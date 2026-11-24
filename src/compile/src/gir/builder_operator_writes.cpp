@@ -141,6 +141,19 @@ oper_group_ptr_t Builder::importedOperatorGroupNamed(const std::string &name) {
     return entity.has_value() && entity->isOperGroup() ? entity->operGroup() : nullptr;
 }
 
+oper_group_ptr_t Builder::builtinOperatorGroupNamed(const std::string &name) {
+    // The builtins module is the one place the prelude's `#op` rules joined
+    // (builder_modules.cpp: the rules of a prelude `#op` are added to the built-in group of
+    // their name), and it is reachable without any scope of the program: the same door
+    // `kBuiltinPrefix` opens for the operators the compiler writes by name (visitDRefNode).
+    const auto builtins = context_->importModule("");
+    if (builtins == nullptr) {
+        return nullptr;
+    }
+    const auto entity = builtins->getNativeEntity(Reference(name));
+    return entity.has_value() && entity->isOperGroup() ? entity->operGroup() : nullptr;
+}
+
 node_handle_t Builder::inPlaceRebindingOf(const GCT::node_ptr_t &gct) {
     // The lowered form of `xs = xs->op<w...>` (and of `xs = op<w...>(xs)`, `xs = xs->op`):
     //   ASSIGN(Plain, DREF xs, LINK(WITH(DREF op, w...) | DREF op, DREF xs))

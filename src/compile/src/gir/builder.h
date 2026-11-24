@@ -3734,6 +3734,14 @@ class Builder {
     /// brings (the built-in module or an imported one) that nothing of the program shadows (the
     /// lookup order of visitDRefNode); nullptr otherwise.
     oper_group_ptr_t importedOperatorGroupNamed(const std::string &name);
+    /// The built-in operator group `name` stands for, taken from the builtins module alone: the
+    /// group the prelude's `#op` rules joined (builder_modules.cpp, "the rules of the prelude join
+    /// the built-in group of their name"). No scope is consulted, so no binding, parameter or
+    /// import of the program can shadow it -- which is what a call the compiler wrote itself
+    /// needs (`cast`, `copy`): the conversion a `var` binding makes is the language's, not the
+    /// program's. nullptr when the builtins module exports no operator group under that name,
+    /// which only a prelude missing its `#op` declaration produces.
+    oper_group_ptr_t builtinOperatorGroupNamed(const std::string &name);
     /// UnusedPureResult at the statement `stmt` when it is a call of an operator declared
     /// pure (`xs->append<5>` on its own line): the operation returns a new value and changes
     /// nothing, so the statement does nothing. `node` is what the statement built.

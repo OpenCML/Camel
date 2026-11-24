@@ -63,9 +63,15 @@ Builder::conversionNodeOf(node_handle_t value, Type *target, const GCT::node_ptr
     // `cast::<T, U>` says a conversion is about a pair of types: the source is the type of the
     // value it reads and the target is the call's result type. Both are known here, which is why
     // the call is resolved with them as the written type arguments and the expected result.
+    //
+    // The group is the built-in one, not the one the name `cast` stands for here: the conversion
+    // is the language's own call, so a binding, a parameter or an import of the program cannot
+    // decide what it calls. Asked by name, a program that binds `cast` made the resolution fail
+    // and left the call with no operator to point at -- a conversion whose identity depends on
+    // what the program named.
     Type *source = nodeTypeOf(value) != nullptr ? valueTypeOf(nodeTypeOf(value)) : nullptr;
     if (source != nullptr && target != nullptr) {
-        const oper_group_ptr_t group = importedOperatorGroupNamed("cast");
+        const oper_group_ptr_t group = builtinOperatorGroupNamed("cast");
         if (group != nullptr) {
             const std::vector<StaticArg> statics(1);
             const auto op = group->resolveForCall({source, target}, target, {}, {source}, statics);
@@ -94,12 +100,15 @@ node_handle_t Builder::copyNodeOf(node_handle_t value, Type *type) {
     // nothing beside them. The kind answered two questions of the value -- whether its type is one
     // the collector traces, and what its static type is -- and the operator answers them from the
     // same rule (`lib/std/builtin/operators/copy.cpp`), so the call keeps what the kind did.
+    //
+    // The group is the built-in one for the reason conversionNodeOf says: a `var` binding's copy
+    // is the language's call, and a program that binds the name `copy` changes nothing about it.
     Type *copied = type != nullptr ? type
                                    : (nodeTypeOf(value) != nullptr
                                           ? valueTypeOf(nodeTypeOf(value))
                                           : nullptr);
     if (copied != nullptr) {
-        const oper_group_ptr_t group = importedOperatorGroupNamed("copy");
+        const oper_group_ptr_t group = builtinOperatorGroupNamed("copy");
         if (group != nullptr) {
             const std::vector<StaticArg> statics(1);
             const auto op = group->resolveForCall({copied}, copied, {}, {copied}, statics);
