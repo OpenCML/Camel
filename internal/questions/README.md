@@ -5,7 +5,7 @@
 > 这一页由 `node scripts/check-doc-links.mjs --questions-index --write` 从目录生成，不要手改：
 > 规矩在 `internal/reviews/` 的裁定里，落没落地看代码和提交，不看这张表。
 
-## 现在在等作者：22 页
+## 现在在等作者：23 页
 
 | 页 | 问什么 |
 | --- | --- |
@@ -31,6 +31,7 @@
 | [`2026-11-24-stream-range-value-map-no-instance`](2026-11-24-stream-range-value-map-no-instance.cn.md) | `map(1..5)` 该拒绝还是该编译？ |
 | [`2026-11-24-what-stops-cxx-opt-and-rewrite`](2026-11-24-what-stops-cxx-opt-and-rewrite.cn.md) | 视图答不出什么：`cxx/opt` 与 `rewrite` 停下来的地方，按能力归类 |
 | [`2026-11-24-what-the-graph-view-does-not-answer`](2026-11-24-what-the-graph-view-does-not-answer.cn.md) | 视图答不出什么：`onnx` 与 `tiles` 停下来的地方，按能力归类 |
+| [`2026-11-25-range-methods-outside-prelude`](2026-11-25-range-methods-outside-prelude.cn.md) | 问作者：Range 上的方法在 prelude 之外不可用，这是缺口还是写法错 |
 
 ## 生成器不会删的行：243 行（页已不在 `questions/` 里）
 
