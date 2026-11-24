@@ -56,15 +56,21 @@ const LANE_BRANCH = /^lane\//
 /// into integration once that branch exists (lanes land there; develop follows it on promotion), into
 /// develop before. A merge seat's own branch (seat/...) is the merging, not a lane waiting for it.
 async function branchesOf(git) {
-    const base = (await git(['rev-parse', '--verify', '--quiet', 'origin/integration']).then(() => true, () => false))
-        ? 'origin/integration'
-        : 'origin/develop'
+    // A lane is unmerged when it has content in neither shared line: develop can run ahead of
+    // integration (a docs push, a merge before the seats moved), and a lane cut from that develop is
+    // not unmerged work. Behind is measured against the line it will merge into: integration while it
+    // holds develop, develop otherwise.
+    const hasIntegration = await git(['rev-parse', '--verify', '--quiet', 'origin/integration']).then(() => true, () => false)
+    const integrationHoldsDevelop = hasIntegration &&
+        await git(['merge-base', '--is-ancestor', 'origin/develop', 'origin/integration']).then(() => true, () => false)
+    const base = integrationHoldsDevelop ? 'origin/integration' : 'origin/develop'
+    const exclude = hasIntegration ? ['^origin/develop', '^origin/integration'] : ['^origin/develop']
     const names = (await git(['for-each-ref', '--format=%(refname:short)', 'refs/heads']))
         .split('\n')
         .filter((name) => name && !PROTECTED.includes(name) && LANE_BRANCH.test(name))
     const rows = []
     for (const branch of names) {
-        const ahead = Number(await git(['rev-list', '--count', `${base}..${branch}`]).catch(() => 'x'))
+        const ahead = Number(await git(['rev-list', '--count', '--no-merges', branch, ...exclude]).catch(() => 'x'))
         if (!Number.isFinite(ahead) || ahead === 0) continue
         const behind = Number(await git(['rev-list', '--count', '--no-merges', `${branch}..${base}`]).catch(() => 'x'))
         rows.push({ branch, ahead, behind: Number.isFinite(behind) ? behind : null })
