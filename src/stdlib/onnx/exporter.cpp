@@ -42,6 +42,7 @@
 #include "camel/passes/opt/config.h"
 #include "camel/passes/opt/generic.h"
 #include "camel/passes/trans/dot/graphviz.h"
+#include "camel/runtime/oper_shape.h"
 #include "camel/runtime/operator_instance.h"
 #include "camel/runtime/draft_inline.h"
 #include "camel/runtime/draft_session.h"
@@ -3808,8 +3809,10 @@ Value Evaluator::evalOper(Activation &act, gc_node_ref_t ref) {
     // (camel/execute/shaped_operators.h), because the front end builds them as operator calls
     // of the same four operations; the lowering table below is for operators that do become ONNX
     // nodes, and a call of one of these four has no row in it and must not be given one: a node
-    // there would stand for a value ONNX does not have.
-    switch (execute::shapeOfUri(uri)) {
+    // there would stand for a value ONNX does not have. The shape is the one the operator's record
+    // states (`camel/runtime/oper_shape.h`, `shapeOfOperator`), asked by the operator the node
+    // names and not by the letters of its URI.
+    switch (camel::runtime::shapeOfOperator(body->oper)) {
     case execute::OperShape::Conversion:
         // The node's type is the target type, its one ordinary operand the value converted.
         return evalCast(act, ref, eval(act, g->normInputsOf(ref).front()));
