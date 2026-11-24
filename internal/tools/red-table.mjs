@@ -55,11 +55,20 @@ const T0 = process.hrtime.bigint();
       process.stderr.write('red-table: --diff needs two files: --diff <a.tsv> <b.tsv>\n');
       process.exit(2);
     }
-    const result = compareRedTables(a, b, {
-      allowUnknownLoad: argv.includes('--allow-unknown-load'),
-      allowUnknownJobs: argv.includes('--allow-unknown-jobs'),
-      allowDifferentTier: argv.includes('--allow-different-tier'),
-    });
+    let result;
+    try {
+      result = compareRedTables(a, b, {
+        allowUnknownLoad: argv.includes('--allow-unknown-load'),
+        allowUnknownJobs: argv.includes('--allow-unknown-jobs'),
+        allowDifferentTier: argv.includes('--allow-different-tier'),
+      });
+    } catch (e) {
+      // A file that cannot be read is "nothing was compared", which is exit 2 and not a diff with
+      // zero differences: the same distinction the gate makes between a red and a run that did not
+      // start.
+      process.stderr.write(`red-table: --diff could not read a table: ${e?.message ?? e}\n`);
+      process.exit(2);
+    }
     process.stdout.write(formatComparison(result));
     process.exit(result.code);
   }
