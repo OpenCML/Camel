@@ -54,7 +54,11 @@ def invoke(*args):
 
 def canonical(source, *passes):
     """The canonical document a pipeline writes for `source`, as (text, parsed)."""
-    done = invoke(EXE, source, *passes, "std::jgir canonical=true")
+    # Why the pipeline ends in `std::nop`: the document is this helper's return value, parsed and
+    # compared byte for byte by every reading of this file, and `std::jgir` hands the graph on, so
+    # the fallback would run the program behind it -- measured `json.loads` "Extra data" where the
+    # run wrote after the version 2 document. The document is the subject; the run is not.
+    done = invoke(EXE, source, *passes, "std::jgir canonical=true", "std::nop")
     assert done.returncode == 0, (source, passes, done.stdout, done.stderr)
     body = "\n".join(
         line for line in done.stdout.splitlines() if not line.startswith("GRAPH_STATS")
@@ -161,8 +165,9 @@ for graph in base["graphs"]:
         assert set(region) <= {"id", "kind", "index", "parent", "owner", "result", "ports", "params", "attrs"}
         assert region["kind"] in ("arm", "loop_cond", "loop_body"), region["kind"]
 
-# The default dump is unchanged: version 1, and the display fields are still there.
-display = invoke(EXE, LOOPS, "std::jgir")
+# The default dump is unchanged: version 1, and the display fields are still there. The `std::nop`
+# says what the reading is: the version 1 document is parsed here, and the pass hands the graph on.
+display = invoke(EXE, LOOPS, "std::jgir", "std::nop")
 assert display.returncode == 0, display.stderr
 v1 = json.loads(display.stdout)
 assert v1["format"] == "camel.gir" and v1["version"] == 1
@@ -366,7 +371,7 @@ for document, name in ((base, "loops"), (ordered, "ordering")):
 # `order` edge a data path already implies -- writes the same document as the assignment itself.
 VAR_PARAM = CASES / "trans/cml/var_param.cml"
 printed = TMP / "var_param_printed.cml"
-just_printed = invoke(EXE, VAR_PARAM, "std::cml")
+just_printed = invoke(EXE, VAR_PARAM, "std::cml", "std::nop")  # printed source is the subject; the run behind it is not
 assert just_printed.returncode == 0, just_printed.stderr
 printed.write_text(just_printed.stdout, encoding="utf-8")
 printed_doc = canonical(printed)[1]
