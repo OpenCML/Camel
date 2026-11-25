@@ -982,7 +982,7 @@ node_handle_t Builder::visitOperand(const GCT::node_ptr_t &expr, const GCT::node
 
 void Builder::requireMutableArgument(const Argument &arg, const std::string &callee) {
     // The argument is handed to the callee as a resource: the cell is shared with it, so it keeps
-    // its cell and is never made SSA, wherever the callee is written.
+    // its cell and is never built as a value, wherever the callee is written.
     if (arg.expr != nullptr && arg.expr->type() == GCT::NodeKind::DREF) {
         if (const std::string name = moduleLevelName(arg.expr->name()); nodeAt(name).has_value()) {
             node_handle_t node = resolveNodeByRef(name);

@@ -782,8 +782,9 @@ Builder::visitGeneratorBody(const AST::node_ptr_t &funcAst, const FunctionType *
     // part is kept from one pull to the next -- the generator body holds no cell for it.
     // The slots are
     // empty today, because a program local of a generator body is a `var T` cell and a cell type has
-    // no zero value; the state carries `pc` alone until the SSA step gives a local a value to travel
-    // in.
+    // no zero value; the state carries `pc` alone. A local gets a slot in it only when the body
+    // builds that local as a value instead of as a cell -- the declaration's own lowering, made
+    // while the body is built and not by a later pass (design principles 3.5).
     std::vector<Type *> stateTypes;
     stateTypes.push_back(intLiteral(0)->data()->type());
     for (const CellDecl &cell : cells) {

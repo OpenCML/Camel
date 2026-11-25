@@ -2692,7 +2692,7 @@ node_handle_t Builder::visitLoopNode(const GCT::node_ptr_t &gct) {
         node_handle_t port = nullptr;
         /// The state is a value, not a cell: the body's name is the port, a write
         /// rebinds it and is the round's next value, and the head's phi is the port.
-        bool ssa = false;
+        bool asValue = false;
     };
     std::vector<LoopCarriedState> carried;
     {
@@ -2818,9 +2818,9 @@ node_handle_t Builder::visitLoopNode(const GCT::node_ptr_t &gct) {
             // A name the declaration built as a value is carried as a value: the
             // body's name is the port, and the head carries whatever the body wrote. Nothing of it
             // is a cell, so none of the cell questions below apply.
-            const SsaEnv::Entry *ssa  = ssa_.find(nodeScope_, name);
-            const node_handle_t value = ssa_.valueOf(ssa);
-            const bool asValue        = ssa != nullptr && value != nullptr && !isVariable(bound);
+            const SsaEnv::Entry *entry = ssa_.find(nodeScope_, name);
+            const node_handle_t value  = ssa_.valueOf(entry);
+            const bool asValue         = entry != nullptr && value != nullptr && !isVariable(bound);
             // A name that is still a cell is carried only when the body's block writes it and no
             // region of its own does, which is the reason a
             // write inside a block of the body is left to that block: the port is read where the
@@ -2833,7 +2833,8 @@ node_handle_t Builder::visitLoopNode(const GCT::node_ptr_t &gct) {
                 continue;
             }
             if (asValue) {
-                Type *stored = ssa->type != nullptr ? ssa->type : valueTypeOf(nodeTypeOf(value));
+                Type *stored =
+                    entry->type != nullptr ? entry->type : valueTypeOf(nodeTypeOf(value));
                 if (stored == nullptr || stored->code() == TypeCode::Void) {
                     continue;
                 }
@@ -3180,7 +3181,7 @@ node_handle_t Builder::visitLoopNode(const GCT::node_ptr_t &gct) {
                         continue;
                     }
                     carried[j].port = part.ports[at];
-                    if (carried[j].ssa) {
+                    if (carried[j].asValue) {
                         // The body's `x` is this head's port, and a write of it is the round's next
                         // state of that port. Anything still live outside this body keeps its own
                         // declaration and its own value: which port a name belongs to is not
@@ -3713,7 +3714,7 @@ node_handle_t Builder::visitLoopNode(const GCT::node_ptr_t &gct) {
                 memberReadNodeOf(loopNode, stateTypes[index], static_cast<uint32_t>(index), gct);
             registerNodeOrigin(context_, value, gct, "gir.loop.value");
         }
-        if (carried[j].ssa) {
+        if (carried[j].asValue) {
             // The write the head hands out is recorded where the loop is written: on the head of a
             // loop around this one, if there is one, so this loop's write is that loop's next state
             // too. This loop's own port went back with the body it was declared in, so the name

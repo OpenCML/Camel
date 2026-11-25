@@ -20,7 +20,7 @@ class Program;
  * rebinding such as `xs = xs->sort` (camel/runtime/exec_plan.h, StorageReuse). The decision is made
  * once, in the plan, and every back end follows it; this function prints it, and decides nothing.
  *
- * It is the criterion for whether an SSA value, at its last use, hands its storage to an update:
+ * It is the criterion for whether a value, at its last use, hands its storage to an update:
  * `camel inspect --copies` reports in-place for the `v = v->append(x)` loop. The tool reports what
  * the tree does; it does not make an update in-place, and both answers are readings.
  *
