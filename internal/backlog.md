@@ -803,3 +803,5 @@
 | D-1125-21 | 记录：`cast-insert` 合并说明写成「entering is a conversion」是我的错，已按 D-1125-20 拆分 | done | 见 D-1125-20 | 15:20 | ⇒ 教训：错误概念写进提交信息，下一个人会照着它实现 |
 | D-1125-21 | time-sensitive 做反了：第 ⑧ 条要的是「闸门问跑测工具（同一个 TOML 解析器），不自己解析」，合进来的是再加一个读法 + 一个比对测试，闸门正则还在 ⇒ 三个读法一个对账＝第二份真相 | taken | 已让原车道返工 | 16:10 | ⇒ 跑测工具出只读入口、camel-remote 调它取值、删掉正则读法与 reader.mjs 与那个比对测试；验收 `git grep time_sensitive internal/tools` 只剩调用一处 |
 | D-1125-22 | 第六次晋级，判据照旧 | taken | 合并位开工（受 8 格上限，等一格空出即起） | 16:29 | ⇒ 带 21 条新增红落地：19 条 opt.pass_*（route4 的 test.cmo 遮住夹具 test.cml）+ 1 条 var_struct_argument（cast-insert）+ 1 条 headers（pwsh-selfcheck.mjs）；报告七块：tip/快层/慢层/三列/人口/硬线/从没跑过 |
+| D-1125-22 | 第六次晋级，判据照旧（三项：按名表无新红 + 新用例绿 + 三列分开） | superseded | 被 D-1125-23 取代 | 17:00 | ⇒ 我一度按「带 21 条红晋级」执行，被纠正：D-1125-13 那次带红是一次性例外 |
+| D-1125-23 | 第六次晋级不带 21 条红：三组各自一小时内向前修，修不好就 revert 带进它的那次合并；三组清掉后晋级 | taken | 三组已全清 | 17:00 | ⇒ ①版权头 65d8689ef4 ②var_struct_argument 转绿（linear 221/0）③19 条 93ab748d73（只把用例自己 .cml 声明的两个 pass 编回 libcamel，模块名与夹具不动） |
