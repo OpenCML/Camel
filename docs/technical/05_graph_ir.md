@@ -228,7 +228,7 @@
 
 `DraftGraphBuilder`（`compile/include/camel/compile/gir/draft_graph_builder.h#DraftGraphBuilder`）是编译期建图的宿主：它持有一个 `GraphDraft`、一个 `GraphArena`，以及只属于编译期的冷数据（端口名、`FUNC`/`DREF`/`OPER` 的目标、依赖/子图/静态图引用、`OperatorIndex` 的所有权）。GCT → GIR 的下降全经它。
 
-- **建节点**：`addStaticDataNode`、`addPortNode`、`addFillNode`、`addAccsNode`、`addBrchNode`、`addJoinNode`、`addCallNode`、`addFuncNode`、`addOperNode`、`addRegionLoopNode`、`addRegionPortNode`、`addGateNode`、`addDrefNode`（同文件）。转换与拷贝没有自己的建节点方法：它们是 `:op/cast` / `:op/copy` 的调用，用 `addOperNode` 建（§4.3）。
+- **建节点**：`addStaticDataNode`、`addPortNode`、`addFillNode`、`addAccsNode`、`addBrchNode`、`addJoinNode`、`addCallNode`、`addFuncNode`、`addOperNode`、`addRegionLoopNode`、`addRegionPortNode`、`addGateNode`、`addDrefNode`（同文件）。类型转换与拷贝不在这张表里：它们是 `:op/cast` / `:op/copy` 算子的调用，由 `Builder::conversionNodeOf` / `Builder::copyNodeOf` 用 `addOperNode` 建（`compile/src/gir/builder_control.cpp`），`addCastNode` / `addCopyNode` 已不在代码里。
 - **连边**：`link(LinkType, from, to)` / `unlink(...)`；同步块里相邻语句的链由 `writeSyncStatement` 写（`compile/src/gir/builder_helpers.h#writeSyncStatement`），它同一对节点上还会补一条 `Ctrl`（给仍按控制边读的消费者）。
 - **图与图之间**：`addDependencyGraph` / `addSubGraph` / `addStaticGraphRef` / `addRuleGraphRef` 及对应的 `erase*`；读取用 `dependencyGraphs()`、`subGraphs()`、`staticGraphRefs()`、`ruleGraphs()`。
 - **冷数据**：`registerNodePortName` / `registerFuncTarget` / `registerDrefTarget` / `registerOperTarget` 写入，`nodePortName()` / `funcTarget()` / `drefTarget()` / `operTarget()` 读出；`lookupOperIndex()` 管 `OperatorIndex` 的生命周期（§5.1 的表）。
