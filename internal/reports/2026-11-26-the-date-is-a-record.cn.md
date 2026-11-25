@@ -164,21 +164,23 @@ A/B/C 三个条件都是"日期在括号里、或紧跟测量动词"的位置条
 | 1 | `14f3920e1a` | 632 | 537 | 105 | 读数 30 行：把"哪天"换成哪台、哪个负载、哪个窗口、哪棵树 |
 | 2 | `11a98019de` | 602 | 507 | 75 | 读数再 30 行：`test/tools/` 20 行、`test/cases/compile/transforms/` 7 行、相邻 3 行 |
 | 3 | `596c92d868` | 574 | 477 | 75 | 状态边界 30 行：把"哪天结束的"换成"被什么界定"（第九节） |
+| 4 | `7bd3eefdad` | 548 | 451 | 50 | 读数 25 行 + 修 1 行 `bd2d84365d` 的残句（第十节） |
 
-所以这一节原来的 135 与 567 是这样走的：135/567 → **105/537**（批 1）→ 75/507（批 2）→ 75/477（批 3）。
+所以这一节原来的 135 与 567 是这样走的：135/567 → **105/537**（批 1）→ 75/507（批 2）→ 75/477（批 3）
+→ 50/451（批 4）。
 
-剩下的 477 行按形状分（读数一族已从起点的 135 行降到 75 行，口径与上表同）：
+剩下的 451 行按形状分（读数一族已从起点的 135 行降到 50 行，口径与上表同）：
 
 | 形 | 行 | 要做的动作 |
 |---|---:|---|
-| 读数（`measured …`、括号里的现场） | 75 | 重写从句：把"哪天"换成"哪台、哪个负载、哪个窗口"，或整句去掉读数的现场 |
+| 读数（`measured …`、括号里的现场） | 50 | 重写从句：把"哪天"换成"哪台、哪个负载、哪个窗口"，或整句去掉读数的现场（批 4 抽掉 25 行，见第十节） |
 | 页名的一段 | 76 | 与 `handover-path` 一族同源：把页名换成"the page"，或删掉引用 |
 | 状态边界（`until/since/as of …`） | 52 | 重写句子：讲现在是什么，不讲哪天变的；判法见第九节（其中 5 行不是边界，剩 47 行） |
-| 有日期的决定（`rule/review/answer of <日期>`、`author`） | 48 | 与族 3 同一动作：留规则，去掉日期与"谁" |
+| 有日期的决定（`rule/review/answer of <日期>`、`author`） | 47 | 与族 3 同一动作：留规则，去掉日期与"谁"；批 4 只在格里落了一行，且那一行是修 `bd2d84365d` 的残句 |
 | 流程事故（`on <日期> … deleted/merged/hit`） | 30 | 重写：只留"为什么这道闸存在"，不留事故的时间地点 |
 | 其余（日期在句中当唯一的"何时"） | 196 | 逐行重写 |
 
-这 477 行**不是规则能降的**：判据已经把它们都判对了，它们是 477 句要重写的话。谁要做，按上表
+这 451 行**不是规则能降的**：判据已经把它们都判对了，它们是 451 句要重写的话。谁要做，按上表
 一行一族地做，做完一批跑一次 `node --test scripts/check-process-traces.test.mjs` —— 那七条里
 红的那五条钉着"日期还得被拒"的底线。
 
@@ -254,3 +256,108 @@ A/B/C 三个条件都是"日期在括号里、或紧跟测量动词"的位置条
 - `test/plans/feat/opt/splice_place.plan.toml:48` 改掉的那句话，在 `:57` 与 `:66` 还有两份一模一样的
   （`The context argument is a Ref handle since …`）；抽样只抽到一份，另两份**按同一句改法**即可，
   本批没动它们，是为了让"30 行"这个数可核。
+
+## 十、读数这一族的第四批：25 行，加一行修复
+
+判据一个字没动，还是第四节那条：日期只回答"这个数是哪次观测到的"，撤掉或换掉它，主张（数、机、
+负载、结论）完整无缺。三招照旧：机/负载当锚、窗口当锚（钟点换成 first/second/third）、读数现场
+整句去掉。
+
+取法与批 0-2 相同，只有一条加严：**落在系列里的行整组取**。`onnx.plan.toml` 的三条读数
+（`:932-934`）、`stdlib_registry.plan.toml` 的两条（`:321`、`:325`）、`startup.plan.toml` 的三条
+（`:20`、`:32`、`:115`）都是一次运行的一组；抽两条留一条，文件就会在一处引一次运行、在另一处引
+三次。第九节记过这个毛病（`splice_place.plan.toml:48/57/66`），这里不再造一个。
+
+| # | 位置 | 改前 → 改后 | 锚是什么 |
+|---:|---|---|---|
+| 1 | `test/plans/feat/modules/onnx.plan.toml:932` | `40.77 s of CPU (2026-10-24 02:39, the slow-layer run of the batch point)` → `(the slow-layer run of the batch point)` | 那次运行的身份 |
+| 2 | 同上 `:933` | `(2026-10-24 05:22, 136 tests, this entry red on the margin only)` → `(136 tests, this entry red on the margin only)` | 用例数 |
+| 3 | 同上 `:934` | `(2026-10-24 05:30, the same plan, 136 tests, green under this budget)` → `(the same plan, 136 tests, …)` | 同上，第三行 |
+| 4 | `test/plans/feat/modules/stdlib_registry.plan.toml:321` | `at 180000 ms, 2026-11-04 04:39 +08:00, 1m load 16.5:` → `at 180000 ms, 1m load 16.5:` | 界与该时点的负载 |
+| 5 | 同上 `:325` | `at 240000 ms, 2026-11-04 05:19 +08:00, 1m load 30.3:` → `at 240000 ms, 1m load 30.3:` | 同上 |
+| 6 | `test/plans/perf/startup.plan.toml:20` | `Measured on the Linux host (AMD EPYC 7343, 32 threads) on 2026-10-23 --` → `… (AMD EPYC 7343, 32 threads) --` | 机器、四个窗口的负载 |
+| 7 | 同上 `:32` | `at load 106-130 on 2026-10-23 -- the reading the rule answered` → `at load 106-130 -- …` | 负载 |
+| 8 | 同上 `:115` | `load average 25.73/43.89/44.94 when it was taken, 2026-10-31), rounded up` → `… when it was taken), rounded up` | 机器、负载 |
+| 9 | `test/plans/feat/showcase_s2.plan.toml:79` | `(PyTorch 2.5.1+cu121, float64, cpu, 2026-11-03, D:\Temp\…)` → `(…, cpu, D:\Temp\…)` | 工具版本、精度、设备 |
+| 10 | 同上 `:111` | `PyTorch's reading of the same literals (float64, cpu, 2026-11-03).` → `(float64, cpu).` | 精度、设备 |
+| 11 | `test/plans/perf/para_speedup.plan.toml:22` | `Measured on the reference host (AMD EPYC 7343, 32 threads) on 2026-10-23, both sides in one run` → `… (AMD EPYC 7343, 32 threads), both sides in one run` | 机器、同一次运行 |
+| 12 | 同上 `:102` | `30 ms of CPU measured on 2026-10-24 -- so it keeps the wall bound.` → `30 ms of CPU measured -- …` | 读数自己 |
+| 13 | `test/plans/feat/compile/transforms.plan.toml:946` | `the run of 2026-11-02 18:45 printed exactly the expected stderr lines` → `a run printed exactly the expected stderr lines` | 那一次运行 |
+| 14 | 同上 `:1240` | `(measured 2026-11-04, the reading the page on a closure member's cotangent reported)` → `(the reading the page … reported)` | 页 |
+| 15 | `test/plans/feat/opt/progen.plan.toml:30` | `the slower 2026-10-24 reading set (150000 / 86560 = 1.73x)` → `the slower reading set (150000 / 86560 = 1.73x)` | 比值与它的两个数 |
+| 16 | 同上 `:32` | `The 2026-10-27 measurement leaves that budget at` → `The 83670 ms measurement leaves that budget at` | 读数自己的数 |
+| 17 | `test/plans/perf/showcase_c2.plan.toml:188` | `Measured 2026-11-15: on the gate host this entry takes 2.07 s` → `On the gate host this entry takes 2.07 s` | 机器 |
+| 18 | `test/plans/feat/tools/selfchecks.plan.toml:175` | `Fast: 0.6 s on the workstation, 2026-11-25.` → `Fast: 0.6 s on the workstation.` | 机器 |
+| 19 | `test/plans/feat/tools/plan_refs_sweep.plan.toml:32` | `on 2026-11-22 the linux-x64-nojit leg read 316220 and 340540 ms of CPU (runs 45003684718 and …)` → `the … leg read … (runs …)` | 那条腿与两个 run id |
+| 20 | `test/plans/feat/tutorial_examples.plan.toml:286` | `([2, 2, 2, 36, 58, 88, 36, 8], seen on 2026-10-26 in a run with -Jobs 8)` → `(…, seen in a run with -Jobs 8)` | 那个参数 |
+| 21 | `test/cases/transforms/split/split_capture_of_a_tensor.cml:33` | `Measured 2026-11-04, \`withport\`.` → `Measured on this tree, \`withport\`.` | 这棵树 |
+| 22 | `test/cases/transforms/compositions/nested_grad_min.cml:21` | `so it is recorded with its date instead of being relied on -- read 2026-11-21 on the tree it was read on, std::nvm:` → `so it is not relied on -- read on this tree, std::nvm:` | 这棵树 + 后端 |
+| 23 | `test/cases/transforms/compositions/nested_grad_through_a_binding.cml:13` | `Read 2026-11-21,` → `Read on this tree,` | 这棵树 |
+| 24 | `test/cases/transforms/nested/nest_quartic.cml:11` | `Read 2026-11-20 09:20:` → `Read on this tree:` | 这棵树 |
+| 25 | `test/cases/runtime/adopt_chain/split_three_calls.cml:16` | `yet: measured 2026-11-04 they are 128.0 and 648.0` → `yet: they are 128.0 and 648.0` | 数自己 |
+
+第 22 行是第四节里被跳过的那行：批 0 跳它，是因为单删日期会留下 "recorded with its date" 自相
+矛盾；**改整句**（不是从这句里删日期）就没有这个矛盾，所以这批收了它。
+
+### 派工点名的 `test/tools/`：0 行
+
+`test/tools/` 下 17 行带日期的行逐条看过，**没有一行是读数**：它们是页名（`run-tests.mjs:436`
+等）、状态边界（`run-tests.mjs:316` 的 `until`）、有日期的决定（`startup-cost.mjs:50`、
+`import-audit.mjs:6`、`para-speedup.mjs:58`）与流程事故（`selftest/run.mjs:65`、
+`run-tests.mjs:1734/1781`、`runner-output.mjs:183`）。`check-vjp-parity.mjs:15` 的
+`before 2026-11-14` 是 `until` 的镜像形状，第九节已点名它归下一族。
+
+唯一一行**长得像读数**的是 `test/tools/check-vjp-ruleset.mjs:21-22`，而它不是读数，是伤：
+
+```
+//               cotangent tuple the pullback answers (one member per parameter, author's ruling of
+//               2026-11-01 14:30), the cotangent read out of it, and the gradient. The point is
+```
+
+`bd2d84365d`（谁决定的族）把这两行的并置文本写回第 21 行，却把第 22 行原样留下，于是同一句出现
+两遍、底下挂着一个日期碎片。修法就是那一批本来该写的：括号里的裁定日期去掉，句子只留一遍。它是
+这 26 行里唯一不属于本族的一行，记在这里，因为它是派工让这批去看的那一行。
+
+### 读数与自测
+
+| 项 | 批 4 之前 | 批 4 之后 |
+|---|---|---|
+| `node scripts/check-process-traces.mjs --root .` | **574**（6336 文件 / 167452 注释行），exit 1 | **548**（6336 文件 / 167451 注释行），exit 1 |
+| `date` 一族 | 477 | 451 |
+| 读数一族 | 75 | **50** |
+| `node --test scripts/check-process-traces.test.mjs` | 8/8（HEAD 两份文件的临时副本上跑） | 8/8 |
+
+注释行少 1 是 `nested_grad_min.cml` 两行并成一行；文件数两侧都是 6336，说明只动了词。把两侧的
+`--list` 逐行比：消失的 26 个命中正是这批改的 26 行，**新增 0**。
+
+接缝十二模式（`(:`、`,,`、`()`、`.` `;` `:` `)` 前的空格各一条、句号后的双空格、行尾空白、
+`until|since|as of` 紧跟标点、`word (`）扫 `src/ scripts/ internal/tools/ test/`：**十二个计数完全
+相同**。行集合只有一处动：`nested_grad_min.cml` 少了那一行，三个命中（两个 `()` 一个 `word (`）
+各上移一行 —— 同一次出现，换了位置，这也是"尺子只在我动过的地方动"的阳性对照。
+
+逐行比词（26 对）：带数字且不是日期/钟点的 token **0 丢** —— `128.0`、`648.0`、`40.77`、`45.60`、
+`25.69`、`46.09`、`30.92`、`136`、`47750`、`26.67`、`20.35`、`47.02`、`235%`、`180000`、`240000`、
+`16.22`、`25.73/43.89/44.94`、`1.08x`、`316220`、`340540`、`45003684718`、`45007258569`、`2.07`、
+`0.6`、`92.9`、`75.2`、`72.6`、`68.7`、`106-130`、`13.0`、`1.73x`、`1.79x`、`83670`、`86560` 全在。
+单位（`s`、`ms`、`%`、`cores`、`threads`）、机器（`AMD EPYC 7343`、`tangshan88`、
+`linux-x64-nojit`、`the gate host`、`the workstation`、`PyTorch 2.5.1+cu121`、`std::nvm`）与负载
+0 丢。丢掉的词只有日期、钟点，与引导它们的连接词（`on` x8、`of` x2、`the` x6、`measured`/
+`Measured` x5），外加两处按判据重写的从句与 `check-vjp-ruleset.mjs` 那段重复的碎片。
+
+11 个改过的计划仍能解析（484 条用例），`.cml`/`.mjs` 的改动逐行检查**全部落在注释行**上，没有一行
+动代码。
+
+### 本批没动的，与下一手要接的
+
+- `test/plans/feat/mm/gc_collections.plan.toml` 的 13 行（`:66` + 十二条同样的 arm 句）：抽两行会
+  留下十条同形孪生句，全取又是半个批。留给整组取的一批。
+- `reshape_adjoint_shape.cml:12-13` 的 `before/after` 与 `inline_two_reads.cml:14` 的
+  `before 2026-11-19` 没有并入：它们属 `before/after` 一族，日期界定的是代码状态，`before :` 不
+  成句。
+- **5 个 `.cml` 的 AST hash 变了。** `test/plans/feat/parse/golden/ast_hashes.txt` 记着这五个文件
+  （`split_capture_of_a_tensor.cml`、`nested_grad_min.cml`、`nested_grad_through_a_binding.cml`、
+  `nest_quartic.cml`、`split_three_calls.cml`），要在能构建的地方重录：
+  `python3 test/tools/parsecheck/check.py snapshot --update --only '<pattern>'`。本车道不构建，
+  所以这一笔留给 88 主机；批 1 与批 2 已经用 17 个 `.cml` 留下同样的债，两批都没有重录，点名它们
+  的闸是 `feat/parse/frontend.plan.toml` 的 `frontend.ast_record`。这不是本批的新问题，但也不能
+  当成没有。
