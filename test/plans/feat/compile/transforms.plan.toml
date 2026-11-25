@@ -1673,7 +1673,7 @@ expect_stdout_contains = ["TANGENT type=float space=self", "TANGENT type=f32 spa
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 
-# Four cases of this block were marked known_fail until 2026-11-02, and their notes said the process
+# Four cases of this block were marked known_fail, and their notes said the process
 # was killed at the timeout with exit null. That reading was the runner's, not the case's: it printed
 # `got null` for every death by signal, and a bare run takes zero seconds and returns 139 (SIGSEGV) -
 # an array cotangent summed as one number rather than an array. repaired it (19f0b05e8,
@@ -1977,7 +1977,7 @@ timeout_ms = 20000
 
 [[tests]]
 name = "jvp_of_a_power"
-desc = "`x ^ 2.0` is a power of a float, and until 2026-11-04 the transform could not lift it: `^` had no key (`ruleKeyOf` derives a `:op/` key only from `add sub mul div neg`), so the walk stopped with `skip=rule uri=:op/pow_d reason=the operator has no forward rule bound at all`. `pow` is one of the written operations now, and `jvp_pow` is its rule, so `d(x^2)` answers `2x dx`: 9.0 and 6.0 at x = 3, and 9.0 and -6.0 at x = -3. The second pair is the one that keeps the rule honest: the constant exponent's tangent has a **structural** zero (a constant has no tangent), so the term that tangent multiplies -- `x^w * log(x) * dw`, whose `log(-3.0)` is NaN -- is not built at all, and `omit=structurally-zero-tangent` in the expansion's reading is the record of it (the rule: the term is omitted where the rule is expanded, `modules/transforms/rule_expand.cpp`, and `pow_tangent`'s `if dw == T(0)` guard is gone; the rule no longer branches on a tangent's value). The third function writes the exponent as the integer literal `2`: the lift sees one operator (`rules=jvp_pow` alone, no `jvp_ltod`) and the exponent's tangent is a constant `0.0` written in the graph, which the expansion recognises by its own type and value -- `omit=structurally-zero-tangent` appears for it too, and the tangent is the same 6.0."
+desc = "`x ^ 2.0` is a power of a float, and the transform could not lift it: `^` had no key (`ruleKeyOf` derives a `:op/` key only from `add sub mul div neg`), so the walk stopped with `skip=rule uri=:op/pow_d reason=the operator has no forward rule bound at all`. `pow` is one of the written operations now, and `jvp_pow` is its rule, so `d(x^2)` answers `2x dx`: 9.0 and 6.0 at x = 3, and 9.0 and -6.0 at x = -3. The second pair is the one that keeps the rule honest: the constant exponent's tangent has a **structural** zero (a constant has no tangent), so the term that tangent multiplies -- `x^w * log(x) * dw`, whose `log(-3.0)` is NaN -- is not built at all, and `omit=structurally-zero-tangent` in the expansion's reading is the record of it (the rule: the term is omitted where the rule is expanded, `modules/transforms/rule_expand.cpp`, and `pow_tangent`'s `if dw == T(0)` guard is gone; the rule no longer branches on a tangent's value). The third function writes the exponent as the integer literal `2`: the lift sees one operator (`rules=jvp_pow` alone, no `jvp_ltod`) and the exponent's tangent is a constant `0.0` written in the graph, which the expansion recognises by its own type and value -- `omit=structurally-zero-tangent` appears for it too, and the tangent is the same 6.0."
 kind = "behavior"
 case = "../../../cases/compile/transforms/jvp_of_a_power.cml"
 args = ["--trace", "transforms", "${case}", "${backend}"]

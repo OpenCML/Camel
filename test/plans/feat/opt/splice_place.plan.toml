@@ -54,7 +54,7 @@ args = ["${case}", "std::opt", "${backend}"]
 [[tests]]
 name = "var_parameter.opt_twice"
 case = "../../../cases/consistency/partial_application/var_parameter.cml"
-desc = "The same graph through the pass twice: the second round finds nothing left to splice and no fork to report. The context argument is a `Ref` handle since 2026-11-16 (design principles 3.5; the carrier the case used before was refused at `add<t>`)."
+desc = "The same graph through the pass twice: the second round finds nothing left to splice and no fork to report. The context argument is a `Ref` handle (design principles 3.5; the carrier the case used before was refused at `add<t>`)."
 expect_stdout_exact = "1 3 6 6\n16 16\n"
 backends = ["nvm", "fvm", "jit", "prl"]
 backends_agree = ["exit_code", "stdout_normalized"]
@@ -63,7 +63,7 @@ args = ["${case}", "std::opt", "std::opt", "${backend}"]
 [[tests]]
 name = "var_parameter.opt_inline"
 case = "../../../cases/consistency/partial_application/var_parameter.cml"
-desc = "`std::cxx::inline` alone splices the same bodies and writes the same chain. The context argument is a `Ref` handle since 2026-11-16 (design principles 3.5; the carrier the case used before was refused at `add<t>`)."
+desc = "`std::cxx::inline` alone splices the same bodies and writes the same chain. The context argument is a `Ref` handle (design principles 3.5; the carrier the case used before was refused at `add<t>`)."
 expect_stdout_exact = "1 3 6 6\n16 16\n"
 backends = ["nvm", "fvm", "jit", "prl"]
 backends_agree = ["exit_code", "stdout_normalized"]

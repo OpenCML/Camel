@@ -89,7 +89,7 @@ import { Graph, Node, NodeKind, TypeRef } from graph
 
 // The type a graph was written with, read off a parameter port.
 //
-// This read \`type_of(nodes(g)[0])\` until 2026-11-18: the first node \`nodes\` gave, which was the
+// This read \`type_of(nodes(g)[0])\`: the first node \`nodes\` gave, which was the
 // node created first -- the graph's own parameter port. \`nodes\` answers the *canonical* order now
 // (design principles 9.5), and the first node of the canonical walk is the same node in two graphs
 // written alike, whatever the parameter types are, so the probe compared one type with itself and

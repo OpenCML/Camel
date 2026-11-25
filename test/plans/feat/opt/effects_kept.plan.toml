@@ -334,7 +334,7 @@ expect_stdout_exact = ""
 # written after it, and that program is refused now: a closure holds the value the name had when it
 # was made (design principles 3.5, item 198), so a write written
 # after the closure is `SemanticDiag::CapturedVarWrittenAfterTheClosure` (0x03000214). The dropped
-# sibling keeps its write after the closure and was read as legal until 2026-11-16, because the rule
+# sibling keeps its write after the closure and was read as legal, because the rule
 # was read as running to the closure's last use and that closure is never called; the rule's third
 # item reads the same shape as the design's third case instead -- the closure's value is put into
 # another value, so the stretch is the scope's rest -- and the case is refused.
@@ -366,7 +366,7 @@ expect_diagnostic_code = "0x03000214"
 
 [[tests]]
 name = "dead_write_rooted_closure.reference"
-desc = "No pass: the closure is called in the same `sync` block and reads the 41 the write left. The write is written before the closure since 2026-11-16: written after it, it would be `CapturedVarWrittenAfterTheClosure` (0x03000214), because a closure holds the value the name had when it was made (design principles 3.5, item 198). The reading is the one this entry had."
+desc = "No pass: the closure is called in the same `sync` block and reads the 41 the write left. The write is written before the closure: written after it, it would be `CapturedVarWrittenAfterTheClosure` (0x03000214), because a closure holds the value the name had when it was made (design principles 3.5, item 198). The reading is the one this entry had."
 case = "../../../cases/opt/effects/dead_write_rooted_closure.cml"
 args = ["${case}", "${backend}"]
 expect_exit = 0

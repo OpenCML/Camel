@@ -5,7 +5,7 @@ tags = ["feat", "runtime", "seal", "exit-type"]
 desc = "The seal's judgement of the value a graph hands on: it is a value of the declared type, and that relation is the one a position holds a value to everywhere else -- assignability (design principles 5.1), not 'the same width' and not 'the same type name'."
 
 # A graph's exit is a promise to its callers: the value it hands on is of the type the signature
-# declares, which is also the slot a back end writes it into. Until 2026-11-04 the seal asked that
+# declares, which is also the slot a back end writes it into. The seal asked that
 # question of `T?` / `T!` exits only (`asTagged(declared) == nullptr` returned early), so a graph
 # whose declared type was anything else handed on whatever its builder left there.
 #

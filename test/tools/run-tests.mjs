@@ -313,7 +313,7 @@ function describeEndCondition(condition) {
  * What a `prints` condition is read against: the bytes the case's own process wrote, normalized the
  * way the case's own assertions read them, and nothing the runner wrote *about* the case.
  *
- * It was read from `failures + stdout + stderr` until 2026-11-25, which made every condition that
+ * It was read from `failures + stdout + stderr`, which made every condition that
  * also appears in an `expect_output_contains` true by construction: a failure line quotes the line
  * it did not find (`output does not contain 'stated mean value=2.5 dL/dx=[0.25, 0.25, 0.25, 0.25]'`),
  * so the condition was satisfied by the sentence saying it was not, and three legitimate marks read

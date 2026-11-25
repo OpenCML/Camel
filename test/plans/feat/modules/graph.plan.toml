@@ -507,7 +507,7 @@ timeout_ms = 20000
 # permissions a node was granted, read without a pass computing them again.
 [[tests]]
 name = "facts_of_graphs_and_nodes"
-desc = "A graph that only computes has no external effect, one that prints has; the shape of a tensor value, which every numeric array states now (its element type and its extents, `?` for an extent nobody fixed); no permissions are granted. The shape list read `[int [?], f32 [?], f32 [2, 3]]` until 2026-11-18: the order the nodes were created in. It now reads `[f32 [?], int [?], f32 [2, 3]]` because `nodes` answers the canonical order (design principles 9.5), which numbers the graph from what it returns -- the `f32` value first -- and the two facts are the same facts in the walk's own order."
+desc = "A graph that only computes has no external effect, one that prints has; the shape of a tensor value, which every numeric array states now (its element type and its extents, `?` for an extent nobody fixed); no permissions are granted. The shape list read `[int [?], f32 [?], f32 [2, 3]]`: the order the nodes were created in. It now reads `[f32 [?], int [?], f32 [2, 3]]` because `nodes` answers the canonical order (design principles 9.5), which numbers the graph from what it returns -- the `f32` value first -- and the two facts are the same facts in the walk's own order."
 kind = "behavior"
 case = "../../../cases/modules/graph_facts.cml"
 args = ["${case}", "std::nvm"]

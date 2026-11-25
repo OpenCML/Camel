@@ -424,7 +424,7 @@ expect_diagnostic_code = "0x03000214"
 
 [[tests]]
 name = "dead_write.direct.same_output"
-desc = "Dropping the dead write leaves the program's output unchanged. The program it reads is refused since 2026-11-16 for the reason `dead_write.direct.answer` gives, so this entry reads the same refusal: `1` is the output the shape would have printed, and it no longer runs."
+desc = "Dropping the dead write leaves the program's output unchanged. The program it reads is refused for the reason `dead_write.direct.answer` gives, so this entry reads the same refusal: `1` is the output the shape would have printed, and it no longer runs."
 kind = "negative"
 case = "../../../cases/modules/selected_protection/dead_write.cml"
 args = ["${case}"]
