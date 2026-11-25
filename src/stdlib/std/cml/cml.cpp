@@ -4894,7 +4894,7 @@ CmlDumpPass::apply(const camel::runtime::Program *program, std::ostream &out) {
     // Nothing is written before the whole program has been printed: a refusal must not leave
     // half a program on the stream.
     out << rendered.str();
-    return nullptr;
+    return program;
 }
 
 namespace {

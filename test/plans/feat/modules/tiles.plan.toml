@@ -648,6 +648,10 @@ skip_unless = ["node", "test/tools/have-cuda-device.mjs", "0"]
 expect_exit = 0
 expect_stdout_exact = "true\n5.0\ncpu effect\n8.0\n10.0\n5.0 6.0\n"
 timeout_ms = 60000
+# Slow layer: over the 2 s the fast layer allows -- 2.34 s of
+# child wall clock in the 2026-11-12 record (appendix B of
+# internal/reports/2026-11-24-test-suite-inventory.cn.md).
+tier = "slow"
 
 [[tests]]
 name = "gpu_preference.invalid_devices"
@@ -1047,6 +1051,10 @@ skip_unless = ["node", "test/tools/have-cuda-device.mjs", "0"]
 expect_exit = 0
 expect_output_contains = ['TILES_PLACEMENT {"body":"gpu-required","body_fact":"gpu","gpu":0,"gpu_required":7,"graph":"pair"', 'TILES_PLACEMENT {"body":"gpu-required","body_fact":"gpu","gpu":0,"gpu_required":1,"graph":"empty"', 'TILES_PLACEMENT {"body":"gpu-required","body_fact":"gpu","gpu":0,"gpu_required":7,"graph":"accumulated"', 'TILES_PLACEMENT {"body":"host","body_fact":"cpu","gpu":0,"gpu_required":0,"graph":"kept"', "value 57.0"]
 timeout_ms = 60000
+# Slow layer: over the 2 s the fast layer allows -- 2.92 s of
+# child wall clock in the 2026-11-12 record (appendix B of
+# internal/reports/2026-11-24-test-suite-inventory.cn.md).
+tier = "slow"
 
 [[tests]]
 name = "gpu_scope.host_effect_is_the_boundary"
@@ -1099,6 +1107,10 @@ assert(report.device_work.to_host_bytes === 16, JSON.stringify(report.device_wor
 }
 """
 timeout_ms = 60000
+# Slow layer: over the 2 s the fast layer allows -- 2.82 s of
+# child wall clock in the 2026-11-12 record (appendix B of
+# internal/reports/2026-11-24-test-suite-inventory.cn.md).
+tier = "slow"
 
 [[tests]]
 name = "gpu_scope.write_outside_a_sync_block_runs_and_is_not_warned"
@@ -1400,7 +1412,7 @@ name = "literal.type_is_the_element_type"
 desc = "The graph itself: the literal operand of a tensor operator is built in the tensor's element type (`f32` beside an `f32` tensor, `bf16` beside a `bf16` one, and the tensor parameter of the `f64` spelling stays `float`). Printed as GIR, where every DATA node states its value type."
 kind = "behavior"
 case = "../../../cases/gpu/nofallback/scalar_literal.cml"
-args = ["--devices", "cpu", "${case}", "std::gir"]
+args = ["--devices", "cpu", "${case}", "std::gir", "std::nop"]
 envs = ["CUDA_VISIBLE_DEVICES=-1"]
 expect_exit = 0
 verify_script = """

@@ -68,6 +68,7 @@ SemanticDiag::CaptureAfterRecursiveCall	test/cases/compile/module_load/recursive
 SemanticDiag::CapturedVarHandedToVarParameter	test/cases/compile/var_closure/err_captured_var_handed_to_var_parameter.cml
 SemanticDiag::CapturedVarWrittenAfterTheClosure	test/cases/compile/var_closure/err_captured_var_written_after_the_closure.cml
 SemanticDiag::ClosureAssignsCapturedName	test/cases/compile/var_closure/err_closure_assigns_captured.cml
+SemanticDiag::CmlUnsupportedConstruct	test/cases/trans/cml/nullable_null.cml
 SemanticDiag::CollectionKeyNotAllowed	test/cases/compile/collections/err_key_float.cml
 SemanticDiag::CompOperandGenericWithoutType	test/cases/compile/stream/comp_operand_generic.cml
 SemanticDiag::CompOperandMismatch	test/cases/compile/stream/comp_operand_mismatch.cml

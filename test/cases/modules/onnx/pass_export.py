@@ -25,7 +25,10 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 REPO_ROOT = HERE.parents[3]
-PIPELINE = ["std::macro", "std::opt", "onnx::export"]
+# The export consumes the graph (see `equiv` below: the program's `println` must not have run), so
+# the pipeline ends in `std::nop`: it says that nothing is left to run, and the pipeline does not fall
+# through to the default scheduling pass.
+PIPELINE = ["std::macro", "std::opt", "onnx::export", "std::nop"]
 # Plain forward export (closure over the weights, unrolled recursion, shape arithmetic) and a
 # training-step export (with_grad + sgd, parameters as graph inputs).
 # The rest widen the coverage: an If, dynamic axes, and Adam / batch-norm / conv training steps.

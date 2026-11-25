@@ -93,7 +93,7 @@ name = "entry_args.rgir_open_parameters"
 desc = "std::rgir on the program without any --arg: a dump needs no values. The entry graph has one port per parameter of main, named like it, and passes them on to main."
 kind = "behavior"
 case = "../../../cases/compile/entry_args/scalars.cml"
-args = ["${case}", "std::rgir"]
+args = ["${case}", "std::rgir", "std::nop"]
 expect_exit = 0
 # The needles name the semantic strings and nothing a file path can spell. They used to be the bare
 # words "Error" and "arity", and a bare word is a substring of a path: the rgir dump prints
@@ -122,7 +122,7 @@ name = "entry_args.rgir_partly_bound"
 desc = "A bound parameter is a constant of the entry graph, the others stay ports: with --arg n=3 the entry graph has three ports left."
 kind = "behavior"
 case = "../../../cases/compile/entry_args/scalars.cml"
-args = ["${case}", "--arg", "n=3", "std::rgir"]
+args = ["${case}", "--arg", "n=3", "std::rgir", "std::nop"]
 expect_exit = 0
 expect_output_not_contains = ["Error"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
@@ -757,7 +757,7 @@ name = "entry_args.cpp_bound"
 desc = "std::cpp translates a main with parameters (design principles 10.6): values bound with --arg when it translates are constants of the program."
 kind = "behavior"
 case = "../../../cases/compile/entry_args/scalars.cml"
-args = ["${case}", "--arg", "n=3", "--arg", "rate=0.5", "--arg", "name=hi", "--arg", "loud=true", "std::cpp"]
+args = ["${case}", "--arg", "n=3", "--arg", "rate=0.5", "--arg", "name=hi", "--arg", "loud=true", "std::cpp", "std::nop"]
 expect_exit = 0
 expect_stdout_contains = ["main_(0, 3, 0.5, lit::str_hi, true)", "int main(int argc, char **argv)"]
 expect_output_not_contains = ["TranslationRefused", "internal error"]
@@ -769,7 +769,7 @@ name = "entry_args.cpp_open"
 desc = "Parameters left open are read by the generated program from its command line, --arg name=value as camel takes them, each by its declared type (design principles 10.6). That the program's output and reports agree with camel's is checked by feat/trans/cpp.agree_with_fvm (test/tools/cppexec/expect.txt)."
 kind = "behavior"
 case = "../../../cases/compile/entry_args/scalars.cml"
-args = ["${case}", "std::cpp"]
+args = ["${case}", "std::cpp", "std::nop"]
 expect_exit = 0
 expect_stdout_contains = ["rt::EntryArguments args(argc, argv, {{\"n\", rt::EntryKind::Int}, {\"rate\", rt::EntryKind::Float}, {\"name\", rt::EntryKind::Text}, {\"loud\", rt::EntryKind::Bool}}", "args.integer(0), args.number(1), args.text(2), args.boolean(3)"]
 expect_output_not_contains = ["TranslationRefused", "internal error"]
@@ -781,7 +781,7 @@ name = "entry_args.cpp_width_open"
 desc = "An `i32` / `f32` parameter left open is read by the generated program at its declared width: rt::EntryKind::Int32 / Float32, with the refusals rendered for `i32` / `f32` and their ranges. That the program's output and reports agree with camel's byte for byte is checked by feat/trans/cpp.agree_with_fvm (test/tools/cppexec/expect.txt)."
 kind = "behavior"
 case = "../../../cases/compile/entry_args/widths.cml"
-args = ["${case}", "std::cpp"]
+args = ["${case}", "std::cpp", "std::nop"]
 expect_exit = 0
 expect_stdout_contains = ["{{\"n\", rt::EntryKind::Int32}, {\"rate\", rt::EntryKind::Float32}}", "args.integer32(0), args.number32(1)", "Cannot convert the string '\\0370' to i32.", "Cannot convert '\\0370' to i32: the value is outside the range of i32 (-2147483648 to 2147483647).", "Cannot convert '\\0370' to f32: the value is outside the range of f32 (at most about 3.4e38 in magnitude)."]
 expect_output_not_contains = ["TranslationRefused", "internal error"]
@@ -1055,7 +1055,7 @@ name = "entry_args.cpp_complex_open"
 desc = "A c64 / c128 parameter left open is read by the generated program from its command line: std::cpp used to refuse a complex entry parameter (TranslationRefused) and now writes rt::EntryKind::C64 / C128. That the two agree is checked by feat/trans/cpp.agree_with_fvm (test/tools/cppexec/expect.txt)."
 kind = "behavior"
 case = "../../../cases/compile/entry_args/complex.cml"
-args = ["${case}", "std::cpp"]
+args = ["${case}", "std::cpp", "std::nop"]
 expect_exit = 0
 expect_stdout_contains = ["{\"z\", rt::EntryKind::C128}, {\"w\", rt::EntryKind::C64}", "args.c128(0), args.c64(1)"]
 expect_output_not_contains = ["TranslationRefused", "internal error"]
@@ -1067,7 +1067,7 @@ name = "entry_args.cpp_complex_bound"
 desc = "A complex value bound with --arg when std::cpp translates is a constant of the program, a std::complex of the parameter's width."
 kind = "behavior"
 case = "../../../cases/compile/entry_args/complex.cml"
-args = ["${case}", "--arg", "z=1+2i", "--arg", "w=0.5-0.25i", "std::cpp"]
+args = ["${case}", "--arg", "z=1+2i", "--arg", "w=0.5-0.25i", "std::cpp", "std::nop"]
 expect_exit = 0
 expect_stdout_contains = ["std::complex<double>{1.0, 2.0}", "std::complex<float>{0.5f, -0.25f}"]
 expect_output_not_contains = ["TranslationRefused", "internal error"]
@@ -1079,7 +1079,7 @@ name = "entry_args.cpp_complex_real_bound"
 desc = "A real text bound to a complex parameter with --arg is the real part of the constant std::cpp writes, with an imaginary part of zero."
 kind = "behavior"
 case = "../../../cases/compile/entry_args/complex.cml"
-args = ["${case}", "--arg", "z=1.5", "--arg", "w=-2", "std::cpp"]
+args = ["${case}", "--arg", "z=1.5", "--arg", "w=-2", "std::cpp", "std::nop"]
 expect_exit = 0
 expect_stdout_contains = ["std::complex<double>{1.5, 0.0}", "std::complex<float>{-2.0f, 0.0f}"]
 expect_output_not_contains = ["TranslationRefused", "internal error"]
@@ -1091,7 +1091,7 @@ name = "entry_args.cpp_struct_refused"
 desc = "A parameter of a type the command line gives camel through files (a struct) is refused by std::cpp, located at main and naming the parameter."
 kind = "behavior"
 case = "../../../cases/compile/entry_args/struct_scalars.cml"
-args = ["-E", "short", "${case}", "std::cpp"]
+args = ["-E", "short", "${case}", "std::cpp", "std::nop"]
 expect_exit = 1
 expect_output_contains = ["RuntimeDiag::TranslationRefused", ".cml:5:1:", "the parameter 'p' of 'main' has type", "std::cpp reads from the command line only the parameters of type int, i32, float, f32, c64, c128, bool and string"]
 expect_output_not_contains = ["internal error", ":?:?:"]

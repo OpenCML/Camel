@@ -119,7 +119,7 @@ name = "equality.negative_graph"
 desc = "The same program printed as a graph: the whole comparisons are `:op/eq` nodes and the negations are `:op/not` on their result, and nothing in the graph is named `:op/ne`."
 kind = "behavior"
 case = "../../../cases/compile/equality/negates_the_whole_comparison.cml"
-args = ["${case}", "std::gir"]
+args = ["${case}", "std::gir", "std::nop"]
 expect_exit = 0
 expect_stdout_contains = ["label=\":op/eq\"", "label=\":op/not\""]
 expect_output_not_contains = ["label=\":op/ne\""]
@@ -143,7 +143,7 @@ name = "equality.collections_negative_graph"
 desc = "The same program printed as a graph: a map's and a set's equality is `:coll/eq` and its negation is `:op/not`, and nothing in the graph is named `:coll/neq` -- the collection reaches its `!=` through the equality it owns."
 kind = "behavior"
 case = "../../../cases/compile/equality/collections_compare_by_content.cml"
-args = ["${case}", "std::gir"]
+args = ["${case}", "std::gir", "std::nop"]
 expect_exit = 0
 expect_stdout_contains = ["label=\":coll/eq\"", "label=\":op/not\""]
 expect_output_not_contains = ["coll/neq"]

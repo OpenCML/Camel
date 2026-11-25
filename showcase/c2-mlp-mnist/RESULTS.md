@@ -49,7 +49,7 @@ throughput is `steps * batch / time`. Peak memory is the peak working set of the
 process and its children, sampled with psutil, so it includes the runtime and the loaded
 weights, and the PyTorch number includes the Python interpreter (the virtual-environment
 `python.exe` is a launcher on Windows, which is why the tree is sampled). The compile time
-is the median of three runs of `camel train.cml ... std::macro std::stats std::null` (parse,
+is the median of three runs of `camel train.cml ... std::macro std::stats std::nop` (parse,
 type check, macro expansion and graph building, no execution); PyTorch is eager and has no
 separate compile step. The whole-process time includes startup and the loading of the
 input files, so for PyTorch it is dominated by importing torch.

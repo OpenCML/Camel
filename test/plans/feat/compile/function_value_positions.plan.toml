@@ -94,7 +94,7 @@ name = "partial_application_span"
 desc = "A partial application is a function value located at the expression itself: in `let g = inc<1>` both the FUNC node the value calls and the value node cover `inc<1>` (9:12-9:18), not the whole `let` statement."
 kind = "behavior"
 case = "../../../cases/compile/function_values/partial_application_span.cml"
-args = ["${case}", "std::gir"]
+args = ["${case}", "std::gir", "std::nop"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """

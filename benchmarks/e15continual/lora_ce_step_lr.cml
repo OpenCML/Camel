@@ -14,7 +14,8 @@
  *   train_ce   run the fine-tune loop (CAMEL_FT_* protocol of lora_mlp.cml)
  */
 
-import { with_grad, stop_gradient } from autodiff
+import { with_grad } from autodiff
+import { stop_gradient } from laws
 import { weight } from camel_bench
 import { get_env } from env
 import { sgd, save_params } from nn

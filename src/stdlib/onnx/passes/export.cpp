@@ -764,7 +764,7 @@ OnnxExportPass::apply(const camel::runtime::Program *program, std::ostream &os) 
         }
         if (requests.empty()) {
             exportEntry(*context_, program, os, out_, asked(ExportOptions{}));
-            return nullptr;
+            return program;
         }
         if (requests.size() > 1 && !out_.empty()) {
             // Reported at the second call: the first one is what the file name stands for.
@@ -803,8 +803,8 @@ OnnxExportPass::apply(const camel::runtime::Program *program, std::ostream &os) 
         }
         diag.commit(kPassName, refusal.message);
     }
-    // Translation consumes the graph: the program is not executed.
-    return nullptr;
+    // Translation hands the graph on: printing or exporting is not a reason to skip the run.
+    return program;
 }
 
 void registerOnnxPasses() {

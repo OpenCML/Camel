@@ -138,6 +138,18 @@ EffectSummary graphEffects(FactStore &facts, const Program &program, const GCGra
 EffectSummary
 nodeEffects(FactStore &facts, const Program &program, const GCGraph &graph, gc_node_ref_t node);
 
+/// What running one node of `graph` does to the resources it reaches: the `core.resources` fact
+/// (camel/runtime/resources.h, `resourcesOf`). Absent means the node touches no resource at all --
+/// no access, nothing allocated, no effect outside the program, and nothing its function operand
+/// brings -- which is the kind's own answer at such a node and not a missing fact: the store keeps
+/// no value for a node whose whole reading is "nothing", and every reader of this one wants the
+/// negative answer, so it is stated here once rather than left to each caller to interpret an empty
+/// value. This is the union the node-role registry used to spell out by hand (architecture 2.3):
+/// the accesses the operator's record states united with the ones its function operand's clause
+/// brings, read off the value the declaration names.
+std::optional<NodeResources>
+nodeResourcesOf(FactStore &facts, const Program &program, const GCGraph &graph, gc_node_ref_t node);
+
 /// The effects of the regions a control node runs (`core.regionEffects`): a JOIN's arms, a LOOP's
 /// body and condition. Empty for every other node. A region is not an anchor a fact can name, so
 /// the answer is stored at the node that owns the regions and each field is the region's own

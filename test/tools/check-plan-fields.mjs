@@ -80,10 +80,12 @@
  *                        cannot find its target
  *   label-without-check  `kind = "negative"` with neither `expect_exit` nor `expect_signal`
  *   kind-unread          `kind` is missing, or is a value no block in the runner reads
- *   mark-without-end-trigger         a `known_fail` mark with no `known_fail_ends_when`: a debt with
- *                        no reading that ends it
- *   end-trigger-names-nothing        a trigger that quotes no reading
- *   end-trigger-names-another-reading  a trigger that does not name this entry's own pinned line
+ *   mark-without-end-trigger         a `known_fail` mark with no `known_fail_ends_when`, or a value
+ *                        that is neither `{ prints = "..." }` nor `{ passes = "..." }`: a debt with
+ *                        no reading a run can evaluate
+ *   end-trigger-names-another-reading  a `prints` that is not one of the entry's own pinned lines
+ *   end-trigger-names-nowhere        a `passes` that names no case in the tree: the mark waits on a
+ *                        verdict nothing produces
  *   path-without-a-tree  a rule of `test/plan-selection.json` names a path prefix that is not in
  *                        the tree (`path-exception-stale`: recorded in `SELECTION_PATH_EXCEPTIONS`
  *                        and no longer needed). This one is not ratcheted: see below.
@@ -292,11 +294,45 @@ function evaluatedFields(kind, test) {
     return fields
 }
 
+/**
+ * The two shapes `known_fail_ends_when` may hold, or `null`. Kept in step with
+ * `knownFailEndCondition` in `run-tests.mjs`, which refuses the same two shapes at load: the checker
+ * is the ratchet over the whole tree, the loader is the refusal at the door, and a third shape here
+ * that the loader would take (or the other way round) is a reading nobody has.
+ */
+function endConditionShape(value) {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) return null
+    const keys = Object.keys(value)
+    if (keys.length !== 1 || (keys[0] !== 'prints' && keys[0] !== 'passes')) return null
+    const text = value[keys[0]]
+    if (typeof text !== 'string' || text.trim().length === 0) return null
+    return { kind: keys[0], text: text.trim() }
+}
+
+/** The lines an entry promises to print, from the three fields that state one. */
+function pinnedLines(entry) {
+    const lines = []
+    for (const field of ['expect_stdout_contains', 'expect_output_contains']) {
+        if (Array.isArray(entry[field])) {
+            for (const line of entry[field]) if (typeof line === 'string' && line !== '') lines.push(line)
+        }
+    }
+    if (typeof entry.expect_stdout === 'string' && entry.expect_stdout !== '') {
+        lines.push(entry.expect_stdout)
+    }
+    return lines
+}
+
 function scanTree(rootDir) {
     const findings = []
     const lines = new Map()
     let plansRead = 0
     let entriesRead = 0
+    // Every case name in the tree, and every `{ passes = "<name>" }` a mark waits on: a condition
+    // that names a case outside this set can never be taken, so it is reported once the tree has
+    // been read rather than skipped.
+    const caseNames = new Set()
+    const waitsOn = []
     const fieldsRead = new Set(ALWAYS_EVALUATED)
     for (const list of Object.values(GATED)) {
         for (const field of list) {
@@ -336,6 +372,7 @@ function scanTree(rootDir) {
                     field,
                     note,
                 })
+            if (typeof entry.name === 'string') caseNames.add(entry.name)
             for (const field of Object.keys(entry)) {
                 if (NOT_AN_ASSERTION.has(field)) {
                     continue
@@ -410,40 +447,63 @@ function scanTree(rootDir) {
                 )
             }
             // A mark records a red; `known_fail_owner` says who ends it and `known_fail_reason` where
-            // it is stuck, and neither says *what* would end it. A debt with no trigger reads as
-            // permanent, and the runner can only notice the two moments it already watches (the case
-            // starts passing; the refusal changes). `known_fail_ends_when` names the reading that
-            // removes the mark, so the next reader -- and the next lane -- can tell a mark that waits
-            // on a named wall from one that waits on nothing.
+            // it is stuck, and neither says *what* would end it. `known_fail_ends_when` names the
+            // reading that removes the mark, and since the ruling of 2026-11-24 it may hold exactly
+            // two things, both of which a run evaluates:
+            //
+            //   { prints = "the line this entry prints when the wall moves" }
+            //   { passes = "another case, whose passing means this one is over" }
+            //
+            // A sentence is refused: a promise nothing can disagree with is not a reading, and the
+            // whole point of the field is that a run re-reads it. `prints` has to be one of the
+            // entry's own pinned lines -- a mark ends when the entry prints what it pins -- and
+            // `passes` has to name a case that exists, checked against the whole plan tree below.
             const marked =
                 entry.known_fail === true ||
                 (Array.isArray(entry.known_fail) && entry.known_fail.length > 0)
             if (marked) {
                 const ends = entry.known_fail_ends_when
-                const pinned = Array.isArray(entry.expect_stdout_contains)
-                    ? entry.expect_stdout_contains.filter((line) => typeof line === 'string' && line !== '')
-                    : []
-                if (typeof ends !== 'string' || ends.trim() === '') {
+                if (ends === undefined) {
                     add(
                         'mark-without-end-trigger',
                         'known_fail_ends_when',
-                        'the mark records a red and no reading that ends it: name the refusal that must go and the line this entry must print',
+                        'the mark records a red and nothing a run can evaluate to remove it: write { prints = "the line this entry prints when the wall moves" } or { passes = "another case" }',
                     )
-                } else if (!/`[^`]+`/.test(ends)) {
-                    add(
-                        'end-trigger-names-nothing',
-                        'known_fail_ends_when',
-                        'the trigger quotes no reading: put the sentence that must stop appearing, and the line this entry must then print, in backticks',
-                    )
-                } else if (pinned.length > 0 && !pinned.some((line) => ends.includes(line))) {
-                    add(
-                        'end-trigger-names-another-reading',
-                        'known_fail_ends_when',
-                        `the trigger does not name this entry's own pinned line (${JSON.stringify(pinned[0])}): a mark ends when the entry prints what it pins`,
-                    )
+                } else {
+                    const shape = endConditionShape(ends)
+                    if (!shape) {
+                        add(
+                            'mark-without-end-trigger',
+                            'known_fail_ends_when',
+                            `the value is ${JSON.stringify(ends)}, which is not a reading: it must be exactly one of { prints = "the line this entry prints when the wall moves" } or { passes = "another case, whose passing ends this mark" } — a sentence cannot be evaluated, so it would be a promise nobody re-reads`,
+                        )
+                    } else if (shape.kind === 'prints') {
+                        const pinned = pinnedLines(entry)
+                        if (pinned.length > 0 && !pinned.includes(shape.text)) {
+                            add(
+                                'end-trigger-names-another-reading',
+                                'known_fail_ends_when',
+                                `\`prints\` names ${JSON.stringify(shape.text)}, which this entry does not pin (${JSON.stringify(pinned[0])}): a mark ends when the entry prints what it promises`,
+                            )
+                        }
+                    } else {
+                        waitsOn.push({ name: shape.text, file: relative, line, entry: entry.name })
+                    }
                 }
             }
         }
+    }
+    for (const wait of waitsOn) {
+        if (caseNames.has(wait.name)) continue
+        findings.push({
+            category: 'end-trigger-names-nowhere',
+            file: wait.file,
+            line: wait.line,
+            name: typeof wait.entry === 'string' ? wait.entry : `<entry at line ${wait.line}>`,
+            kind: undefined,
+            field: 'known_fail_ends_when',
+            note: `\`passes\` names ${JSON.stringify(wait.name)}, which is no case in this tree: the mark waits on a verdict nothing produces, so it can never end`,
+        })
     }
     return { findings, plansRead, entriesRead, fields: fieldsRead.size }
 }

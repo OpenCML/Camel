@@ -227,7 +227,7 @@ TopoNodeSeqDumpPass::apply(const camel::runtime::Program *program, std::ostream 
 
     oss << format("CALL: {}", graph->name()) << "\n";
     os << oss.str();
-    return nullptr;
+    return program;
 }
 
 namespace {

@@ -1,0 +1,10 @@
+// Copyright (c) the OpenCML Organization
+// SPDX-License-Identifier: MIT
+
+// The plan beside this file tells "the graph was printed and nothing ran" from "the graph was
+// printed and the program ran" by the exit code: this program returns 7, so 0 means the run never
+// happened and 7 means it did. The exit code is not part of any graph, so a dump cannot fake it.
+func main() => int sync {
+    println("ran")
+    return 7
+}

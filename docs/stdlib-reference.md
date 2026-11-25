@@ -80,6 +80,7 @@ Not in this reference: the profiler (`perf`).
 | [nn](#nn) | `import { ... } from nn` | C++ |
 | [optim](#optim) | `import { ... } from optim` | Camel |
 | [autodiff](#autodiff) | `import { ... } from autodiff` | C++ |
+| [laws](#laws) | `import { ... } from laws` | Camel |
 | [rulesets.jvp](#rulesets.jvp) | `import { ... } from rulesets.jvp` | Camel |
 | [rulesets.vmap](#rulesets.vmap) | `import { ... } from rulesets.vmap` | Camel |
 | [sim](#sim) | `import { ... } from sim` | C++ |
@@ -118,6 +119,7 @@ Not in this reference: the profiler (`perf`).
 | [nn](#nn) | `import { ... } from nn` |  |
 | [optim](#optim) | `import { ... } from optim` |  |
 | [autodiff](#autodiff) | `import { ... } from autodiff` |  |
+| [laws](#laws) | `import { ... } from laws` |  |
 | [rulesets.jvp](#rulesets.jvp) | `import { ... } from rulesets.jvp` |  |
 | [rulesets.vmap](#rulesets.vmap) | `import { ... } from rulesets.vmap` |  |
 | [sim](#sim) | `import { ... } from sim` |  |
@@ -738,9 +740,10 @@ three numbers that name it down, `to_array` is the one conversion from it to the
 names, and `to_range` is the constructor the interval `a..b` itself is built with (with a step
 of 1).
 
-These names are written by a program only after `import { ... } from prelude`: the prelude's
-types and its functions that are not operators are not brought along unasked. `to_range` is an
-operator, so it is ambient like the rest of them, and the compiler writes its name for `a..b`.
+These names are written without an `import`: the prelude is the built-in module's declaration
+file, and what it exports comes along with the built-in rules it declares (design principles
+10.2, the last layer) -- the types with the functions. `to_range` is an operator as well, so the
+compiler writes its name for `a..b` like any other operator's.
 
 #### `to_range`
 
@@ -7806,15 +7809,15 @@ its other name, `jax.remat`; in this tree "checkpoint" is the persistence module
 `lib/ckpt/ckpt.cml` and stays that, so the transform takes the other word and there is no second
 name for a reader to disambiguate.
 
-`stop_gradient` marks a value as a constant, and the mathematics of the local rules is written
-here, where the library keeps one statement of it: `add_tangent` and its siblings are the tangent
-of a primitive, `add_cotangent` and its siblings its cotangent. The rules themselves -- the
-declarations that attach those statements to a primitive -- live in the ruleset modules, which is
-what a transform reads: `lib/rulesets/jvp.cml` for the forward rules and
-`lib/rulesets/transpose.cml` for the transposes. A tag gives a function's own rules
-(`#jvp(rule)` forward, `#transpose(rule)` for a linear function, `#vjp(rule)` the pullback) and
-is read back by structure (`graph::rule_of`); a primitive's rules are the ruleset's, by the
-operator of their left side.
+What is left here is the engine: this module's four transforms are C++ (`src/stdlib/autodiff/`),
+and the derivative rules are the C++ compiler's. Everything a program can *write* has moved out
+of it -- `stop_gradient` with the mathematics of the rules, to `src/stdlib/laws.cml` (`laws`) --
+because a name a program calls must not leave with the engine that builds the graph. The rules
+themselves -- the declarations that attach a statement to a primitive -- live in the ruleset
+modules: `rulesets.jvp` for the forward rules and `rulesets.transpose` for the transposes. A tag
+gives a function's own rules (`#jvp(rule)` forward, `#transpose(rule)` for a linear function,
+`#vjp(rule)` the pullback) and is read back by structure (`graph::rule_of`); a primitive's rules
+are the ruleset's, by the operator of their left side.
 
 #### `grad`
 
@@ -7867,17 +7870,33 @@ the pair the function gives is returned whole, followed by the gradient --
 - Example (a fragment, not compiled): `let step = with_grad(loss, has_aux: true)`
 - Why it is not compiled: the function must return a pair whose first element is the loss, and that takes a declaration, so the example is a fragment of a program that declares it
 
-#### `stop_gradient`
+<a id="laws"></a>
 
-```camel
-stop_gradient: (x: T) => T pure
-```
+## `laws`: the mathematics a derivative rule is written from
 
-Gives its argument unchanged and cuts the gradient at this point: a value passed through
-`stop_gradient` is a constant to `grad`. Any value is accepted, and the result has the
-argument's own type.
+The mathematics of the local derivative rules: the tangent of a primitive and its cotangent,
+one function per primitive and per name that primitive's rule binds on its left side.
 
-- Example: `stop_gradient(3.0)` gives `3.0`
+These functions are the right sides of the rulesets' rules and nothing else: a transform reads
+a rule's pattern and calls the function the right side names, so the tangent a transform
+produces is a value a program can call and compare with the derivative it claims, and the
+library keeps one writing of the mathematics (design principles: one law, one writing).
+`add_tangent` and its siblings are the tangent of a primitive, `add_cotangent` and its
+siblings its cotangent, and the `_c` set answers the cotangent of the rule's second name,
+which is not the first one's with the arguments swapped: `sub_cotangent(ct)` is `ct`, while
+the cotangent of `c` in `x - c` is `-ct`.
+
+The rules that attach these statements to a primitive live in the ruleset modules --
+`rulesets.jvp` for the forward rules and `rulesets.transpose` for the transposes -- because a
+transform reads those. What is here is arithmetic alone: every function but one below is a
+Camel body over `is_float` types with no operator of its own, so a rule written anywhere in the
+tree can name it, and the module outlives any one engine that uses it.
+
+The exception is `stop_gradient`, at the end of the file: a value no derivative flows through
+cannot be written as an arithmetic expression, so its body is a kernel (`stdlib/laws/`, module
+`laws`, operator `laws:stop_gradient`) and only its declaration is here. It is here rather than
+in the engine that used to hold it because a program calls it by name, and a name a program
+calls must not leave with the engine.
 
 ### The local rules of the scalar arithmetic
 
@@ -7904,6 +7923,7 @@ add_tangent: (x: T, w: T, dx: T, dw: T) => T when is_float::<T>()
 
 The tangent of `x + w` along `(dx, dw)`: `dx + dw`.
 
+- Written in Camel: a subgraph, pure when the functions passed to it are.
 - Example: `add_tangent(3.0, 5.0, 1.0, 0.0)` gives `1.0`
 
 #### `sub_tangent`
@@ -7914,6 +7934,7 @@ sub_tangent: (x: T, w: T, dx: T, dw: T) => T when is_float::<T>()
 
 The tangent of `x - w` along `(dx, dw)`: `dx - dw`.
 
+- Written in Camel: a subgraph, pure when the functions passed to it are.
 - Example: `sub_tangent(3.0, 5.0, 1.0, 0.0)` gives `1.0`
 
 #### `mul_tangent`
@@ -7924,6 +7945,7 @@ mul_tangent: (x: T, w: T, dx: T, dw: T) => T when is_float::<T>()
 
 The tangent of `x * w` along `(dx, dw)`: `dx * w + x * dw`.
 
+- Written in Camel: a subgraph, pure when the functions passed to it are.
 - Example: `mul_tangent(3.0, 5.0, 1.0, 0.0)` gives `5.0`
 
 #### `div_tangent`
@@ -7934,6 +7956,7 @@ div_tangent: (x: T, w: T, dx: T, dw: T) => T when is_float::<T>()
 
 The tangent of `x / w` along `(dx, dw)`: `dx / w - x * dw / (w * w)`.
 
+- Written in Camel: a subgraph, pure when the functions passed to it are.
 - Example: `div_tangent(6.0, 4.0, 1.0, 0.0)` gives `0.25`
 
 #### `neg_tangent`
@@ -7944,6 +7967,7 @@ neg_tangent: (x: T, dx: T) => T when is_float::<T>()
 
 The tangent of `-x` along `dx`: `-dx`.
 
+- Written in Camel: a subgraph, pure when the functions passed to it are.
 - Example: `neg_tangent(3.0, 1.0)` gives `-1.0`
 
 #### `add_cotangent`
@@ -7960,6 +7984,7 @@ so a position whose answer does not read an operand asks for no value of it; tha
 the transposed loop body answer a rule whose other operand is the round's own state (design
 principles: a value the walk does not carry costs nothing unless the rule reads it).
 
+- Written in Camel: a subgraph, pure when the functions passed to it are.
 - Example: `add_cotangent(2.0)` gives `2.0`
 
 #### `sub_cotangent`
@@ -7970,6 +7995,7 @@ sub_cotangent: (ct: T) => T when is_float::<T>()
 
 The cotangent of `x` in `x - c`: the cotangent of the difference, unchanged.
 
+- Written in Camel: a subgraph, pure when the functions passed to it are.
 - Example: `sub_cotangent(2.0)` gives `2.0`
 
 #### `mul_cotangent`
@@ -7980,6 +8006,7 @@ mul_cotangent: (c: T, ct: T) => T when is_float::<T>()
 
 The cotangent of `x` in `x * c`: `ct * c`.
 
+- Written in Camel: a subgraph, pure when the functions passed to it are.
 - Example: `mul_cotangent(5.0, 2.0)` gives `10.0`
 
 #### `div_cotangent`
@@ -7990,6 +8017,7 @@ div_cotangent: (c: T, ct: T) => T when is_float::<T>()
 
 The cotangent of `x` in `x / c`: `ct / c`.
 
+- Written in Camel: a subgraph, pure when the functions passed to it are.
 - Example: `div_cotangent(4.0, 2.0)` gives `0.5`
 
 #### `neg_cotangent`
@@ -8000,6 +8028,7 @@ neg_cotangent: (ct: T) => T when is_float::<T>()
 
 The cotangent of `x` in `-x`: `-ct`.
 
+- Written in Camel: a subgraph, pure when the functions passed to it are.
 - Example: `neg_cotangent(2.0)` gives `-2.0`
 
 ### The other half: the cotangent of each name of a rule's left side
@@ -8024,6 +8053,7 @@ add_cotangent_c: (ct: T) => T when is_float::<T>()
 
 The cotangent of `c` in `x + c`: the cotangent of the sum, unchanged.
 
+- Written in Camel: a subgraph, pure when the functions passed to it are.
 - Example: `add_cotangent_c(2.0)` gives `2.0`
 
 #### `sub_cotangent_c`
@@ -8034,6 +8064,7 @@ sub_cotangent_c: (ct: T) => T when is_float::<T>()
 
 The cotangent of `c` in `x - c`: `-ct`, the opposite sign of `sub_cotangent(ct)`.
 
+- Written in Camel: a subgraph, pure when the functions passed to it are.
 - Example: `sub_cotangent_c(2.0)` gives `-2.0`
 
 #### `mul_cotangent_c`
@@ -8044,6 +8075,7 @@ mul_cotangent_c: (x: T, ct: T) => T when is_float::<T>()
 
 The cotangent of `c` in `x * c`: `ct * x`.
 
+- Written in Camel: a subgraph, pure when the functions passed to it are.
 - Example: `mul_cotangent_c(3.0, 2.0)` gives `6.0`
 
 #### `div_cotangent_c`
@@ -8054,7 +8086,23 @@ div_cotangent_c: (x: T, c: T, ct: T) => T when is_float::<T>()
 
 The cotangent of `c` in `x / c`: `-(ct * x / (c * c))`.
 
+- Written in Camel: a subgraph, pure when the functions passed to it are.
 - Example: `div_cotangent_c(6.0, 4.0, 2.0)` gives `-0.75`
+
+### The one name a program calls through this module
+
+#### `stop_gradient`
+
+```camel
+stop_gradient: (x: T) => T pure
+```
+
+Gives its argument unchanged and cuts the gradient at this point: a value passed through
+`stop_gradient` is a constant to `grad`. Any value is accepted, and the result has the
+argument's own type.
+
+- A native operator of this module: an opaque node, pure.
+- Example: `stop_gradient(3.0)` gives `3.0`
 
 <a id="rulesets.jvp"></a>
 

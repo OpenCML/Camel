@@ -201,7 +201,10 @@ bool Builder::isEffectNode(DraftGraphBuilder *graph, node_handle_t node) const {
     const auto calleeOf = [&](node_handle_t func) { return graph->funcTarget(func); };
     switch (nodeKindOf(node)) {
     case runtime::GCNodeKind::Oper: {
-        const auto &op = graph->operTarget(node);
+        const oper_idx_ptr_t *op = graph->operTarget(node);
+        // A call a pass wrote by URI alone records no declaration: the question "does this node
+        // carry an effect" is answered "no" for it here, as it is for the other kind with no
+        // clause to read.
         if (op == nullptr) {
             return false;
         }
@@ -210,7 +213,7 @@ bool Builder::isEffectNode(DraftGraphBuilder *graph, node_handle_t node) const {
         // The effect is that call's, and it is reported by its own name when it is not run; calling
         // the reader of a version an unexecuted statement would name an operator no program can
         // write, which is how the warning says it looked at the position and not at the thing.
-        if (op->uri() == ":var/after") {
+        if ((*op)->uri() == ":var/after") {
             return false;
         }
         // A higher-order operator's accesses are the function operand's (design principles 3.3):
@@ -219,7 +222,7 @@ bool Builder::isEffectNode(DraftGraphBuilder *graph, node_handle_t node) const {
         // clause, keeps the answer the table gives -- a `map` over a pure function is not an
         // effect, and one over a function that prints is.
         const auto &table = camel::core::OperatorTable::instance();
-        const auto id     = table.lookup(op->uri());
+        const auto id     = table.lookup((*op)->uri());
         if (id.has_value()) {
             if (const auto *facts = table.semantics(*id);
                 facts != nullptr && facts->resources && facts->resources->functionOperand) {
@@ -239,7 +242,7 @@ bool Builder::isEffectNode(DraftGraphBuilder *graph, node_handle_t node) const {
         // The record's answer: `Effectful` is the one that reaches outside the program, and an
         // operator nobody stated a clause for is read as one that writes the global resource
         // (design principles 3.3).
-        const camel::core::sem::Effect effect = table.effectOf(op->uri());
+        const camel::core::sem::Effect effect = table.effectOf((*op)->uri());
         return effect == camel::core::sem::Effect::Effectful ||
                effect == camel::core::sem::Effect::Undeclared;
     }
@@ -464,9 +467,11 @@ bool Builder::writesForRegionOf(DraftGraphBuilder *graph, node_handle_t node) co
         // the wrong question: `footprintOf(graph, id)` places an access only when the written value
         // is one of the body's own ports, so a write to a box the body computed would be missed,
         // and `set` on an array element is exactly that).
-        const auto &op = graph->operTarget(node);
-        return answer(
-            op != nullptr && camel::core::OperatorTable::instance().writesForTheRegion(op->uri()));
+        const oper_idx_ptr_t *op = graph->operTarget(node);
+        // A call a pass wrote by URI alone names no declaration here, and what writes for a region
+        // is read off the declaration: nothing is claimed for that node.
+        const auto &table = camel::core::OperatorTable::instance();
+        return answer(op != nullptr && table.writesForTheRegion((*op)->uri()));
     }
     case runtime::GCNodeKind::Func:
     case runtime::GCNodeKind::Call: {
@@ -646,12 +651,15 @@ void Builder::layRegionWriteEdges() {
                 if (nodeKindOf(draft.ref(statement)) != runtime::GCNodeKind::Oper) {
                     return false;
                 }
-                const auto &op = body->operTarget(draft.ref(statement));
+                const oper_idx_ptr_t *op = body->operTarget(draft.ref(statement));
+                // A statement a pass wrote by URI alone records no declaration here, and this walk
+                // can name no write of it: the answer is "not this node", the same as for a node
+                // of another kind.
                 if (op == nullptr) {
                     return false;
                 }
                 const auto &table = camel::core::OperatorTable::instance();
-                const auto oper   = table.lookup(op->uri());
+                const auto oper   = table.lookup((*op)->uri());
                 if (!oper.has_value()) {
                     return false;
                 }
@@ -1382,7 +1390,11 @@ void Builder::reportDroppedEffects(const compile_graph_ptr_t &graph, bool report
         if (nodeKindOf(node) != runtime::GCNodeKind::Oper) {
             continue;
         }
-        const auto target = graph->operTarget(node);
+        const oper_idx_ptr_t *target = graph->operTarget(node);
+        // Which node's declaration this walk would look the write up in. A statement a pass wrote
+        // by URI alone records none here, and the walk has nothing to ask about it: it is not one
+        // of the stores this builder made, which the lookup just below already says of every
+        // node it did not write.
         if (target == nullptr) {
             continue;
         }
@@ -1514,16 +1526,18 @@ std::vector<Builder::RuleCondition> Builder::ruleConditionsIn(
         if (!nodeIsKind(node, runtime::GCNodeKind::Oper)) {
             continue;
         }
-        const auto &op = graph->operTarget(node);
+        const oper_idx_ptr_t *op = graph->operTarget(node);
+        // A maker call a pass wrote by URI alone records no declaration here; this walk names the
+        // rules it can see declared, and there is no declaration to see for that one.
         if (op == nullptr) {
             continue;
         }
-        const bool conditional = op->uri() == "rewrite:rule_when";
+        const bool conditional = (*op)->uri() == "rewrite:rule_when";
         // `__rule_generic(name, two_way, needs, consts, <the id of its templates>)`: a rule whose
         // head declares type parameters has no condition function to look at here, because what
         // its sides are is decided per type tuple. Its template's body is scanned instead, and the
         // instance it was asked for is checked where it is made.
-        const bool generic = op->uri() == "rewrite:rule_generic";
+        const bool generic = (*op)->uri() == "rewrite:rule_generic";
         if (!conditional && !generic) {
             continue;
         }
@@ -1600,7 +1614,14 @@ std::string Builder::describeEffect(
     std::string subject;
     switch (nodeKindOf(effect)) {
     case runtime::GCNodeKind::Oper:
-        subject = std::format("The call of '{}'", inside->operTarget(effect)->name());
+        // The name a declaration gives the call. A call a pass wrote by URI alone records no
+        // declaration here, so the report names it the way it names a node of a kind it has no name
+        // for -- the position the effect is reported at is the same either way.
+        if (const oper_idx_ptr_t *op = inside->operTarget(effect); op != nullptr) {
+            subject = std::format("The call of '{}'", (*op)->name());
+        } else {
+            subject = "The effect";
+        }
         break;
     case runtime::GCNodeKind::Func:
         subject = std::format("The call of '{}'", inside->funcTarget(effect)->name());
@@ -2096,8 +2117,13 @@ void Builder::markNonRetainingReads() {
     const auto mayWrite = [&](node_handle_t node) {
         switch (nodeKindOf(node)) {
         case runtime::GCNodeKind::Oper: {
-            const auto op     = nodeGraphOf(node)->operTarget(node);
-            const auto traits = table.find(op->uri());
+            const oper_idx_ptr_t *op = nodeGraphOf(node)->operTarget(node);
+            // A call a pass wrote by URI alone records no declaration here: nobody stated what it
+            // writes, so it is read as a writer, the same answer an operator with no traits gets.
+            if (op == nullptr) {
+                return true;
+            }
+            const auto traits = table.find((*op)->uri());
             return !traits.has_value() || (!traits->pure && !traits->stateOnly);
         }
         case runtime::GCNodeKind::Call:
@@ -2190,10 +2216,16 @@ void Builder::markNonRetainingReads() {
             }
             ++users;
             lastUser               = std::max(lastUser, userId);
-            const bool computation = nodeIsKind(user, runtime::GCNodeKind::Oper) &&
-                                     table.effectOf(nodeGraphOf(user)->operTarget(user)->uri()) ==
-                                         camel::core::sem::Effect::Pure &&
-                                     referenceFree(nodeTypeOf(user));
+            // A call a pass wrote by URI alone records no declaration here, so it is not known
+            // to be a pure computation: the value stays kept, the same answer an operator whose
+            // record states an effect gets (`nodeKeepsItsInput` reads it that way too).
+            const oper_idx_ptr_t *userOp =
+                nodeIsKind(user, runtime::GCNodeKind::Oper) ? nodeGraphOf(user)->operTarget(user)
+                                                            : nullptr;
+            const bool computation =
+                userOp != nullptr &&
+                table.effectOf((*userOp)->uri()) == camel::core::sem::Effect::Pure &&
+                referenceFree(nodeTypeOf(user));
             if (!computation) {
                 keeps = keeps || !reached; // condition 3: a node reading the array itself
                 continue;
@@ -2258,11 +2290,12 @@ void Builder::rejectUnusedPureResult(const GCT::node_ptr_t &stmt, node_handle_t 
         // and a `fail` nobody needs has a warning of its own (FailNotExecuted).
         return;
     }
-    const auto op = nodeGraphOf(node)->operTarget(node);
+    const oper_idx_ptr_t *op = nodeGraphOf(node)->operTarget(node);
     // The record's answer (`sem::Effect`): the empty stated clause is what makes the operator a
-    // computation with no effect for the warning to be about.
+    // computation with no effect for the warning to be about. A call a pass wrote by URI alone
+    // records no declaration here, and it states no clause: nothing is said about it.
     if (op == nullptr ||
-        camel::core::OperatorTable::instance().effectOf(op->uri()) !=
+        camel::core::OperatorTable::instance().effectOf((*op)->uri()) !=
             camel::core::sem::Effect::Pure) {
         return;
     }
@@ -2275,7 +2308,7 @@ void Builder::rejectUnusedPureResult(const GCT::node_ptr_t &stmt, node_handle_t 
     while (callee->type() == GCT::NodeKind::WITH && callee->size() > 0) {
         callee = callee->at(0);
     }
-    std::string written = callee->type() == GCT::NodeKind::DREF ? callee->name() : op->name();
+    std::string written = callee->type() == GCT::NodeKind::DREF ? callee->name() : (*op)->name();
     if (const char *symbol = operatorSymbolOf(written)) {
         written = symbol;
     }

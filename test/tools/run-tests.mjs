@@ -25,6 +25,7 @@ import { tierAccountingLine, tierAccountingProblems } from './tier-accounting.mj
 import { formatIsoTime, provenanceLine, staleAllowedMark } from './provenance.mjs'
 import { normalizeReading, READING_NORMAL_VERSION } from './reading-normal.mjs'
 import { describeRefusals, formatRefusalSpec, matchesRefusal, parseRefusalSpec, refusals } from './reading-refusal.mjs'
+import { judgeTranscript, openTranscript, transcriptRefusal } from './transcript.mjs'
 
 const __filename = fileURLToPath(import.meta.url)
 const TOOLS_ROOT = path.dirname(__filename)
@@ -58,6 +59,19 @@ const RESULTS_ROOT = process.env.CAMEL_TEST_RESULTS_ROOT
 const LOG_ROOT = path.join(RESULTS_ROOT, 'log')
 const REPO_ROOT = path.dirname(TEST_ROOT)
 const IS_WINDOWS = process.platform === 'win32'
+
+// The host's token pool. One worker process, one token: the test case takes it through the one line of
+// shell that sits in front of every case on the build host (`internal/tools/host-case.sh`), and the
+// kernel returns it when that case's process tree exits -- so a case that hangs or is killed cannot
+// carry a token away. A case that arrives when the pool is empty *queues*; it does not fail. When no
+// pool is configured (`CAMEL_TOKEN_DIR` unset) nothing here changes and a lane runs as it always did.
+const HOST_CASE = path.join(REPO_ROOT, 'internal', 'tools', 'host-case.sh')
+const TOKEN_POOL = !IS_WINDOWS && !!process.env.CAMEL_TOKEN_DIR && fs.existsSync(HOST_CASE)
+// What the run will report as `tokenWaitSeconds`: how many cases took a token, how long they queued in
+// all, and how many of them queued at all. A pool that is never contended reports a wait of 0.0 s,
+// which is a reading; a report that is absent would be a pool nobody can tell from an unused one.
+const tokenTaking = { cases: 0, waitMs: 0, queued: 0 }
+let tokenSerial = 0
 // The build a run addresses. A Release build lands in out/latest; a Debug build has its own tree
 // at out/debug (scripts/collect-out.js), so `--build debug` cannot silently read a Release binary
 // and the two configurations can be tested without rebuilding one over the other.
@@ -212,6 +226,99 @@ function knownFailIsMarked(mark) {
 }
 
 /**
+ * The two shapes `known_fail_ends_when` may hold, read into one comparable thing. `null` means the
+ * value is not one of them -- which the loader refuses and the checker reports, so nothing past the
+ * load has to guess what a third shape would mean.
+ *
+ * `prints` is the line this entry prints when the wall moves, and it is found in the entry's own
+ * output. `passes` names another case: when that case passes in the same run, this mark has ended.
+ * Both are readings of a run, which is the whole point of the ruling -- the field used to hold a
+ * sentence, and a sentence is not something a run can disagree with.
+ */
+function knownFailEndCondition(value) {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) return null
+    const keys = Object.keys(value)
+    if (keys.length !== 1 || (keys[0] !== 'prints' && keys[0] !== 'passes')) return null
+    const text = value[keys[0]]
+    if (typeof text !== 'string' || text.trim().length === 0) return null
+    return { kind: keys[0], text: text.trim() }
+}
+
+/** How a condition reads on a line: the `[KNOWN]` roster and the strict-xfail message share it. */
+function describeEndCondition(condition) {
+    if (!condition) return null
+    return condition.kind === 'prints'
+        ? `prints "${condition.text}"`
+        : `passes "${condition.text}"`
+}
+
+/**
+ * What a `prints` condition is read against: the bytes the case's own process wrote, normalized the
+ * way the case's own assertions read them, and nothing the runner wrote *about* the case.
+ *
+ * It was read from `failures + stdout + stderr` until 2026-11-25, which made every condition that
+ * also appears in an `expect_output_contains` true by construction: a failure line quotes the line
+ * it did not find (`output does not contain 'stated mean value=2.5 dL/dx=[0.25, 0.25, 0.25, 0.25]'`),
+ * so the condition was satisfied by the sentence saying it was not, and three legitimate marks read
+ * as `known failure has ended` in the merge rehearsal (`modules.onnx/ort_loop_values_dynamic` and the
+ * two `stated_mean_axis_*` gradients). A condition that can be matched by the sentence explaining
+ * that it is unmet is not a condition, it is decoration -- the same family as an assertion that stays
+ * green when nothing can match it.
+ *
+ * The other shape, `passes`, is a reading of another case's verdict and is taken from `completed`
+ * (`settlePassesConditions`), a field of its own. No condition states a thing about the text of a
+ * verdict, so nothing here needs one; `verdictText` below is where the runner's own failure lines
+ * live, and it is never the haystack for a condition.
+ */
+function observedOutput(result) {
+    // The normalized text, and not the raw streams: the condition usually mirrors an
+    // `expect_output_contains`, which is read against `normalized.output`, so both have to compare
+    // with one run through the same normalizers (CRLF, ANSI) or a normalizer would move one and not
+    // the other.
+    return `${result.normalized.stdout}\n${result.normalized.stderr}`
+}
+
+/**
+ * Whether a `prints` condition has arrived: the line the mark says this entry prints when the wall
+ * moves is in `output` -- the case's own output, from `observedOutput`, which is the only thing a
+ * condition may be read against.
+ */
+function endConditionHasArrived(test, output) {
+    const condition = test.__knownFailEndsWhen
+    if (!condition || condition.kind !== 'prints') return false
+    return output.includes(condition.text)
+}
+
+/**
+ * The `passes` shape, taken once every case has settled: it is a reading of another case's verdict,
+ * and the case a mark waits on may be the last one to finish, so it cannot be taken where the mark
+ * fires. A mark whose ending has arrived moves out of the excused reds and into the failing ones --
+ * strict xfail -- and the block printed here is what re-reads the `[XFAIL]` line it printed above.
+ */
+function settlePassesConditions(entries, completed, summary) {
+    const ended = []
+    for (const entry of entries) {
+        const condition = entry.test.__knownFailEndsWhen
+        if (!entry.test.__knownFail || !condition || condition.kind !== 'passes') continue
+        if (!entry.outcome || entry.outcome.status !== 'xfail') continue
+        const other = completed.get(condition.text)
+        if (!other || other.status !== 'pass') continue
+        const line =
+            `known failure has ended: this entry waits on \`${condition.text}\`, which passed` +
+            ' -- delete the mark'
+        entry.outcome.status = 'fail'
+        if (entry.outcome.result) entry.outcome.result.status = 'fail'
+        entry.outcome.failures = [...(entry.outcome.failures || []), line]
+        summary.xfail--
+        summary.fail++
+        summary.knownRows = summary.knownRows.filter((row) => row.name !== listedName(entry.plan, entry.test))
+        ended.push(`${COLORS.cyan}[KNOWN]${COLORS.reset} ${line}`)
+    }
+    for (const line of ended) console.log(line)
+    return ended
+}
+
+/**
  * A marked case must say who owns it and where it is stuck. The mark, the owner and the reason may
  * all be inherited from `[defaults]`: a plan whose default marks one back end and names the owner
  * does not have to repeat itself on each entry that changes only which back end fails.
@@ -261,21 +368,36 @@ function checkKnownFailMark(planPath, entry, inherited, where) {
     // `test.known_fail_msg` and never against a `[defaults]` value -- so a plan cannot supply it
     // once for the whole file.
     //
-    // The mark may instead state the reading that ends it, and that is the shape the author's
-    // ruling of 2026-11-21 02:20 chose for a case whose target is a number and whose wall is being
-    // built: a sentence quoted from a refused run follows the implementation, so a pin on it has to
-    // be re-typed every time the wall moves -- which records the wall's progress as the case's debt
-    // and reads, in the plan, as "this case fails for this reason" long after that reason moved.
-    // `known_fail_ends_when` says what has to arrive instead: the line the entry prints when the
-    // computation is right, which no wall moves. The trade is stated where a reader will weigh it --
-    // the sentence is the only field the run *compares*, so a mark that states its ending reading
-    // accepts any failure as the expected one until the numbers arrive, and a different defect can
-    // wear the mark's name in the meantime. That is why the owner and the reason are still required
-    // on it, and why the reason has to keep naming the wall as it stands today.
+    // The mark may instead state the reading that ends it, and the ruling of 2026-11-21 02:20 chose
+    // that shape for a case whose target is a number and whose wall is being built: a sentence
+    // quoted from a refused run follows the implementation, so a pin on it has to be re-typed every
+    // time the wall moves -- which records the wall's progress as the case's debt and reads, in the
+    // plan, as "this case fails for this reason" long after that reason moved.
+    //
+    // What that field may hold is now exactly two things, because a promise nobody evaluates is a
+    // mark nobody re-reads -- the ruling of 2026-11-24 18:xx (see internal/questions/
+    // 2026-11-24-deleting-known-fail-ends-when-would-unmake-11-marks.cn.md):
+    //
+    //   known_fail_ends_when = { prints = "the line this entry prints when the wall moves" }
+    //   known_fail_ends_when = { passes = "another case, whose passing means this one is over" }
+    //
+    // `prints` is read off the entry's own output on every run; `passes` off another case's verdict
+    // in the same run. Either way the run *evaluates* it: a mark whose ending has arrived fails the
+    // run and says to delete the mark (strict xfail). Prose -- a sentence with no key -- is refused
+    // here and by test/tools/check-plan-fields.mjs, because it cannot be evaluated.
     const expected = entry.known_fail_msg
+    const ends = knownFailEndCondition(entry.known_fail_ends_when)
+    if (entry.known_fail_ends_when !== undefined && ends === null) {
+        throw new PlanSchemaError(
+            `${planLabel(planPath)}: ${where}: known_fail_ends_when must be exactly one of ` +
+                `{ prints = "..." } or { passes = "..." }: the condition has to be something a run ` +
+                `can evaluate -- the line this entry prints when the wall moves, or a case whose ` +
+                `passing means this one is over -- because a sentence nothing reads is a mark ` +
+                `nobody re-reads`,
+        )
+    }
     if (typeof expected !== 'string' || expected.trim().length === 0) {
-        const ends = entry.known_fail_ends_when
-        if (typeof ends !== 'string' || ends.trim().length === 0) {
+        if (ends === null) {
             throw new PlanSchemaError(
                 `${planLabel(planPath)}: ${where}: known_fail needs known_fail_msg or known_fail_ends_when: ` +
                     `quote either the sentence this case prints today, or the reading that ends the mark -- a ` +
@@ -582,6 +704,36 @@ const TIMEOUT_MARGIN = 4
 // kills the child at it either way, so a test that really runs too long still fails.
 export const NO_CPU_TIME_SKIP = 'skipped: this host reports no CPU time'
 
+// What a case's record says about the CPU time it cost. A record carries a figure or a sentence
+// saying why there is none; it never carries 0, which a reader would take as "this case is free"
+// while the truth is "nobody measured it". The figure comes from the wrapper the runner already
+// starts for the test (`test/tools/child-cpu.mjs`, fd 3): the kernel's `cutime` + `cstime` for
+// exactly this test's process tree, so the wrapper's own time is not in it. No second process is
+// started to read it, on any platform: where the kernel reports no such figure the record says so
+// and the runner does nothing else about it.
+export const CPU_READING_WRAPPED =
+    'process-tree CPU time (user + system) the kernel charged this test, read by test/tools/child-cpu.mjs'
+export const CPU_READING_ABSENT =
+    'absent: this platform reports no per-process CPU time (there is no /proc/self/stat), and the ' +
+    'runner starts no process to invent one'
+
+/**
+ * One case's CPU cost, as its record carries it. Three shapes, kept apart so that a later reader
+ * can tell "this case was cheap" from "this platform cannot say" from "this case did not run":
+ *
+ *   * a figure -- the case's own CPU time, with where it came from;
+ *   * no figure although the host could report one -- the wrapper said nothing, and the reason it
+ *     gave is quoted (`cpuReason`); on this shape the timeout-margin rule fails the case, so the
+ *     record and the verdict agree;
+ *   * no figure and no way to get one -- `CPU_READING_ABSENT`, which names the platform's gap
+ *     rather than the case's cost.
+ */
+export function cpuReadingRecord({ cpuMs, cpuReason, canReadCpu }) {
+    if (Number.isFinite(cpuMs)) return { cpuMs, cpuReading: CPU_READING_WRAPPED }
+    if (!canReadCpu) return { cpuMs: null, cpuReading: CPU_READING_ABSENT }
+    return { cpuMs: null, cpuReading: `absent: ${cpuReason || 'the wrapper reported nothing'}` }
+}
+
 // How many tests this run left unjudged that way, for the line it prints at the end.
 let marginSkippedTests = 0
 
@@ -873,6 +1025,42 @@ function positiveInteger(value, what) {
     return parsed
 }
 
+/**
+ * Every option this parser accepts, in one list, because the refusal for an unknown one names it.
+ *
+ * The parser below is the truth and this is its index: a word added there belongs here in the same
+ * commit. The list exists because "I do not know that word" is only half an answer -- the reader
+ * still has to open this file to learn what the tree *does* know, and the gap between those two
+ * readings is exactly "the caller is newer than the checkout it was pointed at", which is the one
+ * thing the run cannot guess. `targets` is listed because it is the argv position that is not an
+ * option: a plan file, a plan directory, or a short name (`smoke`, `feat`, `para`), and it is the
+ * only word that may omit the leading dashes (see the refusal below).
+ */
+const KNOWN_ARGV = [
+    'targets (a plan file, a plan directory, or a short name such as smoke)',
+    '--tier fast|slow|milestone|all|debug',
+    '--build release|debug|profile',
+    '--camel <install>',
+    '--jobs <n>',
+    '--update-golden',
+    '--compile-only',
+    '--list-known',
+    '--list-cases',
+    '--selection-cases[=<file>]',
+    '--selection-layer <plans>',
+    '--selection-empty',
+]
+
+/**
+ * A refusal about argv rather than about a run, marked so `main` prints it as the one line it is.
+ *
+ * An argv error is the caller's sentence, not a crash: it arrives before anything is measured, it
+ * has one cause, and a stack trace buries the only fact worth reading.
+ */
+function argvRefusal(message) {
+    return Object.assign(new Error(message), { argvRefusal: true })
+}
+
 function parseArgs(argv) {
     const envBuild = process.env.CAMEL_TEST_BUILD
     if (envBuild !== undefined && !Object.hasOwn(BUILDS, envBuild)) {
@@ -913,6 +1101,19 @@ function parseArgs(argv) {
         // which is what removes the need for a mode that suppresses the narration.
         // `options.listKnownRows` is where `printResult` collects the verdicts while it prints them.
         listKnown: false,
+        // `--list-cases` answers "which cases would this selection run" without starting one: the
+        // same plan loading, `[[sweeps]]` expansion and tier filter a run uses, printed as one JSON
+        // row per case, and no install is consulted because nothing is executed. It is the reading
+        // `--changed` hands to `scripts/selection-cases.mjs` and the one a selection record is
+        // compared against; a second implementation of "which cases are in this selection" would
+        // agree on the day it was written and disagree the first time a plan learned a sweep.
+        listCases: false,
+        // `--selection-cases <file>` runs exactly the cases a recorded selection names
+        // (`{"cases": ["<plan id>/<case name>", ...]}`), instead of every case of the selected
+        // plans. A case list computed from the change is only meaningful if the run executes that
+        // list: handing the plans over and letting the tier expand them again is how a case got
+        // selected because its whole plan was.
+        selectionCases: null,
     }
     for (let i = 0; i < argv.length; i++) {
         const arg = argv[i]
@@ -920,6 +1121,12 @@ function parseArgs(argv) {
             options.updateGolden = true
         } else if (arg === '--selection-empty') {
             options.selectionEmpty = true
+        } else if (arg === '--list-cases') {
+            options.listCases = true
+        } else if (arg === '--selection-cases' && i + 1 < argv.length) {
+            options.selectionCases = path.resolve(process.cwd(), argv[++i])
+        } else if (arg.startsWith('--selection-cases=')) {
+            options.selectionCases = path.resolve(process.cwd(), arg.slice('--selection-cases='.length))
         } else if (arg === '--list-known') {
             options.listKnown = true
         } else if (arg === '--selection-layer' && i + 1 < argv.length) {
@@ -961,6 +1168,19 @@ function parseArgs(argv) {
             options.jobs = positiveInteger(argv[++i], '--jobs')
         } else if (arg.startsWith('--jobs=')) {
             options.jobs = positiveInteger(arg.slice('--jobs='.length), '--jobs')
+        } else if (arg.startsWith('-')) {
+            // A word that starts with `-` is never a target. Reaching this point means the caller
+            // named an option this checkout does not have -- normally because the caller is newer
+            // than the tree it was pointed at -- and pushing it as a target made `walkPlans` stat
+            // `.../--list-cases` and throw ENOENT, which every consumer reads as "this selection
+            // could not be read". Measured 2026-11-24: a lane cut at 0beeecb9fb, before this tree
+            // had `--list-cases`, answered the host's `[RUNNER, ...targets, '--list-cases',
+            // '--tier', fast]` with a stack trace and exit 1, and `scripts/selection-cases.mjs`
+            // reported `the plan loader refused this selection (exit 1)` -- a version mismatch
+            // wearing the words of an empty selection.
+            throw argvRefusal(
+                `unknown option '${arg}': this runner does not know it (the caller is newer than this tree)`,
+            )
         } else {
             options.targets.push(path.resolve(process.cwd(), arg))
         }
@@ -1316,6 +1536,12 @@ function printPlanHeader(plan) {
     console.log(`${COLORS.cyan}[PLAN]${COLORS.reset} ${showPath}: ${planLabel}${staleAllowedMark()}`)
 }
 
+/**
+ * One verdict, printed, and handed back as the exact text that was printed. The return value is
+ * what the transcript records (`test/tools/transcript.mjs`), so the console line and the recorded
+ * line are one string and cannot drift; it comes back with the colours stripped, because a
+ * transcript that carries escape sequences is a file only a terminal can count.
+ */
 function printStatusLine(status, name, metric = '') {
     const label = status === 'pass'
         ? `${COLORS.green}[PASS]${COLORS.reset}`
@@ -1327,11 +1553,18 @@ function printStatusLine(status, name, metric = '') {
     const left = `${label} ${name}`
     if (!metric) {
         console.log(left)
-        return
+        return plainStatusLine(left)
     }
     const width = 78
     const spaces = ' '.repeat(Math.max(1, width - left.length - metric.length))
-    console.log(`${left}${spaces}${metric}`)
+    const line = `${left}${spaces}${metric}`
+    console.log(line)
+    return plainStatusLine(line)
+}
+
+/** The console text without its colour, which is all a transcript holds. */
+function plainStatusLine(line) {
+    return line.replace(/\x1b\[[0-9;]*m/g, '')
 }
 
 function printDetailLines(lines) {
@@ -1393,6 +1626,16 @@ function printFailedOutput(result, pointer) {
     if (!SHOW_FAILED_OUTPUT) return
     const maxLines = 12
     const maxWidth = 240
+    // Two `(empty)` lines say the same thing twice, and a reader skimming them sees the shape of a
+    // printer that lost its input rather than a run that said nothing. One sentence names the fact
+    // the two lines only implied, and it keeps the pointer, which is where the uncut text is.
+    if (!result.stdout && !result.stderr) {
+        const where = pointer ? ` -- ${pointer}` : ''
+        console.log(
+            `    ${COLORS.cyan}[output]${COLORS.reset} both empty: the run produced no explanation${where}`,
+        )
+        return
+    }
     for (const [name, text] of [['stdout', result.stdout], ['stderr', result.stderr]]) {
         if (!text) {
             console.log(`    ${COLORS.cyan}[${name}]${COLORS.reset} (empty)`)
@@ -1587,8 +1830,42 @@ function listedName(plan, test) {
     return `${planId}/${test.name}`
 }
 
-function printRunSummary(summary) {
-    const total = summary.pass + summary.fail + summary.skip + summary.xfail
+/**
+ * The four verdicts, added: the number `[SUMMARY] total:` prints, and the number the transcript
+ * has to hold. One function so the line a reader reads and the number the check compares cannot be
+ * two different sums.
+ */
+function summaryTotal(summary) {
+    return summary.pass + summary.fail + summary.skip + summary.xfail
+}
+
+/**
+ * Wait until everything already written to `stream` has left the process.
+ *
+ * `process.stdout` is a pipe on a host run, and there the write is asynchronous: `process.exit`
+ * ends the process with whatever is still queued, and the tail of the run's own output goes with
+ * it. Measured 2026-11-24, three runs of one base: every one of them printed `total: 9159` and
+ * every one of them printed its 9159 case lines over the minutes it ran, while the `--list-known`
+ * block -- the only thing printed in one tight loop, immediately before the exit -- arrived with
+ * 9159 rows, 5265 rows and 1239 rows, the fewest from the slowest run. One empty write whose
+ * callback fires when the queue is empty is the whole fix; it costs a tick and no output.
+ */
+function flushStream(stream) {
+    return new Promise((resolve) => {
+        try {
+            stream.write('', () => resolve())
+        } catch {
+            resolve()
+        }
+    })
+}
+
+async function flushOutput() {
+    await Promise.all([flushStream(process.stdout), flushStream(process.stderr)])
+}
+
+function printRunSummary(summary, transcript) {
+    const total = summaryTotal(summary)
     const skipped = summary.skip > 0 ? `, skip: ${summary.skip}` : ''
     const known = summary.xfail > 0 ? `, known failures: ${summary.xfail}` : ''
     // The two ways a failing run ends without an exit code, counted apart. They are printed only
@@ -1597,10 +1874,15 @@ function printRunSummary(summary) {
     const timedOut = summary.timedOut > 0 ? `, timed out: ${summary.timedOut}` : ''
     const crashed = summary.crashed > 0 ? `, killed by a signal: ${summary.crashed}` : ''
     console.log('')
-    console.log(
+    const line =
         `${COLORS.cyan}[SUMMARY]${COLORS.reset} total: ${total}, pass: ${summary.pass}, fail: ${summary.fail}` +
-            `${skipped}${known}${timedOut}${crashed}${staleAllowedMark()}`,
-    )
+        `${skipped}${known}${timedOut}${crashed}${staleAllowedMark()}`
+    console.log(line)
+    // The same line, without its colour, closes the transcript: the file then states the total its
+    // own lines were counted under, so a reader of the file alone -- `transcript.mjs --check` -- can
+    // check it without being told the number by whoever fetched it, and a file cut before this line
+    // is refused for saying no total rather than read as a run of whatever it still holds.
+    if (transcript) transcript.summaryLine(plainStatusLine(line))
 }
 
 /**
@@ -1626,7 +1908,7 @@ function printKnownRoster(summary) {
     if (rows.length === 0) return
     const missing = rows.filter((row) => !row.endsWhen).length
     for (const row of rows) {
-        const ends = row.endsWhen ? row.endsWhen : `${COLORS.red}(no end condition)${COLORS.reset}`
+        const ends = row.endsWhen ? describeEndCondition(row.endsWhen) : `${COLORS.red}(no end condition)${COLORS.reset}`
         console.log(`${COLORS.cyan}[KNOWN]${COLORS.reset} ${row.name}: ${ends}`)
     }
     console.log(
@@ -2057,6 +2339,9 @@ async function runVerification(test, result) {
         // meta.json records (see `costRecord`).
         cpu_ms: result.cpuMs ?? null,
         cpu_budget_ms: result.cpuBudgetMs ?? null,
+        // The sentence that goes with `cpu_ms`: where the figure was read, or why this platform
+        // cannot supply one. A script that reports a case's cost reads this before it divides.
+        cpu_reading: result.cpuReading ?? null,
         cpu_limit_ms: result.cpuLimitMs ?? null,
         cpu_margin_x: result.cpuMarginX ?? null,
         cpu_margin_basis: result.cpuMarginBasis ?? null,
@@ -2596,7 +2881,17 @@ async function runOneTest(test, sharedVars, logContext, scratch, scratchRelative
     const launch = wrapForCpu
         ? { command: process.execPath, args: [CHILD_CPU_TOOL, '--', toolExe, ...args] }
         : { command: toolExe, args }
-    const proc = await runProcess(launch.command, launch.args, {
+    // The token sits outermost, so it is held for the whole of the case -- including the CPU wrapper
+    // and anything the case itself starts -- and it is the case's own token, not the runner's.
+    let tokenReport = null
+    let spawned = launch
+    if (TOKEN_POOL) {
+        tokenSerial += 1
+        tokenReport = path.join(os.tmpdir(), `camel-token-${process.pid}-${tokenSerial}.txt`)
+        env.CAMEL_TOKEN_REPORT = tokenReport
+        spawned = { command: 'bash', args: [HOST_CASE, launch.command, ...launch.args] }
+    }
+    const proc = await runProcess(spawned.command, spawned.args, {
         // The checkout root, and not the test's scratch directory, because `${test_tmp}` is a
         // *repository-relative* path (docs/test-plans.md, "Test Scratch"): a plan writes
         // `ONNX_OUT=${test_tmp}/m.onnx`, and a program started anywhere but here resolves that one
@@ -2625,6 +2920,29 @@ async function runOneTest(test, sharedVars, logContext, scratch, scratchRelative
     // steps in the slot were 2.9-4.4 s together.
     // A `parallel = false` test passes no hook and keeps its slot to the end (see executePlans).
     if (typeof logContext.releaseSlot === 'function') logContext.releaseSlot()
+    // How long this case queued for its token, in the pool's own millisecond reading. Absent when the
+    // case never got one (it would have exited 6 and this line would not be reached) -- `null` here is
+    // "no pool", never "waited zero".
+    let tokenWaitMs = null
+    if (tokenReport) {
+        try {
+            const text = fs.existsSync(tokenReport) ? fs.readFileSync(tokenReport, 'utf8') : ''
+            fs.rmSync(tokenReport, { force: true })
+            const lines = text.split('\n').filter((line) => line.trim() !== '')
+            if (lines.length > 0) {
+                tokenWaitMs = lines.reduce((sum, line) => sum + Number(line.split(' ')[1] || 0), 0)
+                tokenTaking.cases += lines.length
+                tokenTaking.waitMs += tokenWaitMs
+                // A take that costs a few milliseconds is the pool's own overhead, not a queue: count
+                // a case as queued only when it waited long enough to be a wait (100 ms), so the line
+                // does not report a queue that nobody stood in.
+                if (tokenWaitMs >= 100) tokenTaking.queued += 1
+            }
+        } catch {
+            // A reading that could not be taken is not a case that failed: the token was held either
+            // way, and `tokenWaitSeconds` says it did not see this case.
+        }
+    }
     const cpuReading = wrapForCpu
         ? readCpuReport(proc.cpuReport)
         // Nothing was wrapped, because this host has no reading to take and the test declared no
@@ -2633,6 +2951,7 @@ async function runOneTest(test, sharedVars, logContext, scratch, scratchRelative
         : { cpuMs: null, reason: `no reading was taken: ${NO_CPU_TIME_SKIP}` }
     const raw = {
         command: `${toolExe} ${args.join(' ')}`.trim(),
+        tokenWaitMs,
         exitCode: proc.status,
         signal: proc.signal,
         timedOut: proc.timedOut,
@@ -2669,7 +2988,14 @@ async function runOneTest(test, sharedVars, logContext, scratch, scratchRelative
         // payload carry all four, so "how far from red" is in the record and not only inferable
         // from a bound somebody has to know to divide by four.
         cpuBudgetMs,
-        cpuMs: cpuReading.cpuMs,
+        // `cpuMs` and the sentence that goes with it: the figure the wrapper reported, or the
+        // reason this platform has none (`cpuReadingRecord`). meta.json, the verify payload and the
+        // per-case timing record all carry the pair, so a null figure always travels with its why.
+        ...cpuReadingRecord({
+            cpuMs: cpuReading.cpuMs,
+            cpuReason: cpuReading.reason,
+            canReadCpu: CAN_READ_CHILD_CPU,
+        }),
         cpuReason: cpuReading.reason,
         ...costFields,
         // The card the runner chose for this test, if it chose one: which card a GPU test ran on
@@ -2852,6 +3178,10 @@ function writeLogFiles(plan, test, result, status, logDir) {
                 // provenance, not the bound.
                 cpu_ms: result.cpuMs ?? null,
                 cpu_budget_ms: result.cpuBudgetMs ?? null,
+                // Where that figure came from, or the sentence saying why this platform has none.
+                // Beside `cpu_ms` so that a null is never read as "this case cost nothing": the
+                // record answers "nobody can measure it here" in words.
+                cpu_reading: result.cpuReading ?? null,
                 // The same reading every test now records, with the line it was judged against and
                 // how many times it fits under that line: `cpu_limit_ms` is the test's
                 // `cpu_budget_ms` when it declares one and `timeout_ms / 4` otherwise (the timeout
@@ -2931,7 +3261,7 @@ function expandBackends(test) {
             // roster can print it beside the name. Absent unless the plan writes one, like
             // `__knownFailMsg`: the mechanism grew by pinning cases one at a time, and a mark
             // written before the field existed stays legal and reads as `(no end condition)`.
-            __knownFailEndsWhen: typeof test.known_fail_ends_when === 'string' ? test.known_fail_ends_when : null,
+            __knownFailEndsWhen: knownFailEndCondition(test.known_fail_ends_when),
         }]
     }
     if (marked === true) {
@@ -2957,7 +3287,7 @@ function expandBackends(test) {
         // Absent unless the plan pins one, so every mark written before this field existed stays
         // legal: the mechanism grows by pinning cases one at a time, never by a migration.
         __knownFailMsg: typeof test.known_fail_msg === 'string' ? test.known_fail_msg : null,
-        __knownFailEndsWhen: typeof test.known_fail_ends_when === 'string' ? test.known_fail_ends_when : null,
+        __knownFailEndsWhen: knownFailEndCondition(test.known_fail_ends_when),
     }))
 }
 
@@ -3201,27 +3531,44 @@ export function negativeSweepLine(counts) {
 }
 
 /**
- * A test's layer: `tier` on the test first, then its plan. Only `slow` and `milestone` are named
- * destinations; anything else (the old `smoke`/`feat`/`benchmark` labels included) is the fast
- * layer, so a plan written before the split still runs by default. `milestone` is the layer that
- * only runs at a milestone, either because the plan file says so or because a sweep left the copy
- * unsampled. `debug` is a further layer selected only by `--tier debug`: a test that aborts when
- * an assertion fires, or that is only meaningful with assertions compiled in, lives there and is
- * never part of an ordinary or `all` run.
+ * The layer a plan's tests land in when the test says nothing: the plan's own `tier` when it names
+ * one of the four, `fast` otherwise (`docs/test-plans.md`: "any `tier` other than `slow`,
+ * `milestone` or `debug` is the fast layer" -- the old `smoke`/`feat`/`benchmark` labels included,
+ * so a plan written before the split still runs by default).
  *
- * Exported because the plan inventory (`scripts/plan-inventory.mjs`) asks the same question when it
- * decides whether a plan's slow tests have a layer: a second copy of this rule would drift from it.
+ * One function, because this question used to be answered in two places and the second answer was
+ * different. Selection went through `testTier`, which normalises; the per-plan accounting read
+ * `plan.tier ?? 'fast'` raw, so a plan labelled `feat` was filed under a layer no run covers
+ * (`coveredTiers` never returns it) and its emptiness was excused as "another layer's plan" instead
+ * of reported as a plan this layer started nothing in. Six plans in this tree carry `tier = "feat"`;
+ * their 96 tests have always run fast, and the accounting is the only reading that said otherwise.
+ * `scripts/tier-report.mjs` prints how many entries reached a layer by which of these answers, so
+ * "fast" no longer hides whether it was decided or defaulted (iron rule 6).
+ *
+ * Exported because the plan inventory (`scripts/plan-inventory.mjs`) and the layer report ask the
+ * same question: a second copy of this rule would drift from it.
+ */
+export function planLayer(plan) {
+    const tier = plan.tier
+    if (tier === 'fast' || tier === 'slow' || tier === 'milestone' || tier === 'debug') return tier
+    // Reached by a plan with no `tier` and by one whose value is not a layer name. Both are the fast
+    // layer by rule; neither is a fact anyone can read off the file, which is why the report counts
+    // them apart.
+    return 'fast'
+}
+
+/**
+ * A test's layer: `tier` on the test first, then its plan (`planLayer`). `milestone` is the layer
+ * that only runs at a milestone, either because the plan file says so or because a sweep left the
+ * copy unsampled. `debug` is a further layer selected only by `--tier debug`: a test that aborts
+ * when an assertion fires, or that is only meaningful with assertions compiled in, lives there and
+ * is never part of an ordinary or `all` run.
+ *
+ * A test's `tier` is strict: a value that is not one of the four is an error here, not a silent
+ * `fast`, because the test said which layer it wants and the runner cannot honour it.
  */
 export function testTier(plan, test) {
-    const tier = test.tier !== undefined
-        ? test.tier
-        : plan.tier === 'slow'
-            ? 'slow'
-            : plan.tier === 'milestone'
-                ? 'milestone'
-                : plan.tier === 'debug'
-                    ? 'debug'
-                    : 'fast'
+    const tier = test.tier !== undefined ? test.tier : planLayer(plan)
     if (tier !== 'fast' && tier !== 'slow' && tier !== 'milestone' && tier !== 'debug') {
         throw new Error(`test '${test.name}' of ${plan.id || plan.__planPath}: tier must be 'fast', 'slow', 'milestone' or 'debug'`)
     }
@@ -3234,11 +3581,12 @@ export function testTier(plan, test) {
  * one: a fast run must not fail because it left out the reference a selected test compares
  * against.
  *
- * `debug` is a plan-set layer, not a label a plan carries instead of its normal layer: the plans
- * that exercise views, data blocks and the executor hot paths still run fast in Release, and
- * `debug_tier = true` on the plan also selects them on a Debug build. Their debug-only tests say
- * `tier = "debug"`. `all` therefore leaves those tests out: it runs on the Release binary, where
- * the debug layer's abort case would not abort.
+ * `debug` is a plan-set layer: `debug_tier = true` on a plan selects its tests on a Debug build
+ * while leaving their ordinary layer alone -- 22 plans, 319 tests, which run fast in Release and
+ * again under `--tier debug`. The entries whose own layer *is* `debug` (35, all from plans whose
+ * `tier = "debug"`; no test in this tree sets `tier = "debug"` itself) belong to no other layer.
+ * `all` therefore leaves the debug layer out: it runs on the Release binary, where the abort case
+ * would not abort.
  */
 // The layers a run of `tier` claims to cover: a plan of one of them that starts nothing in this run
 // is a failure, and a plan of another layer is expected to be empty here. `compileOnly` covers the
@@ -3254,11 +3602,16 @@ function coveredTiers(tier, compileOnly = false) {
 function relPath(abs) {
     return path.relative(path.resolve(TEST_ROOT, '..'), abs).split(path.sep).join('/')
 }
-function selectTier(plans, tier, namedPlans = new Set(), compileOnly = false) {
+function selectTier(plans, tier, namedPlans = new Set(), compileOnly = false, keep = null) {
     const order = []
     for (const plan of plans) {
         for (const test of plan.tests) order.push({ plan, test })
     }
+    // `keep` is a recorded case selection (`--selection-cases`): a test outside it is not selected
+    // by anything, whatever layer it belongs to. It is applied beside the layer rule instead of
+    // after it, so the accounting below counts what this run starts: a narrowed plan whose entries
+    // were all left out is not a plan that "began no test of its own layer" -- it was not selected.
+    const keptBySelection = (plan, test) => keep === null || keep(listedName(plan, test))
     const wants = (plan, test) => {
         // A plan the schema rejected fails in every layer: its tests never ran, so no layer can
         // honestly say the plan is clean.
@@ -3282,7 +3635,7 @@ function selectTier(plans, tier, namedPlans = new Set(), compileOnly = false) {
         // A plan file named as a target runs in full: naming the plan is the intent, and a plan
         // whose tests are mostly slow would otherwise run almost nothing. A directory target
         // still selects the layer, so the whole-tree `--tier` stays meaningful.
-        if (namedPlans.has(entry.plan.__planPath) || wants(entry.plan, entry.test)) {
+        if ((namedPlans.has(entry.plan.__planPath) || wants(entry.plan, entry.test)) && keptBySelection(entry.plan, entry.test)) {
             selected.add(index)
         }
     })
@@ -3328,7 +3681,7 @@ function selectTier(plans, tier, namedPlans = new Set(), compileOnly = false) {
         if (tests.length > 0) {
             selectedPlans.push({ ...plan, tests })
             let declaredHere = 0
-            for (const test of plan.tests) if (wants(plan, test)) declaredHere++
+            for (const test of plan.tests) if (wants(plan, test) && keptBySelection(plan, test)) declaredHere++
             tierAccounting.push({
                 plan: relPath(plan.__planPath),
                 declared: declaredHere,
@@ -3338,12 +3691,20 @@ function selectTier(plans, tier, namedPlans = new Set(), compileOnly = false) {
         }
         const key = relPath(plan.__planPath)
         const declared = plan.tests.length
-        const own = plan.__planError ? 'failing' : plan.tier ?? 'fast'
+        // Through the same rule selection uses. Read raw, a plan labelled `feat` was filed under a
+        // layer `covered` never holds, so the plan's own emptiness was reported as "another layer's
+        // plan" -- an explanation that is always available and therefore checks nothing.
+        const own = plan.__planError ? 'failing' : planLayer(plan)
         if (plan.__planError) {
             // A schema error already fails this plan; it is counted here as read, not as unproven.
             emptyByLayer.push(plan.__planPath)
         } else if (declared === 0) {
             unproven.push(`${key}: the plan declares no test at all, so this run proves nothing about it`)
+        } else if (keep !== null) {
+            // A plan this recorded selection names no case of is not a plan that started nothing:
+            // the selection left its entries out on purpose, and the count of what the change does
+            // touch is the reading, not a zero to explain.
+            emptyByLayer.push(plan.__planPath)
         } else if (covered.has(own)) {
             unproven.push(
                 `${key}: its own tier is '${own}', the layer this run covers, and it declares ` +
@@ -3405,7 +3766,14 @@ function planLineOf(planPath, needle) {
     return index === -1 ? null : index + 1
 }
 
-function loadPlans(targets, tier, layeredPlans = new Set(), compileOnly = false, emptySelection = false) {
+/**
+ * The plans a selection resolves to, with every test the layer keeps from them. Exported because
+ * the coverage table (`scripts/coverage-table.mjs`) must count the cases a selection selects
+ * through this loader: a second definition of "which cases are in this plan" -- entries only, no
+ * `[[sweeps]]` copies, no back-end expansion, no companion closure -- would agree with a run today
+ * and disagree the first time a plan learned a sweep.
+ */
+export function loadPlans(targets, tier, layeredPlans = new Set(), compileOnly = false, emptySelection = false, keep = null) {
     // A plan file named on the command line (or by `--changed`'s self rule) runs in full; the
     // plans a directory reaches follow the layer. The same plan reached both ways is named,
     // unless `--changed` marked it `layer: true`: then the tier filter applies to it as well.
@@ -3464,10 +3832,279 @@ function loadPlans(targets, tier, layeredPlans = new Set(), compileOnly = false,
     // another layer -- and the count that separates them is the one before the filter, not after
     // it: `plans` is the post-filter list and reads 0 in that message's own case.
     return {
-        ...selectTier(plans, tier, namedPlans, compileOnly === true),
+        ...selectTier(plans, tier, namedPlans, compileOnly === true, keep),
         reachedNothing,
         reachedButFiltered: plans.length,
     }
+}
+
+/**
+ * One row per case a selection would run: `{name, plan, case, tier, refs}`. `name` is the
+ * `<plan id>/<name>` pair `--list-known` prints, so a listed case can be compared with a recorded
+ * one without a translation table. `case` is the entry's input path (repository-relative) when it
+ * has one -- the thing a case-level selection matches a changed file against; `refs` are the
+ * companions the run pulls in for a differential or back-end entry, so a narrower selection can
+ * keep its closure without a second copy of that rule.
+ */
+function caseRows(selected) {
+    const rows = new Map()
+    for (const plan of selected.plans) {
+        for (const test of plan.tests) {
+            const planId = test.__planId || plan.id || path.basename(plan.__planPath, '.plan.toml')
+            const name = listedName(plan, test)
+            if (rows.has(name)) continue
+            const refs = []
+            if (test.kind === 'differential' && test.compare_to) refs.push(`${planId}/${test.compare_to}`)
+            if (test.__backendReference) refs.push(`${planId}/${test.__backendReference}`)
+            const input = test.case ? path.resolve(path.dirname(plan.__planPath), test.case) : null
+            rows.set(name, {
+                name,
+                plan: relPath(plan.__planPath),
+                case: input ? relPath(input) : null,
+                tier: testTier(plan, test),
+                refs: [...new Set(refs)],
+            })
+        }
+    }
+    return [...rows.values()].sort((lhs, rhs) => lhs.name.localeCompare(rhs.name))
+}
+
+/**
+ * One entry of a record's `cases`: the case's name.
+ *
+ * `scripts/selection-cases.mjs` writes `{ name, cause }` per case -- the cause is what says why the
+ * change selected it, and it is the reading the record exists for. Reading such an entry as a name
+ * (`String(entry)`) makes every one of them the single string `[object Object]`, which the set then
+ * de-duplicates into exactly one name: the run is told it must start a case called [object Object],
+ * refuses with `[PLAN ERROR] ... names 1 case(s) this run would not start`, and starts nothing. Every
+ * merge that handed its record to `--selection-cases` read exit 2 and 0 rows that way, and the
+ * message blamed "a stale record or another tree".
+ *
+ * So an entry is its name, or an object that carries one; anything else is refused **by its shape**
+ * rather than coerced, because a record whose entries this run cannot read is a record it cannot
+ * execute, and a coerced name is a silent one.
+ */
+function selectionCaseName(entry) {
+    if (typeof entry === 'string' && entry.length > 0) return entry
+    if (
+        entry !== null &&
+        typeof entry === 'object' &&
+        !Array.isArray(entry) &&
+        typeof entry.name === 'string' &&
+        entry.name.length > 0
+    ) {
+        return entry.name
+    }
+    const shape = entry === null
+        ? 'null'
+        : Array.isArray(entry)
+          ? 'an array'
+          : typeof entry === 'object'
+            ? `an object whose keys are [${Object.keys(entry).join(', ')}]`
+            : `a ${typeof entry}`
+    throw new Error(
+        `--selection-cases: a case entry in the record is ${shape}, and this run cannot read a name ` +
+            `out of it. A case is its name, or an object that carries one -- a selection record writes ` +
+            `{"name": ..., "cause": ...}. Coercing the entry instead is how every recorded case became ` +
+            `the one name "[object Object]".`
+    )
+}
+
+/**
+ * A refusal that is a plan error, not a crash: `main` prints one `[PLAN ERROR]` line and exits 2.
+ * A selection this run cannot read is not measured -- nothing starts -- and 2 is the code this
+ * runner already gives "not measured" (a missing install, an unreadable base). A throw would exit 1,
+ * which says a test failed: the wrong answer, because no test ran.
+ */
+function selectionRefusal(message) {
+    const error = new Error(message)
+    error.planRefusal = true
+    return error
+}
+
+/**
+ * `--selection-cases`: the names a run must execute. An empty or unreadable list is refused rather
+ * than read as "no narrowing": the two mean opposite things, and only one of them is a selection.
+ *
+ * "Empty" has two causes that must not read the same: a selection that names nothing (refused -- it
+ * must not become a plan expansion), and a record that kept a count and a digest instead of its rows
+ * because the list was too long to store. The second one cannot narrow a run at all, so it is named
+ * as the digest it is rather than reported as "names no case".
+ *
+ * The record's own `plans` travel with the names: they are the targets the engine computed the list
+ * for (`scripts/selection-cases.mjs --targets`), and they are what says whether the record describes
+ * this run or another one (`refuseRecordThatNarrowsLayer`).
+ */
+function readCaseSelection(file) {
+    if (!fs.existsSync(file)) throw selectionRefusal(`--selection-cases: ${file} does not exist`)
+    let doc
+    try {
+        doc = JSON.parse(fs.readFileSync(file, 'utf8'))
+    } catch (error) {
+        throw selectionRefusal(`--selection-cases: ${file} is not JSON (${error.message})`)
+    }
+    const names = Array.isArray(doc) ? doc : doc && doc.cases
+    if (!Array.isArray(names)) {
+        throw selectionRefusal(
+            `--selection-cases: ${file} carries no 'cases' array; a selection record writes one ` +
+                '(scripts/selection-cases.mjs --names writes the rows a run executes)'
+        )
+    }
+    if (names.length === 0) {
+        if (doc && doc.cases_recorded === false) {
+            throw selectionRefusal(
+                `--selection-cases: ${file} keeps ${doc.case_count} case(s) as ${doc.case_digest} and ` +
+                    `not as rows, so it cannot name what a run must start. Write the run's list with ` +
+                    'scripts/selection-cases.mjs --names, or replay this record with --verify.'
+            )
+        }
+        throw selectionRefusal(
+            `--selection-cases: ${file} names no case; an empty selection must not become a plan expansion`
+        )
+    }
+    return {
+        names: new Set(names.map(selectionCaseName)),
+        doc: doc && !Array.isArray(doc) ? doc : {},
+        file,
+    }
+}
+
+/**
+ * The names a recorded selection carries that this run would not start: a stale record, a record
+ * taken at another tier, or a case another lane removed. Empty means the run is exactly the list.
+ */
+function missingCaseNames(plans, wantedNames) {
+    if (wantedNames === null) return []
+    const started = new Set()
+    for (const plan of plans) for (const test of plan.tests) started.add(listedName(plan, test))
+    return [...wantedNames].filter((name) => !started.has(name))
+}
+
+/** The targets a record was computed for, in the form `scripts/selection-cases.mjs` writes them. */
+function recordedTargets(record) {
+    const plans = record && Array.isArray(record.plans) ? record.plans : []
+    const seen = new Set()
+    for (const plan of plans) {
+        const text = String(plan).replace(/\\/g, '/').replace(/\/+$/, '')
+        if (text) seen.add(path.posix.normalize(text))
+    }
+    return [...seen].sort()
+}
+
+/** The targets this run names, in the same form. No target is the whole plan tree. */
+function runTargets(options) {
+    const named = options.targets.length > 0 ? options.targets : [PLANS_ROOT]
+    const seen = new Set()
+    for (const target of named) seen.add(relPath(path.resolve(target)).replace(/\/+$/, ''))
+    return [...seen].sort()
+}
+
+/** Whether this run names the whole plan tree and nothing else: what `--all` and `-Plan all` name. */
+function namesWholePlanTree(options) {
+    const targets = runTargets(options)
+    return targets.length === 1 && targets[0] === relPath(PLANS_ROOT)
+}
+
+/** How many cases a loaded selection starts. */
+function countSelectedCases(selected) {
+    return selected.plans.reduce((total, plan) => total + plan.tests.length, 0)
+}
+
+/**
+ * A record may narrow a run only when it describes that run.
+ *
+ * `scripts/selection-cases.mjs --targets` writes the targets it computed the list for into `plans`,
+ * and `--changed` hands over the record it computed for exactly the targets it starts -- there the
+ * narrowing is the whole point, and this function leaves it alone. A record whose `plans` name
+ * another set was computed for another run: a change selection handed to a layer run. Using it as
+ * `keep` makes the layer run start a subset of the layer while still printing the layer's name, and
+ * every reading a gate takes (exit 0, a `[SUMMARY]` with no failure, a `tests:` count nobody
+ * compares with the layer's) reads the same as a complete layer. Nothing in the run's output says
+ * which of the two it was, which is why the refusal is a number and not a warning.
+ *
+ * A whole-tree run is the floor under that rule: a record that covers fewer of its cases than the
+ * layer holds is a change's list whatever its `plans` say, because no change selection names the
+ * plan tree as its target. The denominator is this layer's own list, read through the same
+ * `loadPlans` a run of it uses, so it is the number `scripts/tier-report.mjs` reports for this tree.
+ */
+function refuseRecordThatNarrowsLayer(options, selection, selected) {
+    // A record that names no target makes no claim: the synthetic probes of the self-test write
+    // `plans: []`, and their refusal is about the case names they carry.
+    const described = recordedTargets(selection.doc)
+    if (described.length === 0) return
+    const started = runTargets(options)
+    const describesThisRun =
+        described.length === started.length && described.every((target, index) => target === started[index])
+    if (describesThisRun && !namesWholePlanTree(options)) return
+    const layer = loadPlans(
+        options.targets,
+        options.tier,
+        options.layeredPlans,
+        options.compileOnly === true,
+        options.selectionEmpty === true,
+        null
+    )
+    const covered = countSelectedCases(selected)
+    const layerCases = countSelectedCases(layer)
+    if (covered >= layerCases) return
+    const shown = (list) => {
+        const head = list.slice(0, 3).join(', ')
+        return list.length > 3 ? `${head}, ...` : head
+    }
+    const where = describesThisRun
+        ? `The record names this run's target(s) -- ${shown(started)} -- and covers ${covered} of ` +
+          `their ${layerCases} cases: its case list is a change's, not this layer's.`
+        : `The record was computed for ${described.length} target(s) (${shown(described)}) and this ` +
+          `run names ${started.length} (${shown(started)}).`
+    throw selectionRefusal(
+        `the selection covers ${covered} of ${layerCases} cases in this layer; a layer run cannot ` +
+            `sign for the layer if the record narrows it. ${selection.file}: ${where} A record ` +
+            'narrows the run it describes: run the targets the record names, or compute the record ' +
+            "for this run with scripts/selection-cases.mjs --targets."
+    )
+}
+
+/**
+ * `--list-cases`: the cases this selection would run, printed as JSON rows, nothing started and no
+ * install consulted. It reads the plan tree through `loadPlans`, so the `[[sweeps]]` copies, the
+ * layer filter and the companion closure are the run's own; a listing that agreed with the run only
+ * by construction would be a second definition of the same selection.
+ */
+function listSelectedCases(options) {
+    const selection = options.selectionCases === null ? null : readCaseSelection(options.selectionCases)
+    const keep = selection === null ? null : (name) => selection.names.has(name)
+    const selected = loadPlans(
+        options.targets,
+        options.tier,
+        options.layeredPlans,
+        options.compileOnly === true,
+        false,
+        keep
+    )
+    if (selection !== null) refuseRecordThatNarrowsLayer(options, selection, selected)
+    if (selected.reachedNothing.length > 0) {
+        for (const target of selected.reachedNothing) {
+            console.error(
+                `${COLORS.red}[PLAN ERROR]${COLORS.reset} ${relPath(path.resolve(target))} holds no ` +
+                    '*.plan.toml, so it names no case'
+            )
+        }
+        return 2
+    }
+    const missing = missingCaseNames(selected.plans, selection === null ? null : selection.names)
+    if (missing.length > 0) {
+        const shown = missing.slice(0, 5).join(', ')
+        const rest = missing.length > 5 ? ` and ${missing.length - 5} more` : ''
+        console.error(
+            `${COLORS.red}[PLAN ERROR]${COLORS.reset} --selection-cases names ${missing.length} case(s) ` +
+                `this selection would not start: ${shown}${rest}`
+        )
+        return 2
+    }
+    const rows = caseRows(selected)
+    for (const row of rows) console.log(JSON.stringify(row))
+    console.log(`cases: ${rows.length}`)
+    return 0
 }
 
 /** The result of a test the runner itself could not run: its failure is reported like any other. */
@@ -3602,16 +4239,31 @@ function slotTiming(entry, clock, marks, windows) {
     const result = entry.outcome ? entry.outcome.result : null
     const verification = result ? result.verification : null
     const verifyMs = verification && verification.wallMs ? verification.wallMs : 0
+    // The one figure in this record that is the case's own work rather than its share of the
+    // host's: its CPU time, on the record of every case, beside the intervals above. `cpu_reading`
+    // says where the figure came from, or why this platform has none; a skipped case did not run,
+    // so its record says that instead of quoting a cost of zero.
+    const skipped = entry.outcome ? entry.outcome.status === 'skip' : false
+    const reading = cpuReadingRecord({
+        cpuMs: result ? result.cpuMs : null,
+        cpuReason: result ? result.cpuReason : null,
+        canReadCpu: CAN_READ_CHILD_CPU,
+    })
     return {
         plan: entry.plan.id,
         plan_path: entry.plan.__planPath,
         test: entry.test.name,
         status: entry.outcome ? entry.outcome.status : 'fail',
         serial: clock.serial === true,
-        // This test's own CPU time (user + system, the whole process tree), the figure its
+// This test's own CPU time (user + system, the whole process tree), the figure its
         // `cpu_budget_ms` and the timeout margin are judged against -- and `cpu_reason` where this
-        // host reported none, so a null here is a stated absence and not a zero.
-        cpu_ms: result && Number.isFinite(result.cpuMs) ? roundMs(result.cpuMs) : null,
+        // host reported none, so a null here is a stated absence and not a zero. `cpu_reading` says
+        // the same to a reader of `meta.json`, and a case that was skipped says it did not run
+        // instead of quoting a cost of zero.
+        cpu_ms: skipped ? null : reading.cpuMs,
+        cpu_reading: skipped
+            ? 'not run: the case was skipped, so this run charged it no CPU'
+            : reading.cpuReading,
         cpu_budget_ms: result && typeof result.cpuBudgetMs === 'number' ? roundMs(result.cpuBudgetMs) : null,
         cpu_reason: result ? result.cpuReason ?? null : null,
         // How many of the run's slot permits this test held: a `parallel = false` test and a
@@ -3844,9 +4496,24 @@ function summarizeSlotTimings(records, planWallMs, jobs, stalls, logWindows, run
         (total, record) => total + ((record.tokens || 1) - 1) * record.slot_ms,
         0
     )
+    // The cases that carry a CPU figure, and the sentences of the ones that do not: the run states
+    // which half of its own record answers "what did this cost", so a reading of 0 cases is a fact
+    // about the host and never an empty total that reads as a cheap layer.
+    const cpuRecords = records.filter((record) => Number.isFinite(record.cpu_ms))
+    const absentReadings = [...new Set(
+        records.filter((record) => !Number.isFinite(record.cpu_ms)).map((record) => record.cpu_reading)
+    )].sort()
     return {
         tests: records.length,
         plan_wall_ms: Math.round(planWallMs),
+        cpu: {
+            read: cpuRecords.length,
+            absent: records.length - cpuRecords.length,
+            cpu_ms_total: Math.round(cpuRecords.reduce((total, record) => total + record.cpu_ms, 0)),
+            cpu_ms: distribution(cpuRecords.map((record) => record.cpu_ms)),
+            top_cpu_ms: topContributors(cpuRecords, 'cpu_ms'),
+            absent_reading: absentReadings,
+        },
         // Inside a slot: the test child, and the runner work that still happens while the slot is
         // held (creating the child).
         child_ms_total: Math.round(childTotal),
@@ -4032,6 +4699,12 @@ async function executePlans(plans, options, sharedVars, logDir) {
     const stopLoopMonitor = startLoopMonitor()
     let printed = 0
     let printedPlan = null
+    // The record of the case lines this run prints, written beside the printer that prints them
+    // (test/tools/transcript.mjs). `main` reads it back at the end and refuses the run when the
+    // file does not hold what the summary counted: a line printed and a line counted are one act
+    // here, so a transcript that is short is output that did not arrive, and a run whose record is
+    // short measured nothing a gate can use.
+    const transcript = openTranscript(logDir)
 
     const printResult = (entry) => {
         const { plan, test, outcome } = entry
@@ -4064,7 +4737,7 @@ async function executePlans(plans, options, sharedVars, logDir) {
         }
         if (outcome.status === 'skip') {
             summary.skip++
-            printStatusLine('skip', test.name)
+            transcript.caseLine(printStatusLine('skip', test.name))
             printDetailLines([outcome.reason])
             return
         }
@@ -4082,7 +4755,7 @@ async function executePlans(plans, options, sharedVars, logDir) {
             if (outcome.result.timedOut) summary.timedOut++
             else if (outcome.result.signal) summary.crashed++
         }
-        printStatusLine(outcome.status, test.name, outcome.metric)
+        transcript.caseLine(printStatusLine(outcome.status, test.name, outcome.metric))
         // Who ends this red, printed beside the red. An owner that exists only in the plan file is a
         // promise the person reading the gate never sees, and the field would then be read by
         // nothing but the load-time check -- which is the shape this project already called worse
@@ -4276,13 +4949,40 @@ async function executePlans(plans, options, sharedVars, logDir) {
                         // longer appears turns the run red, the same way a mark that starts
                         // passing does. Unset is legal and pins nothing.
                         const pinned = entry.test.__knownFailMsg
-                        const seen = `${(result.failures || []).join('\n')}\n${result.stdout || ''}\n${result.stderr || ''}`
-                        if (pinned !== null && !seen.includes(pinned)) {
+                        // This column IS the verdict and NOT the case's output: the failure lines
+                        // the runner assembled about the case, then what the case printed. Only
+                        // `known_fail_msg` reads it, and it has to read the first part: an entry with
+                        // a verification script is judged by two programs, and `verifyFailureLines`
+                        // carries the second one's text here (`verification output: ...`). Measured
+                        // on the gate host at 1e01eaa0a9, by narrowing this column to the case's own
+                        // output and running every plan that carries a pin: the two pins of
+                        // `feat.linear.effects_model_edges` stopped matching (`CTRL edge(s)`,
+                        // `CTRL input(s)` -- both are lines their verifiers print), and every other
+                        // pin in the tree still matched, so the runner's own text is read by those
+                        // two verifiers and by no pin that names the case's output.
+                        //
+                        // A `prints` condition must never be matched against this column: a failure
+                        // line quotes the line a run did not find (`output does not contain '<line>'`),
+                        // so the condition would be satisfied by the sentence saying it was not (see
+                        // `observedOutput`).
+                        const verdictText = `${(result.failures || []).join('\n')}\n${result.stdout || ''}\n${result.stderr || ''}`
+                        if (pinned !== null && !verdictText.includes(pinned)) {
                             const first = `${(result.failures || [])[0] || result.stderr || result.stdout || '(no output)'}`
                                 .split('\n')[0]
                             result.status = 'fail'
                             result.failures.push(
                                 `known failure changed its mind: expected "${pinned}", got "${first.trim()}"`,
+                            )
+                        } else if (endConditionHasArrived(entry.test, observedOutput(result))) {
+                            // Strict xfail: a mark whose ending has arrived stops being an excuse the
+                            // moment the run reads it. Left as an XFAIL it would be a green nobody has
+                            // to look at again -- the debt the STALE snippet entries carried, where
+                            // the thing to do is delete the entry and the reading exists to make
+                            // somebody do it.
+                            result.status = 'fail'
+                            result.failures.push(
+                                `known failure has ended: this entry already ${describeEndCondition(entry.test.__knownFailEndsWhen)}` +
+                                    ' -- delete the mark',
                             )
                         } else {
                             result.status = 'xfail'
@@ -4335,6 +5035,7 @@ async function executePlans(plans, options, sharedVars, logDir) {
 
     await Promise.all(entries.map((entry) => entry.promise))
     drain()
+    settlePassesConditions(entries, completed, summary)
     const stalls = stopLoopMonitor()
     const timings = []
     for (const entry of entries) {
@@ -4342,11 +5043,31 @@ async function executePlans(plans, options, sharedVars, logDir) {
         entry.timing.log_write_ms = roundMs(entry.logWriteMs || 0)
         timings.push(entry.timing)
     }
-    return { summary, wallMs: performance.now() - startedAt, timings, stalls, logWindows, startedAt }
+    return { summary, wallMs: performance.now() - startedAt, timings, stalls, logWindows, startedAt, transcript }
 }
 
 async function main() {
-    const options = parseArgs(process.argv.slice(2))
+    let options
+    try {
+        options = parseArgs(process.argv.slice(2))
+    } catch (error) {
+        if (!error || !error.argvRefusal) throw error
+        // One line for the cause, then this tree's own argv and commit: those two are what a caller
+        // comparing versions needs, and they are printed here because the run never starts -- there
+        // is no summary, no provenance line and no log directory to look in.
+        console.error(`${COLORS.red}[ERROR]${COLORS.reset} ${error.message}`)
+        console.error(`[ARGV] this runner knows: ${KNOWN_ARGV.join('  ')}`)
+        const sha = gitOutput(['rev-parse', 'HEAD']) || 'unknown'
+        const when = gitOutput(['log', '-1', '--format=%cI']) || 'unknown'
+        console.error(`[ARGV] this tree is ${sha} (committed ${when}); a word this list lacks is newer than it`)
+        process.exit(1)
+    }
+    if (options.listCases) {
+        // A question about the plan tree, not a run: nothing executes, so no install is consulted.
+        const status = listSelectedCases(options)
+        process.exitCode = status
+        return status
+    }
     // An empty selection starts no plan, so no binary is consulted: refusing here for a missing
     // install would turn "nothing to run" into a red about a build, which is a different question.
     if (!options.selectionEmpty) preflightBuild(options)
@@ -4364,14 +5085,38 @@ async function main() {
             return false
         }
     })
+    // A recorded case selection (`--changed` hands one over) runs exactly those cases. It is a
+    // narrowing of the same load, not a second one: the plans are still the selection's targets, and
+    // `keep` decides which of their entries the change touched.
+    const selection = options.selectionCases === null ? null : readCaseSelection(options.selectionCases)
+    const keep = selection === null ? null : (name) => selection.names.has(name)
     const selected = loadPlans(
         options.targets,
         options.tier,
         options.layeredPlans,
         options.compileOnly === true,
-        options.selectionEmpty === true
+        options.selectionEmpty === true,
+        keep
     )
     const plans = selected.plans
+    if (selection !== null) refuseRecordThatNarrowsLayer(options, selection, selected)
+    // A name the recorded selection carries that this run would not start is a stale or wrong
+    // record, and running the rest of it would be a run that silently proves less than the record
+    // says. It is refused with the base the record names, never dropped.
+    if (selection !== null) {
+        const missing = missingCaseNames(plans, selection.names)
+        if (missing.length > 0) {
+            const shown = missing.slice(0, 5).join(', ')
+            const rest = missing.length > 5 ? ` and ${missing.length - 5} more` : ''
+            console.error(
+                `${COLORS.red}[PLAN ERROR]${COLORS.reset} --selection-cases names ${missing.length} case(s) ` +
+                    `this run would not start: ${shown}${rest}. The record is stale or was taken against ` +
+                    'another tree, so nothing is started.'
+            )
+            process.exitCode = 2
+            return 2
+        }
+    }
     // A target that reached no plan file refuses the run before anything starts: nothing would run,
     // so no [SUMMARY] could say anything true about it. It gets a sentence of its own -- the layer
     // sentence further down answers "these plans belong to another tier", a different question and
@@ -4669,8 +5414,29 @@ async function main() {
         )
     )
 
+    // A run that starts no test measures nothing, and the code says which kind of nothing: 2 is
+    // "not measured" -- the same code a missing install and an unreadable selection get -- while 0
+    // would read as a green run (a zero-row `[SUMMARY]` is the same three numbers a green one
+    // prints) and 1 would blame a test that never ran. `--selection-empty` is the way a gate reaches
+    // this on purpose: a change whose plans hold no case in this layer. Refusing to call that a pass
+    // is the point -- a run that proves nothing is not a run that found nothing wrong.
+    //
+    // The count is the summary's own four fields, the same sum `printRunSummary` prints as `total`:
+    // the summary has no `total` field, and reading one would have made this condition always false
+    // -- the run would have exited 0 while these words said 2.
+    const nothingStarted =
+        outcome.summary.pass + outcome.summary.fail + outcome.summary.skip + outcome.summary.xfail === 0
+    if (nothingStarted) {
+        // Before the `[provenance]` line, which has to stay right before `[SUMMARY]`
+        // (test/cases/tools/provenance.mjs pins the pair): the sentence explains the numbers that
+        // follow, so it goes on the near side of them.
+        console.log(
+            `${COLORS.cyan}[INFO]${COLORS.reset} nothing was started, so nothing was measured: ` +
+                'exit 2, which is not a green run and not a red one'
+        )
+    }
     printProvenance(options)
-    printRunSummary(outcome.summary)
+    printRunSummary(outcome.summary, outcome.transcript)
     // After the numbers, and not between them and the line that states what they belong to: a
     // `[provenance]` line sits immediately before `[SUMMARY]` by its own rule
     // (test/cases/tools/provenance.mjs pins it), and this is the one line that says whether the
@@ -4715,9 +5481,41 @@ async function main() {
         + ` (${(slotTiming.post_release_per_slot_ms / 1000).toFixed(1)} s of it per slot)`
         + `, loop stalls ${(slotTiming.loop_lag.stall_ms_total / 1000).toFixed(1)} s`
     )
+    // The per-case CPU record, in one line: how many cases carry a figure of their own and what
+    // the rest say. A run where the second number is everything is not a run whose costs are
+    // unknown by accident -- it is a run on a host that cannot report them, and the line quotes
+    // the sentence its cases carry rather than leaving the column empty.
+    console.log(
+        `${COLORS.cyan}[CPU]${COLORS.reset} ${slotTiming.cpu.read}/${slotTiming.tests} case(s) carry`
+        + ` the CPU time they cost (${(slotTiming.cpu.cpu_ms_total / 1000).toFixed(1)} s)`
+        + (slotTiming.cpu.absent > 0
+            ? `, ${slotTiming.cpu.absent} say why not: ${slotTiming.cpu.absent_reading.join(' | ')}`
+            : '')
+    )
     console.log(
         `${COLORS.cyan}[INFO]${COLORS.reset} wall: ${(outcome.wallMs / 1000).toFixed(1)} s, jobs: ${options.jobs}, tier: ${options.tier}`
     )
+    // The pool's own reading, beside the wall clock it is paid out of: how many cases took a token, the
+    // high-water mark the pool recorded for itself, and the time the run spent queuing rather than
+    // running. `peak` is the number a person checks against "two runs and a build must stay under 24".
+    if (TOKEN_POOL) {
+        let peak = 0
+        try {
+            for (const name of fs.readdirSync(process.env.CAMEL_TOKEN_DIR)) {
+                const match = /^peak-(\d+)$/.exec(name)
+                if (match) peak = Math.max(peak, Number(match[1]))
+            }
+        } catch {
+            // The pool directory can be gone by now (a caller that cleans up after itself). The rest of
+            // the line is still the run's own reading, so it is printed without the peak.
+        }
+        console.log(
+            `${COLORS.cyan}[TOKEN]${COLORS.reset} pool ${process.env.CAMEL_TOKEN_DIR} peak=${peak}`
+            + `, cases with a token ${tokenTaking.cases}`
+            + `, queued ${tokenTaking.queued}`
+            + `, tokenWaitSeconds=${(tokenTaking.waitMs / 1000).toFixed(1)}`
+        )
+    }
     console.log(formatGateSplit(split))
 
     // Two ways to fail, and both are red: a test that failed, and a run that left a path behind in
@@ -4725,7 +5523,28 @@ async function main() {
     // `[provenance]` line unable to name the tree the reading belongs to, and what the wrapper
     // carries to the host on the next run. A tree that could not be read at all counts as the
     // second: `could not ask` is not `there is nothing` (test/tools/tree-guard.mjs#judgeTree).
-    const exitCode = outcome.summary.fail > 0 || treeVerdict.failed === true ? 1 : 0
+    // `nothingStarted` keeps the 2 it always had, and the transcript verdict below can only raise
+    // this to 2: neither is 1, because neither is a measurement that came out wrong.
+    let exitCode = nothingStarted ? 2 : outcome.summary.fail > 0 || treeVerdict.failed === true ? 1 : 0
+    // A third answer, and not a variant of the two above: whether this run's record holds the
+    // cases it counted. The count is the summary's own total and is not adjusted; the transcript is
+    // the file the run wrote, read back from disk (test/tools/transcript.mjs). A run whose record
+    // and count disagree did not measure a set of cases, so it is refused with exit 2 -- the code
+    // this runner already gives a run that could not be read (`preflightBuild`, the `--changed`
+    // refusal, `merge-readings.mjs`): 1 means "measured, and not right", and this is neither.
+    const transcriptVerdict = judgeTranscript(outcome.transcript, summaryTotal(outcome.summary))
+    if (!transcriptVerdict.ok) {
+        console.log('')
+        console.log(`${COLORS.red}[PLAN ERROR]${COLORS.reset} ${transcriptRefusal(transcriptVerdict)}`)
+        console.log(
+            `    ${relPath(transcriptVerdict.file)} is the record this run wrote: ${transcriptVerdict.lines} ` +
+                `case line(s) read back from it, ${transcriptVerdict.total} counted by the summary above. ` +
+                'The count was not changed to match the transcript, and the truncation was not switched ' +
+                'off: a run whose record is short of its count is not a red reading, it is one that cannot ' +
+                'be read at all (exit 2).'
+        )
+        exitCode = 2
+    }
     // The whole of `--list-known`'s output, emitted last: one `{name, verdict, reading}` per test.
     // Last because the reader is a program that takes the lines after this point, and every line
     // before it is the run a person reads -- the summary, the tree verdict, the roster, the
@@ -4734,6 +5553,9 @@ async function main() {
     if (options.listKnown) {
         for (const row of options.listKnownRows) console.log(JSON.stringify(row))
     }
+    // This block is the reason the flush exists: it is the one output printed as one burst at the
+    // very end, and on a host run the exit used to end the process with part of it still queued.
+    await flushOutput()
     process.exit(exitCode)
 }
 
@@ -4741,6 +5563,16 @@ async function main() {
 // `loadPlanTests` and `expandSweeps` from here, and importing a module must not run the tests.
 if (process.argv[1] && path.resolve(process.argv[1]) === __filename) {
     main().catch((error) => {
+        if (error && error.planRefusal === true) {
+            // A recorded selection this run cannot read: one line and exit 2, no stack. The stack a
+            // throw prints says which line of this file refused, which is not the question a reader
+            // of a gate log has; and exit 1 would say a test failed when nothing was started.
+            console.error(`${COLORS.red}[PLAN ERROR]${COLORS.reset} ${error.message}`)
+            console.error(
+                `${COLORS.cyan}[INFO]${COLORS.reset} nothing was started, so nothing was measured: exit 2`
+            )
+            process.exit(2)
+        }
         console.error(error && error.stack ? error.stack : String(error))
         if (fs.existsSync(TEST_SCRATCH_RUN)) {
             console.error(`${COLORS.cyan}[INFO]${COLORS.reset} test scratch kept: ${TEST_SCRATCH_RUN}`)

@@ -472,9 +472,15 @@ std::string GraphVizDumpPass::dumpGraph(camel::runtime::GCGraph *graph) {
         // color and list every role in the tooltip.
         string roleAttr, roleFill, roleTooltip;
         if (config_.annotateRoles) {
-            for (const auto &match :
-                 camel::runtime::NodeRoleRegistry::instance().classify(
-                     camel::graph::FrozenGraphAdapter(*graph), nodeRef)) {
+            // The site names the graph and the store the fact a role reads is answered by: a role
+            // that speaks about a fact asks it there (camel/runtime/node_roles.h). The adapter is a
+            // named local because a site holds a reference to it: a temporary bound to a reference
+            // member of an aggregate dies with the statement that made it.
+            const camel::graph::FrozenGraphAdapter viewAdapter(*graph);
+            const camel::runtime::NodeRoleSite roleSite{
+                viewAdapter, graph, program_.get(), &context_->facts()};
+            for (const auto &match : camel::runtime::NodeRoleRegistry::instance().classify(
+                     roleSite, nodeRef)) {
                 roleAttr += (roleAttr.empty() ? "" : ";") + match.spec.name;
                 roleTooltip += std::format("\\nrole {}: {}", match.spec.name, escape(match.detail));
                 if (roleFill.empty()) {
@@ -924,7 +930,7 @@ GraphVizDumpPass::apply(const camel::runtime::Program *program, std::ostream &os
     camel::runtime::GCGraph *graph = program->root();
     program_                       = camel::runtime::ProgramHold(*context_, program);
     os << dumpGraph(graph);
-    return nullptr;
+    return program;
 }
 
 

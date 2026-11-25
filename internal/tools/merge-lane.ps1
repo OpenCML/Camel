@@ -132,11 +132,13 @@ param(
     [string] $Target = 'develop',
     # The merge seat's own worktree. EMPTY means "read it from this machine's settings", which is the
     # only place a machine-specific path belongs (internal/tools/camel-gate.local.json,
-    # `mergeWorktree`, git-ignored). It used to default to a path on the author's workstation: the
-    # first default was the author's own checkout, which rule 17 forbids, and the repair -- another
-    # seat's tree -- kept the same defect with a different victim, because a default that happens to
-    # name an existing tree does not fail, it merges into somebody else's checkout. So there is no
-    # default now: a run that cannot read the setting stops and names what is missing.
+    # `mergeWorktree`, git-ignored) -- the same key `scripts/hooks/pre-push` reads to decide which
+    # tree may push develop, and `-MainCheckout` is the one-off override. It used to default to a path
+    # on the author's workstation: the first default was the author's own checkout, which rule 17
+    # forbids, and the repair -- another seat's tree -- kept the same defect with a different victim,
+    # because a default that happens to name an existing tree does not fail, it merges into somebody
+    # else's checkout. So there is no default now: a run that cannot read the setting stops and names
+    # what is missing.
     [string] $MainCheckout = '',
     # The machine's settings file, when it is not the one beside this script. Same parameter as
     # camel-build.ps1, camel-test.ps1 and camel-remote.ps1, for the same reason: a run that has to
@@ -163,7 +165,17 @@ param(
     [string] $BaselineBranch = 'camel-baseline',
     [switch] $WhatIf,
     [switch] $NoPush,
-    [switch] $WarmBaseline
+    [switch] $WarmBaseline,
+    # A merge commit the seat already made, because the merge needed a resolution this tool cannot
+    # make: `git merge --no-ff` stopped on a conflict, the seat resolved the files and committed, and
+    # from then on this tool's own merge step has nothing to add -- it would either be refused by the
+    # start-point assertion (HEAD is no longer origin) or repeat a merge that now conflicts with its
+    # own resolution. Given here, the four stages after the merge (clang, readings, record, push) run
+    # exactly as they always do, on that commit; what is asserted instead of the merge is the shape a
+    # merge this tool would have made has: first parent == origin/<Target>, second parent == the
+    # lane's tip, HEAD == the commit itself. Anything else is refused, because a commit whose parents
+    # are not that is not the merge it claims to be.
+    [string] $MergeCommit = ''
 )
 
 $ErrorActionPreference = 'Stop'
@@ -551,6 +563,34 @@ function Sync-BaselineWorktree {
     $at = "$(& git -C $target rev-parse HEAD 2>$null)".Trim()
     if ($at -ne $Sha) { return "the new worktree $target is at $($at.Substring(0, [Math]::Min(9, $at.Length))), not $short" }
     return $null
+}
+
+# Three trees and three jobs, kept apart on purpose:
+#   $toolRoot         the checkout this SCRIPT lives in -- the instruments (the gate entry, the
+#                     comparer, the record writer) come from here, because the tree the merge makes
+#                     is under judgement and a judged tree must not carry the instrument that judges
+#                     it. `origin/<target>` does not carry these files at all, which is how the first
+#                     full run failed with "Cannot find module ...merge-record.mjs"; an older comparer
+#                     would have accepted `--accept` and ignored `--tree`, seeding a baseline nothing
+#                     could check, and that run would have read as green.
+#   $MainCheckout     the merge position: the seat checkout whose branch is the target, where the
+#                     merge commit is made, which the gates measure, and from which the push is made
+#                     (the hook names that tree for `develop`).
+#   $BaselineWorktree the throwaway tree the baseline is measured in, held at the first parent on a
+#                     branch of its own.
+# The header check and the plan selection are the other way round on purpose: they are about the
+# tree's own files and its own selection rules, so they run the tree's own copies.
+$toolRoot = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
+# The list that decides what docs-only means, in its own file so a test can read it without this
+# script's merge, host and gates around it. Dot-sourced: it defines two functions and nothing else.
+. (Join-Path $PSScriptRoot 'merge-lane-docs.ps1')
+if (-not (Test-Path -LiteralPath (Join-Path $toolRoot 'scripts\merge-readings.mjs'))) {
+    Write-Host ''
+    Write-Host 'STOPPED: this script is not in a checkout that carries the merge instruments (exit 2, nothing measured)' -ForegroundColor Yellow
+    Write-Host "  $toolRoot has no scripts/merge-readings.mjs. The comparer and the record writer are run from the checkout this script lives in, so run it from the merge position's own checkout after pulling."
+    Write-Host ''
+    Write-Host "Nothing was pushed, and local $Target is where it was."
+    exit 2
 }
 
 # --- the push, and the one recovery a refused push may make -------------------
@@ -1036,31 +1076,6 @@ if (-not $BaselineRoot) {
     $BaselineWorktree = $baselineCheckout.Path
 }
 
-# Three trees and three jobs, kept apart on purpose:
-#   $toolRoot         the checkout this SCRIPT lives in -- the instruments (the gate entry, the
-#                     comparer, the record writer) come from here, because the tree the merge makes
-#                     is under judgement and a judged tree must not carry the instrument that judges
-#                     it. `origin/<target>` does not carry these files at all, which is how the first
-#                     full run failed with "Cannot find module ...merge-record.mjs"; an older comparer
-#                     would have accepted `--accept` and ignored `--tree`, seeding a baseline nothing
-#                     could check, and that run would have read as green.
-#   $MainCheckout     the merge position: the seat checkout whose branch is the target, where the
-#                     merge commit is made, which the gates measure, and from which the push is made
-#                     (the hook names that tree for `develop`).
-#   $BaselineWorktree the throwaway tree the baseline is measured in, held at the first parent on a
-#                     branch of its own.
-# The header check and the plan selection are the other way round on purpose: they are about the
-# tree's own files and its own selection rules, so they run the tree's own copies.
-$toolRoot = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
-if (-not (Test-Path -LiteralPath (Join-Path $toolRoot 'scripts\merge-readings.mjs'))) {
-    Write-Host ''
-    Write-Host 'STOPPED: this script is not in a checkout that carries the merge instruments (exit 2, nothing measured)' -ForegroundColor Yellow
-    Write-Host "  $toolRoot has no scripts/merge-readings.mjs. The comparer and the record writer are run from the checkout this script lives in, so run it from the merge position's own checkout after pulling."
-    Write-Host ''
-    Write-Host "Nothing was pushed, and local $Target is where it was."
-    exit 2
-}
-
 Push-Location $MainCheckout
 try {
     # The two directories that are not `$MainCheckout\.git` once the merge position is a linked
@@ -1153,13 +1168,63 @@ try {
         exit 2
     }
 
+    # `-MergeCommit`: the seat merged and resolved by hand, and this run is the four stages after the
+    # merge. What replaces the merge step's own two checks is the same question asked about a commit
+    # that already exists -- is this the merge this tool would have made? Three answers, all read off
+    # git rather than off the seat's word: the first parent is origin/<Target> (so the push is a
+    # fast-forward and the reading is about a tree that lands), the second parent is the lane's tip
+    # (so the record names the lane that came in), and HEAD is the commit (so what is measured and
+    # pushed is the thing that was checked). Each refusal names which one is wrong, because the
+    # repair differs: a wrong first parent means the seat started from another tip, a wrong second
+    # parent means another lane was merged, and a HEAD that is something else means the seat is not
+    # holding the merge it says it made.
+    $mergeSecondParent = ''
+    if ($MergeCommit) {
+        $mc = "$(& git rev-parse --verify "$MergeCommit^{commit}" 2>$null)".Trim()
+        if (-not $mc) {
+            Stop-With "-MergeCommit '$MergeCommit' does not resolve to a commit" 'Pass the sha (or the ref) of the merge commit the seat made; nothing was measured and nothing was pushed.' 2
+        }
+        $mcParents = @("$(& git rev-list --parents -n 1 $mc 2>$null)".Trim() -split '\s+' | Where-Object { $_ })
+        if ($mcParents.Count -lt 3) {
+            Stop-With "-MergeCommit $($mc.Substring(0, 9)) is not a merge commit" "It has $($mcParents.Count - 1) parent(s); a merge of the lane into $Target has two. Nothing was measured and nothing was pushed." 2
+        }
+        $mcFirst = $mcParents[1]
+        $mcSecond = $mcParents[2]
+        $laneTip = "$(& git rev-parse --verify "$Branch^{commit}" 2>$null)".Trim()
+        if (-not $laneTip) {
+            Stop-With "-MergeCommit was given with -Branch $Branch, which does not resolve to a commit" 'The second parent is compared against the lane the merge names, so the lane has to be nameable. Nothing was measured and nothing was pushed.' 2
+        }
+        if ($mcFirst -ne $originTarget) {
+            # Two shapes land here and they are not the same mistake. The first parent is an OLDER
+            # origin/$Target: the seat merged integration into itself and then made its merge on top --
+            # which puts integration's commits on this branch as if they were arrivals, and makes every
+            # tool that reads the first-parent chain count them again. The first parent is a commit
+            # origin never had: the seat started from another base entirely. Naming which one it is
+            # matters, because the repair differs (redo on the new tip, or find the right base).
+            & git merge-base --is-ancestor $mcFirst $originTarget 2>$null
+            $integratedTheOtherWay = ($LASTEXITCODE -eq 0)
+            if ($integratedTheOtherWay) {
+                Stop-With "-MergeCommit $($mc.Substring(0, 9)) has $($mcFirst.Substring(0, 9)) as its first parent, and that is an older origin/$Target, not the tip $($originTarget.Substring(0, 9))" "You are merging integration into the seat, and then merging the lane on top of that: the push would not be a fast-forward, and on the first-parent chain integration's own commits would read as arrivals from a lane. Redo the merge on the current tip -- git checkout -B tmp origin/$Target, then git merge --no-ff $Branch with 'git config rerere.enabled true' replaying the resolution you already made -- and pass that commit. Nothing was measured and nothing was pushed." 2
+            }
+            Stop-With "-MergeCommit $($mc.Substring(0, 9)) has $($mcFirst.Substring(0, 9)) as its first parent, not origin/$Target $($originTarget.Substring(0, 9))" "Its first parent is the tip the merge lands on, and the push is a fast-forward only from origin/$Target. Merge the lane from a checkout whose HEAD is origin/$Target and pass that commit; nothing was measured and nothing was pushed." 2
+        }
+        if ($mcSecond -ne $laneTip) {
+            Stop-With "-MergeCommit $($mc.Substring(0, 9)) has $($mcSecond.Substring(0, 9)) as its second parent, not the tip of $Branch $($laneTip.Substring(0, 9))" 'The second parent is the lane the record names, so a merge of another lane cannot be recorded as this one. Nothing was measured and nothing was pushed.' 2
+        }
+        if ($headTip -ne $mc) {
+            Stop-With "-MergeCommit is $($mc.Substring(0, 9)) and HEAD is $($headTip.Substring(0, 9))" 'The readings and the push are about HEAD, so HEAD has to be the merge commit that was checked. Check the commit out here, or pass the one HEAD holds; nothing was measured and nothing was pushed.' 2
+        }
+        $mergeSecondParent = $mcSecond
+        Write-Host "merging nothing: -MergeCommit $($mc.Substring(0, 9)) is already a merge of $($mcSecond.Substring(0, 9)) into origin/$Target $($originTarget.Substring(0, 9)), and its parents and HEAD are the shape this tool would have made"
+    }
+
     # The assertion: this checkout's HEAD is the target's recorded tip, so the merge commit's first
     # parent is the commit on origin and the push is a fast-forward. A seat works on a branch of its
     # own, so the local branch need not be named like the target; HEAD is what is asserted, and the
     # local branch (when it exists) is read beside it in the messages below.
     $rangeName = if ($localTarget) { "local $Target" } else { 'HEAD' }
     $rangeRight = if ($localTarget) { $Target } else { 'HEAD' }
-    if ($headTip -ne $originTarget) {
+    if ($headTip -ne $originTarget -and -not $MergeCommit) {
         # What the branch holds and origin does not: every commit, so the reader sees what a merge
         # brought with it as well. The judgement, though, is about develop's FIRST-PARENT chain only:
         # the commits a merge pulls in from a lane are not on that chain, were never merges this tool
@@ -1413,10 +1478,19 @@ try {
 
     Write-Host "merging $Branch at $head"
 
-    # Test 1: the exit code.
-    $mergeOutput = & git merge --no-ff $Branch -m "$Message`n`nLane branch: $Branch at $head" 2>&1
-    $mergeExit = $LASTEXITCODE
-    $mergeOutput | ForEach-Object { "  $_" }
+    # Test 1: the exit code. Skipped for `-MergeCommit`: the merge exists and its shape was asserted
+    # above, which is the same question `git merge` answers by exiting 0 and that assertion asks by
+    # comparing parents. Running the merge anyway is not an option -- on a conflicted merge it would
+    # stop on the resolution the seat just made, and on a clean one it would make a second merge
+    # commit on top of the first.
+    if ($MergeCommit) {
+        $mergeExit = 0
+        $mergeOutput = @()
+    } else {
+        $mergeOutput = & git merge --no-ff $Branch -m "$Message`n`nLane branch: $Branch at $head" 2>&1
+        $mergeExit = $LASTEXITCODE
+        $mergeOutput | ForEach-Object { "  $_" }
+    }
 
     if ($mergeExit -ne 0) {
         $conflicted = @(& git diff --name-only --diff-filter=U 2>$null)
@@ -1571,20 +1645,111 @@ try {
         (New-Object System.Text.UTF8Encoding($false)))
     $messageFile = Join-Path ([System.IO.Path]::GetTempPath()) ("camel-merge-message-$PID.txt")
     [System.IO.File]::WriteAllText($messageFile, "$Message`n", (New-Object System.Text.UTF8Encoding($false)))
-    if ($selectExit -ne 0 -or $planTargets.Count -eq 0) {
-        # Not a red and not a green: the selection itself did not answer, so the plans this merge
-        # touches are unknown and nothing about the change has been measured. Same shape as the
-        # clang step's exit 2, and for the same reason: `cannot select` must not read as `no reds`.
+    # --- a merge with nothing to measure ----------------------------------------
+    # `--changed` named no plan. If every file this merge changes is documentation, that is a fact
+    # about the change and not a failure of the selection: no plan covers `internal/questions/`, and
+    # none should -- nothing executes a page. The run is then recorded as what it is (`measured: none`,
+    # with the reason and the gate that decided it) and pushed, because a merge that was never meant to
+    # be measured must not be refused as if the measuring had gone wrong. Anything else stays exit 2:
+    # a change with one non-documentation file in it is a change a plan could turn red on.
+    #
+    # How that is read is `merge-lane-docs.ps1`'s `Get-SelectionVerdict`, and the reason it is a
+    # function there rather than a conjunction here is the defect this replaces: the judgement used to
+    # be `$selectExit -eq 0 -and $planTargets.Count -eq 0 -and every path documentation`, and an empty
+    # selection is exit 2 by the runner's own rule, so the conjunction could never hold and a
+    # documentation-only merge was always refused as unmeasurable. Both documentation verdicts below
+    # take the same branch; the refused one says in its own line that the selection refused, because
+    # "no rule matches" and "could not read the change" are different facts and only the first one is
+    # a documentation merge.
+    $verdict = Get-SelectionVerdict -SelectExit $selectExit -SelectOutput $selectOut `
+        -ChangedFiles $changedFiles -PlanCount $planTargets.Count
+    if ($verdict -eq 'docs-only-listed' -or $verdict -eq 'docs-only-refused') {
+        $firstParentSha = "$(& git rev-parse 'HEAD^1' 2>$null)".Trim()
         Write-Host ''
-        if ($planTargets.Count -eq 0 -and $widened) {
+        if ($verdict -eq 'docs-only-refused') {
+            Write-Host 'docs-only: nothing to measure (selection refused: no rule matches, and every changed path is documentation)' -ForegroundColor Yellow
+        } else {
+            Write-Host 'docs-only: nothing to measure' -ForegroundColor Yellow
+        }
+        Write-Host "  Every one of the $($changedFiles.Count) file(s) this merge changes is documentation: $($changedFiles -join ', ')"
+        if ($verdict -eq 'docs-only-refused') {
+            Write-Host '  `--changed` exited 2 because no rule in `test/plan-selection.json` matches these paths and the selection is empty; that refusal is about the rules, not about this merge, and the paths are the whole change.'
+        } else {
+            Write-Host '  `--changed` names no plan because no plan covers these paths, and running the suite anyway would read some other change.'
+        }
+        Write-Host "  The record says so in those words, and the merge is pushed as a merge that had nothing to measure."
+        $docsWhy = 'documentation only: every file this merge changes is documentation, so no plan is selected and there is nothing to measure'
+        if ($verdict -eq 'docs-only-refused') {
+            $docsWhy = 'documentation only: every file this merge changes is documentation, so the selection names no plan (the runner refuses an empty selection with exit 2) and there is nothing to measure'
+        }
+        $passedDir = Join-Path $commonDir 'camel-passed'
+        New-Item -ItemType Directory -Force -Path $passedDir | Out-Null
+        $recordOut = @(& node (Join-Path $toolRoot 'scripts\merge-record.mjs') write `
+            --measured none `
+            --why $docsWhy `
+            --merge $mergeCommit --first-parent $firstParentSha --second-parent $head --branch $Branch `
+            --tree $MainCheckout --out $passedDir --gate headers --gate clang-syntax --gate docs-only 2>&1)
+        $recordExit = $LASTEXITCODE
+        $recordOut | ForEach-Object { "  $_" }
+        if ($recordExit -ne 0) {
+            Stop-With "the pass record for $($mergeCommit.Substring(0, 9)) could not be written (exit $recordExit)" 'The pre-push hook refuses a merge commit without one, so the push is not attempted.' $mergeCommit
+        }
+        $recordFile = Join-Path $passedDir "$mergeCommit.json"
+        if ($NoPush) {
+            Write-Host ''
+            Write-Host 'would push: this merge had nothing to measure. Nothing was pushed (-NoPush).' -ForegroundColor Yellow
+            Write-GitState -MergeCommit $mergeCommit
+            Write-Host ''
+            Write-Host "tried $Branch at $head; nothing was pushed (-NoPush)"
+            exit 0
+        }
+        for ($i = 1; $i -le 3; $i++) {
+            & git push origin "HEAD:$Target" 2>&1 | Select-Object -Last 1
+            if ($LASTEXITCODE -eq 0) { break }
+            Start-Sleep -Seconds 4
+        }
+        if ($LASTEXITCODE -ne 0) {
+            Remove-Item -LiteralPath $recordFile -Force -ErrorAction SilentlyContinue
+            Stop-With 'git push failed after 3 attempts' "The merge is committed locally and not on origin/$Target, and the pass record was removed with the push's claim." $mergeCommit
+        }
+        Write-Host ''
+        Write-Host "merged $Branch at $head; origin/$Target is $mergeCommit (docs-only, nothing measured)" -ForegroundColor Green
+        exit 0
+    }
+    # `unreadable` and `no-plan` are both refusals and they are not the same fact, so they do not
+    # print the same stop. The first says the change itself is unknown -- a base, the rules or the
+    # changed-file list could not be read -- and that is the gate being blind, not a verdict. The
+    # second says the selection was read and named nothing while at least one path is not
+    # documentation: a hole in `test/plan-selection.json` or an empty merge. Neither is a red, and
+    # neither may read as one.
+    if ($verdict -eq 'unreadable') {
+        Write-Host ''
+        Write-Host "STOPPED: the selection could not be read (exit $selectExit, no reading taken)" -ForegroundColor Yellow
+        Write-Host '  This is not a verdict about your tree: the base, the selection rules or the changed-file list could not be read, so the change itself is unknown -- and whether every path is documentation is not a question an unknown change can answer. Nothing was pushed.'
+        $selectOut | Select-Object -Last 3 | ForEach-Object { "  $_" }
+        Write-Host '  What repairs it: `node scripts/test.js --changed --list` names the selection and starts no test; its own refusal is the line above, and the usual cause is a base branch that does not resolve in this checkout.'
+        Write-Host ''
+        Write-GitState -MergeCommit $mergeCommit
+        exit 2
+    }
+    if ($verdict -eq 'no-plan') {
+        # Not a red and not a green: the selection answered and named no plan, so the plans this
+        # merge touches are unknown and nothing about the change has been measured. Same shape as
+        # the clang step's exit 2, and for the same reason: `cannot select` must not read as `no reds`.
+        Write-Host ''
+        if ($selectExit -eq 0) {
+            Write-Host 'STOPPED: this merge changes no file, so no plan is selected (exit 0, no reading taken)' -ForegroundColor Yellow
+            Write-Host '  This is not a defect in your tree: `git diff --name-only HEAD^1` is empty, so there is no change to measure case by case and no baseline to compare it with. Nothing was pushed.'
+            Write-Host '  What repairs it: check that the merge commit really brings the lane in -- a merge that reports success and changes nothing is the thing `merge-lane` exists to refuse.'
+        } elseif ($planTargets.Count -eq 0 -and $widened) {
             Write-Host 'STOPPED: this merge selects no plan (exit 2, no reading taken)' -ForegroundColor Yellow
             Write-Host '  This is not a defect in your tree: `--changed` named no plan for this change, so it widened to the whole fast layer, and a whole-suite reading is not a reading about this merge. Nothing was pushed.'
             Write-Host '  What repairs it: `node scripts/test.js --changed --list` is the selection itself and starts nothing -- read it. Either the change names no plan (then nothing about it is measured case by case, and that is a fact worth knowing before merging) or `test/plan-selection.json` has no rule for those files.'
         } else {
             Write-Host "STOPPED: the plans this merge touches could not be selected (exit $selectExit, no reading taken)" -ForegroundColor Yellow
-            Write-Host '  This is not a defect in your tree: the selection is what failed, so nothing was pushed and nothing was learned about this change.'
+            Write-Host '  This is not a defect in your tree: the selection named no plan for these paths, and at least one of them is not documentation, so this is a hole in `test/plan-selection.json` rather than a merge with nothing to measure. Nothing was pushed.'
             $selectOut | Select-Object -Last 3 | ForEach-Object { "  $_" }
-            Write-Host '  What repairs it: `node scripts/test.js --changed --list` names the selection and starts no test; the line above is its own refusal, and the usual cause is a base branch that does not resolve in this checkout.'
+            Write-Host '  What repairs it: `node scripts/test.js --changed --list` names the selection and starts no test; the line above is its own refusal. Add the rule the paths belong to, or name the layer deliberately on the command line.'
         }
         Write-Host ''
         Write-GitState -MergeCommit $mergeCommit

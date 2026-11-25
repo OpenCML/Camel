@@ -138,12 +138,14 @@ const DEFAULTS = {
     blockCancelMinutes: 30,
     blockExempt: [],
     limits: {},
-    // Where the pushed plugin is put and loaded from, the one script allowed to put it there, and the
-    // commit it is taken from. Machine-local like `repo` and `buildHost`; the defaults are the path
-    // the plan names, and a profile or config.json overrides them.
+    // Where the pushed plugin is put and loaded from. The script that puts it there and the line it is
+    // taken from are not paths of a checkout: a checkout's working tree may stand on another branch or
+    // hold an unpushed edit (the main one is the author's workspace). Left null, the script is taken
+    // from the same pushed line as the plugin (hotRef), and so is the commit; set them only to test a
+    // change to the script itself.
     liveDir: 'D:\\Projects\\camel-oversight-live',
-    syncScript: 'D:\\Projects\\Camel\\internal\\tools\\sync-oversight-live.mjs',
-    syncRef: 'origin/develop',
+    syncScript: null,
+    syncRef: null,
 }
 
 const clip = (text, n) => {
@@ -947,14 +949,32 @@ export function apply(ctx, rawConfig) {
         }
     }
 
-    const runSync = () =>
-        new Promise((resolve) => {
+    // The sync script as the pushed line has it, written next to the hot-reloaded copies.
+    const syncScriptPath = async (ref) => {
+        if (config.syncScript) return config.syncScript
+        const spec = 'internal/tools/sync-oversight-live.mjs'
+        const blob = (await gitIn(repoRoot(), ['rev-parse', `${ref}:${spec}`])).trim()
+        mkdirSync(HOT_DIR, { recursive: true })
+        const copy = path.join(HOT_DIR, `sync-oversight-live-${blob.slice(0, 12)}.mjs`)
+        if (!existsSync(copy)) writeFileSync(copy, await gitIn(repoRoot(), ['show', `${ref}:${spec}`]))
+        return copy
+    }
+
+    const runSync = async () => {
+        const ref = config.syncRef || (await hotRef(repoRoot()))
+        let script
+        try {
+            script = await syncScriptPath(ref)
+        } catch (error) {
+            return { ok: false, stage: 'spawn', message: clip(`the sync script at ${ref}: ${error.message}`, 300) }
+        }
+        return new Promise((resolve) => {
             execFile(
                 process.execPath,
                 [
-                    config.syncScript,
+                    script,
                     '--repo', repoRoot(),
-                    '--ref', config.syncRef,
+                    '--ref', ref,
                     '--target', config.liveDir,
                     '--json',
                 ],
@@ -974,6 +994,7 @@ export function apply(ctx, rawConfig) {
                 },
             )
         })
+    }
 
     route('/oversee/reload', 'POST', async (req, res) => {
         const outcome = await runSync()

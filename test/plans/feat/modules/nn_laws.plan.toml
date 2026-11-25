@@ -1,0 +1,73 @@
+# Copyright (c) the OpenCML Organization
+# SPDX-License-Identifier: MIT
+
+# The four `nn` operators whose derivative the library could not answer in either direction and now
+# answers the forward one.
+#
+# Each test runs a program that asks the same function two ways -- the engine's pullback (`with_grad`)
+# and the library's forward transform (`jvp`) -- and pins the second against the first dotted with the
+# seed it was asked in. What the pair proves is that the law answers the engine's gradient in one
+# direction; it does **not** prove the library's pullback, and the program does not ask for one. The
+# reverse half of these keys refuses, and the reason is in `scripts/vjp-parity-exemptions.tsv` under
+# the 丙 heading: the adjoint of pooling, convolution and a gather is the engine's `*_grad`, which
+# reads its input's shape, and in a forward law's linear half that slot holds the tangent.
+id = "modules.nn.laws"
+order = 362
+tier = "fast"
+tags = ["feat", "modules", "nn"]
+
+[[tests]]
+name = "library_law_conv2d"
+desc = "`sum(conv2d(x, w, b))` on a `[1, 1, 3, 3]` input and a `[1, 1, 2, 2]` kernel, asked of the library's forward transform and of the engine in one program. `src/stdlib/rulesets/jvp.cml#jvp_conv2d` is the convolution read once per operand with a zero in the other two places -- the operator is linear in each of its three tensors -- so the tangent of the sum is the seed convolved against the kernel, and the kernel's tangent convolved against the input, and the bias's. The engine's own gradient dotted with the seed is the number the law must reach, and the input's shape does not separate two wrong arithmetics while the kernel's four entries do."
+kind = "behavior"
+case = "../../../cases/modules/nn/library_law_conv2d.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm"]
+backends_agree = ["exit_code", "diagnostics"]
+expect_exit = 0
+expect_output_contains = ["conv2d forward_ok=true"]
+expect_output_not_contains = ["skip="]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "library_law_max_pool2d"
+desc = "`sum(max_pool2d(x, 2))` on a `[1, 1, 4, 4]` input whose sixteen values are all distinct. The law is *not* `max_pool2d(dx)`: which position of a window survives is decided by `x`, so pooling the tangent would answer the tangent's own maximum. `jvp_max_pool2d` writes the engine's own `max_pool2d_grad(x, ones_like(y), k)` as a residual mask, sums each window's survivor with `avg_pool2d`, and scales back by the window's area, and the program pins the answer at -44 -- the seed read at the four survivors, -6, -8, -14 and -16 -- which is what the engine's gradient dotted with the seed also answers."
+kind = "behavior"
+case = "../../../cases/modules/nn/library_law_max_pool2d.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm"]
+backends_agree = ["exit_code", "diagnostics"]
+expect_exit = 0
+expect_output_contains = ["max_pool2d forward=-44.0 forward_ok=true"]
+expect_output_not_contains = ["skip="]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "library_law_avg_pool2d"
+desc = "`sum(avg_pool2d(x, 2))` on the same `[1, 1, 4, 4]` input. A window's average is a sum divided by a count that reads no element, so the tangent is the pool of the tangents; the program pins the answer at 4 -- four windows, each averaging four ones -- which is also the engine's `0.25` in every one of the sixteen positions dotted with the seed."
+kind = "behavior"
+case = "../../../cases/modules/nn/library_law_avg_pool2d.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm"]
+backends_agree = ["exit_code", "diagnostics"]
+expect_exit = 0
+expect_output_contains = ["avg_pool2d forward=4.0 forward_ok=true"]
+expect_output_not_contains = ["skip="]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "library_law_embedding"
+desc = "`sum(embedding(table, [0, 2, 2]))` on a `[4, 2]` table. A gather is a choice of rows and so is linear in the table: the forward law is the same gather of the table's tangent, and the indices read row 0 once and row 2 twice. The answer is 9 -- the seed read at rows 0, 2 and 2 -- and the accumulation is what the engine's `embedding_table_grad` gives when it is dotted with the seed."
+kind = "behavior"
+case = "../../../cases/modules/nn/library_law_embedding.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm"]
+backends_agree = ["exit_code", "diagnostics"]
+expect_exit = 0
+expect_output_contains = ["embedding forward=9.0 forward_ok=true"]
+expect_output_not_contains = ["skip="]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000

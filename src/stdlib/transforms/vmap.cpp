@@ -4,6 +4,8 @@
 #include "vmap.h"
 #include "camel/runtime/graph.h"
 
+#include "graph/graph_view.h"
+
 #include "node_order.h"
 #include "refusal_readings.h"
 #include "rule_expand.h"
@@ -116,7 +118,7 @@ uint64_t ruleIdOf(camel::core::context::Context &context, const std::string &nam
 /// and among the laws that take them the narrowest wins (`narrowerPortsThan`); two that both take
 /// them with neither narrower are refused by name rather than picked by filing order.
 std::optional<camel::core::RuleMatch> chooseRuleOfUri(
-    camel::core::context::Context &context, const camel::runtime::GCGraph &function,
+    camel::core::context::Context &context, const camel::graph::GraphView &function,
     gc_node_ref_t ref, const std::string &uri, std::string &why) {
     const std::vector<camel::core::RuleMatch> candidates = camel::core::vmapRulesOf(uri);
     if (candidates.empty()) {
@@ -126,21 +128,20 @@ std::optional<camel::core::RuleMatch> chooseRuleOfUri(
     }
     const Type *operand = firstOperandTypeOf(function, ref);
     Type *elementType   = ruleElementTypeOf(
-        operand != nullptr
-            ? const_cast<Type *>(operand)
-            : (function.node(ref) != nullptr ? function.node(ref)->dataType() : nullptr));
+        operand != nullptr ? const_cast<Type *>(operand)
+                           : const_cast<Type *>(function.typeOf(ref)));
     std::vector<Type *> actual;
-    for (const gc_node_ref_t input : function.normInputsOf(ref)) {
-        const camel::runtime::GCNode *node = function.node(input);
-        actual.push_back(node != nullptr ? node->dataType() : nullptr);
+    for (const camel::graph::NodeRef input :
+         function.inputs(ref, camel::graph::PortGroup::Normal)) {
+        actual.push_back(const_cast<Type *>(function.typeOf(input)));
     }
     // The ports past the data operands are the operator's own configuration -- `reshape`'s target
     // shape comes in `<>` position -- and a rule names them beside the value it batches, in port
     // order (`transpose/walk.cpp` says the same about the pullback's list). Without them a law that
     // names its shape would look like a law that names more ports than the operator has.
-    for (const gc_node_ref_t input : function.withInputsOf(ref)) {
-        const camel::runtime::GCNode *node = function.node(input);
-        actual.push_back(node != nullptr ? node->dataType() : nullptr);
+    for (const camel::graph::NodeRef input :
+         function.inputs(ref, camel::graph::PortGroup::Context)) {
+        actual.push_back(const_cast<Type *>(function.typeOf(input)));
     }
     // Which of the key's laws answers this batch is one question, asked in one place
     // (`rule_expand.cpp#chooseRuleAmong`); the batching family's own part is the type an instance
@@ -272,10 +273,12 @@ VmapGraph buildVmapGraph(
     // so the batched body reads the capture and not the batch element. Answering every port of
     // the source graph with the batch parameter, the capture port among them, would make
     // `x + c` compute `2x` and answer `[2.0, 4.0, 6.0]` where `[4.0, 5.0, 6.0]` is the answer.
-    const auto captures         = function->closureNodes();
-    const auto sourceParameters = function->normPorts();
+    const std::vector<gc_node_ref_t> captures =
+        function->view().ports(camel::graph::PortGroup::Capture);
+    const std::vector<gc_node_ref_t> sourceParameters =
+        function->view().ports(camel::graph::PortGroup::Normal);
     // Where a capture port's value is in the closure tuple: the tuple is in capture order, so the
-    // port that is the i-th entry of `closureNodes` is the i-th slot.
+    // port that is the i-th entry of `ports(Capture)` is the i-th slot.
     std::vector<size_t> captureSlot(function->nodeCount(), static_cast<size_t>(-1));
     for (size_t at = 0; at < captures.size(); ++at) {
         captureSlot[captures[at]] = at;
@@ -399,9 +402,10 @@ VmapGraph buildVmapGraph(
             // The instance is made at the element type the primitive works on, because that is the
             // type the rule is generic in -- read from an operand, not from the node, whose type is
             // what the primitive answers.
-            Type *operandType = firstOperandTypeOf(*function, ref);
+            Type *operandType = firstOperandTypeOf(function->view(), ref);
             Type *elementType = ruleElementTypeOf(
-                operandType != nullptr ? operandType : function->node(ref)->dataType());
+                operandType != nullptr ? operandType
+                                       : const_cast<Type *>(function->view().typeOf(ref)));
             // What the instance was made at, in the reading: a rule is generic in its operands'
             // element, so this is the one fact a wrong reading of the element would show.
             const std::string element = elementType != nullptr ? elementType->toString() : "-";
@@ -587,10 +591,8 @@ VmapGraph buildVmapGraph(
                 break;
             }
             case rt::GCNodeKind::Data: {
-                const std::span<const slot_t> slots = function->staticSlots();
-                const std::ptrdiff_t index          = -static_cast<std::ptrdiff_t>(node->dataIndex);
-                if (node->dataIndex >= 0 || index < 0 ||
-                    static_cast<size_t>(index) >= slots.size()) {
+                const std::optional<slot_t> constant = function->view().constantOf(ref);
+                if (!constant.has_value()) {
                     refused.refusedOrigin =
                         static_cast<camel::source::origin_id_t>(function->nodeOrigin(ref));
                     refused.refusedUri = "a constant";
@@ -598,11 +600,8 @@ VmapGraph buildVmapGraph(
                     complete           = false;
                     break;
                 }
-                copyOf[ref] = liftConstant(
-                    node->dataType(),
-                    rowsOfType(node->dataType()),
-                    slots[static_cast<size_t>(index)],
-                    why);
+                Type *const constantType = const_cast<Type *>(function->view().typeOf(ref));
+                copyOf[ref] = liftConstant(constantType, rowsOfType(constantType), *constant, why);
                 if (copyOf[ref] == rt::kInvalidNodeRef) {
                     refused.refusedOrigin =
                         static_cast<camel::source::origin_id_t>(function->nodeOrigin(ref));
@@ -620,7 +619,7 @@ VmapGraph buildVmapGraph(
                 const auto *body = function->nodeBodyAs<rt::GCOperBody>(ref);
                 const std::string uri(body->uri());
                 ++refused.asked;
-                const auto match = chooseRuleOfUri(*context, *function, ref, uri, why);
+                const auto match = chooseRuleOfUri(*context, function->view(), ref, uri, why);
                 if (!match.has_value() || match->status != camel::core::RuleLookup::Found) {
                     refused.refusedOrigin =
                         static_cast<camel::source::origin_id_t>(function->nodeOrigin(ref));

@@ -105,7 +105,7 @@ std::string_view TaskflowExecSchedPass::serialObstacle(const GraphPlan &plan) co
     }
     // Everything else here is the graph's content, so it is asked of the face: the nodes it has,
     // what each one is, and the operator it names. `nodes()` skips exactly the places that carry no
-    // answer -- a JOIN and a tombstone take no place in the view (C-1123-17) -- and both answered
+    // answer -- a JOIN and a tombstone take no place in the view -- and both answered
     // `default:` here, so the set of nodes this loop speaks about is the same.
     const camel::graph::GraphView &view = graph->view();
     for (const camel::graph::NodeRef ref : view.nodes()) {
@@ -195,7 +195,7 @@ void TaskflowExecSchedPass::prepareBytecodeHandoff(GCGraph *root) {
         const camel::graph::GraphView &view = graph->view();
         obstacle[i] = serialObstacle(*planFor(graph));
         // The same set of nodes as before: a JOIN, a tombstone and a placeholder answer no kind
-        // here, and none of them is the FUNC node this asks about (C-1123-17).
+        // here, and none of them is the FUNC node this asks about.
         for (const camel::graph::NodeRef ref : view.nodes()) {
             if (view.kindOf(ref) != camel::graph::NodeKind::Func) {
                 continue;

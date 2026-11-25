@@ -340,7 +340,7 @@ int runCommand(int argc, char *argv[]) {
     ctx->setMainModule(mainModule);
     // The pass list is resolved against a context that has the program's module. Doing it
     // before the build leaves the entry requirement decided before anything is compiled.
-    if (selectedCommand == Command::Run && passListTranslatesProgram(Run::resolvedPassList, ctx)) {
+    if (selectedCommand == Command::Run && passListEndsWithoutExecuting(Run::resolvedPassList, ctx)) {
         ctx->setRequireEntry(false);
     }
     contextPhase.reset();

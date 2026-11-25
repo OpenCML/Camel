@@ -15,7 +15,10 @@ from camel_arg import camel_from_argv  # noqa: E402
 EXE, ARGV = camel_from_argv(ROOT)
 env = dict(os.environ, CUDA_VISIBLE_DEVICES="-1")
 for name in ("tiles::compile",):
-    result = subprocess.run([EXE, "--devices", "cpu", str(Path(__file__).with_name("public_pass.cml")), name, "std::jgir"],
+    # `std::jgir` prints the document and hands the graph on; without `std::nop` the program then
+    # runs and its own output follows the JSON, which is what `json.loads` below rejects as
+    # "Extra data". The case reads the dump, not the program.
+    result = subprocess.run([EXE, "--devices", "cpu", str(Path(__file__).with_name("public_pass.cml")), name, "std::jgir", "std::nop"],
                             cwd=ROOT, env=env, capture_output=True, text=True)
     assert result.returncode == 0, result.stderr
     data = json.loads(result.stdout)

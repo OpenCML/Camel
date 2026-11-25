@@ -62,13 +62,17 @@ const want = ['1 0', 'yes no any any', '0 5', 'ok 12 ParseError'].join('\n')
 assert(out === want, `unexpected output: ${out}`)
 assert(input.stderr === '', 'no diagnostic: ' + input.stderr)
 """
+# Slow layer: over the 2 s the fast layer allows -- 2.72 s of
+# child wall clock in the 2026-11-12 record (appendix B of
+# internal/reports/2026-11-24-test-suite-inventory.cn.md).
+tier = "slow"
 
 [[tests]]
 name = "match.no_added_arm"
 desc = "The graph of a complete match has exactly the arms the program wrote: no operator of the compiler's own in it."
 kind = "behavior"
 case = "../../../cases/consistency/match/complete_matches.cml"
-args = ["${case}", "std::rgir"]
+args = ["${case}", "std::rgir", "std::nop"]
 backends = ["nvm"]
 backends_agree = []
 expect_exit = 0

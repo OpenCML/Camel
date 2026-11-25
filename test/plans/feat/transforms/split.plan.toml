@@ -89,7 +89,7 @@ case = "../../../cases/transforms/transpose/residuals_in_the_closure.cml"
 args = ["--trace", "transforms", "${case}", "std::nvm"]
 backends = ["nvm"]
 expect_exit = 0
-expect_output_contains = ["value=  18.0", "back dx=  12.0  back dy=  9.0", "TRANSPOSE function=split_of_jvp_of_f_backward graph=", "TRANSPOSE function=autodiff::mul_tangent<float>"]
+expect_output_contains = ["value=  18.0", "back dx=  12.0  back dy=  9.0", "TRANSPOSE function=split_of_jvp_of_f_backward graph=", "TRANSPOSE function=laws::mul_tangent<float>"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 [[tests]]
@@ -162,7 +162,7 @@ expect_exit = 0
 # The success line `modules/transforms/transpose/walk.cpp#buildTransposeMember` writes -- `TRANSPOSE
 # function=<name> graph=<id> type=<signature> nodes=<n> arms=<n> rhs=<rules>`, the line immediately
 # before its `return true` -- is not the only line that begins with `TRANSPOSE
-# function=autodiff::mul_tangent<float>`. The file's one refuse lambda, inside the same function,
+# function=laws::mul_tangent<float>`. The file's one refuse lambda, inside the same function,
 # writes `TRANSPOSE function=<name> skip=<cause>`, and no path writes both: a success line carries no
 # `skip=` token at all. So the bare prefix also matches a *refusal* of this kernel, and a plan
 # holding only that prefix would go green on one -- which is what the weld to `graph=` removes,
@@ -172,10 +172,10 @@ expect_exit = 0
 #
 # The negative needle names the refusal of *this* kernel instead of the bare token `skip=`: the
 # trace is whole-run, so a bare `skip=` would also pin every other function that refuses for a
-# reason of its own in the same program, and `TRANSPOSE function=autodiff::mul_tangent<float>
+# reason of its own in the same program, and `TRANSPOSE function=laws::mul_tangent<float>
 # skip=` is a line only a refusal of this kernel can produce.
-expect_output_contains = ["TRANSPOSE function=autodiff::mul_tangent<float> graph=", "type=(float, float, float) => (float, float)", "author vjp value=4.0 dfdx=4.0", "author vjp value=-6.0 dfdx=3.0"]
-expect_output_not_contains = ["TRANSPOSE function=autodiff::mul_tangent<float> skip="]
+expect_output_contains = ["TRANSPOSE function=laws::mul_tangent<float> graph=", "type=(float, float, float) => (float, float)", "author vjp value=4.0 dfdx=4.0", "author vjp value=-6.0 dfdx=3.0"]
+expect_output_not_contains = ["TRANSPOSE function=laws::mul_tangent<float> skip="]
 # The arm-call reading names its node by position, so the position is `<>` and the rest of the line
 # stays exact -- and the rest is what names it: the region, the callee, the argument count, and how
 # many of those arguments are tangents. Both arms hold a call of the same rule kernel, and the pair
@@ -188,7 +188,7 @@ verify_script = """
 const esc = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/<>/g, '\\d+')
 const field = (text, name) => Number(text.split(name + '=')[1].split(/[ ,\]]/)[0])
 const stderr = input.normalized.stderr
-for (const reading of ['TRANSPOSE function=split_of_jvp_of_f_backward arm-call region=1 node=<> callee=autodiff::mul_tangent<float> args=4 tangent-args=2', 'TRANSPOSE function=split_of_jvp_of_f_backward arm-call region=2 node=<> callee=autodiff::mul_tangent<float> args=4 tangent-args=2']) {
+for (const reading of ['TRANSPOSE function=split_of_jvp_of_f_backward arm-call region=1 node=<> callee=laws::mul_tangent<float> args=4 tangent-args=2', 'TRANSPOSE function=split_of_jvp_of_f_backward arm-call region=2 node=<> callee=laws::mul_tangent<float> args=4 tangent-args=2']) {
   const hits = stderr.split('\n').filter((l) => new RegExp('^' + esc(reading) + '$').test(l))
   assert(hits.length === 2, `two calls of vjp(f), so two lines like '${reading}', found ${hits.length}`)
 }

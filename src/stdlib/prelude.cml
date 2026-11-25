@@ -1104,6 +1104,23 @@ export func filter(r: Range) => int[] {
     return to_array(r)->filter<f>
 }
 
+/// The integers of r for which pred is true, counted. The calls of pred have no order among
+/// them.
+/// @example (0 .. 5)->count<func (x: int) => bool { x % 2 == 0 }>    // 3
+with <pred: (item: int) => bool>
+export func count(r: Range) => int {
+    return loop n = 0 for x in r do if pred(x) then n + 1 else n
+}
+
+/// The first integer of r for which pred is true, or null when none is. The calls of pred have
+/// no order among them.
+/// @example (0 .. 5)->find<func (x: int) => bool { x > 2 }>    // 3
+with <pred: (item: int) => bool>
+export func find(r: Range) => int? {
+    let hits = filter<pred>(r)
+    return if len(hits) == 0 then null else hits[0]
+}
+
 /// The integers of r combined from left to right with initial:
 /// f(...f(f(initial, start), start + step)..., the last one). Both are written in the angle
 /// brackets, as `reduce` on an array writes them.

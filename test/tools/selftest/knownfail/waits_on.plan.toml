@@ -1,0 +1,30 @@
+# Fixture of test/tools/selftest/run.mjs: the `passes` shape. `anchor` passes, so the mark on
+# `waits_on` has ended -- even though `waits_on` itself is still red. This shape can only be read once
+# every case has settled, because the case a mark waits on may be the last to finish.
+id = "selftest.knownfail.waits_on"
+order = 7
+tier = "fast"
+
+[[tests]]
+name = "anchor"
+desc = "The case the other entry waits for: it passes, which ends the other entry's mark."
+tool = "node"
+kind = "behavior"
+case = "anchor.mjs"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_contains = ["OK fixture=knownfail anchor"]
+
+[[tests]]
+name = "waits_on"
+desc = "Marked, still red, and its mark waits on `anchor`: once `anchor` passes the mark has ended."
+tool = "node"
+kind = "behavior"
+case = "fails.mjs"
+args = ["${case}"]
+expect_exit = 0
+known_fail = true
+known_fail_owner = "the runner self-test"
+known_fail_reason = "the fixture stops at `WALL fixture=knownfail`, so the run is red on purpose"
+known_fail_msg = "WALL fixture=knownfail"
+known_fail_ends_when = { passes = "anchor" }

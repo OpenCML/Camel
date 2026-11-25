@@ -1075,6 +1075,27 @@ RuntimeGraphDraftSession::RuntimeGraphDraftSession(
 // the two rules belongs here, beside this line.
 void RuntimeGraphDraftSession::adoptProgram(const Program &program) const {
     work_->adoptMissing(program);
+    // A graph `program` declares it made, and that the work table now holds as one this session
+    // gained by adoption, is the pass's own edit here: the commit records it on the program it
+    // hands back (`recordMade`), so the boundary reads it as made instead of as introduced. The
+    // filter is the work table's own record, and it is what keeps the record honest. That record
+    // is empty when the session opens because `*work_ = *program` is `Program::operator=`, which
+    // clears `made_` (the same place a copy is told not to carry the source's record): so only an
+    // adoption marks it, and a graph the session's given program already held is never recorded
+    // as made here. If that clear were ever dropped, this filter would silently turn the given
+    // program's own graphs into the pass's, and the check below would lose its meaning.
+    //
+    // A library or definition program -- `Program::bind`, no made record at all -- still brings
+    // nothing, so a graph taken from it is refused and named exactly as before. The record cannot
+    // be written at the adoption point instead of here: this is also the path a library's or a
+    // definition's function value comes in by (`definitions.cpp`'s `expandDefinition`,
+    // `graph/txn.cpp`'s `graph.inline`), so registering there would delete the reason the check
+    // exists.
+    for (const uint32_t id : program.madeGraphs()) {
+        if (work_->madeGraphs().contains(id) && work_->graph(static_cast<GraphId>(id)) != nullptr) {
+            madeIds_.insert(id);
+        }
+    }
 }
 
 void RuntimeGraphDraftSession::adoptGraph(GCGraph *graph) const {
@@ -1092,6 +1113,11 @@ void RuntimeGraphDraftSession::adoptGraph(GCGraph *graph) const {
         // a group that inlines through such a session calls these graphs.
         work_->bindTaken(graph->id(), graph);
     }
+    // The session encoded this graph itself, so it is a graph the pass that runs this session
+    // made: the commit records it on the program it hands back (`madeIds_`), and the pass
+    // boundary reads given ∪ made. A graph taken from another program is not a graph this line
+    // marks -- `adoptProgram` takes it in, and records only the ones that program declared it made.
+    madeIds_.insert(toValue(graph->id()));
 }
 
 void RuntimeGraphDraftSession::noteMadeGraph(GCGraph *graph) {
@@ -1900,6 +1926,19 @@ const Program *RuntimeGraphDraftSession::runCommit(bool staged, bool detached) {
         GCGraphBuildAccess::inheritRevision(copy, graph, changed);
     }
 
+    // The graphs this commit made are recorded on the program it hands back, and the record of
+    // the program it rewrote is carried: a pass that makes a graph in one commit and hands the
+    // program on in another must not lose it. The pass boundary reads `given ∪ made`, and `made`
+    // is this record and not a difference of tables -- `produced - given` would make the check
+    // true by construction (Program::madeGraphs, pass.cpp#introducedGraphsViolation).
+    const auto recordMade = [&](Program &program) {
+        std::unordered_set<uint32_t> made = base->hasMadeGraphs()
+                                                ? base->madeGraphs()
+                                                : std::unordered_set<uint32_t>{};
+        made.insert(madeIds_.begin(), madeIds_.end());
+        program.setMadeGraphs(std::move(made));
+    };
+
     if (staged) {
         // The encode and nothing after it: the program these drafts would publish, before the
         // checks that judge it and before anything is delivered. A pass that has to state the type
@@ -1909,6 +1948,7 @@ const Program *RuntimeGraphDraftSession::runCommit(bool staged, bool detached) {
         // judges it ( the pass declares the widened type at
         // the commit). A staged run delivers nothing and makes no revision: the program of this
         // session is still the one it was opened over, and only the encode's copies are new.
+        recordMade(*committed);
         staged_.reset();
         staged_ = ProgramHold(*context_, committed);
         return staged_.get();
@@ -2104,6 +2144,9 @@ const Program *RuntimeGraphDraftSession::runCommit(bool staged, bool detached) {
         // context's root until something installs it.
         context_->trackDetachedRuntimeProgram(committed);
     }
+    // The installing commit may have rebased onto the program the context holds now, and a rebased
+    // program is a new object (`*rebased = *now`): the record is set on the one handed back.
+    recordMade(*committed);
     // A graph left as it was names, in its function values, the program before: they name the
     // program this commit produced, which holds the same versions of everything they reach.
     for (auto *graph : closure) {

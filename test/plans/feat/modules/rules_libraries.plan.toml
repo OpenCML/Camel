@@ -92,6 +92,10 @@ after matmul minus sigmoid 0.0
 """
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
+# Slow layer: over the 2 s the fast layer allows -- 2.62 s of
+# child wall clock in the 2026-11-12 record (appendix B of
+# internal/reports/2026-11-24-test-suite-inventory.cn.md).
+tier = "slow"
 [[tests]]
 name = "rules.accuracy_scalar_log1p_rule"
 desc = "The design's `log(1 + x) => log1p(x)`, one law for the whole floating family since the fold (`when is_float::<T>()`, so the f64 and the f32 site are its two instances): each naive function goes from two operators (log, add) to one `log1p`; the guarded `log(2 + x)` keeps both its operators."
@@ -137,6 +141,10 @@ expect_exit = 0
 expect_stdout_contains = ["log1p tiny  1e-300 1e-300", "expm1 tiny  1e-300 1e-300"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
+# Slow layer: over the 2 s the fast layer allows -- 2.84 s of
+# child wall clock in the 2026-11-12 record (appendix B of
+# internal/reports/2026-11-24-test-suite-inventory.cn.md).
+tier = "slow"
 
 [[tests]]
 name = "rules.accuracy_scalar_guards"

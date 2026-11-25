@@ -17,6 +17,10 @@ timeout_ms = 120000
 name = "debugger.http_gateway"
 desc = "The HTTP API as the Web UI uses it: a file becomes a task in a worker process; node breakpoints by origin, node steps into a callee and over it, continue, the task's log, the graph after each pass, restart with the breakpoints and passes kept, terminate."
 case = "../../../cases/tools/debugger/http_gateway.test.mjs"
+# Slow layer: over the 2 s the fast layer allows -- 2.61 s of
+# child wall clock in the 2026-11-12 record (appendix B of
+# internal/reports/2026-11-24-test-suite-inventory.cn.md).
+tier = "slow"
 
 [[tests]]
 name = "debugger.dap_session"
@@ -39,18 +43,30 @@ name = "debugger.dap_tail_steps"
 desc = "Tail-recursive F10 skips replacement activations, F11 enters with new parameter snapshots, and breakpoints still interrupt step-over on NVM and FVM."
 case = "../../../cases/tools/debugger/dap_tail_steps.test.mjs"
 timeout_ms = 300000
+# Slow layer: over the 2 s the fast layer allows -- 2.96 s of
+# child wall clock in the 2026-11-12 record (appendix B of
+# internal/reports/2026-11-24-test-suite-inventory.cn.md).
+tier = "slow"
 
 [[tests]]
 name = "debugger.dap_frames"
 desc = "How the program is presented over DAP on both back ends (design principles 12.1): the arms of a branch are part of the frame of their function (line steps go through them, their names are the frame's while they run), the frames setting and camel/setFrames show the real subgraphs instead; a line step that goes past a line nothing uses the result of says so, and so does a breakpoint on it that was never hit; full names in the stack, captured values, evaluate and function breakpoints (ambiguous without the module, a function nothing calls)."
 case = "../../../cases/tools/debugger/dap_frames.test.mjs"
 timeout_ms = 300000
+# Slow layer: over the 2 s the fast layer allows -- 2.23 s of
+# child wall clock in the 2026-11-12 record (appendix B of
+# internal/reports/2026-11-24-test-suite-inventory.cn.md).
+tier = "slow"
 
 [[tests]]
 name = "debugger.cli_session"
 desc = "The REPL of camel-db (commands on stdin) on both back ends: breakpoints on a line, on a line nothing uses (with the reason) and on a function by its full name; run, step, next, finish with the line a step went past explained; bt, locals and print in the frame of a function with an arm folded into it; frames subgraphs and functions; the end of the run with the never-hit breakpoint explained; quit."
 case = "../../../cases/tools/debugger/cli_session.test.mjs"
 timeout_ms = 300000
+# Slow layer: over the 2 s the fast layer allows -- 2.42 s of
+# child wall clock in the 2026-11-12 record (appendix B of
+# internal/reports/2026-11-24-test-suite-inventory.cn.md).
+tier = "slow"
 
 [[tests]]
 name = "debugger.dap_faults"
@@ -73,11 +89,19 @@ name = "debugger.loop_frames"
 desc = "A loop in the REPL on both back ends: its body is part of the frame of the function it is written in (design principles 12.1), a breakpoint in the body stops once per round with that round's element and state, and frames subgraphs shows the body as `squares [loop body at line N]`."
 case = "../../../cases/tools/debugger/loop_frames.test.mjs"
 timeout_ms = 300000
+# Slow layer: over the 2 s the fast layer allows -- 2.25 s of
+# child wall clock in the 2026-11-12 record (appendix B of
+# internal/reports/2026-11-24-test-suite-inventory.cn.md).
+tier = "slow"
 
 [[tests]]
 name = "debugger.dap_pipeline"
 desc = "Release compiler boundary stops, live JSON GIR, pass stepping, repeated pass names, runtime handoff, invalid configuration and terminate/consumed graphs."
 case = "../../../cases/tools/debugger/dap_pipeline.test.mjs"
+# Slow layer: over the 2 s the fast layer allows -- 2.19 s of
+# child wall clock in the 2026-11-12 record (appendix B of
+# internal/reports/2026-11-24-test-suite-inventory.cn.md).
+tier = "slow"
 
 [[tests]]
 name = "debugger.dap_memory"
@@ -93,6 +117,10 @@ case = "../../../cases/tools/debugger/dap_node_breakpoints.test.mjs"
 name = "debugger.dap_fusion_group"
 desc = "A node step walks the program through a private `vjp_div_neg` group: it stops at the group's tail (the node that runs the group) and never at the members, which do not execute. The stop carries the group's name, its members' operators in execution order and their refs, and the debug console prints one exact sentence saying the members did not execute separately. A fixture that stops having a group fails the guard."
 case = "../../../cases/tools/debugger/dap_fusion_group.test.mjs"
+# Slow layer: over the 2 s the fast layer allows -- 60.79 s of
+# child wall clock in the 2026-11-12 record (appendix B of
+# internal/reports/2026-11-24-test-suite-inventory.cn.md).
+tier = "slow"
 
 [[tests]]
 name = "debugger.explain"

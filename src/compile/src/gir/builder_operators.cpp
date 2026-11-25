@@ -60,13 +60,15 @@ namespace camel::compile::gir {
 // take the first layer having it (visitDRefNode, "local > this module > imported > using >
 // built-in"); operatorOverloadsOf gathers every layer instead. The layers it reads are the
 // graph scopes of this module (local functions and the module's own), the module's generic
-// operator templates, and ProgramExports::importedOperatorOverloads (every import of a
-// module brings its operator overloads, as for a C++ module's operators). Nothing else of the
-// name lookup is involved, so the lookup can change around it as long as those three stay
-// reachable.
+// operator templates, ProgramExports::importedOperatorOverloads (every import of a module
+// brings its operator overloads, as for a C++ module's operators), and the prelude's own
+// declarations of the name (`preludeOperatorOverloadsOf`: the ambient layer, which no import
+// names and which is not a module of this program). Nothing else of the name lookup is
+// involved, so the lookup can change around it as long as those four stay reachable.
 
 Builder::OperatorOverloads Builder::operatorOverloadsOf(const std::string &group) {
     OperatorOverloads set;
+    set.name = group;
     const auto addGraph = [&](const compile_graph_ptr_t &graph, const std::string &module) {
         if (graph && std::ranges::find(set.graphs, graph) == set.graphs.end()) {
             set.graphs.push_back(graph);
@@ -104,6 +106,22 @@ Builder::OperatorOverloads Builder::operatorOverloadsOf(const std::string &group
         if (std::ranges::find(set.templates, tmpl) == set.templates.end()) {
             set.templates.push_back(tmpl);
             set.moduleOf[tmpl.get()] = imported.moduleOf.at(tmpl.get());
+        }
+    }
+    // The prelude's own bodies of the name are overloads of the same set: the ambient layer is
+    // the one a name needs no import for (design principles 10.2, layer 5), so a body it declares
+    // under the name is a candidate of the call like one this module declares or an import
+    // brings. Without this the set is the group's rules and this program's functions, and a call
+    // only the prelude's body takes -- `(0 .. n)->map<f>`, the prelude's `map` over a range --
+    // is an ordinary no-match even though the body is in the program.
+    const OperatorOverloads &prelude = preludeOperatorOverloadsOf(group);
+    for (const auto &graph : prelude.graphs) {
+        addGraph(graph, prelude.moduleOf.at(graph.get()));
+    }
+    for (const auto &tmpl : prelude.templates) {
+        if (std::ranges::find(set.templates, tmpl) == set.templates.end()) {
+            set.templates.push_back(tmpl);
+            set.moduleOf[tmpl.get()] = prelude.moduleOf.at(tmpl.get());
         }
     }
     set.ops = imported.ops;
@@ -243,6 +261,54 @@ const Builder::OperatorOverloads &Builder::importedOperatorOverloadsOf(const std
     return importedOperators_.emplace(key, std::move(set)).first->second;
 }
 
+const Builder::OperatorOverloads &Builder::preludeOperatorOverloadsOf(const std::string &group) {
+    // The prelude is the ambient layer: what it exports is reachable without an import (design
+    // principles 10.2, layer 5), and it is not a module of this program, so the import sets do not
+    // bring it. What it declares under `group` with a body is an overload of the name's operator
+    // group like one this module declares or an import brings, and this is the set
+    // `operatorOverloadsOf` merges. A declaration of the name without a body is a rule of a group
+    // and arrives through the group itself, so only the forms with a body are collected here.
+    const auto known = preludeOperators_.find(group);
+    if (known != preludeOperators_.end()) {
+        return known->second;
+    }
+    OperatorOverloads set;
+    const module_ptr_t prelude = context_ != nullptr ? context_->preludeModule() : nullptr;
+    if (prelude != nullptr && module_ != nullptr && exports_ != nullptr &&
+        prelude.get() != module_.get()) {
+        // Inside the prelude its names are its own, layer 2: a call there is resolved by the
+        // module's declarations alone, and the builder of that module does not read this.
+        const std::string name = prelude->name();
+        for (const auto &overload : exports_->exportedOperatorOverloads(*prelude, group)) {
+            const entity &ent = overload.overloads;
+            if (camel::core::module::detail::EntityAccess::isGraphSet(ent)) {
+                for (const auto &graph :
+                     *asCompileGraphSet(camel::core::module::detail::EntityAccess::graphSet(ent))) {
+                    if (std::ranges::find(set.graphs, graph) == set.graphs.end()) {
+                        set.graphs.push_back(graph);
+                    }
+                    std::string &origin = set.moduleOf[graph.get()];
+                    if (origin.empty()) {
+                        origin = name;
+                    }
+                }
+            }
+            if (camel::core::module::detail::EntityAccess::isGenericTemplate(ent)) {
+                for (const generic_template_ptr_t &tmpl : genericTemplatesOfEntity(ent)) {
+                    if (std::ranges::find(set.templates, tmpl) == set.templates.end()) {
+                        set.templates.push_back(tmpl);
+                    }
+                    std::string &origin = set.moduleOf[tmpl.get()];
+                    if (origin.empty()) {
+                        origin = name;
+                    }
+                }
+            }
+        }
+    }
+    return preludeOperators_.emplace(group, std::move(set)).first->second;
+}
+
 // ---- An operator of the module that declares the operand's type (design principles 5.7) ----
 //
 // Names are looked up lexically where the expression is written. A value of a dependent type
@@ -294,6 +360,67 @@ Builder::declaringModulesOf(const type_vec_t &withTypes, const type_vec_t &normT
         add(type);
     }
     return found;
+}
+
+bool Builder::isElementFunction(const GCT::node_ptr_t &func) const {
+    if (func == nullptr) {
+        return false;
+    }
+    const auto sourceContext = context_->sourceContext();
+    if (sourceContext == nullptr) {
+        return false;
+    }
+    const auto *record = sourceContext->origin(func->origin());
+    return record != nullptr && record->label == "gct.func.element";
+}
+
+Type *Builder::walkedElementTypeOf(Type *type) {
+    type = valueTypeOf(type);
+    if (type == nullptr || containsTypeVar(type)) {
+        return nullptr;
+    }
+    if (type->code() == TypeCode::Array) {
+        return tt::as_ptr<ArrayType>(type)->elemType();
+    }
+    // The answer of an `__iter__` overload for this type: the stream it hands out, and the element
+    // type is what a round of it is.
+    const auto elementsOf = [&](FunctionType *signature) -> Type * {
+        if (signature == nullptr || signature->normTypesCount() != 1) {
+            return nullptr;
+        }
+        Type *parameter = valueTypeOf(signature->normTypeAt(0));
+        if (parameter == nullptr || !parameter->equals(type)) {
+            return nullptr;
+        }
+        Type *answer = valueTypeOf(signature->exitType());
+        if (answer == nullptr || answer->code() != TypeCode::Stream) {
+            return nullptr;
+        }
+        return tt::as_ptr<StreamType>(answer)->elemType();
+    };
+    // The three sources the loop reads, in the loop's order: what this program declares, the
+    // built-in group, and the module the type's declaration records (`builder_control.cpp`, the
+    // loop's own resolution).
+    for (const compile_graph_ptr_t &graph : operatorOverloadsOf("__iter__").graphs) {
+        if (Type *element = elementsOf(graph->funcType())) {
+            return element;
+        }
+    }
+    for (const auto &[module, typeName] : declaringModulesOf({}, {type})) {
+        for (const auto &overload : exports_->exportedOperatorOverloads(*module, "__iter__")) {
+            const entity &exported = overload.overloads;
+            if (!camel::core::module::detail::EntityAccess::isGraphSet(exported)) {
+                continue;
+            }
+            for (const auto &graph : *asCompileGraphSet(
+                     camel::core::module::detail::EntityAccess::graphSet(exported))) {
+                if (Type *element = elementsOf(graph->funcType())) {
+                    return element;
+                }
+            }
+        }
+    }
+    return nullptr;
 }
 
 bool Builder::addDeclaringModuleOverloads(
@@ -437,7 +564,9 @@ node_handle_t Builder::operatorDrefOf(const std::string &group, const GCT::node_
     registerNodeOrigin(context_, drefNode, gct, "gir.dref");
     if (recorder_) {
         std::vector<std::string> signatures;
-        for (const auto &[uri, resolver] : set.ops->resolvers()) {
+        for (const auto &[uri, resolver] : set.ops != nullptr
+                                             ? set.ops->resolvers()
+                                             : std::vector<std::pair<std::string, resolver_ptr_t>>()) {
             signatures.push_back(resolver->signature());
         }
         for (const auto &graph : set.graphs) {
@@ -461,12 +590,17 @@ compile_graph_ptr_t Builder::chooseOperatorOverload(
     // The name the reports use: `operator +` for a symbol, the name itself for a name a call
     // reaches without a symbol (`map` is an operator group the prelude declares, and a call of
     // it is written like any other call).
-    const std::string display = camel::core::displayNameOf(set.ops->name());
+    // The set's own name: a set gathered for a name can have no operator group.
+    const std::string display = camel::core::displayNameOf(
+        set.ops != nullptr ? set.ops->name() : set.name);
     std::vector<StaticArg> statics;
     for (const Argument &input : normInputs) {
         statics.push_back(staticArgOf(input.node));
     }
-    const bool builtinAccepts = set.ops->resolve(withTypes, normTypes, statics).has_value();
+    // No group, no built-in candidate: the built-ins are the group's, so a set without one is
+    // asked of its own functions alone.
+    const bool builtinAccepts =
+        set.ops != nullptr && set.ops->resolve(withTypes, normTypes, statics).has_value();
     // Design principles 4.3: an overload of the program is preferred where it is more
     // specific than the others that take the arguments. "More specific" is exact: its
     // parameter types are the argument types themselves (as written, without a value entering
@@ -487,11 +621,14 @@ compile_graph_ptr_t Builder::chooseOperatorOverload(
         }
         return true;
     };
-    const bool builtinExact = std::ranges::any_of(set.ops->resolvers(), [&](const auto &entry) {
+    const bool builtinExact =
+        set.ops != nullptr && std::ranges::any_of(
+                                  set.ops->resolvers(),
+                                  [&](const auto &entry) {
         FunctionType *fixed = entry.second->fixedSignature();
         return fixed != nullptr && exactFor(fixed) &&
                entry.second->resolve(withTypes, normTypes).has_value();
-    });
+                                  });
     const auto where        = [&](const void *overload) {
         const auto it = set.moduleOf.find(overload);
         return it == set.moduleOf.end() ? std::string(" (this module)")
@@ -563,7 +700,9 @@ compile_graph_ptr_t Builder::chooseOperatorOverload(
                         where(tmpl.get())));
             }
             if (builtinAccepts && !entering) {
-                for (const auto &[uri, resolver] : set.ops->resolvers()) {
+                for (const auto &[uri, resolver] : set.ops != nullptr
+                                             ? set.ops->resolvers()
+                                             : std::vector<std::pair<std::string, resolver_ptr_t>>()) {
                     if (resolver->resolve(withTypes, normTypes).has_value()) {
                         overloads.push_back(
                             std::format(
@@ -645,7 +784,7 @@ void Builder::rejectOperatorConflict(
     // specific as this one: the two cannot both be meant. One that takes them as members of a
     // family of types (by content, a type rule over several types) is less specific, and this
     // one is preferred where both apply (design principles 4.3; chooseOperatorOverload).
-    const bool sameAsBuiltin = std::ranges::any_of(set.ops->resolvers(), [&](const auto &entry) {
+    const bool sameAsBuiltin = set.ops != nullptr && std::ranges::any_of(set.ops->resolvers(), [&](const auto &entry) {
         const FunctionType *fixed = entry.second->fixedSignature();
         if (fixed == nullptr || fixed->withTypesCount() != 0 ||
             fixed->normTypesCount() != params.size()) {

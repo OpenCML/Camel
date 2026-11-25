@@ -186,6 +186,12 @@ await withServer(async (ls) => {
 
     // ---- incremental synchronisation ----
     // Rename the local `n` by two range edits in one notification, then ask about the result.
+    // The new name is `tally`, not `count`: the prelude declares `count(r: Range)`, and a name in
+    // the ambient layer (design principles 10.2, layer 5) is never undefined, so the edit below
+    // would no longer break the program. `tally` is free on every layer today; if a layer ever
+    // declares it, this check must take another name, and the rule for taking one is that no
+    // layer of the prelude declares it -- the check asserts that a name is undefined, and what
+    // makes that true is that nothing declares it.
     const n1 = src.range('n = norm2')
     const n2 = src.find('identity(n)', 1, 9)
     const one = (pos) => ({ start: pos, end: { line: pos.line, character: pos.character + 1 } })
@@ -193,21 +199,21 @@ await withServer(async (ls) => {
         textDocument: { uri, version: 2 },
         contentChanges: [
             // The later position first, so that the first edit does not move the second.
-            { range: one(n2), text: 'count' },
-            { range: one(n1.start), text: 'count' },
+            { range: one(n2), text: 'tally' },
+            { range: one(n1.start), text: 'tally' },
         ],
     })
     pushed = await ls.diagnosticsFor(uri, 2)
     checkEq(pushed.diagnostics, [], 'the edited text compiles as before, without a warning', pushed.diagnostics)
     h = await ls.request('textDocument/hover', { textDocument: { uri }, position: n1.start })
-    check(h.contents.value.includes('let count: int'), 'the edits were applied', h.contents.value)
+    check(h.contents.value.includes('let tally: int'), 'the edits were applied', h.contents.value)
     // An edit that breaks the program is reported, and undoing it clears the report.
     ls.notify('textDocument/didChange', {
         textDocument: { uri, version: 3 },
         contentChanges: [{ range: { start: n1.start, end: n1.start }, text: 'x' }],
     })
     pushed = await ls.diagnosticsFor(uri, 3)
-    check(pushed.diagnostics.some((x) => x.severity === 1 && x.message.includes('count')),
+    check(pushed.diagnostics.some((x) => x.severity === 1 && x.message.includes('tally')),
         'an unresolved reference after the edit', pushed.diagnostics)
     ls.notify('textDocument/didChange', {
         textDocument: { uri, version: 4 },

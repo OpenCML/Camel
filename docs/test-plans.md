@@ -90,8 +90,11 @@ tests) or on one `[[tests]]` entry (an override), with the values `fast`, `slow`
 - `slow` is the release gate's layer: the plan files `scripts/release-gate.mjs` names in
   `SLOW_PLANS`, run one by one. It is everything whose result is still worth having but whose cost
   does not belong in the developer loop, and that a shared host can still carry: the large
-  front-end and debugger suites, single entries of otherwise-fast plans that take about five
-  seconds or more, and the GPU tile plans.
+  front-end and debugger suites, every case that costs more than **2 s** of its own time (measured,
+  never guessed -- see below), and the GPU tile plans. 2 s is the line because below it the case is
+  cheaper than the bookkeeping around it, and above it a case that runs in every developer loop
+  spends the loop's own budget: the fast layer's whole run is about 220 s for about 9,500 cases, so
+  one case over 2 s is already a percent of it.
 - **The slow layer's only whole plan is `gpu/tiles` (103 entries, and it needs devices): it cannot
   move into the fast layer.** Its entries skip when the cards are busy (`tiles:available()`), so
   the number that runs swings with what else is on the host -- a fast-layer green there would mean
@@ -123,9 +126,25 @@ tests) or on one `[[tests]]` entry (an override), with the values `fast`, `slow`
   count is read beside the card report and never as "the GPU suite passed".
   `feat/modules/random.plan.toml`'s `keyed_random.std_cpp_agrees` is the same shape -- it compiles
   C++ like `trans/cpp`'s `agree_with_fvm` -- but nothing runs that layer today; recorded here and
-  left alone on purpose, one move at a time. Some individual entries are still `tier = "slow"` inside fast plans
-  (`test/plans/feat/modules/autodiff.plan.toml` 5, `tools/debugger` 4, `parse/frontend`,
-  `lib/random/`, `tools/lsp`, `linear/var_reference`, `trans/cpp` 1 each).
+  left alone on purpose, one move at a time.
+  **The layer stopped being "a few single entries" on 2026-11-24**: the first full-record inventory
+  measured every case of the 2026-11-12 fast-layer run and found **261 cases over 2 s**
+  (`internal/reports/2026-11-24-test-suite-inventory.cn.md`, appendix B: child wall clock, because
+  no record of that batch carried CPU time). **257 of them moved**, and they took the layer from
+  164 declared entries to 559: 218 whole entries (396 started cases, because an entry with
+  `backends` moves its back ends with it) and 17 plan files whose every case is over the line,
+  which say `tier = "slow"` on the plan instead of on each entry. Four did not move, each for a
+  reason written where it applies: `agree_with_fvm` (81.3 s, the slowest case in the tree) says
+  `tier = "fast"` and argues it in its own comment -- it is the only test that catches a generated
+  C++ program that builds and runs but prints what the interpreter does not, so it runs with the
+  plan; two belong to `feat/mm/gc_root_window`, a milestone plan that had already left the fast
+  layer; and `var_capture.macro_fold` no longer exists (the entry is `var_capture.default` today).
+  **A moved case is still selectable, and `--tier all` is the reading that says so**: the whole
+  tree at `--tier all` selects every layer but `debug`, so `node scripts/test.js test/plans/feat/gate
+  --tier all` starts the slow-tier gate entries (`13/13` on 2026-11-24) and `--tier slow` starts the
+  same cases alone. Those 63 files are named in `SLOW_PLANS` because naming the file is what makes
+  the gate run its slow tests, so a plan that is fast in part appears in both phases and its fast
+  tests run twice -- the price of not running the slow ones nowhere.
 - `milestone` is the layer that only runs at a milestone, on a quiet machine: the plans
   `agents/test.md` holds back (the full suite, the GC poison sweep and stress plans, progen, the
   PyTorch comparisons and the perf/timeit plans -- the ones `scripts/plan-inventory.mjs` lists in
@@ -358,6 +377,25 @@ it (`plan`, the name every record uses, and `plan_path`), and its own CPU figure
 `cpu_reason` where the host read none, so the per-test cost is in the record the timing questions
 are already asked of. The run prints one `[SLOT]` line with the ratio and the totals.
 
+Each of those records also carries the case's own cost in the currency the case spends: `cpu_ms`
+is the CPU time (user + system) the kernel charged this case's process tree, read by the wrapper
+the runner already starts for it (`test/tools/child-cpu.mjs`, fd 3), so no extra process exists to
+measure it. `cpu_reading` is the sentence that goes with the number: where it was read, or why this
+platform has none. Three readings, kept apart on purpose, because "cheap", "nobody measured it" and
+"this case did not run" are three different answers to "which cases are expensive":
+
+- the figure, with `CPU_READING_WRAPPED` saying how it was read;
+- `absent: this platform reports no per-process CPU time (there is no /proc/self/stat), and the
+  runner starts no process to invent one` -- a Windows or macOS developer machine. The record never
+  carries `0` here, which a reader would take as "this case is free";
+- `not run: the case was skipped, so this run charged it no CPU`, for a case a `skip_unless`
+  precondition held back.
+
+The run prints one `[CPU]` line with how many cases carry a figure and what the rest say, and
+`summary.json`'s `slot_timing.cpu` holds the count, the total, the distribution, the top cases by
+CPU and the distinct absence sentences. The wall clock in the same record is provenance, not a
+cheap stand-in for this figure: on a shared host it measures what the neighbours were doing.
+
 Measured on the `smoke` + `feat` fast layer at `-Jobs 8` (a 32-core host shared with
 other gates), eight runs before and eight after:
 
@@ -391,16 +429,60 @@ the numbers this section reports.
 ## Runner Output
 
 A run writes two trees inside the checkout, and neither is part of it. `test/results/log/<timestamp>_<pid>/`
-is the run's record: `run.json` (what the run was), `summary.json`, and one directory per test holding
+is the run's record: `run.json` (what the run was), `summary.json`, `transcript.txt`, and one directory per test holding
 the captured `stdout.txt`, `stderr.txt`, `output.txt`, `meta.json` and any verification output.
 `tmp/test/run-<pid>` is the run's scratch root. Both are gitignored, so `git clean` does not remove
 them, and both grow per run rather than per test.
 
+`transcript.txt` is one line per verdict, plain text with no colour, in the order the run printed
+them: the record that does not pass through a pipe. It closes with the run's `[SUMMARY]` line, the
+text the console got minus the colour, so the file states the total its own lines were counted
+under and can be checked by whoever fetches it without also being told the number. The run counts a
+verdict and prints its line in one act (`printResult`), and at the end it reads the file back. When
+the transcript does not hold one case line per counted verdict, the run prints
+
+```
+[PLAN ERROR] the transcript holds N case lines but the summary counted M: this run cannot be read
+```
+
+and exits **2**: `[SUMMARY] total:` is never adjusted to make the two agree, and the line printing is
+never switched off. 1 is "measured, and not right"; 2 is "this run cannot be read", the code a run
+already gets when its install or its selection could not be read. The reading exists because a count
+and the lines it counted are two facts about one run, and on 2026-11-24 three runs of one base
+printed `total: 9159` and all 9159 of their case lines while the `--list-known` block, printed in the
+last loop immediately before `process.exit`, arrived with 9159, 5265 and 1239 rows. The block that
+was cut is the only one printed in a single burst immediately before the exit, the run that lost the
+most was the slowest, and the loss moved between two runs of one base: that is the shape of output
+still queued in a process that ends before its stream drains, so the runner now flushes standard
+output before it exits.
+
+The same rule is applied to a capture that has already left the runner, where a whole block can be
+lost and not only its tail: `node test/tools/transcript.mjs --check <capture.txt|->` counts the case
+lines in a captured text -- a console capture, or a run's own `transcript.txt` fetched on its own --
+and compares them with the `[SUMMARY] total:` line the text states,
+exiting 2 when they disagree and also when the capture states no total at all -- a capture with no
+summary is not a run of zero cases. The colours are stripped before counting, which is the whole
+difference between 6 rows and 0 rows on a complete capture. A run that was asked for
+`--list-known` carries a second per-case channel, its `{"name":...}` rows, and that channel is
+counted and reported on its own, because the two fail separately: the three runs of 2026-11-24 kept
+every case line and lost rows, so a single number would have said only that something disagreed.
+
+```
+$ node test/tools/transcript.mjs --check capture.txt
+[PLAN ERROR] the transcript holds 1239 case rows but the summary counted 9159: this run cannot be read (its case lines are whole, so the row block was cut)
+transcript: case lines: 9159 of 9159, rows: 1239 of 9159
+```
+
+The reading line is printed on success too (`-- readable`), and `rows: none in this capture` says the
+run was not asked for the channel rather than that the block was cut. Exit 0 means both channels
+agree with the total the capture states.
+
 The runner bounds the record itself, at the start of every run: **`test/results/log` keeps the newest
 20 run directories** (`RUN_DIRS_KEPT`, next to the policy it belongs to, in
 `test/tools/runner-output.mjs`). A failing run's log is read while the run is happening and just after
-it -- nothing in the repository reads an older run back, and no tool reads a run directory at all -- so
-what ages out is the record of a run nobody is looking at. Three directories are never removed,
+it -- nothing in the repository reads an older run back, and the only reader of a run directory is the
+run itself, which reads its own `transcript.txt` back before it exits -- so what ages out is the
+record of a run nobody is looking at. Three directories are never removed,
 whatever their age or their place in the order:
 
 - the directory of the run doing the pruning;
@@ -555,7 +637,9 @@ makes every edit in that directory pay for the whole plan. `test/tools/selftest/
 derives each plan's cost class from the tree (its `tier`, its tests' tiers, a test timeout of five
 minutes or more), the plans that run each case from their `case` entries, and the selection
 `--changed` returns; a fast case path that selects a slow-cost plan in full fails by name unless
-that plan is the only plan running the case. The two exceptions the original rules hid are named
+that plan is the only plan running the case. That is a statement about the *plan* list: `--changed`
+no longer hands plans to the run (see "The cases a change selects" below), so the guard now reads
+the plan list's cost while the run executes the case list. The two exceptions the original rules hid are named
 now: the graph-space gradient case in `test/cases/feat/mm/gc/` and the formatted-print case in
 `test/cases/trans/cpp/exec/` each resolve through their directory to a slow plan that does not run
 them, so a narrower directory rule comes first and the file rule names the plan that does. A slow
@@ -586,16 +670,115 @@ classes of red that `--tier fast` hid went unseen for exactly that reason. The r
 is cost: the plan is 1,025 compiler runs (27 s of wall at `-Jobs 8`), which must not ride on an
 ordinary change of that corpus.
 
+### The cases a change selects
+
+`--changed` no longer hands the run a list of plans. A plan is a directory of cases, so "the plan
+was selected" is not a reason for a case to run: a change to one `.cml` case used to select the plan
+file or directory that mirrors it, and every case of that plan ran -- a `--tier fast` gate run
+included the plan's slow cases too, because a *named* plan runs in full whatever the layer says.
+
+`node scripts/test.js --changed --list-cases` prints the **cases** instead, one JSON row each:
+`{name, plan, case, tier, cause}`. The plan list is still computed (and printed by `--changed
+--list`); the case list is that list narrowed by three causes, and every case carries the one that
+put it in:
+
+- `case:<file>` -- the changed file is one of the `case` inputs a plan names (a `.cml`, a script, a
+  directory of them). Only the cases that name that input are selected. This is the narrowing: a
+  change to `test/cases/compile/enum/shapes.cml` selects the five `compile.enum` cases that name it,
+  not the plan's cases as a whole.
+- `plan:<target>` -- the changed file names the plan itself (a plan file, a golden, a rule's `also`
+  entry, a file rule). Every case of that target is the reading the rule asked for, so the target is
+  kept whole -- and the record says so per case, so this is a stated plan-level reading rather than
+  an expansion nobody can see.
+- `source:<dir>` -- a source directory mirrors the target (`src/kernel/**` -> `feat/trans`, ...).
+  Without a coverage table this is the honest residue: the plan's cases, not a claim that each one
+  executes the changed file. Its count is what still rides on a plan, and it is the reading the
+  coverage step (plan page `internal/plans/2026-11-24-precise-test-selection.cn.md`) is meant to
+  shrink.
+
+The layer applies to every case by its own declaration, including a plan the change named: a slow
+case does not run in the fast gate because its plan was selected. `--tier slow`/`all` select the
+same way at those layers, and the daily layer runs what the gate leaves out.
+
+The run executes exactly that list. `--changed` writes it beside the run and passes
+`--selection-cases <file>`; `test/tools/run-tests.mjs` keeps only the named cases of the plans it
+was given, and refuses (exit 2) a name it would not start, because a stale record must not become a
+run that quietly proves less than the record says.
+
+The record the run reads is computed for that run's **targets**: `--targets <list>` names the plans
+the run starts, and the case list is computed over those, so a plan the change selected but the run
+does not start contributes no case. `--changed` passes its own target list, which is why the record
+it hands over is a description of the run and not a second selection. The narrowing lives where the
+record is computed, not in the runner: a record and a target list that disagree are two different
+selections, and only the one the run executes can be a reading of the run. `--selection-cases`
+remains what it is -- a guard against a record from somewhere else, whose refusal is exit 2 and one
+`[PLAN ERROR]` line.
+
+The record must also describe the run that reads it. A `--changed` record narrows the run it was
+computed for, and that is what a change selection is; a record whose `plans` name another target set
+was computed for another run, and a change's case list handed to a layer run is not a narrow layer,
+it is a run that starts a subset while printing the layer's name. Every reading a gate takes (exit 0,
+a `[SUMMARY]` with no failure) would read the same as a complete layer. So such a record is refused
+with exit 2 and the two numbers that make the difference visible: `the selection covers N of M cases
+in this layer; a layer run cannot sign for the layer if the record narrows it`. A whole-tree run is
+the floor under the rule: a record that covers fewer of its cases than the layer holds is a change's
+list whatever its `plans` say. `M` is the layer's own count, read through the same loader a run uses,
+so it is the number `scripts/tier-report.mjs --tier fast --quiet` reports for the same tree, and
+`test/tools/selftest/selection-cases.mjs` fails when that number and the rows of `--list-cases` over
+`test/plans` disagree: two tools that each call themselves the layer must not answer differently.
+
+`scripts/selection-cases.mjs` is the engine and the record:
+
+```bash
+node scripts/test.js --changed --list-cases      # the cases this change selects
+node scripts/selection-cases.mjs --print         # the same, with base, tree, counts and digest
+node scripts/selection-cases.mjs --write /tmp/this-run.json --names   # the list a run executes
+node scripts/selection-cases.mjs --verify test/selection/readings/<merge>.json   # a past change, by hand
+```
+
+A record names the base, the head, the tree the plan rules were read from, the changed files with a
+digest over them, the plan-level count and the case-level count, the case list with each case's
+cause, and a digest over the sorted case names. `--verify` replays the record's own file list and
+compares count, digest and every cause: same input, same tree, same list, or a named difference. A
+stored reading keeps a count and a digest rather than 9,000 rows, and the digest is over the same
+sorted names, so the comparison is not weaker. A **run** cannot take a digest: `--selection-cases`
+starts cases by name, so the list `--changed` hands to the run is written with `--names`, which keeps
+the rows past the size a stored reading caps at. A record that holds only a digest is refused by the
+run as a digest -- not as an empty selection, which is a different answer.
+
+**No gate step reads a stored record.** The records kept under `test/selection/` are readings of past
+changes: they say what a past tree selected, and `--verify` replays one by hand. A gate that read one
+would answer with the last commit that wrote it, and the next commit that adds a case would move the
+answer without touching the gate -- so a gate computes its record on the spot, every time, and
+`test/tools/selftest/selection-cases.mjs` fails if a surface a gate runs (a plan, `scripts/`,
+`test/tools/`, `internal/tools/`, CI, `package.json`) so much as names that directory. A stored
+record that no longer replays is a fact about the policy it was taken under, not a broken gate: the
+one recorded during the whole-layer widening (`38b7aec1bf`) no longer reproduces, because its change
+selects nothing now.
+
+A merge is replayed with `--base <merge>^1 --head <merge> --files <git diff --name-only list>`: the
+record then names the tree it was taken on, which is the only tree it is a reading of.
+
 Three ways the selection can come up empty are not the same answer and no longer read the same
-either. A change that matches no rule **widens** to the whole fast layer -- that is the policy for
-a change that only touches a class the project keeps out of `--changed` (perf, GC stress, a progen case)
--- and the widening is printed as a widening, with the files that caused it and the size of the layer
-it runs. A change with **no file in it** selects nothing and starts nothing, and prints
+either. A change that **matches no rule** selects no plan and is refused with exit 2, naming every
+file no rule matched: an empty selection must not become a plan expansion, and a layer is a question
+asked with `--all` or with a plan name. It used to widen to the whole fast layer, and that widening
+is what this refusal replaces: it ran 9,894 cases for a change that names no plan, it printed a
+`[SUMMARY]` no gate can tell from a correct selection, and because a whole-layer selection keeps a
+count and a digest instead of its rows, the record it left held no case at all -- so the run refused
+the record it was handed as an empty selection, after the layer had already been chosen. The classes
+that used to rely on the widening (perf, GC stress, a progen case) are the ones this now names
+plainly. A change with **no file in it** selects nothing and starts nothing, and prints
 `changed: 0 target(s)` beside the size of the layer it did **not** run: an empty target list reaches
 `test/tools/run-tests.mjs#loadPlans` as "no target", and no target is the whole plan tree, so a
 measured-empty selection travels as `--selection-empty` instead of as an absent target. It used to
 widen there: 0 changed files started 336 plan files and printed a `[SUMMARY]` with no failure -- the
-reading a correct selection of one plan gives -- so the number was the only symptom. A base branch, a
+reading a correct selection of one plan gives -- so the number was the only symptom. **A run that
+starts no test exits 2** -- not measured, and neither red nor green. The code is the only place that
+difference can live: a zero-row `[SUMMARY]` prints the same three numbers a green run prints, and 1
+would blame a test that never ran. It printed `total: 0` and exited 0 before that ruling, so a lane
+that ran nothing read as a lane that found nothing wrong; the run now says
+`nothing was started, so nothing was measured: exit 2` above the summary it explains. A base branch, a
 changed-file list or a rule file that cannot be **read**
 is refused with exit 2: the plans the change touches are unknown, so none is selected and no layer
 is run, and the refusal names the base (or the list, or the rules file) that failed and the layer
@@ -661,7 +844,10 @@ Each plan file may define:
 - `order`
   Numeric ordering key used when the runner sorts plans.
 - `tier`
-  The plan's default layer, `fast`, `slow` or `debug` (see "Layers"). A test may override it.
+  The plan's default layer, `fast`, `slow`, `milestone` or `debug` (see "Layers"). A test may
+  override it. A value that names none of the four is the fast layer (see "Layers"), and
+  `scripts/tier-report.mjs` counts the entries that reached a layer that way apart from the ones a
+  plan said so.
 - `debug_tier`
   `true` selects the plan under `--tier debug` while leaving its ordinary layer alone: the plan
   runs fast in Release and is re-run on the Debug binary by the debug layer. Use it on a plan
@@ -912,23 +1098,57 @@ everywhere is written once:
 - `known_fail_note`
   Printed with an `[XFAIL]`: why, and what will fix it.
 - `known_fail_ends_when`
-  The reading that removes the mark: the refusal that has to go, and the line this entry has to
-  print, both in backticks. A mark records a red; `known_fail_owner` says who ends it and
+  The reading that removes the mark, in one of exactly two shapes -- both of which a run evaluates:
+
+  ```toml
+  known_fail_ends_when = { prints = "the line this entry prints when the wall moves" }
+  known_fail_ends_when = { passes = "another case, whose passing means this one is over" }
+  ```
+
+  `prints` is looked for in the entry's own output -- what its process wrote, normalized as the
+  entry's assertions read it -- and in nothing else on every run; `passes` is read off another case's
+  verdict once every case has settled. The "nothing else" is the whole of the rule and not a
+  preference: an entry that also pins the line with `expect_output_contains` gets a failure message
+  that *quotes* it (`output does not contain '<line>'`), so a condition searched for in the runner's
+  own text would be satisfied by the sentence saying it is unmet, and a legitimate mark would read as
+  ended. A mark records a red; `known_fail_owner` says who ends it and
   `known_fail_reason` where the case is stuck, and neither says *what* would end it -- so a mark can
-  outlive its wall and read as permanent debt. The runner already decides the two moments it can see
-  (the case starts passing: `marked known_fail ... but passes`; the refusal changes: `known failure
-  changed its mind`), and this field states the condition those two readings are the evidence of, in
-  the terms the run compares. `test/tools/check-plan-fields.mjs` counts the marks that carry none
-  (`mark-without-end-trigger`, ratcheted: it may not grow), refuses a trigger that quotes no reading
-  (`end-trigger-names-nothing`) and one that does not name the entry's own pinned line
-  (`end-trigger-names-another-reading`). The field is not required at load -- a mark written before it
+  outlive its wall and read as permanent debt. The runner decides the two moments it can see (the case
+  starts passing: `marked known_fail ... but passes`; the refusal changes: `known failure changed its
+  mind`), and this field states the condition those two readings are the evidence of, in the terms the
+  run compares.
+
+  **Strict xfail**: when the stated reading has arrived, the mark has ended, and the run says so and
+  records a failure -- `known failure has ended: this entry already prints "<line>" -- delete the
+  mark`, or, for the `passes` shape, the same block after the results. A mark that keeps excusing a
+  case whose ending has arrived is a green nobody ever has to read again; that is the debt the STALE
+  snippet entries carried, and the reading exists to make somebody delete the entry.
+
+  Prose is refused: a sentence is not something a run can disagree with, so it would be a promise
+  nobody re-reads. The ruling of 2026-11-24 (`internal/questions/
+  2026-11-24-deleting-known-fail-ends-when-would-unmake-11-marks.cn.md`) is why the field is
+  structured rather than deleted: eleven marks carry it *instead of* `known_fail_msg`, so removing
+  the field would make two plan files refuse to load. `test/tools/check-plan-fields.mjs` counts the
+  marks that carry none (`mark-without-end-trigger`, ratcheted: it may not grow), refuses a value
+  that is neither shape (`mark-without-end-trigger`), a `prints` that is not one of the entry's own
+  pinned lines (`end-trigger-names-another-reading`) and a `passes` that names no case in the tree
+  (`end-trigger-names-nowhere`). The field is not required at load -- a mark written before it
   existed keeps working -- but a new mark is expected to carry it.
 - `known_fail_msg`
   A fragment of the reason a marked test fails with, so the reason is pinned and not only the
-  failure. When a marked test fails and the fragment does not appear in its output, the case stays
-  `fail` and the runner prints
+  failure. When a marked test fails and the fragment does not appear in what it failed with, the case
+  stays `fail` and the runner prints
   `known failure changed its mind: expected "<pinned>", got "<first line>"` (`test/tools/run-tests.mjs`,
-  `executePlans`): a pin whose reason drifted is reported instead of staying a quiet `[XFAIL]`. A
+  `executePlans`): a pin whose reason drifted is reported instead of staying a quiet `[XFAIL]`. What it
+  is matched against is the run's *verdict* about the entry -- the failure lines the runner assembled,
+  then what the case printed -- and not the case's output alone: an entry with a verification script is
+  judged by two programs, and the verifier's words reach the pin through
+  `verification output: ...` (`verifyFailureLines`). Measured on the gate host at `1e01eaa0a9` by
+  narrowing that column to the case's own output and running every plan that carries a pin: the two
+  pins of `feat.linear.effects_model_edges` stopped matching and every other pin still matched. This
+  is exactly the column a `known_fail_ends_when = { prints }` condition must never be read against --
+  a failure line quotes the line a run did not find, so a condition that matched here would be
+  satisfied by the sentence saying it is unmet. A
   fragment identifies the reason -- the words the refusal uses, not a whole message. Absent is legal
   and pins nothing: `expandBackends` reads the field as `null`, so every mark written before it
   existed keeps working, and the mechanism grows by pinning cases one at a time rather than by a
@@ -938,13 +1158,14 @@ everywhere is written once:
   ruling of 2026-11-21 02:20 chose the second shape for a case whose target is a number and whose
   wall is being built: a sentence quoted from a refused run follows the implementation, so a pin on
   it has to be re-typed every time the wall moves, which records the wall's progress as the case's
-  debt. `known_fail_ends_when` states the line the entry has to print instead, and no wall moves
-  that. `known_fail` needs one of the two -- the plan is refused at load when it has neither, with
-  the same `checkKnownFailMark` (`test/tools/run-tests.mjs`) -- and the trade is worth stating where
-  a reader weighs it: the sentence is the only field the run *compares*, so a mark that states its
-  ending reading accepts any failure as the expected one until the numbers arrive, and a different
-  defect can wear that mark's name in the meantime. The owner and the reason are required either
-  way, and the reason keeps naming the wall as it stands today.
+  debt. `known_fail_ends_when` states the line the entry has to print instead (`prints`) or a case
+  whose passing ends this one (`passes`), and no wall moves either. `known_fail` needs one of the two
+  -- the plan is refused at load when it has neither, with the same `checkKnownFailMark`
+  (`test/tools/run-tests.mjs`) -- and the trade is worth stating where a reader weighs it: the
+  sentence is the only field the run *compares*, so a mark that states its ending reading accepts any
+  failure as the expected one until the reading arrives, and a different defect can wear that mark's
+  name in the meantime. The owner and the reason are required either way, and the reason keeps naming
+  the wall as it stands today.
 
 `test/tools/selftest/run.mjs` checks these fields on fixture plans, together with the parallel
 ordering (the same status lines as a serial run, tests really overlapping), the serial mark (a

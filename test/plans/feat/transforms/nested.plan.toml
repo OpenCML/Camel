@@ -31,7 +31,7 @@ expect_stdout_contains = ["nested_square x=2.0 d1=4.0 d2=2.0"]
 known_fail = ["nvm"]
 known_fail_owner = "lane-nested-transforms (nested-b)"
 known_fail_reason = "the wall has moved three times and the mark no longer tracks it: `2da9735da` made the outer `jvp`'s lift lift the answer type, `2a2cf31a8` removed `split`'s refusal (`the value half reads the tangent of parameter 0`), and what refuses today is one step later -- `transforms: transpose has no transpose for this function`, cause `the callee's transpose was built, but the parameter at position 3 reads a value this call does not carry`, `modules/transforms/transpose_operator.cpp#refusalSentence`. The mark is on the number, so this one moving again does not touch the entry"
-known_fail_ends_when = "when the nest answers the numbers instead of a refusal, this entry prints `nested_square x=2.0 d1=4.0 d2=2.0` and exits 0 -- f(x)=x*x has f'(x)=2x and f''(x)=2, and d2 is the number that says the nest ran at all. No refusal is pinned, so the mark ends on that line and not on any wall moving: the run reports `marked known_fail ... but passes` on that reading"
+known_fail_ends_when = { passes = "nested.nest_square" }
 timeout_ms = 30000
 
 [[tests]]
@@ -46,7 +46,7 @@ expect_stdout_contains = ["nested_cube x=2.0 d1=12.0 d2=12.0"]
 known_fail = ["nvm"]
 known_fail_owner = "lane-nested-transforms (nested-b)"
 known_fail_reason = "same wall as `nested.nest_square`, and the same reason for not pinning it: what refuses today is `transforms: transpose has no transpose for this function` (cause `the callee's transpose was built, but the parameter at position 3 reads a value this call does not carry`, `modules/transforms/transpose_operator.cpp#refusalSentence`), and the mark is on the numbers"
-known_fail_ends_when = "with `nested.nest_square`: when the nest answers the numbers, this entry prints `nested_cube x=2.0 d1=12.0 d2=12.0` and exits 0 -- f(x)=x^3 has f'(x)=3x^2=12 and f''(x)=6x=12 at 2. Both being 12 is why the square case sits beside it; the mark ends on that line, and the run reports `marked known_fail ... but passes` on that reading"
+known_fail_ends_when = { passes = "nested.nest_cube" }
 timeout_ms = 30000
 
 [[tests]]
@@ -65,7 +65,7 @@ expect_stdout_contains = ["nest_named x=2.0 d1=12.0 d2=12.0"]
 known_fail = ["nvm"]
 known_fail_owner = "lane-nested-transforms (nested-b)"
 known_fail_reason = "the outer `jvp`'s lift refuses a call whose callee's code is not readable, and the callee here is what `split` handed out: `transforms: jvp has no forward transform for this function`, raised from `modules/transforms/jvp_operator.cpp:188` with `refusedOrigin == kInvalidOriginId` (no cause, no place). The nest stops here, one wall before `compositions.jvp_vjp_f`, whose composition does get past the lift"
-known_fail_ends_when = "when `split` hands out code the transforms can read -- the `FunctionClosure` the backward graph is already published as, which `modules/transforms/jvp_operator.cpp` asks for and does not accept -- the outer lift stops refusing with `jvp has no forward transform for this function` and this entry prints `nest_named x=2.0 d1=12.0 d2=12.0` and exits 0. No refusal is pinned here, so the mark ends on that line and not on any wall moving: the run reports `marked known_fail ... but passes` on that reading."
+known_fail_ends_when = { passes = "nested.nest_named" }
 timeout_ms = 30000
 
 [[tests]]
@@ -80,7 +80,7 @@ expect_stdout_contains = ["nest_lambda x=2.0 d2=12.0"]
 known_fail = ["nvm"]
 known_fail_owner = "lane-nested-transforms (nested-b)"
 known_fail_reason = "same wall as `nested.nest_named`: the outer `jvp`'s lift refuses a call whose callee's code is not readable (`transforms: jvp has no forward transform for this function`, `modules/transforms/jvp_operator.cpp:188`, no cause and no place)"
-known_fail_ends_when = "with `nested.nest_named`: when the outer lift stops refusing with `jvp has no forward transform for this function`, this entry prints `nest_lambda x=2.0 d2=12.0` and exits 0 -- the run reports `marked known_fail ... but passes` on that reading. The two writings may part ways when the lift learns to recurse, which is why this entry has its own trigger."
+known_fail_ends_when = { passes = "nested.nest_lambda" }
 timeout_ms = 30000
 
 [[tests]]
@@ -95,7 +95,7 @@ expect_stdout_contains = ["hessian g=[21.0,12.0] row0=[12.0,6.0] row1=[6.0,4.0]"
 known_fail = ["nvm"]
 known_fail_owner = "lane-nested-transforms (nested-b)"
 known_fail_reason = "same wall as `nested.nest_named`: every row of the matrix is a nest, so every row needs the outer `jvp`'s lift to reach a callee `split` handed out, and it refuses (`transforms: jvp has no forward transform for this function`, `modules/transforms/jvp_operator.cpp:188`)"
-known_fail_ends_when = "when the outer lift stops refusing with `jvp has no forward transform for this function` and `split` hands it readable code, every row of the matrix is produced: the entry prints `hessian g=[21.0,12.0] row0=[12.0,6.0] row1=[6.0,4.0]` and exits 0, and the run says `marked known_fail ... but passes`. No refusal is pinned here, so a different refusal in its place does not turn the entry red."
+known_fail_ends_when = { passes = "nested.hessian" }
 known_fail_note = "判据 ③ of the author's four readings. Not one of the four elements is produced today, so the matrix is not partly right: the first row dies before any number is printed. The expectation stays at the values worked out by hand (g = [21, 12], H = [[12, 6], [6, 4]] at (2, 3)) rather than moving to a reading: a number moved to match a refused composition would let the case pass on nothing."
 timeout_ms = 30000
 
@@ -111,7 +111,7 @@ expect_stdout_contains = ["confusion x=1.0 d=1.0"]
 known_fail = ["nvm"]
 known_fail_owner = "lane-nested-transforms (nested-b)"
 known_fail_reason = "same wall as `nested.nest_named`: the inner transform sits in the body of the function the outer one differentiates, so the outer `jvp`'s lift has to reach a callee `split` handed out, and it refuses (`transforms: jvp has no forward transform for this function`, `modules/transforms/jvp_operator.cpp:188`)"
-known_fail_ends_when = "when the outer lift stops refusing with `jvp has no forward transform for this function`, this entry prints `confusion x=1.0 d=1.0` and exits 0 -- 1 and not 2, which is what a nest that read the outer tangent as the inner one answers. No refusal is pinned here, so the mark ends on that line: the run reports `marked known_fail ... but passes` on that reading."
+known_fail_ends_when = { passes = "nested.confusion" }
 known_fail_note = "判据 ④. The expected answer is 1 and a confused implementation answers 2 (it reads the outer tangent as the inner one), which is what makes this reading worth keeping: the day the wall lifts, this is the entry that tells a correct nest from a plausible one. Today it prints nothing -- the refusal comes before the first number."
 timeout_ms = 30000
 
@@ -138,7 +138,7 @@ expect_stdout_contains = ["nested_quartic d2=48.0"]
 known_fail = ["nvm"]
 known_fail_owner = "lane-nested-transforms (nested-b)"
 known_fail_reason = "the nest is one step past both lifts and what refuses is `transforms: transpose has no transpose for this function` (cause `the callee's transpose was built, but the parameter at position 3 reads a value this call does not carry`, `modules/transforms/transpose_operator.cpp#refusalSentence`); the mark is on `d2=48.0` and not on that sentence"
-known_fail_ends_when = "when `grad(grad(f))` answers a number instead of a refusal, this entry prints `nested_quartic d2=48.0` and exits 0 -- f(x)=x^4 has f'(x)=4x^3 and f''(x)=12x^2, so f''(2)=48 and f''(3)=108, and `nested.nest_quartic_forward` beside it already answers the same 48 as `t1` from the forward composition. No refusal is pinned, so the mark ends on that line: the run reports `marked known_fail ... but passes` on that reading"
+known_fail_ends_when = { passes = "nested.nest_quartic" }
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 30000
 

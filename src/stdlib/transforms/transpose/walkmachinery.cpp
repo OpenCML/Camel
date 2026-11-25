@@ -319,12 +319,12 @@ gc_node_ref_t constantValueOf(WalkContext &ctx, gc_node_ref_t ref) {
     if (constantOf[ref] != rt::kInvalidNodeRef) {
         return constantOf[ref];
     }
-    const camel::runtime::GCNode *node  = ctx.function->node(ref);
-    const std::span<const slot_t> slots = ctx.function->staticSlots();
-    const std::ptrdiff_t index          = -static_cast<std::ptrdiff_t>(node->dataIndex);
-    if (node->dataIndex < 0 && index >= 0 && static_cast<size_t>(index) < slots.size()) {
+    const std::optional<slot_t> value = ctx.function->view().constantOf(ref);
+    if (value.has_value()) {
         constantOf[ref] = ctx.draft->materializeStaticValue(
-            slots[static_cast<size_t>(index)], node->dataType(), rt::kGCNodeFlagConstant);
+            *value,
+            const_cast<Type *>(ctx.function->view().typeOf(ref)),
+            rt::kGCNodeFlagConstant);
     }
     return constantOf[ref];
 }

@@ -6,7 +6,8 @@
  * parameters are data and stay constant.
  */
 
-import { grad, with_grad, stop_gradient } from autodiff
+import { grad, with_grad } from autodiff
+import { stop_gradient } from laws
 
 func sq(x: float) => float {
     return x * x
