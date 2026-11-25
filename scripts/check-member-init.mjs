@@ -327,7 +327,7 @@ function scrub(input) {
     return out
 }
 
-const CLASS_HEAD = /\b(class|struct|union)\s+([A-Za-z_]\w*)?\s*(final\b)?\s*(:[^;{}()]*)?\{/g
+const CLASS_HEAD = /\b(class|struct|union)\s+([A-Za-z_]\w*)?\s*(final\b)?\s*([^;{}()]*)?\{/g
 
 function matchingBrace(text, open) {
     let depth = 0

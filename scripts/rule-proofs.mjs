@@ -180,7 +180,7 @@ function readLibrary() {
     const functions = new Map()
     const rules = []
 
-    const funcPattern = /(?:^|\n)\s*(export\s+)?func\s+([A-Za-z_]\w*)\s*(::\s*<\s*(\w+)\s*>)?\s*\(/g
+    const funcPattern = /(?:^|\n)\s*(export\s+)?func\s+([A-Za-z_]\w*)\s*(:\s*<\s*(\w+)\s*>)?\s*\(/g
     for (let match = funcPattern.exec(source); match; match = funcPattern.exec(source)) {
         const open = source.indexOf('{', match.index + match[0].length)
         const close = open < 0 ? -1 : matchingBrace(source, open)

@@ -2784,7 +2784,7 @@ const EXCEPTIONS = {
                 'the rule registers no result text at all (`tree_leaves (type-directed)`); the declaration writes `L`',
         },
         'rule states a function type': {
-            'attempt (:mark/attempt)#result':
+            'attempt (mark/attempt)#result':
                 'the rule answers the function it was given, `((...args: A) => T!)`; the declaration states only the error `F!`',
             'first_with_as_param (transforms:first_with_as_param)#result':
                 'the rule answers a function type -- the reinterpreted function, `((the first `with` parameter, then the parameters) => any)` -- and the declaration writes it `FirstWithAsParam<F>`, a type function this checker does not expand',
@@ -2896,25 +2896,25 @@ const EXCEPTIONS = {
                 'the registered signature is `tree_leaves (type-directed)`, not a list of `name: type` positions',
         },
         'declared arity differs from rule arity': {
-            'slice (:op/slice_bytes)#parameter':
+            'slice (op/slice_bytes)#parameter':
                 'the declaration writes one parameter and the rule registers six positions, so there is no position-by-position pair',
-            'slice (:op/slice_str)#parameter':
+            'slice (op/slice_str)#parameter':
                 'the declaration writes one parameter and the rule registers six positions, so there is no position-by-position pair',
-            'slice (:op/slice_sub)#parameter':
+            'slice (op/slice_sub)#parameter':
                 'the declaration writes one parameter and the rule registers six positions, so there is no position-by-position pair',
             'upload (tiles:upload)#parameter':
                 'the declaration writes one parameter and the rule registers three, so there is no position-by-position pair',
         },
         'untyped pack ..rest': {
-            'eprintln (:io/eprintln)#parameter':
+            'eprintln (io/eprintln)#parameter':
                 'the rule writes `(x: T, ...rest)`, a pack with no type, so no position maps to the declaration',
-            'print (:io/print)#parameter':
+            'print (io/print)#parameter':
                 'the rule writes `(x: T, ...rest)`, a pack with no type, so no position maps to the declaration',
-            'println (:io/println)#parameter':
+            'println (io/println)#parameter':
                 'the rule writes `(x: T, ...rest)`, a pack with no type, so no position maps to the declaration',
         },
         'function-typed parameter': {
-            'attempt (:mark/attempt)#parameter':
+            'attempt (mark/attempt)#parameter':
                 'parameter 1 is `(...args: A) => T`, a function type whose arguments are a pack',
             'grad (autodiff:grad)#parameter':
                 'parameter 1 is `<W...>(N...) => float`, a function type with a `with` pack',

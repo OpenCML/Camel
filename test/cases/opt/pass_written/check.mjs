@@ -117,7 +117,7 @@ const histogram = (file) => {
         throw new Error(`camel ${file} std::opt std::jgir std::nop exited ${run.status}: ${run.stderr}`)
     }
     const counts = {}
-    for (const match of run.stdout.matchAll(/"label": "(:[^"]+)"/g)) {
+    for (const match of run.stdout.matchAll(/"label": "([^"]+)"/g)) {
         counts[match[1]] = (counts[match[1]] || 0) + 1
     }
     return counts

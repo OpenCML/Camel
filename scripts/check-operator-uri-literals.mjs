@@ -71,7 +71,7 @@ const SCANNED = ['src', 'src/tools', 'include', 'modules', 'tools']
 const SOURCE = /\.(?:h|hpp|hh|hxx|cpp|cc|cxx)$/
 
 /** A built-in operator URI literal: `":op/add_l"`, `":io/println"`, `":op/"` as a prefix. */
-const URI_LITERAL = /"(:[A-Za-z_][A-Za-z0-9_]*\/[^"\n]*)"/g
+const URI_LITERAL = /"([A-Za-z_][A-Za-z0-9_]*\/[^"\n]*)"/g
 
 /** The files the rule names outright, relative to the tree. */
 const HOME_FILES = new Set([

@@ -317,7 +317,7 @@ const looks = nodes('look', 'FUNC')
 assert(looks.length === 3, `expected three calls of look, got ${looks.length}`)
 for (const x of looks) for (const y of looks)
     assert(!edge(x, y, 'CTRL'), `a read-only recursive function was ordered as a writer: ${x} -> ${y}`)
-// arms(): the JOIN of the branch in the graph that holds the variable (:var/new) precedes the
+// arms(): the JOIN of the branch in the graph that holds the variable (var/new) precedes the
 // read of c written after the branch.
 const section = text.slice(text.indexOf('label="arms"'))
 const join = section.match(/(N[0-9A-F]+) \[label="JOIN", type="JOIN"[^\n]*span="57:/)

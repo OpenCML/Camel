@@ -2425,7 +2425,7 @@ async function runVerification(test, result) {
 
     const payloadPath = path.join(tempDir, 'input.json')
     // The documented payload fields are listed in docs/test-plans.md; every one of them must be
-    // present, and a missing key is silently dropped by `JSON.stringify` (: `case_path` was
+    // present, and a missing key is silently dropped by `JSON.stringify` (`case_path` was
     // assembled from a result that did not carry it yet, so a script normalizing the absolute
     // source path out of its output could not, and its digest varied with the checkout).
     const payload = {

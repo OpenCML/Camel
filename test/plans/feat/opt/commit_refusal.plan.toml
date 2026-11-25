@@ -252,7 +252,7 @@ kind = "behavior"
 case = "../../../cases/opt/commit_checks/loop_body_read.cml"
 args = ["${case}", "test::commit_loop_body_read", "std::nvm"]
 expect_exit = 60
-expect_stdout_contains = ["commit_loop_body_read: the arm of a branch and the body of a loop are both regions of the graph", "and no BRCH anywhere", "in the body (region 0) reading node", "of the body of LOOP", "refused at the commit: Runtime graph 'main' breaks the branch-arm invariant: COPY 24 runs in the body (region 0) and reads OPER 14 (:op/add_l), which lies in the body of LOOP 17 (region 2): a node reads only the values that run whenever it runs (see docs/technical/17_graph_rewrite_api_contracts.md, 4.1).", "the copy that reads a value of its own region was published", "in the body of LOOP", "reading node", "of the function body was published"]
+expect_stdout_contains = ["commit_loop_body_read: the arm of a branch and the body of a loop are both regions of the graph", "and no BRCH anywhere", "in the body (region 0) reading node", "of the body of LOOP", "refused at the commit: Runtime graph 'main' breaks the branch-arm invariant: COPY 24 runs in the body (region 0) and reads OPER 14 (op/add_l), which lies in the body of LOOP 17 (region 2): a node reads only the values that run whenever it runs (see docs/technical/17_graph_rewrite_api_contracts.md, 4.1).", "the copy that reads a value of its own region was published", "in the body of LOOP", "reading node", "of the function body was published"]
 
 # The six the review of 2026-10-29 lists end with "端口与声明的类型一致", and it is the one of the six
 # that was read from outside the seal: a call site is checked against the callee's *port node*

@@ -48,7 +48,7 @@ tags = ["feat", "compile", "var", "gir", "autodiff"]
 
 [[tests]]
 name = "var.assignment_and_let_chain_are_one_graph"
-desc = "An assignment to a `var` and the equivalent `let` chain have one canonical graph: `std::jgir canonical=true` prints the same bytes for the two writings of one gradient step, and so does the canonical output of the derivative (`std::macro std::jgir canonical=true`). Red on 96a27e435 because the `var` writing still builds a unit (:var/new, three :var/get and :var/assn_d in its graph) and `grad` refuses it outright; green when a unit is lowered to SSA. **It is green on f4bb08f241 for the opposite of that reason**: the whole `var` chain folds, `:var/new` is pruned, and a document with no unit in it proves nothing about lowering one. Read the six entries below for the discriminating half."
+desc = "An assignment to a `var` and the equivalent `let` chain have one canonical graph: `std::jgir canonical=true` prints the same bytes for the two writings of one gradient step, and so does the canonical output of the derivative (`std::macro std::jgir canonical=true`). Red on 96a27e435 because the `var` writing still builds a unit (var/new, three :var/get and :var/assn_d in its graph) and `grad` refuses it outright; green when a unit is lowered to SSA. **It is green on f4bb08f241 for the opposite of that reason**: the whole `var` chain folds, `:var/new` is pruned, and a document with no unit in it proves nothing about lowering one. Read the six entries below for the discriminating half."
 kind = "behavior"
 tool = "node"
 case = "../../../../test/tools/writing-freedom.mjs"

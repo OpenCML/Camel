@@ -1,5 +1,5 @@
 // A lifted body **can** call a function value: the lift writes a call of `jvp(v)` and lets the run
-// time answer which graph `v` stands for (: 提升一个"通过函数值 `v` 的调用"，就
+// time answer which graph `v` stands for (提升一个"通过函数值 `v` 的调用"，就
 // 生成一个对 `jvp(v)` 的调用，在运行时求值). Nothing is read about the value at lift time -- not a
 // `Data`'s static function, not a `FunctionClosure`'s `Fill` -- because at lift time it is not known
 // which graph the value is.
