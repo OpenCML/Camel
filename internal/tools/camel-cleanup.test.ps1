@@ -26,7 +26,7 @@
 # `mktemp -d` fake home, which the harness removes at the end.
 #
 #   pwsh -NoProfile -File internal/tools/camel-cleanup.test.ps1
-#   pwsh -NoProfile -File internal/tools/camel-cleanup.test.ps1 -BashHost 88zjwei
+#   pwsh -NoProfile -File internal/tools/camel-cleanup.test.ps1 -BashHost <host>
 #
 # This machine's `bash` on PATH is WSL and cannot read a Windows path, so without -BashHost the run
 # prints SKIP unless a bash that can read one is found.

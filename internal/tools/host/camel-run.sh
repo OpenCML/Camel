@@ -53,7 +53,7 @@
 #             name bytes the commit does not contain.
 #
 # Usage from a generated run.sh:
-#   "${CAMEL_RUN:=/home/zjwei/camel-work/bin/camel-run}" lock --lane "$name" --branch "$branch" -- \
+#   "${CAMEL_RUN:=<home>/camel-work/bin/camel-run}" lock --lane "$name" --branch "$branch" -- \
 #       bash -c '<the plan run>'
 set -u
 

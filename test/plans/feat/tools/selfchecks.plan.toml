@@ -242,7 +242,7 @@ expect_stdout_contains = ["14 checks, 0 failed"]
 normalizers = ["normalize_newlines"]
 timeout_ms = 120000
 
-# Slow: 3.0 s, and it is the one file in this plan that is red today. Run over `-BashHost 88zjwei`
+# Slow: 3.0 s, and it is the one file in this plan that is red today. Run over `-BashHost <host>`
 # (the invocation `internal/tools/README.md` documents, because this machine's `bash` is WSL and
 # cannot read a Windows path) it prints `44 checks, 2 failed`: `a process inside it is named` and
 # `the bash guard exited 0`. The sweep keeps the fixture's `probe-f` and never prints
@@ -267,7 +267,7 @@ expect_stdout_contains = ["44 checks, 0 failed"]
 normalizers = ["normalize_newlines"]
 timeout_ms = 300000
 
-# Slow: 3.0 s (41 checks over `-BashHost 88zjwei`). Without a usable bash the file prints
+# Slow: 3.0 s (41 checks over `-BashHost <host>`). Without a usable bash the file prints
 # `0 checks, 0 failed` and exits 0, which is the shape the count in this entry is here to refuse.
 [[tests]]
 name = "selfchecks.camel_cleanup"

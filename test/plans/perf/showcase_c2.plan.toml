@@ -185,7 +185,7 @@ timeout_ms = 300000
 # Both halves run: the with_grad pipeline and the library's own gradient are two implementations of
 # the same training program, and the tolerance above is what says they agree.
 #
-# Read it on the gate host, not on a workstation. Measured 2026-11-15: on `88zjwei` this entry takes
+# Read it on the gate host, not on a workstation. Measured 2026-11-15: on the gate host this entry takes
 # 2.07 s and fails with the pinned sentence (`std::vjp` is still not a registered pass), while on a
 # Windows host the same program does not reach that sentence at all -- it hits `timeout_ms` and the
 # runner reports `expected exit 0, got timeout after 600000 ms`, so a reader there sees the mark

@@ -140,7 +140,7 @@ timeout_ms = 20000
 #    cannot answer, and it read back as `float` and summed arrays with `:op/add_d`. This case is the
 #    program that TODO was waiting for.
 #
-# Measured 2026-11-04 on host 88zjwei (1 m load 20.8-21.0, a loaded host): `value= 3.0` and
+# Measured 2026-11-04 on a loaded host (1 m load 20.8-21.0): `value= 3.0` and
 # `grad= [1.0, 1.0]` on `std::nvm` and on `std::fvm`, and the reading
 # `REINTERP split function=jvp_of_g ... residuals=2 loop=1 tape=5 invariants=0 after=1`
 # Of the two `transpose_loop_escape` cases that were red beside it, `second_state_of_the_same_loop`
@@ -3188,7 +3188,7 @@ timeout_ms = 20000
 
 [[tests]]
 name = "extent_of_filling_the_named_position_answers"
-desc = "The control `extent_of_names_the_open_position` needs, and the one its text pin cannot be: the sentence names a position, and this program fills exactly that position and the call answers -- `float[?]`'s open position 0 becomes `float[3]`, which answers `[3]`, and `float[...]`'s open position 0 becomes `float[2, 3]`, which answers `[2, 3]`. A sentence that named the wrong position would still pass the negative entry, because that entry pins the words; it could not make the number come back here. Measured 2026-11-05 (host `88zjwei`): the two refusals exit 1 with 'position 0 is open' at each call, and these two calls exit 0 with these two lists. The answer must stay a refusal when a position is open -- `[]` would be the rank-zero shape, which `sum_to` reads as one element -- so this entry pairs with the refusal and does not replace it."
+desc = "The control `extent_of_names_the_open_position` needs, and the one its text pin cannot be: the sentence names a position, and this program fills exactly that position and the call answers -- `float[?]`'s open position 0 becomes `float[3]`, which answers `[3]`, and `float[...]`'s open position 0 becomes `float[2, 3]`, which answers `[2, 3]`. A sentence that named the wrong position would still pass the negative entry, because that entry pins the words; it could not make the number come back here. Measured 2026-11-05: the two refusals exit 1 with 'position 0 is open' at each call, and these two calls exit 0 with these two lists. The answer must stay a refusal when a position is open -- `[]` would be the rank-zero shape, which `sum_to` reads as one element -- so this entry pairs with the refusal and does not replace it."
 kind = "behavior"
 case = "../../../cases/compile/transforms/extent_of_filling_the_named_position_answers.cml"
 args = ["${case}", "${backend}"]

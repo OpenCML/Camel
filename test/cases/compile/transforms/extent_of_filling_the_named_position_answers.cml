@@ -6,7 +6,7 @@
 //   `float[...]` refused with "position 0 is open: `..` states no dimension there, so no position
 //                has a length to read" -> `extent_of::<float[2, 3]>()` answers `[2, 3]`
 //
-// Measured 2026-11-05 (host `88zjwei`): both refusals exit 1 with those sentences,
+// Measured 2026-11-05: both refusals exit 1 with those sentences,
 // and these two calls exit 0 with these two lists. A sentence that named a position which is not
 // the one holding the missing number would still satisfy the text pin in the negative entry -- the
 // entry pins the words -- and it could not make the number come back here. That is what makes the

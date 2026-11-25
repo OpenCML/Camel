@@ -315,7 +315,7 @@ args = ["${case}", "--verify-docs", "--camel", "${camel}"]
 expect_exit = 0
 expect_stdout_contains = ["every declared name has a description and an @example"]
 normalizers = ["normalize_newlines"]
-# The bound moved with the work, and the two readings below are why (both on `88zjwei`, the same
+# The bound moved with the work, and the two readings below are why (both on the same
 # tree, `--verify-docs --camel out/latest/bin/camel`):
 #
 #   * at 180000 ms, 2026-11-04 04:39 +08:00, 1m load 16.5: `used 47750 ms of CPU

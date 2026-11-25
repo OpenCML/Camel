@@ -26,7 +26,7 @@
 # ~/camel-work through a real bash, and checks that it removes only what all three conditions allow.
 #
 #   pwsh -NoProfile -File internal/tools/camel-remote-cleanup.test.ps1
-#   pwsh -NoProfile -File internal/tools/camel-remote-cleanup.test.ps1 -BashHost 88zjwei
+#   pwsh -NoProfile -File internal/tools/camel-remote-cleanup.test.ps1 -BashHost <host>
 #
 # Part B needs a bash that can hold a flock and read /proc: the build host always has one, and a
 # local `bash` is used when the one on PATH can read a Windows path. When neither is available part
