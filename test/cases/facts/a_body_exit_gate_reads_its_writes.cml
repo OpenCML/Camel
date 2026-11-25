@@ -5,7 +5,7 @@
 //
 // This is the shape `test::facts_compare` reads against the predicate a pass asks before it moves a
 // node: `core.arrangeable` called it freely arrangeable (it is pure, it reaches nothing, it cannot
-// fault and it ends) while `runtime::nodeIsFreelySchedulable` refuses every GATE, because the order
+// fault and it ends) while the predicate a pass asked refused every GATE, because the order
 // a gate stands in is what a reader of the graph must not be free to move. The four terms cannot
 // say "it stands here", so the kind refuses the gate too; the program is otherwise
 // plain -- no call, no branch, no `for` loop, no conversion -- so the gate is the one node whose two

@@ -5,6 +5,7 @@
  * Draft-editing helpers shared by the generic optimization passes (see rewrite.h).
  */
 
+#include "camel/facts/arrangeable.h"
 #include "rewrite.h"
 #include "camel/execute/pass/base.h"
 #include "camel/execute/shaped_operators.h"
@@ -99,13 +100,13 @@ bool isValueOnly(const camel::runtime::GraphTransaction &transaction, gc_node_re
     // reader, and they are asked by their shape (`camel/execute/shaped_operators.h`), not by the
     // four node kinds that still spell them.
     if (camel::execute::shapeOfKind(h->kind) != camel::execute::OperShape::None) {
-        return camel::runtime::nodeIsFreelySchedulable(draft, id, true);
+        return camel::facts::nodeIsFreelyArrangeable(draft, id);
     }
     switch (h->kind) {
     case GCNodeKind::Data:
         return h->dataIndex < 0;
     case GCNodeKind::Oper:
-        return camel::runtime::nodeIsFreelySchedulable(draft, id, true);
+        return camel::facts::nodeIsFreelyArrangeable(draft, id);
     default:
         return false;
     }
@@ -202,7 +203,7 @@ orderedSources(const camel::runtime::GraphTransaction &transaction, gc_node_ref_
             continue;
         }
         seen[n] = true;
-        if (carriesOrdering(draft, n, true)) {
+        if (carriesOrdering(draft, n)) {
             sources.push_back(n);
             continue;
         }
@@ -241,11 +242,11 @@ bool isObservedRun(const camel::runtime::GraphTransaction &transaction, gc_node_
     // A conversion runs when it is read, and may fail, so its running is observed like an
     // operator's; the shape says it is one (`camel/execute/shaped_operators.h`).
     if (camel::execute::shapeOfKind(header->kind) == camel::execute::OperShape::Conversion) {
-        return !camel::runtime::nodeIsFreelySchedulable(draft, id, true);
+        return !camel::facts::nodeIsFreelyArrangeable(draft, id);
     }
     switch (header->kind) {
     case GCNodeKind::Oper:
-        return !camel::runtime::nodeIsFreelySchedulable(draft, id, true);
+        return !camel::facts::nodeIsFreelyArrangeable(draft, id);
     case GCNodeKind::Call:
     case GCNodeKind::Func:
         return true;
@@ -551,7 +552,7 @@ void replaceNode(
     if (!draft.syncUsersOf(id).empty()) {
         std::vector<gc_node_ref_t> lastRead;
         for (gc_node_ref_t source : orderedSources(transaction, id)) {
-            if (!camel::runtime::carriesOrdering(draft, source, true)) {
+            if (!camel::runtime::carriesOrdering(draft, source)) {
                 continue;
             }
             bool readElsewhere = false;
@@ -802,3 +803,7 @@ const camel::runtime::Program *rewriteReachableGraphs(
 }
 
 } // namespace camel::passes::generic
+
+
+
+

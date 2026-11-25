@@ -128,7 +128,7 @@ camel::core::OperId operIdOf(const camel::runtime::GraphTransaction &transaction
 
 /// True for an OPER node a pass may compute ahead of time or merge with an identical call: its
 /// operator is pure and foldable. Whether the node may also be dropped, moved or reordered is a
-/// different question, which only `nodeIsFreelySchedulable` (camel/runtime/graph.h) answers.
+/// different question, which only `core.arrangeable` (camel/facts/arrangeable.h) answers.
 bool isPureOper(const camel::runtime::GraphTransaction &transaction, gc_node_ref_t id);
 
 /**
@@ -338,3 +338,4 @@ const camel::runtime::Program *rewriteReachableGraphs(
     bool (*mayRewrite)(const camel::runtime::GCGraph &) = nullptr, bool checkScreens = false);
 
 } // namespace camel::passes::generic
+

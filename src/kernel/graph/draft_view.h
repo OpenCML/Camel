@@ -140,6 +140,7 @@ class DraftGraphAdapter final : public GraphView {
 
     CalleeRef calleeOf(NodeRef ref) const override;
     camel::core::OperId operatorOf(NodeRef ref) const override;
+    camel::ops::OperShape shapeOf(NodeRef ref) const override;
     LoopForm loopFormOf(NodeRef ref) const override;
 
   private:

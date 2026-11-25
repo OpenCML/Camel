@@ -1600,11 +1600,12 @@ bool sameSyncBlock(const GraphDraft &draft, gc_node_ref_t a, gc_node_ref_t b);
 /// about a commitment, so it is asked of the transaction that would make it.
 std::vector<gc_node_ref_t> draftRuntimeNodeRefs(const GraphTransaction &transaction);
 
-/// `nodeIsFreelySchedulable` (camel/runtime/graph.h) asked of a node of a draft. `byShape` lets
-/// the shapes of the types decide for an elementwise operator (it cannot fail when every shape is
-/// fixed); only a question about one decision of one pass may ask it, never the question of
-/// whether a node takes an order edge, which must not change as types are refined.
-bool nodeIsFreelySchedulable(const GraphDraft &draft, gc_node_ref_t id, bool byShape = false);
+/// Which of the four operations a node of a draft performs, whichever way it is spelled
+/// (`camel/runtime/oper_shape.h`): the operator its payload names, and for a node of one of the four
+/// kinds the kind's own answer -- `Construction` and `Access` are the two a kind still states,
+/// because a conversion and a copy are calls of `:op/cast` and `:op/copy` and their shape is the
+/// operator's record. `None` for a node that performs none of them.
+camel::ops::OperShape draftOperationShape(const GraphDraft &draft, gc_node_ref_t id);
 
 /// `isChainStatement` (camel/runtime/graph.h) asked of a node of a draft: the operator from the
 /// node's payload, a cast's types from its input, and whether it owns a region from the draft's
@@ -1622,8 +1623,8 @@ bool occupiesChainPlace(const GraphDraft &draft, gc_node_ref_t id);
 bool isBlockValue(const GraphDraft &draft, gc_node_ref_t id);
 
 /// `nodeMayFault` (camel/runtime/graph.h) asked of a node of a draft, with the same `byShape`
-/// reading of an elementwise operator. It is the fault half of `nodeIsFreelySchedulable` above,
-/// so a caller that has already asked whether the operator may be recomputed asks this alone.
+/// reading of an elementwise operator: the fault half of the arrangeable question, which the fact
+/// `core.arrangeable` answers as one of its four terms.
 bool nodeMayFault(const GraphDraft &draft, gc_node_ref_t id, bool byShape = false);
 
 /// Whether a node carries the program's order instead of being a value a pass may compute for
@@ -1633,7 +1634,7 @@ bool nodeMayFault(const GraphDraft &draft, gc_node_ref_t id, bool byShape = fals
 /// operator with an effect, one that may fault, one that must run where the program writes it, a
 /// conversion that can fail). The rewrite engine and the generic passes refuse to reorder, drop or
 /// recompute such a node.
-bool carriesOrdering(const GraphDraft &draft, gc_node_ref_t node, bool byShape = false);
+bool carriesOrdering(const GraphDraft &draft, gc_node_ref_t node);
 
 /// Whether a node is a pure computation that no statement waits for and that waits for none: an
 /// operator that may be recomputed, or a conversion, with no control, order or sync edge on either

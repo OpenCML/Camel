@@ -2664,7 +2664,7 @@ size_t GraphDraft::dissolveUnorderedGates() {
             const bool holdsEffectPlace =
                 normUsersOf(id).empty() && withUsersOf(id).empty() &&
                 normUsersOf(value).size() + withUsersOf(value).size() == 1 &&
-                carriesOrdering(*this, value, true);
+                carriesOrdering(*this, value);
             std::vector<gc_node_ref_t> successors;
             if (holdsEffectPlace) {
                 for (auto group : {ctrlUsersOf(id), syncUsersOf(id)}) {

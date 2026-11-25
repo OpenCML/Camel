@@ -17,6 +17,7 @@
  * around the runtime-native draft/session pipeline.
  */
 
+#include "camel/facts/arrangeable.h"
 #include "camel/runtime/draft_inline.h"
 #include "camel/runtime/control.h"
 #include "camel/runtime/effect_liveness.h"
@@ -1611,7 +1612,7 @@ bool splicedBodyNeedsOrder(const GraphTransaction &transaction, gc_node_ref_t id
     if (header == nullptr || header->kind == GCNodeKind::Dead || nodeOwnsRegions(header->kind)) {
         return false;
     }
-    return !nodeIsFreelySchedulable(draft, id);
+    return !camel::facts::nodeIsFreelyArrangeable(draft, id);
 }
 
 /// The node that takes the call's place in the chain of its block (docs/design/effects/edges.cn.md
@@ -2134,7 +2135,7 @@ DraftInlineResult inlineCallableInDraft(
             continue;
         }
         const gc_node_ref_t actual = actualInputs[i];
-        if (!draft.alive(actual) || actual == funcNodeId || !carriesOrdering(draft, actual, true)) {
+        if (!draft.alive(actual) || actual == funcNodeId || !carriesOrdering(draft, actual)) {
             continue;
         }
         // Only the argument whose call was its last reader is lost: one another node reads keeps
@@ -2695,3 +2696,6 @@ DraftInlineResult inlineCallableInDraft(
 }
 
 } // namespace camel::runtime
+
+
+

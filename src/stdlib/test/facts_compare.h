@@ -20,7 +20,7 @@
  *       kind_free_pred_kept=<n> kind_kept_pred_free=<n> no_fact=<n> example=<graph>:<node>
  *
  * The `readers` line compares the fact with the predicate a pass asks
- * (`runtime::nodeIsFreelySchedulable`); the `draft` line asks the same kind of the graph the
+ * (`OldArrangeable`, the copy of that predicate the comparison keeps); the `draft` line asks the same kind of the graph the
  * program's version decodes into -- the graph an editing session is building -- and compares it
  * with the frozen answer at the same node. `no_store` counts drafts the framework answered no
  * store for (the kind is not askable where only a draft is at hand), `kept` the nodes whose second
@@ -53,7 +53,7 @@
  * differ in one bit is a `diff` and names itself.
  *
  * The two `readers` families compare `core.arrangeable` with the predicate a pass asks before it
- * drops, moves, merges or reorders a node (`runtime::nodeIsFreelySchedulable`). They ask one
+ * drops, moves, merges or reorders a node (`OldArrangeable`). They ask one
  * question, so an answer they differ on is a node with two answers, and the second family is the
  * table that says *which* node kinds: one line per node kind the program carries, counting the four
  * combinations of the two answers -- both say freely arrangeable (`both_free`), both refuse

@@ -279,7 +279,7 @@ void declareBuiltinOperatorFaults() {
     // design principles 3.3 leaves "may fault" undeclared-means-yes, and design principles 3.4
     // reads the answer when it decides whether a computation may be scheduled freely. The
     // passes do act on it: `src/kernel/runtime/graph.cpp#nodeMayFault` reads the trait derived from
-    // this table, and `nodeIsFreelySchedulable` hands that answer to whoever may drop, move or
+    // this table, and `core.arrangeable` hands that answer to whoever may drop, move or
     // recompute a node -- a computation left out of this table is a running the program
     // observes, so `std::opt` keeps it alive with `:op/keep` when a removal takes its last
     // read (`src/stdlib/std/cxx/opt/generic/rewrite.cpp#isObservedRun`). Integer arithmetic wraps,
@@ -783,3 +783,4 @@ void declareBuiltinOperatorResources(std::span<const std::string_view> names) {
             .result          = ResultAlias{.kind = ResultAlias::Kind::Unknown},
             .functionOperand = ResourceBinding{.kind = ResourceBinding::Kind::Norm}});
 }
+

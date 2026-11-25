@@ -20,6 +20,7 @@
  * value, not a place in a list.
  */
 
+#include "camel/facts/arrangeable.h"
 #include "txn.h"
 
 #include "handle.h"
@@ -696,7 +697,7 @@ size_t hangSplicedStatements(
             continue;
         }
         if (!draft.regionWithin(draft.nodeRegion(id), region) ||
-            camel::runtime::nodeIsFreelySchedulable(draft, id)) {
+            camel::facts::nodeIsFreelyArrangeable(draft, id)) {
             continue;
         }
         const std::span<const gc_node_ref_t> reads = draft.normInputsOf(exit);
@@ -1061,3 +1062,5 @@ const std::unordered_map<std::string, operator_t> &txnKernels() {
 }
 
 } // namespace camel::graphmod
+
+

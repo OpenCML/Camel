@@ -13,6 +13,7 @@
 #include "camel/facts/control_regions.h"
 #include "camel/runtime/control_regions.h"
 #include "camel/runtime/graph.h"
+#include "camel/runtime/oper_shape.h"
 #include "camel/runtime/graph_txn.h"
 #include "camel/runtime/reachable.h"
 
@@ -36,6 +37,96 @@ using camel::runtime::kInvalidNodeRef;
 /// compares its regions and nodes one for one; it prints `within_pairs=0`, which is what a case
 /// that reads the count as a lower bound reports as a red rather than as a green over nothing.
 constexpr uint32_t kMaxPairRegions = 512;
+
+/// The algorithm that answered the arrangeable question before it became a fact, kept here as the
+/// baseline the comparison is made against. It is not a second implementation a pass may read: it is
+/// the *old* answer, frozen on purpose and named so that nothing can mistake it for the model's, and
+/// the tables this file prints are "the fact against this" -- a claim about two answers needs both of
+/// them to stay still. `OldRegionWalk` is the same shape of thing for `core.controlRegions`.
+///
+/// It is the pair the fact replaced: `nodeMayFault` (which survives, and is still the fault half)
+/// and `OperatorTable::mayBeRecomputed` (foldability and macro), with the two graph forms that read
+/// a node's types for a conversion and the shapes of its operands for an elementwise operator.
+struct OldArrangeable {
+    static bool of(
+        camel::runtime::GCNodeKind kind, camel::core::OperId oper,
+        const camel::core::type::Type *castTarget = nullptr,
+        const camel::core::type::Type *castSource = nullptr, bool fixedShapes = false) {
+        if (kind == camel::runtime::GCNodeKind::Oper &&
+            !camel::core::OperatorTable::instance().mayBeRecomputed(oper)) {
+            return false;
+        }
+        return !camel::runtime::nodeMayFault(kind, oper, castTarget, castSource, fixedShapes);
+    }
+
+    static bool of(const GCGraph &graph, gc_node_ref_t ref) {
+        const camel::runtime::GCNode *node = graph.node(ref);
+        if (node == nullptr) {
+            return false;
+        }
+        if (node->kind == camel::runtime::GCNodeKind::Oper) {
+            const auto *body = graph.nodeBodyAs<camel::runtime::GCOperBody>(ref);
+            const camel::core::OperId oper =
+                body == nullptr ? camel::core::kNoOper : body->oper;
+            if (camel::ops::takesItsOperandAsItsType(camel::runtime::shapeOfOperator(oper))) {
+                const auto inputs                       = graph.normInputsOf(ref);
+                const camel::runtime::GCNode *source    = inputs.size() == 1 ? graph.node(inputs[0]) : nullptr;
+                return of(
+                    node->kind,
+                    oper,
+                    node->dataType(),
+                    source != nullptr ? source->dataType() : nullptr);
+            }
+            return of(node->kind, oper);
+        }
+        if (camel::runtime::shapeOfKind(node->kind) == camel::ops::OperShape::Conversion) {
+            const auto inputs                    = graph.normInputsOf(ref);
+            const camel::runtime::GCNode *source = inputs.size() == 1 ? graph.node(inputs[0]) : nullptr;
+            return of(
+                node->kind,
+                camel::core::kNoOper,
+                node->dataType(),
+                source != nullptr ? source->dataType() : nullptr);
+        }
+        return of(node->kind, camel::core::kNoOper);
+    }
+
+    static bool of(const camel::runtime::GraphDraft &draft, gc_node_ref_t id, bool byShape) {
+        const camel::runtime::DraftNodeHeader *header = draft.header(id);
+        if (header == nullptr || !draft.alive(id)) {
+            return false;
+        }
+        const std::span<const std::byte> payload =
+            header->kind == camel::runtime::GCNodeKind::Oper ? draft.payloadOf(id)
+                                                             : std::span<const std::byte>{};
+        const camel::core::OperId oper =
+            payload.size() >= sizeof(camel::runtime::GCOperBody)
+                ? reinterpret_cast<const camel::runtime::GCOperBody *>(payload.data())->oper
+                : camel::core::kNoOper;
+        const camel::ops::OperShape shape =
+            camel::runtime::draftOperationShape(draft, id);
+        if (camel::ops::takesItsOperandAsItsType(shape)) {
+            const auto inputs     = draft.normInputsOf(id);
+            const auto *source    = inputs.size() == 1 ? draft.header(inputs[0]) : nullptr;
+            return of(
+                header->kind,
+                oper,
+                header->dataType,
+                source != nullptr ? source->dataType : nullptr);
+        }
+        if (header->kind == camel::runtime::GCNodeKind::Oper) {
+            bool fixed = byShape && camel::runtime::shapesAreFixed(header->dataType);
+            for (gc_node_ref_t input : draft.normInputsOf(id)) {
+                const auto *in = draft.header(input);
+                fixed          = fixed && in != nullptr &&
+                                 camel::runtime::shapesAreFixed(in->dataType);
+            }
+            return payload.size() >= sizeof(camel::runtime::GCOperBody) &&
+                   of(header->kind, oper, nullptr, nullptr, fixed);
+        }
+        return of(header->kind, camel::core::kNoOper);
+    }
+};
 
 bool isControlRegion(GCRegionKind kind) {
     return kind == GCRegionKind::Arm || kind == GCRegionKind::LoopCond ||
@@ -369,10 +460,10 @@ struct DraftCounts {
     size_t stale  = 0;
     /// The same family table as `ReaderCounts::byFamily`, asked of the **draft**: the answer the
     /// kind gives at a node of the graph an editing session holds, against the answer the predicate
-    /// a pass asks of a draft gives (`runtime::nodeIsFreelySchedulable(const GraphDraft &, ...)`).
-    /// The frozen table cannot stand for this one: the freeze and the editing session ask the
-    /// draft, they ask it with a different `byShape`, and a node's answer is a fact of the
-    /// representation it was asked of.
+    /// a pass asks of a draft gives (`OldArrangeable::of(const GraphDraft &, ...)`, the frozen
+    /// copy of it). The frozen table cannot stand for this one: the freeze and the editing session
+    /// ask the draft, they asked it with a different `byShape`, and a node's answer is a fact of
+    /// the representation it was asked of.
     std::array<FamilyRow, kFamilyCount + 1> byFamily{};
     /// Nodes where the predicate's `byShape` answer differs from its plain one. It is the one
     /// argument the draft's readers pass two ways (`std::cxx::opt` and the `graph` module ask
@@ -424,8 +515,8 @@ struct ReaderCounts {
     std::array<FamilyRow, kFamilyCount + 1> byFamily{};
 };
 
-/// `core.arrangeable` against the predicate a pass asks before it drops, moves, merges or reorders
-/// a node (`runtime::nodeIsFreelySchedulable`, camel/runtime/graph.h). The two answer one question
+/// `core.arrangeable` against the predicate a pass asked before it drops, moves, merges or reorders
+/// a node (`OldArrangeable`, the copy of the predicate this file keeps). The two answer one question
 /// -- may a pass arrange this node anywhere -- so a node they answer differently is a node that has
 /// two answers, and this is the reading that counts them. A node the kind answers nothing for is a
 /// `no_fact`, separately from a disagreement: "the fact declined" and "the fact and the reader
@@ -460,7 +551,7 @@ void compareReaders(
         // answer; after it, the same answer read from the fact and the answer this comparison keeps
         // is the one the readers replaced (`OldArrangeable`), so the tables below count the
         // same thing on both sides of the deletion.
-        const bool moved = camel::runtime::nodeIsFreelySchedulable(graph, ref);
+        const bool moved = OldArrangeable::of(graph, ref);
         for (KindCounts *cell : {&row, &familyRow.counts}) {
             if (moved) {
                 ++(fact->all() ? cell->bothFree : cell->kindKeptPredFree);
@@ -568,8 +659,8 @@ void compareDraft(
         // The draft's own family table: the fact at this node against the predicate the readers of
         // a draft ask, in the plain form the freeze and the transaction ask it (see `shapeDiff` for
         // the `byShape` form).
-        const bool plain = camel::runtime::nodeIsFreelySchedulable(draft, ref);
-        const bool shape = camel::runtime::nodeIsFreelySchedulable(draft, ref, true);
+        const bool plain = OldArrangeable::of(draft, ref, false);
+        const bool shape = OldArrangeable::of(draft, ref, true);
         if (plain != shape) {
             ++counts.shapeDiff;
         }
@@ -763,3 +854,5 @@ using camel::execute::PassKernel;
 const PassKernel factsCompareKernel(kFactsCompareTestPass, makePass<FactsCompareTestPass>());
 
 } // namespace
+
+

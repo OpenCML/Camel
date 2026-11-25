@@ -61,7 +61,7 @@ bool DraftWritings::deletionAllowed(gc_node_ref_t node) {
         // written in place. It asks only when the fault guard is selected too -- the conservative
         // compatibility guard the two selections have always bought together.
         if (protection_.order && protection_.faults &&
-            (carriesOrdering(draft_, at, true) || !draft_.waitInputsOf(at).empty() ||
+            (carriesOrdering(draft_, at) || !draft_.waitInputsOf(at).empty() ||
              writtenInPlace(at))) {
             return false;
         }
@@ -148,3 +148,4 @@ bool DraftWritings::dropsProtected(
 }
 
 } // namespace camel::runtime
+

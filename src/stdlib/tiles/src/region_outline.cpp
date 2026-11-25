@@ -3,6 +3,7 @@
 
 // Extract eligible regions and replace them with typed calls, independent of device backend.
 
+#include "camel/facts/arrangeable.h"
 #include "camel/core/context/context.h"
 #include "camel/core/error/diagnostics/messages/runtime.h"
 #include "camel/core/mm/gen.h"
@@ -149,7 +150,7 @@ class EffectOrder {
 
   private:
     /// Whether the encoder keeps an order edge that orders `id` after something: a node that may be
-    /// arranged anywhere drops it (`graph.cpp`, the payload plan: `nodeIsFreelySchedulable`), so an
+    /// arranged anywhere drops it (`graph.cpp`, the payload plan: `core.arrangeable`), so an
     /// ordering through such a node is not one the commit reads.
     static bool keepsOrder(const runtime::GraphDraft &draft, runtime::gc_node_ref_t id) {
         const auto *header = draft.header(id);
@@ -162,7 +163,7 @@ class EffectOrder {
         // took its place (`:op/cast`).
         if (camel::transforms::nodeOperatorOf(draft, id) == camel::transforms::NodeOperator::Cast)
             return true;
-        if (!runtime::nodeIsFreelySchedulable(draft, id))
+        if (!camel::facts::nodeIsFreelyArrangeable(draft, id))
             return true;
         // A branch or a loop that owns a region stands for what runs inside it, so its order is
         // the region's order and the encoder keeps it.
@@ -1115,3 +1116,6 @@ std::vector<RegionSegment> regionSegments(const runtime::GCGraph &graph) {
     return segments;
 }
 } // namespace camel::tiles
+
+
+

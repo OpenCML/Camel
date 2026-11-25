@@ -7,6 +7,7 @@
  * edit as the control.
  */
 
+#include "camel/facts/arrangeable.h"
 #include "camel/passes/test/edges.h"
 
 #include "camel/core/rtdata/base.h"
@@ -333,7 +334,7 @@ gc_node_ref_t chainAnchorNode(camel::runtime::GraphTransaction &transaction) {
         // The block's last statement, not a value it computes: an order edge's two ends are
         // effects or nodes that may fault (edges.cn.md 4.6), which is the same question the
         // front end's walk asks of the nodes it orders.
-        if (!camel::runtime::nodeIsFreelySchedulable(draft, id)) {
+        if (!camel::facts::nodeIsFreelyArrangeable(draft, id)) {
             previousBlock = id;
         }
     }
@@ -1247,3 +1248,5 @@ const PassKernel edgesDeliveryCheckKernel(kEdgesDeliveryCheckTestPass, makePass<
 const PassKernel edgeUsersKernel(kEdgeUsersTestPass, makePass<EdgeUsersTestPass>());
 
 } // namespace
+
+

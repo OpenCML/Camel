@@ -159,7 +159,7 @@ assert(num('same') + num('no_old') === num('nodes'), 'the two counts do not cove
 timeout_ms = 20000
 [[tests]]
 name = "facts.compare_arrangeable_readers"
-desc = "test::facts_compare also reads `core.arrangeable` against the predicate a pass asks before it drops, moves, merges or reorders a node (`runtime::nodeIsFreelySchedulable`, the same four terms assembled inside `runtime::may_be_rearranged`): at every node of the program the two answers agree, no node is left without an answer, and both counts cover the nodes. The one node kind this comparison found disagreeing is the hand-on of an order -- a GATE carrying the chain of a `sync` block, which is pure, reaches nothing, cannot fault, ends, and still stands where the order says -- and the kind now declines for it instead of answering `freely arrangeable`, which is the answer a placement decision would act on (design principles 3.4). That program is a `sync` block, so the gate it pins carries a wait edge, which is only the first two of the three forms a gate's order is written in: `facts.compare_arrangeable_readers_a_body_exit_gate` pins the gate that carries its order in the third, the values it reads, and was still answered freely arrangeable after that fix."
+desc = "test::facts_compare also reads `core.arrangeable` against the predicate a pass asks before it drops, moves, merges or reorders a node (`OldArrangeable`, the copy of that predicate `facts_compare.cpp` keeps as the baseline): at every node of the program the two answers agree, no node is left without an answer, and both counts cover the nodes. The one node kind this comparison found disagreeing is the hand-on of an order -- a GATE carrying the chain of a `sync` block, which is pure, reaches nothing, cannot fault, ends, and still stands where the order says -- and the kind now declines for it instead of answering `freely arrangeable`, which is the answer a placement decision would act on (design principles 3.4). That program is a `sync` block, so the gate it pins carries a wait edge, which is only the first two of the three forms a gate's order is written in: `facts.compare_arrangeable_readers_a_body_exit_gate` pins the gate that carries its order in the third, the values it reads, and was still answered freely arrangeable after that fix."
 kind = "behavior"
 case = "../../../cases/facts/tensors_and_loops.cml"
 args = ["${case}", "test::facts_compare"]
@@ -187,14 +187,14 @@ timeout_ms = 20000
 # **third**: `[the value the region hands out, the writes it keeps alive after it]`
 # (`Builder::layRegionWriteEdges`), so it waits on nothing the wait edge kind names. `test::facts_compare`
 # answered it `freely arrangeable` -- pure, reaching nothing, unable to fault, ending, all four true --
-# while `runtime::nodeIsFreelySchedulable` refused it, which is the same node answered two ways. The
+# while the predicate a pass asked refused it, which is the same node answered two ways. The
 # kind refuses every gate now (`src/kernel/facts/facts.cpp`, the `Gate` case), and this is
 # the case that is red when it does not: measured on this tree before the change, the program's one
 # GATE was `kind=1 moved=0 terms=1111 waits=0 orders=0 syncs=0 reads=2` and the totals said
 # `diff=1`; after it, `diff=0` and the gate is `both_kept`.
 [[tests]]
 name = "facts.compare_arrangeable_readers_a_body_exit_gate"
-desc = "The one node kind this comparison still found answered two ways, pinned on the program that shows it without anything else in the way: a body whose exit GATE carries its order in the values it reads rather than in a wait edge. `main` prints `1` and returns `0`, so the region hands `0` out and keeps `println(1)` alive after it, and the exit is a GATE whose ordinary inputs are `[0, println]` -- two of them, no sync predecessor, no control input. `core.arrangeable` called it freely arrangeable (its four terms are all true) and `runtime::nodeIsFreelySchedulable` refused it, because the order a gate stands in is what a pass must not be free to move; the kind refuses every gate now, so the two agree at every node of this program, the gate is present (`nodes=1`) and refused by both (`both_kept=1`), and nothing else in the program is a disagreement. The program has no call to a function of its own, no branch, no `for` loop and no conversion, because those are other classes of the same comparison and are not what this case is for."
+desc = "The one node kind this comparison still found answered two ways, pinned on the program that shows it without anything else in the way: a body whose exit GATE carries its order in the values it reads rather than in a wait edge. `main` prints `1` and returns `0`, so the region hands `0` out and keeps `println(1)` alive after it, and the exit is a GATE whose ordinary inputs are `[0, println]` -- two of them, no sync predecessor, no control input. `core.arrangeable` called it freely arrangeable (its four terms are all true) and the predicate a pass asked refused it, because the order a gate stands in is what a pass must not be free to move; the kind refuses every gate now, so the two agree at every node of this program, the gate is present (`nodes=1`) and refused by both (`both_kept=1`), and nothing else in the program is a disagreement. The program has no call to a function of its own, no branch, no `for` loop and no conversion, because those are other classes of the same comparison and are not what this case is for."
 kind = "behavior"
 case = "../../../cases/facts/a_body_exit_gate_reads_its_writes.cml"
 args = ["${case}", "test::facts_compare"]
@@ -335,3 +335,4 @@ assert(num('stale') === num('graphs'), `editing a draft did not drop the fact st
 }
 """
 timeout_ms = 20000
+

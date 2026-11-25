@@ -683,7 +683,7 @@ bool pruneBranch(camel::runtime::GraphTransaction &transaction, gc_node_ref_t br
     // shortcut.
     if (armTail == kInvalidNodeRef) {
         for (gc_node_ref_t n : armNodes) {
-            if (!inArmRegion(n) || !carriesOrdering(draft, n, true)) {
+            if (!inArmRegion(n) || !carriesOrdering(draft, n)) {
                 continue;
             }
             bool followed = false;
@@ -781,7 +781,7 @@ bool pruneBranch(camel::runtime::GraphTransaction &transaction, gc_node_ref_t br
     if (armChainHead != kInvalidNodeRef) {
         bool armCarriesOrder = false;
         for (gc_node_ref_t n : armNodes) {
-            if (inArmRegion(n) && carriesOrdering(draft, n, true)) {
+            if (inArmRegion(n) && carriesOrdering(draft, n)) {
                 armCarriesOrder = true;
                 break;
             }
@@ -815,11 +815,11 @@ bool pruneBranch(camel::runtime::GraphTransaction &transaction, gc_node_ref_t br
         armTail = armChainTail;
     }
     std::vector<gc_node_ref_t> armRoots;
-    if (armChainHead != kInvalidNodeRef && carriesOrdering(draft, armChainHead, true)) {
+    if (armChainHead != kInvalidNodeRef && carriesOrdering(draft, armChainHead)) {
         armRoots.push_back(armChainHead);
     } else {
         for (gc_node_ref_t n : armNodes) {
-            if (!inArmRegion(n) || !carriesOrdering(draft, n, true)) {
+            if (!inArmRegion(n) || !carriesOrdering(draft, n)) {
                 continue;
             }
             bool hasArmPredecessor = false;
@@ -1106,7 +1106,7 @@ bool pruneBranch(camel::runtime::GraphTransaction &transaction, gc_node_ref_t br
             if (!draft.alive(read)) {
                 continue;
             }
-            if (camel::runtime::carriesOrdering(draft, read, true)) {
+            if (camel::runtime::carriesOrdering(draft, read)) {
                 lost.push_back(read);
                 continue;
             }
@@ -1121,7 +1121,7 @@ bool pruneBranch(camel::runtime::GraphTransaction &transaction, gc_node_ref_t br
             if (!draft.alive(n) || std::ranges::find(lost, n) != lost.end()) {
                 return;
             }
-            if (camel::runtime::carriesOrdering(draft, n, true)) {
+            if (camel::runtime::carriesOrdering(draft, n)) {
                 if (std::ranges::find(targets, n) == targets.end()) {
                     targets.push_back(n);
                 }
@@ -1397,7 +1397,7 @@ size_t placeLostStatements(camel::runtime::GraphTransaction &transaction) {
         if (!view.syncInputsOf(id).empty() || !view.syncUsersOf(id).empty()) {
             continue; // it holds its place
         }
-        if (!camel::runtime::carriesOrdering(view, id, true)) {
+        if (!camel::runtime::carriesOrdering(view, id)) {
             continue; // a value, not a statement: it needs no place
         }
         const auto *idHeader = view.header(id);
@@ -1416,7 +1416,7 @@ size_t placeLostStatements(camel::runtime::GraphTransaction &transaction) {
             // invariant refuses.
             if (nextHeader->kind == GCNodeKind::Brch || nextHeader->kind == GCNodeKind::Loop ||
                 nextHeader->kind == GCNodeKind::Gate ||
-                !camel::runtime::carriesOrdering(view, next, true)) {
+                !camel::runtime::carriesOrdering(view, next)) {
                 continue;
             }
             // ... and both ends are statements whose running is the reason the place exists: a pure
@@ -2204,3 +2204,4 @@ const PassKernel deadCodeKernel(
 const PassKernel orderReductionKernel("std::cxx::order", makePass<OrderReductionPass>());
 
 } // namespace
+

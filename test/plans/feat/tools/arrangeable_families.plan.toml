@@ -9,12 +9,12 @@
 # which side is right, and the counts are what that judgement is made against. A movement here is a
 # behaviour change, not a refactor.
 #
-# The batch is six programs. `arm_loops.cml` carries every form of the two families that disagree on
+# The batch is seven programs. `arm_loops.cml` carries every form of the two families that disagree on
 # principle; the other five carry one family each in a plainer setting, and they all agree today.
 
 [[tests]]
 name = "arrangeable_families.loops_and_branches"
-desc = "The one program in the batch whose answers still differ: 210 nodes, 13 of them answered one way by the older predicate and the other by the fact. The rows pin the disagreement per family -- `brch` 5 nodes the fact refuses and the predicate called free (the branch's arm carries an exit GATE, so the branch is a statement on the chain), `loop` 7 nodes the fact calls free and the predicate refused (a bounded `for` over a pure body is known to end), and `oper_no_record` 1 node (a FILL, whose operator the view cannot name, so the fact has no four terms to read and refuses where the predicate answered free). Both readers agree on all 132 values, all 20 operators, all 17 operators that may fault, all 17 calls and the one gate. The draft measures the same 210 nodes with the same counts, so the disagreement is not a representation artefact."
+desc = "The one program in the batch whose answers still differ: 210 nodes, 12 of them answered one way by the older predicate and the other by the fact. The rows pin the disagreement per family -- `brch` 5 nodes the fact refuses and the predicate called free (the branch's arm carries an exit GATE, so the branch is a statement on the chain) and `loop` 7 nodes the fact calls free and the predicate refused (a bounded `for` over a pure body is known to end). `oper_no_record` is the third family this program found and the one this lane closed: its single node is a FILL, and the fact used to have no four terms to read for a node naming no operator, so it refused where the predicate answered free -- the one place 3.4's `core.arrangeable` was short of an answer rather than of a judgement. The fact reads the node's operation shape now (`GraphView::shapeOf`), a construction is pure, cannot fault and ends like the access beside it, and the row moved from `kind_kept_pred_free` to `both_free`: this is the case that turns from 1 to 0 in that column, and `diff` from 13 to 12, and nothing else in the table moved. Both readers agree on all 132 values, all 20 operators, all 17 operators that may fault, all 17 calls and the one gate. The draft measures the same 210 nodes with the same counts, so the disagreement is not a representation artefact."
 kind = "behavior"
 case = "../../../cases/loops/arm_loops.cml"
 args = ["${case}", "test::facts_compare"]
@@ -35,7 +35,7 @@ const want = {
     value: [132, 132, 0, 0, 0],
     oper: [20, 20, 0, 0, 0],
     oper_may_fault: [17, 0, 17, 0, 0],
-    oper_no_record: [1, 0, 0, 0, 1],
+    oper_no_record: [1, 1, 0, 0, 0],
     call: [17, 0, 17, 0, 0],
     brch: [11, 6, 0, 0, 5],
     loop: [11, 0, 4, 7, 0],
@@ -52,9 +52,20 @@ for (const [name, expected] of Object.entries(want)) {
 }
 assert(fam.reduce((acc, l) => acc + num(l, 'nodes'), 0) === num(line, 'nodes'),
     `the family rows do not cover the nodes: ${fam.join(' ; ')}`)
+// The draft answers the same families the same way: the graph an editing session holds is the one
+// the freeze and the passes ask, so a count that holds on the frozen side alone is a fact of one
+// representation and not of the model.
+for (const [name, expected] of Object.entries(want)) {
+    const row = draft.find(l => l.includes(` family=${name} `))
+    assert(row, `no draft ${name} row: ${draft.join(' ; ')}`)
+    expected.forEach((value, i) => {
+        assert(num(row, cols[i]) === value,
+            `draft ${name}.${cols[i]} is ${num(row, cols[i])}, the measured reading is ${value}: ${row}`)
+    })
+}
 assert(draft.reduce((acc, l) => acc + num(l, 'nodes'), 0) === num(draftLine, 'nodes'),
     `the draft family rows do not cover the nodes: ${draft.join(' ; ')}`)
-assert(num(line, 'diff') === 13, `the frozen disagreement moved: ${line} || ${fam.join(' ; ')}`)
+assert(num(line, 'diff') === 12, `the frozen disagreement moved: ${line} || ${fam.join(' ; ')}`)
 assert(num(draftLine, 'shape_diff') === 0,
     `asking a draft by shape answers differently from asking it plain: ${draftLine}`)
 assert(num(line, 'no_fact') === 0, `a node got no answer from the kind at all: ${line}`)
@@ -234,3 +245,5 @@ assert(num(line, 'diff') === 0 && num(draftLine, 'diff') === 0,
 }
 """
 timeout_ms = 30000
+
+

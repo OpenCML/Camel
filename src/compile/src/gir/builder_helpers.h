@@ -31,6 +31,7 @@
 #include "camel/core/type/typevar.h"
 #include "camel/execute/entry_args.h"
 #include "camel/runtime/control.h"
+#include "camel/facts/arrangeable.h"
 #include "camel/runtime/graph.h"
 #include "camel/runtime/oper_shape.h"
 #include "camel/utils/log.h"
@@ -759,11 +760,23 @@ inline bool nodeTakesAnOrder(node_handle_t node) {
         // The operator is the target this builder recorded, or, for a call a pass wrote by URI
         // alone, the one its payload names (`operIdOf`): the id is the identity the table gave
         // the operator, and a node that names none (`kNoOper`) is left out rather than ordered --
-        // a missing order only leaves the two writes in the order they were written.
+        // a missing order only leaves the two writes in the order they were written. The kind and
+        // the operator are both known here and nothing else is, which is what `operatorArrangeable`
+        // answers for (`camel/facts/arrangeable.h`); asking the fact of the draft is not possible --
+        // this node's payload is not written yet, which is why the runtime seal asks the frozen
+        // graph's answer instead (`runtime/graph.cpp`, the payload plan). A branch's regions, a
+        // loop's termination and an operation's shape all need the graph, and this arithmetic node
+        // has none of them to ask about.
         const auto id = operIdOf(node);
-        return id != camel::core::kNoOper && !camel::runtime::nodeIsFreelySchedulable(kind, id);
+        return id != camel::core::kNoOper && !camel::facts::operatorArrangeable(id).all();
     }
-    return !camel::runtime::nodeIsFreelySchedulable(*nodeDraftOf(node), nodeIdOf(node));
+    // Any other kind, and the node is in the draft the fact reads: `nodeIsFreelyArrangeable` walks
+    // what a branch or a loop stands for and reads an operation's shape, so it answers with the
+    // four terms of design principles 3.4 and not with the kind's name. A node whose payload is
+    // still being written declines there (no answer), which keeps its order edge -- the same reading
+    // `nodeMayFault` gave this line before, and the safe one: a missing order leaves the two writes
+    // in the order they were written.
+    return !camel::facts::nodeIsFreelyArrangeable(*nodeDraftOf(node), nodeIdOf(node));
 }
 
 /// Whether an edge that says "after" and not "value" says anything at all: two different nodes of
@@ -1368,3 +1381,4 @@ struct UnusedStatementScope {
 };
 
 } // namespace camel::compile::gir
+

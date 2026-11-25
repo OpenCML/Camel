@@ -44,7 +44,7 @@
  * A GATE is the one node the four terms are not the answer for, and it is answered `not freely
  * arrangeable` whatever its terms are: a gate exists to carry an order, whether it carries one is
  * not one of the four terms, and the reader that decides a placement asks
- * `runtime::nodeIsFreelySchedulable`, which refuses every gate for that reason. A
+ * `nodeIsFreelyArrangeable` below, which refuses every gate for that reason. A
  * caller that reads a gate's four terms as "it may be moved" is reading the one node this fact
  * declines to speak for.
  */
@@ -88,12 +88,29 @@ Arrangeable operatorArrangeable(camel::ops::OperId oper);
 /// `Call` and a `Func` node do **not**: what a call runs is another graph's content, and walking the
 /// callee's body answers about that body rather than about this node, so the kind declines there
 /// (all four terms false, "it does not answer for this node"). That is the answer
-/// `runtime::nodeIsFreelySchedulable` gives -- a call is an anchor that may be an effect, and
+/// `nodeIsFreelyArrangeable` gives -- a call is an anchor that may be an effect, and
 /// naming the callee directly changes neither its effects nor its faults -- and the two readers of
 /// one question answer it the same way.
 Arrangeable nodeArrangeable(const graph::GraphView &view, NodeId node, ReadLog &log);
+
+/// The question a placement decision asks: may a pass drop, move, merge or reorder this node, and is
+/// it one that needs no order edge after an inline? The answer is `core.arrangeable`'s conjunction
+/// at `node`, read out of the store that holds `graph` -- so every pass on either side of the
+/// boundary asks one implementation, in the fact layer, and the answer is kept as the fact about
+/// this version of the graph rather than recomputed per caller.
+///
+/// It is deliberately not a second predicate over a kind and an operator: an OPER node's four terms
+/// are the operator's record's, a construction's and an access's are what the node does, a loop's
+/// termination is its form's, and a branch's are the conjunction over its arms -- a caller holding
+/// only a kind and an operator cannot answer three of those, which is why a caller holding a graph
+/// asks this and a caller holding only an operator asks `operatorArrangeable`.
+///
+/// False for a graph no store holds: an answer nobody kept is not one a pass may act on, and a node
+/// this kind declines for (a call, a gate) is not freely arrangeable either.
+bool nodeIsFreelyArrangeable(const graph::Graph &graph, NodeId node);
 
 /// The four terms as one line: "freely arrangeable", or what fails.
 std::string toString(const Arrangeable &arrangeable);
 
 } // namespace camel::facts
+

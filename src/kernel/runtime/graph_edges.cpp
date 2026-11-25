@@ -20,6 +20,7 @@
  * Violations are collected; the commit fails with all of them, named by graph and node.
  */
 
+#include "camel/facts/arrangeable.h"
 #include "runtime/graph_build.h"
 
 #include "camel/core/operator_table.h"
@@ -1063,7 +1064,7 @@ bool nodeTakesNoOrder(const GCGraph &graph, gc_node_ref_t ref) {
     if (camel::ops::takesItsOperandAsItsType(camel::runtime::shapeOfOperation(graph, ref))) {
         return false;
     }
-    return nodeIsFreelySchedulable(graph, ref) && !nodeStandsForItsRegion(graph, ref);
+    return camel::facts::nodeIsFreelyArrangeable(graph, ref) && !nodeStandsForItsRegion(graph, ref);
 }
 } // namespace camel::runtime
 
@@ -1260,3 +1261,5 @@ std::vector<std::string> checkGraphCrossReferences(const GCGraph &graph) {
 }
 
 } // namespace camel::runtime
+
+

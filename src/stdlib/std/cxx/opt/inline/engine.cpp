@@ -14,6 +14,7 @@
  * behind the `InlineRewritePass` wrapper and makes the pass surface explicit.
  */
 
+#include "camel/facts/arrangeable.h"
 #include "engine.h"
 #include "camel/graph/graph.h"
 #include "graph/graph_view.h"
@@ -216,14 +217,14 @@ bool bodyNeedsOrder(
         // operator that may; the shape says it is a conversion
         // (`camel/execute/shaped_operators.h`).
         if (camel::execute::shapeOfKind(node->kind) == camel::execute::OperShape::Conversion &&
-            !camel::runtime::nodeIsFreelySchedulable(*graph, it.ref())) {
+            !camel::facts::nodeIsFreelyArrangeable(*graph, it.ref())) {
             return true;
         }
         switch (node->kind) {
         case GCNodeKind::Call:
             return true;
         case GCNodeKind::Oper:
-            if (!camel::runtime::nodeIsFreelySchedulable(*graph, it.ref())) {
+            if (!camel::facts::nodeIsFreelyArrangeable(*graph, it.ref())) {
                 return true;
             }
             break;
@@ -1602,3 +1603,5 @@ const camel::runtime::Program *applyOptimizeRewritePass(
     }
     return program;
 }
+
+
