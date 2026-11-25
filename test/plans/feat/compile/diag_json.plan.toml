@@ -186,7 +186,7 @@ timeout_ms = 6000
 
 [[tests]]
 name = "arm_write_prints_no_warning_text"
-desc = "A program whose only candidate warning is a direct write to a `var` in a branch arm prints no warning now: a write to a `var` is not an effect (design principles 3.1), and the branch hands the write on as its value (3.5; the ruling of 2026-11-16), so `SemanticDiag::IgnoredSideEffect` is not printed for it. The empty stderr is the point -- the withdrawn rule must not come back -- and the program still prints 11 and exits 11, which is the arm's write reaching the print: the same case asserts both, so the zero is not the whole of it. The text form of a warning (`file:line:col: [Warn]: ... (name=..., code=...)`) is pinned by `feat/compile/diag_options: warn.shown`, and the JSON form by `warning_with_error_json`."
+desc = "A program whose only candidate warning is a direct write to a `var` in a branch arm prints no warning now: a write to a `var` is not an effect (design principles 3.1), and the branch hands the write on as its value (3.5; the rule), so `SemanticDiag::IgnoredSideEffect` is not printed for it. The empty stderr is the point -- the withdrawn rule must not come back -- and the program still prints 11 and exits 11, which is the arm's write reaching the print: the same case asserts both, so the zero is not the whole of it. The text form of a warning (`file:line:col: [Warn]: ... (name=..., code=...)`) is pinned by `feat/compile/diag_options: warn.shown`, and the JSON form by `warning_with_error_json`."
 kind = "behavior"
 case = "../../../cases/compile/diag_json/warnings_visible.cml"
 args = ["${case}"]
@@ -200,7 +200,7 @@ timeout_ms = 6000
 
 [[tests]]
 name = "arm_write_prints_no_warning_json"
-desc = "The same program with `--output-format json`: no diagnostics array is written at all, because the arm's direct write to a `var` is a value and not an effect (design principles 3.1, 3.5; the ruling of 2026-11-16), so `SemanticDiag::IgnoredSideEffect` has no entry. stderr is empty and stdout is the program's output, 11: the zero is the conclusion here (the withdrawn rule must stay withdrawn), while the stdout and exit assertions keep the write's hand-over under test. The JSON form of a warning is pinned by `warning_with_error_json`."
+desc = "The same program with `--output-format json`: no diagnostics array is written at all, because the arm's direct write to a `var` is a value and not an effect (design principles 3.1, 3.5; the rule), so `SemanticDiag::IgnoredSideEffect` has no entry. stderr is empty and stdout is the program's output, 11: the zero is the conclusion here (the withdrawn rule must stay withdrawn), while the stdout and exit assertions keep the write's hand-over under test. The JSON form of a warning is pinned by `warning_with_error_json`."
 kind = "behavior"
 case = "../../../cases/compile/diag_json/warnings_visible.cml"
 args = ["--output-format", "json", "${case}"]
@@ -245,7 +245,7 @@ timeout_ms = 6000
 
 [[tests]]
 name = "dropped_effects"
-desc = "Which effects outside a sync block run is read from design principles 3.1, and a call is one of the nodes the ruling of 2026-11-17 names (`算子、调用、分支、循环一样`): a call to a callee that writes a resource outside the program is one of its region's writes, the region's `GATE` reads it, and it runs. So `noisy(1)` and `noisy(2)` -- whose callee prints -- run and print, as does the outer `println(noisy(4))`, and none of the three is reported. A call whose callee writes only a `var` cell is still not run: `modify(i)` at line 36 writes the Variable the caller handed in, which is not a resource outside the program (design principles 3.3), so nothing runs it -- and nothing is reported for it either, because the diagnostic that named a statement which does not run went with the region roots (the ruling of 2026-11-17). The assignment at line 37 is a dropped *value*, reported as `UnusedAssignedValue`; the branch at line 39 is a statement of its region and runs with it (the ruling of 2026-11-16), so the arm it takes prints `arm`; nothing in a sync block and no pure expression is reported."
+desc = "Which effects outside a sync block run is read from design principles 3.1, and a call is one of the nodes the rule names (`算子、调用、分支、循环一样`): a call to a callee that writes a resource outside the program is one of its region's writes, the region's `GATE` reads it, and it runs. So `noisy(1)` and `noisy(2)` -- whose callee prints -- run and print, as does the outer `println(noisy(4))`, and none of the three is reported. A call whose callee writes only a `var` cell is still not run: `modify(i)` at line 36 writes the Variable the caller handed in, which is not a resource outside the program (design principles 3.3), so nothing runs it -- and nothing is reported for it either, because the diagnostic that named a statement which does not run went with the region roots (the rule). The assignment at line 37 is a dropped *value*, reported as `UnusedAssignedValue`; the branch at line 39 is a statement of its region and runs with it (the rule), so the arm it takes prints `arm`; nothing in a sync block and no pure expression is reported."
 kind = "behavior"
 case = "../../../cases/compile/diag_json/dropped_effects.cml"
 args = ["--output-format", "json", "${case}"]

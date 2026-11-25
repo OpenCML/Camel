@@ -94,7 +94,7 @@ timeout_ms = 60000
 
 # The pass has a second bound, and it ends the pass the same way: a round that copies nothing
 # further leaves every count at zero, so `std::opt` reported that round as its fixed point even
-# when the inliner had just left calls as calls because the growth budget is reached (the ruling
+# when the inliner had just left calls as calls because the growth budget is reached (the rule
 # of 2026-11-20, (b), page:
 # internal/reviews/2026-11-20-the-optimizer-calls-a-spent-growth-budget-a-fixpoint.cn.md
 # The round now reports `RuntimeDiag::OptimizationStoppedShort`, the same

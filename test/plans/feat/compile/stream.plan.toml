@@ -477,7 +477,7 @@ timeout_ms = 10000
 
 [[tests]]
 name = "stream.interval_loop_cml"
-desc = "`std::cml` cannot print a loop over a range yet, and the refusal names the reason: since the ruling on `a..b` such a loop walks the range's stream through the range's `operator for` in the prelude, whose return type is the stream type `int..`, and the printer does not print a stream type. The line is a pin on the printer's limit, not on the loop's meaning -- the loop itself is pinned over the graph by stream.interval_loop. When the printer learns `T..`, this entry becomes the `for i in a..b` spelling it had."
+desc = "`std::cml` cannot print a loop over a range yet, and the refusal names the reason: since the rule on `a..b` such a loop walks the range's stream through the range's `operator for` in the prelude, whose return type is the stream type `int..`, and the printer does not print a stream type. The line is a pin on the printer's limit, not on the loop's meaning -- the loop itself is pinned over the graph by stream.interval_loop. When the printer learns `T..`, this entry becomes the `for i in a..b` spelling it had."
 kind = "negative"
 case = "../../../cases/compile/stream/interval_loop.cml"
 args = ["${case}", "std::cml", "std::nop"]
@@ -1375,7 +1375,7 @@ timeout_ms = 20000
 
 [[tests]]
 name = "stream.type_function_of_typeof"
-desc = "`ElementOf<typeof xs>`: `typeof e` gives the type `e` would have and evaluates nothing, so it is a type expression and may stand as the argument of a type function (ruling of 2026-10-31). The cell reads `xs[0]`, whose type is the element type of what `xs` holds; an empty sequence reads through the same declaration."
+desc = "`ElementOf<typeof xs>`: `typeof e` gives the type `e` would have and evaluates nothing, so it is a type expression and may stand as the argument of a type function (the rule). The cell reads `xs[0]`, whose type is the element type of what `xs` holds; an empty sequence reads through the same declaration."
 kind = "behavior"
 case = "../../../cases/compile/stream/type_function_of_typeof.cml"
 args = ["${case}", "${backend}"]
@@ -1388,7 +1388,7 @@ timeout_ms = 30000
 
 [[tests]]
 name = "stream.type_function_of_typeof_nested"
-desc = "A type function applied to a `typeof` of a type that is itself a type function applied to a `typeof`: `ElementOf<ElementOf<typeof xss>>` over an `int[][]` is `int`, so the resolution goes all the way down rather than one layer. The ruling of 2026-10-31 makes both layers type expressions; a resolution that stopped at the first would leave a `typeof` inside and refuse the declaration."
+desc = "A type function applied to a `typeof` of a type that is itself a type function applied to a `typeof`: `ElementOf<ElementOf<typeof xss>>` over an `int[][]` is `int`, so the resolution goes all the way down rather than one layer. the rule makes both layers type expressions; a resolution that stopped at the first would leave a `typeof` inside and refuse the declaration."
 kind = "behavior"
 case = "../../../cases/compile/stream/type_function_of_typeof_nested.cml"
 args = ["${case}", "${backend}"]

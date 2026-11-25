@@ -220,7 +220,7 @@ function collectPythonRuntimeDlls(BASEDIR) {
 // The copy cannot answer the install that finds a *too old* one -- `libs/` missing from an older
 // install, or its `libstdc++.so.6` replaced -- because the loader refuses the binary before `main`.
 // `bin/camel` therefore becomes a launcher (scripts/cxx-runtime-guard.mjs) whose one check runs
-// before that process exists; the copy above and the launcher are the two halves of the ruling
+// before that process exists; the copy above and the launcher are the two halves of the rule
 // "an install carries its own C++ runtime, and when the one it finds is too old it says so".
 // Directories that belong to the distribution. A link that resolved the library there produced a
 // binary the machine it runs on can load, so there is nothing to carry; only a toolchain kept

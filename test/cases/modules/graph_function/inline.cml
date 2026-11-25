@@ -1,4 +1,4 @@
-// The two semantics of `inline` the ruling of 2026-11-18 gave (
+// The two semantics of `inline` the rule gave (
 // docs/design/graph-editing/README.cn.md 7 and 15.3): `at` a statement of a block's chain takes
 // over its place, `at` a pure node only picks the region.
 //
@@ -204,7 +204,7 @@ func atPure() => int spelling sync {
     return 0
 }
 
-/// `at` is the call of a function that writes nothing: by the ruling's own words a call is a
+/// `at` is the call of a function that writes nothing: by the rule's own words a call is a
 /// statement, and by the graph's structure it has no place of its own to take over. The reading says
 /// which one the operator followed: the call is still there, still reads `2`, and the chain did not
 /// move.

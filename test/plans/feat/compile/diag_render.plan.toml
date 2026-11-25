@@ -330,7 +330,7 @@ timeout_ms = 8000
 
 [[tests]]
 name = "render.warning_unused_assigned_value"
-desc = "A warning (to stderr, the program still runs): a write whose value no read takes. It used to be `render.warning_dropped_effect`, and the warning it pinned went with the region roots (the ruling of 2026-11-17): what a statement whose value nobody takes leaves is a value nobody uses, never an effect that failed to run. The rendering this snapshot is about -- the source line, the caret, the note and the help of a warning -- is the same one, on the warning that still exists."
+desc = "A warning (to stderr, the program still runs): a write whose value no read takes. It used to be `render.warning_dropped_effect`, and the warning it pinned went with the region roots (the rule): what a statement whose value nobody takes leaves is a value nobody uses, never an effect that failed to run. The rendering this snapshot is about -- the source line, the caret, the note and the help of a warning -- is the same one, on the warning that still exists."
 kind = "snapshot"
 case = "../../../cases/compile/diag_options/warning.cml"
 args = ["--error-format", "text", "${case}"]

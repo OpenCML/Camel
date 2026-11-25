@@ -36,7 +36,7 @@
 //
 //   * a port that disagrees with its own body. This check reports that. On 2026-11-04 the port was
 //     narrowed to `T` to make the crash go away instead, and this check was taught to allow the pair;
-//     the author's ruling withdrew both: the port says `T[...]` and the conversion happens in the
+//     the rule withdrew both: the port says `T[...]` and the conversion happens in the
 //     compiler, at the one place a value's type goes from `T` to `T[...]`.
 //   * a port that agrees with its body and disagrees with the value the transform hands over. That is
 //     the half `mean_axis_stated_t` was on, and a law's source has no witness for it: `ruleCotangent`
@@ -985,7 +985,7 @@ function selfTest() {
     console.log(
         `self-test: a port 'T' handed to a parameter 'T[3]' is ${fixed.status === 1 ? 'reported' : 'NOT reported'}, a port 'T[...]' handed to a parameter 'T' is ${array.status === 1 ? 'reported' : 'NOT reported'}`
     )
-    // The pair the ruling withdrew the allowance for: an element port whose body
+    // The pair the rule withdrew the allowance for: an element port whose body
     // reads an array is reported like any other disagreement, however the port is spelled. Only the
     // library's own laws -- the element port that reaches an element and the open-rank port that
     // reaches an array -- are not reported, which is the half of the reading that says the check is

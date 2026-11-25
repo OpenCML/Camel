@@ -2,7 +2,7 @@
  * Escape route one, "handed out as a result" (design principles 3.5, 197): `make` makes the closure
  * `add`, which captures `acc`, a `var` of `make`'s call, and returns it. Handing it back is not a
  * fault of any kind: a closure captures a value, so a value that leaves the scope that made it is a
- * value nobody has to own (the author's ruling of 2026-11-16, which withdrew the state rule of
+ * value nobody has to own (the rule, which withdrew the state rule of
  * 2026-11-14 and its diagnostic `ClosureCaptureEscapes`).
  *
  * The assignment inside the closure is the fault: a closure holds a value and not a place, so

@@ -237,7 +237,7 @@ const GROUPS = {
             ['second', 'test/cases/compile/chain/fault_call_second.cml'],
         ],
     },
-    // The region rule of the author's ruling of 2026-11-17 (design principles 3.1): a region's exit
+    // The region rule of the rule (design principles 3.1): a region's exit
     // is one `GATE` whose inputs are the value the region hands out and the nodes in it that write
     // outside the program, and **no edge joins the writes to one another** ("这些写之间不加边"). Two
     // writes to two different resources, written in the two possible orders, must therefore be one
@@ -247,7 +247,7 @@ const GROUPS = {
     // `same-graph` and not `identical`, and the reason is in the dump and not in the front end: the
     // canonical document numbers its nodes in the order they are written, so swapping the two
     // statements renumbers two of them and no two dumps of two writings can share bytes while they
-    // are also the *same* document. What the reading keeps is what the ruling is about: the same
+    // are also the *same* document. What the reading keeps is what the rule is about: the same
     // nodes by kind, operator and value, and the same edges between them (there is no edge between
     // the two writes in either), under the correspondence that survives renumbering.
     region_write: {

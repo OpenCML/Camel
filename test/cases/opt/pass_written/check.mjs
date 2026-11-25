@@ -97,7 +97,7 @@ const CORPUS_DIRS = ['effects', 'defun']
 const REFUSED = {
     effects: {
         // `h` is put into the tuple `(1, h)` and `c` is written after it:
-        // `CapturedVarWrittenAfterTheClosure` (design principles 3.5, 198, the author's ruling of
+        // `CapturedVarWrittenAfterTheClosure` (design principles 3.5, 198). The shape it used to hold is read on `dead_write_held_by_program.cml`.
         // 2026-11-16). The shape it used to hold is read on `dead_write_held_by_program.cml`.
         'dead_write_dropped_closure.cml':
             'refused: a captured name is written after the closure that holds it is put into a tuple'

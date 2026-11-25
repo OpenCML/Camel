@@ -2,7 +2,7 @@
  * A lambda bound to a name in the same function: the call site can see its body, so `f()` is
  * recorded as a write of the reference `c`, and the read written after it sees the new content.
  *
- * The author's ruling of 2026-11-04 narrows the language reference's sentence about calls through
+ * the rule narrows the language reference's sentence about calls through
  * a function value (4.4): only a value whose body the call site cannot see -- passed as an
  * argument, obtained as a return value, stored in a container or in a structure and taken out
  * again -- recognises its side effects by its type alone. This case pins the other side of that

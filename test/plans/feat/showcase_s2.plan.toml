@@ -180,7 +180,7 @@ timeout_ms = 60000
 # `shape(a)` / `shape(b)` in the linear call (`stdlib/rulesets/jvp.cml#jvp_matmul`) and the cut carries
 # them to the backward half as known ports. `stdlib/rulesets/transpose.cml#matmul_stated_t` reduces with
 # `sum_to_stated(..., sa)` and builds the zero carrier its helper reads for rank from that same list
-# (`zeros::<T>(sa) as A`), so an operand whose type states rank and no extent is answered (author,
+# (`zeros::<T>(sa) as A`), so an operand whose type states rank and no extent is answered. Until 2026-11-04 it passed the operand itself, and the expansion asked the caller
 # 2026-11-04 12:40). Until 2026-11-04 it passed the operand itself, and the expansion asked the caller
 # for a value behind it: `skip=parameter-shape uri=tensor:matmul_stated ... param-type=float[]`. Nothing
 # here may be made green by writing `float[2]` in the declaration instead: a program that can write no

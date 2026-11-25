@@ -1,4 +1,4 @@
-// Effectful calls outside a `sync` block (docs/design-principles.cn.md 3.1; the author's ruling of
+// Effectful calls outside a `sync` block (docs/design-principles.cn.md 3.1). Every line of this case prints now, on every scheduler: a write to a resource
 // 2026-11-15). Every line of this case prints now, on every scheduler: a write to a resource
 // outside the program is used by the region it is written in, so a call whose result nobody takes
 // still runs, `sync` body or not.

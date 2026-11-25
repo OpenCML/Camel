@@ -456,7 +456,7 @@ expect_stdout_contains = ["120 true true"]
 # writes of it are not this function's effects (design principles 3.3, effect masking). A closure
 # over such a variable is not an exception, because a closure captures a VALUE: it holds what the
 # name had when it was made, and nothing it does reaches a resource (design principles 3.5, the
-# author's ruling of 2026-11-16).
+# the rule).
 #
 # What a closure may no longer do is write that name: `ClosureAssignsCapturedName` (0x03000213)
 # refuses the assignment, so the two cases below write the name where it lives and let the closure

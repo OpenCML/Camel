@@ -43,7 +43,7 @@ func train(var weights: f32[?, ?]) => void {
     // The rounds are a `loop` whose carried state is the iteration count: the weight is written by
     // `update`'s `var` parameter, which is a write of this body's own name. The rounds used to be a
     // `foreach` element function, and a closure holds the value a name had when it was made, not the
-    // name, so that function could not write `weights` (design principles 3.5, the author's ruling
+    // name, so that function could not write `weights` (design principles 3.5
     // of 2026-11-16, items 197 and 198; `SemanticDiag::ClosureAssignsCapturedName`, 0x03000213).
     // A loop's carried state is the way out the diagnostic names for state that moves each round.
     let _rounds = loop i = 0 while i < its do sync {

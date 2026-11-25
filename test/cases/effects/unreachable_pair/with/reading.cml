@@ -1,6 +1,6 @@
 /**
  * Deleting a declaration nothing reaches leaves every other function's measured resources the same
- * (the ruling of 2026-11-15): a function's set is what its own body was measured to reach, and a
+ * (the rule): a function's set is what its own body was measured to reach, and a
  * declaration written somewhere else is not part of that. `bump` writes the module's `counter`,
  * `apply` reads the same cell, and nothing calls `bump` -- so deleting it is this file against
  * `without/reading.cml`, and every reading but `bump`'s own is the same in both, byte for byte.

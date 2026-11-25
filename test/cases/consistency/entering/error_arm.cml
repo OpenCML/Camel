@@ -1,7 +1,7 @@
 // An error value in a T! position is that position's failing arm (design principles 3.9): the
 // declared return type reaches every arm of the `if`, so a `T!` function may write
 // `return if c then error('Bad', 'c was true') else v`, and the kinds and messages of the error
-// value arrive in the failed arm of the call (the ruling of 2026-10-26). Without a position
+// value arrive in the failed arm of the call (the rule). Without a position
 // that names a T! the arms have no common type and the branch is refused (err_error_arm_no_type).
 
 func pick(c: bool) => int! {

@@ -1426,7 +1426,7 @@ timeout_ms = 12000
 # The one operator of the tagged forms that reads the tag itself. It is placed where the compiler
 # has already read the tag, so a null is the compiler's own defect and is reported as one
 # (`RuntimeDiag::NullSlotUnwrapped`, an internal error that `attempt` cannot isolate) instead of
-# being handed on as the zero slot of the payload type (the ruling of 2026-11-18;
+# being handed on as the zero slot of the payload type (the rule;
 # internal/reviews/2026-11-18-unwrapping-a-nullable-state-slot.cn.md).
 
 [[tests]]

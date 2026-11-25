@@ -520,7 +520,7 @@ timeout_ms = 20000
 # over a `float[4]` prints `[3.0]` with no pass at all (measured 2026-11-14 on b72d59535, and on
 # `lane-idorder` after the walk was put in dependency order). A differential pair here would compare
 # two answers that differ for that reason and could never be green, so the case is left out of the
-# pair and the defect is left where it is: it is not an order, and answering it is the author's call
+# pair and the defect is left where it is: it is not an order, and answering it is
 # -- spreading a one-row batch over an unknown number of rows needs a node this tier cannot write
 # today (`rulesets.vmap#vmap_dim` writes that spread per row, in Camel, over `shape(xs)[0]`). The
 # question is written up for the author, with the three ways to answer it and the default this lane
@@ -534,10 +534,10 @@ timeout_ms = 20000
 #
 # And the cell that pins what is done about the one-row answer *until* the author rules: the same
 # program under `std::opt` is refused by name instead of answering `[2]`. It is a refusal cell, not a
-# pair, because the right answer is not known yet; when the ruling lands this entry changes with it.
+# pair, because the right answer is not known yet; when the rule lands this entry changes with it.
 [[tests]]
 name = "vmap_refuses_an_answer_of_one_row"
-desc = "`vmap(width)(planes)` after `std::opt`: the pass folds `width(r) = dim<1>(r)` to the constant `2`, so the body's whole answer is a constant and the lift of it is the batch of one row. One row is not the batch the caller has (`planes` has two), and no node of the batched graph spreads one row over it, so the transform refuses instead of handing back a one-row array: `skip=body construct=an answer of one row` and `transforms: vmap has no batching for this function.`, exit 1. The eight lines before `width` are asserted as they are printed, so the refusal is still the *tenth* reading and not an earlier one. What the answer should be -- a batch of `[2, 2]`, as the same program answers with no pass -- is the author's call (`internal/reviews/2026-11-14-a-vmap-of-a-constant-body-answers-one-line.cn.md`)."
+desc = "`vmap(width)(planes)` after `std::opt`: the pass folds `width(r) = dim<1>(r)` to the constant `2`, so the body's whole answer is a constant and the lift of it is the batch of one row. One row is not the batch the caller has (`planes` has two), and no node of the batched graph spreads one row over it, so the transform refuses instead of handing back a one-row array: `skip=body construct=an answer of one row` and `transforms: vmap has no batching for this function.`, exit 1. The eight lines before `width` are asserted as they are printed, so the refusal is still the *tenth* reading and not an earlier one. What the answer should be -- a batch of `[2, 2]`, as the same program answers with no pass -- is settled (`internal/reviews/2026-11-14-a-vmap-of-a-constant-body-answers-one-line.cn.md`)."
 kind = "behavior"
 case = "../../../cases/compile/transforms/vmap_layout_ops.cml"
 args = ["--trace", "transforms", "${case}", "std::opt", "std::nvm"]
@@ -591,7 +591,7 @@ timeout_ms = 120000
 # twenty-row table reads twelve.
 [[tests]]
 name = "ruleset_index_table_is_the_whole_index"
-desc = "The whole `rulesets.vmap` table, twenty-seven rows in key order, printed by a program that does nothing but import the ruleset (so no transform adds a reading of its own): `*/2`, `+/2`, `-/1`, `-/2`, `//2`, `argmax/1` twice (the whole form and the axis form of one name, told apart by the ports), `argmin/1` twice, `concat/2`, `dim/1`, `index_into/2`, `matmul/2`, `max/1` twice, `mean/1` twice, `min/1` twice, `mul_tensor/2`, `permute/1`, `reshape/1`, `sum/1` twice, `transpose/1`, `unsqueeze/1`, `where/3` -- twenty-one keys and twenty-seven rows, each with the rule and the callee the index holds. A reduction over an axis is written with the whole reduction's name and the axis in `<>` (author's ruling, 2026-11-05), so the six axis laws are filed under the six whole-reduction keys."
+desc = "The whole `rulesets.vmap` table, twenty-seven rows in key order, printed by a program that does nothing but import the ruleset (so no transform adds a reading of its own): `*/2`, `+/2`, `-/1`, `-/2`, `//2`, `argmax/1` twice (the whole form and the axis form of one name, told apart by the ports), `argmin/1` twice, `concat/2`, `dim/1`, `index_into/2`, `matmul/2`, `max/1` twice, `mean/1` twice, `min/1` twice, `mul_tensor/2`, `permute/1`, `reshape/1`, `sum/1` twice, `transpose/1`, `unsqueeze/1`, `where/3` -- twenty-one keys and twenty-seven rows, each with the rule and the callee the index holds. A reduction over an axis is written with the whole reduction's name and the axis in `<>` (2026-11-05), so the six axis laws are filed under the six whole-reduction keys."
 kind = "behavior"
 case = "../../../cases/compile/rulesets/ruleset_index_only.cml"
 args = ["${case}", "std::rulesets"]

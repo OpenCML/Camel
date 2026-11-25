@@ -18,7 +18,7 @@
 //               `rulesets.transpose` the backward walk has no family for `:op/add_d`.
 //   restored -- the same program exits 0 and prints the four readings of
 //               `test/cases/compile/transforms/vjp_carries_its_ruleset.cml` whole: the value, the
-//               cotangent tuple the pullback answers (one member per parameter, author's ruling of
+//               cotangent tuple the pullback answers (one member per parameter), the cotangent read out of it, and the gradient. The point is
 //               2026-11-01 14:30), the cotangent read out of it, and the gradient. The point is
 //               `x = 2`, where the value (8.0) and the gradient (12.0) differ: a run that answered
 //               the value for the derivative could not print those four lines (P2-22 of the

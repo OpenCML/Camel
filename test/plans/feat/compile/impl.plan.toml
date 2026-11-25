@@ -109,7 +109,7 @@ expect_stdout_exact = "kernel=42,2,0,1 body=42,2,0,1 diff=0,0,0,0\n"
 # (`SemanticDiag::NativeDeclarationForeignOperator`), so the kernels of the cases here are the
 # core's scalar operators. Closing fusion and export needs either a stock `#impl` in `stdlib/`
 # beside the operators, or a test-scoped way to declare another module's operator; both are the
-# language author's call.
+# language.
 #
 # The rule  chose the first of the two, and removed both walls on the way
 #: 「选 (a)，而且取宽的那一种：声明模块可以有函数体，

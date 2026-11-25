@@ -76,7 +76,7 @@ assert(input.normalized.stderr.trim() === '', 'no diagnostic: ' + input.normaliz
 
 [[tests]]
 name = "escapes.unknown_is_an_error"
-desc = "`\"\\q\"` does not compile: LexicalDiag::InvalidEscapeSequence is an error since the author's ruling of 2026-11-02, so a program that writes an unknown escape is refused instead of running with the pair kept. The message names the pair that was written, and nothing is printed."
+desc = "`\"\\q\"` does not compile: LexicalDiag::InvalidEscapeSequence is an error since the rule, so a program that writes an unknown escape is refused instead of running with the pair kept. The message names the pair that was written, and nothing is printed."
 kind = "negative"
 case = "../../../cases/compile/escapes/unknown.cml"
 args = ["${case}"]

@@ -75,7 +75,7 @@ for (const l of [
   // footprint used to carry: `var xs = [3, 1, 2]` is a same-region local `var`, so since stage S1 of
   // the direct-SSA plan it is built as the value it was given and not as a cell, and
   // `Builder::inPlaceRebindingOf` (`src/compile/gir/builder_operators.cpp`) declines for want of one
-  // to take the array out of. In-place is not the front end's rewrite any more; the author's answer
+  // to take the array out of. In-place is not the front end's rewrite any more;
   // of 2026-11-18
   // (`internal/reviews/2026-11-18-an-in-place-call-now-builds-as-ssa-rebinding.cn.md`) rules
   // that it is the execution plan's reuse decision (design principles 10.5), which is why the same

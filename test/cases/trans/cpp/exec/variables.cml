@@ -1,7 +1,7 @@
 /// `var` variables: assigned in a function (a C++ local) and passed as `var` arguments.
 ///
 /// What is no longer here: a closure that captured a `var` and wrote it (a shared cell). A closure
-/// may not assign an outer name (the ruling of 2026-11-15, design principles 3.5); the writes below
+/// may not assign an outer name (the rule, design principles 3.5); the writes below
 /// are the function's own, and the three values printed are the three it printed before.
 
 func bump(var x: int) {

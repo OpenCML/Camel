@@ -1,4 +1,4 @@
-# Fixture of test/tools/selftest/run.mjs: the author's ruling of 2026-11-03 00:30 asks a case that
+# Fixture of test/tools/selftest/run.mjs: the rule asks a case that
 # cannot pass to stay in the plan with three things -- the mark, who owns it, and why it cannot
 # pass. This entry has the mark and the reason and no owner, so the plan must be refused where it
 # is loaded, naming this file, this case and `known_fail_owner`.

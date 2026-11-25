@@ -3,7 +3,7 @@
  * given for one `T` must write the same resources. The two here are the branch `if b then f else g`
  * (neither arm writes anything) and `wide` (it prints), and none of the three declarations wrote a
  * clause -- so each set is what its own body was measured to reach, and the place they meet may not
- * take one of them for the other's (the ruling of 2026-11-15, design principles 3.3).
+ * take one of them for the other's (the rule, design principles 3.3).
  *
  * The answer is a type error at the declaration that writes no clause, and the repair it names is a
  * resource clause there. `same` is written before the functions it is given, so the position is

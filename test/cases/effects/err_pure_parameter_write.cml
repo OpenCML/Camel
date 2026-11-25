@@ -6,7 +6,7 @@
  *
  * The state is a module `var`: a `var` `with` parameter handed to a value would be a cell that
  * value carries, and a closure cannot assign the name it captured (design principles 3.5, 197; the
- * author's ruling of 2026-11-16). The resource the type spells is the same either way.
+ * the rule). The resource the type spells is the same either way.
  */
 
 var total = 0

@@ -38,7 +38,7 @@ timeout_ms = 20000
 
 [[tests]]
 name = "stated_mean_axis_gradient"
-desc = "The gradient of `mean<0, false>(x)` over `[1.0, 2.0, 3.0, 4.0]`: the value is the mean of the four, 2.5, and every position gets a quarter, `dL/dx=[0.25, 0.25, 0.25, 0.25]` -- the lane length `numel(t) / numel(ct)` the reverse law reads off the stated extents. A law that spread the whole cotangent over the lane (the sum's answer) would read 1.0 here, and one that divided by the cotangent's count would read 0.5. The answer is the element itself -- one axis, no `keepdims`, design principles 5.4 -- so the cotangent the law works from has no shape while its port says `T[...]`, and the compiler's rank-zero conversion is what makes `numel(ct)` answer 1 (`camel/core/type/composite/array.h#isRankZeroEdge`, `Array::createRankZero` through `ArrayType::castSlotFrom`). The case wrote `keepdims = true` until the ruling of 2026-11-04 04:20 turned it back, so this reading is the one that says the conversion did not change the derivative."
+desc = "The gradient of `mean<0, false>(x)` over `[1.0, 2.0, 3.0, 4.0]`: the value is the mean of the four, 2.5, and every position gets a quarter, `dL/dx=[0.25, 0.25, 0.25, 0.25]` -- the lane length `numel(t) / numel(ct)` the reverse law reads off the stated extents. A law that spread the whole cotangent over the lane (the sum's answer) would read 1.0 here, and one that divided by the cotangent's count would read 0.5. The answer is the element itself -- one axis, no `keepdims`, design principles 5.4 -- so the cotangent the law works from has no shape while its port says `T[...]`, and the compiler's rank-zero conversion is what makes `numel(ct)` answer 1 (`camel/core/type/composite/array.h#isRankZeroEdge`, `Array::createRankZero` through `ArrayType::castSlotFrom`). The case wrote `keepdims = true` until the rule turned it back, so this reading is the one that says the conversion did not change the derivative."
 kind = "behavior"
 case = "../../../cases/compile/transforms/stated_mean_axis_gradient.cml"
 args = ["${case}", "${backend}"]
@@ -60,7 +60,7 @@ timeout_ms = 20000
 # `mean_axis_stated_t` stated its cotangent as `float[...]`
 # (internal/reviews/2026-11-04-a-rank-zero-cotangent-is-read-as-a-pointer.cn.md): a port that
 # looks like it already has a rank is a slot nothing converts, so `numel(ct)` read the number's bits
-# as a pointer. That reading is what the port's `T` was for; the ruling of 2026-11-04 04:20 has the
+# as a pointer. That reading is what the port's `T` was for; the rule has the
 # port say `T[...]` again and the conversion happen in the compiler, once, where a value's type goes
 # from `T` to `T[...]` -- so this entry's own red is now the next boundary, not this one.
 [[tests]]
@@ -312,7 +312,7 @@ timeout_ms = 20000
 # transpose is `stdlib/rulesets/transpose.cml#sum_from_type_t` -- the adjoint of a reduction, with the
 # extents the reduction consumed as one more port than the operator has.
 #
-# The author's ruling of 2026-11-05 10:40 splits the two readings this plan now carries: a bare
+# the rule splits the two readings this plan now carries: a bare
 # `transpose` requires every parameter's shape to come from its type, so the stated shape answers and
 # the open one is refused by name; a program that wants an open shape reaches the transposition
 # through `vjp`, where the jvp rule carries the shape as a residual. Both writings are measured here,
@@ -332,7 +332,7 @@ expect_output_not_contains = ["skip=parameter-shape", "does not state it"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 
-# The other half of the ruling: the same body declared `x: float[...]`, refused by name -- and the
+# The other half of the rule: the same body declared `x: float[...]`, refused by name -- and the
 # repair that works measured first in the same run, so the case says both what is not allowed and
 # what to write instead. The five help needles are one per thing a reader can act on: the rule about
 # what a type states, the rule about a bare transposition, the edit, the answer that edit produces,

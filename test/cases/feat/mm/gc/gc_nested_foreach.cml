@@ -7,7 +7,7 @@
  * while the arrays built in the element function are still in use.
  *
  * The rows are built with `map` rather than with a `foreach` whose body appends to a captured
- * `var`: a closure may not assign an outer name (the ruling of 2026-11-15, design principles 3.5).
+ * `var`: a closure may not assign an outer name (the rule, design principles 3.5).
  * `map` calls the element function once per element, in order, so the rows are the same ones.
  */
 

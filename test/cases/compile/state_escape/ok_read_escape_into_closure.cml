@@ -2,7 +2,7 @@
  * Route three read through a second closure, with a closure that only reads (design principles
  * 3.5, 197): `inner` reads `acc`, a `var` of `make`'s call that `make` bound to `base * 3` first,
  * and `outer` captures `inner`. Returning `outer` hands the value out inside a value whose type
- * cannot show what it holds; the capture travels one level down as a value (the author's ruling of
+ * cannot show what it holds; the capture travels one level down as a value , so what leaves is a value nobody has to own. Nothing is reported, and `outer(1)`
  * 2026-11-16), so what leaves is a value nobody has to own. Nothing is reported, and `outer(1)`
  * answers 21 + 1 + 1 = 23.
  *

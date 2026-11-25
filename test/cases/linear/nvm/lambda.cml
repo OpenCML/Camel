@@ -9,7 +9,7 @@ let HEIGHT = 10
 
 // Custom filter helper used to exercise lambda predicates over points. It keeps the points with
 // `filter` rather than a `foreach` whose body appends to a captured `var`: a closure may not assign
-// an outer name (the ruling of 2026-11-15, design principles 3.5), and `filter` calls the predicate
+// an outer name (the rule, design principles 3.5), and `filter` calls the predicate
 // once per element, in order.
 with <predicate: (p: Point) => bool>
 func my_filter(points: Point[]) => Point[] sync {

@@ -3,7 +3,7 @@
 //
 // `n` is a module `var` here, not a `var` of `main`. The shape this case used to pin -- `bump`
 // assigning a `var` of the function that declares it -- is refused earlier now, by
-// `ClosureAssignsCapturedName` (0x03000213, design principles 3.5, 197; the author's ruling of
+// `ClosureAssignsCapturedName` (0x03000213, design principles 3.5, 197), so the write could no longer reach this rule at all. The declaration inside a body
 // 2026-11-16), so the write could no longer reach this rule at all. The declaration inside a body
 // and the refusal of the clause are the two things this case is about, and both are unchanged.
 // What is lost with the old shape is the "the capture cannot be placed" reading: that path is

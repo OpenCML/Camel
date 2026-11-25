@@ -9,7 +9,7 @@ desc = "What the modules of this repository register: every operator declares wh
 
 [[tests]]
 name = "registry.purity_declared"
-desc = "No operator of a module of this repository is left without a purity declaration (design principles 3.3), and the ones that read a clock, a random generator, the environment or a file are not declared pure. The assignment operators are declared state and not effectful: this case used to require `:op/assn` and `:op/assn_owned` in the effectful list, and the ruling of 2026-11-15 (design principles 3.1, 3.5) makes a write to a `var` a value and not an effect, so the list asks for state now."
+desc = "No operator of a module of this repository is left without a purity declaration (design principles 3.3), and the ones that read a clock, a random generator, the environment or a file are not declared pure. The assignment operators are declared state and not effectful: this case used to require `:op/assn` and `:op/assn_owned` in the effectful list, and the rule (design principles 3.1, 3.5) makes a write to a `var` a value and not an effect, so the list asks for state now."
 kind = "behavior"
 case = "../../../cases/modules/stdlib/registry_all.cml"
 args = ["inspect", "--ops", "${case}"]
@@ -53,7 +53,7 @@ for (const uri of pure) {
 }
 assert(purity[':var/new'] === 'state' && purity[':var/get'] === 'state', 'var/new and var/get touch only the variables of the program')
 // A write to one of the program's own variables is a value and not an effect (design principles
-// 3.1, 3.5; the ruling of 2026-11-15), so the assignment operators are declared state-only. This
+// 3.1, 3.5; the rule), so the assignment operators are declared state-only. This
 // case used to require them in the list above, where every operator that touches something outside
 // the program stands: that was the same retired rule as the eight warnings, said about the traits
 // instead of about a program.

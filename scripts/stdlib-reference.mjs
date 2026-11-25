@@ -937,7 +937,7 @@ function readDeclarations(file, module, options = {}) {
                 // `#macro` is a tag the language defines on a function declaration, not a marker
                 // this page owns, so a signature file may carry it beside `#op(...)`: the standard
                 // library's transforms are macro functions, which is what lets `std::macro`
-                // evaluate a transform ahead of the run (the author's ruling of 2026-11-15 night,
+                // evaluate a transform ahead of the run (the rule night,
                 // 4ae2c0179). A C++ module's transforms -- `jvp`, `split`, `transpose`, `vmap`,
                 // `first_with_as_param` -- have no other declaration to carry it, because the
                 // file's declarations are the only place a program reads them (`stdlib/
@@ -2755,7 +2755,7 @@ const TYPE_VARIABLE = /^[A-Z]$/
 //
 // ## Why members and not counts
 //
-// Author's ruling of 2026-11-03 13:30 (`internal/reviews/questions-2026-10-29.md`): a count that
+// the rule (`internal/reviews/questions-2026-10-29.md`): a count that
 // can move while the behaviour stays the same protects nothing. The per-class counts this table used
 // to hold were exactly that: an overload that started writing a different spelling moved the class
 // while nothing about the library changed, and the failure said "records 6, and the run found 7" -- a
@@ -3083,7 +3083,7 @@ const STALE_FRAGMENTS = 0
 // Every comparison here is a comparison of members, in both directions, and every message names the
 // member: "entered" says who joined a class and what the two sides say, "left" says who is no longer
 // in it. Nowhere does a message say "records 6, the run found 7" -- that was the failure the author's
-// ruling of 2026-11-03 13:30 retired, because the number left the reader to bisect for a name.
+// the rule retired, because the number left the reader to bisect for a name.
 function exampleProblems(coverage) {
     const problems = []
     const stopped = coverage.programs - coverage.compiled

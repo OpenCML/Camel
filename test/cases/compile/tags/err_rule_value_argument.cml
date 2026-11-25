@@ -1,4 +1,4 @@
-/// A tag argument that names a value of the program rather than a function or a rule: the ruling
+/// A tag argument that names a value of the program rather than a function or a rule: the rule
 /// that lets a rule be named leaves values refused, and the refusal says what the name
 /// is, at the tag.
 

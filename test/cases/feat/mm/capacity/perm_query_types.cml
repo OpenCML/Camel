@@ -10,7 +10,7 @@
  * defect is archived reduced as progen finding F34.
  *
  * Edited by hand once after generator version 1: `e16` and `g22` assigned the captured `var c17`,
- * and the author's ruling of 2026-11-15 (design principles 3.5, 198) makes a closure's assignment to
+ * and the rule (design principles 3.5, 198) makes a closure's assignment to
  * a captured name illegal, so the compiler refused this program at 55:9 and 59:9
  * (`SemanticDiag::ClosureAssignsCapturedName`). The write takes the `fold` shape now -- `e16`
  * assigns what `reduce` answers, in its own body and not inside the element function -- and `g22`

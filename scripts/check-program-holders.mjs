@@ -73,7 +73,7 @@ const SCANNED = ['src', 'src/tools', 'include', 'modules', 'tools']
 
 const SOURCE = /\.(?:h|hpp|hh|hxx|cpp|cc|cxx)$/
 
-/** The two names the ruling exempts outright: the handle, and the owner that pins. */
+/** The two names the rule exempts outright: the handle, and the owner that pins. */
 const EXEMPT_CLASSES = new Set(['ProgramHold', 'GCGraphManager'])
 
 /** The four reasons a holder may give for not pinning. See docs/technical/36_gc_handle_rules.md. */

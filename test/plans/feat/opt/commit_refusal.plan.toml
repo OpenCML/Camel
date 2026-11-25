@@ -17,7 +17,7 @@ tags = ["feat", "opt", "effects", "commit-checks"]
 #   build, before the two checks below.
 #   ③ the tier is what the draft added, not what the build is -- a draft that added an access is asked
 #   the effect and order checks in every build, and a draft that added none owes no answer about them
-#   in any build. This replaces the ruling of 2026-11-16, which read the tier as a build's answer.
+#   in any build. This replaces the rule, which read the tier as a build's answer.
 #   ④ the regions a commit answers for are the ones it touched and every region around them, and a
 #   pair is judged when one of its two *sides* answers for a node this commit made -- a branch node
 #   standing for an arm that gained a write answers for it, although the branch node is not a node
@@ -198,7 +198,7 @@ expect_stdout_contains = ["commit_cycle: the draft's input setters do not look f
 # orders the two). The pair the commit must refuse is the branch node (standing, in the body, for the
 # write under it) against the body's own write -- and *neither* of those two nodes is one this commit
 # made: the branch node and the write were the program's before the commit. A commit that judged a
-# pair only when one of its nodes was made publishes this one, which is what the ruling of 2026-11-18
+# pair only when one of its nodes was made publishes this one, which is what the rule
 # changed.
 [[tests]]
 name = "commit_refusal.ancestor_region"

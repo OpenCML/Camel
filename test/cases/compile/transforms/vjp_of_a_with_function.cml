@@ -1,4 +1,4 @@
-// `vjp` of a function that writes `with` parameters (author's ruling of 2026-11-03 13:50, and the
+// `vjp` of a function that writes `with` parameters (the rule, and the
 // one of 15:15 on what the pullback carries). The reverse transform differentiates the ordinary
 // parameters only and hands the `with` values on unchanged, so `vjp(f)<w>(x)` answers `f`'s value at
 // that point and the pullback's one member is the slope there. Hand-computed, for every line below:

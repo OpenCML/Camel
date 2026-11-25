@@ -1,5 +1,5 @@
 /**
- * An argument of type `never` (design principles 3.9; the author's ruling of 2026-10-26): an
+ * An argument of type `never` (design principles 3.9; the rule): an
  * argument is evaluated before the call it is written in, and one that never gives a value never
  * reaches the call at all, so the call itself is typed `never` and no overload is chosen for it.
  * The warning names the argument. Its result stands where the declared type is, because a value

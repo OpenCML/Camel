@@ -34,7 +34,7 @@ await withServer(async (ls) => {
     // ---- push diagnostics ----
     // A warning is pushed, carries its version, and is a value report rather than an effect: a write
     // whose value nobody reads drops a value, so it is `UnusedAssignedValue` (design principles 3.1,
-    // the ruling of 2026-11-15 that assigning to a `var` is not an effect). `x` is read before the
+    // the rule that assigning to a `var` is not an effect). `x` is read before the
     // write, so the variable is used; the value this write stores is not.
     const warnedUri = ls.open('warned.cml', WARNED)
     let pushed = await ls.diagnosticsFor(warnedUri)
@@ -46,14 +46,14 @@ await withServer(async (ls) => {
     checkEq(warned && fmtRange(warned.range), '6:6-6:7', 'at the assignment operator')
     checkEq(warned?.code, '0x031001C3', 'the dropped value is named as a value, not as an effect')
 
-    // The navigation program itself has no diagnostic at all, and that is the ruling rather than a
+    // The navigation program itself has no diagnostic at all, and that is the rule rather than a
     // loss: `counter += by` in `bump` used to be this test's one warning, `IgnoredSideEffect` ("the
     // call of '<__assn__>' is not in a sync block, and it takes a var argument"). A write to a `var`
     // is not an effect, and the final value of a `var` parameter is handed back at the call, so this
     // write is read by `return counter` (design principles 3.1 and 3.5).
     // Commit 8b541bdba deleted both `var` branches of `IgnoredSideEffect` and says so in docs/cli.md
     // ("a `var` argument is not reported this way"); `warned.cml` above keeps the coverage the old
-    // expectation had, on the report the ruling left.
+    // expectation had, on the report the rule left.
     pushed = await ls.diagnosticsFor(uri)
     check(pushed !== null, 'diagnostics are published after didOpen')
     checkEq(pushed.version, 1, 'the published diagnostics carry the document version')

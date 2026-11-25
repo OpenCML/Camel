@@ -4,7 +4,7 @@
 // This case replaces `pow_gradient_refused_by_the_library.cml`, which pinned the refusal until
 // 2026-11-04. The tangent `pow_tangent` used to answer behind an `if dw == T(0)` guard, and a branch
 // on a tangent's value is a node the backward walk cannot turn around (`skip=condition`, then
-// `skip=call-no-transpose` naming the helper call). The author's ruling of 2026-11-04 took the guard
+// `skip=call-no-transpose` naming the helper call). the rule took the guard
 // away and put the omission where it belongs, in the rule expansion: the term a structurally-zero
 // tangent multiplies is not built. So `^`'s linear half is two products of the operand's own
 // tangents, the walk has laws for both of them, and the pullback answers the engine's number.

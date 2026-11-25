@@ -1,4 +1,4 @@
-# Design principles 3.1 and 3.3, as the author ruled them on 2026-11-16 (the ruling superseded the
+# Design principles 3.1 and 3.3, as the author ruled them on 2026-11-16 (the rule superseded the
 # sentence 3.3 carried since 11-15, "对 `Ref` 的写由之后的读者用到"): a write of a handle runs because
 # the region it is written in runs, exactly like a write of an external resource.
 #

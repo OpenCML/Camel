@@ -859,7 +859,7 @@ function Invoke-PushWithRecovery {
     # moved to the new tip and the merge this run made -- the prepared merge, whose rows and clang
     # result are the reading -- is merged INTO it. The commit that travels then has origin/$Target's
     # tip as its first parent, which is what makes it an arrival. Merging the tip into the merge
-    # commit would put the merge commit first and reproduce the chain the ruling is about: same tree,
+    # commit would put the merge commit first and reproduce the chain the rule is about: same tree,
     # wrong order, and the order is the thing that was wrong.
     $landedSubjects = @(& git -C $Tree log --oneline "$old..$new" 2>$null) | ForEach-Object { "$_".Trim() } | Where-Object { $_ }
     $body = @()
@@ -958,7 +958,7 @@ function Invoke-PushWithRecovery {
     # The re-land was made on the tip read above; between that read and this push the tip can move
     # again, and then the commit about to travel no longer has it as a first parent. The shape is
     # read here for exactly the reason it is read before the first push -- this is the push that
-    # publishes a commit made after a target moved, and it is where the ruling's chain was broken
+    # publishes a commit made after a target moved, and it is where the rule's chain was broken
     # tonight. A second move inside one run is a stop, not another recovery: the run gets one.
     $shape2 = Test-PushFirstParent -Tree $Tree -Target $Target -Sha $reLanded
     if ($shape2.Kind -ne 'arrived') {

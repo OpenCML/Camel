@@ -245,7 +245,7 @@ function checkDiagnosticFileField(planPath, entry, where) {
     )
 }
 
-// The three things the author's ruling of 2026-11-03 00:30 asked a `known_fail` entry to carry: the
+// The three things the rule asked a `known_fail` entry to carry: the
 // mark, who is responsible for making the case green, and why it cannot pass today. The mark alone
 // says "we accept this red"; it says nothing about who ends it or where the case is stuck, and until
 // this check existed the other two lived in the prose of a note that a review had to remember to
@@ -289,7 +289,7 @@ function knownFailIsMarked(mark) {
  *
  * `prints` is the line this entry prints when the wall moves, and it is found in the entry's own
  * output. `passes` names another case: when that case passes in the same run, this mark has ended.
- * Both are readings of a run, which is the whole point of the ruling -- the field used to hold a
+ * Both are readings of a run, which is the whole point of the rule -- the field used to hold a
  * sentence, and a sentence is not something a run can disagree with.
  */
 function knownFailEndCondition(value) {
@@ -425,14 +425,14 @@ function checkKnownFailMark(planPath, entry, inherited, where) {
     // `test.known_fail_msg` and never against a `[defaults]` value -- so a plan cannot supply it
     // once for the whole file.
     //
-    // The mark may instead state the reading that ends it, and the ruling of 2026-11-21 02:20 chose
+    // The mark may instead state the reading that ends it, and the rule chose
     // that shape for a case whose target is a number and whose wall is being built: a sentence
     // quoted from a refused run follows the implementation, so a pin on it has to be re-typed every
     // time the wall moves -- which records the wall's progress as the case's debt and reads, in the
     // plan, as "this case fails for this reason" long after that reason moved.
     //
     // What that field may hold is now exactly two things, because a promise nobody evaluates is a
-    // mark nobody re-reads -- the ruling of 2026-11-24 18:xx (see internal/questions/
+    // mark nobody re-reads -- the rule 18:xx (see internal/questions/
     // 2026-11-24-deleting-known-fail-ends-when-would-unmake-11-marks.cn.md):
     //
     //   known_fail_ends_when = { prints = "the line this entry prints when the wall moves" }

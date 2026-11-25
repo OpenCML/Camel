@@ -41,7 +41,7 @@
  * visitGeneratorBody`: `__gen_pc__`, and every local the body declares), and hands
  * those cells to its caller inside a closure the machine builds itself (`streamValue()`: an
  * unnamed function whose whole body is `return __gen_step__()`). The state carried a second
- * member until 2026-11-18: the author's ruling ("answer: drop the generator's halt
+ * member until 2026-11-18: the rule ("answer: drop the generator's halt
  * bit") removed it, merged, so `S = (pc, halt)` is now `S = (pc)`. Nothing renamed
  * it and nothing took its place, so this script names it nowhere else. A reading taken before that
  * date counted one more cell -- and one more capture port -- per generator body, which is why an

@@ -6,7 +6,7 @@
  *
  * The fourth form writes a module `var` and not a `var` of `main`: a closure captures a value, so
  * it cannot assign a name of the call that made it (design principles 3.5, 197; the author's
- * ruling of 2026-11-16). A module `var` is a name of the module, and the conversion into a `T?`
+ * the rule). A module `var` is a name of the module, and the conversion into a `T?`
  * is the same assignment either way -- what this case is about is where the conversion lands.
  */
 

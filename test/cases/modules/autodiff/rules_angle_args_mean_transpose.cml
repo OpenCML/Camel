@@ -25,7 +25,7 @@
  *              [[0.5, 1.0, 1.5],
  *               [0.5, 1.0, 1.5]]
  *
- * Why the whole array and not its sum (author's ruling, 2026-11-03 15:15): the right answer's total
+ * Why the whole array and not its sum (2026-11-03 15:15): the right answer's total
  * is 2 * (0.5 + 1 + 1.5) = 6.0, and the wrong law -- the one that spreads nothing and hands the
  * incoming cotangent back unchanged, `(ct) => ct` -- answers `[1.0, 2.0, 3.0]`, whose total is also
  * 6.0. A criterion that reads the sum therefore passes whichever of the two the walk did, so a red

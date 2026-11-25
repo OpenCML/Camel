@@ -20,7 +20,7 @@ func scale(x: f32[...], k: f32) => f32[...] {
     return x * k
 }
 // The f64 reading this case pins is the f64 scalar leaf: the device graph carries no f64 scalar of
-// its own, so the program that wants one really writes an f64 tensor and reduces that (the ruling
+// its own, so the program that wants one really writes an f64 tensor and reduces that (the rule
 // on `f32-scalar-to-the-device`: a scalar leaf takes the element type it is written with).
 func mixed(x: f32[...]) => (float, f32[...], float) {
     return (float(sum(f64(x))), x + 1.0, 1.0000000000000002)

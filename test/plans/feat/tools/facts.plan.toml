@@ -81,7 +81,7 @@ timeout_ms = 20000
 
 [[tests]]
 name = "facts.inspect_kind_no_such"
-desc = "camel inspect --fact <key> for a key no store registers a kind under prints FACT-KIND-ABSENT and fails, instead of printing a table with no rows. The key is the one the author ruled out (the execution plan is `std.execPlan`, registered by the module that reads it, and is not a `core.*` kind), which is the ruling's own case: 'if the kind is not registered, report that there is no such fact kind, and do not guess'. An enumeration of the registered kinds cannot report a kind nobody registered, so the absence is asked by name."
+desc = "camel inspect --fact <key> for a key no store registers a kind under prints FACT-KIND-ABSENT and fails, instead of printing a table with no rows. The key is the one the author ruled out (the execution plan is `std.execPlan`, registered by the module that reads it, and is not a `core.*` kind), which is the rule's own case: 'if the kind is not registered, report that there is no such fact kind, and do not guess'. An enumeration of the registered kinds cannot report a kind nobody registered, so the absence is asked by name."
 kind = "behavior"
 case = "../../../cases/facts/two_functions.cml"
 args = ["inspect", "--fact", "core.execPlan", "${case}"]

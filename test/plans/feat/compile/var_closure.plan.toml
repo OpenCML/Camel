@@ -13,7 +13,7 @@
 # entries at the end), which is why the `byref` cases and the `stream` packer went red: the cases are
 # the migration this plan's third step owes, and the packer holds four `Ref`s since `lane-teeref`.
 #
-# The other half of the ruling (a closure may not assign an outer name, and a captured `var` may not be
+# The other half of the rule (a closure may not assign an outer name, and a captured `var` may not be
 # assigned between the making of the closure and its last use) was NOT REPORTED when this plan was
 # written. The author ruled that reporting it before `tee` was migrated to `Ref` would only turn a green
 # ruler into a red one, and that the migration is the next step of the same item rather than a later
@@ -38,7 +38,7 @@
 
 [[tests]]
 name = "ok.update_reads_a_captured_var"
-desc = "A closure reads a `var` of the function that made it and writes nothing (`update(x, () => x + 1)`); legal before and after the ruling, so this entry is the regression guard the acceptance names by hand. The reading is 2."
+desc = "A closure reads a `var` of the function that made it and writes nothing (`update(x, () => x + 1)`); legal before and after the rule, so this entry is the regression guard the acceptance names by hand. The reading is 2."
 kind = "behavior"
 case = "../../../cases/compile/var_closure/ok_update_reads_captured.cml"
 args = ["${case}"]
@@ -47,7 +47,7 @@ expect_stdout_exact = "2\n"
 
 [[tests]]
 name = "ok.a_closure_made_in_each_turn_of_a_loop"
-desc = "A closure made in the body of a loop, once per turn, reading the turn's own `var`; legal before and after the ruling, and the acceptance names this shape too. The reading is 60."
+desc = "A closure made in the body of a loop, once per turn, reading the turn's own `var`; legal before and after the rule, and the acceptance names this shape too. The reading is 60."
 kind = "behavior"
 case = "../../../cases/compile/var_closure/ok_closure_in_loop_body.cml"
 args = ["${case}"]
@@ -143,7 +143,7 @@ expect_diagnostic_code = "0x03000215"
 # captured name stops being a variable, so the general rule that answers "not a variable" fired
 # before the capture rule was asked. Three of them had no case at all: they do not turn red, they
 # only stop saying what they used to say. The four entries below are those places, one each, and
-# the author's ruling of 2026-11-16 makes fixing them the step before `gate5` goes.
+# the rule makes fixing them the step before `gate5` goes.
 #
 # The fourth is the BENIGN direction (`mutableName`, builder_control.cpp): it answers the same
 # before and after the gate goes, so its entry pins the refusal that stands, and names the stale

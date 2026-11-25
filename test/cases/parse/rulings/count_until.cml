@@ -1,4 +1,4 @@
-// Counting until a condition holds, which is the writing the author's ruling of 2026-11-16 sends
+// Counting until a condition holds, which is the writing the rule sends
 // the open interval `a..` to (design principles 4.2): a counter stops at the first square that is
 // not below 1000, and two counters stop when the running sum passes 100 (their value is the tuple
 // of both). Neither asks for a range whose end is a condition.

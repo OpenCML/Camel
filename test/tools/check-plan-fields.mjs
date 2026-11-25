@@ -458,7 +458,7 @@ function scanTree(rootDir) {
             }
             // A mark records a red; `known_fail_owner` says who ends it and `known_fail_reason` where
             // it is stuck, and neither says *what* would end it. `known_fail_ends_when` names the
-            // reading that removes the mark, and since the ruling of 2026-11-24 it may hold exactly
+            // reading that removes the mark, and since the rule it may hold exactly
             // two things, both of which a run evaluates:
             //
             //   { prints = "the line this entry prints when the wall moves" }

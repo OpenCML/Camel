@@ -321,7 +321,7 @@ timeout_ms = 60000
 # for an array, the module's own `spread_over` for an element). The three readings below are the
 # three the change was accepted on: the tree's own laws, and the two directions of one disagreement.
 #
-# The author's ruling of 2026-11-04 04:20 (`internal/reviews/questions-2026-10-29.md`, "秩 0：
+# the rule (`internal/reviews/questions-2026-10-29.md`, "秩 0：
 # 只有一个转换点") withdrew the allowance this check briefly carried: the ports say `T[...]` and the
 # rank-zero conversion is the compiler's, at the one place a value's type goes from `T` to `T[...]`.
 # So the pair that was allowed is now the third negative control, and the library is green because
@@ -336,7 +336,7 @@ tier = "slow"
 
 [[tests]]
 name = "docs.every_laws_port_agrees_with_its_body"
-desc = "Every law of `stdlib/rulesets` states ports that the body uses at the same kind: an element port handed to a scalar helper or to `spread_over`, an array port handed to `numel` or one of the `*_cotangent` helpers that read a length. There is no allowance: the author's ruling of 2026-11-04 04:20 (`internal/reviews/questions-2026-10-29.md`, \"秩 0：只有一个转换点\") has the ports say `T[...]` as the answer is and leaves the rank-zero conversion to the compiler, so a port of `T` over a body that reads an array is a finding however the two spellings might be reconciled at the run. The run prints how many laws and ports it read and how many it could not witness at all -- a port the body only returns, or only multiplies by a value of unknown shape, is counted as unwitnessed rather than passed."
+desc = "Every law of `stdlib/rulesets` states ports that the body uses at the same kind: an element port handed to a scalar helper or to `spread_over`, an array port handed to `numel` or one of the `*_cotangent` helpers that read a length. There is no allowance: the rule (`internal/reviews/questions-2026-10-29.md`, \"秩 0：只有一个转换点\") has the ports say `T[...]` as the answer is and leaves the rank-zero conversion to the compiler, so a port of `T` over a body that reads an array is a finding however the two spellings might be reconciled at the run. The run prints how many laws and ports it read and how many it could not witness at all -- a port the body only returns, or only multiplies by a value of unknown shape, is counted as unwitnessed rather than passed."
 kind = "behavior"
 tool = "node"
 case = "../../../scripts/law-cotangent-ports.mjs"

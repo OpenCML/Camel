@@ -414,7 +414,7 @@ expect_output_contains = [":op/assn_l"]
 #                    the program still prints the 41 it wrote -- the wall against relaxing too far
 [[tests]]
 name = "dead_write.direct.answer"
-desc = "On the graph the rewrite returns the judgement says the write may go. The engine still leaves it, and for a reason this change does not touch: see internal/reviews/2026-11-14-where-do-the-engines-still-keep-a-dead-write.cn.md. The shape this entry reads is refused since 2026-11-16 -- `h` is put into the tuple `(1, h)` and `c` is written after it, which design principles 3.5 (198) runs to the rest of the scope (the author's ruling of 2026-11-16, item 3) -- so the entry is a negative one and the judgement's reading lives on `dead_write_held.direct.kept`."
+desc = "On the graph the rewrite returns the judgement says the write may go. The engine still leaves it, and for a reason this change does not touch: see internal/reviews/2026-11-14-where-do-the-engines-still-keep-a-dead-write.cn.md. The shape this entry reads is refused since 2026-11-16 -- `h` is put into the tuple `(1, h)` and `c` is written after it, which design principles 3.5 (198) runs to the rest of the scope (the rule, item 3) -- so the entry is a negative one and the judgement's reading lives on `dead_write_held.direct.kept`."
 kind = "negative"
 case = "../../../cases/modules/selected_protection/dead_write.cml"
 args = ["${case}"]

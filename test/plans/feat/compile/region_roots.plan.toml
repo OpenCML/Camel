@@ -6,7 +6,7 @@ desc = "The roots a region has (design principles 3.1): a write to a resource ou
 
 # Design principles 3.1, "区域的根" (docs/design/effects/analysis.cn.md 3.4, `regionRoot`): a write to a
 # resource outside the program is used by the region it is written in, so a running region runs it
-# although nothing reads what it produces. The author's ruling of 2026-11-15 names this case first
+# although nothing reads what it produces. the rule names this case first
 # ("非同步函数里的打印不执行"): with `main` not written `sync`, its three prints printed nothing and
 # reported one warning per line, a warning that is gone: a statement that does not run is not reported at all.
 #
@@ -68,7 +68,7 @@ assert(input.diagnostics.length === 0, `expected no diagnostic, got ${input.diag
 timeout_ms = 20000
 [[tests]]
 name = "region_roots.a_loop_that_writes_runs"
-desc = "A loop written in a body is one of that body's writes when what runs inside it writes (design principles 3.1: `算子、调用、分支、循环一样`), so the body's `GATE` reads it and the loop runs even though nothing needs its value: three rounds, three lines, no diagnostic. It used to be the negative case next door -- the loop nobody needed was not started and the warning named it -- and the ruling removed the reading that made a loop's running conditional on its value being read."
+desc = "A loop written in a body is one of that body's writes when what runs inside it writes (design principles 3.1: `算子、调用、分支、循环一样`), so the body's `GATE` reads it and the loop runs even though nothing needs its value: three rounds, three lines, no diagnostic. It used to be the negative case next door -- the loop nobody needed was not started and the warning named it -- and the rule removed the reading that made a loop's running conditional on its value being read."
 kind = "behavior"
 case = "../../../cases/compile/region_roots/dead_loop.cml"
 args = ["-E", "short", "${case}"]
@@ -103,7 +103,7 @@ timeout_ms = 20000
 
 [[tests]]
 name = "region_roots.branch_statement_kinds"
-desc = "What an arm of a branch written as a statement holds, side by side (design principles 3.1, 3.3): `println` runs as a root of the arm's region, `state::set` written as the arm's value runs because the JOIN reads that value, an assignment to a `var` is not an effect and makes the variable 2 as the arm's value says (the ruling of 2026-11-15), and a pure computation runs nothing and reports nothing. The body is not a `sync` block, which is the shape the branch's running was missing."
+desc = "What an arm of a branch written as a statement holds, side by side (design principles 3.1, 3.3): `println` runs as a root of the arm's region, `state::set` written as the arm's value runs because the JOIN reads that value, an assignment to a `var` is not an effect and makes the variable 2 as the arm's value says (the rule), and a pure computation runs nothing and reports nothing. The body is not a `sync` block, which is the shape the branch's running was missing."
 kind = "behavior"
 case = "../../../cases/compile/region_roots/branch_statement_kinds.cml"
 args = ["-E", "short", "${case}", "${backend}"]
@@ -138,7 +138,7 @@ timeout_ms = 20000
 
 [[tests]]
 name = "region_roots.branch_value_dropped"
-desc = "The shape that still does not run, next to `region_roots.branch_statement`: a branch whose value is taken by nobody -- `let unused = if ...` -- is not a statement of its body, so the write in the arm it would take does not run with it (design principles 3.1, 3.7; the author's `R2`: no arm is executed by a branch that does not run). What tells it from `branch_statement.cml` is the value the branch joins: one that joins no value at all is a statement of its region and runs; one that joins a value nobody reads is not. Nothing is printed and nothing is reported: the statement that does not run is what the ruling of 2026-11-17 leaves to the graph, and what a program gets for a value nobody takes is a warning about that value (`UnusedAssignedValue`), not one about an effect that failed to run."
+desc = "The shape that still does not run, next to `region_roots.branch_statement`: a branch whose value is taken by nobody -- `let unused = if ...` -- is not a statement of its body, so the write in the arm it would take does not run with it (design principles 3.1, 3.7; the author's `R2`: no arm is executed by a branch that does not run). What tells it from `branch_statement.cml` is the value the branch joins: one that joins no value at all is a statement of its region and runs; one that joins a value nobody reads is not. Nothing is printed and nothing is reported: the statement that does not run is what the rule leaves to the graph, and what a program gets for a value nobody takes is a warning about that value (`UnusedAssignedValue`), not one about an effect that failed to run."
 kind = "negative"
 case = "../../../cases/compile/region_roots/branch_value_dropped.cml"
 args = ["-E", "short", "${case}"]
@@ -173,7 +173,7 @@ timeout_ms = 20000
 
 [[tests]]
 name = "region_roots.read_only"
-desc = "The boundary of the rule, and why the predicate is a write and not an effect: a read of an outside resource is a dependency like a read of a variable, so `get_env` with nobody needing its value does not run. Nothing is printed and nothing is reported -- the diagnostic that used to name it went with the region roots (the ruling of 2026-11-17), and a read that does not run leaves no value behind to warn about."
+desc = "The boundary of the rule, and why the predicate is a write and not an effect: a read of an outside resource is a dependency like a read of a variable, so `get_env` with nobody needing its value does not run. Nothing is printed and nothing is reported -- the diagnostic that used to name it went with the region roots (the rule), and a read that does not run leaves no value behind to warn about."
 kind = "negative"
 case = "../../../cases/compile/region_roots/read_only.cml"
 args = ["-E", "short", "${case}"]
@@ -188,7 +188,7 @@ assert(input.diagnostics.length === 0, `nothing is reported, got ${input.diagnos
 """
 timeout_ms = 20000
 
-# The writing-freedom reading of the same rule (design principles 3.1, the author's ruling of
+# The writing-freedom reading of the same rule (design principles 3.1): the writes of a region are the inputs of its one `GATE`, and no edge joins them, so
 # 2026-11-17): the writes of a region are the inputs of its one `GATE`, and no edge joins them, so
 # two writings that put two writes to two different resources in the two possible orders are **one**
 # canonical document. Read by `test/tools/writing-freedom.mjs`; the two cases are

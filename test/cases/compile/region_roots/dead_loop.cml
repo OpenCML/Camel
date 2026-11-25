@@ -1,5 +1,5 @@
 /**
- * A loop is one of the nodes the author's ruling of 2026-11-17 names ("算子、调用、分支、循环一样":
+ * A loop is one of the nodes the rule names ("算子、调用、分支、循环一样":
  * design principles 3.1): when what runs inside it writes to a resource outside the program, the loop
  * is one of its region's writes and the region's `GATE` reads it -- so it runs. The loop's own value
  * being taken by nobody does not change that: the write inside it is the reason it runs, exactly as a

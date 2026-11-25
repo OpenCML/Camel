@@ -273,7 +273,7 @@ export function selectionCaseProblems(repoRoot = defaultRoot) {
         // plan expansion. The exit code did not: it was 1, because the reader threw and `main`'s
         // catch exits 1 -- the code that says a test failed, for a run that started nothing. It is
         // 2 now ("not measured"), which is the code a missing install and an unreadable base get.
-        // Measured on the tree before the ruling (2b141ad836): exit 1 with a stack trace; after it:
+        // Measured on the tree before the rule (2b141ad836): exit 1 with a stack trace; after it:
         // exit 2 with one `[PLAN ERROR]` line.
         const emptyFile = path.join(scratch, 'empty.json')
         fs.writeFileSync(emptyFile, `${JSON.stringify({ version: 1, plans: [], cases: [] }, null, 2)}\n`, 'utf8')

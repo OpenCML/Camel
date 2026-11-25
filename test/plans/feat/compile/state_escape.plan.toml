@@ -32,7 +32,7 @@
 # The bytes of what is refused are pinned: the diagnostic is ClosureAssignsCapturedName, the program is
 # refused before it runs, so the cases print nothing.
 #
-# The other half is the control the ruling asks for: the same five routes with a closure that only
+# The other half is the control the rule asks for: the same five routes with a closure that only
 # READS the `var`. Those are legal programs -- carrying a value out is not a fault any more (3.5, 197)
 # -- and each prints the value the name had where the closure was made. `ok_read_escape_*` are the
 # five.
@@ -177,7 +177,7 @@ assert(text.includes('a `Ref`'), 'the third way out is named: ' + text)
 
 [[tests]]
 name = "compile.state_escape.read_escape_return"
-desc = "Route one read as a value: `make` binds `acc` to 21 and returns a closure that only reads it. Nothing is carried out that has to be owned (the ruling of 2026-11-16), so this is a legal program and it prints 21 + 1 = 22. It pins the legality and the value, not a value port against a shared cell: the name is bound once, and the two-binding shape that would separate them is measured in the header."
+desc = "Route one read as a value: `make` binds `acc` to 21 and returns a closure that only reads it. Nothing is carried out that has to be owned (the rule), so this is a legal program and it prints 21 + 1 = 22. It pins the legality and the value, not a value port against a shared cell: the name is bound once, and the two-binding shape that would separate them is measured in the header."
 kind = "behavior"
 case = "../../../cases/compile/state_escape/ok_read_escape_return.cml"
 args = ["${case}"]

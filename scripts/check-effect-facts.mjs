@@ -19,7 +19,7 @@
  *
  *   - a **placement** judgement -- "can the device run this operator" (`tiles`). It reads the same
  *     atoms and answers a different question; folding it into the scheduling fact would merge "can
- *     the device run it" with "may a pass move it", which the author's answer rules out.
+ *     the device run it" with "may a pass move it", which design principles rule out.
  *   - a **user query** -- `graph.is_pure`, and a listing. It asks the fact layer for the answer it
  *     already computes, so it is one of the places the fact is read, not one that assembles it.
  *
@@ -81,7 +81,7 @@ const ANSWERS = ['effectSummaryOf', 'arrangeableKind']
 
 /**
  * The places that read the atoms and answer another question, with the reason. A file listed here
- * is not reported: the ruling exempts the shape of use it makes, and the reason says which one.
+ * is not reported: the rule exempts the shape of use it makes, and the reason says which one.
  */
 const EXEMPT = new Map([
     [

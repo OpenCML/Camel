@@ -5,7 +5,7 @@
 //
 //   a band above the composer of the coordinator's session (conversation.input.dock): lanes running,
 //     develop's age, unacknowledged dispatches, the build host, open alerts; click it for the alerts,
-//     the recent reminders and what the coordinator and the decision-maker said to each other;
+//     the recent reminders and what the coordinator and the other side said to each other;
 //   toasts (shell.overlay): each reminder the watch delivers, each acknowledgement and each message the
 //     coordinator sends, as they happen; an urgent reminder stays until it is dismissed;
 //

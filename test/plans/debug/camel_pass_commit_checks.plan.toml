@@ -6,8 +6,8 @@ desc = """
 The effect-containment check, asked of a pass written in Camel because the build asks it.
 
 A pass whose rewriting interface is the graph module alone cannot build the defect the check looks
-for, so the ruling of 2026-11-15 stopped asking it of such a pass (docs/design/effects/analysis.cn.md
-4.1). The ruling of 2026-11-16 keeps that saving only where it is paid for: a shipped build
+for, so the rule stopped asking it of such a pass (docs/design/effects/analysis.cn.md
+4.1). the rule keeps that saving only where it is paid for: a shipped build
 (`NDEBUG`) does not ask, and a debug or test build asks anyway, which is how the theorem is kept
 true rather than assumed.
 

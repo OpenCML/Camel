@@ -9,7 +9,7 @@
  *                    rule above -- the value the arm gives is read by the JOIN, so it is reached as
  *                    any value is. The box holds 5 afterwards.
  *   `v = 2`          an assignment to a `var`: not an effect (design principles 3.1 and 3.5, the
- *                    author's ruling of 2026-11-15). The arm's value is what the variable becomes,
+ *                    the rule). The arm's value is what the variable becomes,
  *                    so `v` reads 2 in the statement after the branch.
  *   `1 + 2`          pure computation: nothing runs and nothing is reported.
  *

@@ -2635,7 +2635,7 @@ export PATH="`$HOME/$($cfg.hostLocalBin):`$B:`$V:`$C/bin:`$HOME/$($cfg.hostWorkR
 # a shape that reads exactly like "the width followed its neighbours". It was not the width; the
 # binary could not start. The root fix is in the install now -- a build from 26888783c on copies
 # the toolchain's libstdc++.so.6 into its `libs/` and names it with a `$ORIGIN` rpath -- and the
-# 15:35 ruling of 2026-11-03 deleted those two per-stage exports. This one global export stays for
+# 15:35 the rule deleted those two per-stage exports. This one global export stays for
 # the older installs still sitting in host checkouts; `$C/lib` stays after it, where it always was.
 export CC=clang CXX=clang++
 export LD_LIBRARY_PATH='$($cfg.hostLibStdCxxDir)'":`$C/lib:`${LD_LIBRARY_PATH:-}"

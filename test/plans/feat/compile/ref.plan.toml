@@ -572,7 +572,7 @@ verify_script = '''
 
 # ---- two names of one handle ----
 #
-# Design principles 3.3, handle types (负责人 2026-11-15): a handle is a run-time value, so two
+# Design principles 3.3, handle types: a handle is a run-time value, so two
 # names may be one handle. Two same-typed handle names in one function (`Ref<T>` with the same `T`,
 # or one `#resource` type) are one resource, and the accesses through them keep the order they are
 # written in, unless the values are provably different.

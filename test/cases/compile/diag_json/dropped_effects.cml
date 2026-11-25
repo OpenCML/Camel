@@ -1,11 +1,11 @@
 /**
- * Which effects run is design principles 3.1, and a call is one of the nodes the author's ruling of
+ * Which effects run is design principles 3.1, and a call is one of the nodes the rule names ("算子、调用、分支、循环一样"): a call to a callee that writes a resource outside
  * 2026-11-17 names ("算子、调用、分支、循环一样"): a call to a callee that writes a resource outside
  * the program is one of its region's writes, and the region's `GATE` reads it -- so `noisy(1)` and
- * `noisy(2)` run, and so does the bare `println` (the ruling of 2026-11-15). A call whose callee
+ * `noisy(2)` run, and so does the bare `println` (the rule). A call whose callee
  * writes only a `var` cell writes no resource outside the program (design principles 3.3), so
  * `modify(i)` at line 34 is still reported; line 35 is UnusedAssignedValue; line 37 runs with its
- * body (the ruling of 2026-11-16), and `branch_value_dropped` still reports that branch.
+ * body (the rule), and `branch_value_dropped` still reports that branch.
  * Output: `operator`, `noisy` three times (lines 32, 33 and 36), `4`, `arm`, `kept 1`, `0 5`.
  */
 

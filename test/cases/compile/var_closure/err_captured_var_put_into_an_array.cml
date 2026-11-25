@@ -3,7 +3,7 @@
  * and `c`, the name the closure read, is assigned after it. Design principles 3.5 (198) gives that
  * shape an end without a source offset: "the closure's value put into another value runs to the rest
  * of the scope", so the write stands inside the stretch and is
- * `CapturedVarWrittenAfterTheClosure` (the author's ruling of 2026-11-16, item 3).
+ * `CapturedVarWrittenAfterTheClosure` (the rule, item 3).
  *
  * This is the array sibling of the tuple shape `test/cases/opt/effects/dead_write_dropped_closure.cml`
  * reads, and the scan reaches both the same way: the block that binds `h` never names it again --

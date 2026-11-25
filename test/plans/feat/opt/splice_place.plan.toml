@@ -28,7 +28,7 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 # argument used to be `with <var total: int>`, which a partial application may not bind any more: a
 # function value from a partial application has nowhere to write a `var` context parameter back
 # (design principles 3.5), and a closure holds the value a name
-# had when it was made, not the name (the ruling of 2026-11-16, items 197 and 198), so `add<t>` was
+# had when it was made, not the name (the rule, items 197 and 198), so `add<t>` was
 # refused at the binding -- by `SemanticDiag::ClosureAssignsCapturedName` (0x03000213) until
 # `VarContextParameterCannotBeBound` (0x03000216) gave the rule its own report. A handle is a value,
 # so the same three calls, the same accumulator and the same chain are still exercised.
@@ -165,7 +165,7 @@ verify_script = """
 [[tests]]
 name = "perf_fib_smoke.opt_twice"
 case = "../../../cases/linear/jit/perf_fib_smoke.cml"
-desc = "The same graph through the pass twice: the second round finds nothing left to splice and no fork to report. Its cost bound is stated, not inherited: `timeout_ms / 4` was the same 5000 ms as the `cpu_budget_ms` written here, but the derived bound is judged on the wall clock where the host cannot report CPU time, and this entry's reading is the work's own CPU time (`test/tools/run-tests.mjs#TIMEOUT_MARGIN`, and the ruling of 2026-11-02 that a bound is derived from a measurement, not from a constant). The number does not move: the entry is red against 5000 ms either way until the optimizer's cost is answered (internal/reviews/2026-11-19-the-0.2.45-blocker-list-by-severity.cn.md, S3-2), and it is to be re-derived from `test/tools/opt-cost/measure.mjs`'s table once it is."
+desc = "The same graph through the pass twice: the second round finds nothing left to splice and no fork to report. Its cost bound is stated, not inherited: `timeout_ms / 4` was the same 5000 ms as the `cpu_budget_ms` written here, but the derived bound is judged on the wall clock where the host cannot report CPU time, and this entry's reading is the work's own CPU time (`test/tools/run-tests.mjs#TIMEOUT_MARGIN`, and the rule that a bound is derived from a measurement, not from a constant). The number does not move: the entry is red against 5000 ms either way until the optimizer's cost is answered (internal/reviews/2026-11-19-the-0.2.45-blocker-list-by-severity.cn.md, S3-2), and it is to be re-derived from `test/tools/opt-cost/measure.mjs`'s table once it is."
 backends = ["nvm", "fvm", "jit", "prl"]
 backends_agree = ["exit_code"]
 args = ["${case}", "std::opt", "std::opt", "${backend}"]

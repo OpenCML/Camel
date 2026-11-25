@@ -575,7 +575,7 @@ expect_output_contains = ["A tag argument is positional: 'NamedData: w' is named
 
 [[tests]]
 name = "argument_tag"
-desc = "A tag argument that names a tag: a tag is a declaration, not a value (the author's ruling of 2026-10-30: a tag keeps its name and does not enter the value namespace), so the refusal at the tag says what the name is instead of reporting the parameter's declared type against it."
+desc = "A tag argument that names a tag: a tag is a declaration, not a value (the rule: a tag keeps its name and does not enter the value namespace), so the refusal at the tag says what the name is instead of reporting the parameter's declared type against it."
 kind = "negative"
 case = "../../../cases/compile/tags/err_tag_argument.cml"
 args = ["${case}"]
@@ -609,7 +609,7 @@ expect_stdout_exact = "6.0\n"
 expect_output_not_contains = ["[Error]", "TagArgumentNotValue"]
 [[tests]]
 name = "argument_rule"
-desc = "The shape the transform design writes, `#jvp(mul_rule)` with a `rule` for the argument: a tag parameter that carries a function takes a rule's name (the ruling of 2026-10-31), and the program compiles and runs."
+desc = "The shape the transform design writes, `#jvp(mul_rule)` with a `rule` for the argument: a tag parameter that carries a function takes a rule's name (the rule), and the program compiles and runs."
 kind = "behavior"
 case = "../../../cases/compile/tags/rule_argument.cml"
 args = ["${case}"]
@@ -619,7 +619,7 @@ expect_output_not_contains = ["[Error]", "TagArgumentNotValue"]
 
 [[tests]]
 name = "argument_value_still_refused"
-desc = "A tag argument that names a value of the program, not a function and not a rule: the ruling that lets a rule be named leaves values refused, and the refusal says what the name is."
+desc = "A tag argument that names a value of the program, not a function and not a rule: the rule that lets a rule be named leaves values refused, and the refusal says what the name is."
 kind = "negative"
 case = "../../../cases/compile/tags/err_rule_value_argument.cml"
 args = ["${case}"]

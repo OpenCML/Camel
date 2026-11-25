@@ -6,7 +6,7 @@
 // split half reads from its residual tuple; the other two are the **tangents** `dx` and `dw`, and a
 // transposition has no value for a tangent -- the tangent's cotangent is the answer, not an input.
 //
-// Under the ruling a transposed member may take the values it needs **out
+// Under the rule a transposed member may take the values it needs **out
 // of the closure it was built with** -- the closure of the function it is the transposition of -- and
 // must be refused otherwise: the closure is how a value reaches a transposed function without the type
 // naming it, and a value that is not in the closure is not in the call. For `lin` below the closure is

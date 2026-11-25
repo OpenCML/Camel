@@ -1,5 +1,5 @@
 /**
- * A cell is not a value (the ruling of 2026-10-26 on the arm of a branch): a position that
+ * A cell is not a value (the rule on the arm of a branch): a position that
  * takes a value reads the cell out before the arms are joined, so an arm of `var T` joins as
  * its `T` and an arm without a value joins as `null`; the branch is a `T?`, and the cell's
  * type never reaches the join. The value of a write is the cell it wrote into, which is why

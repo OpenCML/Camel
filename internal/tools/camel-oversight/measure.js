@@ -254,7 +254,7 @@ export async function measure({ repo, fetch = true, stateDir = '', buildHost = '
                 developBehind: Number(await git(['rev-list', '--count', 'origin/develop..origin/integration'])),
             }
         }),
-        // What the decision-maker pushed that has landed on neither shared line.
+        // What the other side pushed that has landed on neither shared line.
         fshDev: await attempt(async () => {
             const hasIntegration = await git(['rev-parse', '--verify', '--quiet', 'origin/integration']).then(() => true, () => false)
             const exclude = hasIntegration ? ['^origin/develop', '^origin/integration'] : ['^origin/develop']

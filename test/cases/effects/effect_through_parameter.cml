@@ -11,7 +11,7 @@
  *
  * The state is a module `var` and not a `var` context parameter any more. A `var` `with`
  * parameter handed to a value is a cell that value carries, and a closure cannot assign the name
- * it captured (design principles 3.5, 197; the author's ruling of 2026-11-16), so `add<t>` was
+ * it captured (design principles 3.5, 197; the rule), so `add<t>` was
  * refused at its own write. A module `var` is a name of the module, and a function that writes it
  * reaches a resource the same way. What this case pins -- that the call's footprint comes from the
  * value it was given and not from the parameter's clause -- is unchanged.

@@ -4,7 +4,7 @@ tier = "fast"
 tags = ["feat", "compile", "match_type", "when"]
 desc = "A `match type` case may carry a guard (`case pattern when predicate`): the case is taken when its pattern selects the subject and the predicate holds, and one whose guard does not hold falls through to the case written after it. The predicates stay in Camel -- the default arm of `ShapeOf` asks `is_numeric` -- and their answers are cached by function and type arguments. Before this change `when` was a syntax error in a case and `ShapeOf<string>` quietly answered `int[0]`."
 
-# The readings the four criteria of this step ask for, in the order the ruling gives them:
+# The readings the four criteria of this step ask for, in the order the rule gives them:
 # (1) a type function that divides by structure and then by property, in both positions;
 # (2) `ShapeOf<string>` refused, where it used to answer `int[0]`;
 # (3) the same predicate and type arguments evaluated once, however many cases ask;

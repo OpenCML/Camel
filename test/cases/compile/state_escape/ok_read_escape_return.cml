@@ -2,7 +2,7 @@
  * Route one, as a result, with a closure that only reads (design principles 3.5, 197): `make` binds
  * `acc`, a `var` of its own call, to `base * 3`, and then makes a closure that reads `acc` and
  * returns it. Carrying the value out is not a fault: a closure captures the value the name had
- * where it was made (the author's ruling of 2026-11-16, which withdrew the state rule of
+ * where it was made (the rule, which withdrew the state rule of
  * 2026-11-14), so what leaves the call is a value nobody has to own. Nothing is reported, and the
  * program prints 21 + 1 = 22.
  *

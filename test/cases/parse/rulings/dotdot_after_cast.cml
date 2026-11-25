@@ -7,7 +7,7 @@
 // conversion in parentheses, `(n as int)..5`, which is the spelling that diagnostic names and which
 // reads back as the same tree. Before that rule it wrote this file back as `let r = n as int..5`,
 // and `camel-parsecheck fuzz` reported "the formatted text does not parse" on that text
-// (iteration 929, a mutation of the ruling case above with the line break inserted).
+// (iteration 929, a mutation of the rule case above with the line break inserted).
 
 func main() => int sync {
     let n = 3

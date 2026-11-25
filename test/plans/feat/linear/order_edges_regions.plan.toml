@@ -16,7 +16,7 @@ tags = ["feat", "linear", "runtime", "effects", "gir"]
 #      the data path already orders the `BRCH` and no order edge is needed at all;
 #   2. a read the condition does not feed: the order edge it needs is written on the `BRCH`;
 #   3. a read before a loop whose body writes the same variable: no order edge at all. A write to a
-#      `var` is a value, not a resource (design principles 3.1; the ruling of 2026-11-16), so the
+#      `var` is a value, not a resource (design principles 3.1; the rule), so the
 #      loop hands the write on as its carried state and the read and the write are tied by data,
 #      never by an order edge on the `LOOP`.
 #
@@ -98,7 +98,7 @@ assert(input.exit_code === 56, `unexpected exit ${input.exit_code}`)
 
 [[tests]]
 name = "order_edges_regions.gir"
-desc = "No order edge crosses the border of a control region: the read before the branch that does not feed its condition is ordered by an edge on the BRCH, no edge hangs on the LOOP (a `var` write is not a resource and orders nothing), and the statements inside an arm are still ordered among themselves by an edge inside that arm (docs/design/effects/edges.cn.md 4.6; design principles 3.1). The edge inside the first arm changed with the ruling of 2026-11-16 on a branch written as a statement: that branch joins no value, so its two writes are the cell's two versions and the pair that still carries the arm's order is its two prints (design principles 3.5, F3)."
+desc = "No order edge crosses the border of a control region: the read before the branch that does not feed its condition is ordered by an edge on the BRCH, no edge hangs on the LOOP (a `var` write is not a resource and orders nothing), and the statements inside an arm are still ordered among themselves by an edge inside that arm (docs/design/effects/edges.cn.md 4.6; design principles 3.1). The edge inside the first arm changed with the rule on a branch written as a statement: that branch joins no value, so its two writes are the cell's two versions and the pair that still carries the arm's order is its two prints (design principles 3.5, F3)."
 case = "../../../cases/linear/runtime/order_edges_regions.cml"
 args = ["${case}", "std::jgir", "std::nop"]
 expect_exit = 0

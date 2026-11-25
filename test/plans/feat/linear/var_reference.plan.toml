@@ -1351,7 +1351,7 @@ assert(take && labels.get(take.source) === ':var/new', 'take reads the variable 
 # declines for want of a cell.
 #
 # Stage S3b is where the guarantee comes back, and it comes back as the *plan's* decision and not
-# as a graph shape (the author's answer of 2026-11-18: in-place is the execution plan's reuse
+# as a graph shape (the rule: in-place is the execution plan's reuse
 # decision, not the front end claiming a statement by its shape). The reading, on this tree:
 #
 #   camel inspect --copies test/cases/linear/byref/element_assigned_append.cml

@@ -286,7 +286,7 @@ timeout_ms = 30000
 # Assigning to a `var` is not an effect (design principles 3.1 and 3.5), so
 # what such a write drops when nothing reads it is a value, and the one thing to report is that the
 # value nobody uses: `SemanticDiag::UnusedAssignedValue`, the same family as `UnusedPureResult` and
-# `UnusedFallibleValue`. Measured before the ruling, the case below reported two things about one
+# `UnusedFallibleValue`. Measured before the rule, the case below reported two things about one
 # write -- `IgnoredSideEffect` (the call takes a var argument) and a report that the statement ("The
 # assignment has side effects but is never executed"); both of those sentences are gone, and exactly
 # one is left.

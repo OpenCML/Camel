@@ -13,7 +13,7 @@
  *
  * ## Why these are lists and not numbers
  *
- * Author's ruling of 2026-11-03 13:30 (`internal/reviews/questions-2026-10-29.md`): a count
+ * the rule (`internal/reviews/questions-2026-10-29.md`): a count
  * that can drift while the behaviour stays the same protects nothing.
  *
  *   * The `references` count is **gone**. It counted how many times the whole word `GraphDraft`
@@ -33,7 +33,7 @@
  * insertion is a check people learn to ignore.
  *
  * `files` is a list and not a count even though a machine can write the type into a comment and move
- * it: the ruling keeps this list, and the report below prints the line a new member stands on, so a
+ * it: the rule keeps this list, and the report below prints the line a new member stands on, so a
  * reader sees whether a file entered because of code or because of prose.
  *
  * **Membership is decided on code, not on text.** A match inside a comment, a character literal or a

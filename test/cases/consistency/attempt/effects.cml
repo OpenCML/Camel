@@ -6,7 +6,7 @@
  * run as after any call.
  *
  * The state that has to survive a boundary is a `Ref`, not a `var`: a closure may keep the handle
- * (design principles 3.5, the exit for state that outlives a call), and the ruling of 2026-11-15
+ * (design principles 3.5, the exit for state that outlives a call), and the rule
  * keeps a closure from assigning an outer name at all.
  */
 

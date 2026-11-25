@@ -3,9 +3,9 @@
  * captures and writes a `var`.
  *
  * The shape this case used to pin -- `acc` a `var` of `total`'s call, `add` a closure that captures
- * it and writes it -- is refused by the ruling of 2026-11-15 (a closure may not assign a name it
+ * it and writes it -- is refused by the rule (a closure may not assign a name it
  * captures; design principles 3.5). This program prints the bytes it printed then (6 for
- * `total(4)`), and it is the ruling's first way out, "pass the state as a value".
+ * `total(4)`), and it is the rule's first way out, "pass the state as a value".
  *
  * The rule's own tests are plan compile.state_escape.
  */

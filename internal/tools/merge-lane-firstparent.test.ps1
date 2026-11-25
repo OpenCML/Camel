@@ -129,7 +129,7 @@ function Get-OriginTip {
     return "$out".Trim()
 }
 
-# A page landing on `integration` while the merge is being read: the shape the ruling is about.
+# A page landing on `integration` while the merge is being read: the shape the rule is about.
 function Add-LandingCommit {
     param([string] $Origin, [string] $Dir, [string] $Path, [string] $Text, [string] $Subject)
     if (-not (Test-Path -LiteralPath (Join-Path $Dir '.git'))) {

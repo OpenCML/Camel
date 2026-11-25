@@ -11,7 +11,7 @@
 #   `confusion`: d/dx ( x * (d/dy (x+y) at y=1) ) at x=1 == 1 (a confused reading gives 2)
 #
 # The first run of this plan was a *measurement*, and it stayed one: an entry that is refused is a
-# wall the implementation has not reached yet. Since the ruling of 2026-11-21 02:20 a mark on such an
+# wall the implementation has not reached yet. Since the rule a mark on such an
 # entry states the line the entry has to print instead of quoting the refusal it reads that day, so
 # the wall can move -- and it has, three times -- without the mark following it.
 
@@ -128,7 +128,7 @@ timeout_ms = 30000
 
 [[tests]]
 name = "nested.nest_quartic"
-desc = "The reverse half, now a positive on the number: `grad(grad(f))` for f(x)=x^4, whose hand-worked second derivative is f''(2)=48 (and f''(3)=108). It was `kind = \"negative\"`, pinning `split does not build this function (the value half reads the tangent of parameter 0, which the forward half does not take)`, and that negative had stopped holding before it stopped passing: the law that lifts an answer type was added of `(float, (float) => float)`, so the property the case was written to pin -- 'a result type with no tangent space is refused' -- is not true any more, and the cut's refusal could then go. A positive on the number is what the case is about now: the nest prints 48.0, not a refusal. Re-registered 2026-11-21 by the author's ruling of 02:20, which named this entry as the one that must turn positive."
+desc = "The reverse half, now a positive on the number: `grad(grad(f))` for f(x)=x^4, whose hand-worked second derivative is f''(2)=48 (and f''(3)=108). It was `kind = \"negative\"`, pinning `split does not build this function (the value half reads the tangent of parameter 0, which the forward half does not take)`, and that negative had stopped holding before it stopped passing: the law that lifts an answer type was added of `(float, (float) => float)`, so the property the case was written to pin -- 'a result type with no tangent space is refused' -- is not true any more, and the cut's refusal could then go. A positive on the number is what the case is about now: the nest prints 48.0, not a refusal. Re-registered 2026-11-21 by the rule, which named this entry as the one that must turn positive."
 kind = "behavior"
 case = "../../../cases/transforms/nested/nest_quartic.cml"
 args = ["${case}", "${backend}"]

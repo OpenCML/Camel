@@ -367,7 +367,7 @@ for (const text of [
 }
 
 // --- the `known_fail` gate: a marked case carries an owner, a wall and a sentence --------------
-// The author's ruling of 2026-11-03 00:30: a case that cannot pass today stays in the plan with the
+// the rule: a case that cannot pass today stays in the plan with the
 // mark, who is responsible for making it green, and why it cannot pass. Two of the three used to be
 // prose inside `known_fail_note`, which nothing checked and a review had to remember to read; they
 // are fields now, and a plan that omits either is refused where it is loaded. A fourth field, the

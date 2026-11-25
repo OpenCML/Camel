@@ -12,8 +12,8 @@ tags = ["feat", "linear", "var", "effects"]
 # What a `sync` block adds is the other direction (3.5, F3): a statement of it runs whether or not
 # the variable is read afterwards. This file used to read that as "every write here is reported by
 # SemanticDiag::IgnoredSideEffect", one warning per write outside a sync block -- eight of them.
-# The ruling of 2026-11-15 (design principles 3.1, 3.5) retired that reading for `var`, and the
-# ruling of 2026-11-16 retired the last two branches of it: a write to one of the program's own
+# the rule (design principles 3.1, 3.5) retired that reading for `var`, and the
+# the rule retired the last two branches of it: a write to one of the program's own
 # variables is a value, so no `var` argument, assignment, arm or loop body is reported by that
 # diagnostic. A write whose value nobody reads is reported as a value
 # (SemanticDiag::UnusedAssignedValue). The six entries below were changed on those rulings, not to
@@ -34,7 +34,7 @@ tags = ["feat", "linear", "var", "effects"]
 
 [[tests]]
 name = "var_read_before_write.default"
-desc = "In a body that is not a sync block, a read of a `var` made before a write (a var argument, an assignment, a branch arm, a loop body) is the value the variable had at that point, and a read made after the write takes the new one. Eight SemanticDiag::IgnoredSideEffect were expected for the writes outside a sync block; the ruling of 2026-11-15 (design principles 3.1 and 3.5) makes a write to a `var` a value and not an effect, so a `var` argument and an assignment are no longer reported by it, and neither is the arm at 66:13 or the loop body at 76:5 -- the ruling retires both remaining `var` branches -- with the three writes whose value nobody reads reported as SemanticDiag::UnusedAssignedValue at 52:7, 85:7 and 87:7 -- and no SemanticDiag::UnusedAssignedValue at all now: those three writes each have their value read by the `let` written right after them, so naming them as writes whose value nobody reads was a false report, and the diagnostic asks the question its own text asks (whether any read takes the value this write stores) instead of whether the write's own node has a consumer. Pipeline: default (interpreter)."
+desc = "In a body that is not a sync block, a read of a `var` made before a write (a var argument, an assignment, a branch arm, a loop body) is the value the variable had at that point, and a read made after the write takes the new one. Eight SemanticDiag::IgnoredSideEffect were expected for the writes outside a sync block; the rule (design principles 3.1 and 3.5) makes a write to a `var` a value and not an effect, so a `var` argument and an assignment are no longer reported by it, and neither is the arm at 66:13 or the loop body at 76:5 -- the rule retires both remaining `var` branches -- with the three writes whose value nobody reads reported as SemanticDiag::UnusedAssignedValue at 52:7, 85:7 and 87:7 -- and no SemanticDiag::UnusedAssignedValue at all now: those three writes each have their value read by the `let` written right after them, so naming them as writes whose value nobody reads was a false report, and the diagnostic asks the question its own text asks (whether any read takes the value this write stores) instead of whether the write's own node has a consumer. Pipeline: default (interpreter)."
 kind = "behavior"
 case = "../../../cases/linear/runtime/var_read_before_write.cml"
 args = ["${case}"]
@@ -47,7 +47,7 @@ const out = input.normalized.stdout.trim().split('\n')
 assert(JSON.stringify(out) === JSON.stringify(want), `unexpected output: ${out.join(' | ')}`)
 // The rule this case was written for is retired: it required a diagnostic for every write outside
 // a sync block, and expected eight SemanticDiag::IgnoredSideEffect -- one per `var` argument, per
-// assignment, per branch arm and per loop body. The ruling of 2026-11-15 (design principles 3.1,
+// assignment, per branch arm and per loop body. the rule (design principles 3.1,
 // 3.5) makes a write to a `var` a value and not an effect: the write a `var` argument takes is
 // handed back where the call stands, and an assignment is that same shape, so neither is reported
 // by IgnoredSideEffect any more, and neither is an arm's write or a loop body's: the 2026-11-16
@@ -73,7 +73,7 @@ timeout_ms = 20000
 
 [[tests]]
 name = "var_read_before_write.nvm"
-desc = "In a body that is not a sync block, a read of a `var` made before a write (a var argument, an assignment, a branch arm, a loop body) is the value the variable had at that point, and a read made after the write takes the new one. Eight SemanticDiag::IgnoredSideEffect were expected for the writes outside a sync block; the ruling of 2026-11-15 (design principles 3.1 and 3.5) makes a write to a `var` a value and not an effect, so a `var` argument and an assignment are no longer reported by it, and neither is the arm at 66:13 or the loop body at 76:5 -- the ruling retires both remaining `var` branches -- with the three writes whose value nobody reads reported as SemanticDiag::UnusedAssignedValue at 52:7, 85:7 and 87:7 -- and no SemanticDiag::UnusedAssignedValue at all now: those three writes each have their value read by the `let` written right after them, so naming them as writes whose value nobody reads was a false report, and the diagnostic asks the question its own text asks (whether any read takes the value this write stores) instead of whether the write's own node has a consumer. Pipeline: std::nvm."
+desc = "In a body that is not a sync block, a read of a `var` made before a write (a var argument, an assignment, a branch arm, a loop body) is the value the variable had at that point, and a read made after the write takes the new one. Eight SemanticDiag::IgnoredSideEffect were expected for the writes outside a sync block; the rule (design principles 3.1 and 3.5) makes a write to a `var` a value and not an effect, so a `var` argument and an assignment are no longer reported by it, and neither is the arm at 66:13 or the loop body at 76:5 -- the rule retires both remaining `var` branches -- with the three writes whose value nobody reads reported as SemanticDiag::UnusedAssignedValue at 52:7, 85:7 and 87:7 -- and no SemanticDiag::UnusedAssignedValue at all now: those three writes each have their value read by the `let` written right after them, so naming them as writes whose value nobody reads was a false report, and the diagnostic asks the question its own text asks (whether any read takes the value this write stores) instead of whether the write's own node has a consumer. Pipeline: std::nvm."
 kind = "behavior"
 case = "../../../cases/linear/runtime/var_read_before_write.cml"
 args = ["${case}", "${run_nvm}"]
@@ -86,7 +86,7 @@ const out = input.normalized.stdout.trim().split('\n')
 assert(JSON.stringify(out) === JSON.stringify(want), `unexpected output: ${out.join(' | ')}`)
 // The rule this case was written for is retired: it required a diagnostic for every write outside
 // a sync block, and expected eight SemanticDiag::IgnoredSideEffect -- one per `var` argument, per
-// assignment, per branch arm and per loop body. The ruling of 2026-11-15 (design principles 3.1,
+// assignment, per branch arm and per loop body. the rule (design principles 3.1,
 // 3.5) makes a write to a `var` a value and not an effect: the write a `var` argument takes is
 // handed back where the call stands, and an assignment is that same shape, so neither is reported
 // by IgnoredSideEffect any more, and neither is an arm's write or a loop body's: the 2026-11-16
@@ -112,7 +112,7 @@ timeout_ms = 20000
 
 [[tests]]
 name = "var_read_before_write.fvm"
-desc = "In a body that is not a sync block, a read of a `var` made before a write (a var argument, an assignment, a branch arm, a loop body) is the value the variable had at that point, and a read made after the write takes the new one. Eight SemanticDiag::IgnoredSideEffect were expected for the writes outside a sync block; the ruling of 2026-11-15 (design principles 3.1 and 3.5) makes a write to a `var` a value and not an effect, so a `var` argument and an assignment are no longer reported by it, and neither is the arm at 66:13 or the loop body at 76:5 -- the ruling retires both remaining `var` branches -- with the three writes whose value nobody reads reported as SemanticDiag::UnusedAssignedValue at 52:7, 85:7 and 87:7 -- and no SemanticDiag::UnusedAssignedValue at all now: those three writes each have their value read by the `let` written right after them, so naming them as writes whose value nobody reads was a false report, and the diagnostic asks the question its own text asks (whether any read takes the value this write stores) instead of whether the write's own node has a consumer. Pipeline: std::fvm."
+desc = "In a body that is not a sync block, a read of a `var` made before a write (a var argument, an assignment, a branch arm, a loop body) is the value the variable had at that point, and a read made after the write takes the new one. Eight SemanticDiag::IgnoredSideEffect were expected for the writes outside a sync block; the rule (design principles 3.1 and 3.5) makes a write to a `var` a value and not an effect, so a `var` argument and an assignment are no longer reported by it, and neither is the arm at 66:13 or the loop body at 76:5 -- the rule retires both remaining `var` branches -- with the three writes whose value nobody reads reported as SemanticDiag::UnusedAssignedValue at 52:7, 85:7 and 87:7 -- and no SemanticDiag::UnusedAssignedValue at all now: those three writes each have their value read by the `let` written right after them, so naming them as writes whose value nobody reads was a false report, and the diagnostic asks the question its own text asks (whether any read takes the value this write stores) instead of whether the write's own node has a consumer. Pipeline: std::fvm."
 kind = "behavior"
 case = "../../../cases/linear/runtime/var_read_before_write.cml"
 args = ["${case}", "${run_fvm}"]
@@ -125,7 +125,7 @@ const out = input.normalized.stdout.trim().split('\n')
 assert(JSON.stringify(out) === JSON.stringify(want), `unexpected output: ${out.join(' | ')}`)
 // The rule this case was written for is retired: it required a diagnostic for every write outside
 // a sync block, and expected eight SemanticDiag::IgnoredSideEffect -- one per `var` argument, per
-// assignment, per branch arm and per loop body. The ruling of 2026-11-15 (design principles 3.1,
+// assignment, per branch arm and per loop body. the rule (design principles 3.1,
 // 3.5) makes a write to a `var` a value and not an effect: the write a `var` argument takes is
 // handed back where the call stands, and an assignment is that same shape, so neither is reported
 // by IgnoredSideEffect any more, and neither is an arm's write or a loop body's: the 2026-11-16
@@ -151,7 +151,7 @@ timeout_ms = 20000
 
 [[tests]]
 name = "var_read_before_write.jit"
-desc = "In a body that is not a sync block, a read of a `var` made before a write (a var argument, an assignment, a branch arm, a loop body) is the value the variable had at that point, and a read made after the write takes the new one. Eight SemanticDiag::IgnoredSideEffect were expected for the writes outside a sync block; the ruling of 2026-11-15 (design principles 3.1 and 3.5) makes a write to a `var` a value and not an effect, so a `var` argument and an assignment are no longer reported by it, and neither is the arm at 66:13 or the loop body at 76:5 -- the ruling retires both remaining `var` branches -- with the three writes whose value nobody reads reported as SemanticDiag::UnusedAssignedValue at 52:7, 85:7 and 87:7 -- and no SemanticDiag::UnusedAssignedValue at all now: those three writes each have their value read by the `let` written right after them, so naming them as writes whose value nobody reads was a false report, and the diagnostic asks the question its own text asks (whether any read takes the value this write stores) instead of whether the write's own node has a consumer. Pipeline: std::jit."
+desc = "In a body that is not a sync block, a read of a `var` made before a write (a var argument, an assignment, a branch arm, a loop body) is the value the variable had at that point, and a read made after the write takes the new one. Eight SemanticDiag::IgnoredSideEffect were expected for the writes outside a sync block; the rule (design principles 3.1 and 3.5) makes a write to a `var` a value and not an effect, so a `var` argument and an assignment are no longer reported by it, and neither is the arm at 66:13 or the loop body at 76:5 -- the rule retires both remaining `var` branches -- with the three writes whose value nobody reads reported as SemanticDiag::UnusedAssignedValue at 52:7, 85:7 and 87:7 -- and no SemanticDiag::UnusedAssignedValue at all now: those three writes each have their value read by the `let` written right after them, so naming them as writes whose value nobody reads was a false report, and the diagnostic asks the question its own text asks (whether any read takes the value this write stores) instead of whether the write's own node has a consumer. Pipeline: std::jit."
 kind = "behavior"
 case = "../../../cases/linear/runtime/var_read_before_write.cml"
 args = ["${case}", "${run_jit}"]
@@ -164,7 +164,7 @@ const out = input.normalized.stdout.trim().split('\n')
 assert(JSON.stringify(out) === JSON.stringify(want), `unexpected output: ${out.join(' | ')}`)
 // The rule this case was written for is retired: it required a diagnostic for every write outside
 // a sync block, and expected eight SemanticDiag::IgnoredSideEffect -- one per `var` argument, per
-// assignment, per branch arm and per loop body. The ruling of 2026-11-15 (design principles 3.1,
+// assignment, per branch arm and per loop body. the rule (design principles 3.1,
 // 3.5) makes a write to a `var` a value and not an effect: the write a `var` argument takes is
 // handed back where the call stands, and an assignment is that same shape, so neither is reported
 // by IgnoredSideEffect any more, and neither is an arm's write or a loop body's: the 2026-11-16
@@ -190,7 +190,7 @@ timeout_ms = 20000
 
 [[tests]]
 name = "var_read_before_write.prl"
-desc = "In a body that is not a sync block, a read of a `var` made before a write (a var argument, an assignment, a branch arm, a loop body) is the value the variable had at that point, and a read made after the write takes the new one. Eight SemanticDiag::IgnoredSideEffect were expected for the writes outside a sync block; the ruling of 2026-11-15 (design principles 3.1 and 3.5) makes a write to a `var` a value and not an effect, so a `var` argument and an assignment are no longer reported by it, and neither is the arm at 66:13 or the loop body at 76:5 -- the ruling retires both remaining `var` branches -- with the three writes whose value nobody reads reported as SemanticDiag::UnusedAssignedValue at 52:7, 85:7 and 87:7 -- and no SemanticDiag::UnusedAssignedValue at all now: those three writes each have their value read by the `let` written right after them, so naming them as writes whose value nobody reads was a false report, and the diagnostic asks the question its own text asks (whether any read takes the value this write stores) instead of whether the write's own node has a consumer. Pipeline: std::prl."
+desc = "In a body that is not a sync block, a read of a `var` made before a write (a var argument, an assignment, a branch arm, a loop body) is the value the variable had at that point, and a read made after the write takes the new one. Eight SemanticDiag::IgnoredSideEffect were expected for the writes outside a sync block; the rule (design principles 3.1 and 3.5) makes a write to a `var` a value and not an effect, so a `var` argument and an assignment are no longer reported by it, and neither is the arm at 66:13 or the loop body at 76:5 -- the rule retires both remaining `var` branches -- with the three writes whose value nobody reads reported as SemanticDiag::UnusedAssignedValue at 52:7, 85:7 and 87:7 -- and no SemanticDiag::UnusedAssignedValue at all now: those three writes each have their value read by the `let` written right after them, so naming them as writes whose value nobody reads was a false report, and the diagnostic asks the question its own text asks (whether any read takes the value this write stores) instead of whether the write's own node has a consumer. Pipeline: std::prl."
 kind = "behavior"
 case = "../../../cases/linear/runtime/var_read_before_write.cml"
 args = ["${case}", "${run_prl}"]
@@ -203,7 +203,7 @@ const out = input.normalized.stdout.trim().split('\n')
 assert(JSON.stringify(out) === JSON.stringify(want), `unexpected output: ${out.join(' | ')}`)
 // The rule this case was written for is retired: it required a diagnostic for every write outside
 // a sync block, and expected eight SemanticDiag::IgnoredSideEffect -- one per `var` argument, per
-// assignment, per branch arm and per loop body. The ruling of 2026-11-15 (design principles 3.1,
+// assignment, per branch arm and per loop body. the rule (design principles 3.1,
 // 3.5) makes a write to a `var` a value and not an effect: the write a `var` argument takes is
 // handed back where the call stands, and an assignment is that same shape, so neither is reported
 // by IgnoredSideEffect any more, and neither is an arm's write or a loop body's: the 2026-11-16
@@ -254,7 +254,7 @@ timeout_ms = 20000
 
 [[tests]]
 name = "var_read_before_write.opt_nvm"
-desc = "In a body that is not a sync block, a read of a `var` made before a write (a var argument, an assignment, a branch arm, a loop body) is the value the variable had at that point, and a read made after the write takes the new one. Eight SemanticDiag::IgnoredSideEffect were expected for the writes outside a sync block; the ruling of 2026-11-15 (design principles 3.1 and 3.5) makes a write to a `var` a value and not an effect, so a `var` argument and an assignment are no longer reported by it, and neither is the arm at 66:13 or the loop body at 76:5 -- the ruling retires both remaining `var` branches -- with the three writes whose value nobody reads reported as SemanticDiag::UnusedAssignedValue at 52:7, 85:7 and 87:7 -- and no SemanticDiag::UnusedAssignedValue at all now: those three writes each have their value read by the `let` written right after them, so naming them as writes whose value nobody reads was a false report, and the diagnostic asks the question its own text asks (whether any read takes the value this write stores) instead of whether the write's own node has a consumer. The order edges survive std::opt. Pipeline: std::opt, then std::nvm."
+desc = "In a body that is not a sync block, a read of a `var` made before a write (a var argument, an assignment, a branch arm, a loop body) is the value the variable had at that point, and a read made after the write takes the new one. Eight SemanticDiag::IgnoredSideEffect were expected for the writes outside a sync block; the rule (design principles 3.1 and 3.5) makes a write to a `var` a value and not an effect, so a `var` argument and an assignment are no longer reported by it, and neither is the arm at 66:13 or the loop body at 76:5 -- the rule retires both remaining `var` branches -- with the three writes whose value nobody reads reported as SemanticDiag::UnusedAssignedValue at 52:7, 85:7 and 87:7 -- and no SemanticDiag::UnusedAssignedValue at all now: those three writes each have their value read by the `let` written right after them, so naming them as writes whose value nobody reads was a false report, and the diagnostic asks the question its own text asks (whether any read takes the value this write stores) instead of whether the write's own node has a consumer. The order edges survive std::opt. Pipeline: std::opt, then std::nvm."
 kind = "behavior"
 case = "../../../cases/linear/runtime/var_read_before_write.cml"
 args = ["${case}", "std::opt", "std::nvm"]
@@ -267,7 +267,7 @@ const out = input.normalized.stdout.trim().split('\n')
 assert(JSON.stringify(out) === JSON.stringify(want), `unexpected output: ${out.join(' | ')}`)
 // The rule this case was written for is retired: it required a diagnostic for every write outside
 // a sync block, and expected eight SemanticDiag::IgnoredSideEffect -- one per `var` argument, per
-// assignment, per branch arm and per loop body. The ruling of 2026-11-15 (design principles 3.1,
+// assignment, per branch arm and per loop body. the rule (design principles 3.1,
 // 3.5) makes a write to a `var` a value and not an effect: the write a `var` argument takes is
 // handed back where the call stands, and an assignment is that same shape, so neither is reported
 // by IgnoredSideEffect any more, and neither is an arm's write or a loop body's: the 2026-11-16

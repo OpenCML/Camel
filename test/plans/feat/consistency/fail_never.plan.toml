@@ -111,7 +111,7 @@ expect_stdout_contains = ["42", "BadInput", "end"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 20000
 
-# The author's ruling of 2026-10-26 on the bottom type `never` and on `fail` (design principles
+# the rule on the bottom type `never` and on `fail` (design principles
 # 3.9): an argument of type `never` makes the call itself `never` (the call never runs, so no
 # overload is chosen for it and the warning names the argument); a `fail` on a line of its own is
 # no effect, so in a body that is not `sync` it does not run and the statements after it do; and
@@ -201,7 +201,7 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "norma
 timeout_ms = 20000
 
 # ---- A `never` argument in a `with` position, and `never` in a tagged position ----
-# The author's ruling of 2026-10-26 on `never-argument-scope`: a `with` argument is evaluated
+# the rule on `never-argument-scope`: a `with` argument is evaluated
 # before the call it is written in like an ordinary one, so a `never` `with` argument stops the
 # call -- the same warning, no overload chosen, the call typed `never` -- and `never` enters a
 # tagged position without a conversion, so no CAST is built for it. Every assertion here is on the

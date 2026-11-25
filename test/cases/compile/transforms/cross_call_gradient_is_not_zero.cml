@@ -3,7 +3,7 @@
 //   g(x) = f(x) * x            ==   2 * x*x
 //   g(3) = 18,  g'(3) = 4x = 12
 //
-// The number this case asks for is 12 -- the author's ruling of 2026-11-03 19:35 in one line:
+// The number this case asks for is 12 -- the rule in one line:
 // `transpose(call(g, x)) = transpose(lin_g)`, so a call is differentiated through the callee's own
 // linear half.
 //

@@ -149,7 +149,7 @@ void testScalarDevice() {
                 const auto expected=expressions[op].evaluate(bindings);
                 const ScalarValue actual{type,output[i*expressions.size()+op]};
                 // A NaN is a NaN: its payload and signalling bit are not part of the value (design
-                // principles, floating point; the author's ruling of 2026-11-23), so every float
+                // principles, floating point; the rule), so every float
                 // operation, the extrema included, compares NaN classification. `op < 10` keeps the
                 // integer results (bitcast and the i64 probes) out of a float comparison.
                 const bool nanPair = op < 10 && (f32

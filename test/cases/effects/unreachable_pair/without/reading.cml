@@ -1,7 +1,7 @@
 /**
  * The same program as `../with/reading.cml`, with the declaration nothing reaches (`bump`) deleted:
  * every other function's measured resources are byte for byte the same, because a function's set is
- * what its own body was measured to reach (the ruling of 2026-11-15).
+ * what its own body was measured to reach (the rule).
  */
 
 var counter = 0

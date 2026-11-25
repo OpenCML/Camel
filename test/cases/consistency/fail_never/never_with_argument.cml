@@ -1,5 +1,5 @@
 /**
- * A `with` argument of type `never` (design principles 3.9; the author's ruling of 2026-10-26 on
+ * A `with` argument of type `never` (design principles 3.9; the rule on
  * `never-argument-scope`): a `with` argument is evaluated before the call it is written in like
  * an ordinary argument, so one that never gives a value never reaches the call at all. The call
  * itself is typed `never`, no overload is chosen for it, and the warning names the argument --

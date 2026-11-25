@@ -1,4 +1,4 @@
-// A library-level `with_grad` as the composition of `vjp` (design principles 9.9, author's ruling of
+// A library-level `with_grad` as the composition of `vjp` (design principles 9.9): `vjp` differentiates ordinary parameters only, so the weight is moved to one by
 // 2026-11-03 09:50): `vjp` differentiates ordinary parameters only, so the weight is moved to one by
 // the signature reinterpretation `first_with_as_param` -- the port reclassification that copies the
 // body -- and the seed 1 read off the pullback is its gradient.
@@ -13,7 +13,7 @@
 //   1. The exit's shape: the lifted graph answered with the call's pair instead of a two-member tuple
 //      `Fill` of its own, and `split` cut only a fill (`skip=exit`, `split does not build this
 //      function (a lifted function answers with the pair (result, tangent); ...)`). Answered by the
-//      lift hydrating an application's pair (route B of the ruling of 2026-11-03 15:15).
+//      lift hydrating an application's pair (route B of the rule).
 //   2. The cut's **forward** walk on a captured value: the lifted lambda has no `with` list while its
 //      graph still reads the captures through ports, and the half listed its ports from the
 //      declaration, so a captured port was in neither map (`skip=forward`, `the port is not a

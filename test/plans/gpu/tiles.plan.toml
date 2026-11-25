@@ -1628,7 +1628,7 @@ name = "grad_expand.untagged_graph_keeps_the_runtime_operator"
 kind = "differential"
 case = "../../cases/gpu/nofallback/grad_expand_plain.cml"
 # Adding the pass to the pipeline changes nothing, and this entry states that as a comparison
-# rather than as a second copy of the expected text: the language author's ruling of 2026-10-24
+# rather than as a second copy of the expected text: the language the rule
 # evening (`internal/reviews/questions-2026-10-24-evening.md`,
 # `tiles-compile-resident-value-gradient`) has it that a program with no `#gpu` scope is not
 # touched by `tiles::compile` -- the values outside a scope stay on the host and do not become
@@ -1637,7 +1637,7 @@ case = "../../cases/gpu/nofallback/grad_expand_plain.cml"
 # writing the text twice.
 #
 # What the pass must still not do is answer for the program: neither of its two messages may
-# appear. The refusal the resident value `Device<f32>` used to raise belongs to the ruling's
+# appear. The refusal the resident value `Device<f32>` used to raise belongs to the rule's
 # item 2, which is owed elsewhere (a resident value has to be able to carry a gradient, so upload
 # and download get derivative rules); a program that really is compiled into a scope still meets
 # that refusal today.

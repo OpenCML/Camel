@@ -335,7 +335,7 @@ expect_stdout_exact = ""
 # was made (design principles 3.5, item 198), so a write written
 # after the closure is `SemanticDiag::CapturedVarWrittenAfterTheClosure` (0x03000214). The dropped
 # sibling keeps its write after the closure and was read as legal until 2026-11-16, because the rule
-# was read as running to the closure's last use and that closure is never called; the ruling's third
+# was read as running to the closure's last use and that closure is never called; the rule's third
 # item reads the same shape as the design's third case instead -- the closure's value is put into
 # another value, so the stretch is the scope's rest -- and the case is refused.
 #
@@ -346,7 +346,7 @@ expect_stdout_exact = ""
 # each write without a pipeline around it.
 [[tests]]
 name = "dead_write_dropped_closure.reference"
-desc = "No pass: the write stands after the closure `h` was made, and `h` is put into the tuple `(1, h)`, which design principles 3.5 (198) runs to the end of the scope, so the program is refused (the author's ruling of 2026-11-16, item 3). It printed the 1 that `p.0` gives while the rule stopped at the closure's last use."
+desc = "No pass: the write stands after the closure `h` was made, and `h` is put into the tuple `(1, h)`, which design principles 3.5 (198) runs to the end of the scope, so the program is refused (the rule, item 3). It printed the 1 that `p.0` gives while the rule stopped at the closure's last use."
 kind = "negative"
 case = "../../../cases/opt/effects/dead_write_dropped_closure.cml"
 args = ["${case}"]
@@ -382,7 +382,7 @@ expect_stdout_exact = "41\n41\n"
 
 [[tests]]
 name = "dead_write.judgement_dropped"
-desc = "`test::deadwrite` prints what `camel::runtime::deadWrite` answers for each write, so the judgement is read on its own. The program it reads is refused since 2026-11-16: `h` is bound to a name and put into the tuple `(1, h)`, and the write `c = 41` stands after it, which design principles 3.5 (198) runs to the rest of the scope (the author's ruling of 2026-11-16, item 3). The judgement's own readings are the two entries that follow and `dead_write.opt.still_there`."
+desc = "`test::deadwrite` prints what `camel::runtime::deadWrite` answers for each write, so the judgement is read on its own. The program it reads is refused since 2026-11-16: `h` is bound to a name and put into the tuple `(1, h)`, and the write `c = 41` stands after it, which design principles 3.5 (198) runs to the rest of the scope (the rule, item 3). The judgement's own readings are the two entries that follow and `dead_write.opt.still_there`."
 kind = "negative"
 case = "../../../cases/opt/effects/dead_write_dropped_closure.cml"
 args = ["${case}"]

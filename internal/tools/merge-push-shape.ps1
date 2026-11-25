@@ -60,7 +60,7 @@ function Test-PushFirstParent {
     $tipShort = $tip.Substring(0, 9)
 
     # One read answers both questions: the first token is the commit itself and the rest are its
-    # parents in order, so `Parents[1]` IS `<sha>^1` -- the reading the ruling names -- and the count
+    # parents in order, so `Parents[1]` IS `<sha>^1` -- the reading the rule names -- and the count
     # is what tells a merge from a lane commit.
     $line = "$(& git -C $Tree rev-list --parents -n 1 $sha 2>$null)".Trim()
     $tokens = @($line -split '\s+' | Where-Object { $_ })
