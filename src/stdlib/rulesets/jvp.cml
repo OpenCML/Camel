@@ -308,21 +308,22 @@ export rule jvp_matmul::<T>(a: T[...], b: T[...]) when is_float::<T>() { matmul(
 // tangents -- and the adjoint of that operation gives one cotangent back to every element the
 // operation consumed. That is `shape(xs)` of them, a value of the primal which the tangent does not
 // carry, so the **linear call states it**: one known actual argument beside the tangent, and the law
-// that answers it (`lib/rulesets/transpose.cml`, `sum_stated_t` and its two neighbours) reads
+// that answers it (`src/stdlib/rulesets/transpose.cml`, `sum_stated_t` and its two neighbours) reads
 // that argument and nothing of the operand the cotangent comes back through. A transpose law may
-// read only known operands, and `T[...]` carries no extents in
-// its type (design principles 5.4). `jvp_idx_arr` below is the same arrangement for a read, and
-// `tensor.pick_at` is the operator it states a length to.
+// read only known operands, and `T[...]` carries no extents in its type (design principles 5.4).
+// `jvp_idx_arr` below is the same arrangement for a read, and `tensor:pick_at` is the operator it
+// states a length to.
 //
-// The extents do not ride inside one integer list with the axis and the flag, although the
-// transpose walk refuses an operator with a third *tensor* operand (`skip=arity
-// uri=tensor:mean_axis operands=3`): the
-// stated reductions take their axis, their flag and their extents as three parameters
-// (`lib/tensor/tensor.cml`, `tensor:sum_axis_stated` and its four neighbours), the walk hands the law a
-// node with five operands, and the laws read them by name. The plain axis form does not need the
-// list either: with the axis and the flag in angle brackets it carries one normal operand and two
-// context ports (`sum<axis, keepdims>(xs)`), under the count the walk holds. A list would need a function to build it, and nothing builds a
-// list for a call's arguments: every one of those parameters is a parameter of its own.
+// The extents do not ride inside one integer list with the axis and the flag. A list holds one
+// element type, so the flag would have to be written `1` or `0`; and the walk asks a law for a
+// cotangent per **port** rather than for one operand list -- `int` and `bool` have no tangent space,
+// so the axis and the flag are positions no cotangent is asked of (`sum_axis_stated_t` declares all
+// four names and answers the tensor's). So the stated reductions take their axis, their flag and
+// their extents as parameters of their own (`src/stdlib/tensor.cml`, `tensor:sum_axis_stated` and
+// the three stated spellings beside it), and the laws read them by name. The plain axis form needs
+// no list either: with the axis and the flag in angle brackets it carries one normal operand and
+// two context ports (`sum<axis, keepdims>(xs)`). Each of those parameters is a parameter of its
+// own, and nothing has to build a list for a call's arguments.
 
 /// `d(sum(xs)) = sum(dxs)`: a sum adds its elements up, so it is linear and the sum of the tangents is
 /// the tangent of the sum.
@@ -334,21 +335,6 @@ export rule jvp_matmul::<T>(a: T[...], b: T[...]) when is_float::<T>() { matmul(
 /// the same way.
 export rule jvp_sum::<T>(xs: T[...]) when is_float::<T>() { sum(xs) => func (dxs: T[...]) {
     sum_stated(dxs, shape(xs))
-} }
-
-// ---- the forward rule of `sum_to` ----
-//
-// `sum_to(t, at)` is the reduction a broadcast's adjoint makes, and it is an *exported* operator
-// (`src/stdlib/tensor.cml#sum_to`), so a program can write it and a lift of that program needs a
-// forward rule like any other. It is linear in `t` -- the extents are an operand of their own and
-// the sum of a tangent is the tangent of the sum -- so the law is the operator applied to the
-// tangent, with the extents handed over unchanged.
-//
-// The engine's table answers it too (`lib/tensor/ops/gradient_ops.cpp#sumToVjp`), so the key is one
-// both halves must have; the reverse half is `rulesets/transpose.cml#sum_to_t`, and its answer is
-// the operator this one's forward rule runs backwards.
-export rule jvp_sum_to::<T>(t: T[...], at: int[]) when is_float::<T>() { sum_to(t, at) => func (dt: T[...]) {
-    sum_to(dt, at)
 } }
 
 /// `d(mean<axis, keepdims>(xs)) = mean<axis, keepdims>(dxs)`: a mean is a sum divided by a
@@ -456,6 +442,21 @@ export rule jvp_reshape::<T>(x: T[...], dims: int[]) when is_float::<T>() { resh
 /// `take_stated_t` builds the zeros from those extents and reads nothing of `dt`.
 export rule jvp_take::<T>(t: T[...], indices: int[]) { take(t, indices) => func (dt: T[...]) {
     take_stated(dt, indices, shape(t))
+} }
+
+// ---- the forward rule of `sum_to` ----
+//
+// `sum_to(t, at)` is the reduction a broadcast's adjoint makes, and it is an *exported* operator
+// (`src/stdlib/tensor.cml#sum_to`), so a program can write it and a lift of that program needs a
+// forward rule like any other. It is linear in `t` -- the extents are an operand of their own and
+// the sum of a tangent is the tangent of the sum -- so the law is the operator applied to the
+// tangent, with the extents handed over unchanged.
+//
+// The engine's table answers it too (`lib/tensor/ops/gradient_ops.cpp#sumToVjp`), so the key is one
+// both halves must have; the reverse half is `rulesets/transpose.cml#sum_to_t`, and its answer is
+// the operator this one's forward rule runs backwards.
+export rule jvp_sum_to::<T>(t: T[...], at: int[]) when is_float::<T>() { sum_to(t, at) => func (dt: T[...]) {
+    sum_to(dt, at)
 } }
 
 // ---- the forward rule of the array subtraction ----
