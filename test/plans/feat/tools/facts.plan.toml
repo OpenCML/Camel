@@ -137,7 +137,7 @@ timeout_ms = 20000
 
 [[tests]]
 name = "facts.compare_arrangeable"
-desc = "test::facts_compare reads core.arrangeable at every node -- through the store, so the answer a reader gets -- and the algorithm it replaced, which answered OPER nodes only: the four terms of a node's operator, read from the operator itself. Every OPER node agrees with the older answer, and the count of nodes the older algorithm never answered (values, ports, branches, loops, calls) is printed as no_old: the fact answers them, and that count is part of what moving the question into a fact added."
+desc = "test::facts_compare reads core.arrangeable at every node -- through the store, so the answer a reader gets -- and the algorithm it replaced, which answered OPER nodes only: the four terms of a node's operator, read from the operator itself. Every OPER node agrees with the older answer, and the count of nodes the older algorithm never answered (values, ports, branches, loops, calls) is printed as no_old: the fact answers them, and that count is part of what moving the question into a fact added. For a conversion the older answer is restated at the node with the pair of types it converts between (castMayFault, which the algorithm that was replaced read for those nodes and which the pass predicate reads too), and the count of nodes that took that restatement is printed as conversions -- a run that walked none of them says so instead of reading like a comparison that covered them."
 kind = "behavior"
 case = "../../../cases/facts/tensors_and_loops.cml"
 args = ["${case}", "test::facts_compare"]

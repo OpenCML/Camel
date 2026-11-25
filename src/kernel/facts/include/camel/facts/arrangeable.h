@@ -26,6 +26,15 @@
  * not answer for: the body it runs is another graph's, and `nodeArrangeable` says why walking it
  * would answer a different question.
  *
+ * The fault term has one exception, and it is the node's and not the operator's: a **conversion**
+ * fails or does not fail by the pair of types it converts between (`runtime::castMayFault`), and the
+ * operator's record can only say the half that is true of every cast -- that a cast may fault. So at
+ * an OPER node whose operator is a conversion, `nodeArrangeable` asks the kernel's one reader of that
+ * pair (`runtime::nodeMayFault`, the function the predicate a pass asks is built on) instead of the
+ * record, and the two readers of one question cannot answer differently there. `operatorArrangeable`
+ * takes no pair and therefore reports the operator's half: it is the answer for "a reader that has
+ * only an operator", and a caller that has the node asks `nodeArrangeable`.
+ *
  * The record is the only statement of the first three, and every entrance writes into it: a built-in
  * operator's declaration is copied there when the module loads
  * (`operator_table.h#declareSemantics`), and a Camel declaration states it directly.
@@ -68,7 +77,10 @@ KindId arrangeableKind();
 
 /// `core.arrangeable` at an OPER node of `oper`: the four terms with the termination one answered
 /// by the node's form (an operator node computes a value and hands it on). A reader that has only
-/// an operator -- the chain predicate of a graph, a listing -- asks this.
+/// an operator -- the chain predicate of a graph, a listing -- asks this, and gets the operator's
+/// answer: for a conversion that is the record's half ("a cast may fault"), because the pair of
+/// types the conversion is about is the node's and not the operator's. A reader that has the node
+/// asks `nodeArrangeable` below, which reads that pair (file comment).
 Arrangeable operatorArrangeable(camel::ops::OperId oper);
 
 /// `core.arrangeable` at any node of `graph`'s view. A branch and a loop stand for what runs inside

@@ -41,6 +41,7 @@
 #include "camel/graph/graph.h"
 #include "camel/runtime/fact_slots.h"
 #include "camel/runtime/graph.h"
+#include "camel/runtime/oper_shape.h"
 #include "graph/graph_view.h"
 
 #include <algorithm>
@@ -981,6 +982,44 @@ Arrangeable termsOfOperator(camel::ops::OperId oper) {
     return terms;
 }
 
+/// The four terms of an OPER node: the operator's four (`termsOfOperator` above), with the fault
+/// term asked of **the node** where the operator is a conversion.
+///
+/// Whether a conversion fails is a property of the pair of types it converts between and not of the
+/// operator, and `:op/cast` states the operator's half only: its record says "a cast may fault",
+/// which is true of every cast and of none in particular. The pair is the node's own content -- the
+/// type of its result and the type of its one input -- and the kernel already has **one** reader of
+/// it, `runtime::nodeMayFault` (`castMayFault` inside it), which is what the predicate a pass asks
+/// (`runtime::may_be_rearranged`) is built on. So the kind asks there instead of stating a second
+/// answer from the types, and for a conversion the two cannot disagree: one function, one pair.
+///
+/// Nothing else moves. Every other operator is answered from the same record by `nodeMayFault` (its
+/// elementwise refinement needs the shape argument this kind does not pass, and the predicate does
+/// not pass it either), and a node whose operator is `kNoOper` -- a FILL or an ACCS the view still
+/// folds into `Oper` -- stays the four false terms it was: the view has no query for "which
+/// operation this node performs", so this reader has nothing to ask (`graph_view.h`, the file
+/// comment; `internal/questions/2026-11-23-is-this-node-a-real-oper-record.cn.md`).
+Arrangeable termsOfOperNode(
+    const graph::GraphView &view, graph::NodeRef ref, camel::ops::OperId oper, ReadLog &log) {
+    Arrangeable terms = termsOfOperator(oper);
+    if (camel::runtime::shapeOfOperator(oper) != camel::ops::OperShape::Conversion) {
+        return terms;
+    }
+    const std::span<const graph::NodeRef> norm = view.inputs(ref, graph::PortGroup::Normal);
+    const bool oneInput                        = norm.size() == 1;
+    if (oneInput) {
+        // The input's type is part of the pair this answer reads, so the input is one of the nodes
+        // the computation read: the store prints these beside the fact (`Reads`, facts.h).
+        log.node(static_cast<NodeId>(norm[0]));
+    }
+    terms.cannotFault = !camel::runtime::nodeMayFault(
+        camel::runtime::GCNodeKind::Oper,
+        oper,
+        view.typeOf(ref),
+        oneInput ? view.typeOf(norm[0]) : nullptr);
+    return terms;
+}
+
 /// Walks the nodes one node stands for. A branch and a loop carry what runs inside them, so their
 /// terms are the conjunction over the nodes of their arms and of their regions: a branch with an
 /// effect in one arm is not freely arrangeable.
@@ -1017,7 +1056,7 @@ class ArrangeWalk {
         case graph::NodeKind::Oper: {
             const camel::ops::OperId oper = view.operatorOf(ref);
             log_.record(oper);
-            return termsOfOperator(oper);
+            return termsOfOperNode(view, ref, oper, log_);
         }
         case graph::NodeKind::Data:
         case graph::NodeKind::Port:

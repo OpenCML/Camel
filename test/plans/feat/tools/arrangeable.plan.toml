@@ -1,0 +1,73 @@
+id = "tools.arrangeable"
+order = 918
+tier = "slow"
+tags = ["feat", "tools", "facts", "kernel"]
+desc = "`core.arrangeable` against the predicate a pass asks, on the one node where the two had two answers (a conversion's pair of types) and over every case the tree has."
+
+# The fact and the predicate answer one question -- may a pass arrange this node anywhere -- and one
+# program cannot say whether they do. The fact's own plan pins the two readers on two cases
+# (`facts.compare_arrangeable_readers`), which is what a plan beside a case can afford; the tree is
+# 4,000 programs, and the disagreement this plan was written for was invisible on both of them:
+# `:op/cast` nodes were answered "kept" by the kind (the operator's record says a cast may fault)
+# and "may move" by the predicate a pass asks (which reads the pair of types the conversion converts
+# between), 7,897 of them across the tree.
+#
+# The first entry is the pair of types made into a program, and it is `fast`: two conversions of one
+# operator, one that cannot fail and one that may, so the reading is the same operator answered two
+# ways and only the pair can tell them apart. It is red before the kind reads the pair and green
+# after, in both directions (the safe one moves, the checked one stays).
+#
+# The second entry is the sweep, and it is `slow` because it starts one `camel` per tracked `.cml`
+# (4,376 of them, 2,700-odd readable without the arguments their own plans give them). A named plan
+# file runs in full whatever `--tier` says, which is why the selection rule that names this file is
+# layered (test/plan-selection.json).
+[[tests]]
+name = "facts.arrangeable_conversion_pair"
+tier = "fast"
+desc = "`test::facts_compare` on a program whose two `:op/cast` nodes convert different pairs: `f32[...]` into `f32[2, 3]` checks the value's shape when it runs and may fault, `float[6]` into `f32[]` keeps every value it is given. The tally row for `:op/cast` has one node in `both_free` and one in `both_kept` with no disagreement in either direction: the kind and the predicate a pass asks let the safe conversion move and keep the checked one where the program wrote it, so an answer read from the operator alone (which says 'a cast may fault' about both) cannot be what produced the row. Before the kind read the node's pair, the row was `both_free=0 both_kept=2 kind_kept_pred_free=1`."
+kind = "behavior"
+case = "../../../cases/facts/conversions.cml"
+args = ["${case}", "test::facts_compare"]
+
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout
+const row = out.split('\n').find(l => l.startsWith('FACTS_COMPARE tally node_kind=oper oper=:op/cast '))
+assert(row, 'no tally row for :op/cast: the table did not print')
+const num = (name) => { const m = row.match(new RegExp(name + '=([0-9]+)')); assert(m, `${name} is missing from: ${row}`); return Number(m[1]) }
+assert(num('nodes') >= 2, `the program's two conversions were not both counted: ${row}`)
+assert(num('both_free') >= 1, `the conversion that cannot fail is not answered "freely arrangeable" by both readers: ${row}`)
+assert(num('both_kept') >= 1, `the conversion that checks its value is not kept by both readers: ${row}`)
+assert(num('kind_free_pred_kept') === 0, `the kind calls a node freely arrangeable that a pass keeps: ${row}`)
+assert(num('kind_kept_pred_free') === 0, `the predicate offers a placement the kind will not answer for: ${row}`)
+// The same two nodes against the answer the fact replaced: `operatorArrangeable` alone says "a cast
+// may fault" about both, so the older answer restated at the node is where the difference has to be
+// read as a number rather than inferred from the row above. Before the pair was read this line was
+// `diff=1 conversions=2`; the restatement and the fact are one answer now.
+const older = out.split('\n').find(l => l.startsWith('FACTS_COMPARE kind=core.arrangeable graphs='))
+assert(older, 'no FACTS_COMPARE arrangeable line: the older answer was not compared')
+const onum = (name) => { const m = older.match(new RegExp(name + '=([0-9]+)')); assert(m, `${name} is missing from: ${older}`); return Number(m[1]) }
+assert(onum('conversions') >= 2, `the older answer was not restated at either conversion: ${older}`)
+assert(onum('diff') === 0, `the fact and the answer it replaced differ at a node: ${older}`)
+}
+"""
+timeout_ms = 20000
+
+# The rows of the other node kinds are printed and not decided: they are the table
+# `internal/reports/2026-11-25-the-arrangeable-disagreements.cn.md` keeps, and a red this plan
+# invented about a kind nobody has moved yet is a wall somebody would switch off.
+[[tests]]
+name = "facts.arrangeable_every_operator_agrees"
+desc = "`scripts/check-arrangeable.mjs` runs `test::facts_compare std::gir` on every `.cml` the revision tracks, sums the `tally` rows it prints (one row per node kind and operator, split into both_free, both_kept, kind_free_pred_kept and kind_kept_pred_free) and reads two things: the sweep read at least 2000 cases, and no row of an OPER node has a disagreement in either direction -- which is one answer, not two, to 'may a pass arrange this node anywhere'."
+kind = "behavior"
+tool = "node"
+case = "../../../../scripts/check-arrangeable.mjs"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_contains = ["ARRANGEABLE_SWEEP files=", "ARRANGEABLE_KIND node_kind=oper", "ARRANGEABLE_ROW node_kind=oper oper=:op/cast", "every operator's answer agrees"]
+# One `camel` per case, plus `std::gir` for each (the stopper that keeps a case from being executed:
+# the comparison pass hands the program on, and the next fallback would run it). The bound is the
+# runner's four-times margin over the slowest reading this tree has taken, and a host that runs it
+# slower spends wall clock: at eight at a time the sweep is single-digit minutes on the gate host.
+timeout_ms = 1800000
