@@ -808,3 +808,6 @@
 | D-1125-24 | 车道第四次掉到 3 条：给一张排好序的单子 internal/plans/2026-11-25-lane-queue.cn.md（fsh-dev 2c43a734b），少于 8 就从上往下取第一条没在做的，做完划掉、新的往下加 | taken | 队列页已读，本轮补开 trace-scope（第 10 条）；承认排序错：我跳过第 3–8 条先开了第 10 条 | 17:05 | ⇒ 页上划掉第 2 条（装入有自己的形状已由 uri-to-record 做完） |
 | D-1125-25 | 三组红清掉了、装入有了自己的形状 ⇒ 做第六次晋级；队列是先后排的，第 1 条归合并位，接着开第 3（转置带中间结果）、第 4（fvm/nvm 差分）、第 5（kinds-to-oper 清零），补到 8 条 | taken | 晋级交合并位；三格已开 | 17:12 | ⇒ transpose-carry / fvm-nvm-diff / kinds-zero；第 4 条划了边界：做差分不等于把 std::default 切到 fvm |
 | D-1125-26 | selftest 那笔把 test::params、test::declared 搬回 libcamel，与路线四「测试遍移出 libcamel」相反；为清 19 条红可以接受，但只是过渡。根因：用例自己的 test.cml 与测试模块同名。按根因修，修好后把两个遍搬回 test.cmo，并在队列页上加一条 | taken | 按根因修派给 test-module-name 那格 | 17:16 | ⇒ 判据：夹具不与模块同名，或声明与实现的配对不依赖加载顺序；修好后搬回 test.cmo 并核 19 条不回归 |
+| D-1125-27 | 8 条掉到 3 条：按 lane-queue 补到 8；回一行说那 5 条是交回了、失败了、还是子代理没回应 | taken | 五条全是正常交回、已提交在各自分支、在等合并位 | 17:30 | ⇒ 补开 test-module-name 与 sweep-cost；另三格受 8 格上限未开 |
+| D-1125-28 | 瓶颈在合并位：开两个合并位成批合，别一条一条等；transpose-carry 那页待作者裁的，推上 integration 先看 | taken | merge1b（脚本/工具/报告侧）与 merge2（用例/src 侧）已派 | 17:33 | ⇒ 那页照原样推（045b44296c）；语义归负责人，实现层归决策者 |
+| D-1125-29 | 每日审查附带：收工时由合并位在 develop 尖端跑一轮 GitHub Actions，四个工作流全跑、build-pypi 显式 publish_to=none；读数写进 internal/reports/ 一页，红的逐条进 backlog | taken | 排在第六次晋级之后；若晋级不成则在当轮 develop 尖端跑并在页里写明 | 17:37 | ⇒ 缺一不可：四个工作流都跑（不许只跑绿的那个）、publish_to=none 显式、红逐条进 backlog |
