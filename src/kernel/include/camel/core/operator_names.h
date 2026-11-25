@@ -84,6 +84,22 @@ inline constexpr std::string_view kCompositionCall = "$comp::..";
 /// writes the name.
 inline constexpr std::string_view kComposeCall = "$comp::<>";
 
+/// The operator of the shape check a **call site** makes on an extent (design principles 5.4): a
+/// parameter's type may write its extent over the names the call bound (`f32[n - w + 1]`) or leave
+/// one as `?`, and the check that the value really has that shape is made where the call runs, "the
+/// same check `as` makes". It is not a conversion the program wrote, and not a conversion at all --
+/// it checks a shape and hands the value on -- so it is a call of an operator of its own, with an
+/// identity a graph can read: `:op/cast` keeps meaning the conversion the *program* wrote (`T(x)`,
+/// `x as T`), which a program may bind or shadow and which a compiler-made check is not.
+///
+/// The compiler writes this URI and no program does: nothing declares it, `prelude.cml` says
+/// nothing about it, and the builder makes the node directly (`Builder::refineExtentNodeOf`). It
+/// has a kernel and a record like every other built-in operator (`:op/cast`'s kernel,
+/// `src/stdlib/std/builtin/executors/builtin_semantics.cpp` for the fault), so the operator table
+/// answers `mayFault` for it -- a pass that moves, drops or recomputes a node reads that this check
+/// can stop the program.
+inline constexpr std::string_view kRefineExtentOperatorUri = ":op/refine_extent";
+
 /// The operator of `fail<'Kind'>(message)` (design principles 3.9), declared in
 /// `stdlib/prelude.cml` and built in as the group `fail`: the program's own premise
 /// check, whose call gives the bottom type `never`. A program never writes the URI; the builder

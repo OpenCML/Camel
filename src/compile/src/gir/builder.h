@@ -3941,6 +3941,14 @@ class Builder {
     /// call is still written, by its URI (`:op/cast`), which no name in scope can shadow.
     node_handle_t conversionNodeOf(
         node_handle_t value, camel::core::type::Type *target, const GCT::node_ptr_t &origin);
+    /// The shape check a call site makes on an extent (design principles 5.4): the value checked
+    /// against the extents the call bound, handed on when it has that shape and stopping the
+    /// program where it does not. An OPER node of `:op/refine_extent`, an operator of the
+    /// compiler's own -- no program declares or writes it -- and **not** a conversion: `:op/cast`
+    /// is the one the program wrote, and a graph that holds this URI says the compiler put the
+    /// check there. Its record states `panic`, so a reader of the graph sees that it can fail.
+    node_handle_t refineExtentNodeOf(
+        node_handle_t value, camel::core::type::Type *target, const GCT::node_ptr_t &origin);
     /// A copy written as the operator it is (`copy::<T>` of the prelude): an OPER node whose one
     /// written type argument is the type copied and whose one ordinary operand is the value, which
     /// is the whole of what a copy is about -- nothing about it configures the call. Where no

@@ -128,7 +128,9 @@ class DraftGraphBuilder {
     /// A call of the operator `uri` names, built without resolving the declaration: the
     /// operations that used to be node kinds of their own -- a conversion (`:op/cast`) and a copy
     /// (`:op/copy`) -- are written this way, so a program that shadows the operator's **name**
-    /// still gets the call the language means (`Builder::copyNodeOf`).
+    /// still gets the call the language means. The call a call site makes on an extent is the third
+    /// (`:op/refine_extent`, `Builder::refineExtentNodeOf`): the language means it too, no
+    /// declaration answers it at all, and the URI is the whole of its identity.
     runtime::DraftNodeRef addOperNode(camel::core::type::Type *type, std::string_view uri);
     runtime::DraftNodeRef addFillNode(camel::core::type::Type *type, const runtime::GCFillBody &body);
     runtime::DraftNodeRef
