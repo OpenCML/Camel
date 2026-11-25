@@ -480,8 +480,15 @@ void buildLoopTables(const GCGraph &graph, ExecPlan &plan) {
 /// used by and stay a variable (`:var/new`, `:var/get`, `:var/peek`, `:var/take`, the assignment
 /// operators). Any other user -- a call handed the `var`, a capture port -- takes the cell out of
 /// the graph where its value's observers can be seen.
-bool isVariableOperator(std::string_view uri) {
-    return uri.starts_with(":var/") || uri.starts_with(":op/assn");
+///
+/// Asked of the operator, not of the URI's letters: the six `:var/` operators are the ids
+/// `operator_table.h` fixes (`oper::isVariableOperator`), and a write is the family bit the table
+/// sets from the operator's declaration of itself (`isAssignment`). A name that spelled one of
+/// them while its record said otherwise would be read by the record, which is the answer this
+/// walk wants.
+bool isVariableOperator(camel::core::OperId oper) {
+    return camel::core::oper::isVariableOperator(oper) ||
+           camel::core::OperatorTable::instance().isAssignment(oper);
 }
 
 /// How many nodes the escape walk visits before it gives up, and how many steps the order walk
@@ -523,7 +530,7 @@ bool cellEscapes(
                 break;
             }
             const auto *body = graph.nodeBodyAs<GCOperBody>(user);
-            if (body == nullptr || !isVariableOperator(body->uri())) {
+            if (body == nullptr || !isVariableOperator(body->oper)) {
                 escapes = true;
                 break;
             }
@@ -668,7 +675,10 @@ bool cellValueMayBeKept(
         if (!graph.isOperRecord(user)) {
             return true;
         }
-        if (camel::core::OperatorTable::instance().uri(graph.operatorOf(user)) == ":var/get") {
+        // The reading that can keep the value, by the id of the operator it names: the view hands
+        // out the operator a node runs (`operatorOf`), so asking the table for its URI and
+        // comparing text would be the round trip this asks to avoid.
+        if (graph.operatorOf(user) == camel::core::oper::VarGet) {
             return true;
         }
     }
@@ -941,7 +951,8 @@ void planStorageReuse(const GCGraph &graph, ExecPlan &plan) {
                 const GCNode *takenNode = taken == kInvalidNodeRef ? nullptr : graph.node(taken);
                 if (takenNode != nullptr && takenNode->kind == GCNodeKind::Oper) {
                     const auto *takeBody = graph.nodeBodyAs<GCOperBody>(taken);
-                    if (takeBody != nullptr && takeBody->uri() == ":var/take") {
+                    if (takeBody != nullptr &&
+                        takeBody->oper == camel::core::oper::VarTake) {
                         const gc_node_ref_t cell = cellOfNode(graph, taken);
                         StorageReuse decision    = StorageReuse::Copy;
                         if (cell != kInvalidNodeRef) {
@@ -975,12 +986,12 @@ void planStorageReuse(const GCGraph &graph, ExecPlan &plan) {
                 }
                 continue;
             }
-            if (uri == ":var/get") {
+            if (body->oper == camel::core::oper::VarGet) {
                 const gc_node_ref_t cell = cellOfNode(graph, at);
                 if (cell != kInvalidNodeRef && cell < owned.size()) {
                     owned[cell] = 0;
                 }
-            } else if (uri == ":var/new") {
+            } else if (body->oper == camel::core::oper::VarNew) {
                 // `var v = e`: the node is the cell. When `e` is a value this graph makes, the
                 // variable is its only holder from here on and its first update may reuse the
                 // storage; when `e` comes from elsewhere, that first update copies.
@@ -990,10 +1001,10 @@ void planStorageReuse(const GCGraph &graph, ExecPlan &plan) {
                 if (at < owned.size()) {
                     owned[at] = initialValueMadeHere(graph, init) ? 1 : 0;
                 }
-            } else if (uri.starts_with(":op/assn")) {
+            } else if (table.isAssignment(body->oper)) {
                 const gc_node_ref_t cell = cellOfNode(graph, at);
                 if (cell != kInvalidNodeRef && cell < owned.size()) {
-                    owned[cell] = uri == ":op/assn_owned" ? 1 : 0;
+                    owned[cell] = body->oper == camel::core::oper::AssnOwned ? 1 : 0;
                 }
             } else if (table.inPlaceForm(uri).has_value()) {
                 // The *copying* form of an operator that has an in-place one. A same-region local
@@ -1167,7 +1178,7 @@ bool packsItsInputs(const GCGraph &graph, gc_node_ref_t at) {
         return false;
     }
     const auto *body = graph.nodeBodyAs<GCOperBody>(at);
-    return body != nullptr && body->uri() == ":enum/make";
+    return body != nullptr && body->oper == camel::core::oper::EnumMake;
 }
 
 /// Whether the node reads `value` and passes it on instead of ending it, so that what happens to

@@ -2695,6 +2695,10 @@ class RefEvaluator {
         // still builds (`camel/execute/shaped_operators.h`).
         switch (camel::execute::shapeOfOperation(graph_, ref)) {
         case camel::execute::OperShape::Conversion:
+        case camel::execute::OperShape::Entering:
+        // Three labels on one body, not a family: what the reference asks is what the node's value
+        // is, and a cast, an entering and a copy each hand on the value they were given. A
+        // refinement keeps the generic path (see the table below), as it does in the lowering.
         case camel::execute::OperShape::Clone: {
             const auto inputs = graph_.normInputsOf(ref);
             if (inputs.empty()) {

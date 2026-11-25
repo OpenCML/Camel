@@ -57,6 +57,7 @@ namespace camel::execute {
 
 using camel::ops::OperShape;
 using camel::ops::shapeName;
+using camel::ops::takesItsOperandAsItsType;
 using camel::runtime::shapeOfKind;
 using camel::runtime::shapeOfNode;
 using camel::runtime::shapeOfOperation;

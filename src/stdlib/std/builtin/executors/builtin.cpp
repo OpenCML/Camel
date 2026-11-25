@@ -814,14 +814,19 @@ void registerBuiltinOperatorTraits() {
     registry.set(":op/fill", {.pure = true, .elementwise = false, .mayFault = true});
     registry.set(":op/access", {.pure = true, .elementwise = false, .mayFault = true});
     registry.set(":op/access_key", {.pure = true, .elementwise = false, .mayFault = true});
-    // Which of the four each of them is: the one fact a reader of a graph asks instead of comparing
+    // Which of these each operator is: the one fact a reader of a graph asks instead of comparing
     // the letters of the URI (`camel/runtime/oper_shape.h`). Written here, where the operator is
     // registered with the kernel that runs it, and at no second place.
     registry.declareShape(":op/cast", camel::ops::OperShape::Conversion);
-    // Entering is the same shape as a conversion: it reads one value and hands it on as the type
-    // its call says. What differs is the record's `panic`, and that is the item a reader asks when
-    // it wants to know whether running it can fail (`kernel/runtime/graph.cpp#nodeMayFault`).
-    registry.declareShape(":op/enter", camel::ops::OperShape::Conversion);
+    // Entering and refining each have their own shape, and neither is a spelling of the conversion:
+    // an entering takes one value as the type its call says and never asks the safety table, and a
+    // refinement takes that value and checks the shape of the extent its call carries. A conversion
+    // is what a program writes, and the safety table's answer is its fault (design principles 5.1,
+    // 9.x); a refinement's fault is stated by its own fault table (`declareFaults` below). A reader
+    // that only lowers or carries the value asks `takesItsOperandAsItsType`, which names all three;
+    // one whose answer differs among them writes the shapes it means.
+    registry.declareShape(":op/enter", camel::ops::OperShape::Entering);
+    registry.declareShape(":op/refine_extent", camel::ops::OperShape::Refining);
     registry.declareShape(":op/fill", camel::ops::OperShape::Construction);
     registry.declareShape(":op/access", camel::ops::OperShape::Access);
     registry.declareShape(":op/access_key", camel::ops::OperShape::Access);

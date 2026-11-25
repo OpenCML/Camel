@@ -11,6 +11,16 @@
  *
  * Everything else about them is the rule for every pass (design principles 9.3): the name is the
  * path a pipeline writes, and the implementation is the function that answers it.
+ *
+ * They live in libcamel and not in `test.cmo` (where the other `test::` passes are, since
+ * 2026-11-25), and the reason is the pairing `test::declared` needs: a case puts its own `test.cml`
+ * on the module search path (`-I .`) and that file declares the pass's parameters, so the
+ * declaration and the implementation are found in two different places on purpose. A `.cml`
+ * declaration is paired with an implementation by the module that carries both, and the case's
+ * `test.cml` carries only the declaration: when the kernel sat in `test.cmo`, resolving the name
+ * loaded the case's module instead, which declares the pass and exports no such function, and the
+ * pipeline refused it (`PassNotExportedByModule`). Compiled into libcamel, the name resolves before
+ * any module is imported, exactly as it did before the test channel became a module of its own.
  */
 
 #include "camel/execute/pass/registration.h"

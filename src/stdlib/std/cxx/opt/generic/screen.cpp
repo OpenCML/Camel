@@ -122,6 +122,10 @@ bool mayFold(const GCGraph &graph) {
                     return true; // a conversion of a constant
                 }
                 break;
+            // No node kind stands for an entering or a refinement: both are OPER nodes, and this
+            // switch reads kinds. The labels are here so the enum is named in full.
+            case camel::execute::OperShape::Entering:
+            case camel::execute::OperShape::Refining:
             case camel::execute::OperShape::Clone:
             case camel::execute::OperShape::None:
                 break;

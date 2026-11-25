@@ -356,6 +356,10 @@ bool structuralOperator(core::OperId oper) {
     // sorted the five names by hand and had no way to tell a copy from a conversion but the name.
     switch (camel::runtime::shapeOfOperator(oper)) {
     case camel::ops::OperShape::Conversion:
+    case camel::ops::OperShape::Entering:
+        // A cast and an entering are both a retype this back end reads as one operation, named
+        // side by side because the record states two shapes; a refinement is not here, exactly as
+        // it is not in the lowering -- it keeps the refusal every other use gets.
     case camel::ops::OperShape::Construction:
     case camel::ops::OperShape::Access:
         return true;
