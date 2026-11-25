@@ -1443,6 +1443,10 @@ dc4ce6bf8188ab8e ok test/cases/compile/operators/string_pow_assign.cml
 808280f76b15af31 ok test/cases/compile/operators/struct_add_assign.cml
 a1361575751f20fb ok test/cases/compile/operators/struct_no_add_assign.cml
 0829d62854b0a10f ok test/cases/compile/operators/tensor_add_assign.cml
+ca8ed419d9b0558a ok test/cases/compile/overload_guard/err_array_reduce_initial.cml
+87e61694c3d7fa77 ok test/cases/compile/overload_guard/err_range_reduce_initial.cml
+fd81cf308d0c21e6 ok test/cases/compile/overload_guard/range_reduce_legal.cml
+d2ef37fd526056a6 ok test/cases/compile/overload_guard/range_reduce_literal_initial.cml
 5bdf3a8e7b864083 ok test/cases/compile/overloads/ambiguous_composite.cml
 87d49109e39adad7 ok test/cases/compile/overloads/ambiguous_literal.cml
 db8c5651c8614fc5 ok test/cases/compile/overloads/decorated_call_mismatch.cml
