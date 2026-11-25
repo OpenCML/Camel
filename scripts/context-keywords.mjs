@@ -155,7 +155,12 @@ export const CONTEXT_KEYWORDS = [
         group: 'clause',
         zh: '紧跟 `func` 之后、后面是一个运算符时（`func operator +(a: V, b: V): V`）',
         en: "directly after `func` when an operator follows (`func operator +(a: V, b: V): V`)",
-        evidence: ['return cur_ == TK::Identifier && tree_.tokens_.text(pos_) == "operator" &&'],
+        // `4d806f4776` (2026-11-23, `for` an overloadable operator) turned this reading from one
+        // `return` into the guard below, so it could also take the word `for` as the operator. The
+        // word is read in the same place by the same function (`atOperatorName`, parser.cpp); only
+        // the line that says so changed. The citation follows the line the parser has, and the
+        // entry stays: `operator` is still read as a name only after `func`.
+        evidence: ['if (cur_ != TK::Identifier || tree_.tokens_.text(pos_) != "operator") {'],
     },
     {
         word: 'struct',
