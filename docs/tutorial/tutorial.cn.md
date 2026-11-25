@@ -595,7 +595,7 @@ a
 
 - 类型参数没有单独的表，写在函数名后的 `::<…>` 里；函数名后有它就是泛型，没有就不是。签名里（形参、返回类型、函数体）直接写 `T`。函数头声明的名字在函数里优先于同名的类型。
 - `type Pair<T> = (T, T)` 是带参数的类型声明：`Pair<int>` 就是 `(int, int)`。
-- 在图上，泛型函数是一张**子图模板**。每用一组具体类型调用，就实例化出一张类型全部具体的子图：上面的程序里有 `first<int>` 与 `first<string>` 两张子图（`camel docs/tutorial/examples/08_generics.cml std::rgir` 可以看到）。图上只有具体类型，运行时不需要类型信息。
+- 在图上，泛型函数是一张**子图模板**。每用一组具体类型调用，就实例化出一张类型全部具体的子图：上面的程序里有 `first<int>` 与 `first<string>` 两张子图（`camel docs/tutorial/examples/08_generics.cml std::rgir std::nop` 可以看到）。图上只有具体类型，运行时不需要类型信息。
 - 泛型函数也可以出现在任何期望一个函数的位置（`apply(id, 3)`、`xss->map<reverse>`、`let f: (x: int) => int = id`）：编译器在所在位置确定了类型之后才实例化它。什么都确定不了时（`let g = id`）是编译期错误，提示写出类型。
 
 声明还可以说明**自己在哪里适用**：签名后的 `when` 是对声明类型参数的编译期条件。下面的 `double_it` 只适用于数值；一次调用若所有候选的条件都不成立，调用处会报错，并列出每个候选写下的条件。`is_numeric` 不是编译器内建的名字，而是用 `match type` 写出来的普通函数（标准库的七个类型谓词在 `types` 里）；条件调用的是这个模块看得到的函数，所以片段把它写在同一个模块。
@@ -935,7 +935,7 @@ digraph GraphIR {
 - **`main` 也是一张子图**（`cluster_F01`）。两个 `DATA` 节点是常量 `1`、`2`；**`FUNC` 节点 `add` 就是那次调用**，两条 `NORM`（数据）边把实参送进去；它的结果又经一条数据边送给 `:io/println`。
 - **同步块是控制边。** `println` 的结果没有人用，`return 0` 并不依赖它。让它仍然执行的是那条 `CTRL` 边：`N06 -> N08`，从 `println` 指向 `GATE`，`GATE` 把返回值 `0` 放行到 `EXIT`。把 `main` 的 `sync` 去掉再看一次，这条边和 `println` 节点的可达性就都没有了——第 6 节的规则在图上就是这个样子。
 
-装了 Graphviz 的话，`camel ... std::rgir | dot -Tsvg -o graph.svg` 得到图片；`std::gir` 输出带样式的版本。
+装了 Graphviz 的话，`camel ... std::rgir std::nop | dot -Tsvg -o graph.svg` 得到图片；`std::gir` 输出带样式的版本。
 
 ## 14. 换遍
 
