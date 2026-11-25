@@ -40,7 +40,31 @@ function Add-RunRegistryRow {
                 Select-Object -Last $KeepLines)
             $tmp = "$Path.$PID.tmp"
             [System.IO.File]::WriteAllLines($tmp, [string[]]$keep, $encoding)
-            Move-Item -Force -LiteralPath $tmp -Destination $Path
+            # Not `Move-Item -Force`: it reports a destination a reader holds open as
+            # ERROR_ALREADY_EXISTS (183, "cannot create a file when that file already exists"). Under
+            # `$ErrorActionPreference = 'Stop'` -- which every caller sets -- that exception discarded
+            # the compaction that had already been written, skipped the append below, and left
+            # `run-registry.jsonl.<pid>.tmp` behind in stateDir. Same mechanism as
+            # `camel-gate-state.ps1#Publish-CamelGateState`, spelled out here because the registry is
+            # JSONL and this file is dot-sourced by `camel-remote.ps1`, which does not carry that
+            # helper: one rename of a temp file beside the destination (the overwrite overload, i.e.
+            # MOVEFILE_REPLACE_EXISTING -- every caller is `pwsh`, so it exists), retried across the
+            # milliseconds a reader holds the file. If it cannot land, the compaction is dropped and
+            # the caller is told `$false`, never an exception.
+            $published = $false
+            for ($attempt = 0; $attempt -lt 25; $attempt++) {
+                try {
+                    [System.IO.File]::Move($tmp, $Path, $true)
+                    $published = $true
+                    break
+                } catch {
+                    Start-Sleep -Milliseconds 40
+                }
+            }
+            if (-not $published) {
+                Remove-Item -LiteralPath $tmp -Force -ErrorAction SilentlyContinue
+                return $false
+            }
         }
         $line = ($Row | ConvertTo-Json -Compress -Depth 6)
         [System.IO.File]::AppendAllText($Path, $line + "`n", $encoding)
