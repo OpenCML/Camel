@@ -1,0 +1,77 @@
+[load] host=KOGLER-WORKSTAT cores=28 window=60s step=4s samples=15
+[load] busy_cores avg=10.19 max=13.89 samples=[9.95, 9.94, 10.56, 8.79, 9.55, 9.45, 8.91, 9.05, 9.46, 7.66, 10.59, 10.5, 12.69, 13.89, 11.83]
+[load] quiet_line=4.2 busy_cores (<15%) -> CONTENDED (readings at or above the line: 15 of 15)
+integration-6fcee16d0c call/nvm exit=0 first=853.8609 steady=948.29295
+integration-6fcee16d0c call/fvm exit=0 first=161.251 steady=159.71185000000003
+integration-6fcee16d0c call/jit exit=0 first=4.502 steady=4.29715
+integration-6fcee16d0c call/prl-1 exit=0 first=160.3905 steady=159.88015000000001
+integration-6fcee16d0c call/prl-4 exit=0 first=159.5119 steady=162.95955
+integration-6fcee16d0c call/prl-16 exit=0 first=163.3688 steady=168.58495
+integration-6fcee16d0c loop/nvm exit=0 first=954.122 steady=1190.2166
+integration-6fcee16d0c loop/fvm exit=0 first=96.3091 steady=100.7843
+integration-6fcee16d0c loop/jit exit=0 first=1751.6906 steady=2828.0884
+integration-6fcee16d0c loop/prl-1 exit=0 first=102.2197 steady=102.16964999999999
+integration-6fcee16d0c loop/prl-4 exit=0 first=104.4937 steady=101.89025000000001
+integration-6fcee16d0c loop/prl-16 exit=0 first=107.6003 steady=104.63155
+integration-6fcee16d0c tensor/nvm exit=0 first=83.5316 steady=74.72165
+integration-6fcee16d0c tensor/fvm exit=0 first=64.9245 steady=69.54429999999999
+integration-6fcee16d0c tensor/jit exit=0 first=86.374 steady=88.46520000000001
+integration-6fcee16d0c tensor/prl-1 exit=0 first=88.195 steady=79.33224999999999
+integration-6fcee16d0c tensor/prl-4 exit=0 first=65.1065 steady=64.10305
+integration-6fcee16d0c tensor/prl-16 exit=0 first=61.6662 steady=65.20125
+integration-6fcee16d0c branch/nvm exit=1 first=55.9516 steady=null
+integration-6fcee16d0c branch/fvm exit=1 first=27.8922 steady=null
+integration-6fcee16d0c branch/jit exit=1 first=45.0351 steady=null
+integration-6fcee16d0c branch/prl-1 exit=1 first=37.6108 steady=null
+integration-6fcee16d0c branch/prl-4 exit=1 first=37.9004 steady=null
+integration-6fcee16d0c branch/prl-16 exit=1 first=38.0512 steady=null
+integration-6fcee16d0c closure/nvm exit=0 first=1.1463 steady=0.85025
+integration-6fcee16d0c closure/fvm exit=0 first=0.9997 steady=0.8153999999999999
+integration-6fcee16d0c closure/jit exit=0 first=1.3687 steady=1.0483500000000001
+integration-6fcee16d0c closure/prl-1 exit=0 first=2.1758 steady=1.6287
+integration-6fcee16d0c closure/prl-4 exit=0 first=2.3213 steady=1.7790499999999998
+integration-6fcee16d0c closure/prl-16 exit=0 first=3.174 steady=2.6489000000000003
+wrote D:\Projects\Camel-wt\perf\internal\perf\2026-11-25-backend-speed\results\integration-6fcee16d0c.timeit.csv
+round load: busy_cores=377.3 of 28 (2026-11-25T10:30:12.201Z .. 2026-11-25T10:30:46.249Z)
+wrote D:\Projects\Camel-wt\perf\internal\perf\2026-11-25-backend-speed\results\integration-6fcee16d0c.timeit.json
+integration-6fcee16d0c branch/nvm exit=0 first=122 steady=119
+integration-6fcee16d0c branch/fvm exit=0 first=97 steady=98.5
+integration-6fcee16d0c branch/jit exit=0 first=119 steady=118.5
+integration-6fcee16d0c branch/prl-1 exit=0 first=111 steady=108.5
+integration-6fcee16d0c branch/prl-4 exit=0 first=109 steady=106
+integration-6fcee16d0c branch/prl-16 exit=0 first=109 steady=111.5
+wrote D:\Projects\Camel-wt\perf\internal\perf\2026-11-25-backend-speed\results\integration-6fcee16d0c.process.csv
+round load: busy_cores=10.58 of 28 (2026-11-25T10:31:22.569Z .. 2026-11-25T10:31:25.951Z)
+wrote D:\Projects\Camel-wt\perf\internal\perf\2026-11-25-backend-speed\results\integration-6fcee16d0c.process.json
+integration-6fcee16d0c call/nvm exit=0 1 lines
+integration-6fcee16d0c call/fvm exit=0 1 lines
+integration-6fcee16d0c call/jit exit=0 1 lines
+integration-6fcee16d0c call/prl-1 exit=0 1 lines
+integration-6fcee16d0c call/prl-4 exit=0 1 lines
+integration-6fcee16d0c call/prl-16 exit=0 1 lines
+integration-6fcee16d0c loop/nvm exit=0 1 lines
+integration-6fcee16d0c loop/fvm exit=0 1 lines
+integration-6fcee16d0c loop/jit exit=0 1 lines
+integration-6fcee16d0c loop/prl-1 exit=0 1 lines
+integration-6fcee16d0c loop/prl-4 exit=0 1 lines
+integration-6fcee16d0c loop/prl-16 exit=0 1 lines
+integration-6fcee16d0c tensor/nvm exit=0 1 lines
+integration-6fcee16d0c tensor/fvm exit=0 1 lines
+integration-6fcee16d0c tensor/jit exit=0 1 lines
+integration-6fcee16d0c tensor/prl-1 exit=0 1 lines
+integration-6fcee16d0c tensor/prl-4 exit=0 1 lines
+integration-6fcee16d0c tensor/prl-16 exit=0 1 lines
+integration-6fcee16d0c branch/nvm exit=0 7 lines
+integration-6fcee16d0c branch/fvm exit=0 7 lines
+integration-6fcee16d0c branch/jit exit=0 7 lines
+integration-6fcee16d0c branch/prl-1 exit=0 7 lines
+integration-6fcee16d0c branch/prl-4 exit=0 7 lines
+integration-6fcee16d0c branch/prl-16 exit=0 7 lines
+integration-6fcee16d0c closure/nvm exit=0 5 lines
+integration-6fcee16d0c closure/fvm exit=0 5 lines
+integration-6fcee16d0c closure/jit exit=0 5 lines
+integration-6fcee16d0c closure/prl-1 exit=0 5 lines
+integration-6fcee16d0c closure/prl-4 exit=0 5 lines
+integration-6fcee16d0c closure/prl-16 exit=0 5 lines
+round load: busy_cores=10.33 of 28 (2026-11-25T10:31:29.378Z .. 2026-11-25T10:31:36.071Z)
+wrote D:\Projects\Camel-wt\perf\internal\perf\2026-11-25-backend-speed\results\integration-6fcee16d0c.stdout.json

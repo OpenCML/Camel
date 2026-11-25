@@ -1,0 +1,445 @@
+{
+  "point": "integration-6fcee16d0c",
+  "mode": "stdout",
+  "host": "KOGLER-WORKSTATION",
+  "cores": 28,
+  "started": "2026-11-25T10:31:29.378Z",
+  "finished": "2026-11-25T10:31:36.071Z",
+  "busy_cores": 10.33,
+  "node": "v24.21.0",
+  "camel": "D:\\Projects\\Camel-wt\\perf\\out\\latest\\bin\\camel.exe",
+  "results": [
+    {
+      "program": "call",
+      "backend": "nvm",
+      "threads": null,
+      "argv": [
+        "benchmarks/parallel/cases/fib.cml",
+        "std::nvm"
+      ],
+      "exit": 0,
+      "stdout": "832040\n",
+      "stderr": ""
+    },
+    {
+      "program": "call",
+      "backend": "fvm",
+      "threads": null,
+      "argv": [
+        "benchmarks/parallel/cases/fib.cml",
+        "std::fvm"
+      ],
+      "exit": 0,
+      "stdout": "832040\n",
+      "stderr": ""
+    },
+    {
+      "program": "call",
+      "backend": "jit",
+      "threads": null,
+      "argv": [
+        "benchmarks/parallel/cases/fib.cml",
+        "std::jit"
+      ],
+      "exit": 0,
+      "stdout": "832040\n",
+      "stderr": ""
+    },
+    {
+      "program": "call",
+      "backend": "prl-1",
+      "threads": 1,
+      "argv": [
+        "--threads",
+        "1",
+        "benchmarks/parallel/cases/fib.cml",
+        "std::prl"
+      ],
+      "exit": 0,
+      "stdout": "832040\n",
+      "stderr": ""
+    },
+    {
+      "program": "call",
+      "backend": "prl-4",
+      "threads": 4,
+      "argv": [
+        "--threads",
+        "4",
+        "benchmarks/parallel/cases/fib.cml",
+        "std::prl"
+      ],
+      "exit": 0,
+      "stdout": "832040\n",
+      "stderr": ""
+    },
+    {
+      "program": "call",
+      "backend": "prl-16",
+      "threads": 16,
+      "argv": [
+        "--threads",
+        "16",
+        "benchmarks/parallel/cases/fib.cml",
+        "std::prl"
+      ],
+      "exit": 0,
+      "stdout": "832040\n",
+      "stderr": ""
+    },
+    {
+      "program": "loop",
+      "backend": "nvm",
+      "threads": null,
+      "argv": [
+        "benchmarks/parallel/cases/small_calls.cml",
+        "std::nvm"
+      ],
+      "exit": 0,
+      "stdout": "999912\n",
+      "stderr": ""
+    },
+    {
+      "program": "loop",
+      "backend": "fvm",
+      "threads": null,
+      "argv": [
+        "benchmarks/parallel/cases/small_calls.cml",
+        "std::fvm"
+      ],
+      "exit": 0,
+      "stdout": "999912\n",
+      "stderr": ""
+    },
+    {
+      "program": "loop",
+      "backend": "jit",
+      "threads": null,
+      "argv": [
+        "benchmarks/parallel/cases/small_calls.cml",
+        "std::jit"
+      ],
+      "exit": 0,
+      "stdout": "999912\n",
+      "stderr": ""
+    },
+    {
+      "program": "loop",
+      "backend": "prl-1",
+      "threads": 1,
+      "argv": [
+        "--threads",
+        "1",
+        "benchmarks/parallel/cases/small_calls.cml",
+        "std::prl"
+      ],
+      "exit": 0,
+      "stdout": "999912\n",
+      "stderr": ""
+    },
+    {
+      "program": "loop",
+      "backend": "prl-4",
+      "threads": 4,
+      "argv": [
+        "--threads",
+        "4",
+        "benchmarks/parallel/cases/small_calls.cml",
+        "std::prl"
+      ],
+      "exit": 0,
+      "stdout": "999912\n",
+      "stderr": ""
+    },
+    {
+      "program": "loop",
+      "backend": "prl-16",
+      "threads": 16,
+      "argv": [
+        "--threads",
+        "16",
+        "benchmarks/parallel/cases/small_calls.cml",
+        "std::prl"
+      ],
+      "exit": 0,
+      "stdout": "999912\n",
+      "stderr": ""
+    },
+    {
+      "program": "tensor",
+      "backend": "nvm",
+      "threads": null,
+      "argv": [
+        "benchmarks/parallel/cases/tensor_train.cml",
+        "std::macro",
+        "std::nvm"
+      ],
+      "exit": 0,
+      "stdout": "final loss: 0.028864\n",
+      "stderr": ""
+    },
+    {
+      "program": "tensor",
+      "backend": "fvm",
+      "threads": null,
+      "argv": [
+        "benchmarks/parallel/cases/tensor_train.cml",
+        "std::macro",
+        "std::fvm"
+      ],
+      "exit": 0,
+      "stdout": "final loss: 0.028864\n",
+      "stderr": ""
+    },
+    {
+      "program": "tensor",
+      "backend": "jit",
+      "threads": null,
+      "argv": [
+        "benchmarks/parallel/cases/tensor_train.cml",
+        "std::macro",
+        "std::jit"
+      ],
+      "exit": 0,
+      "stdout": "final loss: 0.028864\n",
+      "stderr": ""
+    },
+    {
+      "program": "tensor",
+      "backend": "prl-1",
+      "threads": 1,
+      "argv": [
+        "--threads",
+        "1",
+        "benchmarks/parallel/cases/tensor_train.cml",
+        "std::macro",
+        "std::prl"
+      ],
+      "exit": 0,
+      "stdout": "final loss: 0.028864\n",
+      "stderr": ""
+    },
+    {
+      "program": "tensor",
+      "backend": "prl-4",
+      "threads": 4,
+      "argv": [
+        "--threads",
+        "4",
+        "benchmarks/parallel/cases/tensor_train.cml",
+        "std::macro",
+        "std::prl"
+      ],
+      "exit": 0,
+      "stdout": "final loss: 0.028864\n",
+      "stderr": ""
+    },
+    {
+      "program": "tensor",
+      "backend": "prl-16",
+      "threads": 16,
+      "argv": [
+        "--threads",
+        "16",
+        "benchmarks/parallel/cases/tensor_train.cml",
+        "std::macro",
+        "std::prl"
+      ],
+      "exit": 0,
+      "stdout": "final loss: 0.028864\n",
+      "stderr": ""
+    },
+    {
+      "program": "branch",
+      "backend": "nvm",
+      "threads": null,
+      "argv": [
+        "--arg",
+        "seed=42",
+        "--arg",
+        "playouts=2000",
+        "--arg",
+        "position=XX.OO....",
+        "showcase/d4-mcts/search.cml",
+        "std::nvm"
+      ],
+      "exit": 0,
+      "stdout": "d4 config seed=42 playouts=2000 position=XX.OO.... to_move=1\nd4 search root_visits=2000 nodes=72 children=5 best=2\nd4 child place=2 visits=1886 score=1886.000000 mean=1.000000\nd4 child place=5 visits=50 score=26.500000 mean=0.530000\nd4 child place=6 visits=22 score=5.500000 mean=0.250000\nd4 child place=7 visits=21 score=4.500000 mean=0.214286\nd4 child place=8 visits=21 score=4.500000 mean=0.214286\n",
+      "stderr": ""
+    },
+    {
+      "program": "branch",
+      "backend": "fvm",
+      "threads": null,
+      "argv": [
+        "--arg",
+        "seed=42",
+        "--arg",
+        "playouts=2000",
+        "--arg",
+        "position=XX.OO....",
+        "showcase/d4-mcts/search.cml",
+        "std::fvm"
+      ],
+      "exit": 0,
+      "stdout": "d4 config seed=42 playouts=2000 position=XX.OO.... to_move=1\nd4 search root_visits=2000 nodes=72 children=5 best=2\nd4 child place=2 visits=1886 score=1886.000000 mean=1.000000\nd4 child place=5 visits=50 score=26.500000 mean=0.530000\nd4 child place=6 visits=22 score=5.500000 mean=0.250000\nd4 child place=7 visits=21 score=4.500000 mean=0.214286\nd4 child place=8 visits=21 score=4.500000 mean=0.214286\n",
+      "stderr": ""
+    },
+    {
+      "program": "branch",
+      "backend": "jit",
+      "threads": null,
+      "argv": [
+        "--arg",
+        "seed=42",
+        "--arg",
+        "playouts=2000",
+        "--arg",
+        "position=XX.OO....",
+        "showcase/d4-mcts/search.cml",
+        "std::jit"
+      ],
+      "exit": 0,
+      "stdout": "d4 config seed=42 playouts=2000 position=XX.OO.... to_move=1\nd4 search root_visits=2000 nodes=72 children=5 best=2\nd4 child place=2 visits=1886 score=1886.000000 mean=1.000000\nd4 child place=5 visits=50 score=26.500000 mean=0.530000\nd4 child place=6 visits=22 score=5.500000 mean=0.250000\nd4 child place=7 visits=21 score=4.500000 mean=0.214286\nd4 child place=8 visits=21 score=4.500000 mean=0.214286\n",
+      "stderr": ""
+    },
+    {
+      "program": "branch",
+      "backend": "prl-1",
+      "threads": 1,
+      "argv": [
+        "--threads",
+        "1",
+        "--arg",
+        "seed=42",
+        "--arg",
+        "playouts=2000",
+        "--arg",
+        "position=XX.OO....",
+        "showcase/d4-mcts/search.cml",
+        "std::prl"
+      ],
+      "exit": 0,
+      "stdout": "d4 config seed=42 playouts=2000 position=XX.OO.... to_move=1\nd4 search root_visits=2000 nodes=72 children=5 best=2\nd4 child place=2 visits=1886 score=1886.000000 mean=1.000000\nd4 child place=5 visits=50 score=26.500000 mean=0.530000\nd4 child place=6 visits=22 score=5.500000 mean=0.250000\nd4 child place=7 visits=21 score=4.500000 mean=0.214286\nd4 child place=8 visits=21 score=4.500000 mean=0.214286\n",
+      "stderr": ""
+    },
+    {
+      "program": "branch",
+      "backend": "prl-4",
+      "threads": 4,
+      "argv": [
+        "--threads",
+        "4",
+        "--arg",
+        "seed=42",
+        "--arg",
+        "playouts=2000",
+        "--arg",
+        "position=XX.OO....",
+        "showcase/d4-mcts/search.cml",
+        "std::prl"
+      ],
+      "exit": 0,
+      "stdout": "d4 config seed=42 playouts=2000 position=XX.OO.... to_move=1\nd4 search root_visits=2000 nodes=72 children=5 best=2\nd4 child place=2 visits=1886 score=1886.000000 mean=1.000000\nd4 child place=5 visits=50 score=26.500000 mean=0.530000\nd4 child place=6 visits=22 score=5.500000 mean=0.250000\nd4 child place=7 visits=21 score=4.500000 mean=0.214286\nd4 child place=8 visits=21 score=4.500000 mean=0.214286\n",
+      "stderr": ""
+    },
+    {
+      "program": "branch",
+      "backend": "prl-16",
+      "threads": 16,
+      "argv": [
+        "--threads",
+        "16",
+        "--arg",
+        "seed=42",
+        "--arg",
+        "playouts=2000",
+        "--arg",
+        "position=XX.OO....",
+        "showcase/d4-mcts/search.cml",
+        "std::prl"
+      ],
+      "exit": 0,
+      "stdout": "d4 config seed=42 playouts=2000 position=XX.OO.... to_move=1\nd4 search root_visits=2000 nodes=72 children=5 best=2\nd4 child place=2 visits=1886 score=1886.000000 mean=1.000000\nd4 child place=5 visits=50 score=26.500000 mean=0.530000\nd4 child place=6 visits=22 score=5.500000 mean=0.250000\nd4 child place=7 visits=21 score=4.500000 mean=0.214286\nd4 child place=8 visits=21 score=4.500000 mean=0.214286\n",
+      "stderr": ""
+    },
+    {
+      "program": "closure",
+      "backend": "nvm",
+      "threads": null,
+      "argv": [
+        "examples/functions/closures.cml",
+        "std::nvm"
+      ],
+      "exit": 0,
+      "stdout": "7 8 14\n13\n[7, 9, 11]\n70 70\n1 2 3 1\n",
+      "stderr": ""
+    },
+    {
+      "program": "closure",
+      "backend": "fvm",
+      "threads": null,
+      "argv": [
+        "examples/functions/closures.cml",
+        "std::fvm"
+      ],
+      "exit": 0,
+      "stdout": "7 8 14\n13\n[7, 9, 11]\n70 70\n1 2 3 1\n",
+      "stderr": ""
+    },
+    {
+      "program": "closure",
+      "backend": "jit",
+      "threads": null,
+      "argv": [
+        "examples/functions/closures.cml",
+        "std::jit"
+      ],
+      "exit": 0,
+      "stdout": "7 8 14\n13\n[7, 9, 11]\n70 70\n1 2 3 1\n",
+      "stderr": ""
+    },
+    {
+      "program": "closure",
+      "backend": "prl-1",
+      "threads": 1,
+      "argv": [
+        "--threads",
+        "1",
+        "examples/functions/closures.cml",
+        "std::prl"
+      ],
+      "exit": 0,
+      "stdout": "7 8 14\n13\n[7, 9, 11]\n70 70\n1 2 3 1\n",
+      "stderr": ""
+    },
+    {
+      "program": "closure",
+      "backend": "prl-4",
+      "threads": 4,
+      "argv": [
+        "--threads",
+        "4",
+        "examples/functions/closures.cml",
+        "std::prl"
+      ],
+      "exit": 0,
+      "stdout": "7 8 14\n13\n[7, 9, 11]\n70 70\n1 2 3 1\n",
+      "stderr": ""
+    },
+    {
+      "program": "closure",
+      "backend": "prl-16",
+      "threads": 16,
+      "argv": [
+        "--threads",
+        "16",
+        "examples/functions/closures.cml",
+        "std::prl"
+      ],
+      "exit": 0,
+      "stdout": "7 8 14\n13\n[7, 9, 11]\n70 70\n1 2 3 1\n",
+      "stderr": ""
+    }
+  ]
+}

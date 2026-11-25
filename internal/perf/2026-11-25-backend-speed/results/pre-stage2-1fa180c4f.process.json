@@ -1,0 +1,211 @@
+{
+  "point": "pre-stage2-1fa180c4f",
+  "mode": "process",
+  "host": "KOGLER-WORKSTATION",
+  "cores": 28,
+  "started": "2026-11-25T10:37:14.467Z",
+  "finished": "2026-11-25T10:37:17.218Z",
+  "busy_cores": 10.14,
+  "node": "v24.21.0",
+  "camel": "D:\\Projects\\Camel-wt\\perf\\out\\latest\\bin\\camel.exe",
+  "results": [
+    {
+      "program": "branch",
+      "backend": "nvm",
+      "pass": "std::nvm",
+      "threads": null,
+      "iters": 5,
+      "argv": [
+        "--arg",
+        "seed=42",
+        "--arg",
+        "playouts=2000",
+        "--arg",
+        "position=XX.OO....",
+        "showcase/d4-mcts/search.cml",
+        "std::nvm"
+      ],
+      "exit": 0,
+      "measurement": "whole process (start-up + parse + pass + teardown)",
+      "samples_ms": [
+        103,
+        100,
+        98,
+        98,
+        98
+      ],
+      "first_ms": 103,
+      "steady_ms": 98,
+      "steady_min_ms": 98,
+      "steady_max_ms": 100,
+      "stdout_first_run": "d4 config seed=42 playouts=2000 position=XX.OO.... to_move=1\nd4 search root_visits=2000 nodes=72 children=5 best=2\nd4 child place=2 visits=1886 score=1886.000000 mean=1.000000\nd4 child place=5 visits=50 score=26.500000 mean=0.530000\nd4 child place=6 visits=22 score=5.500000 mean=0.250000\nd4 child place=7 visits=21 score=4.500000 mean=0.214286\nd4 child place=8 visits=21 score=4.500000 mean=0.214286\n",
+      "stderr_head": ""
+    },
+    {
+      "program": "branch",
+      "backend": "fvm",
+      "pass": "std::fvm",
+      "threads": null,
+      "iters": 5,
+      "argv": [
+        "--arg",
+        "seed=42",
+        "--arg",
+        "playouts=2000",
+        "--arg",
+        "position=XX.OO....",
+        "showcase/d4-mcts/search.cml",
+        "std::fvm"
+      ],
+      "exit": 0,
+      "measurement": "whole process (start-up + parse + pass + teardown)",
+      "samples_ms": [
+        115,
+        82,
+        79,
+        84,
+        90
+      ],
+      "first_ms": 115,
+      "steady_ms": 83,
+      "steady_min_ms": 79,
+      "steady_max_ms": 90,
+      "stdout_first_run": "d4 config seed=42 playouts=2000 position=XX.OO.... to_move=1\nd4 search root_visits=2000 nodes=72 children=5 best=2\nd4 child place=2 visits=1886 score=1886.000000 mean=1.000000\nd4 child place=5 visits=50 score=26.500000 mean=0.530000\nd4 child place=6 visits=22 score=5.500000 mean=0.250000\nd4 child place=7 visits=21 score=4.500000 mean=0.214286\nd4 child place=8 visits=21 score=4.500000 mean=0.214286\n",
+      "stderr_head": ""
+    },
+    {
+      "program": "branch",
+      "backend": "jit",
+      "pass": "std::jit",
+      "threads": null,
+      "iters": 5,
+      "argv": [
+        "--arg",
+        "seed=42",
+        "--arg",
+        "playouts=2000",
+        "--arg",
+        "position=XX.OO....",
+        "showcase/d4-mcts/search.cml",
+        "std::jit"
+      ],
+      "exit": 0,
+      "measurement": "whole process (start-up + parse + pass + teardown)",
+      "samples_ms": [
+        90,
+        87,
+        85,
+        83,
+        82
+      ],
+      "first_ms": 90,
+      "steady_ms": 84,
+      "steady_min_ms": 82,
+      "steady_max_ms": 87,
+      "stdout_first_run": "d4 config seed=42 playouts=2000 position=XX.OO.... to_move=1\nd4 search root_visits=2000 nodes=72 children=5 best=2\nd4 child place=2 visits=1886 score=1886.000000 mean=1.000000\nd4 child place=5 visits=50 score=26.500000 mean=0.530000\nd4 child place=6 visits=22 score=5.500000 mean=0.250000\nd4 child place=7 visits=21 score=4.500000 mean=0.214286\nd4 child place=8 visits=21 score=4.500000 mean=0.214286\n",
+      "stderr_head": ""
+    },
+    {
+      "program": "branch",
+      "backend": "prl-1",
+      "pass": "std::prl",
+      "threads": 1,
+      "iters": 5,
+      "argv": [
+        "--threads",
+        "1",
+        "--arg",
+        "seed=42",
+        "--arg",
+        "playouts=2000",
+        "--arg",
+        "position=XX.OO....",
+        "showcase/d4-mcts/search.cml",
+        "std::prl"
+      ],
+      "exit": 0,
+      "measurement": "whole process (start-up + parse + pass + teardown)",
+      "samples_ms": [
+        92,
+        87,
+        85,
+        87,
+        88
+      ],
+      "first_ms": 92,
+      "steady_ms": 87,
+      "steady_min_ms": 85,
+      "steady_max_ms": 88,
+      "stdout_first_run": "d4 config seed=42 playouts=2000 position=XX.OO.... to_move=1\nd4 search root_visits=2000 nodes=72 children=5 best=2\nd4 child place=2 visits=1886 score=1886.000000 mean=1.000000\nd4 child place=5 visits=50 score=26.500000 mean=0.530000\nd4 child place=6 visits=22 score=5.500000 mean=0.250000\nd4 child place=7 visits=21 score=4.500000 mean=0.214286\nd4 child place=8 visits=21 score=4.500000 mean=0.214286\n",
+      "stderr_head": ""
+    },
+    {
+      "program": "branch",
+      "backend": "prl-4",
+      "pass": "std::prl",
+      "threads": 4,
+      "iters": 5,
+      "argv": [
+        "--threads",
+        "4",
+        "--arg",
+        "seed=42",
+        "--arg",
+        "playouts=2000",
+        "--arg",
+        "position=XX.OO....",
+        "showcase/d4-mcts/search.cml",
+        "std::prl"
+      ],
+      "exit": 0,
+      "measurement": "whole process (start-up + parse + pass + teardown)",
+      "samples_ms": [
+        91,
+        122,
+        88,
+        88,
+        88
+      ],
+      "first_ms": 91,
+      "steady_ms": 88,
+      "steady_min_ms": 88,
+      "steady_max_ms": 122,
+      "stdout_first_run": "d4 config seed=42 playouts=2000 position=XX.OO.... to_move=1\nd4 search root_visits=2000 nodes=72 children=5 best=2\nd4 child place=2 visits=1886 score=1886.000000 mean=1.000000\nd4 child place=5 visits=50 score=26.500000 mean=0.530000\nd4 child place=6 visits=22 score=5.500000 mean=0.250000\nd4 child place=7 visits=21 score=4.500000 mean=0.214286\nd4 child place=8 visits=21 score=4.500000 mean=0.214286\n",
+      "stderr_head": ""
+    },
+    {
+      "program": "branch",
+      "backend": "prl-16",
+      "pass": "std::prl",
+      "threads": 16,
+      "iters": 5,
+      "argv": [
+        "--threads",
+        "16",
+        "--arg",
+        "seed=42",
+        "--arg",
+        "playouts=2000",
+        "--arg",
+        "position=XX.OO....",
+        "showcase/d4-mcts/search.cml",
+        "std::prl"
+      ],
+      "exit": 0,
+      "measurement": "whole process (start-up + parse + pass + teardown)",
+      "samples_ms": [
+        91,
+        89,
+        94,
+        89,
+        92
+      ],
+      "first_ms": 91,
+      "steady_ms": 90.5,
+      "steady_min_ms": 89,
+      "steady_max_ms": 94,
+      "stdout_first_run": "d4 config seed=42 playouts=2000 position=XX.OO.... to_move=1\nd4 search root_visits=2000 nodes=72 children=5 best=2\nd4 child place=2 visits=1886 score=1886.000000 mean=1.000000\nd4 child place=5 visits=50 score=26.500000 mean=0.530000\nd4 child place=6 visits=22 score=5.500000 mean=0.250000\nd4 child place=7 visits=21 score=4.500000 mean=0.214286\nd4 child place=8 visits=21 score=4.500000 mean=0.214286\n",
+      "stderr_head": ""
+    }
+  ]
+}
