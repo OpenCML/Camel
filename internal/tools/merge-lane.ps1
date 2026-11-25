@@ -175,7 +175,17 @@ param(
     # merge this tool would have made has: first parent == origin/<Target>, second parent == the
     # lane's tip, HEAD == the commit itself. Anything else is refused, because a commit whose parents
     # are not that is not the merge it claims to be.
-    [string] $MergeCommit = ''
+    [string] $MergeCommit = '',
+
+    # A backfill may name the cases a historical merge could not pass. `-MergeCommit` records a merge
+    # made earlier; its row reading compares that commit's tree with the commit before it, and a case
+    # that was red at that snapshot and was fixed forward afterwards makes the record unwritable
+    # forever -- the tree it measured no longer exists on the branch. The file names, for each such
+    # case, the snapshot (which must be this merge commit), the commit that fixed it, and a run of
+    # the tip whose `run.json` revision and case status are read here: the claim "green now" is
+    # checked against a reading, not against the sentence that asked for the allowance. Only the
+    # ordinary merge path is untouched by this switch -- it is refused without `-MergeCommit`.
+    [string] $KnownAtSnapshot = ''
 )
 
 $ErrorActionPreference = 'Stop'
@@ -1946,14 +1956,84 @@ $transcript = Join-Path ([System.IO.Path]::GetTempPath()) ("camel-merge-rows-$PI
     # already made in this checkout (that is step 1 of this script), and it is the push that has not
     # happened. A reader who acts on "nothing was committed" would look for a merge that is there.
     if ($compareExit -eq 1) {
-        $compare | ForEach-Object { "  $_" }
-        Write-Host ''
-        Write-Host 'STOPPED: the plans this merge touches measured differently on the merged tree (exit 1: the cases are named above)' -ForegroundColor Red
-        Write-Host "  The baseline is the tree this merge lands on (develop $($developTip.Substring(0, 9))) and this merge is the only thing that moved. `newly red` was green there and is red now; `still red, failing differently` was red both times and reads differently now, which is the move a count cannot see."
-        Write-Host '  If the change makes a case fail on purpose, the merge that makes it fail that way is the one that carries the expectation with it; this one is refused until the two agree.'
-        Write-Host ''
-        Write-GitState -MergeCommit $mergeCommit
-        exit 1
+        # A backfill of a merge made earlier may find a case red at the snapshot it is recording and
+        # fixed on the branch since. That is not a defect in the merge: the judgement `-MergeCommit`
+        # applies ("this commit's tree against its first parent, no new red") is the judgement of the
+        # moment, and the moment has passed. The allowance below re-establishes the fact from a
+        # reading of the tip, one case at a time, and refuses the whole idea when anything about it
+        # does not check out. Without `-KnownAtSnapshot` this is the refusal it always was.
+        $allowed = @()
+        if ($KnownAtSnapshot) {
+            if (-not $MergeCommit) {
+                Stop-With '-KnownAtSnapshot is only for a backfill' 'It records a merge made earlier, so it needs -MergeCommit. The ordinary merge path reads the tree it is merging and has nothing to be allowed for.'
+            }
+            $list = Get-Content -LiteralPath $KnownAtSnapshot -Raw | ConvertFrom-Json
+            if (-not $list.tip -or -not $list.run -or -not @($list.entries).Count) {
+                Stop-With "-KnownAtSnapshot $KnownAtSnapshot is not a list" 'It needs "tip" (the commit the evidence was read on), "run" (the run that read it) and a non-empty "entries".'
+            }
+            $tipSha = "$(& git rev-parse --verify "$($list.tip)^{commit}" 2>$null)".Trim()
+            if (-not $tipSha) { Stop-With "-KnownAtSnapshot tip $($list.tip) does not resolve to a commit" 'The evidence must name a commit this repository has.' }
+            $runJson = Join-Path $list.run 'run.json'
+            $runSummary = Join-Path $list.run 'summary.json'
+            foreach ($f in @($runJson, $runSummary)) {
+                if (-not (Test-Path -LiteralPath $f)) { Stop-With "-KnownAtSnapshot run $($list.run) has no $(Split-Path -Leaf $f)" 'The evidence is a run of the gate: run.json and summary.json are what make it checkable.' }
+            }
+            $revision = "$((Get-Content -LiteralPath $runJson -Raw | ConvertFrom-Json).revision)".Trim()
+            if ($revision -ne $tipSha) {
+                Stop-With "-KnownAtSnapshot run $($list.run) measured $($revision.Substring(0, [Math]::Min(9, $revision.Length))), not the tip $($tipSha.Substring(0, 9))" 'A reading of another tree is not evidence about the tip.'
+            }
+            $summary = Get-Content -LiteralPath $runSummary -Raw | ConvertFrom-Json
+            $diff = Get-Content -LiteralPath (Join-Path $diffDir 'diff.json') -Raw | ConvertFrom-Json
+            $newRed = @($diff.new | ForEach-Object { if ($_ -is [string]) { $_ } elseif ($_.name) { "$($_.name)" } else { "$_" } })
+            $named = @()
+            foreach ($entry in @($list.entries)) {
+                if (-not $entry.case -or -not $entry.snapshot -or -not $entry.fixedAt) {
+                    Stop-With "-KnownAtSnapshot entry $(($entry | ConvertTo-Json -Compress)) is incomplete" 'Each entry needs case, snapshot and fixedAt.'
+                }
+                $snapshot = "$(& git rev-parse --verify "$($entry.snapshot)^{commit}" 2>$null)".Trim()
+                if ($snapshot -ne $mergeCommit) {
+                    Stop-With "-KnownAtSnapshot entry $($entry.case) is red at $($entry.snapshot)" "This run records $($mergeCommit.Substring(0, 9)); an allowance for another snapshot says nothing about it."
+                }
+                $fixing = "$(& git rev-parse --verify "$($entry.fixedAt)^{commit}" 2>$null)".Trim()
+                if (-not $fixing) { Stop-With "-KnownAtSnapshot entry $($entry.case) names $($entry.fixedAt), which is not a commit here" 'The record says which commit fixed it; a sha nobody can resolve is not that.' }
+                & git merge-base --is-ancestor $fixing $tipSha 2>$null
+                if ($LASTEXITCODE -ne 0) { Stop-With "-KnownAtSnapshot entry $($entry.case) names $($entry.fixedAt) as the fixing commit, and it is not on the tip $($tipSha.Substring(0, 9))" 'A fix that is not on the branch does not make the case green there.' }
+                $row = @($summary.test_timings | Where-Object { "$($_.plan)/$($_.test)" -eq $entry.case })
+                if ($row.Count -eq 0) { Stop-With "-KnownAtSnapshot entry $($entry.case) was not read by $($list.run)" 'The run that is offered as evidence does not hold the case.' }
+                if ("$($row[0].status)" -ne 'pass') {
+                    Stop-With "-KnownAtSnapshot entry $($entry.case) is $($row[0].status) on the tip $($tipSha.Substring(0, 9)), not pass" 'The allowance is for a case that is green now; this one is not.'
+                }
+                if ($newRed -notcontains $entry.case) {
+                    Stop-With "-KnownAtSnapshot entry $($entry.case) is not one of the cases this comparison calls new" 'A stale allowance is refused rather than carried: it would let a later case through.'
+                }
+                $allowed += [pscustomobject]@{ case = $entry.case; snapshot = $snapshot; fixedAt = $fixing }
+            }
+            $uncovered = @($newRed | Where-Object { $name = $_; -not ($allowed | Where-Object { $_.case -eq $name }) })
+            if ($uncovered.Count -gt 0) {
+                $compare | ForEach-Object { "  $_" }
+                Stop-With "-KnownAtSnapshot does not cover $($uncovered -join ', ')" "Everything the comparison calls new has to be named in the list, with the commit that fixed it and a pass on the tip. $($allowed.Count) of $($newRed.Count) were."
+            }
+            $compare | Where-Object { "$_".StartsWith('merge-readings:') } | ForEach-Object { "  $_" }
+            foreach ($entry in $allowed) {
+                Write-Host ("  allowed: {0} is red at this snapshot ({1}) and pass at {2}; fixed at {3}" -f `
+                    $entry.case, $mergeCommit.Substring(0, 9), $tipSha.Substring(0, 9), $entry.fixedAt.Substring(0, 9))
+            }
+            Write-Host ("  -KnownAtSnapshot: the record carries these as `knownAtSnapshot` (red at the snapshot, fixed later); no other case moved ({0:N0} s)" -f ((Get-Date) - $rowsStarted).TotalSeconds)
+            # The comparer's exit describes a comparison that has now been judged acceptable, case by
+            # case, with evidence. Leaving it at 1 would send this run into the "no reading taken"
+            # path below, which is about a comparison that never happened.
+            $compareExit = 0
+        }
+        else {
+            $compare | ForEach-Object { "  $_" }
+            Write-Host ''
+            Write-Host 'STOPPED: the plans this merge touches measured differently on the merged tree (exit 1: the cases are named above)' -ForegroundColor Red
+            Write-Host "  The baseline is the tree this merge lands on (develop $($developTip.Substring(0, 9))) and this merge is the only thing that moved. `newly red` was green there and is red now; `still red, failing differently` was red both times and reads differently now, which is the move a count cannot see."
+            Write-Host '  If the change makes a case fail on purpose, the merge that makes it fail that way is the one that carries the expectation with it; this one is refused until the two agree.'
+            Write-Host ''
+            Write-GitState -MergeCommit $mergeCommit
+            exit 1
+        }
     }
     if ($compareExit -ne 0) {
         $compare | ForEach-Object { "  $_" }
@@ -2065,11 +2145,14 @@ $transcript = Join-Path ([System.IO.Path]::GetTempPath()) ("camel-merge-rows-$PI
     # local `develop` -- a judgement outliving the tree it was about.
     $passedDir = Join-Path $commonDir 'camel-passed'
     New-Item -ItemType Directory -Force -Path $passedDir | Out-Null
+    # Splatted as two arguments: a single string with a space in it is one argument, and the record
+    # writer would read it as a flag nobody passed.
+    $knownArgs = @(if ($allowed.Count -gt 0) { '--known-at-snapshot'; $KnownAtSnapshot })
     $recordOut = @(& node (Join-Path $toolRoot 'scripts\merge-record.mjs') write `
         --diff (Join-Path $diffDir 'diff.json') --merge $mergeCommit --first-parent $developTip `
         --second-parent $head --branch $Branch --tree $MainCheckout --out $passedDir `
         --baseline-source $(if ($seededFrom) { "measured now on $($developTip.Substring(0, 9))" } else { "cached from an earlier measurement of $($developTip.Substring(0, 9))" }) `
-        --gate headers --gate clang-syntax --gate rows --exit 0 2>&1)
+        --gate headers --gate clang-syntax --gate rows --exit 0 @knownArgs 2>&1)
     $recordExit = $LASTEXITCODE
     $recordOut | ForEach-Object { "  $_" }
     if ($recordExit -ne 0) {

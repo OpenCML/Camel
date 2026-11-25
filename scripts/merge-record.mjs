@@ -98,6 +98,12 @@ function doWrite() {
     // migration. `unknown` is refused nowhere -- it is a real state -- but `verify` will not treat it
     // as a pass (see below).
     const exit = (arg('--exit') || '0').trim()
+    // The cases that were red at the snapshot this commit is and green on the tip a backfill ends at.
+    // Written only by `merge-lane.ps1 -MergeCommit -KnownAtSnapshot`, and only after that tool has
+    // checked each entry against a reading of the tip (`run.json`'s revision and the case's status).
+    // This file stores the claim with its evidence; `verify` refuses the record again when a `new`
+    // case is not one of them, so the allowance cannot widen a record written without the list.
+    const knownFile = arg('--known-at-snapshot') || ''
     if (exit !== '0' && exit !== 'unknown') {
         refuse(2, `--exit takes '0' or 'unknown'; it got '${exit}'`)
     }
@@ -151,6 +157,43 @@ function doWrite() {
     const regressed = Array.isArray(diff.new) ? diff.new : null
     const changed = Array.isArray(diff.changed) ? diff.changed : null
     if (!fixed || !regressed || !changed) refuse(2, `${diffFile} does not hold the three sets (fixed, new, changed)`)
+
+    // The allowance is read here and checked against the comparison that was just written, not
+    // against a sentence: a list that names a case the comparison calls `new` and nothing else is a
+    // list; one that names a case which is not new says nothing and would let the next one through.
+    let knownAtSnapshot = null
+    if (knownFile) {
+        let list
+        try {
+            list = JSON.parse(fs.readFileSync(knownFile, 'utf8'))
+        } catch (error) {
+            refuse(2, `--known-at-snapshot ${knownFile} is not JSON: ${error.message}`)
+        }
+        const entries = Array.isArray(list.entries) ? list.entries : []
+        if (!SHA.test(String(list.tip || ''))) refuse(2, '--known-at-snapshot needs "tip": the commit the evidence was read on')
+        if (entries.length === 0) refuse(2, '--known-at-snapshot names no entry: an empty allowance is a refusal with extra steps')
+        for (const entry of entries) {
+            if (!entry.case || !SHA.test(String(entry.snapshot || '')) || !SHA.test(String(entry.fixedAt || ''))) {
+                refuse(2, `--known-at-snapshot entry ${JSON.stringify(entry)} needs case, snapshot and fixedAt`)
+            }
+            if (entry.snapshot !== merge) {
+                refuse(2, `--known-at-snapshot entry ${entry.case} is red at ${entry.snapshot.slice(0, 9)}, and this record is about ${merge.slice(0, 9)}`)
+            }
+        }
+        const names = new Set(entries.map((entry) => entry.case))
+        // A comparison names a case as `plan/test`; the `new` set carries that name beside the
+        // reading that moved, so the comparison is on the name and not on the object that holds it.
+        const regressedNames = regressed.map((row) => (typeof row === 'string' ? row : row?.name)).filter(Boolean)
+        const extra = regressedNames.filter((name) => !names.has(name))
+        if (extra.length > 0) {
+            refuse(2, `--known-at-snapshot does not cover ${extra.join(', ')}: the comparison calls it new and the list does not name it`)
+        }
+        const missing = entries.filter((entry) => !regressedNames.includes(entry.case))
+        if (missing.length > 0) {
+            refuse(2, `--known-at-snapshot names ${missing.map((entry) => entry.case).join(', ')}, which the comparison does not call new: a stale allowance is refused rather than carried`)
+        }
+        knownAtSnapshot = { tip: list.tip, evidence: list.run ? String(list.run) : '', entries }
+    }
     if (!diff.planSet || !Array.isArray(diff.planSet.names) || !diff.planSet.hash) {
         refuse(2, `${diffFile} does not name the plan set: a record that cannot say which plans were read is not checkable`)
     }
@@ -181,9 +224,13 @@ function doWrite() {
 
     // A record is a claim that the merge passed. The tool refuses a merge before it gets here, so a
     // call that arrives with a non-empty `new` or `changed` is a caller that took a different path
-    // to this write -- and the one thing this file must never do is certify it.
-    if (regressed.length > 0 || changed.length > 0) {
-        refuse(1, `refusing to record a pass for ${merge.slice(0, 9)}: ${regressed.length} newly red and ${changed.length} changed, and a pass record with those in it would be read as a pass`)
+    // to this write -- and the one thing this file must never do is certify it. The one exception is
+    // a case the allowance above named, verified and put in the record with the commit that fixed it;
+    // `changed` has no such path and stays a refusal.
+    const allowedCases = new Set(knownAtSnapshot ? knownAtSnapshot.entries.map((entry) => entry.case) : [])
+    const unallowed = regressed.filter((row) => !allowedCases.has(typeof row === 'string' ? row : row?.name))
+    if (unallowed.length > 0 || changed.length > 0) {
+        refuse(1, `refusing to record a pass for ${merge.slice(0, 9)}: ${unallowed.length} newly red and ${changed.length} changed, and a pass record with those in it would be read as a pass`)
     }
 
     // A batch writes one record per merge commit, because the hook asks about every merge commit on
@@ -235,6 +282,11 @@ function doWrite() {
         // cannot be told from one whose baseline went missing.
         readings: { cases: docsOnly ? 0 : (diff.baseline?.cases ?? null), fixed: fixed.length, new: regressed.length, changed: changed.length },
         cases: { fixed, new: regressed, changed },
+        // Only on a backfill: the cases a historical merge could not pass because the tree has since
+        // been fixed forward, each with the commit that fixed it and the tip the evidence was read on.
+        // Absent from every record written on the ordinary path, so a reader can tell a merge that was
+        // green where it stood from one that was red there and is green now.
+        ...(knownAtSnapshot ? { knownAtSnapshot } : {}),
         gates,
         // The exit code the measured run ended with, as the gate reported it. `unknown` is the third
         // state and not a zero in disguise: the gate printed its readings and could not obtain the
@@ -379,10 +431,33 @@ function doVerify() {
         }
         const read = record.readings || {}
         if (Number(read.new) > 0 || Number(read.changed) > 0) {
-            problems.push(
-                `${sha.slice(0, 9)}  ${subject}  -- the record is not a pass: new=${read.new} changed=${read.changed}`,
-            )
-            continue
+            // The one way a record with a newly red case is still a pass: the case was red at the
+            // snapshot the merge commit *is* and green on the tip this push ends at, and the writer
+            // verified both from a reading rather than from a sentence. `knownAtSnapshot` says which
+            // cases and at which two commits; a `new` set it does not cover is refused exactly as
+            // before, and so is a covered one that names a case the record does not carry.
+            const known = Array.isArray(record.knownAtSnapshot?.entries) ? record.knownAtSnapshot.entries : []
+            const covered = new Set(known.map((entry) => entry.case))
+            const uncovered = (Array.isArray(record.cases?.new) ? record.cases.new : [])
+                .map((row) => (typeof row === 'string' ? row : row?.name))
+                .filter(Boolean)
+                .filter((name) => !covered.has(name))
+            const wrongCount = Number(read.changed) > 0
+            if (known.length === 0 || uncovered.length > 0 || wrongCount) {
+                problems.push(
+                    `${sha.slice(0, 9)}  ${subject}  -- the record is not a pass: new=${read.new} changed=${read.changed}` +
+                        (uncovered.length > 0 ? ` (${uncovered.slice(0, 3).join(', ')}${uncovered.length > 3 ? ', ...' : ''} not known at the snapshot)` : ''),
+                )
+                continue
+            }
+            for (const entry of known) {
+                if (!entry.fixedAt || !SHA.test(String(entry.fixedAt)) || !SHA.test(String(entry.snapshot))) {
+                    problems.push(
+                        `${sha.slice(0, 9)}  ${subject}  -- the record allows ${entry.case} red at a snapshot and names no commit that fixed it`,
+                    )
+                    continue
+                }
+            }
         }
         // The exit code the measured run ended with. `unknown` means the gate printed its readings and
         // could not say what the run exited with (its closing session did not return). That is not a
