@@ -1321,7 +1321,21 @@ std::any Builder::resolveDRefNode(const GCT::node_ptr_t &gct) {
             // function (`__add__`) is a group.
             oneLayer = overloadsOfLayer(e);
         }
-        if (!oneLayer.has_value()) {
+        // An `#impl` function is not one of those halves, and the join is not for it. Its direct
+        // call is the kernel of the module that tagged it (design principles 10.4), and that is a
+        // property of the function rather than of a signature: a set resolves a call to the body
+        // it carries, so putting this layer's body into the built-in layer's group would replace
+        // the kernel the program named with the body it wrote beside it. The shape is
+        // `impl_cross_module_disagreement_lib`: it exports `#impl(sub_kernel) func add(a, b)`, and
+        // the built-in layer holds a group of the same spelling -- the prelude's
+        // `#op(':coll/set_add') export func add::<T>(s: Set<T>)`, whose one rule the built-in
+        // group named `add` holds. Joined, the direct call `add(19, 23)` answered with the body's
+        // `a + b` (42) instead of the tagged kernel's `a - b` (-4), on all four back ends.
+        const bool implBody =
+            !camel::core::module::detail::EntityAccess::isDecoratedGraph(e) &&
+            camel::core::module::detail::EntityAccess::isGraphSet(e) &&
+            implKernelOf(camel::core::module::detail::EntityAccess::graphSet(e)).has_value();
+        if (!oneLayer.has_value() && !implBody) {
             // This layer's name carries a body and the built-in layer holds a group under the same
             // spelling: the two halves of one name, so the set is the built-in layer's own
             // (`builtinLayerNamed`) rather than this layer's alone.
