@@ -1645,7 +1645,7 @@ timeout_ms = 8000
 
 [[tests]]
 name = "fold_cast.rewrites"
-desc = "A conversion (`e as T`, a CAST node) of a constant is a constant: after std::opt no CAST is left, for a conversion to the shape the compiler already knew, for one checked against the value (the source is declared a plain Tensor); a number converted by the conversion function is folded as any call of constants is. Folding used to leave every CAST, so nothing under `as` was a constant."
+desc = "A conversion (`e as T`) of a constant is a constant: after std::opt no conversion node is left -- no `:op/cast` OPER, the name a conversion has had since `af3c6c9bdd` removed the `CAST` kind and the view began printing the operator's URI -- for a conversion to the shape the compiler already knew, for one checked against the value (the source is declared a plain Tensor); a number converted by the conversion function is folded as any call of constants is. The assertion names the label and the type together, so an OPER of another operator cannot stand in for a conversion, and it asserts that the deleted kind is not printed, so a reader can tell a rename from a resurrection. Folding used to leave every conversion, so nothing under `as` was a constant."
 kind = "behavior"
 case = "../../../cases/opt/generic/fold_cast.cml"
 args = ["${case}", "std::opt", "std::gir", "std::nop"]
@@ -1655,7 +1655,12 @@ verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout
 const count = (label) => (out.match(new RegExp(`label="${label}"`, 'g')) || []).length
-assert(count('CAST') === 0, `a conversion of a constant was not folded: ${count('CAST')} CAST nodes left`)
+// A conversion is an operator call of `:op/cast` since kind-to-operator, and af3c6c9bdd renamed the
+// view's label from `CAST` (which named the deleted kind) to it. Both the label and the type are
+// named, so an OPER of some other operator cannot be counted as a conversion.
+const conversions = out.split('\n').filter((line) => line.includes('label=":op/cast"') && line.includes('type="OPER"'))
+assert(conversions.length === 0, `a conversion of a constant was not folded: ${conversions.length} ':op/cast' OPER nodes left`)
+assert(!out.includes('label="CAST"'), 'the view prints the deleted node kind CAST, so this reading no longer names the node it was written for (af3c6c9bdd moved the label to the operator URI)')
 assert(out.includes('label="31.5"'), 'the expression over the converted constants must fold to its value, 31.5')
 assert(count(':io/println') >= 1, 'effects must be kept')
 }
@@ -1726,7 +1731,7 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 8000
 [[tests]]
 name = "fold_struct_cast.in_return_position"
-desc = "A Safe conversion of a constant struct in return position is folded after std::opt: the function graph's returned value is also its exit and output value, and folding it moves those anchors to the constant (design principles 5.1, 5.2: the conversion only names the type the value is used as and moves nothing). Folding used to treat the graph's returned value as a pinned anchor, so `mk` kept a CAST over its folded constant, and every inlining of `mk` copied the unfolded conversion. The final graph must hold no CAST, and the folded constant must keep the declared type P."
+desc = "A Safe conversion of a constant struct in return position is folded after std::opt: the function graph's returned value is also its exit and output value, and folding it moves those anchors to the constant (design principles 5.1, 5.2: the conversion only names the type the value is used as and moves nothing). Folding used to treat the graph's returned value as a pinned anchor, so `mk` kept a conversion over its folded constant, and every inlining of `mk` copied the unfolded conversion. The final graph must hold no conversion -- no `:op/cast` OPER, the name it has had since `af3c6c9bdd` removed the `CAST` kind, counted by label and type together -- and the folded constant must keep the declared type P. The deleted kind is asserted absent, so a rename is distinguishable from a resurrection."
 kind = "behavior"
 case = "../../../cases/opt/generic/fold_struct_cast.cml"
 args = ["${case}", "std::opt", "std::gir", "std::nop"]
@@ -1735,8 +1740,11 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout
-const count = (label) => (out.match(new RegExp(`label="${label}"`, 'g')) || []).length
-assert(count('CAST') === 0, `a struct conversion of a constant in return position was not folded: ${count('CAST')} CAST nodes left`)
+// Same node the fold has always had to remove, named the way the view names it since af3c6c9bdd:
+// the operator URI with type OPER, not the deleted node kind CAST.
+const conversions = out.split('\n').filter((line) => line.includes('label=":op/cast"') && line.includes('type="OPER"'))
+assert(conversions.length === 0, `a struct conversion of a constant in return position was not folded: ${conversions.length} ':op/cast' OPER nodes left`)
+assert(!out.includes('label="CAST"'), 'the view prints the deleted node kind CAST, so this reading no longer names the node it was written for (af3c6c9bdd moved the label to the operator URI)')
 assert(out.includes('value_type="P"'), 'the folded constant must keep the declared result type P')
 assert(out.includes('label="{ a: 3, b: 1.5 }"'), 'the returned struct must be folded to its value')
 }
@@ -1818,7 +1826,7 @@ timeout_ms = 8000
 
 [[tests]]
 name = "fold_cast.failing_is_kept"
-desc = "A conversion of a constant that fails is not folded: the CAST stays in the simplified graph, and compiling is not an error."
+desc = "A conversion of a constant that fails is not folded: it stays in the simplified graph as `:op/cast` OPER nodes -- the name a conversion has had since `af3c6c9bdd` removed the `CAST` kind -- and compiling is not an error. The count is exact: the program has one conversion site and the view prints the `main` graph in its cluster and again at the top level, so it is two nodes today, and a second site or a dropped one is a different reading. The deleted kind is asserted absent, so a rename is distinguishable from a resurrection."
 kind = "behavior"
 case = "../../../cases/opt/generic/fold_cast_fails.cml"
 args = ["${case}", "std::opt", "std::gir", "std::nop"]
@@ -1827,8 +1835,12 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout
-const count = (label) => (out.match(new RegExp(`label="${label}"`, 'g')) || []).length
-assert(count('CAST') >= 1, 'the failing conversion must stay in the graph')
+// The conversion this test is about, named the way the view names it since af3c6c9bdd: the operator
+// URI with type OPER, not the deleted node kind CAST. Two nodes, one site: std::opt leaves the
+// program graph and the `main` graph it reached, and the view prints both.
+const conversions = out.split('\n').filter((line) => line.includes('label=":op/cast"') && line.includes('type="OPER"'))
+assert(conversions.length === 2, `the failing conversion must stay in the graph: ${conversions.length} ':op/cast' OPER nodes, expected 2 (one conversion site, printed in the main cluster and at the top level)`)
+assert(!out.includes('label="CAST"'), 'the view prints the deleted node kind CAST, so this reading no longer names the node it was written for (af3c6c9bdd moved the label to the operator URI)')
 }
 """
 timeout_ms = 8000
