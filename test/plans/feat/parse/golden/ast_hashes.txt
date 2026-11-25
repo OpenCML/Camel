@@ -3991,6 +3991,7 @@ b50e98a67ddffe74 ok test/cases/opt/commit_checks/inline_two_reads.cml
 f71a3b6609552d7e ok test/cases/opt/commit_checks/loop_body_read.cml
 b70183465aeb1378 ok test/cases/opt/commit_checks/port_type.cml
 04e06cb129f0948f ok test/cases/opt/commit_checks/sibling_arm.cml
+c946f2b9c4d7a780 ok test/cases/opt/cost/cost_choice.cml
 62047c13d03403b4 ok test/cases/opt/cxx_isolation/subject.cml
 6a329b3abbfabfd5 ok test/cases/opt/defun/captured.cml
 8985e92e857a3a09 ok test/cases/opt/defun/closure_dispatch.cml

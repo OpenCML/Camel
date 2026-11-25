@@ -347,6 +347,27 @@ void mergeRecord(Record &into, const Record &from) {
         into.folder = from.folder;
     }
 
+    // How dear one run of the operator is. It belongs here and not with the items a pass asks
+    // about, because it is stated once by the operator's owner and read by a cost function
+    // (`Record::relativeCostOf`, `graph::relative_cost`).
+    //
+    // It is the one item whose absence is silent. An unstated cost reads as 1.0, which is a true
+    // statement about an operator nobody priced and a false one about a division; and because
+    // `rules::default` is `relative_cost(n) + the costs of the values it reads`, a record that
+    // dropped the statement makes the default cost agree with `rules::nodes` on every program.
+    // That is what an extraction did while this item was not merged: the numbers in
+    // `builtin_semantics.cpp` were written into a registration, merged away, and read back as 1.0,
+    // so `cost=rules::default` and `cost=rules::nodes` chose the same writing and nothing anywhere
+    // said a choice had been lost. `test/plans/feat/opt/cost.plan.toml` is the reading that
+    // separates the two again: the same program, two cost functions, two different writings.
+    mergeStated(
+        uri,
+        "cost",
+        into.relativeCost,
+        from.relativeCost,
+        [](double a, double b) { return a == b; },
+        [](double v) { return std::format("{:g}", v); });
+
     // ---- what a pass asks about the operator ------------------------------------------------
 
     mergeItem(

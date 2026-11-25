@@ -1,0 +1,59 @@
+/**
+ * One value with two writings that cost different amounts: `x / 2.0`, and two products that compute
+ * the same number. Which writing the program keeps is what the extraction's cost function decides.
+ *
+ * The two writings. A division states 8 in the operator's record and a product 3, so the default
+ * cost prefers the two products (9 against 10) even though it is the longer writing; the count of
+ * nodes prefers the division (3 against 5). The two cost functions therefore disagree on this
+ * program, which is what makes it a reading of the record and not of the program: when the 8 and the
+ * 3 never reach the record, `cost=rules::default` and `cost=rules::nodes` choose the same writing
+ * and this case's two entries read the same line.
+ */
+import { Node, Graph, nodes, op, op_name, name, graphs_of, relative_cost } from graph
+import { saturate } from rewrite
+
+rule cheaper(x: f64) { x / 2.0 => (x * 0.25) * 2.0 }
+
+/// The saturation only: the value `halve` returns is left with both writings, nothing extracted.
+export func tabled::<F>(p: F) => F! {
+    return p->saturate<[cheaper]>
+}
+
+func opText(n: Node) => string {
+    return match op(n) {
+        case null => ''
+        case o => op_name(o)
+    }
+}
+
+func countOf::<F>(p: F, function: string, operator: string) => int spelling {
+    let found = graphs_of(p)->filter<func (g: Graph) => bool {
+        name(g) == function
+    }>
+    return len(nodes(found[0])->filter<func (n: Node) => bool {
+        opText(n) == operator
+    }>)
+}
+
+/// Which operators `halve` keeps after whatever extraction the pipeline named before this pass, what
+/// each of them states in its record, and what the program prints.
+export func report::<F>(p: F) => F! spelling sync {
+    let found = graphs_of(p)->filter<func (g: Graph) => bool {
+        name(g) == 'halve'
+    }>
+    let costs = nodes(found[0])->map<func (n: Node) => string {
+        '{}={}'->format<opText(n), relative_cost(n)>
+    }>()
+    println('halve div', countOf(p, 'halve', ':op/div_d'), 'mul', countOf(p, 'halve', ':op/mul_d'))
+    println('halve costs', costs->join<' '>)
+    return p
+}
+
+func halve(x: f64) => f64 {
+    return x / 2.0
+}
+
+func main() => int sync {
+    println(halve(8.0))
+    return 0
+}
