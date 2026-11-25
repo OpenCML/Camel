@@ -13,9 +13,11 @@
 #include "camel/facts/control_regions.h"
 #include "camel/runtime/control_regions.h"
 #include "camel/runtime/graph.h"
+#include "camel/runtime/graph_txn.h"
 #include "camel/runtime/reachable.h"
 
 #include <format>
+#include <memory>
 #include <ostream>
 #include <vector>
 
@@ -25,6 +27,7 @@ using camel::runtime::GCGraph;
 using camel::runtime::GCRegion;
 using camel::runtime::GCRegionKind;
 using camel::runtime::gc_node_ref_t;
+using camel::runtime::kInvalidNodeRef;
 
 /// The most control regions a graph may have for the pair-wise part of the comparison: every pair
 /// is one item, and a graph of N control regions costs N*N of them. A graph over the bound still
@@ -212,6 +215,35 @@ struct ReaderCounts {
     size_t noFact = 0;
 };
 
+/// The fourth reading: the same kind asked of a **draft**. `core.arrangeable` is a fact about the
+/// graph an editing session is building as much as about the one a program holds (`facts.h`: "the
+/// graph itself -- the frozen graph a program holds, or the graph an editing session is building"),
+/// and until the framework could hold a draft only the frozen half could be asked. This comparison
+/// decodes each graph into a transaction, asks the kind at every node of the *draft*, and reads:
+///
+///   `no_store`  graphs the framework answered no store for -- a draft it cannot hold, which is the
+///               thing this comparison exists to catch, because a count of zero asked of a draft
+///               that was never held would pass silently;
+///   `same`/`diff`  the draft's answer at a node against the frozen graph's answer at the same node.
+///               A decoded draft keeps the graph's numbering (`GraphDraft::keepsNodeIds`), so the
+///               two are the same node and the count is per node, not per pair;
+///   `kept`      nodes whose second ask was answered from what the store kept (`Status::Valid`), so
+///               a store that recomputed every time would be visible here;
+///   `stale`     graphs where an edit to the draft dropped the stored answer (`Status::Stale`). The
+///               answer a draft gives must go away when the draft changes, and this is the only
+///               reading that says the stamp is the draft's revision and not the constant a frozen
+///               graph answers.
+struct DraftCounts {
+    size_t graphs = 0;
+    size_t nodes  = 0;
+    size_t same   = 0;
+    size_t diff   = 0;
+    size_t noFact = 0;
+    size_t noStore = 0;
+    size_t kept   = 0;
+    size_t stale  = 0;
+};
+
 /// The name of a node kind, as the reading prints it.
 const char *nodeKindName(camel::graph::NodeKind kind) {
     switch (kind) {
@@ -288,6 +320,100 @@ void compareReaders(
     }
 }
 
+/// The fourth reading (see `DraftCounts`): `core.arrangeable` asked of the draft this graph decodes
+/// into, at every node, against the answer the frozen graph gave at the same node. A decoded draft
+/// keeps the graph's numbering (`GraphDraft::keepsNodeIds`), so the two are one node and the count
+/// is per node; a draft that does not keep them is counted as a `no_store` graph and named, because
+/// pairing two different nodes and reporting agreement about nothing is the failure this reading
+/// exists to catch.
+void compareDraft(
+    const camel::runtime::Program &program, const GCGraph &graph, camel::facts::Store &frozen,
+    DraftCounts &counts, std::ostream &os) {
+    const camel::facts::KindId kind = camel::facts::arrangeableKind();
+    const std::unique_ptr<camel::runtime::GraphTransaction> transaction =
+        camel::runtime::GraphTransaction::decode(program, &graph);
+    if (!transaction) {
+        ++counts.noStore;
+        os << std::format("FACTS_COMPARE draft graph={} state=no-transaction\n", graph.name());
+        return;
+    }
+    const camel::runtime::GraphDraft &draft = transaction->graph();
+    ++counts.graphs;
+    if (!draft.keepsNodeIds()) {
+        ++counts.noStore;
+        os << std::format("FACTS_COMPARE draft graph={} state=no-kept-ids\n", graph.name());
+        return;
+    }
+    camel::facts::Store *store = camel::facts::storeHolding(draft);
+    if (store == nullptr) {
+        // The framework answered no store for the draft: the kind is not askable where only a
+        // draft is at hand, which is the thing this reading was added to make visible.
+        ++counts.noStore;
+        os << std::format("FACTS_COMPARE draft graph={} state=no-store\n", graph.name());
+        return;
+    }
+    gc_node_ref_t lastRef = kInvalidNodeRef;
+    for (gc_node_ref_t ref = 0; ref < static_cast<gc_node_ref_t>(draft.nodeSlotCount()); ++ref) {
+        if (!draft.alive(ref) || ref >= static_cast<gc_node_ref_t>(graph.nodeCount())) {
+            continue;
+        }
+        ++counts.nodes;
+        lastRef = ref;
+        const camel::facts::Anchor anchor{&draft, static_cast<camel::facts::NodeId>(ref)};
+        const std::shared_ptr<const camel::facts::Arrangeable> here =
+            store->obtain<camel::facts::Arrangeable>(kind, anchor);
+        const std::shared_ptr<const camel::facts::Arrangeable> there =
+            frozen.obtain<camel::facts::Arrangeable>(
+                kind, camel::facts::Anchor{&graph, static_cast<camel::facts::NodeId>(ref)});
+        if (here == nullptr) {
+            ++counts.noFact;
+            os << std::format(
+                "FACTS_COMPARE draft_diff graph={} node={} state=no-fact node_kind={}\n",
+                graph.name(),
+                ref,
+                nodeKindName(draft.view().kindOf(static_cast<camel::graph::NodeRef>(ref))));
+            continue;
+        }
+        // The second ask must be answered from what the store kept: a store whose stamp never
+        // matched would recompute here, and this count is what would say so (facts.h, Status).
+        if (store->probe(kind, anchor) == camel::facts::Status::Valid) {
+            ++counts.kept;
+        }
+        const bool same = there != nullptr && *here == *there;
+        ++(same ? counts.same : counts.diff);
+        if (!same) {
+            os << std::format(
+                "FACTS_COMPARE draft_diff graph={} node={} node_kind={} draft={}{}{}{} "
+                "frozen={}{}{}{}\n",
+                graph.name(),
+                ref,
+                nodeKindName(draft.view().kindOf(static_cast<camel::graph::NodeRef>(ref))),
+                here->pure ? 1 : 0,
+                here->noExternalEffect ? 1 : 0,
+                here->cannotFault ? 1 : 0,
+                here->terminates ? 1 : 0,
+                there == nullptr ? 0 : (there->pure ? 1 : 0),
+                there == nullptr ? 0 : (there->noExternalEffect ? 1 : 0),
+                there == nullptr ? 0 : (there->cannotFault ? 1 : 0),
+                there == nullptr ? 0 : (there->terminates ? 1 : 0));
+        }
+    }
+    // What the store answered about the draft must not outlive the draft's content: an edit drops
+    // it. Adding one untyped value node is the cheapest edit that is a change of content
+    // (`revision`, `GraphDraft::addNode`), and this transaction is the reading's own -- nothing
+    // reads the draft afterwards.
+    gc_node_ref_t added = kInvalidNodeRef;
+    if (lastRef != kInvalidNodeRef) {
+        added = transaction->edit().addDataNode(nullptr, 0);
+    }
+    if (added != kInvalidNodeRef &&
+        store->probe(
+            kind, camel::facts::Anchor{&draft, static_cast<camel::facts::NodeId>(lastRef)}) ==
+            camel::facts::Status::Stale) {
+        ++counts.stale;
+    }
+}
+
 } // namespace
 
 const camel::runtime::Program *
@@ -296,6 +422,7 @@ FactsCompareTestPass::apply(const camel::runtime::Program *program, std::ostream
     ControlCounts control;
     ArrangeCounts arrange;
     ReaderCounts readers;
+    DraftCounts draft;
     for (auto *graph : collectReachableGraphs(*program)) {
         if (graph == nullptr) {
             continue;
@@ -312,6 +439,7 @@ FactsCompareTestPass::apply(const camel::runtime::Program *program, std::ostream
         compareControlRegions(*graph, *store, control);
         compareArrangeable(*graph, *store, arrange);
         compareReaders(*graph, *store, readers, os);
+        compareDraft(*program, *graph, *store, draft, os);
     }
     os << std::format(
         "FACTS_COMPARE kind=core.controlRegions graphs={} regions={} enclosing_same={} "
@@ -341,6 +469,17 @@ FactsCompareTestPass::apply(const camel::runtime::Program *program, std::ostream
         readers.agree,
         readers.diff,
         readers.noFact);
+    os << std::format(
+        "FACTS_COMPARE kind=core.arrangeable draft graphs={} nodes={} same={} diff={} no_fact={} "
+        "no_store={} kept={} stale={}\n",
+        draft.graphs,
+        draft.nodes,
+        draft.same,
+        draft.diff,
+        draft.noFact,
+        draft.noStore,
+        draft.kept,
+        draft.stale);
     return program;
 }
 

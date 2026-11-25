@@ -180,3 +180,71 @@ assert(other && other.match(/nodes=([0-9]+)/)[1] === String(num('nodes')), 'the 
 }
 """
 timeout_ms = 20000
+
+# The call: the second disagreement the readers comparison found, and the one this lane answered.
+# Before the change, on this program, `main`'s call of `f` was answered 1111 by the kind (the walk
+# read the body of `f` and found it pure, infallible and ending) and 0 by the predicate a pass asks
+# (`FACTS_COMPARE reader_diff graph=main node=1 node_kind=func oper=- kind=1 moved=0 terms=1111`),
+# so the same node had two answers about whether a pass may move it. The kind declines at a call
+# now -- the four terms are about the node's own place, and what a call runs is another graph's
+# content -- which is the answer `graph::is_chain_statement` gives on purpose. A program whose
+# only function-call node is in `main` is the smallest case that reads it: with one call node, one
+# `reader_diff` line is the whole difference between the two answers.
+[[tests]]
+name = "facts.compare_arrangeable_readers_calls"
+desc = "test::facts_compare's readers line on a program whose `main` calls `f`: the fact and the predicate a pass asks agree at every node, including the `func` node that makes the call. The two answered differently until the kind stopped reading a callee's body: the body of `f` is pure, cannot fail and ends, so the kind said `freely arrangeable` about a node whose place carries a call, and the predicate said it may not be moved. A `reader_diff` line names any node the two still answer differently; this test reads the count and the absence of the line."
+kind = "behavior"
+case = "../../../cases/facts/two_functions.cml"
+args = ["${case}", "test::facts_compare"]
+
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout
+const line = out.split('\n').find(l => l.startsWith('FACTS_COMPARE kind=core.arrangeable readers'))
+assert(line, 'no FACTS_COMPARE readers line for core.arrangeable')
+const num = (name) => { const m = line.match(new RegExp(name + '=([0-9]+)')); assert(m, `${name} is missing from: ${line}`); return Number(m[1]) }
+assert(num('nodes') > 0, 'no node was read')
+assert(num('no_fact') === 0, `a node got no answer from the kind: ${line}`)
+assert(num('diff') === 0, `the fact and the pass predicate answer a node differently: ${line}\\n${out.split('\\n').filter(l => l.startsWith('FACTS_COMPARE reader_diff')).join('\\n')}`)
+assert(num('agree') === num('nodes'), 'not every node was answered the same way')
+const diffs = out.split('\n').filter(l => l.startsWith('FACTS_COMPARE reader_diff'))
+assert(diffs.length === 0, `a reader_diff line is still printed: ${diffs.join(' | ')}`)
+}
+"""
+timeout_ms = 20000
+
+# The framework holds a draft. `core.arrangeable` is a fact about a graph, and a graph is the
+# frozen one a program holds *or* the one an editing session is building; until this lane only the
+# frozen half had a store, so the kind could not be asked where a draft was all a caller had (the
+# freeze decides `dropsOrder` from a draft). The `draft` line reads the same kind off a transaction
+# this pass decodes each graph into: every node is answered (`no_fact=0`), no graph failed to get a
+# store (`no_store=0`), every answer equals the frozen graph's answer at the same node
+# (`diff=0`), every second ask was answered from what the store kept (`kept=nodes`), and an edit
+# to the draft dropped the stored answer (`stale=graphs`) -- which is the stamp being the draft's
+# revision and not the constant a frozen graph answers.
+[[tests]]
+name = "facts.compare_arrangeable_draft"
+desc = "test::facts_compare asks `core.arrangeable` of the draft each reachable graph decodes into, at every node, and reads the counts: the framework found a store for every draft (`no_store=0`), answered every node (`no_fact=0`) with the same terms the frozen graph gives at that node (`diff=0`, and `same=nodes`), answered a second ask from what it kept (`kept=nodes`), and dropped the stored answers when the draft was edited (`stale=graphs`). Before the change the `storeHolding` of a draft answered nothing (`state=no-store`), so the count was zero and the reading said nothing: a kind that cannot be asked where a draft is all the caller has is the wall this test reads across."
+kind = "behavior"
+case = "../../../cases/facts/tensors_and_loops.cml"
+args = ["${case}", "test::facts_compare"]
+
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout
+const line = out.split('\n').find(l => l.startsWith('FACTS_COMPARE kind=core.arrangeable draft'))
+assert(line, 'no FACTS_COMPARE draft line for core.arrangeable')
+const num = (name) => { const m = line.match(new RegExp(name + '=([0-9]+)')); assert(m, `${name} is missing from: ${line}`); return Number(m[1]) }
+assert(num('graphs') > 0, 'no draft was asked')
+assert(num('nodes') > 0, 'no node of a draft was asked')
+assert(num('no_store') === 0, `a draft got no store from the framework, so the kind is not askable there: ${line}\\n${out.split('\\n').filter(l => l.startsWith('FACTS_COMPARE draft ')).join('\\n')}`)
+assert(num('no_fact') === 0, `a node of a draft got no answer from the kind: ${line}`)
+assert(num('diff') === 0, `the draft and the frozen graph answer a node differently: ${line}\\n${out.split('\\n').filter(l => l.startsWith('FACTS_COMPARE draft_diff')).join('\\n')}`)
+assert(num('same') === num('nodes'), 'the two counts do not cover the nodes of the drafts')
+assert(num('kept') === num('nodes'), `a draft fact was recomputed on the second ask instead of being answered from what the store kept: ${line}`)
+assert(num('stale') === num('graphs'), `editing a draft did not drop the fact stored about it, so the stamp is not the draft's revision: ${line}`)
+}
+"""
+timeout_ms = 20000
