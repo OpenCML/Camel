@@ -35,7 +35,7 @@ import { erfc as math_erfc, erf as math_erf, exp as math_exp, log as math_log, p
 // a law's left side spells the operator (`nn/signatures/nn.cml`), and a family cannot read
 // another module's private function.
 import { avg_pool2d, conv2d, embedding, max_pool2d, max_pool2d_grad } from nn
-import { abs, add_stated, div_stated, erf, erfc, exp, full, gelu, layer_norm, layer_norm_grad, linear, log, log_softmax, matmul, matmul_stated, max, max_axis_stated, maximum, mean, mean_axis_stated, mean_stated, min, min_axis_stated, minimum, mul_stated, ones_like, permute, pick_at, relu, reshape, rsqrt, shape, sigmoid, softmax, sqrt, subtract_stated, sum, sum_axis_stated, sum_stated, take, take_stated, tanh, transpose, where, zeros_like } from tensor
+import { abs, add_stated, div_stated, erf, erfc, exp, full, gelu, layer_norm, layer_norm_grad, linear, log, log_softmax, matmul, matmul_stated, max, max_axis_stated, maximum, mean, mean_axis_stated, mean_stated, min, min_axis_stated, minimum, mul_stated, ones_like, permute, pick_at, relu, reshape, rsqrt, shape, sigmoid, softmax, sqrt, subtract_stated, sum, sum_axis_stated, sum_stated, sum_to, take, take_stated, tanh, transpose, where, zeros_like } from tensor
 import { is_float, is_integer, is_same, is_string, Tangent } from types
 
 /// A value of type `T` with its tangent: what a forward transform carries for one value.
@@ -334,6 +334,21 @@ export rule jvp_matmul::<T>(a: T[...], b: T[...]) when is_float::<T>() { matmul(
 /// the same way.
 export rule jvp_sum::<T>(xs: T[...]) when is_float::<T>() { sum(xs) => func (dxs: T[...]) {
     sum_stated(dxs, shape(xs))
+} }
+
+// ---- the forward rule of `sum_to` ----
+//
+// `sum_to(t, at)` is the reduction a broadcast's adjoint makes, and it is an *exported* operator
+// (`src/stdlib/tensor.cml#sum_to`), so a program can write it and a lift of that program needs a
+// forward rule like any other. It is linear in `t` -- the extents are an operand of their own and
+// the sum of a tangent is the tangent of the sum -- so the law is the operator applied to the
+// tangent, with the extents handed over unchanged.
+//
+// The engine's table answers it too (`lib/tensor/ops/gradient_ops.cpp#sumToVjp`), so the key is one
+// both halves must have; the reverse half is `rulesets/transpose.cml#sum_to_t`, and its answer is
+// the operator this one's forward rule runs backwards.
+export rule jvp_sum_to::<T>(t: T[...], at: int[]) when is_float::<T>() { sum_to(t, at) => func (dt: T[...]) {
+    sum_to(dt, at)
 } }
 
 /// `d(mean<axis, keepdims>(xs)) = mean<axis, keepdims>(dxs)`: a mean is a sum divided by a

@@ -1,0 +1,100 @@
+/**
+ * The reverse halves of `^`, `softmax` and `layer_norm` (`lib/rulesets/transpose.cml`: `pow_t`,
+ * `softmax_t`, `layer_norm_t`), read against the engine's own rules on the same numbers.
+ *
+ * All three keys were the parity check's `forward-only` column: the forward law was filed
+ * (`jvp_pow`, `jvp_softmax`, `jvp_layer_norm`) and the reverse one was not, so the library answered
+ * the key in one direction only.
+ *
+ * **One of the three is read by both legs; the other two by the engine's alone, and the reason is
+ * the same for both.** `^` at a constant exponent is differentiated twice -- the engine`s `grad(f)`
+ * and the library`s `vjp(f)` of the same function -- and the two numbers are compared.
+ *
+ * `softmax` and `layer_norm` stop one step *before* their new law, in the forward half that was
+ * already there, and the two sentences below are measured on this host, not guessed:
+ *
+ *     TRANSPOSE function=rulesets.jvp::softmax_jvp<float>
+ *     skip=parameter-shape uri=tensor:multiply node=9 position=1 param=1 param-type=float[...]
+ *     TRANSPOSE function=split_of_jvp_of_softmax_total_plain_backward
+ *     skip=call-no-transpose node=19 callee=rulesets.jvp::softmax_jvp<float>
+ *
+ * `softmax_jvp` is a **call** in the linear half, and a call with no transpose of its own stops the
+ * walk -- the rule `jvp_sigmoid` writes down ("no helper: a helper named here becomes a call in the
+ * linear half") and the one `jvp_softmax` breaks by factoring its tangent out. Inside it, the
+ * product of the probabilities with the tangent is a bare `*` on a value whose type states no
+ * extents, which the walk refuses by name as well. `jvp_layer_norm` has the same shape: it writes
+ * `layer_norm_grad(x, layer_norm_neutral(gamma, 1.0), dx, 0)` into its linear half.
+ *
+ * So both laws are filed (the two halves must agree on the key) and neither is walked yet, and the
+ * work that unblocks them is a rewrite of the two **forward** halves -- a straight-line right side
+ * with `mul_stated` and `shape(x)` where `jvp_softmax` calls a helper -- not a change to these
+ * laws. The engine`s number is printed for each so the law`s target is on the record.
+ *
+ * The numbers, derived by hand:
+ *
+ *   * softmax on `[1.0, 2.0, 3.0]` weighted by `[1, 2, 3]`: `Σ w_k p_k` is `2.5752...`, and the
+ *     cotangent of `x` at the seed 1 is `p * (w - Σ w p)` elementwise, so all three lanes are
+ *     non-zero and of both signs. A law that dropped the outer-product term answers `p * w`.
+ *   * `layer_norm` on `[[1, 2, 3], [4, 5, 6]]` with `gamma = [1, 1, 1]` and `beta = [0, 0, 0]`:
+ *     each lane normalizes to zero mean and unit variance, so the `x` cotangent at the seed 1 is a
+ *     small vector whose sum is zero -- which is what makes "the cotangent passed through" a wrong
+ *     answer of a different shape than the right one.
+ *   * `^`: `d(x^3)/dx` at `x = 2` is `12.0`; the two wrong laws a reader might write (`x^3` read
+ *     as the derivative, `3x`) answer `8.0` and `6.0` there.
+ */
+
+import { grad } from autodiff
+import { abs, layer_norm, softmax, sum } from tensor
+import { vjp } from vjp
+
+// ---- softmax --------------------------------------------------------------------------------
+
+with <x: float[3]>
+func softmax_total() => float {
+    return sum(softmax<0>(x) * [1.0, 2.0, 3.0] as float[3])
+}
+
+
+// ---- layer_norm -----------------------------------------------------------------------------
+
+with <x: float[2, 3]>
+func layer_norm_total() => float {
+    return sum(layer_norm(x, [1.0, 2.0, 1.0] as float[3], [0.0, 0.5, 0.0] as float[3]))
+}
+
+// ---- ^ --------------------------------------------------------------------------------------
+
+with <x: float>
+func cube_total() => float {
+    return x ^ 3.0
+}
+
+func cube_total_plain(x: float) => float {
+    return x ^ 3.0
+}
+
+func main() => int sync {
+    // ^: a constant exponent, the only shape the engine's rule accepts, and the one of the three
+    // whose library leg runs today.
+    let cube_engine = grad(cube_total)<2.0>()
+    let (_, cube_pullback) = vjp(cube_total_plain)(2.0)
+    let cube_library = cube_pullback(1.0).0
+    let cube_same = cube_engine == cube_library
+    `cube grad engine={} library={} same={}`->format<cube_engine, cube_library, cube_same>->println
+
+    // softmax: the engine's leg, and the number the law must answer. The library's leg is refused
+    // before this law is asked -- see the header.
+    let probability_input = [1.0, 2.0, 3.0] as float[3]
+    let softmax_engine = grad(softmax_total)<probability_input>()
+    `softmax engine={} library=filed-not-walked`->format<softmax_engine>->println
+
+    // layer_norm: the engine's leg, and the number the law must answer once a forward half reaches
+    // it. The library's leg is not printed because it is refused before this law is asked.
+    let layer_norm_input = [[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]] as float[2, 3]
+    let layer_norm_engine = grad(layer_norm_total)<layer_norm_input>()
+    `layer_norm engine={} library=filed-not-walked`->format<layer_norm_engine>->println
+
+    let all_same = cube_same
+    `softmax_layer_norm_pow all_same={}`->format<all_same>->println
+    return 0
+}

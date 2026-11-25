@@ -49,7 +49,7 @@ import { erfc as math_erfc, erf as math_erf, exp as math_exp, log as math_log, p
 // layering the build enforces is the C++ kernel's, 10.5) and `rulesets.jvp` records the same
 // import from the forward side.
 import { avg_pool2d, avg_pool2d_grad, conv2d, conv2d_bias_grad, conv2d_input_grad, conv2d_kernel_grad, embedding, embedding_table_grad, max_pool2d, max_pool2d_grad, softmax_cross_entropy, softmax_cross_entropy_grad } from nn
-import { abs, add_stated, broadcast_like, div_stated, erf, erfc, exp, full, gelu, linear, log, log_softmax, matmul, matmul_stated, max, max_axis_stated, maximum, mean, mean_axis_stated, mean_stated, min, min_axis_stated, minimum, mul_stated, numel, permute, pick_at, relu, reshape, rsqrt, shape, sigmoid, sqrt, subtract, subtract_stated, sum, sum_axis_stated, sum_stated, sum_to, take, take_stated, tanh, transpose, where, zeros, zeros_like } from tensor
+import { abs, add_stated, broadcast_like, div_stated, erf, erfc, exp, full, gelu, layer_norm, layer_norm_grad, linear, log, log_softmax, matmul, matmul_stated, max, max_axis_stated, maximum, mean, mean_axis_stated, mean_stated, min, min_axis_stated, minimum, mul_stated, numel, permute, pick_at, relu, reshape, rsqrt, shape, sigmoid, softmax, softmax_grad, sqrt, subtract, subtract_stated, sum, sum_axis_stated, sum_stated, sum_to, take, take_stated, tanh, transpose, where, zeros, zeros_like } from tensor
 import { is_float } from types
 
 /// The transpose of `x + c`: the cotangent of the sum, of `x` and of `c`.
@@ -327,6 +327,61 @@ export rule log_softmax_t::<T>(x: T[...]) when is_float::<T>() { log_softmax<0>(
     (ct - exp(log_softmax<0>(x)) * sum<0, true>(ct))
 } }
 
+// ---- the transpose rule of `softmax` ----
+//
+// `softmax<axis>(x)` was the other key of the `forward-only` column here: `jvp_softmax` answered the
+// tangent and nothing answered the cotangent. The reverse is not the forward rule transposed --
+// that is `log_softmax_t`'s note one section up -- it is `y * (ct - sum<axis, true>(ct * y))` with
+// `y = softmax<axis>(x)`, the jacobian `diag(p) - p pᵀ` read from the right.
+//
+// **The law calls `softmax_grad` and does not write that arithmetic out.** The engine's `softmaxVjp`
+// builds the operator (`lib/tensor/ops/reduction_ops.cpp#softmaxVjp`: `tensor:softmax_grad(output,
+// dy[, axis])`), and the kernel behind it is the one place the subtraction's broadcast and the
+// axis' normalization are decided. A law that recomputed the same expression would be a second
+// implementation of one rule, and the two legs of a `grad` are compared bit for bit: the day the
+// kernel's grouping moved, the library's copy would answer a number one place off and nothing
+// would say which of the two was the rule. So the law names the operator, which is also why
+// `softmax_grad` is exported by `tensor` at all.
+//
+// The axis is the operator's second port and the law names it, exactly as `jvp_softmax` does: a law
+// that wrote `<0>` would answer the first axis of a rank-1 input and no other axis at all
+// (`jvp_softmax` records the refusal that spelling produces). The `y` the law feeds the kernel is
+// the forward value recomputed from the operand -- the channel `exp_t` established -- and it is the
+// same number the engine's node carries, because the kernel is deterministic and the operand is
+// the same value.
+export rule softmax_t::<T>(x: T[...], axis: int) when is_float::<T>() { softmax<axis>(x) => func (ct: T[...]) {
+    softmax_grad(softmax<axis>(x), ct, axis)
+} }
+
+// ---- the transpose rule of `layer_norm` ----
+//
+// `layer_norm(x, gamma, beta)` normalizes each lane of `gamma`'s element count, and its adjoint is
+// three cotangents -- one per operand -- each of which is the same operator read at a different
+// `which`. The library cannot write the arithmetic: the lane is a **block of axes**, and every
+// reduction it declares takes one axis (`jvp_layer_norm` records the same wall from the forward
+// side, and it is why that rule is written as the normalization's own derivative rather than as a
+// composition).
+//
+// The engine answers with one operator and a selector -- `tensor:layer_norm_grad(x, gamma, dy,
+// which[, eps])`, once per operand (`lib/tensor/ops/reduction_ops.cpp#layerNormVjp`) -- and that
+// operator is exported by `tensor`, so the law is the engine's own three accumulations written as
+// one tuple: `which = 0` for `x`, `1` for `gamma`, `2` for `beta`, in the order the cotangents are
+// answered. Writing the three calls instead of one is not a choice: a law's right side is the
+// answer, and the answer is a tuple of three.
+//
+// `eps` is not read: the law's left side is the three-operand spelling, so a call that passes the
+// fourth operand reaches no law and is refused by shape rather than answered with the default
+// (design principles: a step the library cannot answer is refused by name, never guessed).
+export rule layer_norm_t::<T>(x: T[...], gamma: T[...], beta: T[...]) {
+    layer_norm(x, gamma, beta) => func (ct: T[...]) {
+        (
+            layer_norm_grad(x, gamma, ct, 0),
+            layer_norm_grad(x, gamma, ct, 1),
+            layer_norm_grad(x, gamma, ct, 2)
+        )
+    }
+}
+
 // ---- the transpose laws of the eight basic elementwise operators ----
 //
 // The reverse half of the tranche whose forward half is in `lib/rulesets/jvp.cml`
@@ -406,6 +461,44 @@ export rule div_stated_t::<T, X, W, AX, AW>(x: X, w: W, ax: AX, aw: AW) when is_
     (sum_to(ct / w, ax), sum_to(-((ct / w) * (x / w)), aw))
 } }
 
+// ---- why `abs`, `log`, `maximum` and `minimum` have no law here ----
+//
+// These four are the largest block of `scripts/vjp-parity.mjs`'s `forward-only` column: their
+// forward laws are in `lib/rulesets/jvp.cml` (`jvp_abs`, `jvp_log`, `jvp_maximum`, `jvp_minimum`)
+// and no transpose law stands beside them, so each key is one the library answers in one direction
+// only. **That is the final state and not an open item: the four laws were written, and they were
+// taken back out.** Two measurements are why, both made on the host on 2026-11-25.
+//
+//   1. A law for any of the four cannot be walked. `transpose` of a one-operator function that
+//      writes one refuses it by name --
+//
+//          TRANSPOSE function=f_abs skip=law-reads-a-value uri=tensor:abs position=0
+//          operand-types=float[3] reason=the rule's right side reads a value the caller does not carry
+//
+//      -- and the sentence is exact. `transpose` turns a *linear* map around: the transposed
+//      function is handed the cotangent and nothing else, and the adjoint of a linear map is
+//      linear, so it cannot consult the operand's value. These four operators are not linear (the
+//      slope reads the value: the sign, the reciprocal, which side of the other operand), so the
+//      only law that could answer them is a law the walk can never reach. `jvp_abs` etc. do not put
+//      the operator into their linear halves for that reason -- the mask is computed in the forward
+//      half and carried -- so the reverse question is not asked anywhere either.
+//
+//   2. Filing them makes the refusal worse, and `test/plans/feat/compile/transforms.plan.toml`'s
+//      `transpose_refuses_a_nonlinear_operator` and `transpose_refuses_maximum` are the guards that
+//      say so. With the laws in place those two cases went red: the message a reader gets for
+//      `transpose(abs)` changed from "the family holds no rule for `tensor:abs` ... `transpose` is
+//      for linear functions ... take the gradient with `vjp`" to the first sentence above, which
+//      tells them a law exists and has an obstacle, when the truth is that the operator has no
+//      transpose at all. A law that no walk reaches and that degrades the diagnostic for the case it
+//      is supposed to serve is decoration, so the four are not filed.
+//
+// What the library answers for these four is the **forward** half's mask, which is the same number
+// the engine's `absVjp`/`logVjp`/`extremumVjp` answer, and
+// `test/cases/modules/autodiff/library_forward_elementwise_both_legs.cml` reads all four through
+// both legs to prove it. `scripts/vjp-parity.mjs` keeps counting them under `forward-only`, and that
+// column is a difference of decomposition rather than a gap: the engine transposes the primal graph
+// and so needs a rule per operator; the library transposes a linear map and answers these four in
+// the forward half.
 /// `x - w` on two arrays: what `tensor:subtract` means, and the left side this rule is filed under.
 func subtract::<T>(x: T[...], w: T[...]) => T[...] when is_float::<T>() {
     return x - w
@@ -711,11 +804,15 @@ export rule matmul_stated_t::<T, A, B, SA, SB>(a: A, b: B, sa: SA, sb: SB)
 // The three operations whose adjoint needs the extents they consumed are below, written against the
 // **stated** spelling their forward halves call (`sum_stated`, `take_stated`, `mean_axis_stated`):
 // that spelling's second operand is the shape, so the law reads a known value instead of the tensor
-// the cotangent comes back through. `reshape` and `softmax` still have no rule here, and what a
+// the cotangent comes back through. `reshape` still has no rule here, and what a
 // rule's pattern cannot do is not the reason: a law *can* name the position the call writes
 // in angle brackets (`rulesets.jvp#jvp_reshape` names `reshape`'s shape now), and what it names is
 // the **target** shape -- not the extents the value had before it was reshaped, which is the shape
 // this side needs and which no port of the node states.
+//
+// `softmax` was the other name in that sentence until 2026-11-25. Its law is `softmax_t` above, and
+// it needed no extents: `softmax_grad(y, ct, axis)` is the kernel's own answer, so the law hands it
+// the axis the node carries and the `y` it recomputes.
 
 // ---- the transpose rules of the three operations that state their extents ----
 //
@@ -1061,6 +1158,25 @@ export rule mean_axis_stated_t::<T, X, A, K, E>(t: X, axis: A, keepdims: K, exte
 // so -- and it is not guarded either: a guard would be a branch on a value of the cotangent, which
 // the transposed walk cannot turn around.
 
+// ---- the transpose rule of `sum_to` ----
+//
+// `sum_to(t, at)` reduces the leading axes to the extents `at` states, and it is linear in `t`, so
+// its adjoint is the spread that undoes it: `broadcast_like(ct, t)` -- the cotangent given back to
+// every position of `t`. That is the engine's rule read backwards
+// (`lib/tensor/ops/gradient_ops.cpp#sumToVjp`: `tensor:broadcast_like` of the cotangent, at
+// `t`'s own value), and the two operators are the pair this file's broadcast laws already use the
+// same way (`add_tensor_t`, `mul_tensor_t`: the reduction names extents, the spread names the value
+// whose lanes are wanted).
+//
+// `t` is read as a **value**, and that is why the law can exist at all: `sum_to`'s first operand is
+// in the primal, so the walk is handed it, and `broadcast_like`'s second operand is the donor whose
+// shape the answer takes -- no extent is reconstructed and no list is read off a tangent.
+//
+// The extents operand is an `int[]` and takes no cotangent, so the law answers one value.
+export rule sum_to_t::<T>(t: T[...], at: int[]) when is_float::<T>() { sum_to(t, at) => func (ct: T[...]) {
+    broadcast_like(ct, t)
+} }
+
 // ---- the laws for a reduction whose extents are in its **type** ----
 //
 // The three laws above are for the *stated* call the linear half writes (`sum_stated(t, at)`): a cut
@@ -1132,6 +1248,31 @@ func pow_d(x: float, y: float) => float {
 /// Its numbers are pinned by `pow_gradient_through_the_library.cml`.
 export rule pow_d_t(x: float, y: float) { pow_d(x, y) => func (ct: float) {
     (ct * y * pow(x, y - 1.0), ct * pow(x, y) * math_log(x))
+} }
+
+// ---- the transpose rule of `^` (`:op/pow_d`, `:op/pow_f`) ----
+//
+// `x ^ w` is a **written token**, so its key is derived rather than filed under a call, and the
+// section above is about the other spelling of the same kernel (`math:pow_d`, reached through a
+// declared function). The two are one arithmetic and two keys; `jvp.cml` answers both forward
+// (`jvp_pow`, `jvp_pow_d`) and only the second one had its reverse half, which is why the parity
+// check listed `^@2` as a key the library answered in one direction.
+//
+// The engine's rule for this operator is not the same rule as the array one and it is narrower:
+// `lib/std/builtin/operators/derivative.cpp#powVjp` refuses a non-constant exponent by name
+// ("Derivative of ':op/pow_d' requires a constant exponent") and answers the base's cotangent
+// only -- `dy * (n * a ^ (n - 1))`. The grouping is that one: the slope `w * x ^ (w - 1)` is
+// built first and the cotangent multiplies it, which is the same product `pow_d_t` writes above
+// and is not the same register as `ct * w * x ^ (w - 1)`.
+//
+// The exponent's cotangent is answered here and refused by the engine. That is the direction this
+// lane works in -- the library is the half that stays -- and the term is `pow_d_t`'s, the same
+// `ct * x ^ w * ln(x)` that law has answered since it landed, NaN for `x <= 0` and not a guarded
+// zero. A program whose exponent is a constant has no tangent there, so the forward half never
+// builds the term and the number the two legs answer is the base's alone: the wider law is not a
+// different number on the programs both legs can run.
+export rule pow_t::<T>(x: T, w: T) when is_float::<T>() { x ^ w => func (ct: T) {
+    (ct * (w * pow(x, w - T(1))), ct * pow(x, w) * math_log(x))
 } }
 
 /// `log(x)`: what `math:log_d` means, and the left side this rule is filed under.
@@ -1342,4 +1483,63 @@ export rule min_t::<T>(xs: T[...]) when is_float::<T>() { min(xs) => func (ct: T
 /// cotangent's element type and then each operand's own type.
 export rule linear_t::<T, A, B>(x: A, w: B) when is_float::<T>() { linear(x, w) => func (ct: T[...]) {
     (sum_to(matmul(ct, transpose(w)), shape(x)), sum_to(matmul(transpose(x), ct), shape(w)))
+} }
+
+// ---- the transpose rules of the model operators (`nn`) ----
+//
+// The four `nn` operators whose forward halves are in `lib/rulesets/jvp.cml`
+// (`jvp_conv2d`, `jvp_max_pool2d`, `jvp_avg_pool2d`, `jvp_embedding`) and whose reverse halves were
+// missing. They are one class and they were missing for one reason: each of these four answers its
+// cotangent with **the model module's own gradient operator** -- there is no arithmetic to write --
+// and the module, not the ruleset, is where those gradients live. So the laws are one call each and
+// the import at the head of this file is the whole of them.
+//
+// Each is the engine's own rule with the same operands in the same order
+// (`src/stdlib/nn/tensor_ops.cpp`): `conv2dVjp` builds `nn:conv2d_input_grad`,
+// `nn:conv2d_kernel_grad` and `nn:conv2d_bias_grad`; `pool2dVjp` builds `<pool>_grad(input, dy,
+// kernel)`; `embeddingVjp` builds `nn:embedding_table_grad(table, indices, dy)`. Naming one
+// operator per answer is the only shape that keeps the two legs bit-identical: a law that
+// recomputed a window's selection or a table's scatter would be a second implementation of the
+// kernel, and the kernels are where the padding, the ties and the repeated indices are decided.
+//
+// `avg_pool2d_t` is the one of the four that a `grad` reaches **today**, without any of these
+// operators being called by the program: `jvp_max_pool2d` writes its linear half with
+// `avg_pool2d` (`lib/rulesets/jvp.cml`), so the backward walk of a `max_pool2d` is stopped by that
+// key before any of the others. It is written with `avg_pool2d_grad` and not with `avg_pool2d`
+// applied to the cotangent, for the reason above: the two agree at stride one and no padding, and
+// the engine's rule is the one the two legs are compared against.
+//
+// The operand lists are the ones the forward halves write. `stride` and `padding` are not named: a
+// call that passes either reaches no law and is refused by shape, which is the same limit the
+// forward half has (`jvp_conv2d` records it: the tangent's extents have to be reduced, and the
+// operator that would state them does not exist yet).
+
+/// The cotangents of `conv2d(x, w, b)`: one per operand, from the kernel's own three gradients.
+/// The bias's gradient takes the bias and the cotangent only -- it sums the cotangent over the
+/// batch and the two window axes, which is what makes it a gradient at all.
+export rule conv2d_t::<T>(x: T[...], w: T[...], b: T[...]) when is_float::<T>() { conv2d(x, w, b) => func (ct: T[...]) {
+    (conv2d_input_grad(x, w, ct), conv2d_kernel_grad(x, w, ct), conv2d_bias_grad(b, ct))
+} }
+
+/// The cotangent of `max_pool2d(x, kernel)`: the kernel's gradient, which gives each window's
+/// cotangent to the position the window chose -- the same convention the forward law's mask uses
+/// (`jvp_max_pool2d`), so the two halves are adjoints of one map even on a window whose maximum is
+/// tied. The kernel is an `int` and takes no cotangent, so the law answers one value.
+export rule max_pool2d_t::<T>(x: T[...], kernel: int) when is_float::<T>() { max_pool2d(x, kernel) => func (ct: T[...]) {
+    max_pool2d_grad(x, ct, kernel)
+} }
+
+/// The cotangent of `avg_pool2d(x, kernel)`: the kernel's gradient. A mean of a window is linear, so
+/// this is also the adjoint of the `avg_pool2d` a forward law writes in its **linear** half
+/// (`jvp_max_pool2d` does), which is the shape a `max_pool2d` gradient walks through today.
+export rule avg_pool2d_t::<T>(x: T[...], kernel: int) when is_float::<T>() { avg_pool2d(x, kernel) => func (ct: T[...]) {
+    avg_pool2d_grad(x, ct, kernel)
+} }
+
+/// The cotangent of `embedding(table, indices)`: the table's rows added back where the indices
+/// gathered them, unvisited rows zero. The indices are a discrete operand with no tangent space,
+/// so the law answers one value -- the head names the `int[]` the forward law names, and that is
+/// the shape both halves are filed at.
+export rule embedding_t::<T>(table: T[...], indices: int[]) when is_float::<T>() { embedding(table, indices) => func (ct: T[...]) {
+    embedding_table_grad(table, indices, ct)
 } }

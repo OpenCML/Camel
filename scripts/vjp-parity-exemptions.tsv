@@ -43,13 +43,41 @@ struct/append_arr_in_place	engine-autodiff	the in-place rebinding's append: the 
 struct/copy_arr	engine-autodiff	the private copy a rewritten loop starts from: machinery, the identity on values
 struct/concat_arr	engine-autodiff	the array concatenation the graph builder writes: machinery, not a program's word
 
-# ---- 乙: the tensor module's internal rules (declared with no export) --------------------------
+# ---- 乙: the tensor module's gradient operators ------------------------------------------------
+#
+# This block used to be headed "declared with no export", which is true of three of these five and
+# false of the two a program can write. `sum_to` and `broadcast_like` are exported
+# (`src/stdlib/tensor.cml`) and both are written in the tree: every broadcast product's cotangent is
+# a `sum_to` in `rulesets/transpose.cml`, and
+# `test/cases/compile/broadcast_like_spreads_rank_zero.cml` calls a `broadcast_like` straight from a
+# program.
+#
+# `sum_to` was therefore a plain gap -- a program could differentiate one and the library stopped in
+# its forward half -- and its row is gone as of 2026-11-25: both halves landed
+# (`rulesets/jvp.cml#jvp_sum_to`, `rulesets/transpose.cml#sum_to_t`), the key is now one both tables
+# answer, and `test/cases/modules/autodiff/library_reverse_sum_to.cml` is the reading.
+#
+# `broadcast_like` is the one this block still owes, and it is not owed for want of an adjoint. The
+# engine's rule (`lib/tensor/ops/gradient_ops.cpp#broadcastLikeVjp`) **branches**: `tensor:sum_to` of
+# the cotangent at `shape(g)` when the first operand is a tensor, `tensor:sum` of it when the operand
+# is a single number. A ruleset holds one rule per operator -- the refusal `mul_tensor_t` records --
+# and a law's right side is one straight line with no `if`, so a single law cannot be the adjoint of
+# both branches, and the same branching stops a forward `jvp_broadcast_like`. Closing it needs a rule
+# family that dispatches on the operand's shape class, which is a design decision and not a missing
+# line; until then the engine's rule is the only one that answers both, and this row says so rather
+# than pretending an adjoint is hard to write.
+#
+# The other three are declared nowhere in CML -- `expand_axis`, `cast_like` and `permute_inverse`
+# have no `export func` -- so a law cannot even name one on its left side without a private
+# `#op('tensor:...')` declaration of an operator their own module does not export. They are the
+# machinery between one rule's node and the next (`expandAxisVjp` sums over the axis it spread,
+# `castLikeVjp` casts back, `permuteInverseVjp` permutes by the same list), and no program's word
+# reaches one.
 
-sum_to	engine-autodiff	a reduction to an operand's shape, written by the engine's own rules
-broadcast_like	engine-autodiff	a spread to an operand's shape, written by the engine's own rules
-expand_axis	engine-autodiff	a spread along an axis, written by the engine's own reduction rules
-cast_like	engine-autodiff	an element-type change between two rules' nodes, written by the engine
-permute_inverse	engine-autodiff	the inverse permutation a permute's adjoint needs, written by the engine
+broadcast_like	engine-autodiff	its adjoint branches on whether the first operand is a tensor (`sum_to` at `shape(g)`) or a number (`sum`), and a ruleset holds one law per operator with a straight-line right side, so one law cannot answer both -- see the block above
+expand_axis	engine-autodiff	no `export func` in the tensor module: a spread along an axis, written only by the engine's reduction rules; a program cannot name it
+cast_like	engine-autodiff	no `export func`: an element-type change between two of the engine's nodes, and the type it casts to is the node's own
+permute_inverse	engine-autodiff	no `export func`: the inverse permutation a `permute`'s adjoint needs, written only by the engine's rule
 
 # ---- 乙: the operators the front end introduces (no source construct of that name) --------------
 #
@@ -107,8 +135,11 @@ int	engine-autodiff	the conversion's destination is `int`, a discrete type with 
 # `erf`, `erfc`, `gelu`, `linear`, `log`, `max`, `max_axis`, `maximum`, `mean`, `min`, `min_axis`,
 # `minimum`, `neg`, `rsqrt`, `sqrt`, `sum_axis`, `transpose`, `where`, and the two axis markers
 # `argmax_axis`/`argmin_axis`, whose key now lands under `argmax`/`argmin`). The ones left are the
-# ones still owed. `layer_norm` left it on 2026-11-20, when `rulesets/jvp.cml#jvp_layer_norm` landed
-# beside the reverse rule the engine already had, so `layer_norm` is now a key both tables answer.
+# ones still owed. `layer_norm`'s forward half landed on 2026-11-20
+# (`rulesets/jvp.cml#jvp_layer_norm`) and its reverse half on 2026-11-25
+# (`rulesets/transpose.cml#layer_norm_t`); between those two dates the key sat in the parity check's
+# `forward-only` column, and the sentence that stood here -- "now a key both tables answer" -- was
+# written when only one half existed.
 # `argmax`, `argmin`, `concat` and `unsqueeze` left it on 2026-11-22, when the comparison stopped
 # reading two rulesets by name and read `stdlib/rulesets/` instead: `#vmap_rule_argmax`,
 # `#vmap_rule_argmin`, `#vmap_rule_concat` and `#vmap_rule_unsqueeze` file `argmax@1`, `argmin@1`,
@@ -116,7 +147,7 @@ int	engine-autodiff	the conversion's destination is `int`, a discrete type with 
 # they were recording a file no line of the comparison opened.
 
 
-pow	lane-rulesets	the law is filed under `^` for `:op/pow_d`; `tensor:pow` has no `jvp_` of its own
+pow	lane-rulesets	`tensor:pow`'s only spelling is `tensor`'s exported `pow`, and both rulesets bind the bare name `pow` to **`math`'s** scalar kernel (`import { ..., pow, ... } from math`), which is the operator whose key is `pow_d`; the array form has no declaration in the tensor module's CML, so no rule can name it. The spelling a program writes, `^`, answers both halves since 2026-11-25 (`rulesets/jvp.cml#jvp_pow`, `rulesets/transpose.cml#pow_t`), so no reading in the tree is refused for want of this key
 slice_sub	lane-rulesets	no `jvp_slice_sub`: the library's forward half stops a program before the reverse is asked
 idx_take	lane-rulesets	the subscript read's forward law is `jvp_idx_arr` for the two-word form; the slab form has no `jvp_*`
 

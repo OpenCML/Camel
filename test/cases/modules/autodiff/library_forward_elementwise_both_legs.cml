@@ -1,0 +1,114 @@
+/**
+ * `abs`, `log`, `maximum` and `minimum` differentiated by **both legs**, on the same numbers.
+ *
+ * These four keys are the largest block of `scripts/vjp-parity.mjs`'s `forward-only` column: the
+ * library files `jvp_abs`, `jvp_log`, `jvp_maximum` and `jvp_minimum`, and no transpose law stands
+ * beside them -- deliberately, and `lib/rulesets/transpose.cml` records the two measurements that
+ * took the four laws back out (a transposed map is handed the cotangent and nothing else, so a law
+ * that reads the operand can never be walked; and filing them replaced a correct "the family holds
+ * no rule for `tensor:abs`, take the gradient with `vjp`" with a misleading "the rule's right side
+ * reads a value").
+ *
+ * What the library answers for these four is the **forward** half's mask, and this case is the
+ * reading that it is the engine's number. Each operator is differentiated twice -- the engine's
+ * `grad(f)` and the library's `vjp(f)` of the same function -- and the two arrays are compared
+ * element by element. That is what `forward-only` costs in practice: nothing a program can see.
+ *
+ * Every lane separates a wrong law from the right one:
+ *
+ *   * `abs` at `-2.0, 0.0, 3.0, -0.5`: the tie at zero separates `>=` from `>` (`where(x > 0.0, ct,
+ *     -ct)` answers `[-1, -1, 1, -1]`), and the negatives separate "the cotangent passed through"
+ *     from "the cotangent's sign".
+ *   * `log` at `0.5, 2.0, 4.0, 0.25`: `ct / x` is `[2, 0.5, 0.25, 4]`, so a law that answered `ct`
+ *     or `ct * x` is a different array.
+ *   * `maximum` at `x = [-1.0, 5.0, 2.0, 2.0]` against `w = [0.0, 1.0, 4.0, 2.0]`: the tie in the
+ *     last lane goes to the **left** operand (`tensor:ge`), so `dx` is `[0, 1, 0, 1]` and `dw` is
+ *     `[1, 0, 1, 0]`. A law that gave the tie to the right operand answers `[0, 1, 0, 0]` there.
+ *   * `minimum` is `maximum`'s mask flipped (`tensor:le`), on numbers where the two disagree at the
+ *     same lane.
+ */
+import { grad } from autodiff
+import { abs, log, maximum, minimum, sum } from tensor
+import { vjp } from vjp
+
+// ---- abs ------------------------------------------------------------------------------------
+
+with <x: float[4]>
+func abs_total() => float {
+    return sum(abs(x))
+}
+
+func abs_total_plain(x: float[4]) => float {
+    return sum(abs(x))
+}
+
+// ---- log ------------------------------------------------------------------------------------
+
+with <x: float[4]>
+func log_total() => float {
+    return sum(log(x))
+}
+
+func log_total_plain(x: float[4]) => float {
+    return sum(log(x))
+}
+
+// ---- maximum --------------------------------------------------------------------------------
+
+with <x: float[4]>
+func maximum_total() => float {
+    return sum(maximum(x, [0.0, 1.0, 4.0, 2.0] as float[4]))
+}
+
+func maximum_total_plain(x: float[4]) => float {
+    return sum(maximum(x, [0.0, 1.0, 4.0, 2.0] as float[4]))
+}
+
+// ---- minimum --------------------------------------------------------------------------------
+
+with <x: float[4]>
+func minimum_total() => float {
+    return sum(minimum(x, [0.0, 1.0, 4.0, 2.0] as float[4]))
+}
+
+func minimum_total_plain(x: float[4]) => float {
+    return sum(minimum(x, [0.0, 1.0, 4.0, 2.0] as float[4]))
+}
+
+func main() => int sync {
+    let mixed = [-1.0, 5.0, 2.0, 2.0] as float[4]
+
+    // abs: the boundary element is the one that separates `>=` from `>`.
+    let abs_x = [-2.0, 0.0, 3.0, -0.5] as float[4]
+    let abs_engine = grad(abs_total)<abs_x>()
+    let (_, abs_pullback) = vjp(abs_total_plain)(abs_x)
+    let abs_library = abs_pullback(1.0).0
+    let abs_same = sum(abs(abs_engine - abs_library)) == 0.0
+    `abs grad engine={} library={} same={}`->format<abs_engine, abs_library, abs_same>->println
+
+    // log: `ct / x`, which no pass-through and no product answers.
+    let log_x = [0.5, 2.0, 4.0, 0.25] as float[4]
+    let log_engine = grad(log_total)<log_x>()
+    let (_, log_pullback) = vjp(log_total_plain)(log_x)
+    let log_library = log_pullback(1.0).0
+    let log_same = sum(abs(log_engine - log_library)) == 0.0
+    `log grad engine={} library={} same={}`->format<log_engine, log_library, log_same>->println
+
+    // maximum: the tie in the last lane goes to the left operand.
+    let max_engine = grad(maximum_total)<mixed>()
+    let (_, max_pullback) = vjp(maximum_total_plain)(mixed)
+    let max_library = max_pullback(1.0).0
+    let max_same = sum(abs(max_engine - max_library)) == 0.0
+    `maximum grad engine={} library={} same={}`->format<max_engine, max_library, max_same>->println
+
+    // minimum: the same numbers through the flipped comparison.
+    let min_engine = grad(minimum_total)<mixed>()
+    let (_, min_pullback) = vjp(minimum_total_plain)(mixed)
+    let min_library = min_pullback(1.0).0
+    let min_same = sum(abs(min_engine - min_library)) == 0.0
+    `minimum grad engine={} library={} same={}`->format<min_engine, min_library, min_same>->println
+
+    let all_same = abs_same && log_same && max_same && min_same
+    `elementwise all_same={}`->format<all_same>->println
+    return 0
+}
