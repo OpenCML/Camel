@@ -5,7 +5,7 @@
 > 这一页由 `node scripts/check-doc-links.mjs --questions-index --write` 从目录生成，不要手改：
 > 规矩在 `internal/reviews/` 的裁定里，落没落地看代码和提交，不看这张表。
 
-## 现在在等作者：27 页
+## 现在在等作者：28 页
 
 | 页 | 问什么 |
 | --- | --- |
@@ -36,6 +36,7 @@
 | [`2026-11-24-what-transforms-and-autodiff-cannot-read-on-the-view`](2026-11-24-what-transforms-and-autodiff-cannot-read-on-the-view.cn.md) | 视图答不出什么：`transforms` 与 `autodiff` 停下来的 28 处 |
 | [`2026-11-25-does-importing-a-module-add-graphs-to-the-entry-program`](2026-11-25-does-importing-a-module-add-graphs-to-the-entry-program.cn.md) | 把模块的遍名写进流水线，为什么要把它的 205 张库图挂到用户程序上？ |
 | [`2026-11-25-range-methods-outside-prelude`](2026-11-25-range-methods-outside-prelude.cn.md) | 问作者：Range 上的方法在 prelude 之外不可用，这是缺口还是写法错 |
+| [`2026-11-25-what-a-compiler-written-conversion-does-when-the-pair-is-not-safe`](2026-11-25-what-a-compiler-written-conversion-does-when-the-pair-is-not-safe.cn.md) | 编译器自动插的转换遇到非 Safe 配对，应该是什么：编译期拒绝、运行时 fault、不插这个转换，还是别的 |
 
 ## 生成器不会删的行：243 行（页已不在 `questions/` 里）
 
