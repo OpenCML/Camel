@@ -439,7 +439,7 @@ with and without the derivative:
 
 ```powershell
 node test/tools/writing-freedom.mjs --group var
-camel test/cases/compile/var/step_var.cml std::jgir canonical=true
+camel test/cases/compile/var/step_var.cml std::jgir canonical=true std::nop
 ```
 
 It is **red** on this tree, and red for one reason: the `var` writing still builds a unit. Its

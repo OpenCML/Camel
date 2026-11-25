@@ -156,7 +156,7 @@ out.
 | 1 | A graph break splits the program into separate compiled graphs with Python in between | The same torch run (resume functions `torch_dynamo_resume_in_loss_fn_at_…`) |
 | 1 | "AI compilers trace Python to recover a graph the language threw away" | `torch.compile` (TorchDynamo) and `jax.jit` both build their graphs by tracing Python execution |
 | 3 | The Camel code compiles and runs; with `best = 0.5` it prints `0.91875`, with `9.0` `1.8375` | `camel` run of the same function in `camel-lanes` (`/work/promo/camel/reveal.cml`) |
-| 3 | The graph's nodes, edges and branch: ports `m`, `x`, `best`; accesses `.w1` … `.b2`; `@`, `+`, `relu`, `mean`, `float`, `>`; BRCH, the `then` arm (`* 0.5`), the `else` arm, JOIN | `camel reveal.cml std::gir`: the GIR of `loss` |
+| 3 | The graph's nodes, edges and branch: ports `m`, `x`, `best`; accesses `.w1` … `.b2`; `@`, `+`, `relu`, `mean`, `float`, `>`; BRCH, the `then` arm (`* 0.5`), the `else` arm, JOIN | `camel reveal.cml std::gir std::nop`: the GIR of `loss` |
 | 3 | Each node comes from a source span | The `span` attribute every node carries in that GIR |
 | 3 | Both arms of the `if` are in one graph; a second call takes the other arm without a retrace | The same GIR (one BRCH/JOIN region), and the two runs |
 

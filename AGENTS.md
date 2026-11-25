@@ -113,8 +113,8 @@ node test\tools\run-tests.mjs --update-golden test\plans\smoke\core.plan.toml
 
 ### Examples
 ```powershell
-camel fib.cml std::rgir
-camel fib.cml std::gir
+camel fib.cml std::rgir std::nop
+camel fib.cml std::gir std::nop
 camel fib.cml std::cxx::inline std::fvm
 ```
 
