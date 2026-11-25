@@ -4,7 +4,7 @@
 //   let outer = grad(inner)
 //
 // It is the same wall gone and not a second one. A derivative of the library's `grad` still takes
-// its weight as a `with` value (`GradientOf<F>`, `stdlib/types.cml`), so a gradient of a gradient,
+// its weight as a `with` value (`Gradient<F>`, `stdlib/types.cml`), so a gradient of a gradient,
 // bound to a name or written in one expression, is the same composition twice. Written down
 // separately because a reader asking "does the nest work" writes it this way as often as the
 // one-expression form, and the two must answer the same kind of number.

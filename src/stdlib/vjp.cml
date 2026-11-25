@@ -19,7 +19,7 @@
  * (`lib/transforms/signatures/transforms.cml`): it reclassifies one port and copies the body unchanged, and
  * it puts the weight **first** among the parameters, so the first member of the pullback's answer is
  * its cotangent. That move is the composition's own and stays inside it: `grad` hands the weight
- * back to the `with` list before it answers, so `GradientOf<F>` (`lib/types/types.cml`) is the
+ * back to the `with` list before it answers, so `Gradient<F>` (`lib/types/types.cml`) is the
  * differentiated function's own shape -- the whole `with` list, then `F`'s own parameters.
  *
  * This is the assembly the design asks for, written out rather than described. `split(jvp(f))`
@@ -59,7 +59,7 @@
 import rulesets.jvp
 import rulesets.transpose
 import { first_with_as_param, jvp, split, transpose } from transforms
-import { is_function, GradientOf, Vjp } from types
+import { is_function, Gradient, Vjp } from types
 
 /// The reverse transform, in JAX's order: `vjp(f)(x)` gives the pair
 /// `(y, pullback)`, and `pullback(ct)` gives the cotangents of `f`'s parameters, `ct`'s own weight one
@@ -146,7 +146,7 @@ export func vjp::<F>(f: F) => Vjp<F> when is_function::<F>() {
 /// the differentiated body reads a `with` value that would need a direction of its own. That move is
 /// the composition's business and not the caller's: the lambda below takes the whole `with` list
 /// back and hands the weight to the moved function in the parameter position the move put it in.
-/// `GradientOf<F>` (`lib/types/types.cml`) is the shape that is answered -- `f`'s own `with` list, then
+/// `Gradient<F>` (`lib/types/types.cml`) is the shape that is answered -- `f`'s own `with` list, then
 /// `f`'s own parameters -- and the first member of the pullback's answer is the weight's cotangent.
 ///
 /// **The whole `with` list is carried, and in its own order.** The reading the body builds is a `vjp`
@@ -181,7 +181,7 @@ export func vjp::<F>(f: F) => Vjp<F> when is_function::<F>() {
 /// -- `transforms: jvp has no forward transform for this function`, at this body's `jvp` line. The
 /// numbers are pinned against that wall and not against the call form.
 #macro
-export func grad::<F>(f: F) => GradientOf<F> when is_function::<F>() {
+export func grad::<F>(f: F) => Gradient<F> when is_function::<F>() {
     let forward = split(jvp(first_with_as_param(f)))
     return func <w, ...ws>(...xs) {
         let (value, lin) = forward<...ws>(w, ...xs)
@@ -197,7 +197,7 @@ export func grad::<F>(f: F) => GradientOf<F> when is_function::<F>() {
 /// parameter, and that parameter *is* the weight here: a declaration whose parameter list is a pack
 /// is what the generic form needs, and the library does not have it yet (see the last paragraph).
 /// `grad` above does not read its weight that way -- it takes the differentiated function's own
-/// `with` list, because that is where a `with` value is written (`GradientOf<F>`).
+/// `with` list, because that is where a `with` value is written (`Gradient<F>`).
 ///
 /// The body is the composition, not a second transform, and it composes **forward**: `jvp(f)` is the
 /// function `(w, dw) => (result, tangent)`, so `jvp(f)(w, 1.0)` reads one direction -- the weight's --

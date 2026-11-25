@@ -1,4 +1,4 @@
-// The positive control for the pack fix of 2026-11-20: `GradientOf<F>` is written
+// The positive control for the pack fix of 2026-11-20: `Gradient<F>` is written
 // `<...WithOf<F>> (...ParamsOf<F>) => ...`, and both packs are settled when the alias is
 // instantiated.
 //
@@ -17,7 +17,7 @@
 // members, as ordinary parameters.
 //
 // The two types are also compared by `is_same`, so the shape is pinned and not only the call.
-import { WithOf, ParamsOf, GradientOf, is_same } from types
+import { WithOf, ParamsOf, Gradient, is_same } from types
 
 type GradOf<F> = <...WithOf<F>>(...ParamsOf<F>) => float
 

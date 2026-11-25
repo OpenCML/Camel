@@ -5,14 +5,14 @@
 //   f(x) = x*x,  f'(x) = 2x,  f''(x) = 2,  so the second derivative at 2 is 2.0
 //
 // The wall this case used to pin is gone, and it was the call form and not the nest: `grad(f)`
-// answered a function whose weight was its first **ordinary** parameter (`GradientOf<F>`), so the
+// answered a function whose weight was its first **ordinary** parameter (`Gradient<F>`), so the
 // outer `grad` met a function with no `with` parameter at all and `first_with_as_param` refused it --
 //
 //   Invalid call to 'first_with_as_param' with argument types <> ((w: float) => float):
 //   `first_with_as_param` moves the first `with` parameter onto the ordinary list, and this
 //   function has no `with` parameter: there is no first one to move
 //
-// The derivative keeps its weight in the `with` list now (`GradientOf<F>`, `stdlib/types.cml`), so
+// The derivative keeps its weight in the `with` list now (`Gradient<F>`, `stdlib/types.cml`), so
 // the outer `grad` finds the parameter the inner one differentiated and the nest is the same
 // composition twice: `grad(f)` answers a function of a `with` value, and `grad` differentiates a
 // function's first `with` parameter (design principles 9.9). That writing typechecks and builds.
