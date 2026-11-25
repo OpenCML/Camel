@@ -8,7 +8,7 @@ desc = "The tooling's own tests: every self-check under test/tools, internal/too
 # ledger (it reds when a new `*.test.mjs` lands with no plan entry and no recorded reason); this
 # plan is the destination for the ones the gate host can run.
 #
-# The other nineteen are `*.test.ps1` and are recorded there instead: the build host is Linux and
+# The other twenty are `*.test.ps1` and are recorded there instead: the build host is Linux and
 # has no pwsh, and the runner resolves a tool that is neither `node` nor `python` inside the
 # install, so an entry for one would fail before the script ran rather than skip with a reason.
 # They are the one class of self-check this plan does not start, and the ledger names them.
@@ -25,6 +25,18 @@ case = "../../../../test/tools/reading-normal.test.mjs"
 args = ["${case}"]
 expect_exit = 0
 expect_stdout_contains = [" pass 3", " fail 0"]
+normalizers = ["normalize_newlines"]
+timeout_ms = 120000
+
+[[tests]]
+name = "selfchecks.time_sensitive_reader"
+desc = "The second reader of a plan's `time_sensitive` declaration: an empty value, a quoted one, mixed case, whitespace, a repeated key, a key inside a table, a key inside a string and a declaration after a nested array each get the answer the file format gives, every plan file's top level is the one the runner's reader sees, the declaration agrees with the runner on every plan file it can read, and the tree still declares exactly the one plan whose header says why. This is the reading the gate's own reader is compared with; a reader that answered `false` to everything would pass an agreement with no anchor, so the anchor is asserted here."
+kind = "behavior"
+tool = "node"
+case = "../../../../test/tools/time-sensitive-reader.test.mjs"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_contains = [" pass 7", " fail 0"]
 normalizers = ["normalize_newlines"]
 timeout_ms = 120000
 

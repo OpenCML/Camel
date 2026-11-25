@@ -499,6 +499,11 @@ $ErrorActionPreference = 'Stop'
 # The command-line lists and what a badly-given one means. Also its own file, for the same reason:
 # `camel-remote-args.test.ps1` measures the binding rule without a host.
 . (Join-Path $PSScriptRoot 'camel-remote-args.ps1')
+# The read of a plan's `time_sensitive` declaration, in its own file for the same reason and one
+# more: it is the reading a second, independent parser is compared with (`test/tools/time-sensitive-reader.mjs`,
+# `camel-remote-timesensitive.test.ps1`). One implementation, called from here; the test reads this
+# call rather than a copy.
+. (Join-Path $PSScriptRoot 'camel-remote-timesensitive.ps1')
 # `-FetchFile -Latest`: which run is newest, what a suffix may name, and where the file lands. Also
 # its own file: `camel-remote-fetch.test.ps1` decides all three without a host.
 . (Join-Path $PSScriptRoot 'camel-remote-fetch.ps1')
@@ -1881,22 +1886,10 @@ $buildCmd = if ($Config -eq 'Debug') { "npm run debug$stackTraceArg" } else { "n
     # The declaration is in the plan and not in a list here, because a list is a second place to
     # forget and it drifts from the plan it names. A directory target (`smoke`, `feat/opt`) and
     # `-Changed` carry no declaration of their own: only a named *.plan.toml can ask for the host.
-    $timeSensitivePlans = @()
-    foreach ($p in $Plan) {
-        $p = "$p".Trim()
-        if (-not $p) { continue }
-        $declared = if ([System.IO.Path]::IsPathRooted($p)) { $p } else { Join-Path $Path $p }
-        if (-not (Test-Path -LiteralPath $declared -PathType Leaf)) { continue }
-        foreach ($declLine in @(Get-Content -LiteralPath $declared)) {
-            # The document's top level ends at the first `[table]` header: a `time_sensitive`
-            # inside `[defaults]` belongs to that table and is not a declaration about the host.
-            if ($declLine -match '^\s*\[') { break }
-            if ($declLine -match '^\s*time_sensitive\s*=\s*true\s*(#.*)?$') {
-                $timeSensitivePlans += $p
-                break
-            }
-        }
-    }
+    # The declaration is read by `camel-remote-timesensitive.ps1` (dot-sourced above), one
+    # implementation for a reading that has a second, independent parser to be compared with; that
+    # file carries the sentences and the table they belong to.
+    $timeSensitivePlans = @(Get-TimeSensitivePlans -Root $Path -Plan $Plan)
     $timeSensitive = $timeSensitivePlans.Count -gt 0
     if ($timeSensitive) {
         Write-Host ("[camel-remote] time sensitive: {0} -- this run takes the plan slot and both build slots together, and starts only when it has all three" -f ($timeSensitivePlans -join ', '))

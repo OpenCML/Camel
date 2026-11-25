@@ -1035,7 +1035,7 @@ const SELF_CHECK_ENTRY_POINTS = new Set([
 ])
 
 // The one reason a self-check of this tree cannot be started by a plan, with the two measurements
-// it rests on. It is written once because the nineteen files below are one class, and the class is
+// it rests on. It is written once because the twenty files below are one class, and the class is
 // the thing that has to be revisited if either measurement changes.
 const NO_PWSH =
     'a plan cannot start it: the build host is Linux and has no pwsh (measured with `command -v pwsh` on ' +
@@ -1052,6 +1052,11 @@ export const SELF_CHECK_EXCEPTIONS = [
     'internal/tools/camel-remote-args.test.ps1',
     'internal/tools/camel-remote-cleanup.test.ps1',
     'internal/tools/camel-remote-fetch.test.ps1',
+    // The gate's reader of `time_sensitive` against the second reader of the same files
+    // (`test/tools/time-sensitive-reader.mjs`). It is here rather than in a plan because one side of
+    // the comparison is PowerShell: the other half of the pair, the second reader's own test, is
+    // `test/tools/time-sensitive-reader.test.mjs` and runs in `feat/tools/selfchecks`.
+    'internal/tools/camel-remote-timesensitive.test.ps1',
     'internal/tools/camel-remote-targets.test.ps1',
     'internal/tools/hook-integration.test.ps1',
     'internal/tools/merge-batch-sets.test.ps1',
