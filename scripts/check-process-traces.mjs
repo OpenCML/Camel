@@ -9,8 +9,9 @@
 // item number (`D-1123-78`, `C-1123-17`), a commit hash, "this lane" / "待审" standing in for who
 // decided what, and a narration of what the code used to be. It reads comment text only (after
 // `//`, `///`, `#` in CMake/TOML/shell/PowerShell, and inside `/* */`), so a date or a path that is
-// data in a string literal is not its business. A test plan's `desc` and `known_fail_*` fields are
-// prose a person reads when they pick the case up, so those count as comments: they are scanned too.
+// data in a string literal is not its business. A test plan's `name`, `desc` and `known_fail_*`
+// fields are prose a person reads when they pick the case up -- the name is what the other entries
+// cite -- so those count as comments: they are scanned too.
 //
 // The step a refactor had reached is the trace this check exists for: `refactor stage 2.3` records
 // a schedule, and a schedule expires while the code does not, so the page it pointed at is gone six
@@ -37,7 +38,17 @@
 // When a hit turns out to be a different domain, ask which condition distinguishes it, and put that
 // condition in the pattern.
 //
-// Usage: node scripts/check-process-traces.mjs --root <dir>   exit 0 when clean, 1 with a list
+// A tree that already carries traces has to be read before it can be worked through, so `--list`
+// prints the same report and exits 0: that flag asks for the reading, not for the verdict. It is a
+// flag on this script rather than a second script because a listing and a refusal must name the
+// same lines -- two readers of one pattern are two patterns the day one of them is edited -- and it
+// says "nothing judged" on its own line, because output that reads like a check and exits 0 is the
+// gate that passes everything. A run that read nothing stays red in both modes: an empty list is
+// not evidence of an empty tree.
+//
+// Usage: node scripts/check-process-traces.mjs --root <dir> [--list]
+//   exit 0 when clean, 1 with a list, 2 when the tree to read was not named
+//   `--list` prints the same list and exits 0: it lists, and judges nothing
 //
 // `--root` is required and has no default: the directory a process was started in is not
 // necessarily the tree the reader meant, so the tree is named here by the caller.
@@ -45,6 +56,9 @@ import fs from 'node:fs';
 import path from 'node:path';
 
 const args = process.argv.slice(2);
+// A listing is not a verdict, so the flag is read before anything is scanned and never changes what
+// is scanned.
+const listOnly = args.includes('--list');
 const rootAt = args.indexOf('--root');
 const root = rootAt >= 0 ? args[rootAt + 1] : '';
 if (!root || root.startsWith('--')) {
@@ -61,8 +75,11 @@ const exts = new Set([
   '.mjs', '.js', '.ps1', '.sh', '.toml',
 ]);
 // A test plan's prose fields: what a person reads when deciding whether the case is the one they
-// need, so the same rule applies to them as to a comment.
-const proseKeys = ['desc', 'known_fail_owner', 'known_fail_reason', 'note', 'title'];
+// need, so the same rule applies to them as to a comment. A test's `name` belongs to that set for a
+// stronger reason: it is what other entries cite (`compare_to = "writings.extract"`), so a trace in
+// a name outlives the step it recorded -- renaming it breaks the references and keeping it publishes
+// the step -- while the name is also the one string a reader quotes when they say which case is red.
+const proseKeys = ['name', 'desc', 'known_fail_owner', 'known_fail_reason', 'note', 'title'];
 
 const pattern = new RegExp(
   [
@@ -86,8 +103,11 @@ const pattern = new RegExp(
     '\\blane-[a-z0-9]*[a-z][a-z0-9]*(?:-[a-z0-9]+)*\\b',
     '\\bcommit\\s+[0-9a-f]{6,40}\\b',
     '`(?=[0-9a-f]*[a-f])[0-9a-f]{7,40}`',
-    // Who decided it, and which work item it was: neither belongs in the code.
-    '\\b[DC]-\\d{4}-\\d+\\b',
+    // Who decided it, and which work item it was: neither belongs in the code. The left side is
+    // "not a letter or a digit" rather than a word boundary because a test's name is written as one
+    // token: a name that ends in an underscore and then a work item number has no boundary between
+    // the two, and a name is where such a number is most likely to be glued on.
+    '(?<![A-Za-z0-9])[DC]-\\d{4}-\\d+(?!\\d)',
     '待审',
     '\\bthis lane\\b',
     '\\biron rule \\d+\\b',
@@ -225,6 +245,16 @@ if (filesRead === 0 || commentLines === 0) {
 
 const reading = `scanned ${filesRead} files, ${commentLines} comment lines, no trace`;
 if (hits.length) {
+  if (listOnly) {
+    // The same lines a refusal prints, and the line that says which of the two this is: a reader who
+    // pipes this into a gate has to meet the word "nothing judged" and not mistake a listing for a
+    // pass.
+    console.log(
+      `process traces in comments: ${hits.length} listed, nothing judged (--list; scanned ${filesRead} files, ${commentLines} comment lines)`,
+    );
+    for (const h of hits) console.log('  ' + h);
+    process.exit(0);
+  }
   console.log(`process traces in comments: ${hits.length} (scanned ${filesRead} files, ${commentLines} comment lines)`);
   for (const h of hits) console.log('  ' + h);
   console.log('A comment says what the code does and why; drop the dated ruling, the handover path, the role,');
@@ -232,4 +262,4 @@ if (hits.length) {
   console.log('The history is the commit message.');
   process.exit(1);
 }
-console.log(reading);
+console.log(listOnly ? `${reading} (--list, nothing judged)` : reading);
