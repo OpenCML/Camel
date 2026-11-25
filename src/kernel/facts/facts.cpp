@@ -1025,20 +1025,27 @@ class ArrangeWalk {
             // nothing to fail and nothing to wait for.
             return Arrangeable{true, true, true, true};
         case graph::NodeKind::Gate: {
-            // The hand-on of an order, and the four terms cannot state "it stands here": a gate
-            // that carries the chain of a `sync` block, or the `wait` a value was written for, is
+            // The hand-on of an order, and the four terms cannot state "it stands here": a gate is
             // pure, it reaches no resource, it cannot fault and it ends -- and it still may not be
-            // arranged anywhere, because the order it carries is what makes the effect it waits
-            // for observably first (design principles 3.3, 3.4). A placement decision acts on the
-            // answer, so the kind declines for such a gate instead of saying yes (D-1124-65: one
+            // arranged anywhere, because the order it carries is what makes the effect it waits for
+            // observably first (design principles 3.3, 3.4). A placement decision acts on the
+            // answer, so the kind declines for every gate instead of saying yes (D-1124-65: one
             // predicate, and a node it cannot answer for must not be answered "freely
-            // arrangeable"). A gate that carries no order is the value itself, handed on.
-            for (const graph::Edge &edge : view.edges(graph::EdgeKind::Wait)) {
-                if (edge.user == ref) {
-                    return Arrangeable{};
-                }
-            }
-            return Arrangeable{true, true, true, true};
+            // arrangeable").
+            //
+            // Every gate, and not only the one that carries a wait edge, because the order a gate
+            // carries is written in one of the three forms the seal reads (`runtime/graph.cpp`,
+            // "GATE node without a wait"): a control input, a sync predecessor, or the values it
+            // hands on beside the value itself -- a region's exit gate reads what the region wrote
+            // after the value it hands out (`Builder::layRegionWriteEdges`, and `test::facts_compare`
+            // prints that count as `reads`). Only the first two are an `EdgeKind::Wait`, so a reader
+            // that asked that edge kind alone answered "carries nothing" for a region's gate and
+            // called it freely arrangeable; a gate that carries none of the three is the seal's
+            // internal error and is not a node a program can run, so refusing it costs nothing,
+            // while answering it "yes" would be a second answer beside the predicate a pass asks
+            // (`nodeIsFreelySchedulable` refuses every gate: a gate is the anchor an order sits on,
+            // and a pass that moved it would move the order with it -- edges.cn.md 4.6, 5.3).
+            return Arrangeable{};
         }
         case graph::NodeKind::Brch: {
             Arrangeable terms{true, true, true, true};

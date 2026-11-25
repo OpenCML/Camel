@@ -2658,6 +2658,7 @@ f962b5091be05977 ok test/cases/effects/var_parameter_write_outside_sync.cml
 c2b5e538250f4f9e ok test/cases/effects/writer_table_through_callee.cml
 84d03fada7b1298a ok test/cases/effects/unreachable_pair/with/reading.cml
 5a246320b71e8e7a ok test/cases/effects/unreachable_pair/without/reading.cml
+fbd1300c8d159061 ok test/cases/facts/a_body_exit_gate_reads_its_writes.cml
 dda16fde3dcff7ec ok test/cases/facts/tensors_and_loops.cml
 5746ac4f2a7487d0 ok test/cases/facts/two_functions.cml
 58f2a1144eea4ff4 ok test/cases/feat/bindings/python_boundary.cml
