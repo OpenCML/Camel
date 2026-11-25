@@ -56,8 +56,8 @@ whether an entry runs is three things, and only one of them lives in the plans:
 2. **The target list.** `npm test` is `node scripts/test.js --tier fast` with **no target**, and no
    target is the whole plan tree; `npm run release-gate` runs the same layer over
    `scripts/plan-inventory.mjs#FAST_TARGETS`, which since `381e55b45` is the single entry
-   `['test/plans']`, then the fourteen plan files of `SLOW_PLANS` by name. Neither is a hand-picked set
-   of directories.
+   `['test/plans']`, then the files `SLOW_PLANS` names (76 at `1b7b986117`) as targets of one
+   command. Neither is a hand-picked set of directories.
 3. **What a lane types.** Most runs in this project are `camel-remote.ps1 -Plan <one directory or
    file>`, chosen by hand; and `.github/workflows/ci.yml` runs only on a push to `release` and on
    `v*`/`V*` tags, never on `develop`.
