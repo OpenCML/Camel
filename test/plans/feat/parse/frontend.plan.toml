@@ -43,8 +43,7 @@ expect_stdout_contains = ["files read as recorded, 0 not in the snapshot yet"]
 normalizers = ["normalize_newlines"]
 timeout_ms = 120000
 # Slow layer: over the 2 s the fast layer allows -- 3.16 s of
-# child wall clock in the 2026-11-12 record (appendix B of
-# internal/reports/2026-11-24-test-suite-inventory.cn.md).
+# child wall clock.
 tier = "slow"
 
 [[tests]]
@@ -71,8 +70,7 @@ expect_stdout_contains = ["changed=0", "unstable=0", "dropped=0", "duplicated=0"
 normalizers = ["normalize_newlines"]
 timeout_ms = 120000
 # Slow layer: over the 2 s the fast layer allows -- 8.93 s of
-# child wall clock in the 2026-11-12 record (appendix B of
-# internal/reports/2026-11-24-test-suite-inventory.cn.md).
+# child wall clock.
 tier = "slow"
 
 

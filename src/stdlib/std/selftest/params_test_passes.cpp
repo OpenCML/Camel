@@ -12,8 +12,8 @@
  * Everything else about them is the rule for every pass (design principles 9.3): the name is the
  * path a pipeline writes, and the implementation is the function that answers it.
  *
- * They live in libcamel and not in `test.cmo` (where the other `test::` passes are, since
- * 2026-11-25), and the reason is the pairing `test::declared` needs: a case puts its own `test.cml`
+ * They live in libcamel and not in `test.cmo` (where the other `test::` passes are), and the reason
+ * is the pairing `test::declared` needs: a case puts its own `test.cml`
  * on the module search path (`-I .`) and that file declares the pass's parameters, so the
  * declaration and the implementation are found in two different places on purpose. A `.cml`
  * declaration is paired with an implementation by the module that carries both, and the case's

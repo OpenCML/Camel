@@ -51,7 +51,7 @@ namespace camel::compile::gir {
 
 node_handle_t
 Builder::castNodeTo(node_handle_t value, Type *target, const GCT::node_ptr_t &origin) {
-    // 装入不是转换 (design principles 5.1, the log entry of 2026-11-25): the step the compiler
+    // 装入不是转换 (design principles 5.1): the step the compiler
     // inserts to make two types meet always succeeds. It is not a conversion -- it asks no safety
     // table and it is not `:op/cast` -- and it never fails at run time. Two things follow, and both
     // are stated here:

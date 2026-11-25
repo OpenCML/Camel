@@ -649,8 +649,7 @@ expect_exit = 0
 expect_stdout_exact = "true\n5.0\ncpu effect\n8.0\n10.0\n5.0 6.0\n"
 timeout_ms = 60000
 # Slow layer: over the 2 s the fast layer allows -- 2.34 s of
-# child wall clock in the 2026-11-12 record (appendix B of
-# internal/reports/2026-11-24-test-suite-inventory.cn.md).
+# child wall clock.
 tier = "slow"
 
 [[tests]]
@@ -1052,8 +1051,7 @@ expect_exit = 0
 expect_output_contains = ['TILES_PLACEMENT {"body":"gpu-required","body_fact":"gpu","gpu":0,"gpu_required":7,"graph":"pair"', 'TILES_PLACEMENT {"body":"gpu-required","body_fact":"gpu","gpu":0,"gpu_required":1,"graph":"empty"', 'TILES_PLACEMENT {"body":"gpu-required","body_fact":"gpu","gpu":0,"gpu_required":7,"graph":"accumulated"', 'TILES_PLACEMENT {"body":"host","body_fact":"cpu","gpu":0,"gpu_required":0,"graph":"kept"', "value 57.0"]
 timeout_ms = 60000
 # Slow layer: over the 2 s the fast layer allows -- 2.92 s of
-# child wall clock in the 2026-11-12 record (appendix B of
-# internal/reports/2026-11-24-test-suite-inventory.cn.md).
+# child wall clock.
 tier = "slow"
 
 [[tests]]
@@ -1108,8 +1106,7 @@ assert(report.device_work.to_host_bytes === 16, JSON.stringify(report.device_wor
 """
 timeout_ms = 60000
 # Slow layer: over the 2 s the fast layer allows -- 2.82 s of
-# child wall clock in the 2026-11-12 record (appendix B of
-# internal/reports/2026-11-24-test-suite-inventory.cn.md).
+# child wall clock.
 tier = "slow"
 
 [[tests]]

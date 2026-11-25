@@ -4,7 +4,7 @@
 /*
  * The test channel: the passes a plan names as `test::<name>`, which no program can reach.
  *
- * These passes were compiled into libcamel until 2026-11-25, by the `lib_module` block's glob over
+ * These passes used to be compiled into libcamel, by the `lib_module` block's glob over
  * this directory. That put the whole test surface inside the language's own library: every one of
  * them shipped with every program, and a symbol one of them needed became an export of libcamel
  * whether or not anything in the language used it. They are their own `.cmo` now, on the same
