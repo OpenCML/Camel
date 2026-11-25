@@ -57,8 +57,8 @@ desc = "`std::nop` answered with an empty graph, so the `std::gir` written after
 case = "../../../cases/trans/hand_on/hand_on.cml"
 args = ["${case}", "std::nop", "std::gir"]  # camel-pass-scan: keep -- gir is after the nop, so it never runs
 expect_exit = 0
-expect_stdout_not_contains = "digraph"
-expect_stderr_contains = "will not run"
+expect_stdout_not_contains = ["digraph"]
+expect_stderr_contains = ["will not run"]
 
 # A pass that does not execute the program is not an entry, so the parameters of `main` are not
 # asked of it. One criterion (`GraphSchedulePass::executesTheProgram`), and these two cases are its
