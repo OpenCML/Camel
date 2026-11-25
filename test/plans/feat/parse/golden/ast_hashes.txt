@@ -398,7 +398,7 @@ b52a61a6d899edda ok docs/tutorial/examples/06_sync_body.cml
 ad9808b9ccfe0b01 ok docs/tutorial/examples/08_generics.cml
 6e4cbb44be508f67 ok docs/tutorial/examples/08_modules.cml
 bf8ff65a6524d864 ok docs/tutorial/examples/08_wordcount.cml
-e81682b2502bee65 ok docs/tutorial/examples/09_dependency.cml
+2563afb8bde6729a ok docs/tutorial/examples/09_dependency.cml
 3dcc689ac2893ed0 ok docs/tutorial/examples/09_errors.cml
 c8c3799d76ebca87 ok docs/tutorial/examples/09_exercise.cml
 b10202003928b401 ok docs/tutorial/examples/09_fault.cml
@@ -417,7 +417,7 @@ e8930ca5f74dd12b ok docs/tutorial/examples/10_uses_beyond.cml
 537d01a18e9e40c3 ok docs/tutorial/examples/11_collections.cml
 d9040ceab35975bf ok docs/tutorial/examples/12_modules.cml
 281dcd8e9046264d ok docs/tutorial/examples/12_stdlib.cml
-d13e141bbe7c3807 ok docs/tutorial/examples/13_graph.cml
+fb9aacfc9982db41 ok docs/tutorial/examples/13_graph.cml
 09d7b5af92d3a4cf ok docs/tutorial/examples/14_passes.cml
 8960937906de7db2 ok docs/tutorial/examples/15_model.cml
 dbfad85084c9e1f6 ok docs/tutorial/examples/15_tensor.cml
@@ -523,23 +523,23 @@ f915d61cc7f06dc8 ok src/stdlib/io.cml
 d07e8f7a68b8a5c8 ok src/stdlib/math.cml
 4bd3189fe34a101a ok src/stdlib/nn.cml
 4d51c5b1e4dba299 ok src/stdlib/onnx.cml
-8094cc17c8e94403 ok src/stdlib/opt.cml
+fd03660cb21d8340 ok src/stdlib/opt.cml
 49015cbc4407a506 ok src/stdlib/optim.cml
 b6a0bf171cb931bc ok src/stdlib/para.cml
 a82098797df46210 ok src/stdlib/perf.cml
-469674a08b59e744 ok src/stdlib/prelude.cml
+2a1ed6f36ff824ba ok src/stdlib/prelude.cml
 0a2356410c7e5b3c ok src/stdlib/process.cml
 8f9a9b5b4701c251 ok src/stdlib/pyplot.cml
 692ab627c3592a87 ok src/stdlib/python.cml
-11ec06d01bdb80fe ok src/stdlib/random.cml
+4c68a760efc1f8a5 ok src/stdlib/random.cml
 5a4ff6e8ce76543a ok src/stdlib/re.cml
 59f8a7b6bec9a1b9 ok src/stdlib/rewrite.cml
 7782a47445b282b4 ok src/stdlib/rules.cml
 27fc4f4fd00b5fb6 ok src/stdlib/sim.cml
 b4a9f226ac6e68db ok src/stdlib/state.cml
 cb7539a8da81e513 ok src/stdlib/statistics.cml
-c2668b69e690214b ok src/stdlib/std.cml
-9305f9be334c12a6 ok src/stdlib/str.cml
+7cfe635dbdebd2e1 ok src/stdlib/std.cml
+1e853ee4b632ef01 ok src/stdlib/str.cml
 b95ce07d27fea622 ok src/stdlib/stream.cml
 8308cebdc691d9b6 ok src/stdlib/tensor.cml
 8f1757aa8f0cbb76 ok src/stdlib/tensor_definitions.cml
@@ -554,10 +554,10 @@ facd1562ced5e6f9 ok src/stdlib/time.cml
 a2ca595975c02dee ok src/stdlib/autodiff/signatures/autodiff.cml
 6ae5ad8be3ee4eec ok src/stdlib/ckpt/signatures/ckpt.cml
 483b0496470b41ad no src/stdlib/nn/signatures/nn.cml
-59278111055f43ed ok src/stdlib/rulesets/jvp.cml
+195b5c1321bd4b4c ok src/stdlib/rulesets/jvp.cml
 8375a530eff268c4 ok src/stdlib/rulesets/probe_batch.cml
 7a11798394cc6e2c ok src/stdlib/rulesets/probe_missing.cml
-ed5922cc9e8909a1 ok src/stdlib/rulesets/transpose.cml
+71a3842751ea808e ok src/stdlib/rulesets/transpose.cml
 a338d98395d2f704 ok src/stdlib/rulesets/vmap.cml
 0c368faaef090af5 no src/stdlib/tensor/signatures/tensor.cml
 6f34daec70d7b4c4 ok src/stdlib/tiles/signatures/tiles.cml
@@ -753,6 +753,8 @@ dcd99e135b7d4539 ok test/cases/compile/contextual_empty_array/all_literal.cml
 f9f71ad4441daaa9 ok test/cases/compile/contextual_empty_array/still_refused.cml
 8c74c953683da4b0 ok test/cases/compile/conversions/array_elementwise.cml
 306d4c96202540d3 ok test/cases/compile/conversions/type_variable.cml
+571d54ea8449d450 ok test/cases/compile/copy_identity/plain.cml
+b84dab8eaa4163b6 ok test/cases/compile/copy_identity/shadowed.cml
 5bb2342bcfdd680c ok test/cases/compile/decorators/block_mismatch.cml
 79564a53bd900f7c ok test/cases/compile/decorators/blocks.cml
 d97be0b1d0400182 ok test/cases/compile/decorators/cse.cml
@@ -1449,6 +1451,8 @@ ea23526b40cd9c2f ok test/cases/compile/overloads/exact_over_entering.cml
 91d91c0de152b015 ok test/cases/compile/overloads/generic_overloads.cml
 124afd53f3ad5e36 ok test/cases/compile/overloads/generic_overloads_same_param_name.cml
 be8e653d5a41c44f ok test/cases/compile/overloads/generic_same_signature.cml
+9e089e24150d11ea ok test/cases/compile/overloads/layer_shadow_below.cml
+33e28afdbf757554 ok test/cases/compile/overloads/layer_shadow_own.cml
 8893955090258bdd ok test/cases/compile/overloads/no_match.cml
 7ceb17acd7c3b125 ok test/cases/compile/overloads/op_body_imported.cml
 4857db62b880302f ok test/cases/compile/overloads/op_body_imported_no_match.cml
@@ -1762,6 +1766,7 @@ ea4ef5573c018b3c ok test/cases/compile/stream/interval.cml
 82b28f9560901e74 ok test/cases/compile/stream/interval_loop_not_materialised.cml
 240873612ef90856 ok test/cases/compile/stream/interval_own_range.cml
 38f98cf7cde23334 ok test/cases/compile/stream/loop_state_consumes.cml
+66ec0d42e9c294ac ok test/cases/compile/stream/map_three_owners.cml
 e1afbadcfc137a2d ok test/cases/compile/stream/operator_for_needs_a_stream.cml
 df10ae6fc9641bd4 ok test/cases/compile/stream/operator_for_not_a_plain_function.cml
 0d5bf0013321fd21 ok test/cases/compile/stream/operator_for_user_type.cml
@@ -1771,6 +1776,7 @@ de00124d2febde5f ok test/cases/compile/stream/prelude_in_module.cml
 aeffff18cf2a99ab no test/cases/compile/stream/probe_unwrap_nullable.cml
 9813dd244143d5a7 ok test/cases/compile/stream/probe_var_null.cml
 fcd61a7cd396ffe9 ok test/cases/compile/stream/pull_order.cml
+028c203508f72ce3 ok test/cases/compile/stream/range_count_find.cml
 84e6e40b4d77df9e ok test/cases/compile/stream/range_step.cml
 323b55c6a8ae2fe9 ok test/cases/compile/stream/range_step_runtime.cml
 0ead23c230b4d43d ok test/cases/compile/stream/range_step_zero.cml
@@ -1778,7 +1784,7 @@ fcd61a7cd396ffe9 ok test/cases/compile/stream/pull_order.cml
 afaf6dd76c8ef116 ok test/cases/compile/stream/range_two_arguments_builtin.cml
 42dac5c2d52952e4 ok test/cases/compile/stream/range_value.cml
 fdab830561aba4de ok test/cases/compile/stream/range_value_from_array.cml
-b55e3a685f9ac5c4 ok test/cases/compile/stream/range_value_map_no_instance.cml
+e8868bbcdcf28c71 ok test/cases/compile/stream/range_value_map_no_instance.cml
 7973c5ad7b784b07 ok test/cases/compile/stream/step_value.cml
 09a5bf9ea1bfcc81 ok test/cases/compile/stream/step_value_signature.cml
 8a908039211cde5e ok test/cases/compile/stream/tee_consumers.cml
@@ -1982,6 +1988,7 @@ fd047c9fd3c729bf ok test/cases/compile/transforms/jvp_vjp_array_product_cross.cm
 ddb14563517c7a39 ok test/cases/compile/transforms/log_softmax_gradient_stops_at_split.cml
 2417d32c311cf820 ok test/cases/compile/transforms/log_softmax_gradient_through_the_engine.cml
 9630b611336f9c66 ok test/cases/compile/transforms/log_softmax_jvp_on_a_non_uniform_lane.cml
+e6b29bf5a7ddf415 ok test/cases/compile/transforms/math_scalar_gradient_through_the_library.cml
 cb4f6de31d143c7f ok test/cases/compile/transforms/matmul_transpose_law.cml
 b8dcaa7880553642 ok test/cases/compile/transforms/matmul_transpose_rank_three.cml
 ad259e018889cb03 ok test/cases/compile/transforms/matmul_transpose_vector_lhs.cml
@@ -3161,7 +3168,7 @@ a9b60fb9aca13d0e ok test/cases/modules/graph_pass/tiny.cml
 1e976f838a6cd395 ok test/cases/modules/graph_pass/typed_target.cml
 167f5101502eaaab no test/cases/modules/graph_pass/unparsable_pass.cml
 e6704f3f915eaf57 no test/cases/modules/graph_pass/unparsable_pass_lib.cml
-55c5b1019c4c5fdd ok test/cases/modules/graph_pass/unused.cml
+f9c6a44b69758837 ok test/cases/modules/graph_pass/unused.cml
 06a1f319960c2a6e ok test/cases/modules/graph_pass/unused_target.cml
 3f7311c80d527aab ok test/cases/modules/graph_pass/valuelib.cml
 78c57c20b14705d4 ok test/cases/modules/graph_pass/valuereader.cml
@@ -3194,8 +3201,8 @@ a14adc60c7dc8045 ok test/cases/modules/math_calls/err_shl_i32.cml
 f58abd971a759b4d ok test/cases/modules/math_calls/err_shr_negative.cml
 dffb58e2e2ea8001 ok test/cases/modules/math_calls/kernel_calls.cml
 45565e3043aa73e0 ok test/cases/modules/math_calls/kernel_values.cml
-6c0b9cf5f3bec27e ok test/cases/modules/math_kernels/err_value_missing/math.cml
-194b2a57ad5e42bf ok test/cases/modules/math_kernels/err_value_type/math.cml
+b32b4c2b6c783af6 ok test/cases/modules/math_kernels/err_value_missing/math.cml
+397e67a09d28b76f ok test/cases/modules/math_kernels/err_value_type/math.cml
 41910758b3820ac2 ok test/cases/modules/module_resolution/cmo_hit_stops/main.cml
 6cbc227771f3b439 ok test/cases/modules/module_resolution/cmo_hit_stops/level/helper.cml
 8fbd6288b8cdf642 ok test/cases/modules/module_resolution/cmo_hit_stops/roots/one/level/helper/foo.cml
@@ -3228,6 +3235,10 @@ b08fce1ddfd4e39f ok test/cases/modules/nn/checkpoint_tensor.cml
 53b0363144020dbe ok test/cases/modules/nn/embedding_mf.cml
 2071d8915c8ba81d ok test/cases/modules/nn/graph_autograd_multi_param_demo.cml
 75a04ef28f9b466c ok test/cases/modules/nn/gru_lite.cml
+cd7ba4a03376a36f ok test/cases/modules/nn/library_law_avg_pool2d.cml
+37652388ebdc8048 ok test/cases/modules/nn/library_law_conv2d.cml
+005c64f23160fae4 ok test/cases/modules/nn/library_law_embedding.cml
+b3b664a707015738 ok test/cases/modules/nn/library_law_max_pool2d.cml
 e8b99e03ab8c3f1e ok test/cases/modules/nn/lr.cml
 00a4d79835fdd748 ok test/cases/modules/nn/lrit.cml
 d5ada2788ff005e7 ok test/cases/modules/nn/matrix_factorization.cml
@@ -3276,6 +3287,7 @@ fede2a0ec0734a19 ok test/cases/modules/onnx/export_loop_pass.cml
 25d2db2bc0f423c9 ok test/cases/modules/onnx/export_loop_tuple_argument.cml
 16f261d751db6b81 ok test/cases/modules/onnx/export_loop_values.cml
 c249313258795056 ok test/cases/modules/onnx/export_loop_values_array.cml
+122d4563c121e83e ok test/cases/modules/onnx/export_member_by_name.cml
 eaf687fe45086180 ok test/cases/modules/onnx/export_minimal.cml
 628dd0cef8ad93f8 ok test/cases/modules/onnx/export_mixed_width_refused.cml
 7fd7e0dd6d895b2e ok test/cases/modules/onnx/export_nontail_recursion.cml
@@ -3379,7 +3391,7 @@ facc20cd0403f9a1 ok test/cases/modules/random/keyed_scalars.cml
 f0704f3a60c3bc9c ok test/cases/modules/random/permutation_non_positive.cml
 ed772d68f1cf679e ok test/cases/modules/random/philox_reference.cml
 a024f7e01076e266 ok test/cases/modules/random/random_independence.cml
-f264e0008dc76aa7 ok test/cases/modules/random/shuffle_kernels.cml
+f5ac251ca40102f7 ok test/cases/modules/random/shuffle_kernels.cml
 1d52dac6e908cb1d ok test/cases/modules/rename/env_identity.cml
 10705d3abe9e7bac ok test/cases/modules/rename/env_new.cml
 e5c45d6522ecdd7e ok test/cases/modules/rename/env_old.cml
@@ -4084,6 +4096,7 @@ a6aeb889e1d91c79 ok test/cases/opt/generic/fold_struct_cast.cml
 bb0edd747fe52832 ok test/cases/opt/generic/gate_branch_wait.cml
 e0116ae968c11e25 ok test/cases/opt/generic/gate_value_dependency.cml
 5f97c7fee3dd4507 ok test/cases/opt/generic/generic_passes.cml
+5bf61f659e7537a1 ok test/cases/opt/generic/graph_identity.cml
 4b78327baa7854e2 ok test/cases/opt/generic/hang_branch_00017.cml
 a534aa721aaaf77e ok test/cases/opt/generic/interval_bounds_computed.cml
 68af2041e7e1c673 ok test/cases/opt/generic/interval_bounds_constant.cml
@@ -4197,7 +4210,7 @@ c6766dc3a4bbb85c ok test/cases/para/core/map_chunks.cml
 fdf5dadb37169aa3 ok test/cases/para/core/map_ordered_effects.cml
 529e555a6148ed4e ok test/cases/para/core/map_result_order.cml
 f92f159ebd9cee28 ok test/cases/para/core/merge_sort.cml
-11ec48a1a913ee1f ok test/cases/para/core/merge_sort_small.cml
+c2186e075088f000 ok test/cases/para/core/merge_sort_small.cml
 7695c1afacdfbca9 ok test/cases/para/core/monte_carlo_pi.cml
 5f314194d58cf2c9 ok test/cases/para/core/monte_carlo_pi_small.cml
 93dfb8e2943a741d ok test/cases/para/core/ordered_operators_inline.cml
@@ -4258,7 +4271,7 @@ d9c9c90db93e9ff5 ok test/cases/runtime/edit_record/a_program.cml
 d3e8c0b8b69de9a2 ok test/cases/runtime/exit_type/int_declared_float_returned.cml
 7f57c5961ed60928 ok test/cases/runtime/exit_type/legal_exits.cml
 545f40cbee5c14b5 ok test/cases/runtime/graph_draft_ledger/probe_handle.cml
-2cd70e24de2070de ok test/cases/runtime/oper_shape/two_forms_one_shape.cml
+a5fee9d295247e69 ok test/cases/runtime/oper_shape/two_forms_one_shape.cml
 b7fe2345bab84529 ok test/cases/showcase_s2/train_curve.cml
 d6ba16a66d67b7f4 ok test/cases/smoke/core/fib10_pipeline.cml
 ee6fd7edfd524efb ok test/cases/smoke/core/prl_scheduler.cml
@@ -4304,6 +4317,7 @@ f1b9a60c8b20e549 ok test/cases/trans/cml_canon_name_a.cml
 503d54e49ffc1de1 ok test/cases/trans/library_module.cml
 0641726b6e67df0a ok test/cases/trans/port_fill_metadata.cml
 5c409e8e03a62758 ok test/cases/trans/annotated/boundaries.cml
+40e0e0dcbbb537da ok test/cases/trans/annotated/effect_union.cml
 6feb2eb7fb155162 ok test/cases/trans/cml/arm_read.cml
 2963442f0903482c ok test/cases/trans/cml/arm_write.cml
 1344b72d8ee4e4ae ok test/cases/trans/cml/branch.cml
@@ -4401,6 +4415,8 @@ e7bf2228339b1d71 ok test/cases/trans/cpp/exec/scalars.cml
 64ad8a4b72a96e50 ok test/cases/trans/cpp/exec/tail_calls.cml
 7992d0f7cd4bfc22 ok test/cases/trans/cpp/exec/variables.cml
 0d1d9faeea1df3e1 ok test/cases/trans/effect_trace/macro_effect.cml
+32e54da7d69ebaff ok test/cases/trans/hand_on/hand_on.cml
+9a430df4e5d7c1d2 ok test/cases/trans/hand_on/nop_params.cml
 962e01ec370a3ba2 ok test/cases/trans/macro/basic.cml
 9b4e72ec1426f785 ok test/cases/trans/macro/branch_chain.cml
 b8f4bf2ae19d71b7 ok test/cases/trans/macro/chain.cml
@@ -4517,3 +4533,4 @@ d1a84c608f212598 ok test/tools/selftest/benchmark_failure.cml
 c52a1164a7fed703 ok test/tools/selftest/sweep_names/reuse_sources/reuse.cml
 db721b9153f0cb68 ok test/tools/selftest/sweep_names/sources/alpha.cml
 9f80b40950c3be56 ok test/tools/selftest/sweep_names/sources/beta.cml
+c7b0f10900f29b1d ok test/tools/selftest/sweep_source/source/boom.cml
