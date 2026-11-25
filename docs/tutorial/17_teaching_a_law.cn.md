@@ -73,7 +73,7 @@ sampled negate: proposition equality, evidence samples 100, fired 8 of 8, covera
 **没有变**，`x * -1` 原样留在图上：
 
 ```bash
-camel docs/tutorial/examples/17_rule.cml std::opt std::rgir > negated.dot
+camel docs/tutorial/examples/17_rule.cml std::opt std::rgir std::nop > negated.dot
 dot -Tsvg negated.dot -o negated.svg
 ```
 
@@ -102,9 +102,12 @@ dot -Tsvg negated.dot -o negated.svg
 
 优化不总是马上决定"用哪种写法"。`std::cxx::saturate` 把标准库的定律用到不动为止，**把同一个值的几种
 写法都留着**，让后面的阶段再挑。`doubled` 这一段在
-`camel docs/tutorial/examples/17_rule.cml std::cxx::saturate std::rgir` 之后是这样：
+`camel docs/tutorial/examples/17_rule.cml std::cxx::saturate std::rgir std::nop` 之后是这样：
 
 ![doubled：x * 2 + x * 2 的几种写法留在一个个等价类里](images/17_rule_saturate.svg)
+
+末尾的 `std::nop` 让流水线停在这里：dump 把图原样交下去，没有它就会落到 `std::default` 把程序跑起来，而这张
+保留着多种写法的图，不先选定一种写法是不该执行的。
 
 每个虚线框是**一类等价的值**（`class`）：框里的节点是同一个值的不同写法。图里不标哪一种写法更便宜——
 代价是目标库的判断，dump 不做这个判断；想要一个值只留一种写法，得由流水线点名一次抽取

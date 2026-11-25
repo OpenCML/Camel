@@ -125,6 +125,30 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 30000
 
 [[tests]]
+name = "writings.nop_takes_the_state"
+desc = "`std::nop` is the pass a pipeline ends in when it is to look and not run (design principles 9.1), and it takes a program with several writings: it reads no part of the program, so no writing has to be chosen and nothing is extracted on the way. The program is not executed -- `std::nop` discards it -- so the 42 it prints when it runs is not printed."
+kind = "behavior"
+case = "../../../cases/feat/mm/writings/saturate_draw.cml"
+args = ["${case}", "std::cxx::saturate", "std::nop"]
+
+expect_exit = 0
+expect_output_not_contains = ["PassNeedsExtraction", "42"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 30000
+
+[[tests]]
+name = "writings.nop_does_not_widen_the_rule"
+desc = "The refusal still stands for a pass that reads the program: `std::nop` declaring that it takes the state declares nothing for anyone else, so the same saturation followed by `std::opt` is still refused with PassNeedsExtraction, naming the extraction to put before the pass. The pass it names is `std::defunctionalize`, the fixed lowering step the pipeline runs ahead of `std::opt`; the optimizer behind it reads the program too and is refused for the same reason. The two readings differ -- this one exits 1, `writings.nop_takes_the_state` exits 0 -- which is what makes the pair evidence and not a run that stopped refusing everything."
+kind = "behavior"
+case = "../../../cases/feat/mm/writings/saturate_draw.cml"
+args = ["${case}", "std::cxx::saturate", "std::opt", "std::nop"]
+
+expect_exit = 1
+expect_output_contains = ["PassNeedsExtraction", "std::defunctionalize", "rewrite::extract cost="]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 30000
+
+[[tests]]
 name = "writings.extract_pass"
 desc = "`rewrite::extract cost=rules::nodes` chooses one writing for every value, so the rewrite pass after it gets a program it knows: the cost is a function value the pipeline names, and the count of nodes is the library's own judgement."
 kind = "behavior"
@@ -287,6 +311,10 @@ timeout_ms = 30000
 # the drawing as a property of what came out, never as a count of lines: a check that examined no
 # class at all fails, and `draw_classes.guard` shows the same check refusing a dump of the program
 # without the saturation, naming the case file and the dump line of the writing that stands alone.
+# Every one of those pipelines ends in `std::nop`: a dump hands the program on (design principles
+# 9.1), so a pipeline that ended at the dump would fall through to `std::default`, which executes
+# and is therefore refused the state with `PassNeedsExtraction` -- and its complaint would land in
+# the dump the case reads.
 
 [[tests]]
 name = "draw_classes.gir"

@@ -882,10 +882,10 @@ func main() => int sync {
 }
 ```
 
-Write the pass `std::rgir` after the file name, and the program does not run; instead the graph is printed as Graphviz DOT text:
+Write the pass `std::rgir` after the file name and end the line with `std::nop`: the program does not run, and the graph is printed as Graphviz DOT text (`std::rgir` draws and hands the graph on; `std::nop` stops the pipeline there):
 
 ```bash
-camel docs/tutorial/examples/13_graph.cml std::rgir
+camel docs/tutorial/examples/13_graph.cml std::rgir std::nop
 ```
 
 Here is the output (for readability, the source-location attributes `origin`, `span` and `srcfile` on each node have been removed):

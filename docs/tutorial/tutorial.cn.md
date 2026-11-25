@@ -882,10 +882,10 @@ func main() => int sync {
 }
 ```
 
-在文件名后面写上遍 `std::rgir`，程序不运行，而是把图打印成 Graphviz 的 DOT 文本：
+在文件名后面写上遍 `std::rgir`，末尾再写 `std::nop`：程序不运行，图打印成 Graphviz 的 DOT 文本（`std::rgir` 画完把图原样交下去，`std::nop` 让流水线就此停住）：
 
 ```bash
-camel docs/tutorial/examples/13_graph.cml std::rgir
+camel docs/tutorial/examples/13_graph.cml std::rgir std::nop
 ```
 
 下面是输出（为了易读，去掉了每个节点上的 `origin`、`span`、`srcfile` 源码位置属性）：
@@ -993,8 +993,8 @@ camel docs/tutorial/examples/14_passes.cml --dump-after-each-pass snap std::cxx:
 
 几条规则：
 
-- 遍按书写顺序运行。执行图的遍（`std::nvm`、`std::fvm`、`std::jit`、`std::prl`）和转译的遍（`std::rgir`、`onnx::export`）消费掉图，写在它们后面的遍不会运行。
-- 不写任何遍，或者写的遍都没有消费掉图，最后运行默认的 `std::nvm`。
+- 遍按书写顺序运行。执行图的遍（`std::nvm`、`std::fvm`、`std::jit`、`std::prl`）返回部分求值后剩下的子图或空图，写在"已经交回空图"的那一遍后面的遍不会运行。把图打印或导出的遍（`std::rgir`、`onnx::export`）画完把图原样交下去，所以写在它们后面的遍照样运行；`std::nop` 让流水线到此停住、什么也不执行。
+- 不写任何遍，或者写下的遍跑完图还在，最后运行默认的 `std::nvm`。只想看图不想运行程序，就在末尾写 `std::nop`。
 - 语言不限制遍的顺序，而顺序可以影响结果：遍会改图，可以有副作用。标准库的优化遍以不改变程序结果为目标，这由测试保证，不是语言层面的约定。
 
 ## 15. 张量与模型的导出

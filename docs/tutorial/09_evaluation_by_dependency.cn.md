@@ -54,7 +54,7 @@ camel docs/tutorial/examples/09_dependency.cml
 
 ## 图上的依赖
 
-把图画出来（`camel docs/tutorial/examples/09_dependency.cml std::rgir > dep.dot`，再 `dot -Tsvg dep.dot -o dep.svg`；
+把图画出来（`camel docs/tutorial/examples/09_dependency.cml std::rgir std::nop > dep.dot`，再 `dot -Tsvg dep.dot -o dep.svg`；
 本书里的图都由第 1 章那个脚本生成）。`total` 这个函数在图上是这样：
 
 ![total 的子图：两次调用互不相干，加法要两份结果](images/09_dependency.svg)
