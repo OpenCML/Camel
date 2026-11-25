@@ -7,12 +7,21 @@
 //
 // Each picture has a source (an example under docs/tutorial/examples) and the passes the page
 // names in its command fence; the script runs `camel <source> <passes...> std::nop` and takes the
-// DOT the dump prints, so the picture is the graph this tree draws, not a drawing kept by hand. The
-// pipeline ends in `std::nop` because it prints and does not run the example: a translating pass
-// hands the graph down (design principles 9.1), so without it the example runs after the dump and
-// its output follows the DOT, which Graphviz then refuses. A picture may name a `cluster` to keep
-// only that subgraph, which is how the `twice` before/after pair is made, and a `title` for the
-// SVG's <title>.
+// DOT the dump prints, so the picture is the graph this tree draws, not a drawing kept by hand. A
+// picture may name a `cluster` to keep only that subgraph, which is how the `twice` before/after
+// pair is made, and a `title` for the SVG's <title>.
+//
+// The `std::nop` is not "this is a drawing command": it is "this pipeline still holds the graph". A
+// translating pass hands the program on (design principles 9.1), so `camel <example> std::rgir` draws
+// the graph and then the driver runs the default scheduling pass, which executes the example -- what
+// follows the DOT is the program's own output, and `01_hello` compares the whole dump, so Graphviz
+// refuses the file at line 1. Measured sheet by sheet on 2026-11-25 with and without the ending: all
+// eight held the graph (`Hello, Camel!`, `12`, `31 31`, `2`, the rules' sampling line, each after the
+// closing brace), and with it the seven that can be drawn are byte-for-byte the committed pictures
+// and nothing runs. `17_rule_saturate` cannot be drawn either way: `std::cxx::saturate` leaves values
+// with several writings, and the driver refuses `std::nop` by name ("Pass 'std::nop' cannot take the
+// program") as well as the `std::default` it would fall back to. `dump()` checks the ending held
+// rather than trusting it, so a sheet that silently executes its example is a failure, not a picture.
 //
 // Two files are written per picture, both in docs/tutorial/images:
 //   <name>.dot  the normalised DOT the picture was drawn from (committed: this is what is compared)
@@ -46,6 +55,16 @@ const CAMEL = option('camel', process.env.CAMEL || 'camel');
 const DOT = option('dot', process.env.DOT || 'dot');
 
 // The pictures the tutorial shows, in the order the chapters use them.
+//
+// A sheet's passes are the pipeline the chapter is about; the tool appends `std::nop` to them,
+// which is the recipe design principles 9.1 gives for looking at a graph without running it. A
+// sheet therefore holds no `std::nop` of its own: the stop belongs to the command the tool builds,
+// so a sheet copied elsewhere cannot pick up a second one. A dump hands the program on, so a sheet
+// that stopped at `std::rgir` would fall through to `std::default` and the program would run -- its
+// output would
+// land in the dump the picture is normalised from (the `01_hello` sheet keeps no cluster, so that
+// output would end up in the `.dot` file) and, on a program with several writings, the run would
+// be refused with `PassNeedsExtraction` before any picture was drawn.
 const SHEETS = [
     {
         name: '01_hello',
@@ -107,13 +126,21 @@ const SHEETS = [
 function dump(sheet) {
     const file = path.join(TUTORIAL, sheet.source);
     if (!fs.existsSync(file)) throw new Error(`${sheet.source} does not exist`);
-    // The sheet gives the passes its page writes; the ending is the tool's own. A pipeline that only
-    // prints says `std::nop` (design principles 9.1, `docs/cli.md`, and the comment in the header):
-    // the drawing hands the graph on, so the pass written after it runs, and with nothing written
-    // after it the default scheduling pass executes the example and prints its output into the DOT.
+    // The sheet gives the passes its page writes; the ending is the tool's own, because the drawing
+    // hands the graph on and a pipeline that only prints says `std::nop` (design principles 9.1).
     const args = [file, ...sheet.passes, 'std::nop'];
     const out = execFileSync(CAMEL, args, { cwd: TUTORIAL, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 });
     if (!out.includes('digraph')) throw new Error(`${CAMEL} ${args.join(' ')} printed no DOT`);
+    // The graph is the last thing a pipeline that stopped before executing prints. Anything after it
+    // is the example's own output -- the pipeline still held the graph, so the default scheduling pass
+    // ran it -- and comparing that as if it were the drawing is how a stale-looking picture that was
+    // never stale gets reported.
+    const after = out.slice(out.lastIndexOf('}') + 1).trim();
+    if (after !== '') {
+        throw new Error(
+            `${CAMEL} ${args.join(' ')} printed more than the graph: ${JSON.stringify(after.split('\n')[0])} -- the pipeline ended with the graph still in hand, so the example ran`,
+        );
+    }
     return out;
 }
 

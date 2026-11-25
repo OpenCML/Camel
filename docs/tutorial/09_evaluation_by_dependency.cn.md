@@ -12,7 +12,7 @@ Camel 的执行模型只有一句话：**一个表达式会被求值，是因为
 ```cml
 // Who needs whose result decides what runs, and what can run at the same time.
 // Run: camel docs/tutorial/examples/09_dependency.cml
-//      camel docs/tutorial/examples/09_dependency.cml std::gir
+//      camel docs/tutorial/examples/09_dependency.cml std::gir std::nop
 
 func price(n: int) => int {
     return n * 3
@@ -54,20 +54,20 @@ camel docs/tutorial/examples/09_dependency.cml
 
 ## 图上的依赖
 
-把图画出来（`camel docs/tutorial/examples/09_dependency.cml std::rgir > dep.dot`，再 `dot -Tsvg dep.dot -o dep.svg`；
+把图画出来（`camel docs/tutorial/examples/09_dependency.cml std::rgir std::nop > dep.dot`，再 `dot -Tsvg dep.dot -o dep.svg`；
 本书里的图都由第 1 章那个脚本生成）。`total` 这个函数在图上是这样：
 
 ![total 的子图：两次调用互不相干，加法要两份结果](images/09_dependency.svg)
 
 要逐个读属性（每条边是什么类型）的地方才贴节选的 DOT。下面是 `camel
-docs/tutorial/examples/09_dependency.cml std::gir` 输出里 `total` 这一段：
+docs/tutorial/examples/09_dependency.cml std::gir std::nop` 输出里 `total` 这一段：
 
 <!-- camel-snippet: graph-dump: the text block is one excerpt of std::gir's DOT, not the program's stdout -->
 
 ```cml
 // Who needs whose result decides what runs, and what can run at the same time.
 // Run: camel docs/tutorial/examples/09_dependency.cml
-//      camel docs/tutorial/examples/09_dependency.cml std::gir
+//      camel docs/tutorial/examples/09_dependency.cml std::gir std::nop
 
 func price(n: int) => int {
     return n * 3
@@ -100,7 +100,7 @@ func main() => int sync {
 ```
 
 ```bash
-camel docs/tutorial/examples/09_dependency.cml std::gir
+camel docs/tutorial/examples/09_dependency.cml std::gir std::nop
 ```
 
 ```text

@@ -9,7 +9,9 @@
 #include "graph/consistency.h"
 
 #include <algorithm>
+#include <cstdint>
 #include <format>
+#include <optional>
 #include <string>
 #include <vector>
 

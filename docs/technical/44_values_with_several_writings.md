@@ -139,6 +139,15 @@ diagnostic `PassNeedsExtraction` instead of the program. The pipeline says how t
 chosen or it stops (`rewrite::extract cost=<module>::<function>`); there is no implicit
 extraction, because the cost is the target library's judgement and the kernel has none of its own.
 
+`std::nop` declares it too, although it reads nothing: it is the pass that drops the program and
+ends the pipeline without a run (design principles 9.1), so the state never reaches anything that
+would have to choose a writing, and nothing has to be extracted on the way. That is what makes
+"look at the saturated graph and stop" spellable: a dump hands the program on, so a pipeline that
+ended at the dump would fall through to `std::default` — a pass that executes — and be refused
+with `PassNeedsExtraction`. `camel f.cml std::cxx::saturate std::gir std::nop` prints the classes
+and executes nothing. Nothing else is widened by it: every pass that reads the program keeps
+answering `PassNeedsExtraction`, and `camel f.cml std::cxx::saturate std::opt` is still refused.
+
 `std::cxx::saturate` reaches that state from the command line: it runs the standard rules library
 (`lib/rules/rules.cml`) for `rounds` rounds (6 by default; `strict` keeps the laws that hold bit for
 bit, as `safe_fp` does for `std::opt`) and extracts nothing. It is the same saturation

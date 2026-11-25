@@ -595,7 +595,7 @@ a
 
 - There is no separate type parameter list: type parameters are declared after the function's name in `::<…>`, and a function with it is generic, one without is not. The signature (parameters and return type) and the body then write `T` directly. A name declared at the head takes precedence over a type of the same name inside the function.
 - `type Pair<T> = (T, T)` is a type declaration with a parameter: `Pair<int>` is `(int, int)`.
-- In the graph, a generic function is a **subgraph template**. Each time it is called with a set of concrete types, a subgraph whose types are all concrete is instantiated: the program above has the two subgraphs `first<int>` and `first<string>` (you can see them with `camel docs/tutorial/examples/08_generics.cml std::rgir`). The graph contains only concrete types, and no type information is needed at run time.
+- In the graph, a generic function is a **subgraph template**. Each time it is called with a set of concrete types, a subgraph whose types are all concrete is instantiated: the program above has the two subgraphs `first<int>` and `first<string>` (you can see them with `camel docs/tutorial/examples/08_generics.cml std::rgir std::nop`). The graph contains only concrete types, and no type information is needed at run time.
 - A generic function may also be passed wherever a function is expected (`apply(id, 3)`, `xss->map<reverse>`, `let f: (x: int) => int = id`): the compiler builds the instance once the position fixes its types. Where nothing does (`let g = id`), it is a compile-time error that says to write the type.
 
 A declaration can also say **where it applies**: `when` after the signature is a compile-time condition over the declaration's type parameters. `double_it` below applies to numbers and to nothing else; when no candidate of a call meets its condition, the error at the call site lists the condition each candidate wrote. `is_numeric` is not a name the compiler knows: it is an ordinary function written with `match type` (the standard library's seven type predicates live in `types`), and a condition calls a function the module can see, so the snippet writes it in the same module.
@@ -882,10 +882,10 @@ func main() => int sync {
 }
 ```
 
-Write the pass `std::rgir` after the file name, and the program does not run; instead the graph is printed as Graphviz DOT text:
+Write the pass `std::rgir` after the file name and end the line with `std::nop`: the program does not run, and the graph is printed as Graphviz DOT text (`std::rgir` draws and hands the graph on; `std::nop` stops the pipeline there):
 
 ```bash
-camel docs/tutorial/examples/13_graph.cml std::rgir
+camel docs/tutorial/examples/13_graph.cml std::rgir std::nop
 ```
 
 Here is the output (for readability, the source-location attributes `origin`, `span` and `srcfile` on each node have been removed):
@@ -935,7 +935,7 @@ Read it side by side with the source:
 - **`main` is also a subgraph** (`cluster_F01`). The two `DATA` nodes are the constants `1` and `2`; **the `FUNC` node `add` is that call**, and two `NORM` (data) edges carry the arguments into it; its result is in turn carried by a data edge to `:io/println`.
 - **A sync block is control edges.** Nobody uses the result of `println`, and `return 0` does not depend on it. What makes it run all the same is that `CTRL` edge: `N06 -> N08`, from `println` to `GATE`, and `GATE` lets the return value `0` through to `EXIT`. Remove the `sync` from `main` and look again: this edge is gone, and so is the reachability of the `println` node — this is what the rules of section 6 look like in the graph.
 
-If you have Graphviz installed, `camel ... std::rgir | dot -Tsvg -o graph.svg` gives you a picture; `std::gir` outputs a styled version.
+If you have Graphviz installed, `camel ... std::rgir std::nop | dot -Tsvg -o graph.svg` gives you a picture; `std::gir` outputs a styled version.
 
 ## 14. Changing the passes
 

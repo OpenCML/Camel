@@ -12,7 +12,7 @@ This chapter shows what that sentence looks like on the graph, and how it differ
 ```cml
 // Who needs whose result decides what runs, and what can run at the same time.
 // Run: camel docs/tutorial/examples/09_dependency.cml
-//      camel docs/tutorial/examples/09_dependency.cml std::gir
+//      camel docs/tutorial/examples/09_dependency.cml std::gir std::nop
 
 func price(n: int) => int {
     return n * 3
@@ -54,21 +54,21 @@ camel docs/tutorial/examples/09_dependency.cml
 
 ## Dependencies on the graph
 
-Draw the graph (`camel docs/tutorial/examples/09_dependency.cml std::rgir > dep.dot`, then
+Draw the graph (`camel docs/tutorial/examples/09_dependency.cml std::rgir std::nop > dep.dot`, then
 `dot -Tsvg dep.dot -o dep.svg`; every picture in this book is drawn by the script chapter 1 names). The function
 `total` looks like this:
 
 ![the subgraph of total: two calls that need nothing from each other, and an addition that needs both](images/09_dependency.svg)
 
 An excerpt of DOT is pasted only where the attributes have to be read one by one (what type each edge is). Below is
-the `total` part of what `camel docs/tutorial/examples/09_dependency.cml std::gir` prints:
+the `total` part of what `camel docs/tutorial/examples/09_dependency.cml std::gir std::nop` prints:
 
 <!-- camel-snippet: graph-dump: the text block is one excerpt of std::gir's DOT, not the program's stdout -->
 
 ```cml
 // Who needs whose result decides what runs, and what can run at the same time.
 // Run: camel docs/tutorial/examples/09_dependency.cml
-//      camel docs/tutorial/examples/09_dependency.cml std::gir
+//      camel docs/tutorial/examples/09_dependency.cml std::gir std::nop
 
 func price(n: int) => int {
     return n * 3
@@ -101,7 +101,7 @@ func main() => int sync {
 ```
 
 ```bash
-camel docs/tutorial/examples/09_dependency.cml std::gir
+camel docs/tutorial/examples/09_dependency.cml std::gir std::nop
 ```
 
 ```text

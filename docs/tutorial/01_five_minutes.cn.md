@@ -53,8 +53,9 @@ Hello, Camel!
 
 ## 你的函数是一张图
 
-把 `std::rgir` 写在命令行最后：程序不会运行，编译器把它编译出的图**画出来**（DOT 是 Graphviz 的格式，交给 `dot`
-就是一张图）。文件名后面写的东西叫**遍**，`std::rgir` 是只负责把图画出来的遍。
+把 `std::rgir` 写在命令行上，末尾再写 `std::nop`：程序不会运行，编译器把它编译出的图**画出来**（DOT 是
+Graphviz 的格式，交给 `dot` 就是一张图）。文件名后面写的东西叫**遍**：`std::rgir` 只负责把图画出来，画完把
+图原样交下去，`std::nop` 才是让流水线就此停住、什么也不执行的那一个（设计原则 9.1）。
 
 ```cml
 // The smallest program: `main` is the entry, and its body is a sync block.
@@ -67,7 +68,7 @@ func main() => int sync {
 ```
 
 ```bash
-camel docs/tutorial/examples/01_hello.cml std::rgir > hello.dot
+camel docs/tutorial/examples/01_hello.cml std::rgir std::nop > hello.dot
 dot -Tsvg hello.dot -o hello.svg
 ```
 
@@ -132,8 +133,8 @@ func main() => int sync {
 ```
 
 ```bash
-camel docs/tutorial/examples/01_rewrite.cml std::rgir
-camel docs/tutorial/examples/01_rewrite.cml std::opt std::rgir
+camel docs/tutorial/examples/01_rewrite.cml std::rgir std::nop
+camel docs/tutorial/examples/01_rewrite.cml std::opt std::rgir std::nop
 ```
 
 | `std::opt` 之前 | `std::opt` 之后 |
@@ -156,7 +157,7 @@ camel docs/tutorial/examples/01_rewrite.cml std::opt std::rgir
 ## 练习
 
 写一个有两个参数的函数 `area(w: int, h: int): int`，返回它们的乘积，并在 `main` 里打印 `area(3, 4)`。
-然后把它画出来（`camel docs/tutorial/examples/01_exercise.cml std::rgir > area.dot`，再
+然后把它画出来（`camel docs/tutorial/examples/01_exercise.cml std::rgir std::nop > area.dot`，再
 `dot -Tsvg area.dot -o area.svg`），在你的图里找到：`w`、`h` 这两个 `PORT` 节点，做乘法的那一个 `OPER` 节点，
 以及把这些连起来的两条数据边。
 
