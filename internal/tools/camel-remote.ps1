@@ -499,11 +499,6 @@ $ErrorActionPreference = 'Stop'
 # The command-line lists and what a badly-given one means. Also its own file, for the same reason:
 # `camel-remote-args.test.ps1` measures the binding rule without a host.
 . (Join-Path $PSScriptRoot 'camel-remote-args.ps1')
-# The read of a plan's `time_sensitive` declaration, in its own file for the same reason and one
-# more: it is the reading a second, independent parser is compared with (`test/tools/time-sensitive-reader.mjs`,
-# `camel-remote-timesensitive.test.ps1`). One implementation, called from here; the test reads this
-# call rather than a copy.
-. (Join-Path $PSScriptRoot 'camel-remote-timesensitive.ps1')
 # `-FetchFile -Latest`: which run is newest, what a suffix may name, and where the file lands. Also
 # its own file: `camel-remote-fetch.test.ps1` decides all three without a host.
 . (Join-Path $PSScriptRoot 'camel-remote-fetch.ps1')
@@ -1886,10 +1881,56 @@ $buildCmd = if ($Config -eq 'Debug') { "npm run debug$stackTraceArg" } else { "n
     # The declaration is in the plan and not in a list here, because a list is a second place to
     # forget and it drifts from the plan it names. A directory target (`smoke`, `feat/opt`) and
     # `-Changed` carry no declaration of their own: only a named *.plan.toml can ask for the host.
-    # The declaration is read by `camel-remote-timesensitive.ps1` (dot-sourced above), one
-    # implementation for a reading that has a second, independent parser to be compared with; that
-    # file carries the sentences and the table they belong to.
-    $timeSensitivePlans = @(Get-TimeSensitivePlans -Root $Path -Plan $Plan)
+    #
+    # This script does not read the declaration. The runner reads it (`test/tools/toml-lite.mjs`,
+    # the same file `test/tools/run-tests.mjs` loads every plan with) and answers the question as a
+    # subcommand, `--print-time-sensitive`, one row per plan: `<path>` TAB `<token>`. That is the
+    # whole point of asking instead of deciding: the plan that takes the host has to be the plan the
+    # runner would run as a time-sensitive one, so the reading that decides this run is the runner's
+    # own. Two readers of this field -- this script's regular expressions were the second -- is how
+    # the field came to be readable two ways at once.
+    #
+    # What is still decided here is only which targets are plan files: a directory target names no
+    # plan, an absolute target is taken as given, a relative one is resolved against the tree, and an
+    # empty one is skipped. Those are path questions, not questions about the format.
+    $timeSensitivePlans = @()
+    $planFileTargets = @()
+    foreach ($p in $Plan) {
+        $p = "$p".Trim()
+        if (-not $p) { continue }
+        $declared = if ([System.IO.Path]::IsPathRooted($p)) { $p } else { Join-Path $Path $p }
+        if (-not (Test-Path -LiteralPath $declared -PathType Leaf)) { continue }
+        $planFileTargets += $declared
+    }
+    if ($planFileTargets.Count -gt 0) {
+        $runnerPath = Join-Path $Path 'test/tools/run-tests.mjs'
+        $nodeGap = $null
+        try {
+            $readerRows = @(& node $runnerPath '--print-time-sensitive' @planFileTargets 2>&1 | ForEach-Object { "$_" })
+            $readerExit = $LASTEXITCODE
+        } catch {
+            $nodeGap = "$_"
+        }
+        # An unread declaration is not "false". The one case where this run could take the host and
+        # not know it is a reading nobody made, so a runner that would not answer stops the run here
+        # -- the same rule as the tree probe below, where an unread probe is not a clean tree.
+        if ($nodeGap) {
+            Write-Host "[camel-remote] the runner could not be asked which plans are time sensitive: $nodeGap"
+            Write-Host '[camel-remote] install node on this side, or run from a checkout that has test/tools/run-tests.mjs; this run is refused rather than started blind'
+            exit 2
+        }
+        if ($readerExit -ne 0) {
+            Write-Host '[camel-remote] the runner could not read every plan named as a target:'
+            $readerRows | ForEach-Object { Write-Host "    $_" }
+            Write-Host '[camel-remote] this run is refused rather than started blind: a plan it cannot read is a plan whose claim on the host is unknown, and unknown is not "no"'
+            exit 2
+        }
+        foreach ($row in $readerRows) {
+            $fields = "$row" -split "`t"
+            if ($fields.Count -ne 2) { continue }
+            if ($fields[1] -eq 'true') { $timeSensitivePlans += $fields[0] }
+        }
+    }
     $timeSensitive = $timeSensitivePlans.Count -gt 0
     if ($timeSensitive) {
         Write-Host ("[camel-remote] time sensitive: {0} -- this run takes the plan slot and both build slots together, and starts only when it has all three" -f ($timeSensitivePlans -join ', '))
