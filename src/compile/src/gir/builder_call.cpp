@@ -836,17 +836,17 @@ Builder::visitLinkNode(const GCT::node_ptr_t &gct, std::optional<GCT::Assignment
     const auto linkedNode = [](Argument &input) -> node_handle_t & {
         return input.early != nullptr ? input.early : input.node;
     };
-    // The dimension names a call binds (design principles 5.4), remembered for the checked
-    // conversion of the returned value below.
+    // The dimension names a call binds (design principles 5.4), remembered for the shape check of
+    // the returned value below.
     ExtentValues dimValues;
     ExtentPacks dimPacks;
     const auto enterParameters = [&](FunctionType *funcType) {
         // The parameter types may write their extents over names the signature binds, e.g.
         // `func f(x: f32[n], y: f32[n])`. Bind each name
         // from every argument whose extent is statically known; what the arguments leave open is
-        // checked when the call runs, by passing the argument through the checked conversion
-        // (`as`) to the refined parameter type. Nothing here depends on the values at runtime,
-        // and no second instance of the function is built.
+        // checked when the call runs, by passing the argument through the language's shape check
+        // (`:op/refine_extent`, `refineExtentNodeOf`) to the refined parameter type. Nothing here
+        // depends on the values at runtime, and no second instance of the function is built.
         struct NamedExtentArg {
             Argument *input;
             type_vec_t *types;
@@ -914,18 +914,17 @@ Builder::visitLinkNode(const GCT::node_ptr_t &gct, std::optional<GCT::Assignment
             if (refined->castSafetyFrom(arg.actual) == CastSafety::Forbidden) {
                 continue;
             }
-            // THE STOP: this is the one step the compiler inserts that is a **conversion**, not an
-            // entering, and it is left as it was. The pair here is a shape the callee declared in
-            // its own names (`f32[n - w + 1]`) against the extent the call gave them (`f32[6]`):
-            // the two are the same type when the extents are read, and the type layer cannot say
-            // so at build time, so the check that the value really has that shape is made when the
-            // value exists (design principles 5.4). Refusing it here is the ruling's other arm --
-            // "a step that may fail is a compile-time type error" -- and it turns `let y: f32[6] =
-            // window<3>(x)` (test/cases/compile/extents/computed.cml) into a program that does not
-            // compile. Which arm holds is the owner's to say; this lane stops at the location and
-            // reports both readings rather than deciding it.
+            // The two static types do not contradict each other and are not the same type: what is
+            // left is the shape of the value, which only the value answers. The argument goes
+            // through the language's shape check -- the check `as` makes, as its own operator and
+            // not as a conversion the program wrote (design principles 5.4,
+            // `Builder::refineExtentNodeOf`). This check is not a conversion either: D-1125-18
+            // makes it its own shape check, an operator that may fault, which is why a program
+            // that declares `f32[n - w + 1]` and is called with `f32[6]` compiles and fails at the
+            // call when the value does not have that shape.
             node_handle_t &refinedArg = linkedNode(*arg.input);
-            refinedArg                = conversionNodeOf(valueOf(refinedArg), refined, arg.input->expr);
+refinedArg                = refineExtentNodeOf(
+                valueOf(refinedArg), refined, arg.input->expr);
             (*arg.types)[arg.index]   = refined;
         }
         const auto enter = [&](std::vector<Argument> &inputs, type_vec_t &types, bool with) {
@@ -2886,8 +2885,10 @@ Builder::visitLinkNode(const GCT::node_ptr_t &gct, std::optional<GCT::Assignment
         targetFuncType != nullptr && targetFuncType->hasExitType()) {
         // The return type may speak about the names the parameters bound (`: f32[n, k]`).
         // The function still has one graph: what varies with the call is only the static type,
-        // and the value is passed through the checked conversion to it (the same check `as`
-        // makes), so a body that breaks the relation is caught where the call runs.
+        // and the value is passed through the language's shape check to it (the same check `as`
+        // makes, as its own operator and not as a conversion the program wrote; design principles
+        // 5.4, `Builder::refineExtentNodeOf`), so a body that breaks the relation is caught where
+        // the call runs.
         Type *namedExit = targetFuncType->exitType();
         std::vector<ExtentForm> forms;
         if (namedExit != nullptr && namedExit->extentForms(forms)) {
@@ -2921,7 +2922,7 @@ Builder::visitLinkNode(const GCT::node_ptr_t &gct, std::optional<GCT::Assignment
             if (refined != nullptr && refined != namedExit && actualExit != nullptr &&
                 !refined->equals(actualExit) &&
                 refined->castSafetyFrom(actualExit) != CastSafety::Forbidden) {
-                targetNode = conversionNodeOf(targetNode, refined, gct);
+targetNode = refineExtentNodeOf(targetNode, refined, gct);
             }
         }
     }

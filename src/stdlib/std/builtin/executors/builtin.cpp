@@ -483,6 +483,13 @@ std::unordered_map<std::string, operator_t> makeOpsImplMap() {
         // The member read by name is a second URI (prelude.cml says why): the same kernel, which
         // reads the string operand as the key.
         {"op/access_key", __access_value__},
+        // The shape check a call site makes on an extent (design principles 5.4): the compiler
+        // writes this call, no program does (`kRefineExtentOperatorUri` says why nothing declares
+        // it). Its kernel is the conversion's own, so "what shape does this value have" is answered
+        // in one place for `as` and for a call's check alike -- a type layer that changes what a
+        // shape check does changes both, and a value that does not have the shape faults with the
+        // array type's own words.
+        {"op/refine_extent", __cast_value__},
     };
     for (const ConversionRegistration &conversion : kConversions) {
         map.emplace(conversion.name, conversion.impl);
@@ -684,6 +691,12 @@ void registerBuiltinOperatorTraits() {
         "op/pow_z",
         "op/pow_z_i",
         "op/pow_z_l",
+        // The shape check of a call site reads its operand and hands it on: it touches no
+        // resource, so it declares the empty list here like the operators above, and its purity
+        // is read off this declaration. It belongs in neither list on its other side: not in
+        // `kConversions`, because it converts nothing -- the two types are one type once the
+        // extents are read.
+        "op/refine_extent",
         "op/set_field",
         "op/set_index",
         "op/set_index_in_place",
