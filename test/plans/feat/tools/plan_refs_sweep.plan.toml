@@ -29,7 +29,7 @@ expect_stdout_contains = ["unbalanced=0", "silent=0", "every graph of every case
 # host that runs the sweep slower spends wall clock, not CPU, so the bound stays a bound.
 #
 # 1400 s, line 350 s. The bound was 1200 s, and that was four times a figure the tree has outgrown:
-# on 2026-11-22 the `linux-x64-nojit` leg read 316220 and 340540 ms of CPU (runs 45003684718 and
+# the `linux-x64-nojit` leg read 316220 and 340540 ms of CPU (runs 45003684718 and
 # 45007258569) and three runs of the same no-JIT build on the shared host read 264630, 263640 and
 # 267520 ms, so a 300 s line sat under the sweep's own cost and the nojit leg went red with
 # `unbalanced=0 skipped=1234 silent=0` -- the answer right and the bound the whole of the red.

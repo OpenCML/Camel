@@ -929,9 +929,9 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 # summed over its threads) is the work and the wall clock is the host's. Measured this plan in full
 # at -Jobs 8:
 #
-#   40.77 s of CPU                (2026-10-24 02:39, the slow-layer run of the batch point)
-#   45.60 s of CPU / 25.69 s wall  (2026-10-24 05:22, 136 tests, this entry red on the margin only)
-#   46.09 s of CPU / 30.92 s wall  (2026-10-24 05:30, the same plan, 136 tests, green under this
+#   40.77 s of CPU                (the slow-layer run of the batch point)
+#   45.60 s of CPU / 25.69 s wall  (136 tests, this entry red on the margin only)
+#   46.09 s of CPU / 30.92 s wall  (the same plan, 136 tests, green under this
 #                                   budget)
 #
 # A 13% spread in the CPU figure. The budget is 75 s: 1.63x the higher of the two readings it was set

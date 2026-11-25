@@ -76,7 +76,7 @@ timeout_ms = 120000
 #
 # Every element is exact in binary floating point, so this entry compares exactly and not to a
 # tolerance: the hand calculation, the library's forward transform and the engine's `with_grad`
-# answer the same four numbers and the same loss (PyTorch 2.5.1+cu121, float64, cpu, 2026-11-03,
+# answer the same four numbers and the same loss (PyTorch 2.5.1+cu121, float64, cpu,
 # `D:\Temp\s2-tensor-first-step-torch.py`).
 [[tests]]
 name = "first_step.tensor_forward_jvp"
@@ -108,7 +108,7 @@ timeout_ms = 60000
 #
 # The line is `loss=10.34375` and `dL/dw=([[3.75, 13.5], [5.5, 19.5]])`: the hand calculation of
 # this page, the forward transform's four seeds in `first_step.tensor_forward_jvp` above, and
-# PyTorch's reading of the same literals (float64, cpu, 2026-11-03). Note the parentheses -- the
+# PyTorch's reading of the same literals (float64, cpu). Note the parentheses -- the
 # pullback answers a one-tuple of cotangents, so `format` prints `((...))` and not `(...)`; the shape
 # is part of what is pinned, not formatting noise. Every element is exact in binary floating point,
 # so this is compared exactly and not to a tolerance.

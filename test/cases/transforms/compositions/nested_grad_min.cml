@@ -18,8 +18,7 @@
 // function's first `with` parameter (design principles 9.9). That writing typechecks and builds.
 //
 // The nest builds and both layers lift, so the wall is past them now. It has moved twice since this
-// file was written, so it is recorded with its date instead of being relied on -- read 2026-11-21 on
-// the tree it was read on, `std::nvm`:
+// file was written, so it is not relied on -- read on this tree, `std::nvm`:
 //
 //   [Error]: An error has occurred: transforms: transpose has no transpose for this function: the
 //   callee's transpose was built, but the parameter at position 3 reads a value this call does not

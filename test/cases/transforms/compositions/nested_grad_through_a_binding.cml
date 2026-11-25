@@ -10,7 +10,7 @@
 // one-expression form, and the two must answer the same kind of number.
 //
 // Bound or inline changes nothing: the same composition twice, and the same wall, which is past both
-// lifts now and has moved twice since this file was written. Read 2026-11-21,
+// lifts now and has moved twice since this file was written. Read on this tree,
 // `std::nvm`, the nest stops at
 //
 //   [Error]: An error has occurred: transforms: transpose has no transpose for this function: the

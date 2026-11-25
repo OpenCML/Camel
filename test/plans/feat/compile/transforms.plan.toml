@@ -943,7 +943,7 @@ expect_exit = 0
 # The reading spans both streams: the two numbers are the program's output, and the
 # `REINTERP` lines that name the rule instance and the type it was asked for are the pass
 # talking, which goes to stderr. Asserting both against stdout made this case look broken on a
-# tree where the fix is present -- the run of 2026-11-02 18:45 printed exactly the expected
+# tree where the fix is present -- a run printed exactly the expected
 # stderr lines and failed on four needles that were never on that stream. `expect_output_*`
 # reads the two streams as one, which is what a case reports when its verdict is a sentence the
 # program and the pass together print.
@@ -1237,7 +1237,7 @@ expect_exit = 0
 expect_output_contains = ["TRANSPOSE function=both graph=", "3.0", "(3.0)", "(6.0)"]
 # The answer is a tuple, and the tuple is what the plan pins: `3.0` alone is printed by the forward
 # line as well, so it cannot tell the answer from the value the program computed on the way there --
-# a transposition whose answer collapsed to a zero still prints `3.0` (measured 2026-11-04, the
+# a transposition whose answer collapsed to a zero still prints `3.0` (the
 # reading the page on a closure member's cotangent reported). A zero answer is named as forbidden
 # rather than left to the reader of a substring.
 expect_output_not_contains = ["(0.0)"]

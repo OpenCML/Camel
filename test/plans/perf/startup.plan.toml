@@ -17,7 +17,7 @@
 # So a crossed ceiling is a regression and never "the host was busy": the 1/5/15-minute load average
 # is printed beside the numbers as provenance, not as an excuse, and the wall clock is not gated at
 # all. Each ceiling is about two and a half times the quiet median of its command. Measured on the
-# Linux host (AMD EPYC 7343, 32 threads) on 2026-10-23 -- sixty fresh processes per command (five
+# Linux host (AMD EPYC 7343, 32 threads) -- sixty fresh processes per command (five
 # samples of twelve) in each of four windows, at load 92.9, 75.2, 72.6 and 68.7 -- with the window
 # at load 21.4, which read the same CPU time, as the quiet column:
 #
@@ -29,7 +29,7 @@
 # They are a smoke alarm for "the standard library is now loaded before the program runs", not a
 # percentage budget: the small commands' cost jumping to the full-import cost, +30 ms, crosses the
 # first two on the first sample. The wall-clock ceilings they replace were 40/45/100/90 ms and read
-# 13.0 ms for `--version`, which compiles nothing, at load 106-130 on 2026-10-23 -- the reading the
+# 13.0 ms for `--version`, which compiles nothing, at load 106-130 -- the reading the
 # rule answered. The older numbers and their spread, the wall-clock ceilings and the 30%
 # share this rule replaced, stand together as the record of that unit -- the note that kept
 # them states the unit they belong to.
@@ -111,8 +111,8 @@ expect_stdout_contains = ["startup.cost metric=cpu_user_plus_system", "startup.c
 # slope of its own CPU against that work.
 #
 # The budget is a single-run CPU reading with the smallest headroom above it: 16.22 s measured with
-# `--jobs 1` on tangshan88 (32 cores, load average 25.73/43.89/44.94 when it was taken,
-# 2026-10-31), rounded up to the next 500 ms -- 1.08x. It is written in CPU seconds of one run
+# `--jobs 1` on tangshan88 (32 cores, load average 25.73/43.89/44.94 when it was taken),
+# rounded up to the next 500 ms -- 1.08x. It is written in CPU seconds of one run
 # because that is the unit this assertion measures: a budget taken from parallel wall clock, or
 # from another machine, pre-loads a false cause into every future failure.
 #

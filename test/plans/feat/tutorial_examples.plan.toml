@@ -283,7 +283,7 @@ expect_output_contains = ["Entry module 'shapes' must define a resolvable 'main'
 # The first line of `05_map_order.cml` has no order on `std::prl`, and no fixed contents either:
 # `randint` advances a hidden state, so which draw an element gets depends on which ran first, and
 # under load the interleaving has produced a line whose multiset differs from the sequential one
-# (`[2, 2, 2, 36, 58, 88, 36, 8]`, seen on 2026-10-26 in a run with -Jobs 8), which is why the
+# (`[2, 2, 2, 36, 58, 88, 36, 8]`, seen in a run with -Jobs 8), which is why the
 # chapter's page shows one run rather than a pinned line. What is asserted about the first line is
 # its shape; the second line, which the reduce writes in element order, is exact.
 [[tests]]

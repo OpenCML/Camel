@@ -8,7 +8,7 @@
 // forward half and already answers the same 48 as `t1` from `jvp(jvp(f))`, which is a second reading
 // of the same second derivative and not a copy of this one.
 //
-// This file used to be a negative, and the two walls it named are both gone. Read 2026-11-20 09:20:
+// This file used to be a negative, and the two walls it named are both gone. Read on this tree:
 //
 //     error[RuntimeDiag::RuntimeError]: An error has occurred: transforms: jvp has no forward
 //     transform for this function.
