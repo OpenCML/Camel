@@ -538,7 +538,7 @@ a82098797df46210 ok src/stdlib/perf.cml
 27fc4f4fd00b5fb6 ok src/stdlib/sim.cml
 b4a9f226ac6e68db ok src/stdlib/state.cml
 cb7539a8da81e513 ok src/stdlib/statistics.cml
-7cfe635dbdebd2e1 ok src/stdlib/std.cml
+fb9eca15a5a6474d ok src/stdlib/std.cml
 1e853ee4b632ef01 ok src/stdlib/str.cml
 b95ce07d27fea622 ok src/stdlib/stream.cml
 8308cebdc691d9b6 ok src/stdlib/tensor.cml
@@ -2747,6 +2747,10 @@ bad73401e511db76 ok test/cases/gpu/nofallback/scalar_literal.cml
 d3a47e7db081aa4d ok test/cases/gpu/profile/device_region.cml
 bb162435acfc071f ok test/cases/gpu/profile/host_loop.cml
 f6db2a998e961da2 ok test/cases/gpu/reading/device_reading.cml
+fe79d50fef19eff3 ok test/cases/linear/backend_agree/fault_in_callee.cml
+156f4bec3257d199 ok test/cases/linear/backend_agree/ordered_effects.cml
+e37331ebd0469647 ok test/cases/linear/backend_agree/sort4.cml
+5acd39cb6f86bc94 ok test/cases/linear/backend_agree/sort5.cml
 9693ad5bd805b1bf ok test/cases/linear/byref/captured_write_graph.cml
 8f9639ec7c77bb05 ok test/cases/linear/byref/captured_write_order.cml
 cd2813367577c430 ok test/cases/linear/byref/captured_write_value.cml
@@ -2809,6 +2813,7 @@ ebb3ddc9fced3c29 ok test/cases/linear/faults/subscript_slice_out_of_range.cml
 3cff4f21e606c90c ok test/cases/linear/faults/subscript_step_zero.cml
 0a80446abdc52c93 ok test/cases/linear/faults/subscript_step_zero_const.cml
 238a8c59f54d9cdf ok test/cases/linear/faults/subscript_take_index.cml
+4d82dafbb3095e77 ok test/cases/linear/fvm/config_probe.cml
 4bb1593d9fa86d55 ok test/cases/linear/jit/branch_join.cml
 3c9361b0467e2f4f ok test/cases/linear/jit/builtin_operator_chain.cml
 370a2479f9a7b9e7 ok test/cases/linear/jit/call_chain_hot.cml

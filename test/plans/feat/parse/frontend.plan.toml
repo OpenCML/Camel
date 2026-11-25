@@ -17,6 +17,21 @@ normalizers = ["normalize_newlines"]
 timeout_ms = 20000
 
 [[tests]]
+name = "frontend.ast_record"
+desc = "The record is read by the layer that runs on every change, and by name. `scripts/check-ast-hashes.mjs` hashes every `.cml` file of the repository with the same tool (`camel-parsecheck hashes`) that `frontend.ast_snapshot` runs, compares each file's line with `test/plans/feat/parse/golden/ast_hashes.txt`, and prints one line per file that is not as recorded -- `mismatch <path> recorded <hash> now <hash>` for a file whose tree moved (a `//` comment moves it: the hash covers each node's token range and origin), `missing <path>` for a file the record holds no line for, `gone <path>` for a line whose file the tree lost -- and exits 1. It writes nothing: the repair is `check.py snapshot --update --only <glob>` (`agents/test.md`), and the whole-record re-record is the host's `-UpdateAstHashes`. This is the reading the record did not have: `frontend.ast_snapshot` is one layer down and asserts a count, so a lane reading `-Tier fast` saw nothing while the record was stale -- on 2026-11-25 four lanes each patched rows by hand, and the record was stale again the same night (its first reading named six: `src/stdlib/std.cml`, moved by `8ade0f383d` a day after its row was recorded, and five `test/cases/linear/**` cases with no row at all). A run that cannot read the record, the install's `camel-parsecheck` or the scope refuses (exit 2) rather than reporting no stale line."
+kind = "behavior"
+tool = "node"
+case = "../../../../scripts/check-ast-hashes.mjs"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_contains = ["0 stale"]
+normalizers = ["normalize_newlines"]
+timeout_ms = 60000
+# Fast layer, and it has to stay there: 1.09 s of child wall clock on the gate host at 2026-11-25
+# 15:19 (load 32), of which 0.5 s is the hashing in four processes; the same list in one process
+# (`--jobs 1`) read 1.4-2.1 s there, which is over the 2 s the fast layer allows.
+
+[[tests]]
 name = "frontend.ast_snapshot"
 desc = "Every case of the parse corpus (test/cases/parse), every probe of the grammar's decisions (test/tools/parsecheck/probes.py) and every other .cml file of the repository (benchmarks, exemplars, examples, showcase, the standard library, the tutorial and the other plans' cases, the handover directory aside) gives the AST, node for node with token ranges and origins, that was recorded for it. The record covers the repository and not only the parser's tests: a graph that moves in stdlib, an example or a benchmark without an assertion of its own is exactly the change this file exists to catch, and a plan that owns the file only catches what it happens to check. A file the record does not hold yet fails this test too: the tool counts those files and exits 0 (`added` is the count the next `--update` writes), so the reading asserts the count is zero -- a case that lands unrecorded is a file nobody read, and it used to pass here as `1 not in the snapshot yet`."
 kind = "behavior"
