@@ -540,13 +540,22 @@ gc_node_ref_t ruleCotangentOf(
     // includes rank 0, a rank-zero array being the element itself), and that is not a statement
     // about the type alone: the slot of a `T[..]` position holds the rank-zero array that *is* the
     // element. Without it the body has no rank to read, and where the body asks `numel(ct)` a number
-    // is read as a pointer -- a SIGSEGV inside the numel kernel. The conversion is made wherever a
+    // is read as a pointer -- a SIGSEGV inside the numel kernel. The step is made wherever a
     // value's type goes from `T` to `T[..]` (`Builder::coerceTo`, whose reason is stated in
     // `ArrayType::castSlotFrom`: the run gets a value with a rank to read), and a call argument is
     // the one entrance that is not such a position (it asks the same question before it enters,
     // `builder_operators.cpp`). A law's right side is entered by this walk and not by a call, so the
-    // conversion is made here -- the value is handed over through a cast to the port's own type,
+    // step is made here -- the value is handed over through an entering to the port's own type,
     // which is what the language would have inserted had the law been written as a call.
+    //
+    // **The operator is `:op/enter`, not `:op/cast`** (design principles 5.1: entering is not a
+    // conversion -- it always succeeds, it is written as its own operator, it goes through no
+    // conversion safety table; and the author's ruling on `enter-by-structure`, `dd71a1293b`: `T`
+    // read as `T[..]` is an entering, its rank coming from the value). `:op/cast` is the operator a
+    // *program* writes when it converts, and it is `mayFault = true`, which this step cannot be: the
+    // branch below already asked `port->assignableFrom(ctType)`, so the entering's own guard
+    // (`__enter_value__` asks `castEntersFrom`) passes. The two kernels both call `castSlotFrom`, so
+    // the numbers are the same either way -- what changes is which operation the graph says it made.
     gc_node_ref_t handed = ct;
     Type *port           = ctType != nullptr
                                ? cotangentPortOf(*ctx.state.context, ruleName, operandTypes, position)
@@ -559,7 +568,7 @@ gc_node_ref_t ruleCotangentOf(
         if (arrayPort != nullptr && arrayPort->rankZeroType() != nullptr &&
             port->assignableFrom(ctType)) {
             const std::vector<gc_node_ref_t> source{ct};
-            handed = ctx.draft->addOperNode(port, nullptr, ":op/cast");
+            handed = ctx.draft->addOperNode(port, nullptr, ":op/enter");
             ctx.draft->setNormInputs(handed, std::span<const gc_node_ref_t>(source));
         }
     }
@@ -567,7 +576,7 @@ gc_node_ref_t ruleCotangentOf(
     // its operator's head and its operand count and the index reads no operand types, so nothing
     // ties the port the law writes for its cotangent to the shape this step has: `mul_tangent`'s law
     // says `(ct: T[..])` and a `float` step hands it the number it was transposed at. The two agree
-    // here when the cast above made them one type -- the rank-zero cotangent read as the open-rank
+    // here when the entering above made them one type -- the rank-zero cotangent read as the open-rank
     // array it is.
     //
     // **A disagreement is a compiler defect, not a language rule.** No program reaches the refusal
@@ -582,7 +591,7 @@ gc_node_ref_t ruleCotangentOf(
     // What the comparison covers is a difference of the **same kind**: two arrays whose element
     // types differ (`float[3]` and `f32[3]`), or two numbers of different codes (an `f32` step
     // handed to a `float` law). A difference across kinds is not a disagreement at all: a number
-    // handed to an array port is the rank-zero case the cast above answers (design principles 5.4),
+    // handed to an array port is the rank-zero case the entering above answers (design principles 5.4),
     // an array handed to a number port is what the law's own instancing answers from the operands'
     // types, and a `Ref` is a type that is not decided yet, which `Type::assignableFrom` cannot
     // compare at all. A comparison that also covered the cross-kind cases finds `mean_axis`'s law on
