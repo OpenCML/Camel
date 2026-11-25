@@ -64,7 +64,7 @@ first. Move the binary somewhere else and you do need `CAMEL_HOME=<install root>
 The graph of the same program is one word away:
 
 ```bash
-out/latest/bin/camel hello.cml std::gir
+out/latest/bin/camel hello.cml std::gir std::nop
 # digraph GraphIR { ... N00 [label="process:user_name", type="OPER", ...] ... }
 ```
 

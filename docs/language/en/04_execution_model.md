@@ -248,7 +248,7 @@ func main() => int sync {
 }
 ```
 
-`camel m.cml` and `camel m.cml std::macro std::nvm` both print `27`; in the graph of the latter, `cube(3)` is already the constant `27` (which can be seen with `camel m.cml std::macro std::rgir`).
+`camel m.cml` and `camel m.cml std::macro std::nvm` both print `27`; in the graph of the latter, `cube(3)` is already the constant `27` (which can be seen with `camel m.cml std::macro std::rgir std::nop`).
 
 `#macro` is a mark on the declaration, not part of the function type: the function type is that of an ordinary function. It may be written only on a function declaration; on a type, field, parameter or block it is a tag-position error, and `#macro<...>` is a tag-argument-count error. A lambda has no declaration to carry it, so `#macro` cannot be written there.
 

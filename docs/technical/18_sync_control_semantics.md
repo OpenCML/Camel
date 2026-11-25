@@ -341,7 +341,7 @@ func g() => int sync {
 
 推荐检查方式：
 
-- `camel <file>.cml std::gir`
+- `camel <file>.cml std::gir std::nop`
 - 关注函数子图里 `EXIT` 入边是否来自 `GATE`，以及 `GATE` 是否同时有值输入与等待（模型里那条等待是同步边，
   见 2.5 的差距）。
 

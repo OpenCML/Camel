@@ -19,7 +19,7 @@ Camel is a graph-native general-purpose programming language; AI is its primary 
   ```bash
   camel prog.cml                      # default: run on the node VM
   camel prog.cml std::opt std::fvm    # optimise first, then run on the bytecode VM
-  camel prog.cml std::rgir            # print the graph
+  camel prog.cml std::rgir std::nop   # print the graph
   ```
 
 The smallest program:

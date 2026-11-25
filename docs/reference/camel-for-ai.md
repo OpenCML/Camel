@@ -248,7 +248,7 @@ Its answer is half of learning the language.
 - **The editor has the same information.** `camel-ls --stdio` is a language server — diagnostics with
   their fixes, completion, hover, and the graph of a function — and `editors/vscode` wraps it.
 - **`camel check prog.cml`** reports the same diagnostics without running the program, and
-  `camel prog.cml std::gir` prints the graph instead of running it.
+  `camel prog.cml std::gir std::nop` prints the graph instead of a run.
 
 Sources: `docs/cli.md`, `docs/editor-support.en.md`, `docs/diagnostics.md`.
 

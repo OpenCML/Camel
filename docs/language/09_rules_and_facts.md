@@ -369,7 +369,7 @@ func main() => int sync {
 ```
 
 ```bash
-camel fired.cml fired::simplify std::gir
+camel fired.cml fired::simplify std::gir std::nop
 ```
 
 ```text
@@ -387,7 +387,7 @@ camel fired.cml fired::simplify std::gir
         }
 ```
 
-不跑这条遍时（`camel fired.cml std::gir`），同一个簇里还有 `math:abs_l` 那个节点：它接在加法那个节点
+不跑这条遍时（`camel fired.cml std::gir std::nop`），同一个簇里还有 `math:abs_l` 那个节点：它接在加法那个节点
 后面，再把结果交给出口；跑过之后，出口的输入直接来自加法那个节点，`math:abs_l` 的节点没有了。
 
 ## 9.8 尚未实现的形态

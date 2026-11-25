@@ -83,7 +83,7 @@ parameters — the inputs of a `CALL` node, on a node of another kind. The graph
 node's result. The value is the `FUNC` node of that graph together with a `FILL` node (a
 closure) whose `WITH` input is the callee it captured.
 
-From `camel x.cml std::rgir` for `let b = attempt(risky)(0) !! -1` (attributes shortened; the
+From `camel x.cml std::rgir std::nop` for `let b = attempt(risky)(0) !! -1` (attributes shortened; the
 synthesized graph has no name of its own):
 
 ```

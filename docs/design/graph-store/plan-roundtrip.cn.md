@@ -804,7 +804,7 @@ func pick(x: int): string { return 'wide' }
 代价：内联体在源码里没有专门写法，唯一正确的做法是**把它的语句按它自己的顺序摊进外层区域**——也就是判定器已经在做的抹掉（`gir_canonical.cpp#CanonicalDocument::canonicalRegionOf`）。代价是「被内联的入口提升成虚拟 `main`」这条（`gir-interchange.md` 已列为「还没做，属于让打印器必要的那一步」）要同时落；否则原文的 `main` 图在重编译后没有调用者，canonical 的「只取可达图」会把两侧的图集比得不一样。**S3b 的第一件事就是量这一条**。
 
 **缺口 D：顺序边（不打印可以，不检查不行）。**
-复现：`camel probe.cml std::jgir canonical=true` 对
+复现：`camel probe.cml std::jgir canonical=true std::nop` 对
 ```camel
 func f() => int sync { let a = println(1)
     let b = println(2)

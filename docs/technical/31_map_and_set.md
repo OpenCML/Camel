@@ -24,7 +24,7 @@ Nothing here depends on what the collection holds. There is no literal and no ne
 Every operation is a pure operator: it reads its arguments and returns a new value. No
 operation changes a map or a set that exists, so two values never alias observably.
 
-`let v = m[k] ?? 0` (`camel x.cml std::rgir`, ports and edges left out):
+`let v = m[k] ?? 0` (`camel x.cml std::rgir std::nop`, ports and edges left out):
 
 ```
 OPER :coll/map_idx      : int?    <- m, k
