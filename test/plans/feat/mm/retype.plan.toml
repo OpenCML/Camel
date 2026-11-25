@@ -43,6 +43,6 @@ name = "retype.enum_pair"
 desc = "The probe: the pair type `(float, (float) => float)` of the program is replaced by an enum with one variant carrying exactly that tuple (test::retype_enum), on every graph at once and without touching a node. The commit's validators are the proof -- the branch's two arms, the JOIN that merges them, the function's signature and the call that reads it all agree on the enum -- and the graph is then dumped rather than run. Two things the pass reports are why: the static area keeps the entries whose value is an object of the old type (`statics_left=2`: an aggregate the program builds is a static template, and a rebuild may not put a new type over an object that keeps its class), and a rebuilt graph cannot be run at all before the rewrite that builds and matches the variants, because the runtime reads its values as the type the graph now declares."
 kind = "behavior"
 case = "../../../cases/feat/mm/retype/retype_enum_pair.cml"
-args = ["${case}", "test::retype_enum", "std::gir"]
+args = ["${case}", "test::retype_enum", "std::gir", "std::nop"]
 expect_exit = 0
 expect_stdout_contains = ["RETYPEENUM seal=ok", "arms_ok=1", "pair_after=0", "statics_left=2", "source_unchanged=1", "PullbackValue"]

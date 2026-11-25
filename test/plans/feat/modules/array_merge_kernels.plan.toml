@@ -42,7 +42,7 @@ name = "array_merge_kernels.merge_sort_graph"
 desc = "In the merge-sort program the call of `merge_sorted` is the kernel operator of its element type, not the body `sort(concat(...))` expanded: the graph has `array:merge_sorted_l` and no `concat`."
 kind = "behavior"
 case = "../../../cases/para/core/merge_sort_small.cml"
-args = ["${case}", "std::gir"]
+args = ["${case}", "std::gir", "std::nop"]
 expect_exit = 0
 expect_stdout_contains = ["label=\"array:merge_sorted_l\""]
 expect_stdout_not_contains = [":struct/concat_arr"]

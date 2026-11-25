@@ -85,7 +85,7 @@ def document_of(path: str, camel: Optional[str]) -> Tuple[bytes, dict]:
         if camel is None:
             raise Unreadable(f"{path}: a .cml program needs --camel <path-to-camel>")
         run = subprocess.run(
-            [camel, path, "std::jgir", "canonical=true"],
+            [camel, path, "std::jgir", "canonical=true", "std::nop"],
             capture_output=True,
         )
         if run.returncode != 0:

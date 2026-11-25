@@ -100,6 +100,25 @@ function parseValue(raw) {
         if (!inner) return []
         return splitTopLevel(inner).map(parseValue)
     }
+    if (value.startsWith('{') && value.endsWith('}')) {
+        // An inline table. It exists here for one field: a `known_fail_ends_when` that says what
+        // ends the mark has to be something a run can evaluate, and `{ prints = "the line" }` /
+        // `{ passes = "the case" }` are the two shapes. A key repeated inside one table is refused
+        // rather than last-one-wins, for the same reason a repeated key in a table is.
+        const inner = value.slice(1, -1).trim()
+        const table = {}
+        if (!inner) return table
+        for (const part of splitTopLevel(inner)) {
+            const separator = part.indexOf('=')
+            if (separator < 0) throw new Error(`unsupported TOML inline table entry: ${part.trim()}`)
+            const key = part.slice(0, separator).trim().replace(/^["']|["']$/g, '')
+            if (Object.prototype.hasOwnProperty.call(table, key)) {
+                throw new Error(`duplicate key '${key}' in an inline table`)
+            }
+            table[key] = parseValue(part.slice(separator + 1))
+        }
+        return table
+    }
     if (value === 'true') return true
     if (value === 'false') return false
     if (/^[+-]?\d+$/.test(value)) return Number.parseInt(value, 10)

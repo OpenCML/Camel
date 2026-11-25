@@ -231,6 +231,10 @@ golden = "golden/deep_enum_chain.txt"
 # safepoint, and a million nodes built one per safepoint turn that into quadratic copying
 # (measured: over the 200 s timeout baseline). The program still runs in this plan.
 sweep = false
+# Slow layer: over the 2 s the fast layer allows -- 4.96 s of
+# child wall clock in the 2026-11-12 record (appendix B of
+# internal/reports/2026-11-24-test-suite-inventory.cn.md).
+tier = "slow"
 
 [[tests]]
 name = "value.deep_nested_enum"

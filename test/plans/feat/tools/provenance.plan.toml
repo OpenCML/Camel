@@ -1,5 +1,9 @@
 id = "feat.tools.provenance"
-tier = "fast"
+# Slow layer: every case of this plan costs more than the 2 s the fast layer allows
+# (2026-11-12 fast-layer record, child wall clock; the list is appendix B of
+# internal/reports/2026-11-24-test-suite-inventory.cn.md). The plan is slow as a whole,
+# so the line goes on the plan and not on each entry.
+tier = "slow"
 desc = "A run states the commit, the binary and the tree its numbers belong to, on one line before `[SUMMARY]`: a clean tree prints this checkout's HEAD character for character, a dirty tree prints `(dirty: N files)` and no sha at all, and the binary's time is the executable's mtime rather than the build log's"
 
 [[tests]]

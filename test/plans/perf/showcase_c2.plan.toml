@@ -197,11 +197,6 @@ timeout_ms = 300000
 name = "implementations"
 desc = "C2 standard profile, twice: the with_grad pipeline and the library-grad pipeline print the same three-block table, and their last logged losses agree within the hand-written 1e-4 relative tolerance."
 kind = "behavior"
-known_fail = true
-known_fail_owner = "unowned (`lane-transforms` wrote this mark and is gone)"
-known_fail_reason = "the second pipeline names `std::vjp`, which no registry has (`showcase/c2-mlp-mnist/compare_implementations.py` runs `std::macro std::vjp std::nvm`), so the library half stops before it runs and there is nothing to compare"
-known_fail_msg = "std::vjp"
-known_fail_ends_when = "when a registry carries `std::vjp`, the library half runs to its end and this entry prints its `implementations A` and `implementations B` tables and a `compare last_loss difference=... tolerance=... PASS` line whose difference is within tolerance, exiting 0; today the second pipeline stops at `Unrecognized graph rewriting/scheduling/translation pass 'std::vjp'`, so there is nothing to compare"
 tool = "python"
 case = "../../../showcase/c2-mlp-mnist/compare_implementations.py"
 args = ["${case}", "--data", "${test_tmp}/c2-implementations/data", "--steps", "1000"]

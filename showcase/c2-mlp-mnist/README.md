@@ -115,7 +115,7 @@ Both programs print the same machine-readable lines (`c2 config`, `c2 init`,
 2. **Performance**: training time (the training loop only; data loading, evaluation and
    checkpointing are excluded), throughput (`steps × batch / time`), the peak working set of
    the whole process including children (psutil), the Camel compile time (the median of three
-   `std::macro std::stats std::null` runs), and the whole-process wall time including
+   `std::macro std::stats std::nop` runs), and the whole-process wall time including
    startup.
 3. **Code size**: SLOC per `// == section ==` / `# == section ==` section the two files share
    (blank lines, full-line comments, Python docstrings and C block comments are not counted;

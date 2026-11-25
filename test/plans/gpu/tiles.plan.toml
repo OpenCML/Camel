@@ -1368,7 +1368,7 @@ case = "../../cases/gpu/nofallback/branch.cml"
 # would lift the arm's computation out of the branch and run the arm that is not taken, which is
 # the defect the design's 2.5 names. `std::jgir` reads the graph the pass produced, so this is a
 # structural guard and needs no device.
-args = ["--devices", "cpu", "${case}", "tiles::compile", "std::jgir"]
+args = ["--devices", "cpu", "${case}", "tiles::compile", "std::jgir", "std::nop"]
 envs = ["CUDA_VISIBLE_DEVICES=-1"]
 expect_exit = 0
 verify_script = """
@@ -1587,7 +1587,7 @@ case = "../../cases/gpu/nofallback/grad_expand_plain.cml"
 # consumer of a derived graph, not its author), and the program is dumped as a whole (`std::jgir`)
 # so that every node, edge, attribute and reference is read. The reading is that the runtime
 # operator is still there and that no pass expanded it outside a scope.
-args = ["--devices", "cpu", "${case}", "tiles::compile", "std::jgir"]
+args = ["--devices", "cpu", "${case}", "tiles::compile", "std::jgir", "std::nop"]
 envs = ["CUDA_VISIBLE_DEVICES=-1"]
 expect_exit = 0
 verify_script = """

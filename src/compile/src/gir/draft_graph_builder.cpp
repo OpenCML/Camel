@@ -401,10 +401,11 @@ DraftGraphBuilder::drefTarget(runtime::DraftNodeRef node) const {
     return it->second;
 }
 
-const oper_idx_ptr_t &DraftGraphBuilder::operTarget(runtime::DraftNodeRef node) const {
+const oper_idx_ptr_t *DraftGraphBuilder::operTarget(runtime::DraftNodeRef node) const {
     auto it = operTargets_.find(node.id);
-    GUARD(it != operTargets_.end(), "DraftGraphBuilder operator target not found.");
-    return it->second;
+    // No entry is an answer, not a broken graph: see the header. A call a pass wrote by naming its
+    // operator's URI was never resolved by this builder, and the node's payload still names it.
+    return it == operTargets_.end() ? nullptr : &it->second;
 }
 
 void DraftGraphBuilder::registerNodePortName(runtime::DraftNodeRef node, std::string name) {

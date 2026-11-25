@@ -59,7 +59,7 @@ expect_stdout_exact = "5\n6\n"
 name = "unused_effect_chain.graph"
 desc = "After dce the two prints are still there and still reach the exit through the block's GATE, the GATE still waits on the chain, and the unread value (`:op/add_l`, `:op/sub_l`) is gone: the value is removed, not kept."
 case = "../../../cases/opt/generic/unused_effect_chain.cml"
-args = ["${case}", "std::cxx::dce", "std::jgir"]
+args = ["${case}", "std::cxx::dce", "std::jgir", "std::nop"]
 verify_script = '''
 ({input,assert})=>{
  const g=JSON.parse(input.normalized.stdout).graphs.find(g=>g.name==='main');
@@ -117,7 +117,7 @@ expect_stdout_exact = "5\n6\n"
 name = "unused_pure_chain.dce_graph"
 desc = "The control: the same shape with no effect is dead whole, and dce leaves the program's result alone (one constant, no operator, no gate). A fix that keeps unread values to be safe fails here."
 case = "../../../cases/opt/generic/unused_pure_chain.cml"
-args = ["${case}", "std::cxx::dce", "std::jgir"]
+args = ["${case}", "std::cxx::dce", "std::jgir", "std::nop"]
 verify_script = '''
 ({input,assert})=>{
  const g=JSON.parse(input.normalized.stdout).graphs.find(g=>g.name==='main');
@@ -131,7 +131,7 @@ verify_script = '''
 name = "unused_pure_chain.opt_graph"
 desc = "The control through the integrated pipeline: `std::opt` leaves the same one constant."
 case = "../../../cases/opt/generic/unused_pure_chain.cml"
-args = ["${case}", "std::opt", "std::jgir"]
+args = ["${case}", "std::opt", "std::jgir", "std::nop"]
 verify_script = '''
 ({input,assert})=>{
  const g=JSON.parse(input.normalized.stdout).graphs.find(g=>g.name==='main');

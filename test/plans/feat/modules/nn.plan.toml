@@ -94,7 +94,7 @@ name = "graph_autograd_multi_param_gir"
 desc = "Inspects the generated grad(mse_loss) graph: weight pullback via matmul_grad_rhs, broadcast bias reduced by sum_to, one sgd node in main."
 kind = "behavior"
 case = "../../../cases/modules/nn/graph_autograd_multi_param_demo.cml"
-args = ["${case}", "std::macro", "std::rgir"]
+args = ["${case}", "std::macro", "std::rgir", "std::nop"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
@@ -340,7 +340,7 @@ name = "softmax_classifier_gir"
 desc = "Inspects the softmax classifier gradient graph: helpers get .fwd/.pb graphs and the loss pullback uses softmax_cross_entropy_grad."
 kind = "behavior"
 case = "../../../cases/modules/nn/softmax_classifier.cml"
-args = ["${case}", "std::macro", "std::rgir"]
+args = ["${case}", "std::macro", "std::rgir", "std::nop"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
@@ -434,7 +434,7 @@ name = "embedding_mf_gir"
 desc = "Inspects the embedding MF gradient graph: score.fwd gathers with nn:embedding and score.pb scatters with nn:embedding_table_grad."
 kind = "behavior"
 case = "../../../cases/modules/nn/embedding_mf.cml"
-args = ["${case}", "std::macro", "std::rgir"]
+args = ["${case}", "std::macro", "std::rgir", "std::nop"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
@@ -538,7 +538,7 @@ name = "tiny_attention_gir"
 desc = "Inspects the attention gradient graph: attend.pb uses softmax_grad and both matmul pullbacks."
 kind = "behavior"
 case = "../../../cases/modules/nn/tiny_attention.cml"
-args = ["${case}", "std::macro", "std::rgir"]
+args = ["${case}", "std::macro", "std::rgir", "std::nop"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
@@ -674,7 +674,7 @@ name = "tiny_cnn_gir"
 desc = "Inspects the CNN gradient graph: features.pb uses the conv2d kernel, bias and input gradient kernels."
 kind = "behavior"
 case = "../../../cases/modules/nn/tiny_cnn.cml"
-args = ["${case}", "std::macro", "std::rgir"]
+args = ["${case}", "std::macro", "std::rgir", "std::nop"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
@@ -702,6 +702,10 @@ has('predict.pb', 'tensor:matmul_grad_rhs')
 }
 """
 timeout_ms = 10000
+# Slow layer: over the 2 s the fast layer allows -- 2.03 s of
+# child wall clock in the 2026-11-12 record (appendix B of
+# internal/reports/2026-11-24-test-suite-inventory.cn.md).
+tier = "slow"
 
 [[tests]]
 name = "conv2d_shape_error"
@@ -750,7 +754,7 @@ name = "residual_mlp_gir"
 desc = "Inspects the residual MLP gradient graph: forward/linear helpers get .fwd/.pb graphs, and the train loops call nn:sgd / nn:adam."
 kind = "behavior"
 case = "../../../cases/modules/nn/residual_mlp.cml"
-args = ["${case}", "std::macro", "std::rgir"]
+args = ["${case}", "std::macro", "std::rgir", "std::nop"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
@@ -782,6 +786,10 @@ assert(text.includes('nn:sgd'), 'GIR output missing nn:sgd')
 }
 """
 timeout_ms = 10000
+# Slow layer: over the 2 s the fast layer allows -- 2.06 s of
+# child wall clock in the 2026-11-12 record (appendix B of
+# internal/reports/2026-11-24-test-suite-inventory.cn.md).
+tier = "slow"
 
 [[tests]]
 name = "siamese_shared_encoder"
@@ -834,6 +842,10 @@ compare_fields = ["exit_code", "stdout_normalized"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 10000
+# Slow layer: over the 2 s the fast layer allows -- 2.02 s of
+# child wall clock in the 2026-11-12 record (appendix B of
+# internal/reports/2026-11-24-test-suite-inventory.cn.md).
+tier = "slow"
 
 [[tests]]
 name = "siamese_shared_encoder.devirtualize_inline.nvm"
@@ -852,7 +864,7 @@ name = "siamese_shared_encoder_gir"
 desc = "Inspects the siamese gradient graph: the shared encoder forward runs twice per loss and the two branch gradients are summed."
 kind = "behavior"
 case = "../../../cases/modules/nn/siamese_shared_encoder.cml"
-args = ["${case}", "std::macro", "std::rgir"]
+args = ["${case}", "std::macro", "std::rgir", "std::nop"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
@@ -920,7 +932,7 @@ name = "gru_lite_gir"
 desc = "Inspects the GRU-lite gradient graph: gru_cell.fwd runs once per time step and gru_cell.pb propagates into both weights and hidden state."
 kind = "behavior"
 case = "../../../cases/modules/nn/gru_lite.cml"
-args = ["${case}", "std::macro", "std::rgir"]
+args = ["${case}", "std::macro", "std::rgir", "std::nop"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
@@ -1205,6 +1217,10 @@ assert(depth === 2, `expected the int field to survive sgd updates unchanged, go
 }
 """
 timeout_ms = 10000
+# Slow layer: over the 2 s the fast layer allows -- 2.12 s of
+# child wall clock in the 2026-11-12 record (appendix B of
+# internal/reports/2026-11-24-test-suite-inventory.cn.md).
+tier = "slow"
 
 [[tests]]
 name = "residual_mlp.simplify.jit"
@@ -1354,6 +1370,10 @@ assert(depth === 2, `expected the int field to survive sgd updates unchanged, go
 }
 """
 timeout_ms = 90000
+# Slow layer: over the 2 s the fast layer allows -- 2.19 s of
+# child wall clock in the 2026-11-12 record (appendix B of
+# internal/reports/2026-11-24-test-suite-inventory.cn.md).
+tier = "slow"
 
 [[tests]]
 name = "softmax_cross_entropy_labels"

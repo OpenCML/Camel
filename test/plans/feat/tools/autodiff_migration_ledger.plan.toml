@@ -1,6 +1,10 @@
 id = "tools.autodiff_migration_ledger"
 order = 918
-tier = "fast"
+# Slow layer: every case of this plan costs more than the 2 s the fast layer allows
+# (2026-11-12 fast-layer record, child wall clock; the list is appendix B of
+# internal/reports/2026-11-24-test-suite-inventory.cn.md). The plan is slow as a whole,
+# so the line goes on the plan and not on each entry.
+tier = "slow"
 tags = ["feat", "tools", "autodiff"]
 desc = "The autodiff migration ledger compares this run with the last one recorded and holds one direction: every case the record names must still pass, and a fall names the case that fell. The record is the list of case paths that passed (`test/cases/tools/autodiff_migration_ledger/baseline.json`), not a count, because a count says how many fell and a list says which one; `--record` writes it and refuses to drop a name without `--force`. The six recorded numbers and the three classification columns are gone: they counted spellings in the case sources, a comment is not a spelling, a case that explained itself moved class with nothing rewritten, and whoever moves a reading also moves the target it is compared against. It is gated because a ruler nobody compares is a promise nobody keeps, and this tool is run by hand otherwise; the comparison is the whole point."
 

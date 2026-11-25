@@ -24,10 +24,36 @@ work that is not a full gate run and hold a machine-wide lock so two of them can
 | `merge-batch.ps1` | The merge position for a BATCH: three or four lanes that touch no file in common, merged into one temporary worktree, measured once over the union of their plans, with the baseline taken on a separate checkout of the merge's first parent. `-Target` names the branch it lands on and pushes to, `develop` (the default) or `integration`, with the same parameter and validation as `merge-lane.ps1`. `-ScratchRoot` is where its two trees and every transcript live, from the settings file's `scratchRoot` like `mergeWorktree`, with no built-in path and exit 2 when the seat names none. See "Batching the merge position" below. |
 | `merge-batch-sets.ps1` | The two readings a batch is composed by: the pairwise intersection of the lanes' changed-file sets, and the plan-set union with the name `scripts/plan-set.mjs` gives it; plus `Resolve-BatchTarget`, which spells every ref from the target and refuses a target it does not know, and `Resolve-BatchScratchRoot`, which takes the seat's `scratchRoot` and refuses a seat that names none. Separated out because all of it fails quietly, and so it can be checked without a host. |
 | `merge-batch-sets.test.ps1` | Their test: `pwsh -NoProfile -File internal/tools/merge-batch-sets.test.ps1` prints `29 checks, 0 failed` and exits 1 on a failure. The plan-set hash check runs `scripts/plan-set.mjs#planSetHash` through node and requires the same string; the target checks include the tool's own refusal of an unknown `-Target`, which needs no host because parameter binding stops before the body runs; the scratch-root checks run the tool against a throwaway git repository to require the exit 2 a seat with no `scratchRoot` gets. |
+| `merge-push-shape.ps1` | The shape a commit must have to be pushed to a target: `Test-PushFirstParent` fetches `origin`, resolves the target's tip, and refuses a single-parent commit (a lane commit that would go straight in) or a merge whose first parent is not that tip. One implementation, dot-sourced by `merge-lane.ps1` (before both of its pushes) and `merge-batch.ps1`; the refusal is D-1124-78 and names the commands that redo the merge on the tip. |
+| `merge-lane-firstparent.test.ps1` | Its test, and the regression beside it: `pwsh -NoProfile -File internal/tools/merge-lane-firstparent.test.ps1` prints `30 checks, 0 failed`. Four cases -- a merge of the tip arrives, a merge of an older tip is refused with the sentence and the redo command, a single-parent commit is refused, and `Invoke-PushWithRecovery` still pushes when the shape is right -- plus the wiring: each tool calls the reading and neither carries a copy of it. |
+| `merge-lane-baseline.test.ps1` | The key a baseline is stored under: `pwsh -NoProfile -File internal/tools/merge-lane-baseline.test.ps1` prints `28 checks, 0 failed`. Same sha twice is a reuse and not a rebuild; a different sha is a different tree; a fixed-name tree holding another commit is called stale (`stale baseline beside the tip: rebuilding`) and moved; two seats that name different trees still resolve one tip to one tree and one branch, which spells the sha. |
+| `hook-integration.test.ps1` | The same rule at the push itself: `scripts/hooks/pre-push` refuses a push to `refs/heads/integration` whose commit is not a merge of the remote tip. `pwsh -NoProfile -File internal/tools/hook-integration.test.ps1` runs the real hook (found by its `sh`, taken from git's own install) against a throwaway repository: `13 checks, 0 failed`. |
 | `camel-cleanup.sh` | The cleanup door: a run's temporaries live under `~/camel-work/tmp/<lane>-<time>/` and are judged by the manifest the run wrote when it created them. `rm` accepts a path only when it is under that root **and** in a manifest. |
 | `camel-cleanup.test.ps1` | Its test: the six readings against a fake home (never the real one). `pwsh -NoProfile -File internal/tools/camel-cleanup.test.ps1 -BashHost <alias>`. |
 | `camel-gate.example.json` | The shape of the local settings file, placeholders only. |
-| `red-table.mjs` | Regenerates `internal/reports/<date>-develop-reds.cn.md`, the table of what is red on `develop`, from the recorded readings alone — it starts no build and no test, and takes about 6 seconds. `red-table.md` says what each of its seven columns may and may not claim. |
+| `red-table.mjs` | Regenerates `internal/reports/<date>-develop-reds.cn.md`, the table of what is red on `develop`, from the recorded readings alone — it starts no build and no test, and takes about 6 seconds. `--tsv <file>` writes the same rows with a header stating the `tip`, `jobs`, `load` and `tier` it was taken at; `--diff <a.tsv> <b.tsv>` compares two such tables and **refuses (exit 2, "not directly comparable")** when their `jobs`/`load`/`tier` differ instead of listing every row as `new`. In a red table `fixed` means **"this red no longer appears"**, not "this case was repaired" — a table of reds cannot tell repaired from deleted, and `--cases <list>` is what separates the two (`removed`). `red-table.md` says what each of its seven columns may and may not claim. |
+| `red-table-context.mjs` | The header, the whole-name reader and the comparison behind `--tsv`/`--diff`: a verdict line's case name is taken whole (never `\S+`, which truncated the ten names with spaces into `removed`), and unknown `jobs`/`load` refuses a comparison rather than passing silently. |
+| `red-table-context.test.mjs` | Its test: `node internal/tools/red-table-context.test.mjs` prints `20/20 checks passed` and exits 1 on a failure. Covers the header round trip, the changed-not-removed case for a name with spaces, fixed-vs-removed with and without a `--cases` inventory, and the two refusals (different `jobs`, quiet-vs-loaded host), including the CLI wiring. |
+
+## What `scripts/hooks/pre-push` refuses
+
+Two rules, and both can be bypassed in one way:
+
+- **`develop` is written from the merge worktree only.** The tree is read from this machine's
+  settings file (`mergeWorktree`); a push from any other tree is refused with the key to set.
+- **An arrival on `integration` is a merge of its tip** (D-1124-78). The hook reads the refs git is
+  about to send, and for `refs/heads/integration` it requires two parents and a first parent equal to
+  the remote tip (a new branch has no tip, so only the parent count applies). A lane commit that
+  would go straight in is refused by name; a merge made on an older tip is refused with the sentence
+  that says what the operator was doing and the command that redoes it on the tip, `rerere`
+  included. `merge-lane.ps1` and `merge-batch.ps1` assert the same thing before their own pushes --
+  the hook is what covers a push made by hand or by a branch re-landed somewhere else.
+
+`git push --no-verify` runs no hook at all, so neither rule can stop a push that asks to skip them.
+That is written here instead of being locked down, because a lock in a hook that git itself offers to
+skip is a lock in name only. **A push made with `--no-verify` says so in its conclusion line**, and
+the chain it wrote is then the thing to repair (the shape is re-read by the next merge, and
+`internal/backlog.md` is where a wrong arrival is recorded).
 
 ## The machine-local settings file
 
@@ -41,7 +67,9 @@ internal/tools/camel-gate.local.json        # this machine's values; git-ignored
 To create it:
 
 1. Copy `internal/tools/camel-gate.example.json` to `internal/tools/camel-gate.local.json` beside it.
-2. Fill in the placeholders. `sshHost` and `stateDir` are required; the rest have defaults.
+2. Fill in the placeholders, and delete the example's `_comment` line while you are there: it is not
+   a setting, and it is the one key the loader has nothing to compare it to. `sshHost` and `stateDir`
+   are required; the rest have defaults.
 3. Worktree-local: the file is git-ignored, so each checkout of the repository needs its own copy.
 
 The example file gives the shape only -- every value in it is a placeholder, and no host, drive letter
@@ -49,8 +77,13 @@ or user's home appears anywhere in the repository. The real file is the one plac
 
 Rules the loader keeps:
 
-- An unknown key is an error, not a silent no-op: a key that is misspelled would otherwise leave a
-  run measuring the machine its owner thought they had changed.
+- A key one or two characters from a known name is an error, not a silent no-op: a key that is
+  misspelled would otherwise leave a run measuring the machine its owner thought they had changed.
+  A key nothing here is close to is a **file newer than the tree's scripts** -- the file is
+  git-ignored and shared by path, so a checkout on an older branch reads a file written for a newer
+  one. That one warns, naming the key, the file and the tree that does not read it, and the run
+  continues; the alternative reports a correct file as a broken one and stops every run of the older
+  tree.
 - A tool that needs a setting the file does not carry stops with exit 2 and prints the path of the
   file to create. It never guesses a host.
 - A parameter with the same name as a key overrides it for one run (`-LocalConfig`, `-StateDir`,
@@ -69,6 +102,10 @@ The keys, and what each decides:
 | `hostLocalBin` | On the host, the extra prefix of the run's `PATH`. |
 | `hostLibStdCxxDir` | On the host, the toolchain's libstdc++ directory, exported for installs that predate carrying their own copy. |
 | `watchRepo` | The checkout `watch-fsh-dev.ps1` reads. |
+| `mergeWorktree` | The one worktree allowed to push `develop` (`scripts/hooks/pre-push`). One absolute path, or several separated by `;`. Leaving it out means no tree may push develop. |
+| `baselineRoot` | The directory the per-tip baseline checkouts live under: the tree for a commit is `<baselineRoot>\<sha>`, on a branch `camel-baseline-<sha12>`, so every seat that lands on that commit reuses one checkout and one host build. The reading itself is filed by `scripts/merge-readings.mjs` as `<sha12>-<planSetHash>-v<normal>.jsonl` under the repository's common `camel-readings` directory: the commit and the plan set, never the seat. |
+| `baselineWorktree` | The older shape of the same decision: one fixed tree per seat, moved to each tip. Still honoured; `Get-BaselineCheckout` checks its HEAD against the tip first, and a tree holding another commit is printed as `stale baseline beside the tip: rebuilding` and moved instead of read. |
+| `scratchRoot` | Where `merge-batch.ps1` writes its merge tree and its transcripts. Its baseline tree follows `baselineRoot` when that is set, and this root otherwise. |
 
 ## `camel-remote.ps1`
 
@@ -159,6 +196,43 @@ pwsh -NoProfile -File internal/tools/camel-remote.ps1 -Path <worktree> -Clean
 The header of the script states the rest as rules: the staging push, what the `-NoBuild` guard
 compares and why content rather than a commit, how a checker stage reports, why the plan's stderr is
 folded into its stdout, and the exact shape of the panel's state files.
+
+## The readings cache: one tree, one reading
+
+`scripts/merge-readings.mjs --read` measures one plan set on one tree and caches what it measured. The
+merge position asks for the same reading more than once per judgement (the tree the merge lands on,
+the merged tree) and a night of merges re-measures the same tip; the rows cannot differ, and the host
+should not be asked to produce them again.
+
+The key contains the identity of the thing cached and everything a reading depends on:
+
+| component | value |
+|---|---|
+| tree | `git -C <tree> rev-parse HEAD` — the commit, never the directory and never an mtime |
+| plan selection | the `<count>-<hash>` from `scripts/plan-set.mjs`, the same value the baseline cache uses |
+| jobs | the runner's `-Jobs` width |
+| tier | `release` or `debug` — two installs of one commit are two binaries |
+| tool | sha256 over `scripts/merge-readings.mjs`, `scripts/plan-set.mjs` and the runner |
+
+A hit is replayed with a line that says the reading came from the cache and names the full tree OID;
+a miss runs `camel-remote` (or `--runner`'s stand-in) and stores what came back. A dirty working tree
+is neither served nor stored: a reading of commit C is not a reading of C plus an uncommitted edit.
+An entry whose transcript holds no row block is not stored either — a build that stopped wrote no
+reading.
+
+**Who creates it, and how it is cleared:** the first successful store creates the cache root, its
+entries and `MANIFEST.md` (which repeats this). It lives *outside every work tree* — the default is
+`D:\Temp\camel-readings-cache`, `--readings-cache` or `CAMEL_READINGS_CACHE` names another one, and a
+path inside a checkout is refused, because an entry there would be a file the next measurement
+carries as a change. Clearing it is always safe; every entry can be measured again:
+
+```powershell
+Remove-Item -LiteralPath D:\Temp\camel-readings-cache -Recurse -Force
+```
+
+The self-test that pins the behaviour down — hit, miss per key component, dirty tree not stored, a
+clone and an mtime touch still hitting — is `internal/tools/merge-readings-cache.test.mjs`; it uses a
+stand-in runner and needs no build host.
 
 ## Cleaning up: the record, not the guess
 
@@ -297,6 +371,27 @@ baseline (the remote was unreachable when it started) is exit 2. `-Repo` or the 
   that disagrees with `jobsRequested` is the mechanism working. A convention ("load is high, lower
   `-Jobs` by hand") is not a mechanism: it is forgotten exactly when it matters.
 - all three are advisory: a locked or unwritable file never fails a build or a plan.
+- a run's line carries the token pool as the run read it on the host: `tokens` (how many tokens that
+  run held), `tokensPeak` (the highest share seen while it ran — a sampled peak, resolution one
+  heartbeat), and `pool` (`{ size, inUse }`, what the pool itself said at that reading). The host
+  reports the pool every 10 s whether or not the work prints anything, and a row written for that
+  report also carries `stageSeconds`, the time the current stage has been running: a heartbeat whose
+  only new value is `updatedAt` says the writer is alive, not that the run is doing anything. A row
+  from before the pool, or from a local run that draws nothing from it, has **no** `tokens` key at
+  all — absent means "not reported", and is never written as `0`, because zero reads as an empty
+  pool and would invite a run that the pool cannot support.
+- `queuedAt` is the moment the run started waiting for admission, and `queuedAtKind` names the gate
+  it waited on (`slot` for a host build/test slot, `local` for a local helper's machine-wide mutex).
+  **A row without `queuedAtKind` is a transition-period row and may only be read as `slot`; every row
+  written from now on says which gate it was.** That sentence is the reading rule, not a remark: the
+  default is right for the old rows by accident (they were all slot waits), and a default that
+  happens to be right is the kind of inference a reader stops checking. One field is not asked to
+  mean two things across one file.
+- the local helpers (`camel-build.ps1`, `camel-test.ps1`) write the registry too, so a local run is
+  not a run the panel cannot see. Their rows have no `tokens`: the pool is the build host's, and a
+  local run draws nothing from it.
+- `run-registry.ps1` is the one writer of that file; all three callers use it, because a second copy
+  of the append-and-compact rule is how two writers end up disagreeing about one file.
 ## The two DSH plugins
 
 Two directories here are loaded as plugins by the agent runtime rather than run as scripts. Their

@@ -53,7 +53,7 @@ def cases(root):
 
 def refusal_of(env, camel, path):
     try:
-        run = subprocess.run([camel, path, "std::cpp"], capture_output=True, text=True,
+        run = subprocess.run([camel, path, "std::cpp", "std::nop"], capture_output=True, text=True,
                              timeout=180, env=env)
     except Exception:
         return None

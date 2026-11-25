@@ -578,12 +578,14 @@ std::optional<sem::ResultAlias> Builder::resultAliasOf(
     const auto &draft = transaction.graph();
     const auto kind   = nodeKindOf(draft.ref(id));
     if (kind == runtime::GCNodeKind::Oper) {
-        const auto &op = graph->operTarget(draft.ref(id));
+        const oper_idx_ptr_t *op = graph->operTarget(draft.ref(id));
+        // A call a pass wrote by URI alone records no declaration here: no operator answers for it,
+        // so the value is read as its own, the answer a node that runs nothing gets just below.
         if (op == nullptr) {
             return std::nullopt;
         }
         const auto &table = camel::core::OperatorTable::instance();
-        if (const auto found = table.lookup(std::string(op->uri())); found.has_value()) {
+        if (const auto found = table.lookup(std::string((*op)->uri())); found.has_value()) {
             if (const auto *facts = table.semantics(*found); facts != nullptr && facts->resources) {
                 return facts->resources->result;
             }
@@ -701,8 +703,11 @@ bool Builder::handleKeyOf(
 bool Builder::reachOfOper(
     DraftGraphBuilder *graph, const runtime::GraphTransaction &transaction, BodyReach &walk,
     draft_node_ref_t id) const {
-    const auto &draft = transaction.graph();
-    const auto &op    = graph->operTarget(draft.ref(id));
+    const auto &draft      = transaction.graph();
+    const oper_idx_ptr_t *op = graph->operTarget(draft.ref(id));
+    // A call a pass wrote by URI alone records no declaration here, so this walk can put no
+    // resource of its own on the body: the answer is "nothing reached through this node", which is
+    // what a node that runs nothing gets.
     if (op == nullptr) {
         return false;
     }
@@ -710,7 +715,7 @@ bool Builder::reachOfOper(
     // (runtime/resources.cpp oper reads them the same way): what the table declares, and otherwise
     // the conservative reading of the effect its record states.
     const auto &table = camel::core::OperatorTable::instance();
-    const std::string uri(op->uri());
+    const std::string uri((*op)->uri());
     sem::ResourceSpec spec;
     sem::ElementCalls elementCalls;
     bool declared = false;

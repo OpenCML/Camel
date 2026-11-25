@@ -103,6 +103,10 @@ assert(!input.normalized.stderr.includes('no collection for'), 'the escalation d
 """
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 180000
+# Slow layer: over the 2 s the fast layer allows -- 3.00 s of
+# child wall clock in the 2026-11-12 record (appendix B of
+# internal/reports/2026-11-24-test-suite-inventory.cn.md).
+tier = "slow"
 
 [[tests]]
 name = "process_state.stw_give_up_escalates"
@@ -126,3 +130,7 @@ assert(input.normalized.stdout.includes('gc_prl_blocked_worker sums=[1,'), 'the 
 """
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 180000
+# Slow layer: over the 2 s the fast layer allows -- 3.81 s of
+# child wall clock in the 2026-11-12 record (appendix B of
+# internal/reports/2026-11-24-test-suite-inventory.cn.md).
+tier = "slow"

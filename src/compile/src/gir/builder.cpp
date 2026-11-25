@@ -1774,7 +1774,13 @@ void Builder::buildFuncBody(
             // one Generic signature that wrote a clause: it promises nothing about its resources,
             // so nothing is measured onto it, and it is not one of the bodies whose set is
             // inferred (design principles 9.5, and `checkInferredResources` reads exactly this).
-            !graph->funcType()->resources().spelling) {
+            !graph->funcType()->resources().spelling &&
+            // The element function of a comprehension is the compiler's own and it wrote no
+            // clause either: what it reaches is a fact about a body the compiler made, not a
+            // promise to the positions it is passed to, so it keeps saying no clause
+            // (`isElementFunction`, which is also how a comprehension is told apart from an
+            // operator that has no candidate for it).
+            !isElementFunction(gct)) {
             // Its signature carries an inferred set from here on: this is what the settled
             // measurement is written onto once every body has been measured. A measurement that
             // cannot be written as a clause is not written now, and is not written then either.

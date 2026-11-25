@@ -19,7 +19,27 @@ Do not build Camel on this workstation. Use the remote Linux build host through 
 pwsh -NoProfile -File internal/tools/camel-remote.ps1 -Path <worktree> -Plan <plan-file-or-directory> -Jobs 8
 ```
 
+**`-Plan` takes forward slashes** (`test/plans/feat/trans/cml.plan.toml`). The path is handed to a
+Linux host, where a backslash is an ordinary character in a file name: `test\plans\...` names one
+file that does not exist, the plan loader refuses the selection and the gate exits 2 with
+`selection-cases: the plan loader refused this selection`. The run then reports failures for every
+point in a second or two, which reads like six broken tests and is one broken argument.
+
 The wrapper transports the current branch and uncommitted changes, builds, runs the selected plans and returns their exit code. Do not invoke another copy of the wrapper or a hand-written build command.
+
+A reading taken while the host is busy is still a verdict but not a timing: `[load]` above 8 carries
+the wrapper's own warning that the numbers are not comparable to quiet-host readings, so quote the
+`[SUMMARY]` and the exit codes, and say which `[load]` they were taken under. That last part is the
+condition on which two readings can be compared at all, not a courtesy.
+
+**The main checkout is not a reading station.** `D:\Projects\Camel` belongs to the author, and it is
+only ever fast-forwarded while it sits cleanly on `develop`: no session detaches it to take a
+reading. A baseline reading uses a worktree that already exists, or one of its own from
+`git worktree add` that it removes afterwards. Restoring the checkout cleanly is not the same as it
+not having happened -- during that window the author can walk into a tree that is not on `develop`,
+and has no way to know who moved it. (Measured on 2026-11-24: a lane detached the main checkout for a
+baseline run and put it back, and the reading was sound, which is exactly why the rule has to be a
+rule rather than a judgement about how careful a session is.)
 
 During development, run the plans touched by the change plus `smoke`. Before finishing, run `smoke` and `feat/**` on the host. A plan file named explicitly runs in full, regardless of the selected tier; a directory selects its `fast` layer by default.
 
@@ -30,7 +50,29 @@ node scripts/check-doc-links.mjs --all
 node scripts/check-std-includes.mjs
 node scripts/conflict-markers.mjs
 node scripts/diagnostics-catalog.mjs --check
+node scripts/camel-pass-scan.mjs --check
 ```
+
+**When a plan is red because a dump was printed and the program ran behind it** (a pipeline whose last
+pass hands the graph on without `std::nop`), hand that plan to the scan before fixing anything:
+
+```powershell
+node scripts/camel-pass-scan.mjs --red test/plans/feat/trans/canon_order.plan.toml
+```
+
+Its three answers are different claims. `--check` exit 1 is "this pipeline is undecided". Exit 3 is
+"this file did not read the pipeline that is there" -- the command is assembled inside a helper that
+does not name the binary on the line writing the passes, so `need std::nop: 0` counted nothing and
+said zero. The mode exists because those two read the same on screen: `--list` on 2026-11-24 showed
+`need std::nop: 0` while three case scripts and one tool of the same tree were still printing dumps
+behind a run. Naming the invisible lines is the point; widening the reader until the count is
+non-zero would trade the admission for a number.
+
+`node scripts/camel-pass-scan.mjs --blind` names the other kind of line the rule cannot see at all:
+the tree also writes the binary as `CAMEL`, and `spawnSync(CAMEL, [file, 'std::opt', 'std::jgir'])`
+is a command that no count in that file includes (18 lines, 7 files, measured 2026-11-24). It exits 3
+and lists them; it is a report, not a to-do list, because whether the program is meant to run after
+that pass is a question about each line.
 
 ## Test layers
 

@@ -86,7 +86,7 @@ name = "algebra_rules.agreement.by_cpp"
 desc = "The reference: std::cxx::algebra neutral_only=true on the ten neutral forms, followed by the same dce the library side runs, as GIR DOT."
 kind = "snapshot"
 case = "../../../cases/opt/algebra_rules/agreement.cml"
-args = ["${case}", "std::cxx::algebra neutral_only=true", "std::cxx::dce values_only=true", "std::gir"]
+args = ["${case}", "std::cxx::algebra neutral_only=true", "std::cxx::dce values_only=true", "std::gir", "std::nop"]
 snapshot_stream = "stdout"
 golden = "./golden/algebra_rules.agreement.cpp.dot"
 
@@ -94,7 +94,7 @@ golden = "./golden/algebra_rules.agreement.cpp.dot"
 name = "algebra_rules.agreement.by_library"
 desc = "The rule library reaches the same graph the legacy pass reaches on all ten rewrites it performs: rules::simplify's dump is the C++ mode's dump by the isomorphic comparison (a node is its kind, type, shape and degree, an edge its endpoints, link type and label), with paths and origin ids the only normalization."
 case = "../../../cases/opt/algebra_rules/agreement.cml"
-args = ["${case}", "rules::simplify", "std::cxx::dce values_only=true", "std::gir"]
+args = ["${case}", "rules::simplify", "std::cxx::dce values_only=true", "std::gir", "std::nop"]
 verify_script_path = "../../../cases/opt/algebra_rules/algebra_graph_equal.mjs"
 
 # `measure::report` is the pass `test/cases/opt/algebra_rules/measure.cml` declares: a pass is
@@ -172,7 +172,7 @@ name = "algebra_rules.divergence.by_cpp"
 desc = "The reference from this tree: std::cxx::algebra neutral_only=true on the corpus of differences. It keeps the named node of `anchor_add` and `anchor_mul32` (isReplaceable refuses to rewrite the graph's exit), and it has no `x * 0` law, so the product over the print in `effect_mul_zero` stands. This golden is the reference column `differs` reads; the shape records that used to sit in that script are gone, and what it asserts is the relation between the two graphs, not their size."
 kind = "snapshot"
 case = "../../../cases/opt/algebra_rules/divergence.cml"
-args = ["${case}", "std::cxx::algebra neutral_only=true", "std::cxx::dce values_only=true", "std::jgir"]
+args = ["${case}", "std::cxx::algebra neutral_only=true", "std::cxx::dce values_only=true", "std::jgir", "std::nop"]
 snapshot_stream = "stdout"
 golden = "./golden/algebra_rules.divergence.cpp.jgir"
 
@@ -180,7 +180,7 @@ golden = "./golden/algebra_rules.divergence.cpp.jgir"
 name = "algebra_rules.divergence.differs"
 desc = "The rule library's graph against the reference mode's, every graph examined. `anchor_add` and `anchor_mul32` are the difference the rule leaves open and this entry holds to the relation, not to a size: the reference keeps the operation as the graph's exit, its output and its returned value (its `isReplaceable` refuses to rewrite those three nodes) and that exit reads the port and the neutral constant, while the rule engine rewrites the matched node and moves the anchor onto what the rule's right side wrote, which for `x + 0 => x` is the port -- the operation and its constant are gone from the graph, not merely unreached. That is the handover the rule makes the engine's job and not a rule condition, and the same rewriting of a return expression the `rules` lane holds (`coefficients` and `chain` fold there). `effect_mul_zero` is not a difference any more: the engine refuses the match whose right side would drop the print (design principles 9.7, the same rule's `rule-drops-effect`). `pairs.mjs` examines all four graphs; no node count is pinned."
 case = "../../../cases/opt/algebra_rules/divergence.cml"
-args = ["${case}", "rules::simplify", "std::cxx::dce values_only=true", "std::jgir"]
+args = ["${case}", "rules::simplify", "std::cxx::dce values_only=true", "std::jgir", "std::nop"]
 verify_script_path = "../../../cases/opt/algebra_rules/pairs.mjs"
 
 [[tests]]

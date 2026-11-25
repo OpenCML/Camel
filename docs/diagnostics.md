@@ -3504,13 +3504,13 @@ None: choice: what to iterate instead is the writer's to write
 **Message**
 
 ```text
-'for' takes the elements of an array, a string, a map, a tensor or a stream; '{0}' has type '{1}'.
+'for' takes the elements of an array, a string, a map, a tensor, a stream, or a value of a named type that says how to walk it; '{0}' has type '{1}'.
 ```
 
 **Help**
 
 ```text
-A loop's 'for x in xs' visits the elements of xs in order (design principles 3.10): the elements of an array; the code points of a string, each a one-character string; the (key, value) pairs of a map, in key order (11.3); the sub-tensors of a tensor along its first dimension; and the elements of a stream, one pull of its step function per round (5.4). 'a..b' is the array of the integers from 'a' to 'b - 1', left closed and right open, and a 'for' over it takes them in order without building the array (4.2).
+A loop's 'for x in xs' visits the elements of xs in order (design principles 3.10): the elements of an array; the code points of a string, each a one-character string; the (key, value) pairs of a map, in key order (11.3); the sub-tensors of a tensor along its first dimension; the elements of a stream, one pull of its step function per round (5.4); and the integers of a value whose type declares how to walk it -- a range's iterator is such a declaration (5.4, 5.7). 'a..b' is the range value of the integers from 'a' to 'b - 1', left closed and right open, and a 'for' over it counts them without building the array (4.2).
 ```
 
 **Example** (`test/cases/loops/err_not_iterable.cml`, run as `camel -E short test/cases/loops/err_not_iterable.cml`)
@@ -5765,7 +5765,24 @@ std::cml cannot print {0}: {1}.
 This version prints expressions, `let` and `var`, branches, loops, closures, `with` and `var` parameters, `sync` blocks, and one `type` statement for each named struct type the program names. Tags, generic instances and the other region kinds are refused.
 ```
 
-*No example: no test small enough to show raises it.*
+**Example** (`test/cases/trans/cml/nullable_null.cml`, run as `camel test/cases/trans/cml/nullable_null.cml std::cml std::nop`)
+
+```camel
+// A `T?` that holds nothing is not a value `std::cml` writes, and the reason is measured rather than
+// assumed: the language reaches the emptiness of a `T?` through the operator that tests its tag
+// (`??` on an absent value is `:op/tag_is_null`), so the graph holds an operator node and not a
+// `null` constant, and the printer refuses the program at that node.
+//
+// This is the counter-reading to `nullable_value.cml`: widening the printer to name `T?` must not
+// widen it to invent a value that is not there. A printed program cannot say something the source
+// did not, so the refusal is the answer, and the entry pins the node it names.
+
+func main() => int sync {
+    let c: int? = null
+    println(c ?? -1)
+    return 0
+}
+```
 
 ### CmlBigConstant
 
@@ -10194,7 +10211,7 @@ Translation pass '{0}' refused the graph: {1}.
 A translation pass only translates the graph the preceding passes left. Run the passes named in the message before it, or remove the construct it cannot express.
 ```
 
-**Example** (`test/cases/compile/collections/refuse_export.cml`, run as `camel test/cases/compile/collections/refuse_export.cml std::cpp`)
+**Example** (`test/cases/compile/collections/refuse_export.cml`, run as `camel test/cases/compile/collections/refuse_export.cml std::cpp std::nop`)
 
 ```camel
 // A pure `main` that goes through a set: what the translation passes (std::cpp,
@@ -11051,7 +11068,7 @@ Pass '{0}' cannot take the program: some values of it have several writings.
 An earlier pass (a saturation) left values with several writings, and nothing extracts them unless the pipeline says how. Put 'rewrite::extract cost=<module>::<function>' before '{0}': it chooses one writing for every value by that cost, for example 'rewrite::extract cost=rules::nodes' (a writing costs the number of its nodes).
 ```
 
-**Example** (`test/cases/feat/mm/writings/congruence.cml`, run as `camel test/cases/feat/mm/writings/congruence.cml test::tabled std::cxx::fold std::nvm`)
+**Example** (`test/cases/feat/mm/writings/congruence.cml`, run as `camel test/cases/feat/mm/writings/congruence.cml test::tabled std::nvm`)
 
 ```camel
 func f(a: int, b: int) => int {
@@ -11716,13 +11733,13 @@ None: runtime: the fault is raised while the program runs, and the repair is in 
 **Message**
 
 ```text
-Pass '{0}' consumes the graph, so {1} written after it will not run.
+Pass '{0}' answered with an empty graph, so {1} written after it will not run.
 ```
 
 **Help**
 
 ```text
-A scheduling pass executes the program and a translation pass translates it; neither hands a graph on, and the pipeline ends there. Remove the passes written after it, or move them before it.
+A scheduling pass executes the program and answers with the residual graph or an empty one. This one answered with an empty graph, so the pipeline ended there; a rewriting pass and a translating pass both hand a graph on and would have run. Remove the passes written after it, or move them before it -- std::nop is a scheduling pass too, and it is how a pipeline that only prints says so.
 ```
 
 **Example** (`test/cases/linear/byref/order_direct_user.cml`, run as `camel test/cases/linear/byref/order_direct_user.cml std::nvm std::cxx::inline std::fvm`)
@@ -11805,7 +11822,7 @@ std::cpp has no standalone translation of {0}: the program it writes calls the C
 Every other operator is translated into C++ that needs only the standard library (docs/cpp_export_build.md). The comment at the top of the C++ file gives the command that builds it with the runtime.
 ```
 
-**Example** (`test/cases/trans/cpp/runtime_bridge.cml`, run as `camel test/cases/trans/cpp/runtime_bridge.cml std::cpp`)
+**Example** (`test/cases/trans/cpp/runtime_bridge.cml`, run as `camel test/cases/trans/cpp/runtime_bridge.cml std::cpp std::nop`)
 
 ```camel
 /// std::cpp has no standalone translation of a string operator: the program links the runtime.

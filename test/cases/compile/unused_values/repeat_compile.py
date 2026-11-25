@@ -26,8 +26,13 @@ def main(argv):
     else:
         camel = str(ROOT / "out/latest/bin" / ("camel.exe" if sys.platform == "win32" else "camel"))
     for run in range(RUNS):
+        # Why the pipeline ends in `std::nop` here: the dump is what this case asserts (its
+        # `returncode`, its first line, its silence on stderr), and `std::gir` hands the graph on, so
+        # the fallback scheduling pass would run `train_step.cml` -- whose `main` has three open
+        # parameters -- and the run's `EntryArgumentMissing` (exit 1, on stderr) would be what the
+        # assertions below read. The compile is the subject; the program's own run is not.
         result = subprocess.run(
-            [camel, str(CASE), "std::gir"], cwd=ROOT, capture_output=True, text=True
+            [camel, str(CASE), "std::gir", "std::nop"], cwd=ROOT, capture_output=True, text=True
         )
         assert result.returncode == 0, (
             f"run {run + 1} of {RUNS} exited {result.returncode}:\n"

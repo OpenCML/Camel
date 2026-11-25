@@ -32,6 +32,10 @@ expect_stdout_contains = ["9 of 9 scale programs ran", "PASS"]
 expect_output_not_contains = ["FAIL"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 300000
+# Slow layer: over the 2 s the fast layer allows -- 2.76 s of
+# child wall clock in the 2026-11-12 record (appendix B of
+# internal/reports/2026-11-24-test-suite-inventory.cn.md).
+tier = "slow"
 
 [[tests]]
 name = "capacity.wide_graph"
@@ -45,6 +49,10 @@ expect_stdout_contains = ["3 of 3 wide runs", "PASS"]
 expect_output_not_contains = ["FAIL"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 120000
+# Slow layer: over the 2 s the fast layer allows -- 8.51 s of
+# child wall clock in the 2026-11-12 record (appendix B of
+# internal/reports/2026-11-24-test-suite-inventory.cn.md).
+tier = "slow"
 
 [[tests]]
 name = "capacity.chunks_shared"
@@ -71,6 +79,10 @@ expect_stdout_contains = ["PASS"]
 expect_output_not_contains = ["FAIL"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 120000
+# Slow layer: over the 2 s the fast layer allows -- 5.27 s of
+# child wall clock in the 2026-11-12 record (appendix B of
+# internal/reports/2026-11-24-test-suite-inventory.cn.md).
+tier = "slow"
 
 [[tests]]
 name = "capacity.f24_const_graphs"
@@ -187,6 +199,10 @@ for (const space of ["graph", "perm", "meta"]) {
 }
 """
 timeout_ms = 300000
+# Slow layer: over the 2 s the fast layer allows -- 2.02 s of
+# child wall clock in the 2026-11-12 record (appendix B of
+# internal/reports/2026-11-24-test-suite-inventory.cn.md).
+tier = "slow"
 
 [[tests]]
 name = "capacity.growth_jit"
@@ -260,6 +276,10 @@ timeout_ms = 300000
 # no longer turns red, while 100 turns red ten times in ten. Do not "speed it up" by weakening any
 # of the three, and do not try `kind=all`: it is not a value `--gc-stress` accepts, the run exits
 # before doing anything, and the case would look broken instead of fast.
+# Slow layer: over the 2 s the fast layer allows -- 9.67 s of
+# child wall clock in the 2026-11-12 record (appendix B of
+# internal/reports/2026-11-24-test-suite-inventory.cn.md).
+tier = "slow"
 [[tests]]
 name = "capacity.dead_function_closure_verify"
 desc = "A verified collection also walks the objects a normal collection never reaches: `--gc-check verify=both` enumerates every old object, dead ones included, to check the remembered set (gc_debug.cpp, verifyRememberedSetUnlocked). A function value whose program the collector has already freed is one of them, and `Function::updateRefs` asked it for the closure's layout through `tupleType()`, which reads `program_->graph(graphId_)` first -- through a pointer that walk may no longer use. With a minor collection at every safepoint (`--gc-stress safepoint=1,kind=minor`, a test control) and a first segment of 1 KB, 100 functions of all shapes reach that state inside a second: the run aborted with the invariant at src/core/rtdata/func.cpp (Function::tupleType, its `graph() != nullptr` guarantee) in ten runs out of ten. The layout the closure needs is the one the value was created with (`closureType()`), which asks nothing of the program, and with that read the case passes. The program prints the sum the generator computed."
@@ -271,6 +291,10 @@ expect_exit = 0
 expect_stdout_contains = ["OK mixed n=100"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 120000
+# Slow layer: over the 2 s the fast layer allows -- 3.34 s of
+# child wall clock in the 2026-11-12 record (appendix B of
+# internal/reports/2026-11-24-test-suite-inventory.cn.md).
+tier = "slow"
 
 [[tests]]
 name = "capacity.perm_query_types"
@@ -297,7 +321,7 @@ name = "capacity.fold_clone_limit"
 desc = "A constant the fold made is cloned once per graph the next commit encodes. With the block space at 24 MB one copy of 2,000,000 ints (15.3 MB) fits and two do not, so the commit exhausts the space while it clones the second and the run reports RuntimeDiag::MemoryExhausted and exits 1. The graphs that commit had bound and never built are given back as memory rather than destructed: the teardown used to dispatch through a vtable that was never written and took the process down after the diagnostic. The case needs a folded constant large enough to be cloned, so it names the budget that admits one: constant_budget's default stays with the pass, and the premise holds whatever that default becomes."
 kind = "behavior"
 case = "../../../cases/opt/generic/fold_constant_clone_limit.cml"
-args = ["--block-limit", "24", "${case}", "std::opt constant_budget=100000000", "std::jgir", "canonical=true"]
+args = ["--block-limit", "24", "${case}", "std::opt constant_budget=100000000", "std::jgir", "canonical=true", "std::nop"]
 expect_exit = 1
 expect_output_contains = ["RuntimeDiag::MemoryExhausted"]
 expect_output_not_contains = ["Segmentation fault", "core dumped"]

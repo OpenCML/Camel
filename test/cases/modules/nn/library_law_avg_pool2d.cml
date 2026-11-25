@@ -1,0 +1,52 @@
+// `avg_pool2d`'s derivative through the library's forward transform, against the engine's.
+//
+// A window's average is a sum divided by a count that reads no element, so the tangent is the pool
+// of the tangents (`src/stdlib/rulesets/jvp.cml#jvp_avg_pool2d`). On a seed of ones the answer is
+// 4 -- four windows, each averaging four ones -- which is also the engine's `0.25` in every one of
+// the sixteen positions dotted with that seed.
+//
+// The **reverse** half of this key has no law yet: `vjp` of this program refuses, for the reason
+// the row in `scripts/vjp-parity-exemptions.tsv` enumerates.
+//
+//     camel test/cases/modules/nn/library_law_avg_pool2d.cml
+
+import { with_grad } from autodiff
+import { avg_pool2d } from nn
+import rulesets.jvp
+import { sum } from tensor
+import { jvp } from transforms
+
+/// The engine's spelling: the input is the `with` parameter.
+with <x: float[1, 1, 4, 4]>
+func loss_engine() => float {
+    return sum(avg_pool2d(x, 2))
+}
+
+func main() => int sync {
+    let x = [[[
+        [1.0, 2.0, 3.0, 4.0],
+        [5.0, 6.0, 7.0, 8.0],
+        [9.0, 10.0, 11.0, 12.0],
+        [13.0, 14.0, 15.0, 16.0]]]] as float[1, 1, 4, 4]
+    let seed = [[[
+        [1.0, 1.0, 1.0, 1.0],
+        [1.0, 1.0, 1.0, 1.0],
+        [1.0, 1.0, 1.0, 1.0],
+        [1.0, 1.0, 1.0, 1.0]]]] as float[1, 1, 4, 4]
+    
+    let (_, engine) = with_grad(loss_engine)<[[[
+        [1.0, 2.0, 3.0, 4.0],
+        [5.0, 6.0, 7.0, 8.0],
+        [9.0, 10.0, 11.0, 12.0],
+        [13.0, 14.0, 15.0, 16.0]]]] as float[1, 1, 4, 4]>()
+    
+    let library_loss = func (xx: float[1, 1, 4, 4]) => float {
+        return sum(avg_pool2d(xx, 2))
+    }
+    let (_, forward) = jvp(library_loss)(x, seed)
+    
+    let forwardDiff = forward - sum(engine * seed)
+    let forwardOk = forwardDiff < 1e-6 && forwardDiff > -1e-6
+    `avg_pool2d forward={} forward_ok={} forward_diff={:.12e}`->format<forward, forwardOk, forwardDiff>->println
+    return 0
+}

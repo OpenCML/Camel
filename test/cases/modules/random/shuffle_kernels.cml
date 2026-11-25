@@ -22,7 +22,7 @@ func main() => int sync {
     let one: int[] = [7]
     println('small', shuffle<k>(e_l), shuffle<k>(one))
     println('input', a_i, a_l, a_f, a_d)
-    let big: int[] = [i for i in 0 .. 5000]
+    let big: int[] = to_array(0 .. 5000)
     let s = shuffle<k>(big)
     let b = big[permutation(k, 5000)]
     println('long', s == b, s[0], s[4999], loop t = 0 for x in s do t + x)

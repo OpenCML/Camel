@@ -334,7 +334,7 @@ timeout_ms = 8000
 # The stop this pins: `vjp` over a loop used to end at `transpose` of `split`'s backward half with
 # `skip=state`, because that half reads the round's *primal* values -- the tape `split` appends one
 # member of per round -- and the reverse loop had nowhere to hand them in
-# (`arm-stop ... callee=autodiff::add_tangent<float>` after the arm's first value argument). The
+# (`arm-stop ... callee=laws::add_tangent<float>` after the arm's first value argument). The
 # backward half itself was never wrong: `split(jvp(f))`'s `lin(1.0)` answered the tangent before and
 # answers it now. What was missing is the wire the case reads: the round's element port is the one
 # value both loops have, and it is where the tape's per-round residuals come from.
@@ -928,8 +928,8 @@ timeout_ms = 20000
 # question is `rule_types.h`'s (the element of the first value operand) and not the operand's type.
 #
 # With `{Type::Float64()}` written into the instance call, this program did not read a wrong number:
-# it built `autodiff::mul_tangent<float>` around `f32` operands and the pass refused the graph it was
-# handed -- "passes a f32 as ordinary argument 0 of 'autodiff::mul_tangent<float>', which takes a
+# it built `laws::mul_tangent<float>` around `f32` operands and the pass refused the graph it was
+# handed -- "passes a f32 as ordinary argument 0 of 'laws::mul_tangent<float>', which takes a
 # float", four edges. `g(x) = x * x` at 1 reads `(1, 2)`.
 [[tests]]
 name = "jvp_rule_instance_at_the_operand_type.f32"
@@ -961,7 +961,7 @@ args = ["--trace", "transforms", "${case}", "${backend}"]
 backends = ["nvm"]
 backends_agree = ["exit_code", "diagnostics"]
 expect_exit = 0
-expect_output_contains = ["TRANSPOSE function=split_of_jvp_of_pick_backward graph=", "type=(float) => (float,) nodes=11 arms=2", "TRANSPOSE function=split_of_jvp_of_merged_backward graph=", "type=(float) => (float,) nodes=16 arms=2", "TRANSPOSE function=autodiff::mul_tangent<float> graph=", "rhs=add_t,mul_t", "(2.0)", "(3.0)", "(7.0)", "(4.0)"]
+expect_output_contains = ["TRANSPOSE function=split_of_jvp_of_pick_backward graph=", "type=(float) => (float,) nodes=11 arms=2", "TRANSPOSE function=split_of_jvp_of_merged_backward graph=", "type=(float) => (float,) nodes=16 arms=2", "TRANSPOSE function=laws::mul_tangent<float> graph=", "rhs=add_t,mul_t", "(2.0)", "(3.0)", "(7.0)", "(4.0)"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 
@@ -1159,11 +1159,6 @@ assert(targets.filter((t) => norm.includes(t)).length === 1, `answer=per-target:
 """
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
-known_fail = ["nvm"]
-known_fail_owner = "unowned (`lane-valports` wrote this mark and is gone)"
-known_fail_reason = "the transposed member has no value port for the parameter `x` (`modules/transforms/transpose/walk.cpp#buildTransposeMember`), so the walk stops at the scalar product's law (`uri=:op/mul_d`) and not at its own parameter check (`modules/transforms/transpose_operator.cpp#explainRejection`), which prints the same sentence"
-known_fail_msg = "skip=law-reads-a-value uri=:op/mul_d position=0"
-known_fail_ends_when = "when the transposed member gets a port for the value of a parameter a rule reads, the walk stops printing `skip=law-reads-a-value uri=:op/mul_d position=0` and this entry prints `29.0` with each of its three trace lines pinned exactly once -- `TRANSPOSE function=read_outer carried=2 ... answer=per-target` and both `ESCAPE` lines with `kindOfTarget` 1 and 11; 15 or 22 in place of 29 says the cotangent was summed across two values that are not the same value"
 
 [[tests]]
 name = "transpose_tuple_component.reads_the_first_slot"
@@ -1530,7 +1525,7 @@ args = ["--trace", "transforms", "${case}", "${backend}"]
 backends = ["nvm"]
 backends_agree = ["exit_code", "diagnostics"]
 expect_exit = 0
-expect_output_contains = ["TRANSPOSE function=autodiff::add_tangent<float> graph=", "type=(float) => (float, float, float, float) nodes=5 arms=0 rhs=add_t", "TRANSPOSE function=at graph=", "nodes=5 arms=0 rhs=-", "(0.0, 0.0, 1.0, 1.0)", "(0.0, 0.0, 2.0, 2.0)"]
+expect_output_contains = ["TRANSPOSE function=laws::add_tangent<float> graph=", "type=(float) => (float, float, float, float) nodes=5 arms=0 rhs=add_t", "TRANSPOSE function=at graph=", "nodes=5 arms=0 rhs=-", "(0.0, 0.0, 1.0, 1.0)", "(0.0, 0.0, 2.0, 2.0)"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 
@@ -1656,7 +1651,7 @@ args = ["--trace", "transforms", "${case}", "${backend}"]
 backends = ["nvm"]
 backends_agree = ["exit_code", "stdout"]
 expect_exit = 0
-expect_output_contains = ["1.0", "27.0", "6.0", "TRANSPOSE function=autodiff::add_tangent<float> graph="]
+expect_output_contains = ["1.0", "27.0", "6.0", "TRANSPOSE function=laws::add_tangent<float> graph="]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 
@@ -1751,7 +1746,7 @@ timeout_ms = 20000
 name = "struct_member_by_index.jgir"
 kind = "behavior"
 case = "../../../cases/compile/transforms/struct_member_by_index.cml"
-args = ["${case}", "std::jgir", "canonical=true"]
+args = ["${case}", "std::jgir", "canonical=true", "std::nop"]
 expect_exit = 1
 expect_output_contains = ["Invalid access index: '1'"]
 expect_output_not_contains = ["Segmentation fault"]
@@ -1767,7 +1762,7 @@ timeout_ms = 15000
 name = "cml_var_holding_a_lambda"
 kind = "behavior"
 case = "../../../cases/compile/transforms/cml_var_holding_a_lambda.cml"
-args = ["${case}", "std::cml"]
+args = ["${case}", "std::cml", "std::nop"]
 expect_exit = 0
 expect_output_contains = ["((x: int): int => x + 100)(1)"]
 expect_output_not_contains = ["Segmentation fault"]
@@ -1915,7 +1910,7 @@ case = "../../../cases/compile/transforms/grad_of_a_division.cml"
 args = ["--trace", "transforms", "${case}", "${backend}"]
 backends = ["nvm"]
 expect_exit = 0
-expect_output_contains = ["3.0", "1.0", "-1.0", "0.25", "-1.0", "TRANSPOSE function=autodiff::div_tangent<float> graph="]
+expect_output_contains = ["3.0", "1.0", "-1.0", "0.25", "-1.0", "TRANSPOSE function=laws::div_tangent<float> graph="]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 
@@ -2108,9 +2103,9 @@ expect_output_not_contains = ["Warning", "[Error]", "library=(0.0", "library=(9.
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 8000
 known_fail = true
-known_fail_owner = "unowned (`lane-deleth` wrote this mark and is gone)"
+known_fail_owner = "`with_grad` as the composition of `FirstOf`/`WithOf` in `stdlib/vjp.cml` (the library's leg of a differentiation)"
 known_fail_msg = "Reference 'with_grad' is declared as imported but is not exported by its module."
-known_fail_ends_when = "when `stdlib/vjp.cml` exports `with_grad` again as the composition design principles 9.9 asks for -- the pair body with the `FirstOf<WithOf<F>>` declaration beside it in `stdlib/types.cml` -- so that the four `library=` fields of this entry's pinned line above carry tuples instead of `RuntimeError`; that pinned line is where the end shows, and the case and the mark turn over in the same commit"
+known_fail_ends_when = { passes = "transforms.with_grad_from_the_library" }
 known_fail_reason = "库层 `with_grad` 按裁定 `080778522` 删除，等它作为组合写出来：`stdlib/vjp.cml` 不再导出这个名字，所以用例停在 `import { with_grad } from vjp`，不是停在组合的某道墙上。"
 known_fail_note = "The mark is the removal, not a wall: the placeholder was deleted with its `fail` sentence and its doc, so there is no name for the case to call and nothing to rewrite the library's leg onto. The four groups, the engine's four answers and the pin stay as the object the composition will answer; `grad_first_with_parameter.cml`'s two entries already pin the engine's numbers, which is why this entry is not duplicated as an engine-only case. Waits on `stdlib/vjp.cml` gaining `with_grad` as the composition (`vjp` of the signature reinterpretation `first_with_as_param`, which moves the weight onto an ordinary parameter, with the seed 1 read off the pullback) with the declaration `FirstOf<WithOf<F>>` beside it."
 
@@ -2183,6 +2178,19 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 
 [[tests]]
+name = "math_scalar_gradient_through_the_library"
+desc = "`sqrt`, `erf` and `erfc` differentiated through `vjp`: the scalar `math` kernels are `math:sqrt_d`, `math:erf_d` and `math:erfc_d`, and the laws are filed under those names (`stdlib/rulesets/jvp.cml`, `…/transpose.cml`). Three readings: `sqrt(9.0) = 3.0` with `d/dx = 0.16666666666666666` (`(ct * 0.5) / sqrt(x)`, the grouping `sqrtVjp` builds); `erf(1.0) = 0.8427007929497149` with the derivative compared inside the program against `2/sqrt(pi) * exp(-1)`, which is `matches=true` bit for bit because the law keeps the definition's grouping; and `erfc(1.0) = 0.15729920705028513`, whose derivative is that product negated. Before these five laws the same program stopped in the forward half with `skip=rule uri=math:erf_d reason=the operator has no forward rule bound at all`, which is the red `vjp-parity` carried for these keys. The single-width pair (`erf_f`/`erfc_f`) runs the same walk with the `f32` constant and is held by `vjp-parity` rather than by this case, whose functions are `float`."
+kind = "behavior"
+case = "../../../cases/compile/transforms/math_scalar_gradient_through_the_library.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm"]
+backends_agree = ["exit_code", "diagnostics"]
+expect_exit = 0
+expect_output_contains = ["sqrt value=3.0 d/dx=0.16666666666666666", "erf value=0.8427007929497149 d/dx=", "matches=true", "erfc value=0.15729920705028513 d/dx=", "erf at zero value=0.0 d/dx=1.1283791670955126"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
 name = "jvp_of_a_pow_call"
 desc = "The forward rule of `math:pow_d`: `pow` (`stdlib/math.cml#pow`) is the same arithmetic as `^` under a declared function's spelling, so it is a different operator with a key of its own, and it had no forward rule -- a lifted program that called it stopped with `skip=rule uri=math:pow_d reason=no forward rule bound at all`, which is what `rulesets_probe_missing` pinned before this law existed. Three readings: `8.0`/`12.0` for `pow(2.0, 3.0)`, `5.656854249492381`/`7.0710678118654755` for `pow(2.0, 2.5)`, and `8.0`/`5.545177444479562` for the exponent lifted on its own (`d/dn 2^n` at `n = 3`). The last one is the branch `^`'s helper guards on a tangent's value and therefore cannot be transposed; here it is written out, so it reads as a number."
 kind = "behavior"
@@ -2222,7 +2230,7 @@ timeout_ms = 20000
 
 [[tests]]
 name = "stop_gradient_gradient_through_the_engine"
-desc = "`d(stop_gradient(x))/dx` at `x = 4` through the engine's own rules: the value passes through (`4.0`) and the gradient is the zero of its type (`0.0`). The engine's kernel is the identity slot (`modules/autodiff/operators.cpp#stopGradientKernel`) and the rule registered for the operator is `camel::core::noGradient`, which contributes nothing; the pullback then materializes the missing contribution as the zero of the value's own type (`modules/autodiff/pullback.cpp#Backward::checkGradientType`). Pinned as one reading, `value` and `gradient` together, because a cut that also changed the value would be a different operator."
+desc = "`d(stop_gradient(x))/dx` at `x = 4` through the engine's own rules: the value passes through (`4.0`) and the gradient is the zero of its type (`0.0`). The engine's kernel is the identity slot (`stdlib/laws/operators.cpp#stopGradientKernel`) and the rule registered for the operator is `camel::core::noGradient`, which contributes nothing; the pullback then materializes the missing contribution as the zero of the value's own type (`modules/autodiff/pullback.cpp#Backward::checkGradientType`). Pinned as one reading, `value` and `gradient` together, because a cut that also changed the value would be a different operator."
 kind = "behavior"
 case = "../../../cases/compile/transforms/stop_gradient_gradient_through_the_engine.cml"
 args = ["${case}", "${backend}"]
@@ -2235,7 +2243,7 @@ timeout_ms = 20000
 
 [[tests]]
 name = "stop_gradient_gradient_through_the_library"
-desc = "The same cut through `vjp`, which is `transpose(split(jvp(f)))`: both halves need a law, and neither existed -- `vjp` stopped in the *forward* half with `skip=rule uri=autodiff:stop_gradient reason=the operator has no forward rule bound at all`, which is the reading this entry was red with before `jvp_stop_gradient` and `stop_gradient_t` were written. The answer is the engine's to the number, `4.0` and `0.0`: the tangent of the result is the zero of its own type and the cotangent of the argument is the same zero, and the zero is the law's answer rather than a value standing in for one -- no operand is read, and the type is the operator's own signature's. `residuals=0` in the split's reading says the same thing from the other side: there is nothing to carry, because the tangent depends on no input."
+desc = "The same cut through `vjp`, which is `transpose(split(jvp(f)))`: both halves need a law, and neither existed -- `vjp` stopped in the *forward* half with `skip=rule uri=laws:stop_gradient reason=the operator has no forward rule bound at all`, which is the reading this entry was red with before `jvp_stop_gradient` and `stop_gradient_t` were written. The answer is the engine's to the number, `4.0` and `0.0`: the tangent of the result is the zero of its own type and the cotangent of the argument is the same zero, and the zero is the law's answer rather than a value standing in for one -- no operand is read, and the type is the operator's own signature's. `residuals=0` in the split's reading says the same thing from the other side: there is nothing to carry, because the tangent depends on no input."
 kind = "behavior"
 case = "../../../cases/compile/transforms/stop_gradient_gradient_through_the_library.cml"
 args = ["--trace", "transforms", "${case}", "${backend}"]
@@ -3131,7 +3139,7 @@ name = "extent_of_answers_a_known_operand.graph"
 desc = "The other half of the same reading, and the one that can fail while the numbers stay right: the graph holds the answer itself. `std::gir` of the case above shows a `DATA` node labelled `[2, 3]` of type `int[]` and **no** `:op/extent_of` node at all -- no operand of the answer exists to read, so nothing of `xs` reaches it. A reader that took the shape from the value (as `shape(xs)` does) would print the same four lines and put an OPER node in the graph, so this entry, not the numbers, is what says the answer is the type's."
 kind = "behavior"
 case = "../../../cases/compile/transforms/extent_of_answers_a_known_operand.cml"
-args = ["${case}", "std::gir"]
+args = ["${case}", "std::gir", "std::nop"]
 expect_exit = 0
 expect_output_contains = ["label=\"[2, 3]\"", "value_type=\"int[]\""]
 expect_output_not_contains = [":op/extent_of"]
@@ -3156,7 +3164,7 @@ name = "extent_of_a_name_is_a_value_everywhere.graph"
 desc = "The graph half: every one of those spellings holds its answer as a constant `DATA` node of type `int[]`, and the graph has **no** `:op/extent_of` node -- the answer of this builtin is never a call, so no path reaches a kernel. The `from_param` instance settles when the type argument is bound, which is the same rule applied at a type that was a name at the point the name was written."
 kind = "behavior"
 case = "../../../cases/compile/transforms/extent_of_a_name_is_a_value_everywhere.cml"
-args = ["${case}", "std::gir"]
+args = ["${case}", "std::gir", "std::nop"]
 expect_exit = 0
 expect_output_contains = ["label=\"[2, 3]\"", "value_type=\"int[]\"", "label=\"[4]\""]
 expect_output_not_contains = [":op/extent_of"]

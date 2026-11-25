@@ -127,7 +127,7 @@ name = "rulings.loop_graph"
 desc = "Each loop is one LOOP node of the graph, of its form (`LOOP for-while`); its condition and its body are regions of the graph."
 kind = "behavior"
 case = "../../../cases/parse/rulings/loop_forms.cml"
-args = ["${case}", "std::rgir"]
+args = ["${case}", "std::rgir", "std::nop"]
 expect_exit = 0
 expect_stdout_contains = ["tooltip=\"LOOP for", "tooltip=\"LOOP while", "tooltip=\"LOOP for-while"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]

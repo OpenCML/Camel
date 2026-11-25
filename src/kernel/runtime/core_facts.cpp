@@ -542,6 +542,13 @@ EffectSummary nodeEffects(
     return *summary;
 }
 
+std::optional<NodeResources>
+nodeResourcesOf(FactStore &facts, const Program &program, const GCGraph &graph, gc_node_ref_t node) {
+    const Anchor anchor{&program, &graph, node};
+    const auto resources = facts.obtain<NodeResources>(coreKinds().resources, anchor);
+    return resources ? std::optional<NodeResources>(*resources) : std::nullopt;
+}
+
 RegionEffects regionEffectsOf(
     FactStore &facts, const Program &program, const GCGraph &graph, gc_node_ref_t node) {
     const Anchor anchor{&program, &graph, node};

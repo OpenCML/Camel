@@ -14,7 +14,7 @@
  * `jvp`.
  */
 
-import { add_tangent, div_tangent, mul_cotangent, mul_tangent, neg_tangent, sub_tangent } from autodiff
+import { add_tangent, div_tangent, mul_cotangent, mul_tangent, neg_tangent, sub_tangent } from laws
 import { declaration_tags, graph_of, rule_of, tag_graphs, tag_name } from graph
 import { Graph, Tag } from graph
 import { jvp, transpose, vjp } from prelude

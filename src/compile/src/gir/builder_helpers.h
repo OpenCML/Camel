@@ -302,16 +302,16 @@ inline bool walksBeforeGraph(const DraftGraphBuilder *left, const DraftGraphBuil
 /// whose payload is the only place the name is kept until the graph is encoded.
 ///
 /// A node of any other kind stands for no operator, so the question is answered before the
-/// builder's operator-target table is asked: that table is keyed by OPER node only, and
-/// `operTarget` is a witness that an entry exists (it refuses a node it has none for). Asking it
-/// of, say, a value node is asking the wrong table, not finding a builder that broke a promise --
-/// it aborts on every graph, not on the one call written by URI alone.
+/// builder's operator-target table is asked: that table is keyed by OPER node only, and asking it
+/// of, say, a value node is asking the wrong table. Asking is not a precondition -- a node whose
+/// declaration was never resolved is an ordinary answer of `nullptr`, never a refusal
+/// (`DraftGraphBuilder::operTarget`) -- and the payload is what the other shape is named by.
 inline std::string_view operUriOf(node_handle_t node) {
     if (node == nullptr || !nodeIsKind(node, runtime::GCNodeKind::Oper)) {
         return {};
     }
-    if (const auto op = nodeGraphOf(node)->operTarget(node); op != nullptr) {
-        return op->uri();
+    if (const oper_idx_ptr_t *op = nodeGraphOf(node)->operTarget(node); op != nullptr) {
+        return (*op)->uri();
     }
     const auto payload = nodeDraftOf(node)->payloadOf(nodeIdOf(node));
     if (payload.size() < sizeof(runtime::GCOperBody)) {

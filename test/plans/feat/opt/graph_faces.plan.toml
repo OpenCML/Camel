@@ -33,6 +33,10 @@ expect_exit = 0
 expect_output_contains = ["[GF] regions 3/3 exit 5/5 slots 2/2 node 0 0/0", "[NF] dead 16 draft=null frozen=null", "[NF] erased 10 draft=null frozen=record", "[BF] brch 6 arms 2/2", "[GF] nodes 11", "[NF] dead past=16 gap=5 beyond=1 both=1", "[NF] erased at=10 last=1 draft-null=1 frozen-record=1", "[BF] brch at=6 only=1 arms-same=1 arms=2", "[GF] exit at=5 same=1 answer=1"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
+# Slow layer: over the 2 s the fast layer allows -- 2.10 s of
+# child wall clock in the 2026-11-12 record (appendix B of
+# internal/reports/2026-11-24-test-suite-inventory.cn.md).
+tier = "slow"
 
 [[tests]]
 name = "graph_faces.view_agrees"
