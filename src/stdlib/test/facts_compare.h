@@ -9,6 +9,18 @@
  *       enclosing_diff=<n> chain_same=<n> chain_diff=<n> within_pairs=<n> within_same=<n>
  *       within_diff=<n> nodes_same=<n> nodes_diff=<n>
  *   FACTS_COMPARE kind=core.arrangeable graphs=<n> nodes=<n> same=<n> diff=<n> no_old=<n>
+ *   FACTS_COMPARE kind=core.arrangeable readers nodes=<n> agree=<n> diff=<n> no_fact=<n>
+ *   FACTS_COMPARE kind=core.arrangeable draft graphs=<n> nodes=<n> same=<n> diff=<n>
+ *       no_fact=<n> no_store=<n> kept=<n> stale=<n>
+ *
+ * The `readers` line compares the fact with the predicate a pass asks
+ * (`runtime::nodeIsFreelySchedulable`); the `draft` line asks the same kind of the graph the
+ * program's version decodes into -- the graph an editing session is building -- and compares it
+ * with the frozen answer at the same node. `no_store` counts drafts the framework answered no
+ * store for (the kind is not askable where only a draft is at hand), `kept` the nodes whose second
+ * ask was answered from what the store kept, and `stale` the graphs where an edit to the draft
+ * dropped the stored answer. A zero `no_store` and a `kept` equal to `nodes` is what "the
+ * framework holds a draft" reads as.
  *
  * The purpose is the one a move of a computation needs: a fact is a new place for an answer, and
  * "the answer did not change" is a claim about every item of every graph, not about one example.
@@ -33,6 +45,12 @@
  * `no_old`: the fact answers them, and how many of them there are is part of what moving the
  * question into a fact added. `same` and `diff` compare the four terms, so a run whose terms
  * differ in one bit is a `diff` and names itself.
+ *
+ * A call is one of those `no_old` nodes and the one the `readers` comparison found an argument
+ * about: the kind used to walk a callee's body and answer 1111 for a call to a pure function,
+ * while the predicate answered 0 (a call is an anchor that may be an effect). The kind declines at
+ * a call now (facts.cpp, ArrangeWalk), so the two readers answer the same and this line reads
+ * `diff=0` on `test/cases/facts/two_functions.cml` as well.
  */
 
 #pragma once

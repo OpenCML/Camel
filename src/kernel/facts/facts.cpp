@@ -40,6 +40,7 @@
 
 #include "camel/graph/graph.h"
 #include "camel/runtime/fact_slots.h"
+#include "camel/runtime/graph.h"
 #include "graph/graph_view.h"
 
 #include <algorithm>
@@ -48,6 +49,7 @@
 #include <ostream>
 #include <shared_mutex>
 #include <tuple>
+#include <unordered_set>
 
 namespace camel::facts {
 
@@ -437,6 +439,10 @@ namespace {
 struct GraphHolds {
     std::mutex mutex;
     std::unordered_map<const graph::Graph *, Store *> stores;
+    /// The stores the framework made for a graph and therefore owns (`storeHolding`: a draft has no
+    /// program to announce it, so its store is made here). They are destroyed in `forgetGraph`,
+    /// when the graph says it is gone.
+    std::unordered_set<Store *> made;
 };
 
 GraphHolds &graphHolds() {
@@ -464,6 +470,24 @@ GraphAccess frozenGraphs(std::function<const graph::Graph *(const graph::Graph &
     };
 }
 
+GraphAccess draftGraphs() {
+    return GraphAccess{
+        .view    = [](const graph::Graph &graph) { return &graph.view(); },
+        // The draft's revision: a fact about a draft must be dropped when an edit makes what it
+        // read different, and a frozen graph's constant 0 would keep it forever (facts.h).
+        .version = [](const graph::Graph &graph) { return runtime::graphContentVersion(graph); },
+        // Empty, and not for want of a resolver: a draft's callee is a `GraphId` whose graph is
+        // held by a `Program`, and no program holds a draft (`Program::calleeOf`).
+        .callee  = {},
+        .setSlot = [](const graph::Graph &graph, KindId kind, const void *value) {
+            runtime::setFactSlotOf(graph, kind, value);
+        },
+        .setNodeSlot = [](const graph::Graph &graph, KindId kind, NodeId node, const void *value) {
+            runtime::setNodeFactSlotOf(graph, kind, node, value);
+        },
+    };
+}
+
 void holdGraph(Store &store, const graph::Graph &graph) {
     GraphHolds &holds = graphHolds();
     std::lock_guard lock(holds.mutex);
@@ -472,9 +496,24 @@ void holdGraph(Store &store, const graph::Graph &graph) {
 
 Store *storeHolding(const graph::Graph &graph) {
     GraphHolds &holds = graphHolds();
-    std::lock_guard lock(holds.mutex);
-    const auto it = holds.stores.find(&graph);
-    return it == holds.stores.end() ? nullptr : it->second;
+    {
+        std::lock_guard lock(holds.mutex);
+        const auto it = holds.stores.find(&graph);
+        if (it != holds.stores.end()) {
+            return it->second;
+        }
+        if (!runtime::graphIsDraft(graph)) {
+            return nullptr;
+        }
+        // The draft's store, made here on the first ask: a draft has no program to announce it
+        // (`program.cpp`, `holdGraph`) and its answers belong to the session it is being built in
+        // (core abstractions section 2), so the framework keeps them itself and drops them with
+        // the draft (`forgetGraph`, told from `~GraphDraft`).
+        Store *made        = new Store(draftGraphs(), /*persistent=*/false);
+        holds.stores[&graph] = made;
+        holds.made.insert(made);
+        return made;
+    }
 }
 
 void forgetGraph(const graph::Graph *graph) {
@@ -482,6 +521,7 @@ void forgetGraph(const graph::Graph *graph) {
         return;
     }
     Store *store = nullptr;
+    bool made    = false;
     {
         GraphHolds &holds = graphHolds();
         std::lock_guard lock(holds.mutex);
@@ -489,11 +529,20 @@ void forgetGraph(const graph::Graph *graph) {
         if (it != holds.stores.end()) {
             store = it->second;
             holds.stores.erase(it);
+            const auto own = holds.made.find(store);
+            if (own != holds.made.end()) {
+                holds.made.erase(own);
+                made = true;
+            }
         }
     }
-    // Outside the holds' lock: the store takes its own.
+    // Outside the holds' lock: the store takes its own (and its destructor takes this one again
+    // when it takes its rows out).
     if (store != nullptr) {
         store->invalidateGraph(graph);
+        if (made) {
+            delete store;
+        }
     }
 }
 
@@ -932,23 +981,31 @@ Arrangeable termsOfOperator(camel::ops::OperId oper) {
     return terms;
 }
 
-/// Walks the nodes one node stands for. A branch, a loop and a call carry what runs inside them,
-/// so their terms are the conjunction over the nodes of their arms, of their regions, or of the
-/// callee's body: a branch with an effect in one arm is not freely arrangeable, and neither is a
-/// call whose callee may not end. A callee that is already being judged above the node is a
-/// recursion, and a recursion is not known to terminate (design principles 3.4, 3.10) -- the node
-/// that makes the call, not the nodes of the body it is in.
+/// Walks the nodes one node stands for. A branch and a loop carry what runs inside them, so their
+/// terms are the conjunction over the nodes of their arms and of their regions: a branch with an
+/// effect in one arm is not freely arrangeable.
+///
+/// A **call** is not one of those. A `Call` and a `Func` node name a callee, and walking the
+/// callee's body answers a question about *another graph* -- "may a pass arrange the nodes of that
+/// body anywhere?" -- which is not the question this kind asks ("may a pass arrange **this node**
+/// anywhere?"). The two answers were read as one and they disagreed with the predicate a pass
+/// asks: on `test/cases/facts/two_functions.cml` the node that calls `f` was answered 1111 (the
+/// body of `f` is pure, cannot fail and ends) while `runtime::nodeIsFreelySchedulable` answered 0,
+/// because a call is an anchor that may be an effect and nothing in this graph says otherwise
+/// (`docs/design/effects/edges.cn.md` 4.6). That is the same reading `graph::is_chain_statement`
+/// takes on purpose -- "a call runs a graph: what it does is not in the operator table, and nothing
+/// says it cannot fail. Naming the callee directly changes neither its effects nor its faults"
+/// (camel/runtime/graph.cpp) -- and the two readers of one question cannot answer differently.
+///
+/// So this kind declines at a call, in the sense the four terms have for a node they cannot state:
+/// all false, "it does not answer for this node" (`Arrangeable`, arrangedable.h). It is not "the
+/// call may fault": the terms are not a claim, and a placement decision that acts on the answer
+/// keeps the call where the program wrote it, which is what every other reader of the graph does.
+/// The consequence is that this kind no longer reads a callee, so it needs no `GraphAccess::callee`
+/// and no recursion guard: what a call runs stays a fact of the graph the callee is anchored on.
 class ArrangeWalk {
   public:
-    ArrangeWalk(const GraphAccess &graphs, ReadLog &log) : graphs_(graphs), log_(log) {}
-
-    /// The graph the node is anchored on: a call to it, met while walking below the node, is the
-    /// recursion this walk has to see.
-    void seed(const graph::Graph *graph) {
-        if (graph != nullptr) {
-            active_.push_back(graph);
-        }
-    }
+    explicit ArrangeWalk(ReadLog &log) : log_(log) {}
 
     Arrangeable at(const graph::GraphView &view, NodeId node) {
         const graph::NodeRef ref = static_cast<graph::NodeRef>(node);
@@ -1002,36 +1059,10 @@ class ArrangeWalk {
             return terms;
         }
         case graph::NodeKind::Call:
-        case graph::NodeKind::Func: {
-            // The callee comes from the owner of the graphs, by identity, when the owner gave the
-            // store that answer: a graph does not know its program, so the view alone can name
-            // only the id a call stores and refuses a hole rather than answer "no callee"
-            // (graph/callee_graph_of.h, and the store's access in facts.h). Without a resolver the
-            // walk is narrower and stops here, which is the honest answer: what the call runs is
-            // not in this graph.
-            const graph::Graph *here = active_.empty() ? nullptr : active_.back();
-            const graph::Graph *calleeGraph =
-                graphs_.callee && here != nullptr
-                    ? graphs_.callee(*here, static_cast<NodeId>(ref))
-                    : nullptr;
-            if (calleeGraph == nullptr) {
-                // A callee named by an environment entry, not named yet, or not one this store's
-                // owner holds: what it runs is not in this graph, so none of the four terms is
-                // known here.
-                return Arrangeable{};
-            }
-            if (std::find(active_.begin(), active_.end(), calleeGraph) != active_.end()) {
-                // A call that reaches a graph this walk is already in: a recursion. It may not
-                // end, so the call is not freely arrangeable wherever it stands.
-                return Arrangeable{};
-            }
-            const graph::GraphView *calleeView =
-                graphs_.view ? graphs_.view(*calleeGraph) : nullptr;
-            if (calleeView == nullptr) {
-                return Arrangeable{};
-            }
-            return atGraph(*calleeView, calleeGraph);
-        }
+        case graph::NodeKind::Func:
+            // A call stands for the body it runs, and that body is another graph's content: the
+            // file comment says why this kind declines instead of answering with it.
+            return Arrangeable{};
         default:
             // A BIND node (reserved: nothing creates one): not known to be anything.
             return Arrangeable{};
@@ -1039,16 +1070,6 @@ class ArrangeWalk {
     }
 
   private:
-    Arrangeable atGraph(const graph::GraphView &view, const graph::Graph *graph) {
-        active_.push_back(graph);
-        Arrangeable terms{true, true, true, true};
-        for (const graph::NodeRef ref : view.nodes()) {
-            terms = andTerms(terms, at(view, ref));
-        }
-        active_.pop_back();
-        return terms;
-    }
-
     Arrangeable andRegions(const graph::GraphView &view, RegionId region, Arrangeable terms) {
         log_.region(region);
         for (const graph::NodeRef ref : view.regionNodes(region)) {
@@ -1057,9 +1078,7 @@ class ArrangeWalk {
         return terms;
     }
 
-    const GraphAccess &graphs_;
     ReadLog &log_;
-    std::vector<const graph::Graph *> active_;
 };
 
 } // namespace
@@ -1067,9 +1086,8 @@ class ArrangeWalk {
 Arrangeable operatorArrangeable(camel::ops::OperId oper) { return termsOfOperator(oper); }
 
 Arrangeable
-nodeArrangeable(const graph::Graph &graph, const graph::GraphView &view, NodeId node, const GraphAccess &graphs, ReadLog &log) {
-    ArrangeWalk walk{graphs, log};
-    walk.seed(&graph);
+nodeArrangeable(const graph::GraphView &view, NodeId node, ReadLog &log) {
+    ArrangeWalk walk{log};
     return walk.at(view, node);
 }
 
@@ -1114,9 +1132,7 @@ KindId arrangeableKind() {
             if (view == nullptr) {
                 return std::nullopt;
             }
-            ArrangeWalk walk{graphs, log};
-            walk.seed(anchors[0].graph);
-            return walk.at(*view, anchors[0].node);
+            return nodeArrangeable(*view, anchors[0].node, log);
         },
         // The answer for a union of places is the conjunction of the answers for the parts: a
         // place is freely arrangeable when every place it is made of is. Adding nodes can turn

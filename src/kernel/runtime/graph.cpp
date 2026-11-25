@@ -3823,7 +3823,25 @@ const GCGraph *frozenGraphOf(const camel::graph::Graph &graph) {
     return dynamic_cast<const GCGraph *>(&graph);
 }
 
+/// The draft a `const graph::Graph *` names, or null: the other half of `frozenGraphOf`, and the
+/// one place the two representations are told apart (`camel/runtime/graph.h`).
+const GraphDraft *draftGraphOf(const camel::graph::Graph &graph) {
+    return dynamic_cast<const GraphDraft *>(&graph);
+}
+
 } // namespace
+
+bool graphIsDraft(const camel::graph::Graph &graph) { return draftGraphOf(graph) != nullptr; }
+
+uint64_t graphContentVersion(const camel::graph::Graph &graph) {
+    // A draft's revision is the number its own readers take for the version of its references
+    // (`GraphDraft::revision`), so a fact stamped with it goes stale exactly when an edit makes
+    // what it read change -- no more often and no less. A frozen graph has no such number because
+    // its content cannot change: `~GCGraph` is the only thing that ends it, and the store drops
+    // what was anchored on it there (`forgetGraph`).
+    const GraphDraft *draft = draftGraphOf(graph);
+    return draft == nullptr ? 0 : draft->revision();
+}
 
 void setFactSlotOf(
     const camel::graph::Graph &graph, std::uint32_t kind, const void *value) noexcept {

@@ -335,6 +335,23 @@ bool nodeStandsForItsRegion(const GCGraph &graph, gc_node_ref_t ref);
 /// cannot drift apart -- there is never an edge the writer knew the check would reject.
 bool nodeTakesNoOrder(const GCGraph &graph, gc_node_ref_t ref);
 
+/// Which of the two representations a graph is, asked by a reader that holds `const graph::Graph *`
+/// and nothing else. The two answers differ where the question is about the graph's *lifetime*: a
+/// frozen graph's content never changes, a draft's changes with every edit. It is the same
+/// `dynamic_cast` `setFactSlotOf` uses to answer "a draft keeps no slots" (graph.cpp), and it is
+/// here rather than in a reader's own file so that the two representations are told apart at one
+/// place and no reader needs either type.
+bool graphIsDraft(const camel::graph::Graph &graph);
+
+/// The version of a graph's content, for a reader that holds a graph and not its owner
+/// (`facts::GraphAccess::version`, camel/facts/facts.h): 0 for a frozen graph, whose content
+/// cannot change, and the draft's revision otherwise (`GraphDraft::revision`, which moves whenever
+/// what the draft refers to may have changed -- a node added, erased or rewritten, a payload handed
+/// out for writing -- which is exactly the condition a stored fact has to be dropped on). A fact
+/// stamped with it about a draft is dropped when the draft is edited; a fact about a frozen graph
+/// never is.
+uint64_t graphContentVersion(const camel::graph::Graph &graph);
+
 /// Properties a graph has besides its nodes (GCGraph::flags).
 enum GCGraphFlag : uint8_t {
     /// Bit 0 is retired.

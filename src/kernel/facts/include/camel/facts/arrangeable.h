@@ -20,9 +20,11 @@
  *
  * Where each term is read: the first three from the operator record of the node's operator
  * (`camel/ops/operator_record.h`: `pure` is the empty `uses` clause, `external` is the reach it
- * states, `panic` is the fault fact), and from the graph the node runs when it runs one (a branch's
- * arms, a loop's regions, a callee's body); the fourth from the node's own form
- * (`camel/core/loop_kind.h` and `CalleeRef`), never from what encloses it.
+ * states, `panic` is the fault fact), and from the graph the node runs when it runs one of this
+ * graph's own regions (a branch's arms, a loop's regions); the fourth from the node's own form
+ * (`camel/core/loop_kind.h`), never from what encloses it. A call is the one node this kind does
+ * not answer for: the body it runs is another graph's, and `nodeArrangeable` says why walking it
+ * would answer a different question.
  *
  * The record is the only statement of the first three, and every entrance writes into it: a built-in
  * operator's declaration is copied there when the module loads
@@ -62,14 +64,15 @@ KindId arrangeableKind();
 /// an operator -- the chain predicate of a graph, a listing -- asks this.
 Arrangeable operatorArrangeable(camel::ops::OperId oper);
 
-/// `core.arrangeable` at any node of `graph`'s view, reading a callee's graph through `graphs`. A
-/// branch, a loop and a call stand for what runs inside them: their terms are the conjunction over
-/// the nodes of their arms, of their regions, or of the callee's body, and a callee already being
-/// judged above this node is a recursion, which is not known to terminate. `graph` is the anchor's
-/// identity, and it is what makes the recursion visible: a call back to it is one.
-Arrangeable nodeArrangeable(
-    const graph::Graph &graph, const graph::GraphView &view, NodeId node, const GraphAccess &graphs,
-    ReadLog &log);
+/// `core.arrangeable` at any node of `graph`'s view. A branch and a loop stand for what runs inside
+/// them: their terms are the conjunction over the nodes of their arms and of their regions. A
+/// `Call` and a `Func` node do **not**: what a call runs is another graph's content, and walking the
+/// callee's body answers about that body rather than about this node, so the kind declines there
+/// (all four terms false, "it does not answer for this node"). That is the answer
+/// `runtime::nodeIsFreelySchedulable` gives -- a call is an anchor that may be an effect, and
+/// naming the callee directly changes neither its effects nor its faults -- and the two readers of
+/// one question answer it the same way.
+Arrangeable nodeArrangeable(const graph::GraphView &view, NodeId node, ReadLog &log);
 
 /// The four terms as one line: "freely arrangeable", or what fails.
 std::string toString(const Arrangeable &arrangeable);

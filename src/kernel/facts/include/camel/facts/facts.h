@@ -169,8 +169,14 @@ struct GraphAccess {
     /// This is the owner's answer and not the view's, because a graph does not know the program
     /// that holds it: `GraphView::calleeOf` can only tell which id a call names, and an adapter
     /// without the owner's resolver refuses rather than answer "no callee" (graph/callee_graph_of.h).
-    /// Asking the owner by identity is what lets a fact walk from a graph to its callee at all --
-    /// it is the `arrangeable` fact's only way across a call (facts.cpp, ArrangeWalk).
+    /// Asking the owner by identity is what lets a fact walk from a graph to its callee at all.
+    ///
+    /// No registered kind reads it today: `core.arrangeable` walks a branch's arms and a loop's
+    /// regions and declines at a call, because a callee's body is another graph's content and the
+    /// four terms are about the node's own place (facts.cpp, ArrangeWalk; arrangeable.h). The hook
+    /// stays declared because it is the owner's answer and not the view's -- a kind that is about
+    /// a callee's body (`core.effects` over a call, an inline's reach) reads it here, and one made
+    /// without it can only report that it cannot.
     std::function<const graph::Graph *(const graph::Graph &, NodeId)> callee;
 
     /// Where the graph keeps a fact of `kind`, so that a reader that has the graph reaches it with
@@ -472,6 +478,10 @@ class Store {
     std::shared_ptr<const T> obtain(KindId kind, const Anchor &anchor, std::uint64_t target = 0) {
         return obtain<T>(kind, std::span<const Anchor>(&anchor, 1), target);
     }
+    // The same for the read that keeps nothing: "what would a read find here?" (`probe`).
+    Status probe(KindId kind, const Anchor &anchor, std::uint64_t target = 0) {
+        return probe(kind, std::span<const Anchor>(&anchor, 1), target);
+    }
 
   private:
     /// One stored fact: what it is about, the value, and what makes it stale.
@@ -530,16 +540,58 @@ void computeAll(
 GraphAccess frozenGraphs(std::function<const graph::Graph *(const graph::Graph &, NodeId)> callee = {});
 
 /**
+ * The access a store reads a *draft* through -- the graph an editing session is building or
+ * editing (`GraphDraft`, camel/runtime/draft.h), which is the other representation a `graph::Graph`
+ * names (`camel/graph/graph.h`). It differs from `frozenGraphs` in the one place the two
+ * representations differ for a fact:
+ *
+ *   - `version` is the draft's revision (`runtime::graphContentVersion`), not the constant 0 a
+ *     frozen graph answers: a draft's content changes, so a stored fact about it must be dropped
+ *     when an edit makes what it read different. A store that answered 0 here would keep an answer
+ *     about a graph that has changed, which is the one failure a stamp exists to prevent.
+ *   - `callee` is empty. A draft names its callee by `GraphId` (`GraphDraft::calleeIdOf`), but the
+ *     graph that number names is held by a `Program` and a draft being built has none -- the program
+ *     answers "no program holds it" for a draft (`Program::calleeOf`), and a draft that decoded a
+ *     graph still does not make the draft itself the program's. So a computation that walks across
+ *     a call reports that it cannot, rather than answering that the call reaches nothing
+ *     (`core.arrangeable` declines for a `Call` and a `Func` for the same reason, and not only this
+ *     one).
+ *   - the slots are the same writes frozenGraphs makes, and they land nowhere: a draft keeps none
+ *     (`camel/runtime/fact_slots.h`). The store is therefore the only place a fact about a draft
+ *     lives, which is why a reader must ask it and cannot keep its own copy.
+ *
+ * A store over a draft is not persistent: `Store(access, false)`. The answers die with the draft
+ * (`forgetGraph`, told from `~GraphDraft`), which is the lifetime core abstractions section 2 gives
+ * them -- a draft's results are dropped with the session.
+ */
+GraphAccess draftGraphs();
+
+/**
  * Tells `store` that `graph` is one of the graphs it holds the facts of. The context does this for
  * every graph it makes -- the runtime graph manager says it when a program takes a graph in, and
  * when a rewrite encodes a graph it has not bound yet -- so that a reader holding only the graph
  * finds the store with `storeHolding`. A graph belongs to one store: the store of the context that
  * made it.
+ *
+ * A draft is told to no store this way: it has no program to announce it, and its store is the one
+ * the framework makes for it (see `storeHolding`). `holdGraph` still accepts one, so a caller that
+ * does keep a store of its own for a draft can say so.
  */
 void holdGraph(Store &store, const graph::Graph &graph);
 
-/// The store that holds `graph`, null when no live store was told about it. A reader that finds
-/// none reports a red: the graph is not one any store can answer about.
+/**
+ * The store that holds `graph`; null when the graph is not one any store can answer about.
+ *
+ * For a frozen graph this is the store the context was told about (`holdGraph`). For a *draft* it
+ * is the store the framework makes here, on the first ask, and keeps until the draft ends
+ * (`forgetGraph`, which `~GraphDraft` calls): a graph an editing session is building has no
+ * `Program` to announce it, and core abstractions section 2 gives its answers to the session, so
+ * the framework holds them itself and drops them with it. That is what makes the kind askable
+ * where a draft is all a caller has -- the freeze, which decides from a draft whether a node keeps
+ * an order edge (`takesNoOrder`, camel/runtime/graph.cpp).
+ *
+ * Null for a graph that is neither: one no store was told about, or one whose store has gone.
+ */
 Store *storeHolding(const graph::Graph &graph);
 
 /**
@@ -548,6 +600,10 @@ Store *storeHolding(const graph::Graph &graph);
  * "what was keyed on it is gone" are one event rather than two. A store destroyed before the
  * graphs it was told about leaves nothing here, so a graph that outlasts its store's owner
  * announces its end to nobody.
+ *
+ * A draft's store is the framework's own (`storeHolding`), so it is destroyed here as well as
+ * forgotten: nothing else names it, and a draft that outlived it would otherwise leave a store per
+ * draft standing for the rest of the process, each holding an answer about a graph that is gone.
  */
 void forgetGraph(const graph::Graph *graph);
 

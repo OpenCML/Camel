@@ -25,6 +25,7 @@
 #include "graph/draft_view.h"
 
 #include "camel/core/tags.h"
+#include "camel/facts/facts.h"
 #include "camel/utils/assert.h"
 
 #include <algorithm>
@@ -46,6 +47,11 @@ const camel::graph::GraphView &camel::runtime::GraphDraft::view() const {
 camel::runtime::GraphDraft::~GraphDraft() {
     delete static_cast<const camel::graph::GraphView *>(viewCache_);
     viewCache_ = nullptr;
+    // The facts about this draft end here, as a frozen graph's do in `~GCGraph`: the store that
+    // answered about it was made for it and is dropped with it (`storeHolding`/`forgetGraph`,
+    // camel/facts/facts.h), and a store left behind would answer about the next draft the allocator
+    // put at this address.
+    camel::facts::forgetGraph(this);
 }
 namespace camel::graph {
 namespace {
