@@ -6,6 +6,7 @@
 #include "camel/core/rtdata/base.h"
 #include "camel/core/rtdata/string.h"
 #include "camel/runtime/graph.h"
+#include "camel/runtime/oper_shape.h"
 
 #include <cstdint>
 #include <optional>
@@ -61,9 +62,30 @@ inline bool hasPayloadOf(const Graph &graph, runtime::gc_node_ref_t ref) noexcep
     }
 }
 
+/// The operator an operator node names, `kNoOper` when it names none: out of the body a frozen
+/// graph points at (`nodeBodyAs`), out of the operator id a face that answers one names, or out of
+/// the payload bytes a draft keeps -- the same `GCOperBody`. This is what a reader asks the
+/// operator's record by; the URI beside it is a name, and no reading of a shape asks a name.
+template <typename Graph>
+inline camel::core::OperId operOf(const Graph &graph, runtime::gc_node_ref_t ref) noexcept {
+    if constexpr (requires { graph.template nodeBodyAs<runtime::GCOperBody>(ref); }) {
+        const auto *body = graph.template nodeBodyAs<runtime::GCOperBody>(ref);
+        return body == nullptr ? camel::core::kNoOper : body->oper;
+    } else if constexpr (requires { graph.operatorOf(ref); }) {
+        return graph.operatorOf(ref);
+    } else {
+        const std::span<const std::byte> bytes = graph.payloadOf(ref);
+        if (bytes.size() < sizeof(runtime::GCOperBody)) {
+            return camel::core::kNoOper;
+        }
+        return reinterpret_cast<const runtime::GCOperBody *>(bytes.data())->oper;
+    }
+}
+
 /// The URI of an operator node: out of the body a frozen graph points at (`nodeBodyAs`), out of the
 /// URI a face that answers one names, or out of the payload bytes a draft keeps -- the same
-/// `GCOperBody`.
+/// `GCOperBody`. A name is what a diagnostic prints and what a rule set is keyed by; it is not what
+/// a shape is read from (`operOf` above, `camel/runtime/oper_shape.h`).
 template <typename Graph>
 inline std::string_view uriOf(const Graph &graph, runtime::gc_node_ref_t ref) noexcept {
     if constexpr (requires { graph.template nodeBodyAs<runtime::GCOperBody>(ref); }) {
@@ -99,8 +121,12 @@ inline std::string_view uriOf(const Graph &graph, runtime::gc_node_ref_t ref) no
  *     if (nodeOperatorOf(graph, ref) == NodeOperator::Fill) { ... }
  *
  * The OPER arm of `nodeOperatorOf(Graph, ref)` answers from the operator record: it reads the
- * node's URI out of `GCOperBody` and names the four by it, so a conversion the front end hands over
- * as an ordinary operator is a conversion here too. What is left for the day the front end stops
+ * operator the node names out of `GCOperBody` and asks `camel/runtime/oper_shape.h` what shape that
+ * operator states, so a conversion the front end hands over as an ordinary operator is a conversion
+ * here too, and an operator whose *name* happens to resemble one of the four is read as what it is.
+ * There is no table of URI text here: the four are stated once, where they are registered
+ * (`declareShape`), and a reader that compared the letters of a URI held a second statement of one
+ * fact that nothing kept in step with the first. What is left for the day the front end stops
  * building the four node kinds is the deletion of the `kind` arm of `nodeOperatorOf(GCNodeKind)`;
  * the eight files do not change again.
  *
@@ -175,7 +201,8 @@ enum class NodeCase : uint8_t {
 
 /// The operator a kind stands for: a construction or a member read, asked of a node the front end
 /// still builds as one of those two kinds. A conversion and a copy have no kind any more: they are
-/// calls of `:op/cast` and `:op/copy`, and only `nodeOperatorOf(uri)` answers them.
+/// calls of `:op/cast` and `:op/copy`, whose records state `Conversion` and `Clone`, and
+/// `nodeOperatorOf(Graph, ref)` answers them from those records.
 inline NodeOperator nodeOperatorOf(runtime::GCNodeKind kind) noexcept {
     switch (kind) {
     case runtime::GCNodeKind::Fill:
@@ -217,24 +244,21 @@ inline NodeCase nodeCaseOf(runtime::GCNodeKind kind) noexcept {
     }
 }
 
-/// Which of the four operators a URI names, or `NotOne`. This is what a graph says about a node
-/// that names an operator instead of wearing a kind: `:op/fill` is a construction, `:op/cast` a
-/// conversion, `:op/copy` a copy, and a member read is written two ways because the two reads ask
-/// the value different questions (a position, a name) -- `:op/access` and `:op/access_key` are both
-/// a member read. Any other URI, including the empty one a node without a record answers, is
-/// `NotOne`: an operator is one of the four by what it says it is, not by being an operator.
-inline NodeOperator nodeOperatorOf(std::string_view uri) noexcept {
-    if (uri == ":op/cast") {
+/// Which of the four operators a shape stands for, `NotOne` for an operator that is not one of
+/// them. The record's vocabulary (`camel/ops/oper_shape.h`) and this file's name the same four, so
+/// this is a rename and not a second reading of the fact.
+inline NodeOperator nodeOperatorOf(camel::ops::OperShape shape) noexcept {
+    switch (shape) {
+    case camel::ops::OperShape::Conversion:
         return NodeOperator::Cast;
-    }
-    if (uri == ":op/copy") {
+    case camel::ops::OperShape::Clone:
         return NodeOperator::Copy;
-    }
-    if (uri == ":op/fill") {
+    case camel::ops::OperShape::Construction:
         return NodeOperator::Fill;
-    }
-    if (uri == ":op/access" || uri == ":op/access_key") {
+    case camel::ops::OperShape::Access:
         return NodeOperator::Accs;
+    case camel::ops::OperShape::None:
+        break;
     }
     return NodeOperator::NotOne;
 }
@@ -253,18 +277,16 @@ inline NodeOperator nodeOperatorOf(const Graph &graph, runtime::gc_node_ref_t re
     if (node == nullptr) {
         return NodeOperator::NotOne;
     }
-    if (payload_detail::kindOf(node) == runtime::GCNodeKind::Oper) {
-        // An operator node is one of the four by the URI its record holds, and every other operator
-        // -- the overwhelming majority -- is `NotOne`, which is what makes a reader that only wants
-        // a yes/no keep working. The URI is read where the face keeps it (`payload_detail::uriOf`):
-        // in place out of `GCOperBody` on a frozen graph, or out of the payload bytes a draft
-        // holds -- the same body either way.
-        if (!payload_detail::hasPayloadOf(graph, ref)) {
-            return NodeOperator::NotOne;
-        }
-        return nodeOperatorOf(payload_detail::uriOf(graph, ref));
+    if (payload_detail::kindOf(node) != runtime::GCNodeKind::Oper) {
+        return nodeOperatorOf(payload_detail::kindOf(node));
     }
-    return nodeOperatorOf(payload_detail::kindOf(node));
+    // An OPER node is one of the four by what its **operator record** says, and by nothing else:
+    // the shape is stated once, where the operator is registered (`declareShape`), and a reader
+    // that decoded the letters of the URI instead held a second statement of one fact. The record
+    // asks nothing of the URI text, so an operator whose name happens to spell one of the four is
+    // read as what it is, and one the front end hands over as an ordinary call is read as the
+    // operation it performs.
+    return nodeOperatorOf(camel::runtime::shapeOfOperator(payload_detail::operOf(graph, ref)));
 }
 
 /// Which case node `ref` is. A ref that is not a node is `Other`, the case a walk's `default:`

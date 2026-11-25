@@ -19,6 +19,7 @@
 #include "camel/runtime/core_facts.h"
 #include "camel/runtime/graph.h"
 #include "camel/runtime/loop.h"
+#include "camel/runtime/oper_shape.h"
 #include "src/stdlib/tensor/ops/registry.h"
 #include "src/stdlib/tensor/ops/support.h"
 #include "src/stdlib/tensor/tensor.h"
@@ -680,11 +681,15 @@ class Compiler {
                 const auto *operBody        = g->nodeBodyAs<rt::GCOperBody>(id);
                 const std::string_view uri = operBody->uri();
                 const auto oper             = operBody->oper;
+                // Which of the four this call performs is the operator's own statement
+                // (`camel/runtime/oper_shape.h`), not the letters of its URI: the shape is stated
+                // once, where the operator is registered, and this back end reads it from there.
+                const camel::ops::OperShape shape = camel::runtime::shapeOfOperator(oper);
                 std::vector<Value> args;
                 const auto kernelArguments = rt::kernelArgumentsOf(*g, id);
                 // A copy is the COPY kind's rule read through the operator the front end writes it as
                 // (`:op/copy`, prelude.cml): one ordinary operand, and the value it stands for.
-                if (uri == ":op/copy" && kernelArguments.with.empty() &&
+                if (shape == camel::ops::OperShape::Clone && kernelArguments.with.empty() &&
                     kernelArguments.norm.size() == 1) {
                     out = eval(f, kernelArguments.norm.front());
                     break;
@@ -694,7 +699,7 @@ class Compiler {
                 // result type. Converting a value to a type it already has is that value, field
                 // order included; anything else is an element computation this back end has no
                 // width for, refused as the shape it is rather than run somewhere else.
-                if (uri == ":op/cast" && kernelArguments.with.empty() &&
+                if (shape == camel::ops::OperShape::Conversion && kernelArguments.with.empty() &&
                     kernelArguments.norm.size() == 1) {
                     Value converted = eval(f, kernelArguments.norm.front());
                     if (!converts(converted, node->dataType()))
@@ -711,8 +716,8 @@ class Compiler {
                 // template the value is made from, and the i-th operand after it fills component
                 // i of that template (builder_helpers.h, constructionValuesOf). No element is
                 // computed, so this is a value the region already holds.
-                if (uri == ":op/fill" && kernelArguments.with.empty() &&
-                    !kernelArguments.norm.empty()) {
+                if (shape == camel::ops::OperShape::Construction &&
+                    kernelArguments.with.empty() && !kernelArguments.norm.empty()) {
                     if (node->dataType()->code() != ty::TypeCode::Tuple &&
                         node->dataType()->code() != ty::TypeCode::Struct &&
                         node->dataType()->code() != ty::TypeCode::Function)
@@ -736,7 +741,7 @@ class Compiler {
                     // (`:op/access` / `:op/access_key`, prelude.cml), so it arrives as the call's
                     // `with` argument and a constant the specialization reads here. The read is
                     // the aggregate's member, which is what the ACCS case above takes as well.
-                    if ((uri == ":op/access" || uri == ":op/access_key") &&
+                    if (shape == camel::ops::OperShape::Access &&
                         kernelArguments.with.size() == 1 && kernelArguments.norm.size() == 1) {
                         Value aggregate    = eval(f, kernelArguments.norm.front());
                         const Value member = eval(f, kernelArguments.with.front());

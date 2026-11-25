@@ -39,6 +39,7 @@
 #include "camel/runtime/exec_plan.h"
 #include "camel/runtime/graph.h"
 #include "camel/runtime/loop.h"
+#include "camel/runtime/oper_shape.h"
 #include "camel/runtime/reachable.h"
 #include "camel/utils/number_text.h"
 #include "src/stdlib/transforms/node_operator.h"
@@ -4144,11 +4145,18 @@ class CmlPrinter {
         if (isVariableOperator(oper)) {
             fail(ref, std::format("the operator '{}'", uri));
         }
-        if (uri == ":op/access" || uri == ":op/access_key") {
+        // A member read and a conversion are the operations their operator's record states
+        // (`OperShape::Access`, `OperShape::Conversion`; camel/runtime/oper_shape.h), read by the
+        // operator the node names and not from the letters of its URI. Which member read it is --
+        // by place, by name -- is the two operators' own difference and stays with
+        // `memberReadExpression`, which reads the member's type from the call's `with` argument.
+        switch (camel::runtime::shapeOfOperator(oper)) {
+        case camel::ops::OperShape::Access:
             return memberReadExpression(ref);
-        }
-        if (uri == ":op/cast") {
+        case camel::ops::OperShape::Conversion:
             return castExpression(ref);
+        default:
+            break;
         }
         if (uri == ":op/idx_arr" || uri == ":op/idx_str" || uri == ":op/idx") {
             if (inputs.size() != 2 && inputs.size() != 3) {

@@ -14,6 +14,7 @@
 #include "camel/runtime/core_facts.h"
 #include "camel/runtime/graph.h"
 #include "camel/runtime/loop.h"
+#include "camel/runtime/oper_shape.h"
 #include "graph/graph_view.h"
 #include "src/stdlib/tensor/type.h"
 #include "src/stdlib/transforms/node_operator.h"
@@ -347,9 +348,20 @@ bool structuralOperator(core::OperId oper) {
     // and ACCS cases and the `:op/cast`, `:op/fill` and `:op/access` branches), so a device scope
     // is not refused for holding one; what a conversion cannot do is convert an element type this
     // back end has no width for, and that stays a refusal of the use, not of the form.
-    const std::string uri(core::OperatorTable::instance().uri(oper));
-    return uri == ":op/cast" || uri == ":op/fill" || uri == ":op/access" ||
-           uri == ":op/access_key";
+    //
+    // Which of the four the operator is comes from its record (`camel/runtime/oper_shape.h`), where
+    // the shape is stated once. A copy is `Clone` and is deliberately not here: it is one of the
+    // four, and it still has to compute an element type this back end may have no width for, so it
+    // is refused by use like any other element computation. A reader that decoded the URI instead
+    // sorted the five names by hand and had no way to tell a copy from a conversion but the name.
+    switch (camel::runtime::shapeOfOperator(oper)) {
+    case camel::ops::OperShape::Conversion:
+    case camel::ops::OperShape::Construction:
+    case camel::ops::OperShape::Access:
+        return true;
+    default:
+        return false;
+    }
 }
 bool deviceCapable(core::OperId oper) {
     return operations().find(oper) != operations().end() && touchesNothing(oper);

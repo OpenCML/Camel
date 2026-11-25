@@ -157,29 +157,6 @@ std::string operatorUri(const GCGraph *graph, gc_node_ref_t ref) {
     return std::string(graph->nodeBodyAs<GCOperBody>(ref)->uri());
 }
 
-// Which of the four the operator node names: `:op/fill` is a construction, `:op/cast` a
-// conversion, `:op/copy` a copy, and a member read is written two ways because the two reads ask
-// the value different questions -- `:op/access` and `:op/access_key` are both a member read. Any
-// other URI is None: an operator is one of the four by what it says it is, not by being an
-// operator, which is the question `node_operator.h` of `std::transforms` asks of the same five
-// names. The kind form of a node answers this through `shapeOfKind`.
-camel::execute::OperShape shapeOfOperatorUri(const std::string &uri) {
-    using camel::execute::OperShape;
-    if (uri == ":op/cast") {
-        return OperShape::Conversion;
-    }
-    if (uri == ":op/copy") {
-        return OperShape::Clone;
-    }
-    if (uri == ":op/fill") {
-        return OperShape::Construction;
-    }
-    if (uri == ":op/access" || uri == ":op/access_key") {
-        return OperShape::Access;
-    }
-    return OperShape::None;
-}
-
 camel::core::OperId operatorId(const GCGraph *graph, gc_node_ref_t ref) {
     return graph->nodeBodyAs<GCOperBody>(ref)->oper;
 }
@@ -659,10 +636,10 @@ bool FunctionEmitter::lowerNode(
     // The four shaped operators lower from the operation their node names, not from a node kind
     // this emitter reads (plan 2.3, camel/execute/shaped_operators.h): a graph may carry the kinds
     // still, and the `:op/cast`, `:op/copy`, `:op/fill` and `:op/access[_key]` calls the front end
-    // now builds say the same thing by their URI. Each lowering reads the parameters from the
-    // writing it has.
+    // now builds name an operator whose record states which of the four it is. Each lowering reads
+    // the parameters from the writing it has.
     const auto shape = node->kind == GCNodeKind::Oper
-                           ? shapeOfOperatorUri(operatorUri(g, ref))
+                           ? camel::runtime::shapeOfOperator(operatorId(g, ref))
                            : camel::execute::shapeOfKind(node->kind);
     switch (shape) {
     case camel::execute::OperShape::Conversion:
