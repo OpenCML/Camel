@@ -92,6 +92,16 @@
  * before the walk dives into a reader every kernel shares. It stops after `MAX_DEPTH` calls or
  * `WALK_BUDGET` definitions, whichever comes first.
  *
+ * One limit of the member step, stated because it is the one place a wrong answer is possible rather
+ * than refused: a member is found by **name**, not by signature. A class that writes one name twice
+ * (an overload) gives one entry, so a call is followed as if it named the member this class writes
+ * first. A virtual override cannot differ in arity from the declaration it overrides, which is why
+ * the union over derived classes is still right for the virtual case; for a class with two
+ * non-virtual overloads the walk may follow the one the call does not name. An overload reached that
+ * way can only add a raise that is in the same class, which reads as kept, never as unkept -- so the
+ * error is in the direction this check must not make: it cannot turn a raising implementation into
+ * an unkept one.
+ *
  * What the walk cannot resolve is reported as **`unproven`**, and the report names the call and the
  * reason: a receiver whose type the text does not write (a call of a returned value), a class name
  * two classes answer to, an overload the call site does not settle, a call through a function
