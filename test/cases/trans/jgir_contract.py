@@ -96,7 +96,7 @@ for retired in ("dot", "rdot", "graphviz", "readable_graphviz", "annotated_graph
 # must work; only a run still requires an entry (acceptance for the no-main library fix).
 LIBRARY = str(ROOT / "test/cases/trans/library_module.cml")
 KNOWN_KINDS = {
-    "DATA", "PORT", "CAST", "COPY", "FILL", "ACCS",
+    "DATA", "PORT", "FILL", "ACCS",
     "BRCH", "JOIN", "CALL", "FUNC", "OPER", "GATE", "LOOP",
 }
 def invoke(*args):
