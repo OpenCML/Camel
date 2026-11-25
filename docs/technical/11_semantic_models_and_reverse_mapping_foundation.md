@@ -204,17 +204,18 @@ GIR 是最终执行图，不再保留树结构。其主要抽象是：
 |------|------|
 | `DATA` | 静态数据 |
 | `PORT` | 形参与闭包入口 |
-| `CAST` | 值转换 |
-| `COPY` | 局部复制 |
 | `FILL` | 聚合值或闭包值填充 |
 | `ACCS` | 访问 |
 | `BRCH` | 分支选择 |
 | `JOIN` | 分支结果汇合 |
 | `CALL` | 调用函数值 |
 | `FUNC` | 可调用图值 |
-| `OPER` | 已解析算子 |
+| `OPER` | 已解析算子；转换是 `:op/cast` 的调用、拷贝是 `:op/copy` 的调用，都由它承载 |
 | `EXIT` | 图输出 |
-| `DREF / GATE / SYNC` | 构图辅助或过渡节点（其中 GIR 的 `GATE` 在作为值出口门控时需同时具备 `Norm` 与 `Ctrl` 输入） |
+| `DREF / GATE` | 构图辅助或过渡节点（其中 GIR 的 `GATE` 在作为值出口门控时需同时具备 `Norm` 与 `Ctrl` 输入） |
+
+`SYNC` 不是节点，也不在这张表里：`sync` 块里语句的先后是**同步边**（`LinkType::Sync`，
+冻结图里存放在 `GCGraphSyncEdge` 侧表，读它的门是 `sync_inputs` / `syncPredsOf`），原先那个种类连同编号 12 一起删了。
 
 ### 4.3 GCT -> GIR 的主要 lowering 模式
 
@@ -225,7 +226,7 @@ GIR 是最终执行图，不再保留树结构。其主要抽象是：
 | `LINK` | `OPER / FUNC / CALL` 及对应输入边 | 一个调用表达式可能变成一簇节点 |
 | `WITH` | 给目标节点补 `With` 输入边 | 不触发调用 |
 | `ACCS` | `AccsNode` | 访问目标值 |
-| `CAST` | `CastNode` | 单值转换 |
+| `CAST` | `OPER`（`:op/cast` 的调用） | 单值转换 |
 | `BRCH` | `BrchNode + JoinNode + 子图` | 分支体各自成为子图 |
 | `FUNC` | `Graph + FuncNode / FillNode / CallNode` | 闭包与函数值场景会分流 |
 
