@@ -2561,10 +2561,16 @@ refinedArg                = refineExtentNodeOf(
                 if (nodeTypeOf(cell)->equals(wanted)) {
                     return cell;
                 }
-                // The cell's type is the callee's: the conversion is the compiler's own step
-                // (nothing the program wrote asks for it), and two cell types whose contents
-                // accept each other are one box, so the step always succeeds -- `castNodeTo`
-                // writes it as the entering it is and refuses it if it were ever otherwise.
+                // The cell's type is the callee's: the step is the compiler's own (nothing the
+                // program wrote asks for it), and two cell types whose contents accept each other
+                // are one box, so it always succeeds. When the node already *is* a cell, the step
+                // is asked of the cells themselves -- `castNodeTo` reads the value a node gives,
+                // and a cell's value is the value it holds, not the box (design principles 3.5).
+                Type *own = nodeTypeOf(cell);
+                if (own->code() == TypeCode::Tuple &&
+                    static_cast<TupleType *>(own)->isCell() && wanted->castEntersFrom(own)) {
+                    return enterNodeOf(cell, wanted, arg.expr, own);
+                }
                 node_handle_t converted = castNodeTo(cell, wanted, arg.expr);
                 return converted;
             };
@@ -2591,9 +2597,24 @@ refinedArg                = refineExtentNodeOf(
                 // recorded where the call is built (recordWrite). The `var` position of an
                 // assignment or of a variable operator is the write itself rather than a read of
                 // the cell, so it keeps the cell (docs/design/effects/edges.cn.md 5.6).
+                //
+                // A version that is not cell-typed is a version of the *value*, not of the box:
+                // `var s = { x: 1, y: 2 }` writes the literal, and `:op/assn` then gives the
+                // literal's value back (`valueVersionOf` says so). A cell is not made from a value
+                // -- no conversion takes a value to the box it is not in -- so such a version is
+                // not what the port carries: the argument's own cell is, and the step below is then
+                // from the cell of the argument's type to the cell of the parameter's type, which
+                // is the pair two cell types whose contents accept each other state (design
+                // principles 3.5, 5.1).
+                const auto isCellTyped = [&](node_handle_t node) {
+                    Type *type = node == nullptr ? nullptr : nodeTypeOf(node);
+                    return type != nullptr && type->code() == TypeCode::Tuple &&
+                           static_cast<TupleType *>(type)->isCell();
+                };
                 if (named && targetOperator == nullptr) {
                     if (node_handle_t version = valueVersionOf(variable);
-                        version != nullptr && inSameRegion(version, targetNode)) {
+                        version != nullptr && inSameRegion(version, targetNode) &&
+                        isCellTyped(version)) {
                         return Passed{asParameterCell(version), variable, LinkType::Norm, true};
                     }
                 }

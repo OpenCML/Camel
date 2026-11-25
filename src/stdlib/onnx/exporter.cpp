@@ -1952,7 +1952,11 @@ Evaluator::evalLoopBody(Activation &act, gc_node_ref_t ref, LoopFrame &loop) {
     switch (execute::shapeOfOperation(*g, ref)) {
     case execute::OperShape::Clone:
         return evalLoopBody(act, g->normInputsOf(ref).front(), loop);
-    case execute::OperShape::Conversion: {
+    case execute::OperShape::Conversion:
+    // Two shapes, one export -- two labels, not a family: an entering's pair enters by
+    // construction and it cannot fault, but to ONNX the value is taken as the node's type either
+    // way. A refinement keeps the generic operator path, as it does in the lowering table.
+    case execute::OperShape::Entering: {
         BodyOutcome out = evalLoopBody(act, g->normInputsOf(ref).front(), loop);
         if (out.result) {
             out.result = evalCast(act, ref, std::move(*out.result));
@@ -3145,9 +3149,11 @@ std::optional<Value> Evaluator::deferredElement(
             }
             continue;
         }
-        // A conversion and a copy pass their input on unchanged: the aggregate a projection
-        // reads is the one behind them.
-        if (shape != execute::OperShape::Conversion && shape != execute::OperShape::Clone) {
+        // An operation that takes its operand as its own type and a copy pass their input on
+        // unchanged -- asked as one question, because that is the question: the aggregate a
+        // projection reads is the one behind them, whichever of the three shapes stated the
+        // retype.
+        if (!execute::takesItsOperandAsItsType(shape) && shape != execute::OperShape::Clone) {
             return std::nullopt;
         }
         const auto norm = g->normInputsOf(source);
@@ -3814,7 +3820,12 @@ Value Evaluator::evalOper(Activation &act, gc_node_ref_t ref) {
     // names and not by the letters of its URI.
     switch (camel::runtime::shapeOfOperator(body->oper)) {
     case execute::OperShape::Conversion:
-        // The node's type is the target type, its one ordinary operand the value converted.
+    case execute::OperShape::Entering:
+        // Two shapes, one export -- and two labels, not a family: a cast is interpreted against the
+        // safety table of its pair and an entering cannot fail, so the record states two shapes; to
+        // ONNX the node's type is the target type and its one ordinary operand the value taken as
+        // it, either way. A refinement keeps the generic operator path it has today (see the
+        // lowering table above), so it is not a third label here.
         return evalCast(act, ref, eval(act, g->normInputsOf(ref).front()));
     case execute::OperShape::Clone:
         // Exported values are never mutated in place, so a copy can share its source.
@@ -3878,6 +3889,7 @@ Value Evaluator::evalOper(Activation &act, gc_node_ref_t ref) {
         }
         return evalAccs(act, ref, norm.front(), read);
     }
+    case execute::OperShape::Refining:
     case execute::OperShape::None:
         break;
     }

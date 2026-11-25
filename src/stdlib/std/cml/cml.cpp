@@ -4141,11 +4141,14 @@ class CmlPrinter {
         case camel::ops::OperShape::Access:
             return memberReadExpression(ref);
         case camel::ops::OperShape::Conversion:
-            // The conversion shape covers both operators of that family: `:op/cast`, which the
-            // program writes, and `:op/enter`, the step the compiler inserts. Both are printed by
-            // the same rule -- what a position supplies is written as the conversion that position
-            // means, and `castExpression` drops the ones a position supplies by itself (a rank-zero
-            // array, a struct retype) and writes `as` for the rest.
+        case camel::ops::OperShape::Entering:
+            // Two shapes, one printed form, and two labels rather than a family: `:op/cast` is the
+            // conversion the program writes and `:op/enter` the step the compiler inserts to make
+            // two types meet (design principles 5.1), and both are printed by the same rule -- what
+            // a position supplies is written as the conversion that position means, and
+            // `castExpression` drops the ones a position supplies by itself (a rank-zero array, a
+            // struct retype) and writes `as` for the rest. A refinement is not printed here: it
+            // states no conversion the program wrote, so it keeps the default path.
             return castExpression(ref);
         default:
             break;

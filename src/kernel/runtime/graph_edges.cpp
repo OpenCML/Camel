@@ -801,6 +801,10 @@ class EdgeChecker {
             }
             return;
         }
+        // A conversion only, and the other two shapes are named so it is clear this is a choice: an
+        // entering's pair enters by construction, so the safety table never calls it forbidden, and
+        // a refinement's two types differ in their extents, not in their kinds, so neither has a
+        // pair this report could be about.
         if (operationShape == camel::ops::OperShape::Conversion) {
             if (norm.size() == 1 && type && typeOf(norm[0]) && !compatible(typeOf(norm[0]), type) &&
                 type->castSafetyFrom(typeOf(norm[0])) == CastSafety::Forbidden) {
@@ -1031,7 +1035,7 @@ bool nodeTakesNoOrder(const GCGraph &graph, gc_node_ref_t ref) {
     // may fault (`oper_shape.h`), and asking the kind half (`shapeOfKind`) answered None for it --
     // so the encoder dropped an order edge the seal must keep (measured: opt.edges /
     // order_edge_survives_the_commit and the four cases beside it).
-    if (camel::runtime::shapeOfOperation(graph, ref) == camel::ops::OperShape::Conversion) {
+    if (camel::ops::takesItsOperandAsItsType(camel::runtime::shapeOfOperation(graph, ref))) {
         return false;
     }
     return nodeIsFreelySchedulable(graph, ref) && !nodeStandsForItsRegion(graph, ref);

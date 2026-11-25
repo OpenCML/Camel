@@ -237,7 +237,10 @@ class SideWalker {
         // the operation, because a graph may write them as the calls `cast` and `copy`, not only as
         // the kinds the front end still builds (`camel/execute/shaped_operators.h`).
         const camel::execute::OperShape shape = camel::execute::shapeOfOperation(graph_, ref);
-        if (shape == camel::execute::OperShape::Conversion ||
+        // A cast, an entering and a copy each make their value out of the one they were
+        // given -- three shapes written out, not one family -- so the reading is the input's.
+        // A refinement keeps the generic path below, as it does in the lowering.
+        if (camel::execute::takesItsOperandAsItsType(shape) ||
             shape == camel::execute::OperShape::Clone) {
             made = forwarded(ref, *node);
         } else {

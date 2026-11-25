@@ -699,7 +699,11 @@ class Compiler {
                 // result type. Converting a value to a type it already has is that value, field
                 // order included; anything else is an element computation this back end has no
                 // width for, refused as the shape it is rather than run somewhere else.
-                if (shape == camel::ops::OperShape::Conversion && kernelArguments.with.empty() &&
+                // A conversion and an entering alike take the value to the call's own type: the
+                // entering is the compiler's step for the same move and cannot fault, so the two
+                // are named here side by side rather than as one shape. A refinement keeps the
+                // generic path, as it does in the lowering -- its type is the type it was given.
+                if (camel::ops::takesItsOperandAsItsType(shape) && kernelArguments.with.empty() &&
                     kernelArguments.norm.size() == 1) {
                     Value converted = eval(f, kernelArguments.norm.front());
                     if (!converts(converted, node->dataType()))
