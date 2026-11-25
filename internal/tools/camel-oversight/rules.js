@@ -38,8 +38,10 @@ export const RULES = [
     {
         id: 'lanes-below',
         level: 'wake',
-        hold: 10,
-        cooldown: 30,
+        // A lane hands back and its slot should be refilled in the same turn; ten minutes of grace and a
+        // half-hour silence let a whole lane-load drain away between reminders.
+        hold: 2,
+        cooldown: 10,
         check: ({ m, lanes, limits }) => {
             if (!readable(lanes) || lanes.running >= limits.minLanes) return null
             const b = readable(m.branches) && m.branches
