@@ -289,7 +289,7 @@ name = "never.with_argument_graph"
 desc = "`std::gir` of the same program: the call is not built at all (no FUNC node of `repeat`), what the expression gives is the argument's own node (the FUNC node of `stop`), and the tagged positions and the declaration build no CAST."
 kind = "behavior"
 case = "../../../cases/consistency/fail_never/never_with_argument_run.cml"
-args = ["${case}", "std::gir"]
+args = ["${case}", "std::gir", "std::nop"]
 expect_exit = 0
 verify_script = """
 ({ input, assert }) => {
@@ -302,7 +302,9 @@ const flat = out.split(' ').join('')
     .split(String.fromCharCode(13)).join('')
 assert(flat.includes('label="stop",type="FUNC"'), `the argument's own call is not in the dump:\n${out}`)
 assert(!flat.includes('label="repeat",type="FUNC"'), `the stopped call is built:\n${out}`)
-assert(!flat.includes('type="CAST"'), `a CAST is built:\n${out}`)
+// A conversion is a call of `:op/cast` now (plan 2.3, step 1), with `OPER` in the kind column, so
+// `type="CAST"` is a spelling no node has and asking for it would assert nothing.
+assert(!flat.includes('label=":op/cast"'), `a conversion is built:\n${out}`)
 }
 """
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
@@ -351,7 +353,7 @@ name = "never.tagged_position_graph"
 desc = "`std::gir` of the two tagged positions: no CAST node anywhere in the graph -- `never` is the bottom type and enters any expected position, tag or no tag -- and neither call is built, so the argument's own node is what stands there."
 kind = "behavior"
 case = "../../../cases/consistency/fail_never/never_tagged_position.cml"
-args = ["${case}", "std::gir"]
+args = ["${case}", "std::gir", "std::nop"]
 expect_exit = 0
 verify_script = """
 ({ input, assert }) => {
@@ -360,7 +362,8 @@ const flat = out.split(' ').join('')
     .split(String.fromCharCode(10)).join('')
     .split(String.fromCharCode(9)).join('')
     .split(String.fromCharCode(13)).join('')
-assert(!flat.includes('type="CAST"'), `a CAST is built for the tagged position:\n${out}`)
+// A conversion is a call of `:op/cast` now (plan 2.3, step 1), with `OPER` in the kind column.
+assert(!flat.includes('label=":op/cast"'), `a conversion is built for the tagged position:\n${out}`)
 assert(flat.includes('label="stop",type="FUNC"'), `the argument's own call is not in the dump:\n${out}`)
 assert(!flat.includes('label="double",type="FUNC"'), `the stopped call is built:\n${out}`)
 }

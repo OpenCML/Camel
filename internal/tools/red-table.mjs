@@ -28,6 +28,7 @@ import { readFileSync, readdirSync, statSync, existsSync, writeFileSync, mkdirSy
 import { join, dirname, relative, basename, sep } from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
+import { writeRedTable, compareRedTables, formatComparison, provenanceFrom } from './red-table-context.mjs';
 
 const SCRIPT = fileURLToPath(import.meta.url);
 const REPO = join(dirname(SCRIPT), '..', '..');
@@ -39,6 +40,56 @@ const argOf = (name, dflt = null) => {
 };
 const PRINT = argv.includes('--print');
 const T0 = process.hrtime.bigint();
+
+// ---------------------------------------------------------------- comparing two tables
+// `--diff` is answered before any record is read: the comparison is about two files, and a reader who
+// asked for it must not pay 10 s of record loading, nor have a page written under them as a side
+// effect. The refusal (exit 2) is the point when the two tables were taken under different conditions
+// (C-1124-183/185): "these are not the same instrument" is not a diff with a hundred new rows.
+{
+  const i = argv.indexOf('--diff');
+  if (i >= 0) {
+    const a = argv[i + 1];
+    const b = argv[i + 2];
+    if (!a || !b || a.startsWith('--') || b.startsWith('--')) {
+      process.stderr.write('red-table: --diff needs two files: --diff <a.tsv> <b.tsv>\n');
+      process.exit(2);
+    }
+    let cases = null;
+    const casesFile = argOf('--cases');
+    if (casesFile) {
+      // The inventory is what turns "red in A, absent from B" into `removed` instead of `fixed`:
+      // without it this module refuses to claim a case was deleted. One `plan/case` per line, a
+      // `#` line is a comment, and a TSV's `plan<TAB>case` is accepted too.
+      try {
+        cases = readFileSync(casesFile, 'utf8').split('\n')
+          .map((l) => l.replace(/\r$/, ''))
+          .filter((l) => l.trim() && !l.startsWith('#'))
+          .map((l) => (l.includes('\t') ? l.split('\t').slice(0, 2).join('/') : l.trim()));
+      } catch (e) {
+        process.stderr.write(`red-table: --cases could not be read: ${e?.message ?? e}\n`);
+        process.exit(2);
+      }
+    }
+    let result;
+    try {
+      result = compareRedTables(a, b, {
+        allowUnknownLoad: argv.includes('--allow-unknown-load'),
+        allowUnknownJobs: argv.includes('--allow-unknown-jobs'),
+        allowDifferentTier: argv.includes('--allow-different-tier'),
+        cases,
+      });
+    } catch (e) {
+      // A file that cannot be read is "nothing was compared", which is exit 2 and not a diff with
+      // zero differences: the same distinction the gate makes between a red and a run that did not
+      // start.
+      process.stderr.write(`red-table: --diff could not read a table: ${e?.message ?? e}\n`);
+      process.exit(2);
+    }
+    process.stdout.write(formatComparison(result));
+    process.exit(result.code);
+  }
+}
 
 const git = (...args) => execFileSync('git', ['-C', REPO, ...args], { encoding: 'utf8' }).trim();
 const rel = (p) => p.split(sep).join('/');
@@ -229,7 +280,7 @@ for (const root of logRoots) {
         }
       }
     }
-    runs.push({ id, at: run.started_at ?? '', rev: run.revision ?? '', dirty: !!run.dirty, stems, failed, why, planPathOfRun, tier: run.tier ?? '' });
+    runs.push({ id, at: run.started_at ?? '', rev: run.revision ?? '', dirty: !!run.dirty, stems, failed, why, planPathOfRun, tier: run.tier ?? '', jobs: Number.isInteger(run.jobs) ? run.jobs : null });
   }
 }
 runs.sort((a, b) => (b.at ?? '').localeCompare(a.at ?? ''));
@@ -471,6 +522,43 @@ const oldestObs = all.reduce((a, r) => ((r.observedAt ?? '') < a ? r.observedAt 
 const esc = (s) => String(s ?? '').replace(/\|/g, '\\|').replace(/\r?\n/g, ' ');
 const stamp = (t) => (t ? String(t).replace('T', ' ').slice(0, 16) : '—');
 const sorted = [...all].sort((a, b) => (a.plan ?? '').localeCompare(b.plan ?? '') || String(a.case).localeCompare(String(b.case)));
+
+// ---------------------------------------------------------------- the table as a diffable file
+// A page is read by a person; a TSV is read by the next comparison. A comparison can only refuse what
+// the file states, so the file states it: the develop tip it was taken at, the anchor its "still red"
+// column rests on, at what `jobs`, and at what `load` (1m/5m/15m). `load` cannot be read from any
+// record -- `run.json` keeps `jobs` but no host load -- so it is either passed by whoever ran the
+// layer (`--load`, or `--load-from <saved log>`) or it stays `unknown`, and an `unknown` refuses a
+// comparison instead of passing silently (red-table-context.mjs).
+const TSV = argOf('--tsv');
+if (TSV) {
+  const runJobs = new Map(runs.map((r) => [r.id, r.jobs]));
+  const contributing = [...new Set(all.map((r) => r.record).filter(Boolean).map((id) => runJobs.get(id)).filter((v) => Number.isInteger(v)))].sort((a, b) => a - b);
+  const statedJobs = argOf('--jobs');
+  let jobs = statedJobs && /^\d+$/.test(statedJobs) ? Number(statedJobs) : 'unknown';
+  let jobsSource = statedJobs ? 'cli --jobs' : 'unknown';
+  if (!statedJobs && contributing.length === 1) { jobs = contributing[0]; jobsSource = 'run.json of the rows\' newest records'; }
+  if (!statedJobs && contributing.length > 1) { jobs = `mixed ${contributing.join(',')}`; jobsSource = 'run.json of the rows\' newest records'; }
+  const loadFromLog = argOf('--load-from');
+  let load = argOf('--load');
+  let loadSource = load ? 'cli --load' : 'unknown';
+  if (!load && loadFromLog) {
+    let text = '';
+    try { text = readFileSync(loadFromLog, 'utf8'); } catch { /* reported as unknown below */ }
+    const m = [...text.matchAll(/^\[load\]\s+([\d.]+)\s+([\d.]+)\s+([\d.]+)\s+\(1m\/5m\/15m\)/gm)].pop();
+    if (m) { load = `${m[1]},${m[2]},${m[3]}`; loadSource = `log ${rel(relative(REPO, loadFromLog))}`; }
+  }
+  writeRedTable(TSV, provenanceFrom({
+    tip: develop, anchor: anchor.sha, jobs, jobsSource, load, loadSource,
+    tier: argOf('--tier'), generatedAt: generatedAt.toISOString(),
+    source: argOf('--source') || `${readingFiles.length} readings, ${runs.length} runs, ${all.length} rows`,
+  }), sorted.map((r) => ({ ...r, cls: r.cls?.cls ?? '' })));
+  process.stdout.write(
+    `[red-table] wrote ${TSV} rows=${sorted.length} tip=${developShort} anchor=${anchor.sha.slice(0, 12)} ` +
+    `jobs=${jobs} (${jobsSource}) load=${load ?? 'unknown'} (${loadSource})\n`
+  );
+  process.exit(0);
+}
 
 const outPath = argOf('--out') || join(REPO, 'internal', 'reports', `${generatedAt.toISOString().slice(0, 10)}-develop-reds.cn.md`);
 const LINES = [];

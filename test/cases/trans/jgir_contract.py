@@ -12,7 +12,12 @@ from camel_arg import camel_from_argv  # noqa: E402
 EXE, ARGV = camel_from_argv(ROOT)
 SOURCE = str(ROOT / "test/cases/loops/captures.cml")
 def export(name):
-    p = subprocess.run([EXE, SOURCE, "std::" + name], cwd=ROOT, capture_output=True, text=True)
+    # Why the pipeline ends in `std::nop`: the case reads the dump this call writes -- a DOT graph
+    # for `gir`/`rgir`/`agir`/`argir` and a version 1 JSON document for `jgir` -- and every one of
+    # those passes hands the graph on, so the fallback would run `captures.cml` behind the dump.
+    # That run is not decoration: its bytes follow the document (`json.loads` below reads them as
+    # "Extra data") and its exit code is the one `export` returns. The dump is the subject.
+    p = subprocess.run([EXE, SOURCE, "std::" + name, "std::nop"], cwd=ROOT, capture_output=True, text=True)
     assert p.returncode == 0, p.stderr
     return p.stdout
 compact, rich = export("gir"), export("rgir")
@@ -64,7 +69,10 @@ for g in graphs.values():
         else:
             assert "sourceIndex" not in e and "targetIndex" not in e
 assert {"LOOP", "DATA", "OPER", "PORT"}.issubset(kinds)
-duplicate = subprocess.run([EXE, str(ROOT / "test/cases/trans/jgir_duplicate.cml"), "std::jgir"], cwd=ROOT, capture_output=True, text=True)
+# Why the pipeline ends in `std::nop`: the document is what is read here (the duplicate operands
+# are asserted on its edges), and `std::jgir` hands the graph on, so the fallback would run
+# `jgir_duplicate.cml` behind it -- measured as exit 4 and `json.loads` "Extra data".
+duplicate = subprocess.run([EXE, str(ROOT / "test/cases/trans/jgir_duplicate.cml"), "std::jgir", "std::nop"], cwd=ROOT, capture_output=True, text=True)
 assert duplicate.returncode == 0, duplicate.stderr
 found_duplicate = False
 for g in json.loads(duplicate.stdout)["graphs"]:
@@ -77,6 +85,10 @@ for g in json.loads(duplicate.stdout)["graphs"]:
             found_duplicate = True
 assert found_duplicate
 for retired in ("dot", "rdot", "graphviz", "readable_graphviz", "annotated_graphviz", "readable_annotated_graphviz"):
+    # No `std::nop` here, and the reason is the case: what is asserted is that an unknown pass is
+    # refused (`returncode != 0`), not a dump. Nothing is handed on, so there is no run to stop --
+    # and a `std::nop` after a name the compiler rejects would read as if this pipeline printed
+    # something to keep.
     p = subprocess.run([EXE, SOURCE, "std::" + retired], cwd=ROOT, capture_output=True, text=True)
     assert p.returncode != 0, retired
 
@@ -84,17 +96,21 @@ for retired in ("dot", "rdot", "graphviz", "readable_graphviz", "annotated_graph
 # must work; only a run still requires an entry (acceptance for the no-main library fix).
 LIBRARY = str(ROOT / "test/cases/trans/library_module.cml")
 KNOWN_KINDS = {
-    "DATA", "PORT", "CAST", "COPY", "FILL", "ACCS",
+    "DATA", "PORT", "FILL", "ACCS",
     "BRCH", "JOIN", "CALL", "FUNC", "OPER", "GATE", "LOOP",
 }
 def invoke(*args):
     return subprocess.run([EXE, *args], cwd=ROOT, capture_output=True, text=True)
 
-lib_dot = invoke(LIBRARY, "std::gir")
+# Why the two pipelines below end in `std::nop`: a library has no `main`, and translating it is not
+# executing it -- but `std::gir`/`std::jgir` hand the graph on, so the fallback would try to run the
+# module, fail with `EntryModuleMissingMain` and make the dump's own exit code that failure. The
+# dumps are what is asserted here; the run of a library is asserted separately, further down.
+lib_dot = invoke(LIBRARY, "std::gir", "std::nop")
 assert lib_dot.returncode == 0, lib_dot.stderr
 assert "digraph GraphIR" in lib_dot.stdout and lib_dot.stdout.strip()
 
-lib_json = invoke(LIBRARY, "std::jgir")
+lib_json = invoke(LIBRARY, "std::jgir", "std::nop")
 assert lib_json.returncode == 0, lib_json.stderr
 library = json.loads(lib_json.stdout)
 assert library["format"] == "camel.gir" and library["version"] == 1

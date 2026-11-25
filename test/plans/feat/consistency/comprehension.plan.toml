@@ -71,7 +71,7 @@ golden = "golden/comprehension_values.txt"
 name = "comprehension.graph_comprehension"
 desc = "The graph of `[x * x for x in xs if x % 2 == 0]`, against the golden graph of the next test."
 case = "../../../cases/consistency/comprehension/graph_comprehension.cml"
-args = ["${case}", "std::gir"]
+args = ["${case}", "std::gir", "std::nop"]
 backends = ["nvm"]
 backends_agree = []
 snapshot_compare = "gir_dot_isomorphic"
@@ -81,7 +81,7 @@ golden = "golden/comprehension_graph.dot"
 name = "comprehension.graph_written_out"
 desc = "The graph of `xs->filter<(x: int) => x % 2 == 0>->map<(x: int) => x * x>`: the same golden graph."
 case = "../../../cases/consistency/comprehension/graph_written_out.cml"
-args = ["${case}", "std::gir"]
+args = ["${case}", "std::gir", "std::nop"]
 backends = ["nvm"]
 backends_agree = []
 snapshot_compare = "gir_dot_isomorphic"
@@ -125,14 +125,15 @@ expect_output_contains = ["name=SemanticDiag::NoMatchingFunction", "err_element_
 
 [[tests]]
 name = "comprehension.shadowed"
-desc = "A module that defines its own `map` and `filter`: a call written with one of the names is ambiguous -- the module's function and the built-in operator both take these arguments, and no declaration order chooses between them -- while a comprehension still means the built-in operators."
-kind = "negative"
+desc = "A module that defines its own `map` and `filter`: a call written with one of the names reaches the module's own function, and the built-in operator of the same spelling is not a candidate beside it -- they are two layers and the first layer that has the name answers (design principles 10.2) -- so `xs->map<...>` prints `my map` and `xs->filter<...>` prints `my filter`. A comprehension still means the built-in operators, whose lowering names the built-in group rather than the written name, so the two comprehensions print their arrays. This entry used to expect the opposite: exit 1 and an AmbiguousCall naming the module's `map` beside `:mark/map_arr`, which was the merged-layers defect in its observable shape."
+kind = "behavior"
 case = "../../../cases/consistency/comprehension/shadowed.cml"
-# `expect_output_contains` below says each back end reported this diagnostic; the agreement is a
-# second claim -- that the four reported the *same* one -- and it is the one `backends_agree`
-# carries: name, code, line and column of every diagnostic, in the order printed.
+# The four back ends print the same two lines; `backends_agree` is the second claim -- that they
+# agree -- carrying the exit code, the normalised stdout and every diagnostic, in order.
 backends = ["nvm", "fvm", "jit", "prl"]
 backends_agree = ["exit_code", "stdout_normalized", "diagnostics"]
-expect_exit = 1
+expect_exit = 0
+expect_stdout_exact = "[4, 16] [2, 3, 4, 5]\nmy map my filter\n"
 expect_output_not_contains = ["Segmentation fault", "dumped core", "internal error", "live DREF"]
-expect_output_contains = ["name=SemanticDiag::AmbiguousCall", "shadowed.cml:12:20", "The call to 'map' with (int[]) fits more than one overload", "map: <f: (x: int) => int> (xs: int[]) => string pure (this module)", "the built-in or module operator <:mark/map_arr>: <f: (item: T) => U> (xs: T[]) => U[]"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000

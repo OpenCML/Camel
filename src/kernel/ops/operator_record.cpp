@@ -12,7 +12,7 @@
  *
  * --- what this file states about the kernel ---------------------------------
  * `kernel(void *)` states the one item that is not a record item. It writes the pointer into
- * `kernel_`, the field the registry lane added to this class (待审, operator_record.h), and
+ * `kernel_`, the field added to this class (operator_record.h), and
  * `Registry::registerOperator` -- the class's friend -- is the one reader: it keeps the pointer
  * beside the record, per OperId, and `Registry::kernel(OperId)` hands it to a reader. The pointer
  * does not enter the record, because operator_record.h says it does not ("Not part of the record: a

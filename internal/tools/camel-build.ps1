@@ -29,7 +29,9 @@
 # "recent" keeps the last 30 builds, which is what a timeline of the queue is drawn from: the gap
 # between queuedAt and startedAt is the time the build waited for the lock.
 #
-# Exit code is the build's exit code (0 for -Check).
+# Exit code is the build's exit code (0 for -Check). A state file that cannot be replaced -- a reader
+# has it open, or the directory is unwritable -- is a warning and never changes that code: the state
+# files are advisory, and the write itself is `camel-gate-state.ps1#Publish-CamelGateState`.
 
 param(
     [Parameter(Mandatory = $true)][string]$Path,
@@ -49,6 +51,9 @@ param(
 $ErrorActionPreference = 'Stop'
 
 . (Join-Path $PSScriptRoot 'camel-gate-config.ps1')
+# The run registry's writer, the same one the host runner uses (`internal/tools/run-registry.ps1`).
+. (Join-Path $PSScriptRoot 'run-registry.ps1')
+. (Join-Path $PSScriptRoot 'camel-gate-state.ps1')
 $cfg = Get-CamelGateConfig -LocalConfig $LocalConfig -ScriptRoot $PSScriptRoot -Override @{ stateDir = $StateDir }
 if (-not $cfg.stateDir) { Stop-CamelGateConfig 'camel-build' $cfg 'stateDir' }
 $statePath = Join-Path $cfg.stateDir 'build-state.json'
@@ -58,6 +63,81 @@ $buildMutex = New-Object System.Threading.Mutex($false, 'Global\CamelBuildSerial
 $stateMutex = New-Object System.Threading.Mutex($false, 'Global\CamelBuildState')
 $acquired = $false
 $startedAt = $null
+# How many state updates this run could not publish. Advisory: reported at the end, never the exit
+# code, and the first one is said out loud when it happens.
+$script:stateUnpublished = 0
+
+# --- the run registry -------------------------------------------------------
+# The panel's one list of runs is `run-registry.jsonl`, and a local build that is missing there is a
+# build nobody can see. So this helper publishes the same row shape the host runner does. What it
+# cannot publish is the one thing a local build does not have: `tokens`. The token pool lives on the
+# build host; a build run here draws nothing from it, so the key is *absent* from these rows and a
+# reader is told "not reported" -- writing 0 would say the pool was empty, which is a different fact.
+$runRegistryPath = Join-Path $cfg.stateDir 'run-registry.jsonl'
+$runRegistryMutex = New-Object System.Threading.Mutex($false, 'Global\CamelRunRegistry')
+$runStartedAt = Get-Date
+$runId = "$PID-$($runStartedAt.ToString('yyyyMMddHHmmss'))"
+$stageStartedAt = $runStartedAt
+$publishedPhase = $null
+$lastRunPublish = [datetime]::MinValue
+$buildRow = @{
+    runId           = $runId
+    pid             = $PID
+    worktree        = $worktree
+    path            = $Path
+    remote          = 'local'
+    local           = $true
+    startedAt       = $runStartedAt.ToString('o')
+    updatedAt       = $runStartedAt.ToString('o')
+    phase           = 'queued'
+    state           = $null
+    slots           = 0
+    slot            = '0'
+    testSlot        = 0
+    noslotWaitedFor = $null
+    overlapping     = @{ atStart = $null; atEnd = $null }
+    loadAtStart     = $null
+    loadAtEnd       = $null
+    queuedAt        = $runStartedAt.ToString('o')
+    # Local admission: the machine-wide mutex this helper takes, not a host slot and not a token.
+    queuedAtKind    = 'local'
+    queueSeconds    = 0
+    buildStartedAt  = $null
+    buildFinishedAt = $null
+    planStartedAt   = $null
+    finishedAt      = $null
+    exit            = $null
+    buildExit       = $null
+    done            = 0
+    total           = 0
+    jobs            = $Parallel
+    jobsRequested   = $Parallel
+    buildJobs       = $Parallel
+    tier            = ''
+    plan            = @()
+    target          = ''
+    lastLine        = "[camel-build] waiting for the machine-wide build lock ($worktree)"
+    stageSeconds    = 0
+}
+
+function Publish-LocalBuild([string]$phase, [string]$lastLine = '') {
+    try {
+        $now = Get-Date
+        if ($phase -ne $publishedPhase) {
+            $script:publishedPhase = $phase
+            $script:stageStartedAt = $now
+        }
+        $buildRow.phase = $phase
+        $buildRow.stageSeconds = [int](($now - $stageStartedAt).TotalSeconds)
+        $buildRow.updatedAt = $now.ToString('o')
+        if ($lastLine) { $buildRow.lastLine = $lastLine }
+        [void](Add-RunRegistryRow -Path $runRegistryPath -Mutex $runRegistryMutex -Row $buildRow)
+        $script:lastRunPublish = $now
+    } catch {
+        # A registry write must never fail the build it describes.
+    }
+}
+Publish-LocalBuild 'queued'
 
 function Read-State {
     if (-not (Test-Path $statePath)) {
@@ -90,9 +170,16 @@ function Edit-State([scriptblock]$change) {
         $change.Invoke($state)
         $state.updatedAt = (Get-Date).ToString('o')
         $json = $state | ConvertTo-Json -Depth 6
-        $tmp = "$statePath.$PID.tmp"
-        Set-Content -Path $tmp -Value $json -Encoding utf8
-        Move-Item -Force -Path $tmp -Destination $statePath
+        # Not `Move-Item -Force`: it reports a destination another process holds open as
+        # ERROR_ALREADY_EXISTS and, under `$ErrorActionPreference = 'Stop'`, that ended a build that
+        # had succeeded. A publish that cannot complete is counted and dropped; the next progress
+        # line carries the newer state.
+        if (-not (Publish-CamelGateState -Path $statePath -Json $json)) {
+            $script:stateUnpublished++
+            if ($script:stateUnpublished -eq 1) {
+                Write-Host "[camel-build] WARNING: build state not published (a reader kept $statePath busy); the state files are advisory and this build's result stands"
+            }
+        }
     } finally {
         $stateMutex.ReleaseMutex()
     }
@@ -129,6 +216,13 @@ function Update-Progress([string]$line) {
     if ($line -match '^\[(\d+)/(\d+)\]') {
         $done = [int]$Matches[1]
         $total = [int]$Matches[2]
+        $buildRow.done = $done
+        $buildRow.total = $total
+        $buildRow.lastLine = $line.Trim()
+        # The compiler prints several lines a second; the registry needs a heartbeat, not a transcript.
+        if (((Get-Date) - $lastRunPublish).TotalSeconds -ge 3) {
+            Publish-LocalBuild 'building' $line.Trim()
+        }
         Edit-State {
             param($state)
             if ($null -ne $state.holder) {
@@ -189,6 +283,9 @@ try {
         lastLine  = ''
     })
     Write-Host "[camel-build] $worktree has the lock"
+    $buildRow.buildStartedAt = $startedAt.ToString('o')
+    $buildRow.queueSeconds = [int](($startedAt - $runStartedAt).TotalSeconds)
+    Publish-LocalBuild $(if ($Check -gt 0) { 'checks' } else { 'building' }) "[camel-build] building $worktree ($Config)"
 
     if ($Check -gt 0) {
         Start-Sleep -Seconds $Check
@@ -224,6 +321,16 @@ try {
         }) + $recent
     }
     Write-Host "[camel-build] done ($worktree), exit $code, $seconds s"
+    $buildRow.buildFinishedAt = (Get-Date).ToString('o')
+    $buildRow.finishedAt = $buildRow.buildFinishedAt
+    $buildRow.exit = $code
+    $buildRow.buildExit = $code
+    Publish-LocalBuild $(if ($code -eq 0) { 'done' } else { 'fail' }) "[camel-build] done, exit $code"
+    # Its own line, after the build's result and never inside it: how many state updates the panel
+    # did not get is a fact about the panel, not about what the compiler did.
+    if ($script:stateUnpublished -gt 0) {
+        Write-Host "[camel-build] $($script:stateUnpublished) state update(s) were not published (advisory; the exit code above is the build's)"
+    }
     exit $code
 } finally {
     if ($acquired) {

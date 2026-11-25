@@ -97,6 +97,20 @@ bool nodeMayFault(
     // a record keyed by URI cannot carry (`src/stdlib/std/builtin/globals.cpp`),
     // so they carry `kNoOper` and have no record to ask; this shape answer is theirs until the
     // front end builds them as ordinary OPER nodes.
+    // A conversion and a copy are asked by their **shape**, in either spelling: the compiler builds
+    // them as calls of `:op/cast` / `:op/copy` now, and the class the record states is the one the
+    // deleted node kinds stood for. The other two shapes keep the record's answer, because a call
+    // written by hand can fault where a node the compiler checked could not.
+    if (kind == GCNodeKind::Oper) {
+        const camel::ops::OperShape shape = shapeOfOperator(oper);
+        if (shape == camel::ops::OperShape::Conversion) {
+            return castMayFault(castTarget, castSource);
+        }
+        if (shape == camel::ops::OperShape::Clone) {
+            return false;
+        }
+    }
+
     switch (camel::runtime::shapeOfKind(kind)) {
     case camel::ops::OperShape::Conversion:
         return castMayFault(castTarget, castSource);
@@ -157,6 +171,20 @@ bool may_be_rearranged(const GCGraph &graph, gc_node_ref_t ref) {
     const GCNode *node = graph.node(ref);
     if (node == nullptr) {
         return false;
+    }
+    if (node->kind == GCNodeKind::Oper) {
+        const auto *body = graph.nodeBodyAs<GCOperBody>(ref);
+        const camel::core::OperId oper = body == nullptr ? camel::core::kNoOper : body->oper;
+        if (shapeOfOperator(oper) == camel::ops::OperShape::Conversion) {
+            const auto inputs    = graph.normInputsOf(ref);
+            const GCNode *source = inputs.size() == 1 ? graph.node(inputs[0]) : nullptr;
+            return may_be_rearranged(
+                node->kind,
+                oper,
+                node->dataType(),
+                source != nullptr ? source->dataType() : nullptr);
+        }
+        return may_be_rearranged(node->kind, oper);
     }
     if (camel::runtime::shapeOfKind(node->kind) == camel::ops::OperShape::Conversion) {
         const auto inputs    = graph.normInputsOf(ref);
@@ -222,6 +250,21 @@ bool is_chain_statement(const GCGraph &graph, gc_node_ref_t ref) {
         return false;
     }
     const bool standsForRegion = nodeStandsForItsRegion(graph, ref);
+    if (node->kind == GCNodeKind::Oper) {
+        const auto *body               = graph.nodeBodyAs<GCOperBody>(ref);
+        const camel::core::OperId oper = body == nullptr ? camel::core::kNoOper : body->oper;
+        if (shapeOfOperator(oper) == camel::ops::OperShape::Conversion) {
+            const auto inputs    = graph.normInputsOf(ref);
+            const GCNode *source = inputs.size() == 1 ? graph.node(inputs[0]) : nullptr;
+            return is_chain_statement(
+                node->kind,
+                oper,
+                node->dataType(),
+                source != nullptr ? source->dataType() : nullptr,
+                standsForRegion);
+        }
+        return is_chain_statement(node->kind, oper, nullptr, nullptr, standsForRegion);
+    }
     if (camel::runtime::shapeOfKind(node->kind) == camel::ops::OperShape::Conversion) {
         const auto inputs    = graph.normInputsOf(ref);
         const GCNode *source = inputs.size() == 1 ? graph.node(inputs[0]) : nullptr;
@@ -987,6 +1030,29 @@ size_t draftPayloadWords(const DraftNodeHeader &header) {
     return (bodyBytes + kPayloadWordBytes - 1) / kPayloadWordBytes;
 }
 
+/// Which of the four operations a node of a draft performs, whichever way it is spelled
+/// (`camel/runtime/oper_shape.h`): the kind half (`shapeOfKind`) answers for a node kind, and only
+/// `Construction` and `Access` have one -- a conversion and a copy are calls of `:op/cast` and
+/// `:op/copy` now, and their shape is the operator's own record. Every question about a draft node
+/// whose answer depends on the operation -- is it freely schedulable, may it fault, does it take an
+/// order edge, is it a chain statement -- asks this, so the two spellings cannot be answered two
+/// ways.
+camel::ops::OperShape draftOperationShape(const GraphDraft &draft, gc_node_ref_t id) {
+    const DraftNodeHeader *header = draft.header(id);
+    if (header == nullptr) {
+        return camel::ops::OperShape::None;
+    }
+    if (header->kind != GCNodeKind::Oper) {
+        return camel::runtime::shapeOfKind(header->kind);
+    }
+    const std::span<const std::byte> payload = draft.payloadOf(id);
+    const camel::core::OperId oper =
+        payload.size() >= sizeof(GCOperBody)
+            ? reinterpret_cast<const GCOperBody *>(payload.data())->oper
+            : camel::core::kNoOper;
+    return shapeOfOperator(oper);
+}
+
 /// Whether the finished node `id` carries no order edge: a node that arranges itself freely says
 /// nothing with one, so the payload the graph holds does not keep them. Two readers ask this -- the
 /// payload plan below, which decides the edge count and the edges emitted, and the delivery check
@@ -994,9 +1060,17 @@ size_t draftPayloadWords(const DraftNodeHeader &header) {
 /// they ask it here so that they cannot answer it two ways.
 bool takesNoOrder(const GraphDraft &draft, gc_node_ref_t id) {
     const DraftNodeHeader *header = draft.header(id);
-    if (header == nullptr || header->kind == GCNodeKind::Dead ||
-        camel::runtime::shapeOfKind(header->kind) == camel::ops::OperShape::Conversion ||
-        !nodeIsFreelySchedulable(draft, id)) {
+    if (header == nullptr || header->kind == GCNodeKind::Dead) {
+        return false;
+    }
+    // A conversion that was ordered when it could fail keeps its place: its record says it may
+    // fault (`:op/cast` is declared `panic`), which is the answer the class question gives, and a
+    // pass that refines the types can make it infallible -- dropping the order is then the pass's
+    // choice, not this plan's.
+    if (draftOperationShape(draft, id) == camel::ops::OperShape::Conversion) {
+        return false;
+    }
+    if (!nodeIsFreelySchedulable(draft, id)) {
         return false;
     }
     if (header->kind == GCNodeKind::Brch || header->kind == GCNodeKind::Loop) {
@@ -1812,34 +1886,29 @@ bool nodeIsFreelySchedulable(const GraphDraft &draft, gc_node_ref_t id, bool byS
     if (header == nullptr || !draft.alive(id)) {
         return false;
     }
-    if (camel::runtime::shapeOfKind(header->kind) == camel::ops::OperShape::Conversion) {
+    const std::span<const std::byte> payload =
+        header->kind == GCNodeKind::Oper ? draft.payloadOf(id) : std::span<const std::byte>{};
+    const camel::core::OperId oper =
+        payload.size() >= sizeof(GCOperBody)
+            ? reinterpret_cast<const GCOperBody *>(payload.data())->oper
+            : camel::core::kNoOper;
+    const camel::ops::OperShape shape = draftOperationShape(draft, id);
+    if (shape == camel::ops::OperShape::Conversion) {
         const auto inputs             = draft.normInputsOf(id);
         const DraftNodeHeader *source = inputs.size() == 1 ? draft.header(inputs[0]) : nullptr;
         return nodeIsFreelySchedulable(
-            header->kind,
-            camel::core::kNoOper,
-            header->dataType,
-            source != nullptr ? source->dataType : nullptr);
+            header->kind, oper, header->dataType, source != nullptr ? source->dataType : nullptr);
     }
-    switch (header->kind) {
-    case GCNodeKind::Oper: {
-        const std::span<const std::byte> payload = draft.payloadOf(id);
-        bool fixed                               = byShape && shapesAreFixed(header->dataType);
+    if (header->kind == GCNodeKind::Oper) {
+        bool fixed = byShape && shapesAreFixed(header->dataType);
         for (gc_node_ref_t input : draft.normInputsOf(id)) {
             const DraftNodeHeader *in = draft.header(input);
             fixed                     = fixed && in != nullptr && shapesAreFixed(in->dataType);
         }
         return payload.size() >= sizeof(GCOperBody) &&
-               nodeIsFreelySchedulable(
-                   header->kind,
-                   reinterpret_cast<const GCOperBody *>(payload.data())->oper,
-                   nullptr,
-                   nullptr,
-                   fixed);
+               nodeIsFreelySchedulable(header->kind, oper, nullptr, nullptr, fixed);
     }
-    default:
-        return nodeIsFreelySchedulable(header->kind, camel::core::kNoOper);
-    }
+    return nodeIsFreelySchedulable(header->kind, camel::core::kNoOper);
 }
 
 bool isChainStatement(const GraphDraft &draft, gc_node_ref_t id) {
@@ -1856,15 +1925,23 @@ bool isChainStatement(const GraphDraft &draft, gc_node_ref_t id) {
             break;
         }
     }
-    if (camel::runtime::shapeOfKind(header->kind) == camel::ops::OperShape::Conversion) {
-        const auto inputs             = draft.normInputsOf(id);
-        const DraftNodeHeader *source = inputs.size() == 1 ? draft.header(inputs[0]) : nullptr;
-        return isChainStatement(
-            header->kind,
-            camel::core::kNoOper,
-            header->dataType,
-            source != nullptr ? source->dataType : nullptr,
-            standsForRegion);
+    if (header->kind == GCNodeKind::Oper) {
+        const std::span<const std::byte> payload = draft.payloadOf(id);
+        const camel::core::OperId oper =
+            payload.size() >= sizeof(GCOperBody)
+                ? reinterpret_cast<const GCOperBody *>(payload.data())->oper
+                : camel::core::kNoOper;
+        if (shapeOfOperator(oper) == camel::ops::OperShape::Conversion) {
+            const auto inputs             = draft.normInputsOf(id);
+            const DraftNodeHeader *source = inputs.size() == 1 ? draft.header(inputs[0]) : nullptr;
+            return isChainStatement(
+                header->kind,
+                oper,
+                header->dataType,
+                source != nullptr ? source->dataType : nullptr,
+                standsForRegion);
+        }
+        return isChainStatement(header->kind, oper, nullptr, nullptr, standsForRegion);
     }
     switch (header->kind) {
     case GCNodeKind::Oper: {
@@ -1956,34 +2033,26 @@ bool nodeMayFault(const GraphDraft &draft, gc_node_ref_t id, bool byShape) {
     if (header == nullptr || !draft.alive(id)) {
         return true;
     }
-    if (camel::runtime::shapeOfKind(header->kind) == camel::ops::OperShape::Conversion) {
-        const auto inputs             = draft.normInputsOf(id);
-        const DraftNodeHeader *source = inputs.size() == 1 ? draft.header(inputs[0]) : nullptr;
-        return nodeMayFault(
-            header->kind,
-            camel::core::kNoOper,
-            header->dataType,
-            source != nullptr ? source->dataType : nullptr);
-    }
-    switch (header->kind) {
-    case GCNodeKind::Oper: {
+    if (header->kind == GCNodeKind::Oper) {
         const std::span<const std::byte> payload = draft.payloadOf(id);
-        bool fixed                               = byShape && shapesAreFixed(header->dataType);
+        const camel::core::OperId oper =
+            payload.size() >= sizeof(GCOperBody)
+                ? reinterpret_cast<const GCOperBody *>(payload.data())->oper
+                : camel::core::kNoOper;
+        if (shapeOfOperator(oper) == camel::ops::OperShape::Conversion) {
+            const auto inputs             = draft.normInputsOf(id);
+            const DraftNodeHeader *source = inputs.size() == 1 ? draft.header(inputs[0]) : nullptr;
+            return nodeMayFault(
+                header->kind, oper, header->dataType, source != nullptr ? source->dataType : nullptr);
+        }
+        bool fixed = byShape && shapesAreFixed(header->dataType);
         for (gc_node_ref_t input : draft.normInputsOf(id)) {
             const DraftNodeHeader *in = draft.header(input);
             fixed                     = fixed && in != nullptr && shapesAreFixed(in->dataType);
         }
-        return payload.size() < sizeof(GCOperBody) ||
-               nodeMayFault(
-                   header->kind,
-                   reinterpret_cast<const GCOperBody *>(payload.data())->oper,
-                   nullptr,
-                   nullptr,
-                   fixed);
+        return nodeMayFault(header->kind, oper, nullptr, nullptr, fixed);
     }
-    default:
-        return nodeMayFault(header->kind, camel::core::kNoOper);
-    }
+    return nodeMayFault(header->kind, camel::core::kNoOper);
 }
 
 bool isUnanchoredPure(const GraphDraft &draft, gc_node_ref_t node) {

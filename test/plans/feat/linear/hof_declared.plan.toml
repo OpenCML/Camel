@@ -10,7 +10,7 @@ name = "hof.macro"
 desc = "map, filter and reduce in a macro function are evaluated ahead of time: the call folds to 38."
 kind = "behavior"
 case = "../../../cases/macro/hof_calls.cml"
-args = ["${case}", "std::macro", "std::rgir"]
+args = ["${case}", "std::macro", "std::rgir", "std::nop"]
 expect_exit = 0
 expect_stdout_contains = ["label=\"38\", type=\"DATA\""]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
@@ -34,7 +34,7 @@ name = "macro_rounds.default"
 desc = "A thousand rounds are within the default limit of a million."
 kind = "behavior"
 case = "../../../cases/loops/macro.cml"
-args = ["${case}", "std::macro", "std::rgir"]
+args = ["${case}", "std::macro", "std::rgir", "std::nop"]
 expect_exit = 0
 expect_stdout_contains = ["label=\"500500\", type=\"DATA\""]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]

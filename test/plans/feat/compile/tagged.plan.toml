@@ -984,7 +984,7 @@ name = "graph.null_then"
 desc = "`a ?? b` on the graph: one OPER reading the tag, one BRCH/JOIN pair with two arms (regions of the graph, each feeding the JOIN; an arm that only gives a value computed outside the branch has no node), and the OPER that takes the value out inside an arm. No node kind of its own."
 kind = "behavior"
 case = "../../../cases/compile/tagged/graph_null_then.cml"
-args = ["${case}", "std::gir"]
+args = ["${case}", "std::gir", "std::nop"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
@@ -1038,7 +1038,7 @@ name = "graph.throw_and_pass"
 desc = "`return e` in a function declared `T!` is the exit of its graph (OPER, CAST, EXIT, no branch); `x -> f` is one BRCH/JOIN."
 kind = "behavior"
 case = "../../../cases/compile/tagged/graph_throw_pass.cml"
-args = ["${case}", "std::gir"]
+args = ["${case}", "std::gir", "std::nop"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
@@ -1073,7 +1073,7 @@ name = "graph.no_cost_without_tagged"
 desc = "A program that uses neither form has no node of them: an `if` compiles to the same BRCH/JOIN and nothing else."
 kind = "behavior"
 case = "../../../cases/compile/tagged/graph_plain_if.cml"
-args = ["${case}", "std::rgir"]
+args = ["${case}", "std::rgir", "std::nop"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
@@ -1081,7 +1081,10 @@ verify_script = """
 const out = input.normalized.stdout
 const count = (text) => out.split(text).length - 1
 assert(count('type="BRCH"') === 1 && count('type="JOIN"') === 1, 'one branch')
-assert(count(':op/tag_') === 0 && count('type="CAST"') === 0, 'no tagged operator and no cast')
+// A conversion is a call of `:op/cast` (plan 2.3, step 1), and the rich dump wraps its label at
+  // the slash (`:op/\ncast`), so the word is what is asked for: `type="CAST"` is no longer a
+  // spelling any node has, and asking for it here would pass without looking at anything.
+  assert(count(':op/tag_') === 0 && count('cast') === 0, 'no tagged operator and no cast')
 }
 """
 timeout_ms = 8000
@@ -1400,7 +1403,7 @@ name = "nullable_positions.default_is_a_null_constant"
 desc = "The same case under `std::gir`: the default of the `with` parameter `p` is one static DATA node whose label is `null` and whose `value_type` is `int?` (the constant of the position's type), so a position that requires a compile-time constant reads a value of the type rather than a CAST of one."
 kind = "behavior"
 case = "../../../cases/compile/tagged/nullable_positions.cml"
-args = ["${case}", "std::gir"]
+args = ["${case}", "std::gir", "std::nop"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 verify_script = """

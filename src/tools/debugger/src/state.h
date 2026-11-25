@@ -78,7 +78,7 @@ struct PassGraphEntry {
 };
 
 /// 逐 pass GIR 快照存储：runScriptOnce 执行线程经 pass 快照钩子写入，HTTP 请求线程读取。
-/// DOT 在钩子回调内立即序列化为 std::string，不持有 GCGraph 指针（GC 会移动/回收）。
+/// DOT 在钩子回调内立即序列化为 std::string，不持有图的指针（GC 会移动/回收）。
 struct PassGraphStore {
     std::mutex mutex;
     std::vector<PassGraphEntry> entries;

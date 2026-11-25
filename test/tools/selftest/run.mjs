@@ -257,7 +257,7 @@ if (!install.present) {
 // expect exit 1, all run at the default width and tier, and none of them claims that nothing
 // started -- so they are one run. Each is read off its own lines: the matrix's 36 named entries out
 // of its own `[PLAN] : selftest.matrix` section (which is what keeps "no unexpected test" a claim
-// about the matrix), the eight refusals by the plan file each message names, and the benchmark by
+// about the matrix), the nine refusals by the plan file each message names, and the benchmark by
 // the failure note of its one entry.
 const failures = runRunner([
     path.join(here, 'matrix.plan.toml'),
@@ -319,10 +319,15 @@ const mustContain = [
     "stdout contains '42'",
     'expect_stdout_exact differs: first difference at offset 2 (expected 4 chars, got 3 chars)',
     // One summary for the run, so the arithmetic is read once, over all four fixtures: 36 matrix
-    // entries + 4 strict + 6 known_fail + 1 benchmark; 28 + 1 + 0 + 0 passed, 1 + 3 + 5 + 1 failed,
-    // and 7 + 0 + 1 + 0 were marked known. A lost or doubled entry anywhere in the four moves this
-    // line, and the per-fixture counts are read below from the entries and refusals themselves.
-    '[SUMMARY] total: 47, pass: 29, fail: 10, known failures: 8',
+    // entries + 4 strict + 11 known_fail (six refused plans and five entries that load) + 1
+    // benchmark. The three entries this change adds are `anchor` (passes) and the two whose marks
+    // have ended (`ends_arrived`, `waits_on`, both reported as failures), which is why the totals
+    // are +3 entries, +1 pass, +2 fail over the previous line -- and why the known count did not
+    // move: `waits_on`'s row leaves the roster when its reading is taken. `quoted_only` is the fifth
+    // entry that loads, and it is a fifth known failure: its condition is quoted by its own failure
+    // message and has not arrived, so the +1 entry is +0 fail and +1 known failure, which is the
+    // arithmetic that says the mark was excused and not reported as ended.
+    '[SUMMARY] total: 52, pass: 30, fail: 13, known failures: 9',
 ]
 for (const text of mustContain) {
     if (!output.includes(text)) problems.push(`output lacks: ${text}`)
@@ -367,11 +372,16 @@ for (const text of [
 // prose inside `known_fail_note`, which nothing checked and a review had to remember to read; they
 // are fields now, and a plan that omits either is refused where it is loaded. A fourth field, the
 // sentence the case prints today, is refused the same way: without it the runner takes any failure
-// as the expected one, and another defect can wear the mark's name. Six plan files share one
-// directory -- five ways to be incomplete and one complete entry. The five must fail with the file,
-// the case and the missing (or unusable) field named; the complete one must load, run, and report
-// `[XFAIL]` with its owner printed beside the mark. A default owner or a default reason would make
-// the five pass and this block red, which is the direction that matters.
+// as the expected one, and another defect can wear the mark's name. Ten plan files share one
+// directory -- six ways to be refused (five incomplete, one whose `known_fail_ends_when` is a
+// sentence instead of a reading) and four entries that load: the complete mark, the two shapes of an
+// ending that has already arrived, and one whose ending is quoted by its own failure message and has
+// NOT arrived. The six must fail with the file, the case and the missing (or unusable) field named;
+// the complete one must load, run, and report `[XFAIL]` with its owner printed beside the mark; the
+// two arrived ones must be reported as failures and told to delete the mark; the quoted one must stay
+// `[XFAIL]`, because a condition matched against the runner's own sentence would always be true. A
+// default owner or a default reason would make the six pass and this block red, which is the
+// direction that matters.
 const knownfail = failures
 // The five readings, each a refusal that names its own missing thing. Kept as pairs so the verdict
 // printed below is read off the output and not off this file's intentions.
@@ -400,6 +410,11 @@ const knownfailReadings = [
         'missing-msg',
         "test/tools/selftest/knownfail/no_msg.plan.toml: test 'no_msg': known_fail needs "
             + 'known_fail_msg',
+    ],
+    [
+        'prose-trigger',
+        "test/tools/selftest/knownfail/prose_ends.plan.toml: test 'prose_ends': known_fail_ends_when "
+            + 'must be exactly one of { prints = "..." } or { passes = "..." }',
     ],
 ]
 const knownfailVerdict = knownfailReadings.map(([what, needle]) => {
@@ -444,6 +459,57 @@ if (!rosterArithmetic) {
     problems.push('known_fail gate: the roster count does not agree with the rows it prints')
 }
 knownfailVerdict.push(`roster=${rosterFixture && rosterArithmetic ? 'named' : 'MISSING'}`)
+// The strict half: a mark whose ending has arrived is a failure, in both shapes. `ends_arrived`
+// prints the line its `prints` condition names, so it is read where the mark fires and reported on
+// its own `[FAIL]` line; `waits_on` waits on `anchor`, which passes, so its reading can only be taken
+// once every case has settled and it is printed after the results. An excused red whose ending has
+// arrived would be a green nobody ever has to read again -- the same debt the STALE snippet entries
+// carried -- so both readings are asserted here, off the output.
+const endsPrints = /^\[FAIL\] ends_arrived\b/m.test(knownfail.output)
+    && knownfail.output.includes(
+        'known failure has ended: this entry already prints "ARRIVED fixture=knownfail the numbers are 2, 4 and 6"'
+            + ' -- delete the mark'
+    )
+if (!endsPrints) {
+    problems.push(`known_fail gate: a satisfied \`prints\` condition was not reported as a failure:\n${knownfail.output}`)
+}
+const endsPasses = knownfail.output.includes(
+    'known failure has ended: this entry waits on `anchor`, which passed -- delete the mark'
+)
+if (!endsPasses) {
+    problems.push(`known_fail gate: a satisfied \`passes\` condition was not reported as a failure:\n${knownfail.output}`)
+}
+// The third reading of the same mechanism, and the one that says a condition cannot satisfy itself:
+// `quoted_only` never prints the line its `prints` condition waits for, and its
+// `expect_output_contains` names that same line -- so the runner's own message about the missing line
+// contains it verbatim (`output does not contain 'ARRIVED fixture=knownfail quoted-only ...'`). A
+// condition read against the runner's message would be satisfied by the sentence explaining that it
+// is unmet, and a legitimate mark would be reported as ended; that is the shape the merge rehearsal
+// of 2026-11-25 measured as three reds (`modules.onnx/ort_loop_values_dynamic` and the two
+// `stated_mean_axis_*` gradients). The entry stays `[XFAIL]`, the ending block is not printed for it,
+// and its end condition still reaches the roster. Read off the output, and off this fixture's own
+// line rather than the run's, so a neighbour that prints the same words cannot answer for it.
+const quotedOnlyEnds = 'known failure has ended: this entry already prints '
+    + '"ARRIVED fixture=knownfail quoted-only the numbers are 2, 4 and 6"'
+const quotedOnlyStaysMarked = /^\[XFAIL\] quoted_only\b/m.test(knownfail.output)
+const quotedOnlyNotEnded = !knownfail.output.includes(quotedOnlyEnds)
+const quotedOnlyRostered = rosterRows.some(
+    ([, name, ends]) => name === 'selftest.knownfail.quoted_only/quoted_only'
+        && ends.trim() === 'prints "ARRIVED fixture=knownfail quoted-only the numbers are 2, 4 and 6"'
+)
+if (!quotedOnlyStaysMarked || !quotedOnlyNotEnded) {
+    problems.push(
+        'known_fail gate: a `prints` condition was satisfied by the failure message that quotes it, '
+            + 'so a legitimate mark was reported as ended:\n' + knownfail.output
+    )
+}
+if (!quotedOnlyRostered) {
+    problems.push(`known_fail gate: the roster did not name the quoted-only end condition:\n${knownfail.output}`)
+}
+knownfailVerdict.push(
+    `strict-xfail=${endsPrints && endsPasses ? 'prints+passes' : 'MISSING'}`,
+    `quoted-only=${quotedOnlyStaysMarked && quotedOnlyNotEnded && quotedOnlyRostered ? 'marked' : 'MISSING'}`
+)
 console.log(`[known_fail gate] ${knownfailVerdict.join('; ')}`)
 // The two directories' refusals are counted where their plans are read, which is the one thing the
 // single summary cannot say: it counts the run. Each refusal names its own plan file, so the count
@@ -454,8 +520,8 @@ const refusedIn = (dir) =>
 if (refusedIn('strict') !== 3) {
     problems.push(`strict: ${refusedIn('strict')} plan(s) refused, expected 3`)
 }
-if (refusedIn('knownfail') !== 5) {
-    problems.push(`known_fail gate: ${refusedIn('knownfail')} plan(s) refused, expected 5`)
+if (refusedIn('knownfail') !== 6) {
+    problems.push(`known_fail gate: ${refusedIn('knownfail')} plan(s) refused, expected 6`)
 }
 
 // --- expect_signal: a run that is meant to die of a named signal -------------------------------
@@ -1645,6 +1711,12 @@ if (problems.length > 0) {
     console.error(problems.join('\n'))
     console.error('--- runner output ---')
     console.error(output)
+    // The problems come first because they are the summary and the run's output is the evidence
+    // behind it; a red of this file is read top-down. They are repeated last as well: the runner
+    // that starts this file keeps only the tail of a failing case's stderr, so the only way the
+    // reason reaches the reader of the gate is to be the last thing printed.
+    console.error('--- problems ---')
+    console.error(problems.join('\n'))
     process.exit(1)
 }
 console.log('runner self-test ok')

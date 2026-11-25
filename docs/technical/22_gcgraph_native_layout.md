@@ -201,10 +201,11 @@ These kinds require no body beyond `GCNode`:
 
 - `Data`
 - `Port`
-- `Copy`
-- `Cast`
-- `Sync`
 - `Gate`
+
+`Copy`, `Cast` and `Sync` are not kinds of node: a conversion and a copy are calls of `:op/cast`
+and `:op/copy`, carried by an `OPER` node (11.2), and a `sync` block's order is a sync edge
+rather than a node. Their old kind numbers (2, 3 and 12) stay vacant.
 
 `Bind` and `Dref` are reserved kind values that never appear in a frozen graph
 (nothing creates `Bind`; `Dref` is a build-time placeholder that encoding

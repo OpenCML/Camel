@@ -125,8 +125,11 @@ class DraftGraphBuilder {
         const camel::core::data::data_ptr_t &data, camel::core::type::Type *runtimeType = nullptr);
     runtime::DraftNodeRef
     addPortNode(camel::core::type::Type *type, std::string name, bool isWith);
-    runtime::DraftNodeRef addCastNode(camel::core::type::Type *type);
-    runtime::DraftNodeRef addCopyNode(camel::core::type::Type *type);
+    /// A call of the operator `uri` names, built without resolving the declaration: the
+    /// operations that used to be node kinds of their own -- a conversion (`:op/cast`) and a copy
+    /// (`:op/copy`) -- are written this way, so a program that shadows the operator's **name**
+    /// still gets the call the language means (`Builder::copyNodeOf`).
+    runtime::DraftNodeRef addOperNode(camel::core::type::Type *type, std::string_view uri);
     runtime::DraftNodeRef addFillNode(camel::core::type::Type *type, const runtime::GCFillBody &body);
     runtime::DraftNodeRef
     addFillNode(camel::core::type::Type *type, std::span<const std::byte> payload);
@@ -198,8 +201,26 @@ class DraftGraphBuilder {
     const DrefTarget &drefTarget(runtime::gc_node_ref_t nodeId) const {
         return drefTarget(ref(nodeId));
     }
-    const oper_idx_ptr_t &operTarget(runtime::DraftNodeRef node) const;
-    const oper_idx_ptr_t &operTarget(runtime::gc_node_ref_t nodeId) const {
+    /// The operator declaration this builder recorded for a node of kind OPER, or `nullptr` when it
+    /// recorded none. **Asking is not a precondition**: nothing recorded is an ordinary answer.
+    ///
+    /// A pass writes a call by naming its operator's URI -- `GraphDraft::addOperNode(type, nullptr,
+    /// uri)`, which is how `:op/cast` and `:op/copy` are written -- and the builder of the graph a
+    /// pass hands on never resolved that call, so no declaration is here to hand back. The URI is
+    /// not lost with it: the node's payload names its operator (`GCOperBody::uri()`, design
+    /// principles 2.3 -- the node is where the operator is stored). This table holds the *resolved*
+    /// declaration, which is exactly the part a call written by URI alone leaves unset.
+    ///
+    /// Two shapes therefore reach every reader, and each reader says what *it* makes of a call
+    /// whose declaration is not known: `isCopyNode` answers "not a copy", `nodeKeepsItsInput`
+    /// answers "a holder", `constructionKindOf` answers "states no construction". A reader outside
+    /// the builder's construction time does meet them, because what a pass hands on is an ordinary
+    /// graph (design principles 9.5: the source level's rules constrain building the graph, not
+    /// rewriting it), so a reader that made "no target" fatal would abort a legitimate graph. The
+    /// pointer refers into the builder's table and lives while that entry does; absence is
+    /// `nullptr`, never a null target.
+    const oper_idx_ptr_t *operTarget(runtime::DraftNodeRef node) const;
+    const oper_idx_ptr_t *operTarget(runtime::gc_node_ref_t nodeId) const {
         return operTarget(ref(nodeId));
     }
     void registerNodePortName(runtime::DraftNodeRef node, std::string name);

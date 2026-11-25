@@ -439,6 +439,17 @@ class SourceModuleFrontEnd final : public SourceModuleLoader {
         camel::runtime::Program &program, bool freshIds) override {
         const auto root =
             std::static_pointer_cast<camel::compile::gir::DraftGraphBuilder>(graph);
+        if (!freshIds) {
+            // The entry program is what its build linked. A module declared into this program's
+            // builder after that build -- a pass library the pipeline loaded and the definition
+            // library of an operator its tool needed -- made its graphs on this root graph, and
+            // they are another program's: the entry program holds what `buildProgram` left
+            // (Builder::pruneToTheProgram), not what was laid on top of it afterwards.
+            if (auto session = module.context()->graphBuildSession()) {
+                std::static_pointer_cast<camel::compile::gir::Builder>(session)
+                    ->pruneToTheProgram();
+            }
+        }
         camel::compile::gir::encodeToRuntimeProgram(
             root, program, freshIds ? &module.context()->graphIds() : nullptr);
     }

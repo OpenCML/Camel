@@ -1434,6 +1434,10 @@ args = ["${case}", "${test_tmp}"]
 expect_exit = 0
 expect_stdout_contains = ["37 exported rule(s) probed: a report with no rule refuted is accepted, and a report in which any one of them is refuted is refused (37 of 37)"]
 timeout_ms = 180000
+# Slow layer: over the 2 s the fast layer allows -- 4.52 s of
+# child wall clock in the 2026-11-12 record (appendix B of
+# internal/reports/2026-11-24-test-suite-inventory.cn.md).
+tier = "slow"
 
 [[tests]]
 name = "rules.const_parameter_is_a_value_in_when"

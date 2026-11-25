@@ -171,23 +171,65 @@ std::optional<camel::core::attr::AttrSetId> Builder::staticGrantOf(const GCT::no
                    graphsAt(name).has_value() || decoratedGraphAt(name).has_value() ||
                    (unit_ != nullptr && unit_->values.contains(name));
         };
-        // The entity an imported name stands for (design principles 10.2, layers 3 to 5).
+        // The entity an imported name stands for, read from the rows `name_layers.h` lists, in that
+        // order: this probe wants an entity, not a value or a type, so each row reads the import
+        // bindings, and a row it has no reading of answers "not this row's".
+        using EntityAnswer = RowAnswer<camel::core::module::entity>;
         const auto imported =
             [&](const GCT::node_ptr_t &ref) -> std::optional<camel::core::module::entity> {
             const std::string written = ref->name();
             if (programName(written) || isOperatorName(written)) {
                 return std::nullopt;
             }
-            if (module_->hasImportedRef(written, ImportLayer::Named)) {
-                return importedEntity(written, ImportLayer::Named);
-            }
-            if (auto match = throughUsing(written, ref)) {
-                return match->ownName.empty() ? match->entity : std::nullopt;
-            }
-            if (module_->hasImportedRef(written, ImportLayer::Ambient)) {
-                return importedEntity(written, ImportLayer::Ambient);
-            }
-            return std::nullopt;
+            const auto answer = firstRowHolding<camel::core::module::entity>(
+                rowsFrom(NameRow::ImportedByName), [&](NameRow row) -> EntityAnswer {
+                    switch (row) {
+                    case NameRow::ImportedByName: {
+                        if (!module_->hasImportedRef(written, ImportLayer::Named)) {
+                            return EntityAnswer::absent();
+                        }
+                        if (auto named = importedEntity(written, ImportLayer::Named);
+                            named.has_value()) {
+                            return EntityAnswer::has(*named);
+                        }
+                        return EntityAnswer::nothing();
+                    }
+                    case NameRow::UsingNamespace: {
+                        auto match = throughUsing(written, ref);
+                        if (!match.has_value()) {
+                            return EntityAnswer::absent();
+                        }
+                        if (!match->ownName.empty()) {
+                            // A name of this module a `using` opened: no entity of another
+                            // module stands behind it.
+                            return EntityAnswer::nothing();
+                        }
+                        if (!match->entity.has_value()) {
+                            return EntityAnswer::nothing();
+                        }
+                        return EntityAnswer::has(*match->entity);
+                    }
+                    case NameRow::AmbientImport: {
+                        if (!module_->hasImportedRef(written, ImportLayer::Ambient)) {
+                            return EntityAnswer::absent();
+                        }
+                        if (auto ambient = importedEntity(written, ImportLayer::Ambient);
+                            ambient.has_value()) {
+                            return EntityAnswer::has(*ambient);
+                        }
+                        return EntityAnswer::nothing();
+                    }
+                    case NameRow::Local:
+                    case NameRow::Module:
+                    case NameRow::EveryImport:
+                    case NameRow::Prelude:
+                        // The scopes and the module's own names are asked above (programName), and
+                        // this probe reads no operator's merged set and no prelude export.
+                        return EntityAnswer::absent();
+                    }
+                    return EntityAnswer::absent();
+                });
+            return answer.found;
         };
         if (callee->type() != GCT::NodeKind::DREF) {
             return std::nullopt;

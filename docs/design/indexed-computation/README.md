@@ -364,7 +364,8 @@ in the arithmetic policy, not hidden by a `pure = true` bit.
 ## 7. Graph representation and operator interfaces
 
 Retain the stable graph skeleton: `DATA`, `PORT`, `OPER`, `FUNC`, `CALL`, `FILL`,
-`ACCS`, `CAST`, `COPY`, `BRCH`, `JOIN`, `LOOP`, `GATE`, `SYNC`.
+`ACCS`, `BRCH`, `JOIN`, `LOOP`, `GATE`, `SYNC`. A conversion and a copy are calls of
+`:op/cast` and `:op/copy`, an `OPER` node, not kinds of their own.
 Domains, layouts, output specifications, and numerical policies are typed values
 or interned descriptors. An operation containing bodies references callable
 graphs through the graph reference table. Multiple logical results can use an

@@ -365,6 +365,10 @@ if (stopped > 0) {
 }
 }
 """
+# Slow layer: over the 2 s the fast layer allows -- 20.32 s of
+# child wall clock in the 2026-11-12 record (appendix B of
+# internal/reports/2026-11-24-test-suite-inventory.cn.md).
+tier = "slow"
 
 [[tests]]
 name = "registry.migrations_stay_migrated"
@@ -385,6 +389,10 @@ timeout_ms = 60000
 # printed the rest and exited 0 (that is how found its seven names only by counting them).
 # The case makes the declaration module in its scratch directory out of a real `.cmo` and points
 # `CAMEL_STD_LIB` at it.
+# Slow layer: over the 2 s the fast layer allows -- 3.02 s of
+# child wall clock in the 2026-11-12 record (appendix B of
+# internal/reports/2026-11-24-test-suite-inventory.cn.md).
+tier = "slow"
 
 [[tests]]
 name = "registry.declaration_load_failure_is_an_error"

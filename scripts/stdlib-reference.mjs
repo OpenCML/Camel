@@ -385,12 +385,27 @@ const MODULES = [
         name: 'autodiff',
         title: '`autodiff`: gradients of functions',
         kind: 'cpp',
-        // `stop_gradient` is declared in stdlib/autodiff.cml; `grad` and `with_grad` answer a
-        // function built from their argument's type, so their entries are in the signature file
-        // named by `computed:`.
+        // `grad` and `with_grad` answer a function built from their argument's type, so their
+        // entries are in the signature file named by `computed:`. The `.cml` declares nothing now
+        // -- `stop_gradient`, the last name a program could write here, is `laws`' -- but it is
+        // still the module's documentation, and that is what this page prints before the entries.
         source: 'autodiff.cml',
         declaration: true,
         computed: 'signatures/autodiff.cml',
+    },
+    {
+        name: 'laws',
+        title: '`laws`: the mathematics a derivative rule is written from',
+        kind: 'camel',
+        // The tangent and the cotangent of each primitive: one function per name a rule's left
+        // side binds. `rulesets.jvp` and `rulesets.transpose` name one of these on a rule's right
+        // side, and nothing else reads the module -- it declares no rule, which is why it is not
+        // a ruleset and not part of `autodiff`.
+        //
+        // It is not pure Camel: `stop_gradient` declares a body-less function whose kernel is the
+        // module's own (`stdlib/laws/`, operator `laws:stop_gradient`), because "no derivative
+        // flows through this value" cannot be written as arithmetic. The declaration is still the
+        // one this page prints, and the build checks it against the registered operator.
     },
     {
         name: 'rulesets.jvp',

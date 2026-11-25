@@ -98,7 +98,7 @@
    - 根里的其余活节点就是模块级值/效应；它们与入口分开比较。
 4. **名字与位置全部去掉**：图名、节点/端口名、类型声明名、标签键名、`let` 名、origin/span、图/节点编号。函数参数名也不计（它不参与类型兼容），但打印时保留。
 5. **类型**：每个命名声明（`StructDecl`/`EnumDecl`）是一个**原子**；比较时在原子之间找双射，保持“不同声明必须不同像”。字段顺序、字段名、变体顺序、变体名、形状（unit/tuple/struct）都算；递归类型用声明原子的编号表示回边。两个字段完全相同的命名类型**不能**合并（名义类型）。泛型实例 `Option<int>` 与 `Option<string>` 是两个原子，字段类型不同，双射自然分开。
-6. **节点**：`kind`；输入边按（种类 normal/context/control、目标槽位）排序后的序列（`sourceIndex` 只表示同一输出被用了几次，不计）；`GCOperBody` 的算子身份（不是 URI 字符串，按 `OperatorSemantics` 身份）、`FILL`/`ACCS`/`BRCH`/`JOIN`/`CALL`/`LOOP`/`CAST`/`COPY` 的负载；端口角色（norm/with/capture/region）与序号；`FUNC` 的被调图颜色；静态值按值（数值按位模式、字符串按字节、数组逐元素、函数常量按图颜色、`Rule` 按字段）。
+6. **节点**：`kind`；输入边按（种类 normal/context/control、目标槽位）排序后的序列（`sourceIndex` 只表示同一输出被用了几次，不计）；`GCOperBody` 的算子身份（不是 URI 字符串，按 `OperatorSemantics` 身份）、`FILL`/`ACCS`/`BRCH`/`JOIN`/`CALL`/`LOOP` 的负载（转换与拷贝是 `:op/cast` / `:op/copy` 的 `OPER`，只有算子身份）；端口角色（norm/with/capture/region）与序号；`FUNC` 的被调图颜色；静态值按值（数值按位模式、字符串按字节、数组逐元素、函数常量按图颜色、`Rule` 按字段）。
 7. **节点属性**：排序后的（标签声明原子，值）集合；标签声明也走双射（名字不计，但同一标签的所有用法必须指向同一像）。
 8. **区域**：种类、父区域（相对路径）、所有者节点、`index`、形参（类型与顺序）、结果、`attrs`。
 9. **图**：把每个图表示成上述局部签名 + 被调图颜色，做颜色细化；颜色相同的图再逐节点匹配。入口图单独标记；根只比较模块级部分。
@@ -132,7 +132,7 @@
 
 - 名字：`std::cml`。头文件 `lib/std/cml/include/camel/passes/trans/cml/cml.h`，源文件 `src/passes/trans/cml/`（`cml.cpp`、`module_writer.cpp`、`expr_writer.cpp`、`type_writer.cpp`、`literal.cpp`、`operator_syntax.cpp`），与 `lib/std/gir/json/` 同构。
 - 类：`CmlDumpPass : public RuntimeGraphTranslatePass`（运行时图，翻译遍）。`apply(const Program *, std::ostream &)` 写源码，返回 `nullptr`（消费程序），与 `JsonGirDumpPass` 一致。
-- `acceptsWritings()` 保持 `false`：驱动在消费型遍之前会 `extractWritings`（`kernel/execute/pass.cpp#extractWritings`），所以遍看到的是可执行状态；带 `kGraphFlagHasWritings` 的图不会到达这里。若手工绕过驱动，遍拒绝。
+- `acceptsWritings()` 保持 `false`。**写这段时的前提已经不成立**：那会儿驱动在消费型遍之前会调 `extractWritings`（`kernel/execute/pass.cpp` 里那次调用**已不存在**），遍因此看到的是可执行状态。现在内核不做隐式抽取——带 `kGraphFlagHasWritings` 的图到消费型遍时由驱动直接拒绝（`kernel/execute/pass.cpp#PassNeedsExtraction`），抽取要流水线自己写成 `rewrite::extract cost=...`。`extractWritings` 本身没有删，只是搬进了 `kernel/runtime/writings_extract.cpp#extractWritings`（内核只留机制，代价由目标库以函数值给出）。若手工绕过驱动，遍拒绝。
 - 参数（`PassDescriptor`，`kernel/include/camel/execute/pass/params.h#PassDescriptor`）：
   - `out`（String，默认 `""`）：写文件；空 = 写 `os`（stdout）。写文件时 `data_dir` 默认取 `out` 的父目录。
   - `data_dir`（String，默认 `""`）：大常量的 sidecar 目录；为空且需要 sidecar 时拒绝。
@@ -181,7 +181,7 @@ GIR 是**无损数据转储**：它能打印语言写不出的图（两张写法
 
 1. 用 `execPlan().topo` 作为顺序，跳过 GATE/SYNC 一类只表达顺序的节点；GATE 只用于找结果（`resultOf`）。
 2. 每个节点按种类降级：
-   - `DATA` → 字面量/函数常量；`PORT` → 参数/区域形参/捕获名；`OPER` → 算子语法表；`CAST` → `expr as T`；`COPY` → 直接写输入表达式（不引入节点）；`FILL` → struct/tuple/数组/闭包字面量；`ACCS` → `expr[i]`/`expr.field`/`expr.0`/枚举字段；`FUNC` → `callee(args)`；`CALL` → `f(args)`；`BRCH/JOIN` → 分支；`LOOP` → 循环。
+   - `DATA` → 字面量/函数常量；`PORT` → 参数/区域形参/捕获名；`OPER` → 算子语法表（`:op/cast` 写 `expr as T`，`:op/copy` 直接写输入表达式、不引入节点）；`FILL` → struct/tuple/数组/闭包字面量；`ACCS` → `expr[i]`/`expr.field`/`expr.0`/枚举字段；`FUNC` → `callee(args)`；`CALL` → `f(args)`；`BRCH/JOIN` → 分支；`LOOP` → 循环。
    - 算子语法表（`operator_syntax.cpp`）按 `OperatorSemantics` 身份分类：中缀/前缀/赋值/索引/字段/调用/类型转换/内建语句；带优先级与结合性。第一版**全括号**，不做最小括号；括号不改变图。
    - 没有源码形式的内部算子（`:op/tag_is_null`、`:enum/tag`、`:enum/field`、`:var/*`、`:struct/append_arr_in_place`、`:op/assn_owned` 等）不由表直接打印，而是由产生它们的构造打印（`match`/`var`/`+=`/`append`）；单独出现则拒绝。
 3. **`let`**：一个值有多个使用者、或它是效应语句的结果、或它是 `var` 的初值时，打印 `let name: T = expr`；纯单使用值直接内联。`let` 不产生节点，所以打印/重编译不改变图；名字由结构键（算子身份 + 输入颜色 + 类型）生成，第二次往返稳定（5.2）。类型标注只在需要给字面量定类型时写（`p24`），或为了可读性统一写；不制造 CAST。
@@ -296,7 +296,7 @@ GIR 是**无损数据转储**：它能打印语言写不出的图（两张写法
 
 ### S1：直行函数
 
-- 产物：`std::cml` 骨架、`module`/入口/顶层 `let`、函数签名、字面量、数组/struct/tuple、ACCS、CAST、COPY、算子语法表（算术/比较/逻辑/转换）、直接调用、返回、函数值（无捕获）、`var`、`sync` 直行。`let`/`var` 的声明名打印源码里的名字（图不保存名字列，名字在 `GCGraphDebugRecord` 的冷数据里）；只有图里本来没有名字的值才生成 `cmlN`。
+- 产物：`std::cml` 骨架、`module`/入口/顶层 `let`、函数签名、字面量、数组/struct/tuple、ACCS、转换与拷贝（`:op/cast` / `:op/copy` 的调用）、算子语法表（算术/比较/逻辑/转换）、直接调用、返回、函数值（无捕获）、`var`、`sync` 直行。`let`/`var` 的声明名打印源码里的名字（图不保存名字列，名字在 `GCGraphDebugRecord` 的冷数据里）；只有图里本来没有名字的值才生成 `cmlN`。
 - 拒绝：区域（分支/循环/内联）、命名类型、泛型、规则、标签（`#strict` 等节点标签留到 S4 与 `Block` 一起处理，先拒绝带标签的图）、`var` 参数、S1 算子表之外的算子、超过 `max_literal_bytes` 的常量。拒绝先于输出：整段打印在内存里完成，失败时流上不留下半个程序。
 - 测试：`test/cases/linear` 的直行子集 + 新增 `test/cases/trans/cml/linear.cml`（覆盖每种表达式/字面量/变量/调用）；验收是往返性质而不是“看起来对”：`source → std::cml → source` 重编译后与原文的 canonical v2 文档必须被 `test/tools/cml_roundtrip.py` 判为等价（2.3）。`let` 名字不属于图等价，另用 v1 节点名与打印文本逐图检查：源图的名字必须全部出现在重编译图和打印文本里，新增名字只允许打印器生成的 `cmlN`/`pN`。
 - 独立理由：即使只有直行，也能打印一大类程序；“先直行后控制”是诚实的进度。

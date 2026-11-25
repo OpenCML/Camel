@@ -93,6 +93,10 @@ assert(out === '19 0', `unexpected output: ${out}`)
 # Measured 3.5 s in a gate run at -Jobs 8 and 5.4 s in a slower one; four times the slower
 # measurement is 21.6 s, so the old 20 s was at the margin, and 40 s is 7.4x the slow one.
 timeout_ms = 40000
+# Slow layer: over the 2 s the fast layer allows -- 3.68 s of
+# child wall clock in the 2026-11-12 record (appendix B of
+# internal/reports/2026-11-24-test-suite-inventory.cn.md).
+tier = "slow"
 
 [[tests]]
 name = "calling_incomplete"

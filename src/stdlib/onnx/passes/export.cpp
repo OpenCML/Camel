@@ -93,14 +93,21 @@ uint64_t originNear(const GraphView &g, NodeRef ref) {
 }
 
 /// The value of `ref` when it is a constant of the graph (a DATA node in the static area).
+///
+/// The type is the record's own. This read used to take the static area's type instead
+/// (`staticDataType()->typeAt(index)`, with the record as the fallback), on the theory that a node
+/// could carry a slot index and no type; a frozen graph cannot, because the encoder folds the
+/// effective type into the record when it writes the node (`effectiveDraftNodeType`, then
+/// `typeIdOf`, runtime/graph.cpp) -- that is the one place a draft becomes a graph, and the reading
+/// that pinned it (`test::view_types`) walks every node of every graph of a program and finds none
+/// whose type sits only at its static slot.
 std::optional<Example> constantOf(const GCGraph *g, gc_node_ref_t ref) {
     const auto *n = g->node(ref);
     if (n->kind != GCNodeKind::Data || n->dataIndex >= 0) {
         return std::nullopt;
     }
-    const auto index     = static_cast<size_t>(-n->dataIndex);
-    core::type::Type *ty = g->staticDataType()->typeAt(index);
-    return Example{g->staticArea()->get<slot_t>(index), ty ? ty : n->dataType()};
+    const auto index = static_cast<size_t>(-n->dataIndex);
+    return Example{g->staticArea()->get<slot_t>(index), n->dataType()};
 }
 
 std::string describeNode(const GraphView &g, NodeRef ref) {
@@ -357,7 +364,7 @@ Request readEntryRequest(
 
 /// The program that holds `g`: a graph the pass reads is always one of the context's.
 const camel::runtime::Program &programOfGraph(const core::context::Context &ctx, const GCGraph *g) {
-    const camel::runtime::Program *program = ctx.programOfRuntimeGraph(g);
+    const camel::runtime::Program *program = ctx.programOfRuntimeGraph(*g);
     if (program == nullptr) {
         throw std::logic_error("the ONNX export met a graph that belongs to no program");
     }
@@ -764,7 +771,7 @@ OnnxExportPass::apply(const camel::runtime::Program *program, std::ostream &os) 
         }
         if (requests.empty()) {
             exportEntry(*context_, program, os, out_, asked(ExportOptions{}));
-            return nullptr;
+            return program;
         }
         if (requests.size() > 1 && !out_.empty()) {
             // Reported at the second call: the first one is what the file name stands for.
@@ -803,8 +810,8 @@ OnnxExportPass::apply(const camel::runtime::Program *program, std::ostream &os) 
         }
         diag.commit(kPassName, refusal.message);
     }
-    // Translation consumes the graph: the program is not executed.
-    return nullptr;
+    // Translation hands the graph on: printing or exporting is not a reason to skip the run.
+    return program;
 }
 
 void registerOnnxPasses() {

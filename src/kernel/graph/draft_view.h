@@ -25,12 +25,19 @@
  *   DraftNodeHeader::origin                  originOf
  *   DraftNodeHeader::region                  regionOf
  *   DraftNodeView::normInputs/withInputs     inputs(ref, Normal) / inputs(ref, Context)
- *   DraftNodeHeader::ctrlInputCount          nothing: a control input is not an edge, and what it
- *                                            said is the region the node is in
+ *   DraftNodeHeader::ctrlInputCount          nothing: a control input is not an edge of its own.
+ *                                            What it said first is the region the node is in;
+ *                                            what it said second is a wait, which
+ *                                            predecessors(ref, Wait) answers
  *   normUsersOf / withUsersOf                users(ref, Normal) / users(ref, Context)
- *   (both input groups at once)              predecessors(ref, Data)
+ *   (both input groups at once)              predecessors(ref, Data) / successors(ref, Data)
  *   DraftNodeView::syncInputs                predecessors(ref, Sync)
  *   DraftNodeView::orderInputs               predecessors(ref, Order)
+ *   DraftNodeView::syncUsers/orderUsers      successors(ref, Sync) / successors(ref, Order)
+ *   DraftNodeView::waitInputs/waitUsers      predecessors(ref, Wait) / successors(ref, Wait)
+ *   DraftNodeHeader::attrs                   attrsOf
+ *   DraftNodeHeader::permissions             permissionsOf, and effectivePermissionsOf for the
+ *                                            permission in effect under a policy (`#strict`)
  *   GraphDraft::region / nodeRegion          region / regionOf
  *   regionPort(i) + GCRegion.portBegin/Count regionParameters
  *   armRegionOf / loopRegionOf               regionsOwnedBy
@@ -112,10 +119,16 @@ class DraftGraphAdapter final : public GraphView {
     std::optional<std::uint32_t> staticIndexOf(NodeRef ref) const override;
     std::uint32_t staticSlotCount() const override;
     std::uint64_t originOf(NodeRef ref) const override;
+    camel::core::attr::AttrSetId attrsOf(NodeRef ref) const override;
+    camel::core::sem::PermissionMask permissionsOf(NodeRef ref) const override;
+    camel::core::sem::PermissionMask effectivePermissionsOf(
+        NodeRef ref, const camel::core::sem::NumericPolicy &policy) const override;
 
     std::span<const NodeRef> inputs(NodeRef ref, PortGroup group) const override;
     std::span<const NodeRef> users(NodeRef ref, PortGroup group) const override;
     std::vector<NodeRef> predecessors(NodeRef ref, EdgeKind kind) const override;
+    std::vector<NodeRef> successors(NodeRef ref, EdgeKind kind) const override;
+    std::span<const Edge> edges(EdgeKind kind) const override;
 
     std::uint32_t regionCount() const override;
     RegionRecord region(RegionId id) const override;
@@ -130,6 +143,10 @@ class DraftGraphAdapter final : public GraphView {
     LoopForm loopFormOf(NodeRef ref) const override;
 
   private:
+    /// The whole table of one edge kind, built once per kind (`edges`): a draft stores its edges on
+    /// the node, so a table is a walk of the nodes. Kept for the same reason `translated_` is -- the
+    /// projection cannot be handed out where it lies -- and it decides nothing.
+    const std::vector<Edge> &tableOf(EdgeKind kind) const;
     /// True when the draft holds a live node at the view's `ref`, whether or not the view has a
     /// *node* there: a JOIN is a place of the draft and not a node of the view (`viewKind`), and
     /// `regionOf` / `exit` answer for places rather than for nodes. `contains` is this and the kind.
@@ -163,6 +180,7 @@ class DraftGraphAdapter final : public GraphView {
     std::span<const NodeRef> kept_;
     CalleeGraphOf calleeGraphOf_;
     mutable std::unordered_map<std::uint64_t, std::vector<NodeRef>> translated_;
+    mutable std::unordered_map<std::uint8_t, std::vector<Edge>> tables_;
 };
 
 } // namespace camel::graph

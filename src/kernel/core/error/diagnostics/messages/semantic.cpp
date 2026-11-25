@@ -1894,6 +1894,14 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             },
         },
         {
+            SemanticDiag::OperatorSignatureUnresolved,
+            {
+                "OperatorSignatureUnresolved",
+                "The signature of the operator '{0}' is not resolved: the type of {1} is not known where the compiler writes this call.",
+                "A conversion or a copy the compiler writes itself is a call of a built-in operator, and resolving which rule takes it needs both types: the type of the value it reads and the type it produces. Nothing is put in place of the type the compiler cannot see.",
+            },
+        },
+        {
             SemanticDiag::IgnoredSideEffect,
             {
                 "IgnoredSideEffect",

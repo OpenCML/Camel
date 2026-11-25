@@ -31,7 +31,7 @@ name = "body_chain_verbatim.inline.order_edges"
 desc = "5.7's extra constraint: after the splice every effect node of the body is ordered after the statement written before the call, beside the chain the body brought."
 kind = "behavior"
 case = "../../../cases/opt/inline/body_chain_verbatim.cml"
-args = ["${case}", "std::cxx::inline", "std::jgir"]
+args = ["${case}", "std::cxx::inline", "std::jgir", "std::nop"]
 expect_exit = 0
 verify_script = """
 ({ input, assert }) => {
@@ -84,7 +84,7 @@ name = "consecutive_sync_calls.opt.gates"
 desc = "The integrated optimizer reduces unused inlined return gates to the one gate that orders the program result after all four prints."
 kind = "behavior"
 case = "../../../cases/opt/inline/consecutive_sync_calls.cml"
-args = ["${case}", "std::opt", "std::jgir"]
+args = ["${case}", "std::opt", "std::jgir", "std::nop"]
 expect_exit = 0
 verify_script = """
 ({ input, assert }) => {
@@ -102,7 +102,7 @@ name = "consecutive_sync_calls.inline.gates"
 desc = "Inlining reuses the callee completion gate instead of wrapping the same return value in another gate."
 kind = "behavior"
 case = "../../../cases/opt/inline/consecutive_sync_calls.cml"
-args = ["${case}", "std::cxx::inline", "std::jgir"]
+args = ["${case}", "std::cxx::inline", "std::jgir", "std::nop"]
 expect_exit = 0
 verify_script = """
 ({ input, assert }) => {
@@ -351,7 +351,7 @@ name = "compute_node_size.at_limit.inlined"
 desc = "How small a function is counts its own compute nodes (its OPERs, the calls it makes and its structural nodes), not its constants, its parameters, its GATEs or what an inline splice adds. `main` reaches a loop through `spin` and its own computation is exactly the limit, eight compute nodes: it is still copied into the entry graph, which the entry graph shows as the inline region it gained, and the count of its own region is eight."
 kind = "behavior"
 case = "../../../cases/opt/inline/compute_node_size_at_limit.cml"
-args = ["${case}", "std::macro", "std::cxx::devirtualize", "std::cxx::inline", "std::jgir"]
+args = ["${case}", "std::macro", "std::cxx::devirtualize", "std::cxx::inline", "std::jgir", "std::nop"]
 expect_exit = 0
 verify_script = """
 ({ input, assert }) => {
@@ -374,7 +374,7 @@ name = "compute_node_size.over_limit.left_a_call"
 desc = "One `println` more, nine compute nodes, is one over the limit: the inliner leaves the call of `main` in the entry graph (no inline region), and the function's own computation is nine compute nodes. The pair with the case above is the boundary of the limit."
 kind = "behavior"
 case = "../../../cases/opt/inline/compute_node_size_over_limit.cml"
-args = ["${case}", "std::macro", "std::cxx::devirtualize", "std::cxx::inline", "std::jgir"]
+args = ["${case}", "std::macro", "std::cxx::devirtualize", "std::cxx::inline", "std::jgir", "std::nop"]
 expect_exit = 0
 verify_script = """
 ({ input, assert }) => {
@@ -922,6 +922,10 @@ assert(out === 'start | saved | arm_call_then_effect r=50000', `unexpected outpu
 }
 """
 timeout_ms = 10000
+# Slow layer: over the 2 s the fast layer allows -- 2.01 s of
+# child wall clock in the 2026-11-12 record (appendix B of
+# internal/reports/2026-11-24-test-suite-inventory.cn.md).
+tier = "slow"
 
 [[tests]]
 name = "arm_call_then_effect.opt.tf"

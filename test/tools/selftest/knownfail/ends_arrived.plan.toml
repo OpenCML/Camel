@@ -1,0 +1,21 @@
+# Fixture of test/tools/selftest/run.mjs: a mark whose `prints` reading has already arrived. The
+# case still fails, and the run must report that failure as a failure -- `known failure has ended`
+# plus `delete the mark` -- instead of counting it as a known failure. An excused red whose ending has
+# arrived is a green nobody ever has to read again.
+id = "selftest.knownfail.ends_arrived"
+order = 6
+tier = "fast"
+
+[[tests]]
+name = "ends_arrived"
+desc = "A marked case that prints the line its mark waits for and still exits 1: strict xfail, reported as a failure."
+tool = "node"
+kind = "behavior"
+case = "ended.mjs"
+args = ["${case}"]
+expect_exit = 0
+known_fail = true
+known_fail_owner = "the runner self-test"
+known_fail_reason = "the fixture stops at `WALL fixture=knownfail`, so the run is red on purpose"
+known_fail_msg = "ARRIVED fixture=knownfail"
+known_fail_ends_when = { prints = "ARRIVED fixture=knownfail the numbers are 2, 4 and 6" }

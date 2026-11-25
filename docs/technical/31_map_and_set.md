@@ -13,7 +13,7 @@ a rule can be applied in one place.
 
 | Construct | On the graph |
 |---|---|
-| `xs as Map<K, V>`, `xs as Set<T>` | a `CAST` node whose target is the collection type |
+| `xs as Map<K, V>`, `xs as Set<T>` | a call of `:op/cast` on an `OPER` node, whose target is the collection type |
 | `m[k]` | `OPER :coll/map_idx`, of type `V?` |
 | every other operation (`put`, `remove`, `has`, `len`, `keys`, `union`, ...) | one `OPER :coll/...` node |
 | `m1 == m2` | `OPER :coll/eq` |
@@ -371,8 +371,8 @@ The conversion is the only way in: an annotated declaration (`let m: Map<string,
   of `put` over `xs`. A fault would make every `map`-then-`as` pipeline partial.
 - A set takes duplicates silently in both cases: removing them is what a set is for.
 
-The conversion runs when the program runs (a `CAST` node), also for a literal; see section
-11.
+The conversion runs when the program runs (a call of `:op/cast` on an `OPER` node), also for a
+literal; see section 11.
 
 ### 6.2 Operations
 
@@ -509,9 +509,9 @@ and a `Set<T>` as an array, in key order.
 ## 8. The subsystems
 
 - **Backends.** No backend was changed. The values are GC-traced references of a module
-  type; the operators are ordinary operators; the conversion is the `CAST` every backend
-  already executes through `Type::castSlotFrom`. The test programs give the same output on
-  `std::nvm`, `std::fvm`, `std::jit` and `std::prl`.
+  type; the operators are ordinary operators; the conversion is the `:op/cast` call every
+  backend already executes through `Type::castSlotFrom`. The test programs give the same
+  output on `std::nvm`, `std::fvm`, `std::jit` and `std::prl`.
 - **Collector.** Section 5.1. A program that builds maps and sets entry by entry out of
   strings, arrays, tuples, `T?` boxes and other maps runs under `--gc-check verify=both` with a
   collection requested every third allocation (`--gc-stress alloc=3`,
@@ -519,9 +519,9 @@ and a `Set<T>` as an array, in key order.
   collector and with `--gc generational`, on the four backends: the output is
   that of an undisturbed run and every verification is `ok`. Under the moving collector one
   such run relocated 864 map tables, 344 set tables and 1608 strings (`--gc-check moves`).
-- **Passes.** The operators are pure operators without a registered folder, and a `CAST` to
-  a module type is not folded, so `std::cxx::fold` leaves them and CSE/DCE treat them like
-  any pure operator. The test programs print the same through `std::opt`, `std::cxx::inline`,
+- **Passes.** The operators are pure operators without a registered folder, and a `:op/cast`
+  call to a module type is not folded, so `std::cxx::fold` leaves them and CSE/DCE treat them
+  like any pure operator. The test programs print the same through `std::opt`, `std::cxx::inline`,
   `std::macro std::opt`, `std::cxx::inline std::opt`, `std::cxx::fold std::cxx::cse std::cxx::dce`
   and `std::opt`.
 - **Constants.** `std::macro` evaluates a macro function ahead of time and stores its result
@@ -622,10 +622,10 @@ Each is implemented as recommended here; the tag is in the code.
 ## 11. Not done
 
 - **No compile-time construction outside `std::macro`.** `[...] as Map<...>` of a literal is
-  checked at compile time (key type, duplicate keys) but built by the `CAST` each time it is
-  executed. `std::cxx::fold` does not fold a `CAST` to a module type, nor an operator over a
-  collection (none has a folder registered). A program that wants the table built once puts
-  it in a `#macro func` and runs `std::macro`, which works (section 8).
+  checked at compile time (key type, duplicate keys) but built by the `:op/cast` call each
+  time it is executed. `std::cxx::fold` does not fold a `:op/cast` call to a module type, nor
+  an operator over a collection (none has a folder registered). A program that wants the
+  table built once puts it in a `#macro func` and runs `std::macro`, which works (section 8).
 - **`map_values`, `filter` and friends are not in the library** (section 6.2): generic
   functions cannot be exported from a module.
 - **No persistent tree** (sections 5.2 and 9).

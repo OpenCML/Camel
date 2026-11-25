@@ -19,7 +19,7 @@ Source: `docs/stdlib-reference.md`, generated from the declarations in `stdlib/*
 `node scripts/stdlib-reference.mjs --write`.
 
 <!-- camel-for-ai region: stdlib-signatures (generated from docs/stdlib-reference.md; node scripts/camel-for-ai.mjs --write) -->
-**`Built-in functions`** — no import — 71 name(s)
+**`Built-in functions`** — no import — 81 name(s)
 
 ```text
 std::mem::blocks: () => { allocs: int, frees: int, live: int, bytes: int }
@@ -119,9 +119,19 @@ extent_of: () => int[] when is_array::<A>()
 copy: (x: T) => T
 cast: (x: T) => U panic
 fill: (template: T, ...fields: ...F) => T panic
-access: (at: int, x: T) => U panic
-access_key: (key: string, x: T) => U panic
+access: <at: int> (x: T) => U panic
+access_key: <key: string> (x: T) => U panic
 range: (start: int, end: int, step: int) => int[] panic
+to_range: (start: int, stop: int, step: int) => Range panic
+to_array: (r: Range) => int[]
+is_empty: (r: Range) => bool
+map: <f: (item: int) => U> (r: Range) => U[]
+filter: <f: (item: int) => bool> (r: Range) => int[]
+count: <pred: (item: int) => bool> (r: Range) => int
+find: <pred: (item: int) => bool> (r: Range) => int?
+reduce: <f: (acc: U, item: int) => U, initial: U> (r: Range) => U
+len: (r: Range) => int
+print: (r: Range) => void
 last: (xs: T[]) => T panic
 slice: <axis: int, start: int, end: int, step: int = 1> (x: T[]) => T[] panic
 slice: <axis: int, start: int, end: int, step: int = 1> (x: string) => string panic
@@ -129,7 +139,7 @@ slice: <axis: int, start: int, end: int, step: int = 1> (x: Bytes) => Bytes pani
 concat: (xs: T[], ys: T[]) => T[]
 contains: <value: T> (xs: T[]) => bool
 contains: <sub: string> (s: string) => bool
-zip: (...xs: ...A) => (...ElementOf<A>)[] panic when ...is_array::<A>()
+zip: (...xs: ...A) => (...ElementOf<A>)[] panic
 append: <value: T> (xs: T[]) => T[]
 map: <f: (item: T) => U> (xs: T[]) => U[]
 filter: <f: (item: T) => bool> (xs: T[]) => T[]
@@ -192,8 +202,8 @@ to_array: (content: Bytes) => int[]
 
 ```text
 tree_leaves: (tree: T) => L
-save_tree: <dir: string, dataset_manifest_sha256: string? = null> (tree: T) => void! panic uses var fs when has_ckpt_form::<T>()
-load_tree: <dataset_manifest_sha256: string? = null> (dir: string) => T! panic uses fs, var stderr when has_ckpt_form::<T>()
+save_tree: <dir: string, dataset_manifest_sha256: string? = null> (tree: T) => void! panic uses var fs
+load_tree: <dataset_manifest_sha256: string? = null> (dir: string) => T! panic uses fs, var stderr
 ```
 
 **`tree`** — import { ... } from tree — 4 name(s)
@@ -205,7 +215,7 @@ tree_reduce: <f: (acc: R, leaf: A) => R> (t: T, init: R) => R
 tree_unzip: (r: R, s: S) => ?
 ```
 
-**`transforms`** — import { ... } from transforms — 6 name(s)
+**`transforms`** — import { ... } from transforms — 7 name(s)
 
 ```text
 jvp: (f: F) => Jvp<F> when is_function::<F>()
@@ -214,6 +224,7 @@ transpose: (f: F) => Transpose<F> when is_function::<F>()
 vmap: (f: F) => Vmap<F> when is_function::<F>()
 remat: (f: F) => F when is_function::<F>()
 first_with_as_param: (f: F) => FirstWithAsParam<F> when is_function::<F>()
+reinterp: (f: F) => F! when is_function::<F>()
 ```
 
 **`vjp`** — import { ... } from vjp — 3 name(s)
@@ -224,7 +235,7 @@ grad: (f: F) => GradientOf<F> when is_function::<F>()
 has_aux: (f: (w: float) => (float, float)) => (w: float) => ((float, float), float)
 ```
 
-**`tensor`** — import { ... } from tensor — 81 name(s)
+**`tensor`** — import { ... } from tensor — 82 name(s)
 
 ```text
 zeros: (shape: int[]) => T[...] when is_numeric::<T>()
@@ -256,7 +267,7 @@ shape: (t: T) => ShapeOf<T>
 numel: (t: T[...]) => int when is_numeric::<T>()
 dim: <axis: int> (t: T[...]) => int when is_numeric::<T>()
 dim: <axis: i32> (t: T[...]) => int when is_numeric::<T>()
-pick_at: (t: T[...], position: int, length: int) => T when is_numeric::<T>()
+pick_at: (t: T[...], position: int, length: int) => T
 sum: (t: T[...]) => T
 sum: <axis: int, keepdims: bool = false> (t: T[...]) => T[...]
 mean: (t: T[...]) => T
@@ -291,16 +302,16 @@ from_bytes: (bytes: Bytes, shape: int[]) => T[...] when is_plain::<T>()
 to_bytes: (t: T[...]) => Bytes when is_plain::<T>()
 save_npy: (t: T[...], path: string) => void when is_numeric::<T>()
 sum_stated: (t: T[...], extents: int[]) => T when is_numeric::<T>()
-take_stated: (t: T[...], indices: int[], extents: int[]) => T[...] when is_numeric::<T>()
-mul_stated: (x: T[...], w: T[...], ax: int[], aw: int[]) => T[...] when is_numeric::<T>()
-add_stated: (x: T[...], w: T[...], ax: int[], aw: int[]) => T[...] when is_numeric::<T>()
-subtract_stated: (x: T[...], w: T[...], ax: int[], aw: int[]) => T[...] when is_numeric::<T>()
-div_stated: (x: T[...], w: T[...], ax: int[], aw: int[]) => T[...] when is_numeric::<T>()
+take_stated: (t: T[...], indices: int[], extents: int[]) => T[...]
+mul_stated: (x: T[...], w: T[...], ax: int[], aw: int[]) => T[...]
+add_stated: (x: T[...], w: T[...], ax: int[], aw: int[]) => T[...]
+subtract_stated: (x: T[...], w: T[...], ax: int[], aw: int[]) => T[...]
+div_stated: (x: T[...], w: T[...], ax: int[], aw: int[]) => T[...]
 matmul_stated: (a: T[...], b: T[...], sa: int[], sb: int[]) => T[...]
-sum_axis_stated: (t: T[...], axis: int, keepdims: bool, extents: int[]) => T[...] when is_numeric::<T>()
+sum_axis_stated: (t: T[...], axis: int, keepdims: bool, extents: int[]) => T[...]
 mean_stated: (t: T[...], extents: int[]) => T when is_numeric::<T>()
-max_axis_stated: (t: T[...], mask: bool[...], axis: int, keepdims: bool, extents: int[]) => T[...] when is_numeric::<T>()
-min_axis_stated: (t: T[...], mask: bool[...], axis: int, keepdims: bool, extents: int[]) => T[...] when is_numeric::<T>()
+max_axis_stated: (t: T[...], mask: bool[...], axis: int, keepdims: bool, extents: int[]) => T[...]
+min_axis_stated: (t: T[...], mask: bool[...], axis: int, keepdims: bool, extents: int[]) => T[...]
 num_threads: () => int
 set_num_threads: (n: int) => void
 set_num_threads: (n: i32) => void
@@ -308,6 +319,7 @@ gemm_backend: () => string
 gemm_threads: () => int
 gemm_library_threads: () => int
 gemm_library: () => string
+fuse: <safe_fp: bool = false> (f: F) => F! when is_function::<F>()
 sum_to: (t: T[...], at: int[]) => T[...] when is_float::<T>()
 broadcast_like: (t: T, like: S) => S
 ```
@@ -360,8 +372,8 @@ sum: <axis: int, keepdims: bool = false> (xs: T[...]) => T[...] when is_integer:
 mean: <axis: int, keepdims: bool = false> (xs: T[...]) => T[...] when is_float::<T>()
 min: <axis: int, keepdims: bool = false> (xs: T[...]) => T[...] when is_integer::<T>() || is_float::<T>()
 max: <axis: int, keepdims: bool = false> (xs: T[...]) => T[...] when is_integer::<T>() || is_float::<T>()
-argmax: <axis: int, keepdims: bool = false> (xs: T[...]) => int[...] when is_integer::<T>() || is_float::<T>()
-argmin: <axis: int, keepdims: bool = false> (xs: T[...]) => int[...] when is_integer::<T>() || is_float::<T>()
+argmax: <axis: int, keepdims: bool = false> (xs: T[...]) => int[...]
+argmin: <axis: int, keepdims: bool = false> (xs: T[...]) => int[...]
 shape: (xs: T[...]) => int[]
 numel: (xs: T[...]) => int
 dim: <axis: int> (xs: T[...]) => int panic
@@ -629,7 +641,7 @@ unordered_reduce: <f: (acc: T, item: T) => T, initial: T> (xs: T[]) => T
 **`test_support`** — import { ... } from test_support — 5 name(s)
 
 ```text
-rendezvous: (parties: int, timeout: float) => int panic uses var rendezvous_point
+rendezvous: (parties: int, timeout: float) => int panic
 thread_count: () => int panic uses process
 with_probe: <base: int, step: int = 10, mode: int = 0> (x: T) => int
 with_probe: <base: int, step: int = 10, mode: int = 0> (xs: int[]) => int
@@ -642,7 +654,7 @@ arity_probe: <tag: int, extra: int[] = []> (f: F, example: E) => int when is_fun
 zen: () => string
 ```
 
-**`graph`** — import { ... } from graph — 52 name(s)
+**`graph`** — import { ... } from graph — 54 name(s)
 
 ```text
 graph_of: (f: F) => Graph when is_function::<F>()
@@ -688,16 +700,18 @@ creation_id: (h: Op) => int spelling
 effects: (g: Graph) => Effects
 shape_text: (n: Node) => string?
 permissions: (n: Node) => int
+relative_cost: (n: Node) => float
 open: (f: F) => Txn<F> when is_function::<F>()
 replace: (t: Txn<F>, old: Node, new: Node) => void uses var t
 erase: (t: Txn<F>, n: Node) => void uses var t
 eval: (t: Txn<F>, n: Node) => Node? uses var t
 order: (t: Txn<F>, before: Node, after: Node) => void uses var t
-inline: (t: Txn<F>, at: Node, fn: G) => Node uses var t when is_function::<G>()
+inline: (t: Txn<F>, at: Node, fn: G) => Node
 outline: (t: Txn<F>, ns: Node[]) => Node uses var t
-add_constant: (t: Txn<F>, g: Graph, value: T) => Node uses var t when is_ordered::<T>()
+add_constant: (t: Txn<F>, g: Graph, value: T) => Node
 commit: (t: Txn<F>) => F! uses var t
 abort: (t: Txn<F>) => void uses var t
+probe_handle: (f: F) => F! when is_function::<F>()
 check_pass_boundary: (before: F, after: F) => F! when is_function::<F>()
 ```
 
@@ -709,7 +723,7 @@ saturate: <rules: Rule[], rounds: int = 6, strict: bool = false, protect_order: 
 extract: <cost: (n: Node, inputs: float[]) => float> (f: F) => F! when is_function::<F>()
 run: <rules: Rule[], rounds: int = 16, strict: bool = false, explain: bool = false, protect_order: bool = true, protect_faults: bool = true, ordered: bool = false> (f: F) => Run<F>! panic when is_function::<F>()
 check: <samples: int = 100, seed: int = 0> (rules: Rule[]) => CheckReport panic
-check: <samples: int = 100, seed: int = 0> (rules: Rule[], over: F) => CheckReport panic when is_function::<F>()
+check: <samples: int = 100, seed: int = 0> (rules: Rule[], over: F) => CheckReport panic
 check_text: (r: CheckReport) => string
 coverage_table: string
 explain: <a: Node, b: Node> (r: Run<F>) => Proof!
@@ -721,7 +735,7 @@ rule_needs: (r: Rule) => int
 rule_consts: (r: Rule) => int
 ```
 
-**`tiles`** — import { ... } from tiles — 9 name(s)
+**`tiles`** — import { ... } from tiles — 12 name(s)
 
 ```text
 upload: (value: f32[...]) => Device<f32[...]> uses var driver
@@ -733,6 +747,9 @@ benchmark: <fn: (a: f32, b: f32) => f32> (inputs: (f32, f32)) => string uses var
 regions: <fn: (a: f32, b: f32) => f32> () => string
 available: () => bool uses var driver
 device: () => string! uses var driver
+compile: (f: F) => F! uses var driver when is_function::<F>()
+census: (f: F) => F! when is_function::<F>()
+test_outline_compiled: <reasons: bool = false, declarations: bool = false> (f: F) => F! when is_function::<F>()
 ```
 
 **`pyplot`** — import { ... } from pyplot — 1 name(s)
@@ -803,14 +820,18 @@ update: (opt: Sgd, params: P, grads: G, state: SgdState) => (P, SgdState)
 update: (opt: Adam, params: P, grads: G, state: AdamState<P>) => (P, AdamState<P>)
 ```
 
-**`autodiff`** — import { ... } from autodiff — 19 name(s)
+**`autodiff`** — import { ... } from autodiff — 4 name(s)
 
 ```text
 grad: (f: F) => Gradient<F> when is_function::<F>()
 grad: (f: F, has_aux: bool) => GradientAndAux<F> when is_function::<F>()
 with_grad: (f: F) => ValueAndGradient<F> when is_function::<F>()
-with_grad: (f: F, has_aux: bool) => ValueAndGradientAndAux<F> when is_function::<F>()
-stop_gradient: (x: T) => T pure
+with_grad: (f: F, has_aux: bool) => ValueAndGradientAndAux<F>
+```
+
+**`laws`** — import { ... } from laws — 15 name(s)
+
+```text
 add_tangent: (x: T, w: T, dx: T, dw: T) => T when is_float::<T>()
 sub_tangent: (x: T, w: T, dx: T, dw: T) => T when is_float::<T>()
 mul_tangent: (x: T, w: T, dx: T, dw: T) => T when is_float::<T>()
@@ -825,6 +846,7 @@ add_cotangent_c: (ct: T) => T when is_float::<T>()
 sub_cotangent_c: (ct: T) => T when is_float::<T>()
 mul_cotangent_c: (x: T, ct: T) => T when is_float::<T>()
 div_cotangent_c: (x: T, c: T, ct: T) => T when is_float::<T>()
+stop_gradient: (x: T) => T pure
 ```
 
 **`rulesets.jvp`** — import { ... } from rulesets.jvp — 14 name(s)
@@ -838,9 +860,9 @@ sub_jvp: (x: float, y: float, d: (float, float)) => (float, Tangent<float>)
 div_jvp: (x: f32, y: f32, d: (f32, f32)) => (f32, Tangent<f32>)
 div_jvp: (x: float, y: float, d: (float, float)) => (float, Tangent<float>)
 reshape_jvp: (dx: T[...], dims: int[]) => T[...] when is_float::<T>()
-softmax_jvp: (x: T[...], dx: T[...], axis: int) => T[...] when is_float::<T>()
-log_softmax_jvp: (x: T[...], dx: T[...], axis: int) => T[...] when is_float::<T>()
-layer_norm_tangent: (gamma: T[...], dgamma: T[...], dbeta: T[...], xhat: T[...], jx: T[...]) => T[...] when is_float::<T>()
+softmax_jvp: (x: T[...], dx: T[...], axis: int) => T[...]
+log_softmax_jvp: (x: T[...], dx: T[...], axis: int) => T[...]
+layer_norm_tangent: (gamma: T[...], dgamma: T[...], dbeta: T[...], xhat: T[...], jx: T[...]) => T[...]
 layer_norm_neutral: (t: T[...], v: float) => T[...] when is_float::<T>()
 pow_tangent: (x: T, w: T, dx: T, dw: T) => T when is_float::<T>()
 permute_jvp: (dx: T[...], perm: int[]) => T[...] when is_float::<T>()
@@ -870,13 +892,13 @@ vmap_max: (xs: T[...]) => T[...] when is_numeric::<T>()
 vmap_min: (xs: T[...]) => T[...] when is_numeric::<T>()
 vmap_argmax: (xs: T[...]) => int[...] when is_numeric::<T>()
 vmap_argmin: (xs: T[...]) => int[...] when is_numeric::<T>()
-vmap_reshape: (xs: T[...], dims: int[...]) => T[...] when is_numeric::<T>()
-vmap_unsqueeze: (xs: T[...], axis: int[]) => T[...] when is_numeric::<T>()
+vmap_reshape: (xs: T[...], dims: int[...]) => T[...]
+vmap_unsqueeze: (xs: T[...], axis: int[]) => T[...]
 vmap_transpose: (xs: T[...]) => T[...] when is_numeric::<T>()
-vmap_permute: (xs: T[...], perm: int[...]) => T[...] when is_numeric::<T>()
-vmap_concat: (a: T[...], b: T[...], axis: int[]) => T[...] when is_numeric::<T>()
+vmap_permute: (xs: T[...], perm: int[...]) => T[...]
+vmap_concat: (a: T[...], b: T[...], axis: int[]) => T[...]
 vmap_dim: (xs: T[...], axis: int[]) => int[] when is_numeric::<T>()
-vmap_where: (cond: bool[...], a: T[...], b: T[...]) => T[...] when is_numeric::<T>()
+vmap_where: (cond: bool[...], a: T[...], b: T[...]) => T[...]
 ```
 
 **`sim`** — import { ... } from sim — 2 name(s)
@@ -886,10 +908,11 @@ pi_hits: (samples: int, seed: int) => int panic
 asian_call_price: (paths: int, steps: int, seed: int) => float panic
 ```
 
-**`onnx`** — import { ... } from onnx — 2 name(s)
+**`onnx`** — import { ... } from onnx — 3 name(s)
 
 ```text
 supported_operators: () => string[]
 export_model: <out: string, dynamic_axes: int[] = [], target: string = 'onnxruntime-cpu'> (fn: F, example: E) => void! when is_function::<F>()
+export_model: <out: string = '', trace: bool = false, dump: bool = false, prep_stats: bool = false> (f: F) => F! when is_function::<F>()
 ```
 <!-- camel-for-ai end: stdlib-signatures -->

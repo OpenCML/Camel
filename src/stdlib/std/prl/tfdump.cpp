@@ -162,7 +162,7 @@ TfDumpPass::apply(const camel::runtime::Program *program, std::ostream &os) {
     auto *graph = program->root();
     TaskflowExecSchedPass tfPass(context_, 32);
     tfPass.buildAndDump(program, graph, os);
-    return nullptr;
+    return program;
 }
 
 namespace {

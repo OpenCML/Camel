@@ -444,13 +444,14 @@ void registerCamelPass(
                                    const context_ptr_t &ctx, const PassArgs &args) {
                     return std::make_unique<CamelPass>(ctx, module, function, genericParams, args);
                 };
-                // The tags written on the declaration are read from the module once its functions are
-                // built: a generic one is not built by the lookup above. A module that does
-                // not compile is a diagnostic against it, recorded by the one place that
-                // decides that (`compileForLoad`, camel/core/module/userdef.h); it is not this
-                // registration's to report, so the answer is not read here.
-                (void)camel::core::module::compileForLoad(
-                    lookup.module, camel::core::module::CompileStage::Done);
+                // The `#reads(...)` tags are read from the declaration the lookup above made: the
+                // module was compiled as a program of its own (`compileAsProgram`), and its
+                // declaration -- every declaration-level fact with it -- is that program's, made
+                // into its own builder. So it is not declared a second time here: declaring it
+                // into the context's own program (`compileForLoad` with `Done`, which for a
+                // module that is not the entry declares and does not build) would put the pass
+                // library's declaration graphs in the entry program, whose composition is
+                // whatever its own build linked.
                 declareReads(lookup.module, module, function);
                 registerModulePass(module + "::" + function, std::move(generic));
                 return;

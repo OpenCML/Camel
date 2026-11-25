@@ -109,6 +109,10 @@ args = ["${case}", "${camel}"]
 expect_exit = 0
 expect_stdout_contains = ["one input, one answer: PASS (40 compiles"]
 timeout_ms = 120000
+# Slow layer: over the 2 s the fast layer allows -- 4.84 s of
+# child wall clock in the 2026-11-12 record (appendix B of
+# internal/reports/2026-11-24-test-suite-inventory.cn.md).
+tier = "slow"
 
 [[tests]]
 name = "unused_values.called_fallible"
@@ -122,6 +126,10 @@ assert(input.diagnostics.length === 1, JSON.stringify(input.diagnostics))
 assert(input.diagnostics[0].name === 'SemanticDiag::CalledFallibleValue', input.diagnostics[0].name)
 assert(input.diagnostics[0].line === 16, JSON.stringify(input.diagnostics[0]))
 """
+# Slow layer: over the 2 s the fast layer allows -- 3.10 s of
+# child wall clock in the 2026-11-12 record (appendix B of
+# internal/reports/2026-11-24-test-suite-inventory.cn.md).
+tier = "slow"
 
 [[tests]]
 name = "unused_values.called_fallible_pipeline"
@@ -149,6 +157,10 @@ assert(input.diagnostics[0].line === 13 && input.diagnostics[0].column === 22, J
 # its output, so a help that named a spelling the language does not have would be caught by the case
 # that follows it rather than by a reader. The page is
 # `internal/reviews/2026-11-05-does-a-println-in-a-loop-body-need-do-sync.cn.md`.
+# Slow layer: over the 2 s the fast layer allows -- 2.93 s of
+# child wall clock in the 2026-11-12 record (appendix B of
+# internal/reports/2026-11-24-test-suite-inventory.cn.md).
+tier = "slow"
 
 [[tests]]
 name = "unused_values.loop_body_runs_each_round"
@@ -204,6 +216,10 @@ args = ["-E", "short", "${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SyntaxDiag::UnexpectedToken"
 expect_stdout_contains = ["Unexpected 'sync'", "expected an expression"]
+# Slow layer: over the 2 s the fast layer allows -- 3.19 s of
+# child wall clock in the 2026-11-12 record (appendix B of
+# internal/reports/2026-11-24-test-suite-inventory.cn.md).
+tier = "slow"
 
 [[tests]]
 name = "unused_values.help_if_arm_then_sync_runs"
@@ -219,6 +235,10 @@ assert(lines.join('|') === 'then=1|then=2', `unexpected output: ${JSON.stringify
 assert(!input.normalized.stderr.includes('is never executed'), input.normalized.stderr)
 }
 """
+# Slow layer: over the 2 s the fast layer allows -- 2.79 s of
+# child wall clock in the 2026-11-12 record (appendix B of
+# internal/reports/2026-11-24-test-suite-inventory.cn.md).
+tier = "slow"
 
 [[tests]]
 name = "unused_values.help_if_arm_else_sync_runs"
@@ -234,6 +254,10 @@ assert(lines.join('|') === 'else=1', `unexpected output: ${JSON.stringify(input.
 assert(!input.normalized.stderr.includes('is never executed'), input.normalized.stderr)
 }
 """
+# Slow layer: over the 2 s the fast layer allows -- 2.43 s of
+# child wall clock in the 2026-11-12 record (appendix B of
+# internal/reports/2026-11-24-test-suite-inventory.cn.md).
+tier = "slow"
 
 [[tests]]
 name = "unused_values.help_function_body_sync_runs"
@@ -249,3 +273,7 @@ assert(lines.join('|') === 'hello from greet', `unexpected output: ${JSON.string
 assert(!input.normalized.stderr.includes('is never executed'), input.normalized.stderr)
 }
 """
+# Slow layer: over the 2 s the fast layer allows -- 2.25 s of
+# child wall clock in the 2026-11-12 record (appendix B of
+# internal/reports/2026-11-24-test-suite-inventory.cn.md).
+tier = "slow"

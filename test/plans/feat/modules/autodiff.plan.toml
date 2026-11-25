@@ -324,7 +324,7 @@ name = "collapse.simplified.rgir"
 desc = "A gradient through helper calls collapses into straight-line code: after std::opt, fold and dce, the derivative graph has no calls, closures or tuples left."
 kind = "behavior"
 case = "../../../cases/modules/autodiff/collapse.cml"
-args = ["${case}", "std::macro", "std::opt", "std::cxx::fold", "std::cxx::dce", "std::rgir"]
+args = ["${case}", "std::macro", "std::opt", "std::cxx::fold", "std::cxx::dce", "std::rgir", "std::nop"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
@@ -465,7 +465,7 @@ timeout_ms = 6000
 known_fail = true
 known_fail_owner = "lane-holdmerge (hold/vjpgrad)"
 known_fail_msg = "is not a function that is named or built in it"
-known_fail_ends_when = "when a shape reaches the `Oper` node again, this entry prints the tail it pins, `which function it calls is not evident where it is called: the function is computed at run time`, and exits 1 with both `expect_output_contains` lines matching; today the same program prints the `Func` tail (`is not a function that is named or built in it`), which is the sentence `second_order_refused_vjp_func` pins, so the two entries are read as one measurement and the day the `Oper` tail returns this one goes green"
+known_fail_ends_when = { prints = "which function it calls is not evident where it is called: the function is computed at run time" }
 known_fail_reason = "同一个程序在标签在场时读的是另一句：`#macro` 落在 `lib/vjp/vjp.cml#vjp` 上之后，调用点拿到的是「一次具名调用交回的图」，`whyNotEvident` 于是走 `GCNodeKind::Func` 那一支。拒绝、位置、前半句都没变，只有尾巴按值的种类换。这一条钉 `Oper` 那种值的措辞，今天不出现；`second_order_refused_vjp_func` 钉另一种。"
 known_fail_note = "Two facts, two entries, one case file: the tail is decided by what the value is, so an operator's answer and a tagged call's answer are pinned apart instead of one of them being dropped from the record. The mark is not a wall -- it is the second fact, and it fires in both directions: `known_fail_msg` pins what the run does say today (a third wording turns the run red), and the day a shape reaches the `Oper` node again this entry passes and the mark has to come off. Where the `Oper` node went: `#macro` makes a call of a declaration hand back a graph, which is what a macro is, so nothing in this tree computes that value with an operator any more."
 
@@ -498,7 +498,7 @@ name = "fused_grad_check.fused"
 desc = "The functions checked by fused_grad_check are indeed the marked groups: tensor::fuse leaves matmul, add and relu in them and writes tensor.fusion on every node of each group. The property, not a total: the graphs that carry a mark are exactly the case's six checked functions (lin_* the matmul-plus-bias ones, mlp_* the ones whose chain ends in relu, which is why their mark is linear_relu), every mark sits on a private chain — the matmul's only normal reader is the add, and for linear_relu the add's only normal reader is the relu — and no matmul or relu of the program is left outside a group."
 kind = "behavior"
 case = "../../../cases/modules/autodiff/fused_grad_check.cml"
-args = ["${case}", "tensor::fuse", "std::jgir"]
+args = ["${case}", "tensor::fuse", "std::jgir", "std::nop"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
@@ -543,6 +543,10 @@ assert(fused.length === 0, `no fused operator may appear: ${JSON.stringify(fused
 }
 """
 timeout_ms = 6000
+# Slow layer: over the 2 s the fast layer allows -- 2.09 s of
+# child wall clock in the 2026-11-12 record (appendix B of
+# internal/reports/2026-11-24-test-suite-inventory.cn.md).
+tier = "slow"
 
 [[tests]]
 name = "scalar_grad.runtime.fvm"
@@ -923,6 +927,10 @@ assert(passed === 21, `expected 21 passing checks, got ${passed}: ${out}`)
 }
 """
 timeout_ms = 20000
+# Slow layer: over the 2 s the fast layer allows -- 2.19 s of
+# child wall clock in the 2026-11-12 record (appendix B of
+# internal/reports/2026-11-24-test-suite-inventory.cn.md).
+tier = "slow"
 
 [[tests]]
 name = "tensor_grad_check.macro.jit"
@@ -985,6 +993,10 @@ args = ["--gc-stress", "safepoint=1,kind=major", "--gc-check", "verify=both", "$
 expect_exit = 0
 expect_stdout_contains = ["loss=0.35793429613113403 gqw=0.19846568 gkw=0.076419204", "loss2=0.35793429613113403 gqw2=0.19846568 gkw2=0.076419204"]
 timeout_ms = 20000
+# Slow layer: over the 2 s the fast layer allows -- 2.10 s of
+# child wall clock in the 2026-11-12 record (appendix B of
+# internal/reports/2026-11-24-test-suite-inventory.cn.md).
+tier = "slow"
 
 [[tests]]
 name = "pb_statics_gc.runtime.fvm"
@@ -995,6 +1007,10 @@ args = ["--gc-stress", "safepoint=1,kind=major", "--gc-check", "verify=both", "$
 expect_exit = 0
 expect_stdout_contains = ["loss=0.35793429613113403 gqw=0.19846568 gkw=0.076419204", "loss2=0.35793429613113403 gqw2=0.19846568 gkw2=0.076419204"]
 timeout_ms = 20000
+# Slow layer: over the 2 s the fast layer allows -- 2.04 s of
+# child wall clock in the 2026-11-12 record (appendix B of
+# internal/reports/2026-11-24-test-suite-inventory.cn.md).
+tier = "slow"
 
 [[tests]]
 name = "control_flow_grad.inline.nvm"
@@ -1687,7 +1703,7 @@ name = "loop_grad_literal_array.shape"
 desc = "A differentiated loop over an array literal: no port reaches the array, so its reverse loop carries no array gradient and neither array-gradient operator appears in it (`:tangent/zeros_arr`, `:tangent/scatter_add_arr`). The loop still iterates a `float[]` data node and the reverse loop is there, so the absence is the rule's, not a missing transformation or a folded-away literal. The parameter-built twin has both operators, the scatter reading its gradient base from a `float[]` port."
 kind = "behavior"
 case = "../../../cases/modules/autodiff/loop_grad_literal_array.cml"
-args = ["${case}", "std::macro", "std::jgir"]
+args = ["${case}", "std::macro", "std::jgir", "std::nop"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
@@ -1720,7 +1736,7 @@ name = "loop_grad_parameter_array.shape"
 desc = "The twin over an array built from the parameter: the array takes part in the gradient, so the reverse loop carries it and both array-gradient operators are there: `:tangent/scatter_add_arr`, whose gradient base is a `float[]` port, and `:tangent/zeros_arr`, whose zero array is the forward array read from a capture port."
 kind = "behavior"
 case = "../../../cases/modules/autodiff/loop_grad_parameter_array.cml"
-args = ["${case}", "std::macro", "std::jgir"]
+args = ["${case}", "std::macro", "std::jgir", "std::nop"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
@@ -1848,6 +1864,10 @@ expect_stdout_contains = ["96 gradients checked, 0 wrong", "PASS"]
 expect_output_not_contains = ["FAIL"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 240000
+# Slow layer: over the 2 s the fast layer allows -- 2.95 s of
+# child wall clock in the 2026-11-12 record (appendix B of
+# internal/reports/2026-11-24-test-suite-inventory.cn.md).
+tier = "slow"
 
 [[tests]]
 name = "grad_effects_kept.default"

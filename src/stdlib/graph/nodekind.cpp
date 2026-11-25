@@ -17,8 +17,6 @@ namespace {
 constexpr std::pair<GCNodeKind, const char *> kNodeKinds[] = {
     {GCNodeKind::Data, "Data"},
     {GCNodeKind::Port, "Port"},
-    {GCNodeKind::Cast, "Cast"},
-    {GCNodeKind::Copy, "Copy"},
     {GCNodeKind::Fill, "Fill"},
     {GCNodeKind::Accs, "Accs"},
     {GCNodeKind::Brch, "Brch"},
@@ -53,8 +51,6 @@ std::optional<uint32_t> nodeKindTag(GCNodeKind kind) {
         return std::nullopt;
     case GCNodeKind::Data:
     case GCNodeKind::Port:
-    case GCNodeKind::Cast:
-    case GCNodeKind::Copy:
     case GCNodeKind::Fill:
     case GCNodeKind::Accs:
     case GCNodeKind::Brch:

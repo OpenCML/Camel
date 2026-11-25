@@ -19,7 +19,7 @@
  *    the tangents -- the cotangent of tangent i is the primal's cotangent of value i, computed from
  *    the values only.
  * 3. **`arm-stop region=1 node=7 arg=1`** (before the split was read at all): the arm's call is a **rule kernel**,
- *    `autodiff::mul_tangent<float>`, whose arguments are `(x, w, dx, dw)`. Transposing it as a plain
+ *    `laws::mul_tangent<float>`, whose arguments are `(x, w, dx, dw)`. Transposing it as a plain
  *    function wants all four values, and a tangent has none in the transposed graph -- tangents are
  *    what the answer is a cotangent of, so they are not among its parameters.
  * 4. **`arm-stop ... arg=1`, with the split declared in one place**: which of a kernel call's

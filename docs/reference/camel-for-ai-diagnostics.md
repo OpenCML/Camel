@@ -58,7 +58,7 @@ Source: `diagnostics/registry.tsv`, the one place a diagnostic is declared. Rege
 
 | `ComparisonAcrossLines` | This '>' is read as a comparison with the next line, which starts with {0}: two statements may have been joined into one. |
 
-**Semantic — errors** (`SemanticDiag`) — 235
+**Semantic — errors** (`SemanticDiag`) — 236
 
 | `Redeclaration` | Redeclaration of reference: '{0}'. |
 | `ModuleNotFound` | Module '{0}' not found. {1} |
@@ -131,7 +131,7 @@ Source: `diagnostics/registry.tsv`, the one place a diagnostic is declared. Rege
 | `LoopStateWithoutType` | The first value of the loop state '{0}' does not give it a type ('{1}'). |
 | `LoopConditionNotBool` | The condition after 'while' has type '{0}'; a condition is a 'bool'. |
 | `LoopNameRepeated` | The name '{0}' is declared twice in this loop head. |
-| `LoopSequenceNotIterable` | 'for' takes the elements of an array, a string, a map, a tensor or a stream; '{0}' has type '{1}'. |
+| `LoopSequenceNotIterable` | 'for' takes the elements of an array, a string, a map, a tensor, a stream, or a value of a named type that says how to walk it; '{0}' has type '{1}'. |
 | `DuplicateEnumVariant` | The variant '{0}' is declared twice in enum '{1}'. |
 | `DuplicateEnumField` | The field '{0}' is declared twice in variant '{1}' of enum '{2}'. |
 | `EnumVariantFieldCount` | The variant '{0}' of enum '{1}' takes {2} field(s), but {3} were given. |
@@ -250,8 +250,8 @@ Source: `diagnostics/registry.tsv`, the one place a diagnostic is declared. Rege
 | `ParamDefaultWrongType` | The default of the parameter '{0}' has type '{1}', not '{2}'. |
 | `ParamAfterDefault` | The parameter '{0}' has no default and follows '{1}', which has one. |
 | `ParamArgumentWrongType` | The argument '{0}' of '{1}' has type '{2}', not '{3}'. |
-| `CompOperandMismatch` | '..' takes two functions or two integers, and '<>' takes two functions; the left operand is '{0}' and the right one '{1}'. |
-| `CompOperandNotUnary` | '..' and '<>' compose a unary function on the left; '{0}' takes {1} parameters. |
+| `CompOperandMismatch` | '..' takes two integers and '<>' takes two functions; the left operand is '{0}' and the right one '{1}'. |
+| `CompOperandNotUnary` | '<>' composes a unary function on the left; '{0}' takes {1} parameters. |
 | `CompOperandGenericWithoutType` | '{0}' composes two functions, and its {1} operand, the generic function '{2}', has no instance here: write its type arguments ('{2}::<int>'), or give the whole expression an expected function type. |
 | `RangeStepZero` | The range 'range({0}, {1}, 0)' has a step of 0, so it is no sequence of integers. |
 | `SliceStepZero` | The slice 't[range(a, b, s)]' has a step of 0, so it takes no element at all, whatever its bounds are. |
@@ -295,6 +295,7 @@ Source: `diagnostics/registry.tsv`, the one place a diagnostic is declared. Rege
 | `CapturedVarHandedToVarParameter` | '{0}' is handed to a `var` parameter of a call after the closure '{1}' was made from it, and the write the call hands back does not reach the closure. |
 | `VarContextParameterCannotBeBound` | '{0}' cannot be bound to '{1}', a `var` context parameter: a function value made by a partial application has no call of its own to write the value back to. |
 | `OperatorAccessesUndeclared` | The operator '{0}' itemizes no accesses, and an operator of the built-in module must say what it touches. |
+| `OperatorSignatureUnresolved` | The signature of the operator '{0}' is not resolved: the type of {1} is not known where the compiler writes this call. |
 
 **Semantic — warnings** (`SemanticDiag`) — 15
 
@@ -363,7 +364,7 @@ Source: `diagnostics/registry.tsv`, the one place a diagnostic is declared. Rege
 
 **Run time and passes — warnings** (`RuntimeDiag`) — 6
 
-| `PassesNeverRun` | Pass '{0}' consumes the graph, so {1} written after it will not run. |
+| `PassesNeverRun` | Pass '{0}' answered with an empty graph, so {1} written after it will not run. |
 | `ConstantExpressionFaults` | This constant expression faults whenever it is evaluated ({0}); it is not folded. |
 | `TranslationLinksRuntime` | std::cpp has no standalone translation of {0}: the program it writes calls the Camel runtime there and is built with libcamel. |
 | `DefunctionalizationIncomplete` | Defunctionalization left {0} as written. |

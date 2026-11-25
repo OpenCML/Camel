@@ -16,7 +16,7 @@ desc = "The witness of a node handle's identity: a handle whose builder is gone 
 # drafts it makes are the compile side's, and no module names `DraftGraphBuilder`.
 [[tests]]
 name = "runtime.draft_node_owner.stale_handle_is_refused"
-desc = "A node of the draft that holds the address resolves to that draft; a handle left over the destroyed draft at the same address names no draft and has no owner, although the address alone would answer yes. GCNodeKind 3 is Copy and 13 is Gate, so the node a stale read would take is visibly the wrong one."
+desc = "A node of the draft that holds the address resolves to that draft; a handle left over the destroyed draft at the same address names no draft and has no owner, although the address alone would answer yes. The kind the stale handle was made with is not the kind at the address now, so the node a stale read would take is visibly the wrong one."
 kind = "behavior"
 case = "../../../cases/runtime/draft_node_owner/owner_after_the_graph.cml"
 args = ["${case}", "test::draft_node_owner"]
@@ -25,7 +25,13 @@ expect_exit = 0
 # it": `same_address=1` is what makes the rest a reading rather than a vacuous miss -- the handle's
 # address is the live draft's, and the epoch is the only thing that answers no. The attempt count is
 # not pinned: the allocator's reuse is the case, not the number of tries it takes to get it.
-expect_stdout_matches = ['\[DRAFT_NODE_OWNER\] current_of_released=0', '\[DRAFT_NODE_OWNER\] released_owner=none', '\[DRAFT_NODE_OWNER\] live_owner=yes', '^\[DRAFT_NODE_OWNER\] reused=1 attempt=\d+ same_address=1$', '\[DRAFT_NODE_OWNER\] kind_when_made=3 kind_at_the_address_now=13', '\[DRAFT_NODE_OWNER\] stale_is_named=0 stale_owner=none', '^\[DRAFT_NODE_OWNER\] Refused: handle made in epoch \d+ at 0x[0-9a-f]+, and the address now holds epoch \d+$', '\[DRAFT_NODE_OWNER\] ok']
+#
+# `kind_when_made` and `kind_at_the_address_now` are left free on purpose: a `GCNodeKind` number
+# moves with the enum (the copy kind this case was written with is gone; a copy is a call of
+# `:op/copy` now), and pinning the numbers makes a deletion elsewhere red here for no reason. What
+# the case needs is that the two differ, which `kind_changed=1` says and the pass refuses to report
+# `ok` without.
+expect_stdout_matches = ['\[DRAFT_NODE_OWNER\] current_of_released=0', '\[DRAFT_NODE_OWNER\] released_owner=none', '\[DRAFT_NODE_OWNER\] live_owner=yes', '^\[DRAFT_NODE_OWNER\] reused=1 attempt=\d+ same_address=1$', '\[DRAFT_NODE_OWNER\] kind_when_made=\d+ kind_at_the_address_now=\d+ kind_changed=1', '\[DRAFT_NODE_OWNER\] stale_is_named=0 stale_owner=none', '^\[DRAFT_NODE_OWNER\] Refused: handle made in epoch \d+ at 0x[0-9a-f]+, and the address now holds epoch \d+$', '\[DRAFT_NODE_OWNER\] ok']
 # The pass says MISSING when it could not set its case up or when the stale handle did resolve. The
 # second is the defect coming back and the first is a witness with nothing to show; both are red.
 expect_stdout_not_contains = ["[DRAFT_NODE_OWNER] MISSING"]

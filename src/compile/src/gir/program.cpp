@@ -625,6 +625,39 @@ bool Builder::buildLibraryEntry(
     return buildFrom(*it->second, true);
 }
 
+void Builder::freezeProgram() {
+    programGraphs_.clear();
+    if (rootGraph_ == nullptr) {
+        programFrozen_ = false;
+        return;
+    }
+    for (const compile_graph_ptr_t &graph : rootGraph_->subGraphs()) {
+        programGraphs_.push_back(graph);
+    }
+    programFrozen_ = true;
+}
+
+bool Builder::pruneToTheProgram() {
+    if (!programFrozen_ || rootGraph_ == nullptr) {
+        return false;
+    }
+    std::unordered_set<const DraftGraphBuilder *> kept;
+    kept.reserve(programGraphs_.size());
+    for (const compile_graph_ptr_t &graph : programGraphs_) {
+        kept.insert(graph.get());
+    }
+    std::vector<compile_graph_ptr_t> added;
+    for (const compile_graph_ptr_t &graph : rootGraph_->subGraphs()) {
+        if (!kept.contains(graph.get())) {
+            added.push_back(graph);
+        }
+    }
+    for (const compile_graph_ptr_t &graph : added) {
+        rootGraph_->eraseSubGraph(graph);
+    }
+    return true;
+}
+
 size_t Builder::sourceOffsetOf(camel::source::origin_id_t origin) const {
     auto sourceContext = context_ != nullptr ? context_->sourceContext() : nullptr;
     if (sourceContext == nullptr || origin == camel::source::kInvalidOriginId) {
@@ -1216,6 +1249,13 @@ bool Builder::buildFrom(ModuleUnit &entry, bool callEntry) {
     }
     for (const compile_graph_ptr_t &graph : imported) {
         rootGraph_->eraseSubGraph(graph);
+    }
+
+    // What the build linked is the program (`freezeProgram`, and `pruneToTheProgram` for the
+    // reader that runs after it). A library build links no program: its graphs are the caller's
+    // (a definition library, an imported module a program built), and nothing freezes here.
+    if (callEntry) {
+        freezeProgram();
     }
 
     if (ok) {

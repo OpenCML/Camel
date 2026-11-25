@@ -9,6 +9,7 @@
 #pragma once
 
 #include "builder_types.h"
+#include "name_layers.h"
 
 #include <string_view>
 
@@ -82,6 +83,27 @@ class Builder {
         FunctionType *expected = nullptr);
 
     compile_graph_ptr_t rootGraph() const { return rootGraph_; }
+
+    /// Records what the program is made of: the root graph's subgraphs as this build left them,
+    /// by identity. Called at the end of a build that calls an entry (`buildProgram`,
+    /// `buildLibraryEntry`), which is the last moment the program's composition is the build's.
+    ///
+    /// A module declared into this builder *after* that build is another program's: a pass the
+    /// pipeline loaded (`UserDefinedModule::compileAsProgram` declares the module into a builder
+    /// of its own, but the operator definitions its tool needs are built here), the definition
+    /// library of an operator, an instance of a generic rule built where the rule is applied.
+    /// Each of those makes graphs on this root graph, and the program whose builder this is must
+    /// not take them: one builder serves one program (design principles 10.1), and a program's
+    /// composition is what its build linked.
+    void freezeProgram();
+
+    /// Puts the root graph back to what `freezeProgram` recorded, erasing the subgraphs added
+    /// since. Answers false when no build of this builder froze a program. The one reader that
+    /// runs after a program build -- the encoding of the entry program
+    /// (`SourceModuleFrontEnd::encodeProgram`) -- asks for it, so that the program it encodes is
+    /// the one the compiler built.
+    bool pruneToTheProgram();
+
     /// Why a generic entry function has no instance for the type it was asked for.
     const std::string &libraryEntryProblem() const { return libraryEntryProblem_; }
 
@@ -394,6 +416,10 @@ class Builder {
     GCT::Tree *tree_ = nullptr;
     compile_graph_ptr_t rootGraph_;
     compile_graph_ptr_t currGraph_;
+    // The program's composition as its build left it (`freezeProgram`), by identity, and whether a
+    // build recorded one at all.
+    std::vector<compile_graph_ptr_t> programGraphs_;
+    bool programFrozen_ = false;
     // The function the root graph calls, when the build is a library used as a program of its
     // own (buildLibraryEntry); empty for a program, whose entry is `main`.
     std::string libraryEntryFunction_;
@@ -1623,6 +1649,24 @@ class Builder {
         std::vector<Argument> &normInputs, camel::core::type::type_vec_t &withTypes,
         camel::core::type::type_vec_t &normTypes, const GCT::node_ptr_t &call,
         Type *expectedResult = nullptr);
+    /// A generic call the name's own declaration does not take: the call, the name, the arguments
+    /// as a report writes them, why the declaration refused them, and the signature it refused
+    /// them by. `instantiateForCall` retries with the name's other bodies before it reports this,
+    /// and reports it only when none of them accepts the call.
+    struct GenericCallRejected {
+        GCT::node_ptr_t call;
+        std::string name;
+        std::string arguments;
+        std::string why;
+        std::string signature;
+    };
+    /// The binding itself: the one declaration of the name against the arguments of the call,
+    /// throwing `GenericCallRejected` where it does not hold.
+    compile_graph_ptr_t instantiateForCallBinding(
+        const generic_template_ptr_t &tmpl, std::vector<Argument> &withInputs,
+        std::vector<Argument> &normInputs, camel::core::type::type_vec_t &withTypes,
+        camel::core::type::type_vec_t &normTypes, const GCT::node_ptr_t &call,
+        Type *expectedResult = nullptr);
     /// The instance of one chosen template; `resolveGenericCall` is this for the single template
     /// a name holds, and the call site is this for each candidate of a name with several.
     compile_graph_ptr_t instantiateForCall(
@@ -1774,15 +1818,19 @@ class Builder {
         const std::vector<Argument> &withInputs, const std::vector<Argument> &normInputs,
         const camel::core::type::type_vec_t &withTypes,
         const camel::core::type::type_vec_t &normTypes, const GCT::node_ptr_t &call);
+    /// The overloads of a name: the rules of its operator group and the declarations of it with a
+    /// body (defined below, beside the resolution that gathers them).
+    struct OperatorOverloads;
     /// An argument of a built-in operator that names a generic function. An operator's type
     /// rule is C++ code that needs the argument types, so it cannot say which function it
     /// expects; the instances the types of the other arguments suggest are tried (their
     /// element types first) and the one the operator accepts is taken. Replaces the name in
     /// `inputs` / `types`; an error when no instance is accepted.
     void settleGenericOperatorArguments(
-        const oper_group_ptr_t &ops, std::vector<Argument> &withInputs,
-        std::vector<Argument> &normInputs, camel::core::type::type_vec_t &withTypes,
-        camel::core::type::type_vec_t &normTypes, const GCT::node_ptr_t &call);
+        const oper_group_ptr_t &ops, const OperatorOverloads *overloads,
+        std::vector<Argument> &withInputs, std::vector<Argument> &normInputs,
+        camel::core::type::type_vec_t &withTypes, camel::core::type::type_vec_t &normTypes,
+        const GCT::node_ptr_t &call);
     //  ---- Build-time tuples. ----
     // A tuple that is known while the graph is built: its type and its element nodes, without a
     // FILL node. A rest parameter's `ts` and a tuple comprehension are the two producers.
@@ -3531,6 +3579,10 @@ class Builder {
         oper_group_ptr_t ops;
         /// The module each imported overload comes from, for diagnostics (absent: this one).
         std::unordered_map<const void *, std::string> moduleOf;
+        /// The name the set is of: what the reports call it. A set gathered for a name can have
+        /// no operator group (`count` is a function of a module and not an operator), and the
+        /// name is then the only thing the set is known by.
+        std::string name;
     };
     /// The DREF of an operator (`__add__`) whose set has overloads of the program, with that
     /// set. A DREF of an operator without any is an ordinary DREF to the operator group.
@@ -3550,15 +3602,46 @@ class Builder {
     /// Collects the overloads of the operator `group` visible here.
     OperatorOverloads operatorOverloadsOf(const std::string &group);
     /// The one overload set `name` stands for when a body-less `#op` declaration of it and a
-    /// declaration of it with a body are both reachable here (design principles 6.4): the rules
-    /// of its operator group and the functions its body declarations make, as the candidates of
-    /// one call. The two used to be two pools of which the name lookup kept the one it found
-    /// first -- a declaration with a body hid the operator group of the same name, so a call
-    /// only the declaration took found no function at all.
+    /// declaration of it with a body are both THIS layer's (design principles 6.4): the rules of
+    /// its operator group and the functions its body declarations make, as the candidates of one
+    /// call. The two used to be two pools of which the name lookup kept the one it found first --
+    /// a declaration with a body hid the operator group of the same name, so a call only the
+    /// declaration took found no function at all.
+    ///
+    /// Only this module's layer is gathered: design principles 10.2 gives a name the first layer
+    /// that has it, and the layers are not one set (an operator's is the exception, and
+    /// `operatorDrefOf` takes every layer for it). A name of a layer below -- the prelude's
+    /// `filter` and `map` among them -- answers only where this module has no such name.
     ///
     /// Nullopt when either side is absent: a name with no operator group is resolved as the
     /// functions it declares, exactly as before.
     std::optional<OperatorOverloads> mergedOverloadsNamed(const std::string &name);
+    /// The overload set one layer's entity stands for: the entity a module exports under a name
+    /// is one name's whole set (6.4; `ProgramExports::exportedEntity`), so it may carry the rules
+    /// of a body-less `#op` declaration and the functions of the same name with a body at once,
+    /// and a call site that took one half of it was taking one half of the name.
+    ///
+    /// Nullopt when the entity carries one form only: the plain branches of `resolveDRefNode`
+    /// resolve a group, a set of functions or a template on their own.
+    std::optional<OperatorOverloads> overloadsOfLayer(const camel::core::module::entity &e);
+    /// What one entity carries of a name, into a set being assembled: the rules of its body-less
+    /// `#op` declaration, the functions of the name with a body, the generic ones. Unlike
+    /// `overloadsOfLayer` it asks for no completeness: a caller joining two halves of one layer
+    /// needs each half as it is, and one half alone is what an entity of one form holds.
+    void gatherOverloads(const camel::core::module::entity &e, OperatorOverloads &out);
+    /// The built-in layer's name, assembled from the two places its halves live: the rules of the
+    /// built-in module's group of `name` and the functions the prelude declares under it. The
+    /// prelude IS the built-in layer (design principles 10.2), and a `#op` declaration of the
+    /// prelude installs its rules into the built-in group rather than keeping them
+    /// (`builder_modules.cpp`, the `preludeModule` branch), so `filter`, `map`, `len` and `reduce`
+    /// are one set here -- the array's function and the range's, not one of the two -- even
+    /// though a lookup that reads one half alone reports the other's argument types as unfitted.
+    ///
+    /// `answered` is the entity the layer already answered with, so nothing that entity carries
+    /// is lost; the prelude's and the built-in module's forms of the name are added to it.
+    /// Nullopt when the assembled set has no rules to choose among or no function to choose.
+    std::optional<OperatorOverloads>
+    builtinLayerNamed(const std::string &name, const camel::core::module::entity &answered);
     /// The entity a name the current module imports stands for in this program
     /// (ProgramExports::importedEntity): the import bindings resolved against this program's
     /// exported entities. The same module in two programs may see different graphs (task).
@@ -3573,6 +3656,22 @@ class Builder {
     /// tag (a tag does not enter the value namespace, 6.2), and inside the prelude itself,
     /// whose own names are layer 2.
     std::optional<camel::core::module::entity> preludeEntity(const std::string &name);
+    /// What a row of the name order says a written value name stands for: the entity an import
+    /// brings, or a name of this module that a `using namespace` opened (which is a name of the
+    /// module again, resolved from its head).
+    struct ValueName {
+        std::optional<camel::core::module::entity> entity;
+        std::string openedName;
+    };
+    /// The rows of the one order in `name_layers.h` that a module-level lookup reads, asked in
+    /// that order: an import by name or through a prefix and the overloads an operator takes from
+    /// every binding (`NameRow::ImportedByName`, `EveryImport`), a `using namespace`, what the
+    /// imports bring unasked, then the prelude. The two rows above them -- the scopes and the
+    /// module's own names -- are answered before a name reaches this point, from the graph,
+    /// template and decorated scopes of `visitDRefNode`. The type names of `lookupType` read the
+    /// same rows, of that table, once its own copy of them is joined to it.
+    camel::compile::RowAnswer<ValueName> valueNameByRow(
+        const std::string &written, const std::string &preludeName, const GCT::node_ptr_t &at);
     /// The type an imported name stands for. A type declaration is the module's own and the
     /// same in every program, so this does not consult the program's table.
     std::optional<Type *> importedType(
@@ -3586,6 +3685,12 @@ class Builder {
     /// imported generic function is built).
     const OperatorOverloads &importedOperatorOverloadsOf(const std::string &group);
     std::map<std::pair<const void *, std::string>, OperatorOverloads> importedOperators_;
+    /// The overloads of `group` the prelude declares with a body
+    /// (ProgramExports::exportedOperatorOverloads of the ambient layer): the layer a name needs
+    /// no import for, and the one the import sets do not bring. Computed once per operator: the
+    /// prelude does not change while a program is built.
+    const OperatorOverloads &preludeOperatorOverloadsOf(const std::string &group);
+    std::map<std::string, OperatorOverloads> preludeOperators_;
     /// The DREF for a use of the operator `group` (visitDRefNode).
     node_handle_t operatorDrefOf(const std::string &group, const GCT::node_ptr_t &gct);
     /// The program's overload a call of an operator takes (an instance for a generic one), or
@@ -3617,6 +3722,22 @@ class Builder {
     std::vector<std::pair<camel::core::module::Module *, std::string>> declaringModulesOf(
         const camel::core::type::type_vec_t &withTypes,
         const camel::core::type::type_vec_t &normTypes);
+    /// The type of the elements a `for` over a value of `type` reads: an array's element type,
+    /// else the element type of the stream the type's `__iter__` answers. This is the loop's own
+    /// resolution asked for its answer alone (the loop builds the call it reads; this needs the
+    /// type), and it is the one place the element type of a walked value is taken from -- a
+    /// comprehension's element function and a call that applies a function to the elements both
+    /// ask it, so neither says "the element is this" a second time. Null for a type nothing
+    /// walks, and for a type that still has a type variable.
+    camel::core::type::Type *walkedElementTypeOf(camel::core::type::Type *type);
+    /// Whether this function is a list comprehension's element function: the one the compiler
+    /// makes from `[e for x in xs]`, which has no name and wrote no clause about resources. Its
+    /// signature keeps saying no clause -- a measurement of its body is a fact about the body,
+    /// not a promise the element function makes (design principles 3.3) -- and this is the one
+    /// place that answers "which function is a comprehension's element function": the
+    /// measurement of a body asks it, and the refusal of a comprehension asks it, so the
+    /// compiler-made function is identified once, by the label it was made with.
+    bool isElementFunction(const GCT::node_ptr_t &func) const;
     /// Adds what the declaring modules of the operands export as overloads of `group` to the
     /// set of `dref`, once each: an overload the module also imports (or one found by both
     /// routes) stays one candidate. `!=` takes the `==` overloads, as it does for the ones the
@@ -3654,8 +3775,7 @@ class Builder {
     bool genericCandidateBinds(
         const generic_template_ptr_t &tmpl, const std::vector<Argument> &withInputs,
         const std::vector<Argument> &normInputs, const camel::core::type::type_vec_t &withTypes,
-        const camel::core::type::type_vec_t &normTypes,
-        std::vector<std::string> *unmetConditions);
+        const camel::core::type::type_vec_t &normTypes, std::vector<std::string> *unmetConditions);
     /// A candidate as a report names it: its name, its type, and the condition it wrote.
     std::string describeGenericCandidate(const generic_template_ptr_t &tmpl);
     /// OperatorOverloadConflict when the overload `funcType` of the operator `group` takes
@@ -3717,6 +3837,14 @@ class Builder {
     /// brings (the built-in module or an imported one) that nothing of the program shadows (the
     /// lookup order of visitDRefNode); nullptr otherwise.
     oper_group_ptr_t importedOperatorGroupNamed(const std::string &name);
+    /// The built-in operator group `name` stands for, taken from the builtins module alone: the
+    /// group the prelude's `#op` rules joined (builder_modules.cpp, "the rules of the prelude join
+    /// the built-in group of their name"). No scope is consulted, so no binding, parameter or
+    /// import of the program can shadow it -- which is what a call the compiler wrote itself
+    /// needs (`cast`, `copy`): the conversion a `var` binding makes is the language's, not the
+    /// program's. nullptr when the builtins module exports no operator group under that name,
+    /// which only a prelude missing its `#op` declaration produces.
+    oper_group_ptr_t builtinOperatorGroupNamed(const std::string &name);
     /// UnusedPureResult at the statement `stmt` when it is a call of an operator declared
     /// pure (`xs->append<5>` on its own line): the operation returns a new value and changes
     /// nothing, so the statement does nothing. `node` is what the statement built.
@@ -3800,16 +3928,16 @@ class Builder {
     castNodeTo(node_handle_t value, camel::core::type::Type *target, const GCT::node_ptr_t &origin);
     /// The same conversion written as the operator it is (`cast::<T, U>` of the prelude): an OPER
     /// node whose written type arguments are the operand's type and the target, and whose result
-    /// type is the target. Falls back to `castNodeTo` where no declaration answers, so a pair the
-    /// operator's rule does not cover keeps the node kind it had instead of disappearing.
+    /// type is the target. Where no declaration answers -- a program that shadows `cast` -- the
+    /// call is still written, by its URI (`:op/cast`), which no name in scope can shadow.
     node_handle_t conversionNodeOf(
         node_handle_t value, camel::core::type::Type *target, const GCT::node_ptr_t &origin);
     /// A copy written as the operator it is (`copy::<T>` of the prelude): an OPER node whose one
     /// written type argument is the type copied and whose one ordinary operand is the value, which
-    /// is the whole of what a copy is about -- nothing about it configures the call. Falls back to
-    /// `addCopyNode` where no declaration answers, so a copy the rule does not cover keeps the node
-    /// kind it had instead of disappearing. The caller registers the origin, as it does today: what
-    /// a copy of a constant says about where it came from is the constant's own answer.
+    /// is the whole of what a copy is about -- nothing about it configures the call. Where no
+    /// declaration answers, the call is still written, by its URI (`:op/copy`), which no name in
+    /// scope can shadow. The caller registers the origin, as it does today: what a copy of a
+    /// constant says about where it came from is the constant's own answer.
     node_handle_t copyNodeOf(node_handle_t value, camel::core::type::Type *type);
     /// A construction written as the operator it is (`fill::<T, ...F>` of the prelude): an OPER
     /// node whose ordinary operands are the template the compiler made and then the values, in

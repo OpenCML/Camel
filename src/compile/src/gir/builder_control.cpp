@@ -63,9 +63,15 @@ Builder::conversionNodeOf(node_handle_t value, Type *target, const GCT::node_ptr
     // `cast::<T, U>` says a conversion is about a pair of types: the source is the type of the
     // value it reads and the target is the call's result type. Both are known here, which is why
     // the call is resolved with them as the written type arguments and the expected result.
+    //
+    // The group is the built-in one, not the one the name `cast` stands for here: the conversion
+    // is the language's own call, so a binding, a parameter or an import of the program cannot
+    // decide what it calls. Asked by name, a program that binds `cast` made the resolution fail
+    // and left the call with no operator to point at -- a conversion whose identity depends on
+    // what the program named.
     Type *source = nodeTypeOf(value) != nullptr ? valueTypeOf(nodeTypeOf(value)) : nullptr;
     if (source != nullptr && target != nullptr) {
-        const oper_group_ptr_t group = importedOperatorGroupNamed("cast");
+        const oper_group_ptr_t group = builtinOperatorGroupNamed("cast");
         if (group != nullptr) {
             const std::vector<StaticArg> statics(1);
             const auto op = group->resolveForCall({source, target}, target, {}, {source}, statics);
@@ -78,13 +84,39 @@ Builder::conversionNodeOf(node_handle_t value, Type *target, const GCT::node_ptr
             }
         }
     }
-    // No declaration answered: the CAST node is what the graph gets, and it is the same
-    // conversion. A pair the operator's rule does not cover says so here rather than building a
-    // node the rule cannot name.
-    node_handle_t castNode = currGraph_->addCastNode(target);
-    linkNodes(LinkType::Norm, value, castNode);
-    registerNodeOrigin(context_, castNode, origin, "gir.cast");
-    return castNode;
+    // No declaration answered -- a program that shadows the name `cast`, say -- and the call is
+    // still the conversion the language means: the node names the operator by its URI, which no
+    // name in scope can shadow, and it is the one `lib/std/prelude.cml` declares.
+    //
+    // Three failures reach this line and they are three different things, so each says its own
+    // (design principles 3.3, "one statement per fact"): the built-in group is not there at all,
+    // which only a prelude missing its `#op` declaration produces and is a defect of the build;
+    // the group is there and no rule takes the pair, which is a conversion the language does not
+    // have and is the program's to write differently; and the types are not known yet, which is
+    // neither -- the call cannot name an operator because the signature it would point at does
+    // not exist yet. A node is written for none of the three: a call with no operator to point at
+    // is a node whose identity no reader can ask for.
+    const oper_group_ptr_t group = builtinOperatorGroupNamed("cast");
+    if (group == nullptr) {
+        diags_->of(InternalDiag::UnknownInternalError)
+            .atOrigin(origin != nullptr ? origin->origin() : camel::source::kInvalidOriginId)
+            .commit("the built-in operator 'cast' has no group: the prelude's #op declaration of "
+                    "':op/cast' did not load");
+        throw BuildAbortException();
+    }
+    if (source == nullptr || target == nullptr) {
+        diags_->of(SemanticDiag::OperatorSignatureUnresolved)
+            .atOrigin(origin != nullptr ? origin->origin() : camel::source::kInvalidOriginId)
+            .commit(
+                ":op/cast",
+                source == nullptr ? std::string("the type of the value it reads")
+                                  : std::string("the type it produces"));
+        throw BuildAbortException();
+    }
+    diags_->of(SemanticDiag::DynamicCastForbidden)
+        .atOrigin(origin != nullptr ? origin->origin() : camel::source::kInvalidOriginId)
+        .commit(source->toString(), target->toString());
+    throw BuildAbortException();
 }
 
 node_handle_t Builder::copyNodeOf(node_handle_t value, Type *type) {
@@ -94,12 +126,15 @@ node_handle_t Builder::copyNodeOf(node_handle_t value, Type *type) {
     // nothing beside them. The kind answered two questions of the value -- whether its type is one
     // the collector traces, and what its static type is -- and the operator answers them from the
     // same rule (`lib/std/builtin/operators/copy.cpp`), so the call keeps what the kind did.
+    //
+    // The group is the built-in one for the reason conversionNodeOf says: a `var` binding's copy
+    // is the language's call, and a program that binds the name `copy` changes nothing about it.
     Type *copied = type != nullptr ? type
                                    : (nodeTypeOf(value) != nullptr
                                           ? valueTypeOf(nodeTypeOf(value))
                                           : nullptr);
     if (copied != nullptr) {
-        const oper_group_ptr_t group = importedOperatorGroupNamed("copy");
+        const oper_group_ptr_t group = builtinOperatorGroupNamed("copy");
         if (group != nullptr) {
             const std::vector<StaticArg> statics(1);
             const auto op = group->resolveForCall({copied}, copied, {}, {copied}, statics);
@@ -111,10 +146,31 @@ node_handle_t Builder::copyNodeOf(node_handle_t value, Type *type) {
             }
         }
     }
-    // No declaration answered: the COPY node is what the graph gets, and it is the same copy.
-    node_handle_t copyNode = currGraph_->addCopyNode(copied);
-    linkNodes(LinkType::Norm, value, copyNode);
-    return copyNode;
+    // No declaration answered -- a program that shadows the name `copy`, say -- and the call is
+    // still the copy the language means: the node names the operator by its URI, which no name in
+    // scope can shadow.
+    //
+    // The three failures conversionNodeOf tells apart apply here too. A copy the built-in rule
+    // refuses is not a conversation the language has: `copy::<T>(x: T): T` takes every type, so a
+    // refusal is the rule's own defect and not the program's to write differently -- which is why
+    // this one reports the compiler's state and not `DynamicCastForbidden`.
+    const oper_group_ptr_t group = builtinOperatorGroupNamed("copy");
+    if (group == nullptr) {
+        diags_->of(InternalDiag::UnknownInternalError)
+            .commit("the built-in operator 'copy' has no group: the prelude's #op declaration of "
+                    "':op/copy' did not load");
+        throw BuildAbortException();
+    }
+    if (copied == nullptr) {
+        diags_->of(SemanticDiag::OperatorSignatureUnresolved)
+            .commit(":op/copy", std::string("the type of the value it copies"));
+        throw BuildAbortException();
+    }
+    diags_->of(InternalDiag::UnknownInternalError)
+        .commit(
+            "the built-in operator 'copy' refused '" + copied->toString() +
+            "', which every type is meant to take");
+    throw BuildAbortException();
 }
 
 node_handle_t
@@ -322,12 +378,13 @@ bool nodeKeepsItsInput(node_handle_t node) {
     if (!nodeIsKind(node, runtime::GCNodeKind::Oper)) {
         return true;
     }
-    const auto op = nodeGraphOf(node)->operTarget(node);
+    const oper_idx_ptr_t *op = nodeGraphOf(node)->operTarget(node);
     // The record's own answer (`sem::Effect`): a pure operator is one whose stated clause is the
     // empty access list, and an operator nobody declared a clause for is not one (design
-    // principles 3.3). This is a node of a draft, so there is no fact to read it at.
+    // principles 3.3). This is a node of a draft, so there is no fact to read it at -- and a call a
+    // pass wrote by URI alone records no declaration here, which is the same answer: a holder.
     if (op == nullptr ||
-        camel::core::OperatorTable::instance().effectOf(op->uri()) !=
+        camel::core::OperatorTable::instance().effectOf((*op)->uri()) !=
             camel::core::sem::Effect::Pure) {
         return true;
     }
@@ -460,7 +517,7 @@ node_handle_t projectPart(node_handle_t value, const Type *type, size_t step) {
             source = nodeDraftOf(source)->ref(inputs.front());
             continue;
         }
-        if (nodeIsKind(source, runtime::GCNodeKind::Cast)) {
+        if (operUriOf(source) == ":op/cast") {
             const auto inputs = normInputsOf(source);
             Type *from = inputs.empty()
                              ? nullptr
@@ -504,7 +561,7 @@ node_handle_t projectPart(node_handle_t value, const Type *type, size_t step) {
 /// declaration states (`__access_value__`, `builtin/operators/struct.cpp`: `norm.size() == 1`,
 /// `with.size() == 1`). The node-kind spelling says the same thing from its payload, with the value
 /// as its one ordinary input -- a graph built before the read was an operator still reads that way,
-/// and the two faces this lane reads (`GCGraph`, `GraphDraft`) both carry such graphs. Both
+/// and the two faces read here (`GCGraph`, `GraphDraft`) both carry such graphs. Both
 /// spellings answer the same question, and the value operand is the ordinary one either way, which
 /// is what tells the caller the read is of the value it asked about.
 std::optional<size_t> accessedPartOf(node_handle_t node, const Type *type) {
@@ -541,11 +598,13 @@ std::optional<size_t> accessedPartOf(node_handle_t node, const Type *type) {
             }
         }
     } else if (nodeIsKind(node, runtime::GCNodeKind::Oper)) {
-        const oper_idx_ptr_t op = nodeGraphOf(node)->operTarget(node);
+        const oper_idx_ptr_t *op = nodeGraphOf(node)->operTarget(node);
+        // A call a pass wrote by URI alone records no declaration; this helper names no access for
+        // it, which is the answer a node of any other kind gets.
         if (op == nullptr) {
             return std::nullopt;
         }
-        const std::string_view uri = op->uri();
+        const std::string_view uri = (*op)->uri();
         const bool byName          = uri == ":op/access_key";
         if (!byName && uri != ":op/access") {
             return std::nullopt;
@@ -4181,8 +4240,8 @@ bool Builder::inferLoopStateFromAppend(
     if (next == nullptr || !nodeIsKind(next, runtime::GCNodeKind::Oper)) {
         return false;
     }
-    const oper_idx_ptr_t op = nodeGraphOf(next)->operTarget(next);
-    if (op == nullptr || op->uri() != ":struct/append_arr") {
+    const oper_idx_ptr_t *op = nodeGraphOf(next)->operTarget(next);
+    if (op == nullptr || (*op)->uri() != ":struct/append_arr") {
         return false;
     }
     const auto normIns = normInputsOf(next);
@@ -4272,9 +4331,12 @@ std::vector<Type *> Builder::collectLoopAppends(
             !nodeIsKind(next[j], runtime::GCNodeKind::Oper)) {
             continue;
         }
-        const oper_idx_ptr_t op = nodeGraphOf(next[j])->operTarget(next[j]);
-        if (op == nullptr ||
-            (op->uri() != ":struct/append_arr" && op->uri() != ":struct/append_arr_owned")) {
+        const oper_idx_ptr_t *op = nodeGraphOf(next[j])->operTarget(next[j]);
+        if (op == nullptr) {
+            continue;
+        }
+        const std::string_view uri = (*op)->uri();
+        if (uri != ":struct/append_arr" && uri != ":struct/append_arr_owned") {
             continue;
         }
         const auto normIns = normInputsOf(next[j]);
@@ -4470,8 +4532,8 @@ void Builder::markLoopStateInPlaceOne(
         if (!nodeIsKind(next, runtime::GCNodeKind::Oper)) {
             return;
         }
-        const oper_idx_ptr_t op = nodeGraphOf(next)->operTarget(next);
-        if (op == nullptr || op->uri() != ":struct/append_arr") {
+        const oper_idx_ptr_t *op = nodeGraphOf(next)->operTarget(next);
+        if (op == nullptr || (*op)->uri() != ":struct/append_arr") {
             return;
         }
         const auto normIns = normInputsOf(next);
@@ -4690,3 +4752,4 @@ void Builder::setBodyResult(const compile_graph_ptr_t &graph, node_handle_t resu
 }
 
 } // namespace camel::compile::gir
+

@@ -1,0 +1,33 @@
+// One name, three owners: `map` on an array, on a `Range`, and on a stream are three
+// implementations of one name, and a call has to keep the one its value's type means. The array's
+// is the rule of the name's operator group, the `Range`'s is the prelude's own declaration of
+// `map` beside it, and the stream's is `stream`'s. They are one overload set, so a call accepts
+// any of them -- and nothing but the value's type chooses which.
+
+import { map } from stream
+
+func dbl(x: int) => int {
+    return x * 2
+}
+
+func count(n: int) => int.. {
+    return step(n)
+}
+
+func step(n: int) => () => (int, int..)? {
+    return func () {
+        if n > 0 then (n, step(n - 1)) else null
+    }
+}
+
+func main() => int sync {
+    let xs: int[] = [1, 2, 3]
+    // The array's: a rule of the group, one result element per element.
+    println(xs->map<dbl>)
+    // The range's: the prelude's declaration, which walks the integers it names.
+    println(map<dbl>(0 .. 4))
+    // The stream's: `stream`'s declaration, one round at a time; the loop is what reads it.
+    let s: int.. = count(3)
+    println(loop acc = 0 for x in s->map<dbl> do acc * 10 + x)
+    return 0
+}

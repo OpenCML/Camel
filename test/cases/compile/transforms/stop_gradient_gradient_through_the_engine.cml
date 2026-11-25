@@ -1,6 +1,6 @@
 // `stop_gradient` through the engine's own rules: the value passes through and the gradient is zero.
 //
-// The engine's kernel is the identity slot (`modules/autodiff/operators.cpp#stopGradientKernel`) and
+// The engine's kernel is the identity slot (`stdlib/laws/operators.cpp#stopGradientKernel`) and
 // the rule registered for the operator is `camel::core::noGradient` -- one that contributes nothing --
 // so the pullback materializes the missing contribution as the zero of the value's own type
 // (`modules/autodiff/pullback.cpp#Backward::checkGradientType`). That is the reading this case
@@ -11,7 +11,8 @@
 // cuts a gradient, and which transform walks the graph is not supposed to change what a cut is.
 //
 //     camel test/cases/compile/transforms/stop_gradient_gradient_through_the_engine.cml
-import { stop_gradient, with_grad } from autodiff
+import { with_grad } from autodiff
+import { stop_gradient } from laws
 
 /// The differentiated value is the `with` parameter, and the body hands it to `stop_gradient`.
 with <x: float>

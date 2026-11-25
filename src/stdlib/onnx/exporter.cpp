@@ -42,6 +42,7 @@
 #include "camel/passes/opt/config.h"
 #include "camel/passes/opt/generic.h"
 #include "camel/passes/trans/dot/graphviz.h"
+#include "camel/runtime/oper_shape.h"
 #include "camel/runtime/operator_instance.h"
 #include "camel/runtime/draft_inline.h"
 #include "camel/runtime/draft_session.h"
@@ -184,7 +185,7 @@ std::vector<Value> elementsOf(slot_t slot, type::Type *ty) {
 
 /// The program that holds `g`: a graph being exported is always one of the context's.
 const camel::runtime::Program &programOf(core::context::Context &ctx, const GCGraph *g) {
-    const camel::runtime::Program *program = ctx.programOfRuntimeGraph(g);
+    const camel::runtime::Program *program = ctx.programOfRuntimeGraph(*g);
     if (program == nullptr) {
         throw std::logic_error("the ONNX export met a graph that belongs to no program");
     }
@@ -870,11 +871,6 @@ Value Evaluator::evalNode(Activation &act, gc_node_ref_t ref) {
         }
         return it->second;
     }
-    case GCNodeKind::Cast:
-        return evalCast(act, ref, eval(act, g->normInputsOf(ref).front()));
-    case GCNodeKind::Copy:
-        // Exported values are never mutated in place, so a copy can share its source.
-        return eval(act, g->normInputsOf(ref).front());
     case GCNodeKind::Gate: {
         // A gate forwards its first ordinary input; the rest are the waits it keeps alive.
         return eval(act, camel::runtime::forwardedInputOf(*g, ref));
@@ -3751,7 +3747,7 @@ Value Evaluator::variableValueAt(Activation &act, gc_node_ref_t cell, gc_node_re
                     ref = forwarded;
                     continue;
                 }
-                if (kind != GCNodeKind::Copy) {
+                if (kind != GCNodeKind::Oper || operUriOf(g->view(), ref) != ":op/copy") {
                     return ref;
                 }
                 const auto norm = g->normInputsOf(ref);
@@ -3808,8 +3804,10 @@ Value Evaluator::evalOper(Activation &act, gc_node_ref_t ref) {
     // (camel/execute/shaped_operators.h), because the front end builds them as operator calls
     // of the same four operations; the lowering table below is for operators that do become ONNX
     // nodes, and a call of one of these four has no row in it and must not be given one: a node
-    // there would stand for a value ONNX does not have.
-    switch (execute::shapeOfUri(uri)) {
+    // there would stand for a value ONNX does not have. The shape is the one the operator's record
+    // states (`camel/runtime/oper_shape.h`, `shapeOfOperator`), asked by the operator the node
+    // names and not by the letters of its URI.
+    switch (camel::runtime::shapeOfOperator(body->oper)) {
     case execute::OperShape::Conversion:
         // The node's type is the target type, its one ordinary operand the value converted.
         return evalCast(act, ref, eval(act, g->normInputsOf(ref).front()));
@@ -3834,6 +3832,10 @@ Value Evaluator::evalOper(Activation &act, gc_node_ref_t ref) {
         // `access::<T, U><at>(x)` by place, `access_key::<T, U><key>(x)` by name: the place or the
         // name is the call's `with` argument, a constant the program wrote, and the value it reads
         // is the call's one ordinary operand (`__access_value__`, builtin/operators/struct.cpp).
+        // The two are one shape and two operators, so the shape does not say which; what does is
+        // what the call hands over in that argument -- a place is an `int`, a name is a `string` --
+        // and the export reads it there rather than off the letters of the URI, which is the one
+        // thing a reader of an operator may not do (operator_table.h).
         const auto norm = g->normInputsOf(ref);
         const auto with = g->withInputsOf(ref);
         if (norm.size() != 1 || with.size() != 1) {
@@ -3846,10 +3848,9 @@ Value Evaluator::evalOper(Activation &act, gc_node_ref_t ref) {
         }
         const Value position = eval(act, with.front());
         MemberRead read;
-        read.byName = uri == ":op/access_key";
+        read.byName = position.ty != nullptr && position.ty->code() == TypeCode::String;
         if (read.byName) {
-            if (!position.isConstant() || position.ty == nullptr ||
-                position.ty->code() != TypeCode::String) {
+            if (!position.isConstant()) {
                 unsupported(
                     act,
                     "a field is read by a name the program computes, and the export reads a name "

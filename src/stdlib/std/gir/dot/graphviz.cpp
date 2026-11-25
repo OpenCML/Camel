@@ -33,8 +33,6 @@ namespace {
 
 string recordShape(const camel::runtime::GCNode &record) {
     switch (record.kind) {
-    case camel::runtime::GCNodeKind::Cast:
-    case camel::runtime::GCNodeKind::Copy:
     case camel::runtime::GCNodeKind::Fill:
     case camel::runtime::GCNodeKind::Accs:
     case camel::runtime::GCNodeKind::Brch:
@@ -446,7 +444,7 @@ std::string GraphVizDumpPass::dumpGraph(camel::runtime::GCGraph *graph) {
         string shape   = recordShape(*node);
         string style   = recordStyle(*node);
         string size    = recordSize(*node);
-        string type    = recordType(*node);
+        string type    = recordType(*graph, nodeRef);
         // Every real node carries its output value type. Export the compiler's type, including
         // static slots, rather than inferring it from the label or from the input types.
         const auto *outputType = nodeStaticSlotType(graph, *node);
@@ -472,9 +470,15 @@ std::string GraphVizDumpPass::dumpGraph(camel::runtime::GCGraph *graph) {
         // color and list every role in the tooltip.
         string roleAttr, roleFill, roleTooltip;
         if (config_.annotateRoles) {
-            for (const auto &match :
-                 camel::runtime::NodeRoleRegistry::instance().classify(
-                     camel::graph::FrozenGraphAdapter(*graph), nodeRef)) {
+            // The site names the graph and the store the fact a role reads is answered by: a role
+            // that speaks about a fact asks it there (camel/runtime/node_roles.h). The adapter is a
+            // named local because a site holds a reference to it: a temporary bound to a reference
+            // member of an aggregate dies with the statement that made it.
+            const camel::graph::FrozenGraphAdapter viewAdapter(*graph);
+            const camel::runtime::NodeRoleSite roleSite{
+                viewAdapter, graph, program_.get(), &context_->facts()};
+            for (const auto &match : camel::runtime::NodeRoleRegistry::instance().classify(
+                     roleSite, nodeRef)) {
                 roleAttr += (roleAttr.empty() ? "" : ";") + match.spec.name;
                 roleTooltip += std::format("\\nrole {}: {}", match.spec.name, escape(match.detail));
                 if (roleFill.empty()) {
@@ -676,7 +680,7 @@ std::string GraphVizDumpPass::dumpGraph(camel::runtime::GCGraph *graph) {
     }
 
     // The graph names the node its result comes from, through the same call the JSON document reads
-    // it with (`GCGraph::exitNodeRef`, src/runtime/graph.cpp#GCGraph::exitNode). The two dumps
+    // it with (the face names it `exit`; GraphView::exit). The two dumps
     // differ only in what they can say when there is none, and they say the same thing: a document
     // writes `null` (src/passes/trans/json/gir.cpp#dumpJsonRuntimeGraph, and the canonical document
     // before it), and this one writes the comment over the EXIT node and draws no edge into it --
@@ -825,8 +829,8 @@ std::string GraphVizDumpPass::dumpGraph(camel::runtime::GCGraph *graph) {
         // arrays rather than from an input run (docs/design/effects/edges.cn.md 1.5). They are
         // drawn apart from the port edges and from each other: an order edge only orders (dotted,
         // no arrowhead filled in), a sync edge orders *and* is used (solid, diamond arrowhead).
-        for (const camel::runtime::GCGraphOrderEdge &edge : graph->orderPredsOf(nodeIndex)) {
-            if (!graph->containsNodeRef(edge.pred)) {
+        for (const camel::graph::NodeRef pred : graph->view().predecessors(nodeIndex, camel::graph::EdgeKind::Order)) {
+            if (!graph->containsNodeRef(pred)) {
                 continue;
             }
             if (!config_.rich) {
@@ -834,19 +838,19 @@ std::string GraphVizDumpPass::dumpGraph(camel::runtime::GCGraph *graph) {
                     "{}{}{} -> {} [label=\"ORDER\", type=\"ORDER\"];\n",
                     baseIndent_,
                     indent_,
-                    edgeSource(edge.pred),
+                    edgeSource(pred),
                     nodeIdent(node));
             } else {
                 res += std::format(
                     "{}{}{} -> {} [label=\"ORDER\", type=\"ORDER\", style=dotted];\n",
                     baseIndent_,
                     indent_,
-                    edgeSource(edge.pred),
+                    edgeSource(pred),
                     nodeIdent(node));
             }
         }
-        for (const camel::runtime::GCGraphSyncEdge &edge : graph->syncPredsOf(nodeIndex)) {
-            if (!graph->containsNodeRef(edge.pred)) {
+        for (const camel::graph::NodeRef pred : graph->view().predecessors(nodeIndex, camel::graph::EdgeKind::Sync)) {
+            if (!graph->containsNodeRef(pred)) {
                 continue;
             }
             if (!config_.rich) {
@@ -854,7 +858,7 @@ std::string GraphVizDumpPass::dumpGraph(camel::runtime::GCGraph *graph) {
                     "{}{}{} -> {} [label=\"SYNC\", type=\"SYNC\"];\n",
                     baseIndent_,
                     indent_,
-                    edgeSource(edge.pred),
+                    edgeSource(pred),
                     nodeIdent(node));
             } else {
                 res += std::format(
@@ -862,7 +866,7 @@ std::string GraphVizDumpPass::dumpGraph(camel::runtime::GCGraph *graph) {
                     "arrowhead=diamond];\n",
                     baseIndent_,
                     indent_,
-                    edgeSource(edge.pred),
+                    edgeSource(pred),
                     nodeIdent(node));
             }
         }
@@ -905,7 +909,7 @@ GraphVizDumpPass::GraphVizDumpPass(const context_ptr_t &context, GraphVizDumpCon
     : RuntimeGraphTranslatePass(context), config_(std::move(config)) {}
 
 std::string GraphVizDumpPass::dumpDot(camel::runtime::GCGraph *graph) {
-    program_ = camel::runtime::ProgramHold(*context_, context_->programOfRuntimeGraph(graph));
+    program_ = camel::runtime::ProgramHold(*context_, context_->programOfRuntimeGraph(*graph));
     GUARD(program_.get() != nullptr, "A graph to dump belongs to no program of the context.");
     return dumpGraph(graph);
 }
@@ -921,10 +925,12 @@ std::string dumpCompactRuntimeGraph(camel::runtime::GCGraph *graph, const contex
 
 const camel::runtime::Program *
 GraphVizDumpPass::apply(const camel::runtime::Program *program, std::ostream &os) {
-    camel::runtime::GCGraph *graph = program->root();
+    // The entry point hands over the graph as a value (`program->root()`); the dump does not name
+    // its type, only the face it reads it through.
+    auto *graph = program->root();
     program_                       = camel::runtime::ProgramHold(*context_, program);
     os << dumpGraph(graph);
-    return nullptr;
+    return program;
 }
 
 

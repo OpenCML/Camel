@@ -13,7 +13,7 @@
 | `Graph`、`Node<T>`、`Op`、`TypeRef`、`Region`、`Tag` | 命名某个函数的图里的东西 | 一个被追踪的 `Handle` 对象（`lib/graph/handle.h`）：种类、所属的 `Program`、`GraphId`、序号、`Type*` |
 | `Txn<F>` | 在函数 `f: F` 上开的事务 | 句柄资源类型：外部资源对象持有一个草稿会话；`commit(t)` 给出同类型的 `F!`。因为是资源，改写它的算子写 `uses t` |
 | `Value` | 值；目前与 `Node` 同一个类型 | `Node` 的另一个名字 |
-| `NodeKind` | `Data, Port, Cast, Copy, Fill, Accs, Brch, Join, Call, Func, Oper, Sync, Gate, Loop` | Camel 的 `enum`（`nodekind.cpp`）；`nodeKindTag` 对 `GCNodeKind` 做穷尽的 `switch`，图模型新增一种节点时这里编译不过，直到它被放进枚举或明确排除（`Bind`、`Dref`、`Dead` 不是程序里看得见的节点） |
+| `NodeKind` | `Data, Port, Fill, Accs, Brch, Join, Call, Func, Oper, Gate, Loop` | Camel 的 `enum`（`nodekind.cpp` = `src/stdlib/graph/nodekind.cpp`）；`nodeKindTag` 对 `GCNodeKind` 做穷尽的 `switch`，图模型新增一种节点时这里编译不过，直到它被放进枚举或明确排除（`Bind`、`Dref`、`Dead` 不是程序里看得见的节点）。`Cast`、`Copy`、`Sync` 不在这张表里，也不是节点种类：转换与拷贝是 `:op/cast` / `:op/copy` 的调用，`kind` 对它们答 `Oper`，`op_name` 给出是哪一种；`sync` 块的次序由同步边表达 |
 | `RegionKind` | `Root, Arm, LoopCond, LoopBody, Inline, Block, Dead` | Camel 的 `enum`（`regionkind.cpp`），与 `GCRegionKind` 一一对应；新增一种区域时 `regionKindTag` 编译不过 |
 
 句柄用 `==` / `!=` 比较（模块通过 `__eq__` / `__neq__` 算子组为自己的类型定义，设计原则 4.3）。两个句柄相等，当且仅当种类、来源（快照或草稿）、图与序号都相同。`id(h)` 给出图的 `GraphId`、节点的 `NodeId` 或算子的 `OperId`，在同一个函数的图里稳定，Map 的键用它。

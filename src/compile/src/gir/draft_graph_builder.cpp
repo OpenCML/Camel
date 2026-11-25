@@ -208,12 +208,9 @@ runtime::DraftNodeRef DraftGraphBuilder::addPortNode(
     return node;
 }
 
-runtime::DraftNodeRef DraftGraphBuilder::addCastNode(camel::core::type::Type *type) {
-    return ref(draft().addCastNode(type));
-}
-
-runtime::DraftNodeRef DraftGraphBuilder::addCopyNode(camel::core::type::Type *type) {
-    return ref(draft().addCopyNode(type));
+runtime::DraftNodeRef
+DraftGraphBuilder::addOperNode(camel::core::type::Type *type, std::string_view uri) {
+    return ref(draft().addOperNode(type, nullptr, uri));
 }
 
 runtime::DraftNodeRef
@@ -404,10 +401,11 @@ DraftGraphBuilder::drefTarget(runtime::DraftNodeRef node) const {
     return it->second;
 }
 
-const oper_idx_ptr_t &DraftGraphBuilder::operTarget(runtime::DraftNodeRef node) const {
+const oper_idx_ptr_t *DraftGraphBuilder::operTarget(runtime::DraftNodeRef node) const {
     auto it = operTargets_.find(node.id);
-    GUARD(it != operTargets_.end(), "DraftGraphBuilder operator target not found.");
-    return it->second;
+    // No entry is an answer, not a broken graph: see the header. A call a pass wrote by naming its
+    // operator's URI was never resolved by this builder, and the node's payload still names it.
+    return it == operTargets_.end() ? nullptr : &it->second;
 }
 
 void DraftGraphBuilder::registerNodePortName(runtime::DraftNodeRef node, std::string name) {

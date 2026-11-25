@@ -188,6 +188,39 @@ function checkFieldType(planPath, entry, field, where, type) {
     throw new PlanSchemaError(`${planLabel(planPath)}: ${where}: ${field} must be a ${type}, got ${shown}`)
 }
 
+// The fields the runner walks one item at a time. A string written where a list belongs is not a
+// shorter list: `for (const needle of "will not run")` visits eleven single characters, and one-letter
+// needles are satisfied by output that says something else entirely. Measured on
+// `feat/trans/hand_on.plan.toml#after_nop_never_run`, whose `expect_stderr_contains = "will not run"`
+// passed for `"… will  not run"` (two spaces: the sentence is gone) and for
+// `"unknown pipeline option: --gir"` (another sentence that happens to hold all eleven letters). A
+// green like that is worse than no reading, because a green is counted and nobody re-reads it, so the
+// shape is refused where the plan is read: the run then reports a plan it cannot read, which is a
+// state a reader can tell from a red and from a green.
+const LIST_FIELDS = [
+    'args', 'envs', 'normalizers', 'compare_fields', 'backends_agree',
+    'expect_output_contains', 'expect_output_not_contains',
+    'expect_stdout_contains', 'expect_stdout_not_contains', 'expect_stderr_contains',
+]
+const SWEEP_LIST_FIELDS = ['plans', 'exclude', 'envs', 'args', 'risk_tags']
+
+function checkListFields(planPath, entry, where, fields) {
+    for (const field of fields) {
+        const value = entry[field]
+        if (value === undefined) continue
+        if (Array.isArray(value) && value.every((one) => typeof one === 'string')) continue
+        const letters = typeof value === 'string' ? [...value] : null
+        throw new PlanSchemaError(
+            `${planLabel(planPath)}: ${where}: ${field} must be a list of strings, got ${JSON.stringify(value)}` +
+                (letters === null
+                    ? ''
+                    : `: a string is read one character at a time, so this asserts ${letters.length} single ` +
+                      `characters (${letters.map((one) => JSON.stringify(one)).join(' ')}) instead of the ` +
+                      `sentence it wrote`),
+        )
+    }
+}
+
 // The three things the author's ruling of 2026-11-03 00:30 asked a `known_fail` entry to carry: the
 // mark, who is responsible for making the case green, and why it cannot pass today. The mark alone
 // says "we accept this red"; it says nothing about who ends it or where the case is stuck, and until
@@ -223,6 +256,99 @@ const WALL_SPELLINGS = [
 
 function knownFailIsMarked(mark) {
     return mark === true || (Array.isArray(mark) && mark.length > 0)
+}
+
+/**
+ * The two shapes `known_fail_ends_when` may hold, read into one comparable thing. `null` means the
+ * value is not one of them -- which the loader refuses and the checker reports, so nothing past the
+ * load has to guess what a third shape would mean.
+ *
+ * `prints` is the line this entry prints when the wall moves, and it is found in the entry's own
+ * output. `passes` names another case: when that case passes in the same run, this mark has ended.
+ * Both are readings of a run, which is the whole point of the ruling -- the field used to hold a
+ * sentence, and a sentence is not something a run can disagree with.
+ */
+function knownFailEndCondition(value) {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) return null
+    const keys = Object.keys(value)
+    if (keys.length !== 1 || (keys[0] !== 'prints' && keys[0] !== 'passes')) return null
+    const text = value[keys[0]]
+    if (typeof text !== 'string' || text.trim().length === 0) return null
+    return { kind: keys[0], text: text.trim() }
+}
+
+/** How a condition reads on a line: the `[KNOWN]` roster and the strict-xfail message share it. */
+function describeEndCondition(condition) {
+    if (!condition) return null
+    return condition.kind === 'prints'
+        ? `prints "${condition.text}"`
+        : `passes "${condition.text}"`
+}
+
+/**
+ * What a `prints` condition is read against: the bytes the case's own process wrote, normalized the
+ * way the case's own assertions read them, and nothing the runner wrote *about* the case.
+ *
+ * It was read from `failures + stdout + stderr` until 2026-11-25, which made every condition that
+ * also appears in an `expect_output_contains` true by construction: a failure line quotes the line
+ * it did not find (`output does not contain 'stated mean value=2.5 dL/dx=[0.25, 0.25, 0.25, 0.25]'`),
+ * so the condition was satisfied by the sentence saying it was not, and three legitimate marks read
+ * as `known failure has ended` in the merge rehearsal (`modules.onnx/ort_loop_values_dynamic` and the
+ * two `stated_mean_axis_*` gradients). A condition that can be matched by the sentence explaining
+ * that it is unmet is not a condition, it is decoration -- the same family as an assertion that stays
+ * green when nothing can match it.
+ *
+ * The other shape, `passes`, is a reading of another case's verdict and is taken from `completed`
+ * (`settlePassesConditions`), a field of its own. No condition states a thing about the text of a
+ * verdict, so nothing here needs one; `verdictText` below is where the runner's own failure lines
+ * live, and it is never the haystack for a condition.
+ */
+function observedOutput(result) {
+    // The normalized text, and not the raw streams: the condition usually mirrors an
+    // `expect_output_contains`, which is read against `normalized.output`, so both have to compare
+    // with one run through the same normalizers (CRLF, ANSI) or a normalizer would move one and not
+    // the other.
+    return `${result.normalized.stdout}\n${result.normalized.stderr}`
+}
+
+/**
+ * Whether a `prints` condition has arrived: the line the mark says this entry prints when the wall
+ * moves is in `output` -- the case's own output, from `observedOutput`, which is the only thing a
+ * condition may be read against.
+ */
+function endConditionHasArrived(test, output) {
+    const condition = test.__knownFailEndsWhen
+    if (!condition || condition.kind !== 'prints') return false
+    return output.includes(condition.text)
+}
+
+/**
+ * The `passes` shape, taken once every case has settled: it is a reading of another case's verdict,
+ * and the case a mark waits on may be the last one to finish, so it cannot be taken where the mark
+ * fires. A mark whose ending has arrived moves out of the excused reds and into the failing ones --
+ * strict xfail -- and the block printed here is what re-reads the `[XFAIL]` line it printed above.
+ */
+function settlePassesConditions(entries, completed, summary) {
+    const ended = []
+    for (const entry of entries) {
+        const condition = entry.test.__knownFailEndsWhen
+        if (!entry.test.__knownFail || !condition || condition.kind !== 'passes') continue
+        if (!entry.outcome || entry.outcome.status !== 'xfail') continue
+        const other = completed.get(condition.text)
+        if (!other || other.status !== 'pass') continue
+        const line =
+            `known failure has ended: this entry waits on \`${condition.text}\`, which passed` +
+            ' -- delete the mark'
+        entry.outcome.status = 'fail'
+        if (entry.outcome.result) entry.outcome.result.status = 'fail'
+        entry.outcome.failures = [...(entry.outcome.failures || []), line]
+        summary.xfail--
+        summary.fail++
+        summary.knownRows = summary.knownRows.filter((row) => row.name !== listedName(entry.plan, entry.test))
+        ended.push(`${COLORS.cyan}[KNOWN]${COLORS.reset} ${line}`)
+    }
+    for (const line of ended) console.log(line)
+    return ended
 }
 
 /**
@@ -275,21 +401,36 @@ function checkKnownFailMark(planPath, entry, inherited, where) {
     // `test.known_fail_msg` and never against a `[defaults]` value -- so a plan cannot supply it
     // once for the whole file.
     //
-    // The mark may instead state the reading that ends it, and that is the shape the author's
-    // ruling of 2026-11-21 02:20 chose for a case whose target is a number and whose wall is being
-    // built: a sentence quoted from a refused run follows the implementation, so a pin on it has to
-    // be re-typed every time the wall moves -- which records the wall's progress as the case's debt
-    // and reads, in the plan, as "this case fails for this reason" long after that reason moved.
-    // `known_fail_ends_when` says what has to arrive instead: the line the entry prints when the
-    // computation is right, which no wall moves. The trade is stated where a reader will weigh it --
-    // the sentence is the only field the run *compares*, so a mark that states its ending reading
-    // accepts any failure as the expected one until the numbers arrive, and a different defect can
-    // wear the mark's name in the meantime. That is why the owner and the reason are still required
-    // on it, and why the reason has to keep naming the wall as it stands today.
+    // The mark may instead state the reading that ends it, and the ruling of 2026-11-21 02:20 chose
+    // that shape for a case whose target is a number and whose wall is being built: a sentence
+    // quoted from a refused run follows the implementation, so a pin on it has to be re-typed every
+    // time the wall moves -- which records the wall's progress as the case's debt and reads, in the
+    // plan, as "this case fails for this reason" long after that reason moved.
+    //
+    // What that field may hold is now exactly two things, because a promise nobody evaluates is a
+    // mark nobody re-reads -- the ruling of 2026-11-24 18:xx (see internal/questions/
+    // 2026-11-24-deleting-known-fail-ends-when-would-unmake-11-marks.cn.md):
+    //
+    //   known_fail_ends_when = { prints = "the line this entry prints when the wall moves" }
+    //   known_fail_ends_when = { passes = "another case, whose passing means this one is over" }
+    //
+    // `prints` is read off the entry's own output on every run; `passes` off another case's verdict
+    // in the same run. Either way the run *evaluates* it: a mark whose ending has arrived fails the
+    // run and says to delete the mark (strict xfail). Prose -- a sentence with no key -- is refused
+    // here and by test/tools/check-plan-fields.mjs, because it cannot be evaluated.
     const expected = entry.known_fail_msg
+    const ends = knownFailEndCondition(entry.known_fail_ends_when)
+    if (entry.known_fail_ends_when !== undefined && ends === null) {
+        throw new PlanSchemaError(
+            `${planLabel(planPath)}: ${where}: known_fail_ends_when must be exactly one of ` +
+                `{ prints = "..." } or { passes = "..." }: the condition has to be something a run ` +
+                `can evaluate -- the line this entry prints when the wall moves, or a case whose ` +
+                `passing means this one is over -- because a sentence nothing reads is a mark ` +
+                `nobody re-reads`,
+        )
+    }
     if (typeof expected !== 'string' || expected.trim().length === 0) {
-        const ends = entry.known_fail_ends_when
-        if (typeof ends !== 'string' || ends.trim().length === 0) {
+        if (ends === null) {
             throw new PlanSchemaError(
                 `${planLabel(planPath)}: ${where}: known_fail needs known_fail_msg or known_fail_ends_when: ` +
                     `quote either the sentence this case prints today, or the reading that ends the mark -- a ` +
@@ -314,6 +455,9 @@ function validatePlanSchema(doc, planPath) {
     // somebody else's build, which is the reading the field exists to prevent. Refused here, where
     // the file and the value are named.
     checkFieldType(planPath, doc, 'time_sensitive', 'plan', 'boolean')
+    // The plan's own `tags` are read by a sweep (`sourceDoc.tags`), so they are a list for the same
+    // reason the assertion lists below are.
+    checkListFields(planPath, doc, 'plan', ['tags'])
     if (doc.defaults !== undefined) {
         if (doc.defaults === null || typeof doc.defaults !== 'object' || Array.isArray(doc.defaults)) {
             throw new PlanSchemaError(`${planLabel(planPath)}: [defaults] must be a table`)
@@ -337,6 +481,7 @@ function validatePlanSchema(doc, planPath) {
             ? `[[sweeps]] entry '${sweep.name}'`
             : `[[sweeps]] entry #${index + 1}`
         checkFields(planPath, sweep, SWEEP_FIELDS, where)
+        checkListFields(planPath, sweep, where, SWEEP_LIST_FIELDS)
     }
     // The fields this change implemented get a type check too: a plan that sets one of them to a
     // number must fail here, where the file and the test are named, not later inside an assertion.
@@ -349,6 +494,9 @@ function validatePlanSchema(doc, planPath) {
     ]
     for (const [where, entry] of entries) {
         if (!entry) continue
+        // The list-shaped fields first: a wrong shape here changes what every other assertion in the
+        // entry means, so it is named before the assertions are read at all.
+        checkListFields(planPath, entry, where, LIST_FIELDS)
         // A marked case has to carry its owner and its wall, and this is the only place that can
         // refuse it: the runner reads a plan once, here, and a promise checked later than this is
         // a promise kept by whoever remembered to look.
@@ -595,6 +743,36 @@ const TIMEOUT_MARGIN = 4
 // bound a property of whoever else is running. The test's timeout is untouched by this: runProcess
 // kills the child at it either way, so a test that really runs too long still fails.
 export const NO_CPU_TIME_SKIP = 'skipped: this host reports no CPU time'
+
+// What a case's record says about the CPU time it cost. A record carries a figure or a sentence
+// saying why there is none; it never carries 0, which a reader would take as "this case is free"
+// while the truth is "nobody measured it". The figure comes from the wrapper the runner already
+// starts for the test (`test/tools/child-cpu.mjs`, fd 3): the kernel's `cutime` + `cstime` for
+// exactly this test's process tree, so the wrapper's own time is not in it. No second process is
+// started to read it, on any platform: where the kernel reports no such figure the record says so
+// and the runner does nothing else about it.
+export const CPU_READING_WRAPPED =
+    'process-tree CPU time (user + system) the kernel charged this test, read by test/tools/child-cpu.mjs'
+export const CPU_READING_ABSENT =
+    'absent: this platform reports no per-process CPU time (there is no /proc/self/stat), and the ' +
+    'runner starts no process to invent one'
+
+/**
+ * One case's CPU cost, as its record carries it. Three shapes, kept apart so that a later reader
+ * can tell "this case was cheap" from "this platform cannot say" from "this case did not run":
+ *
+ *   * a figure -- the case's own CPU time, with where it came from;
+ *   * no figure although the host could report one -- the wrapper said nothing, and the reason it
+ *     gave is quoted (`cpuReason`); on this shape the timeout-margin rule fails the case, so the
+ *     record and the verdict agree;
+ *   * no figure and no way to get one -- `CPU_READING_ABSENT`, which names the platform's gap
+ *     rather than the case's cost.
+ */
+export function cpuReadingRecord({ cpuMs, cpuReason, canReadCpu }) {
+    if (Number.isFinite(cpuMs)) return { cpuMs, cpuReading: CPU_READING_WRAPPED }
+    if (!canReadCpu) return { cpuMs: null, cpuReading: CPU_READING_ABSENT }
+    return { cpuMs: null, cpuReading: `absent: ${cpuReason || 'the wrapper reported nothing'}` }
+}
 
 // How many tests this run left unjudged that way, for the line it prints at the end.
 let marginSkippedTests = 0
@@ -887,6 +1065,42 @@ function positiveInteger(value, what) {
     return parsed
 }
 
+/**
+ * Every option this parser accepts, in one list, because the refusal for an unknown one names it.
+ *
+ * The parser below is the truth and this is its index: a word added there belongs here in the same
+ * commit. The list exists because "I do not know that word" is only half an answer -- the reader
+ * still has to open this file to learn what the tree *does* know, and the gap between those two
+ * readings is exactly "the caller is newer than the checkout it was pointed at", which is the one
+ * thing the run cannot guess. `targets` is listed because it is the argv position that is not an
+ * option: a plan file, a plan directory, or a short name (`smoke`, `feat`, `para`), and it is the
+ * only word that may omit the leading dashes (see the refusal below).
+ */
+const KNOWN_ARGV = [
+    'targets (a plan file, a plan directory, or a short name such as smoke)',
+    '--tier fast|slow|milestone|all|debug',
+    '--build release|debug|profile',
+    '--camel <install>',
+    '--jobs <n>',
+    '--update-golden',
+    '--compile-only',
+    '--list-known',
+    '--list-cases',
+    '--selection-cases[=<file>]',
+    '--selection-layer <plans>',
+    '--selection-empty',
+]
+
+/**
+ * A refusal about argv rather than about a run, marked so `main` prints it as the one line it is.
+ *
+ * An argv error is the caller's sentence, not a crash: it arrives before anything is measured, it
+ * has one cause, and a stack trace buries the only fact worth reading.
+ */
+function argvRefusal(message) {
+    return Object.assign(new Error(message), { argvRefusal: true })
+}
+
 function parseArgs(argv) {
     const envBuild = process.env.CAMEL_TEST_BUILD
     if (envBuild !== undefined && !Object.hasOwn(BUILDS, envBuild)) {
@@ -994,6 +1208,19 @@ function parseArgs(argv) {
             options.jobs = positiveInteger(argv[++i], '--jobs')
         } else if (arg.startsWith('--jobs=')) {
             options.jobs = positiveInteger(arg.slice('--jobs='.length), '--jobs')
+        } else if (arg.startsWith('-')) {
+            // A word that starts with `-` is never a target. Reaching this point means the caller
+            // named an option this checkout does not have -- normally because the caller is newer
+            // than the tree it was pointed at -- and pushing it as a target made `walkPlans` stat
+            // `.../--list-cases` and throw ENOENT, which every consumer reads as "this selection
+            // could not be read". Measured 2026-11-24: a lane cut at 0beeecb9fb, before this tree
+            // had `--list-cases`, answered the host's `[RUNNER, ...targets, '--list-cases',
+            // '--tier', fast]` with a stack trace and exit 1, and `scripts/selection-cases.mjs`
+            // reported `the plan loader refused this selection (exit 1)` -- a version mismatch
+            // wearing the words of an empty selection.
+            throw argvRefusal(
+                `unknown option '${arg}': this runner does not know it (the caller is newer than this tree)`,
+            )
         } else {
             options.targets.push(path.resolve(process.cwd(), arg))
         }
@@ -1439,6 +1666,16 @@ function printFailedOutput(result, pointer) {
     if (!SHOW_FAILED_OUTPUT) return
     const maxLines = 12
     const maxWidth = 240
+    // Two `(empty)` lines say the same thing twice, and a reader skimming them sees the shape of a
+    // printer that lost its input rather than a run that said nothing. One sentence names the fact
+    // the two lines only implied, and it keeps the pointer, which is where the uncut text is.
+    if (!result.stdout && !result.stderr) {
+        const where = pointer ? ` -- ${pointer}` : ''
+        console.log(
+            `    ${COLORS.cyan}[output]${COLORS.reset} both empty: the run produced no explanation${where}`,
+        )
+        return
+    }
     for (const [name, text] of [['stdout', result.stdout], ['stderr', result.stderr]]) {
         if (!text) {
             console.log(`    ${COLORS.cyan}[${name}]${COLORS.reset} (empty)`)
@@ -1711,7 +1948,7 @@ function printKnownRoster(summary) {
     if (rows.length === 0) return
     const missing = rows.filter((row) => !row.endsWhen).length
     for (const row of rows) {
-        const ends = row.endsWhen ? row.endsWhen : `${COLORS.red}(no end condition)${COLORS.reset}`
+        const ends = row.endsWhen ? describeEndCondition(row.endsWhen) : `${COLORS.red}(no end condition)${COLORS.reset}`
         console.log(`${COLORS.cyan}[KNOWN]${COLORS.reset} ${row.name}: ${ends}`)
     }
     console.log(
@@ -2142,6 +2379,9 @@ async function runVerification(test, result) {
         // meta.json records (see `costRecord`).
         cpu_ms: result.cpuMs ?? null,
         cpu_budget_ms: result.cpuBudgetMs ?? null,
+        // The sentence that goes with `cpu_ms`: where the figure was read, or why this platform
+        // cannot supply one. A script that reports a case's cost reads this before it divides.
+        cpu_reading: result.cpuReading ?? null,
         cpu_limit_ms: result.cpuLimitMs ?? null,
         cpu_margin_x: result.cpuMarginX ?? null,
         cpu_margin_basis: result.cpuMarginBasis ?? null,
@@ -2788,7 +3028,14 @@ async function runOneTest(test, sharedVars, logContext, scratch, scratchRelative
         // payload carry all four, so "how far from red" is in the record and not only inferable
         // from a bound somebody has to know to divide by four.
         cpuBudgetMs,
-        cpuMs: cpuReading.cpuMs,
+        // `cpuMs` and the sentence that goes with it: the figure the wrapper reported, or the
+        // reason this platform has none (`cpuReadingRecord`). meta.json, the verify payload and the
+        // per-case timing record all carry the pair, so a null figure always travels with its why.
+        ...cpuReadingRecord({
+            cpuMs: cpuReading.cpuMs,
+            cpuReason: cpuReading.reason,
+            canReadCpu: CAN_READ_CHILD_CPU,
+        }),
         cpuReason: cpuReading.reason,
         ...costFields,
         // The card the runner chose for this test, if it chose one: which card a GPU test ran on
@@ -2971,6 +3218,10 @@ function writeLogFiles(plan, test, result, status, logDir) {
                 // provenance, not the bound.
                 cpu_ms: result.cpuMs ?? null,
                 cpu_budget_ms: result.cpuBudgetMs ?? null,
+                // Where that figure came from, or the sentence saying why this platform has none.
+                // Beside `cpu_ms` so that a null is never read as "this case cost nothing": the
+                // record answers "nobody can measure it here" in words.
+                cpu_reading: result.cpuReading ?? null,
                 // The same reading every test now records, with the line it was judged against and
                 // how many times it fits under that line: `cpu_limit_ms` is the test's
                 // `cpu_budget_ms` when it declares one and `timeout_ms / 4` otherwise (the timeout
@@ -3050,7 +3301,7 @@ function expandBackends(test) {
             // roster can print it beside the name. Absent unless the plan writes one, like
             // `__knownFailMsg`: the mechanism grew by pinning cases one at a time, and a mark
             // written before the field existed stays legal and reads as `(no end condition)`.
-            __knownFailEndsWhen: typeof test.known_fail_ends_when === 'string' ? test.known_fail_ends_when : null,
+            __knownFailEndsWhen: knownFailEndCondition(test.known_fail_ends_when),
         }]
     }
     if (marked === true) {
@@ -3076,7 +3327,7 @@ function expandBackends(test) {
         // Absent unless the plan pins one, so every mark written before this field existed stays
         // legal: the mechanism grows by pinning cases one at a time, never by a migration.
         __knownFailMsg: typeof test.known_fail_msg === 'string' ? test.known_fail_msg : null,
-        __knownFailEndsWhen: typeof test.known_fail_ends_when === 'string' ? test.known_fail_ends_when : null,
+        __knownFailEndsWhen: knownFailEndCondition(test.known_fail_ends_when),
     }))
 }
 
@@ -3320,27 +3571,44 @@ export function negativeSweepLine(counts) {
 }
 
 /**
- * A test's layer: `tier` on the test first, then its plan. Only `slow` and `milestone` are named
- * destinations; anything else (the old `smoke`/`feat`/`benchmark` labels included) is the fast
- * layer, so a plan written before the split still runs by default. `milestone` is the layer that
- * only runs at a milestone, either because the plan file says so or because a sweep left the copy
- * unsampled. `debug` is a further layer selected only by `--tier debug`: a test that aborts when
- * an assertion fires, or that is only meaningful with assertions compiled in, lives there and is
- * never part of an ordinary or `all` run.
+ * The layer a plan's tests land in when the test says nothing: the plan's own `tier` when it names
+ * one of the four, `fast` otherwise (`docs/test-plans.md`: "any `tier` other than `slow`,
+ * `milestone` or `debug` is the fast layer" -- the old `smoke`/`feat`/`benchmark` labels included,
+ * so a plan written before the split still runs by default).
  *
- * Exported because the plan inventory (`scripts/plan-inventory.mjs`) asks the same question when it
- * decides whether a plan's slow tests have a layer: a second copy of this rule would drift from it.
+ * One function, because this question used to be answered in two places and the second answer was
+ * different. Selection went through `testTier`, which normalises; the per-plan accounting read
+ * `plan.tier ?? 'fast'` raw, so a plan labelled `feat` was filed under a layer no run covers
+ * (`coveredTiers` never returns it) and its emptiness was excused as "another layer's plan" instead
+ * of reported as a plan this layer started nothing in. Six plans in this tree carry `tier = "feat"`;
+ * their 96 tests have always run fast, and the accounting is the only reading that said otherwise.
+ * `scripts/tier-report.mjs` prints how many entries reached a layer by which of these answers, so
+ * "fast" no longer hides whether it was decided or defaulted (iron rule 6).
+ *
+ * Exported because the plan inventory (`scripts/plan-inventory.mjs`) and the layer report ask the
+ * same question: a second copy of this rule would drift from it.
+ */
+export function planLayer(plan) {
+    const tier = plan.tier
+    if (tier === 'fast' || tier === 'slow' || tier === 'milestone' || tier === 'debug') return tier
+    // Reached by a plan with no `tier` and by one whose value is not a layer name. Both are the fast
+    // layer by rule; neither is a fact anyone can read off the file, which is why the report counts
+    // them apart.
+    return 'fast'
+}
+
+/**
+ * A test's layer: `tier` on the test first, then its plan (`planLayer`). `milestone` is the layer
+ * that only runs at a milestone, either because the plan file says so or because a sweep left the
+ * copy unsampled. `debug` is a further layer selected only by `--tier debug`: a test that aborts
+ * when an assertion fires, or that is only meaningful with assertions compiled in, lives there and
+ * is never part of an ordinary or `all` run.
+ *
+ * A test's `tier` is strict: a value that is not one of the four is an error here, not a silent
+ * `fast`, because the test said which layer it wants and the runner cannot honour it.
  */
 export function testTier(plan, test) {
-    const tier = test.tier !== undefined
-        ? test.tier
-        : plan.tier === 'slow'
-            ? 'slow'
-            : plan.tier === 'milestone'
-                ? 'milestone'
-                : plan.tier === 'debug'
-                    ? 'debug'
-                    : 'fast'
+    const tier = test.tier !== undefined ? test.tier : planLayer(plan)
     if (tier !== 'fast' && tier !== 'slow' && tier !== 'milestone' && tier !== 'debug') {
         throw new Error(`test '${test.name}' of ${plan.id || plan.__planPath}: tier must be 'fast', 'slow', 'milestone' or 'debug'`)
     }
@@ -3353,11 +3621,12 @@ export function testTier(plan, test) {
  * one: a fast run must not fail because it left out the reference a selected test compares
  * against.
  *
- * `debug` is a plan-set layer, not a label a plan carries instead of its normal layer: the plans
- * that exercise views, data blocks and the executor hot paths still run fast in Release, and
- * `debug_tier = true` on the plan also selects them on a Debug build. Their debug-only tests say
- * `tier = "debug"`. `all` therefore leaves those tests out: it runs on the Release binary, where
- * the debug layer's abort case would not abort.
+ * `debug` is a plan-set layer: `debug_tier = true` on a plan selects its tests on a Debug build
+ * while leaving their ordinary layer alone -- 22 plans, 319 tests, which run fast in Release and
+ * again under `--tier debug`. The entries whose own layer *is* `debug` (35, all from plans whose
+ * `tier = "debug"`; no test in this tree sets `tier = "debug"` itself) belong to no other layer.
+ * `all` therefore leaves the debug layer out: it runs on the Release binary, where the abort case
+ * would not abort.
  */
 // The layers a run of `tier` claims to cover: a plan of one of them that starts nothing in this run
 // is a failure, and a plan of another layer is expected to be empty here. `compileOnly` covers the
@@ -3462,7 +3731,10 @@ function selectTier(plans, tier, namedPlans = new Set(), compileOnly = false, ke
         }
         const key = relPath(plan.__planPath)
         const declared = plan.tests.length
-        const own = plan.__planError ? 'failing' : plan.tier ?? 'fast'
+        // Through the same rule selection uses. Read raw, a plan labelled `feat` was filed under a
+        // layer `covered` never holds, so the plan's own emptiness was reported as "another layer's
+        // plan" -- an explanation that is always available and therefore checks nothing.
+        const own = plan.__planError ? 'failing' : planLayer(plan)
         if (plan.__planError) {
             // A schema error already fails this plan; it is counted here as read, not as unproven.
             emptyByLayer.push(plan.__planPath)
@@ -4007,16 +4279,31 @@ function slotTiming(entry, clock, marks, windows) {
     const result = entry.outcome ? entry.outcome.result : null
     const verification = result ? result.verification : null
     const verifyMs = verification && verification.wallMs ? verification.wallMs : 0
+    // The one figure in this record that is the case's own work rather than its share of the
+    // host's: its CPU time, on the record of every case, beside the intervals above. `cpu_reading`
+    // says where the figure came from, or why this platform has none; a skipped case did not run,
+    // so its record says that instead of quoting a cost of zero.
+    const skipped = entry.outcome ? entry.outcome.status === 'skip' : false
+    const reading = cpuReadingRecord({
+        cpuMs: result ? result.cpuMs : null,
+        cpuReason: result ? result.cpuReason : null,
+        canReadCpu: CAN_READ_CHILD_CPU,
+    })
     return {
         plan: entry.plan.id,
         plan_path: entry.plan.__planPath,
         test: entry.test.name,
         status: entry.outcome ? entry.outcome.status : 'fail',
         serial: clock.serial === true,
-        // This test's own CPU time (user + system, the whole process tree), the figure its
+// This test's own CPU time (user + system, the whole process tree), the figure its
         // `cpu_budget_ms` and the timeout margin are judged against -- and `cpu_reason` where this
-        // host reported none, so a null here is a stated absence and not a zero.
-        cpu_ms: result && Number.isFinite(result.cpuMs) ? roundMs(result.cpuMs) : null,
+        // host reported none, so a null here is a stated absence and not a zero. `cpu_reading` says
+        // the same to a reader of `meta.json`, and a case that was skipped says it did not run
+        // instead of quoting a cost of zero.
+        cpu_ms: skipped ? null : reading.cpuMs,
+        cpu_reading: skipped
+            ? 'not run: the case was skipped, so this run charged it no CPU'
+            : reading.cpuReading,
         cpu_budget_ms: result && typeof result.cpuBudgetMs === 'number' ? roundMs(result.cpuBudgetMs) : null,
         cpu_reason: result ? result.cpuReason ?? null : null,
         // How many of the run's slot permits this test held: a `parallel = false` test and a
@@ -4249,9 +4536,24 @@ function summarizeSlotTimings(records, planWallMs, jobs, stalls, logWindows, run
         (total, record) => total + ((record.tokens || 1) - 1) * record.slot_ms,
         0
     )
+    // The cases that carry a CPU figure, and the sentences of the ones that do not: the run states
+    // which half of its own record answers "what did this cost", so a reading of 0 cases is a fact
+    // about the host and never an empty total that reads as a cheap layer.
+    const cpuRecords = records.filter((record) => Number.isFinite(record.cpu_ms))
+    const absentReadings = [...new Set(
+        records.filter((record) => !Number.isFinite(record.cpu_ms)).map((record) => record.cpu_reading)
+    )].sort()
     return {
         tests: records.length,
         plan_wall_ms: Math.round(planWallMs),
+        cpu: {
+            read: cpuRecords.length,
+            absent: records.length - cpuRecords.length,
+            cpu_ms_total: Math.round(cpuRecords.reduce((total, record) => total + record.cpu_ms, 0)),
+            cpu_ms: distribution(cpuRecords.map((record) => record.cpu_ms)),
+            top_cpu_ms: topContributors(cpuRecords, 'cpu_ms'),
+            absent_reading: absentReadings,
+        },
         // Inside a slot: the test child, and the runner work that still happens while the slot is
         // held (creating the child).
         child_ms_total: Math.round(childTotal),
@@ -4687,13 +4989,40 @@ async function executePlans(plans, options, sharedVars, logDir) {
                         // longer appears turns the run red, the same way a mark that starts
                         // passing does. Unset is legal and pins nothing.
                         const pinned = entry.test.__knownFailMsg
-                        const seen = `${(result.failures || []).join('\n')}\n${result.stdout || ''}\n${result.stderr || ''}`
-                        if (pinned !== null && !seen.includes(pinned)) {
+                        // This column IS the verdict and NOT the case's output: the failure lines
+                        // the runner assembled about the case, then what the case printed. Only
+                        // `known_fail_msg` reads it, and it has to read the first part: an entry with
+                        // a verification script is judged by two programs, and `verifyFailureLines`
+                        // carries the second one's text here (`verification output: ...`). Measured
+                        // on the gate host at 1e01eaa0a9, by narrowing this column to the case's own
+                        // output and running every plan that carries a pin: the two pins of
+                        // `feat.linear.effects_model_edges` stopped matching (`CTRL edge(s)`,
+                        // `CTRL input(s)` -- both are lines their verifiers print), and every other
+                        // pin in the tree still matched, so the runner's own text is read by those
+                        // two verifiers and by no pin that names the case's output.
+                        //
+                        // A `prints` condition must never be matched against this column: a failure
+                        // line quotes the line a run did not find (`output does not contain '<line>'`),
+                        // so the condition would be satisfied by the sentence saying it was not (see
+                        // `observedOutput`).
+                        const verdictText = `${(result.failures || []).join('\n')}\n${result.stdout || ''}\n${result.stderr || ''}`
+                        if (pinned !== null && !verdictText.includes(pinned)) {
                             const first = `${(result.failures || [])[0] || result.stderr || result.stdout || '(no output)'}`
                                 .split('\n')[0]
                             result.status = 'fail'
                             result.failures.push(
                                 `known failure changed its mind: expected "${pinned}", got "${first.trim()}"`,
+                            )
+                        } else if (endConditionHasArrived(entry.test, observedOutput(result))) {
+                            // Strict xfail: a mark whose ending has arrived stops being an excuse the
+                            // moment the run reads it. Left as an XFAIL it would be a green nobody has
+                            // to look at again -- the debt the STALE snippet entries carried, where
+                            // the thing to do is delete the entry and the reading exists to make
+                            // somebody do it.
+                            result.status = 'fail'
+                            result.failures.push(
+                                `known failure has ended: this entry already ${describeEndCondition(entry.test.__knownFailEndsWhen)}` +
+                                    ' -- delete the mark',
                             )
                         } else {
                             result.status = 'xfail'
@@ -4746,6 +5075,7 @@ async function executePlans(plans, options, sharedVars, logDir) {
 
     await Promise.all(entries.map((entry) => entry.promise))
     drain()
+    settlePassesConditions(entries, completed, summary)
     const stalls = stopLoopMonitor()
     const timings = []
     for (const entry of entries) {
@@ -4757,7 +5087,21 @@ async function executePlans(plans, options, sharedVars, logDir) {
 }
 
 async function main() {
-    const options = parseArgs(process.argv.slice(2))
+    let options
+    try {
+        options = parseArgs(process.argv.slice(2))
+    } catch (error) {
+        if (!error || !error.argvRefusal) throw error
+        // One line for the cause, then this tree's own argv and commit: those two are what a caller
+        // comparing versions needs, and they are printed here because the run never starts -- there
+        // is no summary, no provenance line and no log directory to look in.
+        console.error(`${COLORS.red}[ERROR]${COLORS.reset} ${error.message}`)
+        console.error(`[ARGV] this runner knows: ${KNOWN_ARGV.join('  ')}`)
+        const sha = gitOutput(['rev-parse', 'HEAD']) || 'unknown'
+        const when = gitOutput(['log', '-1', '--format=%cI']) || 'unknown'
+        console.error(`[ARGV] this tree is ${sha} (committed ${when}); a word this list lacks is newer than it`)
+        process.exit(1)
+    }
     if (options.listCases) {
         // A question about the plan tree, not a run: nothing executes, so no install is consulted.
         const status = listSelectedCases(options)
@@ -5176,6 +5520,17 @@ async function main() {
         + `, after the last release ${((slotTiming.plan_wall_ms - slotTiming.last_release_ms) / 1000).toFixed(1)} s`
         + ` (${(slotTiming.post_release_per_slot_ms / 1000).toFixed(1)} s of it per slot)`
         + `, loop stalls ${(slotTiming.loop_lag.stall_ms_total / 1000).toFixed(1)} s`
+    )
+    // The per-case CPU record, in one line: how many cases carry a figure of their own and what
+    // the rest say. A run where the second number is everything is not a run whose costs are
+    // unknown by accident -- it is a run on a host that cannot report them, and the line quotes
+    // the sentence its cases carry rather than leaving the column empty.
+    console.log(
+        `${COLORS.cyan}[CPU]${COLORS.reset} ${slotTiming.cpu.read}/${slotTiming.tests} case(s) carry`
+        + ` the CPU time they cost (${(slotTiming.cpu.cpu_ms_total / 1000).toFixed(1)} s)`
+        + (slotTiming.cpu.absent > 0
+            ? `, ${slotTiming.cpu.absent} say why not: ${slotTiming.cpu.absent_reading.join(' | ')}`
+            : '')
     )
     console.log(
         `${COLORS.cyan}[INFO]${COLORS.reset} wall: ${(outcome.wallMs / 1000).toFixed(1)} s, jobs: ${options.jobs}, tier: ${options.tier}`

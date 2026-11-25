@@ -2,7 +2,7 @@ id = "runtime.oper_shape"
 order = 384
 tier = "fast"
 tags = ["feat", "runtime", "oper", "shape", "witness"]
-desc = "A conversion, a copy, a construction and a member read answer one shape whether the program writes the operator's call (`cast`, `copy`, `fill`, `access`, `access_key`) or the form the front end still builds (CAST, COPY, FILL, ACCS), because the classification asks the operator the node names and not its kind."
+desc = "A construction answers one shape whether the program writes the operator's call (`fill`) or the form the front end still builds (FILL), because the classification asks the operator the node names and not its kind; a conversion, a copy and a member read have one form only, since the four node kinds that wrote them are gone (CAST, COPY and the ACCS that `t.0` used to build are `:op/cast`, `:op/copy` and `:op/access` now)."
 # `test::oper_shape` prints one line per form the program uses, so the reading compares the two
 # writings of one operation instead of counting nodes: no program can see the classification, and a
 # back end's answer for it is a decision about the operator, which is what this plan pins.
@@ -11,15 +11,54 @@ desc = "A conversion, a copy, a construction and a member read answer one shape 
 # (`camel/execute/shaped_operators.h`), every `oper=` line of this program stops matching -- the
 # operator-built nodes answer `shape=none` -- while the `kind=` lines keep matching, so the plan's
 # failure names the operator's half and not a program that stopped building the kind.
+#
+# NOTE, measured at the seat this branch starts from and left as it is: this first test is red
+# before the change below, for three reasons of its own, and repairing them is a change of its own.
+#   1. The case no longer compiles -- `access` and `access_key` take their position as a `with`
+#      parameter (`stdlib/prelude.cml`), and it still passes it as a second ordinary argument, so
+#      nothing it asserts is reached. What it prints instead is the two refusals pinned below, and
+#      that is what this entry now asserts; the shape readings are unreachable, not wrong.
+#   2. Past that, the `kind=CAST` and `kind=ACCS` lines it expects are not printed for `float(x)` and
+#      `t.0` any more: both are operator calls now, and the only `kind=` form the repaired program
+#      builds is `kind=FILL` (the tuple `(a, b)`). A member read is `:op/access` by position and
+#      `:op/access_key` by field name; the `ACCS` kind itself still exists (`shapeOfKind` answers
+#      Access for it), it is just no form this program writes.
+#   3. With the calls repaired and `via_cast` taken out of the program, the five `oper=` lines do
+#      print, which is the reader this change moves to the record. `via_cast` itself stops the run
+#      first: `cast::<int, float>(x)` reports "Runtime graph 'via_cast' breaks its edge invariants
+#      (1 violation(s)): ... converts a int to a float, which is forbidden", which that message
+#      calls a defect of the compiler rather than an error of the program.
 [[tests]]
 name = "runtime.oper_shape.the_operator_and_the_kind_answer_one_shape"
-desc = "Eight forms, one shape each: the five operators of the four (two member reads, by position and by field name) and the three kinds the same program builds. A form that answers none is the classification back on the node kind."
+desc = "Red for reasons of its own, pinned rather than merely failing: the case stops at two refusals before any pass runs, so the reading is both `SemanticDiag::NoMatchingFunction`s -- one per member read, with the position or the key offered as an ordinary argument -- and the overload each call was actually offered. With those calls repaired the five `oper=` forms print and one `kind=` form does (`kind=FILL`), so a reading that expected `kind=ACCS` would be pinning a form this program no longer builds."
 kind = "behavior"
 case = "../../../cases/runtime/oper_shape/two_forms_one_shape.cml"
 args = ["${case}", "test::oper_shape"]
+expect_exit = 1
+# The two refusals, and the signature each call was offered: `at` (an `int`) and `key` (a `string`)
+# are `with` parameters, which is the one fact that makes the case unrunnable as it stands.
+expect_diagnostic_name = "SemanticDiag::NoMatchingFunction"
+expect_diagnostic_line = 28
+expect_stdout_contains = ['<> (int, (int, int))', '<:op/access>: <at: int> (x: T) => U', '<> (string, Point)', '<:op/access_key>: <key: string> (x: T) => U']
+# A form answerable only as "not one of the four" is the revert this case exists for. Vacuous while
+# the case does not compile, and kept for the day it is repaired: it is what the entry asserts then.
+expect_stdout_not_contains = ["shape=none", "not ok"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 30000
+
+# The registry behind the answer above, checked directly: the shape a statement writes, the shape a
+# reader gets back off the record, and the refusal a completed record gives a second, different
+# statement. None of it is visible to a program, so nothing in a case can stand in for it: a
+# `stateShape` that took the second statement would leave the four operators' shapes as whatever was
+# registered last, and the `oper=` lines above would keep matching while the registry drifted.
+[[tests]]
+name = "runtime.oper_shape.the_registry_states_one_shape"
+desc = "`declareShape` states a shape at an operator and `shapeOfOperator` reads it back off the record; before the record is completed a later statement stands; after it is completed the same statement is a repetition and a different one is refused, naming both shapes, with the published shape left as it was."
+kind = "behavior"
+case = "../../../cases/compile/ref/ref_float.cml"
+args = ["${case}", "test::oper_shape"]
 expect_exit = 0
-expect_stdout_matches = ['\[OPER_SHAPE\] kind=ACCS shape=access', '\[OPER_SHAPE\] kind=CAST shape=conversion', '\[OPER_SHAPE\] kind=FILL shape=construction', '\[OPER_SHAPE\] oper=:op/access shape=access', '\[OPER_SHAPE\] oper=:op/access_key shape=access', '\[OPER_SHAPE\] oper=:op/cast shape=conversion', '\[OPER_SHAPE\] oper=:op/copy shape=clone', '\[OPER_SHAPE\] oper=:op/fill shape=construction']
-# A form answerable only as "not one of the four" is the revert this case exists for.
-expect_stdout_not_contains = ["shape=none"]
+expect_stdout_contains = ["[SHAPE_REGISTRY] unstated_is_none ok", "[SHAPE_REGISTRY] declareShape ok", "[SHAPE_REGISTRY] completed_refuses_a_second_shape ok"]
+expect_stdout_not_contains = ["not ok"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 30000

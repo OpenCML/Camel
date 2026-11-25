@@ -83,12 +83,12 @@ name = "gir.gir_snapshot"
 desc = "Pins the GIR shape produced by the canonical fib10 program before optimization."
 kind = "snapshot"
 case = "../../cases/smoke/core/fib10_pipeline.cml"
-args = ["${case}", "${run_rgir}"]
+args = ["${case}", "${run_gir}"]
 expect_exit = 0
 snapshot_stream = "stdout"
-snapshot_compare = "gir_dot_isomorphic"
+snapshot_compare = "text_exact"
 golden = "./golden/gir.dot"
-normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths", "normalize_origins"]
 timeout_ms = 10000
 
 [[tests]]
@@ -106,15 +106,15 @@ timeout_ms = 10000
 
 [[tests]]
 name = "gir.rgir_snapshot"
-desc = "Pins the AI-readable GIR dump with only label/type node and edge attributes."
+desc = "Pins the rich, Graphviz-styled GIR dump of the canonical fib10 program before optimization."
 kind = "snapshot"
 case = "../../cases/smoke/core/fib10_pipeline.cml"
-args = ["${case}", "${run_gir}"]
+args = ["${case}", "${run_rgir}"]
 expect_exit = 0
 snapshot_stream = "stdout"
-snapshot_compare = "text_exact"
+snapshot_compare = "gir_dot_isomorphic"
 golden = "./golden/rgir.dot"
-normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths", "normalize_origins"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 10000
 
 [[tests]]

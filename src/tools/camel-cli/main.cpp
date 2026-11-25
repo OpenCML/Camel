@@ -340,7 +340,7 @@ int runCommand(int argc, char *argv[]) {
     ctx->setMainModule(mainModule);
     // The pass list is resolved against a context that has the program's module. Doing it
     // before the build leaves the entry requirement decided before anything is compiled.
-    if (selectedCommand == Command::Run && passListTranslatesProgram(Run::resolvedPassList, ctx)) {
+    if (selectedCommand == Command::Run && passListEndsWithoutExecuting(Run::resolvedPassList, ctx)) {
         ctx->setRequireEntry(false);
     }
     contextPhase.reset();
@@ -552,7 +552,7 @@ int runCommand(int argc, char *argv[]) {
                         olderStore, *ctx->runtimeProgram(), os, wantedOlder);
                 }
                 if (allKinds || !wantedFacts.empty()) {
-                    camel::runtime::GCGraph *root = ctx->runtimeProgram()->root();
+                    auto *root = ctx->runtimeProgram()->root();
                     camel::facts::Store *store =
                         root != nullptr ? camel::facts::storeHolding(*root) : nullptr;
                     if (store == nullptr) {

@@ -1,0 +1,51 @@
+id = "compile.copy_identity"
+order = 336
+tier = "fast"
+tags = ["feat", "compile", "operators", "diagnostics"]
+desc = """
+The operator a `var` binding's copy calls is the language's, not a name in the program's scope: `var g = n` resolves `:op/copy` from the built-in group, so a `let copy = 1` beside it neither changes what the copy calls nor makes it unnameable. A conversion (`f32(n)`) and a copy (`var g = n`) that the compiler writes itself and cannot resolve have three failures that are three different things -- the built-in group absent (a prelude missing its `#op` declaration, InternalDiag::UnknownInternalError), the group present and no rule for the pair (SemanticDiag::DynamicCastForbidden for a conversion, a rule defect for a copy), and the types not known yet (SemanticDiag::OperatorSignatureUnresolved, the code this plan pins by name: no node is written for it, because a call with no operator to point at is one no reader can ask about) -- and the tests below keep the first two out of the third's way.
+"""
+
+[[tests]]
+name = "plain.nvm"
+desc = "A `var` binding's copy, with nothing named `copy` in scope: the program keeps its value and the copy is a call of ':op/copy' resolved from the built-in group (nvm)"
+kind = "behavior"
+case = "../../../cases/compile/copy_identity/plain.cml"
+args = ["${case}", "${run_nvm}"]
+expect_exit = 0
+expect_stdout_contains = ["42"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "plain.fvm"
+desc = "A `var` binding's copy, with nothing named `copy` in scope: the program keeps its value and the copy is a call of ':op/copy' resolved from the built-in group (fvm)"
+kind = "behavior"
+case = "../../../cases/compile/copy_identity/plain.cml"
+args = ["${case}", "${run_fvm}"]
+expect_exit = 0
+expect_stdout_contains = ["42"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "shadowed.nvm"
+desc = "The same copy with `let copy = 1` in scope first: the binding shadows the name for the program's own lookups and not for the call the compiler wrote, so the program still runs and still prints its own 'copy' (nvm). Before the built-in group was read directly, resolving this copy by name answered nothing and the call fell to a node with no operator identity (nvm)"
+kind = "behavior"
+case = "../../../cases/compile/copy_identity/shadowed.cml"
+args = ["${case}", "${run_nvm}"]
+expect_exit = 0
+expect_stdout_contains = ["42", "1"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "shadowed.fvm"
+desc = "The same copy with `let copy = 1` in scope first: the binding shadows the name for the program's own lookups and not for the call the compiler wrote, so the program still runs and still prints its own 'copy' (fvm)"
+kind = "behavior"
+case = "../../../cases/compile/copy_identity/shadowed.cml"
+args = ["${case}", "${run_fvm}"]
+expect_exit = 0
+expect_stdout_contains = ["42", "1"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000

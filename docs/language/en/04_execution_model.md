@@ -336,7 +336,7 @@ A program is processed by the sequence of passes on the command line: `camel fil
 | `onnx::export`, `std::cpp` | Translate to an ONNX model, to C++ source |
 
 - **The language does not restrict the order of passes, and the order can affect the result.** Passes modify the graph and may have side effects; "the same behaviour under any sequence of passes" is not a property of the language.
-- Scheduling passes and translation passes consume the graph, and passes written after them do not run (there is a warning `RuntimeDiag::PassesNeverRun`). When none of the specified passes consumes the graph, the default pass runs next.
+- A scheduling pass executes the program and answers with the residual graph or an empty one; passes written after one that answered with an empty graph do not run (there is a warning `RuntimeDiag::PassesNeverRun`). A rewriting pass and a translation pass both hand a graph on, so the passes after them still run. `std::nop` is the scheduling pass that produces no effect. When the graph is still there after the passes written, the default pass runs next.
 - The source-level rules (`var`/`let`, `sync`) constrain how the compiler builds the graph; once the graph has been obtained, these rules no longer constrain later passes. The optimisation passes of the standard library aim not to change the result of the program; this is a quality requirement on those passes, ensured by tests.
 - When a pass of some module (such as `onnx::export`) is written on the command line, the compiler loads that module automatically.
 

@@ -218,7 +218,7 @@ case = "../../../cases/consistency/operator_overloads/ambiguous_generic.cml"
 args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::AmbiguousCall"
-expect_diagnostic_line = 11
+expect_diagnostic_line = 15
 expect_diagnostic_column = 19
 expect_output_contains = ["(a: T[], b: T[]) => T[] (this module)", "(a: T[], b: U[]) => T[] (this module)"]
 
@@ -230,7 +230,7 @@ case = "../../../cases/consistency/operator_overloads/mods/ambiguous_modules.cml
 args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::AmbiguousCall"
-expect_diagnostic_line = 9
+expect_diagnostic_line = 10
 expect_diagnostic_column = 20
 expect_output_contains = ["(module 'plus_a')", "(module 'plus_b')"]
 
@@ -242,7 +242,7 @@ case = "../../../cases/consistency/operator_overloads/mods/conflict_import.cml"
 args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::OperatorOverloadConflict"
-expect_diagnostic_line = 4
+expect_diagnostic_line = 5
 expect_diagnostic_column = 1
 expect_output_contains = ["by module 'plus_a'"]
 
@@ -294,7 +294,7 @@ case = "../../../cases/consistency/operator_overloads/specific/eq_not_bool.cml"
 args = ["-E", "short", "${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::OperatorOverloadInvalid"
-expect_output_contains = ["returns 'int', not 'bool'", ".cml:7:"]
+expect_output_contains = ["returns 'int', not 'bool'", ".cml:9:"]
 
 [[tests]]
 name = "operator_overloads.namespace_block"

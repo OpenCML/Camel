@@ -116,7 +116,11 @@ function main() {
         // One implementation of the delete: scripts/clean.js owns it, this guard only reports.
         const cleanArgs = [path.join(SCRIPT_DIR, 'clean.js'), '--source', '--root', rootPath]
         if (dryRun) cleanArgs.push('--dry-run')
-        const result = spawnSync(process.execPath, cleanArgs, { cwd: process.cwd(), stdio: 'inherit' })
+        // The child runs in the checkout this run named, never in the directory the run was started
+        // in: that directory is the main checkout (iron rule 17), so a path the delete resolved
+        // relatively would be resolved in the wrong tree. The root is already absolute and reaches
+        // `clean.js` as an argument; this states the same tree twice rather than relying on a cwd.
+        const result = spawnSync(process.execPath, cleanArgs, { cwd: rootPath, stdio: 'inherit' })
         process.exit(result.status === null ? 1 : result.status)
     }
 

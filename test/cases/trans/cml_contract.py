@@ -125,7 +125,12 @@ def invoke(*args):
 
 
 def canonical(source):
-    done = invoke(EXE, source, "std::jgir canonical=true")
+    # Why the pipeline ends in `std::nop`: the document is what this helper returns and what the
+    # case compares -- it is parsed as JSON here and fed to the round-trip checker further down. The
+    # pass hands the graph on, so the fallback runs the program behind the document: measured on
+    # `linear.cml`, `main` returns `shifted` and prints `bonus = 24 ...`, so that run is the exit
+    # code (23) and the text after the document. The document is the subject; the run is not.
+    done = invoke(EXE, source, "std::jgir canonical=true", "std::nop")
     assert done.returncode == 0, (source, done.stdout, done.stderr)
     body = "\n".join(
         line for line in done.stdout.splitlines() if not line.startswith("GRAPH_STATS")
@@ -136,7 +141,11 @@ def canonical(source):
 
 
 def print_source(source):
-    done = invoke(EXE, source, "std::cml")
+    # Why the pipeline ends in `std::nop`: the printed source *is* this helper's return value, and
+    # the case writes it out and compiles it again. With the graph handed on, the program's own
+    # stdout is appended to the printed source, so the copy fails to compile for a reason that is
+    # the run. The print is the subject; the run of the origin is a different reading.
+    done = invoke(EXE, source, "std::cml", "std::nop")
     assert done.returncode == 0, (source, done.stdout, done.stderr)
     assert done.stdout.strip(), "std::cml printed nothing"
     return done.stdout
@@ -158,7 +167,9 @@ def run_source(source, backend="std::nvm"):
 
 def named_nodes(source):
     """The node names `std::jgir` version 1 reports, per graph."""
-    done = invoke(EXE, source, "std::jgir")
+    # Why the pipeline ends in `std::nop`: the version 1 document is parsed here, and the pass hands
+    # the graph on, so the run would write behind the document. Same reading as `canonical()`.
+    done = invoke(EXE, source, "std::jgir", "std::nop")
     assert done.returncode == 0, (source, done.stdout, done.stderr)
     document = json.loads(done.stdout)
     assert document["version"] == 1, document["version"]
@@ -309,7 +320,7 @@ def main():
     check_refusal(
         big, "CmlBigConstant", ("std::cml max_literal_bytes=64",), ("over max_literal_bytes",)
     )
-    done = invoke(EXE, big, "std::cml max_literal_bytes=64")
+    done = invoke(EXE, big, "std::cml max_literal_bytes=64")  # camel-pass-scan: keep -- the pass refuses the constant (`CmlBigConstant`), so nothing is handed on
     message = done.stdout + done.stderr
     assert "max_literal_bytes (64)" in message, message
 
@@ -350,7 +361,7 @@ def main():
     assert stripped != printed, (printed, "the case declares no type to remove")
     without = TMP / "named_type.without_declaration.cml"
     without.write_text(stripped, encoding="utf-8")
-    done = invoke(EXE, without, "std::jgir", "canonical=true")
+    done = invoke(EXE, without, "std::jgir", "canonical=true")  # camel-pass-scan: keep -- the program does not compile, so nothing is handed on
     message = done.stdout + done.stderr
     assert done.returncode != 0 and "UnresolvedTypeReference" in message, (
         "the type declaration is not what makes the printed program compile",

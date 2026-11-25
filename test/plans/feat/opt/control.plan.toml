@@ -24,6 +24,10 @@ args = ["${case}"]
 expect_exit = 0
 expect_stdout_contains = ["Control construction, rewrites, branch protection and linear chain: PASS"]
 timeout_ms = 30000
+# Slow layer: over the 2 s the fast layer allows -- 2.37 s of
+# child wall clock in the 2026-11-12 record (appendix B of
+# internal/reports/2026-11-24-test-suite-inventory.cn.md).
+tier = "slow"
 
 [[tests]]
 name = "control.test_pass_not_in_default_pipeline"

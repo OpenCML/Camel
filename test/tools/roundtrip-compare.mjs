@@ -163,7 +163,13 @@ function firstDifferingLine(a, b) {
 
 function printOf(name) {
     const source = path.join(ROOT, 'test', 'cases', `${name}.cml`)
-    const printed = run([source, 'std::cml'])
+    // Why the pipeline ends in `std::nop`: the printed source *is* what this tool reads back -- it
+    // is written to a scratch file and run as a program -- and `std::cml` hands the graph on, so the
+    // fallback would run the origin behind the print. That run's stdout is then appended to the
+    // printed source (the copy fails to compile: `Unexpected '3'`, `Illegal character '\'`), and its
+    // exit code is the one this function reports as "refused". The print is the subject; the run of
+    // the program is what `measure()` takes separately, twice, with no pass at all.
+    const printed = run([source, 'std::cml', 'std::nop'])
     if (printed.status !== 0) {
         return { error: `std::cml refused it (exit ${printed.status}): ${printed.stderr.split('\n')[0]}` }
     }

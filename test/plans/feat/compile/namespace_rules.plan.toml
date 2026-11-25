@@ -308,7 +308,7 @@ name = "ns.p01_graph_names"
 desc = "Row 21 (N8): graph names in the dump of the entry program p01_qualified.cml; a function of the entry module is shown without the module, an imported one with it (see ns.p01_rgir)."
 kind = "behavior"
 case = "../../../cases/compile/namespace_rules/p01_qualified.cml"
-args = ["${case}", "std::rgir"]
+args = ["${case}", "std::rgir", "std::nop"]
 expect_exit = 0
 expect_stdout_contains = ["lib::root", "lib::Tools::inc", "lib::Deep::Inner::three"]
 
@@ -317,7 +317,7 @@ name = "ns.p23_graph_names.entry_module"
 desc = "Row 21 (N8), the other half: the function of the entry module carries no module in the dump even when a namespace holds a function of the same base name, so `f` and `N::f` are two nodes with those labels."
 kind = "behavior"
 case = "../../../cases/compile/namespace_rules/p23_graph_names.cml"
-args = ["${case}", "std::rgir"]
+args = ["${case}", "std::rgir", "std::nop"]
 expect_exit = 0
 expect_stdout_contains = ["label=\"f\"", "label=\"N::f\""]
 
@@ -353,3 +353,21 @@ expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::AmbiguousName"
 expect_diagnostic_line = 8
 expect_output_contains = ["The name 'P' is ambiguous here: libt1::Shapes::P, libt2::Shapes::P"]
+
+[[tests]]
+name = "ns.p36_own_value_before_prelude"
+desc = "A value name this module declares and the prelude also exports (`join`): the module's own is the name the value means. The row above the prelude is this module's own names, and the two are not merged (design principles 10.2; the rows are one list in src/compile/src/name_layers.h)."
+kind = "behavior"
+case = "../../../cases/compile/namespace_rules/p36_own_value_before_prelude.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_exact = "own\n"
+
+[[tests]]
+name = "ns.p37_own_type_before_prelude"
+desc = "The same for a type name: the module declares its own `Range` and the prelude exports one too (`export type Range = { start: int?, stop: int?, step: int }`). The shapes differ, so taking the prelude's answer would not typecheck the program at all. Design principles 10.2."
+kind = "behavior"
+case = "../../../cases/compile/namespace_rules/p37_own_type_before_prelude.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_exact = "6\n"
