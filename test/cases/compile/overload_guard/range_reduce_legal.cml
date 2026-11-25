@@ -1,0 +1,9 @@
+// A generic overload that does resolve: `keep` binds `U = int[]` and `initial` is an array of
+// that type, so the prelude's range form takes the call. The reading after the refusal was made
+// a refusal again: nothing here was narrowed.
+func push(acc: int[], i: int) => int[] { return acc->append<i> }
+
+func main() => int sync {
+    println((0 .. 3)->reduce<push, [0]>)
+    return 0
+}
