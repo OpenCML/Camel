@@ -1,0 +1,51 @@
+/**
+ * The two halves of `sum_to` (`lib/rulesets/jvp.cml#jvp_sum_to`, `lib/rulesets/transpose.cml#
+ * sum_to_t`), read against the engine's own rule (`lib/tensor/ops/gradient_ops.cpp#sumToVjp`).
+ *
+ * `sum_to` is one of the tensor module's gradient operators that is **exported**
+ * (`src/stdlib/tensor.cml#sum_to`): a program can write it -- the laws write one on every broadcast
+ * product's cotangent -- and the engine's table answers it. The library answered neither direction,
+ * so the key sat in the parity check's `engine-only` column behind an exemption that said "tensor
+ * module internal", which is true of `expand_axis` and false of this one.
+ *
+ * It is the pair that owns a broadcast: `sum_to` reduces to the extents, `broadcast_like` spreads to
+ * a value's shape, and each is the other's adjoint. The forward rule is the reduction applied to the
+ * tangent (a sum of tangents is the tangent of the sum); the reverse rule is `broadcast_like(ct, t)`,
+ * which needs `t`'s value.
+ *
+ * **The forward half is walked and the reverse is not, and the second sentence is measured.** This
+ * program's `vjp` is refused with
+ *
+ *     TRANSPOSE function=split_of_jvp_of_total_plain_backward skip=law-reads-a-value
+ *     uri=tensor:sum_to position=0 operand-types=float[2, 2],int[] reason=the rule's right side
+ *     reads a value the caller does not carry
+ *
+ * -- the same wall `library_reverse_elementwise.cml` records for the mask laws. A transposed map is
+ * handed the cotangent and nothing else, and `sum_to_t` answers `broadcast_like(ct, t)` from `t`.
+ * So the engine's number is printed, the library's leg is marked `filed-not-walked`, and the work
+ * that would unblock the reverse is the same question every law that reads a value raises -- not a
+ * missing line in this one.
+ *
+ * The input `[[1.0, 2.0], [3.0, 4.0]]` reduced to `[2]` is `[3.0, 7.0]`, so the loss is `10.0` and
+ * every one of the four positions feeds it exactly once: the gradient is `[[1, 1], [1, 1]]`, which
+ * is the second line. That separates the two wrong laws a reader might write: a `ct` passed through
+ * unchanged answers `[1, 1]` where a rank 2 array is wanted, and a `sum_to` of the cotangent answers
+ * a rank 1 array.
+ */
+import { grad } from autodiff
+import { abs, sum, sum_to } from tensor
+
+with <x: float[2, 2]>
+func total() => float {
+    return sum(sum_to(x, [2] as int[]))
+}
+
+func main() => int sync {
+    let input = [[1.0, 2.0], [3.0, 4.0]] as float[2, 2]
+    let engine = grad(total)<input>()
+    `sum_to engine={} library=filed-not-walked`->format<engine>->println
+    let ones = [[1.0, 1.0], [1.0, 1.0]] as float[2, 2]
+    let is_ones = sum(abs(engine - ones)) == 0.0
+    `sum_to engine_is_ones={}`->format<is_ones>->println
+    return 0
+}

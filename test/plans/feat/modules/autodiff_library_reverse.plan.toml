@@ -1,0 +1,57 @@
+id = "modules.autodiff_library_reverse"
+order = 380
+tier = "fast"
+tags = ["feat", "modules", "autodiff", "library", "rules"]
+desc = "The eight reverse laws this lane added (`lib/rulesets/transpose.cml`: `softmax_t`, `layer_norm_t`, `pow_t`, `conv2d_t`, `max_pool2d_t`, `avg_pool2d_t`, `embedding_t`, `sum_to_t`, with `lib/rulesets/jvp.cml#jvp_sum_to` as the forward half `sum_to` was missing), each read against the engine's rule for the same key, in one program per family. Every key here was the parity check's `forward-only` or `engine-only` column. A case says per operator whether the library's own composition walks the law or stops before it, and the stop is measured rather than assumed (`skip=law-reads-a-value`, `skip=call-no-transpose`), because a transposed map is handed the cotangent and nothing else. The four keys that were tried and taken back out (`abs`, `log`, `maximum`, `minimum`) are read by `autodiff.elementwise_forward_both_legs` instead: for those the library's answer is the forward half's mask, and a transpose law would be one no walk can reach -- `lib/rulesets/transpose.cml` carries the two measurements."
+
+[[tests]]
+name = "autodiff.elementwise_forward_both_legs"
+desc = "`abs`, `log`, `maximum` and `minimum` through both legs. The numbers separate the laws a reader might write instead: `abs` at the boundary zero separates `>=` from `>` (`-1.0` against `1.0` at the second lane), `log` separates `ct / x` from a pass-through, and both extrema put the tie in the last lane on the **left** operand, which is the convention the forward law's mask and the engine's `extremumVjp` share. `elementwise all_same=true` is the reading: all four comparisons are the same array bit for bit on nvm and on fvm."
+kind = "behavior"
+case = "../../../cases/modules/autodiff/library_forward_elementwise_both_legs.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_contains = ["abs grad engine=", "log grad engine=", "maximum grad engine=", "minimum grad engine=", "elementwise all_same=true"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "autodiff.softmax_layer_norm_pow_reverse_laws"
+desc = "`softmax`, `layer_norm` and `^` through both legs, with `layer_norm` printed by one leg only. `softmax` and `^` are differentiated by both tables on one program and compared; `layer_norm`'s library leg is not printed because it is refused before this law is asked -- `jvp_layer_norm` writes a *call* (`layer_norm_grad(x, neutral, dx, 0)`) into its linear half and a call with no transpose stops the walk, and the bare `transpose` of a one-operator function is refused with `skip=law-reads-a-value`, the law answering from `x` and `gamma` which a transposed map is not handed. The engine's number is printed so the law's target is on the record. `softmax_layer_norm_pow all_same=true` is the reading over the two legs both tables answer."
+kind = "behavior"
+case = "../../../cases/modules/autodiff/library_reverse_softmax_layer_norm_pow.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_contains = ["cube grad engine=", "softmax engine=", "layer_norm engine=", "softmax_layer_norm_pow all_same=true"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "autodiff.nn_reverse_laws"
+desc = "`conv2d`, `avg_pool2d` and `embedding` through both legs, each against the engine's rule that names the same gradient operator. Each law is the module's own gradient operator -- `conv2d_input_grad`/`conv2d_kernel_grad`/`conv2d_bias_grad`, `avg_pool2d_grad`, `embedding_table_grad` -- which are the operators `src/stdlib/nn/tensor_ops.cpp` builds for the same keys. The library's leg is refused on all three with `skip=law-reads-a-value` (`uri=nn:conv2d position=0 ... reason=the rule's right side reads a value the caller does not carry`), which no rewrite of the law can avoid: an adjoint of a convolution is the kernel's gradient at the other operand's values. The engine's numbers are printed, guarded by `nn engine_answered=true` so the reading cannot pass on three zeros. `nn engine_answered=true` is the reading, and the library's leg is marked `filed-not-walked` for the reason the block above records."
+kind = "behavior"
+case = "../../../cases/modules/autodiff/library_reverse_nn.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_contains = ["conv2d engine=", "pools engine=", "embedding engine=", "nn engine_answered=true"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 30000
+
+[[tests]]
+name = "autodiff.sum_to_reverse_laws"
+desc = "`sum_to` -- the tensor module's own reduction, exported, and the operator every broadcast product's cotangent is written with -- through both legs. It was the one row of the parity check's `engine-only` column whose exemption said \"tensor module internal\" and did not hold: a program can write it. The forward rule is the reduction applied to the tangent and the reverse is `broadcast_like(ct, t)`, the spread that undoes it, which is the engine's `sumToVjp` read backwards; both are walked, because the forward law puts `sum_to` on the tangent. `sum_to engine_is_ones=true` is the reading: the engine's gradient of the reduced loss is `[[1, 1], [1, 1]]`, every position feeding the loss once. The library's leg is marked `filed-not-walked` for the reason the block at the top of this plan records: `sum_to_t` reads its operand, and a transposed map is handed the cotangent alone."
+kind = "behavior"
+case = "../../../cases/modules/autodiff/library_reverse_sum_to.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_contains = ["sum_to engine=", "sum_to engine_is_ones=true"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
