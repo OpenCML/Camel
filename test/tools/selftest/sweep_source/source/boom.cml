@@ -1,0 +1,8 @@
+// Fixture of test/tools/selftest/run.mjs: the case the sweeper copies. It runs to completion and
+// leaves with status 1, which is what the source plan's `expect_exit = 0` reports as a failure.
+// A copy is only swept when it drives a run of the compiler, so this is a program, not a script.
+
+func main() => int sync {
+    println('WALL fixture=sweep_source')
+    return 1
+}

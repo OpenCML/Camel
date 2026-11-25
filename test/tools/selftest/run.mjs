@@ -888,6 +888,57 @@ if (reuseLines.join('\n') !== reuseExpected.join('\n')) {
     problems.push(`sweep reuse ran: ${reuseLines.join(', ')}`)
 }
 
+// --- where a red of a sweep copy says it lives -------------------------------------------------
+// A copy belongs to the plan that runs it -- its log directory, its record, the cost it is charged
+// to -- and its name carries the source plan's id. The file the case is written in appears on
+// neither the verdict line nor the `[PLAN]` header above it, so a reader holding
+// `poison:selftest.sweep_source.source:boom` opens the sweeper and finds no such test. The runner
+// prints `[INFO] source plan: <path>` on the line under the verdict for that, and the pair below
+// pins both directions: a copy's red carries the line and names the plan that wrote the case, and a
+// sweeper whose *own* file is broken names itself and carries no such line. Only one of the two may
+// move: an attribution that sent every red to a source plan would name a plan that wrote nothing.
+const copySweep = path.join(here, 'sweep_source', 'copy.plan.toml')
+const copySourceRel = path.relative(repoRoot, path.join(here, 'sweep_source', 'source', 'boom.plan.toml'))
+    .split(path.sep).join('/')
+const copyRun = runRunner([copySweep])
+// The indented lines directly under one verdict line, and nothing else: a detail of the case above
+// is the only thing that speaks for it, and the next verdict's details are not this one's.
+const detailsUnder = (output, prefix) => {
+    const lines = output.split(/\r?\n/)
+    const at = lines.findIndex((line) => line.startsWith(prefix))
+    if (at < 0) return null
+    const details = []
+    for (const line of lines.slice(at + 1)) {
+        if (!/^\s+\[/.test(line)) break
+        details.push(line.trim())
+    }
+    return details
+}
+const copyVerdict = detailsUnder(copyRun.output, '[FAIL] poison:selftest.sweep_source.source:boom')
+const copyNames = copyVerdict !== null && copyVerdict.some(
+    (line) => line.startsWith('[INFO] source plan') && line.includes(copySourceRel),
+)
+if (!copyNames) {
+    problems.push(
+        `sweep source: the copy's red does not name the plan file that wrote the case ` +
+            `(run exit ${copyRun.status}; expected "[INFO] source plan  ${copySourceRel}" under ` +
+            `[FAIL] poison:selftest.sweep_source.source:boom, got ${copyVerdict === null ? 'no such verdict' : JSON.stringify(copyVerdict)})`
+    )
+}
+
+const brokenSweep = path.join(here, 'sweep_source', 'broken.plan.toml')
+const brokenRel = path.relative(repoRoot, brokenSweep).split(path.sep).join('/')
+const brokenRun = runRunner([brokenSweep])
+const brokenNames = brokenRun.output.includes('runner error:') && brokenRun.output.includes(brokenRel)
+const brokenCopied = /^\s+\[INFO\] source plan/m.test(brokenRun.output)
+if (!brokenNames || brokenCopied) {
+    problems.push(
+        `sweep source control: a sweeper whose own file is broken must name that file and no copied ` +
+            `one (run exit ${brokenRun.status}; names itself: ${brokenNames}; printed a source plan ` +
+            `line: ${brokenCopied})`
+    )
+}
+
 // --- the --changed mapping ---------------------------------------------------------------------
 const hasPlan = (selection, name) => selection !== null && selection.names.includes(name)
 const hasLayered = (selection, name) => selection !== null && selection.layered.includes(name)

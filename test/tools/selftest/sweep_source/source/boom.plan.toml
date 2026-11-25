@@ -1,0 +1,15 @@
+# Fixture of test/tools/selftest/run.mjs: the plan that writes the failing case. It is not under
+# test/plans and is never run as a target of its own; the sweeper one directory up copies it.
+id = "selftest.sweep_source.source"
+order = 23
+tier = "fast"
+desc = "The source plan of the attribution pair: one case that leaves with a non-zero status."
+
+[defaults]
+kind = "behavior"
+case = "boom.cml"
+args = ["${case}"]
+expect_exit = 0
+
+[[tests]]
+name = "boom"

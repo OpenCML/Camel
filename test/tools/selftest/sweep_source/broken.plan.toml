@@ -1,0 +1,12 @@
+# Fixture of test/tools/selftest/run.mjs: the control of the attribution pair. The sweeper's own
+# file is wrong, so the error belongs to this file and the run must name it -- and must not name a
+# copied plan, because nothing was copied.
+id = "selftest.sweep_source.broken"
+order = 25
+tier = "fast"
+desc = "A sweeper whose own file is broken: the error belongs to this file."
+
+[[sweeps]]
+name = "poison"
+plans = ["source"]
+this_key_is_not_a_sweep_field = true

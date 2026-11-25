@@ -1,0 +1,11 @@
+# Fixture of test/tools/selftest/run.mjs: the sweeper of the attribution pair. Its one copy comes
+# from `source/boom.plan.toml` and fails, so the run prints one `[FAIL]` for a test this file does
+# not declare -- the reading the runner has to attribute to the plan that wrote it.
+id = "selftest.sweep_source"
+order = 24
+tier = "fast"
+desc = "A sweeper whose only entry is a failing copy of another plan."
+
+[[sweeps]]
+name = "poison"
+plans = ["source"]
