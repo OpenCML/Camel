@@ -6724,6 +6724,29 @@ it is copied.
 - Example (a fragment, not compiled): `outline(t, ns)`
 - Why it is not compiled: t is an open transaction and ns is a group of its graph's nodes
 
+#### `add_param`
+
+```camel
+add_param: (t: Txn<F>, like: Node) => Node uses var t
+```
+
+Adds a parameter to the graph `like` is a node of and gives the port node it is: a node of that
+graph's own body, of the same type as `like`, whose value is what a caller passes. A parameter is
+two statements about one thing -- this node, which the body computes with, and the entry of the
+function type a caller is told about -- and this operator writes the first alone: the second is
+the declaration, and the block head that carries a new signature is what writes it
+(docs/design/graph-editing/README.cn.md 8.4). Until that head exists the declaration is written
+by a caller that states the widened signature for itself, and a commit of a graph whose port list
+is one entry longer than its signature is refused, naming the port node.
+
+The type is the type of a node and not a name: a graph edited through this interface says what
+its new parameter is by naming a value of that type, which is the statement a caller can make
+today (`type_of` gives a `TypeRef?`, and nothing in the language turns one into a `TypeRef`).
+
+- Failure: fault `InvalidArgument` when `like` is not a node of the transaction's graph, when it has no type, or when the transaction is over.
+- Example (a fragment, not compiled): `add_param(t, n)`
+- Why it is not compiled: t is an open transaction and n a node of its graph
+
 #### `add_constant`
 
 ```camel

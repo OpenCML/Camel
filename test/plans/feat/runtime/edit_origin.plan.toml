@@ -1,0 +1,26 @@
+id = "runtime.edit_origin"
+order = 387
+tier = "fast"
+tags = ["feat", "runtime", "graph", "edit", "record", "diagnostic", "witness"]
+desc = "A commit diagnostic names the edit that made the node it refuses about: a value spliced in by `graph::inline` is refused by the effect check, and beside the position the node carries (the callee's) the diagnostic carries the position of the statement the edit stood at."
+# Design graph-editing 8.3: a commit's refusal has to say which step of the block made the bad node.
+# The edit record (`EditNote`) always had the kind and the region; this plan is the reading of the
+# third field, the origin the edit was written at, and of the diagnostic that carries it.
+#
+# Red-first: before the record had an origin, the diagnostic held one position only -- the print's,
+# which is a line of `announce` and not anything `subject` wrote -- so the second position's label was
+# absent and this case fails. That is the `[the edit that made this node was made here at L:C]` line
+# the plan pins, with `L:C` the statement the edit stood at (`x * 3`, line 27, column 13): a kernel
+# cannot see its own call site, so what the record holds is the position of the node the edit anchored
+# on (resources.h, `CommitViolation::editOrigin`).
+[[tests]]
+name = "runtime.edit_origin.the_refusal_names_the_edit_that_made_the_node"
+desc = "`inline(t, <a pure node of subject>, announce)` puts a print into `subject`, which declares no effect: the commit is refused (`RuntimeDiag::PassEffectBeyondType`), nothing is published, and the diagnostic carries two positions -- the print's own, and the `x * 3` the splice stood at, labelled 'the edit that made this node was made here'."
+kind = "behavior"
+case = "../../../cases/runtime/edit_origin/spliced_write.cml"
+args = ["${case}", "std::nvm"]
+expect_exit = 1
+expect_diagnostic_name = "RuntimeDiag::PassEffectBeyondType"
+expect_output_contains = ["[the edit that made this node was made here at 27:15]"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 30000

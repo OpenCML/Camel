@@ -375,9 +375,15 @@ std::string_view editKindName(EditKind kind);
 /// One region one edit changed, with the kind of edit that changed it. The record of a draft is the
 /// list of these in the order the edits were made: an edit that changed three regions is three
 /// entries, so the record answers "which regions" without keeping a second table of node lists.
+///
+/// `origin` is the source position of the statement the edit was written at (0 when the caller did
+/// not know one). The node a commit refuses usually came from an edit and not from the program's
+/// own text, so a diagnostic that carried only the node's origin pointed at the line the node stands
+/// on, never at the edit that put it there (docs/design/graph-editing/README.cn.md 8.3).
 struct EditNote {
     EditKind kind   = EditKind::LowLevel;
     uint32_t region = 0;
+    uint64_t origin = 0;
 };
 
 /// The part of the six commit checks the record owes an answer about (the table's right column is
@@ -607,12 +613,22 @@ class GraphDraft : public camel::graph::Graph {
     /// Closing it is the high-level entry's recording step: the regions the edit changed are the
     /// union of the ones its primitives touched, and the close records them with the kind and tells
     /// the listeners once (`recordEdit`).
+    /// `origin` is where the edit was written -- the source position of the statement that makes it,
+    /// 0 when the caller does not know one. It is carried into the notes the close records
+    /// (`EditNote::origin`), which is what lets a refused commit point back at the edit that made
+    /// the node it names instead of only at the node.
     class NamedEdit {
       public:
-        NamedEdit(GraphDraft &draft, EditKind kind);
+        NamedEdit(GraphDraft &draft, EditKind kind, uint64_t origin = 0);
         ~NamedEdit();
         NamedEdit(const NamedEdit &)            = delete;
         NamedEdit &operator=(const NamedEdit &) = delete;
+        /// Says this edit is not one after all: an operator that refused what it was asked to do (a
+        /// boundary it does not splice, a body that cannot land) made no change, and an edit that
+        /// did not happen is not one the table answers for. The close then records nothing and
+        /// tells no listener; the regions the aborted primitives touched are dropped with it.
+        /// It changes the *draft*, not this object, so a `const NamedEdit` may dismiss itself.
+        void dismiss() const { draft_.namedEditDismissed_ = true; }
 
       private:
         GraphDraft &draft_;
@@ -1500,7 +1516,7 @@ class GraphDraft : public camel::graph::Graph {
     /// A rollback is not an edit and records nothing (`undoSuspended_`). Private with the rest of
     /// the journal: `NamedEdit` is a member of this class and calls it, and a caller outside the
     /// type reaches it only through an edit that changes the graph.
-    void recordEdit(EditKind kind, std::span<const uint32_t> regions);
+    void recordEdit(EditKind kind, std::span<const uint32_t> regions, uint64_t origin = 0);
     /// One node an edit changed, and the region it was in. `inPlace` says the change is one the
     /// commit answers for as a change *in place* (an operand added or taken away, an operator
     /// swapped), which is the last row of the table and the list `lowLevelEdits_` keeps. A node the
@@ -1515,6 +1531,11 @@ class GraphDraft : public camel::graph::Graph {
     /// The kind of the outermost named edit open now, recorded when it closes: a named edit written in
     /// terms of another is still one row of the table, and the row is the outer one's.
     EditKind namedEditKind_ = EditKind::LowLevel;
+    /// Where the outermost named edit open now was written (`NamedEdit`'s origin), recorded with it.
+    uint64_t namedEditOrigin_ = 0;
+    /// Whether the outermost named edit open now said it made no change (NamedEdit::dismiss): the
+    /// close then records nothing.
+    bool namedEditDismissed_ = false;
     /// The edit record (see `editNotes`), and the listeners told about each entry.
     std::vector<EditNote> editNotes_;
     size_t editCount_ = 0;
@@ -1540,6 +1561,18 @@ class GraphDraft : public camel::graph::Graph {
     std::vector<GraphId> ruleGraphs_;
     std::vector<GraphId> liftedFromRefs_;
 };
+
+/// The port node a *new* parameter is: one node of `GCNodeKind::Port` typed by `type`, in the graph's
+/// own region, registered as the last ordinary parameter. It does not touch the signature, and that
+/// is the point: a parameter is two statements about one thing -- the node the body computes with,
+/// and the entry of the function type a caller is told about -- and an edit that adds the first owes
+/// the second (`add_param`, the block head that will write it). A commit of a graph whose port list
+/// is one entry longer than its signature refuses it and names the port
+/// (`EdgeChecker::checkPortTypes`, src/runtime/graph_edges.cpp), which is the reading this helper
+/// makes possible; the caller that *does* declare the parameter calls `GraphDraft::setFuncType` with
+/// the widened type and publishes. `origin` is where the edit that makes the port was written.
+gc_node_ref_t addParameterPort(
+    GraphDraft &draft, camel::core::type::Type *type, uint64_t origin = 0);
 
 /// The control region a node's code lies in: the innermost region that is an arm of a branch or a
 /// part of a loop, 0 for the graph's own frame. The regions that only annotate where a node came

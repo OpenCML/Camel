@@ -1698,8 +1698,106 @@ namespace {
 using camel::execute::makePass;
 using camel::execute::PassKernel;
 
-/// The test-only passes this file implements. Each name is the constant its own header
-/// declares, so the name a pipeline writes and the class that answers it are one fact.
+/// The declaration a graph's signature becomes when it gains one parameter of `type` at the end: the
+/// second of the two statements a parameter is, which `add_param` does not write (`draft.h,
+/// addParameterPort`). A `with` list and an exit type are carried over as they are -- adding a
+/// parameter to a body that already computes with its others changes neither.
+camel::core::type::FunctionType *withOneParameter(
+    camel::core::type::FunctionType *type, camel::core::type::Type *parameter) {
+    using camel::core::type::FunctionType;
+    using camel::core::type::param_vec_t;
+    camel::core::type::param_vec_t withTypes;
+    withTypes.reserve(type->withTypesCount());
+    for (size_t i = 0; i < type->withTypesCount(); ++i) {
+        withTypes.emplace_back(type->withTypeAt(i), type->withIsVarAt(i));
+    }
+    param_vec_t normTypes;
+    normTypes.reserve(type->normTypesCount() + 1);
+    for (size_t i = 0; i < type->normTypesCount(); ++i) {
+        normTypes.emplace_back(type->normTypeAt(i), type->normIsVarAt(i));
+    }
+    normTypes.emplace_back(parameter, false);
+    return FunctionType::create(withTypes, normTypes, type->exitType());
+}
+
+} // namespace
+
+const camel::runtime::Program *
+AddParamTestPass::apply(const camel::runtime::Program *program, std::ostream &out) {
+    using camel::core::type::Type;
+    GCGraph *const graph = program != nullptr ? program->root() : nullptr;
+    if (graph == nullptr) {
+        out << "add_param: the program has no root graph, so there is no graph to add a parameter "
+               "to\n"
+            << std::flush;
+        return program;
+    }
+    out << "add_param: graph '" << graph->name() << "' declares "
+        << (graph->funcType() != nullptr ? graph->funcType()->normTypesCount() : 0)
+        << " parameter(s) and holds " << graph->normPorts().size() << " port node(s)\n"
+        << std::flush;
+    // The negative half: the port node of a new parameter, and nothing declaring it. The commit
+    // must refuse and name the port, which is what says the declaration is the other half and not
+    // an optional remark.
+    {
+        RuntimeGraphDraftSession session(context_, program);
+        auto &draft = session.edit(graph).edit();
+        gc_node_ref_t port = kInvalidNodeRef;
+        {
+            const GraphDraft::NamedEdit named(draft, EditKind::ParamPort);
+            port = camel::runtime::addParameterPort(draft, Type::Int32());
+        }
+        out << "add_param: added port node " << port << " of type 'int'; the graph now holds "
+            << draft.normPorts().size() << " port node(s) and declares "
+            << (draft.funcType() != nullptr ? draft.funcType()->normTypesCount() : 0)
+            << " parameter(s)\n"
+            << std::flush;
+        try {
+            const Program *published = session.commit();
+            out << "add_param: the commit published it, which is the defect (no parameter was "
+                   "declared for port node "
+                << port << ")\n"
+                << std::flush;
+            (void)published;
+        } catch (const std::runtime_error &refused) {
+            out << "add_param: refused at the commit: " << refused.what() << '\n' << std::flush;
+        }
+    }
+    // The positive half: the same port node, and the signature rewritten to declare it. Without
+    // this, "it was refused" would only say "a graph with a new port is always refused".
+    {
+        RuntimeGraphDraftSession session(context_, program);
+        auto &draft = session.edit(graph).edit();
+        gc_node_ref_t port = kInvalidNodeRef;
+        {
+            const GraphDraft::NamedEdit named(draft, EditKind::ParamPort);
+            port = camel::runtime::addParameterPort(draft, Type::Int32());
+        }
+        draft.setFuncType(withOneParameter(graph->funcType(), Type::Int32()));
+        out << "add_param: port node " << port << " added and the signature now declares "
+            << draft.funcType()->normTypesCount() << " parameter(s)\n"
+            << std::flush;
+        try {
+            const Program *published = session.commit();
+            out << "add_param: the commit published it, and nothing was refused (declared="
+                << published->root()->funcType()->normTypesCount() << ")\n"
+                << std::flush;
+        } catch (const std::runtime_error &refused) {
+            out << "add_param: refused at the commit: " << refused.what() << '\n' << std::flush;
+        }
+    }
+    // The program it was given: the reading is the two commits, and a root function that declares a
+    // parameter nothing passes is not a program the pipeline can run at the end of this pass.
+    return program;
+}
+
+namespace {
+
+using camel::execute::makePass;
+using camel::execute::PassKernel;
+
+/// The test-only passes this file implements. Each name is the constant its own header declares, so
+/// the name a pipeline writes and the class that answers it are one fact.
 const PassKernel foldFunctionTypeKernel(kFoldFunctionTypeTestPass, makePass<FoldFunctionTypeTestPass>());
 const PassKernel camelCommitChecksKernel(kCamelCommitChecksTestPass, makePass<CamelCommitChecksTestPass>());
 const PassKernel commitOrderKernel(kCommitOrderTestPass, makePass<CommitOrderTestPass>());
@@ -1716,5 +1814,6 @@ const PassKernel commitLoopBodyReadKernel(kCommitLoopBodyReadTestPass, makePass<
 const PassKernel commitPortTypeKernel(kCommitPortTypeTestPass, makePass<CommitPortTypeTestPass>());
 const PassKernel commitMadeGraphPortsKernel(kCommitMadeGraphPortsTestPass, makePass<CommitMadeGraphPortsTestPass>());
 const PassKernel commitMadeGraphOrderKernel(kCommitMadeGraphOrderTestPass, makePass<CommitMadeGraphOrderTestPass>());
+const PassKernel addParamKernel(kAddParamTestPass, makePass<AddParamTestPass>());
 
 } // namespace

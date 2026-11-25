@@ -410,6 +410,11 @@ enum class CommitCheck : uint8_t {
 
 std::string_view commitCheckName(CommitCheck check);
 
+/// One region one edit changed, with its kind and the position it was written at
+/// (`camel::runtime::EditNote`, draft.h). Declared here and defined there: this header needs only
+/// to name the record a commit reads its `editOrigin` out of, and the record is the draft's.
+struct EditNote;
+
 /// A commit that must be refused: which of the two checks, the graph, the nodes the reading names,
 /// and the one line the diagnostic carries. `origin` is the source position to report against (0
 /// when the program does not name one), so that a caller with a diagnostic can attach it.
@@ -418,7 +423,20 @@ struct CommitViolation {
     const GCGraph *graph = nullptr;
     gc_node_ref_t first  = kInvalidNodeRef;
     gc_node_ref_t second = kInvalidNodeRef;
-    uint64_t origin      = 0;
+    /// The source position of the node the reading names: what to report the diagnostic against.
+    uint64_t origin = 0;
+    /// The source position of the edit that made the node -- the position the draft's record holds
+    /// for the edit that changed the region the node is in (`EditNote::origin`), 0 when no entry of
+    /// the record names one. The node a check refuses usually came from an edit and not from the
+    /// program's own text, so `origin` alone points at the line the node stands on; this is what
+    /// lets the diagnostic also say which edit put it there (design 8.3).
+    ///
+    /// What a kernel can name is the statement it edited, not its own caller: an operator's call site
+    /// is lowered away before the kernel runs, so an edit records the position of the node it stood
+    /// at (the `at` of a splice, the node a `replace` removed, the `before` of an `order`) and the
+    /// diagnostic points there. That is the statement the edit stands at, and it is the closest
+    /// reading there is; a caller that knows its own position passes it to `NamedEdit` instead.
+    uint64_t editOrigin = 0;
     std::string text;
 };
 
@@ -485,7 +503,8 @@ struct CommitViolation {
 std::optional<CommitViolation> commitViolation(
     const Program &program, const GCGraph &graph, std::span<const gc_node_ref_t> made = {},
     std::span<const gc_node_ref_t> changed = {}, const GCGraph *before = nullptr,
-    const Program *beforeProgram = nullptr, bool asksEffects = true, bool asksOrder = true);
+    const Program *beforeProgram = nullptr, bool asksEffects = true, bool asksOrder = true,
+    std::span<const EditNote> edits = {});
 
 /// Whether a commit of `graph` added an access: some node `made` names carries an access (or an
 /// effect outside the program). This is the first half of the tier; the

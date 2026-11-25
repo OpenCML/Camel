@@ -352,3 +352,34 @@ class CamelCommitChecksTestPass : public RuntimeGraphRewritePass {
     const camel::runtime::Program *
     apply(const camel::runtime::Program *program, std::ostream &os) override;
 };
+
+/**
+ * `add_param`'s two halves, read at the commit: a parameter is two statements about one thing -- the
+ * port node the body computes with, and the entry of the function type a caller is told about -- and
+ * the graph module's `add_param` writes the first alone (`stdlib/graph.cml`; the block head that
+ * writes the second is docs/design/graph-editing/README.cn.md 8.4 and is not in the tree).
+ *
+ * Two drafts over the program's own root graph, and the two answers are the reading:
+ *   * the port node is added and nothing declares it: the commit must **refuse**, and the message
+ *     must name the port node and the count it is beyond -- not "the graph is inconsistent";
+ *   * the same port node, and the signature rewritten to declare it (`setFuncType`): the commit must
+ *     **publish**, which is what says the refusal is about the missing declaration and not about
+ *     adding a parameter.
+ *
+ * The port node is the one the operator makes (`camel::runtime::addParameterPort`), so what this
+ * reads is the operator's own edit, not a second copy of it. `test/cases/runtime/add_param/
+ * one_parameter.cml` is the same reading from Camel through `graph::add_param` itself, where the
+ * declaration cannot be written at all yet -- that case is the one this pass's second half answers
+ * for.
+ *
+ * This pass returns the program it was given: the edit's reading is the two commits, and a program
+ * whose entry function declares a parameter nothing passes is not one the pipeline can run at the
+ * end.
+ */
+inline constexpr const char *kAddParamTestPass = "test::add_param";
+class AddParamTestPass : public RuntimeGraphRewritePass {
+  public:
+    using RuntimeGraphRewritePass::RuntimeGraphRewritePass;
+    const camel::runtime::Program *
+    apply(const camel::runtime::Program *program, std::ostream &os) override;
+};

@@ -258,7 +258,8 @@ slot_t replaceKernel(ArgsView &, ArgsView &norm, Context &) {
     // effect and the order checks is a theorem about `replace` itself: the nodes this touches are
     // therefore not the low-level changes that would make the commit answer for them
     // (`GraphDraft::NamedEdit`).
-    const camel::runtime::GraphDraft::NamedEdit named(draft, camel::runtime::EditKind::Replace);
+    const camel::runtime::GraphDraft::NamedEdit named(
+        draft, camel::runtime::EditKind::Replace, draft.nodeOrigin(fromRef));
     camel::passes::generic::replaceNode(transaction, fromRef, toRef);
     return NullSlot;
 }
@@ -282,9 +283,46 @@ slot_t eraseKernel(ArgsView &, ArgsView &norm, Context &) {
     }
     // A named edit: what `erase` re-sequences is the erase's, not a low-level change of the graph
     // (see replaceKernel above).
-    const camel::runtime::GraphDraft::NamedEdit named(draft, camel::runtime::EditKind::Erase);
+    const camel::runtime::GraphDraft::NamedEdit named(
+        draft, camel::runtime::EditKind::Erase, draft.nodeOrigin(ref));
     camel::passes::generic::replaceNode(transaction, ref, kInvalidNodeRef);
     return NullSlot;
+}
+
+/// `add_param(t, like)`: the port node a new parameter is, of the type `like` has, in the graph `like`
+/// is a node of. The operator writes one of the two statements a parameter is -- the node its body
+/// computes with -- and not the other: the declaration is the entry of the function type a caller is
+/// told about, and nothing outside a block head can write a signature for an edit
+/// (docs/design/graph-editing/README.cn.md 8.4 puts `add_param` after that head for exactly this
+/// reason). So the graph this leaves is a graph whose port list is one entry longer than its
+/// signature, which is what a commit refuses and names (`EdgeChecker::checkPortTypes`,
+/// src/runtime/graph_edges.cpp); a caller that also states the widened signature publishes, and
+/// `test::add_param` reads both halves.
+slot_t addParamKernel(ArgsView &, ArgsView &norm, Context &) {
+    static const char *site = "graph.add_param";
+    TxnState &state         = openState(norm, 0, site);
+    auto [transaction, likeRef] = draftOf(state, norm.get<Handle *>(1), site);
+    auto &draft                = transaction.edit();
+    // The type the new parameter takes is the type of a value of the graph: a parameter is a value
+    // the body computes with, and the value the caller hands in is what a call site checks against
+    // the port's type (`EdgeChecker::checkCall`).
+    const camel::runtime::DraftNode *const like = draft.node(likeRef);
+    camel::core::type::Type *const type = like != nullptr ? like->header.dataType : nullptr;
+    if (type == nullptr) {
+        err::throwRuntimeFault(
+            err::RuntimeDiag::InvalidArgument,
+            site,
+            "the value named has no type, so there is no parameter type to add");
+    }
+    // The kind this edit is (`param_port`, the table's row 7) and where it was written: the record
+    // names it instead of the last row, so a draft whose only edit added a parameter is not asked
+    // the effect and order questions -- an unread port carries no access and orders nothing.
+    const camel::runtime::GraphDraft::NamedEdit named(
+        draft, camel::runtime::EditKind::ParamPort);
+    const gc_node_ref_t port = camel::runtime::addParameterPort(draft, type);
+    // A node the graph did not have: the port node the edit made, which the commit answers for as a
+    // parameter the declaration does not name.
+    return toSlot(Handle::createInTransaction(transaction, port, mm::autoSpace()));
 }
 
 /// The operands of an operator whose values are static slots of the graph: the argument view a
@@ -391,6 +429,13 @@ slot_t evalKernel(ArgsView &, ArgsView &norm, Context &ctx) {
     if (graph == nullptr) {
         err::throwRuntimeFault(err::RuntimeDiag::InvalidArgument, site, "the graph does not exist");
     }
+    // The kind this edit is (`eval`, the table's row 3) and where it was written: the record names
+    // it instead of the last row, so a draft whose only edit evaluated a constant is not asked the
+    // effect and order questions -- a constant carries no access and orders nothing. The position
+    // the kernel can state is the one of the node the operator was given: what has no call-site
+    // origin yet.
+    const camel::runtime::GraphDraft::NamedEdit named(
+        draft, camel::runtime::EditKind::Eval, draft.nodeOrigin(ref));
     const gc_node_ref_t value = draft.materializeStaticValue(result, header->dataType);
     // The node exists in the draft and nowhere else, so the handle that names it names the
     // transaction holding it: a program-backed handle here would claim a published node that
@@ -585,7 +630,8 @@ slot_t orderKernel(ArgsView &, ArgsView &norm, Context &) {
     // A named edit: an order edge adds an ordering and never makes a node run, so the table asks
     // this edit no question about the effect or the ordering (`GraphDraft::NamedEdit`).
     {
-        const camel::runtime::GraphDraft::NamedEdit named(draft, camel::runtime::EditKind::Order);
+        const camel::runtime::GraphDraft::NamedEdit named(
+            draft, camel::runtime::EditKind::Order, draft.nodeOrigin(beforeRef));
         draft.appendOrderDependency(afterRef, beforeRef);
     }
     return NullSlot;
@@ -725,9 +771,12 @@ slot_t inlineKernel(ArgsView &, ArgsView &norm, Context &) {
     // function is a statement like any other and takes the branch below: what is expanded there is
     // the function value the operator was given.
     if (atIsCall && draft.calleeGraphOf(atRef) == calleeGraph) {
+        const camel::runtime::GraphDraft::NamedEdit named(
+            draft, camel::runtime::EditKind::Inline, draft.nodeOrigin(atRef));
         const camel::runtime::DraftInlineResult inlined =
             camel::runtime::inlineCallableInDraft(state.session, transaction, atRef);
         if (!inlined) {
+            named.dismiss(); // no splice happened: no edit for the record or the tier to answer for
             err::throwRuntimeFault(
                 err::RuntimeDiag::InvalidArgument,
                 site,
@@ -761,6 +810,11 @@ slot_t inlineKernel(ArgsView &, ArgsView &norm, Context &) {
     // region is `at`'s either way -- that is the one thing `at` always says. What the splice makes
     // is every node from `slotsBefore` on, which is what a caller that has to keep the body's
     // effects alive reads.
+    // The kind this splice is (`inline`, the table's row 5) and where it was written: the splice
+    // puts a callee's accesses into a region, which is what both questions are about, so the record
+    // naming `inline` keeps them both asked.
+    const camel::runtime::GraphDraft::NamedEdit named(
+        draft, camel::runtime::EditKind::Inline, draft.nodeOrigin(atRef));
     const size_t slotsBefore = draft.nodeSlotCount();
     const gc_node_ref_t call = draft.addFuncNode(calleeGraph->id(), valueType);
     draft.setNodeRegion(call, draft.nodeRegion(atRef));
@@ -771,6 +825,7 @@ slot_t inlineKernel(ArgsView &, ArgsView &norm, Context &) {
     const camel::runtime::DraftInlineResult inlined =
         camel::runtime::inlineCallableInDraft(state.session, transaction, call);
     if (!inlined) {
+        named.dismiss(); // nothing was spliced: no edit for the record or the tier to answer for
         err::throwRuntimeFault(
             err::RuntimeDiag::InvalidArgument,
             site,
@@ -850,6 +905,15 @@ slot_t outlineKernel(ArgsView &, ArgsView &norm, Context &) {
     }
     const std::string name = std::format(
         "{}$outline{}", graph->name(), static_cast<unsigned>(std::ranges::min(group)));
+    // The kind this edit is (`outline`, the table's row 6) and where it was written: the group it
+    // moves out is pure by the boundary it is judged by (`outlineDraftNodes` refuses a group that
+    // carries an access), so the call it leaves carries none either -- the effect question is
+    // answered by the theorem, and the pairs it leaves are read by the order question, which the
+    // record keeps asked.
+    camel::runtime::GraphDraft::NamedEdit named(
+        transaction.edit(),
+        camel::runtime::EditKind::Outline,
+        transaction.edit().nodeOrigin(group.front()));
     try {
         const camel::runtime::DraftOutlineResult outlined =
             camel::runtime::outlineDraftNodes(state.session, transaction, group, name);
@@ -859,6 +923,7 @@ slot_t outlineKernel(ArgsView &, ArgsView &norm, Context &) {
     } catch (const mm::MemoryExhausted &) {
         throw;
     } catch (const std::exception &failure) {
+        named.dismiss(); // the boundary refused the group: nothing was outlined, so nothing happened
         err::throwRuntimeFault(err::RuntimeDiag::InvalidArgument, site, failure.what());
     }
 }
@@ -975,6 +1040,7 @@ const std::vector<TxnOp> &txnOps() {
         {"order", orderKernel},
         {"inline", inlineKernel},
         {"outline", outlineKernel},
+        {"add_param", addParamKernel},
     };
     return ops;
 }
