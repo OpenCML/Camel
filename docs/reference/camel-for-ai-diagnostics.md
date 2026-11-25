@@ -58,7 +58,7 @@ Source: `diagnostics/registry.tsv`, the one place a diagnostic is declared. Rege
 
 | `ComparisonAcrossLines` | This '>' is read as a comparison with the next line, which starts with {0}: two statements may have been joined into one. |
 
-**Semantic — errors** (`SemanticDiag`) — 235
+**Semantic — errors** (`SemanticDiag`) — 236
 
 | `Redeclaration` | Redeclaration of reference: '{0}'. |
 | `ModuleNotFound` | Module '{0}' not found. {1} |
@@ -295,6 +295,7 @@ Source: `diagnostics/registry.tsv`, the one place a diagnostic is declared. Rege
 | `CapturedVarHandedToVarParameter` | '{0}' is handed to a `var` parameter of a call after the closure '{1}' was made from it, and the write the call hands back does not reach the closure. |
 | `VarContextParameterCannotBeBound` | '{0}' cannot be bound to '{1}', a `var` context parameter: a function value made by a partial application has no call of its own to write the value back to. |
 | `OperatorAccessesUndeclared` | The operator '{0}' itemizes no accesses, and an operator of the built-in module must say what it touches. |
+| `OperatorSignatureUnresolved` | The signature of the operator '{0}' is not resolved: the type of {1} is not known where the compiler writes this call. |
 
 **Semantic — warnings** (`SemanticDiag`) — 15
 
