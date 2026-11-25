@@ -4140,20 +4140,25 @@ void Backward::visit(gc_node_ref_t node) {
     case GCNodeKind::Oper:
         // A conversion and a copy are calls of `:op/cast` / `:op/copy` now, and the gradient a
         // differentiated value passes through them is the one it had (the two kinds' answer): a
-        // conversion converts it and a copy hands it on.
+        // conversion converts it and a copy hands it on. Which of the two it is comes from the
+        // operator's record (`shapeOfOperator`), where the shape is stated once, and not from the
+        // letters of the node's URI: a reader of the text held a second statement of the same fact,
+        // and a name that spells one of the two would have been read as the operation it names.
         {
             const std::span<const std::byte> payload = forward().payloadOf(node);
-            const std::string_view uri =
+            const camel::core::OperId oper =
                 payload.size() >= sizeof(camel::runtime::GCOperBody)
-                    ? reinterpret_cast<const camel::runtime::GCOperBody *>(payload.data())->uri()
-                    : std::string_view{};
-            if (uri == ":op/cast") {
+                    ? reinterpret_cast<const camel::runtime::GCOperBody *>(payload.data())->oper
+                    : camel::core::kNoOper;
+            switch (camel::runtime::shapeOfOperator(oper)) {
+            case camel::ops::OperShape::Conversion:
                 visitForward(node, true);
                 return;
-            }
-            if (uri == ":op/copy") {
+            case camel::ops::OperShape::Clone:
                 visitForward(node, false);
                 return;
+            default:
+                break;
             }
         }
         visitOper(node);

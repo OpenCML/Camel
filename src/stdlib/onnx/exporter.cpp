@@ -3747,7 +3747,12 @@ Value Evaluator::variableValueAt(Activation &act, gc_node_ref_t cell, gc_node_re
                     ref = forwarded;
                     continue;
                 }
-                if (kind != GCNodeKind::Oper || operUriOf(g->view(), ref) != ":op/copy") {
+                // A copy hands on the value it was given: `OperShape::Clone`, read from the
+                // operator's record (`camel/runtime/oper_shape.h`) and not from the letters of the
+                // node's URI.
+                if (kind != GCNodeKind::Oper ||
+                    camel::runtime::shapeOfOperator(operIdOf(g->view(), ref)) !=
+                        execute::OperShape::Clone) {
                     return ref;
                 }
                 const auto norm = g->normInputsOf(ref);
