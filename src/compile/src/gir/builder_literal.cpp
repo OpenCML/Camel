@@ -491,12 +491,14 @@ node_handle_t Builder::coerceTo(node_handle_t node, Type *target, const GCT::nod
         return nodeTypeOf(failed)->equals(fallible) ? failed : castNodeTo(failed, fallible, origin);
     }
     if (!entersImplicitly(target, source)) {
-        // The other direction of the same edge: a value of `T[..]` read as `T` is the element it
-        // holds (design principles 5.4), so the conversion hands the element on. `T[]` and
-        // `T[3, ..]` are not this edge -- they state dimensions the element has not -- and they
-        // stay refused, as the table refuses them.
+        // The rank-zero edge, read the other way: `T[..]` holds the element when it has no
+        // dimension, and a rank-zero array *is* that element (design principles 5.4). The rank is
+        // the value's and not the type's, so this step can fail: it is a shape check
+        // (`:op/refine_extent`) and not an entering, and the check refuses a value that is not the
+        // element with the array's own words. `T[]` and `T[3, ..]` are not this edge -- they state
+        // dimensions the element has not -- and they stay refused, as the table refuses them.
         if (isRankZeroEdge(target, source)) {
-            return castNodeTo(valueOf(node), target, origin);
+            return refineExtentNodeOf(valueOf(node), target, origin);
         }
         return nullptr;
     }

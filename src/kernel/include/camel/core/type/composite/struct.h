@@ -272,6 +272,11 @@ class StructType : public CompositeType {
     virtual Type *clone(bool deep = false) const override;
     virtual bool equals(Type *type) const override;
     virtual CastSafety castSafetyFrom(Type *sourceType) const override;
+    /// Whether a value of `sourceType` enters this struct type, judged by the two types' structure:
+    /// a value whose fields are this type's, in this type's order, is a value of this type, and the
+    /// slot keeps its fields (design principles 5.2). That step moves nothing and cannot fail; a
+    /// copy through another field order is a conversion the program writes (`as`).
+    virtual bool castEntersFrom(Type *sourceType) const override;
     virtual slot_t castSlotFrom(slot_t value, Type *sourceType) const override;
     virtual bool assignableFrom(Type *sourceType) const override;
     virtual Type *unify(Type *other) const override;
