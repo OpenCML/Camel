@@ -40,6 +40,9 @@
  *   expect_refusal                             yes       yes      yes       yes        yes          yes
  *   expect_diagnostic_name / _code             yes       yes      yes       yes        yes          yes
  *   expect_diagnostic_line / _column           yes       yes      yes       yes        yes          yes
+ *   expect_diagnostic_file                     yes       yes      yes       yes        yes          yes
+ *                                              (the file the diagnostic was reported in; it joins
+ *                                              the four rows above rather than replacing them)
  *   expect_no_diagnostics                      yes       yes      yes       yes        yes          yes
  *                                              (the absence of a diagnostic; when it is set the
  *                                              four rows above are not evaluated for that entry)
@@ -196,6 +199,9 @@ const ALWAYS_EVALUATED = [
     'expect_diagnostic_code',
     'expect_diagnostic_line',
     'expect_diagnostic_column',
+    // The file the diagnostic was reported in. It narrows the same block the four rows above open,
+    // and an entry that does not write it evaluates exactly what it evaluated before.
+    'expect_diagnostic_file',
     // The absence of a diagnostic, which a plan could not say before this field existed
     // (`expect_diagnostic_name = ""` only cancels an inherited name). It stands in place of the four
     // rows above when it is set, so an entry naming it is not also expected to name a diagnostic.
@@ -796,6 +802,14 @@ function revisionOf(rootDir) {
 // Comments and literals become spaces, at the same length as the text they came from, so an offset
 // in one is an offset in the other: what is left is the code's own braces. Without this, a `{` in a
 // template (`\`golden file does not exist: ${path}\``) would be counted as a block.
+//
+// Both comment forms are blanked, and the block form is the half that used to be missing: `//` was
+// handled and `/* ... */` was not, so a sentence in a doc comment held the file hostage from its
+// first apostrophe to the next quote of any kind. "The child's working directory", written in the
+// doc comment of a function above `validateTest`, blanked the signature itself, and this check then
+// said `validateTest is not in test/tools/run-tests.mjs` about a function that was there -- a
+// reading about the stripper, reported as a reading about the runner. A doc comment is a comment;
+// it is blanked here like the other one.
 function stripStringsAndComments(text) {
     const out = text.split('')
     let index = 0
@@ -808,6 +822,13 @@ function stripStringsAndComments(text) {
     }
     while (index < text.length) {
         const char = text[index]
+        if (char === '/' && text[index + 1] === '*') {
+            const close = text.indexOf('*/', index + 2)
+            const stop = close < 0 ? text.length : close + 2
+            blank(index, stop)
+            index = stop
+            continue
+        }
         if (char === "'" || char === '"' || char === '`') {
             let end = index + 1
             while (end < text.length && text[end] !== char) {
