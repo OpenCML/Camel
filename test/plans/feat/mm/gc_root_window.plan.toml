@@ -5,6 +5,10 @@ tags = ["feat", "mm", "gc", "program"]
 
 [[tests]]
 name = "root_window.gru_lite.poison"
+# Fast layer: measured 0.74 s at `2dcda93c7c` (`-Plan test/plans/feat/mm -Tier milestone -Jobs 8`),
+# under the 2 s line, and the two entries beside it are already fast. The `residual_mlp` half of the
+# pair is 3.08 s and stays where it is.
+tier = "fast"
 desc = "A pass-created Program and the graph versions reachable from it stay alive while its C++ holder needs them."
 kind = "behavior"
 case = "../../../cases/modules/nn/gru_lite.cml"

@@ -95,6 +95,7 @@ export const SLOW_PLANS = [
     'test/plans/feat/linear/fvm_nvm_diff.plan.toml',
     'test/plans/feat/linear/var_reference.plan.toml',
     'test/plans/feat/mm/capacity.plan.toml',
+    'test/plans/feat/mm/gc_elder_exhaustion.plan.toml',
     'test/plans/feat/mm/gc_pacing.plan.toml',
     'test/plans/feat/mm/gc_soak.plan.toml',
     'test/plans/feat/mm/graph_space.plan.toml',
