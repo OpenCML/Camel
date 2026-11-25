@@ -1,0 +1,16 @@
+/**
+ * A name the module declares itself is that layer's name (design principles 10.2): the module's
+ * `len` is what the name stands for, and the built-in `len` of the layer below is not a candidate
+ * beside it. While the layers were merged into one set, this call was refused as an ambiguity
+ * between the module's `len(string)` and the built-in rules -- a name of the first layer that has
+ * it could not be called at all.
+ */
+
+func len(s: string) => int {
+    return 99
+}
+
+func main() => int sync {
+    println(len('abc'))
+    return 0
+}

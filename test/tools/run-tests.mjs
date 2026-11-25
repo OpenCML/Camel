@@ -188,6 +188,39 @@ function checkFieldType(planPath, entry, field, where, type) {
     throw new PlanSchemaError(`${planLabel(planPath)}: ${where}: ${field} must be a ${type}, got ${shown}`)
 }
 
+// The fields the runner walks one item at a time. A string written where a list belongs is not a
+// shorter list: `for (const needle of "will not run")` visits eleven single characters, and one-letter
+// needles are satisfied by output that says something else entirely. Measured on
+// `feat/trans/hand_on.plan.toml#after_nop_never_run`, whose `expect_stderr_contains = "will not run"`
+// passed for `"… will  not run"` (two spaces: the sentence is gone) and for
+// `"unknown pipeline option: --gir"` (another sentence that happens to hold all eleven letters). A
+// green like that is worse than no reading, because a green is counted and nobody re-reads it, so the
+// shape is refused where the plan is read: the run then reports a plan it cannot read, which is a
+// state a reader can tell from a red and from a green.
+const LIST_FIELDS = [
+    'args', 'envs', 'normalizers', 'compare_fields', 'backends_agree',
+    'expect_output_contains', 'expect_output_not_contains',
+    'expect_stdout_contains', 'expect_stdout_not_contains', 'expect_stderr_contains',
+]
+const SWEEP_LIST_FIELDS = ['plans', 'exclude', 'envs', 'args', 'risk_tags']
+
+function checkListFields(planPath, entry, where, fields) {
+    for (const field of fields) {
+        const value = entry[field]
+        if (value === undefined) continue
+        if (Array.isArray(value) && value.every((one) => typeof one === 'string')) continue
+        const letters = typeof value === 'string' ? [...value] : null
+        throw new PlanSchemaError(
+            `${planLabel(planPath)}: ${where}: ${field} must be a list of strings, got ${JSON.stringify(value)}` +
+                (letters === null
+                    ? ''
+                    : `: a string is read one character at a time, so this asserts ${letters.length} single ` +
+                      `characters (${letters.map((one) => JSON.stringify(one)).join(' ')}) instead of the ` +
+                      `sentence it wrote`),
+        )
+    }
+}
+
 // The three things the author's ruling of 2026-11-03 00:30 asked a `known_fail` entry to carry: the
 // mark, who is responsible for making the case green, and why it cannot pass today. The mark alone
 // says "we accept this red"; it says nothing about who ends it or where the case is stuck, and until
@@ -422,6 +455,9 @@ function validatePlanSchema(doc, planPath) {
     // somebody else's build, which is the reading the field exists to prevent. Refused here, where
     // the file and the value are named.
     checkFieldType(planPath, doc, 'time_sensitive', 'plan', 'boolean')
+    // The plan's own `tags` are read by a sweep (`sourceDoc.tags`), so they are a list for the same
+    // reason the assertion lists below are.
+    checkListFields(planPath, doc, 'plan', ['tags'])
     if (doc.defaults !== undefined) {
         if (doc.defaults === null || typeof doc.defaults !== 'object' || Array.isArray(doc.defaults)) {
             throw new PlanSchemaError(`${planLabel(planPath)}: [defaults] must be a table`)
@@ -445,6 +481,7 @@ function validatePlanSchema(doc, planPath) {
             ? `[[sweeps]] entry '${sweep.name}'`
             : `[[sweeps]] entry #${index + 1}`
         checkFields(planPath, sweep, SWEEP_FIELDS, where)
+        checkListFields(planPath, sweep, where, SWEEP_LIST_FIELDS)
     }
     // The fields this change implemented get a type check too: a plan that sets one of them to a
     // number must fail here, where the file and the test are named, not later inside an assertion.
@@ -457,6 +494,9 @@ function validatePlanSchema(doc, planPath) {
     ]
     for (const [where, entry] of entries) {
         if (!entry) continue
+        // The list-shaped fields first: a wrong shape here changes what every other assertion in the
+        // entry means, so it is named before the assertions are read at all.
+        checkListFields(planPath, entry, where, LIST_FIELDS)
         // A marked case has to carry its owner and its wall, and this is the only place that can
         // refuse it: the runner reads a plan once, here, and a promise checked later than this is
         // a promise kept by whoever remembered to look.

@@ -233,6 +233,35 @@ expect_output_contains = ["Pass <none_such::run> not found, available passes are
 expect_output_not_contains = ["PassNotProvidedByModule", "PassNotExportedByModule", "42"]
 normalizers = ["strip_ansi", "normalize_newlines", "normalize_paths", "trim_trailing_space"]
 timeout_ms = 10000
+
+# `std::null` was an alias of `std::nop`, and it is not a name a pass can have: a pass's
+# declaration is a function of the standard library, whose leaf has to be writable, and `null` is a
+# keyword of the language. The alias is deleted and nothing answers the old spelling -- design
+# principles 1, "内测阶段不考虑兼容成本": an old spelling is deleted outright, with no alias, no
+# compatibility layer and no diagnostic pointing at the new one. A hint that said "use `std::nop`"
+# would be the alias written as a sentence, so the name is an ordinary unknown pass, exactly like
+# any name the pipeline resolves to nothing, and the answer is the same one `none_such::run` gets
+# above. What makes this a control rather than a restatement is the direction: putting the entry
+# back into `passAliases` makes the program run and this entry red.
+#
+# The three expectations are the refusal read from the run: the diagnostic on stdout, the listing of
+# what does exist on stderr, and the absence of `42` -- the program's own output, which a pipeline
+# refused before its first pass never prints.
+
+[[tests]]
+name = "the_deleted_null_spelling_is_not_a_pass"
+desc = "`std::null` resolves to nothing: the pipeline answers the unknown-pass diagnostic and lists the passes and the aliases that exist, and the program does not run. The alias is not a name a pass can have (`null` is a keyword), and no diagnostic points at the spelling that replaced it."
+kind = "negative"
+case = "../../../cases/modules/pass_not_found/main.cml"
+args = ["${case}", "std::null"]
+expect_exit = 1
+expect_output_contains = ["Unrecognized graph rewriting/scheduling/translation pass 'std::null'", "RuntimeDiag::UnrecognizedGraphPass", "Pass <std::null> not found, available passes are:", "Available aliases are:"]
+# `std::null ->` is the line the alias would print in that listing; the whole point is that the
+# spelling is refused rather than resolved. `42` is the program's own output.
+expect_output_not_contains = ["std::null ->", "42"]
+normalizers = ["strip_ansi", "normalize_newlines", "normalize_paths", "trim_trailing_space"]
+timeout_ms = 20000
+
 # `rewrite` gained a declaration module in (`stdlib/rewrite.cml`), so it is now a Camel
 # module of the kind answers with the short diagnostic. It registers no pass, and the
 # `provided` list names only the module's Camel pass functions, so it says "no passes". This is the

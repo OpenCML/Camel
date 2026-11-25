@@ -3602,15 +3602,46 @@ class Builder {
     /// Collects the overloads of the operator `group` visible here.
     OperatorOverloads operatorOverloadsOf(const std::string &group);
     /// The one overload set `name` stands for when a body-less `#op` declaration of it and a
-    /// declaration of it with a body are both reachable here (design principles 6.4): the rules
-    /// of its operator group and the functions its body declarations make, as the candidates of
-    /// one call. The two used to be two pools of which the name lookup kept the one it found
-    /// first -- a declaration with a body hid the operator group of the same name, so a call
-    /// only the declaration took found no function at all.
+    /// declaration of it with a body are both THIS layer's (design principles 6.4): the rules of
+    /// its operator group and the functions its body declarations make, as the candidates of one
+    /// call. The two used to be two pools of which the name lookup kept the one it found first --
+    /// a declaration with a body hid the operator group of the same name, so a call only the
+    /// declaration took found no function at all.
+    ///
+    /// Only this module's layer is gathered: design principles 10.2 gives a name the first layer
+    /// that has it, and the layers are not one set (an operator's is the exception, and
+    /// `operatorDrefOf` takes every layer for it). A name of a layer below -- the prelude's
+    /// `filter` and `map` among them -- answers only where this module has no such name.
     ///
     /// Nullopt when either side is absent: a name with no operator group is resolved as the
     /// functions it declares, exactly as before.
     std::optional<OperatorOverloads> mergedOverloadsNamed(const std::string &name);
+    /// The overload set one layer's entity stands for: the entity a module exports under a name
+    /// is one name's whole set (6.4; `ProgramExports::exportedEntity`), so it may carry the rules
+    /// of a body-less `#op` declaration and the functions of the same name with a body at once,
+    /// and a call site that took one half of it was taking one half of the name.
+    ///
+    /// Nullopt when the entity carries one form only: the plain branches of `resolveDRefNode`
+    /// resolve a group, a set of functions or a template on their own.
+    std::optional<OperatorOverloads> overloadsOfLayer(const camel::core::module::entity &e);
+    /// What one entity carries of a name, into a set being assembled: the rules of its body-less
+    /// `#op` declaration, the functions of the name with a body, the generic ones. Unlike
+    /// `overloadsOfLayer` it asks for no completeness: a caller joining two halves of one layer
+    /// needs each half as it is, and one half alone is what an entity of one form holds.
+    void gatherOverloads(const camel::core::module::entity &e, OperatorOverloads &out);
+    /// The built-in layer's name, assembled from the two places its halves live: the rules of the
+    /// built-in module's group of `name` and the functions the prelude declares under it. The
+    /// prelude IS the built-in layer (design principles 10.2), and a `#op` declaration of the
+    /// prelude installs its rules into the built-in group rather than keeping them
+    /// (`builder_modules.cpp`, the `preludeModule` branch), so `filter`, `map`, `len` and `reduce`
+    /// are one set here -- the array's function and the range's, not one of the two -- even
+    /// though a lookup that reads one half alone reports the other's argument types as unfitted.
+    ///
+    /// `answered` is the entity the layer already answered with, so nothing that entity carries
+    /// is lost; the prelude's and the built-in module's forms of the name are added to it.
+    /// Nullopt when the assembled set has no rules to choose among or no function to choose.
+    std::optional<OperatorOverloads>
+    builtinLayerNamed(const std::string &name, const camel::core::module::entity &answered);
     /// The entity a name the current module imports stands for in this program
     /// (ProgramExports::importedEntity): the import bindings resolved against this program's
     /// exported entities. The same module in two programs may see different graphs (task).
@@ -3744,8 +3775,7 @@ class Builder {
     bool genericCandidateBinds(
         const generic_template_ptr_t &tmpl, const std::vector<Argument> &withInputs,
         const std::vector<Argument> &normInputs, const camel::core::type::type_vec_t &withTypes,
-        const camel::core::type::type_vec_t &normTypes,
-        std::vector<std::string> *unmetConditions);
+        const camel::core::type::type_vec_t &normTypes, std::vector<std::string> *unmetConditions);
     /// A candidate as a report names it: its name, its type, and the condition it wrote.
     std::string describeGenericCandidate(const generic_template_ptr_t &tmpl);
     /// OperatorOverloadConflict when the overload `funcType` of the operator `group` takes
@@ -3898,8 +3928,8 @@ class Builder {
     castNodeTo(node_handle_t value, camel::core::type::Type *target, const GCT::node_ptr_t &origin);
     /// The same conversion written as the operator it is (`cast::<T, U>` of the prelude): an OPER
     /// node whose written type arguments are the operand's type and the target, and whose result
-    /// type is the target. Where no declaration answers -- a program that shadows `cast` -- the call
-    /// is still written, by its URI (`:op/cast`), which no name in scope can shadow.
+    /// type is the target. Where no declaration answers -- a program that shadows `cast` -- the
+    /// call is still written, by its URI (`:op/cast`), which no name in scope can shadow.
     node_handle_t conversionNodeOf(
         node_handle_t value, camel::core::type::Type *target, const GCT::node_ptr_t &origin);
     /// A copy written as the operator it is (`copy::<T>` of the prelude): an OPER node whose one
