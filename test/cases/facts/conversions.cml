@@ -1,0 +1,20 @@
+// One operator, two pairs of types: the conversion's fault is the pair's and not the operator's.
+//
+// `:op/cast` is declared "a cast may fault", which is true of every cast and of no node in
+// particular. The pair is the node's: `f32[...]` into `f32[2, 3]` checks the value's shape when it
+// runs and may fault; `float[6]` into `f32[]` keeps every value it is given. Both nodes name the
+// same operator, so an answer read from the operator alone cannot tell them apart -- which is the
+// reading `facts.arrangeable_conversion_pair` pins.
+import { ones } from tensor
+
+func shrink(a: f32[...]) => int {
+    let shaped = a as f32[2, 3]
+    return len(shaped)
+}
+
+func main() => int sync {
+    let t: f32[...] = ones::<f32>([2, 3])
+    let flat = [1.0, 2.0, 3.0, 4.0, 5.0, 6.0] as f32[]
+    println(shrink(t) + len(flat))
+    return 0
+}

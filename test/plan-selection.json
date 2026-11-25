@@ -86,6 +86,12 @@
             "plans": ["feat/tools/plan_refs_sweep.plan.toml"]
         },
         {
+            "comment": "The arrangeable sweep: its case is the tool itself, so a change there selects the plan that runs it, the same shape as the plan-refs sweep above. It is a plan of its own for the same cost reason (it starts one `camel` per tracked `.cml`, and a named plan file runs in full whatever `--tier` says), and the fact kind whose rows it sums is read by the files this rule also names: the sweep is what says whether the kind's answer and the predicate a pass asks are still one answer.",
+            "paths": ["scripts/check-arrangeable.mjs", "src/kernel/facts/facts.cpp", "src/stdlib/test/facts_compare.cpp"],
+            "plans": ["feat/tools/arrangeable.plan.toml"],
+            "layer": true
+        },
+        {
             "comment": "The progen seed 23 program of the splice defect `a1723fbb9` fixed (test/cases/opt/inline_cycle): one program, one plan. It is a file rule and not a directory rule for the reason the adb67e081 rule below is one -- the directory rule for test/cases mirrors the segments below test/cases and would look for `test/plans/feat/opt/inline_cycle`, which is a plan file, so nothing would reach it. The plan is fast, so the rule carries no layer.",
             "paths": ["test/cases/opt/inline_cycle/"],
             "plans": ["feat/opt/inline_cycle.plan.toml"]

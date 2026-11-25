@@ -9,9 +9,22 @@
  *       enclosing_diff=<n> chain_same=<n> chain_diff=<n> within_pairs=<n> within_same=<n>
  *       within_diff=<n> nodes_same=<n> nodes_diff=<n>
  *   FACTS_COMPARE kind=core.arrangeable graphs=<n> nodes=<n> same=<n> diff=<n> no_old=<n>
+ *       conversions=<n>
  *   FACTS_COMPARE kind=core.arrangeable readers nodes=<n> agree=<n> diff=<n> no_fact=<n>
+ *   FACTS_COMPARE tally node_kind=<kind> oper=<uri|-> nodes=<n> both_free=<n> both_kept=<n>
+ *       kind_free_pred_kept=<n> kind_kept_pred_free=<n>
+ *   FACTS_COMPARE tally_total rows=<n> nodes=<n>
  *   FACTS_COMPARE kind=core.arrangeable draft graphs=<n> nodes=<n> same=<n> diff=<n>
  *       no_fact=<n> no_store=<n> kept=<n> stale=<n>
+ *
+ * The `tally` rows are the `readers` comparison cut by node kind and by operator: `diff` says how
+ * many nodes the fact and the predicate answer differently, and a row says *which* nodes and which
+ * way. `kind_kept_pred_free` is the predicate offering a placement the kind will not answer for,
+ * `kind_free_pred_kept` is the kind answering "freely arrangeable" about a node a pass keeps where
+ * it was written -- two defects, in two files, and one total would hide which one happened. A row
+ * is printed for every kind the run met, `both_free`/`both_kept` included, so a kind with no
+ * disagreement is a row of zeros in the split and not an absent row. `scripts/check-arrangeable.mjs`
+ * sums these rows over every case the tree has.
  *
  * The `readers` line compares the fact with the predicate a pass asks
  * (`runtime::nodeIsFreelySchedulable`); the `draft` line asks the same kind of the graph the

@@ -14,11 +14,15 @@
 #include "camel/runtime/control_regions.h"
 #include "camel/runtime/graph.h"
 #include "camel/runtime/graph_txn.h"
+#include "camel/runtime/oper_shape.h"
 #include "camel/runtime/reachable.h"
 
 #include <format>
+#include <map>
 #include <memory>
 #include <ostream>
+#include <span>
+#include <string>
 #include <vector>
 
 namespace {
@@ -171,11 +175,12 @@ void compareControlRegions(
 }
 
 struct ArrangeCounts {
-    size_t graphs = 0;
-    size_t nodes  = 0;
-    size_t same   = 0;
-    size_t diff   = 0;
-    size_t noOld  = 0;
+    size_t graphs      = 0;
+    size_t nodes       = 0;
+    size_t same        = 0;
+    size_t diff        = 0;
+    size_t noOld       = 0;
+    size_t conversions = 0;
 };
 
 /// `core.arrangeable` against the algorithm it replaced, which answered OPER nodes only: the four
@@ -183,6 +188,16 @@ struct ArrangeCounts {
 /// algorithm never answered is counted as `no_old` -- the fact answers it, and that count is part
 /// of what putting the question into a fact added. An OPER node the fact has no answer for is a
 /// `diff`: the old algorithm answered it, so the new one must too.
+///
+/// A **conversion** is the one node the operator's four terms do not state on their own, and the
+/// algorithm that was replaced read the pair of types the node converts between for it
+/// (`castMayFault`, which the pass predicate and the compiler both ask). The older answer is
+/// therefore restated here at the node, for a conversion only, instead of being taken from
+/// `operatorArrangeable` -- which has an operator and no types, and could only report the operator's
+/// half ("a cast may fault"). That restatement is the baseline, so it lives here beside the
+/// comparison it is the baseline of, the way `OldRegionWalk` does above; and `conversions` counts
+/// the nodes it applied to, so a run that walked none of them says so instead of reading like a
+/// comparison that covered them.
 void compareArrangeable(
     const GCGraph &graph, camel::facts::Store &store, ArrangeCounts &counts) {
     const camel::graph::GraphView &view  = graph.view();
@@ -201,8 +216,15 @@ void compareArrangeable(
         const std::shared_ptr<const camel::facts::Arrangeable> fact =
             store.obtain<camel::facts::Arrangeable>(
                 kind, camel::facts::Anchor{&graph, static_cast<camel::facts::NodeId>(ref)});
-        const camel::facts::Arrangeable older =
-            camel::facts::operatorArrangeable(view.operatorOf(node));
+        camel::facts::Arrangeable older = camel::facts::operatorArrangeable(view.operatorOf(node));
+        if (camel::runtime::shapeOfOperator(view.operatorOf(node)) ==
+            camel::ops::OperShape::Conversion) {
+            const std::span<const camel::graph::NodeRef> norm =
+                view.inputs(node, camel::graph::PortGroup::Normal);
+            older.cannotFault = !camel::runtime::castMayFault(
+                view.typeOf(node), norm.size() == 1 ? view.typeOf(norm[0]) : nullptr);
+            ++counts.conversions;
+        }
         const bool equal = fact != nullptr && *fact == older;
         ++(equal ? counts.same : counts.diff);
     }
@@ -214,6 +236,25 @@ struct ReaderCounts {
     size_t diff   = 0;
     size_t noFact = 0;
 };
+
+/// One row of the disagreement table: a node kind, and for an OPER node the operator it names, with
+/// how the two answers split over the nodes of that row. The counts are the four ways two booleans
+/// can meet, and they are kept apart because `diff` alone cannot say which side is the generous one:
+/// a row of `kind_free_pred_kept` is the kind letting a pass move a node the predicate keeps, and a
+/// row of `kind_kept_pred_free` is the predicate offering a node the kind will not answer for. The
+/// two are different defects and they are in different files.
+struct TallyRow {
+    size_t nodes            = 0;
+    size_t bothFree         = 0;
+    size_t bothKept         = 0;
+    size_t kindFreePredKept = 0;
+    size_t kindKeptPredFree = 0;
+};
+
+/// The table, keyed by (node kind name, operator URI or "-"). A `std::map` and not a hash table: the
+/// reading is printed, and two runs that print the same rows in a different order are two readings
+/// nobody can diff.
+using ReaderTally = std::map<std::pair<std::string, std::string>, TallyRow>;
 
 /// The fourth reading: the same kind asked of a **draft**. `core.arrangeable` is a fact about the
 /// graph an editing session is building as much as about the one a program holds (`facts.h`: "the
@@ -276,7 +317,8 @@ const char *nodeKindName(camel::graph::NodeKind kind) {
 /// `no_fact`, separately from a disagreement: "the fact declined" and "the fact and the reader
 /// disagree" are different states and one total would hide which happened.
 void compareReaders(
-    const GCGraph &graph, camel::facts::Store &store, ReaderCounts &counts, std::ostream &os) {
+    const GCGraph &graph, camel::facts::Store &store, ReaderCounts &counts, ReaderTally &tally,
+    std::ostream &os) {
     const camel::graph::GraphView &view = graph.view();
     const camel::facts::KindId kind     = camel::facts::arrangeableKind();
     for (gc_node_ref_t ref = 0; ref < static_cast<gc_node_ref_t>(graph.nodeCount()); ++ref) {
@@ -288,11 +330,23 @@ void compareReaders(
         const std::shared_ptr<const camel::facts::Arrangeable> fact =
             store.obtain<camel::facts::Arrangeable>(
                 kind, camel::facts::Anchor{&graph, static_cast<camel::facts::NodeId>(ref)});
+        const std::string nodeKind = nodeKindName(view.kindOf(node));
+        const std::string operName =
+            view.operatorOf(node) == camel::core::kNoOper
+                ? std::string("-")
+                : std::string(camel::core::OperatorTable::instance().uri(view.operatorOf(node)));
         if (fact == nullptr) {
             ++counts.noFact;
             continue;
         }
         const bool moved = camel::runtime::nodeIsFreelySchedulable(graph, ref);
+        // The row is opened before the answers are compared: a node kind that is answered the same
+        // way everywhere must still appear in the table, or its absence would read like a kind the
+        // sweep never visited.
+        TallyRow &row = tally[{nodeKind, operName}];
+        ++row.nodes;
+        ++(fact->all() ? (moved ? row.bothFree : row.kindFreePredKept)
+                       : (moved ? row.kindKeptPredFree : row.bothKept));
         if (fact->all() == moved) {
             ++counts.agree;
             continue;
@@ -304,7 +358,7 @@ void compareReaders(
             "terms={}{}{}{} waits={} orders={} syncs={}\n",
             graph.name(),
             ref,
-            nodeKindName(view.kindOf(node)),
+            nodeKind,
             oper == camel::core::kNoOper
                 ? std::string("-")
                 : std::string(camel::core::OperatorTable::instance().uri(oper)),
@@ -422,6 +476,7 @@ FactsCompareTestPass::apply(const camel::runtime::Program *program, std::ostream
     ControlCounts control;
     ArrangeCounts arrange;
     ReaderCounts readers;
+    ReaderTally tally;
     DraftCounts draft;
     for (auto *graph : collectReachableGraphs(*program)) {
         if (graph == nullptr) {
@@ -438,7 +493,7 @@ FactsCompareTestPass::apply(const camel::runtime::Program *program, std::ostream
         }
         compareControlRegions(*graph, *store, control);
         compareArrangeable(*graph, *store, arrange);
-        compareReaders(*graph, *store, readers, os);
+        compareReaders(*graph, *store, readers, tally, os);
         compareDraft(*program, *graph, *store, draft, os);
     }
     os << std::format(
@@ -457,18 +512,40 @@ FactsCompareTestPass::apply(const camel::runtime::Program *program, std::ostream
         control.nodesSame,
         control.nodesDiff);
     os << std::format(
-        "FACTS_COMPARE kind=core.arrangeable graphs={} nodes={} same={} diff={} no_old={}\n",
+        "FACTS_COMPARE kind=core.arrangeable graphs={} nodes={} same={} diff={} no_old={} "
+        "conversions={}\n",
         arrange.graphs,
         arrange.nodes,
         arrange.same,
         arrange.diff,
-        arrange.noOld);
+        arrange.noOld,
+        arrange.conversions);
     os << std::format(
         "FACTS_COMPARE kind=core.arrangeable readers nodes={} agree={} diff={} no_fact={}\n",
         readers.nodes,
         readers.agree,
         readers.diff,
         readers.noFact);
+    // The disagreement table, one row per (node kind, operator), sorted by the map. The four columns
+    // are the four ways "the kind says freely arrangeable" and "the predicate a pass asks says it may
+    // move" can meet; `rows` is printed beside `nodes` so a table that covered nothing cannot read
+    // like a table with no disagreements in it.
+    size_t tallyNodes = 0;
+    for (const auto &[key, row] : tally) {
+        tallyNodes += row.nodes;
+        os << std::format(
+            "FACTS_COMPARE tally node_kind={} oper={} nodes={} both_free={} both_kept={} "
+            "kind_free_pred_kept={} kind_kept_pred_free={}\n",
+            key.first,
+            key.second,
+            row.nodes,
+            row.bothFree,
+            row.bothKept,
+            row.kindFreePredKept,
+            row.kindKeptPredFree);
+    }
+    os << std::format(
+        "FACTS_COMPARE tally_total rows={} nodes={}\n", tally.size(), tallyNodes);
     os << std::format(
         "FACTS_COMPARE kind=core.arrangeable draft graphs={} nodes={} same={} diff={} no_fact={} "
         "no_store={} kept={} stale={}\n",
