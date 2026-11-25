@@ -1,0 +1,94 @@
+# The cost an extraction reads, and the one thing that decides whether it reads anything.
+#
+# `relative_cost(n)` is the operator's own statement of how dear one run of it is (design principles
+# 9.11): `builtin_semantics.cpp` states 8 for a division and a remainder and 3 for a multiplication,
+# through `CppRegistration::relativeCost`, and every other operator is left silent and reads as 1.0.
+# The statement is one item of the operator's record, and a record is assembled from several
+# entrances: the core declares the arithmetic, and `operator_registry.cpp#mergeRecord` merges each
+# entrance's statement into the one record. An item `mergeRecord` does not merge is an item that is
+# written and never read, and it fails in the one way that looks correct: `relativeCostOf()` falls
+# back to 1.0, so the default cost of an extraction becomes "one per node" -- the reading
+# `cost=rules::nodes` gives -- and the two cost functions the library ships answer the same thing.
+#
+# `test/cases/opt/cost/cost_choice.cml` is the program where the two answers are different ones. One
+# value has two writings, a division and a product of two products, and the rule that makes the
+# second is a rule of the program itself:
+#
+#     x / 2.0  =>  (x * 0.25) * 2.0
+#
+# By the count of nodes the division is the cheap writing (3 against 5) and the extraction keeps it.
+# By the cost the operators state, the division is 8 + the two values it reads and the products are
+# 3 + 3 + the three values they read (10 against 9), so the extraction keeps the longer writing. The
+# two numbers are four lines apart and neither is guessed: `cost.nodes_ignores_the_record` prints the
+# division and its own 8.0, `cost.default_reads_the_record` prints the two products and their own
+# 3.0.
+#
+# The three entries are one reading each and they need all three:
+#
+#   saturated_both_writings  the saturation leaves one class with the two writings, so the choice
+#                            below is a choice and not a program that had one writing all along. A
+#                            rule that stopped firing would make both cost entries agree by there
+#                            being nothing to choose, and this entry is what says so.
+#   default_reads_the_record `rewrite::extract cost=rules::default` keeps the products: `halve div 0
+#                            mul 2`, each product stating 3.0, and the program prints 4.0.
+#   nodes_ignores_the_record `rewrite::extract cost=rules::nodes` keeps the division: `halve div 1
+#                            mul 0`, the division stating 8.0, and the program prints 4.0.
+#
+# The pair is the evidence: two cost functions, one program, two different writings. While the record
+# does not carry `cost`, both entries print `halve div 1 mul 0` and `:op/div_d=1.0` -- the same line,
+# which is what the defect looked like, and the reason an entry that asserted only "the program
+# prints 4.0" would have stayed green through it.
+
+id = "opt.cost"
+order = 1015
+tier = "fast"
+tags = ["feat", "opt", "graph", "extract"]
+
+[[tests]]
+name = "cost.saturated_both_writings"
+desc = "The saturation of `cost_choice.cml` under the program's own rule leaves one value with two writings, and `std::jgir` draws them: one class whose writings are one `:op/div_d` node and one `:op/mul_d` node, with a second `:op/mul_d` under it. A program whose rule no longer fires would have one writing and would make the two extraction entries below agree by having nothing to choose between; this entry is what refuses that reading."
+kind = "behavior"
+case = "../../../cases/opt/cost/cost_choice.cml"
+args = ["${case}", "cost_choice::tabled", "std::jgir", "std::nop"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+  const doc = JSON.parse(input.normalized.stdout.slice(input.normalized.stdout.indexOf('{')))
+  const g = doc.graphs.find((graph) => graph.name === 'halve')
+  assert(g, 'the program has no graph named halve')
+  const label = new Map(g.nodes.map((n) => [n.id, n.label || n.kind]))
+  const count = (l) => g.nodes.filter((n) => n.label === l).length
+  assert(count(':op/div_d') === 1, 'halve has ' + count(':op/div_d') + ' division node(s), not 1')
+  assert(count(':op/mul_d') === 2, 'halve has ' + count(':op/mul_d') + ' multiplication node(s), not 2')
+  const classes = g.classes || []
+  assert(classes.length === 1, 'halve states ' + classes.length + ' class(es), not 1')
+  const writings = (classes[0].writings || []).map((ref) => label.get(ref))
+  assert(writings.length === 2, 'the class has ' + writings.length + ' writing(s), not 2')
+  assert(writings.includes(':op/div_d'), 'no writing of the class is the division: ' + JSON.stringify(writings))
+  assert(writings.includes(':op/mul_d'), 'no writing of the class is the product: ' + JSON.stringify(writings))
+}
+"""
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 30000
+
+[[tests]]
+name = "cost.default_reads_the_record"
+desc = "`rewrite::extract cost=rules::default` chooses the writing of least cost, and the cost it reads is the one the operator states in its record: the products win over the division (9 against 10) even though they are the longer writing, so `halve` keeps two `:op/mul_d` nodes and no division, each product states 3.0, and the program prints 4.0. With `cost` not merged into the record both this entry and `cost.nodes_ignores_the_record` print `halve div 1 mul 0` and a product that states 1.0 -- one line for two different cost functions."
+kind = "behavior"
+case = "../../../cases/opt/cost/cost_choice.cml"
+args = ["${case}", "cost_choice::tabled", "rewrite::extract", "cost=rules::default", "cost_choice::report", "std::nvm"]
+expect_exit = 0
+expect_stdout_contains = ["halve div 0 mul 2", ":op/mul_d=3.0", "4.0"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 30000
+
+[[tests]]
+name = "cost.nodes_ignores_the_record"
+desc = "The positive control of the entry above: the same program, the same saturation, and `rewrite::extract cost=rules::nodes`, which counts nodes and reads no record. It keeps the division (3 against 5), so `halve` has one `:op/div_d` and no product, the division's own record states 8.0, and the program prints 4.0. Two cost functions on one program with two different answers is what makes the pair a reading; the same line twice would say only that an entry ran."
+kind = "behavior"
+case = "../../../cases/opt/cost/cost_choice.cml"
+args = ["${case}", "cost_choice::tabled", "rewrite::extract", "cost=rules::nodes", "cost_choice::report", "std::nvm"]
+expect_exit = 0
+expect_stdout_contains = ["halve div 1 mul 0", ":op/div_d=8.0", "4.0"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 30000
