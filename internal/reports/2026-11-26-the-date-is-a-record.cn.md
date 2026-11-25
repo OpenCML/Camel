@@ -163,20 +163,94 @@ A/B/C 三个条件都是"日期在括号里、或紧跟测量动词"的位置条
 | 0 | `7ddaa9dfa6` | 662 | 567 | 135 | 立这条判据，按它删 71 行 |
 | 1 | `14f3920e1a` | 632 | 537 | 105 | 读数 30 行：把"哪天"换成哪台、哪个负载、哪个窗口、哪棵树 |
 | 2 | `11a98019de` | 602 | 507 | 75 | 读数再 30 行：`test/tools/` 20 行、`test/cases/compile/transforms/` 7 行、相邻 3 行 |
+| 3 | `596c92d868` | 574 | 477 | 75 | 状态边界 30 行：把"哪天结束的"换成"被什么界定"（第九节） |
 
-所以这一节原来的 135 与 567 是这样走的：135/567 → **105/537**（批 1）→ 75/507（批 2）。
+所以这一节原来的 135 与 567 是这样走的：135/567 → **105/537**（批 1）→ 75/507（批 2）→ 75/477（批 3）。
 
-剩下的 507 行按形状分（读数一族已从起点的 135 行降到 75 行，口径与上表同）：
+剩下的 477 行按形状分（读数一族已从起点的 135 行降到 75 行，口径与上表同）：
 
 | 形 | 行 | 要做的动作 |
 |---|---:|---|
 | 读数（`measured …`、括号里的现场） | 75 | 重写从句：把"哪天"换成"哪台、哪个负载、哪个窗口"，或整句去掉读数的现场 |
 | 页名的一段 | 76 | 与 `handover-path` 一族同源：把页名换成"the page"，或删掉引用 |
-| 状态边界（`until/since/as of …`） | 82 | 重写句子：讲现在是什么，不讲哪天变的 |
+| 状态边界（`until/since/as of …`） | 52 | 重写句子：讲现在是什么，不讲哪天变的；判法见第九节（其中 5 行不是边界，剩 47 行） |
 | 有日期的决定（`rule/review/answer of <日期>`、`author`） | 48 | 与族 3 同一动作：留规则，去掉日期与"谁" |
 | 流程事故（`on <日期> … deleted/merged/hit`） | 30 | 重写：只留"为什么这道闸存在"，不留事故的时间地点 |
 | 其余（日期在句中当唯一的"何时"） | 196 | 逐行重写 |
 
-这 507 行**不是规则能降的**：判据已经把它们都判对了，它们是 507 句要重写的话。谁要做，按上表
+这 477 行**不是规则能降的**：判据已经把它们都判对了，它们是 477 句要重写的话。谁要做，按上表
 一行一族地做，做完一批跑一次 `node --test scripts/check-process-traces.test.mjs` —— 那七条里
 红的那五条钉着"日期还得被拒"的底线。
+
+## 九、状态边界这一族：30 行抽样、一条判据、只改 a/b/c
+
+这一族碰不得"读数"那三招，原因是位置不同：`until/since/as of <日期>` 的日期**就是那个从句的
+主语或宾语**。`Until 2026-11-04 the lift refused a body that captured anything at all` 抽走日期
+得到 `Until the lift refused a body` —— 剩下的是个没有起点的从句，读者不知道"until 什么"。
+所以判据不是"这一行像不像日期"，是**先问这个状态是被什么界定的**，再决定日期换成什么。
+
+取法：本族 82 行按文件轮转，从 `test/tools/check-no-algo.mjs:33` 与
+`test/tools/opt-cost/measure.mjs:162` 起，命中多的文件先占（`transforms.plan.toml` 14 行、
+`effects_kept.plan.toml` 8 行、`showcase_s2.plan.toml` 5 行……），同一文件内按行号推进，取满
+30 行。派工里点名的第三个起点 `test/tools/check-vjp-parity.mjs:15` 是 `before 2026-11-14`，是
+`until` 的镜像形状；按下面这条判据它不是本族成员（本族只收 `until/till/since/as of`），
+**它不是本批的一行，也没有被改**，下一批若要把 `before/after` 并入这一族，它是那一批的第一行。
+
+| 类 | 界定的东西 | 行 | 改法 | 例（改前 → 改后） |
+|---|---|---:|---|---|
+| **a** | 一条裁定 | 5 | 留裁定、去日期；裁定本来就在同一从句里被引用（`design principles 3.5 (198)`、`9.5`、引号里的原话） | `Refused since 2026-11-16: the closure is bound to a name…` → `Refused: the closure is bound to a name…`（下一行就是 3.5 (198)） |
+| **b** | 一个提交 | 3 | 换成那个提交在树里的**名字**，不写 sha | `since the 2026-11-22 move` → `after the move into src/stdlib`；`until 2026-11-22` → `until the move into src/`（`10c9d41558`；`under cxx::` 是 `3750540914`） |
+| **c** | 代码现状 | 22 | 日期换成"那句代码事实"：上一句已经说了现在的代码是什么，日期是它的期限 | `Until 2026-11-04 it passed the operand instead` → `It passed the operand instead`（上一句已说它现在从 `sa` 起）；`The first list read … until 2026-11-18: that was the creation order` → `The first list read … -- the creation order`；`1. until 2026-11-04 it pinned a crash` → `1. it first pinned a crash`（编号表里 2 是 `then`、3 是 `now`） |
+| **d** | 只有"从某天起没人动过" | 0 | —— | 见下 |
+
+**d 是 0 行，不是没找。** 30 行逐行看下来，每一行的段落里都另有一个坐标：一句裁定、一个提交、
+或者"现在的代码是什么"——这正是机械删日期会把句子弄坏、而重写总能落地的同一个原因（日期不是
+唯一的信息，它只是那句话里最省事的写法）。所以本批没有"列出来不改"的行；真出现只有日期一个
+坐标的句子（例如"从某天起没人动过，我也说不出为什么"），它才该进 d，且必须写明为什么没有第二个
+坐标可用。
+
+**82 里有 5 行不是状态边界**（判据只认"边界词与日期在同一从句里"，这 5 行的边界词与日期互不相干）：
+
+| 位置 | 是什么 | 归哪一族 |
+|---|---|---|
+| `test/plans/feat/compile/transforms.plan.toml:1474` | `since no signature of mk is read` 是因果连词；日期在页名 `internal/reports/2026-11-04-what-the-transpose-batch-measured.cn.md` 里 | 页名 |
+| `test/plans/feat/compile/transforms.plan.toml:2546` | `since exp(y) was a recomputation` 是因果连词 | 其余 |
+| `test/plans/feat/modules/nn.plan.toml:1319` | 日期在页名 `internal/reviews/2026-11-06-who-roots-a-program-a-pass-holds-while-a-call-runs.cn.md` 里；`until` 挂在 `segfaulted until a C++ holder rooted its program` 上，没有日期 | 页名 |
+| `test/plans/feat/opt/splice_place.plan.toml:168` | 日期在页名 `internal/reviews/2026-11-19-the-0.2.45-blocker-list-by-severity.cn.md` 里 | 页名 |
+| `test/plans/probe/refleak.plan.toml:148` | `author review 2026-11-17, item 10` 是有日期的决定；`until` 挂在 `until the run's own exit disposes it` 上，没有日期 | 有日期的决定 |
+
+反方向也有一行：`test/plans/perf/startup.plan.toml:115` 的 `rounded up to the next 500 ms` 里的
+`up to` 让"边界词+日期"多算了一行，它是读数。所以**字面 82 行、判定 77 行、批 30 行、剩 47 行**；
+批 3 之后字面读数是 52，其中 5 行是上表那 5 行，剩 47 行要重写。
+
+### 读数与自测
+
+| 项 | 批 3 之前 | 批 3 之后 |
+|---|---|---|
+| `node scripts/check-process-traces.mjs --root .` | **604**（6336 文件 / 167452 注释行），exit 1 | **574**（6336 文件 / 167452 注释行），exit 1 |
+| `date` 一族 | 507 | 477 |
+| 状态边界（字面 / 判定） | 82 / 77 | 52 / 48（47 行 + `startup.plan.toml:115` 那 1 行读数） |
+| `node --test scripts/check-process-traces.test.mjs` | 8/8 | 8/8 |
+
+文件数与注释行数两侧相同，说明这一批只动了词、没有动结构。接缝十模式扫全树：九个计数完全相同，
+第十个（`until|since|as of` 紧跟标点）**少一处**，位置正是本批改过的
+`test/tools/opt-cost/measure.mjs:162`（原文 `std::cxx::fold since).` 的省略式 `since`），
+**新增 0 处** —— 这也正好是这把接缝尺的阳性对照：它只在我动过的行上动了。改动 34 行逐行比词，
+丢掉的词只有日期本身（`until`/`since`/`2026`/`11`/`04`）与三处被重写的连接词
+（`it was … and`、`that was`、`before`），没有丢任何一句的主张。
+
+`node scripts/check-process-traces.mjs` 一个字节没动；9 个改过的计划仍能解析（430 条用例）。
+
+### 没写进注释的东西
+
+**没有把日期换成 sha。** b 类的三个提交在树里都有名字（`the move into src/`、`after the move`、
+`under cxx::`），名字是读者能在代码里查的东西；sha 答的是"这条读数是哪棵树上的"，不是"这个状态
+被什么界定"，而且检查器本来就拒 `commit <sha>` 与反引号里的 sha，裸写只是把同一个习惯换个安静
+的字号。两个 id 在批 3 的提交正文与本页。
+
+### 剩下的
+
+- 本族还剩 47 行（外加 5 行不属于本族），判法照第四节与本节；
+- `test/plans/feat/opt/splice_place.plan.toml:48` 改掉的那句话，在 `:57` 与 `:66` 还有两份一模一样的
+  （`The context argument is a Ref handle since …`）；抽样只抽到一份，另两份**按同一句改法**即可，
+  本批没动它们，是为了让"30 行"这个数可核。
