@@ -12,7 +12,7 @@
  * `f17('ab', 1.5) % 1000` either way, so the sixteen lines the program prints and the
  * `direct_calls` reading these entries guard are the same readings.
  *
- * What this entry guards, and what it does not (measured 2026-11-15 on 6c64f2042):
+ * What this entry guards, and what it does not (measured on 6c64f2042):
  *
  *   - it guards that `std::cxx::fold std::cxx::inline` still inlines: `direct_calls` reads 24
  *     with no pass and 3 under the pair (`std::stats`), so a pipeline that stops inlining turns

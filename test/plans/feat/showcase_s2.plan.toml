@@ -113,7 +113,7 @@ timeout_ms = 60000
 # is part of what is pinned, not formatting noise. Every element is exact in binary floating point,
 # so this is compared exactly and not to a tolerance.
 #
-# Measured 2026-11-04 on the cut tree (`integ3/exclude`, tree `<home>/camel-work/reds`, 1 m
+# Measured on the cut tree (`integ3/exclude`, tree `<home>/camel-work/reds`, 1 m
 # load 14-17), exit 0:
 [[tests]]
 name = "first_step.tensor_vjp_answers_the_step"

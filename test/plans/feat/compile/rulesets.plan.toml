@@ -246,7 +246,7 @@ timeout_ms = 20000
 # so a walk in id order meets `(x * 5.0) * 2.0` before the `5.0` inside it and refuses with the
 # reading `REINTERP vmap function=h skip=body construct=- uri=:op/mul_d asked=1 found=1` --
 # `transforms: vmap has no rule for ':op/mul_d' (an operand was not lifted)`, which is the red this
-# entry goes to when the order half is taken away again (measured 2026-11-14 on this branch with
+# entry goes to when the order half is taken away again (measured on this branch with
 # `dependencyOrderOf` swapped back for `0 .. nodeCount()` in `vmap.cpp#buildVmapGraph`).
 [[tests]]
 name = "vmap_rewritten_body_after_std_opt"
@@ -517,7 +517,7 @@ timeout_ms = 20000
 # to the batch of one row (`liftConstant`), and one row is answered where the caller's batch has as
 # many rows as it has -- `println(vmap(width)(planes))` prints `[2]` after the pass where the same
 # program with no pass prints `[2, 2]`. It is not the pass that does this: `vmap((x: float) => 3.0)`
-# over a `float[4]` prints `[3.0]` with no pass at all (measured 2026-11-14 on b72d59535, and on
+# over a `float[4]` prints `[3.0]` with no pass at all (measured on b72d59535, and on
 # after the walk was put in dependency order). A differential pair here would compare
 # two answers that differ for that reason and could never be green, so the case is left out of the
 # pair and the defect is left where it is: it is not an order, and answering it is
@@ -591,7 +591,7 @@ timeout_ms = 120000
 # twenty-row table reads twelve.
 [[tests]]
 name = "ruleset_index_table_is_the_whole_index"
-desc = "The whole `rulesets.vmap` table, twenty-seven rows in key order, printed by a program that does nothing but import the ruleset (so no transform adds a reading of its own): `*/2`, `+/2`, `-/1`, `-/2`, `//2`, `argmax/1` twice (the whole form and the axis form of one name, told apart by the ports), `argmin/1` twice, `concat/2`, `dim/1`, `index_into/2`, `matmul/2`, `max/1` twice, `mean/1` twice, `min/1` twice, `mul_tensor/2`, `permute/1`, `reshape/1`, `sum/1` twice, `transpose/1`, `unsqueeze/1`, `where/3` -- twenty-one keys and twenty-seven rows, each with the rule and the callee the index holds. A reduction over an axis is written with the whole reduction's name and the axis in `<>` (2026-11-05), so the six axis laws are filed under the six whole-reduction keys."
+desc = "The whole `rulesets.vmap` table, twenty-seven rows in key order, printed by a program that does nothing but import the ruleset (so no transform adds a reading of its own): `*/2`, `+/2`, `-/1`, `-/2`, `//2`, `argmax/1` twice (the whole form and the axis form of one name, told apart by the ports), `argmin/1` twice, `concat/2`, `dim/1`, `index_into/2`, `matmul/2`, `max/1` twice, `mean/1` twice, `min/1` twice, `mul_tensor/2`, `permute/1`, `reshape/1`, `sum/1` twice, `transpose/1`, `unsqueeze/1`, `where/3` -- twenty-one keys and twenty-seven rows, each with the rule and the callee the index holds. A reduction over an axis is written with the whole reduction's name and the axis in `<>`, so the six axis laws are filed under the six whole-reduction keys."
 kind = "behavior"
 case = "../../../cases/compile/rulesets/ruleset_index_only.cml"
 args = ["${case}", "std::rulesets"]

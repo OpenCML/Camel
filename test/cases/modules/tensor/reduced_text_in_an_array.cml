@@ -14,7 +14,7 @@
  * compiler that leaves the buffer alone prints these values correctly with the view still pointing
  * at it. What is pinned here is the text the language promises, on both platforms; the read of the
  * dead frame has its one reading on the Windows leg, where a check's report stopped inside a bf16
- * counterexample (2026-11-02, `rules.library_verdicts_are_exactly_these`).
+ * counterexample (`rules.library_verdicts_are_exactly_these`).
  */
 
 func main() => int sync {

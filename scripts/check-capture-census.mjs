@@ -47,7 +47,7 @@
  * date counted one more cell -- and one more capture port -- per generator body, which is why an
  * older tree's `capture_ports_generator` is not this tree's reading and the two are never
  * subtracted (the header's rule about `list_sha` is the same rule). The language author ruled
- * (2026-11-16, item 4 of the answer on the generator page): that state is the generator's
+ * (item 4 of the answer on the generator page): that state is the generator's
  * implementation and not `var` semantics, it must not be counted among the by-reference captures
  * that remain, and the merge must report the two kinds apart.
  *

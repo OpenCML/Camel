@@ -17,7 +17,7 @@
 // (`modules/transforms/split.cpp#residualsOf`; the lane that fixed it is).
 //
 // The wall is down: `lin` reads its own parameter now and the two lines below are what the program
-// prints (measured 2026-11-04 on the cut tree, exit 0). The mark went with the wall, and this file
+// prints (measured on the cut tree, exit 0). The mark went with the wall, and this file
 // stays as the positive entry that `grad_across_a_call` reads through the other door -- that one asks
 // `grad(g)`, which is `transpose(split(jvp(f)))`, this one asks `vjp(g)` and prints the value and the
 // pullback apart. The plan row is in `test/plans/feat/compile/transforms.plan.toml`.

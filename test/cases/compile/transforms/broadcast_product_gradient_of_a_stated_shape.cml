@@ -17,7 +17,7 @@
 // **This case is the clock for a plausible wrong fix.** `mul_tensor_t` could be written to read the
 // operand each side is *not* answering for -- `sum_to(ct * w, w)` for `x` -- which is right exactly
 // while the two shapes are equal and is what a reader reaching for "read a value the caller carries"
-// will try. Measured 2026-11-04 on a broadcasting product, that spelling answers
+// will try. Measured on a broadcasting product, that spelling answers
 //
 //     d/dx numel=1 d/dx=[6.0]            d/dw numel=3 d/dw=[1.0, 2.0, 3.0]
 //

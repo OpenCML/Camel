@@ -2644,7 +2644,7 @@ export LD_LIBRARY_PATH='$($cfg.hostLibStdCxxDir)'":`$C/lib:`${LD_LIBRARY_PATH:-}
 echo "[camel-remote] libstdc++: a current build carries libs/libstdc++.so.6 and finds it by its own rpath; this export is for older builds only"
 # CMAKE_BUILD_PARALLEL_LEVEL is not set here any more. It is a slot budget, and the slot number is
 # only known after the lock below is taken: a flat 24 for every run is how two lawful builds filled
-# 48 compile jobs on a 32-core host (2026-11-23, load 88).
+# 48 compile jobs on a 32-core host (load 88).
 export CAMEL_HOME="`$R/out/latest"
 export CAMEL_TEST_TMP="`$HOME/$($cfg.hostWorkRoot)/$name-test-tmp"
 # A failed test's own output is echoed to the console only under this variable

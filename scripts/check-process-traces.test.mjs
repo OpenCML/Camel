@@ -48,6 +48,25 @@ const cases = [
     // The name is what the other entries cite and what a reader quotes, so a trace in one is refused
     // where it was written, not only in the `desc` beside it.
     ['test', 'plans/feat/mm/named.plan.toml', '[[tests]]\nname = "extract_D-1123-78"\ndesc = "Two writings of `a + 1` are one value."\n'],
+    // A calendar date is the record of *when*, and the four ways a comment spends one -- each line
+    // below is one of them, taken from the tree where it was found. A date is not refused because it
+    // is a date: it is refused because the sentence around it says what the project did or measured
+    // on that day, and a reader a year later cannot tell which tree the claim stood on. The next
+    // reader who wants the count lower meets these four cases: they are here so that the change is
+    // made in the comments, where the claim stays and the day goes, and not by teaching the pattern
+    // that a date is not its business.
+    //
+    // A status that ended on the day.
+    ['test', 'plans/feat/compile/ended.plan.toml', '[[test]]\nname = "k"\n# This case was marked known_fail until 2026-11-04, against the rule.\n'],
+    // A reading taken on the day.
+    ['test', 'cases/compile/loaded_host.cml', '// Measured 2026-11-04 on a loaded host (1 m load 20.8-21.0): value= 3.0.\n'],
+    // A rule dated instead of stated -- the day stands where the rule's content belongs.
+    ['test', 'cases/compile/dated_rule.cml', '// The transposed product is a Gemm instead of a MatMul beside a Transpose (rule of 2026-10-26).\n'],
+    // An incident of the tooling on the day.
+    ['internal/tools', 'row-drop.test.ps1', '# A bulk re-record on a tree missing seven `.cml` files deleted their rows on 2026-11-17.\n'],
+    // A date that is a segment of a page name: the name is how a later comment cites the page, so
+    // the day outlives the page.
+    ['test', 'plans/feat/opt/page.plan.toml', '[[test]]\nname = "p"\ndesc = "Difference test for the page `2026-11-15-can-a-commit-depend-on-unrelated-writes`."\n'],
 ];
 
 const clean = [
@@ -57,6 +76,12 @@ const clean = [
     // under `...` in a quoted placeholder. That is the layout this script works on, not a record of
     // where somebody worked; only a concrete `/home/<name>/` prefix is the record.
     ['internal/tools', 'camel-cleanup.laid-out.sh', '# The root is $HOME/camel-work/tmp and the bare is ~/camel-work/Camel.git.\n'],
+    // The same two lines the date cases refuse, with the day gone and the claim kept: what a comment
+    // looks like after the record is removed. A test that only plants traces never says what the
+    // clean side of a date is, and the answer is not "a date that looks harmless" -- it is the day
+    // deleted, which is why these two pass and the cases above do not.
+    ['test', 'plans/feat/compile/rewritten.plan.toml', '[[test]]\nname = "k"\n# This case passes against the rule: it cannot pass with a mark, an owner and a reason.\n'],
+    ['internal/tools', 'camel-cleanup.measured.sh', '# 48 compile jobs on a 32-core host (load 88).\n# Measured on a loaded host (1 m load 20.8-21.0): 47750 ms of CPU.\n'],
 ];
 
 function tree(files) {

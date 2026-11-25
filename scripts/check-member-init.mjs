@@ -25,7 +25,7 @@
 // that reading is what the fast layer runs. It asks whether any constructor names the member, so it
 // answers a weaker question than the compiler's, and it reports the members whose value would be
 // indeterminate -- scalars, pointers, enums, bit-fields; a class-type member is constructed by its
-// own default constructor and is left to the compiler's reading. Measured 2026-11-20 on this tree:
+// own default constructor and is left to the compiler's reading. Measured on this tree:
 // before the sweep the compiler named 56 sites and the text read 12, the text read being a subset
 // of the compiler's rows apart from one member the compiler reaches through a constructor defined
 // in a .cpp; after the sweep both name none.

@@ -100,7 +100,7 @@ assert(text.includes('a `Ref`'), 'and it names the ways out: ' + text)
 }
 """
 timeout_ms = 20000
-# The same measurement for the pair above, on the same tree (2026-11-15, 6c64f2042):
+# The same measurement for the pair above, on the same tree (6c64f2042):
 #
 #   1. `rc04_seed72` is refused by the state rule before any pass runs -- `camel <case> std::gir`
 #      exits 1 and prints no graph at all -- so neither of the two entries above exercises the

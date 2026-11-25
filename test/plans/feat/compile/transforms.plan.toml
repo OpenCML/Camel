@@ -140,7 +140,7 @@ timeout_ms = 20000
 #    cannot answer, and it read back as `float` and summed arrays with `:op/add_d`. This case is the
 #    program that TODO was waiting for.
 #
-# Measured 2026-11-04 on a loaded host (1 m load 20.8-21.0): `value= 3.0` and
+# Measured on a loaded host (1 m load 20.8-21.0): `value= 3.0` and
 # `grad= [1.0, 1.0]` on `std::nvm` and on `std::fvm`, and the reading
 # `REINTERP split function=jvp_of_g ... residuals=2 loop=1 tape=5 invariants=0 after=1`
 # Of the two `transpose_loop_escape` cases that were red beside it, `second_state_of_the_same_loop`
@@ -574,7 +574,7 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "norma
 timeout_ms = 20000
 
 # What the `[]` above **does** when it meets a real array -- the reading that decides whether the
-# answer with no stated extent is a loud refusal or a quiet wrong number. Measured 2026-11-04 on the
+# answer with no stated extent is a loud refusal or a quiet wrong number. Measured on the
 # same tree: it is 1 dimension of length 0 (`shape(dx)= [0]`, not a rank-zero array, which would act as
 # the scalar `0.0`), and both `dx * x` and `dx + x` are refused by name at the line that asked --
 # `Array shape mismatch in 'multiply': cannot broadcast [0] with [3].` The one place that answers a
@@ -2847,7 +2847,7 @@ timeout_ms = 20000
 
 [[tests]]
 name = "transpose_of_a_sum_over_a_parameter"
-desc = "The transpose of `f(xs: float[3]) = sum(xs)`: the one number`''`s cotangent is that number at every position of the operand''s shape, and the shape is in the **type**, so the law is handed it -- `rulesets/transpose.cml#sum_from_type_t` names one port more than `tensor:sum` has, the walk offers the operands'' own types with the extents `extent_of`''s rule reads appended, and `back(1.0)` answers `([1.0, 1.0, 1.0])`. Measured 2026-11-04 on the base tree this program stopped at `TRANSPOSE function=total skip=rule uri=tensor:sum reason=unbound`: the index had a law, and the law was written for a call the program did not make. The extents the law reads are not a value of the program -- no array stands in for the operand ."
+desc = "The transpose of `f(xs: float[3]) = sum(xs)`: the one number`''`s cotangent is that number at every position of the operand''s shape, and the shape is in the **type**, so the law is handed it -- `rulesets/transpose.cml#sum_from_type_t` names one port more than `tensor:sum` has, the walk offers the operands'' own types with the extents `extent_of`''s rule reads appended, and `back(1.0)` answers `([1.0, 1.0, 1.0])`. Measured on the base tree this program stopped at `TRANSPOSE function=total skip=rule uri=tensor:sum reason=unbound`: the index had a law, and the law was written for a call the program did not make. The extents the law reads are not a value of the program -- no array stands in for the operand ."
 kind = "behavior"
 case = "../../../cases/compile/transforms/transpose_of_a_sum_over_a_parameter.cml"
 args = ["--trace", "transforms", "${case}", "${backend}"]
@@ -3058,7 +3058,7 @@ timeout_ms = 20000
 # pullback separately (`g(3) = 18.0  g'(3) = 12.0`). Neither can drift alone.
 [[tests]]
 name = "cross_call_gradient_is_not_zero"
-desc = "The gradient across a call, read through `vjp` and pinned as the number it must answer: `f(x) = 2.0 * x`, `g(x) = f(x) * x`, so `g(3) = 18` and `g'(3) = 4x = 12`, while the same arithmetic written flat (`flat`) answers 12.0 in the same run and must keep answering it. What is guarded is that the cross-call gradient is not zero: the case landed as a `known_fail` pinning `g'(3) = 0.0` (the cut listed the lifted graph's tangent parameter as a residual, `modules/transforms/split.cpp#residualsOf`), `grad_across_a_call` replaced its row when the fix landed, and it is kept here as the positive regression beside it -- the same defect through the `vjp` door. Measured 2026-11-04 on the cut tree: `g(3) = 18.0  g'(3) = 12.0` and `flat(3) = 18.0  flat'(3) = 12.0`, exit 0."
+desc = "The gradient across a call, read through `vjp` and pinned as the number it must answer: `f(x) = 2.0 * x`, `g(x) = f(x) * x`, so `g(3) = 18` and `g'(3) = 4x = 12`, while the same arithmetic written flat (`flat`) answers 12.0 in the same run and must keep answering it. What is guarded is that the cross-call gradient is not zero: the case landed as a `known_fail` pinning `g'(3) = 0.0` (the cut listed the lifted graph's tangent parameter as a residual, `modules/transforms/split.cpp#residualsOf`), `grad_across_a_call` replaced its row when the fix landed, and it is kept here as the positive regression beside it -- the same defect through the `vjp` door. Measured on the cut tree: `g(3) = 18.0  g'(3) = 12.0` and `flat(3) = 18.0  flat'(3) = 12.0`, exit 0."
 kind = "behavior"
 case = "../../../cases/compile/transforms/cross_call_gradient_is_not_zero.cml"
 args = ["${case}", "${backend}"]

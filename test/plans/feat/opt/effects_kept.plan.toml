@@ -276,7 +276,7 @@ args = ["${case}", "std::jgir", "std::nop"]
 backends = ["nvm"]
 expect_exit = 0
 expect_stdout_contains = ["\"exit\": null"]
-# An effect whose place in the chain was the GATE inlined in front of it (2026-11-01,).
+# An effect whose place in the chain was the GATE inlined in front of it.
 #
 # `std::cxx::inline` splices an inlined body's tail as a GATE, and `std::cxx::fold` prunes the branch
 # whose chain entered that arm. The gate was left with no wait, and the commit dissolved it as "plain

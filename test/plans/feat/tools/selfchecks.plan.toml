@@ -19,7 +19,7 @@ desc = "The tooling's own tests: every self-check under test/tools, internal/too
 #     entry's `skip_unless`, and it is also why these entries carry `case` = the self-check and the
 #     bridge in `args` -- the name the ledger has to see is the file the entry is about.
 #
-# The gate host has no PowerShell: measured 2026-11-25 on the Linux build host, `uname -s` says
+# The gate host has no PowerShell: measured on the Linux build host, `uname -s` says
 # `Linux` and `command -v pwsh` prints nothing (it prints `/usr/bin/node` and `/usr/bin/git` for the
 # other two). So on today's gate these nineteen **skip**, and a skip is neither a pass nor a red:
 # `[SUMMARY]` counts it on its own line and the reason names the host. They run for real on a host

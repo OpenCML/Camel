@@ -202,7 +202,7 @@ name = "gc_pacing.churn_prl"
 #
 # Paced, the byte high-water mark this arm used to bound is a schedule and not the pacing: how much
 # is allocated between asking for a collection at a safepoint and a thread reaching the next one is
-# what the machine decided. Measured on the Linux host (2026-10-24, 32 threads, 1-minute load
+# what the machine decided. Measured on the Linux host (32 threads, 1-minute load
 #  110-127) with eight copies of this case at once, which is the condition named:
 #
 #   paced:        peak 7200000 B, minor 300   (six of the eight copies)

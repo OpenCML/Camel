@@ -43,8 +43,8 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 # entry at two run lengths, nine perf plans in one run at -Jobs 8 and then those plans
 # beside feat/mm/gc and two gpu plans:
 #
-#   5.17 s of CPU / 14.45 s wall   (2026-10-24, 32 tests in the run)
-#   5.10 s of CPU / 11.35 s wall   (2026-10-24, the same plans and more beside them)
+#   5.17 s of CPU / 14.45 s wall   (32 tests in the run)
+#   5.10 s of CPU / 11.35 s wall   (the same plans and more beside them)
 #
 # The ten timed iterations are one fixed amount of work, so the reading is this entry's own CPU
 # against its work. The CPU figure spreads 1.4 % between the two windows where the wall clock

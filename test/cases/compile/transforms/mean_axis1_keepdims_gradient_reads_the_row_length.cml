@@ -4,7 +4,7 @@
  * `jvp_mean_axis` (`stdlib/rulesets/jvp.cml#jvp_mean_axis`) writes the tangent as
  * `dxs * (1 / shape(xs)[axis])`, so the tangent keeps the *operand's* shape while the reduced
  * output's tangent is the reduced one. At `keepdims = false` on a non-last axis the two cannot
- * broadcast and the run stops in the tensor kernel -- measured 2026-11-04 on
+ * broadcast and the run stops in the tensor kernel -- measured on
  * `mean<1, false>(x)`: `TensorDimensionMismatch: Array shape mismatch in 'multiply':
  * cannot broadcast [2, 3] with [2]`. With `keepdims = true` and a weight of the output's own
  * shape the two do broadcast and the numbers are CORRECT, which is what this file pins: the law

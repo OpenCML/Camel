@@ -202,7 +202,7 @@ function listCases(targets, layered, tier) {
         // The runner paints `[ERROR]` in red, so the line that carries the refusal starts with an
         // escape sequence and a plain `^\[ERROR\]` match sees nothing. Stripping is not tidiness:
         // without it this branch never fires and the mismatch falls back to the sentence below --
-        // measured 2026-11-25 on an assembled old tree, where the first version of this branch did
+        // measured on an assembled old tree, where the first version of this branch did
         // exactly that and called a run that had said `unknown option '--list-cases'` a refusal of
         // this selection.
         const plain = text.replace(/\x1b\[[0-9;]*[A-Za-z]/g, '')

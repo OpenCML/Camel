@@ -46,9 +46,9 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 # amount of profiled work. Measured on the Linux host (32 threads; the 1-minute load read
 # 76.41/76.92/80.97 and 85.69/91.25/84.56), the entry at two run lengths:
 #
-#   36.53 s of CPU / 81.03 s wall   (2026-10-24, nine perf plans in one run at -Jobs 8)
-#   35.91 s of CPU / 69.50 s wall   (2026-10-24, those plans beside feat/mm/gc and two gpu)
-#   37.40 s of CPU / 86.05 s wall   (2026-10-24, the gate run of this sweep, 109 tests)
+#   36.53 s of CPU / 81.03 s wall   (nine perf plans in one run at -Jobs 8)
+#   35.91 s of CPU / 69.50 s wall   (those plans beside feat/mm/gc and two gpu)
+#   37.40 s of CPU / 86.05 s wall   (the gate run of this sweep, 109 tests)
 #
 # The CPU figure spreads 1.7-4.0 % across the three windows where the wall clock spreads 17-24 %.
 # The budget is 61 s: 1.63x the highest reading rounded up to the next 1000 ms -- the headroom the

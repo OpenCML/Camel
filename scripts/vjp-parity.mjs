@@ -138,7 +138,7 @@ const WRITTEN_OPERATIONS = [
 // The six axis reductions are one shape of the question: their URI keeps an identity of the
 // implementation (`tensor:sum_axis`), and the one spelling a program writes is the whole
 // reduction's name with the axis and the flag in `<>` (`sum<axis, keepdims>(xs)`), so their laws
-// are filed under `sum` at the one operand the parentheses carry (2026-11-05).
+// are filed under `sum` at the one operand the parentheses carry.
 const RULE_KEY_EXCEPTIONS = [
     { uri: ':op/idx_arr', head: 'index_into', arity: 2 },
     { uri: 'tensor:argmax_axis', head: 'argmax', arity: 1 },

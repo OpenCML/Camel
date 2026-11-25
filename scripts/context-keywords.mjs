@@ -155,7 +155,7 @@ export const CONTEXT_KEYWORDS = [
         group: 'clause',
         zh: '紧跟 `func` 之后、后面是一个运算符时（`func operator +(a: V, b: V): V`）',
         en: "directly after `func` when an operator follows (`func operator +(a: V, b: V): V`)",
-        // (2026-11-23, `for` an overloadable operator) turned this reading from one
+        // (`for` an overloadable operator) turned this reading from one
         // `return` into the guard below, so it could also take the word `for` as the operator. The
         // word is read in the same place by the same function (`atOperatorName`, parser.cpp); only
         // the line that says so changed. The citation follows the line the parser has, and the

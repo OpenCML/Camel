@@ -92,7 +92,7 @@ expect_output_contains = ["'k' is immutable and cannot be passed to a var parame
 #   - a closure written at a call's argument position is NOT reported when the callee's result type
 #     can hold a function (3.5, 198 gives that shape the rest of the scope too). `scanClosureLastUses`
 #     reads the GCT before any body is built, so it cannot resolve a callee, and the shape falls to
-#     the "used by that call" end. Measured 2026-11-16 on this tree, and it is the shape the defect
+#     the "used by that call" end. Measured on this tree, and it is the shape the defect
 #     the tuple and array entries pin is still open in:
 #
 #         func take(f: () => int): () => int { return f }

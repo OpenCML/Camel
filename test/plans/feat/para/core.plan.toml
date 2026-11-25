@@ -26,7 +26,7 @@ args = ["${case}", "${run_prl}"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 # 60 s: what this entry is measured by is the process's own CPU time, and nearly all of that CPU is
-# the PRL thread pool starting and stopping, not the hash. Measured on this host (2026-11-04, load
+# the PRL thread pool starting and stopping, not the hash. Measured on this host (load
 # 9.5-14, the same binary the gate uses): the run is 0.17-0.26 s of wall clock and hashes 11117
 # bytes in 32 chunks in 0.09-0.22 s by the case's own clock, while its CPU reads 1.7-3.9 s -- and
 # the same program on `std::nvm`, with no pool, is 0.11 s of wall and 0.11 s of CPU. So that figure

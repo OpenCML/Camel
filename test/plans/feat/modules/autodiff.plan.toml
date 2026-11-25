@@ -2594,8 +2594,8 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 # margin was reading the neighbours. The CPU figures behind the budget below, measured on the Linux
 # host (32 threads, never quiet that evening: the 1-minute load read 67-98 beside the runs):
 #
-#   943.31 s of CPU / 127.5 s wall   (2026-10-23, load probe beside it: 67-98)
-#   979.37 s of CPU / 165.5 s wall   (2026-10-23, the same commit, -Jobs 8)
+#   943.31 s of CPU / 127.5 s wall   (load probe beside it: 67-98)
+#   979.37 s of CPU / 165.5 s wall   (the same commit, -Jobs 8)
 #
 # A 3.8% spread across two runs at different loads, where the wall clocks differ by 30%. The budget
 # is 1600 s: 1.63x the higher reading, which leaves the tick of the reading (10 ms) and a third of
@@ -2638,9 +2638,9 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 # Measured on the Linux host (32 threads; the 1-minute load read 83-162 across the runs, so the
 # machine was 3-5x oversubscribed):
 #
-#   44.33 s of CPU / 32.45 s wall   (2026-10-24, the four referees of this plan together at -Jobs 8)
-#   47.15 s of CPU / 38.54 s wall   (2026-10-24, same)
-#   52.95 s of CPU / 50.59 s wall   (2026-10-24, this plan in full, 199 tests at -Jobs 8)
+#   44.33 s of CPU / 32.45 s wall   (the four referees of this plan together at -Jobs 8)
+#   47.15 s of CPU / 38.54 s wall   (same)
+#   52.95 s of CPU / 50.59 s wall   (this plan in full, 199 tests at -Jobs 8)
 #
 # A 19% spread in the CPU figure against 56% in the wall clock. The budget is 80 s: 1.63x the higher
 # of the two readings taken to set it (47.15 s, rounded up), the same headroom as
@@ -2669,9 +2669,9 @@ expect_stdout_contains = ["verdict resnetbn seed=benchmark activation=tanh: PASS
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 # CPU time, by the rule quoted on resnet_gradient_smooth_vs_torch64 above; measured with it:
 #
-#   52.27 s of CPU / 36.99 s wall   (2026-10-24, -Jobs 8)
-#   54.27 s of CPU / 47.09 s wall   (2026-10-24, -Jobs 8)
-#   52.63 s of CPU / 38.84 s wall   (2026-10-24, this plan in full at -Jobs 8)
+#   52.27 s of CPU / 36.99 s wall   (-Jobs 8)
+#   54.27 s of CPU / 47.09 s wall   (-Jobs 8)
+#   52.63 s of CPU / 38.84 s wall   (this plan in full at -Jobs 8)
 #
 # A 4% spread in the CPU figure against 27% in the wall clock. The budget is 90 s: 1.63x the higher
 # of the two readings taken to set it (54.27 s, rounded up) and 1.71x the busiest of the three. The
@@ -2699,7 +2699,7 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 #
 #   438.40 s of CPU / 161.99 s wall
 #   588.67 s of CPU / 289.13 s wall
-#   633.12 s of CPU / 381.65 s wall   (2026-10-24, this plan in full, 199 tests at -Jobs 8)
+#   633.12 s of CPU / 381.65 s wall   (this plan in full, 199 tests at -Jobs 8)
 #
 # The CPU figure itself moves with the host's load here (44% between those windows, against 19% for
 # the tanh referee above): the thread pool of every Camel run this referee starts spends more CPU
@@ -2728,9 +2728,9 @@ expect_stdout_contains = ["verdict resnetbn seed=benchmark activation=relu: PASS
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 # CPU time, as above and measured beside it:
 #
-#    916.77 s of CPU / 328.90 s wall   (2026-10-24, -Jobs 8)
-#   1331.68 s of CPU / 710.70 s wall   (2026-10-24, -Jobs 8)
-#   1261.39 s of CPU / 744.96 s wall   (2026-10-24, this plan in full at -Jobs 8)
+#    916.77 s of CPU / 328.90 s wall   (-Jobs 8)
+#   1331.68 s of CPU / 710.70 s wall   (-Jobs 8)
+#   1261.39 s of CPU / 744.96 s wall   (this plan in full at -Jobs 8)
 #
 # The same moving figure as the resnet kinks above (45% between the windows, the same drifting
 # thread pool, against 126% of wall-clock movement). The budget again comes from the higher reading

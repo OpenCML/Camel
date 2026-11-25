@@ -21,9 +21,9 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 # feat/modules/autodiff and the entries of perf/step_budget state. Measured on the 32-core host
 # of this project, the plan alone under camel-remote -Jobs 8:
 #
-#   86560 ms of CPU / 91858 ms wall  (2026-10-24, the first window in which every cell ran)
-#   82180 ms of CPU / 51220 ms wall  (2026-10-24, the run that turned this entry green)
-#   83670 ms of CPU / 42820 ms wall  (2026-10-27, the measurement in force: every cell reaches
+#   86560 ms of CPU / 91858 ms wall  (the first window in which every cell ran)
+#   82180 ms of CPU / 51220 ms wall  (the run that turned this entry green)
+#   83670 ms of CPU / 42820 ms wall  (the measurement in force: every cell reaches
 #                                     the compiler again, 223 of them by failing)
 #
 # The budget is 150000 ms and is not re-derived from the newest reading: it keeps the margin the

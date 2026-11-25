@@ -420,7 +420,7 @@ function pageStem(name) {
 // a clean one. What stood here was `if (!existsSync(QUESTIONS_DIR) || !existsSync(REVIEWS_DIR))
 // return 0`, and on a tree without `reviews/` the half below printed no sentence at all: the gate
 // exited 0 on the index half alone, having read nothing about the question it exists to ask
-// (measured 2026-11-25 on a tree holding two pages in `internal/questions/` and no
+// (measured on a tree holding two pages in `internal/questions/` and no
 // `internal/reviews/`: exit 0, and the "no answered page is left" sentence was simply absent). The
 // script's other two modes already refuse an empty scope -- `--citations` exits 2 with "no citation
 // in N file(s): nothing was checked", the document walk exits 2 with "no Markdown document in the

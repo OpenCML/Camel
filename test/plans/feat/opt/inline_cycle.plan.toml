@@ -80,7 +80,7 @@ verify_script = """
 }
 """
 
-# What the three entries above measure today, and what they cannot (measured 2026-11-15 on
+# What the three entries above measure today, and what they cannot (measured on
 # 6c64f2042, the tree of this change):
 #
 #   1. `seed23_fold_inline` is refused by the state rule before any pass runs -- the call is

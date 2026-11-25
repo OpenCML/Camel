@@ -32,8 +32,8 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 # Measured on the Linux host (32 threads, shared with other worktrees and engines; the 1-minute load
 # read 76.41/76.92/80.97 in the first window and 85.69/91.25/84.56 in the second).
 #
-#   3.57 s of CPU / 6.80 s wall   (2026-10-24, the eleven slow plans of this sweep, 186 tests)
-#   3.22 s of CPU / 4.67 s wall   (2026-10-24, the same entry beside the collection fuzz runs)
+#   3.57 s of CPU / 6.80 s wall   (the eleven slow plans of this sweep, 186 tests)
+#   3.22 s of CPU / 4.67 s wall   (the same entry beside the collection fuzz runs)
 #
 # The CPU figure spreads 10.9 % between the windows where the wall clock spreads more. The budget is
 # 6 s: 1.63x the higher reading rounded up to the next 1000 ms -- the headroom the four resnet
