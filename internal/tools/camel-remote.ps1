@@ -2184,7 +2184,21 @@ echo "[camel-remote] --- ${checkName}: exit `$c ---"
 # --- the gpu layer: observed, never gating (see the header) -----------------
 echo '[camel-remote] --- $($gpuObservationName): $shownGpu ---'
 exec 5>/tmp/camel-host-test.lock
-if ! flock -w 1800 5; then
+# The wait says which second it is on, because a wait that says nothing is a wait the caller cannot
+# tell from a hang. The finish deadline after [SPLIT] is pushed out only by a line that carries a
+# reading -- a keep-alive does not (`Test-CamelRemoteReadingLine`) -- and this stage can sit here for
+# 1800 s, three times the default deadline. Waiting is not working: the observation is going to
+# happen, so it can say so every five seconds and the deadline keeps meaning "nothing has been
+# reported for that long".
+gpu_slot=0
+gpu_waited=0
+while [ "`$gpu_waited" -lt 1800 ]; do
+    if flock -n 5; then gpu_slot=1; break; fi
+    sleep 5
+    gpu_waited=`$(( gpu_waited + 5 ))
+    echo "[camel-remote] $($gpuObservationName): waiting for the host test slot (`$gpu_waited s of 1800)"
+done
+if [ "`$gpu_slot" -ne 1 ]; then
     # No slot is not a red: this observation decides nothing, so it says it did not read and goes.
     echo '[camel-remote] $($gpuObservationName): no host test slot within 1800 s, so the gpu layer was not read'
     echo "check=$($gpuObservationName) total=unknown pass=unknown fail=unknown skip=unknown red=[unknown] red_more=0 seconds=0 state=noslot mode=report"
