@@ -2,7 +2,7 @@ id = "runtime.oper_shape"
 order = 384
 tier = "fast"
 tags = ["feat", "runtime", "oper", "shape", "witness"]
-desc = "A conversion, a copy, a construction and a member read answer one shape whether the program writes the operator's call (`cast`, `copy`, `fill`, `access`, `access_key`) or the form the front end still builds (CAST, COPY, FILL, ACCS), because the classification asks the operator the node names and not its kind."
+desc = "A construction and a member read answer one shape whether the program writes the operator's call (`fill`, `access`, `access_key`) or the form the front end still builds (FILL, ACCS), because the classification asks the operator the node names and not its kind; a conversion and a copy have one form only, since the node kinds that wrote them are gone (CAST and COPY are `:op/cast` and `:op/copy` now)."
 # `test::oper_shape` prints one line per form the program uses, so the reading compares the two
 # writings of one operation instead of counting nodes: no program can see the classification, and a
 # back end's answer for it is a decision about the operator, which is what this plan pins.
@@ -21,12 +21,12 @@ desc = "A conversion, a copy, a construction and a member read answer one shape 
 # the record.
 [[tests]]
 name = "runtime.oper_shape.the_operator_and_the_kind_answer_one_shape"
-desc = "Eight forms, one shape each: the five operators of the four (two member reads, by position and by field name) and the three kinds the same program builds. A form that answers none is the classification back on the node kind."
+desc = "One shape each: the five operators of the four (two member reads, by position and by field name) and the two kinds the same program still builds (a construction and a member read). A form that answers none is the classification back on the node kind."
 kind = "behavior"
 case = "../../../cases/runtime/oper_shape/two_forms_one_shape.cml"
 args = ["${case}", "test::oper_shape"]
 expect_exit = 0
-expect_stdout_matches = ['\[OPER_SHAPE\] kind=ACCS shape=access', '\[OPER_SHAPE\] kind=CAST shape=conversion', '\[OPER_SHAPE\] kind=FILL shape=construction', '\[OPER_SHAPE\] oper=:op/access shape=access', '\[OPER_SHAPE\] oper=:op/access_key shape=access', '\[OPER_SHAPE\] oper=:op/cast shape=conversion', '\[OPER_SHAPE\] oper=:op/copy shape=clone', '\[OPER_SHAPE\] oper=:op/fill shape=construction']
+expect_stdout_matches = ['\[OPER_SHAPE\] kind=ACCS shape=access', '\[OPER_SHAPE\] kind=FILL shape=construction', '\[OPER_SHAPE\] oper=:op/access shape=access', '\[OPER_SHAPE\] oper=:op/access_key shape=access', '\[OPER_SHAPE\] oper=:op/cast shape=conversion', '\[OPER_SHAPE\] oper=:op/copy shape=clone', '\[OPER_SHAPE\] oper=:op/fill shape=construction']
 # A form answerable only as "not one of the four" is the revert this case exists for.
 expect_stdout_not_contains = ["shape=none", "not ok"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]

@@ -89,9 +89,20 @@ class Program final : public camel::core::rtdata::Object {
     /// The graphs a graph refers to, read in this program (graph.h, GCGraph::refs): the graph
     /// of FUNC node `ref`, and the graph a graph is written in. A loop names no graph -- it is its
     /// regions (design principles 3.10). nullptr where the id names no graph of the program.
-    GCGraph *calleeOf(const GCGraph &graph, gc_node_ref_t ref) const {
-        return this->graph(graph.calleeIdOf(ref));
+    ///
+    /// `graph` is the graph **as a value**: the identity a reader holds (`camel::graph::Graph`,
+    /// what a `CalleeRef` names and what a fact is anchored on), not a representation. The program
+    /// finds the version it holds of that value (`holds`) and reads the call out of it; a value the
+    /// program does not hold -- a draft, a graph of another program -- answers nullptr rather than
+    /// naming a graph by a number or by an address. This is the one place a reader hands over a
+    /// graph and gets a graph back without knowing which representation either one is.
+    GCGraph *calleeOf(const camel::graph::Graph &graph, gc_node_ref_t ref) const {
+        const GCGraph *held = heldGraph(graph);
+        return held == nullptr ? nullptr : this->graph(held->calleeIdOf(ref));
     }
+    /// True when `graph` is one of the graphs this program holds -- by the identity it names, so a
+    /// draft and a value of another program answer false whatever their addresses are.
+    bool holds(const camel::graph::Graph &graph) const { return heldGraph(graph) != nullptr; }
     GCGraph *outerOf(const GCGraph &graph) const { return this->graph(graph.outerGraphId()); }
     /// The graphs `ids` name that the program holds, in order.
     std::vector<GCGraph *> resolve(std::span<const GraphId> ids) const {
@@ -293,6 +304,19 @@ class Program final : public camel::core::rtdata::Object {
 
   private:
     friend class GCGraphManager;
+    /// The graph this program holds that *is* `graph`: a graph's identity is the value itself
+    /// (design principles 2.3), so the entry whose value the caller named is the answer, and the
+    /// search compares identities and nothing else -- not the id an address would stand for, and
+    /// not the node a caller read from. nullptr when this program holds no such value, which is a
+    /// real answer: a draft, a graph of another program, a graph a commit replaced.
+    const GCGraph *heldGraph(const camel::graph::Graph &graph) const {
+        for (GCGraph *held : byId_) {
+            if (held != nullptr && static_cast<const camel::graph::Graph *>(held) == &graph) {
+                return held;
+            }
+        }
+        return nullptr;
+    }
     void note(GCGraph *graph);
     void noteAll();
     /// What own_ records of a graph a satellite owns: it adds it, or it took it in.

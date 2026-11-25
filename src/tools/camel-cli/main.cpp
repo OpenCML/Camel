@@ -552,7 +552,7 @@ int runCommand(int argc, char *argv[]) {
                         olderStore, *ctx->runtimeProgram(), os, wantedOlder);
                 }
                 if (allKinds || !wantedFacts.empty()) {
-                    camel::runtime::GCGraph *root = ctx->runtimeProgram()->root();
+                    auto *root = ctx->runtimeProgram()->root();
                     camel::facts::Store *store =
                         root != nullptr ? camel::facts::storeHolding(*root) : nullptr;
                     if (store == nullptr) {

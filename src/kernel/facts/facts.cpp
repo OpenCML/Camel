@@ -446,10 +446,13 @@ GraphHolds &graphHolds() {
 
 } // namespace
 
-GraphAccess frozenGraphs() {
+GraphAccess frozenGraphs(std::function<const graph::Graph *(const graph::Graph &, NodeId)> callee) {
     return GraphAccess{
         .view        = [](const graph::Graph &graph) { return &graph.view(); },
         .version     = [](const graph::Graph &) { return std::uint64_t(0); },
+        // The owner's answer, when it gave one: a graph does not know its program, so the walk
+        // across a call asks whoever holds the graphs (facts.h, GraphAccess::callee).
+        .callee      = std::move(callee),
         // The graph's own slots: written and cleared by the store, read by whoever has the graph
         // (camel/runtime/fact_slots.h). A draft keeps none, and these writes land nowhere.
         .setSlot     = [](const graph::Graph &graph, KindId kind, const void *value) {
@@ -985,22 +988,34 @@ class ArrangeWalk {
         }
         case graph::NodeKind::Call:
         case graph::NodeKind::Func: {
-            const graph::CalleeRef callee = view.calleeOf(ref);
-            if (callee.kind != graph::CalleeRef::Kind::Value || callee.graph == nullptr) {
-                // A callee named by an environment entry, or not named yet: what it runs is not
-                // in this graph, so none of the four terms is known here.
+            // The callee comes from the owner of the graphs, by identity, when the owner gave the
+            // store that answer: a graph does not know its program, so the view alone can name
+            // only the id a call stores and refuses a hole rather than answer "no callee"
+            // (graph/callee_graph_of.h, and the store's access in facts.h). Without a resolver the
+            // walk is narrower and stops here, which is the honest answer: what the call runs is
+            // not in this graph.
+            const graph::Graph *here = active_.empty() ? nullptr : active_.back();
+            const graph::Graph *calleeGraph =
+                graphs_.callee && here != nullptr
+                    ? graphs_.callee(*here, static_cast<NodeId>(ref))
+                    : nullptr;
+            if (calleeGraph == nullptr) {
+                // A callee named by an environment entry, not named yet, or not one this store's
+                // owner holds: what it runs is not in this graph, so none of the four terms is
+                // known here.
                 return Arrangeable{};
             }
-            if (std::find(active_.begin(), active_.end(), callee.graph) != active_.end()) {
+            if (std::find(active_.begin(), active_.end(), calleeGraph) != active_.end()) {
                 // A call that reaches a graph this walk is already in: a recursion. It may not
                 // end, so the call is not freely arrangeable wherever it stands.
                 return Arrangeable{};
             }
-            const graph::GraphView *calleeView = graphs_.view ? graphs_.view(*callee.graph) : nullptr;
+            const graph::GraphView *calleeView =
+                graphs_.view ? graphs_.view(*calleeGraph) : nullptr;
             if (calleeView == nullptr) {
                 return Arrangeable{};
             }
-            return atGraph(*calleeView, callee.graph);
+            return atGraph(*calleeView, calleeGraph);
         }
         default:
             // A BIND node (reserved: nothing creates one): not known to be anything.

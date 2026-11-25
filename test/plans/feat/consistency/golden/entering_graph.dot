@@ -24,7 +24,7 @@ digraph GraphIR {
         }
         O01 [label="EXIT", type="EXIT"];
         N06 [label="5", type="DATA", origin=7054, span="2:12-2:13", srcfile="<ROOT>/test/cases/consistency/entering/graph_explicit.cml", value_type="int"];
-        N07 [label="CAST", type="CAST", origin=7057, span="3:20-3:29", srcfile="<ROOT>/test/cases/consistency/entering/graph_explicit.cml", value_type="int?"];
+        N07 [label=":op/cast", type="OPER", origin=7057, span="3:20-3:29", srcfile="<ROOT>/test/cases/consistency/entering/graph_explicit.cml", value_type="int?"];
         N08 [label="0", type="DATA", origin=7058, span="3:31-3:32", srcfile="<ROOT>/test/cases/consistency/entering/graph_explicit.cml", value_type="int"];
         N09 [label="or_else", type="FUNC", origin=7059, span="3:12-3:33", srcfile="<ROOT>/test/cases/consistency/entering/graph_explicit.cml", value_type="int"];
         N0A [label=":io/println", type="OPER", origin=7060, span="3:4-3:11", srcfile="<ROOT>/test/cases/consistency/entering/graph_explicit.cml", value_type="int"];

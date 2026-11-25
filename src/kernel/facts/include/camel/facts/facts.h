@@ -163,6 +163,15 @@ struct GraphAccess {
     std::function<const graph::GraphView *(const graph::Graph &)> view;
     /// The version of the graph's content: a stored fact is stale when it changed.
     std::function<std::uint64_t(const graph::Graph &)> version;
+    /// The graph FUNC node `NodeId` of `graph` calls, as the graph's identity, or null when the
+    /// call names none this owner holds.
+    ///
+    /// This is the owner's answer and not the view's, because a graph does not know the program
+    /// that holds it: `GraphView::calleeOf` can only tell which id a call names, and an adapter
+    /// without the owner's resolver refuses rather than answer "no callee" (graph/callee_graph_of.h).
+    /// Asking the owner by identity is what lets a fact walk from a graph to its callee at all --
+    /// it is the `arrangeable` fact's only way across a call (facts.cpp, ArrangeWalk).
+    std::function<const graph::Graph *(const graph::Graph &, NodeId)> callee;
 
     /// Where the graph keeps a fact of `kind`, so that a reader that has the graph reaches it with
     /// one indexed load (`camel/runtime/fact_slots.h`, `GCGraph::factSlot`). The store writes the
@@ -512,8 +521,13 @@ void computeAll(
  * `view()` with, and the constant version 0. A frozen graph's content never changes, so a fact
  * about one cannot be stale for a content reason; what ends it is the graph's lifetime, which is
  * `forgetGraph`.
+ *
+ * `callee` is the owner's answer to "which graph does this call reach", by identity. The context
+ * passes its runtime graph manager's (`Context::programOfRuntimeGraph` + `Program::calleeOf`);
+ * a store made without one is narrower, and the one fact that walks calls reports that it cannot
+ * rather than guessing (facts.cpp, ArrangeWalk).
  */
-GraphAccess frozenGraphs();
+GraphAccess frozenGraphs(std::function<const graph::Graph *(const graph::Graph &, NodeId)> callee = {});
 
 /**
  * Tells `store` that `graph` is one of the graphs it holds the facts of. The context does this for

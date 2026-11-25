@@ -117,10 +117,6 @@ string recordLabel(
     }
     case camel::runtime::GCNodeKind::Port:
         return portLabel(graph, nodeRef, record);
-    case camel::runtime::GCNodeKind::Cast:
-        return "CAST";
-    case camel::runtime::GCNodeKind::Copy:
-        return "COPY";
     case camel::runtime::GCNodeKind::Fill:
         return record.dataType() ? record.dataType()->toString() : "FILL";
     case camel::runtime::GCNodeKind::Accs: {
@@ -148,6 +144,12 @@ string recordLabel(
         ASSERT(
             graph->nodePayloadBytes(nodeRef).size() >= sizeof(camel::runtime::GCOperBody),
             "GraphViz OPER payload is smaller than its fixed header.");
+        // The label is the operator the call names, for every OPER node. A conversion and a copy
+        // were kinds of their own once and the picture said CAST and COPY; they are calls of
+        // `:op/cast` and `:op/copy` now (plan 2.3, step 1), and their label says so like every
+        // other call's does. A picture that kept the old word would name a node kind the graph
+        // does not have (`NodeKind::Oper` is the view's answer), and the two would be two answers
+        // to one question -- which is the defect the view face exists to remove.
         return std::string(graph->nodeBodyAs<camel::runtime::GCOperBody>(nodeRef)->uri());
     case camel::runtime::GCNodeKind::Gate:
         return "GATE";
@@ -161,16 +163,16 @@ string recordLabel(
     }
 }
 
-string recordType(const camel::runtime::GCNode &record) {
-    switch (record.kind) {
+string recordType(camel::runtime::GCGraph &graph, camel::runtime::gc_node_ref_t nodeRef) {
+    const camel::runtime::GCNode *node = graph.node(nodeRef);
+    if (node == nullptr) {
+        return "NODE";
+    }
+    switch (node->kind) {
     case camel::runtime::GCNodeKind::Data:
         return "DATA";
     case camel::runtime::GCNodeKind::Port:
         return "PORT";
-    case camel::runtime::GCNodeKind::Cast:
-        return "CAST";
-    case camel::runtime::GCNodeKind::Copy:
-        return "COPY";
     case camel::runtime::GCNodeKind::Fill:
         return "FILL";
     case camel::runtime::GCNodeKind::Accs:
@@ -184,6 +186,10 @@ string recordType(const camel::runtime::GCNode &record) {
     case camel::runtime::GCNodeKind::Func:
         return "FUNC";
     case camel::runtime::GCNodeKind::Oper:
+        // `OPER` for every operator call, a conversion and a copy included: the kind column states
+        // the node's kind, which is `Oper` for all of them (`NodeKind::Oper` through the view), and
+        // the operator is in the label. The two deleted kinds' words are not a second spelling of
+        // this column.
         return "OPER";
     case camel::runtime::GCNodeKind::Gate:
         return "GATE";

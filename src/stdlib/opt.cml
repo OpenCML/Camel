@@ -163,13 +163,14 @@ export func cse::<F>(f: F) => F! when is_function::<F>() {
 
 // ---- dead values ----
 
-// Whether the node computes a value: a constant, a conversion, a copy, an access, a fill or an
-// operation a pass may arrange anywhere (`may_be_rearranged`: pure *and* unable to fault). This is
+// Whether the node computes a value: a constant, an access, a fill, or an operation a pass may
+// arrange anywhere (`may_be_rearranged`: pure *and* unable to fault). A conversion and a copy are
+// operations now (`:op/cast`, `:op/copy`), so they answer in the `NodeKind::Oper` arm. This is
 // `isValueOnly` of the C++, which asks the same entry. The kinds that compute no value (a port, a
 // call, a loop, a gate) answer no: a port is a frame's edge, not a value written in the graph.
 func value_only(n: Node) => bool {
     let k = kind(n)
-    return ((k == NodeKind::Cast || k == NodeKind::Copy || k == NodeKind::Accs || k == NodeKind::Fill || k == NodeKind::Oper) && may_be_rearranged(n)) || (k == NodeKind::Data && is_constant(n))
+    return ((k == NodeKind::Accs || k == NodeKind::Fill || k == NodeKind::Oper) && may_be_rearranged(n)) || (k == NodeKind::Data && is_constant(n))
 }
 
 // Whether the node reads a computation that may fault, and is the only node that reads it. Removing

@@ -1056,7 +1056,7 @@ class CanonicalDocument {
     json nodeJson(GCGraph *graph, gc_node_ref_t ref, const GCNode &node) {
         json value{
             {"id", nodeIdOf(graph, ref) ? *nodeIdOf(graph, ref) : std::string()},
-            {"kind", camel::passes::gir::recordType(node)},
+            {"kind", camel::passes::gir::recordType(*graph, ref)},
             {"type", addType(camel::passes::gir::nodeStaticSlotType(graph, node))},
             {"inputs", inputsJson(graph, ref)}};
         const uint32_t region = canonicalRegionOf(graph, graph->nodeRegion(ref));

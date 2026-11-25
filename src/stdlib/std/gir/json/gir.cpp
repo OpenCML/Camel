@@ -145,7 +145,7 @@ std::string dumpJsonRuntimeGraph(
     GCGraph *root, const camel::core::context::context_ptr_t &ctx, const JsonGirOptions &options) {
     if (!root || !root->hasNodePayload())
         return {};
-    const Program *program = ctx ? ctx->programOfRuntimeGraph(root) : nullptr;
+    const Program *program = ctx ? ctx->programOfRuntimeGraph(*root) : nullptr;
     return program ? dumpJsonRuntimeGraph(*program, root, ctx, options) : std::string{};
 }
 
@@ -347,7 +347,7 @@ std::string dumpJsonRuntimeGraph(
             const auto *node = g->node(ref);
             if (!node)
                 continue;
-            const auto kind = recordType(*node);
+            const auto kind = recordType(*g, ref);
             json value{
                 {"id", nodeId(g, ref)},
                 {"kind", kind},
@@ -516,7 +516,7 @@ std::string dumpJsonRuntimeGraph(
 }
 const camel::runtime::Program *
 JsonGirDumpPass::apply(const camel::runtime::Program *program, std::ostream &out) {
-    camel::runtime::GCGraph *graph = program->root();
+    auto *graph = program->root();
     out << dumpJsonRuntimeGraph(*program, graph, context_, options_) << '\n';
     return program;
 }

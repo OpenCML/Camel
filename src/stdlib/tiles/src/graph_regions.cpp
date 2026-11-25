@@ -121,28 +121,6 @@ const std::unordered_map<core::OperId, std::string> &operations() {
     return result;
 }
 
-/// The nodes the chain of a `sync` block holds, either side of it: every node a sync edge names, as
-/// the statement written before it or as the one written after. A block writes the order of its
-/// statements as a chain (docs/design/effects/edges.cn.md 1), so both ends of an edge are statements
-/// of that block -- the first statement of a block stands only before the next one and has no place
-/// in the chain itself, and it is a statement all the same.
-std::vector<char> chainMembers(const rt::GCGraph &graph) {
-    std::vector<char> member(graph.nodeCount(), 0);
-    for (const rt::GCGraphSyncEdge &edge : graph.syncEdges()) {
-        if (edge.user < member.size()) {
-            member[edge.user] = 1;
-        }
-        if (edge.pred < member.size()) {
-            member[edge.pred] = 1;
-        }
-    }
-    return member;
-}
-
-/// Whether the node is one the chain holds, read from the set `chainMembers` computed once per graph.
-inline bool inChain(const std::vector<char> &chain, rt::gc_node_ref_t id) {
-    return id < chain.size() && chain[id] != 0;
-}
 
 /// Whether the operation is a layout one: its result is the operand read in another order, so there
 /// is no kernel to write for it, only an address (`kernel::coreViewAddress`) to read it through.
@@ -152,16 +130,19 @@ bool layoutOperator(const std::string &op) {
 
 std::string eligibility(
     const rt::Program &graphs, const rt::GCGraph &graph, rt::gc_node_ref_t id,
-    rt::fact::FactStore &facts, const std::vector<char> &chain, bool device) {
+    rt::fact::FactStore &facts, bool device) {
     const auto *node = graph.node(id);
     // Whether the node is a statement of a block, ordered by the edges that order one. The order of
     // a `sync` block is its chain, so a node the chain reaches is a statement as much as one the
     // control kind names (docs/design/effects/edges.cn.md 1). Inside a device scope that ordering is
     // where the node runs, not a reason to leave it on the host: the arm or the block the node is
     // written in is the segment that holds it (docs/design/gpu/plan.cn.md 2.5).
-    const bool ordered = !graph.ctrlInputsOf(id).empty() || !graph.ctrlOutputsOf(id).empty() ||
-                         !graph.syncPredsOf(id).empty() || !graph.uses().sync(id).empty() ||
-                         inChain(chain, id);
+    // Both forms of the wait, both directions, as one question: the face answers the union
+    // (`EdgeKind::Wait`), so a node the chain reaches and a node a control edge names are asked
+    // the same way and the chain set the graph used to be read into (`chainMembers`) is not built.
+    const bool ordered =
+        !graph.view().predecessors(id, camel::graph::EdgeKind::Wait).empty() ||
+        !graph.view().successors(id, camel::graph::EdgeKind::Wait).empty();
     if (node->kind == rt::GCNodeKind::Loop) {
         if (ordered && !device)
             return "control_edge";
@@ -505,7 +486,7 @@ ResidencyPlan planResidency(
             value.block.placement = parameterIsDevice(graph.view(), id) ? Placement::Gpu
                                                                        : Placement::Host;
         else
-            value.block = placementOf(graph, id);
+            value.block = placementOf(graph.view(), id);
         value.readsInPlace = readsInPlace(program, graph, *node, id);
     }
     return planResidency(facts, nodes, regions);
@@ -518,8 +499,7 @@ SegmentAnalysis analyzeRegions(
     std::vector<std::string> reasons(nodes.size());
     // Where each node runs (docs/design/gpu/plan.cn.md 2.5): the body, an arm of a BRCH, or a part of a LOOP.
     const rt::ControlRegions control(graph);
-    // The statements of the `sync` blocks, read once for the whole graph.
-    const std::vector<char> chain = chainMembers(graph);
+
     // The nodes of the condition and of the body of a loop are the loop's: a region that holds
     // the LOOP node holds them, and what they read from outside is read by the LOOP node.
     std::vector<bool> insideLoop(nodes.size(), false);
@@ -543,7 +523,7 @@ SegmentAnalysis analyzeRegions(
             continue;
         }
         const bool device  = scopes != nullptr && scopes->covers(graph, id);
-        reasons[id]        = eligibility(graphs, graph, id, facts, chain, device);
+        reasons[id]        = eligibility(graphs, graph, id, facts, device);
         nodes[id].eligible = reasons[id].empty();
         nodes[id].embedded =
             graph.node(id)->kind == rt::GCNodeKind::Data && graph.node(id)->dataIndex < 0;
@@ -559,14 +539,13 @@ SegmentAnalysis analyzeRegions(
             for (auto edges : {graph.normInputsOf(id), graph.withInputsOf(id)})
                 nodes[id].inputs.insert(nodes[id].inputs.end(), edges.begin(), edges.end());
         }
-        // The control edges order the node in the block it is written in; they are not values,
-        // so a region that holds the node reads nothing through them (docs/design/gpu/plan.cn.md 2.5).
-        for (auto edges : {graph.ctrlInputsOf(id)})
-            nodes[id].order.insert(nodes[id].order.end(), edges.begin(), edges.end());
-        // The statement before it in its block's chain orders it the same way, whichever kind
-        // that edge is written in (docs/design/effects/edges.cn.md 1, 5.3).
-        for (const rt::GCGraphSyncEdge &edge : graph.syncPredsOf(id))
-            nodes[id].order.push_back(edge.pred);
+        // What makes the node run after another one, in either form a wait is written in: the
+        // control edges order the node in the block it is written in and are not values, so a
+        // region that holds the node reads nothing through them (docs/design/gpu/plan.cn.md 2.5),
+        // and the statement before it in its block's chain orders it the same way
+        // (docs/design/effects/edges.cn.md 1, 5.3). One question, one answer: the face's wait.
+        for (const rt::gc_node_ref_t pred : graph.view().predecessors(id, camel::graph::EdgeKind::Wait))
+            nodes[id].order.push_back(pred);
         nodes[id].output = id == graph.outputNodeRef() || id == graph.exitNodeRef();
     }
     // Fixed tuple projections are structural edges of an eligible aggregate
@@ -586,9 +565,8 @@ SegmentAnalysis analyzeRegions(
             // silently left out of the region.
             if (nodes[id].eligible ||
                 transforms::nodeCaseOf(graph, id) != transforms::NodeCase::Accs ||
-                !graph.ctrlInputsOf(id).empty() || !graph.ctrlOutputsOf(id).empty() ||
-                !graph.syncPredsOf(id).empty() || !graph.uses().sync(id).empty() ||
-                inChain(chain, id))
+                !graph.view().predecessors(id, camel::graph::EdgeKind::Wait).empty() ||
+                !graph.view().successors(id, camel::graph::EdgeKind::Wait).empty())
                 continue;
             const auto access = transforms::memberReadOf(graph, id);
             if (!access.has_value() || !nodes[access->value].eligible)

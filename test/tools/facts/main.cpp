@@ -100,6 +100,22 @@ class ThreeNodeView final : public g::GraphView {
     std::span<const g::NodeRef> inputs(g::NodeRef, g::PortGroup) const override { return {}; }
     std::span<const g::NodeRef> users(g::NodeRef, g::PortGroup) const override { return {}; }
     std::vector<g::NodeRef> predecessors(g::NodeRef, g::EdgeKind) const override { return {}; }
+    std::vector<g::NodeRef> successors(g::NodeRef, g::EdgeKind) const override { return {}; }
+    std::span<const g::Edge> edges(g::EdgeKind) const override { return {}; }
+
+    // The tag set and the two permission columns: this graph carries no tag on any node, so it
+    // answers the empty set and no permission -- the same answer its empty static area and empty
+    // name give, and the one a reader that asked would be entitled to.
+    camel::core::attr::AttrSetId attrsOf(g::NodeRef) const override {
+        return camel::core::attr::kNoAttrs;
+    }
+    camel::core::sem::PermissionMask permissionsOf(g::NodeRef) const override {
+        return camel::core::sem::kNoPermissions;
+    }
+    camel::core::sem::PermissionMask effectivePermissionsOf(
+        g::NodeRef, const camel::core::sem::NumericPolicy &) const override {
+        return camel::core::sem::kNoPermissions;
+    }
 
     std::uint32_t regionCount() const override { return 1; }
     g::RegionRecord region(g::RegionId) const override { return {}; }

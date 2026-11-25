@@ -52,6 +52,8 @@ PASS the two derivative tables differ only where the list says so: 103 law(s) fi
 exempt, 0 new, stale=0
 ```
 
+> 2026-11-25 跟进（`C-1124-231`）：上面 `--tables` 那句「三张表」和这段原样输出里的 `48 key(s) both answer` 是四桶拆分之前的读数。旧的 `both` 只要这个键有任何一条 law 就算成 both，于是 `forward-only` 被读成 both，engine-only 也被读成「可达但反半缺失」；现在四桶拆开（`both` / `forward-only` / `reverse-only` / `neither-half`），`engine-only` 与 `forward-only` 分开计数，数字以新输出为准。
+
 | 数 | 值 | 意思 |
 |---|---|---|
 | 库的律 | 103 条 | 两个规则集（`transpose.cml` + `jvp.cml`）的 `rule` 声明 |

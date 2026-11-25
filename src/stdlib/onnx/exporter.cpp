@@ -185,7 +185,7 @@ std::vector<Value> elementsOf(slot_t slot, type::Type *ty) {
 
 /// The program that holds `g`: a graph being exported is always one of the context's.
 const camel::runtime::Program &programOf(core::context::Context &ctx, const GCGraph *g) {
-    const camel::runtime::Program *program = ctx.programOfRuntimeGraph(g);
+    const camel::runtime::Program *program = ctx.programOfRuntimeGraph(*g);
     if (program == nullptr) {
         throw std::logic_error("the ONNX export met a graph that belongs to no program");
     }
@@ -871,11 +871,6 @@ Value Evaluator::evalNode(Activation &act, gc_node_ref_t ref) {
         }
         return it->second;
     }
-    case GCNodeKind::Cast:
-        return evalCast(act, ref, eval(act, g->normInputsOf(ref).front()));
-    case GCNodeKind::Copy:
-        // Exported values are never mutated in place, so a copy can share its source.
-        return eval(act, g->normInputsOf(ref).front());
     case GCNodeKind::Gate: {
         // A gate forwards its first ordinary input; the rest are the waits it keeps alive.
         return eval(act, camel::runtime::forwardedInputOf(*g, ref));
@@ -3752,7 +3747,7 @@ Value Evaluator::variableValueAt(Activation &act, gc_node_ref_t cell, gc_node_re
                     ref = forwarded;
                     continue;
                 }
-                if (kind != GCNodeKind::Copy) {
+                if (kind != GCNodeKind::Oper || operUriOf(g->view(), ref) != ":op/copy") {
                     return ref;
                 }
                 const auto norm = g->normInputsOf(ref);

@@ -107,8 +107,10 @@ constexpr gc_off_t kInvalidOffset       = static_cast<gc_off_t>(-1);
 enum class GCNodeKind : uint8_t {
     Data = 0,
     Port = 1,
-    Cast = 2,
-    Copy = 3,
+    // 2 was the CAST node and 3 the COPY node, deleted: a conversion is a call of `:op/cast` and a
+    // copy a call of `:op/copy`, the operators `lib/std/prelude.cml` declares for them (plan 2.3).
+    // The numbers are not reused -- an encoded kind is a byte of the graph's format -- and a graph
+    // that still holds them is the graph an older build wrote.
     Fill = 4,
     Accs = 5,
     Brch = 6,
@@ -1493,12 +1495,17 @@ class GCGraphManager {
     void leaveRun() { --running_; }
     /// Frees a graph no program holds (a commit's encoding it did not need).
     void release(GCGraph *graph);
-    /// The newest program of the manager that holds this version of `graph`, nullptr when none
-    /// does. A version a commit left unchanged is held by the program before it too, and names
-    /// the graphs it calls by id: what it calls is what the program it is read in holds. This
-    /// answers for a view of the latest program (a dump, the debugger); whoever runs or
-    /// rewrites a graph has the program it was given.
-    const Program *programOf(const GCGraph *graph) const;
+    /// The newest program of the manager that holds this graph, nullptr when none does. A version
+    /// a commit left unchanged is held by the program before it too, and names the graphs it calls
+    /// by id: what it calls is what the program it is read in holds. This answers for a view of the
+    /// latest program (a dump, the debugger); whoever runs or rewrites a graph has the program it
+    /// was given.
+    ///
+    /// `graph` is the graph as a value, not a representation: the question is "which program holds
+    /// this graph", and the answer is found by the identity the caller names (`Program::holds`), so
+    /// a reader holding a `const graph::Graph *` -- the callee of a call, the anchor of a fact, the
+    /// root a pass was handed -- asks once and does not learn which representation it has.
+    const Program *programOf(const camel::graph::Graph &graph) const;
     /// Keeps a program whose holder keeps it outside the heap alive: the definition graphs of
     /// operators, for as long as the context (camel/runtime/definitions.h), and every program a
     /// C++ holder keeps across a safepoint, through the handle that says so

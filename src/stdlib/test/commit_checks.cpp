@@ -396,7 +396,7 @@ gc_node_ref_t spliceCopyBetweenArms(
     auto &draft                  = transaction.edit();
     const GCNode *replaced       = arms.graph->node(arms.firstResult);
     camel::core::type::Type *type = replaced != nullptr ? replaced->dataType() : nullptr;
-    const gc_node_ref_t copy     = draft.addCopyNode(type, 0);
+    const gc_node_ref_t copy     = draft.addOperNode(type, nullptr, ":op/copy");
     draft.setNormInputs(copy, std::span<const gc_node_ref_t>(&from, 1));
     draft.setNodeRegion(copy, arms.firstArm);
     std::vector<gc_node_ref_t> joinInputs(
@@ -471,11 +471,6 @@ LoopBodyRead findLoopBodyRead(const Program &program) {
                         read->dataType() == nullptr) {
                         continue;
                     }
-                    if (read->kind == GCNodeKind::Copy) {
-                        found.place      = ref;
-                        found.outerValue = input;
-                        break;
-                    }
                     if (read->kind != GCNodeKind::Oper) {
                         continue;
                     }
@@ -508,7 +503,7 @@ gc_node_ref_t spliceRead(
     if (read == nullptr || read->dataType() == nullptr) {
         return kInvalidNodeRef;
     }
-    const gc_node_ref_t copy = draft.addCopyNode(read->dataType(), 0);
+    const gc_node_ref_t copy = draft.addOperNode(read->dataType(), nullptr, ":op/copy");
     draft.setNormInputs(copy, std::span<const gc_node_ref_t>(&from, 1));
     draft.setNodeRegion(copy, region);
     std::vector<gc_node_ref_t> inputs(

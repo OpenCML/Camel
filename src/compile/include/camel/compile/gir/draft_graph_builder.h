@@ -125,8 +125,11 @@ class DraftGraphBuilder {
         const camel::core::data::data_ptr_t &data, camel::core::type::Type *runtimeType = nullptr);
     runtime::DraftNodeRef
     addPortNode(camel::core::type::Type *type, std::string name, bool isWith);
-    runtime::DraftNodeRef addCastNode(camel::core::type::Type *type);
-    runtime::DraftNodeRef addCopyNode(camel::core::type::Type *type);
+    /// A call of the operator `uri` names, built without resolving the declaration: the
+    /// operations that used to be node kinds of their own -- a conversion (`:op/cast`) and a copy
+    /// (`:op/copy`) -- are written this way, so a program that shadows the operator's **name**
+    /// still gets the call the language means (`Builder::copyNodeOf`).
+    runtime::DraftNodeRef addOperNode(camel::core::type::Type *type, std::string_view uri);
     runtime::DraftNodeRef addFillNode(camel::core::type::Type *type, const runtime::GCFillBody &body);
     runtime::DraftNodeRef
     addFillNode(camel::core::type::Type *type, std::span<const std::byte> payload);

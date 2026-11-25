@@ -1,9 +1,10 @@
-// One operation, two writings. `cast`, `copy`, `fill`, `access` and `access_key` are declared in
-// stdlib/prelude.cml, so a call of one builds an OPER node that names the operator; the language's
-// own spelling of the same four -- `float(x)`, an aggregate, a member read, a value of its own --
-// builds the CAST, COPY, FILL and ACCS kinds the front end still makes. `test::oper_shape` prints
-// the shape each node answers, one line per form, and the two lines of one operation must agree:
-// the shape is the operator's, not the node kind's.
+// One operation, two writings, as long as the kind that wrote it still exists. `cast`, `copy`,
+// `fill`, `access` and `access_key` are declared in stdlib/prelude.cml, so a call of one builds an
+// OPER node that names the operator; a construction the language writes as an aggregate, and a
+// member read it writes as `t.0`, still build the FILL and ACCS kinds. A conversion and a copy have
+// one writing now -- `:op/cast` and `:op/copy` -- because the CAST and COPY kinds are gone.
+// `test::oper_shape` prints the shape each node answers, one line per form, and the two lines of
+// one operation must agree: the shape is the operator's, not the node kind's.
 //
 // Every writing stands in a function of its own so that nothing folds: a conversion of a literal,
 // or a member read of an aggregate the builder just made, could be computed before the graph is

@@ -604,6 +604,12 @@ sem::PermissionMask effectivePermissions(
     return facts.strict ? sem::kNoPermissions : policy.effective(facts.permissions);
 }
 
+sem::PermissionMask permissionsInEffect(
+    attr::AttrSetId tags, sem::PermissionMask permissions, const sem::NumericPolicy &policy) {
+    const Facts facts = factsOfSet(tags, permissions);
+    return facts.strict ? sem::kNoPermissions : policy.effective(facts.permissions);
+}
+
 namespace {
 
 // The standard tag (declareStandardTags) and the node attribute its fact is carried in.

@@ -788,14 +788,20 @@ class EdgeChecker {
         Type *type      = node.dataType();
         // A copy and a conversion are checked by their shape, not their kind
         // (`camel/runtime/oper_shape.h`): what must hold of the value
-        // they hand on is a property of the operator.
-        if (camel::runtime::shapeOfKind(node.kind) == camel::ops::OperShape::Clone) {
+        // they hand on is a property of the operator. A node of one of the four operations got
+        // that shape from its kind once; a conversion and a copy are calls of `:op/cast` and
+        // `:op/copy` now, and their shape is the operator's own record. Asking the kind half of
+        // the question (`shapeOfKind`) answers None for them and skipped this check, so a call
+        // that copied a value as another type was accepted (measured: opt.edges /
+        // copy_type_mismatch_is_refused).
+        const camel::ops::OperShape operationShape = camel::runtime::shapeOfOperation(graph_, ref);
+        if (operationShape == camel::ops::OperShape::Clone) {
             if (norm.size() == 1 && type && typeOf(norm[0]) && !compatible(typeOf(norm[0]), type)) {
                 report(ref, std::format("copies a {} as a {}", show(typeOf(norm[0])), show(type)));
             }
             return;
         }
-        if (camel::runtime::shapeOfKind(node.kind) == camel::ops::OperShape::Conversion) {
+        if (operationShape == camel::ops::OperShape::Conversion) {
             if (norm.size() == 1 && type && typeOf(norm[0]) && !compatible(typeOf(norm[0]), type) &&
                 type->castSafetyFrom(typeOf(norm[0])) == CastSafety::Forbidden) {
                 report(
@@ -1020,9 +1026,12 @@ bool nodeStandsForItsRegion(const GCGraph &graph, gc_node_ref_t ref) {
 bool nodeTakesNoOrder(const GCGraph &graph, gc_node_ref_t ref) {
     // A conversion that was ordered when it could fail keeps its place: a pass that refines the
     // types can make it infallible, and dropping the order is the pass's choice, not a defect.
-    const GCNode *node = graph.node(ref);
-    if (node != nullptr &&
-        camel::runtime::shapeOfKind(node->kind) == camel::ops::OperShape::Conversion) {
+    // The question is which operation the node performs, so it is `shapeOfOperation` that answers
+    // it: a conversion is a call of `:op/cast` now, whose kind is `Oper` and whose record says it
+    // may fault (`oper_shape.h`), and asking the kind half (`shapeOfKind`) answered None for it --
+    // so the encoder dropped an order edge the seal must keep (measured: opt.edges /
+    // order_edge_survives_the_commit and the four cases beside it).
+    if (camel::runtime::shapeOfOperation(graph, ref) == camel::ops::OperShape::Conversion) {
         return false;
     }
     return nodeIsFreelySchedulable(graph, ref) && !nodeStandsForItsRegion(graph, ref);

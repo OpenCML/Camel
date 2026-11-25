@@ -22,6 +22,11 @@
 #include <utility>
 #include <vector>
 
+namespace camel::graph {
+/// The graph as a value: the identity `programOfRuntimeGraph` is asked about (camel/graph/graph.h).
+class Graph;
+} // namespace camel::graph
+
 namespace camel::runtime {
 class GCGraph;
 class GCGraphManager;
@@ -331,10 +336,12 @@ class Context : public std::enable_shared_from_this<Context> {
     /// See GCGraphManager::noteUnbound: a graph a rewrite encoded and has not bound in a
     /// program yet, which the collector frees once the pass is over if nothing binds it.
     void noteUnboundRuntimeGraph(camel::runtime::GCGraph *graph);
-    /// The newest program of the context that holds this version of `graph` (see
-    /// GCGraphManager::programOf), nullptr when none does.
+    /// The newest program of the context that holds this graph (see GCGraphManager::programOf),
+    /// nullptr when none does. The graph is named by its identity, not by a representation: a
+    /// reader holding a `const graph::Graph *` -- a callee, a fact's anchor, a pass's root -- asks
+    /// here without knowing which representation it has, and a draft answers nullptr.
     const camel::runtime::Program *
-    programOfRuntimeGraph(const camel::runtime::GCGraph *graph) const;
+    programOfRuntimeGraph(const camel::graph::Graph &graph) const;
     /// See GCGraphManager::pin: programs the core keeps for the context's lifetime (the
     /// definition graphs of operators) and programs a holder keeps outside the heap for as long
     /// as it holds them (a draft group's, see camel/runtime/draft_session.h#GraphDraftGroup).

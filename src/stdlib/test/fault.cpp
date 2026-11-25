@@ -228,13 +228,22 @@ template <typename Draft>
             ref = in.back();
             continue;
         }
-        if (header->kind == GCNodeKind::Copy || header->kind == GCNodeKind::Cast) {
-            const auto in = draft.normInputsOf(ref);
-            if (in.empty()) {
-                return nullptr;
+        if (header->kind == GCNodeKind::Oper) {
+            // A copy and a conversion are calls of :op/copy / :op/cast now, each with one
+            // ordinary operand: the value they stand for.
+            const auto payload = draft.payloadOf(ref);
+            const std::string_view uri =
+                payload.size() >= sizeof(camel::runtime::GCOperBody)
+                    ? reinterpret_cast<const camel::runtime::GCOperBody *>(payload.data())->uri()
+                    : std::string_view{};
+            if (uri == ":op/copy" || uri == ":op/cast") {
+                const auto in = draft.normInputsOf(ref);
+                if (in.empty()) {
+                    return nullptr;
+                }
+                ref = in.front();
+                continue;
             }
-            ref = in.front();
-            continue;
         }
         if (header->kind != GCNodeKind::Data || header->dataIndex >= 0) {
             return nullptr;

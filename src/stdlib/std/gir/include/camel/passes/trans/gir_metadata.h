@@ -29,5 +29,5 @@ std::string recordTooltip(std::string_view graphName, const camel::runtime::GCNo
 std::string recordLabel(
     const camel::runtime::Program &, camel::runtime::GCGraph *, camel::runtime::gc_node_ref_t,
     const camel::runtime::GCNode &);
-std::string recordType(const camel::runtime::GCNode &);
+std::string recordType(camel::runtime::GCGraph &, camel::runtime::gc_node_ref_t);
 } // namespace camel::passes::gir

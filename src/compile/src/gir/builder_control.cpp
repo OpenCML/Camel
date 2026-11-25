@@ -78,10 +78,10 @@ Builder::conversionNodeOf(node_handle_t value, Type *target, const GCT::node_ptr
             }
         }
     }
-    // No declaration answered: the CAST node is what the graph gets, and it is the same
-    // conversion. A pair the operator's rule does not cover says so here rather than building a
-    // node the rule cannot name.
-    node_handle_t castNode = currGraph_->addCastNode(target);
+    // No declaration answered -- a program that shadows the name `cast`, say -- and the call is
+    // still the conversion the language means: the node names the operator by its URI, which no
+    // name in scope can shadow, and it is the one `lib/std/prelude.cml` declares.
+    node_handle_t castNode = currGraph_->addOperNode(target, ":op/cast");
     linkNodes(LinkType::Norm, value, castNode);
     registerNodeOrigin(context_, castNode, origin, "gir.cast");
     return castNode;
@@ -111,8 +111,10 @@ node_handle_t Builder::copyNodeOf(node_handle_t value, Type *type) {
             }
         }
     }
-    // No declaration answered: the COPY node is what the graph gets, and it is the same copy.
-    node_handle_t copyNode = currGraph_->addCopyNode(copied);
+    // No declaration answered -- a program that shadows the name `copy`, say -- and the call is
+    // still the copy the language means: the node names the operator by its URI, which no name in
+    // scope can shadow.
+    node_handle_t copyNode = currGraph_->addOperNode(copied, ":op/copy");
     linkNodes(LinkType::Norm, value, copyNode);
     return copyNode;
 }
@@ -461,7 +463,7 @@ node_handle_t projectPart(node_handle_t value, const Type *type, size_t step) {
             source = nodeDraftOf(source)->ref(inputs.front());
             continue;
         }
-        if (nodeIsKind(source, runtime::GCNodeKind::Cast)) {
+        if (operUriOf(source) == ":op/cast") {
             const auto inputs = normInputsOf(source);
             Type *from = inputs.empty()
                              ? nullptr

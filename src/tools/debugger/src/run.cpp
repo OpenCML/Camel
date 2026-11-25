@@ -41,7 +41,7 @@ namespace {
 
 /// Pass 快照收集器：经 setPassSnapshotHandler 的 userData 传入（进程内静态，生命周期覆盖
 /// runScriptOnce）。钩子回调内立刻把图序列化为 DOT 存入 getPassGraphStore()，不保留
-/// GCGraph 指针（GC 会移动/回收）。
+/// 图的指针（GC 会移动/回收）。
 struct PassGraphCollector {
     PassGraphStore *store = nullptr;
     context_ptr_t ctx;
