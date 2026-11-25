@@ -17,11 +17,14 @@
 // follows the DOT is the program's own output, and `01_hello` compares the whole dump, so Graphviz
 // refuses the file at line 1. Measured sheet by sheet on 2026-11-25 with and without the ending: all
 // eight held the graph (`Hello, Camel!`, `12`, `31 31`, `2`, the rules' sampling line, each after the
-// closing brace), and with it the seven that can be drawn are byte-for-byte the committed pictures
-// and nothing runs. `17_rule_saturate` cannot be drawn either way: `std::cxx::saturate` leaves values
-// with several writings, and the driver refuses `std::nop` by name ("Pass 'std::nop' cannot take the
-// program") as well as the `std::default` it would fall back to. `dump()` checks the ending held
-// rather than trusting it, so a sheet that silently executes its example is a failure, not a picture.
+// closing brace), and with it all eight are byte-for-byte the committed pictures and nothing runs.
+// `17_rule_saturate` is one of the eight, and its pipeline is `std::cxx::saturate`: the graph the
+// dump prints still has values with several writings. `std::nop` takes that state as it takes any
+// other, because it reads no part of the program and chooses no writing, so which graph a dump can
+// stop on does not depend on what that graph holds (`11e8532df9`; before it the driver refused
+// `std::nop` by name on this state, and this was the one sheet that could not be drawn at all).
+// `dump()` checks the ending held rather than trusting it, so a sheet that silently executes its
+// example is a failure, not a picture.
 //
 // Two files are written per picture, both in docs/tutorial/images:
 //   <name>.dot  the normalised DOT the picture was drawn from (committed: this is what is compared)
