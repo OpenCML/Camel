@@ -1,20 +1,42 @@
 id = "tools.selfchecks"
 order = 919
 tags = ["feat", "tools", "selfcheck"]
-desc = "The tooling's own tests: every self-check under test/tools, internal/tools and scripts is started by a plan or recorded with the reason it cannot be, and this is the plan that starts the ones a gate can start"
+desc = "The tooling's own tests: every self-check under test/tools, internal/tools and scripts is started by this plan, and the ones a gate host cannot start skip with the reason on the line"
 
 # A self-check that no plan starts cannot fail: a change to the tool it covers is read by nobody,
 # and the file stays green by being unread. `scripts/plan-inventory.mjs#selfCheckProblems` is the
 # ledger (it reds when a new `*.test.mjs` lands with no plan entry and no recorded reason); this
-# plan is the destination for the ones the gate host can run.
+# plan is now the destination for every one of them, and the ledger's exception list is empty.
 #
-# The other nineteen are `*.test.ps1` and are recorded there instead: the build host is Linux and
-# has no pwsh, and the runner resolves a tool that is neither `node` nor `python` inside the
-# install, so an entry for one would fail before the script ran rather than skip with a reason.
-# They are the one class of self-check this plan does not start, and the ledger names them.
+# Two classes, and the second is why this file is longer than its subject:
+#
+#   * the `*.test.mjs` and `--self-test` entries below are started by the runner directly;
+#   * the nineteen `internal/tools/*.test.ps1` are started through `test/tools/pwsh-selfcheck.mjs`,
+#     because a plan entry has no way to name `pwsh`: `tool = "pwsh"` resolves through the runner's
+#     `toolExecutable` to `<install>/bin/pwsh`, a file no build produces, so the entry would fail
+#     before the script ran, and a `.ps1` is not a file the runner can execute as its `case`. That
+#     bridge runs the script with its exit code and output passed through; its other mode is the
+#     entry's `skip_unless`, and it is also why these entries carry `case` = the self-check and the
+#     bridge in `args` -- the name the ledger has to see is the file the entry is about.
+#
+# The gate host has no PowerShell: measured 2026-11-25 on the Linux build host, `uname -s` says
+# `Linux` and `command -v pwsh` prints nothing (it prints `/usr/bin/node` and `/usr/bin/git` for the
+# other two). So on today's gate these nineteen **skip**, and a skip is neither a pass nor a red:
+# `[SUMMARY]` counts it on its own line and the reason names the host. They run for real on a host
+# that has a pwsh, and nothing here has to change for that to happen. `camel-cleanup.test.ps1` and
+# `camel-remote-cleanup.test.ps1` also take `-BashHost` on a machine whose `bash` cannot read a
+# Windows path; on a Linux host their bash half runs with no flag, so no entry passes one.
+#
+# The layer each one is in is its measured wall clock, by the rule `docs/test-plans.md` uses for the
+# 261 cases that moved out of the fast layer: over 2 s is `tier = "slow"`. The times in the comments
+# below were read on the workstation -- the only machine with a pwsh -- on 2026-11-25, one run each,
+# warm, and they are that machine's numbers and not the host's.
 #
 # Nothing here needs a compiler or an install: these are the checks a tool of the tree runs on
-# itself, and they fail by exiting non-zero after printing their own count.
+# itself, and they fail by exiting non-zero after printing their own count. Every entry pins a
+# POSITIVE count beside the exit code, because a file that stops running its checks must fail here:
+# `camel-cleanup.test.ps1` prints `0 checks, 0 failed` and exits 0 on a machine with no usable bash,
+# and an entry that pinned only the exit code would call that green.
 
 [[tests]]
 name = "selfchecks.reading_normal"
@@ -141,3 +163,307 @@ expect_exit = 0
 expect_stdout_contains = ["11 of 11 checks passed"]
 normalizers = ["normalize_newlines"]
 timeout_ms = 120000
+
+# --- the nineteen PowerShell self-checks --------------------------------------------------------
+#
+# One entry per `internal/tools/*.test.ps1`. They share a shape, and the shape is the whole reason
+# `test/tools/pwsh-selfcheck.mjs` exists: `case` names the self-check (so the ledger and a reader see
+# the file the entry is about), `args` hands the runner the bridge and the absolute path, and
+# `skip_unless` asks the bridge whether there is a pwsh at all. `expect_stdout_contains` pins the
+# count the file prints, so an entry cannot stay green over a file that stopped checking.
+
+# Fast: 0.6 s on the workstation, 2026-11-25.
+[[tests]]
+name = "selfchecks.camel_remote_args"
+desc = "`internal/tools/camel-remote-args.test.ps1`: the list parameters split on commas as `-Plan` already did, the `--only`/`--drop` words are built from them, and an `-AstOnly` that names no `.cml` of this tree is refused instead of selecting nothing on the host (17 checks)."
+kind = "behavior"
+tool = "node"
+case = "../../../../internal/tools/camel-remote-args.test.ps1"
+args = ["test/tools/pwsh-selfcheck.mjs", "${case}"]
+skip_unless = ["node", "test/tools/pwsh-selfcheck.mjs", "--probe"]
+expect_exit = 0
+expect_stdout_contains = ["17 checks, 0 failed"]
+normalizers = ["normalize_newlines"]
+timeout_ms = 120000
+
+# Fast: 0.5 s.
+[[tests]]
+name = "selfchecks.camel_remote_fetch"
+desc = "`internal/tools/camel-remote-fetch.test.ps1`: `-FetchFile -Latest` decides which run is newest, what a suffix may name, and where the fetched file lands, and refuses the two spellings that would name a whole directory or a path outside the run (16 checks)."
+kind = "behavior"
+tool = "node"
+case = "../../../../internal/tools/camel-remote-fetch.test.ps1"
+args = ["test/tools/pwsh-selfcheck.mjs", "${case}"]
+skip_unless = ["node", "test/tools/pwsh-selfcheck.mjs", "--probe"]
+expect_exit = 0
+expect_stdout_contains = ["PASS camel-remote-fetch: 16 check(s)"]
+normalizers = ["normalize_newlines"]
+timeout_ms = 120000
+
+# Fast: 0.6 s.
+[[tests]]
+name = "selfchecks.camel_remote_targets"
+desc = "`internal/tools/camel-remote-targets.test.ps1`: the sentence a `-Plan` target is announced with before the push -- a directory, a plan file, the whole tree -- and the refusal of the whole tree, which used to be reported as a `--changed` failure the caller never asked for (24 checks)."
+kind = "behavior"
+tool = "node"
+case = "../../../../internal/tools/camel-remote-targets.test.ps1"
+args = ["test/tools/pwsh-selfcheck.mjs", "${case}"]
+skip_unless = ["node", "test/tools/pwsh-selfcheck.mjs", "--probe"]
+expect_exit = 0
+expect_stdout_contains = ["24 checks, 0 failed"]
+normalizers = ["normalize_newlines"]
+timeout_ms = 120000
+
+# Fast: 0.5 s.
+[[tests]]
+name = "selfchecks.merge_lane_docs"
+desc = "`internal/tools/merge-lane-docs.test.ps1`: what `docs-only` means as a list rather than an opinion -- four page directories are documentation, everything else is code, and `internal/` is not the boundary (28 checks)."
+kind = "behavior"
+tool = "node"
+case = "../../../../internal/tools/merge-lane-docs.test.ps1"
+args = ["test/tools/pwsh-selfcheck.mjs", "${case}"]
+skip_unless = ["node", "test/tools/pwsh-selfcheck.mjs", "--probe"]
+expect_exit = 0
+expect_stdout_contains = ["28 checks, 0 failed"]
+normalizers = ["normalize_newlines"]
+timeout_ms = 120000
+
+# Fast: 1.9 s.
+[[tests]]
+name = "selfchecks.run_registry"
+desc = "`internal/tools/run-registry.test.ps1`: the registry's one write -- with no reader the compaction lands and keeps the newest lines plus the new row, and while a reader holds the file the compaction is dropped, reported and never thrown, with the old file whole and no temp file left (14 checks)."
+kind = "behavior"
+tool = "node"
+case = "../../../../internal/tools/run-registry.test.ps1"
+args = ["test/tools/pwsh-selfcheck.mjs", "${case}"]
+skip_unless = ["node", "test/tools/pwsh-selfcheck.mjs", "--probe"]
+expect_exit = 0
+expect_stdout_contains = ["14 checks, 0 failed"]
+normalizers = ["normalize_newlines"]
+timeout_ms = 120000
+
+# Slow: 3.0 s, and it is the one file in this plan that is red today. Run over `-BashHost 88zjwei`
+# (the invocation `internal/tools/README.md` documents, because this machine's `bash` is WSL and
+# cannot read a Windows path) it prints `44 checks, 2 failed`: `a process inside it is named` and
+# `the bash guard exited 0`. The sweep keeps the fixture's `probe-f` and never prints
+# `camel-remote.ps1`'s `a process is using it` line for it. Reproduced twice on 2026-11-25 while the
+# host carried eleven other runs (1m load 28-32), so it is not the loaded-host flake the harness's
+# own comment at line 240 describes: that one fails the check by the sweep finding nothing, not by
+# the sweep keeping the tree without a reason. Pinning 44 and `0 failed` is the point -- this entry
+# goes red and names the file on the first host that has a pwsh, which is what should happen. The
+# count is not written as `20` (the part-B-skipped reading) and not as `2 failed`
+# (`known_fail` in another spelling).
+[[tests]]
+name = "selfchecks.camel_remote_cleanup"
+desc = "`internal/tools/camel-remote-cleanup.test.ps1`: a reading that failed removes nothing at all, and a live, locked, fresh, unrecorded or foreign checkout is kept and named -- the sweep that deleted two live lane checkouts on 2026-11-17 (44 checks; part B is red today, see the comment above)."
+kind = "behavior"
+tier = "slow"
+tool = "node"
+case = "../../../../internal/tools/camel-remote-cleanup.test.ps1"
+args = ["test/tools/pwsh-selfcheck.mjs", "${case}"]
+skip_unless = ["node", "test/tools/pwsh-selfcheck.mjs", "--probe"]
+expect_exit = 0
+expect_stdout_contains = ["44 checks, 0 failed"]
+normalizers = ["normalize_newlines"]
+timeout_ms = 300000
+
+# Slow: 3.0 s (41 checks over `-BashHost 88zjwei`). Without a usable bash the file prints
+# `0 checks, 0 failed` and exits 0, which is the shape the count in this entry is here to refuse.
+[[tests]]
+name = "selfchecks.camel_cleanup"
+desc = "`internal/tools/camel-cleanup.test.ps1`: `camel-cleanup.sh` against a fake home -- `rm` accepts a path only when, after resolving `..`, an absolute spelling and every symlink, it is under the run root and in a manifest, and everything else is refused (41 checks)."
+kind = "behavior"
+tier = "slow"
+tool = "node"
+case = "../../../../internal/tools/camel-cleanup.test.ps1"
+args = ["test/tools/pwsh-selfcheck.mjs", "${case}"]
+skip_unless = ["node", "test/tools/pwsh-selfcheck.mjs", "--probe"]
+expect_exit = 0
+expect_stdout_contains = ["41 checks, 0 failed"]
+normalizers = ["normalize_newlines"]
+timeout_ms = 300000
+
+# Slow: 3.1 s.
+[[tests]]
+name = "selfchecks.camel_gate_state"
+desc = "`internal/tools/camel-gate-state.test.ps1`: the one write the local helpers make to build-state.json and test-state.json -- the document lands, a reader holding the destination costs one update and no exception, and no read beside the publisher ever sees half a document (13 checks)."
+kind = "behavior"
+tier = "slow"
+tool = "node"
+case = "../../../../internal/tools/camel-gate-state.test.ps1"
+args = ["test/tools/pwsh-selfcheck.mjs", "${case}"]
+skip_unless = ["node", "test/tools/pwsh-selfcheck.mjs", "--probe"]
+expect_exit = 0
+expect_stdout_contains = ["13 checks, 0 failed"]
+normalizers = ["normalize_newlines"]
+timeout_ms = 300000
+
+# Slow: 2.5 s.
+[[tests]]
+name = "selfchecks.hook_integration"
+desc = "`internal/tools/hook-integration.test.ps1`: the real `scripts/hooks/pre-push` against a throwaway repository -- a single-parent arrival on `integration` is refused, a merge whose first parent is not the remote tip is refused with the sentence and the command that redoes it, and a merge of the tip arrives (13 checks)."
+kind = "behavior"
+tier = "slow"
+tool = "node"
+case = "../../../../internal/tools/hook-integration.test.ps1"
+args = ["test/tools/pwsh-selfcheck.mjs", "${case}"]
+skip_unless = ["node", "test/tools/pwsh-selfcheck.mjs", "--probe"]
+expect_exit = 0
+expect_stdout_contains = ["13 checks, 0 failed"]
+normalizers = ["normalize_newlines"]
+timeout_ms = 300000
+
+# Slow: 2.7 s.
+[[tests]]
+name = "selfchecks.merge_batch_sets"
+desc = "`internal/tools/merge-batch-sets.test.ps1`: the pairwise file intersection of a batch, the plan-set union and its hash read back through `scripts/plan-set.mjs`, `-Target` resolution and its refusal of an unknown branch, and the scratch root a seat must name (40 checks)."
+kind = "behavior"
+tier = "slow"
+tool = "node"
+case = "../../../../internal/tools/merge-batch-sets.test.ps1"
+args = ["test/tools/pwsh-selfcheck.mjs", "${case}"]
+skip_unless = ["node", "test/tools/pwsh-selfcheck.mjs", "--probe"]
+expect_exit = 0
+expect_stdout_contains = ["40 checks, 0 failed"]
+normalizers = ["normalize_newlines"]
+timeout_ms = 300000
+
+# Slow: 2.9 s.
+[[tests]]
+name = "selfchecks.merge_lane_baseline"
+desc = "`internal/tools/merge-lane-baseline.test.ps1`: the key a baseline is stored under -- the same tip twice is a reuse and not a rebuild, a different sha is a different tree, a fixed-name tree holding another commit is called stale and moved, and two seats still resolve one tip to one branch (28 checks)."
+kind = "behavior"
+tier = "slow"
+tool = "node"
+case = "../../../../internal/tools/merge-lane-baseline.test.ps1"
+args = ["test/tools/pwsh-selfcheck.mjs", "${case}"]
+skip_unless = ["node", "test/tools/pwsh-selfcheck.mjs", "--probe"]
+expect_exit = 0
+expect_stdout_contains = ["28 checks, 0 failed"]
+normalizers = ["normalize_newlines"]
+timeout_ms = 300000
+
+# Slow: 3.0 s.
+[[tests]]
+name = "selfchecks.merge_lane_checkout"
+desc = "`internal/tools/merge-lane-checkout.test.ps1`: where a merge is made and measured -- both trees come from this machine's settings rather than from a default that names an existing tree, and a run that cannot read them stops before it touches a repository (50 checks)."
+kind = "behavior"
+tier = "slow"
+tool = "node"
+case = "../../../../internal/tools/merge-lane-checkout.test.ps1"
+args = ["test/tools/pwsh-selfcheck.mjs", "${case}"]
+skip_unless = ["node", "test/tools/pwsh-selfcheck.mjs", "--probe"]
+expect_exit = 0
+expect_stdout_contains = ["50 checks, 0 failed"]
+normalizers = ["normalize_newlines"]
+timeout_ms = 300000
+
+# Slow: 29 s. It was 12 s before this lane repaired its fixture, because every scenario died at
+# load; the fixture is now every `internal/tools/*.ps1` rather than a hand-kept list that had
+# fallen behind `merge-push-shape.ps1` and `camel-gate-config.ps1` (18 checks / 14 failed).
+[[tests]]
+name = "selfchecks.merge_lane_docs_only"
+desc = "`internal/tools/merge-lane-docs-only.test.ps1`: a documentation-only merge end to end -- the real `merge-lane.ps1` and `merge-record.mjs`, a real merge commit, a real push into a throwaway repository, and the record read back off disk, in four scenarios (18 checks)."
+kind = "behavior"
+tier = "slow"
+tool = "node"
+case = "../../../../internal/tools/merge-lane-docs-only.test.ps1"
+args = ["test/tools/pwsh-selfcheck.mjs", "${case}"]
+skip_unless = ["node", "test/tools/pwsh-selfcheck.mjs", "--probe"]
+expect_exit = 0
+expect_stdout_contains = ["18 checks, 0 failed"]
+normalizers = ["normalize_newlines"]
+timeout_ms = 300000
+
+# Slow: 11 s.
+[[tests]]
+name = "selfchecks.merge_lane_firstparent"
+desc = "`internal/tools/merge-lane-firstparent.test.ps1`: the shape a commit must have before it is pushed to a target (D-1124-78) -- a merge of the tip arrives, a merge on an older tip and a single-parent commit are refused with the redo command, and the wiring that makes both merge tools read the one implementation (30 checks)."
+kind = "behavior"
+tier = "slow"
+tool = "node"
+case = "../../../../internal/tools/merge-lane-firstparent.test.ps1"
+args = ["test/tools/pwsh-selfcheck.mjs", "${case}"]
+skip_unless = ["node", "test/tools/pwsh-selfcheck.mjs", "--probe"]
+expect_exit = 0
+expect_stdout_contains = ["30 checks, 0 failed"]
+normalizers = ["normalize_newlines"]
+timeout_ms = 300000
+
+# Slow: 24 s -- the longest of the nineteen.
+[[tests]]
+name = "selfchecks.merge_lane_push"
+desc = "`internal/tools/merge-lane-push.test.ps1`: the one recovery a refused push may make -- the boundary is the file path and not a prefix, a docs-only refusal is recovered once with the landed files' plans re-run, and a refusal that touches code is not recovered at all (63 checks)."
+kind = "behavior"
+tier = "slow"
+tool = "node"
+case = "../../../../internal/tools/merge-lane-push.test.ps1"
+args = ["test/tools/pwsh-selfcheck.mjs", "${case}"]
+skip_unless = ["node", "test/tools/pwsh-selfcheck.mjs", "--probe"]
+expect_exit = 0
+expect_stdout_contains = ["63 checks, 0 failed"]
+normalizers = ["normalize_newlines"]
+timeout_ms = 300000
+
+# Slow: 15 s. It also needs `baselineRoot` or `baselineWorktree` in the machine-local settings
+# file: with neither named its five parent assertions fail for want of a tree (6 of 10 failed on
+# this workstation's settings file, which names neither), and that is a reading about the settings
+# rather than about the tool.
+[[tests]]
+name = "selfchecks.merge_lane_resolved"
+desc = "`internal/tools/merge-lane-resolved.test.ps1`: `-MergeCommit` -- the parents it asserts, the three shapes it refuses (first parent not origin, second parent not the lane, HEAD not the commit), and the regression that a run without it still asserts the old start point (10 checks)."
+kind = "behavior"
+tier = "slow"
+tool = "node"
+case = "../../../../internal/tools/merge-lane-resolved.test.ps1"
+args = ["test/tools/pwsh-selfcheck.mjs", "${case}"]
+skip_unless = ["node", "test/tools/pwsh-selfcheck.mjs", "--probe"]
+expect_exit = 0
+expect_stdout_contains = ["10 checks, 0 failed"]
+normalizers = ["normalize_newlines"]
+timeout_ms = 300000
+
+# Slow: 8.4 s.
+[[tests]]
+name = "selfchecks.merge_lane_start"
+desc = "`internal/tools/merge-lane-start.test.ps1`: the start point asserted before the merge -- a local promise that holds nothing but this tool's own unpushed merges is repaired, and one that holds a commit a person made is left alone (17 checks)."
+kind = "behavior"
+tier = "slow"
+tool = "node"
+case = "../../../../internal/tools/merge-lane-start.test.ps1"
+args = ["test/tools/pwsh-selfcheck.mjs", "${case}"]
+skip_unless = ["node", "test/tools/pwsh-selfcheck.mjs", "--probe"]
+expect_exit = 0
+expect_stdout_contains = ["17 checks, 0 failed"]
+normalizers = ["normalize_newlines"]
+timeout_ms = 300000
+
+# Slow: 18 s.
+[[tests]]
+name = "selfchecks.merge_record"
+desc = "`internal/tools/merge-record.test.ps1`: the two ends of the hole where a gate refused a push and not a commit -- the merge is made in a detached checkout and the push sends the merge commit itself, so a refusal leaves the branch where it was, and the hook refuses a first-parent range carrying a merge with no pass record (41 checks)."
+kind = "behavior"
+tier = "slow"
+tool = "node"
+case = "../../../../internal/tools/merge-record.test.ps1"
+args = ["test/tools/pwsh-selfcheck.mjs", "${case}"]
+skip_unless = ["node", "test/tools/pwsh-selfcheck.mjs", "--probe"]
+expect_exit = 0
+expect_stdout_contains = ["41 checks, 0 failed"]
+normalizers = ["normalize_newlines"]
+timeout_ms = 300000
+
+# Slow: 12 s.
+[[tests]]
+name = "selfchecks.run_tests_diagnostic_file"
+desc = "`internal/tools/run-tests-diagnostic-file.test.ps1`: the guard for `expect_diagnostic_file` -- the right file passes (relative and absolute), another file fails with both named, a list, a number, an empty string beside it and an `expect_no_diagnostics` are refused where the plan is read, and an entry that does not write the field keeps its old meaning (36 checks)."
+kind = "behavior"
+tier = "slow"
+tool = "node"
+case = "../../../../internal/tools/run-tests-diagnostic-file.test.ps1"
+args = ["test/tools/pwsh-selfcheck.mjs", "${case}"]
+skip_unless = ["node", "test/tools/pwsh-selfcheck.mjs", "--probe"]
+expect_exit = 0
+expect_stdout_contains = ["36 checks, 0 failed"]
+normalizers = ["normalize_newlines"]
+timeout_ms = 300000
