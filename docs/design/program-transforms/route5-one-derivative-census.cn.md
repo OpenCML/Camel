@@ -230,11 +230,10 @@ foreach($d in 'examples','showcase','benchmarks'){
    的 `explainRejection`）。库是**另一个名字** `has_aux(f)`，而且只声明了一种形状
    `(w: float) => (float, float)`（`src/stdlib/vjp.cml#has_aux` 的注释自己写明了"库还没有
    参数列表是 pack 的声明"）。
-4. **结果类型名不同，但是同一个类型。** 引擎的声明写 `Gradient<F>`（`src/stdlib/autodiff/signatures/autodiff.cml#grad`），
-   库的声明写 `GradientOf<F>`（`src/stdlib/vjp.cml#grad`），两者在 `src/stdlib/types.cml#Gradient` 与
-   `src/stdlib/types.cml#GradientOf` 里是**逐字相同的定义**
-   （`<...WithOf<F>>(...ParamsOf<F>) => Tangent<FirstOf<WithOf<F>>>`）。文件里自己承认"两个名字一个类型
-   是读者要学的一种拼法，合并没在这里做"。
+4. **结果类型名相同，是同一个类型。** 引擎的声明写 `Gradient<F>`（`src/stdlib/autodiff/signatures/autodiff.cml#grad`），
+   库 `grad` 的返回类型现在也写 `Gradient<F>`（`src/stdlib/vjp.cml#grad`）。两套原先把同一个定义
+   （`<...WithOf<F>>(...ParamsOf<F>) => Tangent<FirstOf<WithOf<F>>>`，`src/stdlib/types.cml`）写成了两个名字，
+   **2026-11-25 合并成一个**：另一个名字删掉，不留别名，也不留「旧名 → 新名」的诊断。
 5. **`vjp` 这个词在两套里不是一个东西。** 引擎侧 `vjp` 是**标签** `#vjp(rule)`（`src/stdlib/prelude.cml#vjp`，
    由 `src/stdlib/autodiff/rules.cpp#ruleOf` 读 `graph->ruleGraphs()`）；库侧 `vjp` 是**函数**
    （`src/stdlib/vjp.cml#vjp`）。同名的两种意义共存，靠的是"标签用 `#` 写"这条规则。
@@ -290,7 +289,7 @@ exempt, 0 new, stale=0
 |---|---|---|---|---|
 | ~~1~~ | ~~把 `src/stdlib/autodiff.cml` 里的局部律数学搬出引擎归属~~ **2026-11-25 已做**：14 个律函数逐字搬到新模块 `src/stdlib/laws.cml`（144 行），`autodiff.cml` 190 → 71 行只留 `stop_gradient`；两条 `from …` 各拆成一条 `from laws` + 一条 `from autodiff` | 无 | **已并行完成** | 见 §2 a 的两段读数：律那一半搬走了，`stop_gradient` 那一半搬不走（内核是 `autodiff:stop_gradient`） |
 | ~~1b~~ | ~~把 `stop_gradient` 的声明与内核一起落位到库侧~~ **2026-11-25 已做**：声明进 `laws.cml`，内核（恒等）与 `noGradient` 规则进新模块 `src/stdlib/laws/`（150 行 C++），URI `autodiff:stop_gradient` → **`laws:stop_gradient`**；12 个 `.cml` 的 import 跟改（含 1 个 benchmark），onnx 的 lowering 改名，`git grep 'from autodiff' -- src/*` = **0** | 1 | **已并行完成** | 见 §2 a 的第三段读数与 §1 的 1b 数字；URI 改名按 `docs/design-principles.cn.md` 第 660 行（`模块:路径`，登记时检查冒号前的模块就是正在登记的模块）|
-| 2 | 合并 `Gradient<F>` / `GradientOf<F>` 两个名字（`types.cml`），以及决定 `ValueAndGradient*` 家族归谁 | 无 | **可**，与 1b、3 并行 | 一个类型两个名字是读者要学的一种拼法；引擎一删，`Gradient<F>` 就没人写了 |
+| ~~2~~ | ~~合并 `Gradient<F>` / `GradientOf<F>` 两个名字（`types.cml`），以及决定 `ValueAndGradient*` 家族归谁~~ **2026-11-25 已做前半**：两个名字合并成 `Gradient<F>`（`src/stdlib/types.cml`），另一个名字删掉、不留别名、不留「旧名 → 新名」的诊断；`ValueAndGradient*` 家族归谁**仍未决定** | 无 | **已做完可并行的部分** | 一个类型两个名字是读者要学的一种拼法；引擎一删，`Gradient<F>` 就没人写了 |
 | 3 | 给 15 个"引擎有、库无"的律补 `jvp_*` / `*_t`（逐条见 §8） | 无（但 `nn` 那 7 个要求规则集 `import nn`，见豁免理由原文"the rulesets declare and import nothing from `nn`"） | **可**，与 1b、2 并行；内部按模块再并行 | 这 15 个键是"删引擎就丢"的能力。另外 31 个（`:tangent/*`、`:struct/*`、比较、离散转换、`access`、`cast`）是机器算子，**不搬**，也不该搬 |
 | 4 | 给 `#vjp(rule)` 在库路线找一个读者（或者明确宣布这条标签随引擎一起消失，并把 `custom_rule.cml`、`transform_rules.cml` 一排测试按新语义改写） | 1（律库要在库侧） | 与 3 并行 | 今天用户自定义导数只有引擎读得到；这是**语言能力**，不是实现细节，必须做决定 |
 | 5 | 把家族用例文件里只走引擎入口的 127 个迁到库入口（先把 `scripts/autodiff-migration-ledger.mjs` 的读数往上推） | 3、4 | 与 3 的后半并行，但**必须在 3 之后** | 迁移的判据是那个脚本：现在 `test/cases/tools/autodiff_migration_ledger/baseline.json` 记的是 **23 个案**能在库上跑（145 个案里的 23） |
@@ -448,4 +447,4 @@ promotion-3 记的是晋级 3 那次（基线在 develop 的 `d6503a197c` 一带
 2. **然后才开三条律车道**（§6：A `nn` 7 条、B `math` 5 条、C 索引 2 条），而且**要等主机负载降下来**：
    本轮 536 条用例的读数是在 1 分钟负载 48 到 87 的机器上取的，三条车道并行会把这个读数变成噪声，
    而它们的判据恰恰是"规则集里多了一条律"这种小读数。
-3. 第 2 步（合并 `Gradient<F>` / `GradientOf<F>`）与这三条车道不冲突，可以随时插进来。
+3. ~~第 2 步与这三条车道不冲突，可以随时插进来。~~ **2026-11-25 已做**：两个名字合并成 `Gradient<F>`（见上表第 2 行），这一步不再占车道。
