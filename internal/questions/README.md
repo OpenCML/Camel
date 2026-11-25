@@ -5,7 +5,7 @@
 > 这一页由 `node scripts/check-doc-links.mjs --questions-index --write` 从目录生成，不要手改：
 > 规矩在 `internal/reviews/` 的裁定里，落没落地看代码和提交，不看这张表。
 
-## 现在在等作者：24 页
+## 现在在等作者：25 页
 
 | 页 | 问什么 |
 | --- | --- |
@@ -33,6 +33,7 @@
 | [`2026-11-24-what-the-graph-view-does-not-answer`](2026-11-24-what-the-graph-view-does-not-answer.cn.md) | 视图答不出什么：`onnx` 与 `tiles` 停下来的地方，按能力归类 |
 | [`2026-11-25-does-importing-a-module-add-graphs-to-the-entry-program`](2026-11-25-does-importing-a-module-add-graphs-to-the-entry-program.cn.md) | 把模块的遍名写进流水线，为什么要把它的 205 张库图挂到用户程序上？ |
 | [`2026-11-25-range-methods-outside-prelude`](2026-11-25-range-methods-outside-prelude.cn.md) | 问作者：Range 上的方法在 prelude 之外不可用，这是缺口还是写法错 |
+| [`2026-11-26-oper-uri-readings`](2026-11-26-oper-uri-readings.cn.md) | 算子「按编号认」还差两件事，缺哪一件由你定 |
 
 ## 生成器不会删的行：243 行（页已不在 `questions/` 里）
 
