@@ -1034,7 +1034,7 @@ const SELF_CHECK_ENTRY_POINTS = new Set([
     'test/tools/selftest/selection-cases.mjs',
 ])
 
-// Empty, and that is the reading this list is here to keep: the nineteen `*.test.ps1` were recorded
+// Empty, and that is the reading this list is here to keep: the twenty `*.test.ps1` were recorded
 // in it with one reason (`a plan cannot start it: the build host is Linux and has no pwsh`), and
 // they are now entries of `test/plans/feat/tools/selfchecks.plan.toml` instead -- each one through
 // `test/tools/pwsh-selfcheck.mjs`, with the bridge's `--probe` as its `skip_unless`, so a host
