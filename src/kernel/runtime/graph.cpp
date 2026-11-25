@@ -104,6 +104,17 @@ bool nodeMayFault(
     if (kind == GCNodeKind::Oper) {
         const camel::ops::OperShape shape = shapeOfOperator(oper);
         if (shape == camel::ops::OperShape::Conversion) {
+            // A conversion's answer is the pair's, because its record states `mayFault` for every
+            // pair it may be called with. An operator that states it cannot fault is not a
+            // conversion being asked: it is an entering, the step the compiler inserts to make two
+            // types meet, and the record's answer is the one to take (design principles 5.1). The
+            // two are one shape because a reader of the graph has to read the value the same way;
+            // they differ in exactly this item.
+            const camel::ops::Record *record =
+                camel::core::OperatorTable::instance().recordOf(oper);
+            if (record != nullptr && !record->mayFault()) {
+                return false;
+            }
             return castMayFault(castTarget, castSource);
         }
         if (shape == camel::ops::OperShape::Clone) {

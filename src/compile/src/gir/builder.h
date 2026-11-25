@@ -3926,7 +3926,16 @@ class Builder {
     /// A CAST of `value` to `target`, made by the compiler (no conversion rule is consulted).
     node_handle_t
     castNodeTo(node_handle_t value, camel::core::type::Type *target, const GCT::node_ptr_t &origin);
-    /// The same conversion written as the operator it is (`cast::<T, U>` of the prelude): an OPER
+    /// **Entering**: the step the compiler inserts to make two types meet, written as the operator
+    /// it is (`enter::<T, U>` of the prelude). It always succeeds and it asks no safety table
+    /// (design principles 5.1, "entering is not a conversion"); a conversion the *program* writes
+    /// is `conversionNodeOf` below, which is `:op/cast` and does check the pair.
+    ///
+    /// The caller is `castNodeTo`, which first asks `Type::castEntersFrom` and refuses the program
+    /// where the step could fail. Call this one only for a step that relation admits.
+    node_handle_t enterNodeOf(
+        node_handle_t value, camel::core::type::Type *target, const GCT::node_ptr_t &origin);
+    /// A conversion written as the operator it is (`cast::<T, U>` of the prelude): an OPER
     /// node whose written type arguments are the operand's type and the target, and whose result
     /// type is the target. Where no declaration answers -- a program that shadows `cast` -- the
     /// call is still written, by its URI (`:op/cast`), which no name in scope can shadow.

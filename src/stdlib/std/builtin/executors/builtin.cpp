@@ -474,6 +474,10 @@ std::unordered_map<std::string, operator_t> makeOpsImplMap() {
         // from the call instead: the target type is the result type, the fill kind is the target
         // type's, and the member's position or name is the call's first operand.
         {"op/cast", __cast_value__},
+        // Entering, the fourth operation of this family and the one the compiler writes rather
+        // than the program: the same step as a conversion with no safety table to ask, because a
+        // step the compiler inserts to make two types meet always succeeds (design principles 5.1).
+        {"op/enter", __enter_value__},
         {"op/fill", __fill_value__},
         {"op/access", __access_value__},
         // The member read by name is a second URI (prelude.cml says why): the same kernel, which
@@ -788,6 +792,12 @@ void registerBuiltinOperatorTraits() {
     // stands instead of moving it
     // (`kernel/runtime/graph.cpp#nodeMayFault` asks this answer once the node is an OPER node).
     registry.set(":op/cast", {.pure = true, .elementwise = false, .mayFault = true});
+    // Entering: the fourth operation of this family and the one the compiler writes rather than
+    // the program. It reads the values of its own call and writes nothing outside them, so it is
+    // pure and not elementwise; and it cannot fault -- that is the whole difference between it and
+    // `:op/cast` above, which states `mayFault` per operator because a conversion of a pair the
+    // table calls unsafe is one the program asked to have checked (design principles 5.1).
+    registry.set(":op/enter", {.pure = true, .elementwise = false, .mayFault = false});
     registry.set(":op/fill", {.pure = true, .elementwise = false, .mayFault = true});
     registry.set(":op/access", {.pure = true, .elementwise = false, .mayFault = true});
     registry.set(":op/access_key", {.pure = true, .elementwise = false, .mayFault = true});
@@ -795,6 +805,10 @@ void registerBuiltinOperatorTraits() {
     // the letters of the URI (`camel/runtime/oper_shape.h`). Written here, where the operator is
     // registered with the kernel that runs it, and at no second place.
     registry.declareShape(":op/cast", camel::ops::OperShape::Conversion);
+    // Entering is the same shape as a conversion: it reads one value and hands it on as the type
+    // its call says. What differs is the record's `panic`, and that is the item a reader asks when
+    // it wants to know whether running it can fail (`kernel/runtime/graph.cpp#nodeMayFault`).
+    registry.declareShape(":op/enter", camel::ops::OperShape::Conversion);
     registry.declareShape(":op/fill", camel::ops::OperShape::Construction);
     registry.declareShape(":op/access", camel::ops::OperShape::Access);
     registry.declareShape(":op/access_key", camel::ops::OperShape::Access);

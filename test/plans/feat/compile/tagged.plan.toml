@@ -1059,9 +1059,10 @@ const thrown = idOf(':op/tag_throw')
 const next = lines.find((l) => l.trim().startsWith(thrown + ' -> '))
 assert(next, 'the thrown value is used')
 const cast = next.trim().split(' ')[2]
-// The conversion is an operator (`:op/cast`) rather than a node kind of its own, and the graph is
-// the same graph: the throw's value is the operand of the conversion, which is the exit.
-assert(lines.some((l) => l.trim().startsWith(cast + ' [label=":op/cast"')), 'throw feeds a conversion')
+// The step that makes the thrown value the exit is the entering the compiler inserts -- `:op/enter`,
+// not `:op/cast`: entering is not a conversion (design principles 5.1). The graph is the same graph:
+// the throw's value is the operand of the entering, which is the exit.
+assert(lines.some((l) => l.trim().startsWith(cast + ' [label=":op/enter"')), 'throw feeds the entering')
 assert(lines.some((l) => l.trim().startsWith(cast + ' -> O') && l.includes('type="EXIT"')), 'the conversion is the exit of the graph')
 assert(out.includes('label="graph_throw_pass.cml:10:12"'), 'the position of error(...) is a constant argument')
 }
@@ -1462,5 +1463,76 @@ args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "RuntimeDiag::NullSlotUnwrapped"
 expect_output_not_contains = ["-12345"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+# ---- Entering is not a conversion (design principles 5.1, the ruling of 2026-11-25) ----
+# The step the compiler inserts to make two types meet is `:op/enter`, it always succeeds, and a
+# conversion the program writes is still `:op/cast`. The four tests below pin the three halves of
+# that ruling: the graph says which operator each step is (twice, once per side), the entry that
+# used to end in a conversion fault now runs to its end, and the one step that would have had to
+# fail is a compile-time type error naming both types.
+
+[[tests]]
+name = "entering.never_fails"
+desc = "A step the compiler inserts -- an error value taking the declared `int?!` of its position, a literal taking the position's type -- runs to the end of the entry: the failed form of a position is entered, not converted, so nothing it was given can be refused at run time."
+kind = "behavior"
+case = "../../../cases/compile/tagged/entering_operator.cml"
+args = ["${case}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim()
+const want = ["error KeyError", "5"].join('\n')
+assert(out === want, `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 12000
+
+[[tests]]
+name = "entering.graph_names_the_compiler_step"
+desc = "`std::gir` names the compiler's step `:op/enter` and nothing in this program is a conversion the program wrote: the URIs are `:op/enter` only."
+kind = "behavior"
+case = "../../../cases/compile/tagged/entering_operator.cml"
+args = ["${case}", "std::gir"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines"]
+verify_script = """
+({ input, assert }) => {
+const gir = input.normalized.stdout
+assert(gir.includes(':op/enter'), 'the graph holds no :op/enter node')
+assert(!gir.includes(':op/cast'), 'the graph holds a :op/cast node a step the compiler wrote did not make')
+}
+"""
+timeout_ms = 12000
+
+[[tests]]
+name = "cast.graph_names_the_written_step"
+desc = "`std::gir` names a conversion the program wrote `:op/cast`: the two steps are different operators, and a reader of the graph can tell which it is looking at."
+kind = "behavior"
+case = "../../../cases/compile/tagged/user_cast_is_a_conversion.cml"
+args = ["${case}", "std::gir"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines"]
+verify_script = """
+({ input, assert }) => {
+const gir = input.normalized.stdout
+assert(gir.includes(':op/cast'), 'the graph holds no :op/cast node for the conversion the program wrote')
+}
+"""
+timeout_ms = 12000
+
+[[tests]]
+name = "err.entering_that_would_fail_is_a_type_error"
+desc = "`enter::<int, float>` is a pair that needs a conversion which may fail, and a step the compiler inserts cannot fail: the call is a type error that names both types (0x00021A), and no node is built."
+kind = "negative"
+case = "../../../cases/compile/tagged/err_enter_needs_cast.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::ConversionNeededWhereTheCompilerWouldInsertOne"
+expect_diagnostic_code = "0x0300021A"
+expect_output_contains = ["'int'", "'float'"]
+expect_output_not_contains = ["UnknownInternalError", "Invalid argument of 'cast'"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000
