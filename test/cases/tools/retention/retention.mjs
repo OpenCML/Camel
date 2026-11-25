@@ -394,7 +394,7 @@ function runnerMode() {
         // the test's own meta.json.
         const recordNames = new Set([
             'stdout.txt', 'stderr.txt', 'output.txt', 'meta.json',
-            'verify_stdout.txt', 'verify_stderr.txt', 'summary.json', 'run.json',
+            'verify_stdout.txt', 'verify_stderr.txt', 'summary.json', 'run.json', 'transcript.txt',
         ])
         const seen = fileNamesUnder(lastRun)
         recorded = seen.length
