@@ -557,7 +557,7 @@ a2ca595975c02dee ok src/stdlib/autodiff/signatures/autodiff.cml
 1d27a3dc0b0c111c ok src/stdlib/rulesets/jvp.cml
 8375a530eff268c4 ok src/stdlib/rulesets/probe_batch.cml
 7a11798394cc6e2c ok src/stdlib/rulesets/probe_missing.cml
-29fe22995a1478a0 ok src/stdlib/rulesets/transpose.cml
+0b3495938e0f5394 ok src/stdlib/rulesets/transpose.cml
 a338d98395d2f704 ok src/stdlib/rulesets/vmap.cml
 0c368faaef090af5 no src/stdlib/tensor/signatures/tensor.cml
 6f34daec70d7b4c4 ok src/stdlib/tiles/signatures/tiles.cml
@@ -2659,6 +2659,7 @@ c2b5e538250f4f9e ok test/cases/effects/writer_table_through_callee.cml
 84d03fada7b1298a ok test/cases/effects/unreachable_pair/with/reading.cml
 5a246320b71e8e7a ok test/cases/effects/unreachable_pair/without/reading.cml
 fbd1300c8d159061 ok test/cases/facts/a_body_exit_gate_reads_its_writes.cml
+65dc8fca38021082 ok test/cases/facts/conversions.cml
 dda16fde3dcff7ec ok test/cases/facts/tensors_and_loops.cml
 5746ac4f2a7487d0 ok test/cases/facts/two_functions.cml
 58f2a1144eea4ff4 ok test/cases/feat/bindings/python_boundary.cml
