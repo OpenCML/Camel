@@ -68,8 +68,6 @@
 |--------|------|
 | DATA   | 编译期常量，存于静态区，节点自身通常持有负 `data_idx_t` |
 | PORT   | 参数端口，占运行时槽位，有 name/isVar |
-| CAST   | 运行时类型转换 |
-| COPY   | 运行时数据拷贝 |
 | FILL   | 运行时构造复合数据（如 struct/array） |
 | ACCS   | 运行时下标/字段访问，索引为数字或字符串键 |
 | BRCH   | 条件分支 |
@@ -83,7 +81,7 @@
 | LOOP   | 循环节点：条件与体是这张图的两个区域，端口是初始状态、各区域的结果与轮次计数；值与收集槽的读法见 `kernel/include/camel/runtime/loop.h` |
 | DEAD   | 改写删掉的节点留下的位置（无输入；遍历节点的消费者跳过它，编号不复用） |
 
-`SYNC` 曾是一个节点种类（旧编号 12），已从模型里删除：`GCNodeKind` 里那个编号空着（`graph.h#GCNodeKind`），`sync` 块里语句的先后改由**同步边**表达（§3、§4.5）。`LOOP` 是 15、`DEAD` 是 255（同文件）。
+`SYNC` 曾是一个节点种类（旧编号 12），已从模型里删除：`GCNodeKind` 里那个编号空着（`graph.h#GCNodeKind`），`sync` 块里语句的先后改由**同步边**表达（§3、§4.5）。`CAST`（旧编号 2）与 `COPY`（旧编号 3）同样已删除，编号不复用：转换是 `:op/cast` 的调用、拷贝是 `:op/copy` 的调用，都由 `OPER` 节点承载（§4.3）。`LOOP` 是 15、`DEAD` 是 255（同文件）。
 
 除上表一行摘要外，**§4.1–§4.9** 按类型补充**角色、典型 `Norm`/`With`/`Ctrl` 连边约定**及与调度后端的关系；命名与 `GCNodeKind`（`graph.h#GCNodeKind`）一致，编译期的节点是 `DraftNodeRef` 句柄，不再有节点子类（`compile/include/camel/compile/gir/nodes.h` 今天只是一个弃用转发头）。
 
@@ -110,11 +108,11 @@
   - **边**：多经 **`Norm` 边**向体内算子、分支条件等提供输入；也可与 `With`/`Ctrl` 组合，取决于具体 lowering。  
   - **与 `DATA` 的区别**：`DATA` 是静态只读槽；`PORT` 是每次调用实例化的**动态入口**。
 
-### 4.3 `CAST`、`COPY`、`FILL`、`ACCS`
+### 4.3 转换、拷贝、`FILL`、`ACCS`
 
-- **`CAST`**：对已有值做**运行时类型转换**（宽化/窄化、装箱视图等，以 `dataType` 与算子为准）。**`Norm` 入边**为待转换值，出边为转换结果；通常不自带控制语义，需与上游 `Ctrl` 组合时由调度保证序。
+- **转换（`CAST`）**：不再是节点种类。一次转换是 `:op/cast` 的调用（一个 `OPER` 节点）：建图期由 `Builder::conversionNodeOf` 按源类型与目标类型解析出算子，再用 `addOperNode` 建节点（`compile/src/gir/builder_control.cpp#conversionNodeOf`）。**`Norm` 入边**为待转换值，节点的结果类型是目标类型；通常不自带控制语义，需与上游 `Ctrl` 组合时由调度保证序。
 
-- **`COPY`**：显式**值拷贝**，用于需要打破共享、满足值语义或 ABI 要求的场景（如复合类型按副本传递）。入出以 **`Norm`** 为主。
+- **拷贝（`COPY`）**：同样不再是节点种类。一次拷贝是 `:op/copy` 的调用，由 `Builder::copyNodeOf` 用 `addOperNode` 建（`compile/src/gir/builder_control.cpp#copyNodeOf`），用于需要打破共享、满足值语义或 ABI 要求的场景（如复合类型按副本传递）。入出以 **`Norm`** 为主。
 
 - **`FILL`**：在运行时**构造复合值**（如 `struct` / `tuple` / `array` 等）的聚合节点；多个 **`Norm` 入边**对应各字段/元素来源，出边为合成后的单一值。
 
@@ -216,11 +214,11 @@
 - `FILL`：`GCFillBody`（种类与每个值填到哪个位置；`graph.h#GCFillBody`）。
 - `BRCH` / `JOIN`：`GCBrchBody` / `GCJoinBody`（配对的另一头与臂数；`graph.h#GCBrchBody`）。
 - `OPER`：`GCOperBody`（`OperId` 与调度器解析出的 `operator_t`；`graph.h#GCOperBody`）。
-- `DATA` / `PORT` / `GATE` / `CAST` / `COPY`：没有负载。`DATA` 的 `dataIndex` 为负时指向静态区；`PORT` 是图的三张端口之一（形参、`with` 形参、闭包捕获）。
+- `DATA` / `PORT` / `GATE`：没有负载。`DATA` 的 `dataIndex` 为负时指向静态区；`PORT` 是图的三张端口之一（形参、`with` 形参、闭包捕获）。
 
 旧的那一层节点子类——`DataNode`、`PortNode`、`FuncNode`、`OperNode`、`BrchNode` / `JoinNode`、`GateNode`、`AccsNode`、`CastNode`——已移除：职责由 `GCNode` 加负载结构承担，建图期则由 `DraftNodeHeader` 加 `DraftGraphBuilder` 的冷数据表承担。`compile/include/camel/compile/gir/nodes.h` 今天只是一个弃用转发头。
 
-`CAST` 仍由 `Builder::visitCastNode`（`compile/src/gir/builder_expr.cpp#visitCastNode`）生成：`Norm` 入边是待转换的值，节点类型是目标类型。
+`as` 与值装入 `T?`/`T!` 的转换仍由 `Builder::visitCastNode`（`compile/src/gir/builder_expr.cpp#visitCastNode`）处理，但它今天建的是 `:op/cast` 的调用：`Builder::conversionNodeOf` 解析出算子后用 `addOperNode` 建 `OPER` 节点，`Norm` 入边是待转换的值，节点类型是目标类型。`var` 绑定与值语义要求的拷贝同样如此，由 `Builder::copyNodeOf` 建 `:op/copy` 的调用（`compile/src/gir/builder_control.cpp#copyNodeOf`）。
 
 同步边（§4.5）不是节点，没有对应的节点子类。
 
@@ -343,7 +341,7 @@
 - **OPER** → 字节码 **OPER**（变长，需运行时 operator_t）。
 - **FUNC/CALL/TAIL** → **FUNC/TAIL/CALL** 字节码。
 - **BRCH/JOIN** → **BRCH/JOIN** 字节码。
-- **COPY/ACCS/FILL** → **COPY/ACCS/FILL** 字节码。
+- **ACCS/FILL** → **ACCS/FILL** 字节码；转换与拷贝是 `:op/cast` / `:op/copy` 的调用，走 **OPER** 字节码。
 - **算术/比较** 常被 lowering 为 **IADD/LADD/LLE** 等定长 opcode。
 
 GIR 是「图」形态；线性调度时再通过 **compile** 转为字节码序列（或 NodeVM 直接按拓扑序遍历图节点）。
