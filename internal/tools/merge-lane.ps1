@@ -2101,12 +2101,41 @@ $transcript = Join-Path ([System.IO.Path]::GetTempPath()) ("camel-merge-rows-$PI
             $candidates = @($newRed + $addedRed)
             $named = @()
             foreach ($entry in @($list.entries)) {
-                if (-not $entry.case -or -not $entry.snapshot -or -not $entry.fixedAt) {
-                    Stop-With "-KnownAtSnapshot entry $(($entry | ConvertTo-Json -Compress)) is incomplete" 'Each entry needs case, snapshot and fixedAt.'
+                $removedAt = "$($entry.removedAt)".Trim()
+                $isRemoval = [bool]$removedAt
+                if (-not $entry.case -or -not $entry.snapshot -or (-not $entry.fixedAt -and -not $isRemoval)) {
+                    Stop-With "-KnownAtSnapshot entry $(($entry | ConvertTo-Json -Compress)) is incomplete" 'Each entry needs case, snapshot and fixedAt -- or case, snapshot, removedAt and note for a case that was removed instead.'
                 }
                 $snapshot = "$(& git rev-parse --verify "$($entry.snapshot)^{commit}" 2>$null)".Trim()
                 if ($snapshot -ne $mergeCommit) {
                     Stop-With "-KnownAtSnapshot entry $($entry.case) is red at $($entry.snapshot)" "This run records $($mergeCommit.Substring(0, 9)); an allowance for another snapshot says nothing about it."
+                }
+                if ($candidates -notcontains $entry.case) {
+                    Stop-With "-KnownAtSnapshot entry $($entry.case) is neither new nor an added case that is red here" 'A stale allowance is refused rather than carried: it would let a later case through.'
+                }
+                if ($isRemoval) {
+                    # The third outcome of a red case: the tree at the tip does not carry it at all. That
+                    # is a fact about the tip, and it is checked the way the fix is -- from the
+                    # repository: the name is gone from the plans, the commit that removed it is on the
+                    # line to the tip, and that commit's own message is the one quoted in the entry.
+                    # "removed" is written as removed; it is not a synonym for fixed.
+                    if (-not $entry.note) { Stop-With "-KnownAtSnapshot entry $($entry.case) names removedAt without a note" 'The record quotes the removal commit'; }
+                    $gone = "$(& git rev-parse --verify "$removedAt^{commit}" 2>$null)".Trim()
+                    if (-not $gone) { Stop-With "-KnownAtSnapshot entry $($entry.case) names $removedAt, which is not a commit here" 'The record says which commit removed the case; a sha nobody can resolve is not that.' }
+                    & git merge-base --is-ancestor $gone $tipSha 2>$null
+                    if ($LASTEXITCODE -ne 0) { Stop-With "-KnownAtSnapshot entry $($entry.case) names $($gone.Substring(0, 9)) as the removal, and it is not on the tip $($tipSha.Substring(0, 9))" 'A removal that is not on the branch does not describe the tip.' }
+                    $leaf = "$($entry.case)"
+                    if ($leaf.Contains('/')) { $leaf = $leaf.Substring($leaf.IndexOf('/') + 1) }
+                    $stillThere = @(& git grep -l -- $leaf $tipSha -- test/plans 2>$null)
+                    if ($stillThere.Count -gt 0) {
+                        Stop-With "-KnownAtSnapshot entry $($entry.case) is still in the plans at the tip $($tipSha.Substring(0, 9))" "A case that is there has to be green to be allowed; this one is only gone if nothing in test/plans names it."
+                    }
+                    $goneBody = (@(& git log -1 --format=%B $gone 2>$null) -join "`n")
+                    if (-not $goneBody.Contains("$($entry.note)")) {
+                        Stop-With "-KnownAtSnapshot entry $($entry.case) quotes a sentence $($gone.Substring(0, 9)) does not contain" 'The quote is what makes the removal checkable; a sentence the commit does not say is not that.'
+                    }
+                    $allowed += [pscustomobject]@{ case = $entry.case; kind = 'removed-red'; snapshot = $snapshot; removedAt = $gone; note = "$($entry.note)" }
+                    continue
                 }
                 $fixing = "$(& git rev-parse --verify "$($entry.fixedAt)^{commit}" 2>$null)".Trim()
                 if (-not $fixing) { Stop-With "-KnownAtSnapshot entry $($entry.case) names $($entry.fixedAt), which is not a commit here" 'The record says which commit fixed it; a sha nobody can resolve is not that.' }
@@ -2117,21 +2146,24 @@ $transcript = Join-Path ([System.IO.Path]::GetTempPath()) ("camel-merge-rows-$PI
                 if ("$($row[0].status)" -ne 'pass') {
                     Stop-With "-KnownAtSnapshot entry $($entry.case) is $($row[0].status) on the tip $($tipSha.Substring(0, 9)), not pass" 'The allowance is for a case that is green now; this one is not.'
                 }
-                if ($candidates -notcontains $entry.case) {
-                    Stop-With "-KnownAtSnapshot entry $($entry.case) is neither new nor an added case that is red here" 'A stale allowance is refused rather than carried: it would let a later case through.'
-                }
                 $kind = if ($newRed -contains $entry.case) { 'new' } else { 'added-red' }
                 $allowed += [pscustomobject]@{ case = $entry.case; kind = $kind; snapshot = $snapshot; fixedAt = $fixing }
             }
             $uncovered = @($candidates | Where-Object { $name = $_; -not ($allowed | Where-Object { $_.case -eq $name }) })
             if ($uncovered.Count -gt 0) {
                 $compare | ForEach-Object { "  $_" }
-                Stop-With "-KnownAtSnapshot does not cover $($uncovered -join ', ')" "Everything the comparison calls new or adds red has to be named in the list, with the commit that fixed it and a pass on the tip. $($allowed.Count) of $($candidates.Count) were."
+                Stop-With "-KnownAtSnapshot does not cover $($uncovered -join ', ')" "Everything the comparison calls new or adds red has to be named in the list, with the commit that fixed it and a pass on the tip -- or with the commit that removed it. $($allowed.Count) of $($candidates.Count) were."
             }
             $compare | Where-Object { "$_".StartsWith('merge-readings:') } | ForEach-Object { "  $_" }
             foreach ($entry in $allowed) {
-                Write-Host ("  allowed: {0} is {1} at this snapshot ({2}) and pass at {3}; fixed at {4}" -f `
-                    $entry.case, $(if ($entry.kind -eq 'new') { 'red' } else { 'added red' }), $mergeCommit.Substring(0, 9), $tipSha.Substring(0, 9), $entry.fixedAt.Substring(0, 9))
+                if ($entry.kind -eq 'removed-red') {
+                    Write-Host ("  allowed: {0} is red at this snapshot ({1}) and the tip does not carry it; case removed at {2}, not fixed" -f `
+                        $entry.case, $mergeCommit.Substring(0, 9), $entry.removedAt.Substring(0, 9))
+                }
+                else {
+                    Write-Host ("  allowed: {0} is {1} at this snapshot ({2}) and pass at {3}; fixed at {4}" -f `
+                        $entry.case, $(if ($entry.kind -eq 'new') { 'red' } else { 'added red' }), $mergeCommit.Substring(0, 9), $tipSha.Substring(0, 9), $entry.fixedAt.Substring(0, 9))
+                }
             }
             Write-Host ("  -KnownAtSnapshot: the record carries these as `knownAtSnapshot` (red at the snapshot, fixed later); no other case moved ({0:N0} s)" -f ((Get-Date) - $rowsStarted).TotalSeconds)
             # The comparer's exit describes a comparison that has now been judged acceptable, case by

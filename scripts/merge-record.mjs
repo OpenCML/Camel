@@ -178,8 +178,12 @@ function doWrite() {
         if (!SHA.test(String(list.tip || ''))) refuse(2, '--known-at-snapshot needs "tip": the commit the evidence was read on')
         if (entries.length === 0) refuse(2, '--known-at-snapshot names no entry: an empty allowance is a refusal with extra steps')
         for (const entry of entries) {
-            if (!entry.case || !SHA.test(String(entry.snapshot || '')) || !SHA.test(String(entry.fixedAt || ''))) {
-                refuse(2, `--known-at-snapshot entry ${JSON.stringify(entry)} needs case, snapshot and fixedAt`)
+            const removed = Boolean(entry.removedAt)
+            const ok = removed
+                ? Boolean(entry.case) && SHA.test(String(entry.snapshot || '')) && SHA.test(String(entry.removedAt || '')) && Boolean(entry.note)
+                : Boolean(entry.case) && SHA.test(String(entry.snapshot || '')) && SHA.test(String(entry.fixedAt || ''))
+            if (!ok) {
+                refuse(2, `--known-at-snapshot entry ${JSON.stringify(entry)} needs ${removed ? 'case, snapshot, removedAt and note' : 'case, snapshot and fixedAt'}`)
             }
             if (entry.snapshot !== merge) {
                 refuse(2, `--known-at-snapshot entry ${entry.case} is red at ${entry.snapshot.slice(0, 9)}, and this record is about ${merge.slice(0, 9)}`)
@@ -204,12 +208,14 @@ function doWrite() {
         }
         // Which of the two each entry is, written down: "red where it stood" and "added red" are
         // different claims about a tree, and a report that counts them has to be able to split them.
-        const withKind = entries.map((entry) => ({
-            case: entry.case,
-            kind: regressedNames.includes(entry.case) ? 'new' : 'added-red',
-            snapshot: entry.snapshot,
-            fixedAt: entry.fixedAt,
-        }))
+        const withKind = entries.map((entry) => (entry.removedAt
+            ? { case: entry.case, kind: 'removed-red', snapshot: entry.snapshot, removedAt: entry.removedAt, note: String(entry.note || '') }
+            : {
+                case: entry.case,
+                kind: regressedNames.includes(entry.case) ? 'new' : 'added-red',
+                snapshot: entry.snapshot,
+                fixedAt: entry.fixedAt,
+            }))
         knownAtSnapshot = { tip: list.tip, evidence: list.run ? String(list.run) : '', entries: withKind }
     }
     let knownHeaderAtSnapshot = null
@@ -495,6 +501,17 @@ function doVerify() {
                 continue
             }
             for (const entry of known) {
+                // A case that was removed is a different claim from one that was fixed, and the
+                // record has to be able to say which without a reader guessing from the fields.
+                if (entry.kind === 'removed-red') {
+                    if (!entry.removedAt || !SHA.test(String(entry.removedAt)) || !SHA.test(String(entry.snapshot)) || !entry.note) {
+                        problems.push(
+                            `${sha.slice(0, 9)}  ${subject}  -- the record allows ${entry.case} red at a snapshot and names no commit that removed it, or does not quote it`,
+                        )
+                        continue
+                    }
+                    continue
+                }
                 if (!entry.fixedAt || !SHA.test(String(entry.fixedAt)) || !SHA.test(String(entry.snapshot))) {
                     problems.push(
                         `${sha.slice(0, 9)}  ${subject}  -- the record allows ${entry.case} red at a snapshot and names no commit that fixed it`,
