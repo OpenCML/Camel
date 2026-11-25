@@ -1952,7 +1952,11 @@ Evaluator::evalLoopBody(Activation &act, gc_node_ref_t ref, LoopFrame &loop) {
     switch (execute::shapeOfOperation(*g, ref)) {
     case execute::OperShape::Clone:
         return evalLoopBody(act, g->normInputsOf(ref).front(), loop);
-    case execute::OperShape::Conversion: {
+    case execute::OperShape::Conversion:
+    // Two shapes, one export -- two labels, not a family: an entering's pair enters by
+    // construction and it cannot fault, but to ONNX the value is taken as the node's type either
+    // way. A refinement keeps the generic operator path, as it does in the lowering table.
+    case execute::OperShape::Entering: {
         BodyOutcome out = evalLoopBody(act, g->normInputsOf(ref).front(), loop);
         if (out.result) {
             out.result = evalCast(act, ref, std::move(*out.result));
@@ -3145,9 +3149,11 @@ std::optional<Value> Evaluator::deferredElement(
             }
             continue;
         }
-        // A conversion and a copy pass their input on unchanged: the aggregate a projection
-        // reads is the one behind them.
-        if (shape != execute::OperShape::Conversion && shape != execute::OperShape::Clone) {
+        // An operation that takes its operand as its own type and a copy pass their input on
+        // unchanged -- asked as one question, because that is the question: the aggregate a
+        // projection reads is the one behind them, whichever of the three shapes stated the
+        // retype.
+        if (!execute::takesItsOperandAsItsType(shape) && shape != execute::OperShape::Clone) {
             return std::nullopt;
         }
         const auto norm = g->normInputsOf(source);
@@ -3814,7 +3820,12 @@ Value Evaluator::evalOper(Activation &act, gc_node_ref_t ref) {
     // names and not by the letters of its URI.
     switch (camel::runtime::shapeOfOperator(body->oper)) {
     case execute::OperShape::Conversion:
-        // The node's type is the target type, its one ordinary operand the value converted.
+    case execute::OperShape::Entering:
+        // Two shapes, one export -- and two labels, not a family: a cast is interpreted against the
+        // safety table of its pair and an entering cannot fail, so the record states two shapes; to
+        // ONNX the node's type is the target type and its one ordinary operand the value taken as
+        // it, either way. A refinement keeps the generic operator path it has today (see the
+        // lowering table above), so it is not a third label here.
         return evalCast(act, ref, eval(act, g->normInputsOf(ref).front()));
     case execute::OperShape::Clone:
         // Exported values are never mutated in place, so a copy can share its source.
@@ -3878,6 +3889,7 @@ Value Evaluator::evalOper(Activation &act, gc_node_ref_t ref) {
         }
         return evalAccs(act, ref, norm.front(), read);
     }
+    case execute::OperShape::Refining:
     case execute::OperShape::None:
         break;
     }
@@ -3973,8 +3985,14 @@ Value Evaluator::applyOper(
     // A type name applied to an array is the core's conversion, not a tensor definition: extents
     // of the input, element type of the name. The node's own type is the generic one for a name
     // applied to an array -- the element type it writes, every extent unknown -- so reading it
-    // lost extents the value has (a conversion moves no element).
-    if (def == nullptr && uri.starts_with(":op/ato") && resultType != nullptr) {
+    // lost extents the value has (a conversion moves no element). Which operators these are is
+    // what the operator states when it is registered (`declareConversion`): one that reads an
+    // array and writes the named element type. The letters of the URI are not that statement -- a
+    // conversion a library registers need not spell `ato`, and one that spells it need not convert
+    // an array -- so it is asked of the declaration, which is the one place it is written.
+    const std::optional<core::ConversionTypes> conversion =
+        def == nullptr ? core::OperatorTable::instance().conversionTypesOf(uri) : std::nullopt;
+    if (conversion.has_value() && conversion->source == TypeCode::Array && resultType != nullptr) {
         if (type::Type *answer = camel::core::type::valueTypeOf(resultType);
             tensor::isTensorType(answer)) {
             const TensorFacts named = tensor::tensorFactsOf(answer);

@@ -643,6 +643,13 @@ bool FunctionEmitter::lowerNode(
                            : camel::execute::shapeOfKind(node->kind);
     switch (shape) {
     case camel::execute::OperShape::Conversion:
+    case camel::execute::OperShape::Entering:
+        // Two shapes, one lowering -- and two labels, not a family: a cast is interpreted against
+        // the safety table of its pair and an entering cannot fail, so the record states two
+        // shapes; the emitted code takes one operand as the node's type either way. A refinement
+        // (`Refining`) is deliberately not here: it keeps the generic operator path it has today,
+        // and the one thing it adds to a cast -- the extent check -- is the type layer's, not this
+        // emitter's.
         lowerCast(frame, ref, out);
         return false;
     case camel::execute::OperShape::Clone:
@@ -654,6 +661,7 @@ bool FunctionEmitter::lowerNode(
     case camel::execute::OperShape::Access:
         lowerAccess(frame, ref);
         return false;
+    case camel::execute::OperShape::Refining:
     case camel::execute::OperShape::None:
         break;
     }

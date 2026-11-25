@@ -77,15 +77,36 @@ Builder::castNodeTo(node_handle_t value, Type *target, const GCT::node_ptr_t &or
     return enterNodeOf(value, target, origin);
 }
 
-node_handle_t
-Builder::enterNodeOf(node_handle_t value, Type *target, const GCT::node_ptr_t &origin) {
+node_handle_t Builder::enterNodeOf(
+    node_handle_t value, Type *target, const GCT::node_ptr_t &origin, Type *sourceType) {
     // An entering is a call of `enter::<T, U>` like a conversion is a call of `cast::<T, U>`: the
     // source is the type of the value it reads, the target is the call's result type, and both are
     // known here. The group is the built-in one for the reason `conversionNodeOf` gives -- a
     // program that binds the name `enter` cannot decide what the compiler's own step calls -- and
     // the operator's record states `mayFault = false`, which is the same fact `castEntersFrom`
     // states about the pair.
-    Type *source = nodeTypeOf(value) != nullptr ? valueTypeOf(nodeTypeOf(value)) : nullptr;
+    //
+    // `sourceType` is for the caller that knows what enters better than the node's value type does:
+    // a **cell** is not a value, and a node of a `var` passed to a `var` port enters as the cell it
+    // is, not as the value it holds, so that caller names the cell type (design principles 3.5).
+    Type *source = sourceType != nullptr ? sourceType
+                                        : (nodeTypeOf(value) != nullptr
+                                               ? valueTypeOf(nodeTypeOf(value))
+                                               : nullptr);
+    if (sourceType != nullptr && target != nullptr) {
+        // A cell is not a value, and a declaration's type arguments are values: a cell does not
+        // stand in one, so the call is not resolved against the declaration -- it is written by the
+        // operator's URI instead, with no written type arguments and the target type as the result,
+        // the way `refineExtentNodeOf` writes the shape check. The kernel reads the pair off the
+        // node (its result type and its operand's type), so nothing is missing; and two cell types
+        // whose contents accept each other are one box, which the kernel hands on unchanged
+        // (type/composite/tuple: "the conversion of a cell into another cell type moves nothing").
+        const node_handle_t node = currGraph_->addOperNode(target, ":op/enter");
+        stampPermissions(node);
+        linkNodes(LinkType::Norm, value, node);
+        registerNodeOrigin(context_, node, origin, "gir.enter");
+        return node;
+    }
     if (source != nullptr && target != nullptr) {
         const oper_group_ptr_t group = builtinOperatorGroupNamed("enter");
         if (group != nullptr) {

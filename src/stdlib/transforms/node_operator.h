@@ -247,9 +247,18 @@ inline NodeCase nodeCaseOf(runtime::GCNodeKind kind) noexcept {
 /// Which of the four operators a shape stands for, `NotOne` for an operator that is not one of
 /// them. The record's vocabulary (`camel/ops/oper_shape.h`) and this file's name the same four, so
 /// this is a rename and not a second reading of the fact.
+///
+/// `Conversion`, `Entering` and `Refining` are three case labels on one body, not a family: the
+/// record states three shapes (a conversion is interpreted against the safety table of its pair, an
+/// entering cannot fail, a refinement checks the shape of the extent its call carries), and what
+/// this function answers is the *lowering* a back end runs, which for all three is the cast's -- one
+/// ordinary operand, its value taken as the node's type. A reader that needs to know which of the
+/// three it has asks `shapeOfOperator` itself, or `takesItsOperandAsItsType` for "any of them".
 inline NodeOperator nodeOperatorOf(camel::ops::OperShape shape) noexcept {
     switch (shape) {
     case camel::ops::OperShape::Conversion:
+    case camel::ops::OperShape::Entering:
+    case camel::ops::OperShape::Refining:
         return NodeOperator::Cast;
     case camel::ops::OperShape::Clone:
         return NodeOperator::Copy;

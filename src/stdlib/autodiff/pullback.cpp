@@ -4152,12 +4152,12 @@ void Backward::visit(gc_node_ref_t node) {
                     : camel::core::kNoOper;
             switch (camel::runtime::shapeOfOperator(oper)) {
             case camel::ops::OperShape::Conversion:
-                // The conversion shape covers both operators of that family: `:op/cast`, the
-                // conversion the program writes, and `:op/enter`, the step the compiler inserts.
-                // An entering's gradient is the conversion's -- the tangent is handed on as the
-                // type the node states. That an entering is not a conversion (design principles
-                // 5.1) is about the value check it does not make, not about what the step does
-                // with the value.
+            case camel::ops::OperShape::Entering:
+                // Two shapes, one tangent, and two labels rather than a family: `:op/cast` is the
+                // conversion the program writes and `:op/enter` the step the compiler inserts to
+                // make two types meet, and the record states them apart (design principles 5.1).
+                // Both hand the tangent on as the type the node states, which is what the pullback
+                // asks here; a refinement does not, and keeps the default path below.
                 visitForward(node, true);
                 return;
             case camel::ops::OperShape::Clone:

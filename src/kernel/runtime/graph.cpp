@@ -97,25 +97,19 @@ bool nodeMayFault(
     // a record keyed by URI cannot carry (`src/stdlib/std/builtin/globals.cpp`),
     // so they carry `kNoOper` and have no record to ask; this shape answer is theirs until the
     // front end builds them as ordinary OPER nodes.
-    // A conversion and a copy are asked by their **shape**, in either spelling: the compiler builds
-    // them as calls of `:op/cast` / `:op/copy` now, and the class the record states is the one the
-    // deleted node kinds stood for. The other two shapes keep the record's answer, because a call
-    // written by hand can fault where a node the compiler checked could not.
+    // A conversion, an entering and a refinement are asked by their **shape**: the compiler builds
+    // them as calls of `:op/cast`, `:op/enter` and `:op/refine_extent`, and the shape the record
+    // states is the one the deleted node kinds stood for. Their answers differ, so they are written
+    // out one by one rather than as a family: a conversion's fault is the safety table's answer for
+    // the pair, an entering never fails, and a refinement's fault is its own fault table's (the
+    // record's `panic` covers it below, as it does for every other operator).
     if (kind == GCNodeKind::Oper) {
         const camel::ops::OperShape shape = shapeOfOperator(oper);
         if (shape == camel::ops::OperShape::Conversion) {
-            // A conversion's answer is the pair's, because its record states `mayFault` for every
-            // pair it may be called with. An operator that states it cannot fault is not a
-            // conversion being asked: it is an entering, the step the compiler inserts to make two
-            // types meet, and the record's answer is the one to take (design principles 5.1). The
-            // two are one shape because a reader of the graph has to read the value the same way;
-            // they differ in exactly this item.
-            const camel::ops::Record *record =
-                camel::core::OperatorTable::instance().recordOf(oper);
-            if (record != nullptr && !record->mayFault()) {
-                return false;
-            }
             return castMayFault(castTarget, castSource);
+        }
+        if (shape == camel::ops::OperShape::Entering) {
+            return false;
         }
         if (shape == camel::ops::OperShape::Clone) {
             return false;
@@ -125,6 +119,12 @@ bool nodeMayFault(
     switch (camel::runtime::shapeOfKind(kind)) {
     case camel::ops::OperShape::Conversion:
         return castMayFault(castTarget, castSource);
+    case camel::ops::OperShape::Entering:
+        // No node kind stands for an entering or a refinement: both are OPER nodes, answered above.
+        // The labels are here because the switch has to name every shape, and an answer of "cannot
+        // fault" is the one that would be true of them if a kind ever did.
+    case camel::ops::OperShape::Refining:
+        return false;
     case camel::ops::OperShape::Clone:
     case camel::ops::OperShape::Construction:
     case camel::ops::OperShape::Access: // reads a field of a value whose type has it
@@ -186,7 +186,7 @@ bool may_be_rearranged(const GCGraph &graph, gc_node_ref_t ref) {
     if (node->kind == GCNodeKind::Oper) {
         const auto *body = graph.nodeBodyAs<GCOperBody>(ref);
         const camel::core::OperId oper = body == nullptr ? camel::core::kNoOper : body->oper;
-        if (shapeOfOperator(oper) == camel::ops::OperShape::Conversion) {
+        if (camel::ops::takesItsOperandAsItsType(shapeOfOperator(oper))) {
             const auto inputs    = graph.normInputsOf(ref);
             const GCNode *source = inputs.size() == 1 ? graph.node(inputs[0]) : nullptr;
             return may_be_rearranged(
@@ -264,7 +264,7 @@ bool is_chain_statement(const GCGraph &graph, gc_node_ref_t ref) {
     if (node->kind == GCNodeKind::Oper) {
         const auto *body               = graph.nodeBodyAs<GCOperBody>(ref);
         const camel::core::OperId oper = body == nullptr ? camel::core::kNoOper : body->oper;
-        if (shapeOfOperator(oper) == camel::ops::OperShape::Conversion) {
+        if (camel::ops::takesItsOperandAsItsType(shapeOfOperator(oper))) {
             const auto inputs    = graph.normInputsOf(ref);
             const GCNode *source = inputs.size() == 1 ? graph.node(inputs[0]) : nullptr;
             return is_chain_statement(
@@ -1078,7 +1078,7 @@ bool takesNoOrder(const GraphDraft &draft, gc_node_ref_t id) {
     // fault (`:op/cast` is declared `panic`), which is the answer the class question gives, and a
     // pass that refines the types can make it infallible -- dropping the order is then the pass's
     // choice, not this plan's.
-    if (draftOperationShape(draft, id) == camel::ops::OperShape::Conversion) {
+    if (camel::ops::takesItsOperandAsItsType(draftOperationShape(draft, id))) {
         return false;
     }
     if (!nodeIsFreelySchedulable(draft, id)) {
@@ -1904,7 +1904,7 @@ bool nodeIsFreelySchedulable(const GraphDraft &draft, gc_node_ref_t id, bool byS
             ? reinterpret_cast<const GCOperBody *>(payload.data())->oper
             : camel::core::kNoOper;
     const camel::ops::OperShape shape = draftOperationShape(draft, id);
-    if (shape == camel::ops::OperShape::Conversion) {
+    if (camel::ops::takesItsOperandAsItsType(shape)) {
         const auto inputs             = draft.normInputsOf(id);
         const DraftNodeHeader *source = inputs.size() == 1 ? draft.header(inputs[0]) : nullptr;
         return nodeIsFreelySchedulable(
@@ -1942,7 +1942,7 @@ bool isChainStatement(const GraphDraft &draft, gc_node_ref_t id) {
             payload.size() >= sizeof(GCOperBody)
                 ? reinterpret_cast<const GCOperBody *>(payload.data())->oper
                 : camel::core::kNoOper;
-        if (shapeOfOperator(oper) == camel::ops::OperShape::Conversion) {
+        if (camel::ops::takesItsOperandAsItsType(shapeOfOperator(oper))) {
             const auto inputs             = draft.normInputsOf(id);
             const DraftNodeHeader *source = inputs.size() == 1 ? draft.header(inputs[0]) : nullptr;
             return isChainStatement(
@@ -2050,7 +2050,7 @@ bool nodeMayFault(const GraphDraft &draft, gc_node_ref_t id, bool byShape) {
             payload.size() >= sizeof(GCOperBody)
                 ? reinterpret_cast<const GCOperBody *>(payload.data())->oper
                 : camel::core::kNoOper;
-        if (shapeOfOperator(oper) == camel::ops::OperShape::Conversion) {
+        if (camel::ops::takesItsOperandAsItsType(shapeOfOperator(oper))) {
             const auto inputs             = draft.normInputsOf(id);
             const DraftNodeHeader *source = inputs.size() == 1 ? draft.header(inputs[0]) : nullptr;
             return nodeMayFault(

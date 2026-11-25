@@ -83,6 +83,12 @@ std::string nodeText(const GraphTransaction &transaction, gc_node_ref_t id) {
     case camel::ops::OperShape::Access:
         text += "access";
         break;
+    case camel::ops::OperShape::Entering:
+        text += "enter";
+        break;
+    case camel::ops::OperShape::Refining:
+        text += "refine";
+        break;
     case camel::ops::OperShape::None:
         break;
     }
