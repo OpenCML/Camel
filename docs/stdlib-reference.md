@@ -1909,7 +1909,7 @@ hole, or the `std::macro` stage evaluating the cut where the graph *is* in hand.
 #### `grad`
 
 ```camel
-grad: (f: F) => GradientOf<F> when is_function::<F>()
+grad: (f: F) => Gradient<F> when is_function::<F>()
 ```
 
 The gradient of a function with respect to its first `with` parameter (design principles 9.9):
@@ -1924,7 +1924,7 @@ that one port and copies the body (`lib/transforms/signatures/transforms.cml`), 
 the differentiated body reads a `with` value that would need a direction of its own. That move is
 the composition's business and not the caller's: the lambda below takes the whole `with` list
 back and hands the weight to the moved function in the parameter position the move put it in.
-`GradientOf<F>` (`lib/types/types.cml`) is the shape that is answered -- `f`'s own `with` list, then
+`Gradient<F>` (`lib/types/types.cml`) is the shape that is answered -- `f`'s own `with` list, then
 `f`'s own parameters -- and the first member of the pullback's answer is the weight's cotangent.
 
 **The whole `with` list is carried, and in its own order.** The reading the body builds is a `vjp`
@@ -1974,7 +1974,7 @@ The value, the auxiliary value and the gradient together, for a function whose r
 parameter, and that parameter *is* the weight here: a declaration whose parameter list is a pack
 is what the generic form needs, and the library does not have it yet (see the last paragraph).
 `grad` above does not read its weight that way -- it takes the differentiated function's own
-`with` list, because that is where a `with` value is written (`GradientOf<F>`).
+`with` list, because that is where a `with` value is written (`Gradient<F>`).
 
 The body is the composition, not a second transform, and it composes **forward**: `jvp(f)` is the
 function `(w, dw) => (result, tangent)`, so `jvp(f)(w, 1.0)` reads one direction -- the weight's --

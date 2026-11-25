@@ -549,8 +549,8 @@ e5334eb76ce03465 ok src/stdlib/tiles.cml
 facd1562ced5e6f9 ok src/stdlib/time.cml
 55a69df7d58bcf54 ok src/stdlib/transforms.cml
 5e59e8fe079b43b0 ok src/stdlib/tree.cml
-4488f00069fabe0f ok src/stdlib/types.cml
-0fa32807f11422c0 ok src/stdlib/vjp.cml
+91b30471311851a4 ok src/stdlib/types.cml
+ba52a9c1204641a6 ok src/stdlib/vjp.cml
 a2ca595975c02dee ok src/stdlib/autodiff/signatures/autodiff.cml
 6ae5ad8be3ee4eec ok src/stdlib/ckpt/signatures/ckpt.cml
 483b0496470b41ad no src/stdlib/nn/signatures/nn.cml
@@ -1568,7 +1568,7 @@ fe583dae7f642871 ok test/cases/compile/rest_params/with_pack_argument_carried.cm
 6582c163ebad8e69 ok test/cases/compile/rest_params/with_pack_body_uses_pack.cml
 4448f4790a1c8877 ok test/cases/compile/rest_params/with_pack_destructured.cml
 8ddf6e0489dbf555 ok test/cases/compile/rest_params/with_pack_forwarded.cml
-2a14d9583e55e466 ok test/cases/compile/rest_params/with_pack_lambda_is_a_value.cml
+3d57f178aabd0717 ok test/cases/compile/rest_params/with_pack_lambda_is_a_value.cml
 29f83fbe092ac382 ok test/cases/compile/rest_params/with_pack_read_in_a_lambda.cml
 784f0401a0981d4c ok test/cases/compile/rest_params/with_pack_typed.cml
 7a76f49f4a5a6c4b ok test/cases/compile/rest_params/with_pack_wrong_element.cml
@@ -1973,7 +1973,7 @@ cee87c3f785cd0d7 ok test/cases/compile/transforms/jvp_rule_at_the_operand_type.c
 b2ded13fe92cd063 ok test/cases/compile/transforms/jvp_structural_zero_at_the_wide_widths.cml
 fd047c9fd3c729bf ok test/cases/compile/transforms/jvp_vjp_array_product_cross.cml
 2ee5b1646c7a3ba7 ok test/cases/compile/transforms/layer_norm_jvp.cml
-7d0e180d4658aee5 ok test/cases/compile/transforms/library_grad_carries_the_second_with_value.cml
+c8a6338348a7f0a5 ok test/cases/compile/transforms/library_grad_carries_the_second_with_value.cml
 5849828e1e3ec2f1 ok test/cases/compile/transforms/library_grad_is_the_composition.cml
 1e71154ffe2c555c ok test/cases/compile/transforms/library_grad_of_a_with_weight.cml
 5ea68d7f1aab55d4 ok test/cases/compile/transforms/linear_gradient_both_legs.cml
@@ -4433,8 +4433,8 @@ d5dc5fc8bfee6c23 ok test/cases/trans/macro/tag_with_argument.cml
 a0f893069cc92559 ok test/cases/transforms/compositions/grad_vmap_f.cml
 d57dab7fc9adcd58 ok test/cases/transforms/compositions/hessian_of_a_quadratic.cml
 8036b95e0ab7c65d ok test/cases/transforms/compositions/jvp_vjp_f.cml
-9c4dda068dbf91a1 ok test/cases/transforms/compositions/nested_grad_min.cml
-391ddbeab10cc36e ok test/cases/transforms/compositions/nested_grad_through_a_binding.cml
+de382cc89846351a ok test/cases/transforms/compositions/nested_grad_min.cml
+74217f929fe5034d ok test/cases/transforms/compositions/nested_grad_through_a_binding.cml
 ce5ca6455aaa8618 ok test/cases/transforms/compositions/pullback_of_a_sum_of_squares.cml
 dd5b1bed5ababf92 ok test/cases/transforms/compositions/pullback_read_at_a_cotangent.cml
 ef13735491fdbc6e ok test/cases/transforms/compositions/vjp_single.cml

@@ -4,7 +4,7 @@
  *
  * `lib/vjp/vjp.cml#grad` is a composition -- `vjp` read at the seed 1 -- and it takes the first
  * `with` value as its weight while the rest of the list travels on the derivative
- * (`GradientOf<F>`, `stdlib/types.cml`). A function with one `with` value cannot show that the rest
+ * (`Gradient<F>`, `stdlib/types.cml`). A function with one `with` value cannot show that the rest
  * is carried, because there is no rest: this case has the two values the case study's loss has, one
  * that is the weight (`w`) and one the body reads and nothing differentiates (`scale`), plus one
  * ordinary parameter for the data.
