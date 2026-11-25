@@ -1034,39 +1034,17 @@ const SELF_CHECK_ENTRY_POINTS = new Set([
     'test/tools/selftest/selection-cases.mjs',
 ])
 
-// The one reason a self-check of this tree cannot be started by a plan, with the two measurements
-// it rests on. It is written once because the nineteen files below are one class, and the class is
-// the thing that has to be revisited if either measurement changes.
-const NO_PWSH =
-    'a plan cannot start it: the build host is Linux and has no pwsh (measured with `command -v pwsh` on ' +
-    'the build host: no output), and the runner resolves a tool that is neither `node` nor `python` ' +
-    'inside the install (`<install>/bin/pwsh`), so an entry would fail before the script ran instead of ' +
-    'skipping with a reason. The suite the test covers runs on the workstation under PowerShell, which ' +
-    'no gate command reaches; the `internal/tools/` rule of test/plan-selection.json records the same ' +
-    'fact about the scripts themselves. Running them needs a pwsh on the host or a PATH lookup in the ' +
-    "runner's tool resolution, and neither is this ledger's to decide."
-
-export const SELF_CHECK_EXCEPTIONS = [
-    'internal/tools/camel-cleanup.test.ps1',
-    'internal/tools/camel-gate-state.test.ps1',
-    'internal/tools/camel-remote-args.test.ps1',
-    'internal/tools/camel-remote-cleanup.test.ps1',
-    'internal/tools/camel-remote-fetch.test.ps1',
-    'internal/tools/camel-remote-targets.test.ps1',
-    'internal/tools/hook-integration.test.ps1',
-    'internal/tools/merge-batch-sets.test.ps1',
-    'internal/tools/merge-lane-baseline.test.ps1',
-    'internal/tools/merge-lane-checkout.test.ps1',
-    'internal/tools/merge-lane-docs-only.test.ps1',
-    'internal/tools/merge-lane-docs.test.ps1',
-    'internal/tools/merge-lane-firstparent.test.ps1',
-    'internal/tools/merge-lane-push.test.ps1',
-    'internal/tools/merge-lane-resolved.test.ps1',
-    'internal/tools/merge-lane-start.test.ps1',
-    'internal/tools/merge-record.test.ps1',
-    'internal/tools/run-registry.test.ps1',
-    'internal/tools/run-tests-diagnostic-file.test.ps1',
-].map((file) => ({ file, reason: NO_PWSH }))
+// Empty, and that is the reading this list is here to keep: the nineteen `*.test.ps1` were recorded
+// in it with one reason (`a plan cannot start it: the build host is Linux and has no pwsh`), and
+// they are now entries of `test/plans/feat/tools/selfchecks.plan.toml` instead -- each one through
+// `test/tools/pwsh-selfcheck.mjs`, with the bridge's `--probe` as its `skip_unless`, so a host
+// without a pwsh skips it **with the reason on the line** rather than leaving the file unnamed. A
+// skip is a number in `[SUMMARY]`; a name in this list is not.
+//
+// The list stays because the shape is what the ledger offers a self-check that really cannot be
+// started by any plan, and an entry here is still checked both ways: a recorded file that does not
+// exist is stale, and a recorded file that a plan names must have its entry removed.
+export const SELF_CHECK_EXCEPTIONS = []
 
 // The files the ledger judges: a name that says "test", and the two self-test entry points. Read
 // from the tree, so a new self-check appears here by being written, not by being listed.

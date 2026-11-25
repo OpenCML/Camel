@@ -106,8 +106,21 @@ function New-Fixture {
     & git -C $work config user.name 'docs only test'
     & git -C $work config commit.gpgsign false
 
-    foreach ($rel in @('internal/tools/merge-lane.ps1', 'internal/tools/merge-lane-docs.ps1',
-            'scripts/merge-record.mjs', 'scripts/plan-set.mjs', 'scripts/merge-readings.mjs')) {
+    # Every `internal/tools/*.ps1`, not a hand-kept list of the four the tool loads today. The list
+    # was kept by hand, `merge-push-shape.ps1` was split out of `merge-lane.ps1` (its line 185) and
+    # `camel-gate-config.ps1` is loaded from `$ToolsRoot` (its line 244), and neither arrived here:
+    # every scenario died at load with "the term ... is not recognized" and the reading was 18 checks
+    # / 14 failed. A list that has to be kept in step with the tool drifts exactly when the tool is
+    # refactored, and the drift reads as fourteen behavioural failures rather than one missing file.
+    # `camel-remote.ps1` is overwritten by the stub below, so copying it is harmless.
+    $toolsHolder = Join-Path $repoRoot 'internal/tools'
+    $toolsDest = Join-Path $work 'internal/tools'
+    New-Item -ItemType Directory -Force -Path $toolsDest | Out-Null
+    foreach ($file in (Get-ChildItem -LiteralPath $toolsHolder -Filter '*.ps1' -File)) {
+        Copy-Item -LiteralPath $file.FullName -Destination $toolsDest -Force
+    }
+    New-Item -ItemType Directory -Force -Path (Join-Path $work 'scripts') | Out-Null
+    foreach ($rel in @('scripts/merge-record.mjs', 'scripts/plan-set.mjs', 'scripts/merge-readings.mjs')) {
         $to = Join-Path $work $rel
         New-Item -ItemType Directory -Force -Path (Split-Path -Parent $to) | Out-Null
         Copy-Item -LiteralPath (Join-Path $repoRoot $rel) -Destination $to -Force
