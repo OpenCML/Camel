@@ -118,7 +118,7 @@ async function backlogOf(git) {
         if (!line.trim().startsWith('|')) continue
         // The id is in the first cell, possibly in code or bold marks; a table of any width counts.
         const cells = line.split('|').map((cell) => cell.trim().replace(/[`*]/g, ''))
-        // The whole first word is the id: a sub-item such as `D-1123-50④` is its own row and must not
+        // The whole first word is the id: a sub-item such as `D-<year>-<n>④` is its own row and must not
         // overwrite the item it was split from.
         const id = /^([DC]-\d+-\d+\S*)/.exec(cells[1] || '')
         if (!id) continue
@@ -138,7 +138,7 @@ async function backlogOf(git) {
             updated,
         }
         rows.set(id[0], row)
-        // A row for a sub-item or a group (`D-1123-11/12/13`) also records the item it belongs to,
+        // A row for a sub-item or a group (`D-<year>-<n>/<n>/<n>`) also records the item it belongs to,
         // unless that item has a row of its own, which wins wherever it stands.
         const base = /^[DC]-\d+-\d+/.exec(id[0])[0]
         if (base !== id[0] && !ownRows.has(base)) rows.set(base, row)

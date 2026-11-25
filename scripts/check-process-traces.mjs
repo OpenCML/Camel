@@ -6,7 +6,7 @@
 // This check refuses the traces that are unambiguous: a path into the handover pages, a dated
 // ruling, a role name, a host name or a local path, a calendar date, the step a refactor had
 // reached ("refactor stage 2.3", "stage 3.1", "step 2"), a lane branch name or lane code, a work
-// item number (`D-1123-78`, `C-1123-17`), a commit hash, "this lane" / "待审" standing in for who
+// item number (`D-<year>-<n>`, `C-<year>-<n>`), a commit hash, "this lane" / "待审" standing in for who
 // decided what, and a narration of what the code used to be. It reads comment text only (after
 // `//`, `///`, `#` in CMake/TOML/shell/PowerShell, and inside `/* */`), so a date or a path that is
 // data in a string literal is not its business. A test plan's `name`, `desc` and `known_fail_*`

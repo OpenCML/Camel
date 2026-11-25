@@ -5,7 +5,7 @@
  * The context a red table was taken under, and the comparison that refuses to ignore it.
  *
  * A red table is a claim about a tree *and* about the machine that measured it. Two false reds in one
- * night (C-1124-183 a timeout margin under load 84, C-1124-185 a neighbour writing scratch under
+ * night (a timeout margin under load 84 a neighbour writing scratch under
  * `-Jobs 8`) were indistinguishable from a real red, because the tables did not say what `jobs` and
  * `load` they were taken at. The rule this module implements:
  *
@@ -236,7 +236,7 @@ export function compareRedTables(fileA, fileB, options = {}) {
     // A red table holds reds only, so "in A and not in B" means **no longer red**, not "the case
     // is gone". Those are two different claims and only a case inventory can tell them apart: the
     // older comparison reported the ten names with spaces as `removed` because it had a list of
-    // cases and the truncated names were not in it (C-1124-186). Without an inventory this module
+    // cases and the truncated names were not in it. Without an inventory this module
     // says `fixed` and leaves `removed` at zero -- "I cannot tell" is not "it was deleted".
     const inventory = options.cases ? new Set([...options.cases]) : null
     const names = new Set([...a.rows.keys(), ...b.rows.keys()])

@@ -526,7 +526,7 @@ function* cppFiles(dir) {
 /// returns its list to the module's catalog (`src/stdlib/tensor/ops/catalog.cpp`), which is the
 /// only file there that calls `add`. Reading the tensor catalog's protocol for the whole tree filed
 /// the `nn` rows under `tensor:` -- the right key, the wrong namespace printed beside it
-/// (C-1124-203). Read, not assumed; a module that publishes two protocols is refused rather than
+/// Read, not assumed; a module that publishes two protocols is refused rather than
 /// guessed, because one of the two would be attributed to the wrong namespace.
 function moduleProtocols() {
     const byFile = new Map()

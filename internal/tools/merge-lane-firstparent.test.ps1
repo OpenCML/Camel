@@ -1,4 +1,4 @@
-# The shape a commit must have before it is pushed to a target branch (D-1124-78), and the one
+# The shape a commit must have before it is pushed to a target branch, and the one
 # regression that matters beside it: a merge of the right shape still pushes.
 #
 # Why this exists: the three seats of 2026-11-24 merged `integration` into the seat and then

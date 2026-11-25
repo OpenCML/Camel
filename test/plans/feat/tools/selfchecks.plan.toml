@@ -378,7 +378,7 @@ timeout_ms = 300000
 # Slow: 11 s.
 [[tests]]
 name = "selfchecks.merge_lane_firstparent"
-desc = "`internal/tools/merge-lane-firstparent.test.ps1`: the shape a commit must have before it is pushed to a target (D-1124-78) -- a merge of the tip arrives, a merge on an older tip and a single-parent commit are refused with the redo command, and the wiring that makes both merge tools read the one implementation (30 checks)."
+desc = "`internal/tools/merge-lane-firstparent.test.ps1`: the shape a commit must have before it is pushed to a target -- a merge of the tip arrives, a merge on an older tip and a single-parent commit are refused with the redo command, and the wiring that makes both merge tools read the one implementation (30 checks)."
 kind = "behavior"
 tier = "slow"
 tool = "node"

@@ -8,7 +8,7 @@
 # the destination open. The exception escaped from a progress line AFTER `cmake --build` had finished,
 # and the helper exited 1 on a build that `cmake --build . -- -n` reported as `ninja: no work to do`:
 # a build that succeeded, reported as a build that failed, which is how the first build of a lane was
-# killed that night (C-1124-366).
+# killed that night.
 #
 # So the write is one function with three properties:
 #

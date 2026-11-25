@@ -180,7 +180,7 @@ param(
 
 $ErrorActionPreference = 'Stop'
 
-# The shape a push must have (D-1124-78) lives beside this file, so both merge tools read one
+# The shape a push must have lives beside this file, so both merge tools read one
 # implementation: `merge-batch.ps1` dot-sources it too. Read here, called before every push.
 . (Join-Path $PSScriptRoot 'merge-push-shape.ps1')
 
@@ -751,7 +751,7 @@ function Invoke-PushWithRecovery {
     $basedOn = "$(& git -C $Tree rev-parse 'HEAD^1' 2>$null)".Trim()
 
     # --- what this push would publish, read before it is attempted ---------------
-    # The ruling's shape (D-1124-78): the commit that would travel must be a MERGE whose first parent
+    # The ruling's shape: the commit that would travel must be a MERGE whose first parent
     # is origin/$Target's tip as of this fetch. It is read here and not remembered from the merge
     # stage, because the reading is about what is published and the merge stage is minutes older.
     #
@@ -855,7 +855,7 @@ function Invoke-PushWithRecovery {
     }
 
     # --- documentation only: re-land it in the shape an arrival must have --------
-    # The ruling's recipe (D-1124-78), not "merge the new tip into the merge": the seat's branch is
+    # The ruling's recipe, not "merge the new tip into the merge": the seat's branch is
     # moved to the new tip and the merge this run made -- the prepared merge, whose rows and clang
     # result are the reading -- is merged INTO it. The commit that travels then has origin/$Target's
     # tip as its first parent, which is what makes it an arrival. Merging the tip into the merge
@@ -1370,7 +1370,7 @@ try {
     $startWhere = if ($startBranch) { "on $startBranch" } else { 'on a detached HEAD' }
     Write-Host "start point: target $Target is $($originTarget.Substring(0,9)) (origin/$Target); HEAD is $($headTip.Substring(0,9)) $startWhere"
 
-    # --- -WarmBaseline: the idle-slot run, D-1123-123 --------------------------
+    # --- -WarmBaseline: the idle-slot run --------------------------
     # A merge needs "what the plans it selects read on the commit it lands on". Measured per merge,
     # that is one extra run per merge on top of the merged tree's own. Measured once across the fast
     # layer, the same rows answer every merge that lands on that commit and selects anything inside
@@ -1539,7 +1539,7 @@ try {
 
     # The local gate compiles with this workstation's toolchain; CI's Linux and macOS legs compile
     # with clang 19, and a diagnostic only that one reports (`-Wc++11-narrowing` at
-    # `src/stdlib/onnx/lowering_grad.cpp:480`, D-1123-83) stayed invisible until a CI run a day
+    # `src/stdlib/onnx/lowering_grad.cpp:480`) stayed invisible until a CI run a day
     # later. This runs CI's compiler over the merged tree through the gate's own entry, so the
     # reading is the gate's reading and not a paraphrase of it. It needs no build (`-NoBuild`) and
     # reads the compile lines CMake wrote, so `-AllowStale` is the honest pairing: the install this

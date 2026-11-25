@@ -322,7 +322,7 @@ cmd_plan() {
 # A build takes tokens and no slot. The slot's meaning is "one test run being observed", and there is
 # nothing to observe while compiling; making the slot cover the build would turn three slots into three
 # build seats and leave the tests unbounded, which is the opposite of what they are for. Concurrency
-# between builds is the pool's business -- k tokens, then `ninja -j k` (D-1124-38).
+# between builds is the pool's business -- k tokens, then `ninja -j k`.
 cmd_build() {
     local want="${CAMEL_BUILD_TOKENS:-8}" peak=0
     check_tools

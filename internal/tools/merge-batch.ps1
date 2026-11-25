@@ -124,7 +124,7 @@ $ErrorActionPreference = 'Stop'
 # sets, the plan set with the name `scripts/merge-readings.mjs` gives it, and `Resolve-BatchTarget`.
 . (Join-Path $PSScriptRoot 'merge-batch-sets.ps1')
 
-# The shape a push must have (D-1124-78), from the same file `merge-lane.ps1` reads: the commit a
+# The shape a push must have, from the same file `merge-lane.ps1` reads: the commit a
 # batch pushes is a merge whose first parent is the tip `origin/<target>` holds at that moment, and a
 # chain built by fast-forwarding a seat onto the target is not that shape even when its push is a
 # fast-forward.
@@ -846,7 +846,7 @@ try {
 
     if (-not $verdict.Ok) { Stop-With "the push was refused before it ran" $verdict.Why 1 }
 
-    # --- the shape the arrival must have (D-1124-78) -------------------------
+    # --- the shape the arrival must have -------------------------
     # `$verdict` above answers "is the merge worktree's branch something this batch may push"; this
     # answers "is the commit that would travel the shape an arrival has". Both are read before the
     # push and not after it, because a shape checked only where the merge is made is a shape nobody

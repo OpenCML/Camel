@@ -1,6 +1,6 @@
 # The shape every commit that enters a target branch must have, read immediately before the push.
 #
-# The ruling (D-1124-78): each commit that lands on `integration` is a MERGE commit whose first
+# The ruling: each commit that lands on `integration` is a MERGE commit whose first
 # parent is the tip `origin/integration` held at that moment. The three seats of 2026-11-24 satisfied
 # the weaker rule -- the push was a fast-forward -- by merging `integration` into the seat and then
 # fast-forwarding the seat onto it. The history that produced has four lane commits and four

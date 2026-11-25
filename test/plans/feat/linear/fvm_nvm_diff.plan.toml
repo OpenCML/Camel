@@ -76,7 +76,7 @@ tags = ["feat", "linear", "fvm", "nvm", "differential"]
 # never as a match.
 #
 # **A red here is a defect, not a difference.** Design principle 9.2 and the rule
-# (backlog D-1124-89): there is no class of legal fvm/nvm difference -- execution semantics are one,
+# (backlog): there is no class of legal fvm/nvm difference -- execution semantics are one,
 # nvm is the reference, so a case whose halves disagree is fvm's defect (or a case that pins nvm-only
 # non-semantic output, which is then written with `std::nvm` explicitly, not absorbed here).
 # Nothing in this file is pinned to fvm, and nothing here normalises a difference away.

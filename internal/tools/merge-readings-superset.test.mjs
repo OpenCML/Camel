@@ -6,7 +6,7 @@
  *
  * `merge-readings.mjs` used to accept one key: one develop commit, one plan set, one entry. A merge
  * that landed on a commit measured once across the whole fast layer, and selected three plans out of
- * it, missed that entry and measured a baseline of its own -- the cost D-1123-123 is about. The rule
+ * it, missed that entry and measured a baseline of its own -- the cost that reading is about. The rule
  * this file pins down:
  *
  *   an entry whose plans COVER the merge's selection is a baseline for it (take only the selection's

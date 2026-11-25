@@ -4,11 +4,11 @@
 /**
  * A red table has to say the conditions it was taken under, and it has to read a case's whole name.
  *
- * Two families of false red appeared in one night (C-1124-183, C-1124-185) and looked exactly like a
+ * Two families of false red appeared in one night and looked exactly like a
  * real red in the tables, because the table said nothing about the `jobs` and the `load` it was taken
  * at: a timeout-margin failure under load 84 and a neighbour writing scratch under `-Jobs 8` were both
  * "a case the baseline did not have". And the comparison that called ten cases `removed` was reading
- * their names with `\S+`, which stops at the first space, while the same ten cases had run (C-1124-186).
+ * their names with `\S+`, which stops at the first space, while the same ten cases had run.
  *
  * The checks below are the two rules:
  *
@@ -56,7 +56,7 @@ function file(name) {
     return path.join(root, name)
 }
 
-// The four names C-1124-186 named: single spaces are part of the case name, and an argument with a
+// The four names that reading named: single spaces are part of the case name, and an argument with a
 // space (`safe_fp=true safe_fp=false`) is the common shape.
 const SPACED = 'opt.algebra/invalid.std::cxx::algebra safe_fp=true safe_fp=false'
 const SPACED2 = 'opt.algebra/invalid.std::cxx::algebra unknown=true'

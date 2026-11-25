@@ -643,7 +643,7 @@ $checkers = [ordered]@{
     # nothing. 331 findings; the number coming down is the work item, and this entry
     # going red is what says it went up.
     'plan-fields'         = @{ script = 'test/tools/check-plan-fields.mjs'; args = @(); compiler = $false }
-    # CI's own compiler on this tree's own compile lines (D-1123-84). The local gate compiles with one
+    # CI's own compiler on this tree's own compile lines. The local gate compiles with one
     # toolchain on one platform, so a diagnostic only another one reports -- `-Wc++11-narrowing` at
     # `src/stdlib/onnx/lowering_grad.cpp:480` is the one that cost a day -- stayed invisible until a CI
     # run, and CI runs are the slowest reading in this project. The host's clang is a newer major and

@@ -1468,11 +1468,11 @@ expect_diagnostic_name = "SemanticDiag::CompOperandMismatch"
 expect_diagnostic_code = "0x030001E1"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 10000
-# D-1123-49: `for` is an overloadable operator (design principles 4.3), so a type of a program says
+# `for` is an overloadable operator (design principles 4.3), so a type of a program says
 # how a loop walks it, and a plain function named `iter` no longer stands where the operator stands.
 [[tests]]
 name = "stream.operator_for_user_type"
-desc = "A named type says how a `for` walks it with `func operator for(v: V): T..` (design principles 4.3): the declaration lands in the operator group `__iter__`, as `func operator []` lands in `__idx__`, and `for x in v` is the call that group resolves for `v`'s type. The operator is a generator, so its body runs once per pull and a second loop starts it over: the program counts 2, 3, 4 and prints 234, then walks it again and counts the three rounds, printing 3. It also pins that the loop reaches the type`s own operator at all, which is what `D-1123-49` asked for."
+desc = "A named type says how a `for` walks it with `func operator for(v: V): T..` (design principles 4.3): the declaration lands in the operator group `__iter__`, as `func operator []` lands in `__idx__`, and `for x in v` is the call that group resolves for `v`'s type. The operator is a generator, so its body runs once per pull and a second loop starts it over: the program counts 2, 3, 4 and prints 234, then walks it again and counts the three rounds, printing 3. It also pins that the loop reaches the type`s own operator at all, which is what the requirement asked for."
 kind = "behavior"
 case = "../../../cases/compile/stream/operator_for_user_type.cml"
 args = ["${case}"]

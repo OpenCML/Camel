@@ -1,4 +1,4 @@
-# The shape an arrival on `integration` must have (D-1124-78), checked where the push is made.
+# The shape an arrival on `integration` must have, checked where the push is made.
 #
 # `merge-lane.ps1` asserts the shape of the commit it is about to push, and that assertion cannot see
 # a push it did not make. On 2026-11-24 the three seats pushed merges whose first parent was not the
