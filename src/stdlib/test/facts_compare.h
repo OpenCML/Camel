@@ -9,39 +9,15 @@
  *       enclosing_diff=<n> chain_same=<n> chain_diff=<n> within_pairs=<n> within_same=<n>
  *       within_diff=<n> nodes_same=<n> nodes_diff=<n>
  *   FACTS_COMPARE kind=core.arrangeable graphs=<n> nodes=<n> same=<n> diff=<n> no_old=<n>
- *       conversions=<n>
  *   FACTS_COMPARE kind=core.arrangeable readers nodes=<n> agree=<n> diff=<n> no_fact=<n>
  *   FACTS_COMPARE readers_kind kind=<name> nodes=<n> both_free=<n> both_kept=<n>
  *       kind_free_pred_kept=<n> kind_kept_pred_free=<n> no_fact=<n>
- *   FACTS_COMPARE tally node_kind=<kind> oper=<uri|-> nodes=<n> both_free=<n> both_kept=<n>
- *       kind_free_pred_kept=<n> kind_kept_pred_free=<n>
- *   FACTS_COMPARE tally_total rows=<n> nodes=<n>
+ *   FACTS_COMPARE readers_family family=<name> nodes=<n> both_free=<n> both_kept=<n>
+ *       kind_free_pred_kept=<n> kind_kept_pred_free=<n> no_fact=<n> example=<graph>:<node>
  *   FACTS_COMPARE kind=core.arrangeable draft graphs=<n> nodes=<n> same=<n> diff=<n>
- *       no_fact=<n> no_store=<n> kept=<n> stale=<n>
- *
- * The `readers_kind` lines are the same `readers` answers cut by node kind alone: one line per kind
- * the program carries, counting the four combinations of the two answers -- both say freely
- * arrangeable (`both_free`), both refuse (`both_kept`), and the two disagreements
- * (`kind_free_pred_kept` and `kind_kept_pred_free`) -- plus the nodes the kind answered nothing for.
- * A kind named here with `nodes=0` is absent; a kind whose line is missing was not in the program at
- * all, which is why a case that reads this table asks for the kinds it expects by name rather than
- * only for a zero on the disagreements. The `tally` table is the same split with the operator added,
- * so a kind's whole and a kind's operators are two readings and not one.
- *
- * Every family walks the nodes the view calls nodes (`graph::GraphView::contains`), not the places of
- * the graph's own numbering: a JOIN holds a place there, and the fact layer refuses an anchor on one
- * ("node N is not a node of its graph"), so counting those places made the pass give up with an
- * internal error on every program that carries a branch -- and a program it gave up on is a program
- * no reading covered.
- *
- * The `tally` rows are the `readers` comparison cut by node kind and by operator: `diff` says how
- * many nodes the fact and the predicate answer differently, and a row says *which* nodes and which
- * way. `kind_kept_pred_free` is the predicate offering a placement the kind will not answer for,
- * `kind_free_pred_kept` is the kind answering "freely arrangeable" about a node a pass keeps where
- * it was written -- two defects, in two files, and one total would hide which one happened. A row
- * is printed for every kind the run met, `both_free`/`both_kept` included, so a kind with no
- * disagreement is a row of zeros in the split and not an absent row. `scripts/check-arrangeable.mjs`
- * sums these rows over every case the tree has.
+ *       no_fact=<n> no_store=<n> kept=<n> stale=<n> shape_diff=<n>
+ *   FACTS_COMPARE draft_readers_family family=<name> nodes=<n> both_free=<n> both_kept=<n>
+ *       kind_free_pred_kept=<n> kind_kept_pred_free=<n> no_fact=<n> example=<graph>:<node>
  *
  * The `readers` line compares the fact with the predicate a pass asks
  * (`runtime::nodeIsFreelySchedulable`); the `draft` line asks the same kind of the graph the
@@ -75,6 +51,37 @@
  * `no_old`: the fact answers them, and how many of them there are is part of what moving the
  * question into a fact added. `same` and `diff` compare the four terms, so a run whose terms
  * differ in one bit is a `diff` and names itself.
+ *
+ * The two `readers` families compare `core.arrangeable` with the predicate a pass asks before it
+ * drops, moves, merges or reorders a node (`runtime::nodeIsFreelySchedulable`). They ask one
+ * question, so an answer they differ on is a node with two answers, and the second family is the
+ * table that says *which* node kinds: one line per node kind the program carries, counting the four
+ * combinations of the two answers -- both say freely arrangeable (`both_free`), both refuse
+ * (`both_kept`), and the two disagreements (`kind_free_pred_kept`, `kind_kept_pred_free`) -- plus
+ * the nodes the kind answered nothing for. A kind named here with `nodes=0` is absent; a kind whose
+ * line is missing was not in the program at all, which is why a case that reads the table asks for
+ * the kinds it expects by name rather than only for a zero on the disagreements.
+ *
+ * Every family walks the nodes the view calls nodes (`graph::GraphView::contains`), not the places of
+ * the graph's own numbering: a JOIN holds a place there, and the fact layer refuses an anchor on one
+ * ("node N is not a node of its graph"), so counting those places made the pass give up with an
+ * internal error on every program that carries a branch -- and a program it gave up on is a program
+ * no reading covered.
+ *
+ * The `*_family` lines split the same comparison by the family a node's answer *comes from*
+ * (`familyIndex`), which is finer than the node kind: an OPER node is four families, because the
+ * four terms of design principles 3.4 come from three different places. `oper` is an operator that
+ * may be recomputed (pure and foldable); `oper_may_fault` one that cannot fault and yet may not be
+ * recomputed -- the family where the predicate and the fact differ *on principle*, since foldability
+ * is not one of 3.4's four terms; `oper_no_record` one whose operator the view cannot name at all -- a
+ * FILL or an ACCS, which answer `NodeKind::Oper` with `kNoOper` (`graph/gc_graph_view.h`) and so
+ * leave the fact with no record to read the four terms from. The split is what makes one number
+ * sayable about a thousand nodes: a `diff` in `brch` is a fact about arms, a `diff` in
+ * `oper_no_record` is a fact about a gap in the kind, and the two want different rulings. `example`
+ * names the first node that differs in the family, so a count carries one case with it; the
+ * `draft_readers_family` line asks the same of the draft, and `shape_diff` on the `draft` line counts
+ * the nodes where asking the draft by shape (the way `isValueOnly` and the Camel-side
+ * `may_be_rearranged` ask it) answers differently from asking it plain.
  *
  * A call is one of those `no_old` nodes and the one the `readers` comparison found an argument
  * about: the kind used to walk a callee's body and answer 1111 for a call to a pure function,
