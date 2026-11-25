@@ -99,7 +99,9 @@ verify_script = """
   assert(stated.length > 0, `no mean_axis_stated node: ${lines.join(' | ')}`)
   const asElement = stated.filter((l) => l.includes('value_type="float"'))
   assert(asElement.length === 1, `the stated lane mean is not a float: ${stated.join(' | ')}`)
-  const casts = lines.filter((l) => l.includes('type="CAST"') && l.includes('value_type="float"'))
+  // A conversion is a call of `:op/cast` now (plan 2.3, step 1), and its kind column says `OPER`:
+  // the label is where the node says which operation it is, so that is what is asked for here.
+  const casts = lines.filter((l) => l.includes('label=":op/cast"') && l.includes('value_type="float"'))
   assert(casts.length === 0, `a conversion stands between the node and the return: ${casts.join(' | ')}`)
 }
 """

@@ -306,7 +306,7 @@ void ProgramIndex::collect(
     GCGraph *root, std::map<LineKey, LineNodes> &lines, std::vector<GCGraph *> &graphs,
     std::unordered_set<origin_t> *origins, ArmOwners *arms) {
     const camel::runtime::Program *program =
-        root != nullptr ? ctx_->programOfRuntimeGraph(root) : nullptr;
+        root != nullptr ? ctx_->programOfRuntimeGraph(*root) : nullptr;
     if (program == nullptr) {
         return;
     }
@@ -395,7 +395,7 @@ void ProgramIndex::findLiveGraphs(GCGraph *root) {
     liveGraphIds_.clear();
     liveOrigins_.clear();
     const camel::runtime::Program *program =
-        root != nullptr ? ctx_->programOfRuntimeGraph(root) : nullptr;
+        root != nullptr ? ctx_->programOfRuntimeGraph(*root) : nullptr;
     if (program == nullptr) {
         return;
     }
@@ -770,7 +770,7 @@ GraphInfo &ProgramIndex::graph(GCGraph *g) {
     if (auto it = graphs_.find(g); it != graphs_.end()) {
         return *it->second;
     }
-    const camel::runtime::Program *programOfGraph = ctx_->programOfRuntimeGraph(g);
+    const camel::runtime::Program *programOfGraph = ctx_->programOfRuntimeGraph(*g);
     ASSERT(programOfGraph != nullptr, "A graph of the debugged program is in no program.");
     auto info      = std::make_unique<GraphInfo>();
     info->graph    = g;

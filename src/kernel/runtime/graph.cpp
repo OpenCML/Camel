@@ -1030,6 +1030,29 @@ size_t draftPayloadWords(const DraftNodeHeader &header) {
     return (bodyBytes + kPayloadWordBytes - 1) / kPayloadWordBytes;
 }
 
+/// Which of the four operations a node of a draft performs, whichever way it is spelled
+/// (`camel/runtime/oper_shape.h`): the kind half (`shapeOfKind`) answers for a node kind, and only
+/// `Construction` and `Access` have one -- a conversion and a copy are calls of `:op/cast` and
+/// `:op/copy` now, and their shape is the operator's own record. Every question about a draft node
+/// whose answer depends on the operation -- is it freely schedulable, may it fault, does it take an
+/// order edge, is it a chain statement -- asks this, so the two spellings cannot be answered two
+/// ways.
+camel::ops::OperShape draftOperationShape(const GraphDraft &draft, gc_node_ref_t id) {
+    const DraftNodeHeader *header = draft.header(id);
+    if (header == nullptr) {
+        return camel::ops::OperShape::None;
+    }
+    if (header->kind != GCNodeKind::Oper) {
+        return camel::runtime::shapeOfKind(header->kind);
+    }
+    const std::span<const std::byte> payload = draft.payloadOf(id);
+    const camel::core::OperId oper =
+        payload.size() >= sizeof(GCOperBody)
+            ? reinterpret_cast<const GCOperBody *>(payload.data())->oper
+            : camel::core::kNoOper;
+    return shapeOfOperator(oper);
+}
+
 /// Whether the finished node `id` carries no order edge: a node that arranges itself freely says
 /// nothing with one, so the payload the graph holds does not keep them. Two readers ask this -- the
 /// payload plan below, which decides the edge count and the edges emitted, and the delivery check
@@ -1037,9 +1060,17 @@ size_t draftPayloadWords(const DraftNodeHeader &header) {
 /// they ask it here so that they cannot answer it two ways.
 bool takesNoOrder(const GraphDraft &draft, gc_node_ref_t id) {
     const DraftNodeHeader *header = draft.header(id);
-    if (header == nullptr || header->kind == GCNodeKind::Dead ||
-        camel::runtime::shapeOfKind(header->kind) == camel::ops::OperShape::Conversion ||
-        !nodeIsFreelySchedulable(draft, id)) {
+    if (header == nullptr || header->kind == GCNodeKind::Dead) {
+        return false;
+    }
+    // A conversion that was ordered when it could fail keeps its place: its record says it may
+    // fault (`:op/cast` is declared `panic`), which is the answer the class question gives, and a
+    // pass that refines the types can make it infallible -- dropping the order is then the pass's
+    // choice, not this plan's.
+    if (draftOperationShape(draft, id) == camel::ops::OperShape::Conversion) {
+        return false;
+    }
+    if (!nodeIsFreelySchedulable(draft, id)) {
         return false;
     }
     if (header->kind == GCNodeKind::Brch || header->kind == GCNodeKind::Loop) {
@@ -1861,9 +1892,7 @@ bool nodeIsFreelySchedulable(const GraphDraft &draft, gc_node_ref_t id, bool byS
         payload.size() >= sizeof(GCOperBody)
             ? reinterpret_cast<const GCOperBody *>(payload.data())->oper
             : camel::core::kNoOper;
-    const camel::ops::OperShape shape = header->kind == GCNodeKind::Oper
-                                            ? shapeOfOperator(oper)
-                                            : camel::runtime::shapeOfKind(header->kind);
+    const camel::ops::OperShape shape = draftOperationShape(draft, id);
     if (shape == camel::ops::OperShape::Conversion) {
         const auto inputs             = draft.normInputsOf(id);
         const DraftNodeHeader *source = inputs.size() == 1 ? draft.header(inputs[0]) : nullptr;
@@ -1895,18 +1924,6 @@ bool isChainStatement(const GraphDraft &draft, gc_node_ref_t id) {
             standsForRegion = true;
             break;
         }
-    }
-    if (camel::runtime::shapeOfKind(header->kind) == camel::ops::OperShape::Conversion) {
-        // No kind carries a conversion any more: the call `:op/cast` does, and the branch below
-        // asks it with the same two types.
-        const auto inputs             = draft.normInputsOf(id);
-        const DraftNodeHeader *source = inputs.size() == 1 ? draft.header(inputs[0]) : nullptr;
-        return isChainStatement(
-            header->kind,
-            camel::core::kNoOper,
-            header->dataType,
-            source != nullptr ? source->dataType : nullptr,
-            standsForRegion);
     }
     if (header->kind == GCNodeKind::Oper) {
         const std::span<const std::byte> payload = draft.payloadOf(id);
@@ -2034,16 +2051,6 @@ bool nodeMayFault(const GraphDraft &draft, gc_node_ref_t id, bool byShape) {
             fixed                     = fixed && in != nullptr && shapesAreFixed(in->dataType);
         }
         return nodeMayFault(header->kind, oper, nullptr, nullptr, fixed);
-    }
-    if (camel::runtime::shapeOfKind(header->kind) == camel::ops::OperShape::Conversion) {
-        // No kind carries a conversion any more.
-        const auto inputs             = draft.normInputsOf(id);
-        const DraftNodeHeader *source = inputs.size() == 1 ? draft.header(inputs[0]) : nullptr;
-        return nodeMayFault(
-            header->kind,
-            camel::core::kNoOper,
-            header->dataType,
-            source != nullptr ? source->dataType : nullptr);
     }
     return nodeMayFault(header->kind, camel::core::kNoOper);
 }

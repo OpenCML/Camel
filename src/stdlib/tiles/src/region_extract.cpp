@@ -26,13 +26,17 @@ void require(bool ok, const char *reason) {
     if (!ok)
         throw std::runtime_error(std::string("region extraction: ") + reason);
 }
+/// The type of node `id` of `source`. The record's own answer: a frozen graph's node carries the
+/// type of its value, and a node whose value sits in the static area carries it too, because the
+/// encoder folds the effective type into the record it writes (`effectiveDraftNodeType` feeding
+/// `typeIdOf`, runtime/graph.cpp). The branch this function used to keep for the other case
+/// (`source.staticDataType()->typeAt(-dataIndex)`) is therefore dead, and the reading that says so
+/// (`test::view_types`, which walks every node of every graph of a program) is what keeps it dead.
 ty::Type *typeOf(const rt::GCGraph &source, size_t id) {
     const auto *node = source.node(static_cast<rt::gc_node_ref_t>(id));
     require(node != nullptr, "node outside source graph");
     if (auto *type = node->dataType())
         return type;
-    if (node->dataIndex < 0 && source.staticDataType())
-        return source.staticDataType()->typeAt(static_cast<size_t>(-node->dataIndex));
     throw std::runtime_error("region extraction: missing value type");
 }
 } // namespace

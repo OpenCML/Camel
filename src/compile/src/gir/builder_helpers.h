@@ -303,23 +303,25 @@ inline bool walksBeforeGraph(const DraftGraphBuilder *left, const DraftGraphBuil
 ///
 /// **This is the reader for "which operator does this name", and it answers on any node.** The
 /// empty answer is a whole answer: a node that names no operator (a port, a constant, a
-/// construction, an operation whose payload carries no body) names none, and every caller here
-/// (`isCopyNode`, `constructionKindOf`, `isMemberRead`, `nodeTakesAnOrder`, `isFailCall`) is asking
-/// that question about a value it did not build and cannot have classified first.
+/// construction, an operation whose payload carries no body) names none, and every caller --
+/// `isCopyNode`, `constructionKindOf`, `constructionValuesOf`, `isMemberRead`, `nodeTakesAnOrder`,
+/// `isFailCall`, and `projectPart` in `builder_control.cpp`, which looks a `:op/cast` through it --
+/// is asking that question about a value it did not build and cannot have classified first.
 ///
-/// So the kind and the target are asked in that order. `operTarget` answers the *resolved*
+/// So the kind and the target are asked in that order: the builder's operator-target table is keyed
+/// by OPER node only, and asking it of, say, a value node is asking the wrong table. The kind is
+/// asked first anyway, because the payload of a node of another kind is that node's own body: a
+/// construction's is a `GCFillBody`, and reading it as a `GCOperBody` would name an operator that
+/// does not exist. Asking is not a precondition either: `operTarget` answers the *resolved*
 /// declaration and answers `nullptr` for a node this builder recorded no target for -- a call a
 /// pass wrote by naming its operator's URI is never resolved by the builder of the graph it hands
-/// on (`DraftGraphBuilder`). The kind is asked first anyway, because the payload of a node of
-/// another kind is that node's own body: a construction's is a `GCFillBody`, and reading it as a
-/// `GCOperBody` would name an operator that does not exist. Asking the kind first is also what
-/// stopped the front end aborting once, on the first operand that was a port or a constant.
+/// on (`DraftGraphBuilder`), and that shape is named by its payload. Asking the kind first is also
+/// what stopped the front end aborting once, on the first operand that was a port or a constant.
 inline std::string_view operUriOf(node_handle_t node) {
     if (node == nullptr || !nodeIsKind(node, runtime::GCNodeKind::Oper)) {
         return {};
     }
-    const DraftGraphBuilder *graph = nodeGraphOf(node);
-    if (const oper_idx_ptr_t *op = graph->operTarget(node); op != nullptr) {
+    if (const oper_idx_ptr_t *op = nodeGraphOf(node)->operTarget(node); op != nullptr) {
         return (*op)->uri();
     }
     const auto payload = nodeDraftOf(node)->payloadOf(nodeIdOf(node));

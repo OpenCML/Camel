@@ -175,6 +175,13 @@ NodeKind FrozenGraphAdapter::kindOf(NodeRef ref) const {
 
 const camel::core::type::Type *FrozenGraphAdapter::typeOf(NodeRef ref) const {
     const GCNode *node = graph_.node(static_cast<camel::runtime::gc_node_ref_t>(ref));
+    // The record's type is the node's one type, and it is complete: the encoder folds the type a
+    // node's value has wherever it sits -- beside the record, at its static slot, at its runtime
+    // slot -- into `record.typeId` when it writes the graph (`effectiveDraftNodeType`, then
+    // `typeIdOf`, runtime/graph.cpp). So there is no second branch to write here, and the readers
+    // that used to write one (`onnx/passes/export.cpp`, `tiles/src/region_extract.cpp`) have
+    // dropped theirs. `test::view_types` walks every node of every graph of a program and reports
+    // how many were found with a static slot and no type; the invariant above says none can be.
     return node == nullptr ? nullptr : node->dataType();
 }
 

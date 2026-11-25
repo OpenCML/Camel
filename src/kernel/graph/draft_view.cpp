@@ -221,7 +221,27 @@ NodeKind DraftGraphAdapter::kindOf(NodeRef ref) const {
 
 const camel::core::type::Type *DraftGraphAdapter::typeOf(NodeRef ref) const {
     const DraftNodeHeader *head = graph_->header(sourceOf(ref));
-    return head == nullptr ? nullptr : head->dataType;
+    if (head == nullptr) {
+        return nullptr;
+    }
+    if (head->dataType != nullptr) {
+        return head->dataType;
+    }
+    // A node whose record carries no type: the type is at the node's static slot, the index
+    // `staticIndexOf` answers. One node has one type, so the answer is here and not a branch each
+    // reader writes out by hand (`tiles/src/region_extract.cpp` wrote exactly this one). It is the
+    // answer the encoder gives the record as well: `effectiveDraftNodeType` resolves the same slot
+    // before folding the type in (runtime/graph.cpp), and `draftNodeType` (runtime/draft.cpp)
+    // answers it for a node copied into another draft. The non-negative half of `dataIndex` is not
+    // read: that slot belongs to the execution plan (section 13), and this face reads the graph.
+    if (head->dataIndex < 0) {
+        const size_t index = static_cast<size_t>(-head->dataIndex);
+        const auto types   = graph_->staticSlotTypes();
+        if (index < types.size()) {
+            return types[index];
+        }
+    }
+    return nullptr;
 }
 
 std::optional<::slot_t> DraftGraphAdapter::constantOf(NodeRef ref) const {

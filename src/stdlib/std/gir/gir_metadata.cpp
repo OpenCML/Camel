@@ -6,7 +6,6 @@
 #include "camel/passes/trans/gir_metadata.h"
 #include "camel/core/rtdata/base.h"
 #include "camel/core/rtdata/func.h"
-#include "camel/runtime/oper_shape.h"
 #include "camel/runtime/resources.h"
 #include "graph/graph_view.h"
 #include <format>
@@ -141,22 +140,17 @@ string recordLabel(
         auto *callee = program.calleeOf(*graph, nodeRef);
         return callee ? callee->name() : "FUNC";
     }
-    case camel::runtime::GCNodeKind::Oper: {
+    case camel::runtime::GCNodeKind::Oper:
         ASSERT(
             graph->nodePayloadBytes(nodeRef).size() >= sizeof(camel::runtime::GCOperBody),
             "GraphViz OPER payload is smaller than its fixed header.");
-        // A conversion and a copy are operators now (`:op/cast`, `:op/copy`), and the picture the
-        // four kinds drew is the picture these two keep: the shape says which operation the call
-        // is, and the label the kind used to carry is the one it keeps.
-        switch (camel::runtime::shapeOfOperation(*graph, nodeRef)) {
-        case camel::ops::OperShape::Conversion:
-            return "CAST";
-        case camel::ops::OperShape::Clone:
-            return "COPY";
-        default:
-            return std::string(graph->nodeBodyAs<camel::runtime::GCOperBody>(nodeRef)->uri());
-        }
-    }
+        // The label is the operator the call names, for every OPER node. A conversion and a copy
+        // were kinds of their own once and the picture said CAST and COPY; they are calls of
+        // `:op/cast` and `:op/copy` now (plan 2.3, step 1), and their label says so like every
+        // other call's does. A picture that kept the old word would name a node kind the graph
+        // does not have (`NodeKind::Oper` is the view's answer), and the two would be two answers
+        // to one question -- which is the defect the view face exists to remove.
+        return std::string(graph->nodeBodyAs<camel::runtime::GCOperBody>(nodeRef)->uri());
     case camel::runtime::GCNodeKind::Gate:
         return "GATE";
     case camel::runtime::GCNodeKind::Loop: {
@@ -192,16 +186,11 @@ string recordType(camel::runtime::GCGraph &graph, camel::runtime::gc_node_ref_t 
     case camel::runtime::GCNodeKind::Func:
         return "FUNC";
     case camel::runtime::GCNodeKind::Oper:
-        // The type column the two deleted kinds used to write, kept for the calls that replaced
-        // them: the shape says which of the two operations the node performs.
-        switch (camel::runtime::shapeOfOperation(graph, nodeRef)) {
-        case camel::ops::OperShape::Conversion:
-            return "CAST";
-        case camel::ops::OperShape::Clone:
-            return "COPY";
-        default:
-            return "OPER";
-        }
+        // `OPER` for every operator call, a conversion and a copy included: the kind column states
+        // the node's kind, which is `Oper` for all of them (`NodeKind::Oper` through the view), and
+        // the operator is in the label. The two deleted kinds' words are not a second spelling of
+        // this column.
+        return "OPER";
     case camel::runtime::GCNodeKind::Gate:
         return "GATE";
     case camel::runtime::GCNodeKind::Loop:
