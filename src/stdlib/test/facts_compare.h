@@ -10,6 +10,8 @@
  *       within_diff=<n> nodes_same=<n> nodes_diff=<n>
  *   FACTS_COMPARE kind=core.arrangeable graphs=<n> nodes=<n> same=<n> diff=<n> no_old=<n>
  *   FACTS_COMPARE kind=core.arrangeable readers nodes=<n> agree=<n> diff=<n> no_fact=<n>
+ *   FACTS_COMPARE readers_kind kind=<name> nodes=<n> both_free=<n> both_kept=<n>
+ *       kind_free_pred_kept=<n> kind_kept_pred_free=<n> no_fact=<n>
  *   FACTS_COMPARE kind=core.arrangeable draft graphs=<n> nodes=<n> same=<n> diff=<n>
  *       no_fact=<n> no_store=<n> kept=<n> stale=<n>
  *
@@ -45,6 +47,22 @@
  * `no_old`: the fact answers them, and how many of them there are is part of what moving the
  * question into a fact added. `same` and `diff` compare the four terms, so a run whose terms
  * differ in one bit is a `diff` and names itself.
+ *
+ * The two `readers` families compare `core.arrangeable` with the predicate a pass asks before it
+ * drops, moves, merges or reorders a node (`runtime::nodeIsFreelySchedulable`). They ask one
+ * question, so an answer they differ on is a node with two answers, and the second family is the
+ * table that says *which* node kinds: one line per node kind the program carries, counting the four
+ * combinations of the two answers -- both say freely arrangeable (`both_free`), both refuse
+ * (`both_kept`), and the two disagreements (`kind_free_pred_kept`, `kind_kept_pred_free`) -- plus
+ * the nodes the kind answered nothing for. A kind named here with `nodes=0` is absent; a kind whose
+ * line is missing was not in the program at all, which is why a case that reads the table asks for
+ * the kinds it expects by name rather than only for a zero on the disagreements.
+ *
+ * Every family walks the nodes the view calls nodes (`graph::GraphView::contains`), not the places of
+ * the graph's own numbering: a JOIN holds a place there, and the fact layer refuses an anchor on one
+ * ("node N is not a node of its graph"), so counting those places made the pass give up with an
+ * internal error on every program that carries a branch -- and a program it gave up on is a program
+ * no reading covered.
  *
  * A call is one of those `no_old` nodes and the one the `readers` comparison found an argument
  * about: the kind used to walk a callee's body and answer 1111 for a call to a pure function,

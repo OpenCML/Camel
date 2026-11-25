@@ -1,0 +1,21 @@
+// A body whose exit GATE carries its order in the values it reads rather than in a wait edge
+// (`Builder::layRegionWriteEdges`): the region hands `0` out and keeps `println(1)` alive after it,
+// so the exit is a GATE whose ordinary inputs are `[0, println]` -- two of them, and the node has
+// no sync predecessor and no control input at all.
+//
+// This is the shape `test::facts_compare` reads against the predicate a pass asks before it moves a
+// node: `core.arrangeable` called it freely arrangeable (it is pure, it reaches nothing, it cannot
+// fault and it ends) while `runtime::nodeIsFreelySchedulable` refuses every GATE, because the order
+// a gate stands in is what a reader of the graph must not be free to move. The four terms cannot
+// say "it stands here", so the kind refuses the gate too (D-1124-65); the program is otherwise
+// plain -- no call, no branch, no `for` loop, no conversion -- so the gate is the one node whose two
+// answers the comparison has to reconcile.
+//
+// `main` returns `0` and not the value it hands on: a program's exit status is `main`'s value, and
+// this case is read by a test that expects exit 0.
+//
+// Run: camel test/cases/facts/a_body_exit_gate_reads_its_writes.cml test::facts_compare
+func main() => int {
+    println(1)
+    return 0
+}
