@@ -236,7 +236,7 @@ expect_output_contains = ["(module 'plus_a')", "(module 'plus_b')"]
 
 [[tests]]
 name = "operator_overloads.conflict_import"
-desc = "A module declares an overload whose parameters an overload it imports already takes."
+desc = "A module declares an overload whose parameters an overload it imports already takes; the diagnostic is reported where the offending declaration is (`plus_c.cml`), and the entry says so."
 kind = "negative"
 case = "../../../cases/consistency/operator_overloads/mods/conflict_import.cml"
 args = ["${case}"]
@@ -244,6 +244,11 @@ expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::OperatorOverloadConflict"
 expect_diagnostic_line = 5
 expect_diagnostic_column = 1
+# The declaration is in `plus_c.cml`, one import away from the program this entry runs: a conflict is
+# reported at the origin of the offending declaration (`builder_operators.cpp`, `atOrigin`), while the
+# entry's own file carries the follow-on `ImportedModuleHasErrors` at `conflict_import.cml:4:1`. A pin
+# on the name, the line and the column alone could not say which of the two files it meant.
+expect_diagnostic_file = "plus_c.cml"
 expect_output_contains = ["by module 'plus_a'"]
 
 [[tests]]

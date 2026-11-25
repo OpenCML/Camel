@@ -109,7 +109,7 @@ const TEST_FIELDS = new Set([
     'expect_stdout_starts_with', 'expect_stdout_not_contains', 'expect_stderr_contains',
     'expect_output_contains', 'expect_output_not_contains',
     'expect_diagnostic_name', 'expect_diagnostic_code',
-    'expect_diagnostic_line', 'expect_diagnostic_column', 'expect_no_diagnostics',
+    'expect_diagnostic_line', 'expect_diagnostic_column', 'expect_diagnostic_file', 'expect_no_diagnostics',
     'expect_refusal',
     'perf_budget_mean_ms', 'perf_budget_tolerance_pct', 'perf_budget_platform',
     'verify_script', 'verify_script_path', 'verify_js',
@@ -219,6 +219,30 @@ function checkListFields(planPath, entry, where, fields) {
                       `sentence it wrote`),
         )
     }
+}
+
+// `expect_diagnostic_file` names the file a diagnostic was reported *in*, and it is one path, not a
+// list. A diagnostic has exactly one file, and a list holding several would let any of them satisfy
+// the pin -- which is the hole the field exists to close: a pin on a name, a line and a column alone
+// says "this sentence appears somewhere in this program", and a sentence of another file satisfies
+// it whenever the two files happen to agree on the line number (`operator_overloads.conflict_import`
+// pinned line 4 while the conflict was reported in `plus_c.cml` and the entry's own file carried a
+// different diagnostic at 4:1). So the shape is a string and nothing else, refused here, where the
+// plan, the entry and the key are named, in the same posture as `checkListFields`: an array, a
+// number, a boolean or an empty string is a plan the runner cannot read, not a plan that asserts
+// something smaller.
+function checkDiagnosticFileField(planPath, entry, where) {
+    const value = entry.expect_diagnostic_file
+    if (typeof value === 'string' && value.trim().length > 0) return
+    const shown = Array.isArray(value)
+        ? `${JSON.stringify(value)}: a list would let any of several files satisfy the pin, and the ` +
+          `field exists because one file is the claim`
+        : typeof value === 'string'
+            ? `${JSON.stringify(value)}: an empty string names no file`
+            : JSON.stringify(value)
+    throw new PlanSchemaError(
+        `${planLabel(planPath)}: ${where}: expect_diagnostic_file must be a string naming one file, got ${shown}`,
+    )
 }
 
 // The three things the author's ruling of 2026-11-03 00:30 asked a `known_fail` entry to carry: the
@@ -497,6 +521,20 @@ function validatePlanSchema(doc, planPath) {
         // The list-shaped fields first: a wrong shape here changes what every other assertion in the
         // entry means, so it is named before the assertions are read at all.
         checkListFields(planPath, entry, where, LIST_FIELDS)
+        // The one diagnostic pin that is not a scalar by accident of history but by the shape of the
+        // claim: the file a diagnostic was reported in. A value that names no file is refused here,
+        // and so is the entry that pairs it with `expect_no_diagnostics` -- the absence of every
+        // diagnostic and the presence of one in a named file are two answers to one question, and the
+        // flag would swallow the pin rather than defeat it.
+        if (entry.expect_diagnostic_file !== undefined) {
+            checkDiagnosticFileField(planPath, entry, where)
+        }
+        if (entry.expect_no_diagnostics === true && entry.expect_diagnostic_file !== undefined) {
+            throw new PlanSchemaError(
+                `${planLabel(planPath)}: ${where}: expect_no_diagnostics with expect_diagnostic_file: ` +
+                    `an entry cannot both require a diagnostic in a named file and require no diagnostic at all`,
+            )
+        }
         // A marked case has to carry its owner and its wall, and this is the only place that can
         // refuse it: the runner reads a plan once, here, and a promise checked later than this is
         // a promise kept by whoever remembered to look.
@@ -2555,6 +2593,38 @@ function assertionProblems(test) {
     return problems
 }
 
+/**
+ * The file `expect_diagnostic_file` names, as the absolute path the comparison below needs.
+ *
+ * A relative value is read from the directory of the entry's own program -- the place its `import`s
+ * resolve from, which is where a module of the case lives -- so a plan writes
+ * `expect_diagnostic_file = "plus_c.cml"` next to `case = ".../mods/conflict_import.cml"` and means
+ * the `plus_c.cml` that case actually loads. An absolute value is taken as it is, and `${...}` tokens
+ * are expanded the way the other assertion strings are (`${test_tmp}` names this test's scratch
+ * directory). An entry with no `case` (a `tool` entry) resolves it from the repository root.
+ */
+function namedDiagnosticFile(test, scope) {
+    const text = expandTextTokens(test.expect_diagnostic_file, scope)
+    const anchor = typeof test.case === 'string' && test.case.length > 0
+        ? path.dirname(path.resolve(path.dirname(test.__planPath), test.case))
+        : REPO_ROOT
+    return path.resolve(anchor, text)
+}
+
+/**
+ * Whether a diagnostic the run reported came from the file the entry requires.
+ *
+ * The compiler prints the path it was handed; the runner hands it an absolute case path, so the
+ * reported path is normally absolute already, and a relative one is resolved from the child's
+ * working directory (the repository root). Separators are folded by `path.resolve` and the letter
+ * case is folded on Windows, where they name the same file.
+ */
+function sameDiagnosticFile(reported, wanted) {
+    if (typeof reported !== 'string' || reported.length === 0) return false
+    const fold = (one) => (IS_WINDOWS ? one.toLowerCase() : one)
+    return fold(path.resolve(REPO_ROOT, reported)) === fold(wanted)
+}
+
 async function validateTest(test, result, context) {
     const failures = []
     const scope = context.scope || {}
@@ -2683,23 +2753,50 @@ async function validateTest(test, result, context) {
         || test.expect_diagnostic_code
         || typeof test.expect_diagnostic_line === 'number'
         || typeof test.expect_diagnostic_column === 'number'
+        || typeof test.expect_diagnostic_file === 'string'
     ) {
-        const matched = result.diagnostics.find((diagnostic) => {
+        // The file the entry requires, when it names one. An entry that does not keeps exactly the
+        // meaning it had -- the pin is a name, a code, a line and a column, and any diagnostic the
+        // run reported may satisfy it -- because a field that quietly narrowed every existing
+        // assertion would turn the plan tree red for writing what it wrote.
+        const wantedFile = typeof test.expect_diagnostic_file === 'string'
+            ? namedDiagnosticFile(test, scope)
+            : null
+        const pinsOtherFields = (diagnostic) => {
             if (test.expect_diagnostic_name && diagnostic.name !== test.expect_diagnostic_name) return false
             if (test.expect_diagnostic_code && diagnostic.code !== test.expect_diagnostic_code) return false
             if (typeof test.expect_diagnostic_line === 'number' && diagnostic.line !== test.expect_diagnostic_line) return false
             if (typeof test.expect_diagnostic_column === 'number' && diagnostic.column !== test.expect_diagnostic_column) return false
             return true
-        })
+        }
+        const matched = result.diagnostics.find(
+            (diagnostic) => pinsOtherFields(diagnostic)
+                && (wantedFile === null || sameDiagnosticFile(diagnostic.path, wantedFile))
+        )
         if (!matched) {
-            failures.push(
-                `expected diagnostic ${[
-                    test.expect_diagnostic_name || null,
-                    test.expect_diagnostic_code || null,
-                    typeof test.expect_diagnostic_line === 'number' ? `line ${test.expect_diagnostic_line}` : null,
-                    typeof test.expect_diagnostic_column === 'number' ? `column ${test.expect_diagnostic_column}` : null,
-                ].filter(Boolean).join(', ')}`
-            )
+            // What was asked, in the order a reader weighs it: what the diagnostic says, then the
+            // file it must come from. An entry that named no file produces the message it always
+            // did, character for character.
+            const asked = [
+                test.expect_diagnostic_name || null,
+                test.expect_diagnostic_code || null,
+                typeof test.expect_diagnostic_line === 'number' ? `line ${test.expect_diagnostic_line}` : null,
+                typeof test.expect_diagnostic_column === 'number' ? `column ${test.expect_diagnostic_column}` : null,
+            ].filter(Boolean).join(', ')
+            const askedIn = wantedFile === null ? '' : ` in ${planLabel(wantedFile)}`
+            // The reading that makes a wrong file worth a sentence of its own: the same diagnostic, in
+            // the file the run did print it in. Without it the reader sees "no such diagnostic" and
+            // has to open the log to learn that it is there, one file over -- which is the reading
+            // that cost an evening on `operator_overloads.conflict_import`.
+            const reportedElsewhere = wantedFile === null
+                ? []
+                : result.diagnostics.filter(pinsOtherFields).map((diagnostic) => diagnostic.path)
+            const where = reportedElsewhere.length === 0
+                ? ''
+                : `: that diagnostic is reported in ${[
+                    ...new Set(reportedElsewhere.map((one) => planLabel(one))),
+                ].join(', ')}, not in the file the entry requires`
+            failures.push(`expected diagnostic ${asked}${askedIn}${where}`)
         }
     }
     if (test.kind === 'snapshot') {
