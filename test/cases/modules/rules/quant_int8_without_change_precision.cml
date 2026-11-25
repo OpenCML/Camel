@@ -1,0 +1,40 @@
+/**
+ * The product of `quant_int8.cml` written with one thing left out: `#[change_precision]`.
+ *
+ * The `int8` ruleset's rule asks for that permission (design principles 7.2-7.3), so on a function
+ * that does not carry the tag it does not fire at all: the rewrite count is zero and the two writings
+ * are the same value. That is the reading this case exists for -- a rule that changes values on
+ * purpose is not given to a program that did not ask for it -- and it is also why the case that does
+ * ask (`quant_int8.cml`) prints its rewrite count: a diff of zero must never read as a quantization
+ * that happened.
+ *
+ * The verdict here is `FAIL` on purpose, and the plan's entry expects exit 1: what this case asserts
+ * is the absence of the rewrite, not a quantization.
+ */
+import { run } from rewrite
+import { abs, matmul, max } from tensor
+import { matmul_int8 } from rulesets.int8
+
+/// The same weights as `quant_int8.cml`, with no tag above them.
+func model(x: float[2, 2]) => float[2, 2] {
+    return matmul(x, [[1.3, 2.7], [3.1, 4.9]] as float[2, 2])
+}
+
+func main(tol: float) => int sync {
+    let xs: float[2, 2] = [[1.0, 0.5], [0.25, 2.0]]
+    let reference = model(xs)
+    let measured = match model->run<[matmul_int8]> {
+        case error e => (`matmul_int8 error ${e.kind}: ${e.message}`, false)
+        case r => {
+            let worst = max(abs(r.result(xs) - reference))
+            let fired = r.rewrites > 0
+            (
+                `matmul_int8 max_abs_diff=${worst} rewrites=${r.rewrites} fired=${if fired then "yes" else "no"} tol=${tol}`,
+                fired && worst <= tol
+            )
+        }
+    }
+    println(measured.0)
+    println(`matmul_int8 verdict=${if measured.1 then "PASS" else "FAIL"}`)
+    return if measured.1 then 0 else 1
+}

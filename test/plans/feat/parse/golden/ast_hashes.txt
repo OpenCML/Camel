@@ -554,6 +554,7 @@ ba52a9c1204641a6 ok src/stdlib/vjp.cml
 a2ca595975c02dee ok src/stdlib/autodiff/signatures/autodiff.cml
 6ae5ad8be3ee4eec ok src/stdlib/ckpt/signatures/ckpt.cml
 483b0496470b41ad no src/stdlib/nn/signatures/nn.cml
+b9b23c3234979dee ok src/stdlib/rulesets/int8.cml
 1d27a3dc0b0c111c ok src/stdlib/rulesets/jvp.cml
 8375a530eff268c4 ok src/stdlib/rulesets/probe_batch.cml
 7a11798394cc6e2c ok src/stdlib/rulesets/probe_missing.cml
@@ -3516,6 +3517,8 @@ d4157ef887476da6 ok test/cases/modules/rules/multiset_target.cml
 eb03015684ec91f3 no test/cases/modules/rules/node_of_misuse.cml
 f8b05291682f5150 ok test/cases/modules/rules/pair_target.cml
 bd5b6aa2a8f3cb02 ok test/cases/modules/rules/parts_order.cml
+7bc3c402dd88bafa ok test/cases/modules/rules/quant_int8.cml
+26538d6d93bea18a ok test/cases/modules/rules/quant_int8_without_change_precision.cml
 213f6c1c1736013c ok test/cases/modules/rules/reads_pass.cml
 4602f1ce59b0ead2 ok test/cases/modules/rules/reads_target.cml
 6ff13f40bdaececa ok test/cases/modules/rules/requires.cml
