@@ -1,0 +1,143 @@
+id = "tools.selfchecks"
+order = 919
+tags = ["feat", "tools", "selfcheck"]
+desc = "The tooling's own tests: every self-check under test/tools, internal/tools and scripts is started by a plan or recorded with the reason it cannot be, and this is the plan that starts the ones a gate can start"
+
+# A self-check that no plan starts cannot fail: a change to the tool it covers is read by nobody,
+# and the file stays green by being unread. `scripts/plan-inventory.mjs#selfCheckProblems` is the
+# ledger (it reds when a new `*.test.mjs` lands with no plan entry and no recorded reason); this
+# plan is the destination for the ones the gate host can run.
+#
+# The other nineteen are `*.test.ps1` and are recorded there instead: the build host is Linux and
+# has no pwsh, and the runner resolves a tool that is neither `node` nor `python` inside the
+# install, so an entry for one would fail before the script ran rather than skip with a reason.
+# They are the one class of self-check this plan does not start, and the ledger names them.
+#
+# Nothing here needs a compiler or an install: these are the checks a tool of the tree runs on
+# itself, and they fail by exiting non-zero after printing their own count.
+
+[[tests]]
+name = "selfchecks.reading_normal"
+desc = "Both directions of `normalizeReading`: under-normalising makes every comparison say changed, over-normalising makes two different failures one string. The file asserts its three cases and exits non-zero when either direction regresses."
+kind = "behavior"
+tool = "node"
+case = "../../../../test/tools/reading-normal.test.mjs"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_contains = [" pass 3", " fail 0"]
+normalizers = ["normalize_newlines"]
+timeout_ms = 120000
+
+[[tests]]
+name = "selfchecks.selection_docs_only"
+desc = "A change that is only backlog rows and dated plan pages selects feat/docs_links and not the fast layer under another name, and no file of the change is left unmatched."
+kind = "behavior"
+tool = "node"
+case = "../../../../test/tools/selection-docs-only.test.mjs"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_contains = [" pass 3", " fail 0"]
+normalizers = ["normalize_newlines"]
+timeout_ms = 120000
+
+# The one slow entry: it copies `test/tools` and starts the engine and the runner several times,
+# which is 5.6 s of the host's wall clock at `-Jobs 8` (18 s on the workstation). It carries its own
+# tier line rather than the plan's, because the nine above it are seconds long and this one is not.
+[[tests]]
+name = "selfchecks.selection_cases"
+desc = "The record a change writes and the run that reads it agree on what a case is: a recorded case is read by its name, a record lists the run's own targets, a layer and the run of it count the same cases, a change record cannot narrow a layer run, a zero-row run exits 2, and a change no rule matches selects nothing. The rule-less file is found by asking the engine, not by trusting the name of a directory."
+kind = "behavior"
+tier = "slow"
+tool = "node"
+case = "../../../../test/tools/selftest/selection-cases.mjs"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_contains = ["selection-cases self-test ok"]
+normalizers = ["normalize_newlines"]
+timeout_ms = 240000
+
+[[tests]]
+name = "selfchecks.oversight_reload"
+desc = "The oversight channel's reload: the state file is replaced on disk and the reader takes the newer version without restarting, and its own log is used rather than the one the session is writing."
+kind = "behavior"
+tool = "node"
+case = "../../../../internal/tools/camel-oversight-reload.test.mjs"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_contains = ["ok: 23/23 checks"]
+normalizers = ["normalize_newlines"]
+timeout_ms = 120000
+
+[[tests]]
+name = "selfchecks.pass_scan"
+desc = "The pass scanner's own checks: what it counts as a pass declaration, what it leaves alone, and the keep/stale verdicts it prints -- 19 checks, and the count is asserted so a scanner that stopped finding anything fails here."
+kind = "behavior"
+tool = "node"
+case = "../../../../internal/tools/camel-pass-scan.test.mjs"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_contains = ["19/19 checks passed"]
+normalizers = ["normalize_newlines"]
+timeout_ms = 120000
+
+[[tests]]
+name = "selfchecks.merge_readings_cache"
+desc = "The reading cache the merge gate keeps: a cache directory inside the measured tree is refused, a missing or touched file invalidates the entry, and a cached reading is never read for a different host or job count."
+kind = "behavior"
+tool = "node"
+case = "../../../../internal/tools/merge-readings-cache.test.mjs"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_contains = ["merge-readings cache test: 34 checks, 0 failed"]
+normalizers = ["normalize_newlines"]
+timeout_ms = 120000
+
+[[tests]]
+name = "selfchecks.merge_readings_superset"
+desc = "A run's rows are a superset of the ones the record names, and a line the transcript reader cannot parse is said out loud instead of being dropped: the merge gate compares case by case, so a row that went missing is a merge that silently changed its mind."
+kind = "behavior"
+tool = "node"
+case = "../../../../internal/tools/merge-readings-superset.test.mjs"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_contains = ["merge-readings superset test: 22 checks, 0 failed"]
+normalizers = ["normalize_newlines"]
+timeout_ms = 120000
+
+[[tests]]
+name = "selfchecks.red_table_context"
+desc = "The red table's header round trip, the changed-not-removed case for a name with spaces, fixed-versus-removed with and without a `--cases` inventory, and the two refusals (different `jobs`, quiet-versus-loaded host), CLI wiring included."
+kind = "behavior"
+tool = "node"
+case = "../../../../internal/tools/red-table-context.test.mjs"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_contains = ["red-table-context: 20/20 checks passed"]
+normalizers = ["normalize_newlines"]
+timeout_ms = 120000
+
+[[tests]]
+name = "selfchecks.process_traces"
+desc = "`scripts/check-process-traces.mjs` reads four trees for process traces: a date or a hash that is data is not a trace, the GPU lane domain in the tiles compiler is refused on purpose, and a run that read nothing is red rather than green."
+kind = "behavior"
+tool = "node"
+case = "../../../../scripts/check-process-traces.test.mjs"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_contains = [" pass 5", " fail 0"]
+normalizers = ["normalize_newlines"]
+timeout_ms = 120000
+
+# Not a file of its own name: the switch is how this tool answers about itself, and it printed
+# 11 checks with nothing startable by a gate before this entry existed.
+[[tests]]
+name = "selfchecks.graph_readers"
+desc = "`scripts/count-graph-readers.mjs --self-test`: the row it prints is read back, a run that printed nothing is zero rather than an error, and per-file counts are summed."
+kind = "behavior"
+tool = "node"
+case = "../../../../scripts/count-graph-readers.mjs"
+args = ["${case}", "--self-test"]
+expect_exit = 0
+expect_stdout_contains = ["11 of 11 checks passed"]
+normalizers = ["normalize_newlines"]
+timeout_ms = 120000

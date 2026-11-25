@@ -10,6 +10,12 @@
 // release gate and says so. A plan file that names a tier nobody knows, a slow test that no slow
 // plan names, and a table entry that no longer exists are the problems left, and this check reports
 // them at the commit that lands them.
+//
+// Three ledgers, one question each, all of them "does something read this": a plan file has a layer
+// (`planInventoryProblems`, and `slowLayerReading` opens every file the slow list names instead of
+// trusting the row), a case has a reader (`caseLedgerProblems`), and a tool's own test is started by
+// a plan or recorded with the reason it cannot be (`selfCheckProblems`).
+//
 // The tables and the check live here, in one place, because two readers need the same facts:
 // `scripts/release-gate.mjs` imports them, and the merge gate's fast layer runs this file as an
 // ordinary plan entry (`test/plans/feat/gate/plan_inventory.plan.toml`). A plan that landed without
@@ -27,6 +33,12 @@ import { fileURLToPath } from 'node:url'
 import { expandSweeps, loadPlanTests, testTier } from '../test/tools/run-tests.mjs'
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
+
+// One reading per plan file per run (`readPlan`). The three ledgers below ask about the same tree
+// -- the slow list alone would have the same file parsed three times -- and the parse is the
+// expensive half of the walk. Reset is not offered: this module runs once per process, and a
+// second run in the same process would be a test asking about a different tree.
+const PLAN_READING = new Map()
 
 // The fast layer: the whole plan tree at `--tier fast`, which is the command `npm run test` runs
 // on a subtree. The author's 01:30 ruling (2026-11-02) put it here: "what we call green" and "what
@@ -51,6 +63,12 @@ export const FAST_TARGETS = ['test/plans']
 // because naming the file is what makes the release gate run it. A `slow` test outside these
 // files is a problem this check reports: the fast layer would drop it and no other layer would
 // run it.
+//
+// A row here is read, never skipped (see `slowLayerReading`): the check opens every named file and
+// counts what it holds per layer, so "slow" is answered by the tests' own `tier` lines and not by
+// the fact that a list says so. Before that, the row was a `continue` before any reading -- a file
+// named here could be unreadable, empty, or hold nothing but `fast` entries and the check would
+// still call the layer covered. The three ways a row can be true and empty are reported by name.
 export const SLOW_PLANS = [
     'test/plans/feat/bindings/python_binding.plan.toml',
     'test/plans/feat/compile/collections.plan.toml',
@@ -116,6 +134,7 @@ export const SLOW_PLANS = [
     'test/plans/feat/tools/lsp.plan.toml',
     'test/plans/feat/tools/portability.plan.toml',
     'test/plans/feat/tools/provenance.plan.toml',
+    'test/plans/feat/tools/selfchecks.plan.toml',
     'test/plans/feat/trans/canonical_gir.plan.toml',
     'test/plans/feat/trans/cml.plan.toml',
     'test/plans/feat/trans/cml_sweep.plan.toml',
@@ -211,9 +230,37 @@ export function planInventoryProblems() {
             problems.push(`the plan the gate cannot start, '${entry.file}', does not exist; the list is stale`)
         }
     }
-    for (const file of SLOW_PLANS) {
-        if (!fs.existsSync(path.join(ROOT, file))) {
-            problems.push(`the slow plan '${file}' does not exist; the slow list is stale`)
+    // The slow layer, read rather than skipped. A row of SLOW_PLANS is a claim about a file: that
+    // the runner can open it, that it holds tests, and that at least one of them belongs to the
+    // slow or the milestone layer. Each claim is checked here, by name, because a row that is
+    // false is indistinguishable from a row that is true in every count the gate prints: the file
+    // is run either way, and the number of entries the layer gained is the thing nobody reads.
+    const slow = slowLayerReading()
+    LAST_READING.slow = slow
+    for (const row of slow.files) {
+        if (row.missing) {
+            problems.push(`the slow plan '${row.file}' does not exist; the slow list is stale`)
+            continue
+        }
+        if (row.error) {
+            problems.push(
+                `the slow plan '${row.file}': the runner cannot read it (${row.error}); a named file with no ` +
+                    'reading has no layer, and the gate would fail on it a release later instead of here',
+            )
+            continue
+        }
+        if (row.entries === 0) {
+            problems.push(
+                `the slow plan '${row.file}' holds no test entry: naming it runs nothing, so the row states a ` +
+                    'layer the file does not have',
+            )
+            continue
+        }
+        if (row.slow + row.milestone === 0) {
+            problems.push(
+                `the slow plan '${row.file}' holds ${row.fast} test(s) and no slow or milestone entry: the row ` +
+                    'moves nothing into the slow layer and only runs the file a second time',
+            )
         }
     }
     const planFiles = walkPlans('test/plans') ?? []
@@ -229,9 +276,10 @@ export function planInventoryProblems() {
             if (target.endsWith('.plan.toml')) return key === target
             return key === target || key.startsWith(`${target}/`)
         })
+    let slowOutside = 0
     for (const abs of planFiles) {
         const key = rel(abs)
-        if (slowSet.has(key) || cannotStartSet.has(key)) continue
+        if (cannotStartSet.has(key)) continue
         const plan = readPlan(abs)
         if (plan.error) {
             problems.push(`${key}: the runner cannot read it (${plan.error}); a plan file with no reading has no layer`)
@@ -256,6 +304,11 @@ export function planInventoryProblems() {
             problems.push(`${key}: ${unknownTier}`)
             continue
         }
+        // A named file has been read above, entry by entry. Its own slow tests are the slow
+        // layer's by their own `tier` lines, and the gate runs the whole file; there is nothing
+        // left for this loop to decide about it.
+        if (slowSet.has(key)) continue
+        slowOutside += slowTests
         if (!fastReaches(key)) {
             problems.push(
                 `${key}: no layer reaches it (not a fast target, a SLOW_PLANS file, a plan the gate ` +
@@ -269,15 +322,81 @@ export function planInventoryProblems() {
             )
         }
     }
+    // A slow test whose file is not named here is the same hole seen from the side of the test:
+    // `--tier slow` selects it, the merge gate never asks for that layer, and the file the release
+    // gate runs by name is a different list. The line above reports each such file; this is the
+    // number the whole tree reads, so a run that reports none of them can be told from one that
+    // examined none.
+    LAST_READING.slowOutside = slowOutside
     return problems
+}
+
+/**
+ * The slow layer as a reading: every file SLOW_PLANS names, opened and counted by the layer each
+ * of its entries lands in. `--tier slow` selects the entries whose own line says `slow`; this list
+ * says which files those entries live in, so the two numbers answer two questions and neither is
+ * inferred from the other:
+ *
+ *   * `named` -- rows of the list, i.e. files the release gate starts in full;
+ *   * `read` -- rows that were opened; the difference is what "skipped before reading" used to hide;
+ *   * `entries`/`byLayer` -- what those files hold, by the runner's own `testTier`, including the
+ *     copies their `[[sweeps]]` entries derive.
+ *
+ * The report therefore says where each entry went. A file whose entries are all `fast` adds
+ * nothing to the slow layer: the gate runs it twice and the slow layer is not one test larger.
+ */
+export function slowLayerReading() {
+    const files = []
+    const byLayer = { fast: 0, slow: 0, milestone: 0, debug: 0 }
+    let read = 0
+    for (const file of SLOW_PLANS) {
+        const abs = path.join(ROOT, file)
+        if (!fs.existsSync(abs)) {
+            files.push({ file, missing: true })
+            continue
+        }
+        const plan = readPlan(abs)
+        if (plan.error) {
+            files.push({ file, error: plan.error })
+            continue
+        }
+        read += 1
+        const counts = { fast: 0, slow: 0, milestone: 0, debug: 0 }
+        for (const test of plan.tests) {
+            try {
+                counts[testTier(plan.doc, test)] += 1
+            } catch {
+                // an unknown tier is the plan loop's problem, reported there by name
+            }
+        }
+        for (const tier of Object.keys(byLayer)) byLayer[tier] += counts[tier]
+        files.push({ file, entries: plan.tests.length, ...counts })
+    }
+    const entries = files.reduce((sum, row) => sum + (row.entries || 0), 0)
+    return { named: SLOW_PLANS.length, read, files, byLayer, entries }
 }
 
 /**
  * A plan file as the runner reads it: its own tests plus the copies its `[[sweeps]]` entries
  * generate. A plan the schema rejects, and a malformed sweep, redden the run itself; here they are
  * one problem carrying the reason, so the rest of the inventory still prints.
+ *
+ * Read once per file per run, because three readers now ask for the same file: the layer check,
+ * the slow layer's own reading and the case ledger. Parsing a plan is the expensive half of this
+ * check, and the walk is the reason the plan entry that runs it carries a CPU bound rather than a
+ * wall one.
  */
-function readPlan(abs) {
+export function readPlan(abs) {
+    // One key per file: the callers below spell a path with `/` or with the platform's separator
+    // (the walk joins with it), and two spellings of one plan would be two parses.
+    const key = path.resolve(abs)
+    if (PLAN_READING.has(key)) return PLAN_READING.get(key)
+    const reading = readPlanUncached(abs)
+    PLAN_READING.set(key, reading)
+    return reading
+}
+
+function readPlanUncached(abs) {
     try {
         const { doc, tests } = loadPlanTests(abs)
         return { doc, tests: [...tests, ...expandSweeps(doc, abs)] }
@@ -352,7 +471,14 @@ const CASE_ROOT = 'test/cases'
 // The numbers the standalone run prints, kept from the walk it already takes: reading the tree a
 // second time for the count would cost the fast layer the same eleven seconds the first walk does,
 // and a second walk can also disagree with the first about a tree that changed between them.
-const LAST_READING = { cases: 0, readers: 0 }
+const LAST_READING = {
+    cases: 0,
+    readers: 0,
+    // the three ledgers' own numbers, printed before the verdict and on a failing run too
+    slow: null,
+    slowOutside: null,
+    selfChecks: null,
+}
 // A case is a file of the repository, and a bytecode cache is not: the interpreter writes
 // `__pycache__` beside a Python module it imports, it is in `.gitignore` (so no commit carries
 // one), and it appears and disappears with whoever last imported the module -- including in a
@@ -884,6 +1010,144 @@ function moduleRoots(from) {
     return roots
 }
 
+// --- the self-check ledger: the tools' own tests, and whether a plan runs one ----------------
+//
+// The two ledgers above answer for plan files and for cases. Both were already answering when a
+// reader noticed the third subject: the tools' own tests -- the files whose name says they are a
+// test (`*.test.mjs`, `*.test.ps1`) and the two entry points of the runner's self-test -- were
+// named by no plan, no checker and no workflow, so a red there was invisible for as long as the
+// tool kept being used. That is the same defect the case ledger exists for, one subject down: a
+// file nothing runs cannot fail, so a change that breaks it is silent while the tree pays for it.
+//
+// The rule is the case ledger's: a self-check is either named by a plan -- a value of a plan file
+// that resolves to it, which is what makes a run start it -- or recorded in
+// SELF_CHECK_EXCEPTIONS with the reason it cannot be. A name in a comment, in a report or in this
+// file is prose about a test, not a run of it.
+//
+// `test/tools/selftest/` is the one directory where the name does not decide: the two files that
+// are checks in their own right are listed in SELF_CHECK_ENTRY_POINTS, and the fixtures beside
+// them (`over-selection.mjs`, `scratch_probe.mjs`, `selftest_probe.mjs`, `backend_echo.mjs`, the
+// fixture plans) are inputs of those two rather than checks that stand alone.
+const SELF_CHECK_ROOTS = ['test/tools', 'internal/tools', 'scripts']
+const SELF_CHECK_ENTRY_POINTS = new Set([
+    'test/tools/selftest/run.mjs',
+    'test/tools/selftest/selection-cases.mjs',
+])
+
+// The one reason a self-check of this tree cannot be started by a plan, with the two measurements
+// it rests on. It is written once because the nineteen files below are one class, and the class is
+// the thing that has to be revisited if either measurement changes.
+const NO_PWSH =
+    'a plan cannot start it: the build host is Linux and has no pwsh (measured with `command -v pwsh` on ' +
+    'the build host: no output), and the runner resolves a tool that is neither `node` nor `python` ' +
+    'inside the install (`<install>/bin/pwsh`), so an entry would fail before the script ran instead of ' +
+    'skipping with a reason. The suite the test covers runs on the workstation under PowerShell, which ' +
+    'no gate command reaches; the `internal/tools/` rule of test/plan-selection.json records the same ' +
+    'fact about the scripts themselves. Running them needs a pwsh on the host or a PATH lookup in the ' +
+    "runner's tool resolution, and neither is this ledger's to decide."
+
+export const SELF_CHECK_EXCEPTIONS = [
+    'internal/tools/camel-cleanup.test.ps1',
+    'internal/tools/camel-gate-state.test.ps1',
+    'internal/tools/camel-remote-args.test.ps1',
+    'internal/tools/camel-remote-cleanup.test.ps1',
+    'internal/tools/camel-remote-fetch.test.ps1',
+    'internal/tools/camel-remote-targets.test.ps1',
+    'internal/tools/hook-integration.test.ps1',
+    'internal/tools/merge-batch-sets.test.ps1',
+    'internal/tools/merge-lane-baseline.test.ps1',
+    'internal/tools/merge-lane-checkout.test.ps1',
+    'internal/tools/merge-lane-docs-only.test.ps1',
+    'internal/tools/merge-lane-docs.test.ps1',
+    'internal/tools/merge-lane-firstparent.test.ps1',
+    'internal/tools/merge-lane-push.test.ps1',
+    'internal/tools/merge-lane-resolved.test.ps1',
+    'internal/tools/merge-lane-start.test.ps1',
+    'internal/tools/merge-record.test.ps1',
+    'internal/tools/run-registry.test.ps1',
+    'internal/tools/run-tests-diagnostic-file.test.ps1',
+].map((file) => ({ file, reason: NO_PWSH }))
+
+// The files the ledger judges: a name that says "test", and the two self-test entry points. Read
+// from the tree, so a new self-check appears here by being written, not by being listed.
+function selfCheckFiles() {
+    const out = []
+    for (const root of SELF_CHECK_ROOTS) {
+        for (const file of walkTreeFiles(root)) {
+            const name = baseOf(file)
+            if (name.endsWith('.test.mjs') || name.endsWith('.test.ps1') || SELF_CHECK_ENTRY_POINTS.has(file)) {
+                out.push(file)
+            }
+        }
+    }
+    return out.sort()
+}
+
+/** The files of this tree that a plan value resolves to: what a run of some plan would start. */
+function planNamedFiles() {
+    const named = new Set()
+    for (const abs of walkPlans('test/plans') ?? []) {
+        const plan = readPlan(abs)
+        if (plan.error) continue
+        const base = dirOf(rel(abs))
+        for (const value of referenceStrings(plan.doc)) {
+            if (typeof value !== 'string' || value.includes('${') || value.startsWith('http')) continue
+            // an install path or an absolute path names a file of another tree
+            if (value.includes(':') || value.startsWith('/')) continue
+            // the hand-written joiner the case ledger uses: a plan value is already relative to
+            // the plan's directory, so `/` and `..` are the whole resolution it needs.
+            named.add(underCases(base, value))
+        }
+    }
+    return named
+}
+
+// Every problem, not the first, for the same reason as the two ledgers above.
+export function selfCheckProblems() {
+    const problems = []
+    const files = selfCheckFiles()
+    if (files.length === 0) {
+        return ['no self-check under test/tools, internal/tools or scripts: the ledger examined nothing, which is not a pass']
+    }
+    const recorded = new Map(SELF_CHECK_EXCEPTIONS.map((entry) => [entry.file, entry]))
+    for (const entry of SELF_CHECK_EXCEPTIONS) {
+        if (!fs.existsSync(path.join(ROOT, entry.file))) {
+            problems.push(`the recorded self-check '${entry.file}' does not exist; the exception list is stale`)
+        } else if (!files.includes(entry.file)) {
+            problems.push(
+                `the recorded self-check '${entry.file}' is not one of the files this ledger judges (its name ` +
+                    'does not say test and it is not a self-test entry point); remove the entry',
+            )
+        }
+    }
+    const named = planNamedFiles()
+    let covered = 0
+    let recordedCount = 0
+    for (const file of files) {
+        const startable = named.has(file)
+        const entry = recorded.get(file)
+        if (startable) {
+            covered += 1
+            if (entry) {
+                problems.push(
+                    `${file}: recorded in SELF_CHECK_EXCEPTIONS, but a plan names it now; remove the entry`,
+                )
+            }
+            continue
+        }
+        if (entry) {
+            recordedCount += 1
+            continue
+        }
+        problems.push(
+            `${file}: no plan names it (a plan's value is what starts a file) and SELF_CHECK_EXCEPTIONS does ` +
+                'not record why it cannot be started; give it a plan entry, or say what stops one',
+        )
+    }
+    LAST_READING.selfChecks = { files: files.length, covered, recorded: recordedCount }
+    return problems
+}
+
 // The merge gate's fast layer runs this file as a plan entry, and a reader can run it by hand: the
 // same checks the release gate starts with, without an install and without a layer.
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
@@ -904,7 +1168,8 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
     } else {
         const planProblems = planInventoryProblems()
         const caseProblems = caseLedgerProblems()
-        const problems = [...planProblems, ...caseProblems]
+        const selfProblems = selfCheckProblems()
+        const problems = [...planProblems, ...caseProblems, ...selfProblems]
         const examined = (walkPlans('test/plans') ?? []).length
         // What was read, printed before the verdict and on a failing run too: the number a reader
         // compares across runs, and the sentence a run has to answer for when it shrinks.
@@ -912,13 +1177,34 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
             `plan-inventory: read ${examined} plan file(s) under test/plans, ${LAST_READING.cases} case ` +
                 `file(s) under ${CASE_ROOT} and ${LAST_READING.readers} file(s) under the naming roots`,
         )
+        // The two layer readings, in the words of the question each answers. The slow line is the
+        // one that stopped being a `continue`: every named file is opened, and what it holds is
+        // counted by the layer its own tests belong to.
+        const slow = LAST_READING.slow
+        if (slow) {
+            console.log(
+                `plan-inventory: slow layer: ${slow.named} named plan file(s), ${slow.read} read, ` +
+                    `${slow.entries} test entries in them (${slow.byLayer.fast} fast, ${slow.byLayer.slow} slow, ` +
+                    `${slow.byLayer.milestone} milestone, ${slow.byLayer.debug} debug); ${LAST_READING.slowOutside} ` +
+                    'slow test(s) in files the list does not name',
+            )
+        }
+        const selfChecks = LAST_READING.selfChecks
+        if (selfChecks) {
+            console.log(
+                `plan-inventory: self-checks: ${selfChecks.files} file(s) under test/tools, internal/tools and ` +
+                    `scripts; ${selfChecks.covered} started by a plan, ${selfChecks.recorded} recorded with a reason`,
+            )
+        }
         for (const problem of problems) console.error(`plan-inventory: ${problem}`)
         if (problems.length > 0) {
             console.error(
                 `plan-inventory: ${problems.length} problem(s): every plan file must be reached by a fast target, ` +
-                    'named in SLOW_PLANS, cannot be started by the gate, or be a debug or milestone plan; and every file ' +
+                    'named in SLOW_PLANS, cannot be started by the gate, or be a debug or milestone plan; a slow ' +
+                    'plan must be readable and hold a slow or milestone entry; every file ' +
                     'under test/cases must be read by code -- a plan, an import, a harness that opens it -- ' +
-                    'or be recorded in CASE_EXCEPTIONS with the reason it is kept',
+                    'or be recorded in CASE_EXCEPTIONS with the reason it is kept; and every self-check must be ' +
+                    'started by a plan or recorded in SELF_CHECK_EXCEPTIONS',
             )
             process.exitCode = 1
         } else {
@@ -926,6 +1212,10 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
             console.log(
                 `plan-inventory: ${LAST_READING.cases} case files, every one of them is read by code or recorded with a reason ` +
                     `(${CASE_EXCEPTIONS.length} recorded)`,
+            )
+            console.log(
+                `plan-inventory: ${selfChecks ? selfChecks.files : 0} self-check(s), every one of them is started by a ` +
+                    `plan or recorded with a reason (${SELF_CHECK_EXCEPTIONS.length} recorded)`,
             )
         }
     }

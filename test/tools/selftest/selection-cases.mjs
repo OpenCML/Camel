@@ -307,60 +307,73 @@ export function selectionCaseProblems(repoRoot = defaultRoot) {
         }
 
         // ---- 6. a change no rule matches selects nothing, and does not widen ---------------------
-        // The candidate list holds only rule-less *classes* whose files a plan does not read. It
+        // The candidate list holds rule-less *classes* whose files a plan does not read. It
         // deliberately does not hold the directory of stored records under `test/selection/`: check 10
         // below asserts that nothing a gate runs names it, and a probe that listed it here would be
         // the one reading the check would then have to except.
+        //
+        // The file is *found*, not assumed: a class here is a place a rule has not been written yet,
+        // and a rule written for one of them tomorrow turns "the first file of this directory" into a
+        // comparison of two selections -- which is what happened to `internal/reports/`, whose pages
+        // the docs_links rule now reads. So each candidate is asked the question the check is about
+        // (does any rule match this file?) and the first one that answers no is used. The probe is
+        // the selection engine itself, so the class list cannot vouch for a file it does not read.
+        // A run where every candidate is matched reports what matched, because that is a check that
+        // could not be taken, not a pass over nothing.
+        const RULELESS_CANDIDATES = ['internal/reports/', 'internal/archive/', 'benchmarks/']
         let unruled = null
-        for (const candidate of ['internal/reports/']) {
+        const matched = []
+        for (const candidate of RULELESS_CANDIDATES) {
             const dir = path.join(repoRoot, candidate)
             if (!fs.existsSync(dir)) continue
-            const first = fs.readdirSync(dir).sort().find((entry) => fs.statSync(path.join(dir, entry)).isFile())
-            if (first) {
-                unruled = `${candidate}${first}`
-                break
-            }
-        }
-        if (unruled === null) {
-            problems.push('selection: no candidate for a file no rule matches was found, so the empty-selection path was not exercised')
-        } else {
-            // Confirm it really is rule-less rather than trusting the class name: a rule added for
-            // `internal/reports/` someday would turn this check into a comparison of two selections.
-            const probe = sh(
-                ['-e', `import('./test/runner.mjs').then((m) => { const s = m.plansForChanges(${JSON.stringify([unruled])}); process.exit(s === null ? 3 : 0) })`],
-                repoRoot
-            )
-            if (probe.status !== 3) {
-                problems.push(`selection: ${unruled} is matched by a rule, so the empty-selection check has nothing rule-less to read`)
-            } else {
-                const files = listFile('unruled.txt', [unruled])
-                const engineRun = select(files, ['--print'])
-                if (engineRun.status !== 2) {
-                    problems.push(
-                        `selection: the engine read exit ${engineRun.status} for a change no rule matches, expected 2`
-                    )
-                }
-                if (!/an empty selection must not become a plan expansion/.test(engineRun.output)) {
-                    problems.push(`selection: the engine did not name the empty selection: ${head(engineRun)}`)
-                }
-                if (/layer-cases|whole fast layer is the run/.test(engineRun.output)) {
-                    problems.push('selection: the engine still widened a rule-less change to the fast layer')
-                }
-                const listedRun = sh(
-                    [path.join(repoRoot, 'scripts', 'test.js'), '--changed', '--changed-files', files, '--list'],
+            const files = fs.readdirSync(dir).sort().filter((entry) => fs.statSync(path.join(dir, entry)).isFile())
+            for (const name of files.slice(0, 4)) {
+                const file = `${candidate}${name}`
+                const probe = sh(
+                    ['-e', `import('./test/runner.mjs').then((m) => { const s = m.plansForChanges(${JSON.stringify([file])}); process.exit(s === null ? 3 : 0) })`],
                     repoRoot
                 )
-                if (listedRun.status === 0) {
-                    problems.push(
-                        `selection: --changed --list read exit 0 for a change no rule matches: ${head(listedRun)}`
-                    )
+                if (probe.status === 3) {
+                    unruled = file
+                    break
                 }
-                if (!/no rule in test\/plan-selection\.json matches/.test(listedRun.output)) {
-                    problems.push(`selection: --changed --list did not name the files no rule matched: ${head(listedRun)}`)
-                }
-                if (/\(the whole fast layer/.test(listedRun.output)) {
-                    problems.push('selection: --changed --list still printed the whole fast layer for a rule-less change')
-                }
+                matched.push(`${file}${probe.status === 0 ? '' : ` (probe exit ${probe.status})`}`)
+            }
+            if (unruled !== null) break
+        }
+        if (unruled === null) {
+            problems.push(
+                'selection: every candidate for a file no rule matches is matched by a rule (' +
+                    `${matched.join(', ')}), so the empty-selection path was not exercised`
+            )
+        } else {
+            const files = listFile('unruled.txt', [unruled])
+            const engineRun = select(files, ['--print'])
+            if (engineRun.status !== 2) {
+                problems.push(
+                    `selection: the engine read exit ${engineRun.status} for a change no rule matches, expected 2`
+                )
+            }
+            if (!/an empty selection must not become a plan expansion/.test(engineRun.output)) {
+                problems.push(`selection: the engine did not name the empty selection: ${head(engineRun)}`)
+            }
+            if (/layer-cases|whole fast layer is the run/.test(engineRun.output)) {
+                problems.push('selection: the engine still widened a rule-less change to the fast layer')
+            }
+            const listedRun = sh(
+                [path.join(repoRoot, 'scripts', 'test.js'), '--changed', '--changed-files', files, '--list'],
+                repoRoot
+            )
+            if (listedRun.status === 0) {
+                problems.push(
+                    `selection: --changed --list read exit 0 for a change no rule matches: ${head(listedRun)}`
+                )
+            }
+            if (!/no rule in test\/plan-selection\.json matches/.test(listedRun.output)) {
+                problems.push(`selection: --changed --list did not name the files no rule matched: ${head(listedRun)}`)
+            }
+            if (/\(the whole fast layer/.test(listedRun.output)) {
+                problems.push('selection: --changed --list still printed the whole fast layer for a rule-less change')
             }
         }
     // ---- 7. the record lists the cases of the run's targets, not of the change's plans ------

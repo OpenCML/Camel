@@ -37,7 +37,26 @@ fs.mkdirSync(path.join(process.env.USERPROFILE, '.camel-oversight'), { recursive
 const here = path.dirname(new URL(import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, '$1'))
 const pluginDir = path.join(here, 'camel-oversight')
 const syncScript = path.join(here, 'sync-oversight-live.mjs')
-const repo = 'D:\\Projects\\Camel'
+// The repository the sync reads is the checkout this file lives in, and the ref is one that exists
+// there: `origin/develop` in a developer's clone, `HEAD` on the gate host, which clones the bare
+// repository and pushes one lane branch. The old default was the developer's own checkout by its
+// Windows path (`D:\Projects\Camel`, `origin/develop`), so every check that used it was untested
+// everywhere else: on the host the sync could not even start (the path does not exist), and the
+// first check -- "the sync puts the committed tree in the live directory" -- reported a sync
+// failure with no hint of why. The ref still names a commit, which is the property these checks
+// pin: the tree comes out of the object database, never out of a worktree.
+const repo = process.env.CAMEL_OVERSIGHT_REPO || path.resolve(here, '..', '..')
+const ref = (() => {
+    try {
+        execFileSync('git', ['-C', repo, 'rev-parse', '--verify', '--quiet', 'origin/develop^{commit}'], {
+            stdio: ['ignore', 'pipe', 'ignore'],
+            encoding: 'utf8',
+        })
+        return 'origin/develop'
+    } catch {
+        return 'HEAD'
+    }
+})()
 const logFile = path.join(sandbox, 'log.jsonl')
 
 let checks = 0
@@ -58,7 +77,7 @@ const toUrl = (file) => {
 }
 
 /** One plugin instance, with a context that records what it would have registered. */
-async function instance({ loadFrom, liveDir, repoPath = repo, ref = 'origin/develop', hmr = null }) {
+async function instance({ loadFrom, liveDir, repoPath = repo, ref: syncRef = ref, hmr = null }) {
     const routes = new Map()
     const ctx = {
         logger: { warn() {}, info() {}, error() {}, debug() {} },
@@ -83,7 +102,7 @@ async function instance({ loadFrom, liveDir, repoPath = repo, ref = 'origin/deve
         },
     }
     const module = await import(toUrl(path.join(loadFrom, 'index.js')))
-    module.apply(ctx, { repo: repoPath, syncScript, syncRef: ref, liveDir, logFile })
+    module.apply(ctx, { repo: repoPath, syncScript, syncRef, liveDir, logFile })
     return routes
 }
 
