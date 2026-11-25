@@ -964,10 +964,25 @@ class ArrangeWalk {
         }
         case graph::NodeKind::Data:
         case graph::NodeKind::Port:
-        case graph::NodeKind::Gate:
-            // A value, a port of the body, and the hand-on of a `sync` block: computed from what
-            // they read, with nothing to write, nothing to fail and nothing to wait for.
+            // A value and a port of the body: computed from what they read, with nothing to write,
+            // nothing to fail and nothing to wait for.
             return Arrangeable{true, true, true, true};
+        case graph::NodeKind::Gate: {
+            // The hand-on of an order, and the four terms cannot state "it stands here": a gate
+            // that carries the chain of a `sync` block, or the `wait` a value was written for, is
+            // pure, it reaches no resource, it cannot fault and it ends -- and it still may not be
+            // arranged anywhere, because the order it carries is what makes the effect it waits
+            // for observably first (design principles 3.3, 3.4). A placement decision acts on the
+            // answer, so the kind declines for such a gate instead of saying yes (D-1124-65: one
+            // predicate, and a node it cannot answer for must not be answered "freely
+            // arrangeable"). A gate that carries no order is the value itself, handed on.
+            for (const graph::Edge &edge : view.edges(graph::EdgeKind::Wait)) {
+                if (edge.user == ref) {
+                    return Arrangeable{};
+                }
+            }
+            return Arrangeable{true, true, true, true};
+        }
         case graph::NodeKind::Brch: {
             Arrangeable terms{true, true, true, true};
             for (const RegionId region : view.regionsOwnedBy(ref)) {

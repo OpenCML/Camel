@@ -157,3 +157,26 @@ assert(num('same') + num('no_old') === num('nodes'), 'the two counts do not cove
 }
 """
 timeout_ms = 20000
+[[tests]]
+name = "facts.compare_arrangeable_readers"
+desc = "test::facts_compare also reads `core.arrangeable` against the predicate a pass asks before it drops, moves, merges or reorders a node (`runtime::nodeIsFreelySchedulable`, the same four terms assembled inside `runtime::may_be_rearranged`): at every node of the program the two answers agree, no node is left without an answer, and both counts cover the nodes. The one node kind this comparison found disagreeing is the hand-on of an order -- a GATE carrying the chain of a `sync` block, which is pure, reaches nothing, cannot fault, ends, and still stands where the order says -- and the kind now declines for it instead of answering `freely arrangeable`, which is the answer a placement decision would act on (design principles 3.4; D-1124-65)."
+kind = "behavior"
+case = "../../../cases/facts/tensors_and_loops.cml"
+args = ["${case}", "test::facts_compare"]
+
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout
+const line = out.split('\n').find(l => l.startsWith('FACTS_COMPARE kind=core.arrangeable readers'))
+assert(line, 'no FACTS_COMPARE readers line for core.arrangeable')
+const num = (name) => { const m = line.match(new RegExp(name + '=([0-9]+)')); assert(m, `${name} is missing from: ${line}`); return Number(m[1]) }
+assert(num('nodes') > 0, 'no node was read')
+assert(num('no_fact') === 0, `a node got no answer from the kind: ${line}`)
+assert(num('diff') === 0, `a node is answered differently by the fact and by the pass predicate: ${line}\n${out.split('\n').filter(l => l.startsWith('FACTS_COMPARE reader_diff')).join('\n')}`)
+assert(num('agree') + num('diff') === num('nodes'), 'the two counts do not cover the nodes')
+const other = out.split('\n').find(l => l.startsWith('FACTS_COMPARE kind=core.arrangeable graphs='))
+assert(other && other.match(/nodes=([0-9]+)/)[1] === String(num('nodes')), 'the two comparisons read different graphs')
+}
+"""
+timeout_ms = 20000
