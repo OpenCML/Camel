@@ -1,5 +1,6 @@
 #!/bin/sh
-# Only the merge worktree may push `develop`.
+# Two rules, both about a branch that must not be written by accident: `develop` (who may push it)
+# and `integration` (what shape an arrival on it must have).
 #
 # `develop` has one writer by rule (agents/dispatch.md section 8.3): one lane merges and pushes,
 # every other lane hands its branch over. A rule kept by memory is kept until the next writer
@@ -10,8 +11,9 @@
 # What it reads: the refs git is about to send, on stdin, one per line as
 #   <local ref> <local sha> <remote ref> <remote sha>
 # and nothing else. A line whose remote ref is `refs/heads/develop` (a delete included -- `(delete)`
-# in the local-ref column) is the one this hook is about. Everything else is allowed, which is the
-# normal case: a lane pushing its own branch, and the gate's own staging push to the host's bare
+# in the local-ref column) is the one the tree rule is about. A line whose remote ref is
+# `refs/heads/integration` is the one the shape rule is about. Everything else is allowed, which is
+# the normal case: a lane pushing its own branch, and the gate's own staging push to the host's bare
 # repository, whose refs are `refs/heads/lane-*`.
 #
 # Which tree is the merge worktree is machine-local, so it comes from
@@ -24,22 +26,97 @@
 # The check is the tree doing the push (`git rev-parse --show-toplevel`), not the branch or the
 # user: a worktree is what a lane has, and the same person runs the merge lane from another one.
 #
+# Both rules can be skipped: `git push --no-verify` runs no hook at all. That is said here rather
+# than closed here, because a lock in a hook that git itself offers to skip is a lock in name only.
+# A push made that way is a push whose conclusion line has to say so.
+#
 # Installed by `.husky/pre-push`, which calls this script before anything else reads stdin -- a
 # reader that runs second may see a drained stream, and an empty stream reads as "no push to
 # develop", which is exactly how this hook would let through what it exists to stop.
 set -u
 
 target_ref='refs/heads/develop'
+integration_ref='refs/heads/integration'
 
 refs=$(cat)
 develop_push=''
+develop_local=''
+develop_remote=''
+integration_pushes=''
 while IFS=' ' read -r local_ref local_sha remote_ref remote_sha; do
     if [ "$remote_ref" = "$target_ref" ]; then
         develop_push="$target_ref"
+        develop_local="$local_sha"
+        develop_remote="$remote_sha"
+    fi
+    if [ "$remote_ref" = "$integration_ref" ]; then
+        integration_pushes="$integration_pushes$local_ref $local_sha $remote_sha
+"
     fi
 done <<EOF
 $refs
 EOF
+
+# --- D-1124-78: every arrival on `integration` is a merge of its tip -----------
+#
+# The tree rule below says *who* may write develop. This says what shape a commit may have to enter
+# `integration`, and it is checked here because a push can bypass the tool that makes the merge: on
+# 2026-11-24 the three seats satisfied a weaker rule (the push was a fast-forward) by merging
+# integration into the seat and fast-forwarding the seat onto it, and `50a77d7bf2` went in with one
+# parent and `63f019685b` as its only parent. Nothing refused any of those pushes, and every reader
+# of the first-parent chain read lane commits as arrivals. `merge-lane.ps1` asserts the same thing
+# about the commit it is about to push; this hook asserts it about anything that travels, including
+# a push made by hand or by a branch that was re-landed elsewhere.
+check_integration_shape() {
+    while IFS=' ' read -r local_ref local_sha remote_sha; do
+        # A delete carries no commit to have a shape.
+        [ "$local_ref" != '(delete)' ] || continue
+        [ -n "$local_sha" ] || continue
+        case "$local_sha" in
+            *[!0]*) : ;;
+            *) continue ;;
+        esac
+        parents=$(git rev-list --parents -n 1 "$local_sha" 2>/dev/null)
+        state=$?
+        if [ "$state" -ne 0 ] || [ -z "$parents" ]; then
+            echo "pre-push: refusing to push $local_sha to $integration_ref: the commit could not be read" >&2
+            echo "pre-push: (git rev-list exit $state). A commit this hook cannot read is not a merge." >&2
+            exit 1
+        fi
+        set -- $parents
+        count=$(($# - 1))
+        first=''
+        if [ "$count" -ge 1 ]; then
+            first=$2
+        fi
+        if [ "$count" -lt 2 ]; then
+            echo "pre-push: refusing to push $local_sha to $integration_ref: 一笔车道提交直接进了 integration" >&2
+            echo "pre-push: (a lane commit went straight in: it has $count parent, and every arrival is a merge)." >&2
+            echo 'pre-push: D-1124-78: 每笔到达都是合并，第一父 == 尖端；请把车道合进 integration 再推。' >&2
+            exit 1
+        fi
+        # Creating the branch: there is no tip for the first parent to be. All zeros is git's
+        # "nothing is there", and a shape check has nothing to compare against.
+        case "$remote_sha" in
+            '' | *[!0]*) : ;;
+            *) continue ;;
+        esac
+        if [ "$first" != "$remote_sha" ]; then
+            echo "pre-push: refusing to push $local_sha to $integration_ref: its first parent is $first, and $integration_ref is $remote_sha." >&2
+            echo 'pre-push: 你在把 integration 合进席位，而不是把车道合进 integration；' >&2
+            echo 'pre-push: 请 git checkout -B tmp origin/integration; git merge --no-ff <车道>（冲突解法用 git config rerere.enabled true 复用）后重来。' >&2
+            echo 'pre-push: D-1124-78: 每笔到达都是合并，第一父 == 尖端。' >&2
+            exit 1
+        fi
+    done <<EOF
+$integration_pushes
+EOF
+}
+
+if [ -n "$integration_pushes" ]; then
+    check_integration_shape
+fi
+
 # Nothing here is about another branch: a hook that speaks on every push is read as noise.
 [ -n "$develop_push" ] || exit 0
 
@@ -110,6 +187,33 @@ if [ -z "$match" ]; then
     echo "pre-push:   $config, key 'mergeWorktree', names the tree that may write develop." >&2
     echo "pre-push: push your own branch and hand it to the merge lane; develop is merged there." >&2
     exit 1
+fi
+
+# The tree rule above says *who* may write develop. This says *what* may be written: every merge
+# commit this push would publish has to carry a record that a gate read it and passed it.
+#
+# It exists because a gate refuses a push and not a commit. A merge made in the checkout that had
+# develop checked out survived a refusal on the local branch, and the next push of anything --
+# one backlog row -- carried it, so the merge became public having passed nothing. That is not a
+# mistake a person makes once; it is what the mechanism does whenever somebody pushes after a
+# refusal. The record (`scripts/merge-record.mjs`) is written by the merge tool before it pushes,
+# so a merge that went through the gate is in this hook's set and a merge that was refused is not.
+#
+# The range is the one the push sends, walked by first parent: a commit reachable only through a
+# side branch is part of a merge that already had its reading.
+if [ -n "$develop_local" ]; then
+    node "$top/scripts/merge-record.mjs" verify "$develop_remote" "$develop_local" >&2
+    state=$?
+    if [ "$state" -eq 1 ]; then
+        echo "pre-push: refusing to push $develop_push: the merge commits named above have no reading that holds." >&2
+        echo "pre-push: a gate refuses a push, not a commit -- so a merge it refused is still on this branch" >&2
+        echo "pre-push: and this push would publish it. Merge those lanes again through the merge tool." >&2
+        exit 1
+    elif [ "$state" -ne 0 ]; then
+        echo "pre-push: refusing to push $develop_push: the merge records could not be read (node exit $state)." >&2
+        echo "pre-push: an unreadable record set is not an empty one." >&2
+        exit 1
+    fi
 fi
 
 echo "pre-push: $develop_push from the merge worktree ($top): allowed"

@@ -24,6 +24,45 @@
 # is what determines the final tag. `scripts/check_wheel_tags.py` then fails this job if the
 # tag came out unpublishable, instead of leaving it to the index after the whole matrix ran.
 #
+# --- macOS arm64: bundle the dylibs in, then re-sign what moved (5.37 item 6, 2026-11-24) ---
+# The machine that builds a wheel is not the machine that installs it, and on Apple that difference
+# is in every load command. `CMakeLists.txt` sets CMAKE_MACOSX_RPATH off, so libcamel's install name
+# is the absolute path in the build tree, and every tool, `.cmo` (`cmake/camel_module.cmake` builds
+# them as Mach-O bundles) and `_camel.abi3.so` records that path. On the build host it resolves; on
+# a Mac that installed this wheel it names a directory that does not exist.
+#
+# `delocate-wheel` is the repair, and it sorts dependencies by *where the recorded name resolves*,
+# not by whether a file of that name is inside the wheel:
+#   * a recorded name that resolves inside the wheel is only re-pointed at a relative one
+#     (`@loader_path/...`); that is the case for a `.cmo` linking a sibling `.cmo`, whose install
+#     name `camel_module.cmake` already sets to `@loader_path`;
+#   * a recorded name that resolves outside it (libcamel's build-tree path, a Conan cache, a
+#     framework under /Library) has that file copied into `camel/.dylibs/` and every reference to
+#     it rewritten to `@loader_path/...` pointing there.
+# `RECORD` is then recomputed for every file whose bytes changed, which is what pip hashes at
+# install (delocate.wheeltools.rewrite_record).
+#
+# The consequence for libcamel is worth stating rather than discovering: the copy the wheel carries
+# at `camel/.cmlenv/libs/libcamel.dylib` is *not* the name anything references, so delocate copies
+# the build-tree one into `camel/.dylibs/` and that copy is what loads. The in-wheel copy is still
+# delocated (its own dependencies are rewritten and re-signed like any other Mach-O), but nothing
+# references it, so the wheel ships it unloaded. "Check the macOS wheels" reports exactly that as a
+# NOTE naming the file, which is how the duplication is measured instead of assumed.
+#
+# delocate also re-signs the files it rewrites, and on arm64 that is not optional: editing a Mach-O
+# invalidates the linker's ad-hoc signature, and the loader kills an unsigned or stale-signed file.
+# In delocate 0.13.0 `set_install_name` and `set_install_id` call `replace_signature(filename, "-")`
+# -- `codesign --force --sign -` -- and `_delete_rpaths` (the rpath sanitizing below) does the same,
+# so this workflow signs nothing by hand. That reading comes from 0.13.0's source, not from a run on
+# this runner; "Check the macOS wheels" is what proves it on the shipped bytes (`codesign --verify
+# --strict` per Mach-O), together with `otool -L` naming only system libraries or files inside the
+# wheel (scripts/check_macos_wheel.py). If a future delocate drops the ad-hoc signing, that check is
+# what fails, and the repair is `codesign --force --sign -` before the wheel is packed.
+#
+# No JIT entitlement is involved: the JIT has a code generator for x86-64 only
+# (cmake/Options.cmake turns ENABLE_FASTVM_JIT off on every other processor), so on arm64 nothing
+# generates code at run time and there is nothing to entitle.
+#
 # --- Trusted Publishing (OIDC, no long-lived PyPI tokens in GitHub) ---
 # 1) GitHub: Settings → Environments → create "pypi" and "testpypi" (optional: required reviewers).
 # 2) PyPI: Project → Manage → Publishing → add pending trusted publisher:
@@ -41,7 +80,8 @@ name: Build and package (PyPI wheel)
 on:
   push:
     branches:
-      - release
+      - main
+      - "release/**"
     tags:
       - "v*"
       - "V*"
@@ -261,23 +301,18 @@ jobs:
             # windows-2025-vs2026, i.e. Visual Studio 2026 (VS 18) with MSVC 14.51, so the
             # runtime version is v145. `vswhere -all -products *` reports the IDE.
             msvc_runtime_version: v145
-          # - runner: macos-latest
-          #   slug: macos-arm64
-          #   target_arch: baseline
-          #   platform_tag: macosx_13_0_arm64
-          # NOT built yet (5.37 item 6 asks for it). What is missing is not the matrix cell:
-          # the tag policy in scripts/pypi-rollup.js already produces `macosx_13_0_arm64` from
-          # `sysconfig.get_platform()` with MACOSX_DEPLOYMENT_TARGET=13.0. What is missing is the
-          # bundling step. `delocate` has to copy the non-system libraries in and rewrite their
-          # load paths, and on arm64 that invalidates each binary's signature, so every rewritten
-          # Mach-O needs re-signing (`codesign --force --sign -`) and the wheel's `RECORD` needs
-          # rewriting for the files whose bytes changed -- pip checks those hashes when it
-          # installs. Until that is written and run once, a macOS wheel would ship a tag it
-          # cannot honour, and build-pypi.yml does not build one. ci.yml's macOS leg says the
-          # truth about this (the macos-arm64 cell of the build-test matrix there).
-          #
-          # Windows arm64 is not published: few users. Intel Macs are not published either:
-          # Apple has stopped making them.
+          # Apple Silicon only: Intel Macs are not published (the owner's decision: Apple has
+          # stopped making them). The tag is not the hard part -- scripts/pypi-rollup.js already
+          # produces `macosx_13_0_arm64` from `sysconfig.get_platform()` with
+          # MACOSX_DEPLOYMENT_TARGET=13.0 -- and neither is the build, which ci.yml's macos-arm64
+          # leg has run all along. What was missing was the step that makes the wheel relocatable,
+          # and that is "Bundle the dylibs into the macOS wheels" below (delocate-wheel) plus
+          # "Check the macOS wheels" (otool -L and codesign). Built since 2026-11-24 (5.37 item 6).
+          - runner: macos-latest
+            slug: macos-arm64
+            target_arch: baseline
+            platform_tag: macosx_13_0_arm64
+          # Windows arm64 is not published: few users.
     runs-on: ${{ matrix.cfg.runner }}
     timeout-minutes: 180
 
@@ -353,18 +388,37 @@ jobs:
           }
 
       - name: Install toolchain (macOS)
+        # Homebrew LLVM, not the image's `clang`: that is Apple Clang, whose compiler id is
+        # `AppleClang`, and CMakeLists.txt line ~184 refuses anything but `Clang` ("This project
+        # requires Clang as the C++ compiler. Current compiler is AppleClang."). ci-leg.yml installs
+        # llvm@19 for the same reason and pins the major version to match the Linux cell; this cell
+        # is the same build, so it pins the same. `scripts/common.js` passes
+        # `-DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++` by bare name, so what decides is
+        # what `clang` resolves to on PATH -- hence GITHUB_PATH, which applies to the later steps
+        # (this one cannot see it, so it verifies through the absolute path).
         if: runner.os == 'macOS'
         env:
           HOMEBREW_NO_INSTALLED_DEPENDENTS_CHECK: "1"
         run: |
-          brew install ninja cmake
+          brew install llvm@19 ninja cmake
+          echo "$(brew --prefix llvm@19)/bin" >> "$GITHUB_PATH"
+          "$(brew --prefix llvm@19)/bin/clang" --version
 
       - name: Verify toolchain (macOS)
         if: runner.os == 'macOS'
         run: |
-          cc --version
+          clang --version
+          clang++ --version
           ninja --version
           cmake --version
+          # The version docs/setup.en.md asks for, checked here rather than discovered inside a
+          # dependency build: CMakeLists.txt's compiler-id check passes for any Clang, including a
+          # Homebrew one too old for the C++23 the tree uses.
+          major=$(clang -dumpversion | cut -d. -f1)
+          if [ "$major" -lt 19 ]; then
+            echo "::error::Clang >= 19 is required (docs/setup.en.md); found $(clang -dumpversion) at $(command -v clang)"
+            exit 1
+          fi
 
       - name: Install Conan
         run: python -m pip install --upgrade pip "conan>=2.10"
@@ -425,6 +479,69 @@ jobs:
         run: |
           mkdir -p wheelhouse
           cp dist/pypi/*.whl wheelhouse/
+
+      - name: Bundle the dylibs into the macOS wheels and re-sign what moved (5.37 item 6)
+        # The step macOS needs and Linux gets from `auditwheel repair`. Three things happen:
+        #
+        #   * every dependency whose recorded name resolves outside the wheel is copied into
+        #     `camel/.dylibs/` and every reference to it rewritten to `@loader_path/...` pointing
+        #     there -- libcamel included, because its install name is the build-tree path
+        #     (CMAKE_MACOSX_RPATH off). A dependency that already resolves inside the wheel is only
+        #     re-pointed, which is why the sibling `.cmo` links keep working;
+        #   * `RECORD` is recomputed for every file whose bytes changed, which is what pip hashes at
+        #     install;
+        #   * absolute and relative-to-cwd rpaths are removed (`--sanitize-rpaths` is the CLI's
+        #     default: `delocate.cmd.common.delocate_values` sets it True). That is the part
+        #     scripts/pypi-rollup.js can only do on Linux (`strip_build_rpath.py` edits the ELF
+        #     dynamic string table), so the macOS binaries keep the build tree's and the Conan
+        #     cache's `LC_RPATH` entries until here. A `@loader_path`/`@executable_path` rpath is
+        #     left alone (`delocate.tools._is_rpath_sanitary`).
+        #
+        # Every file whose bytes it changes is re-signed ad hoc inside delocate 0.13.0
+        # (`replace_signature(filename, "-")` after `install_name_tool`, `codesign --force --sign -`),
+        # so this step signs nothing by hand; "Check the macOS wheels" below is what proves the
+        # shipped bytes carry a valid signature rather than this comment asserting it.
+        #
+        # `python -m delocate.cmd.delocate_wheel`, not the console script: the matrix chooses the
+        # interpreter with CAMEL_PYPI_PYTHON, and `-m` cannot end up in a different one. That module
+        # ends with `if __name__ == "__main__": main()`, so `-m` really runs it (a module without
+        # that guard would exit 0 having done nothing, and the check below would then be the only
+        # thing standing between a broken wheel and the index). `-v` puts delocate's own "Modifying
+        # install name in ..." lines in the log, which is the record of which files it rewrote and
+        # therefore signed.
+        #
+        # MACOSX_DEPLOYMENT_TARGET=13.0 is already in the job env: delocate reads it and takes
+        # max(the binaries' own minimum, 13.0) for the platform tag, and a library that needs a
+        # newer system raises here instead of shipping under a tag it cannot honour. It only
+        # *narrows* the tag the wheel already claims, though, it never widens it -- which is why
+        # `macosPlatformTag()` in scripts/pypi-rollup.js had to stop asking the interpreter
+        # (`sysconfig.get_platform()` answers `macosx-10.9-universal2` for the setup-python
+        # framework build) and start asking `process.arch` + `MACOSX_DEPLOYMENT_TARGET`. Run
+        # 45349410016 shipped `...-macosx_13_0_arm64.macosx_13_0_x86_64.whl` off that difference.
+        if: runner.os == 'macOS'
+        env:
+          CAMEL_PYPI_PYTHON: ${{ steps.python.outputs.python-path }}
+        run: |
+          "$CAMEL_PYPI_PYTHON" -m pip install --upgrade "delocate>=0.11"
+          "$CAMEL_PYPI_PYTHON" -m delocate.cmd.delocate_wheel --version
+          mkdir -p wheelhouse
+          "$CAMEL_PYPI_PYTHON" -m delocate.cmd.delocate_wheel -v \
+            --require-archs arm64 -w wheelhouse dist/pypi/*.whl
+          ls -la wheelhouse/
+
+      - name: Check the macOS wheels (lipo, otool -L and codesign)
+        # 5.37 item 6, on the artifact and not on the intention. Every Mach-O has to carry the
+        # architecture the file *name* claims (`lipo -archs`), because that name is what pip offers
+        # to a machine; for every one of them `otool -L` has to name only `/usr/lib` or `/System`
+        # libraries or files reached through `@loader_path` / an `@rpath` that stays inside the
+        # package -- anything else is a path on the build host -- and `codesign --verify --strict`
+        # has to pass. The tag check below is the other half: a wheel can be tagged correctly and
+        # still be unloadable.
+        #
+        # `python3`, not `python`: this step runs only on macOS, and setup-python always provides
+        # `python3` there while `python` has depended on the image.
+        if: runner.os == 'macOS'
+        run: python3 scripts/check_macos_wheel.py -v wheelhouse/*.whl
 
       - name: Refuse an unpublishable tag (5.37 item 1)
         run: |

@@ -36,10 +36,10 @@
  * for the shape and emits from it; the emitted bytes are that back end's own, because only it
  * knows its instruction set.
  *
- * **What is left of the name table.** `shapeOfUri` below is the last reader that classifies by URI
- * text; its two callers are the ONNX exporter and the shape test. It goes when those two ask the
- * record instead -- the operators' records already state the four shapes, which is what
- * `camel/runtime/oper_shape.h` reads -- and no new caller may be added to it.
+ * **No name table.** Every reader asks the record (`camel/runtime/oper_shape.h`), by the operator a
+ * node names: the shapes are stated where the four are registered, so there is nothing here that
+ * could drift from that statement. A table of URI text was the last reader of the kind, and the
+ * exporter and the shape test are the two callers that used to read it -- both ask the record now.
  */
 
 #pragma once
@@ -60,39 +60,6 @@ using camel::ops::shapeName;
 using camel::runtime::shapeOfKind;
 using camel::runtime::shapeOfNode;
 using camel::runtime::shapeOfOperation;
-
-/// The shape the operator `uri` names, or None for an operator that is not one of the four. The two
-/// member reads are two operators -- by position and by field name -- and both are an `Access`
-/// here, because what a back end or an analysis does with either is read a member out of the value
-/// it was given.
-///
-/// **A debt written down here, where it is, and not in a report that goes away:**
-///
-///   1. It classifies by the operator's **name**, comparing URI text: `":op/cast"` -> Conversion,
-///      and so on. That is the one thing a reader of a graph must not do (operator_table.h, design
-///      section 3.8 R10): what an operator is, is stated in its record.
-///   2. **This function must be gone**, not left as a second reading that nothing keeps in step
-///      with the registrations.
-///   3. Why it is still here: its two callers hold a URI and no node -- the ONNX exporter
-///      (`src/stdlib/onnx/exporter.cpp`) and the shape test (`src/stdlib/test/oper_shape.cpp`) --
-///      and neither has been moved to the record yet.
-///   4. **When those two are moved, delete it**, in that change. Not "later": a table kept past its
-///      last reader is a table somebody will reuse.
-inline OperShape shapeOfUri(std::string_view uri) {
-    if (uri == ":op/cast") {
-        return OperShape::Conversion;
-    }
-    if (uri == ":op/copy") {
-        return OperShape::Clone;
-    }
-    if (uri == ":op/fill") {
-        return OperShape::Construction;
-    }
-    if (uri == ":op/access" || uri == ":op/access_key") {
-        return OperShape::Access;
-    }
-    return OperShape::None;
-}
 
 /// What a back end does with a fault a conversion raises is the back end's own failure model and
 /// stays where that model is: `std::prl` catches it at the node, `std::nvm` and `std::macro` let it

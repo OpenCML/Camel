@@ -39,33 +39,93 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 // report now says so instead of holding 25 files back "by policy" while running their fast tests.
 export const FAST_TARGETS = ['test/plans']
 
-// The slow layer, by explicit plan file. Fourteen files: six fast plans whose slow tests
-// are runnable, five whole slow plans, and three perf plans the tree keeps gate-able -- the
-// `para_speedup` plan the 2026-10-23 rule made one, and the two count guards the 2026-10-25
-// rule split out of `perf.step_budget` and `perf.reduce_layout` because they assert counts and
-// properties rather than durations. A `slow` test outside these files is a problem this check
-// reports: the fast layer would drop it and no other layer would run it.
+// The slow layer, by explicit plan file: every file that owns a test whose own line says
+// `tier = "slow"`, and the whole-plan slow files (the GPU tile plans, the two collection plans, the
+// corpus sweep and the perf plans the tree keeps gate-able -- `para_speedup` from the 2026-10-23
+// rule, and the two count guards the 2026-10-25 rule split out of `perf.step_budget` and
+// `perf.reduce_layout` because they assert counts and properties rather than durations).
+//
+// The list grew on 2026-11-24 with the 261 cases the first full fast-layer record measured over
+// 2 s (internal/reports/2026-11-24-test-suite-inventory.cn.md, appendix B): a case is out of the
+// developer loop but still worth reading, so it says `tier = "slow"` and its file is named here,
+// because naming the file is what makes the release gate run it. A `slow` test outside these
+// files is a problem this check reports: the fast layer would drop it and no other layer would
+// run it.
 export const SLOW_PLANS = [
-    'test/plans/feat/parse/frontend.plan.toml',
-    'test/plans/feat/trans/cpp.plan.toml',
-    'test/plans/feat/modules/random.plan.toml',
-    'test/plans/feat/tools/lsp.plan.toml',
+    'test/plans/feat/bindings/python_binding.plan.toml',
+    'test/plans/feat/compile/collections.plan.toml',
+    'test/plans/feat/compile/diag_catalog.plan.toml',
+    'test/plans/feat/compile/diag_fixes.plan.toml',
+    'test/plans/feat/compile/diag_options.plan.toml',
+    'test/plans/feat/compile/generics.plan.toml',
+    'test/plans/feat/compile/numeric_permissions.plan.toml',
+    'test/plans/feat/compile/return_type.plan.toml',
+    'test/plans/feat/compile/type_identity.plan.toml',
+    'test/plans/feat/compile/type_text.plan.toml',
+    'test/plans/feat/compile/unused_values.plan.toml',
+    'test/plans/feat/compile/with_defaults.plan.toml',
+    'test/plans/feat/consistency/attempt.plan.toml',
+    'test/plans/feat/consistency/match.plan.toml',
+    'test/plans/feat/consistency/runner.plan.toml',
+    'test/plans/feat/consistency/surface.plan.toml',
+    'test/plans/feat/consistency/values.plan.toml',
+    'test/plans/feat/docs_links.plan.toml',
+    'test/plans/feat/exemplars.plan.toml',
+    'test/plans/feat/gate/case_ledger.plan.toml',
+    'test/plans/feat/gate/conformance.plan.toml',
+    'test/plans/feat/gate/plan_inventory.plan.toml',
     'test/plans/feat/linear/var_reference.plan.toml',
-    // The whole corpus through the printer, one process per case (`node test/tools/cml-sweep.mjs`),
-    // about a minute.
-    'test/plans/feat/trans/cml_sweep.plan.toml',
-    'test/plans/feat/tools/debugger.plan.toml',
+    'test/plans/feat/mm/capacity.plan.toml',
     'test/plans/feat/mm/gc_pacing.plan.toml',
     'test/plans/feat/mm/gc_soak.plan.toml',
+    'test/plans/feat/mm/graph_space.plan.toml',
+    'test/plans/feat/mm/process_state.plan.toml',
+    'test/plans/feat/modules/autodiff.plan.toml',
+    'test/plans/feat/modules/checkpoints.plan.toml',
+    'test/plans/feat/modules/import_cost.plan.toml',
+    'test/plans/feat/modules/nn.plan.toml',
+    'test/plans/feat/modules/onnx.plan.toml',
+    'test/plans/feat/modules/random.plan.toml',
+    'test/plans/feat/modules/rules.plan.toml',
+    'test/plans/feat/modules/rules_libraries.plan.toml',
+    'test/plans/feat/modules/stdlib_registry.plan.toml',
+    'test/plans/feat/modules/tiles.plan.toml',
+    'test/plans/feat/opt/algebra.plan.toml',
+    'test/plans/feat/opt/control.plan.toml',
+    'test/plans/feat/opt/control_data.plan.toml',
+    'test/plans/feat/opt/defun.plan.toml',
+    'test/plans/feat/opt/effects_kept.plan.toml',
+    'test/plans/feat/opt/gate_value.plan.toml',
+    'test/plans/feat/opt/generic.plan.toml',
+    'test/plans/feat/opt/graph_faces.plan.toml',
+    'test/plans/feat/opt/inline.plan.toml',
+    'test/plans/feat/opt/inline_cycle.plan.toml',
+    'test/plans/feat/opt/inline_use.plan.toml',
+    'test/plans/feat/opt/pass_params.plan.toml',
+    'test/plans/feat/opt/progen_simplify.plan.toml',
+    'test/plans/feat/parse/frontend.plan.toml',
+    'test/plans/feat/tools/autodiff_migration_ledger.plan.toml',
+    'test/plans/feat/tools/build_stamp.plan.toml',
+    'test/plans/feat/tools/clean.plan.toml',
+    'test/plans/feat/tools/cli.plan.toml',
+    'test/plans/feat/tools/debugger.plan.toml',
+    'test/plans/feat/tools/exit_reporting.plan.toml',
+    'test/plans/feat/tools/find_fix.plan.toml',
+    'test/plans/feat/tools/layer_accounting.plan.toml',
+    'test/plans/feat/tools/load_class.plan.toml',
+    'test/plans/feat/tools/lsp.plan.toml',
+    'test/plans/feat/tools/portability.plan.toml',
+    'test/plans/feat/tools/provenance.plan.toml',
+    'test/plans/feat/trans/canonical_gir.plan.toml',
+    'test/plans/feat/trans/cml.plan.toml',
+    'test/plans/feat/trans/cml_sweep.plan.toml',
+    'test/plans/feat/trans/cpp.plan.toml',
     'test/plans/gpu/tiles.plan.toml',
     'test/plans/gpu/tiles_rows.plan.toml',
     'test/plans/gpu/tiles_transfer.plan.toml',
     'test/plans/perf/para_speedup.plan.toml',
-    'test/plans/perf/step_counts.plan.toml',
-    // Its five PyTorch gradient comparisons say `tier = "slow"` and skip without torch; they
-    // were reached by no layer at all while the file sat in the old FORBIDDEN table.
-    'test/plans/feat/modules/autodiff.plan.toml',
     'test/plans/perf/reduce_layout_counts.plan.toml',
+    'test/plans/perf/step_counts.plan.toml',
 ]
 
 // The milestone layer is not a list here either: it is every test whose own tier line (or its

@@ -11,6 +11,14 @@ desc = "A construction and a member read answer one shape whether the program wr
 # (`camel/execute/shaped_operators.h`), every `oper=` line of this program stops matching -- the
 # operator-built nodes answer `shape=none` -- while the `kind=` lines keep matching, so the plan's
 # failure names the operator's half and not a program that stopped building the kind.
+#
+# NOTE, measured on the base this branch starts from and left as it is: this test is red before the
+# change below, for two reasons of its own. The case no longer compiles -- `access` and `access_key`
+# take their position as a `with` parameter, and it still passes it as a second ordinary argument,
+# so nothing it asserts is reached -- and past that, the `kind=CAST` and `kind=ACCS` lines it expects
+# are not printed for `float(x)` and `t.0` any more. Repairing it is a change of its own. With only
+# the call form repaired the five `oper=` lines do print, which is the reader this change moves to
+# the record.
 [[tests]]
 name = "runtime.oper_shape.the_operator_and_the_kind_answer_one_shape"
 desc = "One shape each: the five operators of the four (two member reads, by position and by field name) and the two kinds the same program still builds (a construction and a member read). A form that answers none is the classification back on the node kind."
@@ -20,6 +28,23 @@ args = ["${case}", "test::oper_shape"]
 expect_exit = 0
 expect_stdout_matches = ['\[OPER_SHAPE\] kind=ACCS shape=access', '\[OPER_SHAPE\] kind=FILL shape=construction', '\[OPER_SHAPE\] oper=:op/access shape=access', '\[OPER_SHAPE\] oper=:op/access_key shape=access', '\[OPER_SHAPE\] oper=:op/cast shape=conversion', '\[OPER_SHAPE\] oper=:op/copy shape=clone', '\[OPER_SHAPE\] oper=:op/fill shape=construction']
 # A form answerable only as "not one of the four" is the revert this case exists for.
-expect_stdout_not_contains = ["shape=none"]
+expect_stdout_not_contains = ["shape=none", "not ok"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 30000
+
+# The registry behind the answer above, checked directly: the shape a statement writes, the shape a
+# reader gets back off the record, and the refusal a completed record gives a second, different
+# statement. None of it is visible to a program, so nothing in a case can stand in for it: a
+# `stateShape` that took the second statement would leave the four operators' shapes as whatever was
+# registered last, and the `oper=` lines above would keep matching while the registry drifted.
+[[tests]]
+name = "runtime.oper_shape.the_registry_states_one_shape"
+desc = "`declareShape` states a shape at an operator and `shapeOfOperator` reads it back off the record; before the record is completed a later statement stands; after it is completed the same statement is a repetition and a different one is refused, naming both shapes, with the published shape left as it was."
+kind = "behavior"
+case = "../../../cases/compile/ref/ref_float.cml"
+args = ["${case}", "test::oper_shape"]
+expect_exit = 0
+expect_stdout_contains = ["[SHAPE_REGISTRY] unstated_is_none ok", "[SHAPE_REGISTRY] declareShape ok", "[SHAPE_REGISTRY] completed_refuses_a_second_shape ok"]
+expect_stdout_not_contains = ["not ok"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 30000

@@ -109,9 +109,10 @@ export func uniform::<T>(k: Key) => T[...] when is_float::<T>() {
     let n = shape->reduce<func (a: int, b: int) => int {
         a * b
     }, 1>
-    // `to_array` is a debt: a comprehension's source needs elements, which a range will have once
-    // `operator for` lands (ruling D-1123-49); then the source goes back to `0 .. n`.
-    return reshape<shape>([uniform::<T>(fold(k, i)) for i in to_array(0 .. n)])
+    // A comprehension walks what `for` walks, so the integers of the range are the source as
+    // they are: each element function is applied to one of them, and the array is the shape the
+    // caller asked for.
+    return reshape<shape>([uniform::<T>(fold(k, i)) for i in 0 .. n])
 }
 
 /// A number drawn from the normal distribution with mean 0 and deviation 1 (Box-Muller).
@@ -144,8 +145,7 @@ export func normal::<T>(k: Key) => T[...] when is_float::<T>() {
     let n = shape->reduce<func (a: int, b: int) => int {
         a * b
     }, 1>
-    // The same debt as in `uniform`: the source goes back to `0 .. n` once a range walks itself.
-    return reshape<shape>([normal::<T>(fold(k, i)) for i in to_array(0 .. n)])
+    return reshape<shape>([normal::<T>(fold(k, i)) for i in 0 .. n])
 }
 
 /// An integer drawn uniformly from low (included) to high (excluded).

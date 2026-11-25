@@ -56,7 +56,7 @@ known_fail = ["gir"]
 known_fail_owner = "unowned batch item 9 (P0-2): the construction half of the control-edge rewrite -- the builder still writes a CTRL edge where the model puts a sync or an order edge; whoever takes the item owns both marks"
 known_fail_reason = "the builder still writes a control edge where the model puts a sync or an order edge, all of it through `src/compile/gir/builder_helpers.h#writeControlLink`, and it cannot be burned alone: the readers of the control kind and the stored pictures move in the same commit"
 known_fail_msg = "CTRL edge(s)"
-known_fail_ends_when = "when the builder stops writing a control edge, the `gir` graph of the frozen input has no edge of `type=CTRL` anywhere, which is what `edges.no_ctrl_edge_kind`'s `verify_script` asserts; today the same graph fails that check with `CTRL edge(s)`"
+known_fail_ends_when = { passes = "edges.no_ctrl_edge_kind" }
 args = ["${case}", "${run_gir}"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
@@ -169,7 +169,7 @@ known_fail = ["gir"]
 known_fail_owner = "unowned batch item 9 (P0-2): the construction half of the control-edge rewrite -- the builder still writes a CTRL edge where the model puts a sync or an order edge; whoever takes the item owns both marks"
 known_fail_reason = "the arm's output still gets a control input at `src/compile/gir/builder_control.cpp#coerceArmExit`, and the GATE loses that port only when the sync chain carries the wait, which is the other half of the same rewrite"
 known_fail_msg = "CTRL input(s)"
-known_fail_ends_when = "when the sync chain carries the wait instead of a control port, every `GATE` in the `gir` graph has exactly one `NORM` input and zero `CTRL` inputs -- `edges.gate_has_no_control_input`'s `verify_script` passes -- and its predecessors are `SYNC` only; today it fails with `CTRL input(s)`"
+known_fail_ends_when = { passes = "edges.gate_has_no_control_input" }
 args = ["${case}", "${run_gir}"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]

@@ -307,18 +307,20 @@ inline bool walksBeforeGraph(const DraftGraphBuilder *left, const DraftGraphBuil
 /// (`isCopyNode`, `constructionKindOf`, `isMemberRead`, `nodeTakesAnOrder`, `isFailCall`) is asking
 /// that question about a value it did not build and cannot have classified first.
 ///
-/// So the kind and the target are asked in that order. `operTarget` is a precondition check that
-/// **aborts** for a node without a registered target (`DraftGraphBuilder`), and every node of
-/// another kind is such a node -- asking it first is what aborted the whole front end once, on the
-/// first operand that was a port or a constant. `hasOperTarget` is the question to ask first; it
-/// answers for the URI-only shape too, whose name then comes from the payload.
+/// So the kind and the target are asked in that order. `operTarget` answers the *resolved*
+/// declaration and answers `nullptr` for a node this builder recorded no target for -- a call a
+/// pass wrote by naming its operator's URI is never resolved by the builder of the graph it hands
+/// on (`DraftGraphBuilder`). The kind is asked first anyway, because the payload of a node of
+/// another kind is that node's own body: a construction's is a `GCFillBody`, and reading it as a
+/// `GCOperBody` would name an operator that does not exist. Asking the kind first is also what
+/// stopped the front end aborting once, on the first operand that was a port or a constant.
 inline std::string_view operUriOf(node_handle_t node) {
     if (node == nullptr || !nodeIsKind(node, runtime::GCNodeKind::Oper)) {
         return {};
     }
     const DraftGraphBuilder *graph = nodeGraphOf(node);
-    if (graph->hasOperTarget(node)) {
-        return graph->operTarget(node)->uri();
+    if (const oper_idx_ptr_t *op = graph->operTarget(node); op != nullptr) {
+        return (*op)->uri();
     }
     const auto payload = nodeDraftOf(node)->payloadOf(nodeIdOf(node));
     if (payload.size() < sizeof(runtime::GCOperBody)) {
@@ -744,8 +746,10 @@ inline bool nodeTakesAnOrder(node_handle_t node) {
     }
     const runtime::GCNodeKind kind = nodeKindOf(node);
     if (kind == runtime::GCNodeKind::Oper) {
-        // The operator of a node being built is named by its target, and by the payload when the
-        // builder wrote the call by URI alone (`operUriOf`).
+        // The operator is the target this builder recorded, or, for a call a pass wrote by URI
+        // alone, the one its payload names (`operUriOf`) -- and neither kind of operator is known
+        // until the table answers for that URI (the comment above says what an unknown operator
+        // leaves out).
         const auto id = camel::core::OperatorTable::instance().lookup(operUriOf(node));
         return id.has_value() && !camel::runtime::nodeIsFreelySchedulable(kind, *id);
     }

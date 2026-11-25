@@ -76,7 +76,10 @@ const GATES = [
     },
     {
         name: 'process traces: every trace a page describes is a reading the tree takes',
-        args: ['scripts/check-process-traces.mjs'],
+        // The tree is named here rather than left to the checker's own default: a checker that
+        // chose its tree from the process's directory would read the main checkout (iron rule 17)
+        // when this runs from anywhere else. Every gate already runs with `cwd: ROOT` below.
+        args: ['scripts/check-process-traces.mjs', '--root', ROOT],
     },
     {
         name: 'plan fields: no field a kind does not read, no selection rule naming a path the tree lacks',

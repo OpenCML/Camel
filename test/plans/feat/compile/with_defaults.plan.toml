@@ -21,6 +21,10 @@ expect_exit = 0
 expect_stdout_exact = "18\n20\n80\n26\n10\n12\n12\n4\n3\n3\n"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 30000
+# Slow layer: over the 2 s the fast layer allows -- 2.00 s of
+# child wall clock in the 2026-11-12 record (appendix B of
+# internal/reports/2026-11-24-test-suite-inventory.cn.md).
+tier = "slow"
 
 [[tests]]
 name = "with_defaults.not_constant"
@@ -153,7 +157,7 @@ name = "with_defaults.one_constant"
 desc = "The claim that the default is evaluated once is visible in the graph: two calls that leave `rounds` out make two call nodes, and both read the one constant node holding 4242 — one DATA node, two edges from it, printed by `std::gir` (design principles 4.4)."
 kind = "behavior"
 case = "../../../cases/compile/with_defaults/one_constant.cml"
-args = ["${case}", "std::gir"]
+args = ["${case}", "std::gir", "std::nop"]
 expect_exit = 0
 verify_script = """
 ({ input, assert }) => {

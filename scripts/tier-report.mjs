@@ -149,6 +149,21 @@ function assertionsOf(test) {
     return JSON.stringify(picked)
 }
 
+/**
+ * What decided an entry's layer, as one label. The layer itself comes from the runner's own rule
+ * (`testTier`, through `planLayer`); this says whether that answer was written down on the test, on
+ * the plan, or neither. A layer that fills up because tests say so and a layer that fills up because
+ * the field is missing are the same number and different facts -- and the default is `fast`, which is
+ * also the largest layer, so the difference cannot be seen from the total (iron rule 6).
+ */
+const LAYERS = new Set(['fast', 'slow', 'milestone', 'debug'])
+function decidedBy(plan, test) {
+    if (test.tier !== undefined) return 'test tier'
+    if (plan.tier === undefined) return 'plan has no tier (fast by default)'
+    if (LAYERS.has(plan.tier)) return 'plan tier'
+    return `plan label '${plan.tier}' (not a layer, read as fast)`
+}
+
 const planFiles = walkPlans(PLANS_ROOT)
 if (planFiles.length === 0) {
     // A report over no plan file is not a zero-sized layer, it is a report of nothing.
@@ -158,7 +173,7 @@ if (planFiles.length === 0) {
 
 // One pass over the tree: every declared entry and every derived entry, tagged with its layer and
 // -- for a derived one -- the sweep entry it came from.
-const layers = new Map(TIERS.map((tier) => [tier, { declared: 0, derived: 0, sweeps: new Map(), declaredCommands: new Map() }]))
+const layers = new Map(TIERS.map((tier) => [tier, { declared: 0, derived: 0, by: new Map(), sweeps: new Map(), declaredCommands: new Map() }]))
 const problems = []
 for (const planPath of planFiles) {
     let plan
@@ -179,6 +194,8 @@ for (const planPath of planFiles) {
         const tier = testTier(plan, test)
         const bucket = layers.get(tier)
         bucket.declared += 1
+        const by = decidedBy(plan, test)
+        bucket.by.set(by, (bucket.by.get(by) || 0) + 1)
         // The same reading for what is written down, so the copies' repeat count has something to
         // be compared with: a layer whose declared entries already run one command twice is not
         // made redundant by a sweep that copies both of them.
@@ -187,9 +204,11 @@ for (const planPath of planFiles) {
     }
     for (const test of derived) {
         const tier = testTier(plan, test)
+        const by = decidedBy(plan, test)
         const key = `${rel(planPath)}#${test.__sweep}`
         const bucket = layers.get(tier)
         bucket.derived += 1
+        bucket.by.set(by, (bucket.by.get(by) || 0) + 1)
         if (!bucket.sweeps.has(key)) {
             bucket.sweeps.set(key, {
                 key,
@@ -263,6 +282,11 @@ for (const tier of shown) {
             `${sweeps.length} [[sweeps]] ${sweeps.length === 1 ? 'entry' : 'entries'} ` +
             `= ${total} total (${share}% derived)`,
     )
+    // Printed with and without --quiet: a total says how big a layer is, this says how much of it
+    // anybody decided. `--quiet` drops the per-sweep detail, not the reading that keeps the number
+    // from being mistaken for a decision.
+    const byParts = [...bucket.by.entries()].sort((lhs, rhs) => rhs[1] - lhs[1] || lhs[0].localeCompare(rhs[0]))
+    console.log(`[tier-report]   reached by: ${byParts.length === 0 ? 'nothing' : byParts.map(([label, n]) => `${n} ${label}`).join(' / ')}`)
     if (quiet) continue
     const declaredRepeats = repeats(bucket.declaredCommands)
     console.log(

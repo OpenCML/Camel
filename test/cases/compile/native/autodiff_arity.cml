@@ -1,10 +1,10 @@
 /**
- * The declaration of `autodiff:stop_gradient` takes one ordinary argument: a second one is
+ * The declaration of `laws:stop_gradient` takes one ordinary argument: a second one is
  * refused at the call, and the overload the message lists is the declaration's —
  * `stdlib/autodiff.cml`, not the C++ module (step 10).
  */
 
-import { stop_gradient } from autodiff
+import { stop_gradient } from laws
 
 func main() => int sync {
     println(stop_gradient(1.0, 2.0))

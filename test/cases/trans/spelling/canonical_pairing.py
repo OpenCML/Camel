@@ -113,7 +113,12 @@ def write(path, text):
 
 def run(camel, program, passes):
     """The canonical document of `program` after `passes`, as its exact bytes."""
-    command = [camel, str(program)] + list(passes) + ["std::jgir", "canonical=true"]
+    # Why the pipeline ends in `std::nop`: this helper's subject is the document the last pass
+    # writes -- the two writings are compared byte for byte through it, sha256 and all -- and
+    # `std::jgir` hands the graph on, so the fallback would run the program behind the document.
+    # Both writings' `main` returns `target(3, 5)`, so that run is a nonzero exit code as well as
+    # bytes on the stream this comparison reads. The document is what is measured; the run is not.
+    command = [camel, str(program)] + list(passes) + ["std::jgir", "canonical=true", "std::nop"]
     done = subprocess.run(command, capture_output=True)
     return done.returncode, done.stdout or b"", (done.stderr or b"").decode("utf-8", "replace")
 

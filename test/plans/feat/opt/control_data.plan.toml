@@ -21,6 +21,10 @@ verify_script = '''
  assert(input.normalized.stdout.trim() === 'before\nafter', input.normalized.stdout)
 }
 '''
+# Slow layer: over the 2 s the fast layer allows -- 2.16 s of
+# child wall clock in the 2026-11-12 record (appendix B of
+# internal/reports/2026-11-24-test-suite-inventory.cn.md).
+tier = "slow"
 
 [[tests]]
 name = "control_data.unused_argument.inline"
@@ -33,6 +37,10 @@ verify_script = '''
  assert(input.normalized.stdout.trim() === 'before\nafter', input.normalized.stdout)
 }
 '''
+# Slow layer: over the 2 s the fast layer allows -- 2.12 s of
+# child wall clock in the 2026-11-12 record (appendix B of
+# internal/reports/2026-11-24-test-suite-inventory.cn.md).
+tier = "slow"
 
 [[tests]]
 name = "control_data.unused_argument.inline_fold"
@@ -45,6 +53,10 @@ verify_script = '''
  assert(input.normalized.stdout.trim() === 'before\nafter', input.normalized.stdout)
 }
 '''
+# Slow layer: over the 2 s the fast layer allows -- 2.05 s of
+# child wall clock in the 2026-11-12 record (appendix B of
+# internal/reports/2026-11-24-test-suite-inventory.cn.md).
+tier = "slow"
 
 [[tests]]
 name = "control_data.unused_argument.ctrl_inline"
@@ -57,6 +69,10 @@ verify_script = '''
  assert(input.normalized.stdout.trim() === 'before\nafter', input.normalized.stdout)
 }
 '''
+# Slow layer: over the 2 s the fast layer allows -- 2.01 s of
+# child wall clock in the 2026-11-12 record (appendix B of
+# internal/reports/2026-11-24-test-suite-inventory.cn.md).
+tier = "slow"
 
 [[tests]]
 name = "control_data.unused_argument.opt"
@@ -85,7 +101,7 @@ verify_script = '''
 [[tests]]
 name = "control_data.graph"
 case = "../../../cases/opt/generic/control_data_paths.cml"
-args = ["${case}", "std::macro", "std::opt", "std::jgir"]
+args = ["${case}", "std::macro", "std::opt", "std::jgir", "std::nop"]
 verify_script = '''
 ({ input, assert }) => {
  const g = JSON.parse(input.normalized.stdout).graphs.find(g => g.name === 'main')
@@ -116,6 +132,10 @@ verify_script = '''
  }
 }
 '''
+# Slow layer: over the 2 s the fast layer allows -- 2.04 s of
+# child wall clock in the 2026-11-12 record (appendix B of
+# internal/reports/2026-11-24-test-suite-inventory.cn.md).
+tier = "slow"
 
 [[tests]]
 name = "control_data.macro.left"

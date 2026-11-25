@@ -11,7 +11,8 @@
  * `jvp`, `vjp` and a non-scalar result are not here: they are the transforms that do not exist yet.
  */
 
-import { grad, with_grad, stop_gradient } from autodiff
+import { grad, with_grad } from autodiff
+import { stop_gradient } from laws
 
 with <x: float>
 func square() => float {

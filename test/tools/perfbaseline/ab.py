@@ -21,7 +21,7 @@ the wall time of one `camel` process (the process includes the compile of the pr
 for `--what` modes that time a pass the pass's own time from `--timeit` (which compiles again
 for every iteration and times only the pass):
 
-  compile    camel PROGRAM std::stats std::null          (wall time)
+  compile    camel PROGRAM std::stats std::nop          (wall time)
   optinline  --timeit std::cxx::inline/1 PROGRAM         (the pass's time)
   opt        --timeit std::opt/1 PROGRAM                 (the pass's time)
   nvm, fvm, jit, prl    --timeit std::<back end>/N PROGRAM   (the run, without the compile)
@@ -48,7 +48,7 @@ def timed(pass_name, rounds):
 
 def mode_table(rounds):
     return {
-        "compile": lambda args: (args + ["std::stats", "std::null"], False),
+        "compile": lambda args: (args + ["std::stats", "std::nop"], False),
         "optinline": timed("std::cxx::inline", rounds),
         "opt": timed("std::opt", rounds),
         "nvm": timed("std::nvm", rounds),

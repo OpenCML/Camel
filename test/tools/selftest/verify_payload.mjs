@@ -38,6 +38,7 @@ for (const key of [
     'diagnostics',
     'benchmark',
     'cpu_ms',
+    'cpu_reading',
     'cpu_budget_ms',
     'cpu_limit_ms',
     'cpu_margin_x',
@@ -53,6 +54,11 @@ assert.equal(input.benchmark, null)
 // key. `cpu_ms` is the host's to give: a host without `/proc/self/stat` reports no figure at all,
 // and then the ratio is null while the line is still recorded.
 assert.equal(input.cpu_budget_ms, null)
+// A null CPU figure always travels with the sentence saying why (the runner's `cpuReadingRecord`):
+// a figure and "no figure on this platform" must never read the same, and neither may be `0`.
+assert.equal(typeof input.cpu_reading, 'string')
+assert.ok(input.cpu_reading.length > 0, 'cpu_reading is empty')
+if (input.cpu_ms === null) assert.ok(input.cpu_reading.startsWith('absent:'), input.cpu_reading)
 assert.equal(input.cpu_margin_basis, 'timeout_margin')
 // The line and the ratio are one statement, and the payload has to carry both: the ratio is the
 // line divided by the reading, so a script that reads either can check the other. The line itself

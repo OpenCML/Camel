@@ -1,6 +1,0 @@
-{
-  "meta": {
-    "title": "Build Queue",
-    "description": "Shows the Camel build currently holding the lock, everyone waiting, and recent builds, refreshed once a second."
-  }
-}

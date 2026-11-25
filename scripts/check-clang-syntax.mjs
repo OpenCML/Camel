@@ -333,9 +333,25 @@ function ninjaDeps() {
             continue
         }
         if (!unit) continue
-        const input = line.trim().split(/\s+/).slice(1).join(' ')
-        if (!input) continue
-        const abs = path.resolve(buildDir, input)
+        // Ninja prints one input path per indented line. It does not always print ONLY the path: the
+        // line used to be read as "<something> <path>" and the first token dropped, which on the tree
+        // this runs against left nothing at all -- every line's only token was the path, so the graph
+        // came out empty and every changed header answered "no dependency record", which widened every
+        // change to the whole tree (654 units, 575 s) and still looked like a real reading
+        // (2026-11-24). Take the longest suffix that names a file that exists; a format that puts a
+        // stamp or a flag first then still resolves, and a line that names no file is skipped.
+        const tokens = line.trim().split(/\s+/)
+        let abs = ''
+        if (tokens.length > 0) {
+            for (let i = 0; i < tokens.length; i++) {
+                const candidate = path.resolve(buildDir, tokens.slice(i).join(' '))
+                if (fs.existsSync(candidate)) {
+                    abs = candidate
+                    break
+                }
+            }
+        }
+        if (!abs) continue
         if (!map.has(abs)) map.set(abs, new Set())
         map.get(abs).add(unit)
     }
@@ -439,9 +455,22 @@ selected.forEach((file, i) => {
 fs.writeFileSync(path.join(work, 'jobs.txt'), lines.join('\n') + '\n')
 fs.writeFileSync(path.join(work, 'files.txt'), selected.map((f) => path.relative(ROOT, f)).join('\n') + '\n')
 
+// The host's token pool, if this host has one: the sweep is the largest single consumer on the
+// machine (654 units at -P 16 is every core for ten minutes), so it takes its tokens before it starts
+// and gives them back when the container exits. The tokens bound `-P`, which is the number of
+// compiles that may run at once; a pool with fewer free tokens than `--jobs` therefore makes this
+// sweep *queue* for them at the start rather than fail, and the reading says what it got.
+const tokenTool = path.join(ROOT, 'internal', 'tools', 'host-tokens.sh')
+const poolSize = Number(process.env.CAMEL_TOKENS || 0)
+const usePool = !opt.dryRun && !!process.env.CAMEL_TOKEN_DIR && poolSize > 0 && fs.existsSync(tokenTool)
+const tokens = usePool ? Math.min(opt.jobs, poolSize) : 0
+if (usePool) {
+    console.log(`clang-syntax: tokens=${tokens} of pool ${process.env.CAMEL_TOKEN_DIR} (--jobs ${opt.jobs}${tokens < opt.jobs ? ', narrowed to the pool' : ''})`)
+}
+
 const script = `set -u
 cd ${q(ROOT)}
-xargs -d '\\n' -n 1 -P ${opt.jobs} sh -c < ${q(path.join(work, 'jobs.txt'))}
+xargs -d '\\n' -n 1 -P ${tokens || opt.jobs} sh -c < ${q(path.join(work, 'jobs.txt'))}
 `
 fs.writeFileSync(path.join(work, 'run.sh'), script)
 
@@ -449,14 +478,23 @@ const started = Date.now()
 // The tree and the home directory are what a compile line reaches for (the tree's sources, the
 // toolchain's installation); the scratch directory carries the script the container runs.
 const mounts = ['-v', `${ROOT}:${ROOT}`, '-v', `${os.homedir()}:${os.homedir()}`, '-v', `${work}:${work}`]
-const run = spawnSync(
-    'docker',
-    ['run', '--rm', '--network=none', ...mounts, '-w', ROOT, opt.image, 'sh', path.join(work, 'run.sh')],
-    { stdio: 'inherit' },
-)
+const dockerArgs = ['run', '--rm', '--network=none', ...mounts, '-w', ROOT, opt.image, 'sh', path.join(work, 'run.sh')]
+// `host-tokens.sh run N -- docker ...` holds N tokens for the container's whole life and returns them
+// when it exits; the container's other fds are docker's business, so the token is held by the docker
+// client that lives exactly as long as the container does.
+const run = tokens > 0
+    ? spawnSync('bash', [tokenTool, 'run', String(tokens), '--', 'docker', ...dockerArgs], { stdio: 'inherit' })
+    : spawnSync('docker', dockerArgs, { stdio: 'inherit' })
 const seconds = Math.round((Date.now() - started) / 100) / 10
 summary.seconds = seconds
 
+if (run.status === 6) {
+    // The pool said the wait ran out: nothing was compiled, so nothing was measured. That is its own
+    // answer -- not a red (1) and not a refusal (2) -- and it must not be read as a tree that fails to
+    // compile.
+    console.log('clang-syntax: no tokens within the wait; the sweep ran nothing, so nothing was measured')
+    process.exit(6)
+}
 if (run.error || run.status !== 0) {
     die(`the container could not run the compiles (${run.error ? run.error.message : `exit ${run.status}`}); no reading was taken`)
 }

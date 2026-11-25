@@ -391,7 +391,11 @@ node_ptr_t Builder::visitComprehension(const AST::node_ptr_t &ast) {
         valueUse_           = {};
         node_ptr_t bodyNode = place(makeExec(false), body, "gct.block");
         *bodyNode << visitData(body);
-        node_ptr_t funcNode = place(tree_->makeFunc(std::string()), body, "gct.func");
+        // The element function says so in its origin label: the compiler made it, it has no
+        // name, and its signature never wrote a clause about resources -- what a measurement
+        // found is not what it promised. `isElementFunction` reads this one label, so that
+        // "which function is a comprehension's element function" has one answer.
+        node_ptr_t funcNode = place(tree_->makeFunc(std::string()), body, "gct.func.element");
         *funcNode << typeNode << bodyNode;
         return funcNode;
     };

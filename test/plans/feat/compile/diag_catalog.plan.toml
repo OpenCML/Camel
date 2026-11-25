@@ -26,6 +26,10 @@ expect_exit = 0
 expect_stdout_contains = ["diagnostics registry proof:", "checks passed"]
 normalizers = ["normalize_newlines"]
 timeout_ms = 60000
+# Slow layer: over the 2 s the fast layer allows -- 4.38 s of
+# child wall clock in the 2026-11-12 record (appendix B of
+# internal/reports/2026-11-24-test-suite-inventory.cn.md).
+tier = "slow"
 
 [[tests]]
 name = "catalog.doc_is_generated"
@@ -44,6 +48,10 @@ normalizers = ["normalize_newlines"]
 # in 0.15 s.) The CI runner reads the whole tree slower than this host and measured 30920 ms of
 # CPU, which 120 s was 3.9x -- under the 4x the margin rule asks for. 150 s is 4.85x that figure.
 timeout_ms = 150000
+# Slow layer: over the 2 s the fast layer allows -- 14.95 s of
+# child wall clock in the 2026-11-12 record (appendix B of
+# internal/reports/2026-11-24-test-suite-inventory.cn.md).
+tier = "slow"
 
 [[tests]]
 name = "catalog.coverage_report"
@@ -56,6 +64,10 @@ expect_exit = 0
 expect_stdout_contains = ["diagnostic codes mentioned by no test:"]
 normalizers = ["normalize_newlines"]
 timeout_ms = 20000
+# Slow layer: over the 2 s the fast layer allows -- 2.27 s of
+# child wall clock in the 2026-11-12 record (appendix B of
+# internal/reports/2026-11-24-test-suite-inventory.cn.md).
+tier = "slow"
 
 [[tests]]
 name = "catalog.coverage_zero"

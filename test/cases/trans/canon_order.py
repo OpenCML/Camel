@@ -306,12 +306,18 @@ def run_camel(camel, path, args, timeout=180):
     )
 
 
-def jgir(camel, workdir, name, text, passes=("std::jgir",)):
+def jgir(camel, workdir, name, text, passes=("std::jgir",)):  # camel-pass-scan: keep -- a pass tuple, not a command line (`jgir()` adds `std::nop`)
     """The `std::jgir` document of a program, or None and the process when it did not compile."""
     path = os.path.join(workdir, name)
     with open(path, "w", encoding="utf-8", newline="\n") as handle:
         handle.write(text)
-    proc = run_camel(camel, path, list(passes))
+    # Why the pipeline ends in `std::nop` here: every caller of this helper asserts the document --
+    # the numbering, the capture ports, the byte-for-byte comparison of two writings -- and
+    # `std::jgir` hands the graph on, so the fallback would run the program behind the document.
+    # The programs here return a value from `main` (`CAPTURE_AB` returns `u + p + q`), so that run
+    # is both a nonzero exit code and its own bytes on the stream this helper parses. A document is
+    # what the caller reads; the program's own run is not.
+    proc = run_camel(camel, path, list(passes) + ["std::nop"])
     if proc.returncode != 0:
         return None, proc
     start = proc.stdout.find("{")
@@ -625,10 +631,10 @@ def canonical_text_lines(first, second, left_name, right_name):
 
 def canonical_documents(camel, workdir, left_name, left, right_name, right):
     """The two programs' canonical (`canonical=true`) documents, compared byte for byte."""
-    first, proc = jgir(camel, workdir, left_name, left, ("std::jgir", "canonical=true"))
+    first, proc = jgir(camel, workdir, left_name, left, ("std::jgir", "canonical=true"))  # camel-pass-scan: keep -- a pass tuple, not a command line
     if first is None:
         raise AssertionError(f"{left_name} did not compile: {proc.stderr[:2000]}")
-    second, proc = jgir(camel, workdir, right_name, right, ("std::jgir", "canonical=true"))
+    second, proc = jgir(camel, workdir, right_name, right, ("std::jgir", "canonical=true"))  # camel-pass-scan: keep -- the same, for the other writing
     if second is None:
         raise AssertionError(f"{right_name} did not compile: {proc.stderr[:2000]}")
     return first, canonical_text_lines(first, second, left_name, right_name)

@@ -1,7 +1,9 @@
-// A range is not an array, and the functions an array shares with it are not declared at the type
-// yet (design principles 5.4): `map` resolves through its operator group, and no member of the
-// group takes a `Range`, so the call is an ordinary no-match. This is the reading the overload set
-// of a name has today; a range's own `map` would be a member of that group and is not this round's.
+// A range is not an array and not a stream: `map` over it is the prelude's own declaration of the
+// name, sitting beside the array rule as an overload of it. One name, one overload set, and the
+// value's type is what chooses -- the integers `1 .. 5` walked and doubled, in order.
+//
+// The file keeps the name it was written under: it pinned the no-match this overload replaces, and
+// a parse snapshot records the path, so renaming it is a snapshot re-record of its own.
 
 func dbl(x: int) => int {
     return x * 2

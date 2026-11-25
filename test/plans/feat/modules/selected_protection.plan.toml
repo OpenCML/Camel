@@ -362,7 +362,7 @@ expect_stdout_exact = "41\n"
 [[tests]]
 name = "effect.graph.00"
 case = "../../../cases/modules/selected_protection/effect.cml"
-args = ["${case}", "policy::direct", "order=false", "faults=false", "std::jgir"]
+args = ["${case}", "policy::direct", "order=false", "faults=false", "std::jgir", "std::nop"]
 expect_exit = 0
 expect_output_contains = [":io/println"]
 
@@ -383,7 +383,7 @@ expect_stdout_exact = "0\n41\n"
 [[tests]]
 name = "capture.graph.00"
 case = "../../../cases/modules/selected_protection/capture.cml"
-args = ["${case}", "policy::direct", "order=false", "faults=false", "std::jgir"]
+args = ["${case}", "policy::direct", "order=false", "faults=false", "std::jgir", "std::nop"]
 expect_exit = 0
 expect_output_contains = [":op/assn_l"]
 

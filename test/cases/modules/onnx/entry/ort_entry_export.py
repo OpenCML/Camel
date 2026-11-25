@@ -32,7 +32,9 @@ HERE = Path(__file__).resolve().parent
 REPO_ROOT = HERE.parents[4]
 TOL = 1e-5
 SCHEDULERS = [None, "std::fvm", "std::jit", "std::tf"]
-EXPORT = ["std::macro", "std::opt", "onnx::export"]
+# The export consumes the graph, so the pipeline ends in `std::nop`: the model is written and the
+# program is not run, which is what this harness compares against the native run below.
+EXPORT = ["std::macro", "std::opt", "onnx::export", "std::nop"]
 
 
 def camel(program: str, *args: str, env: dict | None = None) -> str:

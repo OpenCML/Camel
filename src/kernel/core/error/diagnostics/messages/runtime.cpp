@@ -369,8 +369,8 @@ const std::unordered_map<RuntimeDiag, DiagInfo> &getRuntimeDiagInfoMap() {
             RuntimeDiag::PassesNeverRun,
             {
                 "PassesNeverRun",
-                "Pass '{0}' consumes the graph, so {1} written after it will not run.",
-                "A scheduling pass executes the program and a translation pass translates it; neither hands a graph on, and the pipeline ends there. Remove the passes written after it, or move them before it.",
+                "Pass '{0}' answered with an empty graph, so {1} written after it will not run.",
+                "A scheduling pass executes the program and answers with the residual graph or an empty one. This one answered with an empty graph, so the pipeline ended there; a rewriting pass and a translating pass both hand a graph on and would have run. Remove the passes written after it, or move them before it -- std::nop is a scheduling pass too, and it is how a pipeline that only prints says so.",
             },
         },
         {

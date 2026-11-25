@@ -324,12 +324,13 @@ bool nodeKeepsItsInput(node_handle_t node) {
     if (!nodeIsKind(node, runtime::GCNodeKind::Oper)) {
         return true;
     }
-    const auto op = nodeGraphOf(node)->operTarget(node);
+    const oper_idx_ptr_t *op = nodeGraphOf(node)->operTarget(node);
     // The record's own answer (`sem::Effect`): a pure operator is one whose stated clause is the
     // empty access list, and an operator nobody declared a clause for is not one (design
-    // principles 3.3). This is a node of a draft, so there is no fact to read it at.
+    // principles 3.3). This is a node of a draft, so there is no fact to read it at -- and a call a
+    // pass wrote by URI alone records no declaration here, which is the same answer: a holder.
     if (op == nullptr ||
-        camel::core::OperatorTable::instance().effectOf(op->uri()) !=
+        camel::core::OperatorTable::instance().effectOf((*op)->uri()) !=
             camel::core::sem::Effect::Pure) {
         return true;
     }
@@ -506,7 +507,7 @@ node_handle_t projectPart(node_handle_t value, const Type *type, size_t step) {
 /// declaration states (`__access_value__`, `builtin/operators/struct.cpp`: `norm.size() == 1`,
 /// `with.size() == 1`). The node-kind spelling says the same thing from its payload, with the value
 /// as its one ordinary input -- a graph built before the read was an operator still reads that way,
-/// and the two faces this lane reads (`GCGraph`, `GraphDraft`) both carry such graphs. Both
+/// and the two faces read here (`GCGraph`, `GraphDraft`) both carry such graphs. Both
 /// spellings answer the same question, and the value operand is the ordinary one either way, which
 /// is what tells the caller the read is of the value it asked about.
 std::optional<size_t> accessedPartOf(node_handle_t node, const Type *type) {
@@ -543,11 +544,13 @@ std::optional<size_t> accessedPartOf(node_handle_t node, const Type *type) {
             }
         }
     } else if (nodeIsKind(node, runtime::GCNodeKind::Oper)) {
-        const oper_idx_ptr_t op = nodeGraphOf(node)->operTarget(node);
+        const oper_idx_ptr_t *op = nodeGraphOf(node)->operTarget(node);
+        // A call a pass wrote by URI alone records no declaration; this helper names no access for
+        // it, which is the answer a node of any other kind gets.
         if (op == nullptr) {
             return std::nullopt;
         }
-        const std::string_view uri = op->uri();
+        const std::string_view uri = (*op)->uri();
         const bool byName          = uri == ":op/access_key";
         if (!byName && uri != ":op/access") {
             return std::nullopt;
@@ -4183,8 +4186,8 @@ bool Builder::inferLoopStateFromAppend(
     if (next == nullptr || !nodeIsKind(next, runtime::GCNodeKind::Oper)) {
         return false;
     }
-    const oper_idx_ptr_t op = nodeGraphOf(next)->operTarget(next);
-    if (op == nullptr || op->uri() != ":struct/append_arr") {
+    const oper_idx_ptr_t *op = nodeGraphOf(next)->operTarget(next);
+    if (op == nullptr || (*op)->uri() != ":struct/append_arr") {
         return false;
     }
     const auto normIns = normInputsOf(next);
@@ -4274,9 +4277,12 @@ std::vector<Type *> Builder::collectLoopAppends(
             !nodeIsKind(next[j], runtime::GCNodeKind::Oper)) {
             continue;
         }
-        const oper_idx_ptr_t op = nodeGraphOf(next[j])->operTarget(next[j]);
-        if (op == nullptr ||
-            (op->uri() != ":struct/append_arr" && op->uri() != ":struct/append_arr_owned")) {
+        const oper_idx_ptr_t *op = nodeGraphOf(next[j])->operTarget(next[j]);
+        if (op == nullptr) {
+            continue;
+        }
+        const std::string_view uri = (*op)->uri();
+        if (uri != ":struct/append_arr" && uri != ":struct/append_arr_owned") {
             continue;
         }
         const auto normIns = normInputsOf(next[j]);
@@ -4472,8 +4478,8 @@ void Builder::markLoopStateInPlaceOne(
         if (!nodeIsKind(next, runtime::GCNodeKind::Oper)) {
             return;
         }
-        const oper_idx_ptr_t op = nodeGraphOf(next)->operTarget(next);
-        if (op == nullptr || op->uri() != ":struct/append_arr") {
+        const oper_idx_ptr_t *op = nodeGraphOf(next)->operTarget(next);
+        if (op == nullptr || (*op)->uri() != ":struct/append_arr") {
             return;
         }
         const auto normIns = normInputsOf(next);

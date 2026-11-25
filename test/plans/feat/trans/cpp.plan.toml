@@ -8,7 +8,7 @@ name = "exec_mod_scalar"
 desc = "A program of scalars is translated into a standalone C++ file: it includes camel/standalone/runtime.h and nothing of the compiler or the runtime, and `%` goes through rt::mod, which faults on zero at a located site (the program itself is built and run by agree_with_fvm)."
 kind = "behavior"
 case = "../../../cases/trans/cpp/exec_mod_scalar.cml"
-args = ["${case}", "std::cpp"]
+args = ["${case}", "std::cpp", "std::nop"]
 expect_exit = 0
 expect_stdout_contains = ["#include \"camel/standalone/runtime.h\"", "A standalone program", "rt::mod(", "int main(int argc, char **argv) {", "return camel::standalone::run(1000, [&] { return program::entry(argc, argv); });"]
 expect_output_not_contains = ["bridge.h", "camel/core/", "libcamel"]
@@ -20,7 +20,7 @@ name = "complex_numbers"
 desc = "A complex number is translated as std::complex of its parts' width (c64 is std::complex<float>, c128 is std::complex<double>): the literal is a std::complex of two float literals, `/` goes through rt::complexDiv, which faults on the complex zero at a located site, abs is rt::complexAbs (hypot of the parts), and `^` with an integer exponent is rt::pow (repeated squaring). The program itself is built and run by agree_with_fvm."
 kind = "behavior"
 case = "../../../cases/trans/cpp/complex_scalar.cml"
-args = ["${case}", "std::cpp"]
+args = ["${case}", "std::cpp", "std::nop"]
 expect_exit = 0
 expect_stdout_contains = ["std::complex<double>{3.0, 4.0}", "std::complex<float>", "rt::complexDiv(", "rt::complexAbs(", "rt::pow(", "std::exp(", "rt::toText("]
 expect_output_not_contains = ["camel/core/", "libcamel", "TranslationRefused", "bridge"]
@@ -84,7 +84,7 @@ name = "named_struct_types"
 desc = "A named struct type is one C++ struct named by its declaration, and a second declaration of the same layout is another name for it (`using Spot = Point;`); a type that writes its fields in another order is a struct of its own, and converting to it copies field by field in the declaration's order (`Point{lit::record_2.x, lit::record_2.y}`). The program itself is built and run by agree_with_fvm."
 kind = "behavior"
 case = "../../../cases/trans/cpp/named_structs.cml"
-args = ["${case}", "std::cpp"]
+args = ["${case}", "std::cpp", "std::nop"]
 expect_exit = 0
 expect_stdout_contains = ["struct Point {", "struct Swapped {", "using Spot = Point;", "Point{lit::record_2.x, lit::record_2.y}"]
 expect_output_not_contains = ["TranslationRefused", "camel/core/", "libcamel"]
@@ -96,7 +96,7 @@ name = "main_io"
 desc = "Checks the C++ translation path preserves imports, formatting, timing calls, and stdout side effects."
 kind = "behavior"
 case = "../../../cases/trans/cpp/main_io.cml"
-args = ["${case}", "std::cpp"]
+args = ["${case}", "std::cpp", "std::nop"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 10000
@@ -113,7 +113,7 @@ name = "main_after_devirtualize"
 desc = "After `std::cxx::devirtualize` the root still calls main and the writer translates the program instead of refusing it: the entry is the graph the root's FUNC node names, found by its name."
 kind = "behavior"
 case = "../../../cases/trans/cpp/main_io.cml"
-args = ["${case}", "std::cxx::devirtualize", "std::cpp"]
+args = ["${case}", "std::cxx::devirtualize", "std::cpp", "std::nop"]
 expect_exit = 0
 expect_stdout_contains = ["int main(int argc, char **argv)"]
 expect_output_not_contains = ["TranslationRefused", "no call of 'main'"]
@@ -133,7 +133,7 @@ name = "computed_top_level_after_devirtualize"
 desc = "A value the top level computes reaches main as the entry call's own argument once the call is direct; the writer translates the program (the root graph as `top_level`) instead of refusing it as a value only a literal could be."
 kind = "behavior"
 case = "../../../cases/compile/module_imports/d4_cpp_computed.cml"
-args = ["${case}", "std::cxx::devirtualize", "std::cpp"]
+args = ["${case}", "std::cxx::devirtualize", "std::cpp", "std::nop"]
 expect_exit = 0
 expect_stdout_contains = ["int main(int argc, char **argv)", "seven("]
 expect_output_not_contains = ["TranslationRefused", "top level of the module"]
@@ -150,7 +150,7 @@ name = "top_level_fault_after_devirtualize"
 desc = "A fault in a value the top level computes is the program's first statement, whether the entry call is indirect or direct: the writer translates the program, and the report at the division is the interpreter's."
 kind = "behavior"
 case = "../../../cases/consistency/faults/top_level_fault.cml"
-args = ["${case}", "std::cxx::devirtualize", "std::cpp"]
+args = ["${case}", "std::cxx::devirtualize", "std::cpp", "std::nop"]
 expect_exit = 0
 expect_stdout_contains = ["int main(int argc, char **argv)", "Attempted division by zero."]
 expect_output_not_contains = ["TranslationRefused", "top level of the module"]
@@ -162,7 +162,7 @@ name = "narrow_floats"
 desc = "bf16 and f16 are core value types of the language (reduced-precision.md b1) and values of the standalone runtime (include/camel/standalone/half.h), so a program that holds one is translated rather than refused: `rt::BF16` and `rt::F16` stand for the two types, sixteen bits of storage whose constant is the pattern itself (`fromBits`, exact for every pattern a program can write), the text is the type's own shortest text (so `0.1` as a bf16 prints `0.1` and not the `0.100097656` of the f32 it widens to), and arithmetic is computed in f32 and rounded once -- `/` through rt::div, where zero is a fault as it is for f32, and `^` through rt::pow. This entry pinned a refusal before the rules existed; it is now the acceptance case, and the program is built and run by agree_with_fvm, which is what says the two back ends print it byte for byte."
 kind = "behavior"
 case = "../../../cases/trans/cpp/narrow_floats.cml"
-args = ["${case}", "std::cpp"]
+args = ["${case}", "std::cpp", "std::nop"]
 expect_exit = 0
 expect_stdout_contains = ["rt::BF16", "rt::F16", "rt::BF16::fromBits(uint16_t{", "rt::F16::fromBits(uint16_t{", "rt::div(", "rt::pow(", "rt::halfFromText<rt::BF16>(", "rt::halfFromText<rt::F16>(", "rt::convertArray<rt::BF16>(", "rt::convertArray<rt::F16>("]
 expect_output_not_contains = ["TranslationRefused", "no such element type", "camel/core/", "libcamel"]
@@ -174,7 +174,7 @@ name = "narrow_reductions"
 desc = "The module operators over a bf16 or an f16: `tensor::sum` of the whole value (rt::sumAll, the f64 accumulator rounded once into the element type), `math::min`/`math::max` of two values (rt::halfMin/rt::halfMax, the IEEE 754-2019 comparison whose answer is one of the two patterns) and `math::abs` (rt::halfAbs, the sign bit cleared). A half crosses no bridge -- the bridge carries numbers, booleans and strings, and a sixteen-bit value is none of them -- so these need rules of their own here, which is what this entry pins; the readings are compared with the interpreter's by agree_with_fvm."
 kind = "behavior"
 case = "../../../cases/trans/cpp/narrow_reductions.cml"
-args = ["${case}", "std::cpp"]
+args = ["${case}", "std::cpp", "std::nop"]
 expect_exit = 0
 expect_stdout_contains = ["rt::sumAll(", "rt::halfMin(", "rt::halfMax(", "rt::halfAbs("]
 expect_output_not_contains = ["TranslationRefused", "rt::bridge", "libcamel"]
@@ -186,7 +186,7 @@ name = "narrow_mean"
 desc = "The mean of a value of bf16 or f16 is the library's own body -- the total in f64 and the count in f64, divided there and rounded once into the element type -- so it needs no rule of its own and the only thing that can go wrong is the division: it is `rt::div` (a denominator of zero is a fault, as for any float). The reading is the interpreter's, compared by agree_with_fvm; what this entry adds is that the program is translated rather than refused, with the divided total in it."
 kind = "behavior"
 case = "../../../cases/trans/cpp/narrow_mean.cml"
-args = ["${case}", "std::cpp"]
+args = ["${case}", "std::cpp", "std::nop"]
 expect_exit = 0
 expect_stdout_contains = ["rt::div("]
 expect_output_not_contains = ["TranslationRefused", "libcamel"]
@@ -198,7 +198,7 @@ name = "narrow_argmax"
 desc = "The positions read from a value of bf16 or f16: `argsort` names its element type (`array:argsort_bf`, `array:argsort_f6`) and answers with an index, so the rule is one per type but the answer's type is everyone's -- the case where a narrow float's operator result is not a narrow float. `array::argmax` and `argmin` are Camel loops over `argsort` of two elements, so they follow from it, and the order is the one `min` and `max` state (NaN last, -0 below +0, ties where they stand). It is translated into rt::halfArgsort with no bridged call, and its readings are in expect.txt: what kept them out was the writer, not this type -- a `for i in a..b` loop declared its items with the type of the node that holds the interval's two bounds, and that pair is written as a struct as soon as the program has a value of the same shape (function_emitter.cpp, the interval's array)."
 kind = "behavior"
 case = "../../../cases/trans/cpp/narrow_argmax.cml"
-args = ["${case}", "std::cpp"]
+args = ["${case}", "std::cpp", "std::nop"]
 expect_exit = 0
 expect_stdout_contains = ["rt::halfArgsort("]
 expect_output_not_contains = ["TranslationRefused", "rt::bridge", "libcamel"]
@@ -217,6 +217,10 @@ expect_stdout_contains = ["20 of 20: exit 0", "PASS: 20 runs of one command wrot
 expect_output_not_contains = ["FAIL:", "cell(Tuple)"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 300000
+# Slow layer: over the 2 s the fast layer allows -- 2.61 s of
+# child wall clock in the 2026-11-12 record (appendix B of
+# internal/reports/2026-11-24-test-suite-inventory.cn.md).
+tier = "slow"
 
 [[tests]]
 name = "every_expect_program_five_times"
@@ -241,6 +245,10 @@ timeout_ms = 600000
 # not about the program (docs/cli.md, "std::jit"), so the entry declares it and is skipped there --
 # the same two-line precondition the entries that assert a compiled line carry
 # (feat/linear/jit_native.plan.toml); `--absent` is its opposite.
+# Slow layer: over the 2 s the fast layer allows -- 5.59 s of
+# child wall clock in the 2026-11-12 record (appendix B of
+# internal/reports/2026-11-24-test-suite-inventory.cn.md).
+tier = "slow"
 [[tests]]
 name = "narrow_reductions_four_backends"
 skip_unless = ["node", "test/tools/have-native-jit.mjs"]
@@ -254,6 +262,10 @@ expect_stdout_contains = ["PASS: 5 of 5 programs say the same thing on four back
 expect_output_not_contains = ["differs", "not run on", "does not build"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 300000
+# Slow layer: over the 2 s the fast layer allows -- 8.83 s of
+# child wall clock in the 2026-11-12 record (appendix B of
+# internal/reports/2026-11-24-test-suite-inventory.cn.md).
+tier = "slow"
 
 [[tests]]
 name = "narrow_reductions_needs_no_runtime"
@@ -273,6 +285,10 @@ expect_stdout_contains = ["bridge: no", "needs: none of the Camel runtime", "PAS
 expect_output_not_contains = ["FAIL", "libcamel"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 120000
+# Slow layer: over the 2 s the fast layer allows -- 15.60 s of
+# child wall clock in the 2026-11-12 record (appendix B of
+# internal/reports/2026-11-24-test-suite-inventory.cn.md).
+tier = "slow"
 
 [[tests]]
 name = "every_entry_writes_its_own_file"
@@ -303,13 +319,17 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "norma
 # two-core CI runner measured 493.3 s of CPU for it, which 900 s was 1.8x -- under the four the
 # margin rule asks for. 2100 s is 4.3x that figure.
 timeout_ms = 2100000
+# Slow layer: over the 2 s the fast layer allows -- 78.64 s of
+# child wall clock in the 2026-11-12 record (appendix B of
+# internal/reports/2026-11-24-test-suite-inventory.cn.md).
+tier = "slow"
 
 [[tests]]
 name = "fault_narrow_text_number"
 desc = "A text that is not a number, read as a bf16, is a fault at run time, and the compiler renders its report into the site the conversion calls: the program is translated rather than refused, and it carries the invalid-text sentence. The value the fault reports is known only when it happens, so the sentence is written with a placeholder where the text goes; that the program *prints* it -- and prints it as the interpreter does, byte for byte -- is what agree_with_fvm compares (test/tools/cppexec/expect.txt)."
 kind = "behavior"
 case = "../../../cases/trans/cpp/fault_narrow_text_number.cml"
-args = ["${case}", "std::cpp"]
+args = ["${case}", "std::cpp", "std::nop"]
 expect_exit = 0
 expect_stdout_contains = ["Cannot convert the string", "InvalidNumberText"]
 expect_output_not_contains = ["TranslationRefused"]
@@ -321,7 +341,7 @@ name = "fault_narrow_text_range"
 desc = "A text beyond what a bf16 can hold: a conversion into a half names the type and the range, which for bf16 is f32's, because the text is read as f32 first (the sentence camel/core/numeric_convert_half.h raises, and the range a value the runtime fills). Both ranges a reduced-precision conversion can name are one diagnostic at one place, so one site in the program carries the range as a value; the byte-for-byte comparison of the report with the interpreter's is agree_with_fvm's, which runs the program."
 kind = "behavior"
 case = "../../../cases/trans/cpp/fault_narrow_text_range.cml"
-args = ["${case}", "std::cpp"]
+args = ["${case}", "std::cpp", "std::nop"]
 expect_exit = 0
 expect_stdout_contains = ["the value is outside the range of bf16 ("]
 expect_output_not_contains = ["TranslationRefused"]
@@ -333,7 +353,7 @@ name = "fault_narrow_f16_range"
 desc = "The one report only f16 reaches: a number f32 holds and f16 does not names the element type's own range (at most 65504), where a text beyond f32 names f32's. One site carries both, with the range as a value the runtime fills, so the program has one sentence and one run faults it one way; that the report is the interpreter's byte for byte is what agree_with_fvm compares."
 kind = "behavior"
 case = "../../../cases/trans/cpp/fault_narrow_f16_range.cml"
-args = ["${case}", "std::cpp"]
+args = ["${case}", "std::cpp", "std::nop"]
 expect_exit = 0
 expect_stdout_contains = ["the value is outside the range of f16 ("]
 expect_output_not_contains = ["TranslationRefused"]
@@ -345,55 +365,71 @@ name = "fault_narrow_div_zero"
 desc = "Dividing a bf16 by zero is a fault, not an infinity: `/` on these types goes through rt::div for that reason, and the report at that site is the interpreter's DivisionByZero. Pinned as the site the program carries; agree_with_fvm compares the whole report with the interpreter's byte for byte."
 kind = "behavior"
 case = "../../../cases/trans/cpp/fault_narrow_div_zero.cml"
-args = ["${case}", "std::cpp"]
+args = ["${case}", "std::cpp", "std::nop"]
 expect_exit = 0
 expect_stdout_contains = ["rt::div(", "Attempted division by zero."]
 expect_output_not_contains = ["TranslationRefused"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000
+# Slow layer: over the 2 s the fast layer allows -- 2.10 s of
+# child wall clock in the 2026-11-12 record (appendix B of
+# internal/reports/2026-11-24-test-suite-inventory.cn.md).
+tier = "slow"
 
 [[tests]]
 name = "literal_rank"
 desc = "A literal of several dimensions keeps its shape: the elements lie flat in row order and the extents travel in the same block, so the generated program holds `rt::Array<double>{{1.0, 2.0, 3.0, 4.0, 5.0, 6.0}, {3, 2}}` and prints the three rows the interpreter prints -- it printed the first extent's worth of elements (`[1.0, 2.0, 3.0]`) and exited 0 before the shape was carried. The program itself is built and run by agree_with_fvm, which compares it with std::fvm byte for byte."
 kind = "behavior"
 case = "../../../cases/trans/cpp/literal_rank.cml"
-args = ["${case}", "std::cpp"]
+args = ["${case}", "std::cpp", "std::nop"]
 expect_exit = 0
 expect_stdout_contains = ["const rt::Array<double> array{{1.0, 2.0, 3.0, 4.0, 5.0, 6.0}, {3, 2}};"]
 expect_output_not_contains = ["TranslationRefused", "internal error"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000
+# Slow layer: over the 2 s the fast layer allows -- 2.05 s of
+# child wall clock in the 2026-11-12 record (appendix B of
+# internal/reports/2026-11-24-test-suite-inventory.cn.md).
+tier = "slow"
 
 [[tests]]
 name = "literal_rows_computed"
 desc = "A nested literal at a position that states a rank is one value of that shape even when a leaf is computed: `[[1.0, 0.0 / 0.0], [0.0 / 0.0, 2.0]]` is the four elements of a `float[2, 2]` in row order, so the generated program holds `rt::Array<double>{{1.0, 0.0, 0.0, 2.0}, {2, 2}}` and the two computed leaves are the elements they sit in. Built as two rows it was refused before it was a value at all (`Cannot insert data of type 'float[]' into a(n) array with element type 'float'`, reported against the first row). The two divisions fault where they are written, and agree_with_fvm compares the report with std::fvm byte for byte."
 kind = "behavior"
 case = "../../../cases/trans/cpp/literal_rows_computed.cml"
-args = ["${case}", "std::cpp"]
+args = ["${case}", "std::cpp", "std::nop"]
 expect_exit = 0
 expect_stdout_contains = ["const rt::Array<double> array{{1.0, 0.0, 0.0, 2.0}, {2, 2}};", "RuntimeDiag::DivisionByZero at 15:37", "Attempted division by zero."]
 expect_output_not_contains = ["TranslationRefused", "ElementTypeMismatch", "internal error"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000
+# Slow layer: over the 2 s the fast layer allows -- 2.03 s of
+# child wall clock in the 2026-11-12 record (appendix B of
+# internal/reports/2026-11-24-test-suite-inventory.cn.md).
+tier = "slow"
 
 [[tests]]
 name = "literal_rows_filled"
 desc = "A fill of a value of several dimensions is the elements and the shape in one block: `[[1.0, x], [x, 2.0]]` at a `float[2, 2]` position folds to `rt::Array<double>{{1.0, 2.0, 2.0, 2.0}, {2, 2}}` and prints the two rows the interpreter prints. The fold read the template's first extent (`size()`) instead of its element count (`numel()`), so it wrote the first row's worth of elements and no shape at all, and the generated program printed `[1.0, 2.0]`. agree_with_fvm compares the reading with std::fvm byte for byte."
 kind = "behavior"
 case = "../../../cases/trans/cpp/literal_rows_filled.cml"
-args = ["${case}", "std::cpp"]
+args = ["${case}", "std::cpp", "std::nop"]
 expect_exit = 0
 expect_stdout_contains = ["rt::Array<double>{{1.0, 2.0, 2.0, 2.0}, {2, 2}}"]
 expect_output_not_contains = ["TranslationRefused", "internal error"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000
+# Slow layer: over the 2 s the fast layer allows -- 2.00 s of
+# child wall clock in the 2026-11-12 record (appendix B of
+# internal/reports/2026-11-24-test-suite-inventory.cn.md).
+tier = "slow"
 
 [[tests]]
 name = "abs_smallest_int"
 desc = "`math:abs` of the smallest integer answers the value itself -- it has no positive counterpart -- and the translation writes that wrap (`rt::intAbs`) instead of `std::abs`, whose answer for the smallest value is undefined behaviour and may be folded positive. `stdlib/math.cml`'s `gcd` recognises the smallest integer by `abs(a) < 0`, so the fold is what keeps its refusal: the program prints the negative value and then the fault, and agree_with_fvm compares the reading with std::fvm byte for byte."
 kind = "behavior"
 case = "../../../cases/trans/cpp/abs_smallest_int.cml"
-args = ["${case}", "std::cpp"]
+args = ["${case}", "std::cpp", "std::nop"]
 expect_exit = 0
 expect_stdout_contains = ["rt::intAbs(", "gcd does not accept the smallest integer"]
 expect_output_not_contains = ["std::abs(", "TranslationRefused", "internal error"]
@@ -405,7 +441,7 @@ name = "empty_struct_text"
 desc = "A struct with no fields prints as the two braces with nothing between them: `{}`. Written as the opening half (`{ `) and the closing half (` }`) with no member to separate them, the generated text was `{  }`, two spaces the interpreter does not print -- the corpus case is a loop whose zero-leaf state struct is printed twice. agree_with_fvm compares the reading with std::fvm byte for byte."
 kind = "behavior"
 case = "../../../cases/loops/zero_leaf_state.cml"
-args = ["${case}", "std::cpp"]
+args = ["${case}", "std::cpp", "std::nop"]
 expect_exit = 0
 expect_stdout_contains = ["out += \"{}\";"]
 expect_output_not_contains = ["{  }", "TranslationRefused", "internal error"]
@@ -417,7 +453,7 @@ name = "reshape_computed_shape"
 desc = "A target shape the program computes at run time (`reshape<[n, 3]>(y)` with n a parameter) is the operator's value argument, so the extents the call writes are those values, not the ones the caller's contract put in the result type: `rt::reshapeBy(y, rt::Array<int64_t>{n, 3}, at_...)` reads them, and a target that changes the element count reports `[6] -> [3, 3]` -- both shapes filled at run time, the interpreter's sentence. Written from the type, the call carried `{2, 3}` and the fault never happened. agree_with_fvm compares the reading with std::fvm byte for byte."
 kind = "behavior"
 case = "../../../cases/modules/tensor/shape_inference/computed_extent_run_time.cml"
-args = ["${case}", "std::cpp"]
+args = ["${case}", "std::cpp", "std::nop"]
 expect_exit = 0
 expect_stdout_contains = ["rt::reshapeBy(", "reshape changes tensor element count: ["]
 expect_output_not_contains = ["TranslationRefused", "internal error"]
@@ -429,7 +465,7 @@ name = "numel_rank"
 desc = "`numel` counts the elements of a value whatever its rank: six for a rank-2 value, four for its first two rows, eight for a rank-3 one, four for a value of one dimension. It reads the count the value holds and no dimension of it, so a value of several dimensions and one of an open rank are both answered by the run -- which is why this step frees every program that asked for it, the open-rank one included. The program is built and run by agree_with_fvm, which compares it with std::fvm byte for byte."
 kind = "behavior"
 case = "../../../cases/trans/cpp/numel_rank.cml"
-args = ["${case}", "std::cpp"]
+args = ["${case}", "std::cpp", "std::nop"]
 expect_exit = 0
 expect_stdout_contains = ["rt::numel("]
 expect_output_not_contains = ["TranslationRefused", "internal error"]
@@ -441,7 +477,7 @@ name = "mean_rank"
 desc = "The mean of a whole value is the sum divided by the number of elements, both in f64, and the answer's element type reached by one conversion: `2.5` for `int[4]` where a mean of integers is an f32 and not integer division, `1.6666666` for `int[3]` (the f32 rounding, not `1`), `0.2` for an `f32[3]` whose f32 sum divided again would not be that, `3.5` for a rank-2 value, and `7.0` for a single element. The answer's element type is the one the operator states and not the source's, so the rule writes it as the runtime template argument -- the one place in the file where a rule reads the result's type to write the call. A value with no element divides by zero; that fault agrees with the interpreter's too, checked by hand because a faulting program cannot sit in a list that must exit zero. The program is built and run by agree_with_fvm, which compares it with std::fvm byte for byte."
 kind = "behavior"
 case = "../../../cases/trans/cpp/mean_rank.cml"
-args = ["${case}", "std::cpp"]
+args = ["${case}", "std::cpp", "std::nop"]
 expect_exit = 0
 expect_stdout_contains = ["rt::meanAll<"]
 expect_output_not_contains = ["TranslationRefused", "internal error"]
@@ -453,7 +489,7 @@ name = "arg_axis_rank"
 desc = "The position of the extreme along one dimension: the first element of the lane equal to its maximum (minimum), or its first NaN, taken by the same order as the extreme itself -- a NaN is beyond every number and on a tie the earlier position stays. So `[1, 2]` for the columns of a rank-2 value and `[0, 0, 1]` for its rows, `[[1], [1], [0]]` with keepdims, `[[1, 1], [1, 1]]` for the middle axis of a rank-3 one, and `[1, 0]` where one lane holds a tie (the earlier of two equal maxima) and the other its first NaN. The lanes are walked by the extents the value carries -- outer, `extent(axis)`, inner -- and each answer prints its shape with it: `[2] [1, 0]` for axis 1 of an `f32[2, 3]`, and `[2, 4] [[2, 2, 2, 2], [0, 0, 0, 0]]` for axis 1 of an `f32[2, 3, 4]`, whose three different extents are what tells a right split of the lanes from a wrong one (a 2x2x2 value is symmetric in the split and cannot). The answer's element type is int64 whatever the value holds, so the rule states a different runtime element type than the value it reads. A value of one dimension has one lane and nothing beside it, so what that lane reduces to is the answer itself: `1` for an `f32[3]` reduced on axis 0, with `shape` answering `[]` -- a value of no dimension, not an array of one -- `[1]` when the dimension is kept, `0` for the argmin of it, and `5.0 1.0` for its maximum and minimum. The program is built and run by agree_with_fvm, which compares it with std::fvm byte for byte."
 kind = "behavior"
 case = "../../../cases/trans/cpp/arg_axis_rank.cml"
-args = ["${case}", "std::cpp"]
+args = ["${case}", "std::cpp", "std::nop"]
 expect_exit = 0
 expect_stdout_contains = ["rt::argmaxAxis(", "rt::argminAxis("]
 expect_output_not_contains = ["TranslationRefused", "internal error"]
@@ -465,7 +501,7 @@ name = "extreme_axis_rank"
 desc = "A maximum and a minimum along one dimension fold each lane from the operation's identity (-inf for a maximum of floats, +inf for a minimum, the lowest and the largest value otherwise) and compare with the one statement the interpreter uses: a NaN on either side gives the canonical quiet NaN and -0 is below +0. So `[5.0, 4.0]` and `[-3.0, -2.0]` for the two axes of a rank-2 value, `[[-2.0], [0.0], [-3.0]]` with keepdims, two axes of a rank-3 one, `[0.0, 0.0]` against `[-0.0, -0.0]` for a pair of signed zeros (the sign of the zero survives, which a comparison on values alone would lose), and `[nan, nan]` where a NaN element stands in the lane. The program is built and run by agree_with_fvm, which compares it with std::fvm byte for byte."
 kind = "behavior"
 case = "../../../cases/trans/cpp/extreme_axis_rank.cml"
-args = ["${case}", "std::cpp"]
+args = ["${case}", "std::cpp", "std::nop"]
 expect_exit = 0
 expect_stdout_contains = ["rt::maxAxis(", "rt::minAxis("]
 expect_output_not_contains = ["TranslationRefused", "internal error"]
@@ -477,7 +513,7 @@ name = "sum_axis_rank"
 desc = "A reduction along one dimension adds each lane from +0 in ascending order and answers the dimensions it did not reduce, in row-major order: `axis=0` of a rank-2 value sums its columns (`[9.0, 12.0]`), `axis=1` its rows (`[3.0, 7.0, 11.0]`), `keepdims` keeps the reduced dimension as one (`[[3.0], [7.0], [11.0]]`), and the three axes of a rank-3 value each sum a different set -- the middle one pairs elements that are `inner` apart in the run, which no flattening could produce. The axis and the flag arrive either as arguments of the call or as the constant the callee was written with (`sum<1>(xs)`), and the rule reads whichever carried them. A value of one dimension has one lane and nothing beside it, so what it sums to is the answer itself: `8.0` for an `f32[3]` of [1.0, 5.0, 2.0] reduced on axis 0 -- a value of no dimension, where an array of one would print `[8.0]` -- and `[8.0]` when the dimension is kept; `[6.0, 15.0]` for an `f32[2, 3]` reduced on axis 1 and `[[6.0], [15.0]]` with the dimension kept are the same reduction with its dimensions still printed, which is the behaviour it had. The program is built and run by agree_with_fvm, which compares it with std::fvm byte for byte."
 kind = "behavior"
 case = "../../../cases/trans/cpp/sum_axis_rank.cml"
-args = ["${case}", "std::cpp"]
+args = ["${case}", "std::cpp", "std::nop"]
 expect_exit = 0
 expect_stdout_contains = ["rt::sumAxis("]
 expect_output_not_contains = ["TranslationRefused", "internal error"]
@@ -489,7 +525,7 @@ name = "mean_axis_rank"
 desc = "The mean along one dimension is the interpreter's own two steps in its order, not a second average: each lane is added from +0 in ascending order into a `double`, the unrounded total is divided by the extent of the lane in `double`, and that quotient is rounded into the element type once -- rounding the sum first, or dividing in the element type, would be a different number for an `f32` lane. So `[2.0, 5.0]` for an `f32[2, 3]` reduced on axis 1 and `[[5.0, 6.0, 7.0, 8.0], [8.0, 7.0, 6.0, 5.0]]` for an `f32[2, 3, 4]` reduced on axis 1, whose lanes are three elements four apart in the run. A value of one dimension answers the mean itself, a value of no dimension: `2.6666667` for an `f32[3]` of [1.0, 5.0, 2.0], with `shape` answering `[]`, and `[2.6666667]` when the dimension is kept. A lane with no element is not refused -- the interpreter divides 0.0 by 0.0 and answers the canonical NaN, so an `f32[2, 0]` reduced on axis 1 answers `[nan, nan]`. The program is built and run by agree_with_fvm, which compares it with std::fvm byte for byte."
 kind = "behavior"
 case = "../../../cases/trans/cpp/mean_axis_rank.cml"
-args = ["${case}", "std::cpp"]
+args = ["${case}", "std::cpp", "std::nop"]
 expect_exit = 0
 expect_stdout_contains = ["rt::meanAxis("]
 expect_output_not_contains = ["TranslationRefused", "internal error"]
@@ -501,7 +537,7 @@ name = "mean_axis_elements"
 desc = "The mean keeps the element type, and its canonical form is `T(sum(float(x)) / float(numel(x)))` with the sum and the division in f64 and one rounding at the end, so an integer value answers an integer: `mean<0, false>([1, 2, 4] as int[3])` is `2` -- `int(7 / 3)`, the conversion `int(·)` already has, and the number a reader would call a lost average is exactly what the normative form asks for -- with `shape` answering `[]` and `keepdims` answering `[2]`, while the same three elements through `f32(xs)` answer `2.3333333`. `[16777216.0, 1.0, -16777216.0]` separates the accumulations: an f32 accumulator loses the `1` and answers `0`, the f64 one keeps it and answers `0.33333334`. Rows of an `int[2, 3]` reduced on axis 1 answer `[2, 4]`. This is the case the rule used to refuse by name, when the kernel answered an f32 quotient into a slot the type said was an integer (`2.3333333` printed as `1075139925`). The program is built and run by agree_with_fvm, which compares it with std::fvm byte for byte."
 kind = "behavior"
 case = "../../../cases/trans/cpp/mean_axis_elements.cml"
-args = ["${case}", "std::cpp"]
+args = ["${case}", "std::cpp", "std::nop"]
 expect_exit = 0
 expect_stdout_contains = ["rt::meanAxis("]
 expect_output_not_contains = ["TranslationRefused", "internal error"]
@@ -513,7 +549,7 @@ name = "sum_rank"
 desc = "The whole-value `sum` answers the element type: an integer result is the exact int64 accumulator (int64 as it stands) and a float one is the f64 accumulator converted once, added from +0 in the order the elements lie -- `6.0` for a `float[3]`, `10` for an `int[4]`, `0.6` for an `f32[3]` whose f64 total is not the f32 sum, `21.0` for a rank-2 value, `36.0` for a rank-3 one and `6.0` for a column of two. Every rank is one rule because the total reads none of the dimensions: the sum of a whole value is the sum of the same run however it is grouped, so nothing is flattened to reach it -- the axis form (`tensor:sum_axis`) is the one that reads a dimension. The program is built and run by agree_with_fvm, which compares it with std::fvm byte for byte."
 kind = "behavior"
 case = "../../../cases/trans/cpp/sum_rank.cml"
-args = ["${case}", "std::cpp"]
+args = ["${case}", "std::cpp", "std::nop"]
 expect_exit = 0
 expect_stdout_contains = ["rt::sumAll("]
 expect_output_not_contains = ["TranslationRefused", "internal error"]
@@ -525,7 +561,7 @@ name = "shape_rank"
 desc = "`shape(m)` answers the value's dimensions as `int[]` -- `[3, 2]` for a rank-2 value, `[4]` for one of a single dimension, `[2, 2]` for a sliced one, `[2, 2, 2]` for a rank-3 one -- and the answer is a value of its own, not a view: the runtime copies the extents into storage of its own, so a write to it cannot reach the value it describes. The program is built and run by agree_with_fvm, which compares it with std::fvm byte for byte."
 kind = "behavior"
 case = "../../../cases/trans/cpp/shape_rank.cml"
-args = ["${case}", "std::cpp"]
+args = ["${case}", "std::cpp", "std::nop"]
 expect_exit = 0
 expect_stdout_contains = ["rt::shapeOf("]
 expect_output_not_contains = ["TranslationRefused", "internal error"]
@@ -537,7 +573,7 @@ name = "slice_rank"
 desc = "A slice names one dimension of a value and keeps every other one whole: `m[0:2]` is the first two rows of a rank-2 value, `m[:, 1]` its second column, `len` of a row range answers the rows it kept, and `t[1:]` of a rank-3 value is the rank-2 value behind its first row. The dimension sliced takes the length the bounds give it and the shape everywhere else is the value's own, so the runtime's slice gathers along an axis instead of over the whole run. The program is built and run by agree_with_fvm, which compares it with std::fvm byte for byte."
 kind = "behavior"
 case = "../../../cases/trans/cpp/slice_rank.cml"
-args = ["${case}", "std::cpp"]
+args = ["${case}", "std::cpp", "std::nop"]
 expect_exit = 0
 expect_stdout_contains = ["rt::sliceSub("]
 expect_output_not_contains = ["TranslationRefused", "internal error"]
@@ -549,7 +585,7 @@ name = "tensor_ones"
 desc = "`tensor:ones` writes the tensor itself: `T[...]` is `rt::Array<T>` in this back end, and the rule builds that array from the shape and the fill instead of calling the runtime -- `const rt::Array<float> v1_ones = rt::filledArray<float>(lit::array, 1.0, \"ones\", at_17_17);`, every element the fill, the shape read from the `int[]` the call is given. Nothing crosses the bridge and the program needs no Camel library: the value is data, not a handle. `println` of it is the same `rt::println` as for an array the program wrote itself, and it prints the nested form of the shape. agree_with_fvm builds and runs it against std::fvm byte for byte: one line, `[[1.0, 1.0], [1.0, 1.0]]`."
 kind = "behavior"
 case = "../../../cases/trans/cpp/tensor_ones.cml"
-args = ["${case}", "std::cpp"]
+args = ["${case}", "std::cpp", "std::nop"]
 expect_exit = 0
 expect_stdout_contains = ["const rt::Array<float> v1_ones = rt::filledArray<float>(lit::array, 1.0, \"ones\", at_", "rt::println(v1_ones);"]
 expect_output_not_contains = ["TranslationRefused", "internal error", "rt::Foreign", "bridge::", "libcamel"]
@@ -561,7 +597,7 @@ name = "tensor_ones_element"
 desc = "The element type a `tensor:ones` call states is the array's, and it is now the template argument of the call this back end writes: `rt::filledArray<double>(lit::array, 1.0, at_18_17)` for f64 and `rt::filledArray<int64_t>(lit::array, 1, at_19_17)` for i64 -- the fill is `1.0` for the floats and `1` for the integers, which is the type showing twice, in the value and in the text. A call that dropped the type would fill the wrong array, and `ones::<i64>([2, 2])` would print `[[1.0, 1.0], [1.0, 1.0]]` where the interpreter prints `[[1, 1], [1, 1]]`; an f64 tensor prints the same text at both widths, so the integer line is the one that shows it. agree_with_fvm compares both lines with std::fvm."
 kind = "behavior"
 case = "../../../cases/trans/cpp/tensor_ones_element.cml"
-args = ["${case}", "std::cpp"]
+args = ["${case}", "std::cpp", "std::nop"]
 expect_exit = 0
 expect_stdout_contains = ["= rt::filledArray<double>(lit::array, 1.0, \"ones\", at_", "= rt::filledArray<int64_t>(lit::array, 1, \"ones\", at_"]
 expect_output_not_contains = ["TranslationRefused", "internal error", "rt::Foreign", "bridge::", "libcamel"]
@@ -573,7 +609,7 @@ name = "tensor_zeros"
 desc = "`tensor:zeros` is the same rule as `tensor:ones` with the other fill: `const rt::Array<float> v1_zeros = rt::filledArray<float>(lit::array, 0.0, \"zeros\", at_18_18);`. What differs between the two builders is the fill and not a byte of the call this back end writes, which is why they are one rule. It was the last tensor builder refused as work not done (`std::cpp has no translation of it yet`), then one that crossed the bridge, and it is the tensor's data now. agree_with_fvm builds and runs it against std::fvm byte for byte: one line, `[[0.0, 0.0], [0.0, 0.0]]`."
 kind = "behavior"
 case = "../../../cases/trans/cpp/tensor_zeros.cml"
-args = ["${case}", "std::cpp"]
+args = ["${case}", "std::cpp", "std::nop"]
 expect_exit = 0
 expect_stdout_contains = ["const rt::Array<float> v1_zeros = rt::filledArray<float>(lit::array, 0.0, \"zeros\", at_", "rt::println(v1_zeros);"]
 expect_output_not_contains = ["TranslationRefused", "internal error", "rt::Foreign", "bridge::", "libcamel"]
@@ -585,7 +621,7 @@ name = "tensor_half"
 desc = "The two reduced-precision element types are the same array: `ones::<bf16>` writes `rt::filledArray<rt::BF16>(lit::array, rt::BF16(1.0f), \"ones\", at_…)` and `zeros::<f16>` the same with `rt::F16(0.0f)` and `\"zeros\"` over the literal of its own shape (`lit::array_2`) -- the fill is a value of the element type rounded once, which is what the tensor module stores (modules/tensor/dtype.h), so the tensor is `rt::Array<rt::BF16>` / `rt::Array<rt::F16>` and the program needs no Camel library. Before this, a tensor of either width was refused by the rule: the six element types a tensor can hold are one representation, and leaving two of them refused would have made the refusal the second representation. agree_with_fvm builds and runs the program against std::fvm byte for byte."
 kind = "behavior"
 case = "../../../cases/trans/cpp/tensor_ones_half.cml"
-args = ["${case}", "std::cpp"]
+args = ["${case}", "std::cpp", "std::nop"]
 expect_exit = 0
 expect_stdout_contains = ["rt::filledArray<rt::BF16>(lit::array, rt::BF16(1.0f), \"ones\", at_", "rt::filledArray<rt::F16>(lit::array_2, rt::F16(0.0f), \"zeros\", at_"]
 expect_output_not_contains = ["TranslationRefused", "internal error", "rt::Foreign", "bridge::", "libcamel"]
@@ -597,7 +633,7 @@ name = "index_rank"
 desc = "A position on a value of several dimensions: `m[1]` is the second row (`rt::atRow`, one dimension less and of the row's own extent), `m[1, 0]` writes the axis it drops and is the element (`rt::atAxis`, every other dimension kept whole), and `t[1]` of a rank-3 value is the rank-2 value behind it. `len` of a row answers the dimension that is left. The program is built and run by agree_with_fvm, which compares it with std::fvm byte for byte -- six lines, rows and elements both. The operator rule that used to turn a value of several dimensions away is gone with it, as are the two module programs that took the same road: `index_two_positions` translates and agrees."
 kind = "behavior"
 case = "../../../cases/trans/cpp/index_rank.cml"
-args = ["${case}", "std::cpp"]
+args = ["${case}", "std::cpp", "std::nop"]
 expect_exit = 0
 expect_stdout_contains = ["rt::atRow(", "rt::atAxis("]
 expect_output_not_contains = ["TranslationRefused", "internal error"]
@@ -609,7 +645,7 @@ name = "iterate_rows"
 desc = "`for` over a value of several dimensions walks its first dimension: the item is the row, one dimension less, and the number of rounds is the first extent -- not the element count, which a rank-2 value of 2 rows of 3 elements has 6 of and 2 items. The generated loop holds the item as `rt::atRow(v2_items, v3_round, at_13_13)` and breaks at `v3_round >= v2_items.extent(0)`; a rank-3 value's planes come out as rank-2 items the same way, and a value of one dimension still gives its elements (`rt::at`). The elements of a row are copied, so the body holds a value of its own. The program is built and run by agree_with_fvm, which compares it with std::fvm byte for byte -- three lines."
 kind = "behavior"
 case = "../../../cases/trans/cpp/iterate_rows.cml"
-args = ["${case}", "std::cpp"]
+args = ["${case}", "std::cpp", "std::nop"]
 expect_exit = 0
 expect_stdout_contains = ["rt::atRow(", ".extent(0))", "rt::at("]
 expect_output_not_contains = ["TranslationRefused", "internal error"]
@@ -621,7 +657,7 @@ name = "refuse_iterate_open"
 desc = "A `for` over a value whose rank is open is refused with the reason: an item is an element on a value of one dimension and a row on a value of several, and no one C++ type holds both -- the same ground on which the index rule refuses an open rank (`:op/idx_arr`). The refusal names the loop `countRows` and is located at it; the positive half of this law is `iterate_rows`, where the type states the rank."
 kind = "negative"
 case = "../../../cases/trans/cpp/refuse_iterate_open.cml"
-args = ["${case}", "std::cpp"]
+args = ["${case}", "std::cpp", "std::nop"]
 expect_exit = 1
 expect_diagnostic_name = "RuntimeDiag::TranslationRefused"
 expect_diagnostic_line = 12
@@ -634,7 +670,7 @@ name = "literal_open_shape"
 desc = "A literal of one dimension carries the dimension it has. `float[]` names the element type and leaves the length to the value, so the type states no extent -- and the value is one dimension of 3 elements: the constant is written with its extents (`rt::Array<double>::shaped({1.0, 2.0, 3.0}, {3})`), so `shape` and `len` read [3] and 3, and the checked conversion that follows has a rank to compare. A type of open rank (`float[...]`) states nothing about the rank, and a single element there stays the rank-zero value the position promises (compile/array_shape/rank_zero_field_literal.cml)."
 kind = "behavior"
 case = "../../../cases/trans/cpp/literal_open_shape.cml"
-args = ["${case}", "std::cpp"]
+args = ["${case}", "std::cpp", "std::nop"]
 expect_exit = 0
 expect_stdout_contains = ["::shaped({1.0, 2.0, 3.0}, {3})", "::shaped({4.0, 5.0}, {2})", "rt::asShape("]
 expect_output_not_contains = ["TranslationRefused", "internal error"]
@@ -645,7 +681,7 @@ name = "print_shape"
 desc = "Printing tells an element from an array of one. A value of no rank *is* the element (design principles 5.4): a field of `f32[...]` holds such a value and `println(first.v)` writes `1.5`, not `[1.5]`. A value that carries a dimension is written as the whole literal -- `[2.5]` -- because the bracket is the difference between an element and an array of one, and a reader who cannot see it cannot tell the two apart. `shape` of a value of one dimension answers the one dimension it has (`[2]`), not the element, and a value grown by `append` states that it is one dimension (`[3, 4]`). The same holds under a specification: `'{:>6}'->format<x>` writes `   1.5` for a value of no rank and `[   1.5]` for an array of one, because the bracket is the shape's and not the format's. agree_with_fvm runs the program and compares its output with std::fvm byte for byte."
 kind = "behavior"
 case = "../../../cases/trans/cpp/print_shape.cml"
-args = ["${case}", "std::cpp"]
+args = ["${case}", "std::cpp", "std::nop"]
 expect_exit = 0
 expect_stdout_contains = ["rt::println(", "appendText"]
 expect_output_not_contains = ["TranslationRefused", "internal error"]
@@ -657,7 +693,7 @@ name = "cast_shape_holds"
 desc = "`as` states the shape a value must have. Both types are the same `rt::Array<T>` on this side -- a shape is not a second value -- so the conversion writes no bytes and checks the extents the type states: `rt::asShape(v, {2, 3}, \"float[2, 3]\", at_...)` answers the value itself when the rank and every stated extent are the ones the type says. The program keeps reading and prints both values; agree_with_fvm compares them with std::fvm byte for byte."
 kind = "behavior"
 case = "../../../cases/trans/cpp/cast_shape_holds.cml"
-args = ["${case}", "std::cpp"]
+args = ["${case}", "std::cpp", "std::nop"]
 expect_exit = 0
 expect_stdout_contains = ["rt::asShape(", "float[2, 3]", "{2, 3}"]
 expect_output_not_contains = ["TranslationRefused", "internal error"]
@@ -669,7 +705,7 @@ name = "cast_shape_fault"
 desc = "A value that does not hold the shape its type states stops the program at the conversion, with the interpreter's own sentence: `conversion to 'float[3, 3]' failed: the array has shape [2, 2]` -- the same words `ArrayType::castSlotFrom` writes, at the conversion's own position, so the two reports are one. The translation succeeds and the check is the site's (`rt::asShape(v, {3, 3}, \"float[3, 3]\", at_...)`, a RuntimeError site); agree_with_fvm runs the program and compares the report and the exit status with std::fvm's."
 kind = "behavior"
 case = "../../../cases/trans/cpp/cast_shape_fault.cml"
-args = ["${case}", "std::cpp"]
+args = ["${case}", "std::cpp", "std::nop"]
 expect_exit = 0
 expect_stdout_contains = ["rt::asShape(", "float[3, 3]", "RuntimeDiag::RuntimeError"]
 expect_output_not_contains = ["TranslationRefused", "internal error"]
@@ -680,7 +716,7 @@ name = "fault_unread_cast"
 desc = "A conversion that can fail runs where it is written, whether or not its value is read. `let unused = open2(...) as float[3, 3]` states a shape and the check is the statement (design principles 5.4); dropping it because its value is unread would drop the fault with it. The generated function keeps `rt::asShape(open2(...), {3, 3}, \"float[3, 3]\", at_...)` where it stands and answers what the interpreter answers: `conversion to 'float[3, 3]' failed: the array has shape [2, 2]`, `not reached` unprinted. agree_with_fvm compares the report and the exit status byte for byte, and `opt/fault_preservation/chained_cast.cml` is the same statement reached through another pass."
 kind = "behavior"
 case = "../../../cases/trans/cpp/fault_unread_cast.cml"
-args = ["${case}", "std::cpp"]
+args = ["${case}", "std::cpp", "std::nop"]
 expect_exit = 0
 expect_stdout_contains = ["rt::asShape(", "float[3, 3]", "RuntimeDiag::RuntimeError"]
 expect_output_not_contains = ["TranslationRefused", "internal error"]
@@ -693,7 +729,7 @@ name = "enum_types"
 desc = "An enum is translated as a struct of its own: a tag and a std::variant payload struct per variant, with make<Tag>, get<Tag, Index> and an appendText that writes it as the interpreter does; :enum/tag and :enum/field become rt::enumTag and rt::enumField. The program itself is built and run by agree_with_fvm."
 kind = "behavior"
 case = "../../../cases/consistency/values/enums.cml"
-args = ["${case}", "std::cpp"]
+args = ["${case}", "std::cpp", "std::nop"]
 expect_exit = 0
 expect_stdout_contains = ["struct Shape {", "std::variant<std::monostate, Circle, Rect, Empty> value;", "Shape::make<", "rt::enumField<", "out += \"Shape::Circle\";"]
 expect_output_not_contains = ["camel/core/", "libcamel"]
@@ -705,7 +741,7 @@ name = "recursive_enum_types"
 desc = "A recursive enum is translated: the field that contains the enum is held through std::shared_ptr, not refused; make boxes it, get and appendText dereference it, and a generated destructor and operator== walk it on explicit stacks (camel/standalone/recursive.h). The million-node chain itself is built and run by agree_with_fvm, which checks the text and the equality result against std::fvm."
 kind = "behavior"
 case = "../../../cases/consistency/values/deep_enum_chain.cml"
-args = ["${case}", "std::cpp"]
+args = ["${case}", "std::cpp", "std::nop"]
 expect_exit = 0
 expect_stdout_contains = ["struct Chain {", "std::shared_ptr<Chain>", "rt::box<Chain>", "rt::beginDestroy()", "std::vector<std::pair<const Chain *, const Chain *>> pending"]
 expect_output_not_contains = ["camel/core/", "libcamel", "TranslationRefused"]
@@ -717,7 +753,7 @@ name = "links_runtime_warning"
 desc = "An operator std::cpp has no standalone translation for (`str:to_upper`) is called through the Camel runtime: the pass warns once, at the first such call, and says the generated program is built with libcamel. The translation itself succeeds (exit 0), so the warning is what is pinned. The warning is on the call, which the case writes on line 5: the formatter's pass over the corpus (`eb20efab7b`) took out the blank line between the doc comment and `import str`, and this pin kept the line the call had before it. Nothing else about the reading moved -- the message, the code and column 13 are the ones it was written with, and the exit is 0 now that the prelude's exports need no import (`str.cml` itself reads `to_array` from it, which is what used to make this case fail with UnresolvedReference)."
 kind = "behavior"
 case = "../../../cases/trans/cpp/runtime_bridge.cml"
-args = ["${case}", "std::cpp"]
+args = ["${case}", "std::cpp", "std::nop"]
 expect_exit = 0
 expect_diagnostic_name = "RuntimeDiag::TranslationLinksRuntime"
 expect_diagnostic_code = "0x04100016"
@@ -761,3 +797,7 @@ expect_stdout_contains = ["fault program(s) print what std::fvm prints"]
 expect_output_not_contains = ["FAIL:", "is not in the baseline", "now prints what std::fvm prints"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 900000
+# Slow layer: over the 2 s the fast layer allows -- 32.53 s of
+# child wall clock in the 2026-11-12 record (appendix B of
+# internal/reports/2026-11-24-test-suite-inventory.cn.md).
+tier = "slow"

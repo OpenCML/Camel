@@ -19,7 +19,8 @@
  *                graph carries the moments and the step count as extra I/O
  */
 
-import { with_grad, stop_gradient } from autodiff
+import { with_grad } from autodiff
+import { stop_gradient } from laws
 import { weight, bench_input } from camel_bench
 import { get_env } from env
 import { OptimizerState, sgd, adam, adam_state, save_params } from nn

@@ -8,6 +8,7 @@
 #include "camel/runtime/draft.h"
 #include "camel/runtime/graph_txn.h"
 #include "camel/utils/type.h"
+#include "graph/graph_view.h"
 
 namespace camel::transforms::rules {
 
@@ -30,6 +31,10 @@ inline camel::core::type::Type *ruleElementTypeOf(camel::core::type::Type *type)
 
 /// The type of the first *value* operand of the node at `ref`, or nullptr when it has none.
 ///
+/// It reads the graph through `GraphView` (`graph/graph_view.h`): the node's ordinary ports and
+/// the type of each operand are two answers of that face, and asking them there is what lets
+/// `jvp` and `vmap` share this reading without either naming a representation.
+///
 /// A rule is generic in the element its values are made of, and that is not always the first port: a
 /// condition is not a value arm. `where(cond, lhs, rhs)` takes a `bool` first and answers the element
 /// of the two arms, so a rule instantiated on the first port would be a `bool` rule applied to a
@@ -38,26 +43,23 @@ inline camel::core::type::Type *ruleElementTypeOf(camel::core::type::Type *type)
 /// would instantiate its rule at `int64` and apply it to floats. The first port whose element is not
 /// a condition is the one that names the rule's `T`; an operator that is all conditions (none today)
 /// falls back to its first port.
-template <class Graph>
 inline camel::core::type::Type *firstOperandTypeOf(
-    const Graph &function, camel::runtime::gc_node_ref_t ref) {
+    const camel::graph::GraphView &function, camel::runtime::gc_node_ref_t ref) {
     using camel::core::type::TypeCode;
     camel::core::type::Type *first = nullptr;
-    for (const camel::runtime::gc_node_ref_t input : function.normInputsOf(ref)) {
-        if (input >= function.nodeCount()) {
-            continue;
-        }
-        const auto *operand = function.node(input);
+    for (const camel::graph::NodeRef input :
+         function.inputs(ref, camel::graph::PortGroup::Normal)) {
+        const camel::core::type::Type *operand = function.typeOf(input);
         if (operand == nullptr) {
             continue;
         }
-        camel::core::type::Type *element = ruleElementTypeOf(operand->dataType());
+        camel::core::type::Type *element = ruleElementTypeOf(const_cast<camel::core::type::Type *>(operand));
         const bool isCondition = element != nullptr && element->code() == TypeCode::Bool;
         if (first == nullptr) {
-            first = operand->dataType();
+            first = const_cast<camel::core::type::Type *>(operand);
         }
         if (!isCondition) {
-            return operand->dataType();
+            return const_cast<camel::core::type::Type *>(operand);
         }
     }
     return first;

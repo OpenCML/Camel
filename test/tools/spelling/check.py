@@ -293,7 +293,7 @@ def main() -> int:
         for case in cases:
             samples += 1
             name = f"std::cml {Path(case).stem}"
-            done = run([str(camel), str(ROOT / case), "std::cml"])
+            done = run([str(camel), str(ROOT / case), "std::cml", "std::nop"])
             if done.returncode != 0:
                 failures += 1
                 rows.append(f"FAIL {name}: std::cml refused it: {(done.stdout + done.stderr).strip().splitlines()[:1]}")

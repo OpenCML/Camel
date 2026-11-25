@@ -201,29 +201,26 @@ class DraftGraphBuilder {
     const DrefTarget &drefTarget(runtime::gc_node_ref_t nodeId) const {
         return drefTarget(ref(nodeId));
     }
-    /// Whether an OPER node names an operator this builder registered. A call built from a resolved
-    /// declaration has one (`addOperNode(op, ...)`, `retargetOperNode`); a call the front end writes
-    /// by **URI alone** -- which is how a conversion and a copy are written, so that a program that
-    /// shadows the operator's name still gets the call the language means (`addOperNode(type, uri)`)
-    /// -- never does, and its payload is the only place the name is kept until the graph is encoded.
-    /// A node of another kind has none either: "which operator does this name" has nothing to ask.
+    /// The operator declaration this builder recorded for a node of kind OPER, or `nullptr` when it
+    /// recorded none. **Asking is not a precondition**: nothing recorded is an ordinary answer.
     ///
-    /// The two questions are not interchangeable, which is the one thing a caller has to know:
-    /// * `operTarget` is a **precondition check**: it answers for a node this builder registered a
-    ///   target for, and for any other node it reports `DraftGraphBuilder operator target not found.`
-    ///   and aborts -- in every build, not only a debug one (`GUARD`). It is the right question when
-    ///   the caller knows by construction how the node was written, as the sites that build a call
-    ///   from a resolved declaration do.
-    /// * `hasOperTarget` is the question to ask **first** when the node may be either shape, or of
-    ///   another kind altogether: it answers `false` and aborts nothing. `operUriOf`
-    ///   (`builder_helpers.h`) is the reader every caller should use for "which operator does this
-    ///   name", because it asks this and then falls back to the payload.
-    bool hasOperTarget(runtime::DraftNodeRef node) const {
-        return operTargets_.contains(node.id);
-    }
-    bool hasOperTarget(runtime::gc_node_ref_t nodeId) const { return hasOperTarget(ref(nodeId)); }
-    const oper_idx_ptr_t &operTarget(runtime::DraftNodeRef node) const;
-    const oper_idx_ptr_t &operTarget(runtime::gc_node_ref_t nodeId) const {
+    /// A pass writes a call by naming its operator's URI -- `GraphDraft::addOperNode(type, nullptr,
+    /// uri)`, which is how `:op/cast` and `:op/copy` are written -- and the builder of the graph a
+    /// pass hands on never resolved that call, so no declaration is here to hand back. The URI is
+    /// not lost with it: the node's payload names its operator (`GCOperBody::uri()`, design
+    /// principles 2.3 -- the node is where the operator is stored). This table holds the *resolved*
+    /// declaration, which is exactly the part a call written by URI alone leaves unset.
+    ///
+    /// Two shapes therefore reach every reader, and each reader says what *it* makes of a call
+    /// whose declaration is not known: `isCopyNode` answers "not a copy", `nodeKeepsItsInput`
+    /// answers "a holder", `constructionKindOf` answers "states no construction". A reader outside
+    /// the builder's construction time does meet them, because what a pass hands on is an ordinary
+    /// graph (design principles 9.5: the source level's rules constrain building the graph, not
+    /// rewriting it), so a reader that made "no target" fatal would abort a legitimate graph. The
+    /// pointer refers into the builder's table and lives while that entry does; absence is
+    /// `nullptr`, never a null target.
+    const oper_idx_ptr_t *operTarget(runtime::DraftNodeRef node) const;
+    const oper_idx_ptr_t *operTarget(runtime::gc_node_ref_t nodeId) const {
         return operTarget(ref(nodeId));
     }
     void registerNodePortName(runtime::DraftNodeRef node, std::string name);

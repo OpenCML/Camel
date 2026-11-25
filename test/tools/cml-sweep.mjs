@@ -147,7 +147,7 @@ const reasons = new Map()
 const printed = []
 
 await pool(selected, JOBS, async (file) => {
-    const result = await run(camel, [file, 'std::cml'])
+    const result = await run(camel, [file, 'std::cml', 'std::nop'])
     const text = `${result.out}${result.err}`
     const printedSource = result.out.trim()
     if (result.timedOut) {
@@ -178,8 +178,8 @@ await pool(printed, JOBS, async (entry, index) => {
     const right = path.join(SCRATCH, `right-${index}.json`)
     const copy = path.join(printedDir, `printed-${index}.cml`)
     fs.writeFileSync(copy, entry.source)
-    const before = await run(camel, [entry.file, 'std::jgir', 'canonical=true'])
-    const after = await run(camel, [copy, 'std::jgir', 'canonical=true'])
+    const before = await run(camel, [entry.file, 'std::jgir', 'canonical=true', 'std::nop'])
+    const after = await run(camel, [copy, 'std::jgir', 'canonical=true', 'std::nop'])
     // A canonical document is one JSON object and nothing else; anything else is not a document.
     if (before.status !== 0 || after.status !== 0) {
         roundtrip.unfaithful += 1

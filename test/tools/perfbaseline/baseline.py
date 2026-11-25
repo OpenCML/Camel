@@ -6,8 +6,8 @@
 
 For every program of the list below, on this machine and with the build in out/latest:
 
-  compile   `camel <program> std::stats std::null`: parsing and building the graph, then
-            discarding it (std::null consumes the program, so nothing runs). The wall time of the
+  compile   `camel <program> std::stats std::nop`: parsing and building the graph, then
+            discarding it (std::nop consumes the program, so nothing runs). The wall time of the
             whole process, the nodes, edges and bytes std::stats reports, and the peak working
             set of the process.
   opt       `std::cxx::inline`: timed with `--timeit` (which compiles again for every iteration
@@ -293,11 +293,11 @@ def main():
             skipped.append({"name": name, "missing": missing})
             continue
         sys.stderr.write(f"[baseline] {name}\n")
-        stats = run(args + ["std::stats", "std::null"], env)
+        stats = run(args + ["std::stats", "std::nop"], env)
         graph = graph_stats(stats["stdout"])
-        opt_peak = run(args + ["std::cxx::inline", "std::null"], env)
+        opt_peak = run(args + ["std::cxx::inline", "std::nop"], env)
         opt_time = run(["--timeit", f"std::cxx::inline/{rounds}"] + args + ["--output-format", "json"], env)
-        optall_peak = run(args + ["std::opt", "std::null"], env)
+        optall_peak = run(args + ["std::opt", "std::nop"], env)
         optall_time = run(["--timeit", f"std::opt/{rounds}"] + args + ["--output-format", "json"], env)
         row = {
             "name": name,

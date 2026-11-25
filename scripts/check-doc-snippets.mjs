@@ -93,7 +93,7 @@ function usage(message) {
     if (message) console.error(`check-doc-snippets: ${message}`)
     console.error(
         'usage: node scripts/check-doc-snippets.mjs [--default-roots] [--pages|--source-examples] ' +
-            '[--camel PATH] [FILE|DIR ...]',
+            '[--no-pending] [--camel PATH] [FILE|DIR ...]',
     )
     process.exit(2)
 }
@@ -150,8 +150,11 @@ const EXCERPTS = [
 //     one file has not seen the rest of the tree.
 // The count is held at or below PENDING_MAX; deleting entries is routine, and adding one means
 // raising the ceiling in the same edit, which a review can see. Every run prints each entry it
-// used, with its reason, so the list can be reviewed from the output without reading this file.
-const PENDING = [
+// used, with its reason and with the state it is in, and ends the list with one line saying how many
+// snippets wait and for what: the list is a debt whose balance is printed, not an exemption that
+// stays in force. `--no-pending` reads the list as empty, which is how the plan pins that line's
+// zero (see below).
+const PENDING_ALL = [
     {
         file: 'docs/tutorial/17_teaching_a_law.cn.md',
         key: '12ee3b07b5c68a43',
@@ -391,6 +394,12 @@ const PENDING = [
             'reachable from the page; `D-1123-81` sends these sites back to `0 .. n` once it does',
     },
 ]
+
+// `--no-pending` reads the list as empty. It is the way to run the one case that pins the zero
+// reading, and the only honest way to see what a run says when nothing waits: a screen that shows
+// only problems cannot tell "nothing waits" from "nobody is looking", so the zero is printed and
+// this switch is how it gets exercised without emptying the list for the other pages.
+const PENDING = ARGV.includes('--no-pending') ? [] : PENDING_ALL
 
 const PENDING_MAX = 30
 
@@ -1825,10 +1834,43 @@ for (const { entry, pending, line, problems: failed } of exempted) {
             `is exempted: ${pending.reason} -- ${failed[0]}`,
     )
 }
+// The roster says, for every entry of the list, whether it is doing anything in this scope. Without
+// the word at the end, an entry that waits and an entry whose snippet has caught up print the same
+// line, and a reader takes the list for a set of exemptions that is in force when part of it is only
+// a debt already paid: exactly one thing has to be done about the second kind, and nothing about the
+// first.
+const caughtUpKeys = new Set(pendingCaughtUp.map(({ pending }) => pending))
 for (const pending of PENDING) {
     const used = pendingUsed.get(pending)
     const where = used ? `${used.entry.rel}:${used.entry.snippet.open + 1}` : 'unused in this scope'
-    console.log(`pending list: ${pending.file} ${pending.key} (${where}): ${pending.reason}`)
+    const state = pendingBehind.has(pending)
+        ? 'waiting: its snippet does not compile yet in this scope'
+        : caughtUpKeys.has(pending)
+            ? 'STALE: every snippet of its key compiles now, so this entry must be deleted'
+            : 'unused: no snippet of this scope is its text'
+    console.log(`pending list: ${pending.file} ${pending.key} (${where}): ${pending.reason} -- ${state}`)
+}
+
+// One line that answers "how much is still waiting on a ruled construct, and on which one". The
+// number and the reason are both read from the list on every run, so a snippet that catches up, or
+// an entry whose reason is rewritten, changes this line without anybody remembering to change it --
+// the pending list is a debt with a shrinking balance, not an exemption that stays in force.
+const waiting = new Map()
+for (const pending of PENDING) {
+    if (!pendingBehind.has(pending)) continue
+    const count = pendingUsed.get(pending) ? 1 : 0
+    if (count === 0) continue
+    waiting.set(pending.reason, (waiting.get(pending.reason) || 0) + 1)
+}
+if (waiting.size === 0) {
+    console.log(
+        `[PENDING] 0 snippet(s) wait for a ruled construct: the list holds ${PENDING.length} ` +
+            `entr${PENDING.length === 1 ? 'y' : 'ies'} and none of them is behind in this scope`,
+    )
+} else {
+    for (const [reason, count] of waiting) {
+        console.log(`[PENDING] ${count} snippet(s) wait for ${reason}`)
+    }
 }
 
 const seconds = ((Date.now() - started) / 1000).toFixed(1)

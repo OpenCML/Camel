@@ -194,6 +194,10 @@ assert(out === 'a|', `unexpected output: ${JSON.stringify(out)}`)
 }
 """
 timeout_ms = 8000
+# Slow layer: over the 2 s the fast layer allows -- 2.09 s of
+# child wall clock in the 2026-11-12 record (appendix B of
+# internal/reports/2026-11-24-test-suite-inventory.cn.md).
+tier = "slow"
 
 [[tests]]
 name = "simplify_arm_write_lost.simplify_jit"
@@ -210,6 +214,10 @@ assert(out === 'a|', `unexpected output: ${JSON.stringify(out)}`)
 }
 """
 timeout_ms = 8000
+# Slow layer: over the 2 s the fast layer allows -- 2.01 s of
+# child wall clock in the 2026-11-12 record (appendix B of
+# internal/reports/2026-11-24-test-suite-inventory.cn.md).
+tier = "slow"
 
 [[tests]]
 name = "simplify_arm_write_lost.simplify_prl"

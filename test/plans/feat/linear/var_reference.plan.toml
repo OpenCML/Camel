@@ -1176,7 +1176,7 @@ name = "order_graph.before_after"
 desc = "`A(i); modify(i); B(i)` in a sync body: the call statements are chained, and the read of i used by B is ordered after modify."
 kind = "behavior"
 case = "../../../cases/linear/byref/order_before_after.cml"
-args = ["${case}", "std::gir"]
+args = ["${case}", "std::gir", "std::nop"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
@@ -1313,7 +1313,7 @@ name = "element_assigned.in_place_form"
 desc = "The lowering of `arr[0] = 9` on a `var` array is the in-place rebinding: :op/set_index_in_place takes its array from :var/take of the cell, and :op/assn_owned stores the result in that cell. The copying form :op/set_index is not in the graph."
 kind = "behavior"
 case = "../../../cases/linear/byref/element_assigned.cml"
-args = ["${case}", "std::jgir"]
+args = ["${case}", "std::jgir", "std::nop"]
 expect_exit = 0
 verify_script = """
 ({ input, assert }) => {
@@ -2397,6 +2397,10 @@ assert(out === 'plain call: value 1.0 cnt 1 | with_grad: value 2.0 cnt 2 | with_
 }
 """
 timeout_ms = 20000
+# Slow layer: over the 2 s the fast layer allows -- 2.08 s of
+# child wall clock in the 2026-11-12 record (appendix B of
+# internal/reports/2026-11-24-test-suite-inventory.cn.md).
+tier = "slow"
 
 [[tests]]
 name = "var_grad.inline_fvm"
@@ -2445,6 +2449,10 @@ assert(out === 'plain call: value 1.0 cnt 1 | with_grad: value 2.0 cnt 2 | with_
 }
 """
 timeout_ms = 20000
+# Slow layer: over the 2 s the fast layer allows -- 2.10 s of
+# child wall clock in the 2026-11-12 record (appendix B of
+# internal/reports/2026-11-24-test-suite-inventory.cn.md).
+tier = "slow"
 
 [[tests]]
 name = "var_grad.specialize_jit"
@@ -2477,6 +2485,10 @@ assert(out === 'plain call: value 1.0 cnt 1 | with_grad: value 2.0 cnt 2 | with_
 }
 """
 timeout_ms = 20000
+# Slow layer: over the 2 s the fast layer allows -- 2.01 s of
+# child wall clock in the 2026-11-12 record (appendix B of
+# internal/reports/2026-11-24-test-suite-inventory.cn.md).
+tier = "slow"
 
 [[tests]]
 name = "var_grad.macro_opt_jit"
@@ -2613,6 +2625,10 @@ assert(out === 'plain call: value 1.0 sum(acc) 3.0 | with_grad: value 4.0 sum(ac
 }
 """
 timeout_ms = 20000
+# Slow layer: over the 2 s the fast layer allows -- 2.14 s of
+# child wall clock in the 2026-11-12 record (appendix B of
+# internal/reports/2026-11-24-test-suite-inventory.cn.md).
+tier = "slow"
 
 [[tests]]
 name = "grad_tuple_read.default"
@@ -2980,6 +2996,10 @@ assert(out === 'f: 101 counter 6 | g: 101.0 counter 4', `unexpected output: ${ou
 }
 """
 timeout_ms = 8000
+# Slow layer: over the 2 s the fast layer allows -- 2.00 s of
+# child wall clock in the 2026-11-12 record (appendix B of
+# internal/reports/2026-11-24-test-suite-inventory.cn.md).
+tier = "slow"
 
 [[tests]]
 name = "var_read_before_callee_write.macro_simplify_jit"
@@ -3351,7 +3371,7 @@ name = "var_param_reference.an_escaping_var_keeps_its_cell"
 desc = "A `var` handed to a function as a `var` argument escapes: it is a resource shared with the callee, so it keeps its cell and its reads stay cell reads -- the graph has :var/get and :var/new nodes. A `var` that only its own graph reads and writes becomes SSA instead: its reads take the value of the write that made them and no :var/get is left (test/cases/opt/generic/specialization_survives_the_round.cml, where the graph has none)."
 kind = "behavior"
 case = "../../../cases/linear/byref/var_param_reference.cml"
-args = ["${case}", "std::gir"]
+args = ["${case}", "std::gir", "std::nop"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
@@ -3380,7 +3400,7 @@ name = "var_argument_reads_the_nearest_write.the_edge_is_data"
 desc = "The graph of the same case: the `var` argument's port is a data edge from the version the nearest write made. The call also follows that write on the statement chain; its control input, when present, mirrors that chain rather than standing in for a missing data edge (docs/design/effects/edges.cn.md 4.6, 5.6)."
 kind = "behavior"
 case = "../../../cases/linear/byref/var_argument_reads_the_nearest_write.cml"
-args = ["${case}", "std::gir"]
+args = ["${case}", "std::gir", "std::nop"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
@@ -3426,7 +3446,7 @@ name = "var_argument_statement_place.the_statement_is_on_the_chain"
 desc = "The graph of the same case: the effectful statement that reads the `var` parameter occupies the chain place, while the read itself is a value input. The statement follows the preceding statement; it does not borrow a chain place from the read (docs/design/effects/edges.cn.md 4.6, 5.6)."
 kind = "behavior"
 case = "../../../cases/linear/byref/var_argument_statement_place.cml"
-args = ["${case}", "std::gir"]
+args = ["${case}", "std::gir", "std::nop"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """

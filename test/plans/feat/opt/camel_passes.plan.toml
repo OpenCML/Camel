@@ -35,7 +35,7 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "norma
 name = "camel_passes.cse.subject"
 desc = "The corpus before any pass: `shared` writes `x * 7` twice over two separate 7s, `literals` has two constants of 7 that its one product reads, and `written` has two 3s beside two products over two different values -- the parameter, and the sum the rebinding between them made."
 case = "../../../cases/opt/camel_passes/cse_subject.cml"
-args = ["${case}", "std::jgir"]
+args = ["${case}", "std::jgir", "std::nop"]
 verify_script_path = "../../../cases/opt/camel_passes/cse_subject.mjs"
 
 [[tests]]
@@ -43,7 +43,7 @@ name = "camel_passes.cse.by_cpp"
 desc = "The reference: std::cxx::cse on the corpus whose literals and expressions repeat."
 kind = "snapshot"
 case = "../../../cases/opt/camel_passes/cse_subject.cml"
-args = ["${case}", "std::cxx::cse", "std::gir"]
+args = ["${case}", "std::cxx::cse", "std::gir", "std::nop"]
 snapshot_stream = "stdout"
 golden = "./golden/camel_passes.cse.dot"
 
@@ -51,7 +51,7 @@ golden = "./golden/camel_passes.cse.dot"
 name = "camel_passes.cse.by_camel"
 desc = "opt::cse, written in Camel with the graph module, gives the graph the C++ pass gives: the golden of the entry above, compared node by node and edge by edge."
 case = "../../../cases/opt/camel_passes/cse_subject.cml"
-args = ["${case}", "opt::cse", "std::gir"]
+args = ["${case}", "opt::cse", "std::gir", "std::nop"]
 verify_script_path = "../../../cases/opt/camel_passes/graph_equal.mjs"
 
 [[tests]]
@@ -59,7 +59,7 @@ name = "camel_passes.cse.is_a_fixpoint"
 desc = "opt::cse run on its own output gives the same graph: the sweep repeats its rounds until no two nodes are one value, so a version that merged one round of duplicates and stopped is refused here."
 kind = "differential"
 case = "../../../cases/opt/camel_passes/cse_subject.cml"
-args = ["${case}", "opt::cse", "opt::cse", "std::gir"]
+args = ["${case}", "opt::cse", "opt::cse", "std::gir", "std::nop"]
 compare_to = "camel_passes.cse.by_camel"
 compare_fields = ["exit_code", "stdout_normalized"]
 
@@ -67,7 +67,7 @@ compare_fields = ["exit_code", "stdout_normalized"]
 name = "camel_passes.cse.property"
 desc = "What opt::cse leaves: no graph keeps two nodes that are one value, `written`'s twice-written product stays two nodes over the two different values it reads while its twice-written 3 is one node, `shared`'s sum reads its one product twice, `literals`' product reads one value twice, and `apart`'s two sums keep the constants 1 and 2."
 case = "../../../cases/opt/camel_passes/cse_subject.cml"
-args = ["${case}", "opt::cse", "std::jgir"]
+args = ["${case}", "opt::cse", "std::jgir", "std::nop"]
 verify_script_path = "../../../cases/opt/camel_passes/cse_property.mjs"
 
 [[tests]]
@@ -84,7 +84,7 @@ name = "camel_passes.cse_written_variable.by_cpp"
 desc = "The reference: std::cxx::cse on the var corpus whose expression is reread after a write, whose two reads of the cell must stay apart."
 kind = "snapshot"
 case = "../../../cases/opt/generic/written_variable.cml"
-args = ["${case}", "std::cxx::cse", "std::gir"]
+args = ["${case}", "std::cxx::cse", "std::gir", "std::nop"]
 snapshot_stream = "stdout"
 golden = "./golden/camel_passes.cse_written_variable.dot"
 
@@ -92,7 +92,7 @@ golden = "./golden/camel_passes.cse_written_variable.dot"
 name = "camel_passes.cse_written_variable.by_camel"
 desc = "opt::cse gives the graph std::cxx::cse gives on the var corpus too: the two products over two reads of a cell with a write between them are not merged, and the two constants they read are."
 case = "../../../cases/opt/generic/written_variable.cml"
-args = ["${case}", "opt::cse", "std::gir"]
+args = ["${case}", "opt::cse", "std::gir", "std::nop"]
 verify_script_path = "../../../cases/opt/camel_passes/graph_equal.mjs"
 
 [[tests]]
@@ -115,7 +115,7 @@ expect_stdout_exact = "3\n2\n7\n3\n2\n7\n3\n2\n7\n"
 name = "camel_passes.dce.subject"
 desc = "The corpus one pass before the sweep: after std::cxx::inline, `chain` holds a product no node reads, over a constant 2 that the product is the only user of — the node a sweep that stopped after one round would leave behind."
 case = "../../../cases/opt/camel_passes/dce_subject.cml"
-args = ["${case}", "std::cxx::inline", "std::jgir"]
+args = ["${case}", "std::cxx::inline", "std::jgir", "std::nop"]
 verify_script_path = "../../../cases/opt/camel_passes/dce_subject.mjs"
 
 [[tests]]
@@ -123,7 +123,7 @@ name = "camel_passes.dce.by_cpp"
 desc = "The reference: std::cxx::dce restricted to values, after the inlining that leaves the dead chain."
 kind = "snapshot"
 case = "../../../cases/opt/camel_passes/dce_subject.cml"
-args = ["${case}", "std::cxx::inline", "std::cxx::dce values_only=true", "std::gir"]
+args = ["${case}", "std::cxx::inline", "std::cxx::dce values_only=true", "std::gir", "std::nop"]
 snapshot_stream = "stdout"
 golden = "./golden/camel_passes.dce.dot"
 
@@ -131,7 +131,7 @@ golden = "./golden/camel_passes.dce.dot"
 name = "camel_passes.dce.by_camel"
 desc = "opt::dce, written in Camel with the graph module, gives the graph the C++ pass gives, on the corpus whose dead chain needs two rounds: the product, then the constant it reads."
 case = "../../../cases/opt/camel_passes/dce_subject.cml"
-args = ["${case}", "std::cxx::inline", "opt::dce", "std::gir"]
+args = ["${case}", "std::cxx::inline", "opt::dce", "std::gir", "std::nop"]
 verify_script_path = "../../../cases/opt/camel_passes/graph_equal.mjs"
 
 [[tests]]
@@ -139,7 +139,7 @@ name = "camel_passes.dce.is_a_fixpoint"
 desc = "opt::dce run on its own output gives the same graph: the sweep repeats its rounds until no value nobody reads is left, so removing `chain`'s product and leaving the constant it read behind is refused here."
 kind = "differential"
 case = "../../../cases/opt/camel_passes/dce_subject.cml"
-args = ["${case}", "std::cxx::inline", "opt::dce", "opt::dce", "std::gir"]
+args = ["${case}", "std::cxx::inline", "opt::dce", "opt::dce", "std::gir", "std::nop"]
 compare_to = "camel_passes.dce.by_camel"
 compare_fields = ["exit_code", "stdout_normalized"]
 
@@ -147,7 +147,7 @@ compare_fields = ["exit_code", "stdout_normalized"]
 name = "camel_passes.dce.property"
 desc = "What opt::dce leaves: no graph keeps a value nobody reads, and the value the program uses is still there — `kept`'s product is read by its sum and keeps both its operands."
 case = "../../../cases/opt/camel_passes/dce_subject.cml"
-args = ["${case}", "std::cxx::inline", "opt::dce", "std::jgir"]
+args = ["${case}", "std::cxx::inline", "opt::dce", "std::jgir", "std::nop"]
 verify_script_path = "../../../cases/opt/camel_passes/dce_property.mjs"
 
 [[tests]]
@@ -172,7 +172,7 @@ expect_stdout_exact = "5\n11\n"
 name = "camel_passes.fold.subject"
 desc = "The corpus before any pass: `chain` holds an addition over a constant and a product over that addition (two rounds of folding), `compare` a comparison over two let-bound constants, and `live` an operation over a parameter that must stay — the guard refuses a corpus with nothing to fold."
 case = "../../../cases/opt/camel_passes/fold_subject.cml"
-args = ["${case}", "std::jgir"]
+args = ["${case}", "std::jgir", "std::nop"]
 verify_script_path = "../../../cases/opt/camel_passes/fold_subject.mjs"
 
 [[tests]]
@@ -180,7 +180,7 @@ name = "camel_passes.fold.by_cpp"
 desc = "The reference: std::cxx::fold on the corpus whose operations are over constants."
 kind = "snapshot"
 case = "../../../cases/opt/camel_passes/fold_subject.cml"
-args = ["${case}", "std::cxx::fold", "std::gir"]
+args = ["${case}", "std::cxx::fold", "std::gir", "std::nop"]
 snapshot_stream = "stdout"
 golden = "./golden/camel_passes.fold.dot"
 
@@ -188,7 +188,7 @@ golden = "./golden/camel_passes.fold.dot"
 name = "camel_passes.fold.by_camel"
 desc = "opt::fold, written in Camel with the graph module's `eval`, gives the graph the C++ pass gives: the golden of the entry above, compared node by node and edge by edge."
 case = "../../../cases/opt/camel_passes/fold_subject.cml"
-args = ["${case}", "opt::fold", "std::gir"]
+args = ["${case}", "opt::fold", "std::gir", "std::nop"]
 verify_script_path = "../../../cases/opt/camel_passes/graph_equal.mjs"
 
 [[tests]]
@@ -196,7 +196,7 @@ name = "camel_passes.fold.same_text"
 desc = "The two runs of `by_cpp` and `by_camel` as text: with the origin ids normalized the dumps are identical character for character, which is stronger than the isomorphic comparison and holds the two passes to the same node ids in the same order."
 kind = "differential"
 case = "../../../cases/opt/camel_passes/fold_subject.cml"
-args = ["${case}", "opt::fold", "std::gir"]
+args = ["${case}", "opt::fold", "std::gir", "std::nop"]
 compare_to = "camel_passes.fold.by_cpp"
 compare_fields = ["exit_code", "stdout_normalized"]
 
@@ -205,7 +205,7 @@ name = "camel_passes.fold.is_a_fixpoint"
 desc = "opt::fold run on its own output gives the same graph: `chain` needs two rounds, so a version that folded one round and stopped is refused here."
 kind = "differential"
 case = "../../../cases/opt/camel_passes/fold_subject.cml"
-args = ["${case}", "opt::fold", "opt::fold", "std::gir"]
+args = ["${case}", "opt::fold", "opt::fold", "std::gir", "std::nop"]
 compare_to = "camel_passes.fold.by_camel"
 compare_fields = ["exit_code", "stdout_normalized"]
 
@@ -213,7 +213,7 @@ compare_fields = ["exit_code", "stdout_normalized"]
 name = "camel_passes.fold.property"
 desc = "What opt::fold leaves: no operation over constants anywhere, the value `chain` and `compare` print is the constant the folding computed, and `live`'s operation over a parameter still reads its port."
 case = "../../../cases/opt/camel_passes/fold_subject.cml"
-args = ["${case}", "opt::fold", "std::jgir"]
+args = ["${case}", "opt::fold", "std::jgir", "std::nop"]
 verify_script_path = "../../../cases/opt/camel_passes/fold_property.mjs"
 
 [[tests]]
@@ -238,7 +238,7 @@ expect_stdout_exact = "20\n0\ntrue\n0\n13\n0\n"
 name = "camel_passes.fold_fault.subject"
 desc = "The corpus before any pass: `main` returns the division `1 / 0` over two constants — a constant expression that can only fault, and the value the function returns — with `x * y` over two let-bound constants beside it ordered after the division, so one round holds a node the pass may not replace and one it does."
 case = "../../../cases/opt/camel_passes/fold_fault.cml"
-args = ["${case}", "std::jgir"]
+args = ["${case}", "std::jgir", "std::nop"]
 verify_script_path = "../../../cases/opt/camel_passes/fold_fault_subject.mjs"
 
 [[tests]]
@@ -246,7 +246,7 @@ name = "camel_passes.fold_fault.by_cpp"
 desc = "The reference: std::cxx::fold on a corpus whose returned value is a constant expression that can only fault — it warns where the expression is written, leaves it there, and folds the product beside it."
 kind = "snapshot"
 case = "../../../cases/opt/camel_passes/fold_fault.cml"
-args = ["${case}", "std::cxx::fold", "std::jgir"]
+args = ["${case}", "std::cxx::fold", "std::jgir", "std::nop"]
 snapshot_stream = "stdout"
 golden = "./golden/camel_passes.fold_fault.jgir"
 
@@ -255,7 +255,7 @@ name = "camel_passes.fold_fault.same_text"
 desc = "The two folds as text: with the origin ids and the paths normalized the dumps and the warnings are both identical character for character, so the Camel pass evaluates the same node, leaves it there and warns at the same position with the same words as the C++ pass."
 kind = "differential"
 case = "../../../cases/opt/camel_passes/fold_fault.cml"
-args = ["${case}", "opt::fold", "std::jgir"]
+args = ["${case}", "opt::fold", "std::jgir", "std::nop"]
 compare_to = "camel_passes.fold_fault.by_cpp"
 compare_fields = ["exit_code", "stdout_normalized", "stderr_normalized"]
 
@@ -263,7 +263,7 @@ compare_fields = ["exit_code", "stdout_normalized", "stderr_normalized"]
 name = "camel_passes.fold_fault.property"
 desc = "What opt::fold leaves: the division over constants is still the value the function returns, the product beside it is gone and its constant 6 reaches the print, no other operation over constants is left, and the order the source wrote is untouched."
 case = "../../../cases/opt/camel_passes/fold_fault.cml"
-args = ["${case}", "opt::fold", "std::jgir"]
+args = ["${case}", "opt::fold", "std::jgir", "std::nop"]
 verify_script_path = "../../../cases/opt/camel_passes/fold_fault_property.mjs"
 
 [[tests]]
@@ -303,7 +303,7 @@ name = "camel_passes.fold.constant_budget.by_camel"
 desc = "A constant above constant_budget is left as the computation that builds it: five million elements would make this dump forty megabytes."
 kind = "snapshot"
 case = "../../../cases/opt/camel_passes/fold_constant_budget.cml"
-args = ["${case}", "opt::fold", "std::gir"]
+args = ["${case}", "opt::fold", "std::gir", "std::nop"]
 snapshot_stream = "stdout"
 golden = "./golden/camel_passes.fold.constant_budget.camel.dot"
 
@@ -312,6 +312,6 @@ name = "camel_passes.fold.constant_budget.by_cpp"
 desc = "The reference: the same program through std::cxx::fold, which stops at the same budget."
 kind = "snapshot"
 case = "../../../cases/opt/camel_passes/fold_constant_budget.cml"
-args = ["${case}", "std::cxx::fold", "std::gir"]
+args = ["${case}", "std::cxx::fold", "std::gir", "std::nop"]
 snapshot_stream = "stdout"
 golden = "./golden/camel_passes.fold.constant_budget.cpp.dot"

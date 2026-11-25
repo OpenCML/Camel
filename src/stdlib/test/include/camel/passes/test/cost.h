@@ -9,7 +9,7 @@ namespace camel::test {
 
 /// The cost a test pass extracts by: one per node, and the cheapest writing of a value is the
 /// smallest sum of its inputs' (the `CostModel` default's total). It is written here because the
-/// kernel keeps no cost of its own any more (D-1123-78): the cost of a writing is the judgement
+/// kernel keeps no cost of its own any more: the cost of a writing is the judgement
 /// of the library that asks for the extraction, and a test module that wants "a writing costs its
 /// size" says so itself.
 class NodeCountCost final : public camel::runtime::CostModel {

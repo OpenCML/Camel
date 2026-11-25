@@ -96,6 +96,10 @@ expect_exit = 0
 expect_stdout_contains = ["no unverified citation", "symbol citation(s) verified"]
 normalizers = ["normalize_newlines"]
 timeout_ms = 30000
+# Slow layer: over the 2 s the fast layer allows -- 2.98 s of
+# child wall clock in the 2026-11-12 record (appendix B of
+# internal/reports/2026-11-24-test-suite-inventory.cn.md).
+tier = "slow"
 
 [[tests]]
 name = "docs.links.citations_symbol"
@@ -186,6 +190,42 @@ normalizers = ["normalize_newlines"]
 # (`no stale snippet in`, exit 0). 180000 ms puts the margin at 45000 ms, a third above that
 # reading, and still catches a genuine hang inside three minutes.
 timeout_ms = 180000
+# Slow layer: over the 2 s the fast layer allows -- 19.73 s of
+# child wall clock in the 2026-11-12 record (appendix B of
+# internal/reports/2026-11-24-test-suite-inventory.cn.md).
+tier = "slow"
+
+# The zero reading. `--no-pending` reads the pending list as empty, so the run has nothing waiting
+# and prints the sentence that says so. Two zeros look alike on a screen that shows only problems:
+# "nothing waits" and "nobody is looking". This case keeps the first one a reading -- the number and
+# the reason are printed from the list on every run, and when the list is empty the line has to say
+# the list is empty rather than stay silent.
+#
+# The exit is 1 by design, and it is the second half of the same reading: emptying the list does not
+# make the tree pass, it exposes the snippets the list was exempting. So the run says "0 snippet(s)
+# wait" and refuses on the same breath, which is what an emptied list has to do -- a zero that bought
+# a green would be the exact "nobody is looking" this case exists to rule out. The count of those
+# exposed snippets is not pinned, because it decays as the docs catch up; the day the list is empty
+# for real the run turns green and this case has to be revisited with it.
+[[tests]]
+name = "docs.snippets_pending_zero_says_why"
+desc = "With the pending list read as empty, the run says `[PENDING] 0 snippet(s) wait for a ruled construct: the list holds 0 entries and none of them is behind in this scope` and still refuses on the snippets it no longer exempts, so a zero names itself instead of looking like a run that never looked."
+kind = "behavior"
+tool = "node"
+case = "../../../scripts/check-doc-snippets.mjs"
+args = ["${case}", "--default-roots", "--no-pending", "--camel", "${camel}"]
+expect_exit = 1
+expect_stdout_contains = ["[PENDING] 0 snippet(s) wait for a ruled construct: the list holds 0 entries and none of them is behind in this scope", "stale snippet problem(s)"]
+normalizers = ["normalize_newlines"]
+# 300000 ms at the 4x rule, and the reason is the shape of the work, not its size: this case starts
+# one compiler per snippet across eight jobs, so its CPU time is not its wall clock -- on the build
+# host it used 63710 ms of CPU and 17.2 s of wall clock. A bound read off the wall clock is wrong
+# here: 180000 ms looks generous against 17 s, and is 2.8x of the CPU the 4x rule reads, which was
+# itself the red. 300000 ms puts it at 4.7x of the CPU.
+timeout_ms = 300000
+# The same work as `docs.snippets_compile` -- it compiles the whole reader-facing scope -- so it
+# costs what that case costs and belongs on the same side of the 2 s line.
+tier = "slow"
 
 [[tests]]
 name = "docs.snippets_dump_is_compared"
@@ -258,6 +298,10 @@ expect_exit = 0
 expect_stdout_contains = ["no conflict markers", "hunk head, a base block, a separator or a tail"]
 normalizers = ["normalize_newlines"]
 timeout_ms = 60000
+# Slow layer: over the 2 s the fast layer allows -- 2.71 s of
+# child wall clock in the 2026-11-12 record (appendix B of
+# internal/reports/2026-11-24-test-suite-inventory.cn.md).
+tier = "slow"
 
 [[tests]]
 name = "docs.no_unfinished_merge_pattern_sees_all_four_forms"
@@ -289,6 +333,10 @@ timeout_ms = 60000
 # The axis the crash itself was on -- the type the transform hands a law at build time -- is not
 # reachable from a source-only check and is recorded, with its measurement, in
 # `internal/reviews/2026-11-04-where-a-laws-port-disagrees-with-the-value-it-is-handed.cn.md`.
+# Slow layer: over the 2 s the fast layer allows -- 2.65 s of
+# child wall clock in the 2026-11-12 record (appendix B of
+# internal/reports/2026-11-24-test-suite-inventory.cn.md).
+tier = "slow"
 
 [[tests]]
 name = "docs.every_laws_port_agrees_with_its_body"

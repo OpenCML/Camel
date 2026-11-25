@@ -962,7 +962,7 @@ DefunctionalizeRewritePass::apply(const camel::runtime::Program *program, std::o
                                 signature = static_cast<const ty::FunctionType *>(calleeType);
                             }
                         } else if (node.kind == GCNodeKind::Func) {
-                            if (const GCGraph *callee = program->calleeOf(*graph, ref)) {
+                            if (const auto *callee = program->calleeOf(*graph, ref)) {
                                 signature = callee->funcType();
                             }
                         }
@@ -1047,7 +1047,7 @@ DefunctionalizeRewritePass::apply(const camel::runtime::Program *program, std::o
             if ((**it).kind != GCNodeKind::Func) {
                 continue;
             }
-            if (const GCGraph *callee = program->calleeOf(*graph, it.ref())) {
+            if (const auto *callee = program->calleeOf(*graph, it.ref())) {
                 directlyCalled.insert(callee->id());
             }
         }

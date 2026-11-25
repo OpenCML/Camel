@@ -1,0 +1,58 @@
+// The library's gradient of three scalar `math` kernels, through `vjp`: `sqrt`, `erf` and `erfc`
+// are declared once in `stdlib/math.cml` and lowered to one kernel per width; the operator a lifted
+// program meets is the double one -- `math:sqrt_d`, `math:erf_d`, `math:erfc_d` -- so the laws in
+// `rulesets.jvp` and `rulesets.transpose` are filed under those names.
+//
+// What is pinned, in order:
+//   - `sqrt(9.0) = 3.0` and `d/dx = (1 * 0.5) / 3 = 0.16666666666666666`, the grouping the engine's
+//     `sqrtVjp` builds (`ct * 0.5` first, then the division).
+//   - `erf(1.0) = 0.8427007929497149`, and the derivative compared **in the program** with the
+//     definition `2/sqrt(pi) * exp(-1)`; `matches=true` is the reading, and it is bit-for-bit
+//     because the law's grouping is the definition's (`(ct * k) * exp((x * x) * -1.0)`).
+//   - `erfc(1.0) = 0.15729920705028513` and `d/dx` equal to the negation of the same product.
+//
+// Before these five laws the library route stopped at the forward half with
+// `skip=rule uri=math:erf_d reason=the operator has no forward rule bound at all`; the reading this
+// case pins is that the same program now answers the numbers instead of refusing.
+//
+// The single-width pair (`math:erf_f`, `math:erfc_f`) runs the same walk with the constant the
+// engine stores at `f32`; it is not read here because this case's functions are `float`, and
+// `vjp-parity` is what holds the two widths to their two keys.
+//
+//     camel test/cases/compile/transforms/math_scalar_gradient_through_the_library.cml
+import { erf, erfc, exp, sqrt } from math
+import rulesets.jvp
+import rulesets.transpose
+import { vjp } from vjp
+
+func root(x: float) => float {
+    return sqrt(x)
+}
+
+func bell(x: float) => float {
+    return erf(x)
+}
+
+func complement(x: float) => float {
+    return erfc(x)
+}
+
+func main() => int sync {
+    let (rootValue, rootPullback) = vjp(root)(9.0)
+    let rootCotangents = rootPullback(1.0)
+    `sqrt value={} d/dx={}`->format<rootValue, rootCotangents.0>->println
+
+    let (bellValue, bellPullback) = vjp(bell)(1.0)
+    let bellCotangents = bellPullback(1.0)
+    let bellExpected = 1.1283791670955126 * exp(-1.0)
+    `erf value={} d/dx={} matches={}`->format<bellValue, bellCotangents.0, bellCotangents.0 == bellExpected>->println
+
+    let (compValue, compPullback) = vjp(complement)(1.0)
+    let compCotangents = compPullback(1.0)
+    `erfc value={} d/dx={} matches={}`->format<compValue, compCotangents.0, compCotangents.0 == -bellExpected>->println
+
+    let (erfZero, erfZeroPullback) = vjp(bell)(0.0)
+    let erfZeroCotangents = erfZeroPullback(1.0)
+    `erf at zero value={} d/dx={}`->format<erfZero, erfZeroCotangents.0>->println
+    return 0
+}

@@ -965,8 +965,28 @@ std::any Builder::resolveDRefNode(const GCT::node_ptr_t &gct) {
         GUARD(
             entity.has_value() && entity->isOperGroup(),
             "A built-in operator the compiler names does not exist: " + plain);
+        // The rules of the group are the declarations of the built-in module without a body; the
+        // declarations of it with a body are candidates of the same call. `map` is both: its group
+        // holds the array rules, and the prelude declares `map` over a `Range` with a body, so a
+        // comprehension over a range takes this body. What the name means where the comprehension
+        // is written -- this module's `map`, an import's -- is still not read: the compiler's name
+        // is the built-in module's alone.
+        OperatorOverloads set;
+        set.ops                             = entity->operGroup();
+        const OperatorOverloads &builtinBodies = preludeOperatorOverloadsOf(plain);
+        for (const auto &graph : builtinBodies.graphs) {
+            set.graphs.push_back(graph);
+            set.moduleOf[graph.get()] = builtinBodies.moduleOf.at(graph.get());
+        }
+        for (const auto &tmpl : builtinBodies.templates) {
+            set.templates.push_back(tmpl);
+            set.moduleOf[tmpl.get()] = builtinBodies.moduleOf.at(tmpl.get());
+        }
         node_handle_t drefNode{currGraph_->addDrefNode(
-            std::variant<graph_vec_ptr_t, oper_group_ptr_t, graph_ptr_t>{entity->operGroup()})};
+            std::variant<graph_vec_ptr_t, oper_group_ptr_t, graph_ptr_t>{set.ops})};
+        if (!set.graphs.empty() || !set.templates.empty()) {
+            operatorOverloads_[drefNode] = std::move(set);
+        }
         registerNodeOrigin(context_, drefNode, gct, "gir.dref");
         LEAVE("DREF");
         return drefNode;
@@ -1083,11 +1103,35 @@ std::any Builder::resolveDRefNode(const GCT::node_ptr_t &gct) {
     // the same name, so a call only the declaration took found no function at all. The DREF is
     // the group, and what the program declares under the name is resolved beside it
     // (`operatorOverloads_`), which is how an operator of the program is resolved already.
-    if (auto merged = mergedOverloadsNamed(name); merged.has_value()) {
+    // A name a nested scope declares is that scope's before it is the module's or an import's
+    // (design principles 10.2: local, then own module, then imported by name, then what comes
+    // along unasked). The set below is the answer the module and the imported layers give, so it
+    // is asked only where no scope inside the module has the name: a function of a body named
+    // like an operator (`func add`, returned by its name) is that function, not the operator.
+    const auto declaredInsideAFunction = [&] {
+        for (graph_scope_ptr_t scope = graphScope_;
+             scope != nullptr && scope->outer() != nullptr;
+             scope = scope->outer()) {
+            if (scope->get(name, false).has_value()) {
+                return true;
+            }
+        }
+        for (template_scope_ptr_t scope = templateScope_;
+             scope != nullptr && scope->outer() != nullptr;
+             scope = scope->outer()) {
+            if (scope->get(name, false).has_value()) {
+                return true;
+            }
+        }
+        return false;
+    };
+    auto mergedOverloads = declaredInsideAFunction() ? std::optional<OperatorOverloads>{}
+                                                     : mergedOverloadsNamed(name);
+    if (mergedOverloads.has_value()) {
         node_handle_t drefNode{currGraph_->addDrefNode(
-            std::variant<graph_vec_ptr_t, oper_group_ptr_t, graph_ptr_t>{merged->ops})};
+            std::variant<graph_vec_ptr_t, oper_group_ptr_t, graph_ptr_t>{mergedOverloads->ops})};
         registerNodeOrigin(context_, drefNode, gct, "gir.dref");
-        operatorOverloads_[drefNode] = std::move(*merged);
+        operatorOverloads_[drefNode] = std::move(*mergedOverloads);
         LEAVE("DREF");
         return drefNode;
     }
@@ -1400,8 +1444,17 @@ bool Builder::valueNameExists(const std::string &written, const GCT::node_ptr_t 
     if (throughUsing(written, gct)) {
         return true;
     }
-    return module_->hasImportedRef(written, ImportLayer::Ambient) &&
-           importedEntity(written, ImportLayer::Ambient).has_value();
+    if (module_->hasImportedRef(written, ImportLayer::Ambient) &&
+        importedEntity(written, ImportLayer::Ambient).has_value()) {
+        return true;
+    }
+    // The last layer is also the prelude's own exports (`preludeEntity`, design principles 10.2),
+    // which the two questions above do not reach: they ask what a module imports, not what the
+    // built-in module's declaration file exports. A generic template's body is asked this question
+    // at its declaration, before any instance is built, so without this the two readers of one
+    // name disagree -- `to_array` resolves in a body that is built (`resolveDRefNode`) and is
+    // reported unresolved in a body that is checked (`stdlib/random.cml`, `uniform::<T>`).
+    return preludeEntity(name).has_value();
 }
 
 node_handle_t Builder::visitCastNode(const GCT::node_ptr_t &gct) {

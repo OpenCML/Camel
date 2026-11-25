@@ -197,9 +197,13 @@ Builder::visitLinkNode(const GCT::node_ptr_t &gct, std::optional<GCT::Assignment
             return callResultType(inputNode, callee->funcType()->exitType());
         }
         if (nodeIsKind(inputNode, runtime::GCNodeKind::Oper)) {
-            return callResultType(
-                inputNode,
-                nodeGraphOf(inputNode)->operTarget(inputNode)->funcType()->exitType());
+            // An operator value's exit type is the one its resolved signature gives. A call a pass
+            // wrote by URI alone records no signature here, and its value is the node's own type --
+            // the answer every other non-call value gets below.
+            const oper_idx_ptr_t *op = nodeGraphOf(inputNode)->operTarget(inputNode);
+            if (op != nullptr) {
+                return callResultType(inputNode, (*op)->funcType()->exitType());
+            }
         }
         return nodeTypeOf(inputNode);
     };
@@ -978,10 +982,16 @@ Builder::visitLinkNode(const GCT::node_ptr_t &gct, std::optional<GCT::Assignment
     // the operand's type, so a module can offer its type and its operators together. The types
     // of the instance are concrete now, and the set is built from them, so an overload found
     // both there and through an import of this module stays one candidate.
+    oper_group_ptr_t calleeGroup;
     if (nodeIsKind(targetNode, runtime::GCNodeKind::Dref)) {
         const auto &drefTarget = nodeGraphOf(targetNode)->drefTarget(targetNode);
         if (std::holds_alternative<oper_group_ptr_t>(drefTarget)) {
             const auto &ops = std::get<oper_group_ptr_t>(drefTarget);
+            // The rules of that group are half of the name's overload set below (design
+            // principles 6.4), so the set is asked with them: the same question the group's own
+            // path asks, asked once, and a name gathered as a set beside a group is never judged
+            // by its bodies alone.
+            calleeGroup = ops;
             addDeclaringModuleOverloads(
                 targetNode,
                 ops->name(),
@@ -1044,6 +1054,19 @@ Builder::visitLinkNode(const GCT::node_ptr_t &gct, std::optional<GCT::Assignment
     bool negateResult                    = false;
     if (auto overloads = operatorOverloads_.find(targetNode);
         overloads != operatorOverloads_.end()) {
+        // An argument that is still a name gets its function value before the set is asked,
+        // exactly as it does on the operator group's own path: a `with` argument of function
+        // type that is a generic name has no type until a candidate settles it, and asking the
+        // set first would judge the call on a type that does not exist yet. An argument that
+        // was settled already is not waiting, so this settles each one once.
+        settleGenericOperatorArguments(
+            calleeGroup,
+            &overloads->second,
+            withInputs,
+            normInputs,
+            withInputTypes,
+            normInputTypes,
+            gct);
         operatorOverload = chooseOperatorOverload(
             overloads->second,
             withInputs,
@@ -1497,25 +1520,18 @@ Builder::visitLinkNode(const GCT::node_ptr_t &gct, std::optional<GCT::Assignment
                 // 7.5; design principles 5.9).
                 settleGenericFactMaker(normInputs, normInputTypes, gct);
             }
+            // The overload set the DREF of this call stands for, when it has one beyond the
+            // rules of its group: a declaration of the name with a body is a candidate of this
+            // call like a rule, and the probe asks both.
+            const auto setOf = operatorOverloads_.find(targetNode);
             settleGenericOperatorArguments(
                 ops,
+                setOf != operatorOverloads_.end() ? &setOf->second : nullptr,
                 withInputs,
                 normInputs,
                 withInputTypes,
                 normInputTypes,
                 gct);
-            // A name the operator did not settle has no value.
-            for (auto *inputs : {&withInputs, &normInputs}) {
-                for (Argument &input : *inputs) {
-                    if (nodeIsKind(input.node, runtime::GCNodeKind::Dref)) {
-                        rejectNameWithoutValue(
-                            input.node,
-                            input.expr->type() == GCT::NodeKind::DREF ? input.expr->name()
-                                                                      : std::string("the name"),
-                            input.expr);
-                    }
-                }
-            }
             // Design principles 5.1: a literal operand takes the type of the other operand
             // (`x * 2 + 1` with `x: f32`). Done before the resolvers see the arguments,
             // because a resolver matches types exactly. Only a binary arithmetic or
@@ -1609,6 +1625,22 @@ Builder::visitLinkNode(const GCT::node_ptr_t &gct, std::optional<GCT::Assignment
                 }
             }
             if (!res.has_value()) {
+                // A name the call did not settle has no value: `reduce<add, 0>` over an array is a
+                // name the operator turns into the function its parameter names, and a name whose
+                // parameter does not name a function is refused here, at the use. Asking before
+                // the rules run would refuse a name the rules are about to settle (`add` keeps its
+                // signature in the operator table, not in the name's own set).
+                for (auto *inputs : {&withInputs, &normInputs}) {
+                    for (Argument &input : *inputs) {
+                        if (nodeIsKind(input.node, runtime::GCNodeKind::Dref)) {
+                            rejectNameWithoutValue(
+                                input.node,
+                                input.expr->type() == GCT::NodeKind::DREF ? input.expr->name()
+                                                                          : std::string("the name"),
+                                input.expr);
+                        }
+                    }
+                }
                 // A literal operand takes the other operand's type in a named operator call too:
                 // `add(x, 2.0)` with an f32 tensor is the f32 sum, as `x * 2.0` already is
                 // (design principles 5.1). Tried only where the first resolution failed, so an

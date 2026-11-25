@@ -8,7 +8,7 @@
 
 | 路径 / 脚本 | 作用 |
 |-------------|------|
-| `pypi/camel-lang/` | setuptools 包根目录：`pyproject.toml`、`src/camel/`（打包时把 `out/<tag>/` 整树拷成 `src/camel/.cmlenv/`，打完删掉） |
+| `packaging/pypi/camel-lang/` | setuptools 包根目录：`pyproject.toml`、`src/camel/`（打包时把 `out/<tag>/` 整树拷成 `src/camel/.cmlenv/`，打完删掉） |
 | `scripts/pypi-rollup.js` | 编排：默认按**当前 `python`** 匹配一个 SDK 构建；可选 `CAMEL_PYPI_ALL_SDKS=1` 按目录循环；收集 `out/<tag>/`、打 wheel、写入 `dist/pypi/` |
 | `scripts/build.js` | 被 rollup 以「单 SDK 模式」调用；被 `npm run build` 以「普通模式」调用 |
 | `scripts/sync-python-sdks.js` | 将官方 Python 目录树同步到 `modules/python/sdks/python3xx/`（gitignored） |
@@ -94,10 +94,10 @@ rollup 扫描 `modules/python/sdks/`，仅当同时满足：
    - `collect-out` 在 `build.js` 末尾以 `Release` 执行，更新 **`out/latest/`**（或 `CAMEL_PYPI_TAG` 指定 tag）。
 
 2. **组装 wheel 内容**（`packageWheelBundle`）  
-   - 将 `out/<tag>/` **整树**复制到 `pypi/camel-lang/src/camel/.cmlenv/`（打完再删）。  
+   - 将 `out/<tag>/` **整树**复制到 `packaging/pypi/camel-lang/src/camel/.cmlenv/`（打完再删）。  
    - 删掉 `bin/` 里测试专用工具（`camel-parsecheck`）与 `.o/.a/.obj/.d/.pdb`：它们不是发布物。  
    - 检查 `[project.scripts]` 声明的每条命令都在 `.cmlenv/bin/` 里有对应可执行文件——**没有 wrapper-dist，也不改
-     `pyproject.toml`**：入口是 `pypi/camel-lang/src/camel_cli.py` 里的函数，它 `exec` 自带的那只二进制。
+     `pyproject.toml`**：入口是 `packaging/pypi/camel-lang/src/camel_cli.py` 里的函数，它 `exec` 自带的那只二进制。
 
 3. **构建与改标签**（同一份 packaging 打两遍，内容差一个 `.cmlenv/python/`）  
    - 使用该 SDK 的 **`python`**（或回退时的 `python`）执行：  
@@ -111,7 +111,7 @@ rollup 扫描 `modules/python/sdks/`，仅当同时满足：
    - 将两只 `*.whl` **复制到** `dist/pypi/`。  
    - 末尾跑 `scripts/check_wheel_tags.py --ruling dist/pypi/*.whl`：确认两只形态齐全、名字与内容一致（0.2.31 那种错误的标签在
      出 wheel 的这一步就失败，而不是等到索引拒收）。
-   - 删除 `pypi/camel-lang` 下临时 `dist/`、`build/`、`.cmlenv`、`*.egg-info`（这三条路径都在 `.gitignore` 里：
+   - 删除 `packaging/pypi/camel-lang` 下临时 `dist/`、`build/`、`.cmlenv`、`*.egg-info`（这三条路径都在 `.gitignore` 里：
      一次失败的 rollup 会把 `out/` 的副本留在 `src/camel/.cmlenv/`，它不许进历史）。
 
 **整次 rollup 开始前**：会删除 `dist/pypi/` 下所有已有 `*.whl`，保证本次产物集合干净、可预期。
@@ -196,6 +196,47 @@ build job 内用 `setup-python` 的 3.10 做第一格（互操作）。
 - 如需发布到 TestPyPI，在 TestPyPI 单独配置同样的 publisher，并将 environment 改为 `testpypi`；GitHub 中也使用对应 environment。
 
 workflow 的发布 job 已声明 `id-token: write`。Trusted Publisher 的配置必须与工作流身份匹配；只有成功执行 OIDC 上传，才能验证整条发布链路。
+
+### 7.3 macOS arm64（2026-11-24 起）
+
+Mac mini 上 `pip install camel-lang` 找不到版本，原因是 `build-pypi.yml` 从来没有打过 macOS 的 wheel：`ci.yml` 的
+macos-arm64 腿只证明能编译、能跑，与"打得出一个装得上、跑得起来的包"是两件事。补上的是最后那一步打包（5.37 第 6 项），
+随下一版发布，不进 0.2.46。
+
+- 矩阵多一格 `macos-latest` / `macosx_13_0_arm64`（`MACOSX_DEPLOYMENT_TARGET=13.0`）。只发 Apple Silicon，Intel Mac
+  不发布。标签本身是踩过的坑：`scripts/pypi-rollup.js` 原来在这一格用 `sysconfig.get_platform()` 取标签，而
+  `setup-python` 那份 CPython 是 universal2 构建，答的是 `macosx-10.9-universal2`——那是**解释器**怎么编的，不是这个 wheel
+  里有什么。它影响的不只是名字：`delocate-wheel` 不重写标签，它只会**收窄**（`delocating.py` 的 "Limit architecture tags
+  to whatever the wheel already claimed to support"，`arch_version.keys() - wheel_arch_version.keys()` 被删掉），于是
+  第 45349410016 次运行真的产出了 `camel_lang-0.2.47-cp310-abi3-macosx_13_0_arm64.macosx_13_0_x86_64.whl`：pip 会在 Intel
+  Mac 上装它，而包里唯一有 x86_64 切片的文件是 delocate 顺手拷进来的 CPython framework，camel 自己的二进制全是 arm64。
+  现在 macOS 的标签由 `macosPlatformTag()` 从 `process.arch` 与 `MACOSX_DEPLOYMENT_TARGET` 算（架构与部署版本都是产物的
+  事实），`CAMEL_PYPI_PLATFORM_TAG` 仍是覆盖口。
+- 标签是**承诺**，所以 `scripts/check_macos_wheel.py` 再加一条：`lipo -archs` 里每个 Mach-O 都必须带文件名所声明的架构
+  （`universal2` 展开成两个）。上面那次两标签的名字就是这条检查要拦的东西——它会在 arm64-only 的 `camel`、`.cmo`、
+  `_camel.abi3.so` 上直接失败。
+- `delocate-wheel` 把在包外解析得到的动态库拷进 `camel/.dylibs/`、把加载路径改成包内相对路径，并重算 `RECORD`
+  （delocate 的 `rewrite_record`），让 pip 安装时的哈希与真正落地的字节一致。在 Apple 上这一步不只是"搬家"：
+  `CMakeLists.txt` 关掉了 `CMAKE_MACOSX_RPATH`，libcamel 的 install name 因此是构建树里的**绝对路径**，工具、`.cmo`
+  （`cmake/camel_module.cmake` 把它们编成 Mach-O bundle）与 `_camel.abi3.so` 记的都是它——在构建机上有，在用户机器上没有。
+  分界不是"包内有没有同名文件"，而是**记录下来的那个名字在哪里解析得到**：解析在包内（`.cmo` 链兄弟 `.cmo` 的
+  `@loader_path/...` 就是这种情况）就只把引用改成相对路径；解析在包外（libcamel 的构建树路径、Conan 缓存）就把那个文件
+  拷进 `.dylibs/` 再指过去。所以 libcamel 会被拷一份：`camel/.cmlenv/libs/libcamel.dylib` 不是任何引用的名字，真正被
+  加载的是 `.dylibs/` 里那份；包内这份仍会被 delocate 处理（它自己的依赖被改写、被重签），但没有东西引用它，随包发出去
+  是白占体积。`scripts/check_macos_wheel.py` 把它当 NOTE 指名报出来，这一条就是重复的度量。
+- 也就是说，macOS 包目前带两份 libcamel。收成一份有两条路，都还没做：给 libcamel 一个 `@rpath` 的 install name
+  （`CMakeLists.txt` 的 `APPLE` 分支，改的是构建而不只是打包），或者打包后删掉没被引用的那份、再 `wheel pack` 重算
+  `RECORD`。Linux 那边等价的重复是 `auditwheel repair --exclude libcamel.so` 修的：那边 NEEDED 是裸名，排除后由已加载的
+  那份按 SONAME 满足；macOS 的 install name 是绝对路径，照抄排除只会留下一条用户机器上不存在的路径。
+- 改写会让链接器给的 ad-hoc 签名失效，而 arm64 上签名对不上的 Mach-O 会被 loader 直接杀掉。delocate 0.13.0 在
+  `set_install_name` / `set_install_id` 里自己跑 `codesign --force --sign -`（`replace_signature(filename, "-")`），
+  `_delete_rpaths` 删 rpath 时同样补签（`--sanitize-rpaths` 是 CLI 默认，构建树与 Conan 缓存的绝对 `LC_RPATH` 在这里被删掉，
+  而 `strip_build_rpath.py` 只能在 Linux 上改 ELF），所以工作流不再单独签一次；签没签由 `scripts/check_macos_wheel.py`
+  在**产物**上验证（逐个 Mach-O `codesign --verify --strict`），同一支脚本还要求每个 Mach-O 的 `otool -L` 只出现系统库
+  （`/usr/lib`、`/System`）或包内文件，并且带文件名声明的那个架构。
+- arm64 上 JIT 没有代码生成（`cmake/Options.cmake` 在其他处理器上关掉 `ENABLE_FASTVM_JIT`），所以不涉及 JIT 的签名授权。
+- 冒烟与 Windows 同一步（`setup-python` 3.10 的干净 venv）：`camel --version`、跑一个 import 了 stdlib 模块的程序
+  （`std::nvm` 与 `std::jit` 各一次，后者在 arm64 上走字节码解释器）、`import camel`。
 
 ---
 
