@@ -407,9 +407,10 @@ a stale pointer that is never used again; code that no test runs.
   a value kept in an `any` variable across a collection was freed while in use, and what a
   typed value referred to through an `any` element or field was not kept alive either.
   Converting at once (`decode(s) as T`) was not safe either, contrary to what this section once
-  said: `CAST` is a pure node without a control edge, so a back end runs it where its result is
-  used, not right after `decode` (a value converted after `decode` failed
-  on all four back ends under forced collection). Design principles 5.10 settled it:
+  said: a conversion is a pure operator call (`:op/cast`, on an `OPER` node) with no control
+  edge, so a back end runs it where its result is used, not right after `decode` (a value
+  converted after `decode` failed on all four back ends under forced collection). Design
+  principles 5.10 settled it:
   `any` is removed from the language and from the type system, `json.decode` gives a `Json`
   (`lib/json/value.h`: a kind and a payload whose type the kind fixes, traced like a
   function value or a tensor), and a commit refuses a graph with an undetermined type.

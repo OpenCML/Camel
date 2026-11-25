@@ -1329,7 +1329,10 @@ GraphId g = tx.create(role, signature, name, lineage);   // 新图，立即有�
 Program next = tx.commit();                // 冻结被改的图、校验 3.10、产生新快照；失败则抛出，program 不变
 
 GraphDraft                                 // 前端与遍共用
-    addData / addPort / addOper / addFunc / addCall / addFill / addAccs / addCast / addCopy
+    addData / addPort / addOper / addFunc / addCall / addFill / addAccs
+    // 转换与拷贝不是建节点的门：它们是 addOper 加 ':op/cast' / ':op/copy'（今天由
+    // Builder::conversionNodeOf / Builder::copyNodeOf 用 addOperNode 建，addCastNode /
+    // addCopyNode 已不在代码里）
     addBranch(选择子, case 值, 臂) -> (brch, join)     // 成对地建，不出现"先建空的再整体重写"
     addLoop(kind, cond, body, 初值, 捕获) / addGate(值, 等待) / addSync(等待)
     link(kind, from, to) / unlink / replaceInput
