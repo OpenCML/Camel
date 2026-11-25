@@ -145,6 +145,23 @@ function splitTopLevel(text, separator) {
     return parts
 }
 
+// The text between the parentheses of one declaration's parameter list. The slice that follows the
+// name's `(` runs to the body's `{`, so it also holds the closing `)` and the return type; a return
+// type is always written `=> type` (design principles 4.4, the author's ruling of 2026-11-23), and
+// its type may hold a `)` of its own (`done: (q: F) => bool`), so the end of the list is found by
+// counting parentheses rather than by a pattern anchored at the end of the text.
+function parameterListText(text) {
+    let depth = 0
+    for (let index = 0; index < text.length; index++) {
+        if (text[index] === '(') depth++
+        else if (text[index] === ')') {
+            if (depth === 0) return text.slice(0, index)
+            depth--
+        }
+    }
+    return text
+}
+
 function matchingBrace(text, open) {
     let depth = 0
     for (let index = open; index < text.length; index++) {
@@ -172,7 +189,7 @@ function readLibrary() {
         functions.set(match[2], {
             exported: Boolean(match[1]),
             typeParam: match[4] || null,
-            params: parseParams(source.slice(match.index + match[0].length, open).replace(/\)\s*:\s*[\w?[\]]+\s*$/, '')),
+            params: parseParams(parameterListText(source.slice(match.index + match[0].length, open))),
             body
         })
         funcPattern.lastIndex = close
