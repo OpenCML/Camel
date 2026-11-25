@@ -15,7 +15,10 @@
  * "test: register the three cases whose AST the 198 report changed"). The repair was never wrong.
  * What was missing was a reader that says so before the push: the plan's check runs after a build,
  * beside four hundred other cases, and its red names a target rather than the file the lane just
- * edited. This prints one line per file from a lane's own worktree, and it costs one process.
+ * edited. This prints one line per file from a lane's own worktree, in the time the fast layer
+ * allows a case (see "the whole corpus in a few processes" below), so the same command is a `fast`
+ * test of `feat/parse/frontend.plan.toml` (`frontend.ast_record`) and not only a command a lane has
+ * to remember.
  *
  * The plan's check is not replaced and is not narrowed: this is the same reading, taken earlier.
  *
@@ -30,8 +33,17 @@
  * This is not a content-hash check, and it must not become one. A content hash would be red for the
  * one change the record is right to ignore (a message's prose) and would still say nothing about
  * the case the record exists for -- an edit that moves the graph. There is no cheaper approximation
- * of "how does the front end read this file" than the front end, and the front end reads all 4,483
- * files the record covers in one process.
+ * of "how does the front end read this file" than the front end.
+ *
+ * --- the whole corpus in a few processes ------------------------------------
+ * The front end reads all 4,546 files the record covers, and one `hashes` process reads them in
+ * 1.4-2.1 s on the build host under its usual load (measured 2026-11-25, two runs). 2 s is the line
+ * the fast layer draws (`docs/test-plans.md`: a case that costs more goes to `slow`), so the list is
+ * read by `--jobs` processes at once -- four by default -- and the answers are merged: the wall
+ * clock is the slowest chunk's, 0.5 s measured, and the comparison sees one map as before. Nothing
+ * else about the reading depends on the split -- the same command, one list per chunk, one reading
+ * per file -- and `--jobs 1` is the whole corpus in one process for a reading that wants to suspect
+ * the split.
  *
  * --- the scope, counted rather than assumed ---------------------------------
  * The scope is the `.cml` files the tree holds -- the git index, plus the untracked files that are
@@ -158,7 +170,7 @@
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
-import { spawnSync } from 'node:child_process'
+import { spawn, spawnSync } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
 import { takeCamel } from '../test/tools/camel-arg.mjs'
 
@@ -200,8 +212,11 @@ function usage(message) {
     console.error(
         'usage: node scripts/check-ast-hashes.mjs [--base <ref>] [--update [--only <glob>]...]\n' +
             '                                     [--camel <path>] [--timeout MS] [--python <exe>]\n' +
+            '                                     [--jobs N]\n' +
             '  --base <ref>   read only the corpus .cml files this tree changed against <ref>\n' +
             '                 (git diff <ref>...HEAD, the working tree, the untracked files)\n' +
+            '  --jobs N       read the list in N `hashes` processes at once (default 4, or the\n' +
+            '                 machine\'s count when smaller; `--jobs 1` is one process)\n' +
             '  --update       re-record through `check.py snapshot --update --only <glob>`;\n' +
             '                 --only narrows the *files* re-hashed, not the run: check.py hashes\n' +
             '                 all 227 probes every time, so one file re-hashes 228 lines'
@@ -229,13 +244,30 @@ const taken = takeCamel(argv, ROOT, usage)
 const camel = taken.camel
 let timeout = 900000
 let python = 'python3'
+/**
+ * How many `hashes` processes read the corpus at once: four, or the machine's own count when it is
+ * smaller. The corpus is 4,319 files, and one process reads them in 1.4-2.1 s on the build host
+ * under its usual load (2026-11-25) -- over the 2 s the fast layer (`docs/test-plans.md`) allows a
+ * case of its own, and the reason this check could only be read a layer down. `--jobs 1` is the
+ * corpus in one process, and is what a reading that suspects the split should use.
+ */
+let jobs = Math.max(
+    1,
+    Math.min(4, os.availableParallelism ? os.availableParallelism() : os.cpus().length)
+)
 /** The ref this run narrows to, or null for the whole corpus. */
 let base = null
 let update = false
 const only = []
 for (let i = 0; i < taken.rest.length; i++) {
     const arg = taken.rest[i]
-    if (arg === '--timeout' || arg === '--python' || arg === '--base' || arg === '--only') {
+    if (
+        arg === '--timeout' ||
+        arg === '--python' ||
+        arg === '--base' ||
+        arg === '--only' ||
+        arg === '--jobs'
+    ) {
         const value = taken.rest[++i]
         if (value === undefined || value === '') usage(`${arg} needs a value`)
         if (arg === '--timeout') {
@@ -243,7 +275,10 @@ for (let i = 0; i < taken.rest.length; i++) {
             timeout = Number(value)
         } else if (arg === '--base') base = value
         else if (arg === '--only') only.push(value)
-        else python = value
+        else if (arg === '--jobs') {
+            if (!/^\d+$/.test(value) || Number(value) === 0) usage('--jobs needs a positive integer')
+            jobs = Number(value)
+        } else python = value
     } else if (arg === '--update') update = true
     else if (arg === '-h' || arg === '--help') usage()
     else usage(`unknown argument '${arg}'`)
@@ -570,36 +605,87 @@ if (!fs.existsSync(parsecheck)) {
     )
 }
 
-// One list, one process: the tool hashes what the list names and prints one reading per file.
-const listFile = path.join(work, 'files.txt')
+// The list, split across processes: the tool hashes what its list names and prints one reading per
+// file, and the corpus is 4,319 files -- 1.4-2.1 s in one process on the build host under its usual
+// load (2026-11-25), which is over the 2 s the fast layer allows a case to cost and is why this
+// check could only be read a layer down. The split changes only which process reads a file: every
+// chunk is the same `hashes` invocation over a smaller list, the answers are merged below, and a
+// chunk that fails, dies or answers for a file it was not given stops the run exactly as the one
+// process did (`--jobs 1` runs the whole corpus in one process).
 const requested = [...scope, ...probeFiles]
-fs.writeFileSync(listFile, requested.map((each) => forward(each)).join('\n') + '\n')
+const perChunk = Math.ceil(requested.length / Math.min(jobs, requested.length))
+const chunks = []
+for (let index = 0; index < requested.length; index += perChunk) {
+    chunks.push(requested.slice(index, index + perChunk))
+}
+
+/**
+ * One `hashes` process over one list, resolving to what it said.
+ *
+ * `spawn` rather than `spawnSync`, because the chunks read at the same time: the wall clock of this
+ * check is the slowest chunk's and not the sum of theirs. The clock is still the tool's own
+ * (`--timeout`), and a chunk that outlives it resolves with the signal it was killed by, which the
+ * caller refuses. A chunk's output that passes the ceiling is stopped and refused rather than
+ * truncated: half a line parses as a malformed reading, and a malformed reading is a sentence about
+ * this check instead of one about the tree.
+ */
+function readChunk(chunk, index) {
+    const listFile = path.join(work, `files-${index}.txt`)
+    fs.writeFileSync(listFile, chunk.map((each) => forward(each)).join('\n') + '\n')
+    return new Promise((resolve) => {
+        const child = spawn(parsecheck, ['hashes', listFile], { cwd: ROOT, timeout })
+        let stdout = ''
+        let stderr = ''
+        let overflow = false
+        child.stdout.setEncoding('utf8')
+        child.stderr.setEncoding('utf8')
+        child.stdout.on('data', (text) => {
+            stdout += text
+            if (stdout.length <= (64 << 20) || overflow) return
+            overflow = true
+            child.kill()
+        })
+        child.stderr.on('data', (text) => {
+            stderr += text
+        })
+        child.on('error', (error) => resolve({ index, chunk, error }))
+        child.on('close', (status, signal) =>
+            resolve({ index, chunk, status, signal, stdout, stderr, overflow })
+        )
+    })
+}
 
 const started = Date.now()
-const hashesRun = spawnSync(parsecheck, ['hashes', listFile], {
-    cwd: ROOT,
-    encoding: 'utf8',
-    maxBuffer: 64 << 20,
-    timeout
-})
+const runs = await Promise.all(chunks.map((chunk, index) => readChunk(chunk, index)))
 const seconds = ((Date.now() - started) / 1000).toFixed(1)
-if (hashesRun.error) {
-    const timedOut = hashesRun.error.code === 'ETIMEDOUT' || hashesRun.signal === 'SIGTERM'
-    refuse(
-        timedOut
-            ? `${shown(parsecheck)} hashes did not answer within ${timeout} ms`
-            : `${shown(parsecheck)} hashes could not start: ${hashesRun.error.message}`
-    )
-}
-if (hashesRun.signal) {
-    refuse(`${shown(parsecheck)} hashes was killed by ${hashesRun.signal} after ${seconds} s`)
-}
-if (hashesRun.status !== 0) {
-    const detail = `${hashesRun.stdout || ''}${hashesRun.stderr || ''}`.trim()
-    refuse([
-        `${shown(parsecheck)} hashes exited ${hashesRun.status} after ${seconds} s`,
-        ...detail.split(/\r?\n/).slice(0, 10).map((line) => `  ${line}`)
-    ])
+for (const run of runs) {
+    const where = chunks.length === 1 ? '' : ` (chunk ${run.index + 1} of ${chunks.length})`
+    if (run.error) {
+        refuse(
+            `${shown(parsecheck)} hashes could not start${where}: ${run.error.message}`
+        )
+    }
+    if (run.overflow) {
+        refuse(
+            `${shown(parsecheck)} hashes printed more than 64 MiB${where} after ${seconds} s; ` +
+                'a reading that had to be cut is not a reading'
+        )
+    }
+    if (run.signal) {
+        const timedOut = run.signal === 'SIGTERM'
+        refuse(
+            timedOut
+                ? `${shown(parsecheck)} hashes did not answer within ${timeout} ms${where}`
+                : `${shown(parsecheck)} hashes was killed by ${run.signal} after ${seconds} s${where}`
+        )
+    }
+    if (run.status !== 0) {
+        const detail = `${run.stdout || ''}${run.stderr || ''}`.trim()
+        refuse([
+            `${shown(parsecheck)} hashes exited ${run.status} after ${seconds} s${where}`,
+            ...detail.split(/\r?\n/).slice(0, 10).map((line) => `  ${line}`)
+        ])
+    }
 }
 
 // The answer, keyed the way the record spells a path: a probe by `probes/<name>`, everything else
@@ -607,23 +693,25 @@ if (hashesRun.status !== 0) {
 // dropped: the list and its answers have to describe one set.
 const scopeSet = new Set(scope)
 const now = new Map()
-for (const line of (hashesRun.stdout || '').split('\n')) {
-    if (line === '') continue
-    const match = READING.exec(line)
-    if (match === null) {
-        refuse(
-            `${shown(parsecheck)} hashes printed a line that is not a reading: ` +
-                JSON.stringify(line)
-        )
+for (const run of runs) {
+    for (const line of (run.stdout || '').split('\n')) {
+        if (line === '') continue
+        const match = READING.exec(line)
+        if (match === null) {
+            refuse(
+                `${shown(parsecheck)} hashes printed a line that is not a reading: ` +
+                    JSON.stringify(line)
+            )
+        }
+        const key = probeNames.get(path.resolve(match[3])) || match[3]
+        if (!scopeSet.has(key) && !key.startsWith(PROBE_PREFIX)) {
+            refuse(
+                `hashes answered for ${match[3]}, which this run did not ask about; ` +
+                    'the list and its answers disagree'
+            )
+        }
+        now.set(key, { hash: match[1], verdict: match[2] })
     }
-    const key = probeNames.get(path.resolve(match[3])) || match[3]
-    if (!scopeSet.has(key) && !key.startsWith(PROBE_PREFIX)) {
-        refuse(
-            `hashes answered for ${match[3]}, which this run did not ask about; ` +
-                'the list and its answers disagree'
-        )
-    }
-    now.set(key, { hash: match[1], verdict: match[2] })
 }
 const unanswered = [...probeFiles.map((file) => probeNames.get(file)), ...scope].filter(
     (key) => !now.has(key)
@@ -679,13 +767,13 @@ console.log(`[${NAME}] install ${shown(parsecheck)}, built ${buildTime}`)
 if (changed === null) {
     console.log(
         `[${NAME}] scope ${scope.length} .cml file(s) of the tree + ${probeFiles.length} probe(s) ` +
-            `from ${PROBES}, read in ${seconds} s`
+            `from ${PROBES}, read in ${seconds} s (${chunks.length} process(es))`
     )
 } else {
     console.log(
         `[${NAME}] scope ${scope.length} of the ${changed.length} .cml file(s) this tree changed ` +
             `against ${base}, and no probe (a probe moves with the parser, not with a .cml); ` +
-            `read in ${seconds} s`
+            `read in ${seconds} s (${chunks.length} process(es))`
     )
     console.log(
         `[${NAME}] not read: ${unread} of the ${recorded.size} recorded line(s) -- a diff run ` +
