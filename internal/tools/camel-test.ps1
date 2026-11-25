@@ -57,6 +57,7 @@ if (-not (Test-Path (Join-Path $Path 'package.json'))) {
 . (Join-Path $PSScriptRoot 'camel-gate-config.ps1')
 # The run registry's writer, shared with the host runner and the local build helper.
 . (Join-Path $PSScriptRoot 'run-registry.ps1')
+. (Join-Path $PSScriptRoot 'camel-gate-state.ps1')
 $cfg = Get-CamelGateConfig -LocalConfig $LocalConfig -ScriptRoot $PSScriptRoot -Override @{ stateDir = $StateDir }
 if (-not $cfg.stateDir) { Stop-CamelGateConfig 'camel-test' $cfg 'stateDir' }
 $statePath = Join-Path $cfg.stateDir 'test-state.json'
@@ -66,6 +67,8 @@ $mutex = New-Object System.Threading.Mutex($false, 'Global\CamelTestSerialized')
 $stateMutex = New-Object System.Threading.Mutex($false, 'Global\CamelTestState')
 $acquired = $false
 $startedAt = $null
+# Advisory, like the state itself: counted, reported once, and never the run's exit code.
+$script:stateUnpublished = 0
 
 # --- the run registry -------------------------------------------------------
 # Same row shape as the host runner (`camel-remote.ps1`) and the local build helper: this run must be
@@ -166,9 +169,14 @@ function Edit-State([scriptblock]$change) {
         $change.Invoke($state)
         $state.updatedAt = (Get-Date).ToString('o')
         $json = $state | ConvertTo-Json -Depth 6
-        $tmp = "$statePath.$PID.tmp"
-        Set-Content -Path $tmp -Value $json -Encoding utf8
-        Move-Item -Force -Path $tmp -Destination $statePath
+        # Same rule as `camel-build.ps1`: a destination a reader holds open is a dropped update, not
+        # a failed test run. `Move-Item -Force` ended runs that had measured what they were asked to.
+        if (-not (Publish-CamelGateState -Path $statePath -Json $json)) {
+            $script:stateUnpublished++
+            if ($script:stateUnpublished -eq 1) {
+                Write-Host "[camel-test] WARNING: test state not published (a reader kept $statePath busy); the state files are advisory and this run's result stands"
+            }
+        }
     } finally {
         $stateMutex.ReleaseMutex()
     }
@@ -306,6 +314,9 @@ try {
     $testRow.finishedAt = (Get-Date).ToString('o')
     $testRow.exit = $code
     Publish-LocalTest $(if ($code -eq 0) { 'done' } else { 'fail' }) "[camel-test] done, exit $code"
+    if ($script:stateUnpublished -gt 0) {
+        Write-Host "[camel-test] $($script:stateUnpublished) state update(s) were not published (advisory; the exit code above is the plan's)"
+    }
     exit $code
 } finally {
     if ($acquired) { $mutex.ReleaseMutex() }

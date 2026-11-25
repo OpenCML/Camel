@@ -18,6 +18,8 @@ work that is not a full gate run and hold a machine-wide lock so two of them can
 | `camel-test.ps1` | Local helper: one plan run at a time under a lock of its own, publishing to the panel's test state file. |
 | `watch-fsh-dev.ps1` | Watcher for a branch moving on `origin`; not a gate entry and unrelated to the two locks. |
 | `camel-gate-config.ps1` | The loader the four scripts above use for their machine-local settings. |
+| `camel-gate-state.ps1` | The one write `camel-build.ps1` and `camel-test.ps1` make to `build-state.json` / `test-state.json`: the JSON goes to a temp file beside the destination and is moved over it in one rename, retried briefly when a reader holds the file, and a publish that still cannot complete is `$false` rather than an exception. The state files are advisory, so that failure is a warning and never the run's exit code. |
+| `camel-gate-state.test.ps1` | Its test, with no build and no plan: `pwsh -NoProfile -File internal/tools/camel-gate-state.test.ps1` prints `13 checks, 0 failed` and exits 1 on a failure. It publishes over a missing and an existing file, holds the destination open to require "not published, not thrown" plus a complete old document and no temp file, and runs a reader beside the publisher for two seconds to require that no read ever sees half a document. |
 | `camel-remote-args.ps1` | The argument rules `camel-remote.ps1` applies before it pushes anything: comma-split lists (`-Plan`, `-AstOnly`, `-AstDrop`), the `--only`/`--drop` words built from them, and the refusal for a glob that names no `.cml` of this tree. Separated out because those rules are the part that used to fail silently on the host. |
 | `camel-remote-args.test.ps1` | Their test, run without a host: `pwsh -NoProfile -File internal/tools/camel-remote-args.test.ps1` prints `N checks, M failed` and exits 1 on a failure. |
 | `merge-lane.ps1` | The merge position for ONE lane: merge, header check, clang syntax, row readings against the tree the merge lands on, then the push. |
@@ -388,7 +390,12 @@ baseline (the remote was unreachable when it started) is exit 2. `-Repo` or the 
   only narrow it: `-Jobs 32` in a build slot builds 8-wide, `-Jobs 4` builds 4-wide. So a `jobs`
   that disagrees with `jobsRequested` is the mechanism working. A convention ("load is high, lower
   `-Jobs` by hand") is not a mechanism: it is forgotten exactly when it matters.
-- all three are advisory: a locked or unwritable file never fails a build or a plan.
+- all three are advisory: a locked or unwritable file never fails a build or a plan. The write is
+  `camel-gate-state.ps1#Publish-CamelGateState`: one atomic rename over the old document, a short
+  retry while a reader has the file open, and then a warning and a dropped update — never an
+  exception, and never the run's exit code. `camel-build.ps1` and `camel-test.ps1` used to write
+  through `Move-Item -Force`, which on 2026-11-25 threw ERROR_ALREADY_EXISTS from a progress line
+  after `cmake --build` had finished and reported a completed build as exit 1.
 - a run's line carries the token pool as the run read it on the host: `tokens` (how many tokens that
   run held), `tokensPeak` (the highest share seen while it ran — a sampled peak, resolution one
   heartbeat), and `pool` (`{ size, inUse }`, what the pool itself said at that reading). The host
