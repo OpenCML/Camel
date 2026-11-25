@@ -23,7 +23,7 @@ normalizers = ["normalize_newlines"]
 timeout_ms = 20000
 
 # `camel inspect --facts` is the fact framework's viewer switch (`D-1123-29` item 2, answered in
-# internal/questions/2026-11-23-who-owns-a-store.cn.md: "--facts 接线, as the tool's view, not a
+# internal/reviews/2026-11-23-who-owns-a-store.cn.md: "--facts 接线, as the tool's view, not a
 # pass"). Two stores exist and one command has to say which answered: the framework's
 # (`camel/facts/facts.h`) and the older one (`camel/runtime/facts.h`), whose seven kinds are the
 # baseline the remaining moves will be measured against. Every FACT line names its `library`.

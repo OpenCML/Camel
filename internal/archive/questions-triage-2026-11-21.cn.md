@@ -99,7 +99,7 @@
 | [`2026-11-19-a-write-then-read-through-a-call-has-no-printable-subject`](../reviews/2026-11-19-a-write-then-read-through-a-call-has-no-printable-subject.cn.md) | 那个读法已无题材：摘掉 `effects/callback_write_ignored` 并改期望行，还是另造题材。 |
 | [`2026-11-19-packing-the-entry-graph-four-steps-and-two-failed-attempts`](../reviews/2026-11-19-packing-the-entry-graph-four-steps-and-two-failed-attempts.cn.md) | 方案已定死，等一次干净落笔（接手页，不是问题页）。 |
 | [`2026-11-19-the-call-site-refresh-in-the-tiles-pass`](../reviews/2026-11-19-the-call-site-refresh-in-the-tiles-pass.cn.md) | 交下一手：`region_outline.cpp` 已划给 order 族车道。 |
-| [`2026-11-19-the-card-quiets-signalling-nans`](../questions/2026-11-19-the-card-quiets-signalling-nans.cn.md) | 四条判据要不要容忍设备 quiet 掉的 sNaN 负载位（用例断言侧）。 |
+| [`2026-11-19-the-card-quiets-signalling-nans`](../reviews/2026-11-19-the-card-quiets-signalling-nans.cn.md) | 四条判据要不要容忍设备 quiet 掉的 sNaN 负载位（用例断言侧）。 |
 | [`2026-11-19-the-three-steps-target-code-exists-only-on-the-parked-branch`](../reviews/2026-11-19-the-three-steps-target-code-exists-only-on-the-parked-branch.cn.md) | 先修 `lane-ssa` 的 104 条红再执行三步，还是 develop 上只做第三步。 |
 | [`2026-11-19-the-writes-a-clause-refresh-adds-have-no-order`](../reviews/2026-11-19-the-writes-a-clause-refresh-adds-have-no-order.cn.md) | 刷新声明出的写由谁排序，落点在 effect order（`region_outline.cpp`）。 |
 | [`2026-11-20-what-a-lifted-graph-s-second-segment-means-in-the-next-cut`](../reviews/2026-11-20-what-a-lifted-graph-s-second-segment-means-in-the-next-cut.cn.md) | 页内逐字「这一句是给决策者的」：提升图第 2 段在下一刀 `split` 里算切向还是值。 |

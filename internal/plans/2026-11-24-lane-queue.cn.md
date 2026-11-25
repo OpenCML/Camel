@@ -9,7 +9,7 @@
 |---|---|---|---|
 | 1 | `lane/view-gaps` | `Camel-wt\viewgaps` | **A→B→C 按序，D 接在 C 后进同一车道**（作者 `D-1123-137`）：A（`attrsOf` + `RegionRecord` tag set + 节点权限）、B（=B-2，载荷字节/原始 kind/帧布局不交给视图）、C（控制与顺序边、反向 `uses()`、按边种类全表）。**D = 视图 `typeOf` 对「类型在静态区」的节点答 nullptr，那是答错不是缺答**，修在 `typeOf` 里，**先量这种节点有多少**。**G 并入 C**；**F 随 3b**；**H 等 `kinds-to-oper` 清零**。判据用脚本 `node scripts/count-graph-readers.mjs src/stdlib/tiles`（不再手抄 `git grep`） |
 | 2 | `lane/kinds-to-oper` | `Camel-wt\kindsoper` | `node scripts/count-graph-readers.mjs src` 的两个 kind 数到 0，外加枚举删四项、视图不再两步读法。**现 A 125 / B 96**（起点 180/129）；CAST/COPY 已清零，余下 FILL/ACCS 删了会改行为（稀疏 slots、`mayFault=false`），**属语言侧决定，须停下报** |
-| 3 | `lane/3a-onnx-tiles` | 已合 `9f9c316d3` | `node scripts/count-graph-readers.mjs src/stdlib/onnx src/stdlib/tiles` → **84→70 / 74→71**；缺口页 `internal/questions/2026-11-24-what-the-graph-view-does-not-answer.cn.md` |
+| 3 | `lane/3a-onnx-tiles` | 已合 `9f9c316d3` | `node scripts/count-graph-readers.mjs src/stdlib/onnx src/stdlib/tiles` → **84→70 / 74→71**；缺口页 `internal/reviews/2026-11-24-what-the-graph-view-does-not-answer.cn.md` |
 | 4 | `lane/3a-transforms-autodiff` | 已交回 `df5a1cc3c1`，未合 | `transforms` **118→112**、`autodiff` **40→40**（40 处全是图身份，**不是缺口**，已单列）；缺口页已成；**未合原因：`internal/questions/README.md` 生成表冲突** |
 | 5 | `lane/names-layer` | 已交回 `16532a2f6c`，未合 | 层次序收进 `src/compile/src/name_layers.h` 一张表；`ns.p36_own_value_before_prelude`、`ns.p37_own_type_before_prelude` 各绿；类型名那一半等 `op-overload-merge` 落地再接 |
 | 6 | `lane/op-overload-merge` | 既有树 `Camel-wt\op61` | **第五次读数：`fixed=309 new=0 changed=103 added=363 removed=3`**。改名已拆出（`e8447de7d6`，`--name-status` 0 个 `R`）。**卡在 `changed=103`：每条要么把期望带上，要么说明为什么换的是失败方式而不是红绿** |

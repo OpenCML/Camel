@@ -29,7 +29,7 @@
 # quiet a signalling NaN, so those four clauses compare NaN as NaN, the way the rest of those two
 # files already compares a host run against a device run; both cases are green and their entries
 # here are gone. The page that asked:
-# `internal/questions/2026-11-19-the-card-quiets-signalling-nans.cn.md`.
+# `internal/reviews/2026-11-19-the-card-quiets-signalling-nans.cn.md`.
 #
 # So THIRTEEN OF THESE NAMES ARE A FIX OWED, NOT A PERMISSION -- they are recorded here so that the
 # gate can run the layer without blocking merges, which is a different thing from saying the readings
