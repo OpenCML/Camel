@@ -340,6 +340,10 @@ class Module : public std::enable_shared_from_this<Module> {
     /// The names imported by name from more than one module, each with its imports in the
     /// order they were written.
     std::vector<std::pair<Reference, std::vector<NamedImport>>> namesImportedMoreThanOnce() const;
+    /// The modules a name imported by name (layer 3) comes from, one entry per module: a name
+    /// binds to a module's export, and which module that is tells a caller whether the layer it
+    /// answered is the built-in one (`prelude`) or a module of the program's own.
+    std::vector<std::shared_ptr<Module>> namedImportSourcesOf(const Reference &ref) const;
 
     bool exportDefaultImportRef(const Reference &ref);
     bool exportType(const Reference &ref, Type *type);

@@ -1,0 +1,15 @@
+/**
+ * The layer below is not a fallback for a name this module declares (design principles 10.2): the
+ * name `len` is this module's, and it takes a `string`, so `len(int[])` finds no overload and says
+ * so. While the layers were merged into one set, the built-in `len` of the layer below answered
+ * this call and the program printed the array's length.
+ */
+
+func len(s: string) => int {
+    return 99
+}
+
+func main() => int sync {
+    println(len([1, 2, 3]))
+    return 0
+}

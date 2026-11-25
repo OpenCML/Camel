@@ -93,6 +93,12 @@ template <typename Result> struct RowAnswer {
     /// say -- and the caller reports that rather than asking the rows below, which the rule puts
     /// under this one.
     std::optional<Result> found;
+    /// Which row answered: set by `firstRowHolding`, meaningless while `holds` is false. A caller
+    /// that has to know what KIND of layer answered -- the built-in layer's name is one set made
+    /// of two halves, and a name of any other layer's is that layer's alone (design principles
+    /// 10.2) -- reads it here rather than asking the rows again in its own order, which would be
+    /// the rule written twice.
+    NameRow row = NameRow::Local;
 
     /// Not this row's: the next row is asked.
     static RowAnswer absent() { return {}; }
@@ -112,6 +118,7 @@ RowAnswer<Result> firstRowHolding(std::span<const NameRowMeaning> rows, Probe &&
     for (const NameRowMeaning &row : rows) {
         RowAnswer<Result> answer = probe(row.row);
         if (answer.holds) {
+            answer.row = row.row;
             return answer;
         }
     }
