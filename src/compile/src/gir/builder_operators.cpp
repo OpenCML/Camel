@@ -57,14 +57,14 @@ namespace camel::compile::gir {
 // ---- Operator overloads of the program (design principles 10.2) --------------------------
 //
 // Where this meets the resolution of names: an operator is the one kind of name that does not
-// take the first layer having it (visitDRefNode, "local > this module > imported > using >
-// built-in"); operatorOverloadsOf gathers every layer instead. The layers it reads are the
-// graph scopes of this module (local functions and the module's own), the module's generic
-// operator templates, ProgramExports::importedOperatorOverloads (every import of a module
-// brings its operator overloads, as for a C++ module's operators), and the prelude's own
-// declarations of the name (`preludeOperatorOverloadsOf`: the ambient layer, which no import
-// names and which is not a module of this program). Nothing else of the name lookup is
-// involved, so the lookup can change around it as long as those four stay reachable.
+// take the first row having it (`name_layers.h` is the one list of those rows, and
+// `visitDRefNode` walks it); operatorOverloadsOf gathers every row instead. The rows it reads are
+// the graph scopes of this module (local functions and the module's own), the module's generic
+// operator templates, ProgramExports::importedOperatorOverloads (every import of a module brings
+// its operator overloads, as for a C++ module's operators), and the prelude's own declarations of
+// the name (`preludeOperatorOverloadsOf`: the ambient layer, which no import names and which is
+// not a module of this program). Nothing else of the name lookup is involved, so the lookup can
+// change around it as long as those four rows stay reachable.
 
 Builder::OperatorOverloads Builder::operatorOverloadsOf(const std::string &group) {
     OperatorOverloads set;

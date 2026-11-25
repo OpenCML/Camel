@@ -1047,84 +1047,125 @@ auto Builder::whenPredicateNamed(
         }
         return std::static_pointer_cast<GenericTemplate>(EntityAccess::genericTemplate(ent));
     };
-    // 1. The declaration's own module, from its innermost namespace out, its own name allowed
-    // as a prefix (design principles 10.2, layers 1 and 2).
-    const std::string own = moduleLevelName(written);
-    if (const auto tmpl = templateScope_->get(own); tmpl.has_value()) {
-        return tmpl.value();
-    }
-    // The module declares the name itself, as something that is not a generic function: the
-    // name is resolved, and the ordinary report says why a condition cannot call it.
-    if (const ModuleUnit *unit = currentModuleUnit();
-        unit != nullptr && declaredAtTopLevel(*unit, own)) {
-        return std::nullopt;
-    }
-    // 2. What its imports bring by name, selectively (`import { p as q }`) or through a module
-    // prefix (`import m`, `import m as x`; `m::p`, `x::p`).
-    if (!isOperatorName(written) && module_->hasImportedRef(written, ImportLayer::Named)) {
-        if (whenPredicateAmbiguous(written, problem)) {
-            return std::nullopt;
-        }
-        const auto entity = importedEntity(written, ImportLayer::Named);
-        if (!entity.has_value()) {
-            problem.outcome = WhenOutcome::NotCompileTime;
-            problem.subject = written;
-            problem.detail  = "the import brings no name of that spelling";
-            return std::nullopt;
-        }
-        if (const generic_template_ptr_t tmpl = templateOf(*entity); tmpl != nullptr) {
-            return generic_ref_t(tmpl);
-        }
-        problem.outcome = WhenOutcome::NotCompileTime;
-        problem.subject = written;
-        if (const auto source = module_->importedSource(written, ImportLayer::Named)) {
-            problem.detail = std::format(
-                "module '{}' brings it, and it is not a generic function answered at compile "
-                "time",
-                source->first->name());
-        } else {
-            problem.detail = "it is not a generic function answered at compile time";
-        }
-        return std::nullopt;
-    }
-    // 3. What a `using namespace` in force where the declaration is written brings.
-    if (const auto match = throughUsing(written, at); match.has_value()) {
-        if (!match->ownName.empty()) {
-            if (const auto tmpl = templateScope_->get(match->ownName); tmpl.has_value()) {
-                return tmpl.value();
+    // The rows of the one order in `name_layers.h`, asked in that table's order: a name a `when`
+    // condition calls is read by the rule of precedence for names, and this file is not a second
+    // list of it. A row that has the name stops the walk, and the row itself says why it cannot
+    // answer with a generic function answered at compile time (out into `problem`).
+    const auto answer = firstRowHolding<generic_ref_t>(
+        rowsFrom(NameRow::Module),
+        [&](NameRow row) -> RowAnswer<generic_ref_t> {
+            switch (row) {
+            case NameRow::Local:
+                // The condition is written where its declaration is, and the local names there are
+                // not compile-time names: the module's own names are the first row read.
+                return RowAnswer<generic_ref_t>::absent();
+            case NameRow::Module: {
+                // The declaration's own module, from its innermost namespace out, its own name
+                // allowed as a prefix.
+                const std::string own = moduleLevelName(written);
+                if (const auto tmpl = templateScope_->get(own); tmpl.has_value()) {
+                    return RowAnswer<generic_ref_t>::has(tmpl.value());
+                }
+                // The module declares the name itself, as something that is not a generic function:
+                // the name is resolved, and the ordinary report says why a condition cannot call
+                // it.
+                if (const ModuleUnit *unit = currentModuleUnit();
+                    unit != nullptr && declaredAtTopLevel(*unit, own)) {
+                    return RowAnswer<generic_ref_t>::nothing();
+                }
+                return RowAnswer<generic_ref_t>::absent();
             }
-            problem.outcome = WhenOutcome::NotCompileTime;
-            problem.subject = written;
-            problem.detail  = "it is an ordinary function of this module";
-            return std::nullopt;
-        }
-        if (!match->entity.has_value()) {
-            return std::nullopt;
-        }
-        if (const generic_template_ptr_t tmpl = templateOf(*match->entity); tmpl != nullptr) {
-            return generic_ref_t(tmpl);
-        }
-        problem.outcome = WhenOutcome::NotCompileTime;
-        problem.subject = written;
-        problem.detail  = "the imported name is not a generic function answered at compile time";
-        return std::nullopt;
-    }
-    // 4. The prelude: the names the built-in module brings unasked (design principles 10.2,
-    // layer 5).
-    if (module_->hasImportedRef(written, ImportLayer::Ambient)) {
-        const auto entity = importedEntity(written, ImportLayer::Ambient);
-        if (entity.has_value()) {
-            if (const generic_template_ptr_t tmpl = templateOf(*entity); tmpl != nullptr) {
-                return generic_ref_t(tmpl);
+            case NameRow::ImportedByName: {
+                // What its imports bring by name, selectively (`import { p as q }`) or through a
+                // module prefix (`import m`, `import m as x`; `m::p`, `x::p`).
+                if (isOperatorName(written) ||
+                    !module_->hasImportedRef(written, ImportLayer::Named)) {
+                    return RowAnswer<generic_ref_t>::absent();
+                }
+                if (whenPredicateAmbiguous(written, problem)) {
+                    return RowAnswer<generic_ref_t>::nothing();
+                }
+                const auto entity = importedEntity(written, ImportLayer::Named);
+                if (!entity.has_value()) {
+                    problem.outcome = WhenOutcome::NotCompileTime;
+                    problem.subject = written;
+                    problem.detail  = "the import brings no name of that spelling";
+                    return RowAnswer<generic_ref_t>::nothing();
+                }
+                if (const generic_template_ptr_t tmpl = templateOf(*entity); tmpl != nullptr) {
+                    return RowAnswer<generic_ref_t>::has(generic_ref_t(tmpl));
+                }
+                problem.outcome = WhenOutcome::NotCompileTime;
+                problem.subject = written;
+                if (const auto source = module_->importedSource(written, ImportLayer::Named)) {
+                    problem.detail = std::format(
+                        "module '{}' brings it, and it is not a generic function answered at "
+                        "compile time",
+                        source->first->name());
+                } else {
+                    problem.detail = "it is not a generic function answered at compile time";
+                }
+                return RowAnswer<generic_ref_t>::nothing();
             }
-            problem.outcome = WhenOutcome::NotCompileTime;
-            problem.subject = written;
-            problem.detail  = "the prelude brings it, and it is not a generic function answered "
-                              "at compile time";
-            return std::nullopt;
-        }
-    }
-    return std::nullopt;
+            case NameRow::UsingNamespace: {
+                // What a `using namespace` in force where the declaration is written brings.
+                const auto match = throughUsing(written, at);
+                if (!match.has_value()) {
+                    return RowAnswer<generic_ref_t>::absent();
+                }
+                if (!match->ownName.empty()) {
+                    if (const auto tmpl = templateScope_->get(match->ownName); tmpl.has_value()) {
+                        return RowAnswer<generic_ref_t>::has(tmpl.value());
+                    }
+                    problem.outcome = WhenOutcome::NotCompileTime;
+                    problem.subject = written;
+                    problem.detail  = "it is an ordinary function of this module";
+                    return RowAnswer<generic_ref_t>::nothing();
+                }
+                if (!match->entity.has_value()) {
+                    return RowAnswer<generic_ref_t>::nothing();
+                }
+                if (const generic_template_ptr_t tmpl = templateOf(*match->entity);
+                    tmpl != nullptr) {
+                    return RowAnswer<generic_ref_t>::has(generic_ref_t(tmpl));
+                }
+                problem.outcome = WhenOutcome::NotCompileTime;
+                problem.subject = written;
+                problem.detail =
+                    "the imported name is not a generic function answered at compile time";
+                return RowAnswer<generic_ref_t>::nothing();
+            }
+            case NameRow::EveryImport:
+                // The read of every import binding at once (an operator's overloads, a name an
+                // imported prefix reaches): not what a condition's name is read by.
+                return RowAnswer<generic_ref_t>::absent();
+            case NameRow::AmbientImport: {
+                // The names the built-in module brings unasked: this is where the prelude's names
+                // reach a condition, as they always have.
+                if (!module_->hasImportedRef(written, ImportLayer::Ambient)) {
+                    return RowAnswer<generic_ref_t>::absent();
+                }
+                const auto entity = importedEntity(written, ImportLayer::Ambient);
+                if (!entity.has_value()) {
+                    return RowAnswer<generic_ref_t>::nothing();
+                }
+                if (const generic_template_ptr_t tmpl = templateOf(*entity); tmpl != nullptr) {
+                    return RowAnswer<generic_ref_t>::has(generic_ref_t(tmpl));
+                }
+                problem.outcome = WhenOutcome::NotCompileTime;
+                problem.subject = written;
+                problem.detail = "the prelude brings it, and it is not a generic function answered "
+                                 "at compile time";
+                return RowAnswer<generic_ref_t>::nothing();
+            }
+            case NameRow::Prelude:
+                // The prelude's own export table: a condition reaches those names through the
+                // ambient bindings above, which is the row this chain has always used.
+                return RowAnswer<generic_ref_t>::absent();
+            }
+            return RowAnswer<generic_ref_t>::absent();
+        });
+    return answer.found;
 }
 
 std::string Builder::whenPredicateElsewhere(const std::string &written) const {

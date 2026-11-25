@@ -65,7 +65,7 @@ ImplBodyTestPass::apply(const camel::runtime::Program *program, std::ostream &os
                 "IMPL node {} {} {} {} in={}\n",
                 graph->name(),
                 it.ref(),
-                camel::passes::gir::recordType(node),
+                camel::passes::gir::recordType(*graph, it.ref()),
                 camel::passes::gir::recordLabel(*program, graph, it.ref(), node),
                 inputList(*graph, it.ref()));
         }

@@ -6,6 +6,7 @@
 #include "camel/passes/trans/gir_metadata.h"
 #include "camel/core/rtdata/base.h"
 #include "camel/core/rtdata/func.h"
+#include "camel/runtime/oper_shape.h"
 #include "camel/runtime/resources.h"
 #include "graph/graph_view.h"
 #include <format>
@@ -117,10 +118,6 @@ string recordLabel(
     }
     case camel::runtime::GCNodeKind::Port:
         return portLabel(graph, nodeRef, record);
-    case camel::runtime::GCNodeKind::Cast:
-        return "CAST";
-    case camel::runtime::GCNodeKind::Copy:
-        return "COPY";
     case camel::runtime::GCNodeKind::Fill:
         return record.dataType() ? record.dataType()->toString() : "FILL";
     case camel::runtime::GCNodeKind::Accs: {
@@ -144,11 +141,22 @@ string recordLabel(
         auto *callee = program.calleeOf(*graph, nodeRef);
         return callee ? callee->name() : "FUNC";
     }
-    case camel::runtime::GCNodeKind::Oper:
+    case camel::runtime::GCNodeKind::Oper: {
         ASSERT(
             graph->nodePayloadBytes(nodeRef).size() >= sizeof(camel::runtime::GCOperBody),
             "GraphViz OPER payload is smaller than its fixed header.");
-        return std::string(graph->nodeBodyAs<camel::runtime::GCOperBody>(nodeRef)->uri());
+        // A conversion and a copy are operators now (`:op/cast`, `:op/copy`), and the picture the
+        // four kinds drew is the picture these two keep: the shape says which operation the call
+        // is, and the label the kind used to carry is the one it keeps.
+        switch (camel::runtime::shapeOfOperation(*graph, nodeRef)) {
+        case camel::ops::OperShape::Conversion:
+            return "CAST";
+        case camel::ops::OperShape::Clone:
+            return "COPY";
+        default:
+            return std::string(graph->nodeBodyAs<camel::runtime::GCOperBody>(nodeRef)->uri());
+        }
+    }
     case camel::runtime::GCNodeKind::Gate:
         return "GATE";
     case camel::runtime::GCNodeKind::Loop: {
@@ -161,16 +169,16 @@ string recordLabel(
     }
 }
 
-string recordType(const camel::runtime::GCNode &record) {
-    switch (record.kind) {
+string recordType(camel::runtime::GCGraph &graph, camel::runtime::gc_node_ref_t nodeRef) {
+    const camel::runtime::GCNode *node = graph.node(nodeRef);
+    if (node == nullptr) {
+        return "NODE";
+    }
+    switch (node->kind) {
     case camel::runtime::GCNodeKind::Data:
         return "DATA";
     case camel::runtime::GCNodeKind::Port:
         return "PORT";
-    case camel::runtime::GCNodeKind::Cast:
-        return "CAST";
-    case camel::runtime::GCNodeKind::Copy:
-        return "COPY";
     case camel::runtime::GCNodeKind::Fill:
         return "FILL";
     case camel::runtime::GCNodeKind::Accs:
@@ -184,7 +192,16 @@ string recordType(const camel::runtime::GCNode &record) {
     case camel::runtime::GCNodeKind::Func:
         return "FUNC";
     case camel::runtime::GCNodeKind::Oper:
-        return "OPER";
+        // The type column the two deleted kinds used to write, kept for the calls that replaced
+        // them: the shape says which of the two operations the node performs.
+        switch (camel::runtime::shapeOfOperation(graph, nodeRef)) {
+        case camel::ops::OperShape::Conversion:
+            return "CAST";
+        case camel::ops::OperShape::Clone:
+            return "COPY";
+        default:
+            return "OPER";
+        }
     case camel::runtime::GCNodeKind::Gate:
         return "GATE";
     case camel::runtime::GCNodeKind::Loop:

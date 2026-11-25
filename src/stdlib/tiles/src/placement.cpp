@@ -11,6 +11,7 @@
 
 #include <nlohmann/json.hpp>
 
+#include <optional>
 #include <sstream>
 #include <string_view>
 #include <unordered_map>
@@ -20,33 +21,32 @@ namespace camel::tiles {
 namespace {
 
 namespace attr = camel::core::attr;
+using camel::graph::GraphView;
+using camel::graph::NodeRef;
 
 /// The graph of the function constant a node holds, or nullptr when the node is not one or holds
 /// no function: a DATA node whose static slot is a `Function` value (a named function, or the
-/// derived graph an expansion pass leaves at a grad call site).
-const runtime::GCGraph *functionGraphOf(const runtime::GCGraph &graph, runtime::gc_node_ref_t id) {
-    const runtime::GCNode *node = graph.node(id);
-    if (node == nullptr || node->kind != runtime::GCNodeKind::Data || node->dataIndex >= 0) {
+/// derived graph an expansion pass leaves at a grad call site). The slot is the one `constantOf`
+/// answers -- a DATA node's static index, decoded through the node's type -- so the read needs no
+/// payload byte (`graph_view.h`, the payload boundary).
+const runtime::GCGraph *functionGraphOf(const GraphView &view, NodeRef id) {
+    const std::optional<::slot_t> slot = view.constantOf(id);
+    if (!slot.has_value() || *slot == NullSlot) {
         return nullptr;
     }
-    const auto slots  = graph.staticSlots();
-    const size_t slot = static_cast<size_t>(-node->dataIndex);
-    if (slot >= slots.size() || slots[slot] == NullSlot) {
-        return nullptr;
-    }
-    auto *fn = camel::core::rtdata::fromSlot<::Function *>(slots[slot]);
+    auto *fn = camel::core::rtdata::fromSlot<::Function *>(*slot);
     return fn == nullptr ? nullptr : fn->graph();
 }
 
-attr::AttrSetId bodyAttrs(const runtime::GCGraph &graph) {
-    return graph.regionCount() > 0 && graph.region(0) ? graph.region(0)->attrs : attr::kNoAttrs;
+attr::AttrSetId bodyAttrs(const GraphView &view) {
+    return view.regionCount() > 0 ? view.region(0).attrs : attr::kNoAttrs;
 }
 
 /// The nearest region around `region` that carries the placement fact: a node in an untagged
 /// arm of a tagged block belongs to that block's row, not to a row no one prints.
-uint32_t factRegion(const runtime::GCGraph &graph, uint32_t region, attr::AttrKey key) {
-    while (region != 0 && attr::valueOf(graph.region(region)->attrs, key) == attr::kNoValue) {
-        region = graph.region(region)->parent;
+uint32_t factRegion(const GraphView &view, uint32_t region, attr::AttrKey key) {
+    while (region != 0 && attr::valueOf(view.region(region).attrs, key) == attr::kNoValue) {
+        region = view.region(region).parent;
     }
     return region;
 }
@@ -119,8 +119,8 @@ void addCounts(nlohmann::json &entry, const Counts &counts) {
 
 } // namespace
 
-bool holdsStaticFunction(const runtime::GCGraph &graph, runtime::gc_node_ref_t node) {
-    return functionGraphOf(graph, node) != nullptr;
+bool holdsStaticFunction(const GraphView &view, NodeRef node) {
+    return functionGraphOf(view, node) != nullptr;
 }
 
 const runtime::GCGraph *calleeGraphOf(
@@ -139,7 +139,7 @@ const runtime::GCGraph *calleeGraphOf(
     // call through it is a call to that graph, exactly as a written call to a named function is.
     // A value that is not a constant names no one graph: the run chooses the callee.
     for (const runtime::gc_node_ref_t operand : graph.withInputsOf(id)) {
-        if (const auto *callee = functionGraphOf(graph, operand)) {
+        if (const auto *callee = functionGraphOf(graph.view(), operand)) {
             return callee;
         }
     }
@@ -172,7 +172,7 @@ const char *placementScopeName(PlacementScope scope) {
     return "default";
 }
 
-PlacementDecision placementOf(const runtime::GCGraph &graph, runtime::gc_node_ref_t node) {
+PlacementDecision placementOf(const GraphView &view, NodeRef node) {
     PlacementDecision decision;
     // `attr::key` interns the name the core registered as a standard fact; asking for it here
     // does not depend on which module loaded first, and the id is the registered key's.
@@ -180,7 +180,7 @@ PlacementDecision placementOf(const runtime::GCGraph &graph, runtime::gc_node_re
     if (key == attr::kNoKey) {
         return decision;
     }
-    const attr::AttrSetId body        = bodyAttrs(graph);
+    const attr::AttrSetId body        = bodyAttrs(view);
     const attr::AttrValueId bodyValue = attr::valueOf(body, key);
     const bool bodyGpu                = bodyValue == attr::symbol("gpu");
 
@@ -195,15 +195,14 @@ PlacementDecision placementOf(const runtime::GCGraph &graph, runtime::gc_node_re
     // 1. The fact the node carries itself. The builder stamps every node written in a tagged
     //    scope, and a rewrite that moves a node keeps its attributes, so this is the placement
     //    the node had where it was written even after the block region is gone.
-    const attr::AttrValueId own = attr::valueOf(graph.nodeAttrs(node), key);
+    const attr::AttrValueId own = attr::valueOf(view.attrsOf(node), key);
     if (own != attr::kNoValue) {
         return decide(own, PlacementScope::Node, kNoPlacementRegion);
     }
     // 2. The nearest tagged region: a tagged block, an arm or a loop body written inside the
     //    node's scope. Annotation regions are looked through by walking their parent chain.
-    for (uint32_t region = graph.nodeRegion(node); region != 0;
-         region          = graph.region(region)->parent) {
-        const attr::AttrValueId value = attr::valueOf(graph.region(region)->attrs, key);
+    for (uint32_t region = view.regionOf(node); region != 0; region = view.region(region).parent) {
+        const attr::AttrValueId value = attr::valueOf(view.region(region).attrs, key);
         if (value != attr::kNoValue) {
             return decide(value, PlacementScope::Region, region);
         }
@@ -216,13 +215,13 @@ PlacementDecision placementOf(const runtime::GCGraph &graph, runtime::gc_node_re
     return decision;
 }
 
-PlacementDecision bodyPlacementOf(const runtime::GCGraph &graph) {
+PlacementDecision bodyPlacementOf(const GraphView &view) {
     PlacementDecision decision;
     const attr::AttrKey key = attr::key("tiles.placement");
     if (key == attr::kNoKey) {
         return decision;
     }
-    const attr::AttrValueId value = attr::valueOf(bodyAttrs(graph), key);
+    const attr::AttrValueId value = attr::valueOf(bodyAttrs(view), key);
     if (value == attr::kNoValue) {
         return decision;
     }
@@ -234,21 +233,21 @@ PlacementDecision bodyPlacementOf(const runtime::GCGraph &graph) {
     return decision;
 }
 
-bool hasPlacementFact(const runtime::GCGraph &graph) {
+bool hasPlacementFact(const GraphView &view) {
     const attr::AttrKey key = attr::key("tiles.placement");
     if (key == attr::kNoKey) {
         return false;
     }
-    if (attr::valueOf(bodyAttrs(graph), key) != attr::kNoValue) {
+    if (attr::valueOf(bodyAttrs(view), key) != attr::kNoValue) {
         return true;
     }
-    for (uint32_t region = 1; region < graph.regionCount(); ++region) {
-        if (attr::valueOf(graph.region(region)->attrs, key) != attr::kNoValue) {
+    for (uint32_t region = 1; region < view.regionCount(); ++region) {
+        if (attr::valueOf(view.region(region).attrs, key) != attr::kNoValue) {
             return true;
         }
     }
-    for (runtime::gc_node_ref_t node = 0; node < graph.nodeCount(); ++node) {
-        if (attr::valueOf(graph.nodeAttrs(node), key) != attr::kNoValue) {
+    for (NodeRef node = 0; node < view.nodeSlotCount(); ++node) {
+        if (attr::valueOf(view.attrsOf(node), key) != attr::kNoValue) {
             return true;
         }
     }
@@ -257,7 +256,7 @@ bool hasPlacementFact(const runtime::GCGraph &graph) {
 
 bool hasPlacementFact(const runtime::Program &program) {
     for (const auto *graph : program.graphs()) {
-        if (hasPlacementFact(*graph)) {
+        if (hasPlacementFact(graph->view())) {
             return true;
         }
     }
@@ -271,16 +270,17 @@ std::string placementReport(const runtime::Program &program) {
     const attr::AttrKey key = attr::key("tiles.placement");
     std::ostringstream out;
     for (const auto *graph : program.graphs()) {
-        const attr::AttrSetId body        = bodyAttrs(*graph);
+        const attr::AttrSetId body        = bodyAttrs(graph->view());
         const attr::AttrValueId bodyValue = attr::valueOf(body, key);
         const bool bodyGpu                = bodyValue == attr::symbol("gpu");
 
         Counts total;
         std::unordered_map<uint32_t, Counts> perRegion;
         for (runtime::gc_node_ref_t node = 0; node < graph->nodeCount(); ++node) {
-            const PlacementDecision decision = placementOf(*graph, node);
+            const PlacementDecision decision = placementOf(graph->view(), node);
             total.add(decision.placement);
-            perRegion[factRegion(*graph, graph->nodeRegion(node), key)].add(decision.placement);
+            perRegion[factRegion(graph->view(), graph->view().regionOf(node), key)].add(
+                decision.placement);
         }
 
         nlohmann::json entry;
@@ -316,7 +316,7 @@ GpuScopes::GpuScopes(const runtime::Program &program, bool everyNodeOnDevice) : 
     // A body tag makes the whole graph a device unit.
     std::vector<const runtime::GCGraph *> scopes;
     for (const auto *graph : program.graphs()) {
-        if (bodyPlacementOf(*graph).placement == Placement::GpuRequired) {
+        if (bodyPlacementOf(graph->view()).placement == Placement::GpuRequired) {
             scopeOf_.emplace(graph, graph);
             scopes.push_back(graph);
         }
@@ -324,7 +324,7 @@ GpuScopes::GpuScopes(const runtime::Program &program, bool everyNodeOnDevice) : 
     // A call written in a device scope (a `#gpu` body or block) makes the callee one too, even
     // when the code around the block is the host's: that call is still a device call.
     const auto addCall = [&](const auto &graph, runtime::gc_node_ref_t id) {
-        if (placementOf(graph, id).fact == "cpu")
+        if (placementOf(graph.view(), id).fact == "cpu")
             return;
         const auto *callee = calleeGraphOf(program, graph, id);
         if (callee == nullptr || scopeOf_.contains(callee))
@@ -335,7 +335,7 @@ GpuScopes::GpuScopes(const runtime::Program &program, bool everyNodeOnDevice) : 
     };
     for (const auto *graph : program.graphs())
         for (runtime::gc_node_ref_t id = 0; id < graph->nodeCount(); ++id)
-            if (placementOf(*graph, id).onDevice())
+            if (placementOf(graph->view(), id).onDevice())
                 addCall(*graph, id);
     // Transitive: a helper of a helper is called by the scope as well.
     for (size_t next = 0; next < scopes.size(); ++next) {
@@ -346,7 +346,7 @@ GpuScopes::GpuScopes(const runtime::Program &program, bool everyNodeOnDevice) : 
 }
 
 bool GpuScopes::covers(const runtime::GCGraph &graph, runtime::gc_node_ref_t node) const {
-    const PlacementDecision decision = placementOf(graph, node);
+    const PlacementDecision decision = placementOf(graph.view(), node);
     // A fact of the node's own wins, in both directions: `#cpu` is the written way out of a
     // scope, and a nested `#gpu` block is on the device.
     if (decision.onDevice())

@@ -15,14 +15,16 @@
  *  - a node the draft no longer holds is a gap: `alive` refuses an erased place and the encoder's
  *    table refuses a placeholder, and neither is a node of the view.
  *
- * The four kinds that are operators once plan 2.3 has finished removing them answer
- * `NodeKind::Oper` and `kNoOper` from `operatorOf`, exactly as the frozen adapter does -- those
- * nodes carry no operator identity, which `graph_view.h` says at length: it is here twice because
- * the two representations store the same four kinds.
+ * A CAST and a COPY became calls of `:op/cast` and `:op/copy` (plan 2.3, step 1) and are stored
+ * OPER records here, so `operatorOf` answers their operator like any other node's. The two kinds
+ * that are still kinds answer `NodeKind::Oper` and `kNoOper` from `operatorOf`, exactly as the
+ * frozen adapter does -- those nodes carry no operator identity, which `graph_view.h` says at
+ * length: it is here twice because the two representations store the same two kinds.
  */
 
 #include "graph/draft_view.h"
 
+#include "camel/core/tags.h"
 #include "camel/utils/assert.h"
 
 #include <algorithm>
@@ -101,8 +103,6 @@ NodeKind DraftGraphAdapter::viewKind(camel::runtime::GCNodeKind stored) {
         return NodeKind::Data;
     case GCNodeKind::Port:
         return NodeKind::Port;
-    case GCNodeKind::Cast:
-    case GCNodeKind::Copy:
     case GCNodeKind::Fill:
     case GCNodeKind::Accs:
     case GCNodeKind::Oper:
@@ -261,6 +261,27 @@ std::uint64_t DraftGraphAdapter::originOf(NodeRef ref) const {
     return graph_->nodeOrigin(sourceOf(ref));
 }
 
+camel::core::attr::AttrSetId DraftGraphAdapter::attrsOf(NodeRef ref) const {
+    const GraphDraft &draft = *graph_;
+    if (!holdsPlace(ref) || draft.header(sourceOf(ref)) == nullptr) {
+        return camel::core::attr::kNoAttrs;
+    }
+    return static_cast<camel::core::attr::AttrSetId>(draft.nodeAttrs(sourceOf(ref)));
+}
+
+camel::core::sem::PermissionMask DraftGraphAdapter::permissionsOf(NodeRef ref) const {
+    const GraphDraft &draft = *graph_;
+    if (!holdsPlace(ref) || draft.header(sourceOf(ref)) == nullptr) {
+        return camel::core::sem::kNoPermissions;
+    }
+    return draft.nodePermissions(sourceOf(ref));
+}
+
+camel::core::sem::PermissionMask DraftGraphAdapter::effectivePermissionsOf(
+    NodeRef ref, const camel::core::sem::NumericPolicy &policy) const {
+    return camel::core::tag::permissionsInEffect(attrsOf(ref), permissionsOf(ref), policy);
+}
+
 std::span<const NodeRef> DraftGraphAdapter::inputs(NodeRef ref, PortGroup group) const {
     const GraphDraft &draft = *graph_;
     // A record at the place, not `contains` (see graph_view.h): a JOIN and a DREF hold one and
@@ -336,9 +357,72 @@ std::vector<NodeRef> DraftGraphAdapter::predecessors(NodeRef ref, EdgeKind kind)
             pushMapped(preds, in);
         }
         break;
+    case EdgeKind::Wait:
+        // The two forms of a wait as one list, a pair both name once: the draft answers that union
+        // itself (`GraphDraft::waitInputsOf`), so the view does not spell it again.
+        for (const NodeRef in : draft.waitInputsOf(source)) {
+            pushMapped(preds, in);
+        }
+        break;
     }
     return preds;
 }
+
+std::vector<NodeRef> DraftGraphAdapter::successors(NodeRef ref, EdgeKind kind) const {
+    const GraphDraft &draft = *graph_;
+    std::vector<NodeRef> users;
+    if (!holdsPlace(ref) || draft.header(sourceOf(ref)) == nullptr) {
+        return users;
+    }
+    const NodeRef source = sourceOf(ref);
+    switch (kind) {
+    case EdgeKind::Data:
+        for (const NodeRef out : draft.normUsersOf(source)) {
+            pushMapped(users, out);
+        }
+        for (const NodeRef out : draft.withUsersOf(source)) {
+            pushMapped(users, out);
+        }
+        break;
+    case EdgeKind::Sync:
+        for (const NodeRef out : draft.syncUsersOf(source)) {
+            pushMapped(users, out);
+        }
+        break;
+    case EdgeKind::Order:
+        for (const NodeRef out : draft.orderUsersOf(source)) {
+            pushMapped(users, out);
+        }
+        break;
+    case EdgeKind::Wait:
+        for (const NodeRef out : draft.waitUsersOf(source)) {
+            pushMapped(users, out);
+        }
+        break;
+    }
+    return users;
+}
+
+const std::vector<Edge> &DraftGraphAdapter::tableOf(EdgeKind kind) const {
+    const auto found = tables_.find(static_cast<std::uint8_t>(kind));
+    if (found != tables_.end()) {
+        return found->second;
+    }
+    std::vector<Edge> table;
+    // A draft stores its edges on the nodes, so the whole table of a kind is a walk of the nodes in
+    // the view's numbering; the pairs are the ones `predecessors` answers, node by node.
+    for (NodeRef ref = 0; ref < nodeSlotCount(); ++ref) {
+        if (!holdsPlace(ref) || !contains(ref)) {
+            continue;
+        }
+        for (const NodeRef pred : predecessors(ref, kind)) {
+            table.push_back({pred, ref});
+        }
+    }
+    return tables_.emplace(static_cast<std::uint8_t>(kind), std::move(table)).first->second;
+}
+
+std::span<const Edge> DraftGraphAdapter::edges(EdgeKind kind) const { return tableOf(kind); }
 
 void DraftGraphAdapter::pushMapped(std::vector<NodeRef> &into, NodeRef draftId) const {
     // A side array of the draft may name a place that is not in the runtime graph (a placeholder,
@@ -387,6 +471,8 @@ RegionRecord DraftGraphAdapter::region(RegionId id) const {
     record.parent = id == 0 ? kNoRegion : static_cast<RegionId>(stored.parent);
     record.result =
         stored.result == camel::runtime::kInvalidNodeRef ? kNoNode : viewIdOf(stored.result);
+    // The region's tag set is a field of the record the draft keeps, so it is copied with the rest.
+    record.attrs = static_cast<camel::core::attr::AttrSetId>(stored.attrs);
     return record;
 }
 

@@ -32,6 +32,7 @@
 #include "camel/runtime/draft_inline.h"
 #include "camel/runtime/draft_session.h"
 #include "camel/runtime/loop.h"
+#include "camel/runtime/oper_shape.h"
 #include "camel/utils/type.h"
 #include "graph/graph_view.h"
 // The two payload readings that answer both spellings of a construction and of a member read
@@ -4137,6 +4138,24 @@ void Backward::visit(gc_node_ref_t node) {
     }
     switch (kindOf(forwardTransaction_, node)) {
     case GCNodeKind::Oper:
+        // A conversion and a copy are calls of `:op/cast` / `:op/copy` now, and the gradient a
+        // differentiated value passes through them is the one it had (the two kinds' answer): a
+        // conversion converts it and a copy hands it on.
+        {
+            const std::span<const std::byte> payload = forward().payloadOf(node);
+            const std::string_view uri =
+                payload.size() >= sizeof(camel::runtime::GCOperBody)
+                    ? reinterpret_cast<const camel::runtime::GCOperBody *>(payload.data())->uri()
+                    : std::string_view{};
+            if (uri == ":op/cast") {
+                visitForward(node, true);
+                return;
+            }
+            if (uri == ":op/copy") {
+                visitForward(node, false);
+                return;
+            }
+        }
         visitOper(node);
         return;
     case GCNodeKind::Accs:
@@ -4145,10 +4164,6 @@ void Backward::visit(gc_node_ref_t node) {
     case GCNodeKind::Fill:
         visitFill(node);
         return;
-    case GCNodeKind::Cast:
-        visitForward(node, true);
-        return;
-    case GCNodeKind::Copy:
     case GCNodeKind::Gate:
         visitForward(node, false);
         return;
@@ -4476,7 +4491,7 @@ void Backward::visitForward(gc_node_ref_t node, bool convert) {
     gc_node_ref_t g = gradient(node);
     if (convert &&
         !sourceTangent->equals(machineryTangentTypeOf(typeOf(forwardTransaction_, node)))) {
-        const gc_node_ref_t cast = target().addCastNode(sourceTangent);
+        const gc_node_ref_t cast = target().addOperNode(sourceTangent, nullptr, ":op/cast");
         target().setNormInputs(cast, std::span<const gc_node_ref_t>(&g, 1));
         g = cast;
     }

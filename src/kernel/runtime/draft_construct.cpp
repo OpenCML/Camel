@@ -198,20 +198,6 @@ gc_node_ref_t GraphDraft::addPortNode(
             .runtimeFlags = runtimeFlags});
 }
 
-gc_node_ref_t GraphDraft::addCastNode(camel::core::type::Type *type, gc_slot_idx_t dataIndex) {
-    ++mutations_;
-    dataIndex = ensureValueSlot(*this, type, dataIndex);
-    return addNode(
-        DraftNodeInit{.dataIndex = dataIndex, .dataType = type, .kind = GCNodeKind::Cast});
-}
-
-gc_node_ref_t GraphDraft::addCopyNode(camel::core::type::Type *type, gc_slot_idx_t dataIndex) {
-    ++mutations_;
-    dataIndex = ensureValueSlot(*this, type, dataIndex);
-    return addNode(
-        DraftNodeInit{.dataIndex = dataIndex, .dataType = type, .kind = GCNodeKind::Copy});
-}
-
 gc_node_ref_t GraphDraft::addFillNode(
     camel::core::type::Type *type, const GCFillBody &body, gc_slot_idx_t dataIndex) {
     ++mutations_;

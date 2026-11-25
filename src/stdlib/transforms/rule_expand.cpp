@@ -1208,9 +1208,10 @@ gc_node_ref_t expandRuleRightSide(
                     why = "a cast on the rule's right side does not take one value";
                     return rt::kInvalidNodeRef;
                 }
-                const gc_node_ref_t made = nodeCase == NodeCase::Cast
-                                               ? draft.addCastNode(node->dataType())
-                                               : draft.addCopyNode(node->dataType());
+                const gc_node_ref_t made =
+                    nodeCase == NodeCase::Cast
+                        ? draft.addOperNode(node->dataType(), nullptr, ":op/cast")
+                        : draft.addOperNode(node->dataType(), nullptr, ":op/copy");
                 draft.setNormInputs(made, inputs);
                 copied[ref] = made;
                 break;

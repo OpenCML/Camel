@@ -1,0 +1,12 @@
+// A value name this module declares and the prelude also exports (`join`): the module's own is the
+// name the value means, because this module's own names are the row above the prelude's
+// (design principles 10.2; `src/compile/src/name_layers.h` is the one list of those rows).
+
+func join(xs: string[]) => string {
+    return "own"
+}
+
+func main() => int sync {
+    println(join(["a", "b"]))
+    return 0
+}

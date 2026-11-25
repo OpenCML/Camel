@@ -427,11 +427,10 @@ bool Builder::bodyHoldsNoChainStatement(DraftGraphBuilder *graph) {
             break;
         case runtime::GCNodeKind::Data:
         case runtime::GCNodeKind::Port:
-        case runtime::GCNodeKind::Copy:
         case runtime::GCNodeKind::Fill:
         case runtime::GCNodeKind::Accs:
-            // A constant, a port, a copy, a closure value, a field read: computed from what it
-            // reads, with nothing to fail and nothing to order.
+            // A constant, a port, a closure value, a field read: computed from what it reads, with
+            // nothing to fail and nothing to order.
             break;
         default:
             // An operator or a conversion, asked exactly as the chain asks it: an effect, a

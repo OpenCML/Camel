@@ -307,7 +307,7 @@ void syncChainOrdering() {
         auto &draft = owner->edit();
         const auto tail  = node(*owner);
         const auto value = node(*owner);
-        const auto plain = draft.addNode(DraftNodeInit{.kind = GCNodeKind::Copy});
+        const auto plain = draft.addOperNode(nullptr, nullptr, ":op/copy");
         draft.setNormInputs(plain, std::span<const gc_node_ref_t>(&value, 1));
         check(draft.setSyncPredecessor(plain, tail), "a node did not take the chain's tail");
         const auto reader = node(*owner);

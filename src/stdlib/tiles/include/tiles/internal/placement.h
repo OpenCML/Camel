@@ -12,6 +12,8 @@
 
 #include "camel/runtime/graph.h"
 
+#include "graph/graph_view.h"
+
 #include <cstdint>
 #include <string>
 #include <unordered_map>
@@ -54,16 +56,19 @@ struct PlacementDecision {
 const char *placementName(Placement placement);
 const char *placementScopeName(PlacementScope scope);
 
-/// The placement of `node` in `graph` (docs/design/gpu/plan.cn.md 2.2).
-PlacementDecision placementOf(const runtime::GCGraph &graph, runtime::gc_node_ref_t node);
+/// The placement of `node` in `view` (docs/design/gpu/plan.cn.md 2.2). The graph is read through
+/// the view: the fact of the node is `attrsOf`, the nearest region's is `region(r).attrs`, the
+/// body's is region 0's, and the region chain is `regionOf`/`region(r).parent`. Nothing here reads
+/// a representation field, so the answer is the same for a frozen graph and for a draft.
+PlacementDecision placementOf(const camel::graph::GraphView &view, camel::graph::NodeRef node);
 
 /// The placement the graph's body (region 0) carries: what a tag written on the function says.
 /// Host with an empty fact when the body carries none. This is the graph's placement as a unit,
 /// which the runtime of a call needs to know without looking at one of its nodes.
-PlacementDecision bodyPlacementOf(const runtime::GCGraph &graph);
+PlacementDecision bodyPlacementOf(const camel::graph::GraphView &view);
 
-/// Whether any node, block or body region of `graph` carries the placement fact.
-bool hasPlacementFact(const runtime::GCGraph &graph);
+/// Whether any node, block or body region of `view` carries the placement fact.
+bool hasPlacementFact(const camel::graph::GraphView &view);
 
 /// Whether any graph of `program` carries the placement fact.
 bool hasPlacementFact(const runtime::Program &program);
@@ -71,8 +76,10 @@ bool hasPlacementFact(const runtime::Program &program);
 /// Whether `node` holds a function the compiler can see: a DATA node whose static slot is a
 /// `Function` value. This is the operand an expansion pass can act on — a `grad` call whose
 /// function is such a constant is a call the pipeline could have expanded before this pass, while
-/// a function value only the run produces cannot be expanded by any pass.
-bool holdsStaticFunction(const runtime::GCGraph &graph, runtime::gc_node_ref_t node);
+/// a function value only the run produces cannot be expanded by any pass. The slot is read as the
+/// view hands it out -- `constantOf`, the value a DATA node's static index points at -- and the
+/// function is decoded through the node's own type, so no payload byte is read here.
+bool holdsStaticFunction(const camel::graph::GraphView &view, camel::graph::NodeRef node);
 
 /// The graph a call node reaches, whether it names it (`Func`) or holds it as a value (`Call`).
 /// Null when the node is not a call, or when the callee is a value only the run knows: that call

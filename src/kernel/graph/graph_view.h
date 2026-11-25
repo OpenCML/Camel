@@ -26,37 +26,41 @@
  * slots are not handed out -- a reader asks the DATA node for its value, and asks how many slots
  * the area has (`staticSlotCount`) without the array itself.
  *
- * The vocabulary is nine kinds, three kinds of edge and "which region a node is in" (section 1).
+ * The vocabulary is nine kinds, four kinds of edge and "which region a node is in" (section 1); the
+ * fourth kind is the wait, which the vocabulary lists as one reading of two forms (the
+ * control-input paragraph below).
  * Four readings differ from today's graph, and every reader still using the old reading is what the
  * first migration deletes:
- *  - CAST, COPY, FILL and ACCS are not kinds: they are operators, declared in `lib/std` like any
- *    other (plan 2.3). Until the front end and the passes stop building those four node kinds, an
- *    adapter folds each of them into `NodeKind::Oper` -- the graph's shape is already the target's
- *    -- and `operatorOf` answers `kNoOper` for one of them. That answer is the literal one and it
- *    is not the same statement as "this node is not an operator": a CAST and a COPY carry no
- *    payload at all, and a FILL or an ACCS carries its own kind and a place, so no operator
- *    identity sits on the node to hand out, and this face answers what the graph stores and never
- *    a name for what it does not (the file comment above). Answering the operator that replaces
- *    one of them instead -- `:op/cast` and its siblings, which `lib/std` does declare -- would also
- *    invite reading the kind's body as that operator's record, which `runtime/oper_shape.h` records
- *    as a real misread. So the two-step reading is the one a caller writes: `NodeKind::Oper` with
- *    a `kNoOper` is one of the four. What a node *does* is `runtime::shapeOfOperation`, which
- *    answers for both forms; this face has no counterpart yet, so a reader on it takes the two
- *    steps itself.
+ *  - FILL and ACCS are not kinds: they are operators, declared in `lib/std` like any other (plan
+ *    2.3). Until the front end and the passes stop building those two node kinds, an adapter folds
+ *    each of them into `NodeKind::Oper` -- the graph's shape is already the target's -- and
+ *    `operatorOf` answers `kNoOper` for one of them. That answer is the literal one and it is not
+ *    the same statement as "this node is not an operator": a FILL or an ACCS carries its own kind
+ *    and a place, so no operator identity sits on the node to hand out, and this face answers what
+ *    the graph stores and never a name for what it does not (the file comment above). Answering
+ *    the operator that replaces one of them instead -- `:op/fill`, `:op/access`, which `lib/std`
+ *    does declare -- would also invite reading the kind's body as that operator's record, which
+ *    `runtime/oper_shape.h` records as a real misread. So the two-step reading is the one a caller
+ *    writes: `NodeKind::Oper` with a `kNoOper` is one of the two. What a node *does* is
+ *    `runtime::shapeOfOperation`, which answers for both forms; this face has no counterpart yet,
+ *    so a reader on it takes the two steps itself. A CAST and a COPY were the other two of the
+ *    four; they are stored OPER records now (`operatorOf` answers), so nothing asks twice for them.
  *  - JOIN does not appear: a BRCH owns one region per arm and its value is the selected arm's
  *    result, so the two paired payloads (`GCBrchBody::join`, `GCJoinBody::brch`) and the arm count
  *    each of them repeats are gone.
  *  - DREF and DEAD do not appear: a dead place is a tombstone of the numbering, not a node, and a
  *    draft's placeholder is the front end's -- the encoder drops it before a graph exists.
- *  - a control input is not an edge. What it said first -- "this node belongs to that arm" -- is
- *    said by the region a node belongs to. What it said second -- "this one runs after that one" --
- *    is a wait, and a wait is not one kind: a representation keeps the third run of the node's
- *    input table beside its sync edges, which is why `GCGraph::waitInputsOf` unions the two rather
- *    than answering either one. This face has three edge kinds and no `Wait`, so
- *    `predecessors(Sync)` is the sync half and a reader that needs the whole wait reads the
- *    representation until such a kind exists. What the face does answer is the other half of the
- *    old reading: a GATE's value is its single data input, so nothing counts "the first input is
- *    the value" any more.
+ *  - a control input is not an edge of its own. What it said first -- "this node belongs to that
+ *    arm" -- is said by the region a node belongs to. What it said second -- "this one runs after
+ *    that one" -- is a wait, and a wait is written in either of two forms: a representation keeps
+ *    the third run of the node's input table beside its sync edges, which is why
+ *    `GCGraph::waitInputsOf` unions the two rather than answering either one. This face answers the
+ *    union as one edge kind, `EdgeKind::Wait`: a reader asking "does this node wait for that one"
+ *    asks once and gets the same answer whichever form the wait was written in
+ *    (docs/design/effects/edges.cn.md 1, 1.5). `predecessors(Sync)` stays the sync half alone, for
+ *    the reader that wants the chain rather than the wait. What the face does answer is the other
+ *    half of the old reading: a GATE's value is its single data input, so nothing counts "the first
+ *    input is the value" any more.
  *
  * A fifth one was added by the interface review: a callee is the graph it names, by
  * name (an entry of the environment table) or by value, where the stored graph names it by a
@@ -71,6 +75,8 @@
 #pragma once
 
 #include "camel/core/loop_kind.h"
+#include "camel/core/node_attrs.h"
+#include "camel/core/operator_semantics.h"
 #include "camel/core/operator_table.h"
 #include "camel/core/slot.h"
 #include "camel/core/symbol.h"
@@ -150,12 +156,12 @@ enum class NodeKind : std::uint8_t {
     Gate = 8,
 };
 
-/// The three kinds of edge (section 1; design principles 3.1). Replaces the split between a node's
+/// The four kinds of edge (section 1; design principles 3.1). Replaces the split between a node's
 /// input run and the two side arrays of the frozen graph (`GCGraphOrderEdge`, `GCGraphSyncEdge`)
 /// together with the `DraftEdgeKind`/`DraftEdgeSlot` pair a draft keeps: an edge is one notion
 /// asked one way, and which array it lives in is the adapter's problem. Who migrates:
-/// `orderPredsOf`, `syncPredsOf`, `orderEdges`, `syncEdges`, `waitInputsOf`, and the draft's five
-/// user lists.
+/// `orderPredsOf`, `syncPredsOf`, `ctrlInputsOf`/`waitInputsOf`, `orderEdges`, `syncEdges`, and the
+/// draft's five user lists.
 enum class EdgeKind : std::uint8_t {
     /// A value consumed by a node -- the same edges `inputs` answers, without the groups.
     Data = 0,
@@ -163,6 +169,23 @@ enum class EdgeKind : std::uint8_t {
     Sync = 1,
     /// Orders the two nodes where both run, and carries no "used".
     Order = 2,
+    /// Everything that makes `ref` run after another node, in either form a wait is written in:
+    /// the sync half above and the control input a representation keeps in the third run of the
+    /// node's input table (file comment). A pair the two forms both name is answered once. This is
+    /// `GCGraph::waitInputsOf` / `GraphDraft::waitInputsOf` as one kind, so a reader that asks
+    /// "does this node wait for that one" does not have to know which form the program wrote.
+    Wait = 3,
+};
+
+/// One edge of the graph, as a whole table hands it out: `pred` runs before `user` and is the one
+/// the edge starts from. Which end is the "from" is the kind's business -- for a `Data` edge `pred`
+/// is the value read and `user` the node reading it -- and the two are the same words every kind
+/// uses, so a reader of a table does not learn a second order per kind.
+struct Edge {
+    NodeRef pred = kNoNode;
+    NodeRef user = kNoNode;
+
+    bool operator==(const Edge &) const = default;
 };
 
 /// The role of a data port (section 1: a port carries a role; there is one data edge kind).
@@ -204,10 +227,12 @@ enum class RegionKind : std::uint8_t {
 /**
  * One region, as the graph stores it: what it is, who owns it and what it yields.
  *
- * Replaces `GCRegion` minus the two fields that are answers to other questions -- its form ports
- * (a separate query, `regionParameters`) and its tag set (a fact, not a place). A value, not an
- * interface, because every field here is stored once in the representation and copying five words
- * cannot disagree with itself the way a lazily built flyweight can.
+ * Replaces `GCRegion` minus the one field that is an answer to another question -- its form ports
+ * (a separate query, `regionParameters`). A value, not an interface, because every field here is
+ * stored once in the representation and copying six words cannot disagree with itself the way a
+ * lazily built flyweight can. The tag set is one of those six: it is an interned id
+ * (`attr::AttrSetId`), so handing it out is not a second truth, and a reader that walks a region's
+ * parent chain to find the nearest tagged one must see it without a second call per step.
  *
  * A region's ports are its parameters: the state of a loop, the values an arm is given. An arm that
  * only calls another graph is a region holding one FUNC node -- there is no second "subgraph form"
@@ -225,6 +250,13 @@ struct RegionRecord {
     /// The node whose value the region yields, `kNoNode` when it yields none. Replaces
     /// `GCRegion::result`; it is also the whole of "which arm the BRCH hands on".
     NodeRef result = kNoNode;
+    /// The tag set of the region (`GCRegion::attrs`; camel/core/node_attrs.h), `attr::kNoAttrs`
+    /// when it carries none. The facts a tag written on a function, a block, an arm or a loop body
+    /// puts on the region, which is where a pass reads a lexical fact from (`tiles.placement` is
+    /// the one a pass reads today). It is here rather than behind a query because it is a field of
+    /// the record the graph stores, and a reader that walks a region's parent chain to find the
+    /// nearest tagged one (`tiles/src/placement.cpp`) needs it on the record it already holds.
+    camel::core::attr::AttrSetId attrs = camel::core::attr::kNoAttrs;
 };
 
 /// What a LOOP is, as values: its form, where its elements come from, and how many values it
@@ -400,6 +432,28 @@ class GraphView {
     /// Where the node was written, 0 when unknown. Compile and debug metadata, not content.
     virtual std::uint64_t originOf(NodeRef ref) const = 0;
 
+    // -- the choices a library attached to a node ----------------------------------------------
+    /// The tag set the node carries (`GCGraph::nodeAttrs`, `GraphDraft::nodeAttrs`;
+    /// camel/core/node_attrs.h), `attr::kNoAttrs` when it carries none. Graph content: a decorator
+    /// or a tag written on a scope stamps every node written there, and a rewrite that moves a node
+    /// keeps its attributes, so this is the choice the node had where it was written. A pass that
+    /// reads a fact (`tiles.placement`, `train.recompute`, `tensor.kernel`) reads it here and then
+    /// decodes it with `attr::valueOf` -- the key is the pass's, the set is the graph's.
+    virtual camel::core::attr::AttrSetId attrsOf(NodeRef ref) const = 0;
+    /// The numeric permissions the program granted this node
+    /// (`GCGraph::nodePermissions`; `sem::PermissionMask`), 0 when it carries none. The other
+    /// column a node has: `#reassociate` and its siblings written on a scope, kept per node by the
+    /// compiler. A pass that only reports what a node carries reads this; one that decides what it
+    /// may do reads `effectivePermissionsOf`.
+    virtual camel::core::sem::PermissionMask permissionsOf(NodeRef ref) const = 0;
+    /// The permissions in effect on `ref` under `policy`: `permissionsOf` widened by the tags that
+    /// grant one, and none at all when `#strict` is among `attrsOf`'s tags (design principles 7.4:
+    /// `#strict` revokes every permission, including the policy's default grants). Defined in
+    /// `core::tag::permissionsInEffect` and implemented by each adapter over its own two columns,
+    /// so that "which permission is in effect" has one definition and `#strict` one meaning.
+    virtual camel::core::sem::PermissionMask effectivePermissionsOf(
+        NodeRef ref, const camel::core::sem::NumericPolicy &policy) const = 0;
+
     // -- ports, by group ---------------------------------------------------------------------
     /// The values the node takes in `group`, in port order. Replaces `normInputsOf`/`withInputsOf`.
     virtual std::span<const NodeRef> inputs(NodeRef ref, PortGroup group) const = 0;
@@ -421,6 +475,22 @@ class GraphView {
     /// A vector, where a port list is a span: the frozen graph stores a sync edge as a (user, pred)
     /// pair, so the predecessor list is a projection of it and cannot be handed out where it lies.
     virtual std::vector<NodeRef> predecessors(NodeRef ref, EdgeKind kind) const = 0;
+    /// The nodes `ref` must run before, along one kind of edge -- the same four kinds read the
+    /// other way, and the answer `predecessors` does not give: the readers of this stage walk a
+    /// graph forwards, and a scheduler, a chain membership test and "who follows this statement"
+    /// all ask for the other end. `successors(ref, Data)` is `users(ref, Normal)` followed by
+    /// `users(ref, Context)`; `Sync` and `Order` are the users the two side arrays name; `Wait` is
+    /// the union of the wait forms, as `predecessors` answers it (file comment). A vector for the
+    /// same reason `predecessors` is one.
+    virtual std::vector<NodeRef> successors(NodeRef ref, EdgeKind kind) const = 0;
+    /// Every edge of one kind, as (pred, user) pairs, in the order the representation stores them
+    /// -- a `sync` block's chain read as one table, and the order edges beside it. Replaces
+    /// `GCGraph::syncEdges()`/`orderEdges()` and the two-array walk a reader does to learn which
+    /// nodes any chain reaches (`tiles/src/graph_regions.cpp`'s `chainMembers`). The kinds whose
+    /// edges are ports (`Data`) or a union of two forms (`Wait`) have no stored table; the adapter
+    /// builds one by walking the nodes, and the answer is the same list `predecessors` gives for
+    /// each node, paired with it.
+    virtual std::span<const Edge> edges(EdgeKind kind) const = 0;
 
     // -- regions -----------------------------------------------------------------------------
     /// How many regions the graph has, the body included. Replaces `regionCount`/`regionCountOf`.
@@ -527,11 +597,24 @@ class GraphView {
 
     NodeRange nodes() const { return NodeRange(this); }
 
-    // Additions, and not part of this rework (interface review, item 6): the successors
-    // of an order edge and of a sync edge -- the scheduler needs them, where `predecessors` answers
-    // the one direction the readers of this stage ask for -- and an entry that reads a node's tags,
-    // which are content of the graph and which a pass has to read. Both arrive as additions;
-    // nothing here reserves a name for them.
+    // Additions that arrived after the interface review (item 6): the successors of an edge (the
+    // scheduler needs them, where `predecessors` answers the one direction the readers of this
+    // stage ask for), the whole table of one edge kind (a chain membership test needs every edge,
+    // not one node's), and the two columns a pass reads off a node -- its tag set and its numeric
+    // permissions. They are part of the face now; nothing is reserved for them.
+    //
+    // Additions that have NOT arrived, and the one boundary this face keeps: a payload. A node's
+    // payload is the representation's layout (`nodePayloadBytes`, `nodeBodyAs`, the raw
+    // `GCNodeKind` a payload is tagged with), and no byte of it leaves this face -- the file
+    // comment above says so, and the interface review left it there deliberately. What the face
+    // does answer of it is the part that is graph content and not layout: a constant's value and
+    // its static-area index (`constantOf`, `staticIndexOf`), how many slots the static area has,
+    // and the typed records a payload holds (`calleeOf`, `operatorOf`, `loopFormOf`). A reader that
+    // needs the bytes themselves -- a pass that copies a node body into a graph it builds, or a
+    // dump that prints a payload field no record above names -- is doing an edit or a rendering of
+    // the representation, and belongs to stage 3b's edit primitives or to the representation's own
+    // dumpers. Handing the bytes out here would make every reader a reader of the layout, which is
+    // the second model of a graph this face exists to prevent.
 };
 
 } // namespace camel::graph
