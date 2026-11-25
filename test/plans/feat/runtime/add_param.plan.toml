@@ -2,7 +2,7 @@ id = "runtime.add_param"
 order = 386
 tier = "fast"
 tags = ["feat", "runtime", "graph", "edit", "param", "witness"]
-desc = "`graph::add_param` adds the port node of a new parameter and not its declaration: a commit of that graph is refused, naming the port node and the count it is beyond, and the same port node is published once a signature declares it. Two readings, one per half: the operator's, from Camel, where the declaration cannot be written yet (no block head), and the commit's, from `test::add_param`, where it can."
+desc = "`graph::add_param` adds the port node of a new parameter and not its declaration: a commit of that graph is refused, naming the port node and the count it is beyond, and the same port node is published once a signature declares it -- and, once published, it is executed: a caller passes the new parameter a value and the program prints a number that value makes. Three readings: the operator's, from Camel, where the declaration cannot be written yet (no block head); the commit's, from `test::add_param`, where it can; and the run's, where the graph the commit published is the graph `std::nvm` executes."
 # Design graph-editing 8.4 puts `add_param` after the block head that carries a new signature, because
 # a parameter is two statements about one thing (the port node the body computes with, and the entry
 # of the function type a caller is told about) and the operator writes one of them. The tree has no
@@ -16,6 +16,18 @@ desc = "`graph::add_param` adds the port node of a new parameter and not its dec
 # a second reason before the port-count check existed: the graph would have been published with a
 # port node no parameter declares, and the pass would print "the commit published it, which is the
 # defect".
+#
+# The third reading is the one the first two leave out: publishing is not running. A graph whose
+# extra port node nothing executes is a graph no caller's value ever reaches, so the two halves above
+# would be green on an operator that only ever showed a graph to a check. The value a parameter is
+# given has one place to come from at run time -- the caller's argument list, written into the port's
+# slot when the call frame is laid out -- and `--arg` cannot stand in for it: the entry's parameters
+# are bound before the first pass and each bound port is replaced by a constant and erased
+# (`entry_args.cpp#bindEntryArguments`), so a parameter a pass adds to the entry can never be given
+# one. So the case's caller has to be widened with the callee, and the number is what says whether
+# the appended slot (the port's slot is the last the graph lays out, `addParameterPort`) is the one
+# the caller's value lands in. Red first: on the tree before the run half existed the same case
+# prints the unedited call's 4101 and none of the pass's `run:` lines.
 [[tests]]
 name = "runtime.add_param.the_port_without_its_declaration_is_refused"
 desc = "`add_param(t, <the graph's parameter>)` gives a port node of type `int`, and the commit refuses to publish a graph that holds two port nodes while declaring one parameter: the port count around the commit is 1 -> 1, and the error value the commit answers carries the check's message."
@@ -24,6 +36,18 @@ case = "../../../cases/runtime/add_param/one_parameter.cml"
 args = ["${case}", "std::nvm"]
 expect_exit = 0
 expect_stdout_matches = ['\[add_param\] ports=1->1 made=int']
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 30000
+
+[[tests]]
+name = "runtime.add_param.the_added_parameter_runs"
+desc = "The parameter `add_param` adds is not only published but executed: `test::add_param` widens the graph `main` calls by one parameter of type `int`, declares it in the signature, hands the body's reads of its second parameter to the new port, and widens the call site by the value for it. `std::nvm` then runs the program, and the number it prints is the one the caller's value makes -- 4107, not the 4101 the unedited call gives."
+kind = "behavior"
+case = "../../../cases/runtime/add_param/one_parameter_runs.cml"
+args = ["${case}", "test::add_param", "std::nvm"]
+expect_exit = 0
+expect_stdout_matches = ['^add_param: run: graph .+ declares 2 parameter\(s\) and holds 2 port node\(s\)$', '^add_param: run: port node [0-9]+ added, the signature declares 3 parameter\(s\), the call passes 3 argument\(s\)$', '^add_param: run: the commit published it and the program runs$', '^\[add_param_run\] pair=4107$']
+expect_stdout_not_contains = ["pair=4101"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 30000
 
