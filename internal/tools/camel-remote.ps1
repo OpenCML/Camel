@@ -681,16 +681,20 @@ $checkers = [ordered]@{
     # document edit does not. `BUILD_FOOTPRINT` is the only name a reading carries for the binary
     # that produced it, so the two properties are what make two readings comparable -- and a stamp
     # that names a wall clock instead has to be read as "the same" or "different" with the reader's
-    # own memory, which is what this lane replaced. A wall: pure static reading, about a second, no
-    # compiler and no install.
+    # own memory, which is what this check exists to keep out. A wall: pure static reading, about a
+    # second, no compiler and no install.
     'build-stamp'         = @{ script = 'scripts/check-build-stamp.mjs'; args = @(); compiler = $false }
     # A comment says what the code does and why; it does not record how the project got there. This
-    # checker reads comment text only -- after `//`, inside `/* */`, with `#` in CMake -- so a date or
-    # a path that is data in a string literal is not its business, and it counts a comment that names
-    # a dated ruling, a handover page, a role or a lane, a slice code, a host path. A wall with a
-    # threshold of zero: the tree carries none of those comments, so the first one added is this
-    # run's red, and the checker's own exit 1 -- with the `file:line` list it prints above it -- is
-    # what the gate returns.
+    # checker reads comment text only -- after `//`, inside `/* */`, with `#` in CMake, TOML, shell
+    # and PowerShell, and a test plan's `name`/`desc`/`known_fail_*` prose, which a reader takes the
+    # case by -- so a date or a path that is data in a string literal is not its business. It reads
+    # four trees (`src/`, `scripts/`, `internal/tools/`, `test/`) and counts a dated ruling, a
+    # handover page, a role or a lane, a work item number, a commit hash, the step a refactor had
+    # reached, the word that stands in for who decides what, and a sentence about what the code
+    # used to be. A wall whose threshold is zero: the tree does not meet it yet -- the checker's
+    # own reading line says how many comment lines still carry one -- and every one of those is a
+    # comment to rewrite rather than a threshold to move. The checker's exit 1, with the
+    # `file:line` list it prints above it, is what the gate returns.
     # The tree is named, not inherited: this command runs with the checkout as its working directory
     # (see the block that builds it), so `.` is that checkout, and the checker has no default that
     # could read the directory the run was started in instead (iron rule 17).

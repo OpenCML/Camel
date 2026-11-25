@@ -1029,7 +1029,7 @@ class ArrangeWalk {
             // pure, it reaches no resource, it cannot fault and it ends -- and it still may not be
             // arranged anywhere, because the order it carries is what makes the effect it waits for
             // observably first (design principles 3.3, 3.4). A placement decision acts on the
-            // answer, so the kind declines for every gate instead of saying yes (D-1124-65: one
+            // answer, so the kind declines for every gate instead of saying yes: one
             // predicate, and a node it cannot answer for must not be answered "freely
             // arrangeable").
             //

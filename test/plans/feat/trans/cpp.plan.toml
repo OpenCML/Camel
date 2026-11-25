@@ -218,8 +218,7 @@ expect_output_not_contains = ["FAIL:", "cell(Tuple)"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 300000
 # Slow layer: over the 2 s the fast layer allows -- 2.61 s of
-# child wall clock in the 2026-11-12 record (appendix B of
-# internal/reports/2026-11-24-test-suite-inventory.cn.md).
+# child wall clock.
 tier = "slow"
 
 [[tests]]
@@ -246,8 +245,7 @@ timeout_ms = 600000
 # the same two-line precondition the entries that assert a compiled line carry
 # (feat/linear/jit_native.plan.toml); `--absent` is its opposite.
 # Slow layer: over the 2 s the fast layer allows -- 5.59 s of
-# child wall clock in the 2026-11-12 record (appendix B of
-# internal/reports/2026-11-24-test-suite-inventory.cn.md).
+# child wall clock.
 tier = "slow"
 [[tests]]
 name = "narrow_reductions_four_backends"
@@ -263,8 +261,7 @@ expect_output_not_contains = ["differs", "not run on", "does not build"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 300000
 # Slow layer: over the 2 s the fast layer allows -- 8.83 s of
-# child wall clock in the 2026-11-12 record (appendix B of
-# internal/reports/2026-11-24-test-suite-inventory.cn.md).
+# child wall clock.
 tier = "slow"
 
 [[tests]]
@@ -286,8 +283,7 @@ expect_output_not_contains = ["FAIL", "libcamel"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 120000
 # Slow layer: over the 2 s the fast layer allows -- 15.60 s of
-# child wall clock in the 2026-11-12 record (appendix B of
-# internal/reports/2026-11-24-test-suite-inventory.cn.md).
+# child wall clock.
 tier = "slow"
 
 [[tests]]
@@ -320,8 +316,7 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "norma
 # margin rule asks for. 2100 s is 4.3x that figure.
 timeout_ms = 2100000
 # Slow layer: over the 2 s the fast layer allows -- 78.64 s of
-# child wall clock in the 2026-11-12 record (appendix B of
-# internal/reports/2026-11-24-test-suite-inventory.cn.md).
+# child wall clock.
 tier = "slow"
 
 [[tests]]
@@ -372,8 +367,7 @@ expect_output_not_contains = ["TranslationRefused"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000
 # Slow layer: over the 2 s the fast layer allows -- 2.10 s of
-# child wall clock in the 2026-11-12 record (appendix B of
-# internal/reports/2026-11-24-test-suite-inventory.cn.md).
+# child wall clock.
 tier = "slow"
 
 [[tests]]
@@ -388,8 +382,7 @@ expect_output_not_contains = ["TranslationRefused", "internal error"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000
 # Slow layer: over the 2 s the fast layer allows -- 2.05 s of
-# child wall clock in the 2026-11-12 record (appendix B of
-# internal/reports/2026-11-24-test-suite-inventory.cn.md).
+# child wall clock.
 tier = "slow"
 
 [[tests]]
@@ -404,8 +397,7 @@ expect_output_not_contains = ["TranslationRefused", "ElementTypeMismatch", "inte
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000
 # Slow layer: over the 2 s the fast layer allows -- 2.03 s of
-# child wall clock in the 2026-11-12 record (appendix B of
-# internal/reports/2026-11-24-test-suite-inventory.cn.md).
+# child wall clock.
 tier = "slow"
 
 [[tests]]
@@ -420,8 +412,7 @@ expect_output_not_contains = ["TranslationRefused", "internal error"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000
 # Slow layer: over the 2 s the fast layer allows -- 2.00 s of
-# child wall clock in the 2026-11-12 record (appendix B of
-# internal/reports/2026-11-24-test-suite-inventory.cn.md).
+# child wall clock.
 tier = "slow"
 
 [[tests]]
@@ -798,6 +789,5 @@ expect_output_not_contains = ["FAIL:", "is not in the baseline", "now prints wha
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 900000
 # Slow layer: over the 2 s the fast layer allows -- 32.53 s of
-# child wall clock in the 2026-11-12 record (appendix B of
-# internal/reports/2026-11-24-test-suite-inventory.cn.md).
+# child wall clock.
 tier = "slow"

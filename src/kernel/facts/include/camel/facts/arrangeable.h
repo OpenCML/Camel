@@ -35,7 +35,7 @@
  * A GATE is the one node the four terms are not the answer for, and it is answered `not freely
  * arrangeable` whatever its terms are: a gate exists to carry an order, whether it carries one is
  * not one of the four terms, and the reader that decides a placement asks
- * `runtime::nodeIsFreelySchedulable`, which refuses every gate for that reason (D-1124-65). A
+ * `runtime::nodeIsFreelySchedulable`, which refuses every gate for that reason. A
  * caller that reads a gate's four terms as "it may be moved" is reading the one node this fact
  * declines to speak for.
  */

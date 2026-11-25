@@ -467,7 +467,7 @@ export rule div_stated_t::<T, X, W, AX, AW>(x: X, w: W, ax: AX, aw: AW) when is_
 // forward laws are in `lib/rulesets/jvp.cml` (`jvp_abs`, `jvp_log`, `jvp_maximum`, `jvp_minimum`)
 // and no transpose law stands beside them, so each key is one the library answers in one direction
 // only. **That is the final state and not an open item: the four laws were written, and they were
-// taken back out.** Two measurements are why, both made on the host on 2026-11-25.
+// taken back out.** Two measurements are why, both made on the build host.
 //
 //   1. A law for any of the four cannot be walked. `transpose` of a one-operator function that
 //      writes one refuses it by name --
@@ -810,7 +810,8 @@ export rule matmul_stated_t::<T, A, B, SA, SB>(a: A, b: B, sa: SA, sb: SB)
 // the **target** shape -- not the extents the value had before it was reshaped, which is the shape
 // this side needs and which no port of the node states.
 //
-// `softmax` was the other name in that sentence until 2026-11-25. Its law is `softmax_t` above, and
+// `softmax` was the other name in that sentence and is not one any more. Its law is `softmax_t`
+// above, and
 // it needed no extents: `softmax_grad(y, ct, axis)` is the kernel's own answer, so the law hands it
 // the axis the node carries and the `y` it recomputes.
 

@@ -36,6 +36,9 @@ const cases = [
     ['scripts', 'other-tool.mjs', '// The tree is named by the caller (iron rule 17).\n'],
     ['internal/tools', 'merge-lane.ps1', '# The second seat came after `f26529338` broke the first.\n'],
     ['internal/tools', 'camel-cleanup.sh', '# Measured on 2026-11-15, and it held.\n'],
+    // A work root under a concrete home directory is one host's directory, not the layout the tools
+    // define: this is the row of that manifest as it was written on that machine.
+    ['internal/tools', 'camel-cleanup.rows.sh', '# row  checkout\t/home/u/camel-work/tmp/lane-1/src\n'],
     ['test', 'plans/feat/mm/writings.plan.toml', '[[test]]\nname = "x"\ndesc = "The ruling of 2026-11-15 stopped asking it."\n'],
     ['test', 'plans/feat/mm/other.plan.toml', '[[test]]\nname = "y"\nknown_fail_owner = "lane-shapeext"\n'],
     ['test', 'plans/feat/mm/third.plan.toml', '[[test]]\nname = "z"\n# The author\'s ruling of 2026-11-23 is why.\n'],
@@ -50,6 +53,10 @@ const cases = [
 const clean = [
     ['src', 'kernel/core/mm/mm.cpp', '// A coercion decides with 5.4: a rank-zero operand spreads as that value.\n'],
     ['test', 'plans/feat/mm/clean.plan.toml', '[[test]]\nname = "w"\ndesc = "Two writings of `a + 1` are one value."\nprogram = "let d = 2026-11-15"\n'],
+    // The work root the tools define, written the way they write it: rooted at `$HOME` or `~`, or
+    // under `...` in a quoted placeholder. That is the layout this script works on, not a record of
+    // where somebody worked; only a concrete `/home/<name>/` prefix is the record.
+    ['internal/tools', 'camel-cleanup.laid-out.sh', '# The root is $HOME/camel-work/tmp and the bare is ~/camel-work/Camel.git.\n'],
 ];
 
 function tree(files) {

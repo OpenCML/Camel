@@ -918,8 +918,8 @@ Builder::visitLinkNode(const GCT::node_ptr_t &gct, std::optional<GCT::Assignment
             // left is the shape of the value, which only the value answers. The argument goes
             // through the language's shape check -- the check `as` makes, as its own operator and
             // not as a conversion the program wrote (design principles 5.4,
-            // `Builder::refineExtentNodeOf`). This check is not a conversion either: D-1125-18
-            // makes it its own shape check, an operator that may fault, which is why a program
+            // `Builder::refineExtentNodeOf`). This check is not a conversion either: it is its own
+            // shape check, an operator that may fault, which is why a program
             // that declares `f32[n - w + 1]` and is called with `f32[6]` compiles and fails at the
             // call when the value does not have that shape.
             node_handle_t &refinedArg = linkedNode(*arg.input);
@@ -2938,7 +2938,7 @@ refinedArg                = refineExtentNodeOf(
             // body produced. Same location as the argument refinement above and the same reason:
             // the two types are the same type once the extents are read, and only the value can
             // say whether the body kept the relation, so the check is a run-time conversion here
-            // (design principles 5.4). Making it a compile-time type error instead is the ruling's
+            // (design principles 5.4). Making it a compile-time type error instead is the rule's
             // other arm and it refuses `computed.cml`; the owner decides which arm holds.
             if (refined != nullptr && refined != namedExit && actualExit != nullptr &&
                 !refined->equals(actualExit) &&

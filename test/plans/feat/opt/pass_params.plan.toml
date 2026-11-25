@@ -523,8 +523,7 @@ expect_exit = 0
 expect_stdout_contains = ["doc pass forms:", "pass invocation(s) in", "page(s),", "accepted by the real parser", "plan's own desc are reported and not counted", "excused", "parser invocation(s) for"]
 timeout_ms = 30000
 # Slow layer: over the 2 s the fast layer allows -- 2.12 s of
-# child wall clock in the 2026-11-12 record (appendix B of
-# internal/reports/2026-11-24-test-suite-inventory.cn.md).
+# child wall clock.
 tier = "slow"
 
 [[tests]]

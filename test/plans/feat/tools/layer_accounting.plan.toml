@@ -1,7 +1,6 @@
 id = "feat.tools.layer_accounting"
-# Slow layer: every case of this plan costs more than the 2 s the fast layer allows
-# (2026-11-12 fast-layer record, child wall clock; the list is appendix B of
-# internal/reports/2026-11-24-test-suite-inventory.cn.md). The plan is slow as a whole,
+# Slow layer: every case of this plan costs more than the 2 s the fast layer allows.
+# The plan is slow as a whole,
 # so the line goes on the plan and not on each entry.
 tier = "slow"
 desc = "A tier run prints what the layer declares and what it starts; an entry that is declared and started by nothing is a defect rather than a plan that proves nothing"

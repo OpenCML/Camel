@@ -703,8 +703,7 @@ has('predict.pb', 'tensor:matmul_grad_rhs')
 """
 timeout_ms = 10000
 # Slow layer: over the 2 s the fast layer allows -- 2.03 s of
-# child wall clock in the 2026-11-12 record (appendix B of
-# internal/reports/2026-11-24-test-suite-inventory.cn.md).
+# child wall clock.
 tier = "slow"
 
 [[tests]]
@@ -787,8 +786,7 @@ assert(text.includes('nn:sgd'), 'GIR output missing nn:sgd')
 """
 timeout_ms = 10000
 # Slow layer: over the 2 s the fast layer allows -- 2.06 s of
-# child wall clock in the 2026-11-12 record (appendix B of
-# internal/reports/2026-11-24-test-suite-inventory.cn.md).
+# child wall clock.
 tier = "slow"
 
 [[tests]]
@@ -843,8 +841,7 @@ expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 10000
 # Slow layer: over the 2 s the fast layer allows -- 2.02 s of
-# child wall clock in the 2026-11-12 record (appendix B of
-# internal/reports/2026-11-24-test-suite-inventory.cn.md).
+# child wall clock.
 tier = "slow"
 
 [[tests]]
@@ -1218,8 +1215,7 @@ assert(depth === 2, `expected the int field to survive sgd updates unchanged, go
 """
 timeout_ms = 10000
 # Slow layer: over the 2 s the fast layer allows -- 2.12 s of
-# child wall clock in the 2026-11-12 record (appendix B of
-# internal/reports/2026-11-24-test-suite-inventory.cn.md).
+# child wall clock.
 tier = "slow"
 
 [[tests]]
@@ -1371,8 +1367,7 @@ assert(depth === 2, `expected the int field to survive sgd updates unchanged, go
 """
 timeout_ms = 90000
 # Slow layer: over the 2 s the fast layer allows -- 2.19 s of
-# child wall clock in the 2026-11-12 record (appendix B of
-# internal/reports/2026-11-24-test-suite-inventory.cn.md).
+# child wall clock.
 tier = "slow"
 
 [[tests]]
