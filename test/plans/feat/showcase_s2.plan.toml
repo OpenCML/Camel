@@ -260,7 +260,7 @@ timeout_ms = 60000
 #
 # `rule-ranks` is its own word, not `rule-shape`: that one means the law's *pattern* rejected the operand
 # types and nothing was built, which is where this reading stood while the law named its ranks in the
-# pattern (commit `5a2fed990`). A rule is instantiated with three type parameters -- the cotangent's element
+# pattern. A rule is instantiated with three type parameters -- the cotangent's element
 # type and the two operand types -- so a head that names one shape's ranks serves that shape alone, and a
 # ruleset files one rule per operator and arity (`SemanticDiag::DuplicateRuleForOperator`). Serving all three
 # shapes from one key is what moved the ranks into the helpers, and the classification moved with them: one

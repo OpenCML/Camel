@@ -3,22 +3,22 @@ order = 480
 tier = "fast"
 tags = ["feat", "opt", "fold", "branches", "defects"]
 desc = """
-The reduced programs of result `adb67e081` of the CC2027 evaluation
+The reduced programs of the CC2027 evaluation result
 (`Camel-Archive`, `CC2027/eval/results/adb67e081/e9_reduced/`), four of the six that still
 failed on the v0.2.43 pin, copied unedited into `test/cases/opt/adb67e081/`. Each run is
 expected to do what the program does without the optimization passes: exit 0 and no output.
 `rc05_seed104` (the folding of a branch arm, handed its place in a region the arm does not run
 with) is fixed and is in `feat/compile/fold_arms` beside the case of that defect. `rc04_seed72` is green and stays here, and its green is the splice's doing rather than the guard's:
-`a1723fbb9` writes the body after the statement the call is written after, so the fork the guard
+The splice writes the body after the statement the call is written after, so the fork the guard
 used to move does not arise at all (`forked=0`), and taking the guard's order input away leaves this
 entry green. The guard is part of the story and not the reason for it: its blind spot was real -- it
 walked four of the five kinds of input edge, so a chain end that reached the moved statement through
 an order edge only looked free to move it, and the move closed a cycle the seal then reported -- and
-`bf12366ba` walks the order edges beside the other four, which is true of the code; what that walk
+The guard walks the order edges beside the other four, which is true of the code; what that walk
 does not do is decide this run. `rc03_seed30` is
 green as well: the folding used to hand the pruned branch's place to a `DATA` that belongs to no
-arm, and the fixes are in the passes (`aa157702a`, `0add4cd3c`, `060fbffaa`), not in this plan and
-not in the case -- the head of both paths is still `7cde424bd` (2026-11-04 21:52, when the two were
+arm, and the fixes are in the passes, not in this plan and
+not in the case -- the head of both paths is still the red pair (2026-11-04 21:52, when the two were
 red). So the pair below guards the fix, and a red here is the defect returning.
 `rc00_seed27` (SIGSEGV under `std::opt std::nvm`, in the scheduler rather than in a pass) is in no
 plan: it belongs to the lane that owns the schedulers.
@@ -84,7 +84,7 @@ timeout_ms = 20000
 
 [[tests]]
 name = "adb67e081.rc04_seed72_inline"
-desc = "The same refusal as its twin, because `rc04_seed72` is refused before any pass runs and `std::cxx::inline` never sees it. Kept rather than deleted: the pair is what says the seed is refused once, and the entry is where the pipeline it was found with has to come back from. When it was green it read as a behavior test under `std::cxx::inline`, the pipeline it was found with. Two statements, and only the first keeps it green. First, the red went away with the splice: `a1723fbb9` writes the body after the statement the call is written after, so the fork this case used to leave does not arise (`forked=0`), and deleting the guard's order input and rebuilding leaves the run at exit 0 with the same reading -- the cycle the seal used to report, `node 24 (11): lies on a cycle of inputs: 24(11) <- 27(13) <- 38(13) <- 24`, is not kept away by the guard. Second, the guard does walk all five kinds of input edge, the order ones included (`bf12366ba`), and that is true of the code and read in it; what is not true is that an order edge decides anything here: over 2745 programs of `test/cases`, the five-kind walk and a four-kind one answered the same on every fork pair -- 26 read (0,0), 26 read (1,1), none read the (1,0) that an order edge alone would produce. A red here is still the defect returning: the cycle sentence arrived as `PassInternalError`, which `expect_output_not_contains` names."
+desc = "The same refusal as its twin, because `rc04_seed72` is refused before any pass runs and `std::cxx::inline` never sees it. Kept rather than deleted: the pair is what says the seed is refused once, and the entry is where the pipeline it was found with has to come back from. When it was green it read as a behavior test under `std::cxx::inline`, the pipeline it was found with. Two statements, and only the first keeps it green. First, the red went away with the splice: the body is written after the statement the call is written after, so the fork this case used to leave does not arise (`forked=0`), and deleting the guard's order input and rebuilding leaves the run at exit 0 with the same reading -- the cycle the seal used to report, `node 24 (11): lies on a cycle of inputs: 24(11) <- 27(13) <- 38(13) <- 24`, is not kept away by the guard. Second, the guard does walk all five kinds of input edge, the order ones included, and that is true of the code and read in it; what is not true is that an order edge decides anything here: over 2745 programs of `test/cases`, the five-kind walk and a four-kind one answered the same on every fork pair -- 26 read (0,0), 26 read (1,1), none read the (1,0) that an order edge alone would produce. A red here is still the defect returning: the cycle sentence arrived as `PassInternalError`, which `expect_output_not_contains` names."
 kind = "negative"
 case = "../../../cases/opt/adb67e081/rc04_seed72.cml"
 args = ["${case}"]
@@ -108,19 +108,19 @@ timeout_ms = 20000
 #   2. With that one call taken out (`checkCellEscapes();` in src/compile/gir/program.cpp), the
 #      program runs at exit 0 with no output, exactly as its legal same shape
 #      `rc04_seed72_within_call.cml` does: the state rule is the only thing in its way.
-#   3. The ring `a1723fbb9` fixed is unobservable in this shape today, not gone. With the place
+#   3. The ring that fix closed is unobservable in this shape today, not gone. With the place
 #      decision that commit added switched off (`if (false && placePreds.empty())` on the
 #      argument-place block of src/runtime/draft_inline.cpp#inlineCallableInDraft), the program
 #      still exits 0 with no cycle and no `PassInternalError`. The byte-for-byte comparison of the
 #      inlined drawing (2246 lines, the 194 `ORDER` edges included) is on the sibling shape and
 #      written in feat/opt/inline_cycle. Making the ring observable again is work on a branch that
-#      reverts `a1723fbb9`, not a new seed.
+#      reverts that decision, not a new seed.
 #
 # The live half is the inlining the two entries below read: `direct_calls` 2 with no pass and 0
 # under the pass.
 [[tests]]
 name = "adb67e081.rc04_seed72_within_call_no_pass"
-desc = "The legal half of `rc04_seed72` with no pass: the program runs and says nothing, and `std::stats` reads 2 direct calls -- the number the entry below must move. This is the reading still alive in this shape; the place decision `a1723fbb9` added is not on this program's path (see the note above). What made this half legal had to change with the rule: the closure used to write `v16`, which the withdrawn state rule allowed and `ClosureAssignsCapturedName` (0x03000213) refuses, so the write is now the line before the closure is made and the closure only reads `v16`. The value is the same (`0 / -2` is 0) and so is this reading."
+desc = "The legal half of `rc04_seed72` with no pass: the program runs and says nothing, and `std::stats` reads 2 direct calls -- the number the entry below must move. This is the reading still alive in this shape; the place decision that was added is not on this program's path (see the note above). What made this half legal had to change with the rule: the closure used to write `v16`, which the withdrawn state rule allowed and `ClosureAssignsCapturedName` (0x03000213) refuses, so the write is now the line before the closure is made and the closure only reads `v16`. The value is the same (`0 / -2` is 0) and so is this reading."
 kind = "behavior"
 case = "../../../cases/opt/adb67e081/rc04_seed72_within_call.cml"
 args = ["${case}", "std::stats", "${run_nvm}"]

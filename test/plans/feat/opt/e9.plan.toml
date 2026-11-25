@@ -2,7 +2,7 @@ id = "opt.e9"
 order = 336
 tier = "fast"
 tags = ["feat", "opt", "defunctionalize", "inline", "fold", "dce", "branches", "regions", "defects"]
-desc = "The compiler answers what it cannot do with a diagnostic, not with a crash: the E9 reduced programs that used to abort a pass, the two a rewrite made the commit refuse with a read across a region, the two a cell handle outlived by its node ended in a SIGSEGV, the one whose loop state assembly asked a tuple fill for a component the fill holds in its static template rather than in a with-input, the two the C++ writer left without a return value, and the six statements a chain splice used to drop -- a `println` that stopped running, or ran after the statement written after it -- in the six wrong values that class produced: five turned correct by the merge `2779ad600`, the sixth by `f77e57f9d`"
+desc = "The compiler answers what it cannot do with a diagnostic, not with a crash: the E9 reduced programs that used to abort a pass, the two a rewrite made the commit refuse with a read across a region, the two a cell handle outlived by its node ended in a SIGSEGV, the one whose loop state assembly asked a tuple fill for a component the fill holds in its static template rather than in a with-input, the two the C++ writer left without a return value, and the six statements a chain splice used to drop -- a `println` that stopped running, or ran after the statement written after it -- in the six wrong values that class produced: five turned correct by one merge, the sixth by another"
 
 # Four programs of the E9 differential campaign (A4b-A4e, pin adb67e081; the ledger itself is the
 # author’s archive defect ledger, which is not in this repository), reduced to
@@ -349,7 +349,7 @@ expect_output_not_contains = ["enters region", "PassInternalError", "internal er
 # of 2026-11-12 the campaign reduced them with); their entries stay, because a reduction of this
 # campaign that is not in the plan is a defect that can come back unseen.
 #
-# Where each one first goes wrong, measured on `29ea0a011` -- the build the campaign reduced them
+# Where each one first goes wrong, measured -- the build the campaign reduced them
 # on -- by adding the ladder's passes one at a time (`std::macro`, then devirtualize, specialize,
 # inline, fold, cse, algebra, dce, order, then `std::opt` as a whole) under `--gc generational
 # std::nvm`, and comparing the bytes with the same program and no pass:
@@ -363,7 +363,7 @@ expect_output_not_contains = ["enters region", "PassInternalError", "internal er
 # A16e's row in the campaign table names `std::cxx::order`, and that is not where the reading
 # first goes wrong: `+dce`, the step before `+order`, already reads the program's lines in the
 # program's order again, so `+order` cannot be the first wrong step. What `+fold` breaks on
-# `rc09_seed15` is the place `+fold` breaks on `rc02_seed9`. On `8cdd0e64e` -- the baseline these
+# `rc09_seed15` is the place `+fold` breaks on `rc02_seed9`. On the baseline these
 # entries run on -- every one of the five reads correctly at every step of the ladder.
 #
 # A16a and A16e are one defect and one case: `std::cxx::fold`'s `pruneBranch` dissolves the branch
@@ -379,7 +379,7 @@ expect_output_not_contains = ["enters region", "PassInternalError", "internal er
 
 [[tests]]
 name = "rc02_seed9.without_the_pass"
-desc = "`rc02_seed9` (A16a) with no pass at all: the reading the optimized run is held to. Two lines, in this order -- `q36 0` from the call before the branch, `q36 10` from the one after it. First wrong pass: this program first goes wrong in `std::cxx::fold` (measured on `29ea0a011`; correct on this baseline)."
+desc = "`rc02_seed9` (A16a) with no pass at all: the reading the optimized run is held to. Two lines, in this order -- `q36 0` from the call before the branch, `q36 10` from the one after it. First wrong pass: this program first goes wrong in `std::cxx::fold` (measured; correct on this baseline)."
 kind = "behavior"
 case = "../../../cases/opt/e9/rc02_seed9.cml"
 args = ["${case}", "--gc", "generational", "${backend}"]
@@ -398,7 +398,7 @@ timeout_ms = 20000
 
 [[tests]]
 name = "rc02_seed9.specialize_inline_fold"
-desc = "`rc02_seed9` (A16a) under the reduced pipeline the campaign found it with: the same two lines in the same order. The branch the fold dissolves stood between the two calls, so the printed lines used to come out swapped -- the blank line of A16e and this one are one defect, one place `pruneBranch` now hands over. First wrong pass: this program first goes wrong in `std::cxx::fold` (measured on `29ea0a011`; correct on this baseline)."
+desc = "`rc02_seed9` (A16a) under the reduced pipeline the campaign found it with: the same two lines in the same order. The branch the fold dissolves stood between the two calls, so the printed lines used to come out swapped -- the blank line of A16e and this one are one defect, one place `pruneBranch` now hands over. First wrong pass: this program first goes wrong in `std::cxx::fold` (measured; correct on this baseline)."
 kind = "behavior"
 case = "../../../cases/opt/e9/rc02_seed9.cml"
 args = ["${case}", "--gc", "generational", "std::cxx::specialize", "std::cxx::inline", "std::cxx::fold", "${backend}"]
@@ -418,7 +418,7 @@ timeout_ms = 20000
 
 [[tests]]
 name = "rc04_seed251.without_the_pass"
-desc = "`rc04_seed251` (A16b) with no pass at all: exactly one blank line. The count is the reading: the defect printed a blank line per element of the `loop` inside the inlined body. First wrong pass: this program first goes wrong in `std::cxx::inline` (measured on `29ea0a011`; correct on this baseline)."
+desc = "`rc04_seed251` (A16b) with no pass at all: exactly one blank line. The count is the reading: the defect printed a blank line per element of the `loop` inside the inlined body. First wrong pass: this program first goes wrong in `std::cxx::inline` (measured; correct on this baseline)."
 kind = "behavior"
 case = "../../../cases/opt/e9/rc04_seed251.cml"
 args = ["${case}", "--gc", "generational", "${backend}"]
@@ -436,7 +436,7 @@ timeout_ms = 20000
 
 [[tests]]
 name = "rc04_seed251.inline"
-desc = "`rc04_seed251` (A16b) under `std::cxx::inline`, the pass that printed the blank line once per element of the loop's array. One blank line, as with no pass at all. First wrong pass: this program first goes wrong in `std::cxx::inline` (measured on `29ea0a011`; correct on this baseline)."
+desc = "`rc04_seed251` (A16b) under `std::cxx::inline`, the pass that printed the blank line once per element of the loop's array. One blank line, as with no pass at all. First wrong pass: this program first goes wrong in `std::cxx::inline` (measured; correct on this baseline)."
 kind = "behavior"
 case = "../../../cases/opt/e9/rc04_seed251.cml"
 args = ["${case}", "--gc", "generational", "std::cxx::inline", "${backend}"]
@@ -455,7 +455,7 @@ timeout_ms = 20000
 
 [[tests]]
 name = "rc05_seed256.without_the_pass"
-desc = "`rc05_seed256` (A16c) with no pass at all: exactly one blank line. First wrong pass: this program first goes wrong in `std::opt` (measured on `29ea0a011`; correct on this baseline)."
+desc = "`rc05_seed256` (A16c) with no pass at all: exactly one blank line. First wrong pass: this program first goes wrong in `std::opt` (measured; correct on this baseline)."
 kind = "behavior"
 case = "../../../cases/opt/e9/rc05_seed256.cml"
 args = ["${case}", "--gc", "generational", "${backend}"]
@@ -473,7 +473,7 @@ timeout_ms = 20000
 
 [[tests]]
 name = "rc05_seed256.opt"
-desc = "`rc05_seed256` (A16c) under `std::opt`, which printed nothing at all. One blank line, as with no pass at all. First wrong pass: this program first goes wrong in `std::opt` (measured on `29ea0a011`; correct on this baseline)."
+desc = "`rc05_seed256` (A16c) under `std::opt`, which printed nothing at all. One blank line, as with no pass at all. First wrong pass: this program first goes wrong in `std::opt` (measured; correct on this baseline)."
 kind = "behavior"
 case = "../../../cases/opt/e9/rc05_seed256.cml"
 args = ["${case}", "--gc", "generational", "std::opt", "${backend}"]
@@ -492,7 +492,7 @@ timeout_ms = 20000
 
 [[tests]]
 name = "rc07_seed140.without_the_pass"
-desc = "`rc07_seed140` (A16d) with no pass at all: exactly two blank lines. First wrong pass: this program first goes wrong in `std::cxx::dce` (measured on `29ea0a011`; correct on this baseline)."
+desc = "`rc07_seed140` (A16d) with no pass at all: exactly two blank lines. First wrong pass: this program first goes wrong in `std::cxx::dce` (measured; correct on this baseline)."
 kind = "behavior"
 case = "../../../cases/opt/e9/rc07_seed140.cml"
 args = ["${case}", "--gc", "generational", "${backend}"]
@@ -510,7 +510,7 @@ timeout_ms = 20000
 
 [[tests]]
 name = "rc07_seed140.inline_dce"
-desc = "`rc07_seed140` (A16d) under `std::cxx::inline std::cxx::dce`, which printed one blank line of the two. Two blank lines, as with no pass at all. First wrong pass: this program first goes wrong in `std::cxx::dce` (measured on `29ea0a011`; correct on this baseline)."
+desc = "`rc07_seed140` (A16d) under `std::cxx::inline std::cxx::dce`, which printed one blank line of the two. Two blank lines, as with no pass at all. First wrong pass: this program first goes wrong in `std::cxx::dce` (measured; correct on this baseline)."
 kind = "behavior"
 case = "../../../cases/opt/e9/rc07_seed140.cml"
 args = ["${case}", "--gc", "generational", "std::cxx::inline", "std::cxx::dce", "${backend}"]
@@ -529,7 +529,7 @@ timeout_ms = 20000
 
 [[tests]]
 name = "rc09_seed15.without_the_pass"
-desc = "`rc09_seed15` (A16e) with no pass at all: `L4 0 ` -- with the space that is part of the line -- and then a blank line. The trailing space is the reading, so `trim_trailing_space` is not a normalizer of these two entries. First wrong pass: this program first goes wrong in `std::cxx::fold` (measured on `29ea0a011`; correct on this baseline)."
+desc = "`rc09_seed15` (A16e) with no pass at all: `L4 0 ` -- with the space that is part of the line -- and then a blank line. The trailing space is the reading, so `trim_trailing_space` is not a normalizer of these two entries. First wrong pass: this program first goes wrong in `std::cxx::fold` (measured; correct on this baseline)."
 kind = "behavior"
 case = "../../../cases/opt/e9/rc09_seed15.cml"
 args = ["${case}", "--gc", "generational", "${backend}"]
@@ -548,7 +548,7 @@ timeout_ms = 20000
 
 [[tests]]
 name = "rc09_seed15.inline_fold"
-desc = "`rc09_seed15` (A16e) under `std::cxx::inline std::cxx::fold`: the same two lines in the same order. The fold dissolves the branch the taken arm was, and that arm's print is the statement whose place the block's order was held by -- the shape of A16a's defect and the same fix. First wrong pass: this program first goes wrong in `std::cxx::fold` (measured on `29ea0a011`; correct on this baseline)."
+desc = "`rc09_seed15` (A16e) under `std::cxx::inline std::cxx::fold`: the same two lines in the same order. The fold dissolves the branch the taken arm was, and that arm's print is the statement whose place the block's order was held by -- the shape of A16a's defect and the same fix. First wrong pass: this program first goes wrong in `std::cxx::fold` (measured; correct on this baseline)."
 kind = "behavior"
 case = "../../../cases/opt/e9/rc09_seed15.cml"
 args = ["${case}", "--gc", "generational", "std::cxx::inline", "std::cxx::fold", "${backend}"]
@@ -697,7 +697,7 @@ expect_stdout_exact = ""
 # has), a `var` declared in an arm and written in an arm nested in it, and a `var` declared in an arm
 # and never written again.
 #
-# What was wrong was S2's (`243de26e5`) *choice* of the name to carry, not the carrying, and not this
+# What was wrong was S2's *choice* of the name to carry, not the carrying, and not this
 # guarantee: `branchBeforeValues_` is written by every `rebindSsa` an arm's body reaches, and it cannot
 # tell a name the branch found in scope from one an arm declared, so a name that dies with the arm was
 # carried to a JOIN built after that arm's scope had been popped. The rule that forbids it was already
@@ -827,8 +827,8 @@ normalizers = ["strip_ansi", "normalize_newlines"]
 # four back ends (it is before any of them).
 #
 # This entry came in with the merge carrying that red as a known failure, and the owner it named was
-# wrong: it blamed the S1 line that makes a same-region local `var` a value (`1e8e390b6`). The shape
-# arrives with S2's carry (`243de26e5`) instead, and the reading that decides it is that reverting
+# wrong: it blamed the S1 line that makes a same-region local `var` a value. The shape
+# arrives with S2's carry instead, and the reading that decides it is that reverting
 # that commit alone makes the reduced program run. It is the same shape as `rc20_seed5_arm_decl`
 # above, and the same one line closes it, so the mark is gone: what is held now is that the program
 # runs. The output is still not named, because the program says nothing on either side of the fix.
@@ -893,7 +893,7 @@ expect_stdout_exact = "L6 5\n"
 # and the compiler reported as a warning: a `sync` block inside the value of a binding nobody reads,
 # holding an outside write (`q(5)` prints).
 #
-# The author ruled on 2026-11-17 (`e480c0995`):
+# The author ruled on 2026-11-17:
 #
 #   "by principles 3.1 and 3.4 an outside write is used by the region it runs in, so a call, loop
 #    or block that writes runs even when its value is unread; region roots follow the inferred
@@ -929,13 +929,13 @@ case = "../../../cases/opt/e9/rc23_seed429_sync_arm.cml"
 args = ["${case}", "${backend}"]
 expect_exit = 0
 expect_stdout_exact = "P 5\n"
-# The author's rework order of 2026-11-18 (`8614bb4a6`) is that this case is not withdrawn to make a
+# The author's rework order of 2026-11-18 is that this case is not withdrawn to make a
 # number look better: it pins a behaviour he confirmed on 2026-11-17, it has an owner, and it stays in
 # the plan as a red that is being repaired -- `known_fail` is "在修的红", not an accepted answer. The
 # three parts he asked a mark to carry are the three fields below.
 #
 #   the defect -- **a region's write is not joined to the region's exit when the graph is built**
-#     (`95a35c23c`'s finding, still true of this tree). Measured with a temporary trace in
+#     (a finding still true of this tree). Measured with a temporary trace in
 #     `Builder::layRegionWriteEdges`: `q(5)` *is* collected as a write of the `case _` arm
 #     (`id=16 kind=10 -> statement=16 region=3 exit=18`), and then `gateOf` lays no GATE for it,
 #     because the arm's exit already reaches the write (`region=3 write=16 dropped: result already
@@ -944,13 +944,13 @@ expect_stdout_exact = "P 5\n"
 #     prints the warning below instead of `P 5`.
 #   the owner  -- this lane's rework: the exit `GATE` that reads the region's writes.
 #   the unhide -- when that rework is merged, delete the mark; the case prints `P 5` and reports
-#     nothing. The rework landed in the merge that brought `f850a2505` (a region's exit GATE forwards
+#     nothing. The rework landed in the merge that brought the region exit GATE (a region's exit GATE forwards
 #     the value its reader takes), the run below passed on all four back ends, and the four fields are
 #     gone; what stays is this record of what the mark was and why it had to come off.
 #
 # The four fields are gone: `known_fail_msg` pinned the warning, the warning stopped being reported
 # when the rework landed, and the entry reads `P 5` on all four back ends. `develop` printed `P 5`
-# here before that batch (`feat/opt` 1538/1538 at `33c0fb536`), so the mark was a regression of the
+# here before that batch (`feat/opt` 1538/1538), so the mark was a regression of the
 # batch that added it and not a reading the language had not settled -- the tree is back to that
 # reading, and no new mark replaces it.
 
@@ -962,7 +962,7 @@ expect_stdout_exact = "P 5\n"
 # of a predecessor only when `nodeRegion(pred)` was the user's region, and a splice gives the code
 # it moves an `Inline` region, so a predecessor still carrying the annotation of the region it came
 # from was refused -- and the repair reads "another block" through `sameSyncBlock`, the block test
-# the rest of that file and `placeLostStatements` already use (merge `2779ad600`,
+# the rest of that file and `placeLostStatements` already use (merge,
 # docs/design/effects/edges.cn.md 4.6 and 5.7).
 #
 # Five of the six turned correct with it and the sixth did not; these five entries are those five,
@@ -970,7 +970,7 @@ expect_stdout_exact = "P 5\n"
 # section 4), 10 to 23 lines each. Each is one pair: the reading with no pass at all, which the
 # optimized run is held to, and the shortest prefix of the ladder the bisection named as the one
 # that loses the statement. Both cells of all five were measured on the `draft.cpp` of `2779ad600^1`
-# and on the one of `2779ad600` (the file swapped in place and rebuilt either way, `std::nvm`,
+# and on the one after that change (the file swapped in place and rebuilt either way, `std::nvm`,
 # `--gc generational`), which is where the before/after sentence in each entry comes from:
 #
 #   rc24_seed131  devirtualize + inline + fold  `L5 [{ x: 0, y: 0 }]` then the blank line: the
@@ -991,19 +991,19 @@ expect_stdout_exact = "P 5\n"
 # all four back ends, so the prefix below is the narrow reading of the same fact, not a weaker one.
 #
 # The bisection report wrote that these could only be single-cell cases because the no-pass cell is
-# not green. On `2779ad600` all five read correctly with no pass at all, so the pair stands here as
+# not green. On that tree all five read correctly with no pass at all, so the pair stands here as
 # it does for every other program in this file.
 #
 # `311`, the sixth, was deliberately not here while it was red. `std::cxx::inline` on it stops the
 # `println('MAIN')` written before a macro expanded in an argument from running, `sameSyncBlock` does
-# not reach it, and it read the same wrong answer on `2779ad600` as on `2779ad600^1`. A `known_fail`
-# would have recorded a wrong answer as the expected one: the answer was to fix it, and `f77e57f9d`
+# not reach it, and it read the same wrong answer as on `2779ad600^1`. A `known_fail`
+# would have recorded a wrong answer as the expected one: the answer was to fix it, and the fix
 # did (`GraphDraft::closeChainOver`, src/runtime/draft.cpp). Its entry is the section at the end of
 # this file, and it is four cells rather than the pair the five above have.
 
 [[tests]]
 name = "rc24_seed131.without_the_pass"
-desc = "`rc24_seed131` with no pass at all: a blank line, then `L5 [{ x: 0, y: 0 }]`. The order is the reading -- the blank line is the closure's `println('')` at the point the loop body calls it, before the body's own line. First wrong prefix: `std::cxx::devirtualize std::cxx::inline std::cxx::fold` (measured on `2779ad600^1`; correct on `2779ad600`)."
+desc = "`rc24_seed131` with no pass at all: a blank line, then `L5 [{ x: 0, y: 0 }]`. The order is the reading -- the blank line is the closure's `println('')` at the point the loop body calls it, before the body's own line. First wrong prefix: `std::cxx::devirtualize std::cxx::inline std::cxx::fold` (measured on `2779ad600^1`; correct)."
 kind = "behavior"
 case = "../../../cases/opt/e9/rc24_seed131.cml"
 args = ["${case}", "--gc", "generational", "${backend}"]
@@ -1042,7 +1042,7 @@ timeout_ms = 20000
 
 [[tests]]
 name = "rc25_seed141.without_the_pass"
-desc = "`rc25_seed141` with no pass at all: one blank line -- `q37`'s `println('')` runs when `g56` calls it. First wrong prefix: `std::cxx::inline std::cxx::fold` (measured on `2779ad600^1`; correct on `2779ad600`)."
+desc = "`rc25_seed141` with no pass at all: one blank line -- `q37`'s `println('')` runs when `g56` calls it. First wrong prefix: `std::cxx::inline std::cxx::fold` (measured on `2779ad600^1`; correct)."
 kind = "behavior"
 case = "../../../cases/opt/e9/rc25_seed141.cml"
 args = ["${case}", "--gc", "generational", "${backend}"]
@@ -1079,7 +1079,7 @@ timeout_ms = 20000
 
 [[tests]]
 name = "rc26_seed417.without_the_pass"
-desc = "`rc26_seed417` with no pass at all: a blank line, then `L4 0 0`. First wrong prefix: `std::cxx::inline std::cxx::fold` (measured on `2779ad600^1`; correct on `2779ad600`)."
+desc = "`rc26_seed417` with no pass at all: a blank line, then `L4 0 0`. First wrong prefix: `std::cxx::inline std::cxx::fold` (measured on `2779ad600^1`; correct)."
 kind = "behavior"
 case = "../../../cases/opt/e9/rc26_seed417.cml"
 args = ["${case}", "--gc", "generational", "${backend}"]
@@ -1118,7 +1118,7 @@ timeout_ms = 20000
 
 [[tests]]
 name = "rc27_seed419.without_the_pass"
-desc = "`rc27_seed419` with no pass at all: one blank line -- `q21`'s `println('')` runs. First wrong prefix: `std::cxx::inline std::cxx::cse` (measured on `2779ad600^1`; correct on `2779ad600`)."
+desc = "`rc27_seed419` with no pass at all: one blank line -- `q21`'s `println('')` runs. First wrong prefix: `std::cxx::inline std::cxx::cse` (measured on `2779ad600^1`; correct)."
 kind = "behavior"
 case = "../../../cases/opt/e9/rc27_seed419.cml"
 args = ["${case}", "--gc", "generational", "${backend}"]
@@ -1155,7 +1155,7 @@ timeout_ms = 20000
 
 [[tests]]
 name = "rc28_seed484.without_the_pass"
-desc = "`rc28_seed484` with no pass at all: one blank line -- `q27`'s `println('')` runs. First wrong prefix: `std::cxx::inline std::cxx::fold` (measured on `2779ad600^1`; correct on `2779ad600`)."
+desc = "`rc28_seed484` with no pass at all: one blank line -- `q27`'s `println('')` runs. First wrong prefix: `std::cxx::inline std::cxx::fold` (measured on `2779ad600^1`; correct)."
 kind = "behavior"
 case = "../../../cases/opt/e9/rc28_seed484.cml"
 args = ["${case}", "--gc", "generational", "${backend}"]
@@ -1194,7 +1194,7 @@ timeout_ms = 20000
 #
 # `rc29_seed311` is the 20-line program of the sixth figure of
 # `internal/reports/2026-11-18-e9-six-bisected-by-seed.cn.md` section 4 (reproduced 5/5), and
-# it is the sixth of the six wrong values the merge `2779ad600` turned correct -- the one that merge
+# it is the sixth of the six wrong values one merge turned correct -- the one that merge
 # left wrong. Under `std::macro std::cxx::inline` the `println('')` written *before* the call does
 # not run, so the program prints one blank line where it should print two. The inline expands the
 # macro call `f1(true, 10.0)` into the argument slot; the statement written before the call hangs on
@@ -1204,7 +1204,7 @@ timeout_ms = 20000
 # wait on anything else", which answers the right question only while a successor has one wait or
 # none.
 #
-# The repair is `f77e57f9d` (`GraphDraft::closeChainOver`, src/runtime/draft.cpp): the condition a
+# The repair is `GraphDraft::closeChainOver` (src/runtime/draft.cpp): the condition a
 # predecessor's wait is kept by now reads "the successor waited on this node -- its own wait is the
 # one going away -- or it waits on nothing", so two waits no longer refuse the hand-on and the wait
 # evaporates into the chain instead of into nobody.
@@ -1215,7 +1215,7 @@ timeout_ms = 20000
 #                     what the fault needed, so what the ladder prints is held to what the program
 #                     prints -- the entry names no number that the program itself does not give.
 #   macro_inline      `std::macro std::cxx::inline`, the ladder the bisection named: the same two
-#                     lines. Before `f77e57f9d` this cell reads one, and it is the red this pins.
+#                     lines. Before the repair this cell reads one, and it is the red this pins.
 #   macro_only        `std::macro` alone: the same two lines, on both sides of the repair.
 #   inline_only       `std::cxx::inline` alone: the same two lines, on both sides of the repair.
 #
@@ -1248,7 +1248,7 @@ timeout_ms = 20000
 
 [[tests]]
 name = "rc29_seed311.macro_inline"
-desc = "`rc29_seed311` under the ladder the bisection named, `std::macro std::cxx::inline`: the same two blank lines. Before `f77e57f9d` only one line was printed -- the `println('')` written before the call stopped running once the inline expanded the macro `f1(true, 10.0)` into the argument slot, and `closeChainOver` refused to keep that statement's wait. This cell is what pins the repair; the two below say the defect was the pair alone."
+desc = "`rc29_seed311` under the ladder the bisection named, `std::macro std::cxx::inline`: the same two blank lines. Before the repair only one line was printed -- the `println('')` written before the call stopped running once the inline expanded the macro `f1(true, 10.0)` into the argument slot, and `closeChainOver` refused to keep that statement's wait. This cell is what pins the repair; the two below say the defect was the pair alone."
 kind = "behavior"
 case = "../../../cases/opt/e9/rc29_seed311.cml"
 args = ["${case}", "--gc", "generational", "std::macro", "std::cxx::inline", "${backend}"]

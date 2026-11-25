@@ -6,7 +6,7 @@
  * The gate list, as one command.
  *
  * A check that is on no list is a check nobody runs, and the cost of that is not hypothetical: the
- * reds of 2026-11-22 name it twice. `frontend.ast_snapshot` went red on `2d384c3c4` because a `.cml`
+ * reds of 2026-11-22 name it twice. `frontend.ast_snapshot` went red because a `.cml`
  * change did not re-record `test/plans/feat/parse/golden/ast_hashes.txt`, and the merge that landed
  * it had run what the project called "the six gates" -- a list in somebody's memory, which did not
  * name `scripts/check-ast-hashes.mjs`, a script that existed for exactly that red. The same merge

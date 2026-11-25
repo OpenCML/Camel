@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: MIT
 
 # `inline` as an operator of a transaction: the two semantics the ruling of 2026-11-18 gave
-# (`e55cd6157`; internal/reviews/2026-11-18-the-at-of-inline-says-a-region-not-a-place.cn.md
+# (internal/reviews/2026-11-18-the-at-of-inline-says-a-region-not-a-place.cn.md
 # section 5, docs/design/graph-editing/README.cn.md 7 and 15.3).
 #
 # The readings are printed by the program itself, because the two branches are not told apart by
@@ -30,7 +30,7 @@
 #
 # It runs as well, and that is the other half of the same reading: design principles 3.1 makes the
 # body's write a write of the region it landed in, and that region's exit `GATE` waits for it. The
-# author's ruling of 2026-11-20 (`1ee2ce8b9`, item 1) is why this is the reading and not the one
+# author's ruling of 2026-11-20 (item 1) is why this is the reading and not the one
 # this plan pinned before it: "体若带写，`inline` 自己把这些写挂进所选区域出口 `GATE` 的等待". The
 # line this reading pinned until then -- the body's print sitting in a region no chain of the block
 # reaches, so that the splice at a pure node changed nothing the program printed -- was that

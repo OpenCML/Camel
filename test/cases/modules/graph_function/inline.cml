@@ -1,4 +1,4 @@
-// The two semantics of `inline` the ruling of 2026-11-18 gave (`e55cd6157`;
+// The two semantics of `inline` the ruling of 2026-11-18 gave (
 // docs/design/graph-editing/README.cn.md 7 and 15.3): `at` a statement of a block's chain takes
 // over its place, `at` a pure node only picks the region.
 //

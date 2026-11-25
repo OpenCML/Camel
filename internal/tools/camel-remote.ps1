@@ -647,7 +647,7 @@ $checkers = [ordered]@{
     # toolchain on one platform, so a diagnostic only another one reports -- `-Wc++11-narrowing` at
     # `src/stdlib/onnx/lowering_grad.cpp:480` is the one that cost a day -- stayed invisible until a CI
     # run, and CI runs are the slowest reading in this project. The host's clang is a newer major and
-    # does not report what 19 does (measured on `5f68184983`: clang 23 exit 0, clang 19 red), so the
+    # does not report what 19 does (measured: clang 23 exit 0, clang 19 red), so the
     # script runs clang 19 from the image it names. It reads no install -- so `compiler` is false and
     # the entry is meaningful under `-NoBuild` -- and it reads the flags from
     # `build/compile_commands.json` rather than carrying a copy of `cmake/Warnings.cmake`, which is the
@@ -666,7 +666,7 @@ $checkers = [ordered]@{
     # `test/plans/feat/parse/golden/ast_hashes.txt` records for each compared with the reading the
     # file gives now. A `.cml` whose reading moved, or a `.cml` nobody registered, is a red on the
     # base branch that the merge position has to find and patch after the fact; that happened five
-    # times (`1dad3104f` is the fifth: `4363 lines, 3 added, 3 removed`), and each time the repair
+    # times (the fifth: `4363 lines, 3 added, 3 removed`), and each time the repair
     # was right and the reader was late. This is the reader: one process, one line per stale file,
     # from the lane's own worktree, before the push.
     #
@@ -849,11 +849,11 @@ $checkList = $checkNames -join ' '
 # `.cml` file this tree has, and no `-AstDrop` named them -- are `StillHere` and `Refused`. The tree
 # that question is asked about is an argument with no default: a default would have asked it about
 # the directory the tool was started in (iron rule 17). The bulk
-# condition is the one that does not depend on where a file is: on 2026-11-17 `eaa3ecb8c` recorded
+# condition is the one that does not depend on where a file is: on 2026-11-17 a re-record ran
 # with the bulk flag on a tree that was missing the seven `test/cases/compile/var/loop_*.cml` a
 # parallel lane had just added, and those rows went with the files (4400 lines to 4393). Those files
 # were in neither that tree nor its base branch, so no `Test-Path` could have seen the loss; a bulk
-# rewrite could have known it was rewriting the whole table. `27de8a3df` put the rows back by hand,
+# rewrite could have known it was rewriting the whole table. the rows were put back by hand,
 # and `agents/test.md` now carries the rule this function enforces.
 function Get-AstDropVerdict {
     param(
@@ -3693,7 +3693,7 @@ exit `$code
     # A fourth condition now precedes the write: the record may not lose a row while the file that row
     # records is still here (`$astStillHere` below). This is the tree the record belongs to, so it is
     # the only place the question "does that file exist" has the answer that matters -- the host
-    # records from its own checkout, which can be missing files this tree has (`eaa3ecb8c`,
+    # records from its own checkout, which can be missing files this tree has (
     # `agents/test.md`). A row that goes has to be named by -AstDrop, and a bulk re-record may not
     # lose one at all; the refusal prints the rows it would have dropped, with their recorded hash,
     # and writes nothing.

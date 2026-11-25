@@ -240,8 +240,8 @@ function technicalPages(directory = TECHNICAL) {
 // directory. It was the directory alone until 2026-11-05, and that read deletes rows: a page that
 // leaves `questions/` -- answered into `reviews/`, or dropped by a revert -- takes its row with it
 // on the next `--write`, and the check then passes on the smaller table, because the file and the
-// generator agree again. That is exactly what commit 56c0bf43e did (65 rows to 17, the deleted
-// rows still unanswered), and on the live tree at 43b775401 the same read gave "2 page(s) in the
+// generator agree again. That is exactly what the generator did (65 rows to 17, the deleted
+// rows still unanswered), and on a live tree the same read gave "2 page(s) in the
 // directory" against 62 rows in the file: one `--write` would have deleted 61 rows and reported a
 // green check. So the generator only ever adds. A row whose page is gone is kept -- retargeted to
 // the page of the same name in `reviews/` when that is where it moved, and left as a bare name

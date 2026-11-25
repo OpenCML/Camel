@@ -14,7 +14,7 @@
 #
 # The case prints, for every reading, **both sides' canonical form: the byte count and the sha256**.
 # The verdict is that form, byte for byte (`std::jgir canonical=true`, the document
-# `test/tools/same_graph.py` compares, author's ruling `812afad5c`); when the answer is no the tool
+# `test/tools/same_graph.py` compares, author's ruling); when the answer is no the tool
 # also names the nodes and the edges one side has and the other does not, and the readings that
 # require a difference require it to be named.
 #
@@ -38,7 +38,7 @@
 # strict line, which the merge of 丙.1 turns this plan into, is the same command with
 # `--require-one-form` added to `args`: it fails until the two writings fuse to one canonical form.
 #
-# Item (c), wall clock of two effects on two resources: the author's ruling on `1b7905cd4` rejected the
+# Item (c), wall clock of two effects on two resources: the author's ruling rejected the
 # first reading of this item as one resource written twice (two files are one resource, `fs`: "calls on
 # the file system keep their written order", `lib/fs/fs.cml#fs`), so `effect_parallel_clock.py` now
 # runs one 200 ms effect on `clock` (`lib/process/process.cml#sleep`) and one on `rendezvous_point`

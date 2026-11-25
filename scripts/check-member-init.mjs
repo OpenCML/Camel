@@ -5,7 +5,7 @@
 // A class member that no constructor initializes and that carries no default member initializer is
 // read as whatever the allocator left in it. That is not a style question: `Builder`'s `synced_` /
 // `varied_` were read by `UnitContext`'s save before any statement had written them, and a garbage
-// `true` there built a closure under the wrong graph (the S1-6 capture refusal, `8c2d57ce9`).
+// `true` there built a closure under the wrong graph (the S1-6 capture refusal).
 //
 //   node scripts/check-member-init.mjs                 the files changed against the base
 //   node scripts/check-member-init.mjs --all           every .h / .cpp under the scanned roots

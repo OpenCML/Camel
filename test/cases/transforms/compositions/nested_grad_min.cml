@@ -19,15 +19,15 @@
 //
 // The nest builds and both layers lift, so the wall is past them now. It has moved twice since this
 // file was written, so it is recorded with its date instead of being relied on -- read 2026-11-21 on
-// `b74edf66c`, `std::nvm`:
+// the tree it was read on, `std::nvm`:
 //
 //   [Error]: An error has occurred: transforms: transpose has no transpose for this function: the
 //   callee's transpose was built, but the parameter at position 3 reads a value this call does not
 //   carry.
 //
 // Before that it was `split does not build this function (the value half reads the tangent of
-// parameter 0, which the forward half does not take)` (`2a2cf31a8` removed it), and before that
-// `jvp has no forward transform for this function` (`2da9735da` gave the lift the law that lifts the
+// parameter 0, which the forward half does not take)` (it is removed), and before that
+// `jvp has no forward transform for this function` (a law that lifts the
 // answer type). Neither sentence is pinned any more, here or in the plan: the entry is a
 // `known_fail` on the number, because a sentence quoted from a refused run follows the implementation
 // while the number does not.

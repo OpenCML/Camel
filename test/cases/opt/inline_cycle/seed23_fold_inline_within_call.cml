@@ -17,18 +17,18 @@
  *   - it guards that `std::cxx::fold std::cxx::inline` still inlines: `direct_calls` reads 24
  *     with no pass and 3 under the pair (`std::stats`), so a pipeline that stops inlining turns
  *     this entry red;
- *   - it does NOT guard the place decision `a1723fbb9` added. With that decision switched off
+ *   - it does NOT guard the place decision that was added. With that decision switched off
  *     (`if (false && placePreds.empty())` on the argument-place block of
  *     src/runtime/draft_inline.cpp#inlineCallableInDraft), this program's inlined drawing is
  *     byte-for-byte identical -- 2246 lines, the 194 `ORDER` edges included -- at exit 0 and
  *     with no cycle. The ring the old case recorded is unobservable in this shape today, not
- *     gone: making it observable again is work on a branch that reverts `a1723fbb9`.
+ *     gone: making it observable again is work on a branch that reverts that decision.
  */
 /**
  * progen seed 23 of `test/tools/progen`, drawn with `python test/tools/progen/progen.py show --seed 23`
  * (generator version 7, the default feature set, size 1) and copied unedited below this header.
  *
- * It is the second program `a1723fbb9` fixed, and the instance of that defect no plan guarded. Under
+ * It is the second program the fix covered, and the instance of that defect no plan guarded. Under
  * `std::cxx::fold std::cxx::inline` the splice wrote the body's head beside the argument the call
  * reads instead of after it, `resolvePlaceForks` then moved the argument onto the body's tail, and the
  * pass refused the cycle (docs/technical/17_graph_rewrite_api_contracts.md, 4.2 rule 1):

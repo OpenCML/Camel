@@ -1,5 +1,5 @@
 # The rule of a captured value (design principles 3.5, the author's ruling of 2026-11-15): what the
-# main line pins about it after `lane-varclos` (`218f3b3f7`).
+# main line pins about it after `lane-varclos`.
 #
 # Where the rule stands today: the fourth step of "`var` becomes SSA" removed the three conservative
 # gates of `decideCaptureByValue`, so a closure of the program captures a NAME BY VALUE wherever it is
@@ -84,7 +84,7 @@ expect_output_contains = ["'k' is immutable and cannot be passed to a var parame
 #
 #   - a closure the program puts into another value IS reported: the value is used to the end of the
 #     scope, `scanClosureLastUses` records that end as `CapturedVar::stretchToEnd`, and every write
-#     after the making is inside it. `f92e5246f` is the commit that implemented the sentence; the
+#     after the making is inside it. The sentence was implemented; the
 #     tuple shape is read on `test/cases/opt/effects/dead_write_dropped_closure.cml` and the array
 #     shape on `err_captured_var_put_into_an_array` below. Before it the write was built and then
 #     erased for having no reader left: no node and no diagnostic, which is the class of defect this
@@ -139,7 +139,7 @@ expect_diagnostic_name = "SemanticDiag::CapturedVarHandedToVarParameter"
 expect_diagnostic_code = "0x03000215"
 
 # ---- The four call sites a capture PORT turns into a value -------------------------------
-# The step that removed the by-reference capture port (`8b6f57c18`) left four places where a
+# The step that removed the by-reference capture port left four places where a
 # captured name stops being a variable, so the general rule that answers "not a variable" fired
 # before the capture rule was asked. Three of them had no case at all: they do not turn red, they
 # only stop saying what they used to say. The four entries below are those places, one each, and

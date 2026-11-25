@@ -32,8 +32,8 @@
  *
  * The library's `with_grad` would be the same transform written as the composition
  * `vjp((ww: float) => f<ww>(...))(w)` with the seed 1 read off the first member (design principles
- * 9.9), and it is not in `stdlib/vjp.cml` today: `3a2e8fc90` deleted the export that returned
- * `vjp(f)` under a declared type of `F`, and nothing has replaced it. So both plan entries measure
+ * 9.9), and it is not in `stdlib/vjp.cml` today: the export that returned
+ * `vjp(f)` under a declared type of `F` was deleted, and nothing has replaced it. So both plan entries measure
  * the engine's `with_grad` only. Writing the composition makes the differentiated lambda end in a
  * call to a `with`-parameterised function, and the cut refuses that graph in two places, measured:
  * `2026-11-03-when-a-lambda-ends-with-a-with-call-what-does-split-cut.cn.md`.

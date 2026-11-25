@@ -10,7 +10,7 @@
 // to the cotangent can produce it. The pullback answers a tuple, one member per parameter, so the
 // four readings are printed `(6.0)`, `(18.0)`, `(6.0)`, `(18.0)`.
 //
-// The pair is the whole claim. `34788b554` made the cut record which parameter each closure member
+// The pair is the whole claim. The cut records which parameter each closure member
 // was the value of, and a lambda closed by hand records nothing, so its transpose refused where the
 // cut's answered -- the result depended on where the graph came from, which is what the rework
 // removes. Two numbers saying the same thing is what that removal is worth.

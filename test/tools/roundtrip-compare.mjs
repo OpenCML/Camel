@@ -90,7 +90,7 @@ const env = { ...process.env, CAMEL_HOME: process.env.CAMEL_HOME || path.join(RO
 ///
 /// Nine readings were recorded when this list was made. The ninth, `effects/writer_table_through_callee`,
 /// measured "a call writes state and the read after it takes that version", and the 2026-11-16
-/// closure-capture ruling (`81fa0bac9`, design principles 3.5) took its subject away: a closure may
+/// closure-capture ruling (design principles 3.5) took its subject away: a closure may
 /// not assign a captured `var`, so that state is a `state::ref` handle -- and `std::cml` has no
 /// spelling for a `Ref` value (`SemanticDiag::CmlUnsupportedConstruct`). The two other ways to write
 /// the reading are refused as well (a module `var` is a top-level `var`, which the printer refuses in

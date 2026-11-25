@@ -13,7 +13,7 @@
 # a run that wrote a row no back end executes reads balanced too, and that is exactly the defect
 # (3961aa2bf). `released` is the number that moved when the rows started to run.
 #
-# Two entries came later, from the note `ad44fca33` left as a leak (author review 2026-11-17, item
+# Two entries came later, from a note left as a leak (author review 2026-11-17, item
 # 10). `call_box_loop_outer` is that note's own shape -- a box a CALL makes *before* a loop, read on
 # every round, by nothing after -- and it is green: the give-back waits at the LOOP node's position
 # (item 6), so the note measures nothing on this tree. `box_of_a_round` is the shape beside it that
@@ -169,7 +169,7 @@ verify_script = '''
 
 [[tests]]
 name = "probe.call_box_loop_outer.released"
-desc = "A `state::Ref` a CALL makes before a loop, read on every round of it and by nothing after it -- the shape the note left in `ad44fca33` called a leak ('a value a CALL or a FILL makes whose hold would have to be taken inside a loop's round is still kept'). There is no use after the loop for its give-back to land at, so the row waits at the LOOP node's position and runs when the loop leaves: `created` 1, `released` 1, `live` 0, and the three rounds print `box 0`."
+desc = "A `state::Ref` a CALL makes before a loop, read on every round of it and by nothing after it -- the shape the note left called a leak ('a value a CALL or a FILL makes whose hold would have to be taken inside a loop's round is still kept'). There is no use after the loop for its give-back to land at, so the row waits at the LOOP node's position and runs when the loop leaves: `created` 1, `released` 1, `live` 0, and the three rounds print `box 0`."
 kind = "behavior"
 case = "../../probe/refleak/call_box_loop_outer.cml"
 backends = ["nvm", "fvm", "jit", "prl"]

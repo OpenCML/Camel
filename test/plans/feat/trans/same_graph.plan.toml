@@ -1,4 +1,4 @@
-# Are two writings of one body one graph? The measure the region rule of `fd75209cc` is judged by.
+# Are two writings of one body one graph? The measure the region rule is judged by.
 #
 # The ruling (design principles 3.1, author, 2026-11-17): a region's exit is one `GATE` whose first
 # input is the value the region hands out and whose other inputs are the nodes in the region that

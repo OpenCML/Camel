@@ -27,7 +27,7 @@
 # `std::jgir canonical=true` and compares the documents byte for byte, reporting the first byte at
 # which they part with two lines of context from each side and the shape of the difference.
 #
-# Red today (`b96cc93e1`): `twice` is a call, and a call is a statement of the chain whatever its
+# Red today: `twice` is a call, and a call is a statement of the chain whatever its
 # callee holds, so the pure writing stands on the chain and the two documents part. The fix makes the
 # chain ask the callee.
 

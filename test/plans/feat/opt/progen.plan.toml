@@ -36,7 +36,7 @@ timeout_ms = 300000
 
 # Seed 4 of `generate.VERSION` 8, run on its own, and a fast reading of the seed the optimizer broke
 # last. It was the seed the batch left out and the entry carried `known_fail = true`; both are gone
-# because the crash is. `edeaa9c41` took `progen_4` of the E9 differential from crash 1 to crash 0,
+# because the crash is. `progen_4` of the E9 differential went from crash 1 to crash 0,
 # and `test/cases/opt/inline/loop_wait_after_inline.cml` is its 25-line reduction: the four `inline`
 # cells (inline@nvm, @fvm, @jit, @prl) died of SIGSEGV because `addSpliceOrderEdges` writes the wait
 # of the statement a call was written after onto the nodes of the spliced body that own a region, and
@@ -45,12 +45,12 @@ timeout_ms = 300000
 # empty now, so the seed is back in `progen_check` as well; this entry stays because the batch is the
 # milestone layer and the seed the optimizer broke last is worth four seconds on every merge.
 #
-# The seed number alone does not name a program: `generate.VERSION` 7 -> 8 (`0ddbb92af`, "existing
+# The seed number alone does not name a program: `generate.VERSION` 7 -> 8 ("existing
 # seeds are other programs") re-pointed every seed at another program. Any entry that records a seed
 # records the generator version with it, or it names a program the next version will not generate.
 [[tests]]
 name = "progen_seed_4"
-desc = "Seed 4 of `generate.VERSION` 8 through the cross matrix, alone: 41 cells (25 rewrite sequences on the node VM, and no rewrite, std::cxx::inline, std::opt, std::opt and std::macro std::opt on the three other schedulers) all print the reference output. The four `inline` cells used to end in SIGSEGV; `edeaa9c41` fixed it, and `test/cases/opt/inline/loop_wait_after_inline.cml` is the 25-line reduction of the shape (`f8(...)` inside `let n69 = concat(...)` of `main`, whose spliced body owns a loop carrying the wait of the statement the call was written after). A red here is that crash returning: the entry reads `0 wrong` and `PASS`, and the program is `progen.py show --seed 4`."
+desc = "Seed 4 of `generate.VERSION` 8 through the cross matrix, alone: 41 cells (25 rewrite sequences on the node VM, and no rewrite, std::cxx::inline, std::opt, std::opt and std::macro std::opt on the three other schedulers) all print the reference output. The four `inline` cells used to end in SIGSEGV; a later fix closed it, and `test/cases/opt/inline/loop_wait_after_inline.cml` is the 25-line reduction of the shape (`f8(...)` inside `let n69 = concat(...)` of `main`, whose spliced body owns a loop carrying the wait of the statement the call was written after). A red here is that crash returning: the entry reads `0 wrong` and `PASS`, and the program is `progen.py show --seed 4`."
 kind = "behavior"
 # A reading on every run, not only when someone runs the milestone layer: measured at 5.4 s on
 # 2026-11-15, so it is in the fast layer while the batch it belongs to stays in the milestone one.

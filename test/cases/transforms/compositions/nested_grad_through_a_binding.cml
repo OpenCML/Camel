@@ -10,15 +10,15 @@
 // one-expression form, and the two must answer the same kind of number.
 //
 // Bound or inline changes nothing: the same composition twice, and the same wall, which is past both
-// lifts now and has moved twice since this file was written. Read 2026-11-21 on `b74edf66c`,
+// lifts now and has moved twice since this file was written. Read 2026-11-21,
 // `std::nvm`, the nest stops at
 //
 //   [Error]: An error has occurred: transforms: transpose has no transpose for this function: the
 //   callee's transpose was built, but the parameter at position 3 reads a value this call does not
 //   carry.
 //
-// after `split`'s `the value half reads the tangent of parameter 0` (`2a2cf31a8` removed it) and
-// `jvp`'s `no forward transform for this function` (`2da9735da` lifted the answer type). The weight
+// after `split`'s `the value half reads the tangent of parameter 0` (it is removed) and
+// `jvp`'s `no forward transform for this function` (the answer type was lifted). The weight
 // in the `with` list is what makes the nest build at all; none of the three sentences is pinned, and
 // the plan entry is a `known_fail` on the number.
 //

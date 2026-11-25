@@ -2,8 +2,8 @@
 // reads the value the program gave it. The compiler wraps the element into the rank-zero array the
 // slot holds and prints it as the element, so the program sees one value, not an array of one.
 //
-// Before the conversion was made on that edge (`619eedb6c`), `show(2.5)` exited 139: the slot held
-// the number and the reading of the slot read it as an array. After it (`cae413dbf`) the same
+// Before the conversion was made on that edge, `show(2.5)` exited 139: the slot held
+// the number and the reading of the slot read it as an array. After it the same
 // program prints `2.5`, and every backend prints the same two lines.
 
 func show(v: f32[...]) {

@@ -1636,7 +1636,7 @@ timeout_ms = 8000
 
 [[tests]]
 name = "fold_cast.rewrites"
-desc = "A conversion (`e as T`) of a constant is a constant: after std::opt no conversion node is left -- no `:op/cast` OPER, the name a conversion has had since `af3c6c9bdd` removed the `CAST` kind and the view began printing the operator's URI -- for a conversion to the shape the compiler already knew, for one checked against the value (the source is declared a plain Tensor); a number converted by the conversion function is folded as any call of constants is. The assertion names the label and the type together, so an OPER of another operator cannot stand in for a conversion, and it asserts that the deleted kind is not printed, so a reader can tell a rename from a resurrection. Folding used to leave every conversion, so nothing under `as` was a constant."
+desc = "A conversion (`e as T`) of a constant is a constant: after std::opt no conversion node is left -- no `:op/cast` OPER, the name a conversion has had since the `CAST` kind was removed and the view began printing the operator's URI -- for a conversion to the shape the compiler already knew, for one checked against the value (the source is declared a plain Tensor); a number converted by the conversion function is folded as any call of constants is. The assertion names the label and the type together, so an OPER of another operator cannot stand in for a conversion, and it asserts that the deleted kind is not printed, so a reader can tell a rename from a resurrection. Folding used to leave every conversion, so nothing under `as` was a constant."
 kind = "behavior"
 case = "../../../cases/opt/generic/fold_cast.cml"
 args = ["${case}", "std::opt", "std::gir", "std::nop"]
@@ -1671,7 +1671,7 @@ timeout_ms = 8000
 
 [[tests]]
 name = "constant_conversion_folds.the_node_is_there_before_the_fold"
-desc = "Before any pass runs, the conversion of a constant in fold_cast.cml is a node the view prints -- the reading that makes the next test's zero mean 'folded' rather than 'the label went away'. The node is named the way a conversion is named since a cast became an operator call: `label=\":op/cast\"`, `type=\"OPER\"`, not the node kind `CAST`, which `af3c6c9bdd` removed along with the kind that carried it (kinds-to-oper, plan 2.3); the label moved and the object did not, so this pins the object. It counts the program's conversion sites exactly (two: `as f32[2, 3]` and `as f32[?, 3]`), because `> 0` also passes when one conversion is duplicated, and it asserts that the deleted kind is not printed, so a reader can tell a rename from a resurrection."
+desc = "Before any pass runs, the conversion of a constant in fold_cast.cml is a node the view prints -- the reading that makes the next test's zero mean 'folded' rather than 'the label went away'. The node is named the way a conversion is named since a cast became an operator call: `label=\":op/cast\"`, `type=\"OPER\"`, not the node kind `CAST`, which was removed along with the kind that carried it (kinds-to-oper, plan 2.3); the label moved and the object did not, so this pins the object. It counts the program's conversion sites exactly (two: `as f32[2, 3]` and `as f32[?, 3]`), because `> 0` also passes when one conversion is duplicated, and it asserts that the deleted kind is not printed, so a reader can tell a rename from a resurrection."
 kind = "behavior"
 case = "../../../cases/opt/generic/fold_cast.cml"
 args = ["${case}", "std::gir", "std::nop"]
@@ -1722,7 +1722,7 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 8000
 [[tests]]
 name = "fold_struct_cast.in_return_position"
-desc = "A Safe conversion of a constant struct in return position is folded after std::opt: the function graph's returned value is also its exit and output value, and folding it moves those anchors to the constant (design principles 5.1, 5.2: the conversion only names the type the value is used as and moves nothing). Folding used to treat the graph's returned value as a pinned anchor, so `mk` kept a conversion over its folded constant, and every inlining of `mk` copied the unfolded conversion. The final graph must hold no conversion -- no `:op/cast` OPER, the name it has had since `af3c6c9bdd` removed the `CAST` kind, counted by label and type together -- and the folded constant must keep the declared type P. The deleted kind is asserted absent, so a rename is distinguishable from a resurrection."
+desc = "A Safe conversion of a constant struct in return position is folded after std::opt: the function graph's returned value is also its exit and output value, and folding it moves those anchors to the constant (design principles 5.1, 5.2: the conversion only names the type the value is used as and moves nothing). Folding used to treat the graph's returned value as a pinned anchor, so `mk` kept a conversion over its folded constant, and every inlining of `mk` copied the unfolded conversion. The final graph must hold no conversion -- no `:op/cast` OPER, the name it has had since the `CAST` kind was removed, counted by label and type together -- and the folded constant must keep the declared type P. The deleted kind is asserted absent, so a rename is distinguishable from a resurrection."
 kind = "behavior"
 case = "../../../cases/opt/generic/fold_struct_cast.cml"
 args = ["${case}", "std::opt", "std::gir", "std::nop"]
@@ -1817,7 +1817,7 @@ timeout_ms = 8000
 
 [[tests]]
 name = "fold_cast.failing_is_kept"
-desc = "A conversion of a constant that fails is not folded: it stays in the simplified graph as `:op/cast` OPER nodes -- the name a conversion has had since `af3c6c9bdd` removed the `CAST` kind -- and compiling is not an error. The count is exact: the program has one conversion site and the view prints the `main` graph in its cluster and again at the top level, so it is two nodes today, and a second site or a dropped one is a different reading. The deleted kind is asserted absent, so a rename is distinguishable from a resurrection."
+desc = "A conversion of a constant that fails is not folded: it stays in the simplified graph as `:op/cast` OPER nodes -- the name a conversion has had since the `CAST` kind was removed -- and compiling is not an error. The count is exact: the program has one conversion site and the view prints the `main` graph in its cluster and again at the top level, so it is two nodes today, and a second site or a dropped one is a different reading. The deleted kind is asserted absent, so a rename is distinguishable from a resurrection."
 kind = "behavior"
 case = "../../../cases/opt/generic/fold_cast_fails.cml"
 args = ["${case}", "std::opt", "std::gir", "std::nop"]

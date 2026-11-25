@@ -3,7 +3,7 @@
 /// ruling of 2026-11-14: "`ShapeOf<string>` becomes a compile error instead of `int[0]`").
 ///
 /// `UnguardedShapeOf` is the standard library's `ShapeOf` with the guard of its last case taken
-/// off -- the very three lines `stdlib/types.cml` held at `2dcd0a6`, where the default arm was a
+/// off -- the very three lines `stdlib/types.cml` held, where the default arm was a
 /// bare `case _` and the comment above it said the type layer could not tell a number from another
 /// leaf type. A string is not a tensor of any shape, and that arm answered the empty shape for it
 /// anyway: `true` below is the old reading. `err_shape_of_string.cml` is the same question asked of

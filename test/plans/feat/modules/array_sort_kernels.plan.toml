@@ -46,11 +46,11 @@ timeout_ms = 20000
 # stdout, the `in_place` line among them), so changing this entry's assertion did not drop the "the
 # sort is still correct" half of what the two entries prove together.
 #
-# What it read on `6e4b48362`, where the red this entry was owned for (lane H) comes from: `COPIES
+# What it read, where the red this entry was owned for (lane H) comes from: `COPIES
 # main updates 10 in-place 0 by-count 0 declared 0 copied 10`, one `... sort_kernel copied` per site
 # -- the plan placed none of them on the input's storage then.
 #
-# It holds as written since `02939ffb7` (stage S3b), and that is the reading moving and not this
+# It holds as written (stage S3b), and that is the reading moving and not this
 # entry: the same ruler reads this program `COPIES main updates 10 in-place 4 by-count 0 declared 0
 # copied 6` -- the four `v = v->sort` rebindings handed the storage they were given, the six sorts
 # whose argument is printed afterwards still copying -- so all three assertions are met (`updates

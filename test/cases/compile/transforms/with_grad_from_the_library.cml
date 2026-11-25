@@ -13,7 +13,7 @@
  * `vjp` any more -- and the plan entry that runs it is marked `known_fail` for that reason.
  *
  * The four groups stay here with the engine's answers, because they are the numbers the composition
- * owes: `lane-withtan` (merged `713e1ff26`) carries a `with` argument's direction through a lifted
+ * owes: `lane-withtan` (merged) carries a `with` argument's direction through a lifted
  * call, and `library_grad_of_a_with_weight` pins `weighted` answering 3.0 through `vjp` -- the
  * composition works; what is missing is the pair body and the declaration beside it
  * (`FirstOf<WithOf<F>>`, `stdlib/types.cml`). The day it is written, this case turns over with it:

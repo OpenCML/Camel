@@ -11,7 +11,7 @@
  * Why it exists: five merges have changed a `.cml` file and left that record stale, and every one
  * was found the same way. The twelve-target gate turned
  * `feat.parse.frontend | frontend.ast_snapshot` red on the base branch, and the merge position
- * patched the record on the spot (`1dad3104f` is the fifth: `4363 lines, 3 added, 3 removed`,
+ * patched the record on the spot (the fifth: `4363 lines, 3 added, 3 removed`,
  * "test: register the three cases whose AST the 198 report changed"). The repair was never wrong.
  * What was missing was a reader that says so before the push: the plan's check runs after a build,
  * beside four hundred other cases, and its red names a target rather than the file the lane just

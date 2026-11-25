@@ -30,7 +30,7 @@ expect_stdout_contains = ["nested_square x=2.0 d1=4.0 d2=2.0"]
 # numbers instead.
 known_fail = ["nvm"]
 known_fail_owner = "lane-nested-transforms (nested-b)"
-known_fail_reason = "the wall has moved three times and the mark no longer tracks it: `2da9735da` made the outer `jvp`'s lift lift the answer type, `2a2cf31a8` removed `split`'s refusal (`the value half reads the tangent of parameter 0`), and what refuses today is one step later -- `transforms: transpose has no transpose for this function`, cause `the callee's transpose was built, but the parameter at position 3 reads a value this call does not carry`, `modules/transforms/transpose_operator.cpp#refusalSentence`. The mark is on the number, so this one moving again does not touch the entry"
+known_fail_reason = "the wall has moved three times and the mark no longer tracks it: the outer `jvp`'s lift came to lift the answer type, and `split`'s refusal was removed (`the value half reads the tangent of parameter 0`), and what refuses today is one step later -- `transforms: transpose has no transpose for this function`, cause `the callee's transpose was built, but the parameter at position 3 reads a value this call does not carry`, `modules/transforms/transpose_operator.cpp#refusalSentence`. The mark is on the number, so this one moving again does not touch the entry"
 known_fail_ends_when = { passes = "nested.nest_square" }
 timeout_ms = 30000
 
@@ -128,7 +128,7 @@ timeout_ms = 30000
 
 [[tests]]
 name = "nested.nest_quartic"
-desc = "The reverse half, now a positive on the number: `grad(grad(f))` for f(x)=x^4, whose hand-worked second derivative is f''(2)=48 (and f''(3)=108). It was `kind = \"negative\"`, pinning `split does not build this function (the value half reads the tangent of parameter 0, which the forward half does not take)`, and that negative had stopped holding before it stopped passing: `2da9735da` added the law that lifts an answer type of `(float, (float) => float)`, so the property the case was written to pin -- 'a result type with no tangent space is refused' -- is not true any more, and `2a2cf31a8` could then remove the cut's refusal. A positive on the number is what the case is about now: the nest prints 48.0, not a refusal. Re-registered 2026-11-21 by the author's ruling of 02:20, which named this entry as the one that must turn positive."
+desc = "The reverse half, now a positive on the number: `grad(grad(f))` for f(x)=x^4, whose hand-worked second derivative is f''(2)=48 (and f''(3)=108). It was `kind = \"negative\"`, pinning `split does not build this function (the value half reads the tangent of parameter 0, which the forward half does not take)`, and that negative had stopped holding before it stopped passing: the law that lifts an answer type was added of `(float, (float) => float)`, so the property the case was written to pin -- 'a result type with no tangent space is refused' -- is not true any more, and the cut's refusal could then go. A positive on the number is what the case is about now: the nest prints 48.0, not a refusal. Re-registered 2026-11-21 by the author's ruling of 02:20, which named this entry as the one that must turn positive."
 kind = "behavior"
 case = "../../../cases/transforms/nested/nest_quartic.cml"
 args = ["${case}", "${backend}"]

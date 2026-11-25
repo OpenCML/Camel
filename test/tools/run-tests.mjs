@@ -419,7 +419,7 @@ function checkKnownFailMark(planPath, entry, inherited, where) {
     }
     // The sentence the case is expected to print today, quoted from a run. Without it there is
     // nothing to compare a failure against, so `executePlans` takes every failure as the expected
-    // one: a different defect can wear the mark's name and no reader can tell (`ceee7b950`'s page
+    // one: a different defect can wear the mark's name and no reader can tell (a page
     // measured two entries printing `exported`, exiting 0 and writing nothing while their marks
     // reported a known failure). It is read off the entry itself -- `executePlans` compares against
     // `test.known_fail_msg` and never against a `[defaults]` value -- so a plan cannot supply it
@@ -3405,7 +3405,7 @@ function writeLogFiles(plan, test, result, status, logDir) {
  *
  * A test with no `backends` list is one run, and its mark is `known_fail = true`. The mark used to
  * be read *after* the early return for that shape, so `known_fail` on such a test did nothing at
- * all: the case failed, the run went red, and the mark was never mentioned. `20860eb01` found it
+ * all: the case failed, the run went red, and the mark was never mentioned. The defect was found
  * and fixed the one case where it showed -- by giving that case a `fvm` back end so the mark
  * applied -- which fixed the symptom; the author's 01:50 ruling asked for the mechanism. Now the
  * shape decides how the mark is written, and a mark written in the other shape's words is refused

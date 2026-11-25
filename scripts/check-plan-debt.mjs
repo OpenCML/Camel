@@ -6,8 +6,8 @@
 // a case is red today, on a case that runs green.
 //
 // `lane-stale` (8d0de4e3e) cleaned six such sentences out of `test/plans/`. The two plans were
-// written on 2026-11-04 at 21:52 and 22:29 as *work owed* (`7cde424bd`, `4ed4ee6af`), the fixes
-// landed hours later in the passes and not in the tests (`aa157702a`, `0add4cd3c`, `060fbffaa`),
+// written on 2026-11-04 at 21:52 and 22:29 as *work owed*, the fixes
+// landed hours later in the passes and not in the tests,
 // and the plan text was never revised against them, so it went on describing the world before the
 // fix: "RED TODAY, expected to be fixed" over five cases that had been green since. Cleaning those
 // six sentences fixes the leaves and not the mechanism -- the next plan written as debt has the

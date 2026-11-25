@@ -39,7 +39,7 @@ expect_output_contains = ["no case selects string, and the guard of every case t
 
 [[tests]]
 name = "match_type.shape_of_before"
-desc = "The reading `ShapeOf<string>` gave at `2dcd0a6`, kept beside the reading it gives now: `UnguardedShapeOf` is the library's three cases with the guard taken off, and its bare `case _` answers `int[0]` for a string and for `string?` alike -- `true`, `true`. That is the silent answer the guard removes."
+desc = "The reading `ShapeOf<string>` gave, kept beside the reading it gives now: `UnguardedShapeOf` is the library's three cases with the guard taken off, and its bare `case _` answers `int[0]` for a string and for `string?` alike -- `true`, `true`. That is the silent answer the guard removes."
 kind = "behavior"
 case = "../../../cases/compile/match_type_guard/shape_of_before.cml"
 args = ["${case}", "${backend}"]

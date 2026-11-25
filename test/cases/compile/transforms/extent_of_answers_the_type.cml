@@ -2,7 +2,7 @@
 //
 // The value is a fact of the call and of nothing else, and it is settled where the call is built:
 // an OPER node records the instantiated type of the call but not the type argument it was written
-// with, so the kernel has nothing to read. Measured 2026-11-04 on the base tree (`c4391db57`) this
+// with, so the kernel has nothing to read. Measured 2026-11-04 on the base tree this
 // program reached that kernel and failed with
 //
 //   error[RuntimeDiag::PassInternalError]: Pass 'calling `extent_of`' failed with an internal

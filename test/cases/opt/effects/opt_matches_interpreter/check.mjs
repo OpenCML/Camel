@@ -18,7 +18,7 @@
  * because `pruneBranch` handed a dissolved branch's place to the first ordered node of the taken arm
  * (`tensor:matmul` of `softmax(X @ nw)`) instead of to the effect the arm returns, and the
  * `println`'s only remaining edge went away when the node that carried the wait was folded
- * (`6bd8b67d5` fixes it). It is the smallest program found that shows the loss: the mechanism shrinks
+ * (a later fix does). It is the smallest program found that shows the loss: the mechanism shrinks
  * to a two-line arm, the loss does not.
  *
  * The assertion is a comparison, not a golden. Both runs are the same binary on the same host, so

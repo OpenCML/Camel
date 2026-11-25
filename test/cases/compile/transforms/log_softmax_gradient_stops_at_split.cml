@@ -14,9 +14,9 @@
 //     TRANSPOSE function=split_of_jvp_of_total_backward skip=call-no-transpose node=6 callee=rulesets.jvp::log_softmax_jvp<float>
 //     transforms: transpose has no transpose for this function: this call's callee has no transpose of its own
 //
-// **The stop moved out one node later the same day.** Between `5810292c4` and `1a0ac4144` the law's
+// **The stop moved out one node later the same day.** Between the two spellings the law's
 // body was `dx - exp(y) * sum<axis, true>(dx)`, whose operand after the subtraction is the `multiply`,
-// so that is where the walk refused. `1a0ac4144` put the product back inside the sum -- the form the
+// so that is where the walk refused. Putting the product back inside the sum -- the form the
 // inlined tangent below had before it became a call -- `dx - sum<axis, true>(exp(y) * dx)`, so the walk
 // now meets the enclosing `sum<axis, true>` first and refuses one node further out. Same graph, same
 // exit code, same wall (`mul_tensor_t`'s operand shape, which `float[...]` does not state), one layer

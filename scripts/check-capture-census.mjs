@@ -41,8 +41,8 @@
  * visitGeneratorBody`: `__gen_pc__`, and every local the body declares), and hands
  * those cells to its caller inside a closure the machine builds itself (`streamValue()`: an
  * unnamed function whose whole body is `return __gen_step__()`). The state carried a second
- * member until 2026-11-18: the author's ruling `6ce3bf1f2` ("answer: drop the generator's halt
- * bit") removed it, merged as `647b4a31a`, so `S = (pc, halt)` is now `S = (pc)`. Nothing renamed
+ * member until 2026-11-18: the author's ruling ("answer: drop the generator's halt
+ * bit") removed it, merged, so `S = (pc, halt)` is now `S = (pc)`. Nothing renamed
  * it and nothing took its place, so this script names it nowhere else. A reading taken before that
  * date counted one more cell -- and one more capture port -- per generator body, which is why an
  * older tree's `capture_ports_generator` is not this tree's reading and the two are never
@@ -78,7 +78,7 @@
  * Why the markers are facts about the graph and not the port's name: a generator body's own local
  * keeps its source spelling across `yield` (`i`, `x`, `e` in
  * `test/cases/compile/stream/generators.cml` captures `__gen_pc__`, `e`; it captured
- * `__gen_halt__` beside them too, until the halt bit was dropped on 2026-11-18, `6ce3bf1f2`), so a
+ * `__gen_halt__` beside them too, until the halt bit was dropped on 2026-11-18), so a
  * name match on the port would leave those cells in `capture_ports_closure` while the machine port
  * beside them left -- a split by spelling, not by what the port is. The graph, on the other hand,
  * is the thing the compiler builds: `__gen_step__` is a literal bound inside the generator's own
@@ -108,8 +108,8 @@
  * --- the scope, and the denominator it is a part of ---------------------------------
  * The default scope is every `.cml` file under `test/cases/`, sorted: those are the programs the
  * plans select (a plan picks the cases of its own directory; no plan entry names a `.cml` path, so
- * `test/plans/**` adds no file this walk misses). The whole repository (4129 `.cml` at
- * `48e12d4b8`) is available with `--all`, but not compiled by default: 4129 translations cost
+ * `test/plans/**` adds no file this walk misses). The whole repository (4129 `.cml`)
+ * is available with `--all`, but not compiled by default: 4129 translations cost
  * minutes, and the plans' corpus is the reading the author's acceptance is about.
  *
  * `list_sha` is the fingerprint of that denominator: SHA-256 over the sorted lines

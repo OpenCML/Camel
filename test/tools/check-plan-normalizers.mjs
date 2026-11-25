@@ -7,7 +7,7 @@
  * with `\r\n` on Windows and `\n` elsewhere. A plan that compares such a child's output byte for
  * byte is therefore red on Windows unless it normalises newlines first, and it is red *before* the
  * value the test exists to pin is ever compared -- the red says nothing about the program, which is
- * what `f8a2da8f4` had to work out for the CUDA-visibility plan.
+ * what the CUDA-visibility plan had to work out.
  *
  * This guard reads every plan and reports the entries that have both halves: a child that is
  * Python, and a comparison that reaches a line end. A Camel run and a Node fixture write `\n` on
