@@ -264,7 +264,12 @@ Check 'a change to the compiler selects more than the documentation check' ($cod
 
 Write-ListFile -Path $listFile -Lines @('pypi/setup.py')
 $unruledSelection = Get-PlansForChangedFiles -Checkout $repoRoot -ListFile $listFile
-Check 'a class no rule names is reported as the widening, not as a plan' ($unruledSelection.Widened -and $unruledSelection.Targets.Count -eq 0) $unruledSelection.Text
+# A rule-less class used to widen to the whole fast layer. It is now a refusal that names the file
+# and the missing rule (exit 2), so the check is that refusal -- not a widening, and not a plan.
+Check 'a class no rule names is refused by name, not widened into the fast layer' `
+    ($unruledSelection.Exit -eq 2 -and -not $unruledSelection.Widened -and $unruledSelection.Targets.Count -eq 0 -and
+        $unruledSelection.Text -match 'no rule in test/plan-selection\.json matches' -and
+        $unruledSelection.Text -match 'pypi/setup\.py') $unruledSelection.Text
 
 # --- 4. a docs-only refusal is recovered, once, and pushed --------------------
 $a = New-Scenario -Name 'docs-only'
