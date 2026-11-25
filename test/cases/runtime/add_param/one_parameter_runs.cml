@@ -1,0 +1,31 @@
+// `add_param` writes one of the two statements a parameter is: the port node the body computes
+// with. The signature is the other one, and the one statement that can write it today is a C++
+// pass -- no block head exists (design graph-editing 8.4). `one_parameter.cml` reads both halves
+// at the commit; what neither case did was *run* the graph they publish, and an operator whose
+// graph is published but never executed is one step from an operator that does not exist.
+//
+// This is the execution. `test::add_param` widens the graph `main` calls: a third parameter of
+// type `int`, the signature rewritten to declare it, and the body's reads of its second parameter
+// handed to the new port. It widens the call site too, because a parameter's value has exactly one
+// place to come from at run time -- the caller's argument list, bound to the port's slot when the
+// call frame is laid out. The command line cannot stand in for that caller: `--arg` binds the
+// entry's parameters *before* the first pass and substitutes a constant for each port it binds
+// (`entry_args.cpp#bindEntryArguments`), so a parameter a pass adds to the entry can never be
+// given a value.
+//
+// The reading is one number. `pair(41, 1)` is 4101; the same program over the widened graph prints
+// the value the caller passed for the parameter that was added. The port is *appended* -- its slot
+// is the last one the graph lays out (`addParameterPort`) -- so what the run says is whether the
+// value a caller passes for a new parameter lands in the place that parameter names.
+//
+// `pair` is named because the pass has to find it: it is the graph `main` calls, and it is the one
+// this case is about.
+
+func pair(a: int, b: int) => int {
+    return a * 100 + b
+}
+
+func main() => int sync {
+    println(`[add_param_run] pair=${pair(41, 1)}`)
+    return 0
+}

@@ -195,11 +195,14 @@ class EdgeChecker {
      * assignability direction, unify, or are `void` are the same promise, which is what keeps this
      * check from refusing the graphs the call-edge and exit checks already accept.
      *
-     * The two lists are walked together only as far as both of them reach, and their *lengths* are
-     * not judged: an instance of a generic function carries its type argument as a `with` port the
-     * signature of the instance does not declare (`math::is_inf<float>` publishes one `with` port
-     * and declares no capture, which is what a call to it passes and what the call edge counts), so
-     * the two counts are two questions and not one.
+     * The two lists are walked together only as far as both of them reach, and neither list's
+     * length is judged against the other's by the walk itself: an instance of a generic function
+     * carries its type argument as a `with` port the signature of the instance does not declare
+     * (`math::is_inf<float>` publishes one `with` port and declares no capture, which is what a call
+     * to it passes and what the call edge counts), so the two counts are two questions and not one.
+     * The one direction that is judged is a *norm* port past the last declared parameter, below:
+     * no shape of a program has one, and it is where an edit that adds a port owes the declaration
+     * that names it.
      *
      * This is asked of every graph a commit encodes, in every build (see
      * `validateRuntimeGraphPortTypes` below for where it is called). It is asked of every graph and
@@ -227,6 +230,28 @@ class EdgeChecker {
         }
         for (size_t i = 0; i < with.size() && i < funcType->withTypesCount(); ++i) {
             judgePort(with[i], funcType->withTypeAt(i), "capture", i);
+        }
+        // One direction of the two lengths *is* judged, and it is the one the walk above cannot
+        // reach: a port node past the last declared parameter. The other direction is the `with`
+        // exemption above (an instance's type argument is a `with` port its signature does not
+        // declare) and stays unjudged, but an ordinary parameter has no such shape: a graph that
+        // holds one more port node than it declares parameters hands a caller's argument to a
+        // parameter the caller was never told about (`add_param` adds the port, and the declaration
+        // that would name it -- the block head -- is a write of its own). Refusing it names the port
+        // node and the count, so the message says which one is the one the signature does not
+        // declare rather than "the graph is inconsistent".
+        if (norm.size() > funcType->normTypesCount()) {
+            for (size_t i = funcType->normTypesCount(); i < norm.size(); ++i) {
+                violations_.push_back(
+                    std::format(
+                        "graph '{}' declares {} parameter(s) and holds {} port node(s): port node {} "
+                        "(parameter {}) is a parameter its signature does not declare",
+                        graph_.name(),
+                        funcType->normTypesCount(),
+                        norm.size(),
+                        norm[i],
+                        i));
+            }
         }
     }
 

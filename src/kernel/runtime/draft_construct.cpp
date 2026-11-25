@@ -790,5 +790,16 @@ void GraphDraft::appendUniqueNodeRef(std::vector<gc_node_ref_t> &refs, gc_node_r
     }
 }
 
+gc_node_ref_t addParameterPort(GraphDraft &draft, camel::core::type::Type *type, uint64_t origin) {
+    // The slot last: a graph's parameters are the first slots it lays out (draft.h,
+    // `allocateRuntimeSlot`), so a new one appended after the frame was built still has a place of
+    // its own to be written into, and the port node names it by that place.
+    const gc_slot_idx_t slot = draft.allocateRuntimeSlot(type);
+    const gc_node_ref_t port = draft.addPortNode(type, slot);
+    draft.appendNormPort(port);
+    draft.setNodeOrigin(port, origin);
+    return port;
+}
+
 } // namespace camel::runtime
 

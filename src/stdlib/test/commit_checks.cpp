@@ -1698,8 +1698,210 @@ namespace {
 using camel::execute::makePass;
 using camel::execute::PassKernel;
 
-/// The test-only passes this file implements. Each name is the constant its own header
-/// declares, so the name a pipeline writes and the class that answers it are one fact.
+/// The declaration a graph's signature becomes when it gains one parameter of `type` at the end: the
+/// second of the two statements a parameter is, which `add_param` does not write (`draft.h,
+/// addParameterPort`). A `with` list and an exit type are carried over as they are -- adding a
+/// parameter to a body that already computes with its others changes neither.
+camel::core::type::FunctionType *withOneParameter(
+    camel::core::type::FunctionType *type, camel::core::type::Type *parameter) {
+    using camel::core::type::FunctionType;
+    using camel::core::type::param_vec_t;
+    camel::core::type::param_vec_t withTypes;
+    withTypes.reserve(type->withTypesCount());
+    for (size_t i = 0; i < type->withTypesCount(); ++i) {
+        withTypes.emplace_back(type->withTypeAt(i), type->withIsVarAt(i));
+    }
+    param_vec_t normTypes;
+    normTypes.reserve(type->normTypesCount() + 1);
+    for (size_t i = 0; i < type->normTypesCount(); ++i) {
+        normTypes.emplace_back(type->normTypeAt(i), type->normIsVarAt(i));
+    }
+    normTypes.emplace_back(parameter, false);
+    return FunctionType::create(withTypes, normTypes, type->exitType());
+}
+
+} // namespace
+
+const camel::runtime::Program *
+AddParamTestPass::apply(const camel::runtime::Program *program, std::ostream &out) {
+    using camel::core::type::Type;
+    GCGraph *const graph = program != nullptr ? program->root() : nullptr;
+    if (graph == nullptr) {
+        out << "add_param: the program has no root graph, so there is no graph to add a parameter "
+               "to\n"
+            << std::flush;
+        return program;
+    }
+    out << "add_param: graph '" << graph->name() << "' declares "
+        << (graph->funcType() != nullptr ? graph->funcType()->normTypesCount() : 0)
+        << " parameter(s) and holds " << graph->normPorts().size() << " port node(s)\n"
+        << std::flush;
+    // The negative half: the port node of a new parameter, and nothing declaring it. The commit
+    // must refuse and name the port, which is what says the declaration is the other half and not
+    // an optional remark.
+    {
+        RuntimeGraphDraftSession session(context_, program);
+        auto &draft = session.edit(graph).edit();
+        gc_node_ref_t port = kInvalidNodeRef;
+        {
+            const GraphDraft::NamedEdit named(draft, EditKind::ParamPort);
+            port = camel::runtime::addParameterPort(draft, Type::Int32());
+        }
+        out << "add_param: added port node " << port << " of type 'int'; the graph now holds "
+            << draft.normPorts().size() << " port node(s) and declares "
+            << (draft.funcType() != nullptr ? draft.funcType()->normTypesCount() : 0)
+            << " parameter(s)\n"
+            << std::flush;
+        try {
+            const Program *published = session.commit();
+            out << "add_param: the commit published it, which is the defect (no parameter was "
+                   "declared for port node "
+                << port << ")\n"
+                << std::flush;
+            (void)published;
+        } catch (const std::runtime_error &refused) {
+            out << "add_param: refused at the commit: " << refused.what() << '\n' << std::flush;
+        }
+    }
+    // The positive half: the same port node, and the signature rewritten to declare it. Without
+    // this, "it was refused" would only say "a graph with a new port is always refused".
+    {
+        RuntimeGraphDraftSession session(context_, program);
+        auto &draft = session.edit(graph).edit();
+        gc_node_ref_t port = kInvalidNodeRef;
+        {
+            const GraphDraft::NamedEdit named(draft, EditKind::ParamPort);
+            port = camel::runtime::addParameterPort(draft, Type::Int32());
+        }
+        draft.setFuncType(withOneParameter(graph->funcType(), Type::Int32()));
+        out << "add_param: port node " << port << " added and the signature now declares "
+            << draft.funcType()->normTypesCount() << " parameter(s)\n"
+            << std::flush;
+        try {
+            const Program *published = session.commit();
+            out << "add_param: the commit published it, and nothing was refused (declared="
+                << published->root()->funcType()->normTypesCount() << ")\n"
+                << std::flush;
+        } catch (const std::runtime_error &refused) {
+            out << "add_param: refused at the commit: " << refused.what() << '\n' << std::flush;
+        }
+    }
+    // The run half: publishing is not running. The two halves above show a graph to the commit's
+    // checks; this one has it executed. A port node no execution reaches is a parameter no caller's
+    // value arrives at, and such an operator differs from one that does nothing only by the checks it
+    // can fail.
+    //
+    // The value a parameter is given has one place to come from at run time: the caller's argument
+    // list, written into the port's slot when the call frame is laid out
+    // (`bindMarkedFunctionFrame`, stdlib/std/nvm/nodevm.cpp). The command line is not that place for
+    // a parameter a pass adds -- `--arg` binds the entry's parameters *before* the first pass, and
+    // each bound port is replaced by a constant and erased
+    // (`entry_args.cpp#bindEntryArguments`), so a parameter a pass adds to the entry can never be
+    // given one. So this half widens a graph `main` calls together with the call that passes its
+    // values:
+    //
+    //   * the graph `pair` gains a third parameter of type `int` (`addParameterPort`, the operator's
+    //     own edit) and a signature that declares it (`setFuncType`, the other statement);
+    //   * its body's reads of its second parameter become reads of the new port, so the number it
+    //     answers is the value that arrived in the new parameter's slot -- a new parameter nothing
+    //     read would let a wrong slot pass, which is the one thing this reading exists to catch;
+    //   * the call gains the value for it.
+    //
+    // `addParameterPort` *appends* the slot (it is the last one the graph lays out), so a caller's
+    // third argument is the shape the appended slot has to receive.
+    {
+        RuntimeGraphDraftSession session(context_, program);
+        const std::vector<GCGraph *> reachable = session.collectReachableRuntimeGraphs();
+        GCGraph *callee                        = nullptr;
+        for (GCGraph *candidate : reachable) {
+            if (candidate == graph || candidate->funcType() == nullptr) {
+                continue;
+            }
+            if (candidate->normPorts().size() != 2 || candidate->funcType()->normTypesCount() != 2) {
+                continue;
+            }
+            callee = candidate;
+            break;
+        }
+        // The call site: the FUNC node that names `callee`. A call is a FUNC node and its norm inputs
+        // are its arguments (`calleeIdOf` answers for exactly that node, graph.h).
+        GCGraph *caller    = nullptr;
+        gc_node_ref_t call = kInvalidNodeRef;
+        if (callee != nullptr) {
+            for (GCGraph *candidate : reachable) {
+                auto &transaction = session.edit(candidate);
+                auto &draft       = transaction.edit();
+                for (gc_node_ref_t id = 0; id < draft.nodeSlotCount(); ++id) {
+                    if (!draft.alive(id) || draft.header(id)->kind != GCNodeKind::Func) {
+                        continue;
+                    }
+                    if (draft.calleeGraphOf(id) != callee) {
+                        continue;
+                    }
+                    caller = candidate;
+                    call   = id;
+                    break;
+                }
+                if (call != kInvalidNodeRef) {
+                    break;
+                }
+            }
+        }
+        if (callee == nullptr || call == kInvalidNodeRef) {
+            out << "add_param: run: no graph with two parameters that `main` calls is reachable, so "
+                   "there is nothing to pass a value to\n"
+                << std::flush;
+            return program;
+        }
+        out << "add_param: run: graph '" << callee->name() << "' declares "
+            << callee->funcType()->normTypesCount() << " parameter(s) and holds "
+            << callee->normPorts().size() << " port node(s)\n"
+            << std::flush;
+        auto &calleeDraft  = session.edit(callee).edit();
+        gc_node_ref_t port = kInvalidNodeRef;
+        {
+            const GraphDraft::NamedEdit named(calleeDraft, EditKind::ParamPort);
+            port = camel::runtime::addParameterPort(calleeDraft, Type::Int32());
+        }
+        calleeDraft.setFuncType(withOneParameter(callee->funcType(), Type::Int32()));
+        // The second parameter's readers become readers of the new port. `replaceAllValueUses` and not
+        // `replaceNode`: the latter *erases* the node it replaces, and a parameter erased takes its
+        // place in the port list with it -- the graph would declare three parameters and hold two, and
+        // the caller's second argument would then be judged against the new port. Here the second
+        // parameter keeps its place and only the reads of it move, which is what the value the caller
+        // passes for the *new* parameter is asked to answer.
+        calleeDraft.replaceAllValueUses(calleeDraft.normPorts()[1], port);
+        auto &callerTransaction = session.edit(caller);
+        auto &callerDraft       = callerTransaction.edit();
+        std::vector<gc_node_ref_t> arguments(
+            callerDraft.normInputsOf(call).begin(), callerDraft.normInputsOf(call).end());
+        arguments.push_back(callerDraft.materializeStaticValue(
+            camel::core::rtdata::toSlot<int32_t>(7), Type::Int32()));
+        callerDraft.setNormInputs(call, arguments);
+        out << "add_param: run: port node " << port << " added, the signature declares "
+            << calleeDraft.funcType()->normTypesCount() << " parameter(s), the call passes "
+            << callerDraft.normInputsOf(call).size() << " argument(s)\n"
+            << std::flush;
+        try {
+            const Program *published = session.commit();
+            out << "add_param: run: the commit published it and the program runs\n" << std::flush;
+            return published;
+        } catch (const std::runtime_error &refused) {
+            out << "add_param: run: refused at the commit: " << refused.what() << '\n' << std::flush;
+        }
+    }
+    // The program it was given: the reading is the two commits, and a root function that declares a
+    // parameter nothing passes is not a program the pipeline can run at the end of this pass.
+    return program;
+}
+
+namespace {
+
+using camel::execute::makePass;
+using camel::execute::PassKernel;
+
+/// The test-only passes this file implements. Each name is the constant its own header declares, so
+/// the name a pipeline writes and the class that answers it are one fact.
 const PassKernel foldFunctionTypeKernel(kFoldFunctionTypeTestPass, makePass<FoldFunctionTypeTestPass>());
 const PassKernel camelCommitChecksKernel(kCamelCommitChecksTestPass, makePass<CamelCommitChecksTestPass>());
 const PassKernel commitOrderKernel(kCommitOrderTestPass, makePass<CommitOrderTestPass>());
@@ -1716,5 +1918,6 @@ const PassKernel commitLoopBodyReadKernel(kCommitLoopBodyReadTestPass, makePass<
 const PassKernel commitPortTypeKernel(kCommitPortTypeTestPass, makePass<CommitPortTypeTestPass>());
 const PassKernel commitMadeGraphPortsKernel(kCommitMadeGraphPortsTestPass, makePass<CommitMadeGraphPortsTestPass>());
 const PassKernel commitMadeGraphOrderKernel(kCommitMadeGraphOrderTestPass, makePass<CommitMadeGraphOrderTestPass>());
+const PassKernel addParamKernel(kAddParamTestPass, makePass<AddParamTestPass>());
 
 } // namespace

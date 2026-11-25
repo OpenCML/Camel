@@ -1,0 +1,58 @@
+// A node an edit made can be the node a later commit refuses about, and the refusal names the node's
+// position -- the statement the program wrote. What it cannot say is *which edit* made it: the
+// position is the callee's, and a splice moved that code into this graph, so the diagnostic points at
+// a line of `announce` for a node `subject`'s commit is refusing. Design graph-editing 8.3 asks the
+// record for the other half: where the edit that made the node was written.
+//
+// The edit is `inline(t, at, announce)` and `at` is `x * 3`, a pure node that stands in no chain, so
+// the splice only puts `announce`'s print into the body and the commit is refused by the effect
+// check: `subject`'s type declares nothing and the body now reaches the console. That `at` node is
+// the statement the edit stands at, and it is what the edit records as its origin -- a kernel cannot
+// see its own call site (the call is lowered away before the operator runs), so the position the
+// record holds is the position of the node the edit anchored on.
+//
+// The reading is the diagnostic's second position, `[the edit that made this node was made here at
+// L:C]`, which is `x * 3` (line 27, column 15). Before the record carried an origin that position was
+// absent, and the diagnostic held only the print's own position in `announce`.
+
+import { Node, graph_of, nodes, op, op_name, open, inline, commit } from graph
+
+// The body the edit splices in: one print, which `subject`'s type does not declare.
+func announce() => int sync {
+    println('announced')
+    return 42
+}
+
+func subject(x: int) => int {
+    let y = x * 3
+    return y + 1
+}
+
+func isMul(n: Node) => bool spelling {
+    return match op(n) {
+        case null => false
+        case o => op_name(o) == ':op/mul_l'
+    }
+}
+
+func isPrint(n: Node) => bool spelling {
+    return match op(n) {
+        case null => false
+        case o => op_name(o) == ':io/println'
+    }
+}
+
+func firstWhere(ns: Node[]) => Node {
+    return ns[0]
+}
+
+func main() => int spelling sync {
+    let g = graph_of(subject)
+    let at = firstWhere(nodes(g)->filter<isMul>)
+    let t = open(subject)
+    inline(t, at, announce)
+    let edited = commit(t) !! subject
+    let h = graph_of(edited)
+    println(`[origin] prints=${len(nodes(h)->filter<isPrint>)}`)
+    return 0
+}
