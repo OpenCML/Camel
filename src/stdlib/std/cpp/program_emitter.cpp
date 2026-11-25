@@ -12,6 +12,7 @@
 #include "camel/execute/limits.h"
 #include "camel/execute/pass/warnings.h"
 #include "camel/execute/shaped_operators.h"
+#include "camel/runtime/oper_shape.h"
 #include "camel/utils/path.h"
 #include "graph/graph_view.h"
 
@@ -20,6 +21,7 @@
 #include <format>
 #include <functional>
 #include <memory>
+#include <string_view>
 #include <unordered_map>
 #include <unordered_set>
 
@@ -146,39 +148,11 @@ bool isEntryName(const std::string &name) {
 }
 
 const char *kindName(GCNodeKind kind) {
-    // The four the execution side calls shaped operators are named by the operator, the same table
-    // a back end's dump reads (camel/execute/shaped_operators.h).
-    if (const camel::execute::OperShape shape = camel::execute::shapeOfKind(kind);
-        shape != camel::execute::OperShape::None) {
-        return camel::execute::shapeName(shape);
-    }
-    switch (kind) {
-    case GCNodeKind::Data:
-        return "DATA";
-    case GCNodeKind::Port:
-        return "PORT";
-    case GCNodeKind::Brch:
-        return "BRCH";
-    case GCNodeKind::Join:
-        return "JOIN";
-    case GCNodeKind::Call:
-        return "CALL";
-    case GCNodeKind::Bind:
-        return "BIND";
-    case GCNodeKind::Func:
-        return "FUNC";
-    case GCNodeKind::Oper:
-        return "OPER";
-    case GCNodeKind::Gate:
-        return "GATE";
-    case GCNodeKind::Dref:
-        return "DREF";
-    case GCNodeKind::Loop:
-        return "LOOP";
-    default:
-        break;
-    }
-    return "?";
+    // The kinds are named once (`camel/runtime/oper_shape.h#nodeKindName`), which is also where a kind
+    // that stands for one of the four operators is named by the operator -- the table a back end's
+    // dump reads. "?" is this emitter's own word for a value that table does not name.
+    const std::string_view name = camel::runtime::nodeKindName(kind);
+    return name.empty() ? "?" : name.data();
 }
 
 } // namespace

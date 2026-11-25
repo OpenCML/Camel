@@ -25,9 +25,16 @@
  * What a back end *does* with one of the four -- the fast paths that run them and the emitted code
  * -- stays in the library (`camel/execute/shaped_operators.h`), where it has the implementations of
  * the four operators. The kernel only names the shape.
+ *
+ * `nodeKindName` is here because the word a dump prints for a `FILL` or an `ACCS` node *is* the
+ * shape's name: it is the answer to "which operation does this kind stand for", printed. Keeping it
+ * beside the table that answers that question is what stops the six dumps from spelling it
+ * themselves.
  */
 
 #pragma once
+
+#include <string_view>
 
 #include "camel/core/operator_table.h"
 #include "camel/ops/oper_shape.h"
@@ -64,6 +71,55 @@ inline OperShape shapeOfKind(camel::runtime::GCNodeKind kind) noexcept {
         return OperShape::Access;
     default:
         return OperShape::None;
+    }
+}
+
+/// The word a dump or a refusal prints for a node kind, and the one place it is written. A kind that
+/// stands for one of the four operations is named by the operator (`shapeName`), so a `FILL` node and
+/// a `:op/fill` call answer the same word -- which is the whole of what the day the front end stops
+/// building the two kinds leaves to change here: nothing.
+///
+/// It lives beside `shapeOfKind` because that is the fact it prints. Six dumps each kept their own
+/// copy of this table (`kernel/runtime/branch_arms.cpp`, `compile/src/gir/debug_json.cpp`,
+/// `stdlib/verify/translate.cpp`, `stdlib/test/loop_inputs.cpp`, `stdlib/std/cpp/program_emitter.cpp`
+/// and `tools/debugger/src/core/program_index.cpp`), which is one fact stated six times: a reader
+/// that added a kind had to find all six, and four of them spelled `FILL` and `ACCS` themselves while
+/// the other two asked the shape. The four that spelled them are why this function exists.
+///
+/// Empty for a value outside the enum. A dump that needs its own word for a kind says so itself
+/// ("?" / "UNKNOWN" / "NODE"), since that word is the dump's and not the kind's.
+inline std::string_view nodeKindName(camel::runtime::GCNodeKind kind) noexcept {
+    const OperShape shape = shapeOfKind(kind);
+    if (shape != OperShape::None) {
+        return camel::ops::shapeName(shape);
+    }
+    switch (kind) {
+    case camel::runtime::GCNodeKind::Data:
+        return "DATA";
+    case camel::runtime::GCNodeKind::Port:
+        return "PORT";
+    case camel::runtime::GCNodeKind::Brch:
+        return "BRCH";
+    case camel::runtime::GCNodeKind::Join:
+        return "JOIN";
+    case camel::runtime::GCNodeKind::Call:
+        return "CALL";
+    case camel::runtime::GCNodeKind::Bind:
+        return "BIND";
+    case camel::runtime::GCNodeKind::Func:
+        return "FUNC";
+    case camel::runtime::GCNodeKind::Oper:
+        return "OPER";
+    case camel::runtime::GCNodeKind::Gate:
+        return "GATE";
+    case camel::runtime::GCNodeKind::Dref:
+        return "DREF";
+    case camel::runtime::GCNodeKind::Loop:
+        return "LOOP";
+    case camel::runtime::GCNodeKind::Dead:
+        return "DEAD";
+    default:
+        return {};
     }
 }
 

@@ -10,8 +10,10 @@
 #include "camel/core/type.h"
 #include "camel/execute/pass/registration.h"
 #include "camel/runtime/loop.h"
+#include "camel/runtime/oper_shape.h"
 
 #include <format>
+#include <string_view>
 #include <unordered_set>
 
 namespace {
@@ -19,37 +21,11 @@ namespace {
 using namespace camel::runtime;
 
 const char *kindName(GCNodeKind kind) {
-    switch (kind) {
-    case GCNodeKind::Data:
-        return "DATA";
-    case GCNodeKind::Port:
-        return "PORT";
-    case GCNodeKind::Fill:
-        return "FILL";
-    case GCNodeKind::Accs:
-        return "ACCS";
-    case GCNodeKind::Brch:
-        return "BRCH";
-    case GCNodeKind::Join:
-        return "JOIN";
-    case GCNodeKind::Call:
-        return "CALL";
-    case GCNodeKind::Bind:
-        return "BIND";
-    case GCNodeKind::Func:
-        return "FUNC";
-    case GCNodeKind::Oper:
-        return "OPER";
-    case GCNodeKind::Gate:
-        return "GATE";
-    case GCNodeKind::Dref:
-        return "DREF";
-    case GCNodeKind::Loop:
-        return "LOOP";
-    case GCNodeKind::Dead:
-        return "DEAD";
-    }
-    return "?";
+    // The kinds are named once (`camel/runtime/oper_shape.h#nodeKindName`); "?" is this dump's own word
+    // for a value that table does not name. Every name it answers points at a string literal, so
+    // `data()` is the C string the callers print.
+    const std::string_view name = camel::runtime::nodeKindName(kind);
+    return name.empty() ? "?" : name.data();
 }
 
 /// One input of a loop's regions. `constant` is the role the caller determined, not a re-check of
