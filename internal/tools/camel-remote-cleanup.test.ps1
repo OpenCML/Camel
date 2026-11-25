@@ -28,8 +28,11 @@
 #   pwsh -NoProfile -File internal/tools/camel-remote-cleanup.test.ps1
 #   pwsh -NoProfile -File internal/tools/camel-remote-cleanup.test.ps1 -BashHost 88zjwei
 #
-# Without -BashHost, part B prints SKIP when there is no local bash either. A local `bash` is used
-# when there is one.
+# Part B needs a bash that can hold a flock and read /proc: the build host always has one, and a
+# local `bash` is used when the one on PATH can read a Windows path. When neither is available part
+# B does not vanish from the count -- its checks are counted as skipped and the summary says how
+# many -- because a part that silently does not run is green by being unread, which is how the one
+# real defect in it hid for two days (2026-11-25).
 
 [CmdletBinding()]
 param(
@@ -44,6 +47,16 @@ $ErrorActionPreference = 'Stop'
 
 $script:failed = 0
 $script:checked = 0
+# Checks this run did not make. They are counted separately and printed, never dropped: a reading
+# that omits what it did not run cannot be told from one that ran it green.
+$script:skipped = 0
+
+# What part B checks when it can run: one per verdict the harness prints (the number below, which the
+# first `Check` after the harness's output asserts), plus its exit code and that assertion itself.
+# A run without a bash counts all of them as skipped, so the total is the same number either way and
+# a skipped part B cannot pass for a smaller green one.
+$script:partBChecks = 25
+$script:partBTotal = $script:partBChecks + 2
 
 function Check {
     param([string]$Name, [bool]$Ok, [string]$Detail = '')
@@ -55,6 +68,12 @@ function Check {
         Write-Host "  FAIL  $Name"
         if ($Detail) { Write-Host "        $Detail" }
     }
+}
+
+function Skip {
+    param([string]$Reason)
+    Write-Host ("  SKIP  part B: {0} checks not run -- {1}" -f $script:partBTotal, $Reason)
+    $script:skipped += $script:partBTotal
 }
 
 # --- Part A: the decision ----------------------------------------------------
@@ -230,19 +249,40 @@ if (-not $guard) {
         '# the cleanup root and its record are bookkeeping, not checkouts: both must survive the sweep',
         'mkdir -p "$T/tmp/lane-20260101-000000/checkout"',
         'touch -d "2 hours ago" "$T/tmp/lane-20260101-000000/checkout"',
-        '# a live run holds its own checkout''s lock',
+        '# a live run holds its own checkout''s lock, and a process works inside probe-f. Both have to',
+        '# outlive the sweep, and the sweep has no bound this file can know: it forks twice per process',
+        '# per candidate checkout (one `$(readlink ...)` for the cwd, one for the exe), so its cost is',
+        '# the host''s process count times its load. On 2026-11-25 one candidate took 35 s under twelve',
+        '# copies of this harness on two cores (~1800 processes on the host), and the whole sweep took',
+        '# minutes. A `sleep <n>` is therefore a guess about the host, and that guess is exactly what',
+        '# failed: the old 30 s lifetime expired in the middle of the sweep, the guard then found',
+        '# nothing inside probe-f at the instant it looked -- which is correct -- and the check that',
+        '# failed was the one asserting it had named the process. That reads like a guard ignoring a',
+        '# process it can see, and that is how it looked like a defect twice.',
+        '#',
+        '# So the lifetime is not a duration. Each fixture reads from a fifo whose write end this script',
+        '# holds (`exec 9<>` below): it ends when the write end closes, which happens at this script''s',
+        '# exit or when it is killed and its descriptors close. Two further details: their stdio is on',
+        '# /dev/null, because a background process holding the harness''s stdout keeps an `ssh` channel',
+        '# open after the harness exits (measured: the run hung on exactly that); and the lock holder',
+        '# takes the lock on a descriptor the subshell opened, then `exec`s, so the lock and the process',
+        '# end together -- the idiom camel-remote.ps1 uses for a real checkout.',
         'busykey=$(printf "%s" "$T/busy-c" | cksum | cut -d" " -f1)',
-        'flock "/tmp/camel-tree-$busykey.lock" sleep 30 &',
-        'lockpid=$!',
-        '# a process working inside probe-f',
-        '( cd "$T/probe-f" && exec sleep 30 ) &',
+        'mkfifo "$O/gate-probe" "$O/gate-lock"',
+        '( cd "$T/probe-f" && exec cat "$O/gate-probe" ) </dev/null >/dev/null 2>&1 &',
         'prockpid=$!',
-        '# Wait until both are actually visible instead of sleeping a fixed 0.3 s: on a loaded build host',
-        '# (several lanes compiling) the fork lands after the sleep, the sweep correctly says "nothing',
-        '# uses probe-f", and the check that it did is what fails -- a flake that reads like a defect',
-        '# in the guard. 2026-11-24: this failed twice that way, then passed on a quieter minute.',
+        '( exec 8>"/tmp/camel-tree-$busykey.lock"; flock -n 8; exec cat "$O/gate-lock" ) </dev/null >/dev/null 2>&1 &',
+        'lockpid=$!',
+        'trap ''kill $lockpid $prockpid 2>/dev/null'' EXIT',
+        '# let both readers through, and keep the write ends open until this script ends. `<>` rather than',
+        '# `>`: opening a fifo only for writing waits for a reader, and a fixture that failed to start',
+        '# would then hang this run instead of failing it.',
+        'exec 9<>"$O/gate-probe" 10<>"$O/gate-lock"',
+        '# Wait until both are visible -- and then say so. These two readings are the conditions the',
+        '# sweep is about to judge; a fixture that never established one must be reported as the',
+        '# fixture failing, not as the guard failing to name something that was not there.',
         'i=0; lock_held=0; seen=0',
-        'while [ "$i" -lt 50 ]; do',
+        'while [ "$i" -lt 300 ]; do',
         '    for p in /proc/[0-9]*; do',
         '        [ "$(readlink "$p/cwd" 2>/dev/null)" = "$T/probe-f" ] && seen=1 && break',
         '    done',
@@ -250,6 +290,8 @@ if (-not $guard) {
         '    [ "$seen" = 1 ] && [ "$lock_held" = 1 ] && break',
         '    sleep 0.1; i=$((i+1))',
         'done',
+        '[ "$seen" = 1 ] && pass "the fixture put a process inside probe-f" || bad "the fixture put a process inside probe-f" "waited $i rounds, nothing has its cwd there"',
+        '[ "$lock_held" = 1 ] && pass "the fixture holds busy-c''s lock" || bad "the fixture holds busy-c''s lock" "waited $i rounds, the lock is free"',
         '# the harness itself must not look like it is working inside the fake root',
         'cd /tmp',
         '',
@@ -264,6 +306,10 @@ if (-not $guard) {
         'case "$out" in *"not removing host checkouts this run"*) pass "trusted=0 prints why";; *) bad "trusted=0 prints why" "$out";; esac',
         '',
         '# --- a reading that answered removes only what nothing is using',
+        '# The fixture''s own state at the moment the sweep is asked: if this line is ever part of a red,',
+        '# it says whether the process was there and the guard did not name it (the guard''s defect) or',
+        '# whether the fixture left first (this file''s).',
+        'fixture_before="probe-f: pid=$prockpid cwd=$(readlink /proc/$prockpid/cwd 2>/dev/null) state=$(cut -d" " -f3 /proc/$prockpid/stat 2>/dev/null)"',
         'cleanup_host_checkouts "$T" "live-a Camel.git" "1" "Camel.git" > "$O/out1.txt" 2>&1',
         'reclaimed1=$reclaimed',
         'out=$(cat "$O/out1.txt")',
@@ -274,14 +320,16 @@ if (-not $guard) {
         '[ ! -d "$T/dead-e" ] && pass "removed dead-e (gone, unlocked, unused, recorded)" || bad "removed dead-e"',
         '[ ! -f "$T/.records/dead-b" ] && pass "the record goes with the checkout it describes" || bad "record removed"',
         '[ "$reclaimed1" = 1 ] && pass "the reclaim is reported" || bad "the reclaim is reported"',
-        'case "$out" in *"keeping host checkout busy-c: a run holds its lock"*) pass "a held lock is named";; *) bad "a held lock is named" "$out";; esac',
-        'case "$out" in *"keeping host checkout probe-f: a process is using it"*) pass "a process inside it is named";; *) bad "a process inside it is named" "$out";; esac',
+        'case "$out" in *"keeping host checkout busy-c: a run holds its lock"*) pass "a held lock is named";; *) bad "a held lock is named" "lock_held=$lock_held; $out";; esac',
+        'case "$out" in *"keeping host checkout probe-f: a process is using it"*) pass "a process inside it is named";; *) bad "a process inside it is named" "seen=$seen, swept with [$fixture_before]; $out";; esac',
         'case "$out" in *"keeping host checkout fresh-d: a file in it changed in the last 10 minutes"*) pass "a fresh checkout is named";; *) bad "a fresh checkout is named" "$out";; esac',
         '# (d) the creation record: idle and old is not enough, the sweep must find a record',
         'case "$out" in *"keeping host checkout stray-g: no creation record"*) pass "an unrecorded checkout is kept and named";; *) bad "unrecorded checkout kept" "$out";; esac',
         '[ -d "$T/stray-g" ] && pass "the unrecorded checkout is still there" || bad "unrecorded checkout still there"',
         '[ -d "$T/tmp/lane-20260101-000000/checkout" ] && pass "the cleanup root is not swept" || bad "cleanup root swept"',
         '',
+        '# Closing the gates is what ends the two fixtures: their readers see EOF and exit.',
+        'exec 9>&- 10>&-',
         'kill $lockpid $prockpid 2>/dev/null || true',
         'wait 2>/dev/null || true',
         'rm -rf "$O"',
@@ -312,17 +360,43 @@ if (-not $guard) {
             $raw = @(& bash $local)
             $raw += 'RC=' + $LASTEXITCODE
         } else {
-            Write-Host '  SKIP  part B: the bash on PATH cannot read a Windows path; give -BashHost <ssh alias>'
+            Skip 'the bash on PATH cannot read a Windows path; give -BashHost <ssh alias>'
         }
     } else {
-        Write-Host '  SKIP  part B: no bash here; give -BashHost <ssh alias>'
+        Skip 'no bash on this machine; give -BashHost <ssh alias>'
     }
 
     if ($raw.Count -gt 0) {
+        # The harness prints one verdict line per check, and `bad <name> <reason>` puts the reason
+        # after two spaces with the rest of it -- the guard's own output -- on the lines that follow.
+        # Those lines used to be dropped here, so a red named a check and never showed what the
+        # guard said; that is why the reading was indistinguishable from the guard ignoring a
+        # process it could see. They are the detail of the FAIL now.
+        $verdicts = New-Object System.Collections.ArrayList
         foreach ($line in $raw) {
-            if ("$line" -like 'PASS *') { Check ("$line" -replace '^PASS ', '') $true }
-            elseif ("$line" -like 'FAIL *') { Check ("$line" -replace '^FAIL ', '') $false }
+            $s = "$line"
+            if ($s -like 'PASS *' -or $s -like 'FAIL *') {
+                $ok = $s -like 'PASS *'
+                [void]$verdicts.Add([pscustomobject]@{
+                        Ok   = $ok
+                        Text = ($s -replace '^(PASS|FAIL) ', '')
+                        More = @()
+                    })
+            } elseif ($verdicts.Count -gt 0 -and -not $verdicts[$verdicts.Count - 1].Ok -and $s.Trim()) {
+                $verdicts[$verdicts.Count - 1].More += $s
+            }
         }
+        foreach ($v in $verdicts) {
+            $name = ($v.Text -split '  ', 2)[0]
+            $detail = @($v.More)
+            if ($v.Text.Length -gt $name.Length + 2) { $detail = @($v.Text.Substring($name.Length + 2)) + $detail }
+            Check $name $v.Ok (@($detail) -join "`n")
+        }
+        # Part B's promise, in one cell: the number skipped below is this many plus the exit code and
+        # this check, and a harness that grew or lost a check without the number moving fails here
+        # rather than making a skipped run look like a smaller run.
+        Check 'part B made the number of checks it promises' ($verdicts.Count -eq $script:partBChecks) `
+            ("$($verdicts.Count) verdicts, $script:partBChecks promised")
         $rc = @($raw | Where-Object { "$_" -like 'RC=*' }) | Select-Object -Last 1
         Check 'the bash guard exited 0' ("$rc" -eq 'RC=0') ("$rc")
     }
@@ -331,6 +405,11 @@ if (-not $guard) {
 # --- result ------------------------------------------------------------------
 Write-Host ''
 if (-not $Keep) { Remove-Item -Recurse -Force $scratch -ErrorAction SilentlyContinue }
-Write-Host ("{0} checks, {1} failed" -f $script:checked, $script:failed)
+$total = $script:checked + $script:skipped
+if ($script:skipped -gt 0) {
+    Write-Host ("{0} checks, {1} failed, {2} skipped" -f $total, $script:failed, $script:skipped)
+} else {
+    Write-Host ("{0} checks, {1} failed" -f $total, $script:failed)
+}
 if ($script:failed -gt 0) { exit 1 }
 exit 0
