@@ -2686,7 +2686,7 @@ b88c50baed163e9e ok test/cases/feat/mm/gc/gc_live_large.cml
 7a1e90a70e88ea8d ok test/cases/feat/mm/gc/gc_nested_filter.cml
 4bf4f38ee17bc8fe ok test/cases/feat/mm/gc/gc_nested_foreach.cml
 3d095916344ae883 ok test/cases/feat/mm/gc/gc_nested_map.cml
-561c24dc3dd0cfe4 ok test/cases/feat/mm/gc/gc_nested_reduce.cml
+6218fd983c63e7ce ok test/cases/feat/mm/gc/gc_nested_reduce.cml
 36acd7796374c270 ok test/cases/feat/mm/gc/gc_prl_blocked_worker.cml
 eccf7536af3a7885 ok test/cases/feat/mm/gc/gc_prl_scheduler.cml
 39d012e21a3dfae1 ok test/cases/feat/mm/gc/gc_promoted_blocks.cml

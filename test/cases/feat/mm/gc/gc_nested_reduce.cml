@@ -5,6 +5,12 @@
  *   shifted: a reduce whose accumulator is an array that every step rebuilds with map.
  * The innermost functions call a named function, so that every scheduler reaches a safepoint
  * while the arrays built in the element function are still in use.
+ *
+ * The seed of `shifted` is an array, because `reduce`'s accumulator is one: `to_array` is the one
+ * conversion from the interval `0 .. n` (a Range) to the integers it names (design principles
+ * 5.4). The interval rewrite wrote the seed as `0 .. n`, which is a Range and so names no
+ * instance of `reduce`; the only plan that names this file is milestone-tier, so no routine run
+ * compiled it and the mismatch stood.
  */
 
 func add(a: int, b: int) => int {
@@ -26,7 +32,7 @@ func shifted(n: int, k: int) => int[] {
         acc->map<func (x: int) => int {
             add(x, i + k)
         }>
-    }, 0 .. n>
+    }, to_array(0 .. n)>
 }
 
 func total_of(xs: int[]) => int {
