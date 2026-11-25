@@ -416,7 +416,7 @@ what `camel_nvm` executes. Configurations without an optimisation pass must
 execute exactly the reference; optimised ones at least the reference minus the
 operators the script proves unused, and nothing beyond the reference. The proof
 is a demand analysis the script runs on the model's `step` graph after
-`std::macro` (`camel model.cml std::macro std::rgir`): demand starts at what
+`std::macro` (`camel model.cml std::macro std::rgir std::nop`): demand starts at what
 `step` returns (the loss and the updated parameters) and follows data edges
 backwards through calls, closures and tuple slots; a gradient operator the
 demand never reaches is unused. There is no per-model list. The analysis is
