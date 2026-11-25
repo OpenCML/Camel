@@ -19,7 +19,7 @@ Source: `docs/stdlib-reference.md`, generated from the declarations in `stdlib/*
 `node scripts/stdlib-reference.mjs --write`.
 
 <!-- camel-for-ai region: stdlib-signatures (generated from docs/stdlib-reference.md; node scripts/camel-for-ai.mjs --write) -->
-**`Built-in functions`** — no import — 79 name(s)
+**`Built-in functions`** — no import — 81 name(s)
 
 ```text
 std::mem::blocks: () => { allocs: int, frees: int, live: int, bytes: int }
@@ -127,6 +127,8 @@ to_array: (r: Range) => int[]
 is_empty: (r: Range) => bool
 map: <f: (item: int) => U> (r: Range) => U[]
 filter: <f: (item: int) => bool> (r: Range) => int[]
+count: <pred: (item: int) => bool> (r: Range) => int
+find: <pred: (item: int) => bool> (r: Range) => int?
 reduce: <f: (acc: U, item: int) => U, initial: U> (r: Range) => U
 len: (r: Range) => int
 print: (r: Range) => void
