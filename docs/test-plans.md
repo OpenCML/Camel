@@ -1290,6 +1290,7 @@ Behavior-style tests may combine:
 - `expect_diagnostic_code`
 - `expect_diagnostic_line`
 - `expect_diagnostic_column`
+- `expect_diagnostic_file`
 - `expect_no_diagnostics`
 - `expect_refusal`
 - `verify_script`
@@ -1299,6 +1300,40 @@ Behavior-style tests may combine:
 Every assertion above is checked in addition to the others: a test may combine them. The runner
 checks every field it is given; a field it does not know is a plan-schema error (see "Top-Level
 Plan Fields"), never a silent no-op.
+
+### `expect_diagnostic_file`
+
+`expect_diagnostic_name`, `_code`, `_line` and `_column` say *what* the diagnostic says and *where in
+it* the position is; none of them says *which file* it was reported in, so they are satisfied by a
+diagnostic of any file the program loaded. `expect_diagnostic_file` names that file: the run must
+produce a diagnostic matching the other pins **in this one file**.
+
+```toml
+expect_diagnostic_name = "SemanticDiag::OperatorOverloadConflict"
+expect_diagnostic_line = 5
+expect_diagnostic_column = 1
+expect_diagnostic_file = "plus_c.cml"     # read from the directory of the entry program
+```
+
+A relative value is read from the directory of the entry's own program — the place its `import`s
+resolve from — so the line above means the `plus_c.cml` that `case` actually loads; an absolute path
+is taken as written, and `${test_tmp}` (and the other text tokens) expand as in the other assertion
+strings. It is **one path, not a list**: a diagnostic has exactly one file, and a list would let any
+of several satisfy the pin, which is the hole the field exists to close. A list, a number, a boolean
+or an empty string is refused where the plan is loaded, with the file, the entry and the key named;
+so is an entry that pairs it with `expect_no_diagnostics = true`.
+
+It takes effect **only for an entry that writes it**, and an entry that does not keeps exactly the
+meaning it had. A failure names both files: `expected diagnostic … in <the file the entry requires>:
+that diagnostic is reported in <the file it did come from>, not in the file the entry requires`.
+
+The reading behind the field: `operator_overloads.conflict_import` pinned `line = 4, column = 1` for
+`SemanticDiag::OperatorOverloadConflict` and was green for as long as `plus_c.cml` declared the
+conflicting overload on its line 4 — the pin never said it meant `plus_c.cml`, and the entry's own
+file has a diagnostic at 4:1 as well (`ImportedModuleHasErrors`, the follow-on of that same
+conflict), so the coordinates alone could not tell a reader which file was meant. When a formatter
+pass moved the declaration to line 5 the pin went red, and the entry then had to be re-read against
+the output rather than repaired by the number.
 
 ### `expect_stdout_contains` / `expect_stderr_contains`
 
