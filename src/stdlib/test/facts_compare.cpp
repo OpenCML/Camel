@@ -8,6 +8,7 @@
 #include "facts_compare.h"
 
 #include "camel/execute/pass/registration.h"
+#include "camel/core/operator_table.h"
 #include "camel/facts/arrangeable.h"
 #include "camel/facts/control_regions.h"
 #include "camel/runtime/control_regions.h"
@@ -204,6 +205,89 @@ void compareArrangeable(
     }
 }
 
+struct ReaderCounts {
+    size_t nodes  = 0;
+    size_t agree  = 0;
+    size_t diff   = 0;
+    size_t noFact = 0;
+};
+
+/// The name of a node kind, as the reading prints it.
+const char *nodeKindName(camel::graph::NodeKind kind) {
+    switch (kind) {
+    case camel::graph::NodeKind::Data:
+        return "data";
+    case camel::graph::NodeKind::Port:
+        return "port";
+    case camel::graph::NodeKind::Oper:
+        return "oper";
+    case camel::graph::NodeKind::Func:
+        return "func";
+    case camel::graph::NodeKind::Call:
+        return "call";
+    case camel::graph::NodeKind::Bind:
+        return "bind";
+    case camel::graph::NodeKind::Brch:
+        return "brch";
+    case camel::graph::NodeKind::Loop:
+        return "loop";
+    case camel::graph::NodeKind::Gate:
+        return "gate";
+    }
+    return "?";
+}
+
+/// `core.arrangeable` against the predicate a pass asks before it drops, moves, merges or reorders
+/// a node (`runtime::nodeIsFreelySchedulable`, camel/runtime/graph.h). The two answer one question
+/// -- may a pass arrange this node anywhere -- so a node they answer differently is a node that has
+/// two answers, and this is the reading that counts them. A node the kind answers nothing for is a
+/// `no_fact`, separately from a disagreement: "the fact declined" and "the fact and the reader
+/// disagree" are different states and one total would hide which happened.
+void compareReaders(
+    const GCGraph &graph, camel::facts::Store &store, ReaderCounts &counts, std::ostream &os) {
+    const camel::graph::GraphView &view = graph.view();
+    const camel::facts::KindId kind     = camel::facts::arrangeableKind();
+    for (gc_node_ref_t ref = 0; ref < static_cast<gc_node_ref_t>(graph.nodeCount()); ++ref) {
+        if (!graph.containsNodeRef(ref)) {
+            continue;
+        }
+        ++counts.nodes;
+        const camel::graph::NodeRef node = static_cast<camel::graph::NodeRef>(ref);
+        const std::shared_ptr<const camel::facts::Arrangeable> fact =
+            store.obtain<camel::facts::Arrangeable>(
+                kind, camel::facts::Anchor{&graph, static_cast<camel::facts::NodeId>(ref)});
+        if (fact == nullptr) {
+            ++counts.noFact;
+            continue;
+        }
+        const bool moved = camel::runtime::nodeIsFreelySchedulable(graph, ref);
+        if (fact->all() == moved) {
+            ++counts.agree;
+            continue;
+        }
+        ++counts.diff;
+        const camel::core::OperId oper = view.operatorOf(node);
+        os << std::format(
+            "FACTS_COMPARE reader_diff graph={} node={} node_kind={} oper={} kind={} moved={} "
+            "terms={}{}{}{} waits={} orders={} syncs={}\n",
+            graph.name(),
+            ref,
+            nodeKindName(view.kindOf(node)),
+            oper == camel::core::kNoOper
+                ? std::string("-")
+                : std::string(camel::core::OperatorTable::instance().uri(oper)),
+            fact->all() ? 1 : 0,
+            moved ? 1 : 0,
+            fact->pure ? 1 : 0,
+            fact->noExternalEffect ? 1 : 0,
+            fact->cannotFault ? 1 : 0,
+            fact->terminates ? 1 : 0,
+            graph.waitInputsOf(ref).size(),
+            graph.orderPredsOf(ref).size(),
+            graph.syncPredsOf(ref).size());
+    }
+}
+
 } // namespace
 
 const camel::runtime::Program *
@@ -211,6 +295,7 @@ FactsCompareTestPass::apply(const camel::runtime::Program *program, std::ostream
     using namespace camel::runtime;
     ControlCounts control;
     ArrangeCounts arrange;
+    ReaderCounts readers;
     for (auto *graph : collectReachableGraphs(*program)) {
         if (graph == nullptr) {
             continue;
@@ -226,6 +311,7 @@ FactsCompareTestPass::apply(const camel::runtime::Program *program, std::ostream
         }
         compareControlRegions(*graph, *store, control);
         compareArrangeable(*graph, *store, arrange);
+        compareReaders(*graph, *store, readers, os);
     }
     os << std::format(
         "FACTS_COMPARE kind=core.controlRegions graphs={} regions={} enclosing_same={} "
@@ -249,6 +335,12 @@ FactsCompareTestPass::apply(const camel::runtime::Program *program, std::ostream
         arrange.same,
         arrange.diff,
         arrange.noOld);
+    os << std::format(
+        "FACTS_COMPARE kind=core.arrangeable readers nodes={} agree={} diff={} no_fact={}\n",
+        readers.nodes,
+        readers.agree,
+        readers.diff,
+        readers.noFact);
     return program;
 }
 
