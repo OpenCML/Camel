@@ -21,7 +21,7 @@
 //
 // The trees read are `src/`, `scripts/`, `internal/tools/` and `test/`. The first version read
 // `src/` only, and while it reported green the same day's merges left work item numbers in plans,
-// lane codes in `known_fail_owner`, and "the rule" in sixty `desc` fields:
+// lane codes in `known_fail_owner`, and a dated ruling in sixty `desc` fields:
 // a check that reads one tree cannot say anything about the others, and a green light from it was
 // read as "the tree is clean".
 //
