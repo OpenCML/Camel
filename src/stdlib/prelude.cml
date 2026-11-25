@@ -951,24 +951,24 @@ export func extent_of::<A>() => int[] when is_array::<A>()
 /// type; a scalar and a value whose parts no write could be seen through are handed on as they
 /// are. `var b = a` asks the same question at a declaration, and the answer is the same one.
 ///
-/// This is the COPY node kind written as an ordinary operator (plan 2.3, step 1): the three
-/// backends ask the same two things of the value -- whether its type is one the collector traces,
-/// and what its static type is -- so the operator answers with their rule and not a second one
-/// (`lib/std/builtin/operators/copy.cpp`).
+/// A copy is a call of `:op/copy`, an `OPER` node like any other operator call (plan 2.3, step
+/// 1): the three backends ask the same two things of the value -- whether its type is one the
+/// collector traces, and what its static type is -- so the operator answers with their rule and
+/// not a second one (`lib/std/builtin/operators/copy.cpp`).
 ///
 /// @pure
 /// @example copy([1, 2])    // [1, 2]
 #op(':op/copy')
 export func copy::<T>(x: T) => T
 
-/// A conversion as an ordinary operator: the CAST node kind written as a call of the operator that
-/// does the same thing (plan 2.3, step 2). The target type is the call's own result type and the
-/// source type is the operand's, so a conversion needs no compile-time parameter beside them: the
-/// two facts a record keyed by URI holds are the two a conversion asks. The implementation is the
-/// type's own conversion (`lib/std/builtin/operators/cast.cpp`), which is the rule the CAST node
-/// ran, so a conversion that checks its value still checks it and one that cannot fail still
-/// cannot. It states `panic` because one conversion of a pair whose types make it safe is not the
-/// one being looked at here: the operator is a call of every pair the compiler builds.
+/// A conversion is a call of `:op/cast`, an `OPER` node like any other operator call (plan 2.3,
+/// step 2). The target type is the call's own result type and the source type is the operand's, so
+/// a conversion needs no compile-time parameter beside them: the two facts a record keyed by URI
+/// holds are the two a conversion asks. The implementation is the type's own conversion
+/// (`lib/std/builtin/operators/cast.cpp`), so a conversion that checks its value still checks it
+/// and one that cannot fail still cannot. It states `panic` because one conversion of a pair whose
+/// types make it safe is not the one being looked at here: the operator is a call of every pair
+/// the compiler builds.
 ///
 /// A program writes a conversion as `T(x)` or `x as T`, and those reach this operator by the
 /// language's own conversion rules; the call form is the name a graph holds the conversion under.
