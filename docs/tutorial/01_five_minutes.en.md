@@ -59,9 +59,10 @@ Hello, Camel!
 
 ## Your function is a graph
 
-Put `std::rgir` at the end of the command line: the program does not run, and the compiler **draws** the graph it
-built (DOT is Graphviz's format; hand it to `dot` and you have a picture). What you write after the file name is a
-**pass**, and `std::rgir` is the pass that draws the graph.
+Write `std::rgir` on the command line and end it with `std::nop`: the program does not run, and the compiler
+**draws** the graph it built (DOT is Graphviz's format; hand it to `dot` and you have a picture). What you write
+after the file name is a **pass**: `std::rgir` draws the graph and hands it on unchanged, and `std::nop` is the pass
+that stops the pipeline there without executing anything (design principles 9.1).
 
 ```cml
 // The smallest program: `main` is the entry, and its body is a sync block.
@@ -74,7 +75,7 @@ func main() => int sync {
 ```
 
 ```bash
-camel docs/tutorial/examples/01_hello.cml std::rgir > hello.dot
+camel docs/tutorial/examples/01_hello.cml std::rgir std::nop > hello.dot
 dot -Tsvg hello.dot -o hello.svg
 ```
 
@@ -145,8 +146,8 @@ func main() => int sync {
 ```
 
 ```bash
-camel docs/tutorial/examples/01_rewrite.cml std::rgir
-camel docs/tutorial/examples/01_rewrite.cml std::opt std::rgir
+camel docs/tutorial/examples/01_rewrite.cml std::rgir std::nop
+camel docs/tutorial/examples/01_rewrite.cml std::opt std::rgir std::nop
 ```
 
 | before `std::opt` | after `std::opt` |
@@ -170,7 +171,7 @@ sync edge between effects; optimization replaces the graph with a smaller graph 
 ## Exercise
 
 Write a function `area(w: int, h: int): int` that returns their product, and print `area(3, 4)` from `main`. Then
-draw it (`camel docs/tutorial/examples/01_exercise.cml std::rgir > area.dot`, then `dot -Tsvg area.dot -o area.svg`)
+draw it (`camel docs/tutorial/examples/01_exercise.cml std::rgir std::nop > area.dot`, then `dot -Tsvg area.dot -o area.svg`)
 and find in your graph: the two `PORT` nodes `w` and `h`, the one `OPER` node that multiplies, and the two data
 edges that join them.
 

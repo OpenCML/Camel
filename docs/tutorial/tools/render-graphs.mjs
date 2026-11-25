@@ -46,59 +46,66 @@ const CAMEL = option('camel', process.env.CAMEL || 'camel');
 const DOT = option('dot', process.env.DOT || 'dot');
 
 // The pictures the tutorial shows, in the order the chapters use them.
+//
+// Every sheet ends its passes in `std::nop`, which is the recipe design principles 9.1 gives for
+// looking at a graph without running it: a dump hands the program on, so a sheet that stopped at
+// `std::rgir` would fall through to `std::default` and the program would run -- its output would
+// land in the dump the picture is normalised from (the `01_hello` sheet keeps no cluster, so that
+// output would end up in the `.dot` file) and, on a program with several writings, the run would
+// be refused with `PassNeedsExtraction` before any picture was drawn.
 const SHEETS = [
     {
         name: '01_hello',
         source: 'examples/01_hello.cml',
-        passes: ['std::rgir'],
+        passes: ['std::rgir', 'std::nop'],
         title: 'main 的子图与入口对它的调用',
     },
     {
         name: '01_twice_before',
         source: 'examples/01_rewrite.cml',
-        passes: ['std::rgir'],
+        passes: ['std::rgir', 'std::nop'],
         cluster: 'twice',
         title: 'std::opt 之前：两个乘法加一个加法',
     },
     {
         name: '01_twice_after',
         source: 'examples/01_rewrite.cml',
-        passes: ['std::opt', 'std::rgir'],
+        passes: ['std::opt', 'std::rgir', 'std::nop'],
         cluster: 'twice',
         title: 'std::opt 之后：一个乘法乘常量 4',
     },
     {
         name: '09_dependency',
         source: 'examples/09_dependency.cml',
-        passes: ['std::rgir'],
+        passes: ['std::rgir', 'std::nop'],
         cluster: 'total',
         title: 'total 的子图：谁要谁的结果',
     },
     {
         name: '10_var_order',
         source: 'examples/10_var_order.cml',
-        passes: ['std::rgir'],
+        passes: ['std::rgir', 'std::nop'],
         cluster: 'twice',
         title: 'twice 的子图：格子和两次写之间的同步边',
     },
     {
         name: '17_rule_negated',
         source: 'examples/17_rule.cml',
-        passes: ['std::opt', 'std::rgir'],
+        passes: ['std::opt', 'std::rgir', 'std::nop'],
         cluster: 'negated',
         title: '自己的定律没有交出去：x * -1 原样留着',
     },
     {
         name: '17_rule_combined',
         source: 'examples/17_rule.cml',
-        passes: ['std::opt', 'std::rgir'],
+        passes: ['std::opt', 'std::rgir', 'std::nop'],
         cluster: 'combined',
         title: '标准库的定律：x * 3 + x * 5 剩下一乘',
     },
     {
         name: '17_rule_saturate',
         source: 'examples/17_rule.cml',
-        passes: ['std::cxx::saturate', 'std::rgir'],
+        passes: ['std::cxx::saturate', 'std::rgir', 'std::nop'],
         cluster: 'doubled',
         title: 'std::cxx::saturate：一个值的几种写法都留着',
     },

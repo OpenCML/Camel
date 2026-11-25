@@ -514,7 +514,7 @@ camel: 1 error
 
 ## 在图上
 
-把 [`examples/10_var_order.cml`](examples/10_var_order.cml) 的 `twice` 画出来（`camel docs/tutorial/examples/10_var_order.cml std::rgir`，本书的图都由第 1 章那个脚本生成）：
+把 [`examples/10_var_order.cml`](examples/10_var_order.cml) 的 `twice` 画出来（`camel docs/tutorial/examples/10_var_order.cml std::rgir std::nop`，本书的图都由第 1 章那个脚本生成）：
 
 ![twice 的子图：`var c` 是一个格子，两次写入之间有同步边](images/10_var_order.svg)
 

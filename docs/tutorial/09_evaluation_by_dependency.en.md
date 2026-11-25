@@ -54,7 +54,7 @@ camel docs/tutorial/examples/09_dependency.cml
 
 ## Dependencies on the graph
 
-Draw the graph (`camel docs/tutorial/examples/09_dependency.cml std::rgir > dep.dot`, then
+Draw the graph (`camel docs/tutorial/examples/09_dependency.cml std::rgir std::nop > dep.dot`, then
 `dot -Tsvg dep.dot -o dep.svg`; every picture in this book is drawn by the script chapter 1 names). The function
 `total` looks like this:
 
