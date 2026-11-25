@@ -5,7 +5,7 @@
 //
 // What crosses the cut is the transform's own business: the values the backward half reads are
 // closed over **inside** the linear map `split` builds, so no program names them and no type carries
-// them. That is the closure ABI (author, 2026-11-02), and this case asserts its two halves: `split(f)`
+// them. That is the closure ABI, and this case asserts its two halves: `split(f)`
 // is the forward function, `fwd(3.0)` answers the result and that linear map, and `lin(1.0)` answers
 // 6 = 2x·dx.
 //

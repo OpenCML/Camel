@@ -29,7 +29,7 @@ desc = "The tooling's own tests: every self-check under test/tools, internal/too
 #
 # The layer each one is in is its measured wall clock, by the rule `docs/test-plans.md` uses for the
 # 261 cases that moved out of the fast layer: over 2 s is `tier = "slow"`. The times in the comments
-# below were read on the workstation -- the only machine with a pwsh -- on 2026-11-25, one run each,
+# below were read on the workstation -- the only machine with a pwsh -- one run each,
 # warm, and they are that machine's numbers and not the host's.
 #
 # Nothing here needs a compiler or an install: these are the checks a tool of the tree runs on

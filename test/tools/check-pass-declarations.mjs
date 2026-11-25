@@ -45,7 +45,7 @@ const REPO_ROOT = path.resolve(HERE, '..', '..')
 // The block directories the layout map files the product's sources under
 // (`docs/design/architecture/layout-map.cn.md`): `src/`, `include/` and `modules/` before the
 // layout move, `src/kernel/`, `src/parse/`, `src/compile/` and `src/stdlib/` after it, and all of
-// them under `src/` since the 2026-11-22 move. The names of the earlier layouts stay in the list, so
+// them under `src/` since the move. The names of the earlier layouts stay in the list, so
 // a checkout of one is read the same way.
 const SOURCE_ROOTS = ['src/kernel', 'src/parse', 'src/compile', 'src/stdlib', 'kernel', 'parse', 'compile', 'lib']
 const ROOTS = [...SOURCE_ROOTS, 'src/tools', 'scripts', 'examples']
@@ -323,7 +323,7 @@ function ordinaryParameterCount(line) {
 }
 
 // A module's declaration is the file of its own name in the library: `<module>.cml` at the root of
-// `src/stdlib/` since the 2026-11-22 move, beside the module's C++ directory rather than inside it
+// `src/stdlib/` since the move, beside the module's C++ directory rather than inside it
 // (it was `lib/<module>/<module>.cml` after the layout move, and one flat `stdlib/<module>.cml`
 // before it). A directory with no such file is not a module declaration: `src/stdlib/std/` holds the
 // module's C++ for the core's own declarations (`std.cml`, read above) and `src/stdlib/rulesets/` is

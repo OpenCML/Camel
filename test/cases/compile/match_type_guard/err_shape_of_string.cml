@@ -1,5 +1,5 @@
 /// `ShapeOf<string>` is a type function applied to a type it is not defined for, and it is reported
-/// as one (design principles 5.5, ruling of 2026-11-14).
+/// as one (design principles 5.5).
 ///
 /// Before `match type` cases could carry a guard, the last case of `ShapeOf` was a bare `case _`,
 /// and it answered `int[0]` for every type whose shape states no dimension -- a string as readily

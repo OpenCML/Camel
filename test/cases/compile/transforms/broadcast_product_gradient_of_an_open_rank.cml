@@ -12,7 +12,7 @@
 // which it can do because its pullback holds the primal values). The library cannot: the walk asks
 // `stdlib/rulesets/transpose.cml#mul_tensor_t` for the tangent's cotangent, the law's `sum_to` reads
 // that operand for its shape, the operand is a tangent, and `float[...]` states no extents --
-// `shapeCarrierOf` answers only a stated type (author, 2026-11-03 16:15). Measured 2026-11-04:
+// `shapeCarrierOf` answers only a stated type. Measured 2026-11-04:
 //
 //     TRANSPOSE function=split_of_jvp_of_total_backward skip=parameter-shape uri=tensor:multiply node=7 position=0 param=0 param-type=float[...]
 //     error[RuntimeDiag::TransposeNeedsParameterShape]: The transpose of 'split_of_jvp_of_total_backward' needs the shape of the parameter at position 1, and the type 'float[...]' does not state it.

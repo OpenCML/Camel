@@ -84,7 +84,7 @@ timeout_ms = 10000
 
 [[tests]]
 name = "effects_outside_sync.nvm"
-desc = "Every print of this case runs, whatever the body is: a write to a resource outside the program is used by the region it is written in (design principles 3.1, the author's ruling of 2026-11-15), so an effectful call whose result is unused runs in a plain body too, and a nested sync block no longer drops its tail. Same output on every scheduler (nvm)."
+desc = "Every print of this case runs, whatever the body is: a write to a resource outside the program is used by the region it is written in (design principles 3.1), so an effectful call whose result is unused runs in a plain body too, and a nested sync block no longer drops its tail. Same output on every scheduler (nvm)."
 kind = "behavior"
 case = "../../../cases/linear/runtime/effects_outside_sync.cml"
 args = ["${case}", "${run_nvm}"]
@@ -101,7 +101,7 @@ timeout_ms = 10000
 
 [[tests]]
 name = "effects_outside_sync.fvm"
-desc = "Every print of this case runs, whatever the body is: a write to a resource outside the program is used by the region it is written in (design principles 3.1, the author's ruling of 2026-11-15), so an effectful call whose result is unused runs in a plain body too, and a nested sync block no longer drops its tail. Same output on every scheduler (fvm)."
+desc = "Every print of this case runs, whatever the body is: a write to a resource outside the program is used by the region it is written in (design principles 3.1), so an effectful call whose result is unused runs in a plain body too, and a nested sync block no longer drops its tail. Same output on every scheduler (fvm)."
 kind = "behavior"
 case = "../../../cases/linear/runtime/effects_outside_sync.cml"
 args = ["${case}", "${run_fvm}"]
@@ -118,7 +118,7 @@ timeout_ms = 10000
 
 [[tests]]
 name = "effects_outside_sync.jit"
-desc = "Every print of this case runs, whatever the body is: a write to a resource outside the program is used by the region it is written in (design principles 3.1, the author's ruling of 2026-11-15), so an effectful call whose result is unused runs in a plain body too, and a nested sync block no longer drops its tail. Same output on every scheduler (jit)."
+desc = "Every print of this case runs, whatever the body is: a write to a resource outside the program is used by the region it is written in (design principles 3.1), so an effectful call whose result is unused runs in a plain body too, and a nested sync block no longer drops its tail. Same output on every scheduler (jit)."
 kind = "behavior"
 case = "../../../cases/linear/runtime/effects_outside_sync.cml"
 args = ["${case}", "${run_jit}"]
@@ -135,7 +135,7 @@ timeout_ms = 10000
 
 [[tests]]
 name = "effects_outside_sync.tf"
-desc = "Every print of this case runs, whatever the body is: a write to a resource outside the program is used by the region it is written in (design principles 3.1, the author's ruling of 2026-11-15), so an effectful call whose result is unused runs in a plain body too, and a nested sync block no longer drops its tail. Same output on every scheduler (tf)."
+desc = "Every print of this case runs, whatever the body is: a write to a resource outside the program is used by the region it is written in (design principles 3.1), so an effectful call whose result is unused runs in a plain body too, and a nested sync block no longer drops its tail. Same output on every scheduler (tf)."
 kind = "behavior"
 case = "../../../cases/linear/runtime/effects_outside_sync.cml"
 args = ["${case}", "std::tf"]

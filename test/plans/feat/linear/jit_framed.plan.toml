@@ -229,7 +229,7 @@ desc = "The same program after std::cxx::inline: every function is inlined into 
 # run, is in internal/reports/2026-11-05-rc04-answers-nothing-and-rc00-signals-under-gir-too.cn.md.
 # What makes the needle the whole line is the newline it ends with: `expect_output_contains` finds
 # a needle anywhere in the output, so a needle that stopped at the last reason also matched a longer
-# line, and one did -- the 2026-11-02 install (d2b27967) printed this same summary as
+# line, and one did -- the install (d2b27967) printed this same summary as
 # `..., helper: the round contains OPER at pc=291`, the position the reason carried before
 # 9e48ccfc0 dropped it, and a needle ending at `OPER` matched that line too. With the newline,
 # anything after the last reason is a red: a field on the reason's own text, and a fifth reason --

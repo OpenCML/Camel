@@ -348,7 +348,7 @@ timeout_ms = 10000
 
 [[tests]]
 name = "effect_order_folded.nvm"
-desc = "An effect before code simplify folds away still runs first, an arm reading a value computed before its branch is entered after the branch, and tail calls through nested branches keep the stack flat (NodeVM). The accumulator is a module `var`: since the 2026-11-16 ruling a closure holds the value a name had when it was made, not the name, so the nested function cannot write a `var` of the body around it (design principles 3.5, items 197 and 198)."
+desc = "An effect before code simplify folds away still runs first, an arm reading a value computed before its branch is entered after the branch, and tail calls through nested branches keep the stack flat (NodeVM). The accumulator is a module `var`: since the ruling a closure holds the value a name had when it was made, not the name, so the nested function cannot write a `var` of the body around it (design principles 3.5, items 197 and 198)."
 kind = "behavior"
 case = "../../../cases/opt/generic/effect_order_folded.cml"
 args = ["${case}", "${run_nvm}"]
@@ -366,7 +366,7 @@ timeout_ms = 8000
 
 [[tests]]
 name = "effect_order_folded.simplify.nvm"
-desc = "An effect before code simplify folds away still runs first, an arm reading a value computed before its branch is entered after the branch, and tail calls through nested branches keep the stack flat (std::opt, NodeVM). The accumulator is a module `var`: since the 2026-11-16 ruling a closure holds the value a name had when it was made, not the name, so the nested function cannot write a `var` of the body around it (design principles 3.5, items 197 and 198)."
+desc = "An effect before code simplify folds away still runs first, an arm reading a value computed before its branch is entered after the branch, and tail calls through nested branches keep the stack flat (std::opt, NodeVM). The accumulator is a module `var`: since the ruling a closure holds the value a name had when it was made, not the name, so the nested function cannot write a `var` of the body around it (design principles 3.5, items 197 and 198)."
 kind = "behavior"
 case = "../../../cases/opt/generic/effect_order_folded.cml"
 args = ["${case}", "std::macro", "std::opt", "${run_nvm}"]
@@ -384,7 +384,7 @@ timeout_ms = 8000
 
 [[tests]]
 name = "effect_order_folded.simplify.fvm"
-desc = "An effect before code simplify folds away still runs first, an arm reading a value computed before its branch is entered after the branch, and tail calls through nested branches keep the stack flat (std::opt, FastVM). The accumulator is a module `var`: since the 2026-11-16 ruling a closure holds the value a name had when it was made, not the name, so the nested function cannot write a `var` of the body around it (design principles 3.5, items 197 and 198)."
+desc = "An effect before code simplify folds away still runs first, an arm reading a value computed before its branch is entered after the branch, and tail calls through nested branches keep the stack flat (std::opt, FastVM). The accumulator is a module `var`: since the ruling a closure holds the value a name had when it was made, not the name, so the nested function cannot write a `var` of the body around it (design principles 3.5, items 197 and 198)."
 kind = "behavior"
 case = "../../../cases/opt/generic/effect_order_folded.cml"
 args = ["${case}", "std::macro", "std::opt", "${run_fvm}"]
@@ -402,7 +402,7 @@ timeout_ms = 8000
 
 [[tests]]
 name = "effect_order_folded.simplify.jit"
-desc = "An effect before code simplify folds away still runs first, an arm reading a value computed before its branch is entered after the branch, and tail calls through nested branches keep the stack flat (std::opt, JIT). The accumulator is a module `var`: since the 2026-11-16 ruling a closure holds the value a name had when it was made, not the name, so the nested function cannot write a `var` of the body around it (design principles 3.5, items 197 and 198)."
+desc = "An effect before code simplify folds away still runs first, an arm reading a value computed before its branch is entered after the branch, and tail calls through nested branches keep the stack flat (std::opt, JIT). The accumulator is a module `var`: since the ruling a closure holds the value a name had when it was made, not the name, so the nested function cannot write a `var` of the body around it (design principles 3.5, items 197 and 198)."
 kind = "behavior"
 case = "../../../cases/opt/generic/effect_order_folded.cml"
 args = ["${case}", "std::macro", "std::opt", "${run_jit}"]
@@ -420,7 +420,7 @@ timeout_ms = 8000
 
 [[tests]]
 name = "effect_order_folded.inline.fvm"
-desc = "An effect before code simplify folds away still runs first, an arm reading a value computed before its branch is entered after the branch, and tail calls through nested branches keep the stack flat (std::cxx::inline, FastVM). The accumulator is a module `var`: since the 2026-11-16 ruling a closure holds the value a name had when it was made, not the name, so the nested function cannot write a `var` of the body around it (design principles 3.5, items 197 and 198)."
+desc = "An effect before code simplify folds away still runs first, an arm reading a value computed before its branch is entered after the branch, and tail calls through nested branches keep the stack flat (std::cxx::inline, FastVM). The accumulator is a module `var`: since the ruling a closure holds the value a name had when it was made, not the name, so the nested function cannot write a `var` of the body around it (design principles 3.5, items 197 and 198)."
 kind = "behavior"
 case = "../../../cases/opt/generic/effect_order_folded.cml"
 args = ["${case}", "std::macro", "std::cxx::inline", "${run_fvm}"]
@@ -438,7 +438,7 @@ timeout_ms = 8000
 
 [[tests]]
 name = "effect_order_folded.inline.jit"
-desc = "An effect before code simplify folds away still runs first, an arm reading a value computed before its branch is entered after the branch, and tail calls through nested branches keep the stack flat (std::cxx::inline, JIT). The accumulator is a module `var`: since the 2026-11-16 ruling a closure holds the value a name had when it was made, not the name, so the nested function cannot write a `var` of the body around it (design principles 3.5, items 197 and 198)."
+desc = "An effect before code simplify folds away still runs first, an arm reading a value computed before its branch is entered after the branch, and tail calls through nested branches keep the stack flat (std::cxx::inline, JIT). The accumulator is a module `var`: since the ruling a closure holds the value a name had when it was made, not the name, so the nested function cannot write a `var` of the body around it (design principles 3.5, items 197 and 198)."
 kind = "behavior"
 case = "../../../cases/opt/generic/effect_order_folded.cml"
 args = ["${case}", "std::macro", "std::cxx::inline", "${run_jit}"]

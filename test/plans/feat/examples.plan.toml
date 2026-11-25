@@ -264,7 +264,7 @@ timeout_ms = 60000
 #
 # The two rewrite passes live in `examples/case-study/edits.cml`, a pass library beside the program,
 # so a command names the directory as a module root (`CAMEL_PACKAGES`) instead of the program
-# importing its own rewriter. The two entries below record what the two rewrites did on 2026-11-15,
+# importing its own rewriter. The two entries below record what the two rewrites did 
 # measured on the tree at 96a27e435 and re-measured on the merge that brought this example in:
 #
 #   edits::drop_print  Erases every printing call. ACCEPTED: the commit takes the graph (exit 0) and

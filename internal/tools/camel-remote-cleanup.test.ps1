@@ -32,7 +32,7 @@
 # local `bash` is used when the one on PATH can read a Windows path. When neither is available part
 # B does not vanish from the count -- its checks are counted as skipped and the summary says how
 # many -- because a part that silently does not run is green by being unread, which is how the one
-# real defect in it hid for two days (2026-11-25).
+# real defect in it hid for two days.
 
 [CmdletBinding()]
 param(

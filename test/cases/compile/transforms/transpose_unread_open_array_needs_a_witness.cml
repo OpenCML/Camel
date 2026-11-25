@@ -7,10 +7,10 @@
 //      tangent`, exit 1) -- `:tangent/zeros_arr` was named in the walk's own source and handed a node
 //      of the *source* graph.
 //   2. then it pinned `([], 2.0)`: the zero the *type* states, an array of no elements for an open
-//      extent. That reading is **withdrawn** (author, 2026-11-18 17:50): an unwitnessed zero is wrong
+//      extent. That reading is **withdrawn**: an unwitnessed zero is wrong
 //      at every length but 0, so it is not the adjoint's zero.
 //   3. here it pins the refusal, because this call has no witness to hand: `transpose(g)`'s own type
-//      is `(float) => (float[], float)` -- one argument, the cotangent (author, 2026-11-02 11:30: a
+//      is `(float) => (float[], float)` -- one argument, the cotangent (: a
 //      parameter's value is not passed to a transposed function) -- so the width of `float[]` is
 //      nowhere. Where a witness does exist, the cut carries it and the zero is built from it:
 //      `vjp_const_function_answers_zero` pins `([0.0, 0.0, 0.0])` for the same parameter through

@@ -1368,7 +1368,7 @@ assert(take && labels.get(take.source) === ':var/new', 'take reads the variable 
 
 [[tests]]
 name = "element_assigned_append.in_place_form"
-desc = "The append `v = v->append<4>` at the value's last use runs the in-place form, read the way stage S3b says to read it: `camel inspect --copies` answers `append in-place` for it, and the plan's summary counts one in-place update and no copy. Not a graph shape, because there is no cell left to take the array out of: `v` is a same-region local `var`, so it is a value (stage S1), and the decision is the plan's (`ExecPlan::storageReuseAt`, `ExecPlan::operatorUriFor`) -- design principles 10.5, the author's answer of 2026-11-18 that in-place is the execution plan's reuse decision and not the front end claiming a statement by its shape."
+desc = "The append `v = v->append<4>` at the value's last use runs the in-place form, read the way stage S3b says to read it: `camel inspect --copies` answers `append in-place` for it, and the plan's summary counts one in-place update and no copy. Not a graph shape, because there is no cell left to take the array out of: `v` is a same-region local `var`, so it is a value (stage S1), and the decision is the plan's (`ExecPlan::storageReuseAt`, `ExecPlan::operatorUriFor`) -- design principles 10.5 that in-place is the execution plan's reuse decision and not the front end claiming a statement by its shape."
 kind = "behavior"
 tool = "camel"
 case = "../../../cases/linear/byref/element_assigned_append.cml"

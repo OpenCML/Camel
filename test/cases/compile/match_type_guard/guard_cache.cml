@@ -1,6 +1,6 @@
 /// A predicate's answer is remembered by the function and the type arguments it was given, so a
 /// guard costs one evaluation per question and not one per case that asks it (design principles
-/// 5.5, ruling of 2026-11-14: "with their results cached by function and type arguments").
+/// 5.5: "with their results cached by function and type arguments").
 ///
 /// `NumericOnce` and `NumericAgain` are two type functions that ask `is_numeric` about the same
 /// types, and `is_numeric` itself is written as a `match type` over shapes, so it is a predicate

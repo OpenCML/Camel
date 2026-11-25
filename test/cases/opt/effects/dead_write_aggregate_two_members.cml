@@ -5,7 +5,7 @@
 // aggregate cannot fold away, and whose second member is a closure nothing reads. `x` is a parameter
 // rather than a literal for that reason: the point is to reach the judgement, not to fold past it.
 //
-// The cell is the module's since 2026-11-16. A local `var` written after the closure that reads it is
+// The cell is the module's. A local `var` written after the closure that reads it is
 // `CapturedVarWrittenAfterTheClosure` when the closure's value is put into another value -- the
 // aggregate here (design principles 3.5, 198, the author's ruling of that day) -- and this case is
 // about the aggregate's shape, not about that refusal. The module's cell is a place the graph names,

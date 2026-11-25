@@ -5,7 +5,7 @@
  *
  * It held an external read nothing depends on, and before that `println('never printed')`. The
  * `println` line runs now -- a write to a resource outside the program is used by the region it is
- * written in (design principles 3.1, the author's ruling of 2026-11-15) -- and the read was
+ * written in (design principles 3.1) -- and the read was
  * reported by a warning that no longer exists (the ruling of 2026-11-17: a statement runs with the
  * region it is written in, and what a value nobody takes leaves is a value nobody uses, never an
  * effect that failed to run). So the one warning this case needs is the dropped value itself, which

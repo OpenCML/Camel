@@ -6,7 +6,7 @@
 # cost 4005 ms of CPU, of which the *second* pass was 3607 ms against 89 ms for the first
 # (`internal/reports/2026-11-20-where-the-opt-twice-cpu-goes.cn.md`). The helper's own shape was
 # what made the program expensive -- it returned one array built by `concat` at every level of a
-# recursion -- so rewriting the helper (2026-11-22) takes the workload away with it. This entry keeps
+# recursion -- so rewriting the helper takes the workload away with it. This entry keeps
 # the reading: it names the case, runs the same pipeline, and pins how many times the first pass the
 # second one costs, so the cost cannot drop out of the tests just because the tool that used to
 # produce it was rewritten.

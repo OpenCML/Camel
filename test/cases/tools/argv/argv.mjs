@@ -31,7 +31,7 @@
  *                  before that option did. The real `selection-cases.mjs` then lists that tree's
  *                  cases, and what a gate would print is asserted: the version-mismatch sentence,
  *                  and neither `refused this selection` nor `the cases this change selects could not
- *                  be computed` -- the line that cost the merge position a round on 2026-11-24.
+ *                  be computed` -- the line that cost the merge position a round.
  *                  The runner's refusal is painted red, and the first version of the consumer's
  *                  branch never fired because of it: this case is why that is now known.
  *

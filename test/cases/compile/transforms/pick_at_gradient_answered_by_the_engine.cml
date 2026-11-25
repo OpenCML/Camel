@@ -17,7 +17,7 @@
 // day someone filed a `setVjp` for `pick_at`, this file was to be turned into the positive reading
 // of the same program, `engine dL/dw=[0.0, 1.0, 0.0]`, the number the library's `vjp` answers.
 //
-// `lane-pickatvjp` filed that row (2026-11-04) -- `setVjp(defs, "pick_at", &pickAtVjp)` at the end of
+// `lane-pickatvjp` filed that row -- `setVjp(defs, "pick_at", &pickAtVjp)` at the end of
 // `layoutOps` in `modules/tensor/ops/layout_ops.cpp`, beside the `take` and `idx_take` entries -- and
 // flipped this file with it. The rule is the read's own adjoint: zeros in the differentiated
 // tensor's shape with the cotangent added at `position` (`pickAtVjp`), the construction the core files

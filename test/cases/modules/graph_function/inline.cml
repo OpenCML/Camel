@@ -248,7 +248,7 @@ func atStatement() => int spelling sync {
 /// the one that gate reads; the two prints that were already there are ordered before it, and the
 /// commit is accepted -- the third print is in the graph the commit published, ordered after both.
 /// It runs as well, because design principles 3.1 makes the body's write a write of the region it
-/// landed in and that region's exit `GATE` waits for it (the author's ruling of 2026-11-20): the
+/// landed in and that region's exit `GATE` waits for it: the
 /// splice at a pure node changes nothing the block's chain says, and still prints the body's line.
 func atPureThenOrder() => int spelling sync {
     let g = graph_of(subject)

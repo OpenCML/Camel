@@ -229,7 +229,7 @@ function measureCpu(argv, warmups, samples, runsPerSample) {
 
 // The declarations the standard library writes: one body-less `export func` per operator of a
 // declared module. Counting them keeps the unit of `declaration.cost` in the sources. A
-// declaration is `src/stdlib/<module>.cml` since the 2026-11-22 move, the same spelling the core's
+// declaration is `src/stdlib/<module>.cml` since the move, the same spelling the core's
 // own files keep and the flat library used before the layout move; the layout move put it inside the
 // module's directory (`src/stdlib/<module>/<module>.cml`). Every spelling is asked, so the file the
 // tree has is read and no layout is spelled twice.
@@ -414,7 +414,7 @@ function declarationCost(rounds) {
 // A reading that moves more than 1.5 between runs must not become a ceiling: at that point the
 // measurement is of the host, not of the compiler, and the honest result is that it cannot be judged.
 //
-// The earlier calibration, kept as the record of the unit it belonged to: measured on the Linux host (AMD EPYC 7343, 32 threads) on 2026-10-23, five samples of twelve fresh
+// The earlier calibration, kept as the record of the unit it belonged to: measured on the Linux host (AMD EPYC 7343, 32 threads) five samples of twelve fresh
 // processes each (sixty per command) in each of four windows (load 92.9, 75.2, 72.6 and 68.7); the
 // quiet column is the window at load 21.4, which read the same CPU time:
 //
@@ -590,7 +590,7 @@ function main() {
         return 0
     }
     // The host's load, in the same log as the medians, as provenance: CPU time barely moves with it,
-    // so it no longer has to separate a regression from a busy machine (the 2026-10-23 rule).
+    // so it no longer has to separate a regression from a busy machine (the rule).
     console.log(
         `startup.cost metric=cpu_user_plus_system samples=${samples} runs_per_sample=${runsPerSample} ` +
             `host load=${os.loadavg().map((value) => value.toFixed(1)).join('/')}`

@@ -460,7 +460,7 @@ args = ["${case}", "std::opt check_screens=true", "std::nop"]
 
 [[tests]]
 name = "generic.effect_order_folded"
-desc = "The effect-order corpus reaches the passes with the accumulator a module `var`: since the 2026-11-16 ruling a closure holds the value a name had when it was made, not the name, so the nested function that appends to it could no longer write a `var` of the body around it (design principles 3.5, items 197 and 198; `SemanticDiag::ClosureAssignsCapturedName`, 0x03000213). The program's subject -- effects around folded code -- and this entry's reading, that no pass rewrites a graph its screen skipped, are unchanged."
+desc = "The effect-order corpus reaches the passes with the accumulator a module `var`: since the ruling a closure holds the value a name had when it was made, not the name, so the nested function that appends to it could no longer write a `var` of the body around it (design principles 3.5, items 197 and 198; `SemanticDiag::ClosureAssignsCapturedName`, 0x03000213). The program's subject -- effects around folded code -- and this entry's reading, that no pass rewrites a graph its screen skipped, are unchanged."
 case = "../../../cases/opt/generic/effect_order_folded.cml"
 args = ["${case}", "std::opt check_screens=true", "std::nop"]
 

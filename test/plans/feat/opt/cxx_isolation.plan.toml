@@ -4,7 +4,7 @@ tier = "fast"
 tags = ["feat", "opt", "cxx", "differential", "fold", "cse"]
 
 # The C++ optimization passes and the Camel ones are two implementations of one optimization.
-# Neither is deleted yet (docs/roadmap.cn.md, P, written by the author on 2026-11-18): the C++
+# Neither is deleted yet (docs/roadmap.cn.md, P, written by the author): the C++
 # ones stay, isolated under `cxx::`, and are compared against the Camel ones -- "输出图是否规范相等
 # （不等处逐例归因）" -- before anything decides which one runs by default. The report of the
 # experiment is internal/reports/2026-11-18-two-implementations-of-one-pass.md.

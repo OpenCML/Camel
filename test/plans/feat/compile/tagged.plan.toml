@@ -1466,7 +1466,7 @@ expect_output_not_contains = ["-12345"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000
 
-# ---- Entering is not a conversion (design principles 5.1, the ruling of 2026-11-25) ----
+# ---- Entering is not a conversion (design principles 5.1) ----
 # The step the compiler inserts to make two types meet is `:op/enter`, it always succeeds, and a
 # conversion the program writes is still `:op/cast`. The four tests below pin the three halves of
 # that ruling: the graph says which operator each step is (twice, once per side), the entry that

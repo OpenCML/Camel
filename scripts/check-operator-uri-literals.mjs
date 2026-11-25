@@ -63,7 +63,7 @@ const NAME = 'check-operator-uri-literals'
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 
 /** The directories the scan covers by default, the same set the other source checks read. */
-// `src` holds the five blocks and the standard library since the 2026-11-22 move, and the seven
+// `src` holds the five blocks and the standard library since the move, and the seven
 // tools are `src/tools`; a directory a checkout does not have is skipped rather than stat'ed, so a
 // tree of either layout is scanned instead of crashing on the way in.
 const SCANNED = ['src', 'src/tools', 'include', 'modules', 'tools']

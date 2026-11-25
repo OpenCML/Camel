@@ -14,7 +14,7 @@
  * (rc=139); the page is
  * `internal/reviews/2026-11-06-who-roots-a-program-a-pass-holds-while-a-call-runs.cn.md`.
  *
- * The answer the author ruled (2026-11-13) is one handle: `camel::runtime::ProgramHold` pins the
+ * The answer the author ruled is one handle: `camel::runtime::ProgramHold` pins the
  * program in its constructor and unpins it in its destructor (camel/runtime/graph.h). A holder
  * that lives across a safepoint therefore holds the program through that handle and nothing else --
  * no bare `Program *`, no `shared_ptr<Program>`.
@@ -66,7 +66,7 @@ import { fileURLToPath } from 'node:url'
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 
 /** The directories the scan covers by default. */
-// `src` holds the five blocks and the standard library since the 2026-11-22 move, and the seven
+// `src` holds the five blocks and the standard library since the move, and the seven
 // tools are `src/tools`; a directory a checkout does not have is skipped rather than stat'ed, so a
 // tree of either layout is scanned instead of crashing on the way in.
 const SCANNED = ['src', 'src/tools', 'include', 'modules', 'tools']

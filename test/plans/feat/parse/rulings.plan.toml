@@ -68,7 +68,7 @@ timeout_ms = 8000
 
 [[tests]]
 name = "rulings.doc_comment_attribution_is_syntax"
-desc = "A `///` line belongs to the declaration that follows it, and a blank line between the two changes nothing (the author's ruling of 2026-10-26): `with_gap`, `exported` and `gap_constant` each carry the documentation written one blank line above them. A blank line inside a block of `///` lines does not split it either, so `two_paragraphs` carries both paragraphs. An ordinary `//` comment belongs to no declaration and ends the documentation of what follows it, so `separated` carries none; the blank line after a declaration ends a block that reaches back over it, so `later` does not take the documentation of `separated`."
+desc = "A `///` line belongs to the declaration that follows it, and a blank line between the two changes nothing: `with_gap`, `exported` and `gap_constant` each carry the documentation written one blank line above them. A blank line inside a block of `///` lines does not split it either, so `two_paragraphs` carries both paragraphs. An ordinary `//` comment belongs to no declaration and ends the documentation of what follows it, so `separated` carries none; the blank line after a declaration ends a block that reaches back over it, so `later` does not take the documentation of `separated`."
 kind = "behavior"
 case = "../../../cases/parse/rulings/doc_comment_blank_line.cml"
 args = ["${inspect_ast}", "${case}"]
@@ -349,7 +349,7 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "norma
 
 [[tests]]
 name = "rulings.open_range_not_in_language"
-desc = "There is no open interval `a..` (the author's ruling of 2026-11-16): a range has only a bounded form, its result is an array, and no syntax is added for counting until a condition holds -- that is the counting `while` loop. `1..` has no right-hand side, and it is refused by name - SyntaxDiag::IntervalHasNoOpenForm, at the `..` itself (18:17) - instead of the parser taking the `return` of the following line for the missing operand and reporting `Unexpected 'return'; expected an expression` at 8:5, which is a token that is not wrong. The help gives the author's replacement wording, and what does have a second operand is accepted in the same program above the refusal: `1..4` is the interval and `inc <> dbl` is the composition, so a change that made `..` unreadable everywhere would be red here."
+desc = "There is no open interval `a..`: a range has only a bounded form, its result is an array, and no syntax is added for counting until a condition holds -- that is the counting `while` loop. `1..` has no right-hand side, and it is refused by name - SyntaxDiag::IntervalHasNoOpenForm, at the `..` itself (18:17) - instead of the parser taking the `return` of the following line for the missing operand and reporting `Unexpected 'return'; expected an expression` at 8:5, which is a token that is not wrong. The help gives the author's replacement wording, and what does have a second operand is accepted in the same program above the refusal: `1..4` is the interval and `inc <> dbl` is the composition, so a change that made `..` unreadable everywhere would be red here."
 kind = "negative"
 case = "../../../cases/parse/rulings/open_range.cml"
 args = ["${case}"]

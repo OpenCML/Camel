@@ -465,7 +465,7 @@ export function runCmakeBuild(config, cmakeOptionFlags) {
 function removeStaleModuleArtifacts(config, moduleFiles) {
     const built = new Set(moduleFiles.map((file) => path.resolve(file)))
     // A module's output directory follows the module's source directory, and it has moved twice:
-    // `build/src/stdlib/<name>/<config>` since the 2026-11-22 move (the module is `src/stdlib/<name>/`
+    // `build/src/stdlib/<name>/<config>` since the move (the module is `src/stdlib/<name>/`
     // and CMake puts a target's binary directory under the one its source directory has),
     // `build/lib/<name>/<config>` after the layout move, `build/modules/<name>/<config>` before it.
     // Every spelling is scanned, because a sweep that only knows one of them leaves a renamed
@@ -507,7 +507,7 @@ function removeStaleModuleArtifacts(config, moduleFiles) {
  * @param {'Release'|'Debug'|'RelWithDebInfo'} config
  */
 export function copyBuildArtifacts(config) {
-    // `build/src/tools/camel-cli` since the 2026-11-22 move (`build/tools/camel-cli` before it): the
+    // `build/src/tools/camel-cli` since the move (`build/tools/camel-cli` before it): the
     // CLI's source directory is `src/tools/camel-cli` and CMake keeps its binary directory under the
     // same relative path.
     const exeSrcDir = [

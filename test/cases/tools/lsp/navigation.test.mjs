@@ -50,7 +50,7 @@ await withServer(async (ls) => {
     // loss: `counter += by` in `bump` used to be this test's one warning, `IgnoredSideEffect` ("the
     // call of '<__assn__>' is not in a sync block, and it takes a var argument"). A write to a `var`
     // is not an effect, and the final value of a `var` parameter is handed back at the call, so this
-    // write is read by `return counter` (design principles 3.1 and 3.5, the ruling of 2026-11-15).
+    // write is read by `return counter` (design principles 3.1 and 3.5).
     // Commit 8b541bdba deleted both `var` branches of `IgnoredSideEffect` and says so in docs/cli.md
     // ("a `var` argument is not reported this way"); `warned.cml` above keeps the coverage the old
     // expectation had, on the report the ruling left.

@@ -68,7 +68,7 @@ assert(input.diagnostics.length === 0, `expected no diagnostic, got ${input.diag
 timeout_ms = 20000
 [[tests]]
 name = "region_roots.a_loop_that_writes_runs"
-desc = "A loop written in a body is one of that body's writes when what runs inside it writes (design principles 3.1, the author's ruling of 2026-11-17: `算子、调用、分支、循环一样`), so the body's `GATE` reads it and the loop runs even though nothing needs its value: three rounds, three lines, no diagnostic. It used to be the negative case next door -- the loop nobody needed was not started and the warning named it -- and the ruling removed the reading that made a loop's running conditional on its value being read."
+desc = "A loop written in a body is one of that body's writes when what runs inside it writes (design principles 3.1: `算子、调用、分支、循环一样`), so the body's `GATE` reads it and the loop runs even though nothing needs its value: three rounds, three lines, no diagnostic. It used to be the negative case next door -- the loop nobody needed was not started and the warning named it -- and the ruling removed the reading that made a loop's running conditional on its value being read."
 kind = "behavior"
 case = "../../../cases/compile/region_roots/dead_loop.cml"
 args = ["-E", "short", "${case}"]

@@ -1,7 +1,7 @@
 // A bare `transpose` of a declaration that states no extents, and the two things the refusal owes a
 // reader -- with the repair that does work, measured first, in the same program.
 //
-// The rule (author, 2026-11-05 10:40): a bare transposition requires the shape of every parameter to
+// The rule: a bare transposition requires the shape of every parameter to
 // come from its type. `float[...]` states neither a rank nor a length, `transpose(f)` is handed the
 // cotangent of the result and nothing else, and no residual carries the shape, so `transpose(total)`
 // has nowhere to read it and is refused by name -- the function, the parameter `x` and the type

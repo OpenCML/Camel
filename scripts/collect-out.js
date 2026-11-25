@@ -303,7 +303,7 @@ function collect(config, tag) {
     ensureDir(libsDir)
     ensureDir(stdlibDir)
 
-    // `build/src/tools` since the 2026-11-22 move: a target's build directory follows its source
+    // `build/src/tools` since the move: a target's build directory follows its source
     // directory from the top-level `CMakeLists.txt`, and the tools are `src/tools/` now. Both
     // spellings are tried, so a build tree made before the move is still collected.
     const toolsBuildDir = [
@@ -324,7 +324,7 @@ function collect(config, tag) {
     // 复制 tools 下所有子目录的 exe 到 out/tag/bin/
     //
     // The development tools are collected the same way from wherever their source directory put
-    // their build directory: `camel-parsecheck` moved to `test/tools/parsecheck/` on 2026-11-22, so
+    // their build directory: `camel-parsecheck` moved to `test/tools/parsecheck/` so
     // its target builds under `build/test/tools/parsecheck/`. The plan that runs it
     // (`feat/parse`) starts `out/latest/bin/camel-parsecheck`, so a build that left it only in the
     // build tree made two cases fail with FileNotFoundError.
@@ -471,7 +471,7 @@ function collect(config, tag) {
         fs.cpSync(includeSrc, includeDir, { recursive: true })
     }
 
-    // The declarations live in one directory since the 2026-11-22 move: `src/stdlib/`, with
+    // The declarations live in one directory since the move: `src/stdlib/`, with
     // `<name>.cml` for a module written in Camel, `src/stdlib/<name>/signatures/<name>.cml` for the
     // computed half of a C++ module beside its C++, and `prelude.cml`/`std.cml` for the two that have
     // no module of their own. The install keeps the shape the module search path reads, which is not

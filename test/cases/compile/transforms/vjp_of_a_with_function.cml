@@ -11,7 +11,7 @@
 //     quadratic(x) = w * x + v * x * x        w = 3.0, v = 2.0, x = 1.0
 //                  value = 3.0 + 2.0 = 5.0            slope = 3.0 + 4.0 = 7.0
 //
-// The pullback does **not** take the `with` list (author, 2026-11-03 15:15: 带 `with` 的函数，
+// The pullback does **not** take the `with` list (: 带 `with` 的函数，
 // pullback 带不带 `with` 列表——不带，闭包捕获). The rule is one rule: 后一半要读的东西都是残差，进
 // `lin` 的闭包，`with` 值也在内. So `split` captures the weight in `lin`'s closure at the cut,
 // `transpose(lin)` is `(ct) => (cotangents)` with no list of its own (`Pullback<F>` in

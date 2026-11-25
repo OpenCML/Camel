@@ -6,7 +6,7 @@
  *
  * The context argument used to be `with <var total: int>`. That shape is retired: a function value
  * from a partial application has nowhere to write a `var` context parameter back (design principles
- * 3.5, the author's ruling of 2026-11-15), and a closure holds the value a name had when it was made,
+ * 3.5), and a closure holds the value a name had when it was made,
  * not the name, so the write is refused where the value is made (`SemanticDiag::
  * ClosureAssignsCapturedName`, 0x03000213, at `add<t>`; the author's ruling of 2026-11-16, items 197
  * and 198). What stays is what this case reads: two partial applications of one function, three calls

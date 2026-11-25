@@ -1,4 +1,4 @@
-// The criterion of the 2026-11-03 rework, as two readings of one number: a lambda a caller closes by
+// The criterion of the rework, as two readings of one number: a lambda a caller closes by
 // hand and the second half `split` builds answer **the same**, because both are read as what they
 // are -- a port the function is handed -- and neither answer depends on where the graph came from.
 //

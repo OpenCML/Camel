@@ -1,6 +1,6 @@
 // The halves of a `split` are not a pair the program can take apart: refused.
 //
-// Under the closure ABI (author, 2026-11-02) `split(jvp(f))` **is** the forward function; for
+// Under the closure ABI  `split(jvp(f))` **is** the forward function; for
 // `f(x, y) = x*x*y*y` at `(3.0, 2.0)` it answers `(value, linear)`, and `linear` is a function --
 // the residuals it was built over live in its closure, in no value and in no type. So
 // `let (dx, dy) = linear` cannot mean "read the two directions out of it": there is nothing to

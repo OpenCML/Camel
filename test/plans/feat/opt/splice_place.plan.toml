@@ -27,7 +27,7 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 # handle; each splice left the block's gate beside the statement that really follows. The context
 # argument used to be `with <var total: int>`, which a partial application may not bind any more: a
 # function value from a partial application has nowhere to write a `var` context parameter back
-# (design principles 3.5, the author's ruling of 2026-11-15), and a closure holds the value a name
+# (design principles 3.5), and a closure holds the value a name
 # had when it was made, not the name (the ruling of 2026-11-16, items 197 and 198), so `add<t>` was
 # refused at the binding -- by `SemanticDiag::ClosureAssignsCapturedName` (0x03000213) until
 # `VarContextParameterCannotBeBound` (0x03000216) gave the rule its own report. A handle is a value,
@@ -36,7 +36,7 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 [[tests]]
 name = "var_parameter.reference"
 case = "../../../cases/consistency/partial_application/var_parameter.cml"
-desc = "The values with nothing but the executor: three calls through a partial application whose context argument is a `Ref` handle, and the accumulator after them. The context argument is a handle since 2026-11-16, when a `var` context parameter stopped being bindable by a partial application (design principles 3.5; `SemanticDiag::ClosureAssignsCapturedName` was the refusal at `add<t>`); the reading is the one this entry had."
+desc = "The values with nothing but the executor: three calls through a partial application whose context argument is a `Ref` handle, and the accumulator after them. The context argument is a handle when a `var` context parameter stopped being bindable by a partial application (design principles 3.5; `SemanticDiag::ClosureAssignsCapturedName` was the refusal at `add<t>`); the reading is the one this entry had."
 expect_stdout_exact = "1 3 6 6\n16 16\n"
 backends = ["nvm", "fvm", "jit", "prl"]
 backends_agree = ["exit_code", "stdout_normalized"]
@@ -119,7 +119,7 @@ args = ["${case}", "std::cxx::inline", "${backend}"]
 [[tests]]
 name = "perf_fib_smoke.reference"
 case = "../../../cases/linear/jit/perf_fib_smoke.cml"
-desc = "The timed helper's twenty rounds with nothing but the executor, and the summary line the case writes after them: the numbers are the measurement, the lines and the exit code are the behavior. The summary used to be dropped -- a bare `->println` statement whose value nobody takes -- and runs now, because a write to a resource outside the program is used by the region it is written in (design principles 3.1, the author's ruling of 2026-11-15)."
+desc = "The timed helper's twenty rounds with nothing but the executor, and the summary line the case writes after them: the numbers are the measurement, the lines and the exit code are the behavior. The summary used to be dropped -- a bare `->println` statement whose value nobody takes -- and runs now, because a write to a resource outside the program is used by the region it is written in (design principles 3.1)."
 backends = ["nvm", "fvm", "jit", "prl"]
 backends_agree = ["exit_code"]
 args = ["${case}", "${backend}"]

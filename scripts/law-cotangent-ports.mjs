@@ -985,7 +985,7 @@ function selfTest() {
     console.log(
         `self-test: a port 'T' handed to a parameter 'T[3]' is ${fixed.status === 1 ? 'reported' : 'NOT reported'}, a port 'T[...]' handed to a parameter 'T' is ${array.status === 1 ? 'reported' : 'NOT reported'}`
     )
-    // The pair the 2026-11-04 04:20 ruling withdrew the allowance for: an element port whose body
+    // The pair the ruling withdrew the allowance for: an element port whose body
     // reads an array is reported like any other disagreement, however the port is spelled. Only the
     // library's own laws -- the element port that reaches an element and the open-rank port that
     // reaches an array -- are not reported, which is the half of the reading that says the check is

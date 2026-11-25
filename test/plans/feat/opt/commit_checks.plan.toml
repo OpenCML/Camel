@@ -4,7 +4,7 @@ tier = "fast"
 tags = ["feat", "opt", "effects", "commit-checks"]
 
 # The first of the two checks the effect analysis makes when a C++ pass commits a program
-# (docs/design/effects/analysis.cn.md 4.1, the ruling of 2026-11-15): at every call site, the
+# (docs/design/effects/analysis.cn.md 4.1): at every call site, the
 # footprint of the function value called must not exceed what the type at that call site declares.
 #
 # The case runs a test-only pass that writes exactly that defect, on the smallest program that can

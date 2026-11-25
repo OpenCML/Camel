@@ -782,7 +782,7 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 # headroom as the four autodiff budgets taken by this rule, and 1.63x the busiest reading of the
 # three as well. It still fails a run whose work has grown by two thirds.
 #
-# What failed here was never the work: the 2026-10-24 05:22 run exited 0 with `exported in 2.55 s:
+# What failed here was never the work: the run exited 0 with `exported in 2.55 s:
 # 1125 nodes, onnx.checker ok` and all 123 per-output checks `ok` (`onnx training-step check: PASS`,
 # 126 lines of output, nothing on stderr). It was the runner's 4x margin on the timeout -- 300 s / 4
 # = 75 s of work allowed against 121.81 s measured -- which reads a timeout as a cost ceiling.
@@ -3367,7 +3367,7 @@ timeout_ms = 20000
 
 [[tests]]
 name = "export_refusal_is_visible"
-desc = "A refused export must not read as a successful one. `export_model` answers `void!`, so its refusal is a value; a program that discards it with `let _ =` prints its own `exported` line, exits 0, and leaves no file -- which is how `modules.onnx` spent a whole run reporting failures whose stdout said `exported`. This case pins the pair the printed word and the disk must be compared on: the refused program does not print `exported`, the refusal is visible (`ExportUnsupported`, or a non-zero exit), and no model reaches the disk. The discarding form itself is settled: `let _ = export_model(...)` is the wrong writing, and every case, plan and document that used it handles the refusal instead (the 2026-10-29 ruling in internal/reviews/questions-2026-10-29.md; the discovery is recorded in internal/reviews/2026-11-05-does-a-shape-declaration-need-a-length-in-its-return-type.cn.md, section 5)."
+desc = "A refused export must not read as a successful one. `export_model` answers `void!`, so its refusal is a value; a program that discards it with `let _ =` prints its own `exported` line, exits 0, and leaves no file -- which is how `modules.onnx` spent a whole run reporting failures whose stdout said `exported`. This case pins the pair the printed word and the disk must be compared on: the refused program does not print `exported`, the refusal is visible (`ExportUnsupported`, or a non-zero exit), and no model reaches the disk. The discarding form itself is settled: `let _ = export_model(...)` is the wrong writing, and every case, plan and document that used it handles the refusal instead (the ruling in internal/reviews/questions-2026-10-29.md; the discovery is recorded in internal/reviews/2026-11-05-does-a-shape-declaration-need-a-length-in-its-return-type.cn.md, section 5)."
 kind = "behavior"
 case = "../../../cases/modules/onnx/export_refusal_is_visible.cml"
 args = ["${case}"]

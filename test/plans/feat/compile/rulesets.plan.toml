@@ -239,7 +239,7 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 
 # Why this pair exists as well as the elementwise one: the two halves of the reading are separate,
-# and measured separate (2026-11-14). `vmap_elementwise_after_std_opt` is held by skipping the
+# and measured separate. `vmap_elementwise_after_std_opt` is held by skipping the
 # `Dead` places of the rewrite -- with the `Dead` places skipped and the places still read in id
 # order it is green, because the folds there leave no reader whose operand has a larger id. This
 # body does: the pass writes `5.0` and the two products *after* the place the outer product holds,
@@ -430,7 +430,7 @@ timeout_ms = 20000
 
 [[tests]]
 name = "vmap_rule_may_not_read_its_pattern_name"
-desc = "A rule of a family whose transform calls only the callee its right side names may not read a name its left side's pattern binds: nothing binds it in a batched graph, because the outer arrow is never called (the author's ruling of 2026-11-01 05:10). The refusal is a compile error at the rule, where it is written, and it names the rule and the name: `probe_rule_mul` reads `w`. The fixture `rulesets.probe_batch` is the reachable copy of that shape, the way `rulesets.probe_missing` is a copy of `jvp`'s family with a hole in it."
+desc = "A rule of a family whose transform calls only the callee its right side names may not read a name its left side's pattern binds: nothing binds it in a batched graph, because the outer arrow is never called. The refusal is a compile error at the rule, where it is written, and it names the rule and the name: `probe_rule_mul` reads `w`. The fixture `rulesets.probe_batch` is the reachable copy of that shape, the way `rulesets.probe_missing` is a copy of `jvp`'s family with a hole in it."
 kind = "negative"
 case = "../../../cases/compile/transforms/vmap_rule_outer_variable.cml"
 args = ["${case}"]
@@ -575,7 +575,7 @@ timeout_ms = 20000
 # table as a table of twelve to anyone who reads the tail.
 [[tests]]
 name = "ruleset_index_agrees_with_the_transform"
-desc = "Both doors of the batching index, compared on one program: the table `std::rulesets` prints (twenty-seven rows over twenty-one keys, `RULESET rulesets.vmap <head>/<arity> -> <rule> (rhs <callee>)`), the answers `lookupRule` gives for the same keys (`LOOKUP ... -> <rule>`), and the `asked=1 found=1 missing=0 rules=<rule>` readings the transform prints for the twenty-five primitives a body reaches. All three have to say the same thing: every answer is the table's rule for that key, and every hit is a row of the table with the same rule name -- except the six keys that hold two laws (the whole reduction and the reduction over an axis, one name, author's ruling of 2026-11-05), where the singular lookup refuses by design and the transform asks the plural one and chooses by the operands' ports. The eight keys a tail-reading of the output does not show (`*/2`, `+/2`, `-/1`, `-/2`, `//2`, `argmax/1`, `argmin/1`, `sum/1`) are asserted by name."
+desc = "Both doors of the batching index, compared on one program: the table `std::rulesets` prints (twenty-seven rows over twenty-one keys, `RULESET rulesets.vmap <head>/<arity> -> <rule> (rhs <callee>)`), the answers `lookupRule` gives for the same keys (`LOOKUP ... -> <rule>`), and the `asked=1 found=1 missing=0 rules=<rule>` readings the transform prints for the twenty-five primitives a body reaches. All three have to say the same thing: every answer is the table's rule for that key, and every hit is a row of the table with the same rule name -- except the six keys that hold two laws (the whole reduction and the reduction over an axis, one name), where the singular lookup refuses by design and the transform asks the plural one and chooses by the operands' ports. The eight keys a tail-reading of the output does not show (`*/2`, `+/2`, `-/1`, `-/2`, `//2`, `argmax/1`, `argmin/1`, `sum/1`) are asserted by name."
 kind = "behavior"
 tool = "node"
 case = "../../../cases/compile/rulesets/ruleset_index_agrees_with_the_transform.mjs"

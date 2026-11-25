@@ -83,7 +83,7 @@ const SCOPE = [
 // this scan reads (2,922 `.py`, 1,166 `.cml`, 1,624 `.h` and 490 `.ts` of the packages and headers
 // that live there) -- and `vendor/`, the dependency trees (744 files). A run that entered them took
 // longer than ten minutes and was read as a hang or as a red check rather than as a walk of the
-// repository (measured 2026-11-04).
+// repository.
 //
 // `vendor` is here for two reasons of content and one of cost. Content: git ignores it, so it is
 // not content of a checkout, exactly like `sdks`; and its files cite *their own* paths, so the
@@ -632,7 +632,7 @@ function isComment(file, text, index) {
 //
 // This function and `lineAt` below both read the whole prefix of a document, which looks quadratic
 // and was twice mistaken for the reason this check is slow: it is not, and the numbers are here so
-// that nobody pays for them again (measured 2026-11-03). `lineAt` is called *only when a problem is
+// that nobody pays for them again. `lineAt` is called *only when a problem is
 // reported*, so on a tree whose citations all resolve it is called zero times. `inFence` is called
 // only for a match inside a markdown document, which is a small part of the walk. Neither is on the
 // main path: a run over this tree is 1.43 s on the build host and about 3 s locally, of which
@@ -941,7 +941,7 @@ if (args.includes('--self-test')) {
     process.exit(selfTestSkipDirs())
 }
 // A rule about the pages that only a reader of the rule could keep: "我方新问题一律一页一问放进
-// internal/questions/" and "每页都要写默认建议，并当轮按默认开工" (author, 2026-11-03). The second
+// internal/questions/" and "每页都要写默认建议，并当轮按默认开工". The second
 // half is a property of the page, so it is checked on the page rather than remembered: a section
 // whose heading names a default, and at least one line of text under it. The report names which of
 // the two is missing, because "this page is not compliant" sends the reader back to the rule to work

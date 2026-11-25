@@ -107,7 +107,7 @@ name = "main_after_devirtualize"
 # once a pass has settled the callee, a FUNC node that names its graph (`std::cxx::devirtualize`
 # writes that one). The writer read only the first, so it refused every program devirtualize had
 # touched as "the program has no call of 'main' std::cpp can find": 132 of the 132 translatable
-# programs of test/tools/cppexec/expect.txt (the defect the 2026-11-01 eval report counted as
+# programs of test/tools/cppexec/expect.txt (the defect the eval report counted as
 # "about 55%"). The graph such a node names is still main, found by its name; nothing was inlined
 # away, and this case is the reading that keeps the writer reading both spellings.
 desc = "After `std::cxx::devirtualize` the root still calls main and the writer translates the program instead of refusing it: the entry is the graph the root's FUNC node names, found by its name."

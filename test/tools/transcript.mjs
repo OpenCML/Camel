@@ -175,7 +175,7 @@ export function statedTotal(text) {
  * very end of the run and bracketed by the markers `camel-remote.ps1` adds.
  *
  * They are the other per-case channel, and the one a host run actually lost: of three runs of one
- * base on 2026-11-24, all three held their 9159 case lines and their `[SUMMARY] total: 9159`, and
+ * base all three held their 9159 case lines and their `[SUMMARY] total: 9159`, and
  * the row block arrived with 9159, 5265 and 1239 lines. A row is defined the way the consumer
  * defines it (`scripts/merge-readings.mjs#readRows`): a line at column 0 that is JSON with a string
  * `name` and a string `verdict`. Column 0 matters -- a failed test's captured output is indented

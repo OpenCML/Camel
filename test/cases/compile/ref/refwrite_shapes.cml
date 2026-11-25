@@ -1,6 +1,6 @@
 /**
  * A write to a reference is a root of the region it is written in (design principles 3.1 and 3.3,
- * as the author ruled them on 2026-11-16): it runs although nothing in its own graph reads the
+ * as the author ruled them): it runs although nothing in its own graph reads the
  * value it answers, because the reader of a handle may be somewhere this graph cannot see -- in the
  * caller of a box that escaped, in a closure called later, behind another name of the same type.
  *

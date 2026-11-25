@@ -256,7 +256,7 @@ const diags = JSON.parse(input.stderr)
 assert(diags.every(d => d.severity === 'Warn'), 'warnings only')
 assert(!diags.some(d => d.message.includes('is never executed')), 'no statement is reported as one that does not run: ' + JSON.stringify(diags.map(d => d.data.name)))
 // The assignment at 35 is not one of these any more: assigning to a `var` is not an effect (design
-// principles 3.1 and 3.5, the ruling of 2026-11-15), so what it drops is a value and it is reported
+// principles 3.1 and 3.5), so what it drops is a value and it is reported
 // as one -- the same family as a result nobody uses.
 const assigned = diags.filter(d => d.data.name === 'SemanticDiag::UnusedAssignedValue')
 const assignedAt = assigned.map(d => (d.range.start.line + 1) + ':' + (d.range.start.character + 1) + ' ' + d.message)
@@ -267,7 +267,7 @@ timeout_ms = 6000
 
 [[tests]]
 name = "dropped_effects_outside_sync"
-desc = "effects_outside_sync.cml prints every line it writes and reports nothing: a write to a resource outside the program is used by the region it is written in (design principles 3.1, the author's ruling of 2026-11-15), in a plain body, in a nested sync block and before a returned call alike, so there is no dropped effect left to report."
+desc = "effects_outside_sync.cml prints every line it writes and reports nothing: a write to a resource outside the program is used by the region it is written in (design principles 3.1), in a plain body, in a nested sync block and before a returned call alike, so there is no dropped effect left to report."
 kind = "behavior"
 case = "../../../cases/linear/runtime/effects_outside_sync.cml"
 args = ["--output-format", "json", "${case}"]
@@ -401,7 +401,7 @@ timeout_ms = 6000
 
 [[tests]]
 name = "dropped_effects_forward"
-desc = "The order of definitions does not decide which writes run: `later` and `earlier_dropped` are written after `caller` and both run, because a call written as a statement is one of its body's writes when its callee writes (design principles 3.1, the author's ruling of 2026-11-17: `算子、调用、分支、循环一样`) and the body's `GATE` reads it. Two lines print, then the value `caller` hands on (2), and nothing is reported."
+desc = "The order of definitions does not decide which writes run: `later` and `earlier_dropped` are written after `caller` and both run, because a call written as a statement is one of its body's writes when its callee writes (design principles 3.1: `算子、调用、分支、循环一样`) and the body's `GATE` reads it. Two lines print, then the value `caller` hands on (2), and nothing is reported."
 kind = "behavior"
 case = "../../../cases/compile/diag_json/dropped_effects_forward.cml"
 args = ["--output-format", "json", "${case}"]

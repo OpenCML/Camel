@@ -265,7 +265,7 @@ desc = "Maps and sets of 150 to 260 entries with string and tuple keys and array
 case = "../../../cases/feat/mm/gc/gc_collection_trees.cml"
 args = ["--gc-stress", "alloc=3,safepoint=1,kind=major", "--gc-check", "verify=both", "--coll", "validate=on", "${case}", "std::gc::verify", "${run_nvm}"]
 expect_stdout_contains = ["\"ok\":true", "m=150/1124950 grown=160/2015440 cut=66/1239480", "[1, 1] [189, 35721] [0] false true", "s=260 k=160 both=148 either=272 only=12 subset=true", "grid=170 hit=key-24 miss=? items=170", "true false true 150 1124950"]
-# CPU 10.16 s, 10.16 s and 10.37 s in the plan's three windows (2026-10-24): 1.63x the
+# CPU 10.16 s, 10.16 s and 10.37 s in the plan's three windows: 1.63x the
 # highest rounded up to the next 1000 ms is 17 s, 1.64x the busiest reading; 
 # the walls and the load are at the head of this plan.
 # The plan's 60 s default would leave 2.7x the busiest wall of this case, so the entry also declares
@@ -279,7 +279,7 @@ desc = "Maps and sets of 150 to 260 entries with string and tuple keys and array
 case = "../../../cases/feat/mm/gc/gc_collection_trees.cml"
 args = ["--gc-stress", "alloc=3,safepoint=1,kind=major", "--gc-check", "verify=both", "--coll", "validate=on", "${case}", "std::gc::verify", "${run_fvm}"]
 expect_stdout_contains = ["\"ok\":true", "m=150/1124950 grown=160/2015440 cut=66/1239480", "[1, 1] [189, 35721] [0] false true", "s=260 k=160 both=148 either=272 only=12 subset=true", "grid=170 hit=key-24 miss=? items=170", "true false true 150 1124950"]
-# CPU 8.89 s, 8.95 s and 9.15 s in the plan's three windows (2026-10-24): 1.63x the
+# CPU 8.89 s, 8.95 s and 9.15 s in the plan's three windows: 1.63x the
 # highest rounded up to the next 1000 ms is 15 s, 1.64x the busiest reading; 
 # the walls and the load are at the head of this plan.
 # The plan's 60 s default would leave 2.7x the busiest wall of this case, so the entry also declares
@@ -305,7 +305,7 @@ desc = "Maps and sets of 150 to 260 entries with string and tuple keys and array
 case = "../../../cases/feat/mm/gc/gc_collection_trees.cml"
 args = ["--gc-stress", "alloc=3,safepoint=1,kind=major", "--gc-check", "verify=both", "--coll", "validate=on", "--gc", "generational", "${case}", "std::gc::verify", "${run_nvm}"]
 expect_stdout_contains = ["\"ok\":true", "m=150/1124950 grown=160/2015440 cut=66/1239480", "[1, 1] [189, 35721] [0] false true", "s=260 k=160 both=148 either=272 only=12 subset=true", "grid=170 hit=key-24 miss=? items=170", "true false true 150 1124950"]
-# CPU 10.14 s, 10.27 s and 10.41 s in the plan's three windows (2026-10-24): 1.63x the
+# CPU 10.14 s, 10.27 s and 10.41 s in the plan's three windows: 1.63x the
 # highest rounded up to the next 1000 ms is 17 s, 1.63x the busiest reading; 
 # the walls and the load are at the head of this plan.
 # The plan's 60 s default would leave 2.7x the busiest wall of this case, so the entry also declares
@@ -319,7 +319,7 @@ desc = "Maps and sets of 150 to 260 entries with string and tuple keys and array
 case = "../../../cases/feat/mm/gc/gc_collection_trees.cml"
 args = ["--gc-stress", "alloc=3,safepoint=1,kind=major", "--gc-check", "verify=both", "--coll", "validate=on", "--gc", "generational", "${case}", "std::gc::verify", "${run_fvm}"]
 expect_stdout_contains = ["\"ok\":true", "m=150/1124950 grown=160/2015440 cut=66/1239480", "[1, 1] [189, 35721] [0] false true", "s=260 k=160 both=148 either=272 only=12 subset=true", "grid=170 hit=key-24 miss=? items=170", "true false true 150 1124950"]
-# CPU 8.90 s, 8.88 s and 9.10 s in the plan's three windows (2026-10-24): 1.63x the
+# CPU 8.90 s, 8.88 s and 9.10 s in the plan's three windows: 1.63x the
 # highest rounded up to the next 1000 ms is 15 s, 1.65x the busiest reading; 
 # the walls and the load are at the head of this plan.
 # The plan's 60 s default would leave 2.7x the busiest wall of this case, so the entry also declares
@@ -345,7 +345,7 @@ desc = "Maps and sets of 150 to 260 entries with string and tuple keys and array
 case = "../../../cases/feat/mm/gc/gc_collection_trees.cml"
 args = ["--gc-stress", "alloc=3,safepoint=1,kind=minor", "--gc-check", "verify=both", "--coll", "validate=on", "${case}", "std::gc::verify", "${run_nvm}"]
 expect_stdout_contains = ["\"ok\":true", "m=150/1124950 grown=160/2015440 cut=66/1239480", "[1, 1] [189, 35721] [0] false true", "s=260 k=160 both=148 either=272 only=12 subset=true", "grid=170 hit=key-24 miss=? items=170", "true false true 150 1124950"]
-# CPU 10.49 s, 10.42 s and 10.65 s in the plan's three windows (2026-10-24): 1.63x the
+# CPU 10.49 s, 10.42 s and 10.65 s in the plan's three windows: 1.63x the
 # highest rounded up to the next 1000 ms is 18 s, 1.69x the busiest reading; 
 # the walls and the load are at the head of this plan.
 # The plan's 60 s default would leave 2.7x the busiest wall of this case, so the entry also declares
@@ -359,7 +359,7 @@ desc = "Maps and sets of 150 to 260 entries with string and tuple keys and array
 case = "../../../cases/feat/mm/gc/gc_collection_trees.cml"
 args = ["--gc-stress", "alloc=3,safepoint=1,kind=minor", "--gc-check", "verify=both", "--coll", "validate=on", "${case}", "std::gc::verify", "${run_fvm}"]
 expect_stdout_contains = ["\"ok\":true", "m=150/1124950 grown=160/2015440 cut=66/1239480", "[1, 1] [189, 35721] [0] false true", "s=260 k=160 both=148 either=272 only=12 subset=true", "grid=170 hit=key-24 miss=? items=170", "true false true 150 1124950"]
-# CPU 9.33 s, 9.12 s and 9.36 s in the plan's three windows (2026-10-24): 1.63x the
+# CPU 9.33 s, 9.12 s and 9.36 s in the plan's three windows: 1.63x the
 # highest rounded up to the next 1000 ms is 16 s, 1.71x the busiest reading; 
 # the walls and the load are at the head of this plan.
 # The plan's 60 s default would leave 2.7x the busiest wall of this case, so the entry also declares
@@ -385,7 +385,7 @@ desc = "Maps and sets of 150 to 260 entries with string and tuple keys and array
 case = "../../../cases/feat/mm/gc/gc_collection_trees.cml"
 args = ["--gc-stress", "alloc=3,safepoint=1,kind=minor", "--gc-check", "verify=both", "--coll", "validate=on", "--gc", "generational", "${case}", "std::gc::verify", "${run_nvm}"]
 expect_stdout_contains = ["\"ok\":true", "m=150/1124950 grown=160/2015440 cut=66/1239480", "[1, 1] [189, 35721] [0] false true", "s=260 k=160 both=148 either=272 only=12 subset=true", "grid=170 hit=key-24 miss=? items=170", "true false true 150 1124950"]
-# CPU 10.46 s, 10.51 s and 10.77 s in the plan's three windows (2026-10-24): 1.63x the
+# CPU 10.46 s, 10.51 s and 10.77 s in the plan's three windows: 1.63x the
 # highest rounded up to the next 1000 ms is 18 s, 1.67x the busiest reading; 
 # the walls and the load are at the head of this plan.
 # The plan's 60 s default would leave 2.7x the busiest wall of this case, so the entry also declares
@@ -399,7 +399,7 @@ desc = "Maps and sets of 150 to 260 entries with string and tuple keys and array
 case = "../../../cases/feat/mm/gc/gc_collection_trees.cml"
 args = ["--gc-stress", "alloc=3,safepoint=1,kind=minor", "--gc-check", "verify=both", "--coll", "validate=on", "--gc", "generational", "${case}", "std::gc::verify", "${run_fvm}"]
 expect_stdout_contains = ["\"ok\":true", "m=150/1124950 grown=160/2015440 cut=66/1239480", "[1, 1] [189, 35721] [0] false true", "s=260 k=160 both=148 either=272 only=12 subset=true", "grid=170 hit=key-24 miss=? items=170", "true false true 150 1124950"]
-# CPU 9.14 s, 9.07 s and 9.36 s in the plan's three windows (2026-10-24): 1.63x the
+# CPU 9.14 s, 9.07 s and 9.36 s in the plan's three windows: 1.63x the
 # highest rounded up to the next 1000 ms is 16 s, 1.71x the busiest reading; 
 # the walls and the load are at the head of this plan.
 # The plan's 60 s default would leave 2.7x the busiest wall of this case, so the entry also declares
@@ -425,7 +425,7 @@ desc = "Maps and sets of 150 to 260 entries with string and tuple keys and array
 case = "../../../cases/feat/mm/gc/gc_collection_trees.cml"
 args = ["--gc-stress", "alloc=3,safepoint=1,kind=both", "--gc-check", "verify=both", "--coll", "validate=on", "${case}", "std::gc::verify", "${run_nvm}"]
 expect_stdout_contains = ["\"ok\":true", "m=150/1124950 grown=160/2015440 cut=66/1239480", "[1, 1] [189, 35721] [0] false true", "s=260 k=160 both=148 either=272 only=12 subset=true", "grid=170 hit=key-24 miss=? items=170", "true false true 150 1124950"]
-# CPU 10.22 s, 10.30 s and 10.42 s in the plan's three windows (2026-10-24): 1.63x the
+# CPU 10.22 s, 10.30 s and 10.42 s in the plan's three windows: 1.63x the
 # highest rounded up to the next 1000 ms is 17 s, 1.63x the busiest reading; 
 # the walls and the load are at the head of this plan.
 # The plan's 60 s default would leave 2.7x the busiest wall of this case, so the entry also declares
@@ -439,7 +439,7 @@ desc = "Maps and sets of 150 to 260 entries with string and tuple keys and array
 case = "../../../cases/feat/mm/gc/gc_collection_trees.cml"
 args = ["--gc-stress", "alloc=3,safepoint=1,kind=both", "--gc-check", "verify=both", "--coll", "validate=on", "${case}", "std::gc::verify", "${run_fvm}"]
 expect_stdout_contains = ["\"ok\":true", "m=150/1124950 grown=160/2015440 cut=66/1239480", "[1, 1] [189, 35721] [0] false true", "s=260 k=160 both=148 either=272 only=12 subset=true", "grid=170 hit=key-24 miss=? items=170", "true false true 150 1124950"]
-# CPU 9.04 s, 9.13 s and 9.03 s in the plan's three windows (2026-10-24): 1.63x the
+# CPU 9.04 s, 9.13 s and 9.03 s in the plan's three windows: 1.63x the
 # highest rounded up to the next 1000 ms is 15 s, 1.64x the busiest reading; 
 # the walls and the load are at the head of this plan.
 # The plan's 60 s default would leave 2.7x the busiest wall of this case, so the entry also declares
@@ -465,7 +465,7 @@ desc = "Maps and sets of 150 to 260 entries with string and tuple keys and array
 case = "../../../cases/feat/mm/gc/gc_collection_trees.cml"
 args = ["--gc-stress", "alloc=3,safepoint=1,kind=both", "--gc-check", "verify=both", "--coll", "validate=on", "--gc", "generational", "${case}", "std::gc::verify", "${run_nvm}"]
 expect_stdout_contains = ["\"ok\":true", "m=150/1124950 grown=160/2015440 cut=66/1239480", "[1, 1] [189, 35721] [0] false true", "s=260 k=160 both=148 either=272 only=12 subset=true", "grid=170 hit=key-24 miss=? items=170", "true false true 150 1124950"]
-# CPU 10.19 s, 10.19 s and 10.41 s in the plan's three windows (2026-10-24): 1.63x the
+# CPU 10.19 s, 10.19 s and 10.41 s in the plan's three windows: 1.63x the
 # highest rounded up to the next 1000 ms is 17 s, 1.63x the busiest reading; 
 # the walls and the load are at the head of this plan.
 # The plan's 60 s default would leave 2.7x the busiest wall of this case, so the entry also declares
@@ -479,7 +479,7 @@ desc = "Maps and sets of 150 to 260 entries with string and tuple keys and array
 case = "../../../cases/feat/mm/gc/gc_collection_trees.cml"
 args = ["--gc-stress", "alloc=3,safepoint=1,kind=both", "--gc-check", "verify=both", "--coll", "validate=on", "--gc", "generational", "${case}", "std::gc::verify", "${run_fvm}"]
 expect_stdout_contains = ["\"ok\":true", "m=150/1124950 grown=160/2015440 cut=66/1239480", "[1, 1] [189, 35721] [0] false true", "s=260 k=160 both=148 either=272 only=12 subset=true", "grid=170 hit=key-24 miss=? items=170", "true false true 150 1124950"]
-# CPU 9.01 s, 8.99 s and 9.09 s in the plan's three windows (2026-10-24): 1.63x the
+# CPU 9.01 s, 8.99 s and 9.09 s in the plan's three windows: 1.63x the
 # highest rounded up to the next 1000 ms is 15 s, 1.65x the busiest reading; 
 # the walls and the load are at the head of this plan.
 # The plan's 60 s default would leave 2.7x the busiest wall of this case, so the entry also declares
@@ -505,7 +505,7 @@ desc = "Maps and sets of 150 to 260 entries with string and tuple keys and array
 case = "../../../cases/feat/mm/gc/gc_collection_trees.cml"
 args = ["--gc-stress", "alloc=3,safepoint=1,kind=major", "--gc-check", "verify=both", "--coll", "validate=on,leaf=2,fanout=4", "${case}", "std::gc::verify", "${run_nvm}"]
 expect_stdout_contains = ["\"ok\":true", "m=150/1124950 grown=160/2015440 cut=66/1239480", "[1, 1] [189, 35721] [0] false true", "s=260 k=160 both=148 either=272 only=12 subset=true", "grid=170 hit=key-24 miss=? items=170", "true false true 150 1124950"]
-# CPU 17.03 s, 16.91 s and 17.34 s in the plan's three windows (2026-10-24): 1.63x the
+# CPU 17.03 s, 16.91 s and 17.34 s in the plan's three windows: 1.63x the
 # highest rounded up to the next 1000 ms is 29 s, 1.67x the busiest reading; 
 # the walls and the load are at the head of this plan.
 # The plan's 60 s default would leave 1.4x the busiest wall of this case, so the entry also declares
@@ -519,7 +519,7 @@ desc = "Maps and sets of 150 to 260 entries with string and tuple keys and array
 case = "../../../cases/feat/mm/gc/gc_collection_trees.cml"
 args = ["--gc-stress", "alloc=3,safepoint=1,kind=major", "--gc-check", "verify=both", "--coll", "validate=on,leaf=2,fanout=4", "${case}", "std::gc::verify", "${run_fvm}"]
 expect_stdout_contains = ["\"ok\":true", "m=150/1124950 grown=160/2015440 cut=66/1239480", "[1, 1] [189, 35721] [0] false true", "s=260 k=160 both=148 either=272 only=12 subset=true", "grid=170 hit=key-24 miss=? items=170", "true false true 150 1124950"]
-# CPU 14.85 s, 14.87 s and 15.09 s in the plan's three windows (2026-10-24): 1.63x the
+# CPU 14.85 s, 14.87 s and 15.09 s in the plan's three windows: 1.63x the
 # highest rounded up to the next 1000 ms is 25 s, 1.66x the busiest reading; 
 # the walls and the load are at the head of this plan.
 # The plan's 60 s default would leave 1.4x the busiest wall of this case, so the entry also declares
@@ -545,7 +545,7 @@ desc = "Maps and sets of 150 to 260 entries with string and tuple keys and array
 case = "../../../cases/feat/mm/gc/gc_collection_trees.cml"
 args = ["--gc-stress", "alloc=3,safepoint=1,kind=major", "--gc-check", "verify=both", "--coll", "validate=on,leaf=2,fanout=4", "--gc", "generational", "${case}", "std::gc::verify", "${run_nvm}"]
 expect_stdout_contains = ["\"ok\":true", "m=150/1124950 grown=160/2015440 cut=66/1239480", "[1, 1] [189, 35721] [0] false true", "s=260 k=160 both=148 either=272 only=12 subset=true", "grid=170 hit=key-24 miss=? items=170", "true false true 150 1124950"]
-# CPU 17.01 s, 17.05 s and 17.17 s in the plan's three windows (2026-10-24): 1.63x the
+# CPU 17.01 s, 17.05 s and 17.17 s in the plan's three windows: 1.63x the
 # highest rounded up to the next 1000 ms is 28 s, 1.63x the busiest reading; 
 # the walls and the load are at the head of this plan.
 # The plan's 60 s default would leave 1.4x the busiest wall of this case, so the entry also declares
@@ -559,7 +559,7 @@ desc = "Maps and sets of 150 to 260 entries with string and tuple keys and array
 case = "../../../cases/feat/mm/gc/gc_collection_trees.cml"
 args = ["--gc-stress", "alloc=3,safepoint=1,kind=major", "--gc-check", "verify=both", "--coll", "validate=on,leaf=2,fanout=4", "--gc", "generational", "${case}", "std::gc::verify", "${run_fvm}"]
 expect_stdout_contains = ["\"ok\":true", "m=150/1124950 grown=160/2015440 cut=66/1239480", "[1, 1] [189, 35721] [0] false true", "s=260 k=160 both=148 either=272 only=12 subset=true", "grid=170 hit=key-24 miss=? items=170", "true false true 150 1124950"]
-# CPU 14.89 s, 14.87 s and 15.07 s in the plan's three windows (2026-10-24): 1.63x the
+# CPU 14.89 s, 14.87 s and 15.07 s in the plan's three windows: 1.63x the
 # highest rounded up to the next 1000 ms is 25 s, 1.66x the busiest reading; 
 # the walls and the load are at the head of this plan.
 # The plan's 60 s default would leave 1.4x the busiest wall of this case, so the entry also declares
@@ -585,7 +585,7 @@ desc = "Maps and sets of 150 to 260 entries with string and tuple keys and array
 case = "../../../cases/feat/mm/gc/gc_collection_trees.cml"
 args = ["--gc-stress", "alloc=3,safepoint=1,kind=minor", "--gc-check", "verify=both", "--coll", "validate=on,leaf=2,fanout=4", "${case}", "std::gc::verify", "${run_nvm}"]
 expect_stdout_contains = ["\"ok\":true", "m=150/1124950 grown=160/2015440 cut=66/1239480", "[1, 1] [189, 35721] [0] false true", "s=260 k=160 both=148 either=272 only=12 subset=true", "grid=170 hit=key-24 miss=? items=170", "true false true 150 1124950"]
-# CPU 17.27 s, 17.27 s and 17.39 s in the plan's three windows (2026-10-24): 1.63x the
+# CPU 17.27 s, 17.27 s and 17.39 s in the plan's three windows: 1.63x the
 # highest rounded up to the next 1000 ms is 29 s, 1.67x the busiest reading; 
 # the walls and the load are at the head of this plan.
 # The plan's 60 s default would leave 1.4x the busiest wall of this case, so the entry also declares
@@ -599,7 +599,7 @@ desc = "Maps and sets of 150 to 260 entries with string and tuple keys and array
 case = "../../../cases/feat/mm/gc/gc_collection_trees.cml"
 args = ["--gc-stress", "alloc=3,safepoint=1,kind=minor", "--gc-check", "verify=both", "--coll", "validate=on,leaf=2,fanout=4", "${case}", "std::gc::verify", "${run_fvm}"]
 expect_stdout_contains = ["\"ok\":true", "m=150/1124950 grown=160/2015440 cut=66/1239480", "[1, 1] [189, 35721] [0] false true", "s=260 k=160 both=148 either=272 only=12 subset=true", "grid=170 hit=key-24 miss=? items=170", "true false true 150 1124950"]
-# CPU 15.08 s, 15.10 s and 15.27 s in the plan's three windows (2026-10-24): 1.63x the
+# CPU 15.08 s, 15.10 s and 15.27 s in the plan's three windows: 1.63x the
 # highest rounded up to the next 1000 ms is 25 s, 1.64x the busiest reading; 
 # the walls and the load are at the head of this plan.
 # The plan's 60 s default would leave 1.4x the busiest wall of this case, so the entry also declares
@@ -625,7 +625,7 @@ desc = "Maps and sets of 150 to 260 entries with string and tuple keys and array
 case = "../../../cases/feat/mm/gc/gc_collection_trees.cml"
 args = ["--gc-stress", "alloc=3,safepoint=1,kind=minor", "--gc-check", "verify=both", "--coll", "validate=on,leaf=2,fanout=4", "--gc", "generational", "${case}", "std::gc::verify", "${run_nvm}"]
 expect_stdout_contains = ["\"ok\":true", "m=150/1124950 grown=160/2015440 cut=66/1239480", "[1, 1] [189, 35721] [0] false true", "s=260 k=160 both=148 either=272 only=12 subset=true", "grid=170 hit=key-24 miss=? items=170", "true false true 150 1124950"]
-# CPU 17.22 s, 17.34 s and 17.58 s in the plan's three windows (2026-10-24): 1.63x the
+# CPU 17.22 s, 17.34 s and 17.58 s in the plan's three windows: 1.63x the
 # highest rounded up to the next 1000 ms is 29 s, 1.65x the busiest reading; 
 # the walls and the load are at the head of this plan.
 # The plan's 60 s default would leave 1.4x the busiest wall of this case, so the entry also declares
@@ -639,7 +639,7 @@ desc = "Maps and sets of 150 to 260 entries with string and tuple keys and array
 case = "../../../cases/feat/mm/gc/gc_collection_trees.cml"
 args = ["--gc-stress", "alloc=3,safepoint=1,kind=minor", "--gc-check", "verify=both", "--coll", "validate=on,leaf=2,fanout=4", "--gc", "generational", "${case}", "std::gc::verify", "${run_fvm}"]
 expect_stdout_contains = ["\"ok\":true", "m=150/1124950 grown=160/2015440 cut=66/1239480", "[1, 1] [189, 35721] [0] false true", "s=260 k=160 both=148 either=272 only=12 subset=true", "grid=170 hit=key-24 miss=? items=170", "true false true 150 1124950"]
-# CPU 15.22 s, 15.14 s and 15.37 s in the plan's three windows (2026-10-24): 1.63x the
+# CPU 15.22 s, 15.14 s and 15.37 s in the plan's three windows: 1.63x the
 # highest rounded up to the next 1000 ms is 26 s, 1.69x the busiest reading; 
 # the walls and the load are at the head of this plan.
 # The plan's 60 s default would leave 1.4x the busiest wall of this case, so the entry also declares
@@ -665,7 +665,7 @@ desc = "Maps and sets of 150 to 260 entries with string and tuple keys and array
 case = "../../../cases/feat/mm/gc/gc_collection_trees.cml"
 args = ["--gc-stress", "alloc=3,safepoint=1,kind=both", "--gc-check", "verify=both", "--coll", "validate=on,leaf=2,fanout=4", "${case}", "std::gc::verify", "${run_nvm}"]
 expect_stdout_contains = ["\"ok\":true", "m=150/1124950 grown=160/2015440 cut=66/1239480", "[1, 1] [189, 35721] [0] false true", "s=260 k=160 both=148 either=272 only=12 subset=true", "grid=170 hit=key-24 miss=? items=170", "true false true 150 1124950"]
-# CPU 17.29 s, 17.03 s and 17.40 s in the plan's three windows (2026-10-24): 1.63x the
+# CPU 17.29 s, 17.03 s and 17.40 s in the plan's three windows: 1.63x the
 # highest rounded up to the next 1000 ms is 29 s, 1.67x the busiest reading; 
 # the walls and the load are at the head of this plan.
 # The plan's 60 s default would leave 1.4x the busiest wall of this case, so the entry also declares
@@ -679,7 +679,7 @@ desc = "Maps and sets of 150 to 260 entries with string and tuple keys and array
 case = "../../../cases/feat/mm/gc/gc_collection_trees.cml"
 args = ["--gc-stress", "alloc=3,safepoint=1,kind=both", "--gc-check", "verify=both", "--coll", "validate=on,leaf=2,fanout=4", "${case}", "std::gc::verify", "${run_fvm}"]
 expect_stdout_contains = ["\"ok\":true", "m=150/1124950 grown=160/2015440 cut=66/1239480", "[1, 1] [189, 35721] [0] false true", "s=260 k=160 both=148 either=272 only=12 subset=true", "grid=170 hit=key-24 miss=? items=170", "true false true 150 1124950"]
-# CPU 15.15 s, 14.99 s and 15.15 s in the plan's three windows (2026-10-24): 1.63x the
+# CPU 15.15 s, 14.99 s and 15.15 s in the plan's three windows: 1.63x the
 # highest rounded up to the next 1000 ms is 25 s, 1.65x the busiest reading; 
 # the walls and the load are at the head of this plan.
 # The plan's 60 s default would leave 1.4x the busiest wall of this case, so the entry also declares
@@ -705,7 +705,7 @@ desc = "Maps and sets of 150 to 260 entries with string and tuple keys and array
 case = "../../../cases/feat/mm/gc/gc_collection_trees.cml"
 args = ["--gc-stress", "alloc=3,safepoint=1,kind=both", "--gc-check", "verify=both", "--coll", "validate=on,leaf=2,fanout=4", "--gc", "generational", "${case}", "std::gc::verify", "${run_nvm}"]
 expect_stdout_contains = ["\"ok\":true", "m=150/1124950 grown=160/2015440 cut=66/1239480", "[1, 1] [189, 35721] [0] false true", "s=260 k=160 both=148 either=272 only=12 subset=true", "grid=170 hit=key-24 miss=? items=170", "true false true 150 1124950"]
-# CPU 17.27 s, 16.96 s and 17.42 s in the plan's three windows (2026-10-24): 1.63x the
+# CPU 17.27 s, 16.96 s and 17.42 s in the plan's three windows: 1.63x the
 # highest rounded up to the next 1000 ms is 29 s, 1.66x the busiest reading; 
 # the walls and the load are at the head of this plan.
 # The plan's 60 s default would leave 1.4x the busiest wall of this case, so the entry also declares
@@ -719,7 +719,7 @@ desc = "Maps and sets of 150 to 260 entries with string and tuple keys and array
 case = "../../../cases/feat/mm/gc/gc_collection_trees.cml"
 args = ["--gc-stress", "alloc=3,safepoint=1,kind=both", "--gc-check", "verify=both", "--coll", "validate=on,leaf=2,fanout=4", "--gc", "generational", "${case}", "std::gc::verify", "${run_fvm}"]
 expect_stdout_contains = ["\"ok\":true", "m=150/1124950 grown=160/2015440 cut=66/1239480", "[1, 1] [189, 35721] [0] false true", "s=260 k=160 both=148 either=272 only=12 subset=true", "grid=170 hit=key-24 miss=? items=170", "true false true 150 1124950"]
-# CPU 15.11 s, 15.15 s and 15.36 s in the plan's three windows (2026-10-24): 1.63x the
+# CPU 15.11 s, 15.15 s and 15.36 s in the plan's three windows: 1.63x the
 # highest rounded up to the next 1000 ms is 26 s, 1.69x the busiest reading; 
 # the walls and the load are at the head of this plan.
 # The plan's 60 s default would leave 1.4x the busiest wall of this case, so the entry also declares

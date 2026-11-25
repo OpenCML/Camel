@@ -73,7 +73,7 @@ import { refuseInstallNotOfThisTree } from './install-stamp.mjs'
 import { defaultCamel } from '../test/tools/camel-arg.mjs'
 
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
-// The library, in any of the three layouts the tree has had. After the 2026-11-22 move it is
+// The library, in any of the three layouts the tree has had. After the move it is
 // `src/stdlib/`: one declaration per module at its root (`<name>.cml`), the module's C++ in
 // `<name>/` beside it, the computed half in `<name>/signatures/`, and the one directory that is a
 // dotted prefix rather than a module in `rulesets/`. Before that move it was one declaration per
@@ -89,7 +89,7 @@ const firstThere = (candidates) => candidates.find((one) => fs.existsSync(one)) 
 // `out/latest`. Every install a run measures passes the build stamp of `scripts/install-stamp.mjs`,
 // named there or not.
 let camelPath = null
-/// The directory the library is walked from: `src/stdlib/` after the 2026-11-22 move, `lib/` after
+/// The directory the library is walked from: `src/stdlib/` after the move, `lib/` after
 /// the layout move, `stdlib/` before it. Walking any of them finds the same `.cml` files, which is
 /// what the match-type table reads.
 const STDLIB_DIR =
@@ -473,7 +473,7 @@ function announcePending() {
 }
 
 // `source` is the file's name inside the library: `rewrite.cml` (the module's own directory, flat at
-// the root of `src/stdlib/` since the 2026-11-22 move), `rulesets/jvp.cml` (a dotted prefix, the one
+// the root of `src/stdlib/` since the move), `rulesets/jvp.cml` (a dotted prefix, the one
 // directory that keeps its name), `prelude.cml` (one of the two declarations that have no module of
 // their own). Every candidate is tried in the newest layout first and the older ones after it, so one
 // reader serves all three layouts of the tree.
@@ -502,7 +502,7 @@ function sourceOf(module) {
 }
 
 /// The computed half of a module's declarations: `signatures/<name>.cml` beside the module after
-/// the layout move (under `src/stdlib/` since the 2026-11-22 move), in the one flat directory
+/// the layout move (under `src/stdlib/` since the move), in the one flat directory
 /// before both.
 /// A module with no computed half has no file, and `path.join` refuses `undefined`: the callers
 /// push the answer into a list they filter, so `null` is the shape they expect.
@@ -535,7 +535,7 @@ function signatureFiles() {
 
 /// The declaration files of the library, the way `scripts/collect-out.js` assembles the install:
 /// every `.cml` at the root of `src/stdlib/`, the declared dotted `rulesets/` and the signature files
-/// beside their modules -- or, in the two layouts before the 2026-11-22 move, `lib/<name>/<name>.cml`
+/// beside their modules -- or, in the two layouts before the move, `lib/<name>/<name>.cml`
 /// with the ones in `lib/std/`, and the same set flat in `stdlib/` before the layout move. The audit's
 /// "no module of the table reads this file" half is only worth reading if it walks the library the
 /// install is built from.
@@ -3057,7 +3057,7 @@ const EXAMPLE_STOPS = {
         'src/stdlib/transforms/signatures/transforms.cml#first_with_as_param#1':
             'the example reinterprets a function that has a `with` parameter, and a `with` list is written on a declaration: no lambda this page can write inline has one'
     },
-    // `an internal error` is gone (2026-11-03). The class held the examples that reached the
+    // `an internal error` is gone. The class held the examples that reached the
     // compiler with a function-typed parameter bound by name: `split`'s own example, which kept a
     // live dereference node, and then, while the split ABI moved, `src/stdlib/vjp.cml`'s example and the
     // two fragments beside it, which still destructured the pair `split(f)` no longer answers. The

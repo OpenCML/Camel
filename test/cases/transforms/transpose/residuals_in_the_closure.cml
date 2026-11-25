@@ -1,4 +1,4 @@
-// The transposed linear half, reading its residuals out of the closure (2026-11-02).
+// The transposed linear half, reading its residuals out of the closure.
 //
 // `split` now hands out a forward half whose second member is the backward graph closed over the
 // values the cut carried: `lin` takes the tangents and nothing else, and the five residuals ride in

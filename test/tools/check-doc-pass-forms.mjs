@@ -468,7 +468,7 @@ const PASS_NAMES = new Set()
 }
 
 // A module's Camel passes: the declarations of `<module>.cml` at the root of `src/stdlib/` (the file
-// sat inside the module's directory before the 2026-11-22 move, `lib/<module>/<module>.cml`, and in
+// sat inside the module's directory before the move, `lib/<module>/<module>.cml`, and in
 // one flat `stdlib/` before the layout move), and the names the module registers (the loop below).
 //
 // What a pass is, and why the shape is tested rather than the head alone: a pass is a function of

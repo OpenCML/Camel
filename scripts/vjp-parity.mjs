@@ -486,7 +486,7 @@ function readLibrary() {
 // it, so the two float widths are read as the four registers they are instead of as one.
 //
 // The roots are the block directories the layout map files the sources under, not `src/` and
-// `modules/`: after the 2026-11-22 move the engine is `src/kernel/`, `src/compile/` and `src/parse/`,
+// `modules/`: after the move the engine is `src/kernel/`, `src/compile/` and `src/parse/`,
 // and a module is `src/stdlib/<name>`. They are spelled out because a bare `'src'` is a word as much
 // as a path -- the rewrite that carries the move will not touch it -- and a root list that no longer
 // exists makes every law look unanswered, which is how this comparison reported a whole table as

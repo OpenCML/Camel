@@ -490,7 +490,7 @@ function declarationCost(reps) {
             }
             samples.sort((a, b) => a - b)
             const median = samples[Math.floor(samples.length / 2)]
-            // The declaration sits at the root of `src/stdlib/` since the 2026-11-22 move, beside the
+            // The declaration sits at the root of `src/stdlib/` since the move, beside the
             // module's own sources after the layout move, and in the flat library before it.
             const declaration = [
                 path.join(REPO_ROOT, 'src', 'stdlib', `${module}.cml`),

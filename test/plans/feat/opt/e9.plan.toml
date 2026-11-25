@@ -123,7 +123,7 @@ expect_stdout_exact = ""
 
 [[tests]]
 name = "rc04_seed72.without_the_pass"
-desc = "Not a run: the closure rule refuses this program before any pass (`v16` is a `var` the closure assigns; the escape it also makes is legal since 2026-11-16, which is why the refusal is now `ClosureAssignsCapturedName`, 0x03000213, and no longer the withdrawn `ClosureCaptureEscapes`). It stays here with the shape pinned as a refusal, because the program is still the reduction the E9 campaign produced and dropping it would hide that `std::opt` no longer reaches it."
+desc = "Not a run: the closure rule refuses this program before any pass (`v16` is a `var` the closure assigns; the escape it also makes is legal which is why the refusal is now `ClosureAssignsCapturedName`, 0x03000213, and no longer the withdrawn `ClosureCaptureEscapes`). It stays here with the shape pinned as a refusal, because the program is still the reduction the E9 campaign produced and dropping it would hide that `std::opt` no longer reaches it."
 case = "../../../cases/opt/e9/rc04_seed72.cml"
 args = ["${case}", "${backend}"]
 expect_exit = 1
@@ -132,7 +132,7 @@ expect_diagnostic_code = "0x03000213"
 
 [[tests]]
 name = "rc04_seed72.opt"
-desc = "The same refusal with `std::opt` on the command line: the rule runs before the pipeline, so this entry holds that the pass never sees the program (it used to abort on a cycle of inputs here). The refusal is `ClosureAssignsCapturedName` since the escape rule was withdrawn on 2026-11-16; the pass is kept out of the program either way."
+desc = "The same refusal with `std::opt` on the command line: the rule runs before the pipeline, so this entry holds that the pass never sees the program (it used to abort on a cycle of inputs here). The refusal is `ClosureAssignsCapturedName` since the escape rule was withdrawn; the pass is kept out of the program either way."
 case = "../../../cases/opt/e9/rc04_seed72.cml"
 args = ["${case}", "std::opt", "${backend}"]
 expect_exit = 1
@@ -566,7 +566,7 @@ assert(lines[1] === '', `second line is ${JSON.stringify(lines[1])}, not a blank
 """
 timeout_ms = 20000
 
-# --- The crash class of the 2026-11-17 full run ------------------------------------------------
+# --- The crash class of the full run ------------------------------------------------
 #
 # That run put ten programs in the crash class, and they are seven shapes. A shape here is the
 # crash's own words -- the guarantee that fired, the symbol the fault is in, or the C++ compiler's
@@ -678,7 +678,7 @@ args = ["${case}", "std::opt", "${backend}"]
 expect_exit = 0
 expect_stdout_exact = ""
 
-# --- The crash class of the 2026-11-17 reading: a name declared in an arm, written in it ---------
+# --- The crash class of the reading: a name declared in an arm, written in it ---------
 #
 # `rc20_seed5_arm_decl` is the seed-5 program of the same differential, reduced by hand from 178 lines
 # to the 85 bytes below -- the whole program on one line:
@@ -810,7 +810,7 @@ expect_output_contains = ["rt::Fn<bool(rt::Str, int64_t)>("]
 expect_output_not_contains = ["TranslationRefused"]
 normalizers = ["strip_ansi", "normalize_newlines"]
 
-# --- The eighth shape of the 2026-11-17 reading: the same line closes it ----------------------
+# --- The eighth shape of the reading: the same line closes it ----------------------
 #
 # `rc20_seed262` is the reduced program of the eighth shape of that full run: `sync { }` as the arm
 # of an `if`, holding a `var` that the arm writes with `+=`. `camel rc20_seed262.cml std::nvm` stopped
@@ -930,7 +930,7 @@ args = ["${case}", "${backend}"]
 expect_exit = 0
 expect_stdout_exact = "P 5\n"
 # The author's rework order of 2026-11-18 is that this case is not withdrawn to make a
-# number look better: it pins a behaviour he confirmed on 2026-11-17, it has an owner, and it stays in
+# number look better: it pins a behaviour he confirmed it has an owner, and it stays in
 # the plan as a red that is being repaired -- `known_fail` is "在修的红", not an accepted answer. The
 # three parts he asked a mark to carry are the three fields below.
 #

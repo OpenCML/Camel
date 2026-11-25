@@ -12,7 +12,7 @@
 // mark to be on the call's callee when `split` walks the lifted body, which is what the compile-time
 // instantiation step gives; until then the cut reads the graph it is handed.
 //
-// The closure ABI (author, 2026-11-02) is what the four lines below read. `split(lifted)` is the
+// The closure ABI is what the four lines below read. `split(lifted)` is the
 // forward function; `plainForward(3.0, 2.0)` answers the value and a linear map closed over that
 // call's residuals, so the map takes the direction alone -- `plainBackward(1.0, 0.0)` for df/dx and
 // `plainBackward(0.0, 1.0)` for df/dy. Under the binary-tuple ABI the same case destructured

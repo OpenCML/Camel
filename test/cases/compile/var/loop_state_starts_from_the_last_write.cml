@@ -12,7 +12,7 @@
  * A build that starts the loop from the declaration prints `off 0` / `off 1` and no `on` line at all,
  * so the two halves cannot both pass unless the version is read.
  *
- * Found by the E9 differential campaign, seed 361 (2026-11-18): the generator writes a `var false`
+ * Found by the E9 differential campaign, seed 361: the generator writes a `var false`
  * before a loop whose condition reads it, then writes `true`, and all 99 cells of the matrix lost the
  * ten lines the loop prints.
  */

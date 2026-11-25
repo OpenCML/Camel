@@ -284,7 +284,7 @@ function main() {
     //    tree answers the caller with `no Release binary at ...` or a stack -- it cannot say the
     //    sentence this check is about. The archived half is still worth looking at (`--build --ref`),
     //    but it is the *before*, and pretending it were the pairing would be the same mistake the
-    //    two explanations made on 2026-11-24.
+    //    two explanations made.
     const built = buildTree(null, options, 'synthesis')
     if (!built.ok) {
         console.error(`[PROBE] the old tree was not built: ${built.failure}`)

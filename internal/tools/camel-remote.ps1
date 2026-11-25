@@ -623,7 +623,7 @@ $checkers = [ordered]@{
     # The whole static layer of the release gate, in the gate's own order and with the gate's own
     # criterion: this entry exists because the layer had never actually been run on the mainline.
     # The merges only ever ran plans, and the gate's static phase -- thirteen checks, four of which
-    # start the tree's binary -- was measured for the first time on 2026-11-03, where all four of
+    # start the tree's binary -- was measured for the first time where all four of
     # those four failed with `GLIBCXX_3.4.36 not found`. The cause was not four defects but one:
     # `release-gate.mjs` appends `--camel <install>` to the four checks that read the install and
     # says nothing about the library that install needs, so they loaded the host's system
@@ -640,7 +640,7 @@ $checkers = [ordered]@{
     # A wall rather than a report-only entry: it is pure static analysis, deterministic, a few
     # seconds, and its count is already ratcheted in test/tools/plan-fields-baseline.json -- findings
     # may not grow past that file, and a missing baseline is itself a red rather than a pass over
-    # nothing. 331 findings on 2026-11-14; the number coming down is the work item, and this entry
+    # nothing. 331 findings; the number coming down is the work item, and this entry
     # going red is what says it went up.
     'plan-fields'         = @{ script = 'test/tools/check-plan-fields.mjs'; args = @(); compiler = $false }
     # CI's own compiler on this tree's own compile lines (D-1123-84). The local gate compiles with one
@@ -658,7 +658,7 @@ $checkers = [ordered]@{
     # `compiles`: this checker starts compilers on the host, so it is a build with another name and
     # takes a build slot like one (see the checker stage, and `-Jobs` from the slot it gets). Without
     # that it ran after the build slots were released: the panel showed no build holder while the box
-    # ran at load 192, and the reading was taken with nothing excluding anyone (2026-11-24).
+    # ran at load 192, and the reading was taken with nothing excluding anyone.
     'clang-syntax'        = @{ script = 'scripts/check-clang-syntax.mjs'; args = @('--changed'); compiler = $false; changed = $true; compiles = $true }
     # The front end's AST snapshot against the tree, before the plan that is red on it: every `.cml`
     # the tree holds, and the probes `probes.py` makes, hashed by `camel-parsecheck hashes` -- the
@@ -706,7 +706,7 @@ $checkers = [ordered]@{
     # printed here is the number the checker printed -- the list is one work item, and the number
     # coming down is what this line exists to show. `--enforce` is deliberately absent: the checker
     # offers it as the mode this entry becomes once its list is empty, and a lane that switched it
-    # on now would gate the baseline each entry printed on 2026-11-14.
+    # on now would gate the baseline each entry printed.
     'program-holders'       = @{ script = 'scripts/check-program-holders.mjs'; args = @(); compiler = $false; reportOnly = $true; findings = 's/.*check-program-holders: ([0-9]+) C\+\+ Program holder.*/\1/p' }
     # The three layering rows of the target architecture's section 7 (守护), each read as its own
     # script: only the semantic layer enumerates a kind of edge; an effect is answered by the fact
@@ -1514,7 +1514,7 @@ $run = @{
     # the hold; `jobsRequested` is what the caller wrote on the command line. They are two fields
     # because they are two facts: a registry whose only `jobs` is the request records an intention,
     # and an intention of 32 beside a run that started 8 processes is the number that misled every
-    # lane on 2026-11-23. `buildJobs` is the build half, taken from the build slot.
+    # lane. `buildJobs` is the build half, taken from the build slot.
     jobs            = $null
     jobsRequested   = $Jobs
     buildJobs       = $null
@@ -2649,7 +2649,7 @@ export CAMEL_HOME="`$R/out/latest"
 export CAMEL_TEST_TMP="`$HOME/$($cfg.hostWorkRoot)/$name-test-tmp"
 # A failed test's own output is echoed to the console only under this variable
 # (test/tools/run-tests.mjs: printFailedOutput). Without it a red gate prints nothing but
-# "expected exit 0, got 1", so the gate hands back a red with no reason in it -- on 2026-10-23
+# "expected exit 0, got 1", so the gate hands back a red with no reason in it -- 
 # that hid "imports_all: median 92.8 ms exceeds ceiling 90 ms" behind a bare exit 1 for a day.
 export CAMEL_TEST_SHOW_OUTPUT=1
 # A gate run on a branch cut from a base that was already built compiles the same 600 translation
@@ -2701,7 +2701,7 @@ echo 'HOST_BUILD_SLOT=0'
 # --- the process budget of a slot -------------------------------------------
 # A slot says how many runs may be on this host at once; it says nothing about how many processes one
 # run starts. Three lawful occupancies -- two builds and one plan -- were measured at 153 processes
-# with load 88 on this 32-core host (2026-11-23), and every lane read that as "my change is slow".
+# with load 88 on this 32-core host, and every lane read that as "my change is slow".
 # So the budget belongs to the slot number and is decided here, where the slot number is known:
 # build slot 8 each, plan slot 16, the three together 32 -- the core count. The caller's -Jobs may
 # lower a budget and never raise it: a run that writes 32 gets its slot's 8, and one that writes 4

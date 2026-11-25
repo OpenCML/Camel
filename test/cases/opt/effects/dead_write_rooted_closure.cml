@@ -4,7 +4,7 @@
 // A probe: the same program, with `h` called, so the write `c = 41` is still rooted.
 //
 // The write is written before the closure is made, not after it. A closure holds the value the name
-// had when it was made (design principles 3.5, the author's ruling of 2026-11-16, item 198), so a
+// had when it was made (design principles 3.5, item 198), so a
 // write written after the closure is refused (`SemanticDiag::CapturedVarWrittenAfterTheClosure`,
 // 0x03000214) -- it could not reach what the closure reads, and the program that says it does is
 // gone. What this probe reads is unchanged: the write nobody computes with (`(c = 41) * 0`) is kept

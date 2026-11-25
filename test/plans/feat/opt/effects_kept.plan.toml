@@ -332,7 +332,7 @@ expect_stdout_exact = ""
 #
 # The write of `dead_write_rooted_closure` is written **before** the closure is made. It used to be
 # written after it, and that program is refused now: a closure holds the value the name had when it
-# was made (design principles 3.5, the author's ruling of 2026-11-16, item 198), so a write written
+# was made (design principles 3.5, item 198), so a write written
 # after the closure is `SemanticDiag::CapturedVarWrittenAfterTheClosure` (0x03000214). The dropped
 # sibling keeps its write after the closure and was read as legal until 2026-11-16, because the rule
 # was read as running to the closure's last use and that closure is never called; the ruling's third

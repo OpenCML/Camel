@@ -1,7 +1,7 @@
 // The extent is written in the parameter's type: `both` takes a `float[3]`, not a `float[]`, and the
 // cotangent of the element read has the extent the type states.
 //
-// The ruling (author, 2026-11-03 16:15) makes a transposed function's parameter shape come from its
+// The ruling makes a transposed function's parameter shape come from its
 // type: `float[3]` says the extent, `float[]` does not, and a shape neither the type nor the
 // cotangent states is refused where `transpose(g)` is built. This case is the type's side of that
 // sentence -- the same `xs[1] * xs[0]` as `grad_array_no_int`, at an extent a reader can write.

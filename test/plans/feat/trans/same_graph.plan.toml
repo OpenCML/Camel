@@ -38,7 +38,7 @@ desc = "Two writings of one body compared as graphs: the same nodes and the same
 
 [[tests]]
 name = "trans.two_writings_are_one_graph_or_the_difference_is_named"
-desc = "`println(x)` and a write to a file, written in the two orders, read as graphs: one graph when no edge joins the two writes (design principles 3.1, the ruling of 2026-11-17), and, when a build still chains them, a `false` whose symmetric difference names the ordering edge that divides them. The body with the write taken out, and the body whose write became a read of a variable, must both read `false` and name what changed -- a comparator that cannot say `false` is not a comparator."
+desc = "`println(x)` and a write to a file, written in the two orders, read as graphs: one graph when no edge joins the two writes (design principles 3.1), and, when a build still chains them, a `false` whose symmetric difference names the ordering edge that divides them. The body with the write taken out, and the body whose write became a read of a variable, must both read `false` and name what changed -- a comparator that cannot say `false` is not a comparator."
 kind = "behavior"
 tool = "python"
 case = "../../../cases/trans/same_graph_writings.py"

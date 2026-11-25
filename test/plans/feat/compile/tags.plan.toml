@@ -645,7 +645,7 @@ expect_output_contains = ["The tag 'vjp' cannot take 'nowhere' as an argument: i
 
 [[tests]]
 name = "tag_name_as_value"
-desc = "A tag name where a value belongs: a tag keeps its name and does not enter the value namespace (design principles 6.2, the author's ruling of 2026-10-30), so the report names the tag instead of telling the writer the name is undeclared."
+desc = "A tag name where a value belongs: a tag keeps its name and does not enter the value namespace (design principles 6.2), so the report names the tag instead of telling the writer the name is undeclared."
 kind = "negative"
 case = "../../../cases/compile/tags/err_tag_as_value.cml"
 args = ["${case}"]

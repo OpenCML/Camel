@@ -69,7 +69,7 @@ const casePath = input.case_path ?? payload.case_path ?? ''
 const repoRoot =
     input.repo_root ?? payload.repo_root ?? path.resolve(path.dirname(casePath), '..', '..', '..', '..')
 const testName = input.test_name ?? payload.test_name ?? 'rules.differential_equivalence'
-// The library files its rule list at the root of `src/stdlib/` since the 2026-11-22 move
+// The library files its rule list at the root of `src/stdlib/` since the move
 // (`lib/rules/rules.cml` after the layout move, `stdlib/rules/rules.cml` before it).
 const library = [
     path.join(repoRoot, 'src', 'stdlib', 'rules.cml'),

@@ -82,7 +82,7 @@ assert(out.trim() === '6', 'the closure reads and writes the cell inside the cal
 
 [[tests]]
 name = "compile.state_escape.escape_return"
-desc = "Route one, as a result: `make` returns the closure that reads `acc`, a `var` of its own call, and the closure assigns it. Being carried out of the call is no longer a fault of its own (design principles 3.5, the ruling of 2026-11-16); the write is. Refused by `ClosureAssignsCapturedName` (0x03000213), with the three ways out the design names."
+desc = "Route one, as a result: `make` returns the closure that reads `acc`, a `var` of its own call, and the closure assigns it. Being carried out of the call is no longer a fault of its own (design principles 3.5); the write is. Refused by `ClosureAssignsCapturedName` (0x03000213), with the three ways out the design names."
 kind = "negative"
 case = "../../../cases/compile/state_escape/err_escape_return.cml"
 args = ["${case}"]
@@ -101,7 +101,7 @@ assert(text.includes('a `Ref`'), 'the third way out is named: ' + text)
 
 [[tests]]
 name = "compile.state_escape.escape_field"
-desc = "Route two, a field: `fill` stores the closure that reads its own `acc` into `b.f`, a field of the caller's variable, which outlives the call, and the closure assigns `acc`. The store is not a refusal (3.5, the ruling of 2026-11-16); the write is, and it is `ClosureAssignsCapturedName` (0x03000213)."
+desc = "Route two, a field: `fill` stores the closure that reads its own `acc` into `b.f`, a field of the caller's variable, which outlives the call, and the closure assigns `acc`. The store is not a refusal (3.5); the write is, and it is `ClosureAssignsCapturedName` (0x03000213)."
 kind = "negative"
 case = "../../../cases/compile/state_escape/err_escape_field.cml"
 args = ["${case}"]
@@ -158,7 +158,7 @@ assert(text.includes('a `Ref`'), 'the third way out is named: ' + text)
 
 [[tests]]
 name = "compile.state_escape.escape_into_closure"
-desc = "One level down: `outer` captures `inner`, which holds a cell of `make`'s call, and `make` returns `outer`. The capture travels into a value whose type cannot show it, and that is still fine (3.5, the ruling of 2026-11-16); the write `inner` makes is not, and it is `ClosureAssignsCapturedName` (0x03000213)."
+desc = "One level down: `outer` captures `inner`, which holds a cell of `make`'s call, and `make` returns `outer`. The capture travels into a value whose type cannot show it, and that is still fine (3.5); the write `inner` makes is not, and it is `ClosureAssignsCapturedName` (0x03000213)."
 kind = "negative"
 case = "../../../cases/compile/state_escape/err_escape_into_closure.cml"
 args = ["${case}"]

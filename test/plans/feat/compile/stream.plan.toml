@@ -1000,7 +1000,7 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 10000
 [[tests]]
 name = "stream.generator"
-desc = "A function that writes `yield` hands out a stream: three `yield`s with a `var` written between them are three elements, the tuple element is read with `.0` and `.1`, a branch with a `yield` in each arm goes on in the arm the condition chose, and a closure the body made before a `yield` captures by value, like any other closure (design principles 3.5, the author's ruling of 2026-11-16), so what a later pull writes reaches it through the `Ref` handle it captured -- `read()` is 5, not 0. All four back ends agree."
+desc = "A function that writes `yield` hands out a stream: three `yield`s with a `var` written between them are three elements, the tuple element is read with `.0` and `.1`, a branch with a `yield` in each arm goes on in the arm the condition chose, and a closure the body made before a `yield` captures by value, like any other closure (design principles 3.5), so what a later pull writes reaches it through the `Ref` handle it captured -- `read` is 5, not 0. All four back ends agree."
 kind = "behavior"
 case = "../../../cases/compile/stream/generators.cml"
 args = ["${case}", "${backend}"]

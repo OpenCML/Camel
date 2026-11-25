@@ -247,7 +247,7 @@ let python = 'python3'
 /**
  * How many `hashes` processes read the corpus at once: four, or the machine's own count when it is
  * smaller. The corpus is 4,319 files, and one process reads them in 1.4-2.1 s on the build host
- * under its usual load (2026-11-25) -- over the 2 s the fast layer (`docs/test-plans.md`) allows a
+ * under its usual load -- over the 2 s the fast layer (`docs/test-plans.md`) allows a
  * case of its own, and the reason this check could only be read a layer down. `--jobs 1` is the
  * corpus in one process, and is what a reading that suspects the split should use.
  */
@@ -607,7 +607,7 @@ if (!fs.existsSync(parsecheck)) {
 
 // The list, split across processes: the tool hashes what its list names and prints one reading per
 // file, and the corpus is 4,319 files -- 1.4-2.1 s in one process on the build host under its usual
-// load (2026-11-25), which is over the 2 s the fast layer allows a case to cost and is why this
+// load, which is over the 2 s the fast layer allows a case to cost and is why this
 // check could only be read a layer down. The split changes only which process reads a file: every
 // chunk is the same `hashes` invocation over a smaller list, the answers are merged below, and a
 // chunk that fails, dies or answers for a file it was not given stops the run exactly as the one

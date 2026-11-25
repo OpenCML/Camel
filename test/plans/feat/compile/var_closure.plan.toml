@@ -1,4 +1,4 @@
-# The rule of a captured value (design principles 3.5, the author's ruling of 2026-11-15): what the
+# The rule of a captured value (design principles 3.5): what the
 # main line pins about it after `lane-varclos`.
 #
 # Where the rule stands today: the fourth step of "`var` becomes SSA" removed the three conservative
@@ -20,7 +20,7 @@
 # round -- applying by-value capture everywhere made `tee`'s five cases fail with `Runtime graph
 # 'side0' breaks its edge invariants`. `tee` itself no longer keeps cells: it holds four `Ref`s
 # (`lane-teeref`), so its five
-# outputs never depended on this choice, and `lane-closurediag` (2026-11-16) is the step that reports the
+# outputs never depended on this choice, and `lane-closurediag` is the step that reports the
 # rule. The three `err.*` entries at the end of this plan are the three ways that write is written. The
 # three `transitional.*` entries that stood between them are GONE: they were the same programs, accepted
 # while the capture port was a cell, and they were refused from the day the rule reports -- the step that

@@ -97,7 +97,7 @@
  * change runs, and a rule is a list of path prefixes; a prefix that is not in the tree matches no
  * file, so the rule selects nothing -- and nothing says so, because `--changed` widens a file no
  * rule matched to the whole fast layer and the run is green. `include/camel/parse/` sat in that
- * state from the layout move (2026-11-22) until this reading existed: its twin,
+ * state from the layout move until this reading existed: its twin,
  * `src/parse/include/camel/parse/`, was already there under the new layout, so one rule of the file
  * matched no file at all and every file under `include/` -- a directory the tree no longer has --
  * was read as "no plan needed". A counting ratchet is the wrong shape for it: a rule that names

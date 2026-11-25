@@ -96,7 +96,7 @@ const HERE = path.dirname(url.fileURLToPath(import.meta.url))
 
 /// The repository root: the first ancestor of this tool that holds the standard library. The runner
 /// resolves a case against the plan that names it, so neither `process.cwd()` nor `HERE` can be
-/// assumed to be the root. The library is `src/stdlib/std.cml` since the 2026-11-22 move, the same
+/// assumed to be the root. The library is `src/stdlib/std.cml` since the move, the same
 /// spelling after the layout move, and `stdlib/std.cml` before it; the tool runs against all of those
 /// trees, so any marker answers.
 const ROOT_MARKERS = [

@@ -283,7 +283,7 @@ expect_stdout_contains = ["commit_port_type: a graph publishes one statement abo
 #
 # Two narrower placements missed this graph, and neither was the case they were written for (that case
 # was the compiler's own outputs -- `*$spec*`, `main$lift0` -- whose ports sat one place over from the
-# signature, a defect fixed at its source on 2026-11-18). Measured 2026-11-18: the commit's closing
+# signature, a defect fixed at its source). Measured 2026-11-18: the commit's closing
 # loop decodes a made graph, finds no write recorded, drops it from `edited_`, so a commit that asked
 # only the graphs it edited never asked it (probe: `graph 'made$mismatch' not asked the port question
 # (edited=0, made=1)`); and the signature tier `sameSignature(before, after)` would have waived it too,

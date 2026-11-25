@@ -110,7 +110,7 @@ function link(relative) {
 }
 
 function buildCopy() {
-    // The rulesets are `src/stdlib/rulesets/` since the 2026-11-22 move, in the layout the map files
+    // The rulesets are `src/stdlib/rulesets/` since the move, in the layout the map files
     // the library under, so the copy is that directory and the blocks are under `src/` beside it.
     const library = path.join('src', 'stdlib')
     fs.mkdirSync(path.join(scratch, library, 'rulesets'), { recursive: true })

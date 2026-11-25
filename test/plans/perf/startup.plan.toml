@@ -49,7 +49,7 @@
 #
 # Every round of the measurement asserts that each (phase, module) among parse, GCT and declare
 # appears exactly once -- a module compiled twice names itself, which no ratio and no total can -- and
-# the round's parse + GCT + declare CPU is read against an absolute total (20 ms since 2026-10-27,
+# the round's parse + GCT + declare CPU is read against an absolute total (20 ms 
 # re-baselined by that bound's own calibration rather than weakened: this tree's 371-372 declarations
 # at 41.3, 44.1 and 42.7 us each read 15.3, 16.4 and 15.9 ms against the 12 ms bound, and the load
 # average fell from 83.7 to 58.9 across those three readings without moving the per-declaration cost,
@@ -60,7 +60,7 @@
 # docs/technical/50_pyplot_cpython_init.md §4.3 as the record of the unit and rule it belonged to.
 #
 # That measurement is CPU for the same reason as the four ceilings: the wall clock of those same
-# phases read 21 us per declaration on the quiet host and 75-104 us at load 106-112 on 2026-10-23,
+# phases read 21 us per declaration on the quiet host and 75-104 us at load 106-112 
 # while the CPU reading of the same rounds is 27.5-28.5 us in every window measured at load 68-112.
 # The compiler henceforth writes `cpu_ns` beside `wall_ns` per phase (src/utils/phase_timer.cpp), and
 # a platform with no process CPU clock makes the line report an error instead of reading the wall
@@ -116,7 +116,7 @@ expect_stdout_contains = ["startup.cost metric=cpu_user_plus_system", "startup.c
 # because that is the unit this assertion measures: a budget taken from parallel wall clock, or
 # from another machine, pre-loads a false cause into every future failure.
 #
-# The 13 s it replaces was written against 7.4-7.6 s readings from 2026-10-24, and the commit that
+# The 13 s it replaces was written against 7.4-7.6 s readings and the commit that
 # wrote it already read 15.8 s here: a bisect of five points over eight days reads 15.55, 15.59,
 # 15.71, 15.80 and 16.18 s with no step in them, so what moved was the machine or the way the
 # figure is taken, not one change of ours. A reader on another host must measure again before

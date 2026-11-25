@@ -66,7 +66,7 @@ const stripAnsi = (text) => text.replace(/\x1b\[[0-9;]*m/g, '')
 // fixture, run at 32 on a quieter host the same day, was 13/13 (`internal/reviews/
 // 2026-11-03-the-self-test-is-red-on-develop-and-has-no-name.cn.md`). All thirteen failing, none
 // passing, is the shape of "squeezed out", not the shape of "one assertion chose wrongly"; and a
-// judgement that moves with the load is neither a red nor a green (author ruling 2026-11-02 16:50).
+// judgement that moves with the load is neither a red nor a green.
 // The checks below compare against fixed strings, so the width they are taken at has to be fixed
 // too. Four is a width this fixture's work is small enough to fill and small enough not to swamp;
 // one would make the wall time unacceptable, and it is not what the plan layer runs at either.
@@ -1478,7 +1478,7 @@ const matchedSelection = runTestCli(['--changed', '--changed-files', matchedChan
 // 2026-11-14 the `test/cases/` rule carries `{ "plan": "feat/parse/frontend.plan.toml", "layer":
 // true }` (test/plan-selection.json; the reason is in that rule's own comment: the frontend plan
 // hashes every `.cml` of the repository, so a case that lands without its record is a file that
-// changed with nothing reading it). `select 1 plan(s)` was written on 2026-11-05, when the rule had
+// changed with nothing reading it). `select 1 plan(s)` was written when the rule had
 // one plan; it was the count of that day, and it is now the count of a tree without `also`. A count
 // alone is a thin reading, so both plan files are asserted by name beside it and so is the layer
 // mark: a rule that dropped `also` reads 1 and goes red here, and an `also` written without

@@ -3,7 +3,7 @@
 # No `perf_budget_mean_ms` here: the means are recorded, not gated. The budgets this plan used to
 # carry (200/200/65/50/80/3 ms, 2026-05-04) were recorded on a developer machine and cannot be met
 # on another one. docs/performance/graph-store-baseline.md measured the same case with the same
-# `--timeit` on the 28-core i7-14700K (2026-10-20): nvm 219.0 ms -- 1 ms under its 220 ms ceiling
+# `--timeit` on the 28-core i7-14700K: nvm 219.0 ms -- 1 ms under its 220 ms ceiling
 # -- fvm 55.8 ms, jit 84.7 ms. The Linux host runs this workload about twice as slowly per core,
 # so nvm and fvm fail there on a quiet machine, and on the shared host the same command spreads
 # from 432 ms to 960 ms between runs (load average 26 to 54), which no percentage tolerance makes

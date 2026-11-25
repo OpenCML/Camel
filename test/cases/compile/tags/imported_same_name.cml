@@ -1,6 +1,6 @@
 /// An imported tag beside a function of the same name declared here. The tag is imported from the
 /// module that exports it and reached through `#`, exactly as the function is reached by its name;
-/// neither takes the other's space (design principles 6.2, the author's ruling of 2026-10-30).
+/// neither takes the other's space (design principles 6.2).
 
 import { jvp } from prelude
 

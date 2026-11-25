@@ -98,7 +98,7 @@ assert(input.exit_code === 56, `unexpected exit ${input.exit_code}`)
 
 [[tests]]
 name = "order_edges_regions.gir"
-desc = "No order edge crosses the border of a control region: the read before the branch that does not feed its condition is ordered by an edge on the BRCH, no edge hangs on the LOOP (a `var` write is not a resource and orders nothing), and the statements inside an arm are still ordered among themselves by an edge inside that arm (docs/design/effects/edges.cn.md 4.6; design principles 3.1, the ruling of 2026-11-16). The edge inside the first arm changed with the ruling of 2026-11-16 on a branch written as a statement: that branch joins no value, so its two writes are the cell's two versions and the pair that still carries the arm's order is its two prints (design principles 3.5, F3)."
+desc = "No order edge crosses the border of a control region: the read before the branch that does not feed its condition is ordered by an edge on the BRCH, no edge hangs on the LOOP (a `var` write is not a resource and orders nothing), and the statements inside an arm are still ordered among themselves by an edge inside that arm (docs/design/effects/edges.cn.md 4.6; design principles 3.1). The edge inside the first arm changed with the ruling of 2026-11-16 on a branch written as a statement: that branch joins no value, so its two writes are the cell's two versions and the pair that still carries the arm's order is its two prints (design principles 3.5, F3)."
 case = "../../../cases/linear/runtime/order_edges_regions.cml"
 args = ["${case}", "std::jgir", "std::nop"]
 expect_exit = 0
@@ -154,7 +154,7 @@ assert(onBrch[0].from === ':op/copy' && onBrch[0].to === 'BRCH', `the order edge
 // What an order edge inside a control region is for: the statements an arm runs keep their order
 // among themselves. The pair of writes in the first arm (`x = 3; x = 4`) is no longer two
 // `:op/assn_l` nodes to hang such an edge on -- the branch there is written as a statement, so it
-// joins no value (design principles 3.7, the author's ruling of 2026-11-16), and the two writes are
+// joins no value (design principles 3.7), and the two writes are
 // the cell's two versions with the value `4` handed to the join; a write nothing reads is not kept
 // alive by an order edge either (design principles 3.5, F3). The pair the arm still has is its two
 // prints, and the edge inside the arm is the one they carry. What must not change is that an arm's

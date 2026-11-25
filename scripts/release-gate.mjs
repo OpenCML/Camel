@@ -17,7 +17,7 @@
 // This script owns the gate instead:
 //
 //   1. fast layer   -- the whole plan tree at `--tier fast`, the same command `npm run test`
-//                      runs on a subtree. The author's 01:30 ruling (2026-11-02): what we
+//                      runs on a subtree. The author's 01:30 ruling: what we
 //                      call green and what a release runs get one definition; the gate used
 //                      to name `smoke` + `feat/**` + two gpu files, and a named list was a
 //                      second definition, so a fast test outside the names was neither run
@@ -117,7 +117,7 @@ const STATIC_CHECKS = [
     { name: 'document links: no broken relative link', args: ['scripts/check-doc-links.mjs', '--all'] },
     // A plan's fixtures can live in a directory named after the plan, beside it: the short name
     // still reaches `D.plan.toml`, but the full path `test/plans/.../D` reaches the fixtures and
-    // selects nothing. The runner refuses such a target now (2026-11-03); this keeps the pairing
+    // selects nothing. The runner refuses such a target now; this keeps the pairing
     // documented instead of discovered.
     { name: 'plan directories: a fixtures directory beside its plan says it holds no plan', args: ['scripts/plan-dir-markers.mjs', '--check'] },
     // A page the reviewer has already answered belongs in reviews/, and a copy left in questions/
@@ -142,7 +142,7 @@ const STATIC_CHECKS = [
     { name: 'conformance: each recorded reading holds before and after optimization', args: ['scripts/check-conformance.mjs'], camel: true },
     { name: 'std includes: no header borrowed through another header', args: ['scripts/check-std-includes.mjs'] },
     // The wheel tags a release may upload: `cp310-abi3-<platform>` with the interop extension and
-    // `py3-none-<platform>` without it (the 2026-10-25 ruling, carried out 2026-11-02;
+    // `py3-none-<platform>` without it (the ruling, carried out 2026-11-02;
     // internal/archive/handover-README.cn.md item 7, review index C28). It reads what `npm run pypi:rollup`
     // left in dist/pypi/ and prints a SKIPPED banner -- naming that command -- when the gate was
     // not run after a wheel build: this gate does not build wheels, and a fabricated pass here

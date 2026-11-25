@@ -273,7 +273,7 @@ expect_exit = 0
 expect_stdout_exact = "0 41\n0 42\n0 9\n0\n0 5\n"
 # The write a body leaves in a `var` parameter is handed back where the call stands, so not one of
 # these three writes is reported for being outside a `sync` block, and not one of them is an effect
-# that has to run (design principles 3.1 and 3.5, the ruling of 2026-11-15). Measured before it, this
+# that has to run (design principles 3.1 and 3.5). Measured before it, this
 # same program's stderr held three `SemanticDiag::IgnoredSideEffect` (at 19:5, 40:5 and 57:36 --
 # `set`'s, `clear`'s and the lambda's write), each one saying the call of `<__assn__>` "is not in a
 # sync block, and it takes a var argument".
@@ -283,7 +283,7 @@ timeout_ms = 30000
 
 # --- A write to a `var` whose value nobody reads -----------------------------------------------
 #
-# Assigning to a `var` is not an effect (design principles 3.1 and 3.5, the ruling of 2026-11-15), so
+# Assigning to a `var` is not an effect (design principles 3.1 and 3.5), so
 # what such a write drops when nothing reads it is a value, and the one thing to report is that the
 # value nobody uses: `SemanticDiag::UnusedAssignedValue`, the same family as `UnusedPureResult` and
 # `UnusedFallibleValue`. Measured before the ruling, the case below reported two things about one

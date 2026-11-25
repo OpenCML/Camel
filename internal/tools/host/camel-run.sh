@@ -119,7 +119,7 @@ version_check() {
 check_version() {
     # The caller may name the version it expects (a run.sh records the one that generated it). A
     # disagreement is refused with both values, because "which tools took this reading" is the question
-    # that cost half a day on 2026-11-24.
+    # that cost half a day.
     local want="${CAMEL_RUN_EXPECT:-}"
     local have
     version_check

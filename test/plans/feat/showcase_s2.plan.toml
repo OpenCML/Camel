@@ -226,7 +226,7 @@ timeout_ms = 60000
 # above and `internal/reports/2026-11-04-the-two-vector-laws-ask-for-a-shape-the-declaration-does-not-write.cn.md`.
 [[tests]]
 name = "matmul_t.vector_lhs_law_stated_extent"
-desc = "The same row-times-matrix law as `matmul_t.vector_lhs_law`, with the vector declared `float[2]` instead of `float[]`: dL/dv [0.75, 1.125] and dL/dw [[1, 1], [2, 2]] at loss 3.0, every `max_abs_diff` 0.0 against the engine. It is evidence, not the fix: the shape is answered because the declaration states it, and a program that cannot state a length is served by `mul_stated`/`matmul_stated` instead (author, 2026-11-04 12:40)"
+desc = "The same row-times-matrix law as `matmul_t.vector_lhs_law`, with the vector declared `float[2]` instead of `float[]`: dL/dv [0.75, 1.125] and dL/dw [[1, 1], [2, 2]] at loss 3.0, every `max_abs_diff` 0.0 against the engine. It is evidence, not the fix: the shape is answered because the declaration states it, and a program that cannot state a length is served by `mul_stated`/`matmul_stated` instead "
 kind = "behavior"
 case = "../../cases/compile/transforms/matmul_transpose_vector_lhs_stated_extent.cml"
 args = ["${case}", "${backend}"]

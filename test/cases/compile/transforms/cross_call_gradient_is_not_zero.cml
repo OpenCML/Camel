@@ -7,7 +7,7 @@
 // `transpose(call(g, x)) = transpose(lin_g)`, so a call is differentiated through the callee's own
 // linear half.
 //
-// It was written as a `known_fail` on 2026-11-04 07:34, because the line answered `g'(3) = 0.0`
+// It was written as a `known_fail` because the line answered `g'(3) = 0.0`
 // with no diagnostic and no refusal: the transposition was right and the value it transposed was
 // not. `jvp(g)` was right -- `jvp(g)(3.0, 1.0)` is `(18.0, 12.0)` and `jvp(g)(3.0, 2.0)` is `(18.0,
 // 24.0)` -- while `split(jvp(g)).1`, the `lin_g` that ruling transposes, ignored its own parameter:

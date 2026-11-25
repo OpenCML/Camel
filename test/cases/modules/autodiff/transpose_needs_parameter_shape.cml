@@ -9,7 +9,7 @@
  * pullback of `mean<axis>` cannot be built: `mean_axis_cotangent` reads `xs` for `numel(xs)` and
  * `ones_like(xs)`.
  *
- * This is the language's rule and not a gap of the transform (author, 2026-11-03 16:15): the answer
+ * This is the language's rule and not a gap of the transform: the answer
  * is a refusal that names the parameter whose type has to state its shape, and the repair is that
  * declaration -- `x: float[2, 3]`, which is what the neighbouring case writes, and which answers
  * `[[0.5, 1.0, 1.5], [0.5, 1.0, 1.5]]`. JAX's `linear_transpose` asks its caller for the same fact

@@ -31,7 +31,7 @@ func sign(x: int) => int.. sync {
     yield 0
 }
 
-// What the author ruled (2026-11-16): a closure the body made before a `yield` captures by value
+// What the author ruled: a closure the body made before a `yield` captures by value
 // like any other closure, so a name it mentions may not be assigned from the closure's creation to
 // its last use (design principles 3.5). The box is the way out that rule names: the handle is
 // captured by value, and the value a later pull writes into the box is what `read()` gives -- 5

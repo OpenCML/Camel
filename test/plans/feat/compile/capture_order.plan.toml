@@ -16,7 +16,7 @@ desc = "Two writings of one program that differ only in the order two `var` decl
 # refuses (exit 2) a program that does not translate, so a refusal cannot be read as two documents
 # that agree.
 #
-# --- what this case does NOT prove, measured rather than assumed (2026-11-20) --------------
+# --- what this case does NOT prove, measured rather than assumed --------------
 # It is a regression guard, not a proof that the walk's key is load-bearing. Three readings were
 # taken on this host and all three came back green, so this program does not separate an ordered walk
 # from an unordered one:

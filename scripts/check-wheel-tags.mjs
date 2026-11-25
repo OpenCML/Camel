@@ -4,7 +4,7 @@
 // The wheel tags a release is allowed to upload, as a static check of the release gate.
 //
 // The rule itself lives in `scripts/check_wheel_tags.py --ruling`, because that script is what the
-// build job already runs and one definition is the point: the two forms of the 2026-10-25 decision
+// build job already runs and one definition is the point: the two forms of the decision
 // (`cp310-abi3-<platform>` with the interop extension, `py3-none-<platform>` without it; see
 // internal/archive/handover-README.cn.md item 7 and review index C28) are asserted there, and this file only
 // finds the wheels, finds an interpreter for them and passes the exit code through.

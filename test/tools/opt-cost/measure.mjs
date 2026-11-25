@@ -31,7 +31,7 @@
 //   * `--trace effects` and `-vv` count **how many times** the whole-program checks are asked in
 //     one `std::opt` run: one `effect containment: checked N call site(s)` line per pass-boundary
 //     question (`src/kernel/execute/pass.cpp#passBoundaryViolation`, asked per rewrite session by
-//     `src/passes/opt/inline/engine.cpp`, since 2026-11-18) and one `boundary asked after session`
+//     `src/passes/opt/inline/engine.cpp`) and one `boundary asked after session`
 //     line per session the engine completed. A count is not a duration, but it is what turns "the
 //     check is 30% of the pass" into "the check is asked N times per pass over the whole program",
 //     and it is independent of the host.

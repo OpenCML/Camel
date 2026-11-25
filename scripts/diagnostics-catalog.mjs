@@ -614,7 +614,7 @@ function walk(dir, predicate, out = []) {
 // The roots are spelled out rather than derived because a bare `'src'` is a word as much as a path:
 // the rewrite that carried the move will not touch it, and a root list that no longer exists makes
 // every code look unproduced, which is the reading this function exists to deny. Both layouts are
-// listed: the four blocks under `src/` since the 2026-11-22 move, and their own names before it.
+// listed: the four blocks under `src/` since the move, and their own names before it.
 const PRODUCER_ROOTS = ['src/kernel', 'src/compile', 'src/parse', 'src/stdlib', 'kernel', 'compile', 'parse', 'lib']
 
 function producedNames(root) {
@@ -1383,7 +1383,7 @@ if (mode === '--text-coverage' || mode === '--text-coverage-check') {
 // outlived its last use. Either way the registry is claiming something about the compiler that the
 // compiler does not do, and the audit entry "every registered diagnostic code has a producer" is
 // the rule this holds. `FeatureNotSupported` was such a row for a month: after the generator
-// refusal retired (2026-10-31) nothing constructed it, and no test could see that, because a code
+// refusal retired nothing constructed it, and no test could see that, because a code
 // with no producer is also a code no case can pin.
 //
 // A producer is an occurrence of the name in code -- src, include, modules -- with comments and the

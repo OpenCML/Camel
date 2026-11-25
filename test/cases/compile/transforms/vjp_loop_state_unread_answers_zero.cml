@@ -3,7 +3,7 @@
 // cotangent of the loop's value is the zero of its cotangent space. Through `vjp` the half that is
 // transposed is `split(jvp(h))`'s backward one, and that half carries a closure (the loop's tape), so
 // this is the shape where an answer that is a constant meets a member that carries a value: the
-// answer is a constant and the closure is filled anyway (author, 2026-11-03, `origin/fsh-dev =
+// answer is a constant and the closure is filled anyway (`origin/fsh-dev =
 // 3ab482ab2`: "a member carries its closure whatever its answer reads -- a zero answer is a constant
 // and the closure is still filled; no refusal").
 //

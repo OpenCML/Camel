@@ -26,7 +26,7 @@ plan: it belongs to the lane that owns the schedulers.
 # Why not `known_fail`: a mark says "this program is expected to be refused", and these are
 # programs the compiler is expected to run. A red here is the defect, visible in `feat/opt`
 # `[SUMMARY]`, and it goes away by fixing the pass. That choice paid off when the two went green
-# (2026-11-05): there was no mark to take off, so the reading was a fix and not a cleanup -- and a
+#: there was no mark to take off, so the reading was a fix and not a cleanup -- and a
 # red here today means the defect is back.
 
 [[tests]]

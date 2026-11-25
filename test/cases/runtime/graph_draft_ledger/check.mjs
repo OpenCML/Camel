@@ -99,7 +99,7 @@ const REPO_ROOT = path.resolve(HERE, '..', '..', '..', '..')
 const BASELINE_PATH = path.join(HERE, 'baseline.json')
 
 // The roots the ledger reads: the four source roots of the layout map
-// (`docs/design/architecture/layout-map.cn.md`), under `src/` since the 2026-11-22 move and under
+// (`docs/design/architecture/layout-map.cn.md`), under `src/` since the move and under
 // their own names before it (`src/`, `include/` and `modules/` before the layout move).
 // `test/`, `docs/` and the library's own `.cml` are deliberately absent: the ledger page and this
 // checker talk about `GraphDraft` by name all day, and the engine's sources must not.

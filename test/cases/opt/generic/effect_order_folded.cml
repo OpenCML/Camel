@@ -10,7 +10,7 @@ import { reshape, concat, zeros, show } from tensor
 
 // The accumulator the nested `visit` writes is a module `var`, a cell a closure may still write: a
 // closure holds the value a name had when it was made, not the name (design
-// principles 3.5, the author's ruling of 2026-11-16, items 197 and 198), so a closure that writes a
+// principles 3.5, items 197 and 198), so a closure that writes a
 // `var` of the body around it is refused (`SemanticDiag::ClosureAssignsCapturedName`, 0x03000213).
 // This case's subject is the order of the effects around folded code, not the way the accumulator
 // is held, so the accumulator moved to the top level rather than the case keeping a shape the rule

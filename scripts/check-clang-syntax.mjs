@@ -338,7 +338,7 @@ function ninjaDeps() {
         // this runs against left nothing at all -- every line's only token was the path, so the graph
         // came out empty and every changed header answered "no dependency record", which widened every
         // change to the whole tree (654 units, 575 s) and still looked like a real reading
-        // (2026-11-24). Take the longest suffix that names a file that exists; a format that puts a
+        // Take the longest suffix that names a file that exists; a format that puts a
         // stamp or a flag first then still resolves, and a line that names no file is skipped.
         const tokens = line.trim().split(/\s+/)
         let abs = ''

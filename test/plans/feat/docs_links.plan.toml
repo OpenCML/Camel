@@ -302,7 +302,7 @@ tier = "slow"
 
 [[tests]]
 name = "docs.no_unfinished_merge_pattern_sees_all_four_forms"
-desc = "The marker rule's reverse reading: on a probe file carrying all four forms, this rule catches four lines and the old one-line `git grep '^<<<<<<< '` catches one, so the rule is known to catch 407a7ee9f's shape rather than merely passing on a clean tree. The other two readings are the walk's: on a miniature tree whose `tmp/test/run-1/` holds the same four forms beside a plain file of the tree's own `docs/` that holds them, only the tree's file is reported (the run's scratch is not the tree, and the probe this very case writes lands there), and a directory that is gone when the walk reaches it -- the `ENOENT ... scandir` of the 2026-11-22 nojit leg -- is read as nothing found rather than as a failure."
+desc = "The marker rule's reverse reading: on a probe file carrying all four forms, this rule catches four lines and the old one-line `git grep '^<<<<<<< '` catches one, so the rule is known to catch 407a7ee9f's shape rather than merely passing on a clean tree. The other two readings are the walk's: on a miniature tree whose `tmp/test/run-1/` holds the same four forms beside a plain file of the tree's own `docs/` that holds them, only the tree's file is reported (the run's scratch is not the tree, and the probe this very case writes lands there), and a directory that is gone when the walk reaches it -- the `ENOENT ... scandir` of the nojit leg -- is read as nothing found rather than as a failure."
 kind = "behavior"
 tool = "node"
 case = "../../../scripts/conflict-markers.mjs"

@@ -454,7 +454,7 @@ timeout_ms = 6000
 
 [[tests]]
 name = "second_order_refused_vjp"
-desc = "The second derivative of a function whose body applies vjp is refused at the library's own line, lib/vjp/vjp.cml#vjp's split(jvp(f))<...ws>(...xs): the forward half `split` answers does not exist as a graph until the program runs (modules/transforms/split_operator.cpp#splitKernel reads function->graph()), so the derivative that call needs cannot be planned before it runs. This entry is the reading where the caller is handed an operator's answer -- 'the function is computed at run time', the tail modules/autodiff/pullback.cpp#Backward::whyNotEvident writes for a GCNodeKind::Oper that is not a variable read. It is marked known_fail because the value's kind moved on this tree, not because the verdict or this sentence is wrong: lib/vjp/vjp.cml#vjp carries `#macro` (author's ruling of 2026-11-15, 4ae2c0179), and a call of a tagged function is compiled as a call whose answer is a graph, so the same program reads the Func sentence the next entry pins. Both readings stay written and both are pinned: the mark carries the tail it does see, so a third wording turns the run red, and it comes off the day a shape reaches the `Oper` node again (measured both ways on one build: with the tag removed this sentence is what the case prints). The answer it would have given is 12 (f(x)=x^3, f''(x)=6x at 2), the same number the nest produces (second_order_nest.nvm)."
+desc = "The second derivative of a function whose body applies vjp is refused at the library's own line, lib/vjp/vjp.cml#vjp's split(jvp(f))<...ws>(...xs): the forward half `split` answers does not exist as a graph until the program runs (modules/transforms/split_operator.cpp#splitKernel reads function->graph), so the derivative that call needs cannot be planned before it runs. This entry is the reading where the caller is handed an operator's answer -- 'the function is computed at run time', the tail modules/autodiff/pullback.cpp#Backward::whyNotEvident writes for a GCNodeKind::Oper that is not a variable read. It is marked known_fail because the value's kind moved on this tree, not because the verdict or this sentence is wrong: lib/vjp/vjp.cml#vjp carries `#macro` (author's ruling of 2026-11-15, 4ae2c0179), and a call of a tagged function is compiled as a call whose answer is a graph, so the same program reads the Func sentence the next entry pins. Both readings stay written and both are pinned: the mark carries the tail it does see, so a third wording turns the run red, and it comes off the day a shape reaches the `Oper` node again (measured both ways on one build: with the tag removed this sentence is what the case prints). The answer it would have given is 12 (f(x)=x^3, f''(x)=6x at 2), the same number the nest produces (second_order_nest.nvm)."
 kind = "negative"
 case = "../../../cases/modules/autodiff/second_order_refused_vjp.cml"
 args = ["${case}", "${run_nvm}"]
@@ -2588,7 +2588,7 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 #    四条命令的天花板改为按 CPU 时间、取安静主机中位数加余量；"负载下红不算回归"的口径因此不需要。"
 #
 # The wall clock this check reads is the host's and not its own: 127.2 s in the slow layer at
-# -Jobs 8 on 2026-10-23, against 210.8 s for the same work earlier the same day while the host was
+# -Jobs 8 against 210.8 s for the same work earlier the same day while the host was
 # at load 135 with other agents' camel, python and qemu running. Judged on that wall clock it was
 # red with every one of its 312 gradient lines `ok` and `gradient check: PASS` at the end: the 4x
 # margin was reading the neighbours. The CPU figures behind the budget below, measured on the Linux
@@ -2697,8 +2697,8 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 # CPU time, by the rule quoted on resnet_gradient_smooth_vs_torch64 above; measured with it
 # (the same 32-thread host, the four referees of this plan together at -Jobs 8):
 #
-#   438.40 s of CPU / 161.99 s wall   (2026-10-24)
-#   588.67 s of CPU / 289.13 s wall   (2026-10-24)
+#   438.40 s of CPU / 161.99 s wall
+#   588.67 s of CPU / 289.13 s wall
 #   633.12 s of CPU / 381.65 s wall   (2026-10-24, this plan in full, 199 tests at -Jobs 8)
 #
 # The CPU figure itself moves with the host's load here (44% between those windows, against 19% for
@@ -3630,7 +3630,7 @@ timeout_ms = 20000
 # 8.0 with a gradient of 12.0, and the point is 2 and not 3, where all three numbers are 27.
 [[tests]]
 name = "has_aux.library.plain"
-desc = "The library's own two names with no auxiliary value: `vjp(f)(2.0)` is `(8.0, pullback)` with `pullback(1.0) == (12.0)`, and `grad(f_at)<2.0>()` -- `vjp` read at the seed 1, the weight written where the differentiated function reads it -- is 12.0, for `f(x) = x*x*x`. The value and the gradient are different numbers, so a `grad` that answered the value it differentiates is caught; the point is 2 and not 3 for that reason, since at 3 the value and the derivative `3x^2` are both 27 (`vjp_gradient` in test/plans/feat/compile/transforms.plan.toml makes the same choice and records the reading as P2-22 of the 2026-11-01 review)."
+desc = "The library's own two names with no auxiliary value: `vjp(f)(2.0)` is `(8.0, pullback)` with `pullback(1.0) == (12.0)`, and `grad(f_at)<2.0>` -- `vjp` read at the seed 1, the weight written where the differentiated function reads it -- is 12.0, for `f(x) = x*x*x`. The value and the gradient are different numbers, so a `grad` that answered the value it differentiates is caught; the point is 2 and not 3 for that reason, since at 3 the value and the derivative `3x^2` are both 27 (`vjp_gradient` in test/plans/feat/compile/transforms.plan.toml makes the same choice and records the reading as P2-22 of the review)."
 kind = "behavior"
 case = "../../../cases/modules/autodiff/has_aux_library_plain.cml"
 args = ["${case}", "${backend}"]

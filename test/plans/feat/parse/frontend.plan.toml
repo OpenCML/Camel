@@ -27,7 +27,7 @@ expect_exit = 0
 expect_stdout_contains = ["0 stale"]
 normalizers = ["normalize_newlines"]
 timeout_ms = 60000
-# Fast layer, and it has to stay there: 1.09 s of child wall clock on the gate host at 2026-11-25
+# Fast layer, and it has to stay there: 1.09 s of child wall clock on the gate host 
 # 15:19 (load 32), of which 0.5 s is the hashing in four processes; the same list in one process
 # (`--jobs 1`) read 1.4-2.1 s there, which is over the 2 s the fast layer allows.
 

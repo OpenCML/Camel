@@ -20,7 +20,7 @@
  * wrote, they are not part of the checkout, and walking them would cost this guard the tree's size
  * rather than its own work (`isRunnerOutput` in `runner-output.mjs` is where that is decided).
  *
- * Three classes of path, and telling them apart is the point of this file (2026-11-22). It used to
+ * Three classes of path, and telling them apart is the point of this file. It used to
  * probe its `algo` paths with `existsSync` and walk whichever roots it happened to find, so a PASS
  * rested on a scope it never named: every probed path was absent -- which for those paths is the
  * expected reading, see GONE_PATHS -- while the code roots it actually read were only assumed to be

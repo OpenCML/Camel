@@ -37,7 +37,7 @@ import url from 'node:url'
 
 const CWD = path.dirname(url.fileURLToPath(import.meta.url))
 const REPO_ROOT = path.resolve(CWD, '..', '..')
-// The option parser's source: `src/tools/camel-cli/config.cpp` since the 2026-11-22 move, the same
+// The option parser's source: `src/tools/camel-cli/config.cpp` since the move, the same
 // spelling after the layout move and `tools/camel-cli/config.cpp` before it.
 const CLI_SOURCE = [
     path.join(REPO_ROOT, 'src', 'tools', 'camel-cli', 'config.cpp'),
@@ -46,7 +46,7 @@ const CLI_SOURCE = [
 // `--gc` is read by the allocator rather than by the option parser: the CLI hands the word to this
 // function, which decides which collector modes exist. Where the allocator lives is a layout (the
 // layout map, table B: `src/core/` is `src/kernel/core/` after the move, and `kernel/core/` before
-// the 2026-11-22 one), so every spelling is asked and the one the tree has decides.
+// the one), so every spelling is asked and the one the tree has decides.
 const MM_SOURCE = [
     path.join(REPO_ROOT, 'src', 'kernel', 'core', 'mm', 'mm.cpp'),
     path.join(REPO_ROOT, 'kernel', 'core', 'mm', 'mm.cpp'),

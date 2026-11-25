@@ -78,7 +78,7 @@
  * Why the markers are facts about the graph and not the port's name: a generator body's own local
  * keeps its source spelling across `yield` (`i`, `x`, `e` in
  * `test/cases/compile/stream/generators.cml` captures `__gen_pc__`, `e`; it captured
- * `__gen_halt__` beside them too, until the halt bit was dropped on 2026-11-18), so a
+ * `__gen_halt__` beside them too, until the halt bit was dropped), so a
  * name match on the port would leave those cells in `capture_ports_closure` while the machine port
  * beside them left -- a split by spelling, not by what the port is. The graph, on the other hand,
  * is the thing the compiler builds: `__gen_step__` is a literal bound inside the generator's own

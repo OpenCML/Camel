@@ -46,7 +46,7 @@
  * is a fact about a process, and "gate 8 exits 2 in this run" means gate 8 could not read the golden
  * at all (no build, no `python3`), which is the state the golden's line reads as NOT READ and the
  * summary says its own zero does not cover -- two gates' sentences composing a green over a file
- * neither of them opened was the reading this wording replaced on 2026-11-25. Reading it twice would
+ * neither of them opened was the reading this wording replaced. Reading it twice would
  * look like two pieces of evidence and be one, at the price of a whole corpus of hashing to agree
  * with the first.
  *

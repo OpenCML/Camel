@@ -907,7 +907,7 @@ export function apply(ctx, rawConfig) {
 
     // ---- reloading the plugin itself ---------------------------------------------------------------
     //
-    // The owner's rule (2026-11-24): restarting DSH to change this plugin stops every agent at work, so
+    // The owner's rule: restarting DSH to change this plugin stops every agent at work, so
     // the change is a button, and what it buys is this plugin reloading alone. Three steps, in this
     // order, and the third one is what makes the first two safe to ship:
     //
