@@ -824,3 +824,7 @@
 | D-1125-24 | 队列页改成优先级序，放 `internal/plans/2026-11-25-lane-queue.cn.md` | taken | 已执行：页即单子，顶部是 3 个 CC 常驻格 | 00:20 | ⇒ 同上 |
 | D-1125-25 | 队列 3–8 项排在 9–10 之前 | taken | 已执行：派工按页序取 | 00:20 | ⇒ 同上 |
 | D-1125-26 | 格子少于 8 时按 2/10 分钟阈值回填到 8 | taken | 已执行：本轮多次补派 | 00:20 | ⇒ 同上 |
+| D-1125-29 | 收工在 develop 上跑一轮四支工作流，读数一页，红的逐条进 backlog | done | 报告页 `internal/reports/2026-11-25-day-end-actions.cn.md` + `-reds.tsv`（2244 行），提交 `4f4360d48c` | 00:40 | ⇒ **靶不是晋级后的树**：`origin/develop`=`2a33df70`，落后 integration 68 笔 |
+| DEF-dayend-1 | 新红 38 条 distinct（linux 32 / win 34 / mac 38，30 条三腿重合；对 11-24 `d6503a197c` 比） | open | 五簇：①`opt.pass_*`×19 是**树落后一次晋级**的产物（`93ab748d73` 已在 integration 修）②`compile.chain`×4+`region_roots`×1 writing-freedom 自检拒③`diag_json`×2+`diag_render`×1 `PassesNeverRun` 从拒绝变 Warn（golden 同因）④`tensor op_stats.table` 整段没打印⑤macOS 3 条新 Warn `JitWithoutCodeGenerator` | 00:40 | ⇒ ① 会随晋级消失，②③④⑤ 是真缺陷 |
+| DEF-dayend-2 | `CI leg` 无法单独 dispatch（`on:` 只有 `workflow_call`），「四支各跑一轮」今天不成立 | open | 它的执行体是 CI run 内三个 `Build and test (...)` job；要单跑须给 ci-leg.yml 加 `workflow_dispatch`（工作流改动，决策者的事） | 00:40 | ⇒ 422 是配置事实，不是权限问题 |
+| DEF-dayend-3 | build-pypi 的两条 smoke 红：工作流内联 printf 里仍是旧返回类型写法 `): f32[] {` | open | `eb20efab7b` 之后返回类型只写 `=>` ⇒ `camel.load()` 抛 `SyntaxDiag::UnexpectedToken` (1:41) | 00:40 | ⇒ 工作流里的样例代码也要跟着语法走，否则“装得上但用不了” |
