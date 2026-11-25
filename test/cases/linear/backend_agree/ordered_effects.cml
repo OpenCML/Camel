@@ -1,0 +1,26 @@
+/**
+ * Effects in a fixed order and nothing else: two prints written one after the other, then a call
+ * whose body prints one line per round of a loop, then a last print. The console is one resource
+ * (docs/design/effects/edges.cn.md 1), so the six lines come out in the order they are written,
+ * and every back end must print them in that order -- a schedule that reorders them prints a
+ * different program.
+ *
+ * The loop's value is not read; the loop is written for its effects, which execute because the
+ * region runs (design principles 3.1).
+ */
+
+func rounds(n: int) => int sync {
+    loop i = 0 while i < n do sync {
+        println('round', i)
+        i + 1
+    }
+    return 0
+}
+
+func main() => int sync {
+    println('first')
+    println('second')
+    rounds(2)
+    println('last')
+    return 0
+}

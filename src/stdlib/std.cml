@@ -216,8 +216,15 @@ namespace gc {
 export func nvm::<F>(f: F) => F! when is_function::<F>()
 
 /// Executes the program on the bytecode interpreter.
-with </// Append per-graph bytecode and execution counts of the run to this file; null writes none.
-stats: string? = null>
+with <
+    /// Append per-graph bytecode and execution counts of the run to this file; null writes none.
+    stats: string? = null,
+    /// Print the settings this pass runs with on standard error, before the program does: the mode
+    /// and the call count a graph is compiled after, whether the traced MIR is kept, and where the
+    /// run's statistics go. What is printed is the run's own, so it answers "which default did
+    /// this run get", which the declaration only says is available.
+    config: bool = false
+>
 export func fvm::<F>(f: F) => F! when is_function::<F>()
 
 namespace fastvm {
@@ -232,7 +239,10 @@ namespace fastvm {
         /// Append per-graph bytecode and execution counts of the run to this file; null writes none.
         stats: string? = null,
         /// Calls from one call site before a graph is compiled; 0 compiles at the first call.
-        hot_threshold: int = 1
+        hot_threshold: int = 1,
+        /// Print the settings this pass runs with on standard error, before the program does; the
+        /// same line `std::fvm` prints, so the two back ends' settings can be read side by side.
+        config: bool = false
     >
     export func jit::<F>(f: F) => F! when is_function::<F>()
     

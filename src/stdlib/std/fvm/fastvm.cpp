@@ -520,10 +520,36 @@ void FastVMSchedPass::observeFault(const camel::core::error::RuntimeFault &fault
     }
 }
 
+void FastVMSchedPass::reportConfig(std::ostream &os) const {
+    // The settings the run got, not the ones the declaration offers. The one place the two can
+    // differ is the mode: `ENABLE_FASTVM_JIT` is x86-64 only, so a build without a code generator
+    // compiles nothing whichever mode its declaration asked for, and the MIR the JIT would keep
+    // is kept by nobody. Everything else is what the constructor mapped in.
+#if ENABLE_FASTVM_JIT
+    const char *mode = jitConfig_.policy == jit::JitPolicy::Always
+                           ? "Always"
+                           : (jitConfig_.policy == jit::JitPolicy::OnDemand ? "OnDemand"
+                                                                           : "Disabled");
+    const size_t threshold = jitConfig_.hotThreshold;
+    const bool traceMir    = enableJitTraceMir_;
+#else
+    const char *mode       = "Disabled";
+    const size_t threshold = config_.jitHotThreshold;
+    const bool traceMir    = false;
+#endif
+    os << "[fastvm] config jit=" << mode << " hot_threshold=" << threshold
+       << " trace_mir=" << (traceMir ? "on" : "off")
+       << " stats=" << (statsPath_.empty() ? std::string("(none)") : statsPath_) << '\n';
+}
+
 const camel::runtime::Program *
 FastVMSchedPass::apply(const camel::runtime::Program *program, std::ostream &os) {
     (void)os;
     GUARD(program->root() != nullptr, "FastVM requires a non-null runtime root graph.");
+
+    if (config_.reportConfig) {
+        reportConfig(std::cerr);
+    }
 
     if (camel::profile::enabled()) {
 #if ENABLE_FASTVM_JIT
@@ -1547,7 +1573,8 @@ const PassKernel fastVmKernel(
     "std::fvm",
     [](const camel::core::context::context_ptr_t &ctx, const PassArgs &args) {
         FastVMConfig config{};
-        config.statsPath = pathArgument(args, "stats");
+        config.statsPath    = pathArgument(args, "stats");
+        config.reportConfig = args.getBool("config");
         return std::make_unique<FastVMSchedPass>(ctx, config);
     });
 
@@ -1556,6 +1583,7 @@ const PassKernel fastVmJitKernel(
     [](const camel::core::context::context_ptr_t &ctx, const PassArgs &args) {
         FastVMConfig config = makeDefaultFastVmJitConfig();
         config.statsPath    = pathArgument(args, "stats");
+        config.reportConfig = args.getBool("config");
         const int64_t threshold = args.getInt("hot_threshold");
         config.jitHotThreshold  = threshold < 0 ? 0 : static_cast<size_t>(threshold);
         return std::make_unique<FastVMSchedPass>(ctx, config);
