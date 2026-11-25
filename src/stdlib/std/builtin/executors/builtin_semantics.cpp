@@ -488,9 +488,10 @@ void declareBuiltinOperatorFaults() {
         // (`operators/cast.cpp#__cast_value__`), which raises nothing in its own text: what
         // refuses a value of another shape is the type layer's conversion to the parameter's type
         // (`src/kernel/core/type/composite/array.cpp`), so the raise is not in the kernel's file.
-        // That is the position `:op/cast` is in, and the reason `scripts/check-operator-panic.mjs`
-        // reads both as `unkept`: the check follows calls within one file, and a raise reached
-        // through a helper in another is not followed.
+        // That is the position `:op/cast` is in, and the reading `scripts/check-operator-panic.mjs`
+        // takes of both: the check follows the kernel's call into the class that declares
+        // `Type::castSlotFrom` and reaches the raise in that class's overrides, so both read as
+        // `panic` kept -- see "the second reading" in the check's header.
         {":op/refine_extent", true},
     };
     // The one operator whose fault is a shape rather than an operand's value: the check a call site
