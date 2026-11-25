@@ -6,9 +6,11 @@ desc = "Every picture in docs/tutorial/images is the graph this tree draws for t
 
 # The tutorial shows pictures instead of pasting DOT (a page-sized DOT block, with `origin`, `span` and `tupleSlots` in it, is a poor first
 # frame). docs/tutorial/tools/render-graphs.mjs draws them: for each picture it runs
-# `camel <example> <passes...>`, keeps the part of the dump the picture is about, drops the
+# `camel <example> <passes...> std::nop`, keeps the part of the dump the picture is about, drops the
 # attributes that move with the source positions, and writes `images/<name>.dot` (what the
-# picture was drawn from) and `images/<name>.svg` (the picture).
+# picture was drawn from) and `images/<name>.svg` (the picture). The `std::nop` is the pipeline
+# saying that it only prints (design principles 9.1): the pass before it hands the graph on, so
+# without it the default scheduling pass runs the example and its output follows the DOT.
 #
 # What a picture says about the page is `images/<name>.dot`, so that is what the check compares:
 # it re-dumps every example, normalises the same way and requires the committed file to be what

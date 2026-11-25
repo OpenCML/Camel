@@ -22,4 +22,3 @@ digraph GraphIR {
     N05 -> O00 [label="0", type="EXIT", style=solid];
     N04 -> N05 [label="0|0", type="WITH", style=dashed];
 }
-Hello, Camel!
