@@ -1,0 +1,25 @@
+bisect loop/jit first threshold=400 1fa180c4f..6fcee16d0c
+step 1 d48df71f6a candidates left 1932
+   -> 1858.0536 ms (1858.1, 2208.8, 2943.2)
+step 2 bc717f7d06 candidates left 923
+   -> 122.6986 ms (122.7, 123.7, 119.5)
+step 3 80796d1c29 candidates left 366
+   -> 1910.8008 ms (1910.8, 2461.5, 3074.8)
+file:///D:/Temp/perf-bisect/bisect.mjs:58
+    if (r.status !== 0) throw new Error(`git ${a.join(' ')}: ${r.stderr}`)
+                              ^
+
+Error: git checkout --detach 5e8eb04d5d3ae42d40bb7a023adb5e16bf77cb77: error: Your local changes to the following files would be overwritten by checkout:
+	src/kernel/include/camel/core/error/diagnostics/messages/runtime.h
+	src/kernel/include/camel/core/error/diagnostics/messages/semantic.h
+	src/kernel/include/camel/core/error/diagnostics/messages/syntax.h
+Please commit your changes or stash them before you switch branches.
+Aborting
+
+    at git (file:///D:/Temp/perf-bisect/bisect.mjs:58:31)
+    at file:///D:/Temp/perf-bisect/bisect.mjs:143:5
+    at ModuleJob.run (node:internal/modules/esm/module_job:561:25)
+    at async node:internal/modules/esm/loader:647:26
+    at async asyncRunEntryPointWithESMLoader (node:internal/modules/run_main:101:5)
+
+Node.js v24.21.0

@@ -312,6 +312,11 @@ if (diffs.length) {
     for (const d of diffs) W(`  - ${d}`)
 }
 W('')
+W('## 二分')
+W('')
+W('`small_calls` × `std::jit` 的 16 倍已经二分到一组提交，逐笔读数与「为什么」在 `bisect.cn.md`。')
+W('其余超过 20% 的格**没有**单独二分（`tensor_train` 与 `fib` 落在同一区间、四个后端一起动，最可能同因，但未验证）。')
+W('')
 
 const md = lines.join('\n')
 fs.writeFileSync(path.join(HERE, 'table.cn.md'), md + '\n')

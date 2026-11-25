@@ -68,3 +68,21 @@
 于是 `prelude::filter` 的 Range 重载不再匹配。**这是 `--timeit` 复用上下文/重编译的结果，不是 MCTS 程序的问题**
 （普通运行连跑 5 次全部 exit 0，输出一致）。交接一只量不改，故这里只记录、不修；这一格改用
 「整进程跑 5 次」，并注明那一列是整进程墙钟（含起动与解析，约 +65 ms 的常量）。
+
+**这两个端点都验证过**：同一句 `--timeit std::nvm/2` 在审计点与阶段 2 之前都能跑完两次，
+只有当前 integration 失败。所以它是这个区间引入的编译缺陷，与「量不了」无关。
+
+## 这一目录里有什么
+
+| 文件 | 是什么 |
+|---|---|
+| `README.cn.md` | 本页：三个点的提交是怎么定的、五个程序、量法 |
+| `build-stamps.md` | 三个点的 `build-info.json` 戳（源码数、指纹、选项哈希）与**选项差异** |
+| `run-timing.mjs` | 取数的脚本（`timeit` / `process` / `stdout` 三种模式） |
+| `load-gate.ps1` | 60 秒负载闸：每 4 秒一个采样，安静线是核数的 15% |
+| `analyze.mjs` | 把三个点摊成表、算 >20% 的变化、比 stdout |
+| `bisect.mjs` | 二分驱动（每步 checkout → 构建 → 量一格） |
+| `table.cn.md` | **60 格表 + >20% 清单 + stdout 一致性**（`analyze.mjs` 生成） |
+| `table.expanded.json` | 同一张表，一格一行（含每格全部采样） |
+| `bisect.cn.md` | 二分：`small_calls` × `std::jit` 的 16 倍落在哪一组提交上 |
+| `results/` | 三个点的原始 JSON/CSV、负载日志、构建日志尾巴、二分日志 |

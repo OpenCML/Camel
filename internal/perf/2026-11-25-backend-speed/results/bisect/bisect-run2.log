@@ -1,0 +1,23 @@
+bisect loop/jit first threshold=400 bc717f7d06..80796d1c29
+step 1 5e8eb04d5d candidates left 176
+   -> 1837.0211 ms (1837.0, 2291.4, 2970.1)
+step 2 8b0948e433 candidates left 88
+   -> 1922.4646 ms (1922.5, 2696.8, 3479.1)
+step 3 ce7f79bd9d candidates left 44
+   -> 1971.9208 ms (1971.9, 2630.7, 3419.2)
+step 4 181a33cb67 candidates left 22
+   -> 2025.8503 ms (2025.9, 2956.9, 3288.6)
+step 5 1de6c6df29 candidates left 11
+   -> 123.2293 ms (123.2, 126.3, 124.4)
+step 6 a23a6f46d0 candidates left 5
+   -> 2164.7233 ms (2164.7, 3057.5, 3484.5)
+step 7 17a0514283 candidates left 3
+   -> 2001.8665 ms (2001.9, 2656.4, 3482.1)
+step 8 76f5cfea5b candidates left 2
+   -> 2004.0792 ms (2004.1, 2766.8, 3404.2)
+converged after 8 steps: culprit = 76f5cfea5b667a331cd1dd64b227b1d5f3a95be7
+
+first bad = 76f5cfea5b667a331cd1dd64b227b1d5f3a95be7
+last good = 1de6c6df297226e057a45c36271602efa6189e2d
+candidates in between: 1
+  76f5cfea5b 2026-11-23 16:25:38 +0800 merge develop: one facts store per context, the exec plan belongs to the module that reads it, and a range's ends are bounds
