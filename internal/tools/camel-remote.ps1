@@ -903,6 +903,28 @@ function Stop-HostProcess {
     try { if (-not $Process.HasExited) { $Process.Kill() } } catch { }
 }
 
+# Is this line a reading, or only a keep-alive?
+#
+# The finish deadline after `[SPLIT]` exists to stop waiting on a session that will not close. It is
+# pushed out by a line because a run that is still working is still printing: the tree probe, the
+# checkers, the gpu observation and the run's own `RUN_EXIT` all arrive after `[SPLIT]`, and cutting
+# one of those short would throw away a reading that was about to arrive.
+#
+# A heartbeat is not one of those. `HOST_TOKENS mine=0 inuse=0 size=24` -- and `HOST_ALIVE` beside
+# it -- is the seat's token reporter saying the host is still there, once per tick, for as long as
+# the host lives. It says nothing about what the run found, and it is printed by a process the run
+# owns: when the plan stage ends or the plan stage hangs, that reporter keeps ticking either way.
+# A deadline a heartbeat can postpone is not a deadline -- measured 2026-11-25, the pre-fix run sat
+# behind exactly this and its 600 s cutoff never fired, because every tick reset the clock.
+#
+# So the rule is one line wide: a keep-alive does not reset the clock, everything else does. Written
+# as an allow-everything-but test on purpose -- a new kind of reading must not need a change here,
+# while a new kind of keep-alive must state its prefix and be added deliberately.
+function Test-CamelRemoteReadingLine {
+    param([string]$Line)
+    return -not ($Line -match '^HOST_(TOKENS|ALIVE)\b')
+}
+
 # The lines a growing file has gained since the last call.
 #
 # `$State` is a hashtable the caller keeps (path, byte position, the partial line's bytes): reading is
@@ -3397,7 +3419,9 @@ exit `$code
     while ($true) {
         $arrived = $false
         foreach ($line in (Read-RemoteStream $streamOutState $streamEncoder)) {
-            $arrived = $true
+            # Only a line that carries a reading postpones the finish deadline; see
+            # `Test-CamelRemoteReadingLine`.
+            if (Test-CamelRemoteReadingLine $line) { $arrived = $true }
             # The host's last line, written after the scratch directory is removed: the run finished
             # and this is its code, whatever the channel does afterwards.
             if ($line -match '^__CAMEL_REMOTE_EXIT__=(\d+)\s*$') {
