@@ -201,3 +201,36 @@ assert(num(line, 'diff') === 0 && num(draftLine, 'diff') === 0,
 }
 """
 timeout_ms = 30000
+[[tests]]
+name = "arrangeable_families.a_gradient_value"
+desc = "A program that makes a gradient value and keeps it (`a_gradient_value.cml`): `grad(square)` is not expanded, because this program names no `std::macro`. The family this case was written for is `oper_unrecomputable` -- an operator that is pure, cannot fault and ends, and that a pass may nonetheless not compute ahead of time -- and the reading is that the family is empty here and on every other program in the batch. `autodiff:grad` is registered from C++ with `pure`, `readsGraphs` and `macro`, and a registration that states no fault table is read as *may fault* (`operator_semantics.h`: `mayFault()` is `!faults || !faults->empty()`), so the node lands in `oper_may_fault` and both readers keep it; the four `rewrite:rule` makers, which are what `declareUnfoldable` was written for, are not declared at all and land there too. The rows assert exactly that: no `oper_unrecomputable` row, the two may-fault operators of the program kept by both readers, the one operator that may be recomputed free in both, and the four other families agreeing."
+kind = "behavior"
+case = "../../../cases/facts/a_gradient_value.cml"
+args = ["${case}", "test::facts_compare"]
+
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout
+const rows = (prefix) => out.split('\n').filter(l => l.startsWith(prefix))
+const fam = rows('FACTS_COMPARE readers_family ')
+const draft = rows('FACTS_COMPARE draft_readers_family ')
+const line = out.split('\n').find(l => l.startsWith('FACTS_COMPARE kind=core.arrangeable readers '))
+const draftLine = out.split('\n').find(l => l.startsWith('FACTS_COMPARE kind=core.arrangeable draft '))
+assert(line && draftLine, 'no readers or draft line')
+const num = (t, n) => { const m = t.match(new RegExp(n + '=([0-9]+)')); assert(m, `${n} is missing from: ${t}`); return Number(m[1]) }
+const row = (name) => fam.find(l => l.includes(` family=${name} `))
+assert(!row('oper_unrecomputable'), `a node reached the unfoldable family: ${row('oper_unrecomputable')}`)
+const fault = row('oper_may_fault')
+assert(fault, `no oper_may_fault row: ${fam.join(' ; ')}`)
+assert(num(fault, 'nodes') === 2 && num(fault, 'both_kept') === 2,
+    `the gradient node and the multiplication are no longer both kept: ${fault}`)
+assert(num(row('oper'), 'nodes') === 1 && num(row('oper'), 'both_free') === 1, `oper: ${row('oper')}`)
+assert(num(row('gate'), 'nodes') === 1 && num(row('gate'), 'both_kept') === 1, `gate: ${row('gate')}`)
+assert(fam.reduce((acc, l) => acc + num(l, 'nodes'), 0) === num(line, 'nodes'),
+    `the family rows do not cover the nodes: ${fam.join(' ; ')}`)
+assert(num(line, 'diff') === 0 && num(draftLine, 'diff') === 0,
+    `readers: ${line} || draft: ${draftLine} || frozen families: ${fam.join(' ; ')} || draft families: ${draft.join(' ; ')}`)
+}
+"""
+timeout_ms = 30000
