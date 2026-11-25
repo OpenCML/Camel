@@ -4523,6 +4523,7 @@ ac352f7ec177642e ok test/cases/transforms/split/split_loop_taped_rounds.cml
 f8d6eafa7edc0cde ok test/cases/transforms/split/split_two_params.cml
 6343d2633f3bb453 ok test/cases/transforms/split/split_unread_member_with_no_zero_refused.cml
 0edbfdbc16c4ae3a ok test/cases/transforms/split/split_whole_and_member_answers.cml
+4e550462b3865211 ok test/cases/transforms/transpose/cotangent_enters_the_array_port.cml
 4c02b6ac23d1c0b5 ok test/cases/transforms/transpose/floatgate_f32_branch.cml
 48455d20b8a47f6a ok test/cases/transforms/transpose/floatgate_f32_closure.cml
 3f0d4ccbd6dffc44 ok test/cases/transforms/transpose/floatgate_f32_loop.cml

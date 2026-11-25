@@ -1,0 +1,60 @@
+# Copyright (c) the OpenCML Organization
+# SPDX-License-Identifier: MIT
+
+# The one place the transpose walk hands a value over through `:op/enter`
+#
+# `modules/transforms/transpose/walkmachinery.cpp#ruleCotangentOf` makes a step wherever a value's
+# type goes from `T` to `T[..]`: a law that writes its cotangent port `(ct: T[..])` is entered from
+# the element, the rank coming from the value (design principles 5.1 and 5.4, the author's
+# `enter-by-structure` ruling `dd71a1293b`). The operator the walk writes there is `:op/enter` --
+# not `:op/cast`, which is what a *program* writes when it converts and which is `mayFault = true`;
+# the step here is taken only after `port->assignableFrom(ctType)` held, so it cannot fault. Both
+# kernels call `castSlotFrom`, so the numbers are the same either way: **only the operator says
+# which step was made.**
+#
+# **Where that operator can be read.** Not in a graph: `transforms:transpose` is a run-time operator
+# (`src/stdlib/transforms/jvp_operator.cpp#registerOperatorMetadata` sets it pure, `readsGraphs`, not
+# foldable, and not macro), so the walk runs inside `transposeKernel` *after* the passes are over and
+# the member it builds lives in a `TransposeMember` fact, not in the program's graph list. Measured
+# on `778ef0d629`: `std::jgir` over this case holds **zero** `:op/enter` nodes, with and without
+# `std::macro` in the pipeline (byte-identical document, 219292 bytes). The commit that wrote the
+# step says the same from the other side -- it read the step with a *temporary instrument*, which it
+# did not keep. So the reading this case pins is the walk's own, on the diagnostic side:
+#
+#     TRANSPOSE function=lane_mean entrance=:op/enter law=mean_axis_from_type_t port=float[...] ct=float
+#
+# one line, every field of it a fact this case is about: the operator the walk chose, the law that
+# asked for the port, the port's type and the type of the cotangent really handed over. The
+# `entrance=` field is the one addition the walk needs for that sentence to exist; the rest of the
+# line is what `readings()` already writes.
+#
+# Why the program is the shortest one that reaches it: the axis form of the whole mean over a
+# fixed-shape `float[4]` parameter. `mean_axis_from_type_t` writes its cotangent port `T[...]` while
+# the cotangent of a `float` result is one number -- exactly the `T -> T[..]` step. A parameter
+# written `float[]` instead is refused at the call (`TransposeNeedsParameterShape`), so the shape is
+# part of the program and not decoration.
+#
+# The `vjp` route would build the same member while the passes run (both `vjp` and `grad` are
+# `#macro` functions, so `std::macro` evaluates them), and it is the route that would put the member
+# in front of `std::jgir`. It is refused today, one step early, by `split`'s exit type -- the gap
+# this lane was opened for:
+#
+#     'vjp::vjp<(t: float[4]) => float pure>' could not be evaluated by std::macro: the value the
+#     graph 'split_of_jvp_of_lane_mean_backward' hands on has type 'float[...]', and the graph
+#     declares 'float'. (name=RuntimeDiag::MacroEvaluationFailed, code=0x0400000E)
+
+[defaults]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+expect_output_not_contains = ["Segmentation fault", "dumped core", "internal error"]
+timeout_ms = 20000
+
+[[tests]]
+name = "cotangent_enter.the_numbers"
+desc = "`lane_mean(t: float[4]) = mean<0, false>(t)` at `t = [1, 2, 3, 4]` is `10/4 = 2.5`, and its transposed call at cotangent 1 spreads `1/4` over the four lanes: `[0.25, 0.25, 0.25, 0.25]`. The entering is not a no-op: it is what reads the rank-zero cotangent as the open-rank array the law's `numel` and `extent_product` then divide by. Measured A/B on this entry's own program -- with the entering's condition forced false the run is killed by SIGSEGV (rc=139) before it prints anything, so a walk that stops making the step is a red here rather than a wrong number. The `entrance=` line is the operator itself: `:op/cast` in its place answers these same four numbers and only this line changes, which is what the positive control reads."
+kind = "behavior"
+case = "../../../cases/transforms/transpose/cotangent_enters_the_array_port.cml"
+args = ["--trace", "transforms", "${case}", "std::nvm"]
+backends = ["nvm"]
+expect_exit = 0
+expect_stdout_contains = ["lane_mean value=2.5", "lane_mean d = 0.25 0.25 0.25 0.25"]
+expect_stderr_contains = ["TRANSPOSE function=lane_mean entrance=:op/enter law=mean_axis_from_type_t port=float[...] ct=float"]
