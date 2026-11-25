@@ -87,7 +87,7 @@ fault as well」才只有一处实现；若裁决是「各处自己拼」，`ope
 
 ## 决策者答（2026-11-24，`D-1124-65`）
 
-**这三问 11-23 已经定过**（`internal/questions/2026-11-23-who-owns-freely-arrangeable.cn.md` 决策者答 ①②）。这次是**没落实的第二个实例**，不是新问题。
+**这三问 11-23 已经定过**（`internal/reviews/2026-11-23-who-owns-freely-arrangeable.cn.md` 决策者答 ①②）。这次是**没落实的第二个实例**，不是新问题。
 
 ### ① 做一个 kind，不是六处各补一项
 

@@ -2,7 +2,7 @@
 
 ## 事实
 
-`core.arrangeable` 落地（`internal/questions/2026-11-23-who-owns-freely-arrangeable.cn.md`
+`core.arrangeable` 落地（`internal/reviews/2026-11-23-who-owns-freely-arrangeable.cn.md`
 的裁决）之后，逐节点的改前/改后答案对照跑在 6 个程序、224 个节点、70 个 OPER 节点上
 （`test::arrangeable_probe`，临时探针，读数如下）：
 
