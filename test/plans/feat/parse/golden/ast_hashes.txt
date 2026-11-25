@@ -527,7 +527,7 @@ fd03660cb21d8340 ok src/stdlib/opt.cml
 49015cbc4407a506 ok src/stdlib/optim.cml
 b6a0bf171cb931bc ok src/stdlib/para.cml
 a82098797df46210 ok src/stdlib/perf.cml
-2a1ed6f36ff824ba ok src/stdlib/prelude.cml
+e5e59cb4ca9bfdf4 ok src/stdlib/prelude.cml
 0a2356410c7e5b3c ok src/stdlib/process.cml
 8f9a9b5b4701c251 ok src/stdlib/pyplot.cml
 692ab627c3592a87 ok src/stdlib/python.cml
@@ -554,7 +554,7 @@ ba52a9c1204641a6 ok src/stdlib/vjp.cml
 a2ca595975c02dee ok src/stdlib/autodiff/signatures/autodiff.cml
 6ae5ad8be3ee4eec ok src/stdlib/ckpt/signatures/ckpt.cml
 483b0496470b41ad no src/stdlib/nn/signatures/nn.cml
-cbebc41049d612a7 ok src/stdlib/rulesets/jvp.cml
+1d27a3dc0b0c111c ok src/stdlib/rulesets/jvp.cml
 8375a530eff268c4 ok src/stdlib/rulesets/probe_batch.cml
 7a11798394cc6e2c ok src/stdlib/rulesets/probe_missing.cml
 29fe22995a1478a0 ok src/stdlib/rulesets/transpose.cml
@@ -1838,8 +1838,10 @@ bb6f0d606b15ed6c ok test/cases/compile/surface/name_as_value_overloads.cml
 a2fc763d8d6a9d9c ok test/cases/compile/surface/reserved_function_name.cml
 5ca7df8c7505679a ok test/cases/compile/surface/self_import.cml
 b8cd8df6683549c7 ok test/cases/compile/tagged/combined.cml
+ee46ef2adaf7f6d6 ok test/cases/compile/tagged/entering_operator.cml
 09f4e0a77380e4be ok test/cases/compile/tagged/err_argument.cml
 89e33abff3563a97 ok test/cases/compile/tagged/err_bind_plain.cml
+1a87f4bf17b9d1de ok test/cases/compile/tagged/err_enter_needs_cast.cml
 44f774d1da423f14 ok test/cases/compile/tagged/err_error_outside_fallible.cml
 3b7be38fc529f72f ok test/cases/compile/tagged/err_failed_arm_value.cml
 6f10fbf6064dfa72 ok test/cases/compile/tagged/err_generic_nesting.cml
@@ -1871,6 +1873,7 @@ b28b98f420901fac ok test/cases/compile/tagged/stdlib.cml
 0f0bcad3cc76229f ok test/cases/compile/tagged/unwrap_null.cml
 69597f3642d23152 ok test/cases/compile/tagged/unwrap_null_attempt.cml
 e83b897eb98b87be ok test/cases/compile/tagged/unwrap_value.cml
+fae52ed733727a54 ok test/cases/compile/tagged/user_cast_is_a_conversion.cml
 bdde648291049784 ok test/cases/compile/tags/decl.cml
 ab5dff6e6716b8c5 ok test/cases/compile/tags/err_arity.cml
 579a1a21c98d2636 ok test/cases/compile/tags/err_const.cml
