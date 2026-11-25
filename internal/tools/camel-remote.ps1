@@ -190,6 +190,12 @@
 #     only`, because a red check that does not fail the run must not be read as a green one either.
 #     An entry becomes a wall by losing that marking, and the checker's own `--enforce` is the mode
 #     it then runs in;
+#   * one entry rides every run that takes a reading and is not left to `-Check`: the citation walk
+#     (`check-doc-links --citations`). A citation that names a file or a symbol the tree does not
+#     have is a broken promise inside the tree this run just measured, so it cannot be a question
+#     the caller may leave out -- see the section "the citation walk is not a check somebody asks
+#     for" below for the two citations that survived because it was. It is still the same table
+#     entry (one invocation, no paraphrase), and it is a wall, not `reportOnly`;
 #   * the stages are build -> plan -> checks, so one call answers both questions and a failing plan
 #     still gets its checkers (their readings are not thrown away with the plan's);
 #   * the run exits non-zero when any checker failed, and the exit code is the plan's when it failed,
@@ -755,7 +761,6 @@ foreach ($requested in $Check) {
         exit 2
     }
 }
-$checkList = $checkNames -join ' '
 
 # What `all` cannot mean, read out of the table above and never out of a list written beside it.
 # Every entry marked `planStage` is a check whose evidence is the plan stage, and `all` has no plan
@@ -796,6 +801,39 @@ $gpuWanted = (-not $NoGpuWatch) -and (-not $UpdateGolden) -and $gpuReadingWanted
 if ($NoGpuWatch -and $gpuReadingWanted) {
     Write-Host "[camel-remote] -NoGpuWatch: the gpu plans were not run, so this run prints no gpu reading (test/plans/gpu is observed and never gates a known red; see the header)"
 }
+
+# --- the citation walk is not a check somebody asks for ----------------------
+# `check-doc-links --citations` is an entry of the table above, so `-Check all` runs it -- and that
+# was the whole of what it gated. A run that names a plan and no check (which is every lane's run)
+# and a merge stage that names one check (the header and clang-syntax stages) measured no citation
+# at all. On 2026-11-25 the tree carried two that pointed at nothing: one in the process-trace
+# check's own test cited a *line* of a C++ file, and a comment in the plan runner cited a symbol of
+# `test/runner.mjs` that had been renamed out from under it. (Neither is spelled out here as a
+# citation: a `path#Symbol` in a comment of this file is itself one, and this file is scanned -- the
+# same trap that check's own source records.) Both were red *readings* in `feat/docs_links` and
+# neither was a failing gate: the plan case that reports them is slow-tier, so a `--changed` run
+# filtered it out, and the checker itself ran only when somebody typed `-Check all`.
+#
+# So the walk rides every run that takes a reading, beside `-Check` instead of through it: whether a
+# citation points at something real is a property of the tree this run just measured, not a question
+# the caller may leave out. It is the same table entry -- the invocation cannot drift into a
+# paraphrase -- and it is a wall and not `reportOnly`, because a citation that points at nothing is a
+# broken promise in the tree and a report nobody has to act on is exactly how those two survived. It
+# costs about 2 s against the checkout, and `-NoGpuWatch` does not reach it: that switch declines a
+# plan run on devices, and this is a static read.
+#
+# A build-only run (`-Path` with neither `-Plan` nor `-Changed`) is left out on purpose: it takes no
+# reading, and the sentence this stage enforces is "what this run measured is sound". That is the
+# same distinction `$gpuReadingWanted` already draws above, so it is what decides here rather than a
+# second condition written beside it.
+$citationWalkName = 'check-doc-links'
+if ($gpuReadingWanted -and $checkNames -notcontains $citationWalkName) {
+    $checkNames += $citationWalkName
+}
+# The names the host script runs, in order, now that every one of them is decided: the entries the
+# caller asked for and the walk above. `$checkList` empty is what tells the host stage to skip
+# itself (`if [ -n '$checkList' ]`), so it is written once, after both sources.
+$checkList = $checkNames -join ' '
 
 # `-UpdateAstHashes` may not take a row out of the AST record while the file that row records is
 # still here, and a bulk re-record may not take one out at all. This is that rule as a function, so

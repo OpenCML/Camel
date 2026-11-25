@@ -342,6 +342,23 @@ else()
     message(STATUS "Skipping src/bindings/python (CAMEL_ENABLE_PYTHON_BINDINGS=OFF or CAMEL_PACKAGE_MINIMAL=ON).")
 endif()
 
+# The test channel: the test-only passes a plan names as `test::<name>`, built as a `.cmo` of their
+# own and never part of libcamel (src/stdlib/test/module.cpp says what that buys and what makes it
+# safe). It is not in CAMEL_ALL_MODULES -- the language has no `test` module, nothing exports
+# through it, and that list is what the module loop turns into the set of importable names -- but it
+# is a module target all the same: the same wrapper, the same manifest, the same install, so a
+# `test::` name resolves exactly the way a `tiles::` one does.
+#
+# It is added here, and not beside the tools below, because two steps that run later read globals it
+# appends to: the `.cmo` manifest (a `.cmo` the manifest does not list is not installed, and the
+# install then removes it from stdlib/) and `camel_layout_append_catchall()`, which hands the
+# transition include roots to every module target that exists when it runs.
+#
+# Every configuration builds it, `CAMEL_PACKAGE_MINIMAL` included: a plan run against a packaged
+# tree needs the channel that tree's plans name, and a package without it fails with `Unrecognized
+# pass 'test::...'` rather than with a sentence about a missing module.
+add_subdirectory(src/stdlib/test)
+
 # ---------------------------------------------------------------------------------------------
 # The module manifest: one line per .cmo this configure builds, per configuration.
 #
