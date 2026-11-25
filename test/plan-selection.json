@@ -140,12 +140,12 @@
         },        {
             "comment": "The parse-check harness, the selftest fixtures and the load-class guard: a change here runs smoke, the runner plan, the load-class plan (its cases are the selftest fixtures) and the front-end plan (layered so its slow fuzz test is filtered under --tier fast).",
             "paths": ["test/tools/parsecheck/", "test/tools/jitcov/workloads.cml", "test/tools/selftest/", "test/tools/check-load-class.mjs"],
-            "plans": ["smoke", "feat/consistency/runner.plan.toml", "feat/tools/load_class.plan.toml", "feat/tools/plan_normalizers.plan.toml", { "plan": "feat/parse/frontend.plan.toml", "layer": true }]
+            "plans": ["smoke", "feat/consistency/runner.plan.toml", "feat/tools/load_class.plan.toml", "feat/tools/plan_normalizers.plan.toml", { "plan": "feat/parse/frontend.plan.toml", "layer": true }, { "plan": "feat/tools/selfchecks.plan.toml", "layer": true }]
         },
         {
-            "comment": "The runner itself and the self-test: the plans that exercise the runner and the smoke set. `feat/tools/plan_fields` is here too, because its second entry reads `test/tools/run-tests.mjs` itself: a field that moves out of a kind-gated block, or a fourth gated kind, is a red there, and a change to the runner is the only thing that can cause it.",
+            "comment": "The runner itself and the self-test: the plans that exercise the runner and the smoke set. `feat/tools/plan_fields` is here too, because its second entry reads `test/tools/run-tests.mjs` itself: a field that moves out of a kind-gated block, or a fourth gated kind, is a red there, and a change to the runner is the only thing that can cause it. `feat/tools/selfchecks` starts the two self-tests that read the selection engine and the runner, so a change to either is the change they exist to be run on; it follows `--tier`, because its one slow entry copies `test/tools` and starts the engine several times.",
             "paths": ["test/tools/run-tests.mjs", "test/tools/selftest/", "test/tools/toml-lite.mjs", "test/tools/gir-dot.mjs", "test/plan-selection.json", "test/runner.mjs", "test/vars.toml", "scripts/test.js", "package.json"],
-            "plans": ["smoke", "feat/consistency/runner.plan.toml", "feat/tools/plan_fields.plan.toml"]
+            "plans": ["smoke", "feat/consistency/runner.plan.toml", "feat/tools/plan_fields.plan.toml", { "plan": "feat/tools/selfchecks.plan.toml", "layer": true }]
         },
         {
             "comment": "The diagnostic-form checker reads the tools that parse a diagnostic out of a run: a change to it, or to a tool it names, re-runs the plan that holds its reading.",
@@ -166,6 +166,43 @@
             "comment": "The stdlib-registry guards: `check-env-switches.mjs` and `check-no-algo.mjs` are two of the fourteen cases of `feat/modules/stdlib_registry` (`registry.no_env_switches`, `registry.algo_module_gone`), which is the plan that would report a regression in either.",
             "paths": ["test/tools/check-env-switches.mjs", "test/tools/check-no-algo.mjs"],
             "plans": ["feat/modules/stdlib_registry.plan.toml", "smoke", "feat/consistency/runner.plan.toml"]
+        },
+        {
+            "comment": "The tooling's own tests, three rules for three families: a `*.test.mjs` beside the tool it tests is read by `feat/tools/selfchecks` and by nothing else, so an edit to the test or to the tool under it must run that plan -- otherwise the file that checks the tool is green only because nothing reads it. Each rule re-lists the plans its family reached before (`smoke` from the `scripts/` rule, `smoke` and the runner plan from the general `test/tools/` rule, `feat/docs_links` from the `internal/tools/` rule), because the first matching rule replaces the general one for a file. The `*.test.ps1` files are the class these rules leave out: a plan cannot start one (the build host has no pwsh, and the runner resolves a tool that is neither `node` nor `python` inside the install), and `scripts/plan-inventory.mjs#selfCheckProblems` names every one of them with that reason.",
+            "paths": [
+                "test/tools/reading-normal.mjs",
+                "test/tools/reading-normal.test.mjs",
+                "test/tools/selection-docs-only.test.mjs"
+            ],
+            "plans": ["feat/tools/selfchecks.plan.toml", "smoke", "feat/consistency/runner.plan.toml"]
+        },
+        {
+            "comment": "The next two families of the rule above: the checks beside the tools of `internal/tools` and of `scripts`, and the tools they cover. `feat/tools/selfchecks` starts them; `feat/docs_links` is what the `internal/tools/` rule reached before (its citation and conflict-marker walks read those `.ps1` and `.mjs` files), and `smoke` is what the `scripts/` rule reached before.",
+            "paths": [
+                "internal/tools/sync-oversight-live.mjs",
+                "internal/tools/camel-oversight-reload.test.mjs",
+                "internal/tools/camel-pass-scan.test.mjs",
+                "internal/tools/merge-readings-cache.test.mjs",
+                "internal/tools/merge-readings-superset.test.mjs",
+                "internal/tools/red-table-context.mjs",
+                "internal/tools/red-table-context.test.mjs"
+            ],
+            "plans": ["feat/tools/selfchecks.plan.toml", "feat/docs_links.plan.toml"]
+        },
+        {
+            "comment": "The checks of the `scripts/` tools: the merge gate's readers, the case-selection record and the two counters. No plan but the one that starts them reads either half of a pair, so a change to a test or to the tool it tests runs `feat/tools/selfchecks`; `smoke` stays because the `scripts/` rule reached it before.",
+            "paths": [
+                "scripts/camel-pass-scan.mjs",
+                "scripts/camel-pass-keep.mjs",
+                "scripts/camel-pass-nop-patch.mjs",
+                "scripts/camel-pass-pipelines.mjs",
+                "scripts/check-process-traces.mjs",
+                "scripts/check-process-traces.test.mjs",
+                "scripts/count-graph-readers.mjs",
+                "scripts/merge-readings.mjs",
+                "scripts/selection-cases.mjs"
+            ],
+            "plans": ["feat/tools/selfchecks.plan.toml", "smoke"]
         },
         {
             "comment": "The DAP race harness that `feat/tools/load_class` drives under load. It lives in test/tools/debugger but is not one of the debugger's DAP cases: the debugger plan reached it only because the directory rule below covers the directory, and that plan is kept here so the change runs no less than it did.",
