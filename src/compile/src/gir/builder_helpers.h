@@ -301,11 +301,22 @@ inline bool walksBeforeGraph(const DraftGraphBuilder *left, const DraftGraphBuil
 /// builder writes for an operation no declaration in scope answers -- `addOperNode(type, uri)`),
 /// whose payload is the only place the name is kept until the graph is encoded.
 ///
-/// A node of any other kind stands for no operator, so the question is answered before the
-/// builder's operator-target table is asked: that table is keyed by OPER node only, and asking it
-/// of, say, a value node is asking the wrong table. Asking is not a precondition -- a node whose
-/// declaration was never resolved is an ordinary answer of `nullptr`, never a refusal
-/// (`DraftGraphBuilder::operTarget`) -- and the payload is what the other shape is named by.
+/// **This is the reader for "which operator does this name", and it answers on any node.** The
+/// empty answer is a whole answer: a node that names no operator (a port, a constant, a
+/// construction, an operation whose payload carries no body) names none, and every caller --
+/// `isCopyNode`, `constructionKindOf`, `constructionValuesOf`, `isMemberRead`, `nodeTakesAnOrder`,
+/// `isFailCall`, and `projectPart` in `builder_control.cpp`, which looks a `:op/cast` through it --
+/// is asking that question about a value it did not build and cannot have classified first.
+///
+/// So the kind and the target are asked in that order: the builder's operator-target table is keyed
+/// by OPER node only, and asking it of, say, a value node is asking the wrong table. The kind is
+/// asked first anyway, because the payload of a node of another kind is that node's own body: a
+/// construction's is a `GCFillBody`, and reading it as a `GCOperBody` would name an operator that
+/// does not exist. Asking is not a precondition either: `operTarget` answers the *resolved*
+/// declaration and answers `nullptr` for a node this builder recorded no target for -- a call a
+/// pass wrote by naming its operator's URI is never resolved by the builder of the graph it hands
+/// on (`DraftGraphBuilder`), and that shape is named by its payload. Asking the kind first is also
+/// what stopped the front end aborting once, on the first operand that was a port or a constant.
 inline std::string_view operUriOf(node_handle_t node) {
     if (node == nullptr || !nodeIsKind(node, runtime::GCNodeKind::Oper)) {
         return {};
@@ -737,8 +748,10 @@ inline bool nodeTakesAnOrder(node_handle_t node) {
     }
     const runtime::GCNodeKind kind = nodeKindOf(node);
     if (kind == runtime::GCNodeKind::Oper) {
-        // The operator of a node being built is named by its target, and by the payload when the
-        // builder wrote the call by URI alone (`operUriOf`).
+        // The operator is the target this builder recorded, or, for a call a pass wrote by URI
+        // alone, the one its payload names (`operUriOf`) -- and neither kind of operator is known
+        // until the table answers for that URI (the comment above says what an unknown operator
+        // leaves out).
         const auto id = camel::core::OperatorTable::instance().lookup(operUriOf(node));
         return id.has_value() && !camel::runtime::nodeIsFreelySchedulable(kind, *id);
     }
