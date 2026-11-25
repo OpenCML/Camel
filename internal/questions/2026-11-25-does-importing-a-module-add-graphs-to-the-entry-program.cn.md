@@ -55,3 +55,6 @@ main.cpp:779      入口程序**到这时才** encode
 ## ④ 我已经记下的、与这一问相邻的一条缺陷
 
 `introducedGraphsViolation` 读的是裸指针 `given`，而 `pass.cpp:2758-2762` 自己写着「the program the pass is given is not read once it has returned」（`settle(keep=produced)` 会把 given 从根集摘掉）。这次它是**侥幸**没被回收（探针前后同地址同尺寸），但没有任何东西 pin 它。⇒ 要让这条断言成为可信读数，应在 pass 前后快照 given 的 id 集合，或用 `ProgramHold` 住它。**这一条不依赖上面三选一，可以独立修。**
+## 决策者答（2026-11-25）
+
+**(甲)**，而且要做完，不停在只读那一半。依据：设计原则 2.3，程序没有另外的表示，程序就是它的根函数，属于程序的，是从入口经调用和静态引用能到达的图；9.2，写模块的遍名只为加载这个遍，不能改变程序。所以"解析遍名"导入的库图属于上下文，不属于入口程序。判据就用页上那条：encode 时从入口导出的 callee/static 引用，`__root__` 为库代码登记的 nested 引用不算。先做的只读计数（`graphs: 5 (+205 library)`）可以作为第一笔，用来确认判据；接着让 `stats`、`gir`/`jgir`、`fvm`/`jit` 的入口都按这个可达集合读，48 条红应当随之消失，参考值不改。(乙) 和 (丙) 都不采用，理由正如页上所说。
