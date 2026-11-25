@@ -172,9 +172,7 @@
             "paths": [
                 "test/tools/reading-normal.mjs",
                 "test/tools/reading-normal.test.mjs",
-                "test/tools/selection-docs-only.test.mjs",
-                "test/tools/time-sensitive-reader.mjs",
-                "test/tools/time-sensitive-reader.test.mjs"
+                "test/tools/selection-docs-only.test.mjs"
             ],
             "plans": ["feat/tools/selfchecks.plan.toml", "smoke", "feat/consistency/runner.plan.toml"]
         },

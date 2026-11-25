@@ -1124,6 +1124,7 @@ const KNOWN_ARGV = [
     '--compile-only',
     '--list-known',
     '--list-cases',
+    '--print-time-sensitive',
     '--selection-cases[=<file>]',
     '--selection-layer <plans>',
     '--selection-empty',
@@ -1186,6 +1187,15 @@ function parseArgs(argv) {
         // compared against; a second implementation of "which cases are in this selection" would
         // agree on the day it was written and disagree the first time a plan learned a sweep.
         listCases: false,
+        // `--print-time-sensitive` answers one question per plan file named as a target: is this
+        // plan's top-level `time_sensitive` the boolean true. It prints `<path>\t<token>` and does
+        // nothing else -- no install, no lock, no plan started, nothing written -- because its one
+        // caller is the gate that decides whether to take the host for itself
+        // (`internal/tools/camel-remote.ps1`). The token is this runner's own reading of the field,
+        // which is the point: a plan that takes the host must be the plan this runner would run as
+        // a time-sensitive one, so the answer comes from the code that loads plans and not from a
+        // second reader of the same file.
+        printTimeSensitive: false,
         // `--selection-cases <file>` runs exactly the cases a recorded selection names
         // (`{"cases": ["<plan id>/<case name>", ...]}`), instead of every case of the selected
         // plans. A case list computed from the change is only meaningful if the run executes that
@@ -1201,6 +1211,8 @@ function parseArgs(argv) {
             options.selectionEmpty = true
         } else if (arg === '--list-cases') {
             options.listCases = true
+        } else if (arg === '--print-time-sensitive') {
+            options.printTimeSensitive = true
         } else if (arg === '--selection-cases' && i + 1 < argv.length) {
             options.selectionCases = path.resolve(process.cwd(), argv[++i])
         } else if (arg.startsWith('--selection-cases=')) {
@@ -4227,6 +4239,47 @@ function refuseRecordThatNarrowsLayer(options, selection, selected) {
 }
 
 /**
+ * `--print-time-sensitive`: one row per plan file named as a target, `<path>` TAB `<token>`, where
+ * the token is what *this* reader made of the plan's top-level `time_sensitive`:
+ *
+ *   true        the field is the boolean true: this plan asks for the host to itself
+ *   false       the field is the boolean false
+ *   absent      there is no top-level `time_sensitive`
+ *   invalid     the field is there and is not a boolean; `validatePlanSchema` refuses such a plan
+ *   unreadable  the file could not be read or parsed (exit 2, with the reason on stderr)
+ *
+ * The gate that takes the host reads this and nothing else. Before the flag existed it answered the
+ * question with two regular expressions of its own over the plan's lines, so the field had two
+ * readers -- and a field that decides whether a run owns the machine cannot be read two ways: the
+ * reading that matters is the one the runner will act on, so the gate asks instead of deciding.
+ *
+ * `invalid` and `unreadable` are readings, not failures of this command: the plan they describe is
+ * one the runner will refuse. Only `unreadable` sets the exit code, because a file this program
+ * cannot open is a caller that asked about the wrong tree.
+ */
+function printTimeSensitive(options) {
+    let status = 0
+    for (const target of options.targets) {
+        const shown = relPath(target)
+        let doc
+        try {
+            doc = parseTomlFile(target)
+        } catch (error) {
+            console.log(`${shown}\tunreadable`)
+            console.error(
+                `${COLORS.red}[PLAN ERROR]${COLORS.reset} ${shown}: ${String(error && error.message).split('\n')[0]}`
+            )
+            status = 2
+            continue
+        }
+        const value = doc.time_sensitive
+        const token = value === undefined ? 'absent' : typeof value === 'boolean' ? String(value) : 'invalid'
+        console.log(`${shown}\t${token}`)
+    }
+    return status
+}
+
+/**
  * `--list-cases`: the cases this selection would run, printed as JSON rows, nothing started and no
  * install consulted. It reads the plan tree through `loadPlans`, so the `[[sweeps]]` copies, the
  * layer filter and the companion closure are the run's own; a listing that agreed with the run only
@@ -5234,6 +5287,13 @@ async function main() {
         const when = gitOutput(['log', '-1', '--format=%cI']) || 'unknown'
         console.error(`[ARGV] this tree is ${sha} (committed ${when}); a word this list lacks is newer than it`)
         process.exit(1)
+    }
+    if (options.printTimeSensitive) {
+        // A question about plan files, not a run: nothing executes, so no install is consulted and
+        // no lock is taken -- which is what lets the gate ask it before it decides to take the host.
+        const status = printTimeSensitive(options)
+        process.exitCode = status
+        return status
     }
     if (options.listCases) {
         // A question about the plan tree, not a run: nothing executes, so no install is consulted.
