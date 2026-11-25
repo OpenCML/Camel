@@ -1606,6 +1606,25 @@ try {
         $pushExit = $LASTEXITCODE
         Write-Host "[camel-remote] could not push $branch to $sshHost`:$bare (git exit $pushExit)."
         foreach ($line in $pushOutput) { if ("$line".Trim()) { Write-Host "[camel-remote]   $("$line".Trim())" } }
+        # Two gates on one branch push the same ref, and the one that loses does not have a broken
+        # branch: the staging ref was being written while this push asked for it. Measured
+        # 2026-11-25 by running two gates on this branch at once -- git answers `! [remote rejected]
+        # ... (failed to update ref)`, and the block below then explains that as a stale scratch ref
+        # and tells the reader to delete a branch. That is the wrong next step for a busy ref, and
+        # it is not a code failure either: the push is named here and takes the class of a run that
+        # did not start (4) with its reason in the verdict line, not 2 ("no reading, look at the
+        # transfer").
+        $busyPush = @($pushOutput | Where-Object {
+            "$_" -match 'failed to update ref|cannot lock ref|unable to create .*\.lock|failed to lock' })
+        if ($busyPush.Count -gt 0) {
+            Write-Host ("[camel-remote] another run is using this branch: the staging ref refs/heads/{0} was locked or moved while this push asked for it (git: {1})." -f `
+                $branch, "$($busyPush[0])".Trim())
+            Write-Host '[camel-remote] nothing was measured, so nothing is red: a run that did not start is the'
+            Write-Host '[camel-remote] same class as one that found no host slot. The branch and its ref are fine --'
+            Write-Host '[camel-remote] wait for the other run and re-run; do not delete anything.'
+            Write-Host ("[camel-remote] {0} exit 4 (another run is using this branch)" -f $name)
+            exit 4
+        }
         # The usual cause is not the network: the staging bare repository keeps one branch per
         # worktree name, and an earlier run may have left refs/heads/<branch> on a commit that is
         # not an ancestor of the one being pushed (a reset branch, a rebased scratch tree, an A/B
@@ -3428,6 +3447,11 @@ exit `$code
     $finishArmed = $false
     $lastStreamData = Get-Date
     $finishLimit = if ($FinishTimeoutSeconds -gt 0) { $FinishTimeoutSeconds } else { 0 }
+    # Which stage was running the last time the run said anything. The cutoff message names it,
+    # because "cut while the checker clang-syntax was compiling" and "the plan finished and nobody
+    # took its code" are different situations with different next steps, and one sentence has to
+    # tell them apart on its own.
+    $silentStage = 'the plan'
     $draining = $false
 
     while ($true) {
@@ -3442,7 +3466,19 @@ exit `$code
                 $streamExit = [int]$Matches[1]
                 continue
             }
-            if ($line -match '^\[SPLIT\]') { $finishArmed = $true }
+            # What has announced itself since: the stages print a header naming themselves, so the
+            # last one seen is where the run was when the silence began. `[SPLIT]` is the plan
+            # runner's last line, so what follows it is the run's tail until something else says so.
+            if ($line -match '^\[SPLIT\]') {
+                $finishArmed = $true
+                $silentStage = "the run's tail (the tree probe and the scratch removal)"
+            } elseif ($line -match '^\[camel-remote\] --- check (\S+):') {
+                $silentStage = "the checker $($Matches[1])"
+            } elseif ($line -match '^\[camel-remote\] --- (\S+):\s') {
+                $silentStage = "the $($Matches[1]) stage"
+            } elseif ($line -match '^__CAMEL_REMOTE_CHECKS_START__') {
+                $silentStage = 'the checkers'
+            }
             . $processRemoteLine $line
         }
         foreach ($line in (Read-RemoteStream $streamErrState $streamEncoder)) {
@@ -3478,8 +3514,8 @@ exit `$code
         Stop-HostProcess $streamProc
         $code = 7
         $exitUnknown = $true
-        Write-Host ("[camel-remote] {0} went silent {1} s after [SPLIT], so the session was cut; the readings above are kept and the exit code was not obtained" -f `
-            $name, $FinishTimeoutSeconds)
+        Write-Host ("[camel-remote] {0} went silent {1} s after [SPLIT] while {2} was running, so the session was cut; the readings above are kept and the exit code was not obtained" -f `
+            $name, $FinishTimeoutSeconds, $silentStage)
     } else {
         # ssh's own status is the remote command's when it exits by itself.
         $code = $streamProc.ExitCode
@@ -3981,12 +4017,21 @@ if ($Latest -and $FetchFile -ne '') {
         Write-Host ("[camel-remote] {0} exit unknown ({1}; total {2} s)" -f `
             $name, $phases, [math]::Round($sw.Elapsed.TotalSeconds))
         $unknownWhy = 'the exit code was not obtained: the run printed its summary and the session did not ' +
-            "close within $FinishTimeoutSeconds s after it. The readings above are complete and are kept; " +
-            'this run is neither green nor red (exit 7), and a merge record may name it only as exit=unknown.'
+            "close within $FinishTimeoutSeconds s after it, while $silentStage was running. The readings " +
+            'above are complete and are kept; this run is neither green nor red (exit 7), and a merge ' +
+            'record may name it only as exit=unknown.'
         Write-Host "[camel-remote] $unknownWhy"
     } else {
-        Write-Host ("[camel-remote] {0} exit {1} ({2}; total {3} s)" -f `
-            $name, $code, $phases, [math]::Round($sw.Elapsed.TotalSeconds))
+        # 4 is "this run did not start", and its two ways must not read alike: no host slot and a
+        # branch another run is using are different next steps. The tag puts the criterion in the
+        # verdict line itself, because `exit 4` printed beside `exit 1` reads like a verdict, and a
+        # reader matching `exit \d+` cannot tell a run that never started from one that came back red.
+        # 1 needs no tag (its `[SUMMARY]` is the criterion) and 7 says `exit unknown` for itself.
+        # The reason goes *inside* the one parenthesis the line already has: it is half of the same
+        # verdict, not a second remark -- two brackets in a row read as two statements.
+        $codeWhy = if ($code -eq 4 -and $run.state -eq 'noslot') { 'no host slot; ' } else { '' }
+        Write-Host ("[camel-remote] {0} exit {1} ({2}{3}; total {4} s)" -f `
+            $name, $code, $codeWhy, $phases, [math]::Round($sw.Elapsed.TotalSeconds))
     }
     exit $code
 } finally {
