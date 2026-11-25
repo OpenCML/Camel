@@ -21,7 +21,7 @@
 // removed, `split does not build this function (the value half reads the tangent of
 // parameter 0, which the forward half does not take)`.
 //
-// What the nest stops at today, measured 2026-11-21 (`std::nvm`), is one step
+// What the nest stops at today, measured on `std::nvm`, is one step
 // further on, and it is neither of those:
 //
 //     [Error]: An error has occurred: transforms: transpose has no transpose for this function: the

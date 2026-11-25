@@ -1959,7 +1959,7 @@ function summaryTotal(summary) {
  *
  * `process.stdout` is a pipe on a host run, and there the write is asynchronous: `process.exit`
  * ends the process with whatever is still queued, and the tail of the run's own output goes with
- * it. Measured 2026-11-24, three runs of one base: every one of them printed `total: 9159` and
+ * it. Measured over three runs of one base: every one of them printed `total: 9159` and
  * every one of them printed its 9159 case lines over the minutes it ran, while the `--list-known`
  * block -- the only thing printed in one tight loop, immediately before the exit -- arrived with
  * 9159 rows, 5265 rows and 1239 rows, the fewest from the slowest run. One empty write whose

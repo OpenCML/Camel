@@ -524,7 +524,7 @@ const LEGACY_NAMING_ROOTS = new Set(['lib/', 'tools/', 'include/', 'stdlib/', 'm
 // and the two the ledger reads by name. This list exists because of the shape `walkTreeFiles` used to
 // have -- `readdir` on a directory that is not there throws `ENOENT`, the catch turned that into an
 // empty list, and an empty list is exactly what a directory holding no matching file returns too.
-// Measured 2026-11-22 with `exemplars/` moved away: `412 plan files, every one of them has a
+// Measured with `exemplars/` moved away: `412 plan files, every one of them has a
 // destination` and `4216 case files, every one of them is read by code`, exit 0 -- the same two
 // lines, in the same order, about a tree the run had not read. The walk now separates the two
 // readings (see the catch below), and this list names a root that is not there before any of them.

@@ -31,7 +31,7 @@
 // rank-zero pair. A law that hands `ct` to a body read at the element writes `ct: T`; the one that
 // serves both shapes of answer writes `ct: T[...]` with a body that reads an array.
 //
-// The failure this class produces was measured on 2026-11-04: 8 of 8 runs died in
+// The failure this class produces was measured: 8 of 8 runs died in
 // `numelKernel`. That reading has two halves and this check owns the first of them:
 //
 //   * a port that disagrees with its own body. This check reports that. On 2026-11-04 the port was

@@ -549,7 +549,7 @@ $AstDrop = @(Split-CamelArgList -Values $AstDrop)
 # `test\plans\feat\trans\cml.plan.toml` is one file name containing backslashes. The plan loader
 # refuses the selection and the gate answers exit 2, but the run before that point has already
 # reported a failure for every selected case in a second or two -- which reads like six broken tests
-# and is one broken argument. Measured on 2026-11-24: a lane's six-point run came back all-red at
+# and is one broken argument. A lane's six-point run came back all-red at
 # 1s each for this reason. The refusal belongs here, before the transfer, where the argument that did
 # it is still in sight, and it names the form that works instead of translating it: a silent
 # conversion would leave the next reader writing backslashes into a path a Linux host resolves.
@@ -956,7 +956,7 @@ function Stop-HostProcess {
 # it -- is the seat's token reporter saying the host is still there, once per tick, for as long as
 # the host lives. It says nothing about what the run found, and it is printed by a process the run
 # owns: when the plan stage ends or the plan stage hangs, that reporter keeps ticking either way.
-# A deadline a heartbeat can postpone is not a deadline -- measured 2026-11-25, the pre-fix run sat
+# A deadline a heartbeat can postpone is not a deadline -- the pre-fix run sat
 # behind exactly this and its 600 s cutoff never fired, because every tick reset the clock.
 #
 # So the rule is one line wide: a keep-alive does not reset the clock, everything else does. Written

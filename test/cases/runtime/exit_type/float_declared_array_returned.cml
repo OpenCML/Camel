@@ -7,7 +7,7 @@
  * seal then declares `float` and hands on a `float[]`. Nothing about that graph is a defect of the
  * compiler: the program wrote a rewrite whose right side is not of the type of its left side.
  *
- * Measured 2026-11-04, before the seal judged every declared exit type: the run printed
+ * Measured before the seal judged every declared exit type: the run printed
  * `6.3956244425295e-310` and exited 0 -- the array's address read as a float -- because the check
  * refused only a `T?` / `T!` exit that had lost its boxed form. After: the seal refuses it, and the
  * run exits 1 with `RuntimeDiag::ExitTypeMismatch`, whose sentence names the graph, the value's

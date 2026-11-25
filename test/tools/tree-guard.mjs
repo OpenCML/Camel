@@ -54,7 +54,7 @@
  * pair of readings. Judging it again is a second verdict on the same phenomenon, and the two
  * criteria differ: the nested window closes while a file a *sibling* test wrote is still there (a
  * leak, red), and that file is gone when the outer window closes (`appeared and were gone again`, an
- * annotation). Measured on 2026-11-16: `test/.provenance-probe-3367882.tmp`, written and removed by
+ * annotation). Measured: `test/.provenance-probe-3367882.tmp`, written and removed by
  * `runner.provenance_line_names_the_artifact`, failed the nested run started by
  * `runner.tier_declared_against_started` and was an annotation in the outer run -- one gate, one
  * file, two verdicts. So the role travels in `CAMEL_TREE_GUARD`, which every run sets to `nested` for

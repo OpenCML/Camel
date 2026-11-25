@@ -69,7 +69,7 @@ case = "../../cases/perf/fib_recursive.cml"
 args = ["${timeit_inline_nvm_10}", "${case}", "${run_inline_nvm}"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-# CPU time, by the rule quoted on nvm_timeit above; measured with it on 2026-10-24 at the
+# CPU time, by the rule quoted on nvm_timeit above; measured with it at the
 # same two run lengths and the same 1-minute loads:
 #
 #   5.09 s of CPU / 13.90 s wall   (nine perf plans in one run at -Jobs 8, 32 tests)

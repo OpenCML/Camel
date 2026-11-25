@@ -37,7 +37,7 @@
  *
  * --- the whole corpus in a few processes ------------------------------------
  * The front end reads all 4,546 files the record covers, and one `hashes` process reads them in
- * 1.4-2.1 s on the build host under its usual load (measured 2026-11-25, two runs). 2 s is the line
+ * 1.4-2.1 s on the build host under its usual load, over two runs. 2 s is the line
  * the fast layer draws (`docs/test-plans.md`: a case that costs more goes to `slow`), so the list is
  * read by `--jobs` processes at once -- four by default -- and the answers are merged: the wall
  * clock is the slowest chunk's, 0.5 s measured, and the comparison sees one map as before. Nothing

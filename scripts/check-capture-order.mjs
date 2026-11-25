@@ -38,7 +38,7 @@
  * A program that does not translate gives no reading and is refused (exit 2) rather than reported:
  * a refusal read as "the documents agree" is the one answer this case must never give.
  *
- * --- what this check does NOT prove (measured, 2026-11-20, on the build host) ----------------
+ * --- what this check does NOT prove (measured on the build host) -----------------------------
  * It is a regression guard, not a proof that the walks' key is load-bearing, and the arm that was
  * asked for came back green: `walksBefore` cut to `left.epoch < right.epoch`, and then the sorts of
  * `dropCarriedVariableUnits` deleted outright (the earlier walk) both still give one

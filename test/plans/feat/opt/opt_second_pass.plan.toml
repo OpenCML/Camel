@@ -25,7 +25,7 @@
 # criterion, and a regression then hides behind whichever machine has the generous bound.
 #
 # What the numbers are, and what each one is a reading of (reference host, Release, `--jobs 1`,
-# measured 2026-11-22 with the tool's own line, `cpu_ms` against `baseline_cpu_ms`):
+# measured with the tool's own line, `cpu_ms` against `baseline_cpu_ms`):
 #
 #   `perf_fib_smoke` -- the program whose whole run is the entry's cost. The first pass over it costs
 #   207.9 ms and the second 1669.8-1673.8 ms, a ratio of 8.03-8.05 (7.85 in one run taken at load 24).

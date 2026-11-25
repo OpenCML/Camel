@@ -81,7 +81,7 @@ skip_unless_timeout_ms = 30000
 # This plan is the wall-bound exception of the sweep of the slow tier, and the rule covers
 # the case: what this entry measures is a ratio of two wall windows of one run -- the seconds a user waits
 # -- so its own CPU time cannot stand in for it, and no cpu_budget_ms is declared here. It was
-# measured on 2026-10-24 on the loaded host (32 threads, 1-minute load 85.69/91.25/84.56) anyway:
+# measured on the loaded host (32 threads, 1-minute load 85.69/91.25/84.56) anyway:
 # 63.33 s of CPU / 62.79 s of wall, the CPU being the serial side's 31.7 s plus the parallel side's
 # 32.0 s, which is what the tool prints as its two ungated child CPU numbers. The timeout below stays
 # as the bound it already describes.

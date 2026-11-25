@@ -184,7 +184,7 @@ function gateExit(number) {
  * run") is a fact about a process, and a reader had to know, from another file, that 2 means "nothing
  * was read". The summary below said "the tree agrees" beside it, so on a machine where gate 8 cannot
  * start the pointer line and the green summary composed into a coverage sentence about a file neither
- * gate had opened (measured 2026-11-25: no `python3` on the machine, gate 8 exit 2, gate 10 exit 0,
+ * gate had opened (measured: no `python3` on the machine, gate 8 exit 2, gate 10 exit 0,
  * and its summary read "4 of 5 ... the tree agrees"). `read` is that half, and the words say which of
  * the four closes this was.
  */

@@ -772,9 +772,9 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 # Measured with that reading, this plan in full at -Jobs 8 (the 1-minute load on this 32-thread host
 # read 120-129 across the window):
 #
-#   111.99 s of CPU                (2026-10-24 02:39, the slow-layer run of the batch point)
-#   121.81 s of CPU / 21.03 s wall  (2026-10-24 05:22, 136 tests, this entry red on the margin only)
-#   117.21 s of CPU / 24.97 s wall  (2026-10-24 05:30, the same plan, 136 tests, green under this
+#   111.99 s of CPU                (the first window, the slow-layer run of the batch point)
+#   121.81 s of CPU / 21.03 s wall  (the second window, 136 tests, this entry red on the margin only)
+#   117.21 s of CPU / 24.97 s wall  (the third window, the same plan, 136 tests, green under this
 #                                    budget; the run waited 210 s for a build slot, another lane)
 #
 # An 8.8% spread in the CPU figure against the wall clock, which is the neighbours'. The budget is

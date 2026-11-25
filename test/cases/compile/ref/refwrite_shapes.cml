@@ -30,7 +30,7 @@
  *       "the value is not a reference", from `state.set`. Blocked on : on the tree
  *       this change started from, a live `state::get` of a handle made OUTSIDE a loop and read inside
  *       the body already faults the same way after two rounds, so the hole is the region port of a
- *       loop body, not the rule about roots. Measured 2026-11-16; see the report.
+ *       loop body, not the rule about roots. Measured; see the report.
  */
 
 import state

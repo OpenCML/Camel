@@ -23,7 +23,7 @@ desc = "Maps and sets under collection stress: a table keeps its keys and values
 # second and 21.3-50.8 s in the third, against the 15 s that the plan-wide 60 s default timeout
 # allows, and the load is other people's work (the host's 1-minute load average read
 # 76.41/76.92/80.97, 85.69/91.25/84.56 and up to 112.8 in those three windows).
-# The twenty-four nvm, fvm and jit arms were measured at three run lengths on 2026-10-24: in
+# The twenty-four nvm, fvm and jit arms were measured at three run lengths: in
 # eleven slow plans in one run at -Jobs 8
 # (186 tests), then this plan in a run of fifteen plan files, then this plan in a run of three
 # plan files (76 tests) -- with each entry's own CPU readings beside it: 1.63x the highest of
