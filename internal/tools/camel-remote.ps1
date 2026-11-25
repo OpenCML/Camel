@@ -2409,21 +2409,77 @@ exec 5>&-
     # Anything else keeps the checkout and prints why. A failed reading is never read as "gone": the
     # cost of keeping a dead checkout is disk, and the cost of the opposite is somebody's whole run.
     #
+    # (c)'s "no process inside" is one snapshot of /proc per sweep, not two `readlink` forks per host
+    # process per candidate directory. Measured on 2026-11-25 (32 cores, 1 m load 15, 1750 host
+    # processes): one candidate cost 7.0 s, so the 40-candidate sweep this guard runs in spent four
+    # to five minutes there, its cost rose with every process anybody else started, and by the last
+    # candidate the reading judging it was minutes old. The snapshot is taken at the first candidate
+    # that needs it and ages as the sweep goes; what protects a run that entered a checkout after the
+    # snapshot was taken is not this reading but the lock the removal below takes again.
+    #
     # A single-quoted here-string: the shell's `$` must reach the host verbatim, and this fragment is
     # also what internal/tools/camel-remote-cleanup.test.ps1 extracts and runs.
     $cleanupGuard = @'
 # --- host cleanup guard: extracted and run by internal/tools/camel-remote-cleanup.test.ps1 ---
+# The one /proc reading (c2) judges every candidate by, taken once per sweep. Two passes, both
+# fork-free after the single `ls`: keep only the links whose target is under this sweep's root --
+# a handful out of thousands -- and then answer each candidate from that short list.
+# `proc_hits` is (pid directory, link name, target) in the order `ls` printed them, which is what
+# keeps the process a candidate names identical to the one the per-process loop named.
+proc_hits=()
+proc_snapshot_ms=''
+proc_snapshot_lines=0
+proc_snapshot_age_ms=''
+proc_used_by=''
+proc_snapshot_take() {
+    local root="$1" listing line path target total=0
+    if [ -n "$proc_snapshot_ms" ]; then return 0; fi
+    proc_snapshot_ms=$(date +%s%N)
+    # No `|| listing=''` here: `ls` exits 2 when any one of the several thousand operands vanished
+    # between the glob and the read, which happens on every run and says nothing about the rest. What
+    # it printed is the listing, and only a listing with no lines at all is a reading that failed --
+    # `proc_snapshot_lines` is how (c2) tells those apart, because "I could not read" and "nothing is
+    # using it" are not the same answer.
+    listing=$(LC_ALL=C ls -l /proc/[0-9]*/cwd /proc/[0-9]*/exe 2>/dev/null)
+    while IFS= read -r line; do
+        [ -n "$line" ] || continue
+        total=$((total + 1))
+        case "$line" in *' -> '*) ;; *) continue;; esac
+        target=${line##* -> }
+        path=${line% -> *}
+        path=${path##* }
+        case "$target" in "$root"/*) proc_hits+=("${path%/*}" "${path##*/}" "$target");; esac
+    done <<< "$listing"
+    proc_snapshot_lines=$total
+}
+proc_hit_for() {
+    local dd="$1" i
+    proc_used_by=''
+    for ((i = 0; i < ${#proc_hits[@]}; i += 3)); do
+        case "${proc_hits[i + 2]}" in
+            "$dd"|"$dd"/*) proc_used_by="${proc_hits[i]} ${proc_hits[i + 1]}=${proc_hits[i + 2]}"; return 0;;
+        esac
+    done
+    return 1
+}
 cleanup_host_checkouts() {
     local root="$1"
     local live="$2"
     local trusted="$3"
     local skip="$4"
     reclaimed=0
+    # The snapshot belongs to one sweep. It is reset here and not only initialized at the top of the
+    # fragment: a caller that runs two sweeps (every test of this guard does) must not have the
+    # second one judged by the first one's minutes-old reading.
+    proc_hits=()
+    proc_snapshot_ms=''
+    proc_snapshot_lines=0
+    proc_snapshot_age_ms=''
     if [ "$trusted" != 1 ]; then
         echo '[camel-remote] not removing host checkouts this run: the workstation could not say which worktrees exist, and a failed reading is not an empty one'
         return 0
     fi
-    local d dd n key lockf busy p t
+    local d dd n key lockf
     for d in "$root"/*/; do
         [ -d "$d" ] || continue
         dd="${d%/}"
@@ -2454,15 +2510,24 @@ cleanup_host_checkouts() {
         fi
         # (c2) A build, a test, or a person inside it. The executable matters as much as the
         # directory: a plan runs out/latest/bin/camel from a checkout whose cwd can be elsewhere.
-        busy=''
-        for p in /proc/[0-9]*; do
-            t=$(readlink "$p/cwd" 2>/dev/null) || t=''
-            case "$t" in "$dd"|"$dd"/*) busy="$p cwd=$t"; break;; esac
-            t=$(readlink "$p/exe" 2>/dev/null) || t=''
-            case "$t" in "$dd"|"$dd"/*) busy="$p exe=$t"; break;; esac
-        done
-        if [ -n "$busy" ]; then
-            echo "[camel-remote] keeping host checkout $n: a process is using it ($busy)"
+        #
+        # Judged from the sweep's one snapshot, not from two forks per process per candidate (see
+        # the note above the function). `ls -l` resolves every /proc/<pid>/cwd and
+        # /proc/<pid>/exe in a single process -- 3544 links in 88 ms on the host above, against
+        # 7.0 s for one candidate's per-process loop -- prints a line per link even when the link
+        # cannot be read, with no target, which is the same "cannot see it" that a failed
+        # `readlink` produced and never a match; and it sorts by name, so the process named here is
+        # the one the per-process loop named: `cwd` before `exe`, then pids in spelling order.
+        proc_snapshot_take "$root"
+        # The one answer here that the per-process loop gave differently: when the reading failed
+        # outright, that loop found no match and this guard said "not busy". A reading that could
+        # not be taken is not an empty one, so it keeps the checkout and says so.
+        if [ "$proc_snapshot_lines" = 0 ]; then
+            echo "[camel-remote] keeping host checkout $n: the host's process list could not be read, so this sweep cannot say nothing is using it"
+            continue
+        fi
+        if proc_hit_for "$dd"; then
+            echo "[camel-remote] keeping host checkout $n: a process is using it ($proc_used_by)"
             continue
         fi
         # (c3) Something in it changed within ten minutes: a run that has just handed over, or one
@@ -2490,6 +2555,12 @@ cleanup_host_checkouts() {
             echo "[camel-remote] keeping host checkout $n: a run took its lock while it was being removed"
         fi
     done
+    # How old (c2)'s reading was when the last candidate was judged by it. A snapshot that decides
+    # every candidate in a sweep has to say how stale it got; this is that number, and
+    # camel-remote-cleanup-sweep-cost.test.ps1 is what reads it.
+    if [ -n "$proc_snapshot_ms" ]; then
+        proc_snapshot_age_ms=$(( ($(date +%s%N) - proc_snapshot_ms) / 1000000 ))
+    fi
 }
 # --- end host cleanup guard ---
 '@
