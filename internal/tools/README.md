@@ -38,6 +38,7 @@ work that is not a full gate run and hold a machine-wide lock so two of them can
 | `camel-cleanup.sh` | The cleanup door: a run's temporaries live under `~/camel-work/tmp/<lane>-<time>/` and are judged by the manifest the run wrote when it created them. `rm` accepts a path only when it is under that root **and** in a manifest. |
 | `camel-cleanup.test.ps1` | Its test: the six readings against a fake home (never the real one). `pwsh -NoProfile -File internal/tools/camel-cleanup.test.ps1 -BashHost <alias>`. |
 | `camel-gate.example.json` | The shape of the local settings file, placeholders only. |
+| `camel-remote-cleanup-sweep-cost.test.ps1` | The price of the sweep's "is any process inside this checkout" reading, and the four ways a process can be inside one. `cleanup_host_checkouts` used to answer it with two `readlink` calls per host process per candidate, so a candidate cost the host's process count times two forks and a sweep cost that times its candidates: 7.0 s per candidate and 290 s for forty on 2026-11-25 (~1780 processes), which left the reading that judged the last candidate minutes old. It is now one `ls -l /proc/*/cwd /proc/*/exe` per sweep (3544 links in 88 ms). The test shims `readlink` and `ls` on PATH and counts them: **0** readlink calls and **1** `ls` for seven candidates and for four alike, while a process in the cwd, in a subdirectory and in an executable is still named, `cand-1`'s process does not reach `cand-10`, a process that has exited stops being named, and a process list that could not be read keeps the checkout instead of reading as "nothing is using it" (21 checks). `pwsh -NoProfile -File internal/tools/camel-remote-cleanup-sweep-cost.test.ps1 -BashHost <alias>`. |
 | `red-table.mjs` | Regenerates `internal/reports/<date>-develop-reds.cn.md`, the table of what is red on `develop`, from the recorded readings alone — it starts no build and no test, and takes about 6 seconds. `--tsv <file>` writes the same rows with a header stating the `tip`, `jobs`, `load` and `tier` it was taken at; `--diff <a.tsv> <b.tsv>` compares two such tables and **refuses (exit 2, "not directly comparable")** when their `jobs`/`load`/`tier` differ instead of listing every row as `new`. In a red table `fixed` means **"this red no longer appears"**, not "this case was repaired" — a table of reds cannot tell repaired from deleted, and `--cases <list>` is what separates the two (`removed`). `red-table.md` says what each of its seven columns may and may not claim. |
 | `red-table-context.mjs` | The header, the whole-name reader and the comparison behind `--tsv`/`--diff`: a verdict line's case name is taken whole (never `\S+`, which truncated the ten names with spaces into `removed`), and unknown `jobs`/`load` refuses a comparison rather than passing silently. |
 | `red-table-context.test.mjs` | Its test: `node internal/tools/red-table-context.test.mjs` prints `20/20 checks passed` and exits 1 on a failure. Covers the header round trip, the changed-not-removed case for a name with spaces, fixed-vs-removed with and without a `--cases` inventory, and the two refusals (different `jobs`, quiet-vs-loaded host), including the CLI wiring. |
@@ -300,6 +301,16 @@ The host sweep applies the same idea to the persistent checkouts: it removes one
 `~/camel-work/.records/<name>` exists, on top of the three liveness readings it already took (a free
 per-checkout lock, no process inside, nothing written in ten minutes). A checkout with no record is
 named and left, and `-Clean` is the explicit way to reclaim it.
+
+"No process inside" is one snapshot of `/proc` per sweep — one `ls -l /proc/*/cwd /proc/*/exe`, which
+is 3544 links in 88 ms on the build host — not two `readlink` forks per host process per candidate
+directory. The old shape made one candidate cost the host's process count times two forks: 7.0 s per
+candidate and 290 s for a forty-candidate sweep on 2026-11-25, rising with every process anyone else
+started, and stale enough by the last candidate that the reading was minutes old. The snapshot is
+taken at the first candidate that needs it; a sweep whose process table cannot be read at all keeps
+every checkout and says so, rather than reading "I could not look" as "nothing is using it". What
+keeps a run that entered a checkout after the snapshot is not the reading but the per-checkout lock,
+which the removal takes again.
 
 ## The token pool: one process, one token
 
