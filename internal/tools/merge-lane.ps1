@@ -1844,15 +1844,41 @@ try {
             Write-Host ("  no baseline for develop {0}: measuring it there, in a worktree at {1} on the gate's own branch" -f `
                 $developTip.Substring(0, 9), $baselinePath)
             $seedStarted = Get-Date
-            # The same change, read from the other end: the seeding run lists it with `git diff
-            # --name-only` against `-ChangedBase`, taken in the baseline tree, so the base has to be the
-            # MERGE COMMIT. The files that differ between the merged tree and the baseline tree are
-            # exactly the files this merge changes; a diff against the lane head also names the lane's
-            # own files, because those two trees differ by more than the merge -- measured as
-            # `smoke`-plus-`docs.links` (31 cases) where the merge selected `docs.links` (21), and the
-            # comparison then refused, correctly, as two runs of different things.
-            $seedRun = @(& pwsh -NoProfile -File (Join-Path $toolRoot 'internal\tools\camel-remote.ps1') `
-                -Path $baselinePath -Changed -ChangedBase $comparedTree -ListKnown -NoGpuWatch 2>&1)
+            # The selection has to be the one the merged tree's run made, not merely "the same change"
+            # read by another selector. `-Changed` here asked `camel-remote.ps1`'s own selector, which
+            # resolves directory rules to whole directories, while the merged run asked
+            # `test.js --changed --list`, which lists plans -- and the two disagreed by 1509 cases
+            # (`test/plans/feat/opt/**` plus `lit2.*` and `defun` on one side only), so the comparison
+            # refused with "the two runs selected differently" and no reading could be taken for a
+            # merge whose trees were both perfectly readable. The plan set the merged run used is
+            # already in `$planTargets`; the seeding run is given exactly it.
+            $seedTargets = @($planTargets)
+            # A plan file the merge *adds* exists on the merged tree and nowhere else: asking the
+            # first parent's checkout for it fails the whole seeding run (ENOENT), which says nothing
+            # about the trees. Those targets are dropped here -- their cases are `added` in the
+            # comparison, which is what a case that did not exist before the merge is.
+            $absent = @($seedTargets | Where-Object { -not (Test-Path -LiteralPath (Join-Path $baselinePath ($_ -replace '/', '\'))) })
+            if ($absent.Count -gt 0) {
+                $seedTargets = @($seedTargets | Where-Object { $absent -notcontains $_ })
+                Write-Host ("  seeding without {0} plan target(s) this merge adds, which the first parent's tree does not have: {1}" -f `
+                    $absent.Count, ($absent -join ', '))
+            }
+            if ($seedTargets.Count -gt 0) {
+                # `-File` binds one value to `-Plan` and treats the second target as a positional
+                # argument, so the array has to be written into a command: this is the only form that
+                # gives the child the plan set as a set. A target is a repository path (no quotes in
+                # it); each is single-quoted here and every quote inside one is doubled.
+                $quoted = @($seedTargets | ForEach-Object { "'" + ("$_" -replace "'", "''") + "'" }) -join ','
+                $camelCommand = "& '" + (Join-Path $toolRoot 'internal\tools\camel-remote.ps1') + "' -Path '" +
+                    ($baselinePath -replace "'", "''") + "' -ListKnown -NoGpuWatch -Plan @(" + $quoted + ")"
+                $seedRun = @(& pwsh -NoProfile -Command $camelCommand 2>&1)
+            }
+            else {
+                # No selection to copy (the merged run widened, or listed nothing): fall back to the
+                # change-driven selector rather than measure no plan at all.
+                $seedRun = @(& pwsh -NoProfile -File (Join-Path $toolRoot 'internal\tools\camel-remote.ps1') `
+                    -Path $baselinePath -Changed -ChangedBase $comparedTree -ListKnown -NoGpuWatch 2>&1)
+            }
             $seedExit = $LASTEXITCODE
             $seedSeconds = ((Get-Date) - $seedStarted).TotalSeconds
             [System.IO.File]::WriteAllText($seedTranscript,
@@ -1925,8 +1951,20 @@ Write-Host "STOPPED: the baseline could not be measured (exit 2, no reading take
     # and once, after the push, to store this commit's own reading as the baseline for the next
     # merge -- so the plan runs once and both readers read the same run.
 $transcript = Join-Path ([System.IO.Path]::GetTempPath()) ("camel-merge-rows-$PID.txt")
-    $rowsRun = @(& pwsh -NoProfile -File (Join-Path $toolRoot 'internal\tools\camel-remote.ps1') `
-        -Path $MainCheckout -Changed -ChangedBase $developTip -ListKnown -NoGpuWatch 2>&1)
+    if ($planTargets.Count -gt 0) {
+        # The same plan set, named the same way, as the baseline seeding run below: `-Changed` applies
+        # the runner's tier rules to a plan file, `-Plan` runs the file whole, and the two sides then
+        # measured 8 different cases (`parse.frontend` and `docs.links`) for one merge whose trees were
+        # both readable. The set was computed once above; both runs are given it.
+        $rowsQuoted = @($planTargets | ForEach-Object { "'" + ("$_" -replace "'", "''") + "'" }) -join ','
+        $rowsCommand = "& '" + (Join-Path $toolRoot 'internal\tools\camel-remote.ps1') + "' -Path '" +
+            ($MainCheckout -replace "'", "''") + "' -ListKnown -NoGpuWatch -Plan @(" + $rowsQuoted + ")"
+        $rowsRun = @(& pwsh -NoProfile -Command $rowsCommand 2>&1)
+    }
+    else {
+        $rowsRun = @(& pwsh -NoProfile -File (Join-Path $toolRoot 'internal\tools\camel-remote.ps1') `
+            -Path $MainCheckout -Changed -ChangedBase $developTip -ListKnown -NoGpuWatch 2>&1)
+    }
     $rowsExit = $LASTEXITCODE
     # Byte for byte, without a BOM and with LF: the comparer splits on `\n` and matches the markers
     # exactly, and a transcript written by `>` in PowerShell would be UTF-16.
