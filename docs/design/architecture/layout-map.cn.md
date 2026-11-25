@@ -59,7 +59,7 @@
 | `editors/` | — | — | 留 | 编辑器扩展；语言服务器本身在 `tools/lang-server/` |
 | `examples/` | — | — | 留 | 用户程序 |
 | `exemplars/` | — | — | 留 | 用户程序 |
-| `export_matrix.csv` | — | — | 留 | 生成物，索引页 |
+| `export_matrix.csv` | — | — | 留 | 生成物，索引页；按 R7 **不入库、生成到 `out/`**，根下已无副本 —— 这一行是第一次搬家前根下那一份的记录 |
 | `hello.cml` | — | — | 留 | 仓库根的示例程序 |
 | `include/` | 拆到表 B | 各块 | 搬 | 拆完顶层不再有 `include/`（U10、U11 定了内核公开头进 `kernel/include/`） |
 | `internal/` | — | — | 留 | 构建与闸门 helper，不是独立程序（第 9 节的 `tools/` 指命令行、调试器、语言服务器） |
