@@ -1922,6 +1922,15 @@ try {
             # merge whose trees were both perfectly readable. The plan set the merged run used is
             # already in `$planTargets`; the seeding run is given exactly it.
             $seedTargets = @($planTargets)
+            # The seeding run is measured by the gate of the tree it measures. A backfill's baseline
+            # can be old enough that its runner has never heard of a subcommand this checkout's gate
+            # asks every tree for (`--print-time-sensitive` arrived with the time-sensitive rework,
+            # 9e369c01d): asking ee34a1d66's runner for it stops the seeding run with "unknown option
+            # -- the caller is newer than this tree", which is a fact about the caller and not about
+            # the tree. The tree under measurement brings its own gate, exactly as it brings its own
+            # runner -- the reading is the snapshot's, taken by the rules in force at that snapshot.
+            $seedGate = Join-Path $baselinePath 'internal\tools\camel-remote.ps1'
+            if (-not (Test-Path -LiteralPath $seedGate)) { $seedGate = Join-Path $toolRoot 'internal\tools\camel-remote.ps1' }
             # A plan file the merge *adds* exists on the merged tree and nowhere else: asking the
             # first parent's checkout for it fails the whole seeding run (ENOENT), which says nothing
             # about the trees. Those targets are dropped here -- their cases are `added` in the
@@ -1938,14 +1947,14 @@ try {
                 # gives the child the plan set as a set. A target is a repository path (no quotes in
                 # it); each is single-quoted here and every quote inside one is doubled.
                 $quoted = @($seedTargets | ForEach-Object { "'" + ("$_" -replace "'", "''") + "'" }) -join ','
-                $camelCommand = "& '" + (Join-Path $toolRoot 'internal\tools\camel-remote.ps1') + "' -Path '" +
+                $camelCommand = "& '" + $seedGate + "' -Path '" +
                     ($baselinePath -replace "'", "''") + "' -ListKnown -NoGpuWatch -Plan @(" + $quoted + ")"
                 $seedRun = @(& pwsh -NoProfile -Command $camelCommand 2>&1)
             }
             else {
                 # No selection to copy (the merged run widened, or listed nothing): fall back to the
                 # change-driven selector rather than measure no plan at all.
-                $seedRun = @(& pwsh -NoProfile -File (Join-Path $toolRoot 'internal\tools\camel-remote.ps1') `
+                $seedRun = @(& pwsh -NoProfile -File $seedGate `
                     -Path $baselinePath -Changed -ChangedBase $comparedTree -ListKnown -NoGpuWatch 2>&1)
             }
             $seedExit = $LASTEXITCODE
