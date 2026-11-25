@@ -1645,6 +1645,30 @@ function plainStatusLine(line) {
     return line.replace(/\x1b\[[0-9;]*m/g, '')
 }
 
+/**
+ * The plan file a `[[sweeps]]` copy's case was written in, as one detail line, or null for a test
+ * the plan declares itself.
+ *
+ * A copy belongs to the plan that runs it -- `meta.json`'s `plan_path`, the log directory and the
+ * cost reading are the sweeper's, and they are right to be: the sweeper is what started the run.
+ * Its name carries the source plan too (`<sweep>:<source plan id>:<test>`), and that is where the
+ * reader was left: the verdict line and the `[PLAN]` header above it name the sweeper, which holds
+ * no such test, so a red sent a person to a file that never wrote the case. The plan file is the
+ * one thing a name cannot carry -- the id is not the path, and a plan with no `id` gives a
+ * basename that several plans share -- so it is printed here, under the verdict, in the shape the
+ * runner already uses when a plan's *own* file is what is wrong (`[INFO] runner error: <plan
+ * file>: ...`). Both readings then answer "which file does this red belong to", and they answer
+ * with different files.
+ *
+ * Not printed for a passing copy: a green case sends nobody anywhere, and the fast layer's
+ * sampled copies would each grow a second line for a puzzle no one is solving.
+ */
+function sweepSourceLine(test) {
+    const source = test.__sweepSource
+    if (!source) return null
+    return `source plan: ${planLabel(source.plan_path)}`
+}
+
 function printDetailLines(lines) {
     for (const line of lines) {
         const shortKv = line.match(/^([^:]{1,24}):\s+(.+)$/)
@@ -4875,6 +4899,10 @@ async function executePlans(plans, options, sharedVars, logDir) {
         if (outcome.status === 'skip') {
             summary.skip++
             transcript.caseLine(printStatusLine('skip', test.name))
+            // Where the case came from, before why it did not run: a skip count is read per plan,
+            // and for a copy the plan a reader would open is the sweeper's.
+            const source = sweepSourceLine(test)
+            if (source) printDetailLines([source])
             printDetailLines([outcome.reason])
             return
         }
@@ -4893,6 +4921,13 @@ async function executePlans(plans, options, sharedVars, logDir) {
             else if (outcome.result.signal) summary.crashed++
         }
         transcript.caseLine(printStatusLine(outcome.status, test.name, outcome.metric))
+        // The file this red belongs to, printed beside the red: the verdict line and the header
+        // above it name the sweeper that ran the copy, and a reader who opens the sweeper finds
+        // no such test. See `sweepSourceLine`.
+        if (outcome.status !== 'pass') {
+            const source = sweepSourceLine(test)
+            if (source) printDetailLines([source])
+        }
         // Who ends this red, printed beside the red. An owner that exists only in the plan file is a
         // promise the person reading the gate never sees, and the field would then be read by
         // nothing but the load-time check -- which is the shape this project already called worse
