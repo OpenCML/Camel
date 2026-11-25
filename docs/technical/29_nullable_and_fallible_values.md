@@ -19,8 +19,8 @@ language author. Each is implemented the way section 10 recommends and marked in
 | `x -> f`, `x: T?` or `T!` that no overload of `f` takes whole | `BRCH` on the tag of `x`; arm 0 hands the null or the error on, arm 1 calls `f` with the value |
 | `match x { case null => A  case v => B }` | the same `BRCH`; arm 0 is `A`, arm 1 binds `v` and is `B` |
 | `match r { case error e => A  case v => B }` | the same `BRCH`; arm 0 binds `e` and is `A`, arm 1 binds `v` and is `B` |
-| `return e` (an error value) | the exit of the graph, exactly where any `return` puts it; the value is the failed form of the declared `T!` (`OPER`, `CAST`) |
-| `v as T?`, and a value that enters a `T?`/`T!` position by itself (an argument, an annotated `let`, an array element, a branch arm, `return`) | a `CAST` node per level |
+| `return e` (an error value) | the exit of the graph, exactly where any `return` puts it; the value is the failed form of the declared `T!` (`OPER :op/tag_throw`, then the `:op/cast` call) |
+| `v as T?`, and a value that enters a `T?`/`T!` position by itself (an argument, an annotated `let`, an array element, a branch arm, `return`) | a call of `:op/cast` (an `OPER` node) per level |
 | `try`/`catch` | nothing: a diagnostic |
 
 Section numbers below: 2 the tag, 3 the nodes, 4 types, 5 `try`, 6 faults, 7 passes, 8
@@ -80,14 +80,16 @@ Why this is acceptable under the constraints:
 - **Backends, GC, JIT, exporters and autodiff need no change**, which was the stated goal.
   `null` is the null slot, which every traced slot may already hold.
 
-The cost is one allocation when a value enters the form (`CAST`), and one indirection when it
+The cost is one allocation when a value enters the form (`:op/cast`), and one indirection when it
 is taken out. `null` itself allocates nothing. A later optimisation may leave reference
 payloads unboxed in `T?`; it would change the two operators of section 3 and nothing on the
 graph.
 
 ## 3. The nodes
 
-Three things happen to a value of these forms, and each is an existing node kind.
+Three things happen to a value of these forms: reading the tag and choosing a path are existing
+node kinds; putting a value into the form is a call of `:op/cast`, an `OPER` node like any other
+operator call.
 
 **Reading the tag and the parts: `OPER`.** Six built-in operators
 (`lib/std/builtin/operators/tagged.cpp`, group names are reserved identifiers):
@@ -114,7 +116,7 @@ the reader could not tell a slot that was never written from one that holds zero
 2026-11-18, `96714f465`; the reasoning is
 `internal/reviews/2026-11-18-unwrapping-a-nullable-state-slot.cn.md`).
 
-**Putting a value into the form: `CAST`.** `TupleType::castSlotFrom` allocates the box.
+**Putting a value into the form: a call of `:op/cast`.** `TupleType::castSlotFrom` allocates the box.
 Allowed conversions (`castSafetyFrom`): `T -> T?`, `T -> T!`, `U! -> T!` for the failed case (compiler-made only, the error arm
 of `->`), and `null -> T?` (the null slot; nothing is allocated).
 
@@ -147,7 +149,7 @@ call with `x` first, in an arm that is dropped afterwards (`Builder::visitPipeLi
 the other arguments of the call are built, and run, once.
 
 Otherwise (`Builder::peelPipeReceiver`) the branch is on the tag of `x`. Arm 1 is the call
-`f(value-of(x))`; if `f` returns a plain `U` the arm ends in a `CAST` to `U?` (`U!`), and a
+`f(value-of(x))`; if `f` returns a plain `U` the arm ends in a `:op/cast` call to `U?` (`U!`), and a
 `U` that already has that form is kept. Arm 0 hands the null on (a null cast to the result
 type) or the error (`x` cast to `U!`: an error box has no payload). The result is `U?` or
 `U!`. A value tagged twice (`T?!`) is taken apart one tag at a time: the call in arm 1 sees
@@ -174,13 +176,13 @@ there `case null`, `case error e` and a binding case are errors.
 g:
   OPER :op/error_new   : Error   <- "K", "m", "file.cml:9:11"
   OPER :op/tag_throw   : void!   <- OPER :op/error_new
-  CAST                 : int!    <- OPER :op/tag_throw
-  EXIT                           <- CAST
+  OPER :op/cast        : int!    <- OPER :op/tag_throw
+  EXIT                           <- OPER :op/cast
 ```
 
 `T!` is the declared return type of the function the statement belongs to (looking out of
 branch arms; a lambda is a function of its own). `__throw__` makes the failed value, the
-`CAST` gives it the declared type; both are the same object. It is not a jump: like any other
+`:op/cast` gives it the declared type; both are the same object. It is not a jump: like any other
 `return`, it gives the value of the body (or of the branch arm) it stands in.
 
 `error(kind, message)` builds an `Error`; the compiler appends the source position of the
@@ -218,22 +220,22 @@ function or union payload).
     with another payload does not enter (`int?` is not put into `float?`).
   - `joinTypes(a, b)`: the type two arms or two elements have in common: what they unify
     to, else the one the other enters, else (one of them being `null`) the other, nullable.
-- On the graph every level is a `CAST` node, the one `v as T?` gives; the GIR builder adds it
-  (`Builder::coerceTo`). The positions:
+- On the graph every level is a call of `:op/cast` (an `OPER` node), the one `v as T?` gives; the
+  GIR builder adds it (`Builder::coerceTo`). The positions:
 
   | Position | Where |
   |---|---|
-  | argument of a function, a function value, a decorated or a generic function | `visitLinkNode`: the callee is first tried with the argument types as they are, so an exact overload wins, then with each entering argument counted as its parameter's type (`enteringTypes`); the CASTs are added once the callee is known (`enterParameters`) |
+  | argument of a function, a function value, a decorated or a generic function | `visitLinkNode`: the callee is first tried with the argument types as they are, so an exact overload wins, then with each entering argument counted as its parameter's type (`enteringTypes`); the `:op/cast` calls are added once the callee is known (`enterParameters`) |
   | annotated `let`, `as` | a GCT `CAST` as before; `visitCastNode` adds the levels a single conversion does not cover |
-  | array literal with a known element type (`let xs: (int?)[] = [1, null]`, `[...] as (int?)[][]`) | GCT `visitDataInto`: every element is the value under a `CAST` to the element type, recursively for nested literals |
+  | array literal with a known element type (`let xs: (int?)[] = [1, null]`, `[...] as (int?)[][]`) | GCT `visitDataInto`: every element is the value under a `:op/cast` to the element type, recursively for nested literals |
   | array literal without one, with a `null` among its elements (`[1, null, 3]`, `[x, null]`) | GCT `visitArrayData` leaves every element computed; `visitDataNode` joins the element types and puts the elements that are not of the joined type into it |
-  | branch arms (`if`, `match`) | `buildBranch`: the join type is `joinTypes` of the arms; an arm that is not of it gets the CAST at its exit (`coerceArmExit`), added to the arm's own graph |
+  | branch arms (`if`, `match`) | `buildBranch`: the join type is `joinTypes` of the arms; an arm that is not of it gets the `:op/cast` at its exit (`coerceArmExit`), added to the arm's own graph |
   | `return v` under a declared `T?`/`T!` | `adaptExitValue` |
 
 - An argument of a built-in operator is not such a position: an operator's parameter types
   are computed from the argument types by its C++ resolver, so there is no target type before
   the resolver has accepted the arguments.
-- `null` is the literal of every `T?`. On the graph it is the constant `null` under a `CAST`.
+- `null` is the literal of every `T?`. On the graph it is the constant `null` under a `:op/cast`.
   Its type is `void`, and a `void` expression that is not the literal is treated the same
   (Q11).
 - The empty literal `[]` (type `void[]`) is given the element type of its position by the
@@ -290,7 +292,7 @@ Nothing in a pass, a backend or an exporter mentions the two forms. What they me
 
 - `BRCH`/`JOIN` with two subgraph arms and a `bool` condition: an `if`;
 - `OPER` nodes of pure built-in operators;
-- `CAST` nodes whose target is a tuple type (`std::cxx::fold` folds a `CAST` between
+- calls of `:op/cast` whose target is a tuple type (`std::cxx::fold` folds a `:op/cast` between
   primitive types only, so these stay in the graph);
 - values whose type is a tuple type.
 
@@ -321,7 +323,7 @@ operator's name (`<parse_int>`), as an operator does not know its call site.
 ## 9. A defect met in a pass
 
 Not caused by this work, and not fixed (the optimisation passes are being repaired on other
-lines). `tryResolveStaticValue` (`kernel/runtime/draft_inline.cpp`) looks through a `CAST` node
+lines). `tryResolveStaticValue` (`kernel/runtime/draft_inline.cpp`) looks through a `:op/cast` call
 to the constant under it and takes that constant, unconverted, as the value of the argument
 when a callee is specialised on a constant argument. Any conversion of a constant is
 affected, with or without the tagged forms:

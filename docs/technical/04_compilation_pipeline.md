@@ -52,7 +52,7 @@
 - **GIR Builder**（`compile/src/gir/builder.cpp`）遍历 GCT，生成 **GraphIR** 命名空间下的 **Graph** 与 **Node**。
 - 每个 GCT `NodeKind` 对应一个 `visitXxxNode`：递归访问子节点、创建 GIR 节点、用 `Node::link(LinkType, from, to)` 建立边。
 - 典型模式：单子节点（如 ACCS、CAST、VARI）访问 `gct->at(0)` 得到值节点，创建目标 GIR 节点后以 `Norm` 边连接 `valueNode → targetNode`。
-- 每个函数体对应一个 **Graph**，内含 **Node**（DATA, PORT, OPER, CALL, FUNC, BRCH, JOIN, EXIT, CAST 等）及 Norm/With/Ctrl 边。
+- 每个函数体对应一个 **Graph**，内含 **Node**（DATA, PORT, OPER, CALL, FUNC, BRCH, JOIN, EXIT 等）及 Norm/With/Ctrl 边；转换与拷贝不是节点种类，它们是 `:op/cast` / `:op/copy` 的调用，由 `OPER` 节点承载。
 - 子函数对应子图，通过 `Graph::addSubGraph` 等与根图关联。
 - 源码映射不再停留在 AST tokenRange，而是通过 `SourceContext / OriginTable / DebugMap` 继续传播到 GCT、GIR、bytecode 与 runtime。详见 `10_source_mapping_and_debug_locations.md`。
 

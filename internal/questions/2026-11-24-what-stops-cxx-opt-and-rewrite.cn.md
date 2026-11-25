@@ -186,7 +186,7 @@ git grep -cE '\bGCGraph\b|\bGraphDraft\b' <rev> -- src/stdlib/rewrite
 
 两者只在一个输入上分岔：**一个存储的 OPER 节点，`GCOperBody.oper` 恰好是 `kNoOper`**。这时旧的会问 `mayBeRecomputed(kNoOper)`，新的直接答 false。`mayRecomputed(kNoOper)` 是不是 true 没有断言钉住；而一个 OPER 节点带 `kNoOper` 在今天的构建里要么不发生、要么是真缺陷。**这一处要一行：谁确认「存储的 OPER 的 oper 永不为 kNoOper」，这一行就能迁。**
 
-**顺带核过、没有缺陷**：我原以为 `mayMerge` 在 `:193` 对每个节点调 `isPureOperNode`，会让 CAST/COPY/FILL/ACCS 的载荷被当成 `GCOperBody` 读（`graph_view.h` 记着这是一条真的误读）。**不成立**：那四种在存储里是**自己的 kind**（`GCNodeKind::Fill` 等），`node->kind == GCNodeKind::Oper` 先短路了。折叠成 `Oper` 是**视图**做的事，不是存储。所以 `isPureOperNode` 在旧面上没有误读。
+**顺带核过、没有缺陷**：我原以为 `mayMerge` 在 `:193` 对每个节点调 `isPureOperNode`，会让 CAST/COPY/FILL/ACCS 的载荷被当成 `GCOperBody` 读（`graph_view.h` 记着这是一条真的误读）。**不成立**：`FILL`、`ACCS` 在存储里是**自己的 kind**（`GCNodeKind::Fill` / `GCNodeKind::Accs`），`node->kind == GCNodeKind::Oper` 先短路了；`CAST`/`COPY` 今为 `:op/cast`/`:op/copy` 的调用、由 `OPER` 节点承载，载荷本来就是 `GCOperBody`，也没有这一误读（本页写作时 GIR 导出的 kind 列还印这两个词，见 `af3c6c9bdd`）。折叠成 `Oper` 是**视图**做的事，不是存储。所以 `isPureOperNode` 在旧面上没有误读。
 
 ### `cxx/opt/generic/rewrite.{h,cpp}` —— 剩 15
 
