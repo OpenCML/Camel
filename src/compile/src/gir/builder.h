@@ -83,6 +83,27 @@ class Builder {
         FunctionType *expected = nullptr);
 
     compile_graph_ptr_t rootGraph() const { return rootGraph_; }
+
+    /// Records what the program is made of: the root graph's subgraphs as this build left them,
+    /// by identity. Called at the end of a build that calls an entry (`buildProgram`,
+    /// `buildLibraryEntry`), which is the last moment the program's composition is the build's.
+    ///
+    /// A module declared into this builder *after* that build is another program's: a pass the
+    /// pipeline loaded (`UserDefinedModule::compileAsProgram` declares the module into a builder
+    /// of its own, but the operator definitions its tool needs are built here), the definition
+    /// library of an operator, an instance of a generic rule built where the rule is applied.
+    /// Each of those makes graphs on this root graph, and the program whose builder this is must
+    /// not take them: one builder serves one program (design principles 10.1), and a program's
+    /// composition is what its build linked.
+    void freezeProgram();
+
+    /// Puts the root graph back to what `freezeProgram` recorded, erasing the subgraphs added
+    /// since. Answers false when no build of this builder froze a program. The one reader that
+    /// runs after a program build -- the encoding of the entry program
+    /// (`SourceModuleFrontEnd::encodeProgram`) -- asks for it, so that the program it encodes is
+    /// the one the compiler built.
+    bool pruneToTheProgram();
+
     /// Why a generic entry function has no instance for the type it was asked for.
     const std::string &libraryEntryProblem() const { return libraryEntryProblem_; }
 
@@ -395,6 +416,10 @@ class Builder {
     GCT::Tree *tree_ = nullptr;
     compile_graph_ptr_t rootGraph_;
     compile_graph_ptr_t currGraph_;
+    // The program's composition as its build left it (`freezeProgram`), by identity, and whether a
+    // build recorded one at all.
+    std::vector<compile_graph_ptr_t> programGraphs_;
+    bool programFrozen_ = false;
     // The function the root graph calls, when the build is a library used as a program of its
     // own (buildLibraryEntry); empty for a program, whose entry is `main`.
     std::string libraryEntryFunction_;
