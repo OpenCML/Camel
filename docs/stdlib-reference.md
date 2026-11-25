@@ -8223,27 +8223,17 @@ The forward rule of `/` on two 64-bit floats.
 - Written in Camel: a subgraph, pure when the functions passed to it are.
 - Example: `div_jvp(6.0, 2.0, (1.0, 0.25))` gives `(3.0, 0.125)`
 
-### The extents a reduction's or a gather's adjoint spreads over
+### The forward rule of `sum_to`
 
-Each of the three laws below is linear in its data, so its tangent is the same operation on the
-tangents -- and the adjoint of that operation gives one cotangent back to every element the
-operation consumed. That is `shape(xs)` of them, a value of the primal which the tangent does not
-carry, so the **linear call states it**: one known actual argument beside the tangent, and the law
-that answers it (`lib/rulesets/transpose.cml`, `sum_stated_t` and its two neighbours) reads
-that argument and nothing of the operand the cotangent comes back through. A transpose law may
-read only known operands, and `T[...]` carries no extents in
-its type (design principles 5.4). `jvp_idx_arr` below is the same arrangement for a read, and
-`tensor.pick_at` is the operator it states a length to.
+`sum_to(t, at)` is the reduction a broadcast's adjoint makes, and it is an *exported* operator
+(`src/stdlib/tensor.cml#sum_to`), so a program can write it and a lift of that program needs a
+forward rule like any other. It is linear in `t` -- the extents are an operand of their own and
+the sum of a tangent is the tangent of the sum -- so the law is the operator applied to the
+tangent, with the extents handed over unchanged.
 
-The extents do not ride inside one integer list with the axis and the flag, although the
-transpose walk refuses an operator with a third *tensor* operand (`skip=arity
-uri=tensor:mean_axis operands=3`): the
-stated reductions take their axis, their flag and their extents as three parameters
-(`lib/tensor/tensor.cml`, `tensor:sum_axis_stated` and its four neighbours), the walk hands the law a
-node with five operands, and the laws read them by name. The plain axis form does not need the
-list either: with the axis and the flag in angle brackets it carries one normal operand and two
-context ports (`sum<axis, keepdims>(xs)`), under the count the walk holds. A list would need a function to build it, and nothing builds a
-list for a call's arguments: every one of those parameters is a parameter of its own.
+The engine's table answers it too (`lib/tensor/ops/gradient_ops.cpp#sumToVjp`), so the key is one
+both halves must have; the reverse half is `rulesets/transpose.cml#sum_to_t`, and its answer is
+the operator this one's forward rule runs backwards.
 
 #### `reshape_jvp`
 
