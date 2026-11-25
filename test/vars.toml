@@ -12,8 +12,11 @@ run_prl = ["std::prl"]
 run_inline_nvm = ["std::cxx::inline", "std::nvm"]
 run_inline_fvm = ["std::cxx::inline", "std::fvm"]
 run_inline_jit = ["std::cxx::inline", "std::jit"]
-run_inline_gir = ["std::cxx::inline", "std::gir"]
-run_inline_rgir = ["std::cxx::inline", "std::rgir"]
+# `std::gir` / `std::rgir` hand the graph on, so an inline dump entry that ends there leaves a
+# non-empty graph and the fallback `std::nvm` runs the program after the dump. `std::nop` returns the
+# empty graph, so the run prints the dump and nothing else.
+run_inline_gir = ["std::cxx::inline", "std::gir", "std::nop"]
+run_inline_rgir = ["std::cxx::inline", "std::rgir", "std::nop"]
 
 timeit_json = ["--output-format", "json"]
 timeit_nvm_10 = ["--timeit", "std::nvm/10", "--output-format", "json"]
