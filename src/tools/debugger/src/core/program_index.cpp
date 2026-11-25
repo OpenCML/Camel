@@ -3,6 +3,7 @@
 
 #include "program_index.h"
 #include "camel/runtime/control_regions.h"
+#include "camel/runtime/oper_shape.h"
 #include "camel/runtime/program.h"
 #include "values.h"
 
@@ -13,6 +14,7 @@
 #include <algorithm>
 #include <deque>
 #include <filesystem>
+#include <string_view>
 
 namespace debugger::core {
 
@@ -20,36 +22,20 @@ using namespace camel::runtime;
 namespace fs = std::filesystem;
 
 const char *kindName(GCNodeKind kind) {
+    // The kinds a frozen graph holds are named once (`camel/runtime/oper_shape.h#nodeKindName`), which
+    // is also where a kind standing for one of the four operators is named by the operator. The
+    // three reserved kinds are this index's own answer, "NODE": never part of a frozen graph
+    // (see GCNodeKind), so the shared table's names for them are not printed here.
     switch (kind) {
-    case GCNodeKind::Data:
-        return "DATA";
-    case GCNodeKind::Port:
-        return "PORT";
-    case GCNodeKind::Fill:
-        return "FILL";
-    case GCNodeKind::Accs:
-        return "ACCS";
-    case GCNodeKind::Brch:
-        return "BRCH";
-    case GCNodeKind::Join:
-        return "JOIN";
-    case GCNodeKind::Call:
-        return "CALL";
-    case GCNodeKind::Func:
-        return "FUNC";
-    case GCNodeKind::Oper:
-        return "OPER";
-    case GCNodeKind::Gate:
-        return "GATE";
-    case GCNodeKind::Loop:
-        return "LOOP";
     case GCNodeKind::Bind:
     case GCNodeKind::Dref:
     case GCNodeKind::Dead:
-        // Reserved kinds: never part of a frozen graph (see GCNodeKind).
+        return "NODE";
+    default:
         break;
     }
-    return "NODE";
+    const std::string_view name = camel::runtime::nodeKindName(kind);
+    return name.empty() ? "NODE" : name.data();
 }
 
 std::string whyNotExecuted(LineState state, const std::vector<std::string> &names) {

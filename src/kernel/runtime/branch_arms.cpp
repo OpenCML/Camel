@@ -46,47 +46,17 @@ namespace camel::runtime {
 
 namespace {
 
-std::string_view kindName(GCNodeKind kind) {
-    // The four operators the front end still builds as nodes of their own are named by their
-    // operator (`shapeName`): the name belongs to the operator, so a node of one of the four kinds
-    // and an OPER node that names the operator answer the same word.
-    const camel::ops::OperShape shape = camel::runtime::shapeOfKind(kind);
-    if (shape != camel::ops::OperShape::None) {
-        return camel::ops::shapeName(shape);
-    }
-    switch (kind) {
-    case GCNodeKind::Data:
-        return "DATA";
-    case GCNodeKind::Port:
-        return "PORT";
-    case GCNodeKind::Brch:
-        return "BRCH";
-    case GCNodeKind::Join:
-        return "JOIN";
-    case GCNodeKind::Call:
-        return "CALL";
-    case GCNodeKind::Func:
-        return "FUNC";
-    case GCNodeKind::Oper:
-        return "OPER";
-    case GCNodeKind::Gate:
-        return "GATE";
-    case GCNodeKind::Dref:
-        return "DREF";
-    case GCNodeKind::Loop:
-        return "LOOP";
-    default:
-        return "node";
-    }
-}
-
 /// "OPER 17 (:io/println)", "FUNC 9 (calls 'f')", "GATE 12".
 std::string describe(const Program &program, const GCGraph *graph, gc_node_ref_t ref) {
     const GCNode *node = graph->node(ref);
     if (!node) {
         return std::format("node {}", ref);
     }
-    std::string text = std::format("{} {}", kindName(node->kind), ref);
+    // The kinds are named once (`camel/runtime/oper_shape.h#nodeKindName`), which is also where a kind
+    // that stands for one of the four operators is named by the operator. "node" -- what this dump
+    // prints for a ref that is not one -- is this dump's own word for the unnamed case.
+    const std::string_view kind = camel::runtime::nodeKindName(node->kind);
+    std::string text = std::format("{} {}", kind.empty() ? "node" : kind, ref);
     if (node->kind == GCNodeKind::Oper) {
         text += std::format(" ({})", graph->nodeBodyAs<GCOperBody>(ref)->uri());
     } else if (node->kind == GCNodeKind::Func) {
