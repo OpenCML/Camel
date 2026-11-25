@@ -6,6 +6,7 @@
 #include "camel/core/rtdata/array.h"
 #include "camel/core/rtdata/base.h"
 #include "camel/core/rtdata/string.h"
+#include "camel/core/type/composite/array.h"
 #include "camel/core/type/composite/composite.h"
 #include "camel/core/type/intern.h"
 #include "camel/core/type/other.h"
@@ -285,6 +286,22 @@ CastSafety Type::castSafetyFrom(Type *sourceType) const {
     // `f32(x)`), whose loss rule is the function's own. A literal is not converted either: it
     // takes the type of its position (`let x: float = 5`).
     return CastSafety::Forbidden;
+}
+
+bool Type::castEntersFrom(Type *sourceType) const {
+    // A step that cannot fail is an entering (design principles 5.1). What is `Unsafe` is a
+    // conversion the program has to write itself, and `Forbidden` is no step at all.
+    if (castSafetyFrom(sourceType) == CastSafety::Safe) {
+        return true;
+    }
+    // One edge the table answers `Unsafe` for and that still moves nothing: `T[..]` read as `T` is
+    // the element the rank-zero array holds (design principles 5.4 -- a rank-zero array *is* the
+    // element: the same value, the same printing, the same comparison). The table has to say
+    // `Unsafe` because the shape is not known until the value exists, and `castSlotFrom` below
+    // reads the value it can check; the compiler inserts this step wherever a position of `T`
+    // receives a `T[..]` (`isRankZeroEdge`), so it is an entering and the pair table is not the
+    // question it asks.
+    return isRankZeroEdge(const_cast<Type *>(this), sourceType);
 }
 
 slot_t Type::castSlotFrom(slot_t value, Type *sourceType) const {

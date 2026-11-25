@@ -82,3 +82,9 @@ slot_t __f6tod__(ArgsView &with, ArgsView &norm, camel::core::context::Context &
 /// type and the source type is the operand's own, so the kernel asks those two facts and hands them
 /// to the type's own conversion -- the rule the CAST node ran, not a second one.
 slot_t __cast_value__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);
+
+/// Entering as an ordinary operator: `enter::<T, U>` of `lib/std/prelude.cml`. The same step as a
+/// conversion and the same two facts, minus the safety table: this is the step the **compiler**
+/// inserts to make two types meet, so it always succeeds (design principles 5.1, "entering is not a
+/// conversion"). A conversion the program writes is `__cast_value__` above.
+slot_t __enter_value__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);

@@ -339,6 +339,23 @@ CastSafety TupleType::castSafetyFrom(Type *sourceType) const {
     return CastSafety::Forbidden;
 }
 
+bool TupleType::castEntersFrom(Type *sourceType) const {
+    if (castSafetyFrom(sourceType) == CastSafety::Safe) {
+        return true;
+    }
+    // The other half is the step `castSafetyFrom` answers `Unsafe` for alone (see the note there):
+    // a value the compiler knows has failed, passed on where another `T!` is expected. `->`, the
+    // error arm of a `match` and a `return` of an error value are where it is inserted, and it
+    // cannot fail -- `castSlotFrom` hands the same object on -- so it is an entering like the
+    // others even though it is not a conversion the safety table calls Safe.
+    if (!isFallible() || sourceType == nullptr) {
+        return false;
+    }
+    const TupleType *from = asTagged(sourceType);
+    return from != nullptr && from->tag_ == tag_ && from->isFallible() &&
+           !typesPtr_[0]->assignableFrom(sourceType);
+}
+
 slot_t TupleType::castSlotFrom(slot_t value, Type *sourceType) const {
     if (sourceType == nullptr) {
         return Type::castSlotFrom(value, sourceType);

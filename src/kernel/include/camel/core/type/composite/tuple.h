@@ -158,6 +158,11 @@ class TupleType : public CompositeType {
     /// failed value): the CAST node of `v as T?`, of `return v` under a declared `T!`, and of a
     /// `return` whose value is an error.
     virtual slot_t castSlotFrom(slot_t value, Type *sourceType) const override;
+    /// Entering, which for the tagged forms is `Safe` **and** the one step that is Unsafe and
+    /// still cannot fail: a failed value retyped as another `T!` is the same object
+    /// (`castSlotFrom` hands it on untouched), so the compiler may insert it and a program can
+    /// never write it (builder_expr allows an Unsafe `as` only into a module type or an array).
+    virtual bool castEntersFrom(Type *sourceType) const override;
     virtual bool assignableFrom(Type *sourceType) const override;
     /// Widens every element type, so `var` bindings never hold refined aggregates (mutation
     /// through `var` parameters would otherwise break covariant assignability).

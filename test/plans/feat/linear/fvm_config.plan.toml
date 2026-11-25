@@ -1,0 +1,99 @@
+id = "linear.fvm_config"
+order = 359
+tier = "fast"
+tags = ["feat", "linear", "fvm", "settings"]
+
+# What the bytecode VM runs with was readable only in its sources: the struct of settings and the
+# kernel that builds it. A run printed none of it. The log lines that name the mode are compiled
+# out of a release build and need `-vv` besides; `stats=` writes a file about bytecodes, not about
+# the settings; `std::profile` reports the back end's *name*; and the listing that does print a
+# pass's parameters prints the *declaration's* defaults, for a name the pipeline could not resolve.
+# So "which mode, which call count, whose statistics file" had no reading a run could give.
+#
+# `config=true` is that reading: one line on standard error, written before the program runs, with
+# the same keys for `std::fvm` and `std::jit` so the two can be read side by side:
+#
+#   [fastvm] config jit=Disabled hot_threshold=1 trace_mir=off stats=(none)
+#
+# The cases pin the line for the declaration's defaults, pin the two keys a parameter can move (the
+# call count and the statistics path), and pin that a run which did not ask prints nothing.
+#
+# The mode reported is the one the build will use, not the one the declaration asked for: the JIT
+# has a code generator for x86-64 only, so `std::jit` reads `OnDemand` where there is one and
+# `Disabled` where there is not (`test/tools/have-native-jit.mjs`). `std::fvm` reads the same in
+# both builds, which is why only the two `std::jit` cases are skipped on a host without one.
+
+[[tests]]
+name = "fvm.defaults"
+desc = "The bytecode interpreter's own reading of what a run gets, with nothing given: jit=Disabled, hot_threshold=1, trace_mir=off and no statistics file. The reading is on standard error, so the program's own output is the one line it printed and nothing more."
+kind = "behavior"
+case = "../../../cases/linear/fvm/config_probe.cml"
+args = ["${case}", "${run_fvm_config}"]
+expect_exit = 0
+expect_stdout_exact = "probe\n"
+expect_stderr_contains = ["[fastvm] config jit=Disabled hot_threshold=1 trace_mir=off stats=(none)"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 10000
+
+[[tests]]
+name = "fvm.quiet_without_the_parameter"
+desc = "A run that did not ask for the reading prints nothing about its settings: the line belongs to the parameter and is not something every run of the interpreter writes."
+kind = "behavior"
+case = "../../../cases/linear/fvm/config_probe.cml"
+args = ["${case}", "${run_fvm}"]
+expect_exit = 0
+expect_stdout_exact = "probe\n"
+expect_output_not_contains = ["[fastvm] config", "hot_threshold", "trace_mir"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 10000
+
+[[tests]]
+name = "fvm.stats_path_is_the_one_given"
+desc = "The statistics path the reading reports is the word the pipeline gave it, not a default: this line can only be read from the run. `stats=` is also the one key whose value the run acts on, so the case pins the path it was handed."
+kind = "behavior"
+case = "../../../cases/linear/fvm/config_probe.cml"
+args = ["${case}", "std::fvm stats=${test_tmp}/cfg.jsonl config=true"]
+expect_exit = 0
+expect_stdout_exact = "probe\n"
+expect_stderr_contains = ["[fastvm] config jit=Disabled hot_threshold=1 trace_mir=off stats=${test_tmp}/cfg.jsonl"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 10000
+
+[[tests]]
+name = "jit.defaults"
+desc = "The same line, same keys, for the JIT: mode OnDemand and the declaration's call count of 1. Read beside `fvm.defaults`, this is the difference between the two back ends' settings, which the sources could say and a run could not."
+kind = "behavior"
+case = "../../../cases/linear/fvm/config_probe.cml"
+args = ["${case}", "${run_jit_config}"]
+skip_unless = ["node", "test/tools/have-native-jit.mjs"]
+expect_exit = 0
+expect_stdout_exact = "probe\n"
+expect_stderr_contains = ["[fastvm] config jit=OnDemand hot_threshold=1 trace_mir=off stats=(none)"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 10000
+
+[[tests]]
+name = "jit.hot_threshold_is_the_one_given"
+desc = "The call count the reading reports is the one the parameter gave (0 compiles at the first call), so the line is the run's and not a copy of the declaration's default."
+kind = "behavior"
+case = "../../../cases/linear/fvm/config_probe.cml"
+args = ["${case}", "std::jit hot_threshold=0 config=true"]
+skip_unless = ["node", "test/tools/have-native-jit.mjs"]
+expect_exit = 0
+expect_stdout_exact = "probe\n"
+expect_stderr_contains = ["[fastvm] config jit=OnDemand hot_threshold=0 trace_mir=off stats=(none)"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 10000
+
+[[tests]]
+name = "fvm.unknown_parameter_is_refused"
+desc = "The reading is a parameter of the declaration like any other: a misspelled one is refused with the declaration's diagnostic, at the pipeline, before the program runs. A spelling the declaration does not carry reads exactly this way."
+kind = "negative"
+case = "../../../cases/linear/fvm/config_probe.cml"
+args = ["${case}", "std::fvm configg=true"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::ParamArgumentUnknown"
+expect_output_contains = ["'configg' is not a parameter of 'std::fvm'"]
+expect_output_not_contains = ["probe"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 10000

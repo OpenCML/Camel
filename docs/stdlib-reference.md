@@ -659,6 +659,26 @@ The two type parameters are the pair a conversion is about, so a call names them
 - Pure.
 - Example: `cast::<int, float>(1)` gives `1.0`
 
+#### `enter`
+
+```camel
+enter: (x: T) => U
+```
+
+Entering is a call of `:op/enter`, the operator the **compiler** writes and a program does not
+(design principles 5.1, "entering is not a conversion"): the step that puts a value into a form
+it belongs in -- `T` into `T?` or `T!`, an error value into a type with `!` -- to make two types
+meet. It always succeeds: it asks no safety table (`:op/cast` above is the conversion a program
+writes, and that one checks the pair), and the record states no fault for it.
+
+A value reaches this operator only where the language puts it into a position of that form by
+itself: an argument, a typed `let`, an array element, an arm of a branch, a declared return. A
+program that needs a conversion writes `T(x)` or `x as T`, which is `:op/cast`; where making
+two types meet would need a conversion that can fail, the program is a type error and no call
+is built at all, so what the compiler inserted never fails at run time.
+
+- Pure.
+
 #### `fill`
 
 ```camel

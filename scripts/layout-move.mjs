@@ -566,11 +566,16 @@ function buildBlocks (moves) {
     // "A module" is the build's own definition and not a guess about the block: a module is a
     // directory the module loop enters (`add_subdirectory(lib/<name>)`), and every one of them
     // carries a `CMakeLists.txt` that makes its `.cmo`. A directory under `lib/` without one is
-    // core code the move carried out of `src/`, and it has to stay in `libcamel`: `lib/test/` is
-    // `src/passes/test/`, whose objects register the `test::` passes and whose declarations are in
-    // `stdlib/std.cml`. Left out of every block, the directory compiles nowhere, the binary has no
-    // `test::` channel, and the plans fail with `Unrecognized pass 'test::…'` -- forty-eight cells
-    // of it. The check reads the moved tree, which is the tree `cmakeText` runs on (the moves are
+    // core code the move carried out of `src/`, and it has to stay in `libcamel`: left out of every
+    // block it compiles nowhere, and the failure is not a link error but a channel that quietly is
+    // not there. `lib/test/` was that directory -- its objects register the `test::` passes, and a
+    // tree that compiled it nowhere failed every plan that names one with `Unrecognized pass
+    // 'test::…'`, forty-eight cells of it. It is the example and not the case today: on 2026-11-25
+    // it got a `CMakeLists.txt` of its own, so the test-only passes are `test.cmo` and this filter
+    // leaves the directory out of the block. What the rule still says is that the filter is the
+    // directory's own build file and never a list of names kept here.
+    //
+    // The check reads the moved tree, which is the tree `cmakeText` runs on (the moves are
     // applied before the generated file is written).
     // A directory brings its whole tree; a single file brings the directory it lands in, so the
     // block that received `kernel/execute/pass.cpp` globs `kernel/execute/*.cpp` -- a split whose

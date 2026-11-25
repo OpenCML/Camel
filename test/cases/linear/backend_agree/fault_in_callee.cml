@@ -1,0 +1,20 @@
+/**
+ * A fault raised inside a callee, on the third round of a loop. Two lines are printed per round
+ * before the fault, so standard output holds the rounds that really ran and nothing after them,
+ * and the diagnostic's position is the division in the callee rather than the call. The round the
+ * program stops at, the lines it printed and the position it reports are all the program's, so
+ * both back ends have to give the same ones.
+ */
+
+func divide(n: int, d: int) => int {
+    return n / d
+}
+
+func main() => int sync {
+    loop i = 0 while i < 5 do sync {
+        println('round', i)
+        println(divide(10, i - 2))
+        i + 1
+    }
+    return 0
+}

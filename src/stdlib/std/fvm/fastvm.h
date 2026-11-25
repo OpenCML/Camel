@@ -87,6 +87,9 @@ struct FastVMConfig {
     /// File that receives per-graph bytecode and execution counts at the end of the run
     /// (`std::fvm stats="file"`); empty: none.
     std::string statsPath;
+    /// Print the run's settings on standard error before the program runs (`config=true` on the
+    /// declaration). Off by default: a run that did not ask prints nothing.
+    bool reportConfig = false;
 };
 
 /// The ranges of the bytecode vector that no live graph version uses: a graph made while the
@@ -285,6 +288,14 @@ class FastVMSchedPass : public RuntimeGraphSchedulePass {
     void statsNoteCompiled(size_t pc);
     void statsWrite();
 
+    // The settings this pass was made with, kept whole: the reading below prints the run's own,
+    // and a build without a native code generator has no jitConfig_ to ask for the call count.
+    FastVMConfig config_;
+    /// Prints the settings the run got, as one line on standard error (`config=true` on the
+    /// declaration). The mode is the one this build will use, not the one a declaration asked
+    /// for, because a build without a code generator compiles nothing.
+    void reportConfig(std::ostream &os) const;
+
     // The interpreter's own call stack: a direct call (FUNC) pushes its return pc and frame
     // here and does not nest on the native stack. The two arrays start with room for the
     // default limit and grow (outside the hot path) up to the limit in effect.
@@ -373,6 +384,7 @@ class FastVMSchedPass : public RuntimeGraphSchedulePass {
 #endif
     {
         statsPath_ = config.statsPath;
+        config_    = config;
         framePool_.registerGcTracer();
     }
     virtual ~FastVMSchedPass();

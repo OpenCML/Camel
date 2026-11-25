@@ -1,0 +1,31 @@
+/**
+ * The step the compiler inserts to make two types meet is `:op/enter`, and an entering never
+ * fails (design principles 5.1, "entering is not a conversion").
+ *
+ * Nothing here is written by the program: `return error('KeyError', ...)` under a declared
+ * `int?!` is the failed form of the position, and `return 5` is a literal taking the position's
+ * type. Both are the compiler's own steps, so `std::gir` shows one `:op/enter` and no `:op/cast`
+ * -- and the entry runs to its end, which is the fact this case pins: a step the compiler wrote
+ * cannot end in a conversion fault.
+ */
+
+func lookup(k: int) => int?! {
+    if k < 0 then {
+        return error('KeyError', 'negative')
+    } else {
+        return 5
+    }
+}
+
+func show(r: int?!) => string {
+    return match r {
+        case error e => 'error ' + e.kind
+        case v => format<v ?? -1>('{}')
+    }
+}
+
+func main() => int sync {
+    println(show(lookup(-1)))
+    println(show(lookup(5)))
+    return 0
+}

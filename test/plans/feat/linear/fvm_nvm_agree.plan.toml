@@ -1,0 +1,119 @@
+id = "linear.fvm_nvm_agree"
+order = 360
+tier = "fast"
+tags = ["feat", "linear", "fvm", "nvm", "differential"]
+
+# The two interpreters of one program: `std::nvm` is the reference semantics, and `std::fvm` is the
+# bytecode one that `std::default` points at, so every other back end is read against the reference
+# (design principles 9.2). Each case here runs one program on both, pins the bytes it prints, and
+# has the runner compare the second back end against the first on its exit code, its diagnostics and
+# its standard output -- byte for byte, which is what `backends_agree` compares. A case is red if
+# either side leaves the pinned bytes or if the two disagree.
+#
+# Three classes, because they are the ones a back end is easiest to get wrong in: comparisons and
+# branch selection (two sorting programs with different comparison orders), the order effects run in
+# (the console is one resource, so the lines are the program's), and where a fault stops the program
+# and which position it reports.
+#
+# The last case reads what the bytecode interpreter runs with. Two back ends that agree on a
+# program's output cannot catch a setting of one of them that changes nothing that output shows, so
+# the settings this plan's `fvm` halves depend on are pinned here too: a run whose default moved is
+# red on this plan, not only somewhere else.
+
+[[tests]]
+name = "sort_network4"
+desc = "Four values sorted by a compare-exchange network, four inputs: the output is the result of the comparisons and of the branch each one takes, and both interpreters print the same four numbers in ascending order for each input, equal values kept in place."
+kind = "behavior"
+case = "../../../cases/linear/backend_agree/sort4.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm"]
+backends_agree = ["exit_code", "diagnostics", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_exact = "1 2 3 4\n1 2 3 4\n1 1 2 2\n0 2 5 9\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 10000
+
+[[tests]]
+name = "bubble_passes5"
+desc = "Five values sorted by four bubble passes, three inputs: a different comparison order and ten comparisons instead of five, and the same requirement -- both interpreters take every branch the same way and print the same five numbers in ascending order."
+kind = "behavior"
+case = "../../../cases/linear/backend_agree/sort5.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm"]
+backends_agree = ["exit_code", "diagnostics", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_exact = "1 2 3 4 5\n1 2 3 4 5\n1 1 7 7 7\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 10000
+
+[[tests]]
+name = "effects_in_written_order"
+desc = "Two prints, then a call that prints one line per round of a loop, then a last print: the console is one resource, so the six lines are the program's and both interpreters write them in the written order, one line at a time."
+kind = "behavior"
+case = "../../../cases/linear/backend_agree/ordered_effects.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm"]
+backends_agree = ["exit_code", "diagnostics", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_exact = "first\nsecond\nround 0\nround 1\nlast\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 10000
+
+[[tests]]
+name = "effects_through_a_call"
+desc = "A call that prints keeps its place between the prints written beside it: `1`, `2` from inside the callee, `3`, and `main` returns 123. The order and the return value are the program's, so both interpreters give both."
+kind = "behavior"
+case = "../../../cases/linear/runtime/same_resource_order_call.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm"]
+backends_agree = ["exit_code", "diagnostics", "stdout_normalized"]
+expect_exit = 123
+expect_stdout_exact = "1\n2\n3\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 10000
+
+[[tests]]
+name = "fault_at_the_division"
+desc = "A division by zero at a top-level expression, with no call for the position to be attributed to: the diagnostic is the runtime's division fault, reported at the division in the case (7:16) and at the same place by both interpreters, and the exit code is 1. The pinned position is what separates this case from the one below, where the same fault is raised inside a callee."
+kind = "negative"
+case = "../../../cases/linear/runtime/divide_by_zero.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm"]
+backends_agree = ["exit_code", "diagnostics", "stdout_normalized"]
+expect_exit = 1
+expect_diagnostic_name = "RuntimeDiag::DivisionByZero"
+expect_diagnostic_code = "0x04000001"
+expect_diagnostic_line = 7
+expect_diagnostic_column = 16
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 10000
+
+[[tests]]
+name = "fault_in_callee"
+desc = "A division by zero inside a callee on the third round of a loop: the rounds that ran printed their two lines each and nothing is printed after the fault, so standard output starts with `round 2` and ends there. The diagnostic is the runtime's division fault at the division in the callee (10:14), not at the call, and both interpreters stop at the same round, print the same lines and report the same position."
+kind = "negative"
+case = "../../../cases/linear/backend_agree/fault_in_callee.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm"]
+backends_agree = ["exit_code", "diagnostics", "stdout_normalized"]
+expect_exit = 1
+expect_diagnostic_name = "RuntimeDiag::DivisionByZero"
+expect_diagnostic_code = "0x04000001"
+expect_diagnostic_line = 10
+expect_diagnostic_column = 14
+expect_stdout_starts_with = "round 0\n-5\nround 1\n-10\nround 2\n"
+expect_output_not_contains = ["round 3"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 10000
+
+[[tests]]
+name = "fvm.settings_are_the_defaults"
+desc = "What the bytecode interpreter runs with, read on this plan: jit=Disabled, hot_threshold=1, trace_mir=off, no statistics file. The two back ends agreeing on a program's output says nothing about a setting that changes no output, so the default the `fvm` halves above run under is pinned here by the run itself."
+kind = "behavior"
+case = "../../../cases/linear/fvm/config_probe.cml"
+args = ["${case}", "${run_fvm_config}"]
+expect_exit = 0
+expect_stdout_exact = "probe\n"
+expect_stderr_contains = ["[fastvm] config jit=Disabled hot_threshold=1 trace_mir=off stats=(none)"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 10000

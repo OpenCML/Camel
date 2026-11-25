@@ -1,0 +1,14 @@
+/**
+ * The program the bytecode VM's settings are read on: one line of its own output and one value,
+ * so a case can pin standard output exactly while `config=true` writes the run's settings to
+ * standard error. The reading is on standard error because standard output is the program's
+ * result (docs/cli.md, "The value `main` returns goes to the output"): a settings line there
+ * would be a line the program did not print.
+ *
+ * `main` returns an exit code, so it prints `probe` once and writes nothing else.
+ */
+
+func main() => int sync {
+    println('probe')
+    return 0
+}

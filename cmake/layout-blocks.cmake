@@ -422,10 +422,16 @@ function(camel_layout_add_blocks)
             list(FILTER _sources EXCLUDE REGEX "/parse/src/src/antlr/")
         endif()
         if(_block STREQUAL "lib_module")
+            # `src/stdlib/test` was globbed here until 2026-11-25: its test-only passes were
+            # compiled into libcamel, so the library carried the whole `test::` channel and every
+            # symbol one of those passes needed became an export of libcamel. They are `test.cmo`
+            # now (src/stdlib/test/CMakeLists.txt, entered from the top-level CMakeLists.txt), and
+            # this block globs none of them. A regeneration of this file would leave the directory
+            # out by itself, because this block's rule skips a directory that has a
+            # `CMakeLists.txt` -- a module is built by its own `.cmo` target, never by `libcamel`.
+            # `rulesets/` stays: it holds no C++ today, and the glob is what says so.
             file(GLOB_RECURSE _sources
                 "${PROJECT_SOURCE_DIR}/src/stdlib/rulesets/*.cpp"
-                "${PROJECT_SOURCE_DIR}/src/stdlib/test/*.cpp"
-                "${PROJECT_SOURCE_DIR}/src/stdlib/test/include/camel/passes/test/*.cpp"
             )
             list(FILTER _sources EXCLUDE REGEX "/parse/src/src/antlr/")
         endif()
