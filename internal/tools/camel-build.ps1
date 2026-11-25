@@ -29,7 +29,9 @@
 # "recent" keeps the last 30 builds, which is what a timeline of the queue is drawn from: the gap
 # between queuedAt and startedAt is the time the build waited for the lock.
 #
-# Exit code is the build's exit code (0 for -Check).
+# Exit code is the build's exit code (0 for -Check). A state file that cannot be replaced -- a reader
+# has it open, or the directory is unwritable -- is a warning and never changes that code: the state
+# files are advisory, and the write itself is `camel-gate-state.ps1#Publish-CamelGateState`.
 
 param(
     [Parameter(Mandatory = $true)][string]$Path,
@@ -49,6 +51,7 @@ param(
 $ErrorActionPreference = 'Stop'
 
 . (Join-Path $PSScriptRoot 'camel-gate-config.ps1')
+. (Join-Path $PSScriptRoot 'camel-gate-state.ps1')
 $cfg = Get-CamelGateConfig -LocalConfig $LocalConfig -ScriptRoot $PSScriptRoot -Override @{ stateDir = $StateDir }
 if (-not $cfg.stateDir) { Stop-CamelGateConfig 'camel-build' $cfg 'stateDir' }
 $statePath = Join-Path $cfg.stateDir 'build-state.json'
@@ -58,6 +61,9 @@ $buildMutex = New-Object System.Threading.Mutex($false, 'Global\CamelBuildSerial
 $stateMutex = New-Object System.Threading.Mutex($false, 'Global\CamelBuildState')
 $acquired = $false
 $startedAt = $null
+# How many state updates this run could not publish. Advisory: reported at the end, never the exit
+# code, and the first one is said out loud when it happens.
+$script:stateUnpublished = 0
 
 function Read-State {
     if (-not (Test-Path $statePath)) {
@@ -90,9 +96,16 @@ function Edit-State([scriptblock]$change) {
         $change.Invoke($state)
         $state.updatedAt = (Get-Date).ToString('o')
         $json = $state | ConvertTo-Json -Depth 6
-        $tmp = "$statePath.$PID.tmp"
-        Set-Content -Path $tmp -Value $json -Encoding utf8
-        Move-Item -Force -Path $tmp -Destination $statePath
+        # Not `Move-Item -Force`: it reports a destination another process holds open as
+        # ERROR_ALREADY_EXISTS and, under `$ErrorActionPreference = 'Stop'`, that ended a build that
+        # had succeeded. A publish that cannot complete is counted and dropped; the next progress
+        # line carries the newer state.
+        if (-not (Publish-CamelGateState -Path $statePath -Json $json)) {
+            $script:stateUnpublished++
+            if ($script:stateUnpublished -eq 1) {
+                Write-Host "[camel-build] WARNING: build state not published (a reader kept $statePath busy); the state files are advisory and this build's result stands"
+            }
+        }
     } finally {
         $stateMutex.ReleaseMutex()
     }
@@ -224,6 +237,11 @@ try {
         }) + $recent
     }
     Write-Host "[camel-build] done ($worktree), exit $code, $seconds s"
+    # Its own line, after the build's result and never inside it: how many state updates the panel
+    # did not get is a fact about the panel, not about what the compiler did.
+    if ($script:stateUnpublished -gt 0) {
+        Write-Host "[camel-build] $($script:stateUnpublished) state update(s) were not published (advisory; the exit code above is the build's)"
+    }
     exit $code
 } finally {
     if ($acquired) {
