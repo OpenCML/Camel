@@ -5,7 +5,7 @@
  * The `int8` ruleset: a product whose fixed weight is written in int8 and restored before the
  * product runs.
  *
- *     matmul(x, [[1.3, 2.7], [3.1, 4.9]])->run<[matmul_int8<0.25>]>
+ *     matmul(x, [[1.3, 2.7], [3.1, 4.9]])->run<[matmul_int8]>
  *
  * The value the rule produces is the same product of the same numbers, with the second operand put
  * through the grid of int8 codes first: `round(w / s)` is the code (an integer in `[-127, 127]`),
@@ -14,8 +14,22 @@
  * by is the quantization error of the weight and nothing else: at most `s / 2` per element before the
  * product sums its row.
  *
- * The scale is a `with` parameter, so it is the writer's: `int8`'s positive half is `127` steps, so a
- * weight of magnitude at most `M` is written without clipping at `s = M / 127`.
+ * The scale is read off the weight: `s = max(|w|) / levels`, the largest scale that writes the weight
+ * without clipping at `levels` steps (`127` for the positive half of int8). A weight of any magnitude
+ * is therefore written as finely as the format allows, and the writer does not have to know its
+ * range. `levels` is the `with` parameter, so the number of steps is the writer's and the scale is
+ * the weight's.
+ *
+ * Why the scale is computed inside the right side and not passed in as a `with` value: a `with` value
+ * is a compile-time constant, and one computed from an array is not one today. The build-time
+ * evaluation refuses it by name -- `matmul_int8<max(abs(W)) / 127.0>` reports
+ * `FoldCallArgumentNotConstant`: "The call of `__div__` cannot be evaluated at build time: it calls
+ * `abs`, which this build-time evaluation cannot read: no function of that name is declared here"
+ * (`src/compile/src/gir/builder_when.cpp#Builder::evaluateCallInsideBody`). Scalar arithmetic over
+ * literals *is* folded there (`<0.25 * 2.0>` compiles), so the boundary is the operator call over a
+ * value, not the arithmetic. Reading the scale off the matched weight in the right side needs no
+ * change to that evaluation and no new operator: the transform builds the graph of the expression,
+ * and the reduction runs where the weight runs.
  *
  * Three things about the shape of the rule are what the engine allows, not choices of style:
  *
@@ -33,21 +47,26 @@
  * - the two parameter types are the *open-rank* arrays the operator takes: `float[2, 2]` would make
  *   the rule apply to one shape only, and the operator's own signature is `float[...]`.
  *
+ * One rule per operator: a second rule under `matmul/2` with these parameter types is refused with
+ * `DuplicateRuleForOperator` -- "which of them applies would be decided by the order they are written
+ * in" -- so a writer who wants a particular scale writes it in the rule, and the library keeps the
+ * one law whose scale comes from the data.
+ *
  * A rule that changes values this way asks for the permission that says so, `change_precision`
  * (design principles 7.2-7.3): the function it rewrites has to be written with that permission, so a
  * program that did not ask for a precision change is never given one.
  */
 
 import { is_constant } from graph
-import { abs, matmul, minimum, where } from tensor
+import { abs, matmul, max, minimum, where } from tensor
 
-/// `matmul(x, w)` with `w` written in int8 at the scale `scale` and restored before the product: the
-/// code of an element is `round(w / scale)` clamped to the positive half of the range, so the operand
-/// the product sees is within `scale / 2` of `w`, element by element.
+/// `matmul(x, w)` with `w` written in int8 at `max(|w|) / levels` and restored before the product:
+/// the code of an element is `round(w / scale)` clamped to the positive half of the range, so the
+/// operand the product sees is within `scale / 2` of `w`, element by element.
 /// @example-fragment a rule is not a function a program calls: the example is the writing it rewrites, and `test/cases/modules/rules/quant_int8.cml` is the program that measures the difference
 /// @example-fragment matmul(x, w)    // the left side, with `w` a constant of the body
 #requires(change_precision)
-with <scale: float = 0.25>
+with <levels: float = 127.0>
 export rule matmul_int8(x: float[...], w: float[...]) when is_constant(w) {
-    matmul(x, w) => matmul(x, where(w >= 0.0, 1.0, -1.0) * minimum(float(int(abs(w) / scale + 0.5)), 127.0) * scale)
+    matmul(x, w) => matmul(x, where(w >= 0.0, 1.0, -1.0) * minimum(float(int(abs(w) / (max(abs(w)) / levels) + 0.5)), 127.0) * (max(abs(w)) / levels))
 }

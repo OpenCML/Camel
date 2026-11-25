@@ -5,10 +5,12 @@
  * rule and not something else in the program.
  *
  * The tolerance is not in this file: it is the `tol` parameter of `main`, which the plan gives
- * (`test/plans/feat/modules/rules.plan.toml`). Given a `tol` below the quantization error, this
+ * (`test/plans/feat/modules/rules_quant.plan.toml`). Given a `tol` below the quantization error, this
  * program prints `verdict=FAIL` and exits 1, which is the plan's second entry: the comparison can be
  * read, and tightened, without touching the program that computes it, and a tolerance that is too
- * small really does turn the case red.
+ * small really does turn the case red. The plan's first entry gives the error the rule is allowed,
+ * `rows * scale / 2` for a row of two weights: the scale is read off the weight (`4.9 / 127`), so the
+ * bound is `0.0193` per element and `0.0386` per sum.
  *
  * `#[change_precision]` is the permission the rule asks for (design principles 7.2-7.3): quantization
  * changes values on purpose, so a function written without that permission is never quantized --
@@ -55,7 +57,7 @@ func measure(label: string, quantized: float[2, 2], reference: float[2, 2], rewr
 func main(tol: float) => int sync {
     let xs = inputs()
     let reference = model(xs)
-    let quantized = match model->run<[matmul_int8<0.25>]> {
+    let quantized = match model->run<[matmul_int8]> {
         case error e => ([`matmul_int8 error ${e.kind}: ${e.message}`, 'matmul_int8 verdict=FAIL'], false)
         case r => measure('matmul_int8', r.result(xs), reference, r.rewrites, tol)
     }
