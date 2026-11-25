@@ -1653,12 +1653,13 @@ function plainStatusLine(line) {
  * cost reading are the sweeper's, and they are right to be: the sweeper is what started the run.
  * Its name carries the source plan too (`<sweep>:<source plan id>:<test>`), and that is where the
  * reader was left: the verdict line and the `[PLAN]` header above it name the sweeper, which holds
- * no such test, so a red sent a person to a file that never wrote the case. The plan file is the
- * one thing a name cannot carry -- the id is not the path, and a plan with no `id` gives a
- * basename that several plans share -- so it is printed here, under the verdict, in the shape the
- * runner already uses when a plan's *own* file is what is wrong (`[INFO] runner error: <plan
- * file>: ...`). Both readings then answer "which file does this red belong to", and they answer
- * with different files.
+ * no such test. So a person who takes a red out of this run and opens the file it names finds
+ * nothing to fix, and the file to open is the one that wrote the case. The plan file is the one
+ * thing a name cannot carry -- the id is not the path, and a plan with no `id` gives a basename
+ * that several plans share -- so it is printed here, under the verdict, in the shape the runner
+ * already uses when a plan's *own* file is what is wrong (`[INFO] runner error: <plan file>: ...`).
+ * Both readings then answer "which file does this red belong to", and they answer with different
+ * files.
  *
  * Not printed for a passing copy: a green case sends nobody anywhere, and the fast layer's
  * sampled copies would each grow a second line for a puzzle no one is solving.
