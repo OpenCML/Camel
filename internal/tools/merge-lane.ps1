@@ -185,7 +185,13 @@ param(
     # the tip whose `run.json` revision and case status are read here: the claim "green now" is
     # checked against a reading, not against the sentence that asked for the allowance. Only the
     # ordinary merge path is untouched by this switch -- it is refused without `-MergeCommit`.
-    [string] $KnownAtSnapshot = ''
+    [string] $KnownAtSnapshot = '',
+    # The same idea one layer up: a file that has no two-line header in the tree this merge made,
+    # and was given one by a later commit. It names the file, the snapshot (this merge commit) and
+    # the commit that wrote the header; the file has to be in this tree without a copyright line,
+    # the fix has to be an ancestor of the tip named in the list, and every file the check names
+    # has to have an entry. Also refused without `-MergeCommit`.
+    [string] $KnownHeaderAtSnapshot = ''
 )
 
 $ErrorActionPreference = 'Stop'
@@ -1543,8 +1549,71 @@ try {
     $headers = & node (Join-Path $MainCheckout 'scripts\headers.mjs') --check 2>&1
     $headersExit = $LASTEXITCODE
     $headers | Select-Object -Last 2 | ForEach-Object { "  $_" }
+    # A backfill of a merge made earlier meets trees that today's header rule rejects: the rule has
+    # grown since, and a file some later commit gave its two lines to is headless in the tree that
+    # added it. Writing the header into this commit is rewriting history and skipping the commit
+    # breaks the first-parent chain the next backfilled merge asserts, so the fact is recorded
+    # instead of hidden: `-KnownHeaderAtSnapshot` names the file, the snapshot and the commit that
+    # gave it its header, and this block re-establishes all three from the repository before it
+    # lets the push through. Without the switch this is the refusal it always was.
+    $headerAllowed = @()
     if ($headersExit -ne 0) {
-        Stop-With 'the header check failed' 'A file without its two-line header does not go to develop, because it stops a whole CI run before the build starts.' $mergeCommit
+        if (-not $KnownHeaderAtSnapshot) {
+            Stop-With 'the header check failed' 'A file without its two-line header does not go to develop, because it stops a whole CI run before the build starts.' $mergeCommit
+        }
+        if (-not $MergeCommit) {
+            Stop-With '-KnownHeaderAtSnapshot is only for a backfill' 'It records a merge made earlier, so it needs -MergeCommit. The ordinary merge path checks the tree it is merging and has nothing to be allowed for.'
+        }
+        $hlist = Get-Content -LiteralPath $KnownHeaderAtSnapshot -Raw | ConvertFrom-Json
+        if (-not $hlist.tip -or -not @($hlist.entries).Count) {
+            Stop-With "-KnownHeaderAtSnapshot $KnownHeaderAtSnapshot is not a list" 'It needs "tip" (a commit the fix has to be an ancestor of) and a non-empty "entries".'
+        }
+        $hTip = "$(& git rev-parse --verify "$($hlist.tip)^{commit}" 2>$null)".Trim()
+        if (-not $hTip) { Stop-With "-KnownHeaderAtSnapshot tip $($hlist.tip) does not resolve to a commit" 'The evidence must name a commit this repository has.' }
+        $failing = @($headers | ForEach-Object { "$_" } |
+            Where-Object { $_ -match '^\s*(\S+): missing the two-line header' } |
+            ForEach-Object { ($_ -replace '^\s*(\S+): missing the two-line header.*$', '$1').Trim() } | Select-Object -Unique)
+        foreach ($entry in @($hlist.entries)) {
+            if (-not $entry.file -or -not $entry.snapshot -or -not $entry.fixedAt) {
+                Stop-With "-KnownHeaderAtSnapshot entry $(($entry | ConvertTo-Json -Compress)) is incomplete" 'Each entry needs file, snapshot and fixedAt.'
+            }
+            $snapSha = "$(& git rev-parse --verify "$($entry.snapshot)^{commit}" 2>$null)".Trim()
+            $fixSha = "$(& git rev-parse --verify "$($entry.fixedAt)^{commit}" 2>$null)".Trim()
+            if (-not $snapSha) { Stop-With "-KnownHeaderAtSnapshot entry $($entry.file) names snapshot $($entry.snapshot), which is not a commit" 'The snapshot is the merge being recorded.' }
+            if (-not $fixSha) { Stop-With "-KnownHeaderAtSnapshot entry $($entry.file) names $($entry.fixedAt), which is not a commit" 'The fix has to be a commit this repository has.' }
+            if ($snapSha -ne $mergeCommit) {
+                Stop-With "-KnownHeaderAtSnapshot entry $($entry.file) is red at $($snapSha.Substring(0, 9))" "This run records $($mergeCommit.Substring(0, 9)); an entry about another snapshot is stale."
+            }
+            & git merge-base --is-ancestor $fixSha $hTip 2>$null
+            if ($LASTEXITCODE -ne 0) {
+                Stop-With "-KnownHeaderAtSnapshot entry $($entry.file) names $($fixSha.Substring(0, 9)), which is not an ancestor of $($hTip.Substring(0, 9))" 'A fix that is not on the line the evidence was read from did not reach the tip.'
+            }
+            # The three facts, read from the repository and not from the list: the file is in the
+            # snapshot's tree and has no copyright line there, and it has one at the fix.
+            $atSnap = @(& git show "$($snapSha):$($entry.file)" 2>$null | Select-Object -First 6)
+            if (-not $atSnap.Count) { Stop-With "-KnownHeaderAtSnapshot entry $($entry.file) is not in $($snapSha.Substring(0, 9))" 'The file the entry names has to be in the snapshot tree.' }
+            if (@($atSnap | Where-Object { $_ -match 'Copyright' }).Count -gt 0) {
+                Stop-With "-KnownHeaderAtSnapshot entry $($entry.file) already has its header at $($snapSha.Substring(0, 9))" 'The header check did not fail on this file, so the entry is not about it.'
+            }
+            $atFix = @(& git show "$($fixSha):$($entry.file)" 2>$null | Select-Object -First 6)
+            if (@($atFix | Where-Object { $_ -match 'Copyright' }).Count -eq 0) {
+                Stop-With "-KnownHeaderAtSnapshot entry $($entry.file) has no header at $($fixSha.Substring(0, 9)) either" 'The entry names a fix that did not write the header.'
+            }
+            $headerAllowed += $entry.file
+        }
+        $uncovered = @($failing | Where-Object { $headerAllowed -notcontains $_ })
+        if ($uncovered.Count -gt 0) {
+            Stop-With "-KnownHeaderAtSnapshot does not cover $($uncovered -join ', ')" 'Every file the check names has to have an entry, or the push carries a headless file.'
+        }
+        $stale = @($headerAllowed | Where-Object { $failing -notcontains $_ })
+        if ($stale.Count -gt 0) {
+            Stop-With "-KnownHeaderAtSnapshot lists $($stale -join ', '), which the check did not name" 'A stale entry hides nothing here; it only makes the record say more than the check did.'
+        }
+        foreach ($entry in @($hlist.entries)) {
+            Write-Host ("  allowed: {0} has no header at this snapshot ({1}); the header is at {2} -- it stops no CI run of this tree" -f `
+                $entry.file, $mergeCommit.Substring(0, 9), "$($entry.fixedAt)".Substring(0, [Math]::Min(9, "$($entry.fixedAt)".Length)))
+        }
+        $headersExit = 0
     }
 
     # The local gate compiles with this workstation's toolchain; CI's Linux and macOS legs compile
@@ -2186,6 +2255,12 @@ $transcript = Join-Path ([System.IO.Path]::GetTempPath()) ("camel-merge-rows-$PI
     # Splatted as two arguments: a single string with a space in it is one argument, and the record
     # writer would read it as a flag nobody passed.
     $knownArgs = @(if ($allowed.Count -gt 0) { '--known-at-snapshot'; $KnownAtSnapshot })
+    # A different layer, a different switch: the reading allowance says a case was red and is not
+    # any more, this one says a file had no header and has one later. They travel as separate
+    # fields so the record never has to be read twice to know which of the two it is.
+    if ($headerAllowed.Count -gt 0) {
+        $knownArgs += @('--known-header-at-snapshot'; $KnownHeaderAtSnapshot)
+    }
     $recordOut = @(& node (Join-Path $toolRoot 'scripts\merge-record.mjs') write `
         --diff (Join-Path $diffDir 'diff.json') --merge $mergeCommit --first-parent $developTip `
         --second-parent $head --branch $Branch --tree $MainCheckout --out $passedDir `

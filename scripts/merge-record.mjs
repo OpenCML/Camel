@@ -104,6 +104,11 @@ function doWrite() {
     // This file stores the claim with its evidence; `verify` refuses the record again when a `new`
     // case is not one of them, so the allowance cannot widen a record written without the list.
     const knownFile = arg('--known-at-snapshot') || ''
+    // The same shape one layer up: a file that has no two-line header in this tree and was given one
+    // by a later commit. `merge-lane.ps1 -MergeCommit -KnownHeaderAtSnapshot` reads the three facts
+    // out of the repository before it writes this; here they are stored as their own field so a
+    // reader can tell a head allowance from a reading allowance without opening either.
+    const knownHeaderFile = arg('--known-header-at-snapshot') || ''
     if (exit !== '0' && exit !== 'unknown') {
         refuse(2, `--exit takes '0' or 'unknown'; it got '${exit}'`)
     }
@@ -193,6 +198,27 @@ function doWrite() {
             refuse(2, `--known-at-snapshot names ${missing.map((entry) => entry.case).join(', ')}, which the comparison does not call new: a stale allowance is refused rather than carried`)
         }
         knownAtSnapshot = { tip: list.tip, evidence: list.run ? String(list.run) : '', entries }
+    }
+    let knownHeaderAtSnapshot = null
+    if (knownHeaderFile) {
+        let list
+        try {
+            list = JSON.parse(fs.readFileSync(knownHeaderFile, 'utf8'))
+        } catch (error) {
+            refuse(2, `--known-header-at-snapshot ${knownHeaderFile} is not JSON: ${error.message}`)
+        }
+        const entries = Array.isArray(list.entries) ? list.entries : []
+        if (!SHA.test(String(list.tip || ''))) refuse(2, '--known-header-at-snapshot needs "tip": a commit the fix has to be an ancestor of')
+        if (entries.length === 0) refuse(2, '--known-header-at-snapshot names no entry: an empty allowance is a refusal with extra steps')
+        for (const entry of entries) {
+            if (!entry.file || !SHA.test(String(entry.snapshot || '')) || !SHA.test(String(entry.fixedAt || ''))) {
+                refuse(2, `--known-header-at-snapshot entry ${JSON.stringify(entry)} needs file, snapshot and fixedAt`)
+            }
+            if (entry.snapshot !== merge) {
+                refuse(2, `--known-header-at-snapshot entry ${entry.file} has no header at ${entry.snapshot.slice(0, 9)}, and this record is about ${merge.slice(0, 9)}`)
+            }
+        }
+        knownHeaderAtSnapshot = { tip: list.tip, entries }
     }
     if (!diff.planSet || !Array.isArray(diff.planSet.names) || !diff.planSet.hash) {
         refuse(2, `${diffFile} does not name the plan set: a record that cannot say which plans were read is not checkable`)
@@ -287,6 +313,11 @@ function doWrite() {
         // Absent from every record written on the ordinary path, so a reader can tell a merge that was
         // green where it stood from one that was red there and is green now.
         ...(knownAtSnapshot ? { knownAtSnapshot } : {}),
+        // The other layer of the same backfill: a file this tree added without its two-line header,
+        // and the commit that wrote it. `header` below says the check passed on the pushed tree; this
+        // says which files it passed because a later commit had given them their header. Absent from
+        // every record written on the ordinary path.
+        ...(knownHeaderAtSnapshot ? { knownHeaderAtSnapshot } : {}),
         gates,
         // The exit code the measured run ended with, as the gate reported it. `unknown` is the third
         // state and not a zero in disguise: the gate printed its readings and could not obtain the
