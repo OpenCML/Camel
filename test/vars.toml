@@ -38,3 +38,9 @@ run_prl_gc_stats1_no_bytecode = ["std::prl gc_stats=1 bytecode=false"]
 run_prl_no_bytecode = ["std::prl bytecode=false"]
 run_prl_segments = ["std::prl segments=true"]
 run_inline_jit_hot_threshold0 = ["std::cxx::inline", "std::jit hot_threshold=0"]
+
+# The bytecode VM's own settings, printed on standard error before the program runs: one line,
+# `[fastvm] config jit=<mode> hot_threshold=<n> trace_mir=<on|off> stats=<path|(none)>`. The two
+# passes print the same keys, so their two lines can be read side by side.
+run_fvm_config = ["std::fvm config=true"]
+run_jit_config = ["std::jit config=true"]

@@ -1,0 +1,53 @@
+/**
+ * A second sorting program, over five values, written as four bubble passes: each pass carries the
+ * largest of the values still in play to the end of its range, so after four passes the five names
+ * hold the input in ascending order. It is a different comparison order from `sort4`'s network --
+ * ten comparisons instead of five -- and the same requirement: both back ends take every `if` the
+ * same way and print the same five numbers.
+ */
+
+func low(a: int, b: int) => int {
+    return if a <= b then a else b
+}
+
+func high(a: int, b: int) => int {
+    return if a <= b then b else a
+}
+
+func network5(v0: int, v1: int, v2: int, v3: int, v4: int) => int[] {
+    // First pass over all five: the largest reaches the last name.
+    let a0 = low(v0, v1)
+    let a1 = high(v0, v1)
+    let b1 = low(a1, v2)
+    let b2 = high(a1, v2)
+    let c2 = low(b2, v3)
+    let c3 = high(b2, v3)
+    let d3 = low(c3, v4)
+    let d4 = high(c3, v4)
+    // Second pass over the first four.
+    let e0 = low(a0, b1)
+    let e1 = high(a0, b1)
+    let f1 = low(e1, c2)
+    let f2 = high(e1, c2)
+    let g2 = low(f2, d3)
+    let g3 = high(f2, d3)
+    // Third pass over the first three.
+    let h0 = low(e0, f1)
+    let h1 = high(e0, f1)
+    let i1 = low(h1, g2)
+    let i2 = high(h1, g2)
+    // Fourth pass over the first two.
+    let j0 = low(h0, i1)
+    let j1 = high(h0, i1)
+    return [j0, j1, i2, g3, d4]
+}
+
+func main() => int sync {
+    let down = network5(5, 4, 3, 2, 1)
+    println(down[0], down[1], down[2], down[3], down[4])
+    let mixed = network5(1, 5, 2, 4, 3)
+    println(mixed[0], mixed[1], mixed[2], mixed[3], mixed[4])
+    let repeats = network5(7, 7, 1, 1, 7)
+    println(repeats[0], repeats[1], repeats[2], repeats[3], repeats[4])
+    return 0
+}

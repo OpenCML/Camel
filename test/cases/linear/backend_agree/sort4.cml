@@ -1,0 +1,44 @@
+/**
+ * A sorting program with no array writes: a compare-exchange network of four values. Each step
+ * puts the smaller of its pair in the lower name and the larger in the higher one, so the four
+ * numbers it ends with are the input in ascending order, and every step is an `if` the two back
+ * ends have to take the same way. The program prints the sorted values, so the output is the
+ * result of the comparisons and of nothing else.
+ *
+ * The network is the optimal one for four inputs -- (0,3), (1,2), (0,1), (2,3), (1,2) -- with
+ * equal values kept in their places by `<=` in `low`.
+ */
+
+func low(a: int, b: int) => int {
+    return if a <= b then a else b
+}
+
+func high(a: int, b: int) => int {
+    return if a <= b then b else a
+}
+
+func network4(a: int, b: int, c: int, d: int) => int[] {
+    let p0 = low(a, d)
+    let p3 = high(a, d)
+    let p1 = low(b, c)
+    let p2 = high(b, c)
+    let q0 = low(p0, p1)
+    let q1 = high(p0, p1)
+    let q2 = low(p2, p3)
+    let q3 = high(p2, p3)
+    let r1 = low(q1, q2)
+    let r2 = high(q1, q2)
+    return [q0, r1, r2, q3]
+}
+
+func main() => int sync {
+    let one = network4(3, 1, 4, 2)
+    println(one[0], one[1], one[2], one[3])
+    let two = network4(4, 3, 2, 1)
+    println(two[0], two[1], two[2], two[3])
+    let three = network4(2, 2, 1, 1)
+    println(three[0], three[1], three[2], three[3])
+    let four = network4(9, 0, 5, 2)
+    println(four[0], four[1], four[2], four[3])
+    return 0
+}
