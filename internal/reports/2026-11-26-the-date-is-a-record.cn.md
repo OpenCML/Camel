@@ -165,17 +165,19 @@ A/B/C 三个条件都是"日期在括号里、或紧跟测量动词"的位置条
 | 2 | `11a98019de` | 602 | 507 | 75 | 读数再 30 行：`test/tools/` 20 行、`test/cases/compile/transforms/` 7 行、相邻 3 行 |
 | 3 | `596c92d868` | 574 | 477 | 75 | 状态边界 30 行：把"哪天结束的"换成"被什么界定"（第九节） |
 | 4 | `7bd3eefdad` | 548 | 451 | 50 | 读数 25 行 + 修 1 行 `bd2d84365d` 的残句（第十节） |
+| 5 | `ea95240d56` | 523 | 426 | 50 | 状态边界第二批 25 行：同一条判据，b 与 d 都是 0（第十一节） |
 
 所以这一节原来的 135 与 567 是这样走的：135/567 → **105/537**（批 1）→ 75/507（批 2）→ 75/477（批 3）
-→ 50/451（批 4）。
+→ 50/451（批 4）→ 50/426（批 5）。
 
-剩下的 451 行按形状分（读数一族已从起点的 135 行降到 50 行，口径与上表同）：
+剩下的 426 行按形状分（读数一族已从起点的 135 行降到 50 行，口径与上表同；状态边界那行是批 5
+之后的）：
 
 | 形 | 行 | 要做的动作 |
 |---|---:|---|
 | 读数（`measured …`、括号里的现场） | 50 | 重写从句：把"哪天"换成"哪台、哪个负载、哪个窗口"，或整句去掉读数的现场（批 4 抽掉 25 行，见第十节） |
 | 页名的一段 | 76 | 与 `handover-path` 一族同源：把页名换成"the page"，或删掉引用 |
-| 状态边界（`until/since/as of …`） | 52 | 重写句子：讲现在是什么，不讲哪天变的；判法见第九节（其中 5 行不是边界，剩 47 行） |
+| 状态边界（`until/since/as of …`） | 27 | 重写句子：讲现在是什么，不讲哪天变的；判法见第九节，批 5 抽掉 25 行（第十一节）。字面 27 里 **6 行不是边界**，剩 21 行 |
 | 有日期的决定（`rule/review/answer of <日期>`、`author`） | 47 | 与族 3 同一动作：留规则，去掉日期与"谁"；批 4 只在格里落了一行，且那一行是修 `bd2d84365d` 的残句 |
 | 流程事故（`on <日期> … deleted/merged/hit`） | 30 | 重写：只留"为什么这道闸存在"，不留事故的时间地点 |
 | 其余（日期在句中当唯一的"何时"） | 196 | 逐行重写 |
@@ -223,7 +225,10 @@ A/B/C 三个条件都是"日期在括号里、或紧跟测量动词"的位置条
 
 反方向也有一行：`test/plans/perf/startup.plan.toml:115` 的 `rounded up to the next 500 ms` 里的
 `up to` 让"边界词+日期"多算了一行，它是读数。所以**字面 82 行、判定 77 行、批 30 行、剩 47 行**；
-批 3 之后字面读数是 52，其中 5 行是上表那 5 行，剩 47 行要重写。
+批 3 之后字面读数是 52，其中 5 行是上表那 5 行，剩 47 行要重写。**批 5 发现这张表还漏了第六行**
+（`test/plans/feat/compile/transforms.plan.toml:1615`：`until` 与日期都在页名
+`questions-2026-11-01-the-residual-slot-has-no-type-until-execution.md` 里，整行没有从句，与
+`:1474` 同形），所以判定剩下的是 46 行而不是 47 行 —— 见第十一节。
 
 ### 读数与自测
 
@@ -252,10 +257,11 @@ A/B/C 三个条件都是"日期在括号里、或紧跟测量动词"的位置条
 
 ### 剩下的
 
-- 本族还剩 47 行（外加 5 行不属于本族），判法照第四节与本节；
+- 本族还剩 47 行（外加 5 行不属于本族），判法照第四节与本节；批 5 抽走 25 行、并查出第 6 行
+  不属于本族，剩 21 行（第十一节）；
 - `test/plans/feat/opt/splice_place.plan.toml:48` 改掉的那句话，在 `:57` 与 `:66` 还有两份一模一样的
   （`The context argument is a Ref handle since …`）；抽样只抽到一份，另两份**按同一句改法**即可，
-  本批没动它们，是为了让"30 行"这个数可核。
+  本批没动它们，是为了让"30 行"这个数可核。批 5 把这两份按同一句改完了。
 
 ## 十、读数这一族的第四批：25 行，加一行修复
 
@@ -361,3 +367,144 @@ A/B/C 三个条件都是"日期在括号里、或紧跟测量动词"的位置条
   所以这一笔留给 88 主机；批 1 与批 2 已经用 17 个 `.cml` 留下同样的债，两批都没有重录，点名它们
   的闸是 `feat/parse/frontend.plan.toml` 的 `frontend.ast_record`。这不是本批的新问题，但也不能
   当成没有。
+
+## 十一、状态边界第二批：25 行，b 与 d 都是 0
+
+判据一个字没动，还是第九节那条：**先问这个状态是被什么界定的**，再决定日期换成什么。批 5
+（`ea95240d56`）从这一族里取 25 行，落在 21 个文件里。
+
+取法：本族按文件轮转，命中多的文件先占一轮，同一文件内按行号推进，一个文件一轮一格。
+`splice_place.plan.toml:57`、`:66` 与批 3 改过的 `:48` 是同一句（`The context argument is a Ref
+handle since …`），**整组取** —— 批 3 只在抽样里抽到一份，留了两份同形的，本节把它们按同一句改法
+补齐（见下面第 9、10 行）。
+
+| # | 位置 | 改前 → 改后 | 类 | 界是什么 |
+|---:|---|---|---|---|
+| 1 | `test/plans/feat/compile/transforms.plan.toml:1676` | `were marked known_fail until 2026-11-02, and their notes said` → `were marked known_fail, and their notes said` | c | 那四个标记已被摘掉，下一句就说清了 runner 的读数错在哪 |
+| 2 | 同上 `:1980` | `and until 2026-11-04 the transform could not lift it` → `and the transform could not lift it` | c | 同段末尾的 `pow is one of the written operations now, and jvp_pow is its rule` |
+| 3 | `test/plans/feat/opt/effects_kept.plan.toml:337` | `read as legal until 2026-11-16, because the rule` → `read as legal, because the rule` | a | 同句后半就是那条规则的第三项（`design principles 3.5`） |
+| 4 | 同上 `:369` | `before the closure since 2026-11-16:` → `before the closure:` | a | 同句的 `(design principles 3.5, item 198)` |
+| 5 | `test/plans/feat/showcase_s2.plan.toml:102` | `was a *negative* one until 2026-11-04, and it was written` → `was a *negative* one, and it was written` | c | 下一段 `The day came, so the assertion is the number now`（`the day` 指上一行的 `the day the wall fell`，不是被删的日期） |
+| 6 | 同上 `:120` | `where until 2026-11-04 it stopped at` → `where it stopped at` | c | 同句的 `asserts that neither refusal sentence is printed any more` |
+| 7 | `test/plans/feat/effects/masking_transition.plan.toml:169` | `carrying it until 2026-11-16.` → `carrying it.` | c | 前半句已说现在按 `capture 0` 命名 |
+| 8 | `test/plans/feat/modules/selected_protection.plan.toml:427` | `is refused since 2026-11-16 for the reason` → `is refused for the reason` | a | 同句点名的那条记录 `dead_write.direct.answer` |
+| 9 | `test/plans/feat/opt/splice_place.plan.toml:57` | `a Ref handle since 2026-11-16 (design principles 3.5;` → `a Ref handle (design principles 3.5;` | a | 同句的 `design principles 3.5`，与 `:48` 一致 |
+| 10 | 同上 `:66` | 同上 | a | 同上 |
+| 11 | `test/plans/feat/compile/transpose_array_product.plan.toml:21` | `Green since 2026-11-04 through mul_stated_t` → `Green through mul_stated_t` | c | 同句点名的法则 `mul_stated_t` |
+| 12 | `test/plans/feat/opt/adb67e081.plan.toml:68` | `the refusal changed on 2026-11-16:` → `the refusal changed:` | a | 同句 `was withdrawn by the author … (design principles 3.5)` |
+| 13 | `test/plans/feat/opt/commit_refusal.plan.toml:129` | `the operator: until 2026-11-19 tensor:load_npy named the` → `the operator: tensor:load_npy named the` | c | 下一句 `the case is red before the repair and green after` |
+| 14 | `test/plans/feat/runtime/exit_type.plan.toml:8` | `it into. Until 2026-11-04 the seal asked that` → `it into. The seal asked that` | c | 上一句已说这道闸现在问的是 assignability（`design principles 5.1`） |
+| 15 | `test/plans/feat/modules/graph.plan.toml:510` | `f32 [2, 3]] until 2026-11-18: the order the nodes were created in.` → `f32 [2, 3]]: the order the nodes were created in.` | c | 下一句 `It now reads … because nodes answers the canonical order (design principles 9.5)` |
+| 16 | `test/plans/feat/compile/inferred_resources.plan.toml:38` | `carrying it until 2026-11-16 -- the same number here` → `carrying it -- the same number here` | c | 同句 `the reading names it by its capture position (capture 0)` |
+| 17 | `test/plans/feat/opt/progen8_arm.plan.toml:31` | `the plan's open debt until 2026-11-05, not exceptions` → `the plan's open debt, not exceptions` | c | 下一行 `no known_fail` |
+| 18 | `test/plans/feat/compile/rest_params.plan.toml:307` | `Until 2026-11-05 the read killed the process` → `The read killed the process` | c | 同句 `was built by linking its members as With inputs alone`（过去式即是被换掉的状态） |
+| 19 | `test/tools/run-tests.mjs:316` | ``read from `failures + stdout + stderr` until 2026-11-25, which made`` → ``read from `failures + stdout + stderr`, which made`` | c | 同一段就是这个读法错在哪 |
+| 20 | `test/plans/feat/opt/screens.plan.toml:92` | `carries the iteration count since 2026-11-16:` → `carries the iteration count:` | a | 同句 `(design principles 3.5, items 197 and 198)` |
+| 21 | `test/cases/compile/transforms/first_step_tensor_vjp.cml:25` | `Since 2026-11-04 the product's **linear call** is` → `The product's **linear call** is` | c | 同句点名的 `matmul_stated` |
+| 22 | `test/cases/compile/type_identity/identity.mjs:92` | ``read `type_of(nodes(g)[0])` until 2026-11-18:`` → ``read `type_of(nodes(g)[0])`:`` | c | 下一句 `nodes answers the *canonical* order now (design principles 9.5)` |
+| 23 | `test/cases/modules/selected_protection/dead_write.cml:4` | `Refused since 2026-11-16 (design principles 3.5, 198):` → `Refused (design principles 3.5, 198):` | a | 同句的 `design principles 3.5, 198` |
+| 24 | `test/cases/opt/effects/dead_write_dropped_closure.cml:4` | 同上 | a | 同上 |
+| 25 | `test/cases/para/core/closure_capture_gives_its_box_back.cml:10` | `was, until 2026-11-18, taken by no plan any gate` → `was taken by no plan any gate` | c | 同段 `it is put where a gate reads it`（这就是那个状态现在的样子） |
+
+分布：**a 9 / b 0 / c 16 / d 0**。a 与 c 的界线就是第九节那条：同句（或同段下一句）另有一个
+坐标，且那个坐标是"一条裁定"时归 a、"代码现在是什么"时归 c —— 两者都不是"删掉日期就完了"，
+而是"日期换成它"。
+
+### b 与 d 为什么是 0，不是没找
+
+**b（一个提交）**：本样例 25 行里，没有一行的界是一个提交。本族用提交做界的三个都在批 3
+（`596c92d868`：布局搬进 `src/`、标准库搬到 `src/stdlib` 下），它们用的是树里已有的名字
+（`before/after the layout move`、`under cxx::`），不是 sha。批 5 没有可换名的地方，所以这条
+判据原位站着、没有被用到。
+
+**d（只有"从某天起没人动过"）**：0 行。25 行逐行看下来，每一行的段落里都另有一个坐标：一条裁定
+（第 3、4、8、9、10、12、20、23、24 行）、一条点名的法则或记录（`mul_stated_t`、`jvp_pow`、
+`dead_write.direct.answer`、`capture 0`）、或者"代码现在是什么"（其余各行）。**这正是"删掉日期
+句子就散"与"重写总能落地"是同一件事的两面**：日期不是唯一的信息，它只是那句话里最省事的坐标。
+真出现只有日期一个坐标的句子（例如"从某天起没人动过，我也说不出为什么"），它才该进 d，且必须
+写明为什么没有第二个坐标可用 —— 本批没有这样的行。
+
+### 派工的两条前提没能复现
+
+派工说"剩 47 行"，并点名 `splice_place.plan.toml:57`、`:66` 两句整组取。后者对（见上表第
+9、10 行）；前者在两个地方与树上的读数不同：
+
+- **47 里有一行不是边界。** `test/plans/feat/compile/transforms.plan.toml:1615` 整行是
+  `# internal/reviews/questions-2026-11-01-the-residual-slot-has-no-type-until-execution.md).`
+  —— 日期与 `until` 都在页名的 slug 里，两边都没有从句。它与第九节表里 `:1474` 是同一个形状，
+  那张五行表漏了它。所以判定剩下的是 **46 行**，批 5 取走 25 行后剩 **21 行**。
+- **五行同时属于两个族。** 本批**跳过**它们，没有半改：
+  `transforms.plan.toml:1954`（`until 2026-11-04` 旁边还有 `the author withdrew on 2026-11-18`）、
+  `transforms.plan.toml:2208` 与 `modules/selected_protection.plan.toml:417`（同句有页名日期）、
+  `transforms/nested.plan.toml:147`（`reintroduced on 2026-11-20`）、
+  `perf/showcase_c3.plan.toml:56`（`on 2026-11-04 the walk refuses`）。只删边界那一个日期，行里
+  还留着另一个族的日期，这一行**仍然会出现在读数里** —— 那本批的"25 行"就无法用自己的读数核。
+  它们归"把那个日期一起结清"的那一批。
+
+### 整组留的两处
+
+- `transforms.plan.toml:1781/1810/1833/1856/1879`：一句话在五个块里各出现一次
+  （`(Until 2026-11-03 this block said "the wall is the law idx_arr_t, not the shape"; …)`）。
+  抽一行会留下四个同形孪生，所以**整组没动**。与 `feat/mm/gc_collections.plan.toml` 那十三条
+  一样，留给整组取的一批（这两处是下一批最该整组取的）。
+- `showcase_s2.plan.toml:183-184` 是 `bd2d84365d` 留下的**伤**：那一批把 `answered (author,`
+  换成 `answered. Until 2026-11-04 it passed the operand itself, …,` 却没删下一行，于是同一句在
+  两行上各写了一遍，底下还挂着 `2026-11-04 12:40).` 这个碎片。修法就是那一批本来该写的
+  （整句只留一遍、日期去掉）；它与 `check-vjp-ruleset.mjs:21-22`（批 4 修的那处）是同一个形状。
+  本批没有抽到它，所以**没动**：它要跟 showcase_s2 剩下那几行一起取，且两行必须一起取。
+
+### 读数与自测
+
+| 项 | 批 5 之前 | 批 5 之后 |
+|---|---|---|
+| `node scripts/check-process-traces.mjs --root .` | **548**（6336 文件 / 167451 注释行），exit 1 | **523**（6336 文件 / 167451 注释行），exit 1 |
+| `date` 一族 | 451 | 426 |
+| 读数一族 | 50 | 50（本批没碰） |
+| 状态边界（字面 / 判定） | 52 / 47 | 27 / 21（27 减 6 行非边界） |
+| `node --test scripts/check-process-traces.test.mjs` | 8/8（`git archive HEAD` 副本上跑） | 8/8 |
+
+文件数与注释行数两侧完全相同（6336 / 167451），说明这一批只动了词。两侧 `--list` 的行集合逐行
+比：**消失的 25 个命中正是上表这 25 行，新增 0**。`git archive HEAD` 的副本上跑的既是自测的
+"前一读"，也是这份清单的"前一份"：它读 548，与本树批前的 548 相同，所以两侧是同一把尺。
+
+接缝十二模式（`(:`、`,,`、`()`、`.` `;` `:` `)` 前的空格各一条、句号后的双空格、行尾空白、
+`until|since|as of` 紧跟标点、`word (`、双空格）扫 `src/ scripts/ internal/tools/ test/`：
+**十二个计数完全相同**（167、3、72534、7285、362、14977、1534、124、795、40、83526、2014818），
+**十二个行集合也完全相同、0 处移动** —— 这一批没有删掉标点、也没有造出新的接缝，所以尺子无事
+可报。这既是对照（尺子只在我动过的地方动，而这次我动的都是词），也是本批唯一"没有变化"的那一
+格，不抹平。
+
+逐行比词（25 对）：带数字且不是日期的 token **0 丢** —— `0x03000210`、`0x03000213`、
+`0x03000214`、`197`/`198`、`3.5`、`9.5`、`10.34375`、`3.75`、`13.5`、`5.5`、`19.5`、`20`、`41`、
+`30.0`、`9.0`、`6.0`、`0.15`、`0.085` 全在；这 25 行**没有机器名、没有负载数字**（它们界定的是
+状态，不是读数），所以那一类没有被丢的风险。丢掉的词只有边界词与日期、引导它们的连接词
+（`Since`、`was,`），以及两处按判据重写的从句（`was, until <日期>, taken` → `was taken`；
+`known_fail until <日期>,` → `known_fail,`）。
+
+15 个改过的计划仍能解析：`node test/tools/check-plan-fields.mjs --root .` 两侧都读 **432 个计划 /
+7067 条用例 / 317 条 finding**（delta +0）；两个 `.mjs` 过 `node --check`。
+
+### AST 账：4 个 `.cml` 需要重录
+
+这一批改到 4 个 `.cml`（`first_step_tensor_vjp.cml`、`dead_write.cml`、
+`dead_write_dropped_closure.cml`、`closure_capture_gives_its_box_back.cml`），注释在 AST 里，
+所以 `test/plans/feat/parse/golden/ast_hashes.txt` 的这四行会过期。**这些需要重录**，在能构建
+`camel-parsecheck` 的地方：
+`python3 test/tools/parsecheck/check.py snapshot --update --only '<pattern>'`。
+本车道不构建，也**没有手写任何 hash**；`11d0200331` 重录的是前几批留下的 207 行，这四行是批 5
+新欠的。点名它们的闸是 `feat/parse/frontend.plan.toml` 的 `frontend.ast_record`。
+
+### 本批没动的，与下一手要接的
+
+剩 21 行（字面 27 减 6 行非边界），分四堆：
+
+| 堆 | 行 | 位置 | 下一批怎么接 |
+|---|---:|---|---|
+| 同形系列 | 5 | `transforms.plan.toml:1781/1810/1833/1856/1879` | 整组取，一次改五处 |
+| 两个族 | 5 | `transforms.plan.toml:1954`、`:2208`、`modules/selected_protection.plan.toml:417`、`transforms/nested.plan.toml:147`、`perf/showcase_c3.plan.toml:56` | 与"有日期的决定 / 页名"那批一起，把第二个日期也结清 |
+| 伤的成对 | 2 | `showcase_s2.plan.toml:183-184` | 一起取：整句留一遍、`2026-11-04 12:40).` 碎片去掉 |
+| 干净的散行 | 9 | `transpose_array_product.plan.toml:34`、`masking_transition.plan.toml:191`、`effects_kept.plan.toml:377/385/549/566/574`、`transforms.plan.toml:2534/2929` | 按本节判据直接改 |
+
+那 6 行非边界（`transforms.plan.toml:1474`、`:1615`、`:2546`、`modules/nn.plan.toml:1319`、
+`opt/splice_place.plan.toml:168`、`probe/refleak.plan.toml:148`）不属于本族，归页名 / 因果连词 /
+有日期的决定那几族。
