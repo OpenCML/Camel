@@ -63,6 +63,7 @@ class CollectionType : public OtherType {
 
     Type *clone(bool deep = false) const override;
     bool equals(Type *type) const override;
+    bool castEntersFrom(Type *sourceType) const override;
     CastSafety castSafetyFrom(Type *sourceType) const override;
     slot_t castSlotFrom(slot_t value, Type *sourceType) const override;
     bool assignableFrom(Type *sourceType) const override;

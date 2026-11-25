@@ -2,11 +2,11 @@
 // SPDX-License-Identifier: MIT
 
 #include "camel/core/type/base.h"
+#include "camel/core/error/runtime.h"
 #include "camel/core/mm.h"
 #include "camel/core/rtdata/array.h"
 #include "camel/core/rtdata/base.h"
 #include "camel/core/rtdata/string.h"
-#include "camel/core/type/composite/array.h"
 #include "camel/core/type/composite/composite.h"
 #include "camel/core/type/intern.h"
 #include "camel/core/type/other.h"
@@ -15,6 +15,7 @@
 #include "camel/utils/type.h"
 
 #include <string_view>
+#include <string>
 #include <stdexcept>
 
 using namespace std;
@@ -289,34 +290,62 @@ CastSafety Type::castSafetyFrom(Type *sourceType) const {
 }
 
 bool Type::castEntersFrom(Type *sourceType) const {
-    // A step that cannot fail is an entering (design principles 5.1). What is `Unsafe` is a
-    // conversion the program has to write itself, and `Forbidden` is no step at all.
-    if (castSafetyFrom(sourceType) == CastSafety::Safe) {
+    // Entering is judged by the **structure** of the two types, not by the conversion table
+    // (design principles 5.1, "entering is not a conversion"). That table answers one question --
+    // may a program write this conversion, and does the value have to be checked when it runs -- and
+    // it is asked where a program writes one (`x as T`, `T(x)`, `cast::<T, U>(x)`). Asking it here
+    // made the two concepts one: a pair the table called `Safe` became a step the compiler inserted,
+    // which is how a conversion turned into an entering (and, before `:op/enter` existed, into a
+    // conversion that could fault on a value nobody asked about). The table is therefore not a name
+    // this judgement mentions: what follows reads the two types.
+    //
+    // What the structure says, for a type that states no form of its own:
+    if (sourceType == nullptr) {
+        return false;
+    }
+    // The value already has the type the position asks for: nothing moves (5.1).
+    if (equals(sourceType)) {
         return true;
     }
-    // One edge the table answers `Unsafe` for and that still moves nothing: `T[..]` read as `T` is
-    // the element the rank-zero array holds (design principles 5.4 -- a rank-zero array *is* the
-    // element: the same value, the same printing, the same comparison). The table has to say
-    // `Unsafe` because the shape is not known until the value exists, and `castSlotFrom` below
-    // reads the value it can check; the compiler inserts this step wherever a position of `T`
-    // receives a `T[..]` (`isRankZeroEdge`), so it is an entering and the pair table is not the
-    // question it asks.
-    return isRankZeroEdge(const_cast<Type *>(this), sourceType);
+    // The bottom type `never` (design principles 3.9): the expression gives the position no value,
+    // so putting it there converts nothing and cannot fail.
+    if (sourceType->code() == TypeCode::Never) {
+        return true;
+    }
+    // Every other pair is a question for the type that states the form the value goes into -- the
+    // tagged forms (TupleType), an array's rank-zero slot and open rank (ArrayType), a struct's
+    // fields (StructType), an enum's instance (EnumType) -- and a type that states no such form
+    // enters nothing but itself. A pair none of them calls an entering is refused where the
+    // compiler would have had to insert a step: the conversion that may fail is the program's to
+    // write (5.1), and a shape only the value knows is a check (`:op/refine_extent`), not an
+    // entering.
+    return false;
 }
 
 slot_t Type::castSlotFrom(slot_t value, Type *sourceType) const {
     GUARD(sourceType != nullptr, "castSlotFrom source type is null");
     if (sourceType->code() == TypeCode::Array) {
-        // A value of `T[..]` read as `T` is the element it holds: a rank-zero array *is* that
-        // element (design principles 5.4), so reading it back hands the element on, and the
-        // compiler inserts this conversion where a value's type goes from `T[..]` back to `T`
-        // (Builder::coerceTo). The table below refuses an `as` on an open rank -- the shape is not
-        // known until the conversion runs -- so this one edge is not the table's answer, and it
-        // reads a value it can check: only a value with no dimension is the element.
-        const auto *array =
-            camel::core::rtdata::fromSlot<const Array *>(value);
-        if (array != nullptr && array->rank() == 0) {
-            return array->getSlot(0);
+        // A value of `T[..]` read as `T` is the element it holds, because a rank-zero array *is*
+        // that element (design principles 5.4) -- and only a value with no dimension is the
+        // element. The rank is the value's, not the type's, so this edge is a **check**, not an
+        // entering: it is inserted as `:op/refine_extent` (`Builder::coerceTo`), which may fault,
+        // and a value of the wrong rank is refused here with the array's own words instead of
+        // being handed on as something it is not. An `as` of an open rank does not reach this
+        // line: the safety table refuses it where the program is read, because the shape is not
+        // known until the conversion runs.
+        const auto *array = camel::core::rtdata::fromSlot<const Array *>(value);
+        if (array != nullptr) {
+            if (array->rank() == 0) {
+                return array->getSlot(0);
+            }
+            std::string actual = "[";
+            for (size_t i = 0; i < array->rank(); ++i) {
+                actual += (i ? ", " : "") + std::to_string(array->dim(i));
+            }
+            actual += "]";
+            camel::core::error::throwRuntimeFault(
+                camel::core::error::RuntimeDiag::RuntimeError,
+                "conversion to '" + toString() + "' failed: the array has shape " + actual);
         }
     }
     GUARD(

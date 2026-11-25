@@ -299,6 +299,7 @@ class FunctionType : public CompositeType {
     virtual Type *closed() const override;
     virtual bool equals(Type *type) const override;
     virtual Type *unify(Type *other) const override;
+    virtual bool castEntersFrom(Type *sourceType) const override;
     virtual CastSafety castSafetyFrom(Type *sourceType) const override;
     virtual bool assignableFrom(Type *sourceType) const override;
 

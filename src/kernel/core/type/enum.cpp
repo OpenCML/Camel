@@ -250,6 +250,23 @@ bool EnumType::assignableFrom(Type *sourceType) const {
     return equals(sourceType) || enumEntersFrom(const_cast<EnumType *>(this), sourceType);
 }
 
+// Whether the pair is an entering, by the structure of the two types and not by the conversion
+// table (design principles 5.1, "entering is not a conversion"): an instance of the same
+// declaration whose arguments are this instance's, or the holes this one fills, is the same tagged
+// value, and handing it on moves nothing.
+bool EnumType::castEntersFrom(Type *sourceType) const {
+    if (sourceType == nullptr) {
+        return false;
+    }
+    if (equals(sourceType)) {
+        return true;
+    }
+    if (sourceType->code() == TypeCode::Never) {
+        return true;
+    }
+    return enumEntersFrom(const_cast<EnumType *>(this), sourceType);
+}
+
 CastSafety EnumType::castSafetyFrom(Type *sourceType) const {
     if (equals(sourceType)) {
         return CastSafety::Safe;

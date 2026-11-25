@@ -1,0 +1,23 @@
+/**
+ * The two rank-zero edges of an open rank, and which of them is which:
+ *
+ *   - a value of `T` handed to a `T[...]` position is the rank-zero array that *is* the element
+ *     (design principles 5.4). Nothing can fail -- the array is made from the value -- so it is an
+ *     **entering**, written as `:op/enter`.
+ *   - a `T[...]` read as a `T` is the element only when the value has no dimension. The rank is the
+ *     value's, so that step is a **shape check**, written as `:op/refine_extent`, and it may stop the
+ *     program (`cases/consistency/entering/rank_not_zero.cml` shows that it does).
+ *
+ * Neither is a conversion: `:op/cast` appears nowhere in this graph, because the program wrote no
+ * `as`. A reader that finds `:op/cast` here is looking at a compiler that turned a check into a
+ * conversion the program never asked for.
+ */
+
+func element_of(x: f32[...]) => f32 {
+    return x
+}
+
+func main() => int sync {
+    println(element_of(1.5))
+    return 0
+}

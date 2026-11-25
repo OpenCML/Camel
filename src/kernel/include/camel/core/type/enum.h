@@ -187,6 +187,10 @@ class EnumType final : public OtherType {
     /// Safe from an equal type and from a pending instance of the same declaration that this
     /// one completes (`Option<_>` to `Option<int>`); forbidden otherwise.
     CastSafety castSafetyFrom(Type *sourceType) const override;
+    /// Whether a value of `sourceType` enters this enum type, judged by the two types' structure: an
+    /// instance of the same declaration whose arguments are this instance's, or the holes this one
+    /// fills (`Option<_>` to `Option<int>`), is the same tagged value, and the step moves nothing.
+    bool castEntersFrom(Type *sourceType) const override;
     /// The value itself: an enum value does not depend on the arguments it holds no data of.
     slot_t castSlotFrom(slot_t value, Type *sourceType) const override;
 

@@ -2361,11 +2361,14 @@ c4b6abfbcc3857dd ok test/cases/consistency/entering/err_assignment_other_payload
 aaac8730da9df233 ok test/cases/consistency/entering/err_error_arm_no_type.cml
 41323046ee4c5bb9 ok test/cases/consistency/entering/err_numeric.cml
 98613e7ecc0d899f ok test/cases/consistency/entering/err_other_payload.cml
+056e1419387dd6b8 ok test/cases/consistency/entering/err_widening_position.cml
 e3ce67fcb2b4ee14 ok test/cases/consistency/entering/error_arm.cml
 dad0d62b3722fc5d ok test/cases/consistency/entering/fallback_chain.cml
 debac9969e64d467 ok test/cases/consistency/entering/graph_explicit.cml
 32af8279a3e182ce ok test/cases/consistency/entering/graph_implicit.cml
 3fb2303fc2d4caa6 ok test/cases/consistency/entering/positions.cml
+b118668f656aa978 ok test/cases/consistency/entering/rank_not_zero.cml
+4301a1dbc7eb188b ok test/cases/consistency/entering/rank_zero_edges.cml
 596cbf3eb8420f30 ok test/cases/consistency/entering/void_arm.cml
 e844178e3870aaa0 ok test/cases/consistency/entry/declared_int.cml
 cb18bb34987aa27c ok test/cases/consistency/entry/declared_string.cml
