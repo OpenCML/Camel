@@ -15,7 +15,7 @@ prints one entry.
 - **Message, help.** The templates; `{0}`, `{1}`, ... are filled in by the report.
 - **Example.** A program of the test suite that raises the diagnostic, where one is small enough to show.
 
-327 diagnostics: 305 errors, 22 warnings. 14 carry a machine-applicable edit, 313 say why they carry none.
+328 diagnostics: 306 errors, 22 warnings. 14 carry a machine-applicable edit, 314 say why they carry none.
 
 | Code | Name | Severity | Edit |
 |------|------|----------|------|
@@ -281,6 +281,7 @@ prints one entry.
 | `0x03000216` | [SemanticDiag::VarContextParameterCannotBeBound](#varcontextparametercannotbebound) | Error | no |
 | `0x03000217` | [SemanticDiag::ReadonlyResourceWritten](#readonlyresourcewritten) | Error | no |
 | `0x03000218` | [SemanticDiag::OperatorAccessesUndeclared](#operatoraccessesundeclared) | Error | no |
+| `0x03000219` | [SemanticDiag::OperatorSignatureUnresolved](#operatorsignatureunresolved) | Error | no |
 | `0x03100002` | [SemanticDiag::IgnoredSideEffect](#ignoredsideeffect) | Warn | no |
 | `0x03100090` | [SemanticDiag::ExitInUnusedBranch](#exitinunusedbranch) | Warn | no |
 | `0x031000C0` | [SemanticDiag::UnusedFallibleValue](#unusedfalliblevalue) | Warn | no |
@@ -8475,7 +8476,7 @@ A value declared without a right side (`export let inf: float`) is supplied by t
 **Example** (`test/cases/modules/math_kernels/err_value_missing/math.cml`, run as `camel test/cases/modules/math_kernels/err_value_missing/math.cml`)
 
 ```camel
-import { timeit } from perf
+import { mean } from array // loads the C++ module `math`: a file named `math` importing `math` is a self-import with no effect
 
 export let tau: float
 
@@ -8507,7 +8508,7 @@ A value declared without a right side is the one the C++ module registers: write
 **Example** (`test/cases/modules/math_kernels/err_value_type/math.cml`, run as `camel test/cases/modules/math_kernels/err_value_type/math.cml`)
 
 ```camel
-import { timeit } from perf
+import { mean } from array // loads the C++ module `math`: a file named `math` importing `math` is a self-import with no effect
 
 export let inf: int
 
@@ -9410,6 +9411,28 @@ The operator '{0}' itemizes no accesses, and an operator of the built-in module 
 
 ```text
 An operator that itemizes none is read as writing the global resource, and the graph builder read the same operator a different way -- every operand read-modify-written -- so one call was on the sync chain for one reader and not for the other, and neither answer was a declaration. This is a mistake in the operator's registration, not in a program: declare its accesses where it is registered (OperatorTable::declareResources in src/builtin/executors/builtin_semantics.cpp) -- the empty list where it is pure, the operand or ambient resource it reads or writes otherwise -- and the load goes on.
+```
+
+*No example: no test small enough to show raises it.*
+
+### OperatorSignatureUnresolved
+
+`0x03000219` · Error · `SemanticDiag::OperatorSignatureUnresolved`
+
+**Fix**
+
+None: context: the call is one the compiler wrote, and the type it lacks is the one inference had not reached yet
+
+**Message**
+
+```text
+The signature of the operator '{0}' is not resolved: the type of {1} is not known where the compiler writes this call.
+```
+
+**Help**
+
+```text
+A conversion or a copy the compiler writes itself is a call of a built-in operator, and resolving which rule takes it needs both types: the type of the value it reads and the type it produces. Nothing is put in place of the type the compiler cannot see.
 ```
 
 *No example: no test small enough to show raises it.*

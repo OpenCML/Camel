@@ -12,6 +12,7 @@
 #include "camel/utils/assert.h"
 
 #include <sstream>
+#include <format>
 
 namespace mm = camel::core::mm;
 using namespace camel::core::error;
@@ -317,5 +318,23 @@ slot_t __cast_value__(ArgsView &with, ArgsView &norm, Context &ctx) {
     camel::core::type::Type *source = norm.type(0);
     GUARD(target != nullptr, "a conversion must state the type it produces.");
     GUARD(source != nullptr, "a conversion must state the type of its operand.");
+    // A conversion that is not `Safe` is one the program has to check when it runs, and what it
+    // leaves open is the value: `:op/cast` declares exactly that (`registry.set(":op/cast", …,
+    // .mayFault = true)`, and `castMayFault` answers the same for the pair). `Type::castSlotFrom`
+    // is defined only for the pairs whose conversion is Safe -- it states that as a GUARD -- so
+    // calling it here on any other pair aborts the process with an invariant violation, which says
+    // "the compiler wrote something it may not write" about a program that only asked for a
+    // conversion of a value that does not fit. The fault the declaration promised is raised here
+    // instead, and the GUARD stays as the statement it is.
+    const camel::core::type::CastSafety safety = target->castSafetyFrom(source);
+    if (safety != camel::core::type::CastSafety::Safe) {
+        throwRuntimeFault(
+            RuntimeDiag::InvalidArgument,
+            "cast",
+            std::format(
+                "a value of type '{}' does not convert to '{}' by this call",
+                source->toString(),
+                target->toString()));
+    }
     return target->castSlotFrom(norm.slot(0), source);
 }

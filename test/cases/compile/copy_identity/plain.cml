@@ -1,0 +1,7 @@
+func main() => int sync {
+    let n = 41
+    var g = n
+    g = g + 1
+    println(g)
+    return 0
+}
