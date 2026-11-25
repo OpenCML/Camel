@@ -118,13 +118,13 @@ timeout_ms = 120000
 
 [[tests]]
 name = "selfchecks.process_traces"
-desc = "`scripts/check-process-traces.mjs` reads four trees for process traces: a date or a hash that is data is not a trace, the GPU lane domain in the tiles compiler is refused on purpose, and a run that read nothing is red rather than green."
+desc = "`scripts/check-process-traces.mjs` reads four trees for process traces: a date or a hash that is data is not a trace, a trace in a test's name is refused where the name is written, `--list` prints the same lines and judges nothing while the same tree without the flag is refused, a listing of a tree that read nothing is still red, the GPU lane domain in the tiles compiler is refused on purpose, and a run that read nothing is red rather than green."
 kind = "behavior"
 tool = "node"
 case = "../../../../scripts/check-process-traces.test.mjs"
 args = ["${case}"]
 expect_exit = 0
-expect_stdout_contains = [" pass 5", " fail 0"]
+expect_stdout_contains = [" pass 8", " fail 0"]
 normalizers = ["normalize_newlines"]
 timeout_ms = 120000
 

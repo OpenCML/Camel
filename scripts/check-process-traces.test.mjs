@@ -42,6 +42,9 @@ const cases = [
     ['test', 'cases/compile/loop.cml', '// The notation the author gave on 2026-11-23.\n'],
     ['test', 'cases/compile/tuple.cml', '// It was 当时 read the other way round.\n'],
     ['test', 'cases/compile/branch.cml', '// Green today, measured 2026-11-05: exit 0.\n'],
+    // The name is what the other entries cite and what a reader quotes, so a trace in one is refused
+    // where it was written, not only in the `desc` beside it.
+    ['test', 'plans/feat/mm/named.plan.toml', '[[tests]]\nname = "extract_D-1123-78"\ndesc = "Two writings of `a + 1` are one value."\n'],
 ];
 
 const clean = [
@@ -59,13 +62,18 @@ function tree(files) {
     return root;
 }
 
-function run(root) {
+function run(root, extra = []) {
     try {
-        const stdout = execFileSync(process.execPath, [checker, '--root', root], { encoding: 'utf8' });
+        const stdout = execFileSync(process.execPath, [checker, '--root', root, ...extra], { encoding: 'utf8' });
         return { status: 0, stdout };
     } catch (error) {
         return { status: error.status, stdout: `${error.stdout ?? ''}${error.stderr ?? ''}` };
     }
+}
+
+// The lines a report names, so a listing and a refusal can be compared line for line.
+function named(stdout) {
+    return stdout.split('\n').filter((line) => /^\s{2}\S.*:\d+: /.test(line));
 }
 
 test('every spelling that occurred is caught, in the tree and file type it occurred in', () => {
@@ -122,4 +130,37 @@ test('the trees read are the four that carry traces', () => {
     for (const dir of ['src', 'scripts', 'internal/tools', 'test']) {
         assert.ok(line[1].includes(`'${dir}'`), `${dir} should be read`);
     }
+});
+
+test('--list names the same lines and judges nothing, and the same tree without it is refused', () => {
+    // A tree that carries traces has to be read before it can be worked through, and the reading has
+    // to be the one the refusal would print: two lists of the same tree that disagree are two
+    // patterns, and the one that is edited later is whichever a reader happens to open.
+    const root = tree(cases.slice(0, 4));
+    const judged = run(root);
+    const listed = run(root, ['--list']);
+    assert.equal(judged.status, 1, `a trace must be refused without the flag: ${judged.stdout}`);
+    assert.equal(listed.status, 0, `--list must list and not judge, and it exited ${listed.status}: ${listed.stdout}`);
+    assert.deepEqual(named(listed.stdout), named(judged.stdout), 'a listing and a refusal name the same lines');
+    assert.equal(named(listed.stdout).length, 4, 'every planted trace should be named');
+    assert.match(listed.stdout, /nothing judged/, 'a listing has to say it judged nothing, or it reads as a pass');
+    fs.rmSync(root, { recursive: true, force: true });
+});
+
+test('--list of a tree that read nothing is still red', () => {
+    // The flag lifts the verdict on traces, not the rule that a run which read nothing checked
+    // nothing: an empty listing is exactly what a broken pattern prints.
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'traces-empty-list-'));
+    const { status, stdout } = run(root, ['--list']);
+    assert.equal(status, 1, '--list on a tree that could not be read proves nothing and must not pass');
+    assert.ok(stdout.includes('not read'), `the report should say nothing was read: ${stdout}`);
+    fs.rmSync(root, { recursive: true, force: true });
+});
+
+test('a clean tree stays clean with --list', () => {
+    const root = tree(clean);
+    const { status, stdout } = run(root, ['--list']);
+    assert.equal(status, 0, `a clean tree must pass with the flag too: ${stdout}`);
+    assert.match(stdout, /no trace/, `the reading should be printed with the verdict: ${stdout}`);
+    fs.rmSync(root, { recursive: true, force: true });
 });
