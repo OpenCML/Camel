@@ -6,10 +6,13 @@
 //   node docs/tutorial/tools/render-graphs.mjs --check   redraw in memory and compare, changing nothing
 //
 // Each picture has a source (an example under docs/tutorial/examples) and the passes the page
-// names in its command fence; the script runs `camel <source> <passes...>` and takes the DOT the
-// dump prints, so the picture is the graph this tree draws, not a drawing kept by hand. A picture
-// may name a `cluster` to keep only that subgraph, which is how the `twice` before/after pair is
-// made, and a `title` for the SVG's <title>.
+// names in its command fence; the script runs `camel <source> <passes...> std::nop` and takes the
+// DOT the dump prints, so the picture is the graph this tree draws, not a drawing kept by hand. The
+// pipeline ends in `std::nop` because it prints and does not run the example: a translating pass
+// hands the graph down (design principles 9.1), so without it the example runs after the dump and
+// its output follows the DOT, which Graphviz then refuses. A picture may name a `cluster` to keep
+// only that subgraph, which is how the `twice` before/after pair is made, and a `title` for the
+// SVG's <title>.
 //
 // Two files are written per picture, both in docs/tutorial/images:
 //   <name>.dot  the normalised DOT the picture was drawn from (committed: this is what is compared)
@@ -104,7 +107,11 @@ const SHEETS = [
 function dump(sheet) {
     const file = path.join(TUTORIAL, sheet.source);
     if (!fs.existsSync(file)) throw new Error(`${sheet.source} does not exist`);
-    const args = [file, ...sheet.passes];
+    // The sheet gives the passes its page writes; the ending is the tool's own. A pipeline that only
+    // prints says `std::nop` (design principles 9.1, `docs/cli.md`, and the comment in the header):
+    // the drawing hands the graph on, so the pass written after it runs, and with nothing written
+    // after it the default scheduling pass executes the example and prints its output into the DOT.
+    const args = [file, ...sheet.passes, 'std::nop'];
     const out = execFileSync(CAMEL, args, { cwd: TUTORIAL, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 });
     if (!out.includes('digraph')) throw new Error(`${CAMEL} ${args.join(' ')} printed no DOT`);
     return out;

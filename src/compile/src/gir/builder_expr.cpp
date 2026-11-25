@@ -1303,6 +1303,16 @@ std::any Builder::resolveDRefNode(const GCT::node_ptr_t &gct) {
         // merged: what a layer below declares under the same spelling is not a candidate beside
         // this layer's name (10.2), and the built-in layer is one name of two places
         // (`builtinLayerNamed`).
+        //
+        // The one exception 10.2 states one sentence later is an operator's overloads, which are
+        // one set across the layers (`name_layers.h` writes that step down as `EveryImport`), and
+        // it applies here too: a name a module exports with a body while the built-in layer holds
+        // the `#op` group of the same spelling is one name, not two. Taking this layer alone made
+        // `import { map } from stream` answer `xs->map<f>` with `stream`'s `(s: T..) => U..` and
+        // refuse an `int[]`, although the array's `map` is the group's rule and the prelude
+        // declares a body over a `Range` beside it (`builtinLayerNamed` gathers exactly those
+        // three: this layer's forms, the prelude's declarations of the name, the built-in module's
+        // group -- and nothing of the module the call is written in).
         std::optional<OperatorOverloads> oneLayer =
             builtinLayer ? builtinLayerNamed(name, e) : overloadsOfLayer(e);
         if (!oneLayer.has_value() && builtinLayer) {
@@ -1310,6 +1320,12 @@ std::any Builder::resolveDRefNode(const GCT::node_ptr_t &gct) {
             // no rules at all (`to_array`) is an ordinary function, and one with rules and no
             // function (`__add__`) is a group.
             oneLayer = overloadsOfLayer(e);
+        }
+        if (!oneLayer.has_value()) {
+            // This layer's name carries a body and the built-in layer holds a group under the same
+            // spelling: the two halves of one name, so the set is the built-in layer's own
+            // (`builtinLayerNamed`) rather than this layer's alone.
+            oneLayer = builtinLayerNamed(name, e);
         }
         if (oneLayer.has_value()) {
             node_handle_t drefNode{graph->addDrefNode(
