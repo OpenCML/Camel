@@ -431,7 +431,12 @@ class TaskflowExecSchedPass : public RuntimeGraphSchedulePass {
     static constexpr size_t kNoBytecode = std::numeric_limits<size_t>::max();
     struct GraphPlan {
         camel::runtime::GCGraph *graph = nullptr;
-        // The execution plan of the graph version, shared with the other back ends.
+        // The execution plan of the graph version, shared with the other back ends. Held here,
+        // not borrowed: the store that keeps the fact may let it go while this plan still runs on
+        // it -- two workers that meet a graph for the first time both compute the plan, and the
+        // second to publish replaces the entry and releases the first -- and a bare pointer would
+        // then read a released plan (`shared`, below, is the reader's view of it).
+        std::shared_ptr<const camel::runtime::ExecPlan> execPlan;
         const camel::runtime::ExecPlan *shared = nullptr;
         // False: the graph does not fit the scope model (or task graphs are switched off); it
         // is evaluated node by node in linear order, its calls still as task graphs.
