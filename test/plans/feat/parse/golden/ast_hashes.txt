@@ -515,7 +515,7 @@ ff143e01e0e4dbb0 ok src/stdlib/bytes.cml
 7962d89c131ca828 ok src/stdlib/ckpt.cml
 091e49283aec1438 ok src/stdlib/env.cml
 0797036114bc4a4c ok src/stdlib/fs.cml
-31e8e689ef33dd80 ok src/stdlib/graph.cml
+3fbfab05c72cef5e ok src/stdlib/graph.cml
 c653d7d211aed8b2 ok src/stdlib/hash.cml
 f915d61cc7f06dc8 ok src/stdlib/io.cml
 70530f2be80f49bf ok src/stdlib/json.cml
@@ -4283,11 +4283,14 @@ a3d372c4bd6d36c5 ok test/cases/probe/dpack_dots_ok.cml
 835ae3d0fb2bacf6 ok test/cases/resources/conflict_per_resource.cml
 1dfda197c555a488 ok test/cases/resources/effects.cml
 1308a35af80d20f6 ok test/cases/resources/names.cml
+794dca840bdad542 ok test/cases/runtime/add_param/one_parameter.cml
+e50e5ccab0349e4c ok test/cases/runtime/add_param/one_parameter_runs.cml
 4f2ce016e07193d7 ok test/cases/runtime/adopt_chain/grad_three_calls.cml
 3db534466b9a5f2b ok test/cases/runtime/adopt_chain/jvp_three_calls.cml
 705bcd78e5fa266f ok test/cases/runtime/adopt_chain/split_three_calls.cml
 a0be62aef00668ca ok test/cases/runtime/draft_erase_unread/refusal_keeps_the_set.cml
 af4bb3052e55257a ok test/cases/runtime/draft_node_owner/owner_after_the_graph.cml
+bc5155c245e51ec0 ok test/cases/runtime/edit_origin/spliced_write.cml
 d9c9c90db93e9ff5 ok test/cases/runtime/edit_record/a_program.cml
 16d6b9aa86a88229 ok test/cases/runtime/exit_type/float_declared_array_returned.cml
 d3e8c0b8b69de9a2 ok test/cases/runtime/exit_type/int_declared_float_returned.cml
