@@ -19,7 +19,7 @@ Source: `docs/stdlib-reference.md`, generated from the declarations in `stdlib/*
 `node scripts/stdlib-reference.mjs --write`.
 
 <!-- camel-for-ai region: stdlib-signatures (generated from docs/stdlib-reference.md; node scripts/camel-for-ai.mjs --write) -->
-**`Built-in functions`** — no import — 81 name(s)
+**`Built-in functions`** — no import — 82 name(s)
 
 ```text
 std::mem::blocks: () => { allocs: int, frees: int, live: int, bytes: int }
@@ -118,6 +118,7 @@ len: (x: Bytes) => int
 extent_of: () => int[] when is_array::<A>()
 copy: (x: T) => T
 cast: (x: T) => U panic
+enter: (x: T) => U
 fill: (template: T, ...fields: ...F) => T panic
 access: <at: int> (x: T) => U panic
 access_key: <key: string> (x: T) => U panic
