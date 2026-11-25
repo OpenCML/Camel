@@ -212,7 +212,10 @@ GIR 是最终执行图，不再保留树结构。其主要抽象是：
 | `FUNC` | 可调用图值 |
 | `OPER` | 已解析算子；转换是 `:op/cast` 的调用、拷贝是 `:op/copy` 的调用，都由它承载 |
 | `EXIT` | 图输出 |
-| `DREF / GATE / SYNC` | 构图辅助或过渡节点（其中 GIR 的 `GATE` 在作为值出口门控时需同时具备 `Norm` 与 `Ctrl` 输入） |
+| `DREF / GATE` | 构图辅助或过渡节点（其中 GIR 的 `GATE` 在作为值出口门控时需同时具备 `Norm` 与 `Ctrl` 输入） |
+
+`SYNC` 不是节点，也不在这张表里：`sync` 块里语句的先后是**同步边**（`LinkType::Sync`，
+冻结图里存放在 `GCGraphSyncEdge` 侧表，读它的门是 `sync_inputs` / `syncPredsOf`），原先那个种类连同编号 12 一起删了。
 
 ### 4.3 GCT -> GIR 的主要 lowering 模式
 

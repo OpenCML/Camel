@@ -1334,7 +1334,9 @@ GraphDraft                                 // 前端与遍共用
     // Builder::conversionNodeOf / Builder::copyNodeOf 用 addOperNode 建，addCastNode /
     // addCopyNode 已不在代码里）
     addBranch(选择子, case 值, 臂) -> (brch, join)     // 成对地建，不出现"先建空的再整体重写"
-    addLoop(kind, cond, body, 初值, 捕获) / addGate(值, 等待) / addSync(等待)
+    addLoop(kind, cond, body, 初值, 捕获) / addGate(值, 等待)
+    // 同步不是建节点的门：`sync` 块里语句的先后是 Sync 的边，走下面的 link
+    // （LinkType::Sync，冻结图里是 GCGraphSyncEdge 侧表，没有 SYNC 节点）
     link(kind, from, to) / unlink / replaceInput
     replaceAllUses(old, new) / erase(node)
     replaceNode(old, new)                  // 保持顺序的替换（今天 generic/rewrite.h 的 replaceNode）
