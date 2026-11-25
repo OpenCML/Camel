@@ -1931,6 +1931,16 @@ try {
             # runner -- the reading is the snapshot's, taken by the rules in force at that snapshot.
             $seedGate = Join-Path $baselinePath 'internal\tools\camel-remote.ps1'
             if (-not (Test-Path -LiteralPath $seedGate)) { $seedGate = Join-Path $toolRoot 'internal\tools\camel-remote.ps1' }
+            # The gate's settings file is local configuration, not part of the tree: `camel-gate.local.json`
+            # is git-ignored, so a worktree checked out for a baseline has none and the gate that
+            # belongs to that tree stops before it starts ("the local settings file has no 'sshHost'").
+            # The seeding worktree is measured on the same host with the same settings, so it is given
+            # this checkout's file -- settings of the machine, not of a commit.
+            $seedSettings = Join-Path $baselinePath 'internal\tools\camel-gate.local.json'
+            $ourSettings = Join-Path $toolRoot 'internal\tools\camel-gate.local.json'
+            if (-not (Test-Path -LiteralPath $seedSettings) -and (Test-Path -LiteralPath $ourSettings)) {
+                Copy-Item -LiteralPath $ourSettings -Destination $seedSettings -Force
+            }
             # A plan file the merge *adds* exists on the merged tree and nowhere else: asking the
             # first parent's checkout for it fails the whole seeding run (ENOENT), which says nothing
             # about the trees. Those targets are dropped here -- their cases are `added` in the
