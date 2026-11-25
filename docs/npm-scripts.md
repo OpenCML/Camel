@@ -142,15 +142,17 @@ It runs, in order:
    Three of those files are perf plans whose tests assert counts and properties, never a duration:
    `perf.para_speedup` and the count guards `perf.step_counts` and `perf.reduce_layout_counts`
    (the measured halves of `perf.step_budget` and `perf.reduce_layout` stay in the skip list);
-3. the static checks -- fourteen of them, in the order `scripts/release-gate.mjs#STATIC_CHECKS`
+3. the static checks -- thirteen of them, in the order `scripts/release-gate.mjs#STATIC_CHECKS`
    runs them: `stdlib-reference --verify-ops`, `stdlib-reference --verify-doc`,
    `diagnostics-catalog --check`, `check-doc-links --all`, `plan-dir-markers --check`,
-   `check-doc-links --questions-index`, `check-doc-links --questions-defaults`,
-   `check-doc-links --source-line-citations`, `check-doc-snippets`,
-   `stdlib-declarations --check`, `check-conformance`, `check-std-includes`, `check-wheel-tags`,
-   and `rule-proofs --require-solver`. The list is that array, in its order and with its flags --
-   not a memory of which checks exist: four of these are a `check-doc-links` flag each, and three
-   of those four were missing from this list while it was written from memory.
+   `check-doc-links --questions-index`, `check-doc-links --source-line-citations`,
+   `check-doc-snippets`, `stdlib-declarations --check`, `check-conformance`,
+   `check-std-includes`, `check-wheel-tags`, and `rule-proofs --require-solver`. The list is that
+   array, in its order and with its flags -- not a memory of which checks exist: three of these
+   are a `check-doc-links` flag each, and two of those three were missing from this list while it
+   was written from memory. `check-doc-links --questions-defaults` is still there to run as a
+   self-check, but it is not one of the gate's checks: a pending page's default is the author's to
+   state, not a release condition (ruling A12, `internal/reviews/questions-2026-10-29.md`).
    `check-wheel-tags` reads the wheels the last `npm run pypi:rollup` left in `dist/pypi/` and
    requires the two forms `cp310-abi3` (with the interop extension) and `py3-none` (without it),
    asserting through the same `scripts/check_wheel_tags.py --ruling` the build job runs; with no
