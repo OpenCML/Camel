@@ -801,3 +801,5 @@
 | D-1125-19 | 车道第三次掉到 3 条；插件提醒改 2/10 分钟（fsh-dev 1c246b85e）排下一批；补到 8，route5 第二步仍等库表达力则改挑独立可开工的 | taken | 已补 8 | 15:10 | ⇒ 新增 tool-tests（自测接进计划）与 time-sensitive-parser（第二个解析器）；fsh-dev 那笔在合并队列 |
 | D-1125-20 | 装入要自己的形状 Entering（一进一出、改类型、永不失败），读者按形状的性质回答；需要同样处理的读者显式写两种形状；合并说明写「装入是自己的形状」 | taken | 交 uri-to-record 顺带做 | 15:20 | ⇒ 它同时在做 Refining（调用处形状检查）；`OperShape` 由 4 项增到 6 项 |
 | D-1125-21 | 记录：`cast-insert` 合并说明写成「entering is a conversion」是我的错，已按 D-1125-20 拆分 | done | 见 D-1125-20 | 15:20 | ⇒ 教训：错误概念写进提交信息，下一个人会照着它实现 |
+| D-1125-21 | time-sensitive 做反了：第 ⑧ 条要的是「闸门问跑测工具（同一个 TOML 解析器），不自己解析」，合进来的是再加一个读法 + 一个比对测试，闸门正则还在 ⇒ 三个读法一个对账＝第二份真相 | taken | 已让原车道返工 | 16:10 | ⇒ 跑测工具出只读入口、camel-remote 调它取值、删掉正则读法与 reader.mjs 与那个比对测试；验收 `git grep time_sensitive internal/tools` 只剩调用一处 |
+| D-1125-22 | 第六次晋级，判据照旧 | taken | 合并位开工（受 8 格上限，等一格空出即起） | 16:29 | ⇒ 带 21 条新增红落地：19 条 opt.pass_*（route4 的 test.cmo 遮住夹具 test.cml）+ 1 条 var_struct_argument（cast-insert）+ 1 条 headers（pwsh-selfcheck.mjs）；报告七块：tip/快层/慢层/三列/人口/硬线/从没跑过 |
