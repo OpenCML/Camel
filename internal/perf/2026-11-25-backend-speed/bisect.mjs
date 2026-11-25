@@ -27,7 +27,13 @@ import path from 'path'
 import { fileURLToPath } from 'url'
 
 const HERE = path.dirname(fileURLToPath(import.meta.url))
-const ROOT = path.resolve(HERE, '..', '..', '..')
+// `--root` matters: a bisect checks out commits that predate this directory, so a driver living
+// inside the worktree would delete itself mid-run. It is meant to be copied outside and pointed
+// back at the tree.
+const ROOT = path.resolve(process.argv.includes('--root') ? process.argv[process.argv.indexOf('--root') + 1] : path.resolve(HERE, '..', '..', '..'))
+const LOGDIR = process.argv.includes('--logdir')
+    ? path.resolve(process.argv[process.argv.indexOf('--logdir') + 1])
+    : path.join(HERE, 'results')
 
 function args() {
     const o = { iters: 3, threshold: null, lo: null, hi: null, maxSteps: 14, out: null }
@@ -58,7 +64,7 @@ function hasSrc() {
 }
 
 function build(step) {
-    const logDir = path.join(HERE, 'results')
+    const logDir = LOGDIR
     fs.mkdirSync(logDir, { recursive: true })
     const log = path.join(logDir, `bisect-build-${step}.log`)
     const r = spawnSync(process.execPath, ['./scripts/build.js'], {
@@ -120,7 +126,7 @@ function measure() {
 }
 
 const steps = []
-const out = o.out || path.join(HERE, 'results', `bisect-${o.program}-${o.backend}.jsonl`)
+const out = o.out || path.join(LOGDIR, `bisect-${o.program}-${o.backend}.jsonl`)
 stdoutWrite(`bisect ${o.program}/${o.backend} ${o.sample} threshold=${o.threshold} ${o.lo}..${o.hi}`)
 
 let good = git('rev-parse', o.lo)
@@ -176,6 +182,7 @@ for (const c of finalRange.slice(0, 12)) {
     process.stderr.write(`  ${c.slice(0, 10)} ${git('log', '-1', '--format=%ci %s', c)}\n`)
 }
 fs.writeFileSync(
-    path.join(HERE, 'results', `bisect-${o.program}-${o.backend}.result.json`),
+    path.join(LOGDIR, `bisect-${o.program}-${o.backend}.result.json`),
     JSON.stringify({ cell: `${o.program}/${o.backend}`, sample: o.sample, threshold: o.threshold, good, bad, finalRange, steps }, null, 2)
 )
+
