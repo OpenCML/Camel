@@ -1298,8 +1298,7 @@ bool liftGraph(
         // The FUNC nodes, read off the view: `nodes()` is every place the view has a node at, and
         // `kindOf` answers `Func` for exactly the places the stored kind said `Func` for -- the
         // places the view does not have (a JOIN, a placeholder, a tombstone) cannot be a FUNC node,
-        // so the set of nodes this loop lifts is the same one the numbering walk lifted
-        // (`C-1123-17`).
+        // so the set of nodes this loop lifts is the same one the numbering walk lifted.
         for (const camel::graph::NodeRef ref : function.view().nodes()) {
             if (function.view().kindOf(ref) != camel::graph::NodeKind::Func) {
                 continue;

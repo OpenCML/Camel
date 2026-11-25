@@ -12,6 +12,7 @@
 #include "camel/core/rtdata/base.h"
 #include "camel/execute/shaped_operators.h"
 #include "camel/runtime/core_facts.h"
+#include "camel/runtime/oper_shape.h"
 #include "graph/graph_view.h"
 
 #include <format>
@@ -39,37 +40,10 @@ inline constexpr const char *kUnreadable = "the sides of the rule could not be r
 inline constexpr const char *kNotBuilt   = "the check did not build the rule's two sides";
 
 std::string kindName(GCNodeKind kind) {
-    switch (kind) {
-    case GCNodeKind::Data:
-        return "DATA";
-    case GCNodeKind::Port:
-        return "PORT";
-    case GCNodeKind::Fill:
-        return "FILL";
-    case GCNodeKind::Accs:
-        return "ACCS";
-    case GCNodeKind::Brch:
-        return "BRCH";
-    case GCNodeKind::Join:
-        return "JOIN";
-    case GCNodeKind::Call:
-        return "CALL";
-    case GCNodeKind::Bind:
-        return "BIND";
-    case GCNodeKind::Func:
-        return "FUNC";
-    case GCNodeKind::Oper:
-        return "OPER";
-    case GCNodeKind::Gate:
-        return "GATE";
-    case GCNodeKind::Dref:
-        return "DREF";
-    case GCNodeKind::Loop:
-        return "LOOP";
-    case GCNodeKind::Dead:
-        return "DEAD";
-    }
-    return "an unknown kind";
+    // The kinds are named once (`camel/runtime/oper_shape.h#nodeKindName`); a value that table does not
+    // name is this refusal's own word for it.
+    const std::string_view name = camel::runtime::nodeKindName(kind);
+    return name.empty() ? "an unknown kind" : std::string(name);
 }
 
 /// A whole tensor is one of the three classes design 8.1 lists as beyond the coverage: the property

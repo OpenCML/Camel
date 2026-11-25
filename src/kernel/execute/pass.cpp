@@ -1982,7 +1982,7 @@ std::string effectContainmentText(
 /// to the difference: it says the commit recorded nothing it made and refuses on that reading.
 ///
 /// Naming them, not counting them, is the reading: a count says how much came in, and the names say
-/// whose it is. Measured on `lane/std-nop` with `opt::cse`, a couple of hundred graphs are reached
+/// whose it is. Measured with `opt::cse`: a couple of hundred graphs are reached
 /// from the produced root (the pass's own module graphs, `opt::evaluated` among them), but the
 /// produced *table* holds only the ones the given program held: what counts here is the table, and
 /// the graphs a pass reached through a function value are not graphs it adopted.

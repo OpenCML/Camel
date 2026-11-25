@@ -94,8 +94,7 @@ assert(out === '19 0', `unexpected output: ${out}`)
 # measurement is 21.6 s, so the old 20 s was at the margin, and 40 s is 7.4x the slow one.
 timeout_ms = 40000
 # Slow layer: over the 2 s the fast layer allows -- 3.68 s of
-# child wall clock in the 2026-11-12 record (appendix B of
-# internal/reports/2026-11-24-test-suite-inventory.cn.md).
+# child wall clock.
 tier = "slow"
 
 [[tests]]

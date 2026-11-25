@@ -18,8 +18,7 @@ name = "debugger.http_gateway"
 desc = "The HTTP API as the Web UI uses it: a file becomes a task in a worker process; node breakpoints by origin, node steps into a callee and over it, continue, the task's log, the graph after each pass, restart with the breakpoints and passes kept, terminate."
 case = "../../../cases/tools/debugger/http_gateway.test.mjs"
 # Slow layer: over the 2 s the fast layer allows -- 2.61 s of
-# child wall clock in the 2026-11-12 record (appendix B of
-# internal/reports/2026-11-24-test-suite-inventory.cn.md).
+# child wall clock.
 tier = "slow"
 
 [[tests]]
@@ -44,8 +43,7 @@ desc = "Tail-recursive F10 skips replacement activations, F11 enters with new pa
 case = "../../../cases/tools/debugger/dap_tail_steps.test.mjs"
 timeout_ms = 300000
 # Slow layer: over the 2 s the fast layer allows -- 2.96 s of
-# child wall clock in the 2026-11-12 record (appendix B of
-# internal/reports/2026-11-24-test-suite-inventory.cn.md).
+# child wall clock.
 tier = "slow"
 
 [[tests]]
@@ -54,8 +52,7 @@ desc = "How the program is presented over DAP on both back ends (design principl
 case = "../../../cases/tools/debugger/dap_frames.test.mjs"
 timeout_ms = 300000
 # Slow layer: over the 2 s the fast layer allows -- 2.23 s of
-# child wall clock in the 2026-11-12 record (appendix B of
-# internal/reports/2026-11-24-test-suite-inventory.cn.md).
+# child wall clock.
 tier = "slow"
 
 [[tests]]
@@ -64,8 +61,7 @@ desc = "The REPL of camel-db (commands on stdin) on both back ends: breakpoints 
 case = "../../../cases/tools/debugger/cli_session.test.mjs"
 timeout_ms = 300000
 # Slow layer: over the 2 s the fast layer allows -- 2.42 s of
-# child wall clock in the 2026-11-12 record (appendix B of
-# internal/reports/2026-11-24-test-suite-inventory.cn.md).
+# child wall clock.
 tier = "slow"
 
 [[tests]]
@@ -90,8 +86,7 @@ desc = "A loop in the REPL on both back ends: its body is part of the frame of t
 case = "../../../cases/tools/debugger/loop_frames.test.mjs"
 timeout_ms = 300000
 # Slow layer: over the 2 s the fast layer allows -- 2.25 s of
-# child wall clock in the 2026-11-12 record (appendix B of
-# internal/reports/2026-11-24-test-suite-inventory.cn.md).
+# child wall clock.
 tier = "slow"
 
 [[tests]]
@@ -99,8 +94,7 @@ name = "debugger.dap_pipeline"
 desc = "Release compiler boundary stops, live JSON GIR, pass stepping, repeated pass names, runtime handoff, invalid configuration and terminate/consumed graphs."
 case = "../../../cases/tools/debugger/dap_pipeline.test.mjs"
 # Slow layer: over the 2 s the fast layer allows -- 2.19 s of
-# child wall clock in the 2026-11-12 record (appendix B of
-# internal/reports/2026-11-24-test-suite-inventory.cn.md).
+# child wall clock.
 tier = "slow"
 
 [[tests]]
@@ -118,8 +112,7 @@ name = "debugger.dap_fusion_group"
 desc = "A node step walks the program through a private `vjp_div_neg` group: it stops at the group's tail (the node that runs the group) and never at the members, which do not execute. The stop carries the group's name, its members' operators in execution order and their refs, and the debug console prints one exact sentence saying the members did not execute separately. A fixture that stops having a group fails the guard."
 case = "../../../cases/tools/debugger/dap_fusion_group.test.mjs"
 # Slow layer: over the 2 s the fast layer allows -- 60.79 s of
-# child wall clock in the 2026-11-12 record (appendix B of
-# internal/reports/2026-11-24-test-suite-inventory.cn.md).
+# child wall clock.
 tier = "slow"
 
 [[tests]]

@@ -41,9 +41,14 @@
  * gates is red" is the least useful sentence this script could print.
  *
  * Each generated artifact has one gate that reads it. Gate 10 compares the four files the node
- * generators write, and lists the AST golden as gate 8's to read: it prints the exit gate 8 reported
- * for it in the same run, because reading it twice would look like two pieces of evidence and be one,
- * at the price of a whole corpus of hashing to agree with the first.
+ * generators write, and lists the AST golden as gate 8's to read: it prints what gate 8 reported for
+ * it in the same run, and says in words whether that report was a reading. It has to: an exit number
+ * is a fact about a process, and "gate 8 exits 2 in this run" means gate 8 could not read the golden
+ * at all (no build, no `python3`), which is the state the golden's line reads as NOT READ and the
+ * summary says its own zero does not cover -- two gates' sentences composing a green over a file
+ * neither of them opened was the reading this wording replaced on 2026-11-25. Reading it twice would
+ * look like two pieces of evidence and be one, at the price of a whole corpus of hashing to agree
+ * with the first.
  *
  * This is the whole-tree static layer: it needs no install and no build except where a gate says so
  * (8 reads the tree through the parsecheck tool, which a build produces; 10 regenerates the files the

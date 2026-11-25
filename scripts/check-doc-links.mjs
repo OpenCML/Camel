@@ -36,8 +36,11 @@
 // answer is to add the name, never to wait an hour or to read the wait as a red check.
 //
 // Exit status 1 when a link is broken or a citation does not resolve, 2 when the scope is empty or
-// names a missing entry: a check of nothing is refused, never reported as a pass. External links
-// (http, mailto) are not fetched.
+// names a missing entry: a check of nothing is refused, never reported as a pass. `--questions-index`
+// is the mode whose scope is two directories rather than a file pattern -- `internal/questions/` and
+// `internal/reviews/`, the pages and the answers to them -- and a tree carrying only one of them is
+// refused the same way, naming the directory the run could not read. External links (http, mailto)
+// are not fetched.
 
 import fs from 'node:fs'
 import os from 'node:os'
@@ -412,8 +415,42 @@ function pageStem(name) {
     return name.replace(/\.cn\.md$|\.md$/, '')
 }
 
+// The two directories are this mode's whole scope: `questions/` holds the pages that may have been
+// answered and `reviews/` holds the answers, so a tree with only one of them is half a scope and not
+// a clean one. What stood here was `if (!existsSync(QUESTIONS_DIR) || !existsSync(REVIEWS_DIR))
+// return 0`, and on a tree without `reviews/` the half below printed no sentence at all: the gate
+// exited 0 on the index half alone, having read nothing about the question it exists to ask
+// (measured 2026-11-25 on a tree holding two pages in `internal/questions/` and no
+// `internal/reviews/`: exit 0, and the "no answered page is left" sentence was simply absent). The
+// script's other two modes already refuse an empty scope -- `--citations` exits 2 with "no citation
+// in N file(s): nothing was checked", the document walk exits 2 with "no Markdown document in the
+// given scope" -- and a missing half of this scope is that same state, not a pass.
+function missingQuestionDirectories() {
+    return [QUESTIONS_DIR, REVIEWS_DIR].filter((directory) => !fs.existsSync(directory))
+}
+
+// What the run could not see, printed, and exit 2 -- or 0 when both directories are there.
+// `--questions-index` calls this before either half: the index half needs it too, because its
+// generator retargets every kept row into `reviews/`, and a generator that cannot see that
+// directory writes a table this tree does not have -- the 243 kept rows of
+// `internal/questions/README.md` lost their targets the moment `reviews/` was renamed on
+// 2026-11-25, and the comparison then reports a hand edit nobody made.
+function refuseMissingQuestionDirectories() {
+    const missing = missingQuestionDirectories()
+    if (missing.length === 0) return 0
+    for (const directory of missing) console.log(`${directory}: no such file or directory`)
+    console.log(
+        `${missing.length === 1 ? 'it is' : 'they are'} half of this check's scope -- a page in ` +
+            'internal/questions/ is answered by a page in internal/reviews/ -- and a run that cannot ' +
+            `read ${missing.length === 1 ? 'it' : 'them'} has read nothing about the question it is asked`,
+    )
+    console.log('refusing: a check of half a scope is not a pass')
+    return 2
+}
+
 function checkAnsweredPages() {
-    if (!fs.existsSync(QUESTIONS_DIR) || !fs.existsSync(REVIEWS_DIR)) return 0
+    const refused = refuseMissingQuestionDirectories()
+    if (refused !== 0) return refused
     const reviews = fs.readdirSync(REVIEWS_DIR).filter((name) => name.endsWith('.md'))
     // A page is answered when the reviewer's index names it, whichever way that reads: a page of
     // its own in reviews/, or its name inside the index of a batch of questions
@@ -1004,6 +1041,11 @@ if (args.includes('--questions-defaults')) {
     process.exit(checkQuestionsHaveDefaults())
 }
 if (args.includes('--questions-index')) {
+    // Before the generator as well as before the comparison, and once: `--write` without `reviews/`
+    // would retarget the kept rows away from pages that are there (see the function's comment), and
+    // the comparison would then name a hand edit nobody made instead of the directory it lacks.
+    const refused = refuseMissingQuestionDirectories()
+    if (refused !== 0) process.exit(refused)
     if (args.includes('--write')) process.exit(writeQuestionsIndex())
     const indexCode = checkQuestionsIndex()
     const answeredCode = checkAnsweredPages()

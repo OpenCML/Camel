@@ -839,7 +839,7 @@ gc_node_ref_t expandRuleRightSide(
             // tombstone -- are not operators, carry no type and name no operator record, so
             // `isCollapsibleProduct` answers false for every one of them and no pass of this fixed
             // point could mark one. So the walk reads the nodes of the view, and the set it can
-            // mark is the same one the numbering walk marked (`C-1123-17`).
+            // mark is the same one the numbering walk marked.
             for (const camel::graph::NodeRef ref : body->view().nodes()) {
                 if (collapsed[ref] || !isCollapsibleProduct(body->view(), ref)) {
                     continue;

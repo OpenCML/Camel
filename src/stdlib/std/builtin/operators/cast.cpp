@@ -324,7 +324,7 @@ slot_t __cast_value__(ArgsView &with, ArgsView &norm, Context &ctx) {
     // type) -- and the fault it raises where the value does not fit is the one the declaration
     // promised. So this kernel asks no safety table of its own and hands the value to the type.
     //
-    // It used to ask one (`61bab72902`): a pair the table does not call `Safe` raised
+    // It used to ask one: a pair the table does not call `Safe` raised
     // `InvalidArgument` here instead of reaching `castSlotFrom`. That is measurably wrong for the
     // pairs above -- an empty `[]` becoming a `Set<int>` and an `f32[...]` whose shape is only known
     // when it runs becoming an `f32[6]` are both `Unsafe` and both conversions the language

@@ -27,6 +27,14 @@
 // artifact is accounted for, and the gate that can go red about it is the one that does. A gate that
 // never goes green because it took on work it cannot do is a gate people learn to skip.
 //
+// The pointer carries a state, not an exit number. `check-ast-hashes` exits 2 when it could not take a
+// reading (no `camel-parsecheck`, no `python3`), and a summary saying "4 of 5 ... the tree agrees"
+// beside "gate 8 exits 2 in this run" reads as coverage of five files when the fifth was opened by
+// nobody. So the owner's report is read as one of: read and agrees, read and stale, could not read,
+// did not run -- and the summary says in words which, naming the artifact as NOT READ rather than
+// leaving a reader to infer it from a number. The exit code is unchanged: the artifact's own gate is
+// the one that goes red about it.
+//
 // The two generators are not independent, and the order they run in is not free: the signatures
 // catalogue is generated from the standard library page, so the page is regenerated first and the
 // catalogue in the copy reads the fresh one. One edited declaration therefore moves the page and the
@@ -166,12 +174,36 @@ function gateExit(number) {
     return found ? found.code : undefined
 }
 
-/** How the gate that owns an artifact closed in this run, in the words the line can use. */
-function ownerReported(number) {
+/**
+ * How the gate that owns an artifact closed in this run, split into the half that matters: did it take
+ * a reading of the artifact, and what did it say about it?
+ *
+ * `check-ast-hashes` closes 0 when every line it read is the line the record holds, 1 when some line
+ * is stale (a reading, and a red), and 2 when it could not take a reading at all -- no
+ * `camel-parsecheck`, no `python3`, a golden it cannot open. A number alone ("gate 8 exits 2 in this
+ * run") is a fact about a process, and a reader had to know, from another file, that 2 means "nothing
+ * was read". The summary below said "the tree agrees" beside it, so on a machine where gate 8 cannot
+ * start the pointer line and the green summary composed into a coverage sentence about a file neither
+ * gate had opened (measured 2026-11-25: no `python3` on the machine, gate 8 exit 2, gate 10 exit 0,
+ * and its summary read "4 of 5 ... the tree agrees"). `read` is that half, and the words say which of
+ * the four closes this was.
+ */
+function ownerState(number) {
     const code = gateExit(number)
-    if (code === undefined) return `this run recorded no exit for gate ${number}`
-    if (code === null) return `gate ${number} was killed by a signal in this run`
-    return `gate ${number} exits ${code} in this run`
+    if (code === undefined) {
+        return { read: false, words: `gate ${number} did not run in this run, so nothing read it` }
+    }
+    if (code === null) {
+        return { read: false, words: `gate ${number} was killed by a signal in this run, so it did not read it` }
+    }
+    if (code === 0) return { read: true, words: `gate ${number} read it and reports it agrees (exit 0 in this run)` }
+    if (code === 1) return { read: true, words: `gate ${number} read it and reports it stale (exit 1 in this run)` }
+    // 2 is this project's "a run that could not take a reading" for every checker that has one, and
+    // any other code is not a reading either: neither may be counted as coverage.
+    return {
+        read: false,
+        words: `gate ${number} could not take a reading (exit ${code} in this run), so nothing read it`,
+    }
 }
 
 function usage(message) {
@@ -315,10 +347,11 @@ function main(argv) {
     }
 
     for (const entry of OWNED) {
+        const state = ownerState(entry.gate)
         console.log(
-            `[${NAME}] owned by gate ${entry.gate} ${entry.rel}: \`${entry.owner}\` is the gate that compares it ` +
-                `(${entry.needs}); ${ownerReported(entry.gate)}, so nothing compared it here. ` +
-                `It is re-recorded by \`${entry.re_record}\`. This line is a pointer, not a verdict`,
+            `[${NAME}] owned by gate ${entry.gate} ${entry.rel}: \`${entry.owner}\` is the gate that compares ` +
+                `it (${entry.needs}). ${state.words}. Nothing was compared here. This line is a pointer, ` +
+                `not a verdict; it is re-recorded by \`${entry.re_record}\``,
         )
     }
 
@@ -342,10 +375,29 @@ function main(argv) {
         return 1
     }
     if (OWNED.length > 0) {
+        const owners = OWNED.map((entry) => ({ entry, state: ownerState(entry.gate) }))
+        const unread = owners.filter((each) => !each.state.read)
+        const described = owners.map((each) => `${each.entry.rel} -- ${each.state.words}`).join('; ')
+        if (unread.length > 0) {
+            // The summary is the one line a reader quotes, so it may not say "the tree agrees" about a
+            // set it did not read: the artifact is named as NOT READ, in those words, and the same
+            // sentence says what this run's own zero covers. The exit stays 0 for the same reason the
+            // pointer is not a verdict -- the gate that can go red about the artifact is the one named
+            // above, and a gate that went red because another gate could not build would report one
+            // missing build twice. What changed is the sentence, which used to compose a green one
+            // beside a pointer at an exit number.
+            console.log(
+                `[${NAME}] ${agreed.length} of ${total} artifact(s) are this gate's to compare and the tree ` +
+                    `agrees: ${agreed.length} compared, ${unread.length} NOT READ in this run and not counted ` +
+                    `as green (${described}); this run's verdict covers the ${agreed.length} it compared, and ` +
+                    'the gate that can go red about the rest is named above',
+            )
+            return 0
+        }
         console.log(
-            `[${NAME}] ${agreed.length} of ${total} artifact(s) were compared and the tree agrees: ` +
-                `${agreed.length} compared, ${OWNED.length} owned by gate ${OWNED.map((one) => one.gate).join(', ')} ` +
-                `and not compared here (${OWNED.map((one) => `${one.rel} -- ${ownerReported(one.gate)}`).join('; ')})`,
+            `[${NAME}] all ${total} artifact(s) were accounted for: ${agreed.length} compared here and the ` +
+                `tree agrees, ${OWNED.length} read by ${owners.map((each) => `gate ${each.entry.gate}`).join(', ')} ` +
+                `(${described})`,
         )
         return 0
     }

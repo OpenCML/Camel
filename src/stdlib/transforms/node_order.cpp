@@ -28,7 +28,7 @@ namespace {
 /// One query of the view: `predecessors(ref, Data)` is defined as the ordinary group followed by
 /// the context one, which is the order this walk has always read, and it answers for a JOIN too
 /// (a place the view has no kind for still has ports). The walk itself stays on the numbering:
-/// a JOIN is one item of the order, and `nodes()` would drop it (`C-1123-17`).
+/// a JOIN is one item of the order, and `nodes()` would drop it.
 void appendDataInputsOf(
     const camel::graph::GraphView &graph, gc_node_ref_t ref, std::vector<gc_node_ref_t> &out) {
     const std::vector<gc_node_ref_t> inputs =

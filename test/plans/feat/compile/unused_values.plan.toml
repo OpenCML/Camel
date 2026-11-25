@@ -110,8 +110,7 @@ expect_exit = 0
 expect_stdout_contains = ["one input, one answer: PASS (40 compiles"]
 timeout_ms = 120000
 # Slow layer: over the 2 s the fast layer allows -- 4.84 s of
-# child wall clock in the 2026-11-12 record (appendix B of
-# internal/reports/2026-11-24-test-suite-inventory.cn.md).
+# child wall clock.
 tier = "slow"
 
 [[tests]]
@@ -127,8 +126,7 @@ assert(input.diagnostics[0].name === 'SemanticDiag::CalledFallibleValue', input.
 assert(input.diagnostics[0].line === 16, JSON.stringify(input.diagnostics[0]))
 """
 # Slow layer: over the 2 s the fast layer allows -- 3.10 s of
-# child wall clock in the 2026-11-12 record (appendix B of
-# internal/reports/2026-11-24-test-suite-inventory.cn.md).
+# child wall clock.
 tier = "slow"
 
 [[tests]]
@@ -158,8 +156,7 @@ assert(input.diagnostics[0].line === 13 && input.diagnostics[0].column === 22, J
 # that follows it rather than by a reader. The page is
 # `internal/reviews/2026-11-05-does-a-println-in-a-loop-body-need-do-sync.cn.md`.
 # Slow layer: over the 2 s the fast layer allows -- 2.93 s of
-# child wall clock in the 2026-11-12 record (appendix B of
-# internal/reports/2026-11-24-test-suite-inventory.cn.md).
+# child wall clock.
 tier = "slow"
 
 [[tests]]
@@ -217,8 +214,7 @@ expect_exit = 1
 expect_diagnostic_name = "SyntaxDiag::UnexpectedToken"
 expect_stdout_contains = ["Unexpected 'sync'", "expected an expression"]
 # Slow layer: over the 2 s the fast layer allows -- 3.19 s of
-# child wall clock in the 2026-11-12 record (appendix B of
-# internal/reports/2026-11-24-test-suite-inventory.cn.md).
+# child wall clock.
 tier = "slow"
 
 [[tests]]
@@ -236,8 +232,7 @@ assert(!input.normalized.stderr.includes('is never executed'), input.normalized.
 }
 """
 # Slow layer: over the 2 s the fast layer allows -- 2.79 s of
-# child wall clock in the 2026-11-12 record (appendix B of
-# internal/reports/2026-11-24-test-suite-inventory.cn.md).
+# child wall clock.
 tier = "slow"
 
 [[tests]]
@@ -255,8 +250,7 @@ assert(!input.normalized.stderr.includes('is never executed'), input.normalized.
 }
 """
 # Slow layer: over the 2 s the fast layer allows -- 2.43 s of
-# child wall clock in the 2026-11-12 record (appendix B of
-# internal/reports/2026-11-24-test-suite-inventory.cn.md).
+# child wall clock.
 tier = "slow"
 
 [[tests]]
@@ -274,6 +268,5 @@ assert(!input.normalized.stderr.includes('is never executed'), input.normalized.
 }
 """
 # Slow layer: over the 2 s the fast layer allows -- 2.25 s of
-# child wall clock in the 2026-11-12 record (appendix B of
-# internal/reports/2026-11-24-test-suite-inventory.cn.md).
+# child wall clock.
 tier = "slow"

@@ -50,8 +50,7 @@ desc = "The result with `!!`, `->`, `match ... case error e` and println; a call
 case = "../../../cases/consistency/attempt/forms.cml"
 golden = "golden/attempt_forms.txt"
 # Slow layer: over the 2 s the fast layer allows -- 2.02 s of
-# child wall clock in the 2026-11-12 record (appendix B of
-# internal/reports/2026-11-24-test-suite-inventory.cn.md).
+# child wall clock.
 tier = "slow"
 
 [[tests]]
@@ -60,8 +59,7 @@ desc = "Effects inside the boundary before the fault stay: lines printed are pri
 case = "../../../cases/consistency/attempt/effects.cml"
 golden = "golden/attempt_effects.txt"
 # Slow layer: over the 2 s the fast layer allows -- 2.42 s of
-# child wall clock in the 2026-11-12 record (appendix B of
-# internal/reports/2026-11-24-test-suite-inventory.cn.md).
+# child wall clock.
 tier = "slow"
 
 [[tests]]
@@ -71,8 +69,7 @@ case = "../../../cases/consistency/attempt/depth.cml"
 golden = "golden/attempt_depth.txt"
 timeout_ms = 60000
 # Slow layer: over the 2 s the fast layer allows -- 2.41 s of
-# child wall clock in the 2026-11-12 record (appendix B of
-# internal/reports/2026-11-24-test-suite-inventory.cn.md).
+# child wall clock.
 tier = "slow"
 
 [[tests]]
@@ -89,8 +86,7 @@ desc = "Forty boundaries side by side in the elements of a map, every second one
 case = "../../../cases/consistency/attempt/concurrent.cml"
 golden = "golden/attempt_concurrent.txt"
 # Slow layer: over the 2 s the fast layer allows -- 2.84 s of
-# child wall clock in the 2026-11-12 record (appendix B of
-# internal/reports/2026-11-24-test-suite-inventory.cn.md).
+# child wall clock.
 tier = "slow"
 
 [[tests]]
@@ -102,8 +98,7 @@ golden = "golden/attempt_compiled.txt"
 # Asserts that the function was compiled to native code: only where the JIT generates code
 # (x86-64; elsewhere std::jit runs the bytecode interpreter, see test/tools/have-native-jit.mjs).
 # Slow layer: over the 2 s the fast layer allows -- 2.80 s of
-# child wall clock in the 2026-11-12 record (appendix B of
-# internal/reports/2026-11-24-test-suite-inventory.cn.md).
+# child wall clock.
 tier = "slow"
 [[tests]]
 name = "attempt.compiled.inline_jit"
@@ -140,8 +135,7 @@ desc = "`attempt` around library functions written in Camel (array: find, any, a
 case = "../../../cases/consistency/attempt/library.cml"
 golden = "golden/attempt_library.txt"
 # Slow layer: over the 2 s the fast layer allows -- 2.53 s of
-# child wall clock in the 2026-11-12 record (appendix B of
-# internal/reports/2026-11-24-test-suite-inventory.cn.md).
+# child wall clock.
 tier = "slow"
 
 [[tests]]
@@ -165,8 +159,7 @@ verify_script = """
 assert(input.normalized.stdout === '34200000\n1999000\n42\nend\n', JSON.stringify(input.normalized.stdout))
 """
 # Slow layer: over the 2 s the fast layer allows -- 4.24 s of
-# child wall clock in the 2026-11-12 record (appendix B of
-# internal/reports/2026-11-24-test-suite-inventory.cn.md).
+# child wall clock.
 tier = "slow"
 
 [[tests]]
@@ -181,8 +174,7 @@ verify_script = """
 assert(input.normalized.stdout === '3420000\n19900\n42\nend\n', JSON.stringify(input.normalized.stdout))
 """
 # Slow layer: over the 2 s the fast layer allows -- 4.24 s of
-# child wall clock in the 2026-11-12 record (appendix B of
-# internal/reports/2026-11-24-test-suite-inventory.cn.md).
+# child wall clock.
 tier = "slow"
 
 [[tests]]
@@ -197,8 +189,7 @@ verify_script = """
 assert(input.normalized.stdout === '8328\nerror DivisionByZero: Attempted division by zero.\nitem 20 / 20\nend\n', JSON.stringify(input.normalized.stdout))
 """
 # Slow layer: over the 2 s the fast layer allows -- 3.47 s of
-# child wall clock in the 2026-11-12 record (appendix B of
-# internal/reports/2026-11-24-test-suite-inventory.cn.md).
+# child wall clock.
 tier = "slow"
 
 [[tests]]
@@ -215,8 +206,7 @@ assert(input.normalized.stdout === '8328\nerror DivisionByZero: Attempted divisi
 
 # --- the parallel scheduler ---------------------------------------------------------------
 # Slow layer: over the 2 s the fast layer allows -- 3.41 s of
-# child wall clock in the 2026-11-12 record (appendix B of
-# internal/reports/2026-11-24-test-suite-inventory.cn.md).
+# child wall clock.
 tier = "slow"
 
 [[tests]]
@@ -244,8 +234,7 @@ assert(after.filter((l) => l.startsWith('start ')).length === 48 && after.filter
 assert(lines[lines.length - 2] === '5976' && lines[lines.length - 1] === 'after', JSON.stringify(lines.slice(-2)))
 """
 # Slow layer: over the 2 s the fast layer allows -- 3.47 s of
-# child wall clock in the 2026-11-12 record (appendix B of
-# internal/reports/2026-11-24-test-suite-inventory.cn.md).
+# child wall clock.
 tier = "slow"
 
 [[tests]]
@@ -283,8 +272,7 @@ assert(last === 'Index 140 is out of range for an array of length 3.', 'the faul
 
 # --- what is not isolated ------------------------------------------------------------------
 # Slow layer: over the 2 s the fast layer allows -- 2.07 s of
-# child wall clock in the 2026-11-12 record (appendix B of
-# internal/reports/2026-11-24-test-suite-inventory.cn.md).
+# child wall clock.
 tier = "slow"
 
 [[tests]]
@@ -298,8 +286,7 @@ verify_script = """
 assert(input.normalized.stdout === 'before\nleaving\n1\nleaving\n', JSON.stringify(input.normalized.stdout))
 """
 # Slow layer: over the 2 s the fast layer allows -- 2.36 s of
-# child wall clock in the 2026-11-12 record (appendix B of
-# internal/reports/2026-11-24-test-suite-inventory.cn.md).
+# child wall clock.
 tier = "slow"
 
 [[tests]]
@@ -318,8 +305,7 @@ verify_script = """
 assert(input.diagnostics.length === 1, `one diagnostic expected, got ${input.diagnostics.length}`)
 """
 # Slow layer: over the 2 s the fast layer allows -- 2.27 s of
-# child wall clock in the 2026-11-12 record (appendix B of
-# internal/reports/2026-11-24-test-suite-inventory.cn.md).
+# child wall clock.
 tier = "slow"
 
 [[tests]]
@@ -335,8 +321,7 @@ expect_diagnostic_column = 31
 expect_stdout_starts_with = "20\n"
 expect_output_not_contains = ["not reached", "Segmentation fault", "dumped core"]
 # Slow layer: over the 2 s the fast layer allows -- 6.08 s of
-# child wall clock in the 2026-11-12 record (appendix B of
-# internal/reports/2026-11-24-test-suite-inventory.cn.md).
+# child wall clock.
 tier = "slow"
 
 [[tests]]
@@ -354,8 +339,7 @@ assert(out.split('name=SemanticDiag::NoMatchingFunction').length === 6, 'five No
 for (const line of [12, 13, 14, 15, 16]) assert(out.includes(`bad_calls.cml:${line}:20: `), `no diagnostic at line ${line}`)
 """
 # Slow layer: over the 2 s the fast layer allows -- 2.20 s of
-# child wall clock in the 2026-11-12 record (appendix B of
-# internal/reports/2026-11-24-test-suite-inventory.cn.md).
+# child wall clock.
 tier = "slow"
 
 [[tests]]
@@ -377,8 +361,7 @@ expect_output_not_contains = ["Segmentation fault", "dumped core"]
 # enclosing graph, so the boundary stays a graph boundary. The output is the same as without
 # the passes.
 # Slow layer: over the 2 s the fast layer allows -- 2.18 s of
-# child wall clock in the 2026-11-12 record (appendix B of
-# internal/reports/2026-11-24-test-suite-inventory.cn.md).
+# child wall clock.
 tier = "slow"
 
 [[tests]]
@@ -408,8 +391,7 @@ case = "../../../cases/consistency/attempt/pipelines.cml"
 args = ["-Wno-constant-expression-faults", "${case}", "std::opt", "${backend}"]
 golden = "golden/attempt_pipelines.txt"
 # Slow layer: over the 2 s the fast layer allows -- 4.50 s of
-# child wall clock in the 2026-11-12 record (appendix B of
-# internal/reports/2026-11-24-test-suite-inventory.cn.md).
+# child wall clock.
 tier = "slow"
 
 [[tests]]
@@ -419,8 +401,7 @@ case = "../../../cases/consistency/attempt/pipelines.cml"
 args = ["${case}", "std::cxx::fold", "${backend}"]
 golden = "golden/attempt_pipelines.txt"
 # Slow layer: over the 2 s the fast layer allows -- 6.08 s of
-# child wall clock in the 2026-11-12 record (appendix B of
-# internal/reports/2026-11-24-test-suite-inventory.cn.md).
+# child wall clock.
 tier = "slow"
 
 [[tests]]
@@ -430,8 +411,7 @@ case = "../../../cases/consistency/attempt/pipelines.cml"
 args = ["${case}", "std::cxx::cse", "std::cxx::dce", "${backend}"]
 golden = "golden/attempt_pipelines.txt"
 # Slow layer: over the 2 s the fast layer allows -- 6.11 s of
-# child wall clock in the 2026-11-12 record (appendix B of
-# internal/reports/2026-11-24-test-suite-inventory.cn.md).
+# child wall clock.
 tier = "slow"
 
 [[tests]]
@@ -441,8 +421,7 @@ case = "../../../cases/consistency/attempt/pipelines.cml"
 args = ["${case}", "std::macro", "std::opt", "${backend}"]
 golden = "golden/attempt_pipelines.txt"
 # Slow layer: over the 2 s the fast layer allows -- 6.12 s of
-# child wall clock in the 2026-11-12 record (appendix B of
-# internal/reports/2026-11-24-test-suite-inventory.cn.md).
+# child wall clock.
 tier = "slow"
 
 [[tests]]
@@ -452,8 +431,7 @@ case = "../../../cases/consistency/attempt/pipelines.cml"
 args = ["${case}", "std::cxx::inline", "std::opt", "${backend}"]
 golden = "golden/attempt_pipelines.txt"
 # Slow layer: over the 2 s the fast layer allows -- 6.14 s of
-# child wall clock in the 2026-11-12 record (appendix B of
-# internal/reports/2026-11-24-test-suite-inventory.cn.md).
+# child wall clock.
 tier = "slow"
 
 [[tests]]
@@ -463,8 +441,7 @@ case = "../../../cases/consistency/attempt/places.cml"
 args = ["${case}", "std::cxx::inline", "std::opt", "${backend}"]
 golden = "golden/attempt_places.txt"
 # Slow layer: over the 2 s the fast layer allows -- 6.17 s of
-# child wall clock in the 2026-11-12 record (appendix B of
-# internal/reports/2026-11-24-test-suite-inventory.cn.md).
+# child wall clock.
 tier = "slow"
 
 [[tests]]
@@ -476,8 +453,7 @@ golden = "golden/attempt_nested.txt"
 
 # --- other libraries ----------------------------------------------------------------------
 # Slow layer: over the 2 s the fast layer allows -- 6.11 s of
-# child wall clock in the 2026-11-12 record (appendix B of
-# internal/reports/2026-11-24-test-suite-inventory.cn.md).
+# child wall clock.
 tier = "slow"
 
 [[tests]]
@@ -491,8 +467,7 @@ expect_exit = 0
 expect_output_contains = ["rt::attempt<double>(depth, at_10_12, tagged0, x)", "if (v1_call.failed()) {", "Function(graph=risky, tupleSlots=0)"]
 expect_output_not_contains = ["TranslationRefused", "Segmentation fault", "dumped core"]
 # Slow layer: over the 2 s the fast layer allows -- 6.14 s of
-# child wall clock in the 2026-11-12 record (appendix B of
-# internal/reports/2026-11-24-test-suite-inventory.cn.md).
+# child wall clock.
 tier = "slow"
 
 [[tests]]
@@ -509,8 +484,7 @@ expect_diagnostic_column = 12
 expect_output_contains = [":mark/isolate"]
 expect_output_not_contains = ["Segmentation fault", "dumped core"]
 # Slow layer: over the 2 s the fast layer allows -- 5.96 s of
-# child wall clock in the 2026-11-12 record (appendix B of
-# internal/reports/2026-11-24-test-suite-inventory.cn.md).
+# child wall clock.
 tier = "slow"
 
 [[tests]]
@@ -526,8 +500,7 @@ expect_diagnostic_line = 13
 expect_output_contains = ["no derivative rule for operator ':op/tag_error_value'"]
 expect_output_not_contains = ["Segmentation fault", "dumped core"]
 # Slow layer: over the 2 s the fast layer allows -- 3.90 s of
-# child wall clock in the 2026-11-12 record (appendix B of
-# internal/reports/2026-11-24-test-suite-inventory.cn.md).
+# child wall clock.
 tier = "slow"
 
 [[tests]]
@@ -571,8 +544,7 @@ assert(out.startsWith('acquire a\nuse a\nacquire b\nuse b\n-1\ntouch a\n1\nlast 
 for (const name of ['a', 'b']) assert(out.split('release ' + name + '\n').length === 2, `release ${name}: ` + JSON.stringify(out))
 """
 # Slow layer: over the 2 s the fast layer allows -- 6.44 s of
-# child wall clock in the 2026-11-12 record (appendix B of
-# internal/reports/2026-11-24-test-suite-inventory.cn.md).
+# child wall clock.
 tier = "slow"
 
 [[tests]]
@@ -589,8 +561,7 @@ assert(out.startsWith('acquire a\nuse a\nacquire b\nuse b\ntouch b\n25\ntouch a\
 for (const name of ['a', 'b']) assert(out.split('release ' + name + '\n').length === 2, `release ${name}: ` + JSON.stringify(out))
 """
 # Slow layer: over the 2 s the fast layer allows -- 6.38 s of
-# child wall clock in the 2026-11-12 record (appendix B of
-# internal/reports/2026-11-24-test-suite-inventory.cn.md).
+# child wall clock.
 tier = "slow"
 
 [[tests]]
@@ -612,8 +583,7 @@ assert(!out.includes('last line of main'), JSON.stringify(out))
 for (const name of ['a', 'b']) assert(out.split('release ' + name + '\n').length === 2, `release ${name}: ` + JSON.stringify(out))
 """
 # Slow layer: over the 2 s the fast layer allows -- 6.32 s of
-# child wall clock in the 2026-11-12 record (appendix B of
-# internal/reports/2026-11-24-test-suite-inventory.cn.md).
+# child wall clock.
 tier = "slow"
 
 [[tests]]
@@ -632,6 +602,5 @@ assert(!out.includes('last line of main'), JSON.stringify(out))
 for (const name of ['a', 'b']) assert(out.split('release ' + name + '\n').length === 2, `release ${name}: ` + JSON.stringify(out))
 """
 # Slow layer: over the 2 s the fast layer allows -- 6.27 s of
-# child wall clock in the 2026-11-12 record (appendix B of
-# internal/reports/2026-11-24-test-suite-inventory.cn.md).
+# child wall clock.
 tier = "slow"

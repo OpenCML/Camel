@@ -114,7 +114,7 @@ ViewPortsTestPass::apply(const camel::runtime::Program *program, std::ostream &o
         }
         ++graphs;
         const camel::graph::FrozenGraphAdapter view(*target, calleeGraphOf);
-        // The regions first: their records carry the tag set this lane added, and region 0 is the
+        // The regions first: their records carry the tag set a region's ports need, and region 0 is the
         // body even when the graph's own table is empty (`region(0)` answers nullptr then, and the
         // body's facts are none).
         for (camel::runtime::gc_cnt_t id = 0; id < target->regionCount(); ++id) {

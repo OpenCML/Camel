@@ -14,6 +14,7 @@
 #include "camel/compile/gir/draft_graph_builder.h"
 #include "camel/compile/gir/types.h"
 #include "camel/core/source/manager.h"
+#include "camel/runtime/oper_shape.h"
 
 #include <cstdio>
 #include <format>
@@ -24,6 +25,7 @@
 
 #include <nlohmann/json.hpp>
 #include <queue>
+#include <string_view>
 #include <unordered_set>
 
 namespace debugger {
@@ -46,36 +48,13 @@ camel::source::gir_draft_node_key_t draftDebugKey(draft_node_ref_t nodeId) {
     return static_cast<camel::source::gir_draft_node_key_t>(nodeId);
 }
 
-std::string nodeKindName(GCNodeKind kind) {
-    switch (kind) {
-    case GCNodeKind::Data:
-        return "DATA";
-    case GCNodeKind::Port:
-        return "PORT";
-    case GCNodeKind::Fill:
-        return "FILL";
-    case GCNodeKind::Accs:
-        return "ACCS";
-    case GCNodeKind::Brch:
-        return "BRCH";
-    case GCNodeKind::Join:
-        return "JOIN";
-    case GCNodeKind::Call:
-        return "CALL";
-    case GCNodeKind::Bind:
-        return "BIND";
-    case GCNodeKind::Func:
-        return "FUNC";
-    case GCNodeKind::Oper:
-        return "OPER";
-    case GCNodeKind::Gate:
-        return "GATE";
-    case GCNodeKind::Dref:
-        return "DREF";
-    case GCNodeKind::Loop:
-        return "LOOP";
-    }
-    return "UNKNOWN";
+/// The word this dump prints for a node's kind. The kinds themselves are named once
+/// (`camel/runtime/oper_shape.h#nodeKindName`), a `FILL` node and an `:op/fill` call under the same
+/// word. "UNKNOWN" is this dump's own word, for a value that table does not name -- and for `DEAD`,
+/// a place rather than a node this dump shows, which it printed "UNKNOWN" for before that table
+/// became the only copy.
+std::string dumpKindName(const std::string_view stored) {
+    return stored.empty() ? "UNKNOWN" : std::string(stored);
 }
 
 json graphSummary(const DraftGraphBuilder *graph) {
@@ -94,7 +73,13 @@ json nodeToJson(const DraftGraphBuilder *graph, draft_node_ref_t nodeId) {
     const auto *header = node ? graph->view().header(nodeId) : nullptr;
     j["id"]            = nodeId;
     j["graphId"]       = camel::runtime::toText(graph->graphId());
-    j["type"]          = header ? nodeKindName(header->kind) : "DEAD";
+    // A ref with no node is "DEAD"; a node whose kind is `DEAD` -- a place the graph keeps and no
+    // reader draws -- printed "UNKNOWN" before the kinds had one name, and still does.
+    const std::string_view kindWord =
+        header && header->kind != GCNodeKind::Dead
+            ? camel::runtime::nodeKindName(header->kind)
+            : std::string_view();
+    j["type"]          = header ? dumpKindName(kindWord) : "DEAD";
     // Entity IDs are only assigned by the (currently unwired) sealing pass, so synthesize a
     // session-stable composite id: graph id + per-graph draft ref. This is the id the
     // debugger UI shows and can reference back via /api/gir-breakpoints node-id matching.
