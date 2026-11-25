@@ -805,3 +805,6 @@
 | D-1125-22 | 第六次晋级，判据照旧 | taken | 合并位开工（受 8 格上限，等一格空出即起） | 16:29 | ⇒ 带 21 条新增红落地：19 条 opt.pass_*（route4 的 test.cmo 遮住夹具 test.cml）+ 1 条 var_struct_argument（cast-insert）+ 1 条 headers（pwsh-selfcheck.mjs）；报告七块：tip/快层/慢层/三列/人口/硬线/从没跑过 |
 | D-1125-22 | 第六次晋级，判据照旧（三项：按名表无新红 + 新用例绿 + 三列分开） | superseded | 被 D-1125-23 取代 | 17:00 | ⇒ 我一度按「带 21 条红晋级」执行，被纠正：D-1125-13 那次带红是一次性例外 |
 | D-1125-23 | 第六次晋级不带 21 条红：三组各自一小时内向前修，修不好就 revert 带进它的那次合并；三组清掉后晋级 | taken | 三组已全清 | 17:00 | ⇒ ①版权头 65d8689ef4 ②var_struct_argument 转绿（linear 221/0）③19 条 93ab748d73（只把用例自己 .cml 声明的两个 pass 编回 libcamel，模块名与夹具不动） |
+| D-1125-24 | 车道第四次掉到 3 条：给一张排好序的单子 internal/plans/2026-11-25-lane-queue.cn.md（fsh-dev 2c43a734b），少于 8 就从上往下取第一条没在做的，做完划掉、新的往下加 | taken | 队列页已读，本轮补开 trace-scope（第 10 条）；承认排序错：我跳过第 3–8 条先开了第 10 条 | 17:05 | ⇒ 页上划掉第 2 条（装入有自己的形状已由 uri-to-record 做完） |
+| D-1125-25 | 三组红清掉了、装入有了自己的形状 ⇒ 做第六次晋级；队列是先后排的，第 1 条归合并位，接着开第 3（转置带中间结果）、第 4（fvm/nvm 差分）、第 5（kinds-to-oper 清零），补到 8 条 | taken | 晋级交合并位；三格已开 | 17:12 | ⇒ transpose-carry / fvm-nvm-diff / kinds-zero；第 4 条划了边界：做差分不等于把 std::default 切到 fvm |
+| D-1125-26 | selftest 那笔把 test::params、test::declared 搬回 libcamel，与路线四「测试遍移出 libcamel」相反；为清 19 条红可以接受，但只是过渡。根因：用例自己的 test.cml 与测试模块同名。按根因修，修好后把两个遍搬回 test.cmo，并在队列页上加一条 | taken | 按根因修派给 test-module-name 那格 | 17:16 | ⇒ 判据：夹具不与模块同名，或声明与实现的配对不依赖加载顺序；修好后搬回 test.cmo 并核 19 条不回归 |
