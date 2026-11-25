@@ -2,7 +2,7 @@
 // answers 6.0 and the gradient of `xs`, [2.0, 3.0], with `()` beside it for the `int` -- an empty
 // member of the answer, because the pullback answers one slot per parameter and `Tangent<int>` is
 // `()`; the `int` itself is a value the caller still passes and takes no answer slot of its own.
-// It read a `split` refusal until 2026-11-03, then stopped on the answer's shape: the pullback
+// It first read a `split` refusal, then stopped on the answer's shape: the pullback
 // answered `(float[],)` where `Vjp<F>` declares `(float[], ())`.
 import { vjp } from vjp
 

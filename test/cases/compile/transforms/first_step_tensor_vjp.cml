@@ -6,7 +6,7 @@
 // 3.75 / 13.5 / 5.5 / 19.5 against the engine's 3.75 / 13.5 / 5.5 / 19.5). What `vjp` needed was
 // the *reverse* of every step, and the reverse rule table had no rule for the matrix product at all
 // (`stdlib/rulesets/transpose.cml` files `add_t`, `sub_t`, `mul_t`, `div_t`, `neg_t`, `dtod_t`,
-// `sum_t`, `mean_axis_t`, `idx_arr_t`, `take_t` and, until 2026-11-04, no `matmul_t`), so the walk
+// `sum_t`, `mean_axis_t`, `idx_arr_t`, `take_t` and no `matmul_t`), so the walk
 // stopped at the product with the message this case used to pin -- the wall `split` answered for a
 // while, one operator earlier than the `mul_t` it named.
 //

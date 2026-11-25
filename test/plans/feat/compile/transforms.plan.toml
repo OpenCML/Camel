@@ -117,7 +117,7 @@ timeout_ms = 20000
 # has the gradient `s0 + s1` (`(1.0, 1.0)`), and undone in the order they were written it has
 # `s0 + 10*s1` (`(1.0, 10.0)`). One cotangent, two numbers, no seed to argue about.
 #
-# This case was marked known_fail until 2026-11-04, against the rule (a
+# This case was marked known_fail, against the rule (a
 # case that cannot pass today belongs in the plan with a mark, an owner and a reason, not outside
 # it); the mark is gone because the answer is the two numbers now, on both backends. Four facts about
 # the graph had to land, and none of them is a patch at this program:

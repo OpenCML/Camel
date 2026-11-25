@@ -540,8 +540,8 @@ function collect(config, tag) {
     // src/kernel/core/module/dynamic.cpp), so a Linux host that built its bridge still failed to find it
     // while only the Windows spelling was collected here.
     //
-    // The bridge's build directory follows its module: `build/src/stdlib/python` since the 2026-11-22
-    // move, `build/lib/python` while the module lived in `lib/python`, `build/modules/python` before
+    // The bridge's build directory follows its module: `build/src/stdlib/python` after the move into
+    // `src/stdlib`, `build/lib/python` while the module lived in `lib/python`, `build/modules/python` before
     // the layout move. All three are tried so one script collects any of those trees -- `existsSync`
     // turning a wrong guess into "no bridge" is exactly how a build that produced one installs
     // without it.

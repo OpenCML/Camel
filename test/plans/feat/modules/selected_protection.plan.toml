@@ -407,7 +407,7 @@ expect_output_contains = [":op/assn_l"]
 # cannot disagree (design principles 9.7).
 #
 #   dead_write       the cell is a local `var` that no root names, and the fold took the write's only
-#                    reader: no write is left in `probe`. Refused since 2026-11-16 for the reason
+#                    reader: no write is left in `probe`. Refused for the reason
 #                    above, so `probe` is never built; the reading this entry had is the one
 #                    `dead_write_held` keeps
 #   dead_write_held  the cell belongs to the module, so a root holds it: `bump` keeps its write and

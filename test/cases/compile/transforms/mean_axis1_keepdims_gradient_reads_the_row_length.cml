@@ -27,7 +27,7 @@
  *            [6.666666666666667, 6.666666666666667, 6.666666666666667]]
  *
  * `w[i] / 3` is a division, and those are `10.0 / 3.0` and `20.0 / 3.0` rounded to double. They
- * were written `3.333333333333333` and `6.666666666666666` until 2026-11-04, which is
+ * were written `3.333333333333333` and `6.666666666666666`, which is
  * `10.0 * (1.0 / 3.0)` -- one ulp lower in the last place, the shape of a reciprocal multiply
  * (`ct * (1/n)`) rather than of the division this paragraph writes down. Nothing else moves.
  *

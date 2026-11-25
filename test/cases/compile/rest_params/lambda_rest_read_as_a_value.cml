@@ -1,7 +1,7 @@
 // A lambda's rest parameter read *as a value* -- not spread into a call, but indexed.
 //
 // `xs` in the body of `(...xs) => ...` is the tuple of the parameters the position's function type
-// gave the lambda, and `xs.[0]` is a read of one of them. Until 2026-11-05 that read reached the
+// gave the lambda, and `xs.[0]` is a read of one of them. That read reached the
 // scheduler and killed the process:
 //
 //     Camel Invariant Violation: !normInputs.empty()

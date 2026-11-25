@@ -25,7 +25,7 @@
 // linear call** (the author's 2026-11-04 12:40 ruling). The reverse law
 // (`stdlib/rulesets/transpose.cml#matmul_stated_t`) then reduces with `sum_to_stated(..., sa)`, and it
 // builds the one thing the walk cannot build from a type that states no extents: the zero carrier the
-// helpers read for `v`'s rank, from `sa` itself (`zeros::<T>(sa) as A`). Until 2026-11-04 it passed
+// helpers read for `v`'s rank, from `sa` itself (`zeros::<T>(sa) as A`). It passed
 // the operand instead, so the expansion asked the caller for a value behind it, and the step stopped at
 // `skip=parameter-shape uri=tensor:matmul_stated node=11 position=0 param=0 param-type=float[]`.
 //

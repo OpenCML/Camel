@@ -3,7 +3,7 @@
 //
 // The three readings this case has had, so the name and the assertion cannot disagree:
 //
-//   1. until 2026-11-04 it pinned a crash (`autodiff: a zero tangent array needs an array with a
+//   1. it first pinned a crash (`autodiff: a zero tangent array needs an array with a
 //      tangent`, exit 1) -- `:tangent/zeros_arr` was named in the walk's own source and handed a node
 //      of the *source* graph.
 //   2. then it pinned `([], 2.0)`: the zero the *type* states, an array of no elements for an open

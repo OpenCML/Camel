@@ -41,10 +41,10 @@
  * visitGeneratorBody`: `__gen_pc__`, and every local the body declares), and hands
  * those cells to its caller inside a closure the machine builds itself (`streamValue()`: an
  * unnamed function whose whole body is `return __gen_step__()`). The state carried a second
- * member until 2026-11-18: the rule ("answer: drop the generator's halt
+ * member: the rule ("answer: drop the generator's halt
  * bit") removed it, merged, so `S = (pc, halt)` is now `S = (pc)`. Nothing renamed
- * it and nothing took its place, so this script names it nowhere else. A reading taken before that
- * date counted one more cell -- and one more capture port -- per generator body, which is why an
+ * it and nothing took its place, so this script names it nowhere else. A reading taken with the halt
+ * bit counted one more cell -- and one more capture port -- per generator body, which is why an
  * older tree's `capture_ports_generator` is not this tree's reading and the two are never
  * subtracted (the header's rule about `list_sha` is the same rule). The language author ruled
  * (item 4 of the answer on the generator page): that state is the generator's

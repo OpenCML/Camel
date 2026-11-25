@@ -66,7 +66,7 @@ timeout_ms = 120000
 # its batch and its target -- `x = [[1, 2], [3, 4]]`, `t = [[0, 0], [1, 1]]` -- and moves one weight
 # `w = [[0.5, 0.25], [0.125, 1]]` through `pred = x @ w`, `loss = 0.5 * sum((pred - t)^2)`.
 #
-# Until 2026-11-03 a body that captured *anything* was refused whole
+# A body that captured *anything* was refused whole
 # (`transforms: jvp has no forward transform for this function`, `REINTERP jvp ... skip=body`), for a
 # captured `float` as much as for a captured `float[2, 2]`: the ports a capture arrives at were the
 # one kind `jvp` did not make, and the report of the tensor path blamed `pairTypeOf`, which hands an

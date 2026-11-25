@@ -321,7 +321,7 @@ expect_stdout_exact = ""
 #
 #   dead_write_dropped_closure  the closure that captured the cell reaches nothing the program keeps
 #                               (`p.0` reads the tuple's first member alone), and `x * 0 => 0` folds
-#                               away the write's only reader. Refused since 2026-11-16: the closure is
+#                               away the write's only reader. Refused: the closure is
 #                               bound to a name and put into a tuple, and design principles 3.5 (198)
 #                               runs the stretch of a value put into another value to the rest of the
 #                               scope, so the write after it is inside the stretch. The entries that

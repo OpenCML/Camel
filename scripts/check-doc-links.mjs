@@ -237,7 +237,7 @@ function technicalPages(directory = TECHNICAL) {
 // edited the page by hand.
 //
 // THE FACT SOURCE IS THE UNION OF TWO SETS: the rows the file already has, and the pages in the
-// directory. It was the directory alone until 2026-11-05, and that read deletes rows: a page that
+// directory. The directory alone is a read that deletes rows: a page that
 // leaves `questions/` -- answered into `reviews/`, or dropped by a revert -- takes its row with it
 // on the next `--write`, and the check then passes on the smaller table, because the file and the
 // generator agree again. That is exactly what the generator did (65 rows to 17, the deleted

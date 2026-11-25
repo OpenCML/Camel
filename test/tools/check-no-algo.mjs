@@ -30,7 +30,7 @@
  *     scope that quietly lost a root is the failure this guard was fixed for.
  *   * LEGACY_ROOTS are the names the layout had before the move to `src/`: the five block directories
  *     and the library sat at the top of the tree (`kernel/`, `parse/`, `compile/`, `lib/`,
- *     `tools/`) until 2026-11-22, and `include/`, `modules/`, `stdlib/` before the layout move.
+ *     `tools/`) until the move into `src/`, and `include/`, `modules/`, `stdlib/` before the layout move.
  *     They are walked when present, so a checkout of any layout is scanned, but their absence is
  *     today's layout and is reported, not failed.
  *   * GONE_PATHS must NOT be there, and their absence is *half of this guard's PASS*: the deleted

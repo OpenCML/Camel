@@ -10,7 +10,7 @@
 // is about; that the engine answers it is.
 //
 // The library's half is the neighbouring case, `pow_gradient_of_a_caret_through_the_library.cml`:
-// until 2026-11-04 the same function's gradient through `vjp` refused by name (`skip=condition`, then
+// The same function's gradient through `vjp` refused by name (`skip=condition`, then
 // `skip=call-no-transpose` on the `pow_tangent` call), because the tangent the rule answered with was
 // written behind an `if dw == T(0)` guard. The guard is gone -- the term is omitted in the rule
 // expansion instead, so no law branches on a tangent's value -- and the library now answers this same

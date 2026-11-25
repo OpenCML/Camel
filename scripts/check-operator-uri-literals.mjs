@@ -12,7 +12,7 @@
  * has to be edited when the operator moves: the URI is the operator's identity, and identity is
  * owned by the table (`OperatorTable`) and by the declarations that fill it.
  *
- * That page is not in this tree as of 2026-11-14: it is the design branch's (`origin/fsh-dev`), so
+ * That page is not in this tree: it is the design branch's (`origin/fsh-dev`), so
  * section 7 is quoted here rather than linked -- a link to a page this tree does not hold is a
  * broken link, and `scripts/check-doc-links.mjs --citations` says so.
  *

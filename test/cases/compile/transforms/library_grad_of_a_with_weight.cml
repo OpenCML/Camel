@@ -12,7 +12,7 @@
  * written in; the two legs differ in who computes the gradient and not in the function they
  * differentiate, which is what makes 3.0 the number worth pinning twice.
  *
- * **The shape this file used to measure is gone, and its number was wrong.** Until 2026-11-05 the
+ * **The shape this file used to measure is gone, and its number was wrong.** The
  * library's leg moved the weight onto an ordinary parameter with a written lambda,
  * `f = (ww) => weighted<ww>(2.0)`, and relied on the forward lift promoting a *callee's* `with`
  * parameters into its ordinary list so that a direction could be handed in at the call. That path

@@ -58,7 +58,7 @@ tags = ["feat", "effects", "resources", "runtime", "compile"]
 #                      capture position, as the closure's own cell is in `capture_local_var`; the `rmw`
 #                      is this printer's word for a capture, since a capture states a position and no
 #                      mode, not `peek`'s reading. It named the `with` port carrying that capture,
-#                      `variable with 0`, until 2026-11-16). Both agree it is not masked; only the
+#                      `variable with 0`, while the port was the name). Both agree it is not masked; only the
 #                      vocabulary differs, because the runtime's walk has no notion of a module-level
 #                      cell.
 #   module_var_write   the same for `bump`'s write of that cell.

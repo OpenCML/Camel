@@ -23,7 +23,7 @@
 // one element out of `x^T e`: seeding the (0,0) direction answers 3.75, and so on. The reverse
 // transform would answer all four in one call, and it is the next wall rather than this case.
 //
-// The capture is the point. Until 2026-11-03 the lift refused a body that captured anything at all
+// The capture is the point. The lift refused a body that captured anything at all
 // (`transforms: jvp has no forward transform for this function`, `REINTERP jvp ... skip=body`), for a
 // captured `float` as much as for a captured `float[2, 2]`: the ports a body's captures arrive at
 // were the one kind `jvp` did not make, so the body was refused whole and `pairTypeOf` -- which the

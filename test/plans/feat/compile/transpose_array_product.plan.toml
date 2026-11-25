@@ -7,7 +7,7 @@
 # paired with that cotangent at one point -- the same number twice, if the law is the adjoint of the
 # product rule and not merely a plausible one.
 #
-# Both cases were `known_fail` until 2026-11-04, and the mark waited on exactly this: the law read the
+# Both cases were `known_fail`, and the mark waited on exactly this: the law read the
 # operand whose cotangent it was answering for `sum_to`'s shape, and that operand is a tangent, whose
 # type states no extents (`float[...]`). The debt is paid by the stated twin -- `rulesets.jvp`'s
 # `jvp_mul_tensor` now calls `mul_stated(dx, w, shape(x), shape(w)) + mul_stated(x, dw, shape(x),

@@ -10,7 +10,7 @@
  * same kind are allowed only in the semantic layer's files. This script is that check, in
  * report-only mode.
  *
- * That page is not in this tree as of 2026-11-14: it is the design branch's (`origin/fsh-dev`), so
+ * That page is not in this tree: it is the design branch's (`origin/fsh-dev`), so
  * section 7 is quoted here rather than linked -- a link to a page this tree does not hold is a
  * broken link, and `scripts/check-doc-links.mjs --citations` says so.
  *
