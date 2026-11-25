@@ -51,11 +51,86 @@ namespace camel::compile::gir {
 
 node_handle_t
 Builder::castNodeTo(node_handle_t value, Type *target, const GCT::node_ptr_t &origin) {
-    // A conversion is an ordinary operator, so a conversion the compiler makes is a call of it
-    // like any other: the operator's rule is the conversion the CAST node ran, and the value is
-    // the same either way (design principles 5.1: the target type is a type name applied to a
-    // value, and `cast` is the operator that name is).
-    return conversionNodeOf(value, target, origin);
+    // 装入不是转换 (design principles 5.1, the log entry of 2026-11-25): the step the compiler
+    // inserts to make two types meet always succeeds. It is not a conversion -- it asks no safety
+    // table and it is not `:op/cast` -- and it never fails at run time. Two things follow, and both
+    // are stated here:
+    //
+    //   * the step is `:op/enter`, written by `enterNodeOf` below, so a conversion the program
+    //     wrote (`x as T`, `T(x)`, `cast::<T, U>(x)`) and one the compiler wrote are different
+    //     operators, and a reader of the graph can tell which it is looking at;
+    //   * a step that could fail is not inserted. Where the only way from the value's type to the
+    //     target is a conversion that may fail, the program is refused here, at compile time, with
+    //     the two types named -- the conversion that checks a value is the program's to write.
+    //
+    // Which steps those are is the type layer's answer (`Type::castEntersFrom`), not this
+    // function's: the compiler never decides on its own that a pair is close enough.
+    Type *source = nodeTypeOf(value) != nullptr ? valueTypeOf(nodeTypeOf(value)) : nullptr;
+    if (source == nullptr || target == nullptr || !target->castEntersFrom(source)) {
+        diags_->of(SemanticDiag::ConversionNeededWhereTheCompilerWouldInsertOne)
+            .atOrigin(origin != nullptr ? origin->origin() : camel::source::kInvalidOriginId)
+            .commit(
+                source != nullptr ? source->toString() : std::string("void"),
+                target != nullptr ? target->toString() : std::string("void"));
+        throw BuildAbortException();
+    }
+    return enterNodeOf(value, target, origin);
+}
+
+node_handle_t
+Builder::enterNodeOf(node_handle_t value, Type *target, const GCT::node_ptr_t &origin) {
+    // An entering is a call of `enter::<T, U>` like a conversion is a call of `cast::<T, U>`: the
+    // source is the type of the value it reads, the target is the call's result type, and both are
+    // known here. The group is the built-in one for the reason `conversionNodeOf` gives -- a
+    // program that binds the name `enter` cannot decide what the compiler's own step calls -- and
+    // the operator's record states `mayFault = false`, which is the same fact `castEntersFrom`
+    // states about the pair.
+    Type *source = nodeTypeOf(value) != nullptr ? valueTypeOf(nodeTypeOf(value)) : nullptr;
+    if (source != nullptr && target != nullptr) {
+        const oper_group_ptr_t group = builtinOperatorGroupNamed("enter");
+        if (group != nullptr) {
+            const std::vector<StaticArg> statics(1);
+            const auto op = group->resolveForCall({source, target}, target, {}, {source}, statics);
+            if (op.has_value()) {
+                node_handle_t node = currGraph_->addOperNode(*op, 0);
+                stampPermissions(node);
+                linkNodes(LinkType::Norm, value, node);
+                registerNodeOrigin(context_, node, origin, "gir.enter");
+                return node;
+            }
+        }
+    }
+    // The same three failures `conversionNodeOf` tells apart, and they are three different things
+    // (design principles 3.3, "one statement per fact"): no declaration to name (a prelude missing
+    // its `#op` line, which is a defect of the build), a type not known yet (neither the holder's
+    // nor the program's), and a pair the operator's own rule refuses -- which the relation above
+    // has already refused, so reaching it here means the declaration and the relation disagree and
+    // that is the compiler's defect, not the program's.
+    const oper_group_ptr_t group = builtinOperatorGroupNamed("enter");
+    if (group == nullptr) {
+        diags_->of(InternalDiag::UnknownInternalError)
+            .atOrigin(origin != nullptr ? origin->origin() : camel::source::kInvalidOriginId)
+            .commit("the built-in operator 'enter' has no group: the prelude's #op declaration of "
+                    "':op/enter' did not load");
+        throw BuildAbortException();
+    }
+    if (source == nullptr || target == nullptr) {
+        diags_->of(SemanticDiag::OperatorSignatureUnresolved)
+            .atOrigin(origin != nullptr ? origin->origin() : camel::source::kInvalidOriginId)
+            .commit(
+                ":op/enter",
+                source == nullptr ? std::string("the type of the value it enters")
+                                  : std::string("the type it enters"));
+        throw BuildAbortException();
+    }
+    diags_->of(InternalDiag::UnknownInternalError)
+        .atOrigin(origin != nullptr ? origin->origin() : camel::source::kInvalidOriginId)
+        .commit(
+            "the built-in operator 'enter' refused '" + source->toString() + "' entering '" +
+            target->toString() +
+            "', which Type::castEntersFrom says is a step that cannot fail: the declaration and "
+            "the relation disagree");
+    throw BuildAbortException();
 }
 
 node_handle_t
@@ -517,7 +592,7 @@ node_handle_t projectPart(node_handle_t value, const Type *type, size_t step) {
             source = nodeDraftOf(source)->ref(inputs.front());
             continue;
         }
-        if (operUriOf(source) == ":op/cast") {
+        if (operUriOf(source) == ":op/cast" || operUriOf(source) == ":op/enter") {
             const auto inputs = normInputsOf(source);
             Type *from = inputs.empty()
                              ? nullptr

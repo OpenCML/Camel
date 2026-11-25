@@ -1902,6 +1902,14 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             },
         },
         {
+            SemanticDiag::ConversionNeededWhereTheCompilerWouldInsertOne,
+            {
+                "ConversionNeededWhereTheCompilerWouldInsertOne",
+                "This value has type '{0}', and the position it stands in has type '{1}': getting from one to the other needs a conversion that may fail, and the compiler inserts only steps that cannot.",
+                "A step the compiler inserts to make two types meet always succeeds (design principles 5.1, \"entering is not a conversion\"); a conversion that checks a value is the program's to write, and it fails when the value does not fit. Nothing is converted implicitly between numbers, and a shape the position fixes is not checked on the value's behalf. Write the conversion where the value stands ('T(x)' or 'x as T'), or give the position a type the value enters by itself.",
+            },
+        },
+        {
             SemanticDiag::IgnoredSideEffect,
             {
                 "IgnoredSideEffect",

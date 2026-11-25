@@ -1,0 +1,16 @@
+/**
+ * A conversion the **program** writes is `:op/cast`, and the two steps are different operators:
+ * this file writes `5 as int?` and `std::gir` shows it as `:op/cast`, where a step the compiler
+ * inserts (a literal or an error value taking a position's type) is `:op/enter`
+ * (design principles 5.1, "entering is not a conversion").
+ *
+ * The pair here is one the table calls safe, so the call cannot fail and the entry prints its
+ * value; a conversion of a pair that may fail is the program's to ask for and may fault, which is
+ * what `:op/cast` declares.
+ */
+
+func main() => int sync {
+    let written = 5 as int?
+    println(written ?? 0)
+    return 0
+}

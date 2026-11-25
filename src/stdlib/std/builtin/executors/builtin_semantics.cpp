@@ -387,6 +387,10 @@ void declareBuiltinOperatorFaults() {
         {":op/not", false},
         {":op/extent_of", false},
         {":op/copy", false},
+        // Entering has no fault path at all, and that is the design principle it exists for: a step
+        // the compiler inserts to make two types meet always succeeds (design principles 5.1). The
+        // empty table says the same thing the operator's record and `Type::castEntersFrom` say.
+        {":op/enter", false},
         // The predicates and measures over a collection walk one and build no value.
         {":struct/len_arr", false},
         {":struct/len_str", false},

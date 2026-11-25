@@ -268,6 +268,22 @@ class Type {
      */
     virtual Type *literalOperandType() const;
     virtual CastSafety castSafetyFrom(Type *sourceType) const;
+    /**
+     * Whether a value of `sourceType` **enters** this type -- whether the step that puts it into
+     * this type is one that cannot fail (design principles 5.1, "entering is not a conversion").
+     *
+     * Entering is not a conversion: it is the step the compiler inserts to make two types meet,
+     * it always succeeds, and it goes through neither `:op/cast` nor `castSafetyFrom`. This
+     * judgement is the one place that says which steps those are, and the compiler inserts a step
+     * only where it answers true: where making the types meet would need a real conversion that
+     * may fail, the program is a type error at compile time and nothing is inserted, so what the
+     * compiler puts in a graph never fails at run time with a conversion fault.
+     *
+     * The default is the conversions that are `Safe` -- one that cannot fail is not one anybody
+     * has to check. The tagged forms answer for one more step, because a failed value retyped as
+     * another `T!` is the same object (TupleType::castEntersFrom).
+     */
+    virtual bool castEntersFrom(Type *sourceType) const;
     virtual slot_t castSlotFrom(slot_t value, Type *sourceType) const;
     bool assignableFrom(Type *sourceType) const;
     /**

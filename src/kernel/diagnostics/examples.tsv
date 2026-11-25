@@ -81,6 +81,7 @@ SemanticDiag::ConstasInNativeDeclaration	test/cases/compile/constas/constas_nati
 SemanticDiag::ConstasNotAllowed	test/cases/compile/constas/constas_dimension_name.cml
 SemanticDiag::ConstasTypeRequired	test/cases/compile/constas/constas_no_type.cml
 SemanticDiag::ConstasValueNotConstant	test/cases/compile/constas/constas_value_not_constant.cml
+SemanticDiag::ConversionNeededWhereTheCompilerWouldInsertOne	test/cases/compile/tagged/err_enter_needs_cast.cml
 SemanticDiag::DeclaredTypeMismatch	test/cases/compile/array_shape/err_nonliteral_rank.cml
 SemanticDiag::DimensionAfterAnyRank	test/cases/compile/array_shape/err_pack_not_last.cml
 SemanticDiag::DimensionMismatch	test/cases/compile/array_shape/err_call_mismatch.cml

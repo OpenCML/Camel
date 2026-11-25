@@ -2138,6 +2138,13 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
         // The names are the URI's own tail, which is the name `camel inspect --ops` reports for them
         // (`copy` / `:op/copy`) and what `--verify-ops` compares a declaration with.
         OperatorGroup::create("cast", {}),
+        // Entering (design principles 5.1, "entering is not a conversion"): the same shape as a
+        // conversion, declared the same way, because it is the same kind of operator -- a call
+        // whose target type is the call's result type. What differs is who writes it (the
+        // compiler, never the program) and that its record states no fault. Its name is the URI's
+        // own tail (`enter` / `:op/enter`), which is what `camel inspect --ops` reports and what
+        // `--verify-ops` compares a declaration with.
+        OperatorGroup::create("enter", {}),
         OperatorGroup::create("fill", {}),
         OperatorGroup::create("access", {}),
         // The member read by name is its own group, and so its own URI: the two reads ask the

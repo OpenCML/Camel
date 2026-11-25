@@ -51,6 +51,12 @@ using namespace camel::core::data;
 using namespace camel::core::type;
 
 namespace camel::compile::gir {
+/// The URI of the entering operator (`prelude.cml`, `#op(':op/enter')`). It is compared here
+/// because the question is about a **call the program wrote** against the one
+/// `Builder::castNodeTo` writes itself: the record's answer is asked where a graph is read
+/// (`camel/runtime/oper_shape.h`), and this is the builder deciding what a call means.
+static constexpr std::string_view kEnterUri = ":op/enter";
+
 node_handle_t
 Builder::visitLinkNode(const GCT::node_ptr_t &gct, std::optional<GCT::AssignmentForm> store) {
     // A call. `store` says this call is the store a write makes: the two arguments are the cell
@@ -908,8 +914,18 @@ Builder::visitLinkNode(const GCT::node_ptr_t &gct, std::optional<GCT::Assignment
             if (refined->castSafetyFrom(arg.actual) == CastSafety::Forbidden) {
                 continue;
             }
+            // THE STOP: this is the one step the compiler inserts that is a **conversion**, not an
+            // entering, and it is left as it was. The pair here is a shape the callee declared in
+            // its own names (`f32[n - w + 1]`) against the extent the call gave them (`f32[6]`):
+            // the two are the same type when the extents are read, and the type layer cannot say
+            // so at build time, so the check that the value really has that shape is made when the
+            // value exists (design principles 5.4). Refusing it here is the ruling's other arm --
+            // "a step that may fail is a compile-time type error" -- and it turns `let y: f32[6] =
+            // window<3>(x)` (test/cases/compile/extents/computed.cml) into a program that does not
+            // compile. Which arm holds is the owner's to say; this lane stops at the location and
+            // reports both readings rather than deciding it.
             node_handle_t &refinedArg = linkedNode(*arg.input);
-            refinedArg                = castNodeTo(valueOf(refinedArg), refined, arg.input->expr);
+            refinedArg                = conversionNodeOf(valueOf(refinedArg), refined, arg.input->expr);
             (*arg.types)[arg.index]   = refined;
         }
         const auto enter = [&](std::vector<Argument> &inputs, type_vec_t &types, bool with) {
@@ -2150,6 +2166,28 @@ Builder::visitLinkNode(const GCT::node_ptr_t &gct, std::optional<GCT::Assignment
                     return settledNode;
                 }
             }
+            // Entering is the step the **compiler** inserts to make two types meet, and it always
+            // succeeds (design principles 5.1, "entering is not a conversion"). A program that
+            // writes `enter::<T, U>(x)` itself can therefore only mean a step that cannot fail:
+            // where the pair does need a conversion that may fail, that conversion is `cast` and
+            // is the program's to write, so the call is a type error here and no node is built.
+            // This is the program-written half of the boundary `Builder::castNodeTo` states for
+            // the compiler-written one, and the two answer with one diagnostic.
+            if (targetOperator->uri() == kEnterUri && !normInputTypes.empty() &&
+                normInputTypes[0] != nullptr &&
+                (targetOperator->funcType() == nullptr ||
+                 targetOperator->funcType()->exitType() == nullptr ||
+                 !targetOperator->funcType()->exitType()->castEntersFrom(normInputTypes[0]))) {
+                diags_->of(SemanticDiag::ConversionNeededWhereTheCompilerWouldInsertOne)
+                    .atOrigin(gct->origin())
+                    .commit(
+                        normInputTypes[0]->toString(),
+                        targetOperator->funcType() != nullptr &&
+                                targetOperator->funcType()->exitType() != nullptr
+                            ? targetOperator->funcType()->exitType()->toString()
+                            : std::string("void"));
+                throw BuildAbortException();
+            }
             targetNode = currGraph_->addOperNode(targetOperator, 0);
             stampPermissions(targetNode);
             // An operator declared macro runs in std::macro once its inputs are static, like a call
@@ -2524,7 +2562,11 @@ Builder::visitLinkNode(const GCT::node_ptr_t &gct, std::optional<GCT::Assignment
                 if (nodeTypeOf(cell)->equals(wanted)) {
                     return cell;
                 }
-                node_handle_t converted = conversionNodeOf(cell, wanted, arg.expr);
+                // The cell's type is the callee's: the conversion is the compiler's own step
+                // (nothing the program wrote asks for it), and two cell types whose contents
+                // accept each other are one box, so the step always succeeds -- `castNodeTo`
+                // writes it as the entering it is and refuses it if it were ever otherwise.
+                node_handle_t converted = castNodeTo(cell, wanted, arg.expr);
                 return converted;
             };
             if (takesVariables) {
@@ -2870,10 +2912,16 @@ Builder::visitLinkNode(const GCT::node_ptr_t &gct, std::optional<GCT::Assignment
             Type *refined =
                 hasNames ? const_cast<Type *>(namedExit->withExtentValues(dimValues, dimPacks))
                          : nullptr;
+            // THE STOP: the exit type of a call whose names the call bound, against the extent the
+            // body produced. Same location as the argument refinement above and the same reason:
+            // the two types are the same type once the extents are read, and only the value can
+            // say whether the body kept the relation, so the check is a run-time conversion here
+            // (design principles 5.4). Making it a compile-time type error instead is the ruling's
+            // other arm and it refuses `computed.cml`; the owner decides which arm holds.
             if (refined != nullptr && refined != namedExit && actualExit != nullptr &&
                 !refined->equals(actualExit) &&
                 refined->castSafetyFrom(actualExit) != CastSafety::Forbidden) {
-                targetNode = castNodeTo(targetNode, refined, gct);
+                targetNode = conversionNodeOf(targetNode, refined, gct);
             }
         }
     }

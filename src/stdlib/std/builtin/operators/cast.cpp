@@ -11,6 +11,7 @@
 #include "camel/core/type/base.h"
 #include "camel/utils/assert.h"
 
+#include <format>
 #include <sstream>
 
 namespace mm = camel::core::mm;
@@ -317,5 +318,45 @@ slot_t __cast_value__(ArgsView &with, ArgsView &norm, Context &ctx) {
     camel::core::type::Type *source = norm.type(0);
     GUARD(target != nullptr, "a conversion must state the type it produces.");
     GUARD(source != nullptr, "a conversion must state the type of its operand.");
+    // A conversion the **program** wrote is a value check, and the check is the type's own: every kind
+    // of target that states an `Unsafe` pair also states how to read the value -- an array checks
+    // its element type and shape, a set or a map checks the values it holds (`castSlotFrom` of the
+    // type) -- and the fault it raises where the value does not fit is the one the declaration
+    // promised. So this kernel asks no safety table of its own and hands the value to the type.
+    //
+    // It used to ask one (`61bab72902`): a pair the table does not call `Safe` raised
+    // `InvalidArgument` here instead of reaching `castSlotFrom`. That is measurably wrong for the
+    // pairs above -- an empty `[]` becoming a `Set<int>` and an `f32[...]` whose shape is only known
+    // when it runs becoming an `f32[6]` are both `Unsafe` and both conversions the language
+    // performs, and the rule refused 77 of them across `compile.collections` and
+    // `compile.extent_expressions`. What that commit was after is a pair the type layer refuses
+    // outright, and no program reaches one through `as` or `cast`: a pair with no conversion is
+    // refused where the program is read (`DynamicCastForbidden`), and a primitive pair is refused by
+    // the graph's own edge check.
+    return target->castSlotFrom(norm.slot(0), source);
+}
+
+// Entering, as an operator of its own (`enter::<T, U>` of `lib/std/prelude.cml`; design principles
+// 5.1, "entering is not a conversion"). It performs the same step the conversion performs and
+// differs in the one thing that matters: it does not ask the safety table. A conversion that is not
+// `Safe` is a value check the program asked for, and `__cast_value__` above is where the program
+// asked; this one is the step the *compiler* inserts to make two types meet, which always succeeds
+// -- so there is no question here for a case to answer, and the `mayFault = false` the operator is
+// registered with states the same thing from the other side.
+//
+// The `GUARD` is the builder's contract and not a fault a program can observe: the compiler inserts
+// this call only where `Type::castEntersFrom` says the step cannot fail, so a call that reaches it
+// with any other pair is a compiler that wrote something it may not write. `Type::castSlotFrom`'s
+// own guard says the same about the step itself.
+slot_t __enter_value__(ArgsView &with, ArgsView &norm, Context &ctx) {
+    (void)with;
+    (void)ctx;
+    camel::core::type::Type *target = norm.resultType();
+    camel::core::type::Type *source = norm.type(0);
+    GUARD(target != nullptr, "an entering must state the type it enters.");
+    GUARD(source != nullptr, "an entering must state the type of its operand.");
+    GUARD(
+        target->castEntersFrom(source),
+        "':op/enter' is written only where the step cannot fail");
     return target->castSlotFrom(norm.slot(0), source);
 }

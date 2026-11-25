@@ -1,0 +1,12 @@
+/**
+ * Entering is the step the compiler inserts to make two types meet, and it always succeeds: a
+ * program that writes `enter::<T, U>` for a pair that needs a conversion which may fail is a type
+ * error, reported with both types, and no node is built (design principles 5.1, "entering is not
+ * a conversion"). The conversion that checks the value is `cast`, and it is the program's to
+ * write.
+ */
+
+func main() => float {
+    let x = enter::<int, float>(1)
+    return x
+}
