@@ -28,6 +28,7 @@ work that is not a full gate run and hold a machine-wide lock so two of them can
 | `merge-lane-firstparent.test.ps1` | Its test, and the regression beside it: `pwsh -NoProfile -File internal/tools/merge-lane-firstparent.test.ps1` prints `30 checks, 0 failed`. Four cases -- a merge of the tip arrives, a merge of an older tip is refused with the sentence and the redo command, a single-parent commit is refused, and `Invoke-PushWithRecovery` still pushes when the shape is right -- plus the wiring: each tool calls the reading and neither carries a copy of it. |
 | `merge-lane-baseline.test.ps1` | The key a baseline is stored under: `pwsh -NoProfile -File internal/tools/merge-lane-baseline.test.ps1` prints `28 checks, 0 failed`. Same sha twice is a reuse and not a rebuild; a different sha is a different tree; a fixed-name tree holding another commit is called stale (`stale baseline beside the tip: rebuilding`) and moved; two seats that name different trees still resolve one tip to one tree and one branch, which spells the sha. |
 | `hook-integration.test.ps1` | The same rule at the push itself: `scripts/hooks/pre-push` refuses a push to `refs/heads/integration` whose commit is not a merge of the remote tip. `pwsh -NoProfile -File internal/tools/hook-integration.test.ps1` runs the real hook (found by its `sh`, taken from git's own install) against a throwaway repository: `13 checks, 0 failed`. |
+| `lane-audit.mjs` | Which `lane/*` branches are already inside a merged tree, and which are really unmerged: `ahead` / `behind` / `contained` / `equiv` per branch, listed in three buckets -- deletable, suspect-merged, unmerged (by `behind`) -- with `--json` and a `--check` that exits 3 when bucket 3 is over `--limit` (default 20). The base is `seat/merge-rehearsal`, else `develop`, and the report says which one on its first line. A bucket 1 row also says whether `origin/develop` holds it yet: a rehearsal tree is built on one machine, so "contained in the base" is not "published", and a branch deleted while its content is unpublished leaves the base as the only ref holding it. It reads local refs only and fetches nothing; it deletes no ref and creates none, and it takes that reading rather than claiming it: `refs/heads/lane/*` is compared before and after the run, and a sha that moved is exit 4 with the ref named. Bucket 2 means "the same content by different commits" and belongs to the lane's owner -- a row here is a conversation, never a deletion. |
 | `camel-cleanup.sh` | The cleanup door: a run's temporaries live under `~/camel-work/tmp/<lane>-<time>/` and are judged by the manifest the run wrote when it created them. `rm` accepts a path only when it is under that root **and** in a manifest. |
 | `camel-cleanup.test.ps1` | Its test: the six readings against a fake home (never the real one). `pwsh -NoProfile -File internal/tools/camel-cleanup.test.ps1 -BashHost <alias>`. |
 | `camel-gate.example.json` | The shape of the local settings file, placeholders only. |
@@ -54,6 +55,14 @@ That is written here instead of being locked down, because a lock in a hook that
 skip is a lock in name only. **A push made with `--no-verify` says so in its conclusion line**, and
 the chain it wrote is then the thing to repair (the shape is re-read by the next merge, and
 `internal/backlog.md` is where a wrong arrival is recorded).
+
+Beside those two rules the hook runs `scripts/merge-record.mjs verify` over the push's first-parent
+range: every merge commit in it needs a pass record in `.git/camel-passed/<sha>.json`, and the record
+now carries the measured run's own `exit`. **`exit` absent means `"0"`** -- records written before the
+field existed stay valid, no migration -- and any other value is refused in its own words, so a
+record that says `exit=unknown` (the gate's exit 7: readings complete, exit code not obtained, see
+`camel-remote.ps1`) exists for the reader who wants the reading but opens no door. Only merge commits
+are read: a single-parent commit such as a documentation page is not asked for a record at all.
 
 ## The machine-local settings file
 
@@ -116,6 +125,14 @@ runs what was asked. Every line comes back as it happens, the run's clock is spl
 build and plan, the phases are published to the panel's state files, and the exit code is the build's
 or the plan's own.
 
+One code is not a verdict: **exit 7 means the readings are complete and the exit code was not
+obtained**, which is neither a pass nor a failure. The run reports its code as its own last line
+(`__CAMEL_REMOTE_EXIT__=`) so a session that will not close cannot take the code with it, and
+`-FinishTimeoutSeconds` bounds the close; a close that misses it keeps every reading and prints
+`[camel-remote] <name> exit unknown` (registry: `exit=7 phase=unknown`). Read it as its own state:
+not green (nothing says the run's checkers were green), not a red reading (the readings are all
+there), and the one state in which a record is written with `exit=unknown` and no push follows.
+
 A clean tree whose host checkout is already on that commit and clean skips the checkout and the patch
 altogether, so an unchanged re-run costs one build pass and the plan.
 
@@ -138,6 +155,7 @@ altogether, so an unchanged re-run costs one build pass and the plan.
 | `-AstDrop <path>[,...]` | With `-UpdateAstHashes`: a recorded path whose row this re-record may lose (a case that really is deleted). Each name is printed as it is dropped, and a name that no row was dropped for is printed too. Without it the write-back refuses the drop. |
 | `-Clean` | Delete this worktree's host checkout, build directory included, and stop. Refuses (exit 3) what lives beside the checkouts: a bare repository, and the cleanup root's own bookkeeping (`tmp/`, `.records/`). |
 | `-StackTrace` | Diagnostic build with assertion stack traces. Its readings do not decide green or red. |
+| `-FinishTimeoutSeconds <n>` | How long the *close* of a finished run waits, in seconds. Default 600. It counts silence after the plan's own last line (`[SPLIT]`) and nothing before it, so a quiet plan is never cut; a close that misses it keeps every reading and reports exit 7. |
 | `-StateDir <dir>` | Override the settings file's `stateDir`. |
 | `-LocalConfig <file>` | Use that settings file instead of the one beside the script. |
 | `-LibStdCxxDir <dir>` | Override the settings file's `hostLibStdCxxDir`. |
