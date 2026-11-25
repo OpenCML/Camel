@@ -81,3 +81,6 @@
 - 分支 `lane/view-graph-identity`，提交 `6b396eeff1`（D/E 主体）、`ed70bf059c`（读数钉住）。
 - 命令：`git grep -n "collectReachableRuntimeGraphs" -- src`（20 处调用点）；本页表格第三列读的是每个调用点后三行。
 - 读数所在计划：`test/plans/feat/opt/graph_identity.plan.toml`（`test::view_types`、`test::program_identity`）。
+## 决策者答（2026-11-25）
+
+按默认 **A**，维持现状，理由按 §3 写的成立。第 21 处真出现一个"只问身份"的读者时，再给它一个身份入口，不为假想的读者先开口子。
