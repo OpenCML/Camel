@@ -139,6 +139,7 @@ set(CAMEL_LAYOUT_BLOCK_lib_module_ROOTS
     ${PROJECT_SOURCE_DIR}/src/stdlib/hash
     ${PROJECT_SOURCE_DIR}/src/stdlib/io
     ${PROJECT_SOURCE_DIR}/src/stdlib/json
+    ${PROJECT_SOURCE_DIR}/src/stdlib/laws
     ${PROJECT_SOURCE_DIR}/src/stdlib/math
     ${PROJECT_SOURCE_DIR}/src/stdlib/nn
     ${PROJECT_SOURCE_DIR}/src/stdlib/nn/signatures
@@ -230,6 +231,7 @@ set(CAMEL_LAYOUT_CATCHALL_ROOTS
     ${PROJECT_SOURCE_DIR}/src/stdlib/hash
     ${PROJECT_SOURCE_DIR}/src/stdlib/io
     ${PROJECT_SOURCE_DIR}/src/stdlib/json
+    ${PROJECT_SOURCE_DIR}/src/stdlib/laws
     ${PROJECT_SOURCE_DIR}/src/stdlib/math
     ${PROJECT_SOURCE_DIR}/src/stdlib/nn
     ${PROJECT_SOURCE_DIR}/src/stdlib/nn/signatures

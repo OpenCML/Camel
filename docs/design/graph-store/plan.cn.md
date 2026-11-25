@@ -132,7 +132,7 @@
 
 - 名字：`std::cml`。头文件 `lib/std/cml/include/camel/passes/trans/cml/cml.h`，源文件 `src/passes/trans/cml/`（`cml.cpp`、`module_writer.cpp`、`expr_writer.cpp`、`type_writer.cpp`、`literal.cpp`、`operator_syntax.cpp`），与 `lib/std/gir/json/` 同构。
 - 类：`CmlDumpPass : public RuntimeGraphTranslatePass`（运行时图，翻译遍）。`apply(const Program *, std::ostream &)` 写源码，返回 `nullptr`（消费程序），与 `JsonGirDumpPass` 一致。
-- `acceptsWritings()` 保持 `false`：驱动在消费型遍之前会 `extractWritings`（`kernel/execute/pass.cpp#extractWritings`），所以遍看到的是可执行状态；带 `kGraphFlagHasWritings` 的图不会到达这里。若手工绕过驱动，遍拒绝。
+- `acceptsWritings()` 保持 `false`。**写这段时的前提已经不成立**：那会儿驱动在消费型遍之前会调 `extractWritings`（`kernel/execute/pass.cpp` 里那次调用**已不存在**），遍因此看到的是可执行状态。现在内核不做隐式抽取——带 `kGraphFlagHasWritings` 的图到消费型遍时由驱动直接拒绝（`kernel/execute/pass.cpp#PassNeedsExtraction`），抽取要流水线自己写成 `rewrite::extract cost=...`。`extractWritings` 本身没有删，只是搬进了 `kernel/runtime/writings_extract.cpp#extractWritings`（内核只留机制，代价由目标库以函数值给出）。若手工绕过驱动，遍拒绝。
 - 参数（`PassDescriptor`，`kernel/include/camel/execute/pass/params.h#PassDescriptor`）：
   - `out`（String，默认 `""`）：写文件；空 = 写 `os`（stdout）。写文件时 `data_dir` 默认取 `out` 的父目录。
   - `data_dir`（String，默认 `""`）：大常量的 sidecar 目录；为空且需要 sidecar 时拒绝。

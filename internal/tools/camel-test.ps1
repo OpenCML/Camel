@@ -55,6 +55,8 @@ if (-not (Test-Path (Join-Path $Path 'package.json'))) {
 }
 
 . (Join-Path $PSScriptRoot 'camel-gate-config.ps1')
+# The run registry's writer, shared with the host runner and the local build helper.
+. (Join-Path $PSScriptRoot 'run-registry.ps1')
 $cfg = Get-CamelGateConfig -LocalConfig $LocalConfig -ScriptRoot $PSScriptRoot -Override @{ stateDir = $StateDir }
 if (-not $cfg.stateDir) { Stop-CamelGateConfig 'camel-test' $cfg 'stateDir' }
 $statePath = Join-Path $cfg.stateDir 'test-state.json'
@@ -64,6 +66,76 @@ $mutex = New-Object System.Threading.Mutex($false, 'Global\CamelTestSerialized')
 $stateMutex = New-Object System.Threading.Mutex($false, 'Global\CamelTestState')
 $acquired = $false
 $startedAt = $null
+
+# --- the run registry -------------------------------------------------------
+# Same row shape as the host runner (`camel-remote.ps1`) and the local build helper: this run must be
+# visible in `run-registry.jsonl`, which is the panel's one list of runs. A local plan draws nothing
+# from the host's token pool, so the row carries no `tokens` key at all -- "not reported", which is a
+# different reading from "zero held" and must never be written as one.
+$runRegistryPath = Join-Path $cfg.stateDir 'run-registry.jsonl'
+$runRegistryMutex = New-Object System.Threading.Mutex($false, 'Global\CamelRunRegistry')
+$runStartedAt = Get-Date
+$runId = "$PID-$($runStartedAt.ToString('yyyyMMddHHmmss'))"
+$stageStartedAt = $runStartedAt
+$publishedPhase = $null
+$lastRunPublish = [datetime]::MinValue
+$testRow = @{
+    runId           = $runId
+    pid             = $PID
+    worktree        = $worktree
+    path            = $Path
+    remote          = 'local'
+    local           = $true
+    startedAt       = $runStartedAt.ToString('o')
+    updatedAt       = $runStartedAt.ToString('o')
+    phase           = 'queued'
+    state           = $null
+    slots           = 0
+    slot            = '0'
+    testSlot        = 1
+    noslotWaitedFor = $null
+    overlapping     = @{ atStart = $null; atEnd = $null }
+    loadAtStart     = $null
+    loadAtEnd       = $null
+    queuedAt        = $runStartedAt.ToString('o')
+    queuedAtKind    = 'local'
+    queueSeconds    = 0
+    buildStartedAt  = $null
+    buildFinishedAt = $null
+    planStartedAt   = $null
+    finishedAt      = $null
+    exit            = $null
+    buildExit       = $null
+    done            = 0
+    total           = 0
+    jobs            = $Jobs
+    jobsRequested   = $Jobs
+    buildJobs       = $null
+    tier            = $Tier
+    plan            = @($Plan)
+    target          = if ($Plan.Count -gt 0) { $Plan[0] } else { '' }
+    lastLine        = "[camel-test] waiting for the machine-wide test lock ($worktree)"
+    stageSeconds    = 0
+}
+
+function Publish-LocalTest([string]$phase, [string]$lastLine = '') {
+    try {
+        $now = Get-Date
+        if ($phase -ne $publishedPhase) {
+            $script:publishedPhase = $phase
+            $script:stageStartedAt = $now
+        }
+        $testRow.phase = $phase
+        $testRow.stageSeconds = [int](($now - $stageStartedAt).TotalSeconds)
+        $testRow.updatedAt = $now.ToString('o')
+        if ($lastLine) { $testRow.lastLine = $lastLine }
+        [void](Add-RunRegistryRow -Path $runRegistryPath -Mutex $runRegistryMutex -Row $testRow)
+        $script:lastRunPublish = $now
+    } catch {
+        # A registry write must never fail the plan it describes.
+    }
+}
+Publish-LocalTest 'queued'
 
 function Read-State {
     if (-not (Test-Path $statePath)) {
@@ -178,6 +250,9 @@ try {
         lastLine  = ''
     })
     Write-Host "[camel-test] $worktree has the lock; $($Plan.Count) target(s), jobs $Jobs"
+    $testRow.queueSeconds = [int](($startedAt - $runStartedAt).TotalSeconds)
+    $testRow.planStartedAt = $startedAt.ToString('o')
+    Publish-LocalTest 'plan' "[camel-test] $($Plan.Count) target(s), jobs $Jobs"
 
     Push-Location $Path
     try {
@@ -192,7 +267,16 @@ try {
             & node @arguments 2>&1 | ForEach-Object {
                 $line = "$_"
                 # Per-test status lines are what a reader wants to see; keep the writes rare.
-                if ($line -match '^(FAIL|pass |fail )|^\[|^PASS|^ok ') { Update-Holder $line }
+                if ($line -match '^(FAIL|pass |fail )|^\[|^PASS|^ok ') {
+                    Update-Holder $line
+                    # The registry gets a heartbeat from the same lines the console keeps, at most
+                    # once every three seconds: a plan that says nothing for a minute is a plan the
+                    # registry cannot tell from a dead one.
+                    if (((Get-Date) - $lastRunPublish).TotalSeconds -ge 3) {
+                        $testRow.lastLine = $line.Trim()
+                        Publish-LocalTest 'plan' $line.Trim()
+                    }
+                }
                 Write-Host $line
             }
             $planCode = $LASTEXITCODE
@@ -219,6 +303,9 @@ try {
         }) + $recent
     }
     Write-Host "[camel-test] done ($worktree): $($Plan -join ', '), exit $code, $seconds s"
+    $testRow.finishedAt = (Get-Date).ToString('o')
+    $testRow.exit = $code
+    Publish-LocalTest $(if ($code -eq 0) { 'done' } else { 'fail' }) "[camel-test] done, exit $code"
     exit $code
 } finally {
     if ($acquired) { $mutex.ReleaseMutex() }

@@ -52,8 +52,10 @@
 # this run handed over"). 5 means the gpu observation read a case red
 # that its baseline does not name (see "the gpu layer is observed, and never gates"; the known reds
 # never decide a run). 4 means the -NoBuild guard refused before anything ran; 3 means the host is
-# short of disk; 2 means the worktree, the push or the transfer failed, or -Check named a checker
-# that does not exist.
+# short of disk; 2 means the worktree, the push or the transfer failed, -Check named a checker
+# that does not exist, or `-Plan` named the whole plan tree without -Tier naming a layer of it (that
+# refusal is about the target and is printed before anything is pushed; see
+# `camel-remote-targets.ps1`, which also says why it is not a `--changed` refusal).
 #
 # --- where the machine-specific values live ---------------------------------
 # Nothing in this file names a host, a drive or a user's home. The ssh alias, the ssh/scp binaries,
@@ -433,6 +435,12 @@ param(
 # Pair this with a path `.gitignore` covers (e.g. `out/trace-golden/...`), so a fetched record can
 # never be committed by accident.
 [string]$FetchFile = '',
+    # Read the fetched suffix against the **newest** run's log directory instead of the live checkout:
+    # `-FetchFile fail/<case>.<backend>/stdout.txt -Latest` brings that file back from the run this
+    # invocation just made, whose directory is named after a clock the caller cannot know in advance.
+    # The console keeps one truncated line of a failing case's output, so without this a reader who was
+    # just told what the case printed cannot ask for the rest of the sentence.
+    [switch]$Latest,
     # How long a run waits for the slot(s) it needs before it says `state=noslot` and stops, in
     # seconds. 1800 s is the shape every wait here has had: a queue behind other lanes' builds is
     # waiting, not a failure, and a reading that was never taken is not a red. It is a parameter
@@ -455,6 +463,28 @@ $ErrorActionPreference = 'Stop'
 # The command-line lists and what a badly-given one means. Also its own file, for the same reason:
 # `camel-remote-args.test.ps1` measures the binding rule without a host.
 . (Join-Path $PSScriptRoot 'camel-remote-args.ps1')
+# `-FetchFile -Latest`: which run is newest, what a suffix may name, and where the file lands. Also
+# its own file: `camel-remote-fetch.test.ps1` decides all three without a host.
+. (Join-Path $PSScriptRoot 'camel-remote-fetch.ps1')
+# Where a `-Latest` fetch lands in this tree: under the fetched directory, keeping the run's relative
+# path as its tail, so two cases of one run cannot overwrite each other and the path says where the
+# file came from. `.gitignore` covers `test/results/`, so a fetched log can never be committed.
+if ($Latest) {
+    if ([string]::IsNullOrWhiteSpace($FetchFile)) {
+        Write-Host $script:CamelFetchUsage
+        exit 2
+    }
+    $fetchSuffix = Resolve-CamelFetchSuffix -Suffix $FetchFile
+    $fetchLocalRel = "test/results/fetched/$fetchSuffix"
+    $fetchDisplay = "test/results/log/<newest run>/$fetchSuffix"
+} else {
+    $fetchSuffix = ''
+    $fetchLocalRel = $FetchFile
+    $fetchDisplay = ''
+}
+# The run registry's writer, shared with the local helpers so the append-and-compact rule exists
+# once (`internal/tools/run-registry.ps1`).
+. (Join-Path $PSScriptRoot 'run-registry.ps1')
 $cfg = Get-CamelGateConfig -LocalConfig $LocalConfig -ScriptRoot $PSScriptRoot -Override @{
     stateDir         = $StateDir
     hostLibStdCxxDir = $LibStdCxxDir
@@ -478,6 +508,22 @@ $remoteName = $sshHost
 $Plan = @(Split-CamelArgList -Values $Plan)
 $AstOnly = @(Split-CamelArgList -Values $AstOnly)
 $AstDrop = @(Split-CamelArgList -Values $AstDrop)
+
+# A backslash in a plan path is not a separator on the host: the path is resolved on Linux, where
+# `test\plans\feat\trans\cml.plan.toml` is one file name containing backslashes. The plan loader
+# refuses the selection and the gate answers exit 2, but the run before that point has already
+# reported a failure for every selected case in a second or two -- which reads like six broken tests
+# and is one broken argument. Measured on 2026-11-24: a lane's six-point run came back all-red at
+# 1s each for this reason. The refusal belongs here, before the transfer, where the argument that did
+# it is still in sight, and it names the form that works instead of translating it: a silent
+# conversion would leave the next reader writing backslashes into a path a Linux host resolves.
+$planBackslashed = @($Plan | Where-Object { $_ -match '\\' })
+if ($planBackslashed.Count -gt 0) {
+    $named = $planBackslashed -join "', '"
+    Write-Host "[camel-remote] -Plan takes forward slashes ('test/plans/feat/trans/cml.plan.toml'): '$named' is one file name on the Linux host, where a backslash is an ordinary character."
+    Write-Host '[camel-remote] The plan loader would refuse the selection (exit 2) after reporting a failure for every selected case.'
+    exit 2
+}
 
 # -ListKnown asks for the rows one plan run produced, so it needs a plan run: with neither -Plan nor
 # -Changed this run would build and stop, the caller would get no marker block, and the only reading
@@ -573,7 +619,11 @@ $checkers = [ordered]@{
     # every unit that includes a changed header, from the build's own dependency graph; a file the graph
     # cannot answer for widens it to every unit rather than narrowing it to "fast but leaky". Not in
     # `all`: it takes minutes over the whole tree, and the reading a merge needs is the change's.
-    'clang-syntax'        = @{ script = 'scripts/check-clang-syntax.mjs'; args = @('--changed'); compiler = $false; changed = $true }
+    # `compiles`: this checker starts compilers on the host, so it is a build with another name and
+    # takes a build slot like one (see the checker stage, and `-Jobs` from the slot it gets). Without
+    # that it ran after the build slots were released: the panel showed no build holder while the box
+    # ran at load 192, and the reading was taken with nothing excluding anyone (2026-11-24).
+    'clang-syntax'        = @{ script = 'scripts/check-clang-syntax.mjs'; args = @('--changed'); compiler = $false; changed = $true; compiles = $true }
     # The front end's AST snapshot against the tree, before the plan that is red on it: every `.cml`
     # the tree holds, and the probes `probes.py` makes, hashed by `camel-parsecheck hashes` -- the
     # tool `frontend.ast_snapshot` itself starts -- with the line
@@ -605,7 +655,10 @@ $checkers = [ordered]@{
     # threshold of zero: the tree carries none of those comments, so the first one added is this
     # run's red, and the checker's own exit 1 -- with the `file:line` list it prints above it -- is
     # what the gate returns.
-    'process-traces'      = @{ script = 'scripts/check-process-traces.mjs'; args = @(); compiler = $false }
+    # The tree is named, not inherited: this command runs with the checkout as its working directory
+    # (see the block that builds it), so `.` is that checkout, and the checker has no default that
+    # could read the directory the run was started in instead (iron rule 17).
+    'process-traces'      = @{ script = 'scripts/check-process-traces.mjs'; args = @('--root', '.'); compiler = $false }
     # --- report only -----------------------------------------------------------
     # The checks the target architecture asks for before they are walls: they run on every gate and
     # publish their own reading, and their exit code does not decide the run's. `findings` is the
@@ -721,7 +774,9 @@ if ($NoGpuWatch -and $gpuReadingWanted) {
 # nothing when it refuses.
 #
 # The three conditions of the failure -- the record gets shorter, the rows it loses still name a
-# `.cml` file this tree has, and no `-AstDrop` named them -- are `StillHere` and `Refused`. The bulk
+# `.cml` file this tree has, and no `-AstDrop` named them -- are `StillHere` and `Refused`. The tree
+# that question is asked about is an argument with no default: a default would have asked it about
+# the directory the tool was started in (iron rule 17). The bulk
 # condition is the one that does not depend on where a file is: on 2026-11-17 `eaa3ecb8c` recorded
 # with the bulk flag on a tree that was missing the seven `test/cases/compile/var/loop_*.cml` a
 # parallel lane had just added, and those rows went with the files (4400 lines to 4393). Those files
@@ -733,9 +788,16 @@ function Get-AstDropVerdict {
         [AllowEmptyCollection()][string[]]$Before = @(),
         [AllowEmptyCollection()][string[]]$After = @(),
         [AllowEmptyCollection()][string[]]$Drop = @(),
-        [string]$Root = '.',
+        # The tree the dropped rows are tested against. There is no default: a run that names no tree
+        # would read the directory it was started in, and that directory is the owner's main checkout
+        # (iron rule 17), not the tree whose record is being rewritten.
+        [string]$Root = '',
         [bool]$Bulk = $true
     )
+    if (-not $Root) {
+        Write-Host "[camel-remote] Get-AstDropVerdict needs -Root: the tree is named by the caller and never inherited, because the directory a tool was started in is the main checkout, not this tree (iron rule 17)."
+        exit 2
+    }
     # A line is `<16 hex> <ok|no> <path>`, and the question is about the paths: a hash that moved is
     # one line lost and one line gained, never a row that went, so a set of whole lines would call
     # every re-read row a deletion.
@@ -809,9 +871,23 @@ if (-not (Test-Path (Join-Path $Path 'package.json'))) {
 }
 $name = Split-Path -Leaf $Path
 $branch = (git -C $Path rev-parse --abbrev-ref HEAD).Trim()
+# A detached HEAD is a real position to measure from, and the place it matters is the merge: the
+# merge is made in a throwaway checkout of the commit it lands on, and no branch may be created
+# there for the reader to mistake for the one being merged. So the identity of the tree is the
+# commit, not a name a branch gave it: the staging ref is derived from the commit, which also makes
+# two checkouts of different commits unable to collide under one ref name. `$commit` travels in the
+# run record for the same reason -- a registry that says only the worktree leaf name cannot tell two
+# runs on the same path apart.
+$commit = "$(git -C $Path rev-parse HEAD 2>$null)".Trim()
+$detached = $false
 if ($branch -eq 'HEAD') {
-    Write-Host "[camel-remote] detached HEAD in $name; check out a branch first"
-    exit 2
+    if ($commit -notmatch '^[0-9a-f]{40}$') {
+        Write-Host "[camel-remote] $name is not on a branch and HEAD does not resolve to a commit, so there is nothing to name this run by"
+        exit 2
+    }
+    $branch = "camel-sha-$($commit.Substring(0, 12))"
+    $detached = $true
+    Write-Host "[camel-remote] $name is a detached HEAD at $($commit.Substring(0, 12)); the run is recorded by that commit and staged as refs/heads/$branch"
 }
 # `-AstOnly` selects which lines a recording rewrites; with no recording there is no stage that could
 # read it, and a request nobody carries out must not look like one that ran.
@@ -836,6 +912,30 @@ if ($PSBoundParameters.ContainsKey('AstOnly')) {
 if ($astProblems.Count -gt 0) {
     foreach ($problem in $astProblems) { Write-Host "[camel-remote] $problem" }
     exit 2
+}
+
+# What `-Plan` names, said before the push (see `camel-remote-targets.ps1`). The opening lines of a
+# run used to say nothing about the target, so a reader had to wait for the runner's `[tier]` line,
+# after the build, to learn how many plan files the run was about -- and that line never says whether
+# the number is the target's own contents or a layer the target was silently widened to.
+. (Join-Path $PSScriptRoot 'camel-remote-targets.ps1')
+if ($Changed -and $Plan.Count -gt 0) {
+    # `-Changed` selects the plans the change touches and the plan stage runs that selection, not the
+    # `-Plan` list (`$runPlan` below). Saying which of the two is being read is the whole point here.
+    Write-Host ("[camel-remote] plan target: -Changed selects the plans this change touches; the {0} -Plan target(s) named here ({1}) are not read" -f `
+        $Plan.Count, ($Plan -join ', '))
+} elseif (-not $Clean -and $Plan.Count -gt 0) {
+    $planTargets = @(Resolve-CamelPlanTarget -Values $Plan -Root $Path)
+    # The whole plan tree is a layer question, and the runner answers it silently with `fast`. A run
+    # that starts one layer while its target says "the whole tree" cannot be told from a complete
+    # reading afterwards, so the target is refused before anything is pushed -- one word says what
+    # was meant, and `-UpdateGolden` (which reads no layer) is exempt.
+    $targetRefusal = @(Get-CamelPlanTargetRefusal -Targets $planTargets -Tier $Tier -Golden:$UpdateGolden)
+    if ($targetRefusal.Count -gt 0) {
+        foreach ($reason in $targetRefusal) { Write-Host $reason }
+        exit 2
+    }
+    Write-Host (Format-CamelPlanTargetLine -Targets $planTargets -Tier $Tier -Golden:$UpdateGolden)
 }
 
 # One checkout per worktree name, kept for its incremental build directory. `-Clean` throws that
@@ -890,9 +990,12 @@ $testStateMutex = New-Object System.Threading.Mutex($false, 'Global\CamelTestSta
 # JSON line per run snapshot, keyed by runId, and the panel keeps the last line per run. Nothing
 # here is read back by this script, and every write is best-effort: a locked or unwritable file
 # must never fail a build or a plan.
+#
+# The registry is also where the token pool is read: `tokens`, `tokensPeak` and `pool` in these rows
+# are the run's own reading of `/tmp/camel-tokens` (see the `HOST_TOKENS` handler below), and a row
+# that has no `tokens` field says the pool was never read -- it does not say the pool was empty.
 $runRegistryPath = Join-Path $cfg.stateDir 'run-registry.jsonl'
 $runRegistryMutex = New-Object System.Threading.Mutex($false, 'Global\CamelRunRegistry')
-$runRegistryEncoding = New-Object System.Text.UTF8Encoding($false)
 
 # ANSI colours: scripts/common.js always emits them, and over ssh (no console) they arrive verbatim.
 # camel-build.ps1 matches plain console text, so strip the escapes before applying its patterns.
@@ -1006,35 +1109,38 @@ function Set-BuildPhase([string]$phase, [string]$line) {
     }
 }
 
-# Append one snapshot for this run. Best-effort by design: the panel can survive a missing
-# registry (it falls back to the state files), but a build must not die because a monitor file
-# was busy. The named mutex serialises appends between concurrent runs; the file is compacted
-# only when it grows past half a megabyte.
+# Append one snapshot for this run through the shared writer (`run-registry.ps1`), then remember when
+# it was written and which phase it was written in: `stageSeconds` in the next row is measured from
+# the moment the stage actually changed, not from the run's start. A row whose only new number is
+# `updatedAt` says nothing that a reader can use -- "this stage has been going for N seconds" is the
+# reading that tells a slow run apart from a dead one.
 function Publish-Run {
     try {
         if ($null -eq $run) { return }
-        $run.updatedAt = (Get-Date).ToString('o')
-        $line = ($run | ConvertTo-Json -Compress -Depth 5)
-        $held = $false
-        try {
-            try {
-                $held = $runRegistryMutex.WaitOne([TimeSpan]::FromSeconds(2))
-            } catch [System.Threading.AbandonedMutexException] {
-                $held = $true
-            }
-            if (-not $held) { return }
-            $info = Get-Item -LiteralPath $runRegistryPath -ErrorAction SilentlyContinue
-            if ($null -ne $info -and $info.Length -gt 524288) {
-                $keep = @(Get-Content -LiteralPath $runRegistryPath -ErrorAction SilentlyContinue |
-                    Select-Object -Last 300)
-                $tmp = "$runRegistryPath.$PID.tmp"
-                [System.IO.File]::WriteAllLines($tmp, [string[]]$keep, $runRegistryEncoding)
-                Move-Item -Force -LiteralPath $tmp -Destination $runRegistryPath
-            }
-            [System.IO.File]::AppendAllText($runRegistryPath, $line + "`n", $runRegistryEncoding)
-        } finally {
-            if ($held) { $runRegistryMutex.ReleaseMutex() }
+        $now = Get-Date
+        if ($run.phase -ne $script:publishedPhase) {
+            $script:publishedPhase = $run.phase
+            $script:stageStartedAt = $now
         }
+        if ($null -ne $script:stageStartedAt) {
+            $run.stageSeconds = [int](($now - $script:stageStartedAt).TotalSeconds)
+        }
+        $run.updatedAt = $now.ToString('o')
+        # A field that was never read is *absent*, not null: the reader of this file is told
+        # "nobody reported" by the key not being there, and by nothing else. Tokens and the pool are
+        # the fields this happens to; every other field is written from the run's first row.
+        $row = @{}
+        foreach ($key in $run.Keys) { $row[$key] = $run[$key] }
+        if ($null -eq $run.tokens) {
+            $row.Remove('tokens')
+            $row.Remove('tokensPeak')
+        }
+        if ($null -eq $run.pool.size -and $null -eq $run.pool.inUse) { $row.Remove('pool') }
+        if ($row.ContainsKey('tokens')) { $script:publishedTokens = $row['tokens'] }
+        [void](Add-RunRegistryRow -Path $runRegistryPath -Mutex $runRegistryMutex -Row $row)
+        # Script scope: a plain assignment here would create a local and leave the throttle outside
+        # reading the old value, which would publish on every line.
+        $publishClock.at = $now
     } catch {
         # Advisory state only: never let the monitor break the work it monitors.
     }
@@ -1145,7 +1251,15 @@ $rowsChannel = $false
 $rowsOpen = $false
 $rowsEnded = $false
 $rowsSeen = 0
-$lastRunPublish = [datetime]::MinValue
+$publishClock = @{ at = [datetime]::MinValue }
+# The stage clock behind `stageSeconds`: reset by Publish-Run whenever the phase changes, so a
+# heartbeat row carries "this stage has been running for N seconds" rather than repeating the same
+# numbers with a newer `updatedAt` -- a row whose only new value is the timestamp says the writer is
+# alive, not that the run is doing anything.
+$stageStartedAt = $startedAt
+$publishedPhase = $null
+# The last `tokens` value actually written, so a heartbeat can say whether the pool reading moved.
+$publishedTokens = $null
 
 # One line per run for the panel's run registry. The fields that say *how* this run was scheduled
 # are reported by the host itself and not guessed here: `slot` is the build slot the host took
@@ -1162,6 +1276,8 @@ $run = @{
     pid             = $PID
     worktree        = $name
     path            = $Path
+    commit          = $commit
+    detached        = $detached
     remote          = $remoteName
     startedAt       = $startedAt.ToString('o')
     updatedAt       = $startedAt.ToString('o')
@@ -1170,11 +1286,23 @@ $run = @{
     slots           = 2
     slot            = $null
     testSlot        = $null
+    # The wait is a reading of its own. `phase=built` standing still for twenty-two minutes is what a
+    # queued run looks like when nobody writes the wait down -- and on 2026-11-24 it was read as
+    # `waiters = []` twice, which says "nobody is waiting" about three runs that were.
+    testWaitSince   = $null
+    testWaitSlots   = $null
     noslotWaitedFor = $null
     overlapping     = @{ atStart = $null; atEnd = $null }
     loadAtStart     = if ($null -ne $loadStart) { "$([math]::Round($loadStart[0], 2))" } else { $null }
     loadAtEnd       = $null
     queuedAt        = $null
+    # Which gate `queuedAt` measured. Old rows have no such field and were all slot waits; a row that
+    # says `token` waited for the token pool. One field cannot mean two things across one file, so the
+    # gate is named beside the time instead of being inferred by whoever reads it -- and the reading
+    # rule is written down in `README.md`: a row *without* this field is a transition-period row and
+    # may only be read as `slot`, because every row written from now on says which gate it was. A
+    # default that happens to be right for the old rows is not a field that answers the question.
+    queuedAtKind    = $null
     queueSeconds    = $null
     buildStartedAt  = $null
     buildFinishedAt = $null
@@ -1196,6 +1324,17 @@ $run = @{
     plan            = @($Plan)
     target          = if ($Plan.Count -gt 0) { $Plan[0] } else { '' }
     lastLine        = "[camel-remote] pushing $branch to $sshHost"
+    # The token pool, as this run reads it on the host (`HOST_TOKENS` below). `tokens` is this run's
+    # own share, `tokensPeak` the highest share seen while it ran -- a sampled peak, resolution one
+    # heartbeat, which is stated rather than dressed up as an exact maximum. `pool` is what the pool
+    # itself said at that reading. Until the first reading these three keys are *absent* from the
+    # row, not null and never zero: "no row said anything" and "the pool was empty" must not look
+    # alike on a panel, because zero reads as permission to start another run.
+    tokens          = $null
+    tokensPeak      = $null
+    pool            = @{ size = $null; inUse = $null }
+    # Seconds the current stage has been running; the number a heartbeat row can change every time.
+    stageSeconds    = $null
 }
 Publish-Run
 
@@ -1249,9 +1388,9 @@ try {
     # it out of the tar -- the next run would compare against nothing. Naming it adds it to the tar
     # and nothing else: it is never staged, and a run without `-FetchFile` does not mention it.
     if ($FetchFile -ne '') {
-        $fetchLocal = Join-Path $Path $FetchFile
+        $fetchLocal = Join-Path $Path $fetchLocalRel
         if (Test-Path -LiteralPath $fetchLocal) {
-            $untracked = @($untracked | Where-Object { $_ -ne $FetchFile }) + @($FetchFile)
+            $untracked = @($untracked | Where-Object { $_ -ne $fetchLocalRel }) + @($fetchLocalRel)
         }
     }
     $changedListFile = Join-Path $scratch 'changed.txt'
@@ -1302,7 +1441,11 @@ try {
     # non-fast-forward to the same ref name, and the run stopped before it reached the host;
     # without the delete, one ref per worktree name outlived every run and went stale the moment
     # that name was reused -- which is where the staging repository's pile of lane-* refs came from.
-    $pushOutput = @(git -C $Path push --quiet --force "$sshHost`:$bare" $branch 2>&1)
+    # A detached HEAD has no local branch to push, so the refspec names the commit and the ref it
+    # becomes on the far side in one word: `HEAD:refs/heads/<the name derived from the commit>`. The
+    # rest of the run -- the host checkout, the delete in the finally -- then reads that one name.
+    $pushSource = if ($detached) { "HEAD:refs/heads/$branch" } else { $branch }
+    $pushOutput = @(git -C $Path push --quiet --force "$sshHost`:$bare" $pushSource 2>&1)
     if ($LASTEXITCODE -ne 0) {
         $pushExit = $LASTEXITCODE
         Write-Host "[camel-remote] could not push $branch to $sshHost`:$bare (git exit $pushExit)."
@@ -1315,7 +1458,7 @@ try {
         # it: the forced push above and the delete in the finally are what removed this cause. The
         # block below now reports a push that fails for some other reason.
         $remoteRef = @(git -C $Path ls-remote "$sshHost`:$bare" "refs/heads/$branch" 2>$null)
-        $localSha = (git -C $Path rev-parse $branch).Trim()
+        $localSha = if ($detached) { $commit } else { (git -C $Path rev-parse $branch).Trim() }
         if ($remoteRef.Count -gt 0 -and $remoteRef[0]) {
             $remoteSha = ($remoteRef[0] -split '\s+')[0]
             git -C $Path cat-file -e "$remoteSha^{commit}" 2>$null
@@ -1497,6 +1640,11 @@ $buildCmd = if ($Config -eq 'Debug') { "npm run debug$stackTraceArg" } else { "n
         ':'
     }
 
+    # The plan runs as a child of `camel-run`, which takes the slot and holds it until that command
+    # exits. The command travels as a file, byte for byte: quoting it into `bash -c` would rewrite it,
+    # and a rewritten command is exactly how a run ends up looking normal while running less.
+    $runPlanExec = 'exec "$CAMEL_RUN" plan --lane "${CAMEL_LANE:-}" --branch "${CAMEL_BRANCH:-}" -- bash ''' +
+        $remoteScratch + '/plan.sh'''
     # --- does a plan in this run declare itself time sensitive? ---------------
     # A reading that is a duration (perf/**, a `perf_budget_*` entry, an `opt_twice`-style
     # measurement) is only comparable to another duration taken in the same company, and the host
@@ -1560,12 +1708,12 @@ code=${PIPESTATUS[0]}
 echo '__CAMEL_REMOTE_ROWS_START__'
 grep '^{' 'TEETMP' || true
 echo '__CAMEL_REMOTE_ROWS_END__'
-'@.Replace('RUNPLAN', $runPlan).Replace('TEETMP', "$remoteScratch/rows.txt")
+'@.Replace('RUNPLAN', $runPlanExec).Replace('TEETMP', "$remoteScratch/rows.txt")
     } else {
         @'
 RUNPLAN 2>&1
 code=${PIPESTATUS[0]}
-'@.Replace('RUNPLAN', $runPlan)
+'@.Replace('RUNPLAN', $runPlanExec)
     }
 
     # The width the plan is started at, decided by the slot the host script holds and not by -Jobs:
@@ -1621,7 +1769,15 @@ echo "HOST_JOBS=$CAMEL_JOBS"
 # names the path when the host has nothing there -- a fetch that silently sends nothing would look
 # exactly like a run whose comparison passed.
 $fetchRel = ($FetchFile -replace '\\', '/')
-$fetchStage = if ($FetchFile -ne '') {
+# `-Latest` names the file by its place inside a run, not by the run's name: the suffix is resolved
+# against the newest run directory under `test/results/log`, which is the run this invocation just
+# made. The `find` is the command `camel-remote-fetch.ps1#New-CamelLatestRunCommand` writes and
+# `camel-remote-fetch.test.ps1` pins, so the two cannot drift; everything else about the fetch -- the
+# markers, the base64, the "the host has no ..." line -- is the same as for a named path.
+# `-Latest` does not travel with the plan. The run directory it names exists only once the plan has
+# run, so the fetch is a second, small connection after it (the block beside the AST record, further
+# down); the stage here is the named path's, unchanged.
+$fetchStage = if ($FetchFile -ne '' -and -not $Latest) {
 @'
 if [ -f "$R/FETCHREL" ]; then
 echo '__CAMEL_REMOTE_FETCH_BEGIN__'
@@ -1726,6 +1882,41 @@ echo '__CAMEL_REMOTE_GOLDENS_END__'
     # back, so the console shows one line per checker and the run can summarise them at the end;
     # `checkfail` carries the first failure out of the stage as the run's exit code.
     $checkBlocks = ''
+    # The build slots are released as soon as the build ends -- and the checkers run after that, which
+    # was right for the checkers that read a finished run and wrong for the one that compiles. This
+    # block takes the build slots back for the check stage when a checker compiles, and hands the
+    # width to the checker through `chk_jobs`; the release follows the blocks. A run that holds all
+    # three slots (a time-sensitive one) has released them by this point, so nothing here re-opens a
+    # descriptor the hold still stands on.
+    $checkSlotBlock = ''
+    $checkSlotRelease = ''
+    if ($checkNames -contains 'clang-syntax') {
+        $checkSlotBlock = @"
+    exec 9>/tmp/camel-host-build-1.lock
+    exec 8>/tmp/camel-host-build-2.lock
+    chk_jobs=8
+    chk_slot=
+    if flock -n 9; then chk_slot=1; fi
+    if flock -n 8; then chk_slot="`$chk_slot"2; fi
+    if [ -z "`$chk_slot" ]; then
+        echo '[camel-remote] waiting for a host build slot for the checker (clang-syntax compiles)'
+        chk_waited=0
+        while [ -z "`$chk_slot" ]; do
+            if flock -n 9; then chk_slot=1; elif flock -n 8; then chk_slot=2; else
+                sleep 3; chk_waited=`$((chk_waited + 3))
+                if [ `$((chk_waited % 30)) -eq 0 ]; then echo "[camel-remote] still waiting for a host build slot for the checker (`${chk_waited}s)"; fi
+            fi
+        done
+    fi
+    if [ "`$chk_slot" = "12" ] || [ "`$chk_slot" = "21" ]; then chk_jobs=16; fi
+    echo "HOST_CHECK_SLOT=`$chk_slot"
+    echo "HOST_CHECK_JOBS=`$chk_jobs"
+"@
+        $checkSlotRelease = @"
+    exec 9>&- 2>/dev/null; exec 8>&- 2>/dev/null
+    echo 'HOST_CHECK_SLOT_RELEASED=1'
+"@
+    }
     foreach ($checkName in $checkNames) {
         $entry = $checkers[$checkName]
         # A `--changed` checker reads a diff, and a diff needs two different commits. When this
@@ -1758,7 +1949,10 @@ echo '__CAMEL_REMOTE_GOLDENS_END__'
         # Every entry but the generated-file pair is a node script; those two name their own
         # interpreter because their generators are python (see the table above).
         $interp = if ($entry.interpreter) { $entry.interpreter } else { 'node' }
-        $shownCommand = "$interp $($entry.script) $($entry.args -join ' ')$camelArg"
+        # A checker that compiles is handed the width the build slot it took says, not a width it
+        # chooses for itself: `${chk_jobs:-8}` is set by the acquire block the stage runs before it.
+        $jobsArg = if ($entry.compiles) { ' --jobs ${chk_jobs:-8}' } else { '' }
+        $shownCommand = "$interp $($entry.script) $($entry.args -join ' ')$camelArg$jobsArg"
         if ($entry.reportOnly) {
             # The same invocation, with one difference that is the whole point of the entry: its
             # output is captured so the reading can be reduced out of the checker's own summary, and
@@ -2210,6 +2404,8 @@ others_now() {
     awk -v me='$($run.runId)' -v now="`$(date +%s)" 'NF >= 4 { if (`$1 == me) next; if (now - `$4 > 21600) next; printf "%s%s:%s", sep, `$1, `$3; sep = "," }' "`$RUN_NOTE_DIR"/* 2>/dev/null
 }
 finish_probe() {
+    # The pool reporter is a background loop; it must not outlive the run that started it.
+    [ -n "`${tokens_reporter:-}" ] && kill "`$tokens_reporter" 2>/dev/null
     echo "HOST_LOAD_END=`$(cut -d' ' -f1 /proc/loadavg 2>/dev/null || echo unknown)"
     echo "HOST_OVERLAP_END=`$(others_now)"
     rm -f "`$RUN_NOTE_DIR/'$($run.runId)'"
@@ -2245,7 +2441,53 @@ budget_jobs() {
 # only so that a missed branch cannot abort a run under `set -u`.
 CAMEL_JOBS=`$requested_jobs
 echo "HOST_JOBS_REQUESTED=`$requested_jobs"
+# The host's shared budget, handed out per worker process rather than per run (internal/tools/
+# host-tokens.sh). Exported here and nowhere else, so every stage of this run -- the plan's cases, the
+# clang check, the build -- draws from one pool. A run that does not set these keeps its old behaviour
+# exactly: the per-case wrapper execs the case unchanged when CAMEL_TOKEN_DIR is unset, so this is the
+# switch, and it is one line to see in the generated script.
+export CAMEL_TOKEN_DIR="`${CAMEL_TOKEN_DIR:-/tmp/camel-tokens}"
+export CAMEL_TOKENS="`${CAMEL_TOKENS:-24}"
+export CAMEL_LANE='$name'
+export CAMEL_BRANCH='$branch'
+# The plan is a child of `camel-run` now, in a process of its own, and a shell variable of this
+# script is not that process's environment. `R` names the checkout the plan must run in, so it
+# crosses the boundary like the lane and the branch do: without it the plan's own `cd `$R/` empties
+# to `cd /`, and every plan dies with `Cannot find module '/scripts/test.js'` -- a reading that looks
+# like a broken tree rather than a variable that did not travel (measured, 2026-11-24).
+export R
+echo "HOST_TOKEN_POOL=`$CAMEL_TOKEN_DIR size=`$CAMEL_TOKENS"
 echo '__CAMEL_REMOTE_SYNCED__'
+# --- the token pool, read while the run goes --------------------------------
+# The registry used to be written only when a stage changed, so a run sitting in one long case -- or
+# in a build that prints no progress lines -- wrote nothing for half an hour, and the panel's own
+# rule ("no new snapshot for five minutes means dead") drew a live run as dead (11-24: opertarget's
+# registry stood still for 35 minutes while its process kept starting cases). So this reporter
+# speaks every 10 s whether or not the work does: the pool's own reading when the token tool is in
+# the checkout, a bare alive line when it is not (the tool arrives with the pool; before that there
+# is no number to report, and "no number" must not be printed as zero).
+#
+# `show` is the pool's verifiable reading, and the lane in each holder record is how a token is
+# attributed to this run: `mine` counts the tokens whose holder record names this lane. The record
+# is only believed for a token that is actually held (show prints only held tokens), so a stale
+# record cannot inflate the count. One printf per line: a short line reaches the stream whole, so a
+# concurrent line from the run cannot be spliced into the middle of it.
+(
+    while :; do
+        sleep 10
+        if [ -f "`$R/internal/tools/host-tokens.sh" ]; then
+            pool_line=`$(CAMEL_LANE='$name' bash "`$R/internal/tools/host-tokens.sh" show 2>/dev/null |
+                awk -v lane='$name' '
+                    /^free=/ { seen = 1; for (i = 1; i <= NF; i++) { if (`$i ~ /^free=/) free = substr(`$i, 6); if (`$i ~ /^held=/) held = substr(`$i, 6) } }
+                    /held by pid/ { flat = `$0; gsub(/ +/, " ", flat); if (index(flat, " " lane " ") > 0) mine++ }
+                    END { if (seen) printf "mine=%d inuse=%d size=%d", mine + 0, held + 0, free + held }')
+            if [ -n "`$pool_line" ]; then printf 'HOST_TOKENS %s\n' "`$pool_line"; else printf 'HOST_ALIVE\n'; fi
+        else
+            printf 'HOST_ALIVE\n'
+        fi
+    done
+) &
+tokens_reporter=`$!
 if [ '$NoBuild' = 'True' ]; then
     if [ -f scripts/build-info.js ]; then
         # Captured rather than piped so the marker the guard prints past -AllowStale can be handed
@@ -2280,16 +2522,23 @@ if [ '$timeSensitive' = 'True' ]; then
     while [ "`$held_all" = 0 ]; do
         exec 9>/tmp/camel-host-build-1.lock
         exec 8>/tmp/camel-host-build-2.lock
-        exec 7>/tmp/camel-host-test.lock
+        # All three test slots, because "exclusive" means the machine is this run's: a time-sensitive
+        # measurement that left one test slot open would be measuring beside whatever took it.
+        exec 21>/tmp/camel-host-test-1.lock
+        exec 22>/tmp/camel-host-test-2.lock
+        exec 23>/tmp/camel-host-test-3.lock
         miss=
         flock -n 9 || miss=build-1
         if [ -z "`$miss" ]; then flock -n 8 || miss=build-2; fi
-        if [ -z "`$miss" ]; then flock -n 7 || miss=test; fi
+        if [ -z "`$miss" ]; then flock -n 21 || miss=test-1; fi
+        if [ -z "`$miss" ]; then flock -n 22 || miss=test-2; fi
+        if [ -z "`$miss" ]; then flock -n 23 || miss=test-3; fi
         if [ -z "`$miss" ]; then
             held_all=1
-            echo '[camel-remote] time sensitive: hold taken on build-1, build-2 and test'
+            echo '[camel-remote] time sensitive: hold taken on build-1, build-2 and test-1, test-2, test-3'
         else
-            exec 9>&- 2>/dev/null; exec 8>&- 2>/dev/null; exec 7>&- 2>/dev/null
+            exec 9>&- 2>/dev/null; exec 8>&- 2>/dev/null
+            exec 21>&- 2>/dev/null; exec 22>&- 2>/dev/null; exec 23>&- 2>/dev/null
             if [ "`$ts_waited" -ge '$SlotWaitSeconds' ]; then
                 echo "[camel-remote] noslot: waited `${ts_waited}s and the host `$miss slot is still held by another run; this plan is time sensitive, so it does not start without build-1, build-2 and test together" >&2
                 echo "HOST_NOSLOT=`$miss"
@@ -2304,7 +2553,7 @@ if [ '$timeSensitive' = 'True' ]; then
         fi
     done
     echo 'HOST_BUILD_SLOT=1&2'
-    echo 'HOST_TEST_SLOT=1'
+    echo 'HOST_TEST_SLOT=1&2&3'
     # Holding the host means holding its whole process budget too: nothing else is running, so the
     # plan and the build both get all 32 (still no more than the caller asked for).
     export CAMEL_JOBS="`$(budget_jobs `$EXCLUSIVE_JOBS)"
@@ -2381,32 +2630,33 @@ $vscodeDeps
 # lock covers the plan and nothing else -- the transfer and the build are outside it, and the build
 # has its own slots -- so a full queue costs waiting time, never a wrong number. Waiting is not a
 # failure: only the plan's own exit code reaches the caller.
-if [ "`$held_all" = 1 ]; then
-    # The plan slot was taken with the two build slots before the build. Re-opening fd 7 here would
-    # close the descriptor the hold stands on, and the lock with it: nothing is opened, nothing is
-    # waited for, and the hold lasts until the line after the plan below.
-    :
-else
-    exec 7>/tmp/camel-host-test.lock
-    test_wait_started_ns=`$(date +%s%N)
-    if ! flock -w 1800 7; then
-        echo '[camel-remote] no host test slot within 1800 s' >&2
-        exit 4
-    fi
-    test_wait_ms=`$(( (`$(date +%s%N) - test_wait_started_ns) / 1000000 ))
-    if [ `$test_wait_ms -gt 2000 ]; then
-        echo "[camel-remote] waited `$(awk "BEGIN{printf \"%.1f\", `$test_wait_ms/1000}") s for the host test slot"
-    fi
-    # The plan slot is a slot of its own: a run that built nothing still holds one here, and the
-    # registry says so instead of reading slot=0 as "this reading was taken with no exclusion at
-    # all".
-    echo 'HOST_TEST_SLOT=1'
-    run_note plan
+# The test slot is NOT taken here. It is taken by `camel-run plan`, inside the process that runs the
+# plan, because a lock lives on a file descriptor and a descriptor does not cross a process boundary:
+# a slot opened here would be held by this shell and be invisible to the run it protects.
+#
+# What used to be here was a second implementation of taking a lock. On 2026-11-24 three slots were
+# added and the merge position's worktree -- still running the older copy of this generator -- never
+# took one of them; two takers that do not know about each other are the same thing as no lock.
+#
+# The old single lock `/tmp/camel-host-test.lock` is taken by `camel-run` during the transition, not
+# here, so that one process holds both and every run waits in the same order.
+CAMEL_RUN="`${CAMEL_RUN:-`$HOME/camel-work/bin/camel-run}"
+if [ ! -x "`$CAMEL_RUN" ]; then
+    echo "[camel-remote] no lock taker at `$CAMEL_RUN; refusing to run without one." >&2
+    echo "[camel-remote] install it from a checkout tracking origin/integration: camel-run.sh install" >&2
+    exit 3
 fi
+echo "CAMEL_RUN_AT=`$CAMEL_RUN"
+run_note plan
 # The plan's budget belongs to the plan slot it now holds: 16, or the whole 32 when this run holds
 # all three. -UpdateGolden rewrites files and the runner drops to one test at a time whatever
 # --jobs says (run-tests.mjs), so that run's actual width is 1 and the registry says 1.
 $jobsBudget
+# Taken while this run holds the plan slot and before its own runner starts: every process this
+# counts is a plan running BESIDE this one. A slot is a promise only to the runs that ask for it --
+# a plan started by hand over ssh holds nothing -- so this is the number that says whether the
+# reading about to be taken was taken alone. One line, and the caller carries it into `busy`.
+echo "HOST_TEST_PROCS_AT_START=`$(pgrep -fc 'run-tests\.mjs' 2>/dev/null || echo 0)"
 $planMarker
 # The plan's stderr is folded into its own stdout here, on the host, before it leaves this script.
 # The runner writes a red run's reason to stderr ("this run selected no test at all", the ENOENT
@@ -2432,8 +2682,10 @@ else
 fi
 $goldenStage
 $fetchStage
-# Released here, before the checkers: they read a finished run and need no exclusion. A
-# time-sensitive run lets go of all three slots here, at the same moment and for the same reason.
+# The plan slot is released here, before the checkers: they read a finished run and need no
+# exclusion. A time-sensitive run lets go of all three slots here, for the same reason -- and the
+# build half is taken back by the check stage itself when a checker compiles (clang-syntax does),
+# so "released" here does not mean the checkers run outside the box.
 if [ "`$held_all" = 1 ]; then
     exec 7>&- 2>/dev/null; exec 8>&- 2>/dev/null; exec 9>&- 2>/dev/null
 else
@@ -2446,7 +2698,9 @@ fi
 if [ -n '$checkList' ]; then
     checkfail=0
     echo '__CAMEL_REMOTE_CHECKS_START__'
+$checkSlotBlock
 $checkBlocks
+$checkSlotRelease
     if [ `$checkfail -ne 0 ]; then
         echo '__CAMEL_REMOTE_CHECKS_FAILED__'
         if [ `$code -eq 0 ]; then code=`$checkfail; fi
@@ -2468,6 +2722,11 @@ exit `$code
 
     # The script travels as a file: a string piped into `ssh bash -s` arrives with the pipe's
     # encoding, and a CR before a newline makes `exit 0` fail with "numeric argument required".
+    # The plan command, byte for byte. `camel-run plan` executes this file and holds the slot for as long
+    # as it runs, so the command the gate meant to run and the command that ran are the same characters.
+    $planFile = Join-Path $scratch 'plan.sh'
+    [System.IO.File]::WriteAllText($planFile, ($runPlan -replace "`r`n", "`n") + "`n",
+        (New-Object System.Text.UTF8Encoding($false)))
     $scriptFile = Join-Path $scratch 'run.sh'
     [System.IO.File]::WriteAllText($scriptFile, ($remoteScript -replace "`r`n", "`n"),
         (New-Object System.Text.UTF8Encoding($false)))
@@ -2489,6 +2748,28 @@ exit `$code
             $line = "$_"
             # NOT $clean: PowerShell is case-insensitive and the script has a [switch]$Clean.
             $cleanLine = ($line -replace $ansiPattern, '').Trim()
+            # The registry's heartbeat and its token reading. The host reports the pool every 10 s
+            # whether or not the work prints anything, and a row written here carries `stageSeconds`
+            # -- a number that changes because the stage is still running -- so "alive and quiet"
+            # stays a different reading from "dead". Neither line is printed: ten a minute would
+            # drown the run they measure, and the registry is where a reader looks.
+            if ($cleanLine -match '^HOST_TOKENS mine=(\d+) inuse=(\d+) size=(\d+)\s*$') {
+                $mine = [int]$Matches[1]
+                $run.tokens = $mine
+                if ($null -eq $run.tokensPeak -or $mine -gt $run.tokensPeak) { $run.tokensPeak = $mine }
+                $run.pool = @{ size = [int]$Matches[3]; inUse = [int]$Matches[2] }
+                $sincePublish = ((Get-Date) - $publishClock.at).TotalSeconds
+                # A reading that moved is worth a row, at most one every 10 s; when nothing moved, a
+                # heartbeat row at most one every 60 s (the panel treats five silent minutes as dead).
+                if (($run.tokens -ne $publishedTokens -and $sincePublish -ge 10) -or $sincePublish -ge 60) {
+                    Publish-Run
+                }
+                return
+            }
+            if ($cleanLine -match '^HOST_ALIVE\s*$') {
+                if (((Get-Date) - $publishClock.at).TotalSeconds -ge 60) { Publish-Run }
+                return
+            }
             # -UpdateAstHashes sends the recorded file back on this stream, base64 between two markers.
             # It is a file and not a reading, so it is not printed: the lines are collected and the
             # file is written once the run has ended (the markers bracket the payload in order, so a
@@ -2619,8 +2900,20 @@ exit `$code
                 Write-Host $line
                 return
             }
-            if ($cleanLine -match '^HOST_TEST_SLOT=(\d+)$') {
-                $run.testSlot = [int]$Matches[1]
+            if ($cleanLine -match '^HOST_TEST_WAIT_START=([0-9 ]+) (\S+)$') {
+                $run.testWaitSlots = ($Matches[1].Trim() -replace ' ', ',')
+                $run.testWaitSince = $Matches[2]
+                Publish-Run
+                Write-Host $line
+                return
+            }
+            if ($cleanLine -match '^HOST_TEST_SLOT=([0-9&]+)$') {
+                $run.testWaitSince = $null
+                $run.testWaitSlots = $null
+                # `1&2&3` is a run that holds every slot (a time-sensitive measurement); a single
+                # number is the slot an ordinary run took. Kept as text in the second case so the
+                # registry does not lose which slots were actually held.
+                $run.testSlot = if ($Matches[1] -match '^\d+$') { [int]$Matches[1] } else { $Matches[1] }
                 Publish-Run
                 Write-Host $line
                 return
@@ -2860,6 +3153,11 @@ exit `$code
                 if ($null -eq $queueStartedAt) { $queueStartedAt = (Get-Date).AddSeconds(-$waited) }
                 $run.phase = 'queued'
                 $run.queuedAt = $queueStartedAt.ToString('o')
+                # The gate this wait was for. The token pool hands out budget per process instead of
+                # a slot per run, so a later run may wait on tokens instead; `queuedAt` keeps one
+                # meaning ("waiting for admission began here") and this field says which gate it was,
+                # rather than the same key meaning two things across one file.
+                $run.queuedAtKind = 'slot'
                 $run.queueSeconds = $waited
                 $run.lastLine = $cleanLine
                 Set-BuildPhase 'queued' $cleanLine
@@ -2888,18 +3186,18 @@ exit `$code
                     }
                     # Progress lines can arrive several times a second; the registry only needs a
                     # heartbeat, so throttle to one snapshot every few seconds.
-                    if (((Get-Date) - $lastRunPublish).TotalSeconds -ge 3) {
+                    if (((Get-Date) - $publishClock.at).TotalSeconds -ge 3) {
                         Publish-Run
-                        $lastRunPublish = Get-Date
+                        $publishClock.at = Get-Date
                     }
                 }
             } else {
                 Update-TestProgress $line
-                if (((Get-Date) - $lastRunPublish).TotalSeconds -ge 3) {
+                if (((Get-Date) - $publishClock.at).TotalSeconds -ge 3) {
                     $run.lastLine = $cleanLine
                     $run.phase = 'plan'
                     Publish-Run
-                    $lastRunPublish = Get-Date
+                    $publishClock.at = Get-Date
                 }
             }
             Write-Host $line
@@ -3009,7 +3307,7 @@ exit `$code
 # nothing is written, and a directory the path needs is created first.
 if ($null -ne $fetchPayloadText -and $FetchFile -ne '') {
     $fetchPayload = ($fetchPayloadText -replace '\s', '')
-    $fetchTarget = Join-Path $Path $FetchFile
+    $fetchTarget = Join-Path $Path $fetchLocalRel
     if ($fetchPayload.Length -eq 0 -or $fetchPayload.Length % 4 -ne 0 -or
         $fetchPayload -notmatch '^[A-Za-z0-9+/]*={0,2}$') {
         Write-Host ("[camel-remote] -FetchFile: the file did not arrive intact ({0} chars); nothing was written" -f $fetchPayload.Length)
@@ -3023,6 +3321,60 @@ if ($null -ne $fetchPayloadText -and $FetchFile -ne '') {
             [System.Convert]::FromBase64String($fetchPayload)) -replace "`r`n", "`n"
         [System.IO.File]::WriteAllText($fetchTarget, $fetchText, (New-Object System.Text.UTF8Encoding($false)))
         Write-Host ("[camel-remote] -FetchFile: {0} bytes written to {1}" -f $fetchText.Length, $fetchTarget)
+    }
+}
+
+# The file `-FetchFile <suffix> -Latest` asked for: the newest run's copy of it, brought back by two
+# small commands after the plan. It runs after the plan because the run directory it names is the one
+# this run just made -- a directory named after a clock the caller cannot know when the command line
+# is typed, which is the whole reason this mode exists (the console keeps one truncated line of a
+# failing case's output). Nothing is guessed when the answer is missing: a run directory that is not
+# there, and a file that is not in it, each say so and name the run the tool resolved.
+if ($Latest -and $FetchFile -ne '') {
+    $remoteLogRoot = '$HOME/camel-work/{0}/test/results/log' -f $name
+    $runName = ''
+    $runPath = ''
+    try {
+        # Both halves of the answer in one line: the run's absolute path (what `scp` needs: it hands
+        # the path to the remote side as it is, so a `$HOME` in it would arrive unexpanded) and its
+        # name (what a message needs).
+        $found = ((& $sshExe -o ConnectTimeout=20 $sshHost `
+                        "find `"$remoteLogRoot`" -mindepth 1 -maxdepth 1 -type d -printf '%p`t%f\n' 2>/dev/null | sort | tail -n 1") 2>&1 |
+                    Out-String).Trim()
+        $parts = $found -split "`t"
+        if ($parts.Count -eq 2) {
+            $runPath = $parts[0]
+            $runName = $parts[1]
+        }
+    } catch {
+        $runName = ''
+    }
+    $runName = Select-CamelLatestRun -Runs @($runName)
+    if ($runName -eq '' -or $runPath -eq '') {
+        Write-Host "[camel-remote] -FetchFile -Latest: the host has no run directory under camel-work/$name/test/results/log; nothing was fetched"
+        $code = 2
+    } else {
+        $fetchTarget = Join-Path (Join-Path $Path 'test/results/fetched') ($fetchSuffix -replace '/', '\')
+        $runRoot = $runPath.Substring(0, $runPath.Length - $runName.Length - 1)
+        $fetched = Get-CamelFetchPaths -LogRootOnHost $runRoot -Run $runName `
+            -Suffix $fetchSuffix -LocalRoot (Join-Path $Path 'test/results/fetched')
+        $fetchTarget = $fetched.LocalPath
+        $fetchDir = Split-Path -Parent $fetchTarget
+        if ($fetchDir -and -not (Test-Path -LiteralPath $fetchDir)) {
+            New-Item -ItemType Directory -Path $fetchDir -Force | Out-Null
+        }
+        if (Test-Path -LiteralPath $fetchTarget) {
+            Remove-Item -LiteralPath $fetchTarget -Force
+        }
+        $scpOutput = & $scpExe -q "${sshHost}:$($fetched.HostPath)" $fetchTarget 2>&1
+        if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath $fetchTarget)) {
+            Write-Host ("[camel-remote] -FetchFile -Latest: the newest run {0} has no {1}; nothing was written ({2})" -f
+                $runName, $fetchSuffix, ($scpOutput | Out-String).Trim())
+            $code = 2
+        } else {
+            $bytes = (Get-Item -LiteralPath $fetchTarget).Length
+            Write-Host ("[camel-remote] -FetchFile -Latest: {0} bytes of run {1} written to {2}" -f $bytes, $runName, $fetchTarget)
+        }
     }
 }
 

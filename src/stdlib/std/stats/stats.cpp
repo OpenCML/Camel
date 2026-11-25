@@ -93,7 +93,7 @@ std::string GraphStats::toJson() const {
 
 GraphStats collectGraphStats(const camel::core::context::context_ptr_t &context, GCGraph *root) {
     const camel::runtime::Program *program =
-        root && context ? context->programOfRuntimeGraph(root) : nullptr;
+        root && context ? context->programOfRuntimeGraph(*root) : nullptr;
     return program ? collectGraphStats(*program, root) : GraphStats{};
 }
 

@@ -43,11 +43,21 @@
  * a channel that records nothing look the same from here, and neither is a green. A missing marker
  * is "the channel did not run": the run may have been green, red, or absent, and this program has
  * nothing to say about any of them. Zero rows is never "no reds" at this position.
+ *
+ * The readings themselves are cached, by `--read`: one plan set measured on one tree is stored under
+ * (tree OID, plan set hash, jobs, tier, tool) and replayed with a line that says, in as many words,
+ * that it came from the cache and which tree it is the reading of. A night of merges measures the
+ * same tip again and again; the rows cannot differ, and the host should not be asked to produce them
+ * again. A dirty working tree is neither served nor stored. See "the readings cache" below.
  */
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
+import crypto from 'node:crypto'
+import { execFileSync, spawnSync } from 'node:child_process'
+import { fileURLToPath } from 'node:url'
 import { READING_NORMAL_VERSION } from '../test/tools/reading-normal.mjs'
+import { planSetHash, planSetNames } from './plan-set.mjs'
 
 /** The two lines the plan stage brackets its rows with (`internal/tools/camel-remote.ps1`). */
 const ROWS_START = '__CAMEL_REMOTE_ROWS_START__'
@@ -56,6 +66,7 @@ const ROWS_END = '__CAMEL_REMOTE_ROWS_END__'
 /** The rows and the rule set they were taken under, from the text that held them. */
 function readRows(label, text) {
     const rows = new Map()
+    const unparsed = []
     let version = null
     for (const line of text.split('\n')) {
         if (!line.trim()) continue
@@ -63,10 +74,16 @@ function readRows(label, text) {
         try {
             row = JSON.parse(line)
         } catch {
-            die(`${label} holds a line that is not a reading: ${line.slice(0, 120)}`)
+            unparsed.push(line)
+            continue
         }
+        // A row is `{name, verdict}` and nothing else is. A failing test's own message may start with
+        // `{` -- `Error: reason missing: [{...}]` on its own line does -- and that line parsed as JSON
+        // once, which is how a failed case turned a red into "not measured": the reader took the
+        // message for a row, found no verdict, and refused the whole reading.
         if (typeof row.name !== 'string' || typeof row.verdict !== 'string') {
-            die(`${label} holds a reading with no name or no verdict: ${line.slice(0, 120)}`)
+            unparsed.push(line)
+            continue
         }
         if (row.reading_version !== undefined) {
             if (version === null) version = row.reading_version
@@ -74,8 +91,23 @@ function readRows(label, text) {
         }
         rows.set(row.name, { verdict: row.verdict, reading: row.reading ?? null })
     }
-    if (rows.size === 0) die(`${label} holds no readings: an empty baseline would compare nothing and call it agreement`)
-    return { rows, version, text }
+    // Said out loud, on stderr, and then the reading goes on: a measurement that failed and a
+    // measurement that could not be read are two different things, and only the second is exit 2.
+    // Dropping these silently would be the other lie -- the output did contain lines nobody read.
+    if (unparsed.length > 0) {
+        process.stderr.write(
+            `merge-readings: ${label}: unparsed line(s): ${unparsed.length} -- a line is a row only when it ` +
+                `is JSON with a name and a verdict; the conclusion below uses the ${rows.size} row(s) that are\n`,
+        )
+    }
+    if (rows.size === 0) {
+        die(
+            unparsed.length > 0
+                ? `${label} holds no readings: ${unparsed.length} line(s) were not rows (first: ${unparsed[0].slice(0, 120)})`
+                : `${label} holds no readings: an empty baseline would compare nothing and call it agreement`,
+        )
+    }
+    return { rows, version, text, unparsed: unparsed.length }
 }
 
 function readRowsFile(file) {
@@ -86,14 +118,16 @@ function readRowsFile(file) {
 /**
  * The rows out of one run's transcript, or the reading that says why there are none.
  *
- * A line is a row when it starts with `{`: the channel prints the runner's `{name, verdict, reading}`
- * lines and nothing else between its markers, and the run's own narration around them does not.
- * The markers are matched after trimming, because the console carries them beside whatever
- * indentation a wrapper gave them; the payload is matched as JSON, not as a shape this file
- * invents -- a row that does not parse is `readRows`' refusal, which names it.
+ * A line is a row when it is JSON with a name and a verdict, and nothing else is one. The channel
+ * prints the runner's `{name, verdict, reading}` lines between its markers; the run's own narration
+ * around them does not, but a failing case's message can still begin with `{` -- `Error: reason
+ * missing: [{...}]` does -- and taking that for a row is what turned a red into "not measured". Such
+ * a line is now counted as `unparsed` and said on stderr, and the conclusion is drawn from the rows
+ * that are rows. The markers are matched after trimming, because the console carries them beside
+ * whatever indentation a wrapper gave them.
  *
- * Both refusals are exit 2 and neither says anything about the tree: a green transcript with no
- * block is a merge position that never installed this channel, and a block with no row is a plan
+ * The two refusals that remain are exit 2 and neither says anything about the tree: a transcript with
+ * no block is a merge position that never installed this channel, and a block with no row is a plan
  * set that started no case or a channel that recorded none. Both are "not measured" -- the one
  * reading a merge must never round down to "no reds".
  */
@@ -121,6 +155,329 @@ const arg = (name) => {
     return at >= 0 ? process.argv[at + 1] : null
 }
 
+// --- the readings cache (`--read`) -------------------------------------------
+// A *reading* is one plan set run on one tree: the runner's own narration plus the row block it
+// brackets. The merge position takes two of them per judgement (the tree the merge lands on and the
+// merged tree), and a night of merges measures the same tip again and again -- each time paying the
+// host for a transfer, a build and a plan run. Nothing about that repetition is new information:
+// the same tree, the same plans, the same jobs and the same tool produce the same rows.
+//
+// So a reading is stored under the identity of the thing it describes, and nothing else:
+//
+//   tree OID      `git -C <tree> rev-parse HEAD`. Not the directory (two checkouts at one commit are
+//                 one tree), not a file mtime (it changes when the content does not), not the path a
+//                 run happened to see. A commit's tree is the identity a reading can be checked
+//                 against, and it is what `[provenance] tip` already names.
+//   plan set hash the `<count>-<hash>` from `plan-set.mjs` -- the same value the baseline cache keys
+//                 by, so "which plans were read" has one definition in the repository.
+//   jobs          the runner's width. A reading taken at `-Jobs 4` is not the reading at `-Jobs 8`:
+//                 different scheduling, different timeouts, occasionally a different order.
+//   tier          `release` or `debug`, i.e. which install was executed. Two builds of one commit
+//                 are two binaries.
+//   tool          sha256 over this file, `plan-set.mjs` and the runner. Editing any of them changes
+//                 what a reading *means* (a row reader, a plan-set spelling, a run's own narration);
+//                 an entry keyed without it would outlive the rule it was taken under.
+//
+// A dirty working tree is never served from the cache and never stored in it. A reading of commit C
+// is not a reading of C plus somebody's uncommitted edit, and storing one under C would hand it back
+// for a tree that never produced it. The tool measures a dirty tree when asked, says so, and writes
+// nothing -- the same refusal `camel-remote`'s own build guard makes in the other direction.
+//
+// The cache lives outside every work tree (a directory inside the repository is refused), and the
+// manifest written beside the entries says who creates it and how to clear it.
+const rowsStartMark = '__CAMEL_REMOTE_ROWS_START__'
+const rowsEndMark = '__CAMEL_REMOTE_ROWS_END__'
+
+const sha256 = (buf) => crypto.createHash('sha256').update(buf).digest('hex')
+const fileHash = (file) => {
+    try {
+        return sha256(fs.readFileSync(file))
+    } catch {
+        return 'missing'
+    }
+}
+
+function readingsFail(why) {
+    console.log(`merge-readings: ${why}`)
+    console.log('merge-readings: no reading was taken')
+    process.exit(2)
+}
+
+/** git, with a refusal instead of an exception: a tree whose identity cannot be read is not measured. */
+function gitRead(cwd, args, what) {
+    try {
+        return execFileSync('git', ['-C', cwd, ...args], {
+            encoding: 'utf8',
+            stdio: ['ignore', 'pipe', 'pipe'],
+            maxBuffer: 64 * 1024 * 1024,
+        })
+    } catch (e) {
+        const said = `${e.stderr ?? ''}`.trim().split('\n')[0]
+        readingsFail(`${what}: \`git -C ${cwd} ${args.join(' ')}\` failed${said ? ` (${said})` : ` (${e.message})`}`)
+    }
+}
+
+/** A path relative to a parent, in either slash direction. */
+function inside(parent, child) {
+    const rel = path.relative(parent, child)
+    return rel !== '' && !rel.startsWith('..') && !path.isAbsolute(rel)
+}
+
+/** The rows in a runner transcript, counted by the same rule `readRows` uses everywhere else. */
+function rowBlockOf(text) {
+    const lines = text.split('\n').map((line) => line.replace(/\r$/, ''))
+    const start = lines.findIndex((line) => line.trim() === rowsStartMark)
+    const end = start < 0 ? -1 : lines.indexOf(rowsEndMark, start + 1)
+    if (start < 0 || end < 0) return { present: false, rows: 0 }
+    let rows = 0
+    for (const line of lines.slice(start + 1, end)) {
+        try {
+            const row = JSON.parse(line)
+            if (typeof row.name === 'string' && typeof row.verdict === 'string') rows += 1
+        } catch {
+            // A failing case's own message can begin with `{`; it is not a row (see readRows).
+        }
+    }
+    return { present: true, rows }
+}
+
+const READINGS_MANIFEST = [
+    '# camel-readings-cache',
+    '',
+    'Who writes here: `scripts/merge-readings.mjs --read` (the readings cache, backlog C-1124-131).',
+    'Each entry is one plan-set reading of one tree, named',
+    '',
+    '    <tree12>-<planset>-j<jobs>-<tier>-<key12>.json',
+    '',
+    "and holds the key (tree OID, plan set hash, jobs, tier, tool hash), when and where it was",
+    "measured, the runner's exit code, and the runner's transcript with its row block. An entry is a",
+    'hit only when every part of the key matches exactly; anything else is a miss and the plans run',
+    'again.',
+    '',
+    'This directory is outside the repository on purpose -- a cache inside a work tree would be a file',
+    'the next measurement carries as a change. The tool refuses such a path.',
+    '',
+    'Clearing it is always safe: every entry can be measured again. Nothing here is a record of a',
+    'merge.',
+    '',
+    '    Remove-Item -LiteralPath "$env:CAMEL_READINGS_CACHE" -Recurse -Force    # PowerShell',
+    '    rm -rf "$CAMEL_READINGS_CACHE"                                         # POSIX',
+    '',
+    'The default root is D:\\Temp\\camel-readings-cache; --readings-cache names another one.',
+    '',
+].join('\n')
+
+/** The cache directory is created on the first store, with the manifest beside the entries. */
+function prepareReadingsCache(dir) {
+    fs.mkdirSync(dir, { recursive: true })
+    const manifest = path.join(dir, 'MANIFEST.md')
+    if (!fs.existsSync(manifest)) fs.writeFileSync(manifest, READINGS_MANIFEST, 'utf8')
+}
+
+/** The one place `--read` is handled: it produces a reading, and never compares anything. */
+function runReadMode() {
+    if (process.argv.includes('--cache')) {
+        readingsFail('--read and --cache are two caches with two keys: --cache stores a baseline to compare against, --read stores a reading of one tree')
+    }
+    if (process.argv.includes('--probe')) readingsFail('--read measures (or replays) a reading; --probe answers whether a baseline exists, which is the other cache')
+    if (arg('--current') || arg('--transcript')) readingsFail('--read produces the rows itself; --current / --transcript feed rows in, and one call cannot do both')
+
+    const treeArg = arg('--tree-path')
+    if (!treeArg) readingsFail('--read needs --tree-path <checkout>: the tree OID, not a made-up name, is the identity of a reading')
+    const treePath = path.resolve(treeArg)
+    if (!fs.existsSync(treePath)) readingsFail(`--tree-path ${treePath} does not exist`)
+
+    const planSetPath = arg('--plans')
+    if (!planSetPath) readingsFail('--read needs --plans <file or comma list>: a reading is of one plan set, and the set is part of its key')
+    const planNames = [...new Set(planSetNames(planSetPath).map((s) => s.trim()).filter(Boolean))]
+    if (planNames.length === 0) readingsFail(`--plans ${planSetPath} names no plan; a reading of nothing is not a reading`)
+
+    // The identity of the tree: the commit, and whether the working tree is that commit.
+    const treeRoot = gitRead(treePath, ['rev-parse', '--show-toplevel'], 'the tree is not a git checkout').trim().replace(/\\/g, '/')
+    if (path.resolve(treeRoot).replace(/\\/g, '/') !== treePath.replace(/\\/g, '/')) {
+        readingsFail(`--tree-path ${treePath} is not the root of a checkout (git says ${treeRoot}); a reading of a subdirectory is a reading of some other tree`)
+    }
+    const treeOid = gitRead(treePath, ['rev-parse', 'HEAD'], 'the tree has no HEAD to name').trim()
+    if (!/^[0-9a-f]{40}$/.test(treeOid)) readingsFail(`git named the tree's HEAD as "${treeOid}", which is not a commit OID`)
+    let branch = ''
+    try {
+        branch = execFileSync('git', ['-C', treePath, 'symbolic-ref', '-q', '--short', 'HEAD'], {
+            encoding: 'utf8',
+            stdio: ['ignore', 'pipe', 'ignore'],
+        }).trim()
+    } catch {
+        branch = '(detached)'
+    }
+    const statusOf = () =>
+        gitRead(treePath, ['status', '--porcelain'], 'the tree status could not be read')
+            .split('\n')
+            .map((line) => line.replace(/\r$/, ''))
+            .filter(Boolean)
+    let dirty = statusOf()
+
+    // The key's other components.
+    const jobsText = arg('--jobs')
+    const jobs = jobsText === null ? 8 : Number(jobsText)
+    if (!Number.isInteger(jobs) || jobs < 1 || jobs > 64) readingsFail(`-jobs ${jobsText} is not a width between 1 and 64`)
+    const tier = (arg('--tier') || 'release').toLowerCase()
+    if (tier !== 'release' && tier !== 'debug') readingsFail(`--tier ${arg('--tier')} is neither release nor debug: a reading of one install is not a reading of the other`)
+    const planHash = planSetHash(planNames)
+
+    const toolDir = path.dirname(fileURLToPath(import.meta.url))
+    const runner = path.resolve(arg('--runner') || path.join(toolDir, '..', 'internal', 'tools', 'camel-remote.ps1'))
+    if (!fs.existsSync(runner)) readingsFail(`the runner ${runner} does not exist: --runner names the program that takes a reading, defaulting to internal/tools/camel-remote.ps1`)
+    const toolHash = sha256(
+        [path.join(toolDir, 'merge-readings.mjs'), path.join(toolDir, 'plan-set.mjs'), runner]
+            .map((f) => `${path.basename(f)}:${fileHash(f)}`)
+            .join('\n'),
+    ).slice(0, 16)
+
+    // The cache root: outside every work tree, because an entry inside one is a file the next
+    // measurement would carry as a change.
+    const cacheArg = arg('--readings-cache') || process.env.CAMEL_READINGS_CACHE || 'D:\\Temp\\camel-readings-cache'
+    const cacheRoot = path.resolve(cacheArg)
+    const toolRoot = path.dirname(toolDir)
+    for (const [name, root] of [['this work tree', treeRoot], ['the tool work tree', toolRoot]]) {
+        if (inside(path.resolve(root), cacheRoot) || path.resolve(root) === cacheRoot) {
+            readingsFail(`the readings cache ${cacheRoot} is inside ${name} (${root}); it must live outside every checkout, or every entry becomes a change the tree carries`)
+        }
+    }
+
+    const key = { tree: treeOid, plans: planHash, jobs, tier, tool: toolHash }
+    const keyDigest = sha256(JSON.stringify({ tree: treeOid, plans: planHash, jobs, tier, tool: toolHash }))
+    const entryName = `${treeOid.slice(0, 12)}-${planHash}-j${jobs}-${tier}-${keyDigest.slice(0, 12)}.json`
+    const entryFile = path.join(cacheRoot, entryName)
+    const outFile = arg('--out')
+    const identity = `tree ${treeOid}, plans ${planHash} over ${planNames.length} target(s), jobs ${jobs}, tier ${tier}, tool ${toolHash}`
+
+    /** The runner's own command line: `camel-remote.ps1` for real, a Node script for tests. */
+    function runnerInvocation() {
+        if (/\.m?js$/i.test(runner)) {
+            // A Node runner gets camel-remote's vocabulary, one `-Plan` per target, so that the
+            // contract the cache is tested against is the contract it drives.
+            const args = [runner, '-Path', treePath, '-Jobs', String(jobs), '-NoGpuWatch', '-ListKnown']
+            for (const name of planNames) args.push('-Plan', name)
+            if (tier === 'debug') args.push('-Config', 'Debug', '-Tier', 'debug')
+            return { exe: process.execPath, args }
+        }
+        const q = (s) => `'${String(s).replace(/'/g, "''")}'`
+        // `-Plan a,b` reaches a `[string[]]` parameter as one string, so the array is spelled out.
+        const plans = planNames.length === 1 ? q(planNames[0]) : `@(${planNames.map(q).join(',')})`
+        let command = `& ${q(runner)} -Path ${q(treePath)} -Plan ${plans} -Jobs ${jobs} -NoGpuWatch -ListKnown`
+        if (tier === 'debug') command += ' -Config Debug -Tier debug'
+        return { exe: 'pwsh', args: ['-NoProfile', '-Command', command] }
+    }
+
+    /** Measure now, and store the reading only when it can still be said to describe this tree. */
+    function measure(reason) {
+        console.log(`merge-readings: readings-cache: ${reason}`)
+        const { exe, args } = runnerInvocation()
+        const started = Date.now()
+        const run = spawnSync(exe, args, {
+            encoding: 'utf8',
+            stdio: ['ignore', 'pipe', 'pipe'],
+            maxBuffer: 512 * 1024 * 1024,
+            windowsHide: true,
+        })
+        const seconds = Number(((Date.now() - started) / 1000).toFixed(1))
+        if (run.error) readingsFail(`the runner ${runner} could not be started (${run.error.message})`)
+        const text = `${run.stdout ?? ''}${run.stderr ?? ''}`
+        // Printed before the store line so the reading a caller captures is the runner's own output,
+        // with the cache's verdict after it rather than woven through it.
+        process.stdout.write(text.endsWith('\n') || text === '' ? text : `${text}\n`)
+        const block = rowBlockOf(text)
+        const exit = Number.isInteger(run.status) ? run.status : 2
+
+        const oidAfter = gitRead(treePath, ['rev-parse', 'HEAD'], 'the tree has no HEAD to name after the run').trim()
+        const dirtyAfter = statusOf()
+        if (outFile) {
+            fs.mkdirSync(path.dirname(path.resolve(outFile)), { recursive: true })
+            fs.writeFileSync(outFile, text, 'utf8')
+        }
+        if (dirty.length > 0) {
+            console.log(`merge-readings: readings-cache: nothing stored -- the tree was dirty when it was measured (${dirty.length} path(s) differ from ${treeOid.slice(0, 9)})`)
+        } else if (!block.present) {
+            console.log('merge-readings: readings-cache: nothing stored -- the run wrote no row block, so there is no reading to store (a build that stopped writes none)')
+        } else if (block.rows === 0) {
+            console.log('merge-readings: readings-cache: nothing stored -- the row block held no row, and an empty reading would answer every later question with nothing')
+        } else if (oidAfter !== treeOid) {
+            console.log(`merge-readings: readings-cache: nothing stored -- the tree moved while it was measured (${treeOid.slice(0, 9)} -> ${oidAfter.slice(0, 9)}), so this reading is of neither`)
+        } else if (dirtyAfter.length > 0) {
+            console.log(`merge-readings: readings-cache: nothing stored -- the run left ${dirtyAfter.length} changed path(s) behind, so the tree it measured is no longer the tree HEAD names`)
+        } else {
+            prepareReadingsCache(cacheRoot)
+            fs.writeFileSync(
+                entryFile,
+                JSON.stringify(
+                    {
+                        key,
+                        normal: READING_NORMAL_VERSION,
+                        tree_branch: branch,
+                        plans_list: planNames,
+                        measured_at: new Date().toISOString(),
+                        host: os.hostname(),
+                        seconds,
+                        exit,
+                        rows: block.rows,
+                        transcript: text,
+                    },
+                    null,
+                    2,
+                ),
+                'utf8',
+            )
+            console.log(`merge-readings: readings-cache: stored ${entryName} (${identity}, ${block.rows} case(s), ${seconds} s, runner exit ${exit})`)
+        }
+        process.exit(exit)
+    }
+
+    // A dirty tree is measured, never served and never stored: its content is not the commit.
+    if (dirty.length > 0) {
+        return measure(
+            `bypass -- the working tree is dirty (${dirty.length} path(s) differ from HEAD ${treeOid}), so no cached entry describes it and none is stored: measuring it now`,
+        )
+    }
+
+    if (fs.existsSync(entryFile)) {
+        let entry = null
+        try {
+            entry = JSON.parse(fs.readFileSync(entryFile, 'utf8'))
+        } catch {
+            entry = null
+        }
+        // The file name is not the proof: the key inside the entry is. A file whose record disagrees
+        // with the key it is filed under is not a hit, it is a miss the store will replace.
+        const same =
+            entry &&
+            entry.key &&
+            entry.key.tree === key.tree &&
+            entry.key.plans === key.plans &&
+            entry.key.jobs === key.jobs &&
+            entry.key.tier === key.tier &&
+            entry.key.tool === key.tool &&
+            typeof entry.transcript === 'string'
+        if (same) {
+            console.log('merge-readings: readings-cache: HIT -- this reading came from the cache, not from a run now')
+            console.log(`merge-readings: readings-cache: ${identity}`)
+            console.log(
+                `merge-readings: readings-cache: measured ${entry.measured_at} on ${entry.host} in ${entry.seconds} s (${entry.rows} case(s), runner exit ${entry.exit}); ` +
+                    `the cache entry is ${entryName}`,
+            )
+            console.log(`[readings-cache] hit tree=${treeOid} plans=${planHash} jobs=${jobs} tier=${tier} tool=${toolHash} measured_at=${entry.measured_at}`)
+            if (outFile) {
+                fs.mkdirSync(path.dirname(path.resolve(outFile)), { recursive: true })
+                fs.writeFileSync(outFile, entry.transcript, 'utf8')
+            }
+            process.stdout.write(entry.transcript.endsWith('\n') ? entry.transcript : `${entry.transcript}\n`)
+            process.exit(Number.isInteger(entry.exit) ? entry.exit : 0)
+        }
+    }
+
+    return measure(`MISS -- no entry for ${identity}; measuring it on the host now`)
+}
+
+if (process.argv.includes('--read')) runReadMode()
+
 // --- the baseline cache ------------------------------------------------------
 // A baseline is "what this plan set reads on this develop commit", so its key is the commit, the
 // plan set and the normalization version -- never the commit alone, because one commit is measured
@@ -143,19 +500,10 @@ const treeSha = (arg('--tree') || '').trim()
 const storeFile = process.argv.includes('--accept')
 const probeOnly = process.argv.includes('--probe')
 
-function planSetHash(names) {
-    // Order-independent and content-sensitive: the same plans listed in another order are the same
-    // set, and one plan added or removed is a different one.
-    const list = [...new Set(names.map((n) => n.trim()).filter(Boolean))].sort()
-    let h = 0
-    for (const ch of list.join('\n')) h = (h * 31 + ch.codePointAt(0)) >>> 0
-    return `${list.length}-${h.toString(16)}`
-}
-
-/** The names `--plans` names: a file of one name per line, or a comma list. */
-function planSetNames(list) {
-    return fs.existsSync(list) ? fs.readFileSync(list, 'utf8').split('\n') : list.split(',')
-}
+// The plan set's hash and its names live in `plan-set.mjs`, not here: `merge-record.mjs` reads both
+// out of the `diff.json` this program writes and recomputes the hash from the names to prove the
+// document says which plans were read. One definition, so the cache key below and the record's
+// `planSet.hash` cannot drift apart -- and a copy in each file would agree until one of them changed.
 
 /** A target as both sides spell it: trimmed, forward slashes, no trailing slash. */
 const normTarget = (s) => String(s).trim().replace(/\\/g, '/').replace(/\/+$/, '')
@@ -420,8 +768,24 @@ if (probeOnly) {
         )
         process.exit(2)
     }
-    const meta = readWhere(found.key)
-    const where = meta ? `, ${meta.cases} case(s), tree ${(meta.tree || 'not recorded').slice(0, 9)}, measured ${meta.measured_at} on ${meta.host}` : ''
+const meta = readWhere(found.key)
+    if (!meta || typeof meta.tree !== 'string' || !meta.tree) {
+        // An entry with no recorded tree is not a baseline this program can use: every comparison
+        // against it would be refused later, after a full run -- and that refusal is right, because
+        // nothing proves the reading is not of the tree being compared. The probe answers the
+        // question its caller has ("can I compare against this?"), so a stale entry is a miss here
+        // and the caller measures instead of spending a run to discover the refusal.
+        //
+        // This is about the entry the superset search settled on, not about `cacheKey`: an exact
+        // entry with no tree is no better than a superset entry with none, and the caller cannot
+        // tell the two apart from an exit code.
+        console.log(
+            `merge-readings: cache-miss: ${path.basename(found.key)} was stored without the tree it was measured on ` +
+                '(it predates --tree), so nothing proves it is not the tree being compared; measure it again'
+        )
+        process.exit(2)
+    }
+    const where = `, ${meta.cases} case(s), tree ${meta.tree.slice(0, 9)}, measured ${meta.measured_at} on ${meta.host}`
     const how = found.exact
         ? ''
         : ` (a superset: measured across ${found.plans.length} target(s), covers the ${requestedTargets().length} this selection names)`
@@ -434,6 +798,7 @@ const transcriptFile = arg('--transcript')
 if (!currentFile && !transcriptFile) {
     console.log('usage: merge-readings.mjs (--current <rows.jsonl> | --transcript <console output>) (--baseline <rows.jsonl> | --cache <dir> --develop <sha> --plans <list> --tree <sha> [--accept])')
     console.log('       merge-readings.mjs --cache <dir> --develop <sha> --plans <list> --probe')
+    console.log('       merge-readings.mjs --read --tree-path <checkout> --plans <list> [--jobs 8] [--tier release|debug] [--readings-cache <dir>] [--out <transcript>]')
     process.exit(2)
 }
 const tree = transcriptFile ? rowsFromTranscript(transcriptFile) : readRowsFile(currentFile)
@@ -679,7 +1044,22 @@ if (changed.length > 0) {
 const out = arg('--out')
 if (out) {
     fs.mkdirSync(out, { recursive: true })
-    fs.writeFileSync(path.join(out, 'diff.json'), JSON.stringify({ fixed, new: regressed, changed, added: addedGreen, addedRed, removed }, null, 2))
+// The three sets are the judgement; the plan set and the baseline are what makes the judgement
+    // checkable by a reader who was not here. A pass record built from this file carries all of it,
+    // because "passed" on its own is indistinguishable from no record at all.
+    //
+    // `--plans` is optional here and required for a record: a comparison between two row files
+    // (`--baseline` plus `--current`) can be made without naming a plan set at all, and the plan set
+    // is then reported as absent rather than filled in from nothing.
+    const planNames = planSet
+        ? (fs.existsSync(planSet) ? fs.readFileSync(planSet, 'utf8').split('\n') : planSet.split(',')).filter(Boolean)
+        : []
+    fs.writeFileSync(path.join(out, 'diff.json'), JSON.stringify({
+        planSet: planNames.length ? { names: planNames, hash: planSetHash(planNames) } : null,
+        baseline: { sha: develop, file: baseFile, cases: base.rows.size, normal: base.version },
+        fixed, new: regressed, changed,
+        added: addedGreen, addedRed, removed,
+    }, null, 2))
 }
 
 console.log(

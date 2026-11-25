@@ -28,6 +28,10 @@ timeout_ms = 60000
 # `stdlib/*.cml`. The build runs the same script at the end of `copyBuildArtifacts`, so a step that
 # starts writing there fails the build; this is the plan-level check that the tree is clean.
 # `node scripts/check-source-artifacts.mjs --clean` deletes what it lists.
+# Slow layer: over the 2 s the fast layer allows -- 3.48 s of
+# child wall clock in the 2026-11-12 record (appendix B of
+# internal/reports/2026-11-24-test-suite-inventory.cn.md).
+tier = "slow"
 
 [[tests]]
 name = "portability.source_artifacts"

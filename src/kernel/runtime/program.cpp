@@ -173,10 +173,13 @@ void GCGraphManager::release(GCGraph *graph) {
     freeGraph(graph);
 }
 
-const Program *GCGraphManager::programOf(const GCGraph *graph) const {
+const Program *GCGraphManager::programOf(const camel::graph::Graph &graph) const {
     std::lock_guard lock(mutex_);
     for (auto program = programs_.rbegin(); program != programs_.rend(); ++program) {
-        if ((*program)->contains(graph)) {
+        // The identity the caller names, not an id read off a representation: a value no program
+        // here holds -- a draft, a graph of another context -- answers nullptr, which is the
+        // answer "no program holds it" and not a program chosen by a number or an address.
+        if ((*program)->holds(graph)) {
             return *program;
         }
     }

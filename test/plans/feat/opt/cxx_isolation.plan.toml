@@ -51,7 +51,7 @@ name = "cxx_isolation.fold.by_cpp"
 desc = "The C++ constant folding (`std::cxx::fold`) on the corpus whose literals form a chain: the canonical document of the graph it leaves, with no operation over two constants remaining, and the reading the Camel pass is put to."
 kind = "behavior"
 case = "../../../cases/opt/cxx_isolation/subject.cml"
-args = ["${case}", "std::cxx::fold", "std::jgir canonical=true"]
+args = ["${case}", "std::cxx::fold", "std::jgir canonical=true", "std::nop"]
 expect_exit = 0
 timeout_ms = 20000
 verify_script = """
@@ -81,7 +81,7 @@ name = "cxx_isolation.fold.by_camel"
 desc = "The Camel constant folding (`opt::fold`, stdlib/opt.cml) on the same graph: its canonical document is the one the C++ pass printed, byte for byte and with no normalizer between them."
 kind = "differential"
 case = "../../../cases/opt/cxx_isolation/subject.cml"
-args = ["${case}", "opt::fold", "std::jgir canonical=true"]
+args = ["${case}", "opt::fold", "std::jgir canonical=true", "std::nop"]
 expect_exit = 0
 timeout_ms = 20000
 compare_to = "cxx_isolation.fold.by_cpp"
@@ -102,7 +102,7 @@ name = "cxx_isolation.fold.by_old_name"
 desc = "The name the C++ fold had before the isolation, `std::opt::fold`, is not accepted: the isolation keeps no alias (author's rework, 2026-11-18), so the pipeline is refused as an unknown pass and the refusal names the name. The same program under the same dump pass, one word changed -- the reading differs from `by_cpp` in the only way a retired name can differ: it never runs."
 kind = "behavior"
 case = "../../../cases/opt/cxx_isolation/subject.cml"
-args = ["${case}", "std::opt::fold", "std::jgir canonical=true"]
+args = ["${case}", "std::opt::fold", "std::jgir canonical=true", "std::nop"]
 expect_exit = 1
 timeout_ms = 20000
 expect_output_contains = ["Pass <std::opt::fold> not found, available passes are:"]
@@ -123,7 +123,7 @@ name = "cxx_isolation.cse.by_cpp"
 desc = "The C++ common-subexpression elimination (`std::cxx::cse`) on the corpus whose expression is written twice over one value: the canonical document of the graph it leaves, the sweep reached its fixpoint, and the `flags` word it prints -- the one field that tells it from the Camel reading."
 kind = "behavior"
 case = "../../../cases/opt/cxx_isolation/subject.cml"
-args = ["${case}", "std::cxx::cse", "std::jgir canonical=true"]
+args = ["${case}", "std::cxx::cse", "std::jgir canonical=true", "std::nop"]
 expect_exit = 0
 timeout_ms = 20000
 verify_script = """
@@ -164,7 +164,7 @@ name = "cxx_isolation.cse.by_camel"
 desc = "The Camel common-subexpression elimination (`opt::cse`, stdlib/opt.cml) on the same graph, read the same way: the same graphs, nodes, operators and operands, the sweep reached its fixpoint, and every graph prints the gates-dissolved bit because a program-wide commit looked at all of them."
 kind = "behavior"
 case = "../../../cases/opt/cxx_isolation/subject.cml"
-args = ["${case}", "opt::cse", "std::jgir canonical=true"]
+args = ["${case}", "opt::cse", "std::jgir canonical=true", "std::nop"]
 expect_exit = 0
 timeout_ms = 20000
 verify_script = """
@@ -212,7 +212,7 @@ name = "cxx_isolation.default_pipeline.by_default_name"
 desc = "The default pipeline, run by the name a program writes -- `std::opt`, the word a program that asks for optimization by name uses -- prints a canonical document of the whole graph set in which no operation over constants is left. This is the reference `by_registered_name` is compared against; it asserts a canonical, non-empty document of five graphs because an empty run against an empty run compares equal, which is the trap the experiment's report names (internal/reports/2026-11-18-two-implementations-of-one-pass.md, section 4)."
 kind = "behavior"
 case = "../../../cases/opt/cxx_isolation/subject.cml"
-args = ["${case}", "std::opt", "std::jgir canonical=true"]
+args = ["${case}", "std::opt", "std::jgir canonical=true", "std::nop"]
 expect_exit = 0
 timeout_ms = 20000
 verify_script = """
@@ -246,7 +246,7 @@ name = "cxx_isolation.default_pipeline.by_registered_name"
 desc = "The same pipeline under the name the isolation registered, `std::cxx::opt`: the canonical document is the one the default name printed, byte for byte -- same exit, same bytes, no normalizer. The rework deleted every old sub-pass name and kept `std::opt` alone, so this is the entry that says what it kept still runs the kernel rather than merely resolving to a name."
 kind = "differential"
 case = "../../../cases/opt/cxx_isolation/subject.cml"
-args = ["${case}", "std::cxx::opt", "std::jgir canonical=true"]
+args = ["${case}", "std::cxx::opt", "std::jgir canonical=true", "std::nop"]
 expect_exit = 0
 timeout_ms = 20000
 compare_to = "cxx_isolation.default_pipeline.by_default_name"

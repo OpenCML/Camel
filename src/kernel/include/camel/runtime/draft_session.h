@@ -168,6 +168,14 @@ class RuntimeGraphDraftSession {
     void noteMadeGraph(GCGraph *graph);
     /// The graphs this transaction made, in the order they were made.
     const std::vector<GCGraph *> &madeGraphs() const { return madeGraphs_; }
+    /// The ids of the graphs this session made itself (`adoptGraph`, `noteMadeGraph`), and of the
+    /// graphs it adopted from a program that declared them made (`adoptProgram`, see
+    /// `Program::madeGraphs`) and that the work table then holds: what a commit records on the
+    /// program it hands back (`Program::setMadeGraphs`), beside the record it carries from the
+    /// program it rewrote. A graph taken from a program that made nothing -- a library or a
+    /// definition program, encoded with `Program::bind` -- is not here: that is the adoption the
+    /// pass boundary refuses.
+    const std::unordered_set<uint32_t> &madeGraphIds() const { return madeIds_; }
     GCGraph *runtimeRoot() const { return runtimeRoot_; }
     /// The context of the program the session rewrites.
     const camel::core::context::context_ptr_t &context() const { return context_; }
@@ -338,6 +346,10 @@ class RuntimeGraphDraftSession {
     /// order they were made: they are delivered by every commit of the session, the closure being
     /// the graphs the root reaches and these.
     std::vector<GCGraph *> madeGraphs_;
+    /// The ids of the graphs this session encoded for itself (`adoptGraph`): the record a commit
+    /// carries to the program it hands back. Mutable because `adoptGraph` is a const operation on
+    /// the work table and this is the book it keeps of it.
+    mutable std::unordered_set<uint32_t> madeIds_;
     struct DraftRefs {
         uint64_t revision = 0;
         bool valid        = false;

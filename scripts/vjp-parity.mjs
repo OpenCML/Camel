@@ -39,13 +39,31 @@
 // rule of the two rulesets is reduced to the key it files (`leftHeadOf`), and the two key sets
 // are diffed:
 //
-//   both          a key on both sides: the step is answered either way. Counted, not listed.
+//   both          a key on both sides, with a law in **each** half of the library: the step is
+//                 answered either way. Counted, not listed.
+//   forward-only  a key on both sides whose library law is the forward one only: `jvp` answers it
+//                 and `vjp` does not. Counted here rather than in `both`, because a count of keys
+//                 cannot tell the two apart and "the library answers it" is then true of one
+//                 direction: `layer_norm` is this shape, and so is every `nn` law that landed
+//                 without its adjoint. Listed by name under `--tables` and `--json`, like the two
+//                 rows below.
+//   reverse-only  a key on both sides whose library law is the reverse one only: `vjp` answers it
+//                 and `jvp` does not. The engine answers `vjp`, so the two halves disagree the
+//                 other way round.
+//   neither-half  a key on both sides whose library law is neither (`vmap.cml` files batching
+//                 rules, which answer no derivative). It used to be counted as `both`.
 //   library-only  the library answers the key and no engine registration reduces to it. This is
 //                 the `pick_at` shape, and the table a reader acts on.
 //   engine-only   an engine registration reduces to no key the library files. Legal (the
 //                 tangent operators are machinery no program writes, a conversion to a discrete
 //                 type has no tangent to carry) but not silently: each row here is a decision,
 //                 and the decision is written in the exemption list below.
+//
+// The third column is why the split exists: `both` counted a key whose only law was `jvp_conv2d`
+// beside one whose two halves are the pair an adjoint is, and route five's question -- can the
+// engine's table be deleted -- is a question about the **pair**, not about a key. A tree whose
+// engine-only count reached zero while five keys had one half would read green and lose a
+// capability; this is the column that says so.
 //
 // Equality is not the property asked for, because the two tables are not meant to be equal: a
 // law can belong to the library alone (乙: the step exists only in a transformed graph, or the
@@ -257,6 +275,27 @@ function rulesetFiles() {
 }
 
 const RULESETS = rulesetFiles()
+
+// The two halves of the derivative library, by the file each writes its laws in. The names are not
+// a list of rulesets -- `RULESETS` above is read from the directory and must stay that way -- but of
+// the **pair** a key needs to be answered in both directions: `jvp.cml` answers the tangent of the
+// result from the tangents of the operands, `transpose.cml` answers the cotangents of the operands
+// from the cotangent of the result, and `src/stdlib/rulesets/vmap.cml` answers neither (its laws
+// batch an operator over lanes). A key filed by a fourth ruleset some day is neither half, and is
+// reported as such rather than assumed into one.
+const FORWARD_RULESET = 'src/stdlib/rulesets/jvp.cml'
+const BACKWARD_RULESET = 'src/stdlib/rulesets/transpose.cml'
+
+/// Which half of the pair files a law: `'forward'`, `'backward'`, or `'neither'`.
+function halfOf(file) {
+    if (file === FORWARD_RULESET) {
+        return 'forward'
+    }
+    if (file === BACKWARD_RULESET) {
+        return 'backward'
+    }
+    return 'neither'
+}
 
 /// The `.cml` files under `src/stdlib/rulesets` that declare a rule and are not in the read set.
 ///
@@ -475,26 +514,69 @@ function* cppFiles(dir) {
     }
 }
 
-/// The protocol a `setVjp(defs, ...)` lands in: `OpRegistry::instance().add("<protocol>", ...)`
-/// in the tensor module's catalog. Read, not assumed, and refused when the catalog names more
-/// than one, because then one of the two would be attributed to the wrong namespace.
-function tensorProtocol() {
-    const text = withoutComments(read('src/stdlib/tensor/ops/catalog.cpp'))
-    const protocols = new Set()
-    for (const match of text.matchAll(/OpRegistry::instance\(\)\.add\(\s*"([^"]+)"/g)) {
-        protocols.add(match[1])
+/// The protocol each module publishes its operators under, read from every
+/// `OpRegistry::instance().add("<protocol>", ...)` under `src/stdlib` and grouped two ways: by the
+/// file that writes the call and by the module (`src/stdlib/<name>`) the file belongs to.
+///
+/// The URI of a module operator is `<protocol>:<def.name>` (`src/stdlib/tensor/ops/registry.cpp`
+/// copies `OpDef` into the registry under it), so the protocol of a `setVjp` is the one of the
+/// module that **publishes the list the call is written against** -- and that is not always one
+/// module: `src/stdlib/nn/tensor_ops.cpp` publishes its own list from the same file
+/// (`OpRegistry::instance().add("nn", nnTensorOps())`), while every `src/stdlib/tensor/ops/*.cpp`
+/// returns its list to the module's catalog (`src/stdlib/tensor/ops/catalog.cpp`), which is the
+/// only file there that calls `add`. Reading the tensor catalog's protocol for the whole tree filed
+/// the `nn` rows under `tensor:` -- the right key, the wrong namespace printed beside it
+/// (C-1124-203). Read, not assumed; a module that publishes two protocols is refused rather than
+/// guessed, because one of the two would be attributed to the wrong namespace.
+function moduleProtocols() {
+    const byFile = new Map()
+    const byModule = new Map()
+    for (const file of cppFiles(path.join(ROOT, 'src/stdlib'))) {
+        const relative = path.relative(ROOT, file).replaceAll(path.sep, '/')
+        const text = withoutComments(fs.readFileSync(file, 'utf8'))
+        for (const match of text.matchAll(/OpRegistry::instance\(\)\.add\(\s*"([^"]+)"/g)) {
+            byFile.set(relative, match[1])
+            const module = relative.split('/').slice(0, 3).join('/')
+            if (!byModule.has(module)) {
+                byModule.set(module, new Set())
+            }
+            byModule.get(module).add(match[1])
+        }
     }
-    if (protocols.size !== 1) {
+    if (byFile.size === 0) {
         fail(
-            `src/stdlib/tensor/ops/catalog.cpp registers ${protocols.size} protocol(s) ` +
-                `(${[...protocols].join(', ')}): a setVjp cannot be attributed by this reader`
+            'no module under src/stdlib calls `OpRegistry::instance().add(...)`: the protocol of a ' +
+                '`setVjp` row would be invented by this reader'
         )
     }
-    return [...protocols][0]
+    return { byFile, byModule }
 }
 
 function readEngine() {
-    const protocol = tensorProtocol()
+    const protocols = moduleProtocols()
+    // The protocol of the file a `setVjp` is written in: its own if it publishes one, else the one
+    // its module publishes. Called only from a `setVjp` row, so a file with neither is not a refusal.
+    const protocolOf = (relative) => {
+        const own = protocols.byFile.get(relative)
+        if (own !== undefined) {
+            return own
+        }
+        const module = relative.split('/').slice(0, 3).join('/')
+        const published = protocols.byModule.get(module)
+        if (published === undefined) {
+            fail(
+                `${relative}: a setVjp is written here and ${module} publishes no operator protocol: ` +
+                    `the URI of the row cannot be stated`
+            )
+        }
+        if (published.size !== 1) {
+            fail(
+                `${module} registers ${published.size} protocol(s) (${[...published].join(', ')}): ` +
+                    `the URI of a setVjp in ${relative} cannot be attributed by this reader`
+            )
+        }
+        return [...published][0]
+    }
     const registrations = []
     let transportsRead = 0
     for (const root of ENGINE_ROOTS) {
@@ -627,7 +709,7 @@ function readEngine() {
                 }
                 for (const name of names) {
                     registrations.push({
-                        uri: `${protocol}:${name}`,
+                        uri: `${protocolOf(relative)}:${name}`,
                         file: relative,
                         line: lineOf(raw, match.index),
                         call: 'setVjp',
@@ -786,16 +868,16 @@ const library = readLibrary()
 // `library.rules` carries both files with the relative path each was read from, so a `--root` copy
 // is read the same way and a law appended to the copy is reported like one in the tree.
 if (CLOSURE) {
-    const BACKWARD = 'src/stdlib/rulesets/transpose.cml'
-    const FORWARD = 'src/stdlib/rulesets/jvp.cml'
-    const backward = library.rules.filter((rule) => rule.file === BACKWARD)
-    const forward = library.rules.filter((rule) => rule.file === FORWARD)
+    // The two files are the module's constants (`FORWARD_RULESET`/`BACKWARD_RULESET` above), so a
+    // ruleset that moves is one edit and not two.
+    const backward = library.rules.filter((rule) => rule.file === BACKWARD_RULESET)
+    const forward = library.rules.filter((rule) => rule.file === FORWARD_RULESET)
     const forwardKeys = new Set(forward.map((rule) => rule.key))
     const backwardKeys = new Set(backward.map((rule) => rule.key))
     const missing = backward.filter((rule) => !forwardKeys.has(rule.key))
     const lines = [
-        `closure: ${BACKWARD} files ${backward.length} law(s) over ${backwardKeys.size} key(s); ` +
-            `${FORWARD} files ${forward.length} law(s) over ${forwardKeys.size} key(s)`,
+        `closure: ${BACKWARD_RULESET} files ${backward.length} law(s) over ${backwardKeys.size} key(s); ` +
+            `${FORWARD_RULESET} files ${forward.length} law(s) over ${forwardKeys.size} key(s)`,
     ]
     for (const rule of missing) {
         lines.push(`  no forward law for '${rule.key}': ${rule.file}#${rule.symbol} (${rule.left})`)
@@ -841,17 +923,39 @@ for (const registration of engine) {
     bucket.get(id).registrations.push(registration)
 }
 
-const rows = { both: [], libraryOnly: [], engineOnly: [] }
+const rows = {
+    both: [],
+    forwardOnly: [],
+    reverseOnly: [],
+    neitherHalf: [],
+    libraryOnly: [],
+    engineOnly: [],
+}
 for (const [key, entry] of libraryKeys) {
     if (engineKeys.has(key)) {
         const other = engineKeys.get(key)
-        rows.both.push({
+        const row = {
             key,
             head: entry.head,
             arity: entry.arity,
             rules: entry.rules,
             registrations: other.registrations,
-        })
+        }
+        // Which halves answer this key: the pair is what an adjoint is, and a key with one of the
+        // two is answered in one direction only. A family files several laws under one key
+        // (`jvp.cml` files four for `float(x)`), so the halves are collected, not read off one rule.
+        const halves = new Set(entry.rules.map((rule) => halfOf(rule.file)))
+        const forward = halves.has('forward')
+        const backward = halves.has('backward')
+        if (forward && backward) {
+            rows.both.push(row)
+        } else if (forward) {
+            rows.forwardOnly.push(row)
+        } else if (backward) {
+            rows.reverseOnly.push(row)
+        } else {
+            rows.neitherHalf.push(row)
+        }
     } else {
         rows.libraryOnly.push({
             key,
@@ -869,8 +973,12 @@ for (const [key, entry] of engineKeys) {
 for (const [key, entry] of engineUnkeyed) {
     rows.engineOnly.push({ key, head: entry.head, arity: null, registrations: entry.registrations })
 }
-rows.libraryOnly.sort((a, b) => (a.key < b.key ? -1 : a.key > b.key ? 1 : 0))
-rows.engineOnly.sort((a, b) => (a.key < b.key ? -1 : a.key > b.key ? 1 : 0))
+const byKey = (a, b) => (a.key < b.key ? -1 : a.key > b.key ? 1 : 0)
+for (const bucket of [rows.both, rows.forwardOnly, rows.reverseOnly, rows.neitherHalf]) {
+    bucket.sort(byKey)
+}
+rows.libraryOnly.sort(byKey)
+rows.engineOnly.sort(byKey)
 
 // Which differences the list does not hold, and which rows of the list no longer describe one.
 const newDebt = []
@@ -889,6 +997,9 @@ if (JSON_MODE) {
         JSON.stringify(
             {
                 both: rows.both.map((row) => ({ key: row.key })),
+                forwardOnly: rows.forwardOnly.map((row) => ({ key: row.key })),
+                reverseOnly: rows.reverseOnly.map((row) => ({ key: row.key })),
+                neitherHalf: rows.neitherHalf.map((row) => ({ key: row.key })),
                 libraryOnly: rows.libraryOnly,
                 engineOnly: rows.engineOnly,
                 newDebt: newDebt.map((row) => row.key),
@@ -906,8 +1017,30 @@ const where = (rule) => `${rule.file}#${rule.symbol}`
 const at = (registration) => `${registration.file} (${registration.call}, line ${registration.line})`
 
 if (TABLES) {
-    console.log(`both tables answer ${rows.both.length} key(s)`)
+    console.log(`both tables answer ${rows.both.length} key(s), both halves of the library`)
     console.log('')
+    const oneHalf = [
+        ['forward-only', 'the forward half answers it and the reverse does not', rows.forwardOnly],
+        ['reverse-only', 'the reverse half answers it and the forward does not', rows.reverseOnly],
+        [
+            'neither-half',
+            'a law files it and neither half of the derivative library answers it',
+            rows.neitherHalf,
+        ],
+    ]
+    for (const [name, why, bucket] of oneHalf) {
+        console.log(`${name} (${why}): ${bucket.length}`)
+        for (const row of bucket) {
+            console.log(`  ${row.key}`)
+            for (const rule of row.rules) {
+                console.log(`      ${where(rule)}  left side: ${rule.left}`)
+            }
+            for (const registration of row.registrations) {
+                console.log(`      ${registration.uri}: ${at(registration)}`)
+            }
+        }
+        console.log('')
+    }
     console.log(`the library answers and the engine does not: ${rows.libraryOnly.length}`)
     for (const row of rows.libraryOnly) {
         const exempt = exemptByMarker.get(row.head)
@@ -979,7 +1112,9 @@ console.log(
     `PASS the two derivative tables differ only where the list says so: ${library.rules.length} ` +
         `law(s) filed under ${libraryKeys.size} key(s), ${engine.length} engine registration(s) ` +
         `under ${engineKeys.size + engineUnkeyed.size} key(s), ${rows.both.length} key(s) both ` +
-        `answer, ${rows.libraryOnly.length} library-only and ${rows.engineOnly.length} engine-only ` +
+        `answer (each half), ${rows.forwardOnly.length} forward-only, ${rows.reverseOnly.length} ` +
+        `reverse-only, ${rows.neitherHalf.length} with a law that is neither half, ` +
+        `${rows.libraryOnly.length} library-only and ${rows.engineOnly.length} engine-only ` +
         `exempt, 0 new, stale=${stale.length}`
 )
 process.exit(0)

@@ -702,10 +702,11 @@ bool TaskflowExecSchedPass::boundedLight(GraphPlan &plan) {
 
 std::unique_ptr<TaskflowExecSchedPass::GraphPlan>
 TaskflowExecSchedPass::buildGraphPlan(GCGraph *graph) {
-    auto plan    = std::make_unique<GraphPlan>();
-    plan->graph  = graph;
-    plan->shared = &graph->execPlan();
-    plan->topo   = plan->shared->topo;
+    auto plan      = std::make_unique<GraphPlan>();
+    plan->graph    = graph;
+    plan->execPlan = camel::runtime::execPlanOf(*graph);
+    plan->shared   = plan->execPlan.get();
+    plan->topo     = plan->shared->topo;
 
     // Tail position, by the rule every back end shares (ExecPlan::tailCalls).
     plan->lastNode       = plan->shared->tailValueRef;

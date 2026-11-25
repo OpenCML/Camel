@@ -100,7 +100,7 @@ python showcase\c2-mlp-mnist\baseline\train_torch.py `
    `compare.py` 以非 0 退出。小规模计划用同一套断言，所以示例不会悄悄坏掉。
 2. **Performance**：训练时间（只量训练循环，数据加载/评估/检查点不计）、吞吐（`steps ×
    batch / 时间`）、整个进程的峰值工作集（psutil 采样，含子进程）、Camel 的编译时间
-   （`std::macro std::stats std::null` 三次的中位数）、以及含启动的整进程墙钟时间。
+   （`std::macro std::stats std::nop` 三次的中位数）、以及含启动的整进程墙钟时间。
 3. **Code size**：按两边共用的 `// == section ==` / `# == section ==` 分段统计 SLOC
    （空行、整行注释、Python docstring、C 块注释不计；带行尾注释的代码行计一次）。
 

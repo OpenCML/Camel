@@ -49,10 +49,10 @@ expect_output_contains = ["stated mean value=2.5 dL/dx=[0.25, 0.25, 0.25, 0.25]"
 expect_output_not_contains = ["skip="]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 known_fail = ["nvm"]
-known_fail_owner = "unowned (`lane-rank0point` wrote this mark and is gone)"
+known_fail_owner = "`split`'s typing of the rank-zero answer of a stated-axis `mean` (`modules/transforms`, the cut's exit)"
 known_fail_reason = "the graph is built and then refused by its own return type: `():?:?: [Error]: The value the graph 'split_of_jvp_of_total_backward' hands on has type 'float[...]', and the graph declares 'float'; the value is node 8.` -- `tensor:mean_axis` computes the element at rank 0, the lift states the pair as `(float, float)` because that is the value's own type, and the tangent the rule's right side wrote (`mean_axis_stated(dxs, at)`) is typed `T[...]`; `split` then copies that node as the backward half's exit, whose declared type is `Tangent<float>`"
 known_fail_msg = "declares 'float'"
-known_fail_ends_when = "when `split` types the rank-zero answer at the cut's exit instead of copying the rank-zero node into a `Tangent<float>` slot, this entry prints `stated mean value=2.5 dL/dx=[0.25, 0.25, 0.25, 0.25]` and exits 0 -- 1.0 in those slots would be the sum's answer spread over the lane and 0.5 a division by the cotangent's count; what this mark pins is the message `declares 'float'` above -- a changed message turns the run red as `known failure changed its mind` before this reading arrives -- not a refusal behaviour, so when the entry prints that line and exits 0 the run reports `marked known_fail ... but passes` on that reading"
+known_fail_ends_when = { prints = "stated mean value=2.5 dL/dx=[0.25, 0.25, 0.25, 0.25]" }
 timeout_ms = 20000
 
 # The law with the mean's answer an element instead of an array: `keepdims = false` on a rank-one
@@ -76,10 +76,10 @@ expect_output_contains = ["stated mean element value=2.5 dL/dx=[0.25, 0.25, 0.25
 expect_output_not_contains = ["skip="]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 known_fail = ["nvm"]
-known_fail_owner = "unowned (`lane-statedsig` wrote this mark and is gone)"
+known_fail_owner = "`split`'s typing of the rank-zero answer of a stated-axis `mean` (`modules/transforms`, the cut's exit)"
 known_fail_reason = "the graph is built and then refused by its own return type: `():?:?: [Error]: The value the graph 'split_of_jvp_of_total_backward' hands on has type 'float[...]', and the graph declares 'float'; the value is node 8.` -- `tensor:mean_axis`'s result is computed now (`cmp:mean_axis` answers the element at rank 0, which is what the declaration `T[...]` used to deny), and the transpose of the jvp graph still hands the rank-zero array where the split signature says `float`"
 known_fail_msg = "declares 'float'"
-known_fail_ends_when = "with `stated_mean_axis_gradient`, on the writing whose answer is the element itself: when the cut's exit types the rank-zero answer, this entry prints `stated mean element value=2.5 dL/dx=[0.25, 0.25, 0.25, 0.25]` and exits 0 -- the four quarters are `numel(t) / numel(ct)` read off the stated extents, and a cotangent read as a pointer is the SIGSEGV this case was written to catch"
+known_fail_ends_when = { prints = "stated mean element value=2.5 dL/dx=[0.25, 0.25, 0.25, 0.25]" }
 timeout_ms = 20000
 
 # The signature, where it can be stated: `at` written in the call is a compile-time constant, so
@@ -90,7 +90,7 @@ name = "stated_mean_axis_declares_the_extents"
 desc = "`mean_axis_stated(x, [0, 0, 4])` over `[1.0, 2.0, 3.0, 4.0]` states the result's extents: axis 0, no `keepdims`, four elements, so the answer is the element 2.5 and the graph's node is a `float` rather than a `float[...]` under a conversion. The value alone does not say which of the two types was read -- a rank-zero array is its element (design principles 5.4) -- so the case reads the graph: the node's `value_type` and the absence of the `CAST` a declared `T[...]` forced."
 kind = "behavior"
 case = "../../../cases/compile/transforms/stated_mean_axis_declares_the_extents.cml"
-args = ["${case}", "std::gir"]
+args = ["${case}", "std::gir", "std::nop"]
 expect_exit = 0
 verify_script = """
 ({ input, assert }) => {
@@ -99,7 +99,9 @@ verify_script = """
   assert(stated.length > 0, `no mean_axis_stated node: ${lines.join(' | ')}`)
   const asElement = stated.filter((l) => l.includes('value_type="float"'))
   assert(asElement.length === 1, `the stated lane mean is not a float: ${stated.join(' | ')}`)
-  const casts = lines.filter((l) => l.includes('type="CAST"') && l.includes('value_type="float"'))
+  // A conversion is a call of `:op/cast` now (plan 2.3, step 1), and its kind column says `OPER`:
+  // the label is where the node says which operation it is, so that is what is asked for here.
+  const casts = lines.filter((l) => l.includes('label=":op/cast"') && l.includes('value_type="float"'))
   assert(casts.length === 0, `a conversion stands between the node and the return: ${casts.join(' | ')}`)
 }
 """
@@ -276,11 +278,6 @@ expect_output_contains = ["value=2.5 engine dL/dw=[0.25, 0.25, 0.25, 0.25] libra
 expect_output_not_contains = ["skip=", "no derivative rule"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
-known_fail = ["nvm"]
-known_fail_owner = "unowned (`lane-statedsig` wrote this mark and is gone)"
-known_fail_reason = "the same wall `stated_mean_axis_element_gradient` hits, on the library leg: `The value the graph 'split_of_jvp_of_through_library_backward' hands on has type 'float[...]', and the graph declares 'float'` -- `vjp(mean<0, false>(x))` lifts through `rulesets/jvp.cml#jvp_mean_axis`, and the transposed half hands the rank-zero array where the lifted signature says `float`"
-known_fail_msg = "declares 'float'"
-known_fail_ends_when = "with `stated_mean_axis_element_gradient`, on the library leg: when the cut's exit types the rank-zero answer, this entry prints `value=2.5 engine dL/dw=[0.25, 0.25, 0.25, 0.25] library dL/dx=[0.25, 0.25, 0.25, 0.25]` and exits 0 -- the engine leg is green and stays pinned, and the library leg prints the same four quarters it owes"
 
 
 [[tests]]

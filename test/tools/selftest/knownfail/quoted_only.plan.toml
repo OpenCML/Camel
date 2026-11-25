@@ -1,0 +1,28 @@
+# Fixture of test/tools/selftest/run.mjs: a mark whose `prints` line the case never prints, written
+# so that the runner's own failure message QUOTES that line -- `expect_output_contains` names the
+# same text, so a run that does not find it pushes `output does not contain '<line>'`.
+#
+# A condition matched against the runner's message would therefore be satisfied by the sentence
+# saying it is unmet: the mark would read as `known failure has ended` and a legitimate known_fail
+# would come back as a red. That is what the merge rehearsal of 2026-11-25 measured on three plans
+# (`modules.onnx/ort_loop_values_dynamic` and the two `stated_mean_axis_*` gradients), and it is why
+# a `prints` condition is read from the case's own output and from nothing else. This entry must stay
+# `[XFAIL]`; `ends_arrived.plan.toml` is the same mark whose line really is printed.
+id = "selftest.knownfail.quoted_only"
+order = 8
+tier = "fast"
+
+[[tests]]
+name = "quoted_only"
+desc = "A marked case that never prints the line its mark waits for while the failure message quotes it: the condition is not satisfied and the entry stays [XFAIL]."
+kind = "behavior"
+tool = "node"
+case = "fails.mjs"
+args = ["${case}"]
+expect_exit = 0
+expect_output_contains = ["ARRIVED fixture=knownfail quoted-only the numbers are 2, 4 and 6"]
+known_fail = true
+known_fail_owner = "the runner self-test"
+known_fail_reason = "the fixture stops at `WALL fixture=knownfail`, so the run is red on purpose"
+known_fail_msg = "WALL fixture=knownfail"
+known_fail_ends_when = { prints = "ARRIVED fixture=knownfail quoted-only the numbers are 2, 4 and 6" }

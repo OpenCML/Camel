@@ -531,7 +531,7 @@ class Compiler {
             node.results.push_back({value.shape, value.dtype});
         }
         node.loop = std::move(region);
-        // A legal graph outside the initial lane-local subset remains a CPU region.
+        // A legal graph outside the subset the initial lanes handle remains a CPU region.
         // Structural/contract validation below still reports actual malformed IR.
         for (const auto &value : node.loop->body.nodes) {
             const auto &op       = value.op;

@@ -154,7 +154,7 @@ name = "shared_product.completion_gate"
 desc = "The pure result of shared_product is a block value, not a statement in the middle of the chain. Its return GATE still waits for the preceding println after the product is rewritten."
 kind = "behavior"
 case = "../../../cases/opt/generic/algebra.cml"
-args = ["${case}", "--arg", "x=2", "std::cxx::fold", "test::saturate", "std::jgir"]
+args = ["${case}", "--arg", "x=2", "std::cxx::fold", "test::saturate", "std::jgir", "std::nop"]
 expect_exit = 0
 verify_script = """
 ({ input, assert }) => {

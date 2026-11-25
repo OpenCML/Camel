@@ -123,7 +123,7 @@ GraphFacesTestPass::apply(const camel::runtime::Program *program, std::ostream &
     NodeRef anyNode   = camel::graph::kNoNode;
     NodeRef brchRef   = camel::graph::kNoNode;
     NodeRef victimRef = camel::graph::kNoNode;
-    // The answers this lane added, each against the representation's own on the frozen side.
+    // The answers added here, each against the representation's own on the frozen side.
     bool nameSame        = true;
     size_t nameLength    = 0;
     size_t operRecords   = 0;
@@ -167,7 +167,7 @@ GraphFacesTestPass::apply(const camel::runtime::Program *program, std::ostream &
                                 ? 0
                                 : view.regionsOwnedBy(brchRef).size();
 
-        // --- the answers this lane added, against the representation's own --------------------
+        // --- the answers added here, against the representation's own --------------------
         nameLength = view.name().size();
         nameSame   = view.name() == std::string_view(target->name());
         frozenSlotsFromView = view.staticSlotCount();
@@ -309,7 +309,7 @@ GraphFacesTestPass::apply(const camel::runtime::Program *program, std::ostream &
     os << "[GF] exit at=" << draft.exitRef << " same=" << (draft.exitRef == frozen.exitRef ? 1 : 0)
        << " answer=" << (draft.exitRef == frozen.exitRef && brchRef != camel::graph::kNoNode ? 1 : 0)
        << "\n";
-    // The answers this lane added, each beside the representation's own. A graph with no constant
+    // The answers added here, each beside the representation's own. A graph with no constant
     // has no `[GC] static` line, and the `index=` of the last line is then true by having had
     // nothing to disagree about -- the same reading `oper` takes on a graph that has no OPER node.
     const bool staticOk =

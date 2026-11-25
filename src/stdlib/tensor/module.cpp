@@ -270,8 +270,9 @@ bool TensorModule::load() {
     // back to the host, or a computed host number entering tensor math.
     camel::runtime::NodeRoleRegistry::instance().add(
         {"scalar-boundary", "scalar boundary (tensor <-> host number)", "#fff2cc"},
-        [](const camel::graph::GraphView &graph,
+        [](const camel::runtime::NodeRoleSite &site,
            camel::graph::NodeRef ref) -> std::optional<std::string> {
+            const camel::graph::GraphView &graph = site.view;
             namespace rt = camel::runtime;
             // An operator that names an operator: the four kinds the view folds into
             // `NodeKind::Oper` keep their own payload in both representations today, so they answer

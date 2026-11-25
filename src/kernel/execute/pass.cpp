@@ -45,6 +45,7 @@
 #include <sstream>
 #include <stdexcept>
 #include <unordered_map>
+#include <unordered_set>
 
 using namespace camel::core::error;
 using namespace camel::core::context;
@@ -127,7 +128,6 @@ const std::map<std::string, std::string> passAliases = {
     // Common translation and dump aliases
     // Names whose leaf is a keyword of the language: the declaration uses a name that can be
     // written, and the old spelling keeps resolving to it.
-    {"std::null", "std::nop"},
     {"std::type::array", "std::arraytype"},
     {"std::type::identity", "std::identitytype"},
     // `std::cxx` is not a shorthand of the C++ exporter, `std::cpp`:
@@ -1965,6 +1965,88 @@ std::string effectContainmentText(
     return text;
 }
 
+/// The graphs a pass brought with it.
+///
+/// A pass rewrites the program it is given. What it hands back may hold the graphs that program
+/// held and the graphs its own edits made -- and nothing else: `graphs(produced) ⊆ graphs(given) ∪
+/// made`. So a graph in the produced table that is neither one the given program held nor one the
+/// commit recorded as made (`Program::madeGraphs`) is one the pass *introduced*, and a program can
+/// only gain a graph it did not make by adopting another program's table (`Program::adoptMissing`,
+/// reached from the draft session when a reference names a graph only the program the pass runs in
+/// holds).
+///
+/// `made` comes from the commit's own record (`RuntimeGraphDraftSession::madeGraphIds`, written on
+/// the program the commit hands back), never from the difference of the two tables: `produced -
+/// given` as the definition of `made` would make this check true by construction. When the produced
+/// program carries no record at all -- no commit of that kind made it -- the check must not fall back
+/// to the difference: it says the commit recorded nothing it made and refuses on that reading.
+///
+/// Naming them, not counting them, is the reading: a count says how much came in, and the names say
+/// whose it is. Measured on `lane/std-nop` with `opt::cse`, a couple of hundred graphs are reached
+/// from the produced root (the pass's own module graphs, `opt::evaluated` among them), but the
+/// produced *table* holds only the ones the given program held: what counts here is the table, and
+/// the graphs a pass reached through a function value are not graphs it adopted.
+///
+/// What the given program held is read out before the pass runs (`GraphIdsHeld`), not read from its
+/// `Program` afterwards: the pass replaces the context's root while it runs, and `settle` then drops
+/// the pipeline's reservations, so nothing roots the program a pass was given once it has returned
+/// (src/kernel/runtime/program.cpp, `GCGraphManager::settle`). The check compares ids, and names the
+/// introduced graphs from the produced table, which is the one that is alive here.
+using GraphIdsHeld = std::unordered_set<uint32_t>;
+
+GraphIdsHeld graphIdsHeld(const camel::runtime::Program &program) {
+    GraphIdsHeld ids;
+    for (const GCGraph *graph : program.graphs()) {
+        if (graph != nullptr) {
+            ids.insert(camel::runtime::toValue(graph->id()));
+        }
+    }
+    return ids;
+}
+
+std::string introducedGraphsViolation(
+    const GraphIdsHeld &given, const camel::runtime::Program &produced) {
+    std::vector<const GCGraph *> introduced;
+    for (const GCGraph *graph : produced.graphs()) {
+        if (graph == nullptr) {
+            continue;
+        }
+        const uint32_t id = camel::runtime::toValue(graph->id());
+        if (given.contains(id)) {
+            continue;
+        }
+        // `made` is consulted only when the program says a commit recorded it; a program with no
+        // record is not read as one that made nothing -- that is the blindness reported below.
+        if (produced.hasMadeGraphs() && produced.madeGraphs().contains(id)) {
+            continue;
+        }
+        introduced.push_back(graph);
+    }
+    if (introduced.empty()) {
+        return "";
+    }
+    constexpr size_t kNamesShown = 4;
+    std::string text =
+        produced.hasMadeGraphs()
+            ? std::format(
+                  "the program the pass hands back holds {} graph(s) it was not given, and a pass "
+                  "may only hand back the graphs it was given and the ones its own edits made",
+                  introduced.size())
+            : std::format(
+                  "the program the pass hands back holds {} graph(s) it was not given, and no commit "
+                  "recorded the graphs it made, so the check cannot say which of them are the pass's "
+                  "own edits",
+                  introduced.size());
+    text += "; the first are named";
+    for (size_t i = 0; i < introduced.size() && i < kNamesShown; ++i) {
+        text += std::format(" '{}'", introduced[i]->name());
+    }
+    if (introduced.size() > kNamesShown) {
+        text += std::format(" (and {} more)", introduced.size() - kNamesShown);
+    }
+    return text;
+}
+
 /// Every generic pass, including a registered nested pass, checks operator ports, entry/exit
 /// and effect credentials. The comparative resource-support and matched-order predicates run
 /// only when selected: by the optimizer's internal checks or graph::check_pass_boundary.
@@ -1981,7 +2063,19 @@ std::string effectContainmentText(
 /// Returns true when it refused: the diagnostic is recorded, and the caller fails the run.
 bool passBoundaryViolation(
     const context_ptr_t &ctx, const std::string &spec, const camel::runtime::Program &program,
-    const ProgramEffects &effectsBefore, bool preserveEffects = false, bool commitChecks = true) {
+    const ProgramEffects &effectsBefore, bool preserveEffects = false, bool commitChecks = true,
+    const GraphIdsHeld *given = nullptr) {
+    // The graphs the pass brought with it, before anything about their content: a pass that hands
+    // back a program holding graphs it was not given has already answered the wrong question, and
+    // the node-level readings below would be read against a program that is not the user's.
+    if (given != nullptr) {
+        const std::string introduced = introducedGraphsViolation(*given, program);
+        if (!introduced.empty()) {
+            ctx->rtmDiags()->of(RuntimeDiag::PassInternalError).commit(spec, introduced);
+            CAMEL_LOG_INFO_S("Pass", "run | passes | FAIL {} (introduced graphs)", spec);
+            return true;
+        }
+    }
     const ProgramEffects effectsAfter = collectEffects(ctx->facts(), program);
     const std::vector<std::pair<size_t, size_t>> pairs =
         matchedEffects(effectsBefore, effectsAfter);
@@ -2216,8 +2310,11 @@ PassRunResult applyRegisteredPass(
         throwUnresolvedPass(spec, resolved, 0, ctx);
     }
     const bool publishes = ctx && ctx->currentRuntimeProgram() == program;
-    // The old program's content is read here, before the pass runs (graphRevisionsOf).
+    // The old program's content is read here, before the pass runs (graphRevisionsOf), and so are
+    // the graph ids it held (`graphIdsHeld`): the program a pass returns is not read once it has
+    // returned, and the pass may have replaced the context's root with the program it hands back.
     const std::unordered_map<uint32_t, uint64_t> beforeRevisions = graphRevisionsOf(program);
+    const GraphIdsHeld givenGraphs = program != nullptr ? graphIdsHeld(*program) : GraphIdsHeld{};
     auto pass                                                    = constructPass(ctx, spec);
     if (!pass) {
         // Construction reported: the diagnostic is recorded, and the caller prints it.
@@ -2261,7 +2358,8 @@ PassRunResult applyRegisteredPass(
                               *produced,
                               effectsBefore,
                               false,
-                              commitChecksAskedOf(*pass))) {
+                              commitChecksAskedOf(*pass),
+                              program != nullptr ? &givenGraphs : nullptr)) {
         return {nullptr, true};
     }
     const bool changed = programContentChanged(program, beforeRevisions, produced);
@@ -2358,34 +2456,26 @@ firstConsumingPass(const std::vector<std::string> &passes, const context_ptr_t &
         if (!pass) {
             continue; // construction reported; the pipeline build below is where it stops
         }
-        if (dynamic_cast<GraphSchedulePass *>(pass.get()) != nullptr ||
-            dynamic_cast<GraphTranslatePass *>(pass.get()) != nullptr) {
+        if (dynamic_cast<GraphSchedulePass *>(pass.get()) != nullptr) {
             return i;
         }
     }
     return std::nullopt;
 }
 
-bool passListTranslatesProgram(const std::vector<std::string> &passes, const context_ptr_t &ctx) {
-    for (const auto &name : passes) {
-        auto factory = resolvePassWithModule(name, ctx).factory;
-        if (!factory) {
-            continue;
-        }
-        const auto pass = constructPass(ctx, name);
-        if (!pass) {
-            continue; // construction reported; the pipeline build below is where it stops
-        }
-        // The first pass that consumes the graph decides what the list does. Before it, rewrite
-        // passes only transform the program; after it, the graph is gone.
-        if (dynamic_cast<GraphTranslatePass *>(pass.get()) != nullptr) {
-            return true;
-        }
-        if (dynamic_cast<GraphSchedulePass *>(pass.get()) != nullptr) {
-            return false;
-        }
+bool passListEndsWithoutExecuting(const std::vector<std::string> &passes, const context_ptr_t &) {
+    if (passes.empty()) {
+        return false; // the fallback scheduling pass runs the program
     }
-    return false;
+    // A scheduling pass that produces no effect executes nothing, so a list that ends in it
+    // executes nothing. Every other scheduling pass runs the program, and a translation pass hands
+    // the graph on to whatever follows -- the fallback when nothing does.
+    //
+    // Which pass that is comes from the pass itself (`NopPass::kName`, `executesTheProgram`), not
+    // from a spelling written here: this question is asked before the program is compiled and so
+    // before any pass can be built, and it must not be the one place that answers "does this pass
+    // execute" a second time.
+    return resolveAlias(specName(passes.back())) == NopPass::kName;
 }
 
 std::optional<Diagnostic>
@@ -2605,22 +2695,32 @@ PassApplyResult applyPassesDetailed(
             if (!pass) {
                 return {nullptr, PassApplyStatus::Failed};
             }
-            // The debugger's observer is told which pass runs: only a scheduling pass runs the
-            // program it debugs; a rewrite or translation pass may evaluate graphs of its own.
-            const bool schedules = dynamic_cast<GraphSchedulePass *>(pass.get()) != nullptr;
+            // The debugger's observer is told which pass runs: a scheduling pass that executes the
+            // program it debugs does, and a rewrite or translation pass may evaluate graphs of its
+            // own. `std::nop` is a scheduling pass that does not execute, and the observer is told
+            // what happens rather than what kind of pass it is.
+            const auto *scheduling = dynamic_cast<GraphSchedulePass *>(pass.get());
+            // The one criterion: does *this* pass execute the program. It is asked here once and
+            // read below for both consequences -- the observer above and the entry's arguments.
+            const bool executes = scheduling != nullptr && scheduling->executesTheProgram();
             if (auto *observer = camel::execute::executionObserver()) {
-                observer->passStarting(schedules, program->root());
+                observer->passStarting(executes, program->root());
             }
-            // Diagnostics raised while this pass runs carry its stage: "run" for a scheduling
-            // pass (the program executes), "pass:<name>" for rewrite and translation passes.
+            // Diagnostics raised while this pass runs carry its stage: "run" for a scheduling pass
+            // (the program executes there), "pass:<name>" for rewrite and translation passes. The
+            // stage keeps naming the kind, not the run: a scheduling pass's diagnostics belong to
+            // the run it is about even when it ends the pipeline without one.
             struct StageScope {
                 explicit StageScope(std::string stage) { setPipelineStage(std::move(stage)); }
                 ~StageScope() { setPipelineStage(""); }
-            } stageScope(schedules ? std::string("run") : "pass:" + specName(p));
+            } stageScope(scheduling != nullptr ? std::string("run") : "pass:" + specName(p));
             // A program runs only when every parameter of `main` has a value. Parameters
             // left open are fine for rewriting and translation (they are the inputs of what
-            // is translated); nothing may execute with a slot nobody filled.
-            if (schedules) {
+            // is translated); nothing may execute with a slot nobody filled. The question is
+            // whether *this* pass executes the program, and a scheduling pass that ends the
+            // pipeline without a run (`std::nop`) does not: it is not an entry, so its arguments
+            // are not asked of it.
+            if (executes) {
                 const auto open = camel::execute::unboundEntryParameters(program->root());
                 if (!open.empty()) {
                     std::string names;
@@ -2654,6 +2754,12 @@ PassApplyResult applyPassesDetailed(
             // principles 3.3), and the end of this iteration compares. Read here rather than after
             // the pass because the program the pass is given is not read once it has returned.
             const ProgramEffects effectsBefore = collectEffects(ctx->facts(), *program);
+            // The graphs the program holds, kept to the boundary check below, which names the graphs
+            // the pass hands back and the program did not hold (`introducedGraphsViolation`). The
+            // ids are read here because the program a pass is given is not read once it has
+            // returned: the pass replaces the context's root while it runs and `settle` then drops
+            // what the pipeline reserved, so no pointer to it is alive at the check.
+            const GraphIdsHeld given = graphIdsHeld(*program);
             try {
                 program = pass->apply(program, os);
             } catch (const DiagnosticsLimitExceededBaseException &) {
@@ -2760,7 +2866,8 @@ PassApplyResult applyPassesDetailed(
                     *program,
                     effectsBefore,
                     false,
-                    commitChecksAskedOf(*pass))) {
+                    commitChecksAskedOf(*pass),
+                    &given)) {
                 return {nullptr, PassApplyStatus::Failed};
             }
             if (PassSnapshotHandler snapshotHandler =

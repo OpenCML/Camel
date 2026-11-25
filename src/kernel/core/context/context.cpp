@@ -434,7 +434,24 @@ context_ptr_t Context::create(const EntryConfig &entryConf, const DiagsConfig &d
     // graph manager can tell it about every graph the context makes (facts.h, "Which store holds
     // a graph"). ~Context gives the graphs back before it drops the store, so each graph's end is
     // announced to a store that is still there.
-    ctx->factsStore_ = std::make_unique<camel::facts::Store>(camel::facts::frozenGraphs(), true);
+    //
+    // The store's callee answer is this context's own, by the graph's identity: the program that
+    // holds the graph says which graph its call reaches (`Program::calleeOf`), and the manager says
+    // which program that is (`programOf`, by identity, not by a representation or an address). The
+    // graph space's store cannot answer this itself -- a graph does not know its program -- and a
+    // fact that walks calls (`arrangeable`) reads it here.
+    ctx->factsStore_ = std::make_unique<camel::facts::Store>(
+        camel::facts::frozenGraphs(
+            [context = ctx.get()](const camel::graph::Graph &graph, camel::facts::NodeId node)
+                -> const camel::graph::Graph * {
+                const camel::runtime::Program *program = context->programOfRuntimeGraph(graph);
+                if (program == nullptr) {
+                    return nullptr;
+                }
+                return static_cast<const camel::graph::Graph *>(
+                    program->calleeOf(graph, static_cast<camel::runtime::gc_node_ref_t>(node)));
+            }),
+        true);
     ctx->runtimeGraphMgr_->setFactsStore(ctx->factsStore_.get());
     // Registered under this context's address, so a second context beside this one (a language
     // server, a tool's second context, the Python binding) adds its roots instead of replacing
@@ -1123,7 +1140,7 @@ void Context::noteUnboundRuntimeGraph(camel::runtime::GCGraph *graph) {
 }
 
 const camel::runtime::Program *
-Context::programOfRuntimeGraph(const camel::runtime::GCGraph *graph) const {
+Context::programOfRuntimeGraph(const camel::graph::Graph &graph) const {
     GUARD(runtimeGraphMgr_ != nullptr, "Runtime graph manager is not initialized.");
     return runtimeGraphMgr_->programOf(graph);
 }

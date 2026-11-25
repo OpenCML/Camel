@@ -80,6 +80,7 @@ Not in this reference: the profiler (`perf`).
 | [nn](#nn) | `import { ... } from nn` | C++ |
 | [optim](#optim) | `import { ... } from optim` | Camel |
 | [autodiff](#autodiff) | `import { ... } from autodiff` | C++ |
+| [laws](#laws) | `import { ... } from laws` | Camel |
 | [rulesets.jvp](#rulesets.jvp) | `import { ... } from rulesets.jvp` | Camel |
 | [rulesets.vmap](#rulesets.vmap) | `import { ... } from rulesets.vmap` | Camel |
 | [sim](#sim) | `import { ... } from sim` | C++ |
@@ -118,6 +119,7 @@ Not in this reference: the profiler (`perf`).
 | [nn](#nn) | `import { ... } from nn` |  |
 | [optim](#optim) | `import { ... } from optim` |  |
 | [autodiff](#autodiff) | `import { ... } from autodiff` |  |
+| [laws](#laws) | `import { ... } from laws` |  |
 | [rulesets.jvp](#rulesets.jvp) | `import { ... } from rulesets.jvp` |  |
 | [rulesets.vmap](#rulesets.vmap) | `import { ... } from rulesets.vmap` |  |
 | [sim](#sim) | `import { ... } from sim` |  |
@@ -720,12 +722,12 @@ the type to know what it does is what the node kinds were.
 range: (start: int, end: int, step: int) => int[] panic
 ```
 
-The integers of a step: `start`, `start + step`, ... up to, not including, `end`; with no step
-the step is 1, `range(a, b)` is the same sequence as the interval `a..b` and becomes it on the
-graph (design principles 4.2). `step` must move: a step of 0 is a fault, and a constant call
-with a step of 0 is refused where it is written. The result is empty when the step does not
-carry `start` towards `end`. A `for` over an interval is fused by the compiler and builds no
-array; this call builds one.
+The array of the integers of a step: `start`, `start + step`, ... up to, not including, `end`;
+with no step the step is 1. This is the materialised form and nothing else asks for it: the
+interval `a..b` is the value `to_range(a, b, 1)` (design principles 4.2, 5.4), and `to_array`
+is the one place a range becomes an array. `step` must move: a step of 0 is a fault, and a
+constant call with a step of 0 is refused where it is written. The result is empty when the
+step does not carry `start` towards `end`.
 
 - Failure: fault `InvalidArgument` when the step is 0.
 - Example: `range(0, 10, 3)` gives `[0, 3, 6, 9]`
@@ -734,24 +736,26 @@ array; this call builds one.
 ### Ranges
 
 A range is a value of its own type, not an array (design principles 5.4): `Range` writes the
-three numbers that name it down, and `to_array` is the one conversion from it to the integers it
-names. Nothing else in the library is renamed or retyped here: the interval `a..b` still builds
-the array `range(a, b, 1)`, and the functions a range shares with an `int[]` (`map`, `filter`,
-`reduce`, `len`, `print`) are not this round's -- a function of one of those names declared
-beside the operator group of the same name is not an overload of it, it shadows it.
+three numbers that name it down, `to_array` is the one conversion from it to the integers it
+names, and `to_range` is the constructor the interval `a..b` itself is built with (with a step
+of 1).
 
-These names are written by a program only after `import { ... } from prelude`: the prelude's
-types and its functions that are not operators are not brought along unasked.
+These names are written without an `import`: the prelude is the built-in module's declaration
+file, and what it exports comes along with the built-in rules it declares (design principles
+10.2, the last layer) -- the types with the functions. `to_range` is an operator as well, so the
+compiler writes its name for `a..b` like any other operator's.
 
 #### `to_range`
 
 ```camel
-to_range: (start: int, stop: int, step: int) => Range
+to_range: (start: int, stop: int, step: int) => Range panic
 ```
 
-The range from start up to, not including, stop, taken in steps of step: the step of
-`range(a, b, s)`, and 1 for the interval `a..b`.
+The range from start up to, not including, stop, taken in steps of step: what the interval
+`a..b` is, with a step of 1, and what its three numbers are. `step` must move, as the array
+`range(a, b, s)` requires.
 
+- Failure: fault `InvalidArgument` when the step is 0.
 - Example: `to_range(1, 5, 1)->to_array()` gives `[1, 2, 3, 4]`
 
 #### `to_array`
@@ -777,6 +781,76 @@ is_empty: (r: Range) => bool
 Whether r holds no integer.
 
 - Example: `to_range(3, 3, 1)->is_empty()` gives `true`
+
+#### `map`
+
+```camel
+map: <f: (item: int) => U> (r: Range) => U[]
+```
+
+f applied to every integer r names; the calls have no order among them, and the result is by
+position, as `map` on the array the range names.
+
+- Example: `(0 .. 3)->map<func (x: int) => int { x * 2 }>` gives `[0, 2, 4]`
+
+#### `filter`
+
+```camel
+filter: <f: (item: int) => bool> (r: Range) => int[]
+```
+
+The integers of r for which f is true, in order; the calls of f have no order among them.
+
+- Example: `(0 .. 5)->filter<func (x: int) => bool { x % 2 == 0 }>` gives `[0, 2, 4]`
+
+#### `reduce`
+
+```camel
+reduce: <f: (acc: U, item: int) => U, initial: U> (r: Range) => U
+```
+
+The integers of r combined from left to right with initial:
+f(...f(f(initial, start), start + step)..., the last one). Both are written in the angle
+brackets, as `reduce` on an array writes them.
+
+- Example: `(0 .. 3)->reduce<func (acc: int, x: int) => int { acc + x }, 0>` gives `3`
+
+#### `len`
+
+```camel
+len: (r: Range) => int
+```
+
+How many integers r names.
+
+- Example: `(0 .. 5)->len()` gives `5`
+
+#### `print`
+
+```camel
+print: (r: Range) => void
+```
+
+The integers of r, written as the array they are.
+
+- Example: `(0 .. 3)->print()` gives `[0, 1, 2]`
+
+### A range's stream
+
+`for i in r` asks the type of `r` how to walk it (design principles 3.10, 5.4): it calls the
+operator group `__iter__`, exactly as `r[i]` calls `__idx__`. The operator is `for`, so a type
+answers with `func operator for(v: V) => T..`, and a range's answer is `operator for` below. Its
+parameters are the value to walk -- one, like `operator []`'s two -- and what it answers is a
+stream (the loop reads it round by round), which the compiler checks when the operator is
+declared: a `for` that answers a value has no reading in a loop.
+
+A range hands out its integers one round at a time instead of building the array `to_array`
+makes: the operator is a generator (design principles 5.4), so the body runs one stretch per
+pull and the integer a round sees is the one the pull before it stopped at.
+
+The loop counts towards the end the range names, and a range whose end is left out counts on:
+that is the one form `a..b` cannot write (an interval always names both ends, design principles
+4.2), but the type allows it and walking it is what "count on" means.
 
 #### `last`
 
@@ -865,7 +939,7 @@ string.
 #### `zip`
 
 ```camel
-zip: (...xs: ...A) => (...ElementOf<A>)[] panic when ...is_array::<A>()
+zip: (...xs: ...A) => (...ElementOf<A>)[] panic
 ```
 
 Two arrays combined element by element into pairs. They must have the same length.
@@ -1463,7 +1537,7 @@ The leaves of a tree, as a tuple.
 #### `save_tree`
 
 ```camel
-save_tree: <dir: string, dataset_manifest_sha256: string? = null> (tree: T) => void! panic uses var fs when has_ckpt_form::<T>()
+save_tree: <dir: string, dataset_manifest_sha256: string? = null> (tree: T) => void! panic uses var fs
 ```
 
 Saves a tree to a directory, one file per leaf named by its path (`blocks.0.w.npy` for an
@@ -1483,7 +1557,7 @@ time; one of two racing saves fails, and a reader still sees a complete checkpoi
 #### `load_tree`
 
 ```camel
-load_tree: <dataset_manifest_sha256: string? = null> (dir: string) => T! panic uses fs, var stderr when has_ckpt_form::<T>()
+load_tree: <dataset_manifest_sha256: string? = null> (dir: string) => T! panic uses fs, var stderr
 ```
 
 Reads a tree of the type T back from a directory `save_tree` wrote, checking the structure, the
@@ -1717,6 +1791,20 @@ than a value).
 
 - Example (a fragment, not compiled): `let reinterpreted = first_with_as_param(weighted)`
 - Why it is not compiled: `weighted` is a function the program declares, because the example needs a `with` parameter
+
+#### `reinterp`
+
+```camel
+reinterp: (f: F) => F! when is_function::<F>()
+```
+
+Builds the transform's own graph for every function of the program that is made of operators and
+prints what it built, one line per function:
+`REINTERP target=<graph name> primitives=<n> other=<n> graph=<id> nodes=<n>`. The primitives are
+the operator nodes a replacement has to replace; `other` is everything else in the function. The
+graph is the transform's own (a member of one draft group), not the function's.
+
+    camel f.cml transforms::reinterp std::nvm
 
 <a id="vjp"></a>
 
@@ -2253,7 +2341,7 @@ The extent of one axis; a negative axis counts from the last one (`-1` is the la
 #### `pick_at`
 
 ```camel
-pick_at: (t: T[...], position: int, length: int) => T when is_numeric::<T>()
+pick_at: (t: T[...], position: int, length: int) => T
 ```
 
 The element at `position` of a rank-1 tensor whose length is `length`: `t[position]`, with the
@@ -2813,7 +2901,7 @@ gradient of the wrong shape.
 #### `take_stated`
 
 ```camel
-take_stated: (t: T[...], indices: int[], extents: int[]) => T[...] when is_numeric::<T>()
+take_stated: (t: T[...], indices: int[], extents: int[]) => T[...]
 ```
 
 The rows `take` reads, with the indices it reads **and** the operand's extents stated:
@@ -2832,7 +2920,7 @@ outside the first dimension
 #### `mul_stated`
 
 ```camel
-mul_stated: (x: T[...], w: T[...], ax: int[], aw: int[]) => T[...] when is_numeric::<T>()
+mul_stated: (x: T[...], w: T[...], ax: int[], aw: int[]) => T[...]
 ```
 
 The product of two tensors, with **both** operands' extents stated: `x * w`, where `ax` is
@@ -2855,7 +2943,7 @@ operand that is one number states no extents, and its list is empty.
 #### `add_stated`
 
 ```camel
-add_stated: (x: T[...], w: T[...], ax: int[], aw: int[]) => T[...] when is_numeric::<T>()
+add_stated: (x: T[...], w: T[...], ax: int[], aw: int[]) => T[...]
 ```
 
 The sum of two tensors, with **both** operands' extents stated: `x + w`, where `ax` is
@@ -2879,7 +2967,7 @@ one number states no extents, and its list is empty.
 #### `subtract_stated`
 
 ```camel
-subtract_stated: (x: T[...], w: T[...], ax: int[], aw: int[]) => T[...] when is_numeric::<T>()
+subtract_stated: (x: T[...], w: T[...], ax: int[], aw: int[]) => T[...]
 ```
 
 The difference of two tensors, with **both** operands' extents stated: `x - w`, where `ax` is
@@ -2897,7 +2985,7 @@ type. The forward half is `rulesets.jvp`'s `jvp_subtract`.
 #### `div_stated`
 
 ```camel
-div_stated: (x: T[...], w: T[...], ax: int[], aw: int[]) => T[...] when is_numeric::<T>()
+div_stated: (x: T[...], w: T[...], ax: int[], aw: int[]) => T[...]
 ```
 
 The quotient of two tensors, with **both** operands' extents stated: `x / w`, where `ax` is
@@ -2939,7 +3027,7 @@ the answer's shape is neither operand's: a `[3, 4] @ [4, 2]` product reduces the
 #### `sum_axis_stated`
 
 ```camel
-sum_axis_stated: (t: T[...], axis: int, keepdims: bool, extents: int[]) => T[...] when is_numeric::<T>()
+sum_axis_stated: (t: T[...], axis: int, keepdims: bool, extents: int[]) => T[...]
 ```
 
 The sum of each lane along one axis, with the axis, `keepdims` and the operand's extents
@@ -2980,7 +3068,7 @@ element
 #### `max_axis_stated`
 
 ```camel
-max_axis_stated: (t: T[...], mask: bool[...], axis: int, keepdims: bool, extents: int[]) => T[...] when is_numeric::<T>()
+max_axis_stated: (t: T[...], mask: bool[...], axis: int, keepdims: bool, extents: int[]) => T[...]
 ```
 
 The largest element of each lane along one axis, with the tie selection, the axis, `keepdims` and
@@ -3003,7 +3091,7 @@ outside the rank
 #### `min_axis_stated`
 
 ```camel
-min_axis_stated: (t: T[...], mask: bool[...], axis: int, keepdims: bool, extents: int[]) => T[...] when is_numeric::<T>()
+min_axis_stated: (t: T[...], mask: bool[...], axis: int, keepdims: bool, extents: int[]) => T[...]
 ```
 
 The smallest element of each lane along one axis, with the tie selection, the axis, `keepdims` and
@@ -3089,6 +3177,16 @@ CBLAS, otherwise the canonical kernel's name, which is what the path forwards to
 
 - Pure.
 - Example: `gemm_library()`
+
+#### `fuse`
+
+```camel
+fuse: <safe_fp: bool = false> (f: F) => F! when is_function::<F>()
+```
+
+Writes the implementation choices of the tensor operators as node attributes, changing no
+operator (design principles 9.3). `safe_fp` keeps a matmul on the canonical algorithm (design
+principles 7.4); the default lets a matmul the 7.3 rule permits use the library GEMM.
 
 ### The reductions along an axis, computed rather than declared
 
@@ -3750,26 +3848,26 @@ The largest element along an axis, compared as `max` of the whole array compares
 #### `argmax`
 
 ```camel
-argmax: <axis: int, keepdims: bool = false> (xs: T[...]) => int[...] when is_integer::<T>() || is_float::<T>()
+argmax: <axis: int, keepdims: bool = false> (xs: T[...]) => int[...]
 ```
 
 The position along an axis of the first largest element, ordered as `argmax` of the whole
 array orders.
 
-- Written in Camel: a subgraph, pure when the functions passed to it are.
+- A native operator of this module: an opaque node, pure.
 - Failure: fault `InvalidArgument` when the axis is outside the rank or its extent is 0.
 - Example: `([[1.0, 2.0], [3.0, 4.0]] as float[2, 2])->argmax<1>` gives `[1, 1]`
 
 #### `argmin`
 
 ```camel
-argmin: <axis: int, keepdims: bool = false> (xs: T[...]) => int[...] when is_integer::<T>() || is_float::<T>()
+argmin: <axis: int, keepdims: bool = false> (xs: T[...]) => int[...]
 ```
 
 The position along an axis of the first smallest element, ordered as `argmin` of the whole
 array orders.
 
-- Written in Camel: a subgraph, pure when the functions passed to it are.
+- A native operator of this module: an opaque node, pure.
 - Failure: fault `InvalidArgument` when the axis is outside the rank or its extent is 0.
 - Example: `([[1.0, 2.0], [3.0, 4.0]] as float[2, 2])->argmin<0>` gives `[0, 0]`
 
@@ -5827,7 +5925,7 @@ scheduler visible.
 #### `rendezvous`
 
 ```camel
-rendezvous: (parties: int, timeout: float) => int panic uses var rendezvous_point
+rendezvous: (parties: int, timeout: float) => int panic
 ```
 
 Blocks until `parties` calls are waiting at the meeting point, or until `timeout` seconds have
@@ -6457,6 +6555,22 @@ The numeric permissions the program granted the node, as a bit set (0 for none).
 - Example (a fragment, not compiled): `permissions(n)`
 - Why it is not compiled: n is a node of the surrounding pass
 
+#### `relative_cost`
+
+```camel
+relative_cost: (n: Node) => float
+```
+
+How dear one run of the node is, as its operator states it in the operator's record: a division
+states more than a multiplication and a multiplication more than an addition, and a node whose
+operator states nothing (a datum, a port, an operator nobody priced) reads as the cheapest run,
+1.0. This is the reading a cost function makes instead of comparing the operator's name: the
+number is the operator owner's statement, and every cost function that reads it agrees on which
+of two writings is dearer (design principles 9.11, "the cost of an extraction").
+
+- Example (a fragment, not compiled): `relative_cost(n)`
+- Why it is not compiled: n is a node of the surrounding pass
+
 ### Transactions
 
 #### `open`
@@ -6531,7 +6645,7 @@ nothing and is not an error.
 #### `inline`
 
 ```camel
-inline: (t: Txn<F>, at: Node, fn: G) => Node uses var t when is_function::<G>()
+inline: (t: Txn<F>, at: Node, fn: G) => Node
 ```
 
 Splices the body of the function value `fn` into the region `at` is in and gives the node that
@@ -6571,7 +6685,7 @@ it is copied.
 #### `add_constant`
 
 ```camel
-add_constant: (t: Txn<F>, g: Graph, value: T) => Node uses var t when is_ordered::<T>()
+add_constant: (t: Txn<F>, g: Graph, value: T) => Node
 ```
 
 Adds a value the transaction creates to the graph's static values and gives the node that
@@ -6607,6 +6721,20 @@ Drops the transaction.
 
 `==` of the handle types (design principles 4.3): a library defines the operators of its own
 types. Two handles are equal when they name the same thing of the same function.
+
+#### `probe_handle`
+
+```camel
+probe_handle: (f: F) => F! when is_function::<F>()
+```
+
+The self-test of two checks that answer "a node the program has": makes a handle that claims a
+node the program does not have and reports whether the claim was refused where the handle was
+made; then asks `nodeRegion` of the same wrong ref, after printing the body region of a node
+that is there. It is a test, in no pipeline, and naming it is the whole switch: `HANDLE_PROBE
+allowed a node that is there` (the control), `HANDLE_PROBE refused: ...` for the node that is
+not, then `REGION_PROBE body region of node 0: 0` and, instead of a third answer, the abort the
+region guard raises -- 0 is the body, so a node that is not there has no region to be given.
 
 #### `check_pass_boundary`
 
@@ -6692,7 +6820,9 @@ extract: <cost: (n: Node, inputs: float[]) => float> (f: F) => F! when is_functi
 ```
 
 Chooses one writing of every value that has several, the one of least total cost. The cost of
-a writing is `cost(o, inputs)`: the operator and the costs of the writings of its inputs.
+a writing is `cost(n, inputs)`: the node and the costs of the writings of its inputs. The node
+arrives as a `Node` of the graph being read, so a cost function reads its operator, the shapes
+of its operands and what the operator's own record says, and judges by those and not by a name.
 
 - Example (a fragment, not compiled): `f->extract<rules::nodes>`
 - Why it is not compiled: the cost function comes from `rules`
@@ -6735,7 +6865,7 @@ checked at the types every operator group registered.
 #### `check`
 
 ```camel
-check: <samples: int = 100, seed: int = 0> (rules: Rule[], over: F) => CheckReport panic when is_function::<F>()
+check: <samples: int = 100, seed: int = 0> (rules: Rule[], over: F) => CheckReport panic
 ```
 
 The same, with the law also checked at the types of the values `over` has, each once, in the
@@ -7004,6 +7134,48 @@ memory.
 
 - Failure: error value `DeviceUnavailable` when this build or this machine has no CUDA device.
 - Example: `device() !! 'no device'`
+
+#### `compile`
+
+```camel
+compile: (f: F) => F! uses var driver when is_function::<F>()
+```
+
+Outlines the regions the device can run, compiles them and executes the program; the card is
+chosen at run time with `--devices`, never by a pass parameter.
+
+- Failure: error value `GpuScopeUnsupported` when a `#gpu` scope holds an operator the device cannot run (the error names the operator and the scope).
+
+#### `census`
+
+```camel
+census: (f: F) => F! when is_function::<F>()
+```
+
+Prints the operator surface of the program and consumes it: one `TILES_CENSUS` line with the
+number of surface operators, how many the device's capability table names and how many it does
+not, then one `TILES_CENSUS_DEVICE` line per operator the table names and one `TILES_CENSUS_GAP`
+line per operator no device program exists for. The surface is what a `#gpu` scope asks the
+device for (the `tensor` and `nn` modules); a `#gpu` scope refuses every operator of the gap, so
+the list is the work the support surface has left. It reads the program where the pipeline
+stands, which is why `std::macro` is written before it when a derived graph's operators are to be
+counted.
+
+#### `test_outline_compiled`
+
+```camel
+test_outline_compiled: <reasons: bool = false, declarations: bool = false> (f: F) => F! when is_function::<F>()
+```
+
+The outline pass the tests drive directly, with the readings they assert as parameters rather
+than as environment variables: `reasons=true` prints, per operator node of the result, the
+declaration and the reason it is in no region (`TILES_OPERATOR_DECLARATION`,
+`TILES_OPERATOR_ID`, `TILES_REGION_REASON`), and `declarations=true` prints the six batches of
+the twenty-one operators of the B group with their ids and contracts (`TILES_DECLARATIONS_1`
+through `TILES_DECLARATIONS_6`). Both default to false: a pipeline that does not ask prints
+`TILES_OUTLINED` and nothing else.
+
+- Failure: error value `GpuScopeUnsupported` when the outlined region holds an operator the device cannot run.
 
 <a id="pyplot"></a>
 
@@ -7637,15 +7809,15 @@ its other name, `jax.remat`; in this tree "checkpoint" is the persistence module
 `lib/ckpt/ckpt.cml` and stays that, so the transform takes the other word and there is no second
 name for a reader to disambiguate.
 
-`stop_gradient` marks a value as a constant, and the mathematics of the local rules is written
-here, where the library keeps one statement of it: `add_tangent` and its siblings are the tangent
-of a primitive, `add_cotangent` and its siblings its cotangent. The rules themselves -- the
-declarations that attach those statements to a primitive -- live in the ruleset modules, which is
-what a transform reads: `lib/rulesets/jvp.cml` for the forward rules and
-`lib/rulesets/transpose.cml` for the transposes. A tag gives a function's own rules
-(`#jvp(rule)` forward, `#transpose(rule)` for a linear function, `#vjp(rule)` the pullback) and
-is read back by structure (`graph::rule_of`); a primitive's rules are the ruleset's, by the
-operator of their left side.
+What is left here is the engine: this module's four transforms are C++ (`src/stdlib/autodiff/`),
+and the derivative rules are the C++ compiler's. Everything a program can *write* has moved out
+of it -- `stop_gradient` with the mathematics of the rules, to `src/stdlib/laws.cml` (`laws`) --
+because a name a program calls must not leave with the engine that builds the graph. The rules
+themselves -- the declarations that attach a statement to a primitive -- live in the ruleset
+modules: `rulesets.jvp` for the forward rules and `rulesets.transpose` for the transposes. A tag
+gives a function's own rules (`#jvp(rule)` forward, `#transpose(rule)` for a linear function,
+`#vjp(rule)` the pullback) and is read back by structure (`graph::rule_of`); a primitive's rules
+are the ruleset's, by the operator of their left side.
 
 #### `grad`
 
@@ -7688,7 +7860,7 @@ the pair a training step needs from one evaluation. The same compile-time refusa
 #### `with_grad`
 
 ```camel
-with_grad: (f: F, has_aux: bool) => ValueAndGradientAndAux<F> when is_function::<F>()
+with_grad: (f: F, has_aux: bool) => ValueAndGradientAndAux<F>
 ```
 
 The value, the auxiliary value and the gradient of a function whose result is `(value, aux)`:
@@ -7698,17 +7870,33 @@ the pair the function gives is returned whole, followed by the gradient --
 - Example (a fragment, not compiled): `let step = with_grad(loss, has_aux: true)`
 - Why it is not compiled: the function must return a pair whose first element is the loss, and that takes a declaration, so the example is a fragment of a program that declares it
 
-#### `stop_gradient`
+<a id="laws"></a>
 
-```camel
-stop_gradient: (x: T) => T pure
-```
+## `laws`: the mathematics a derivative rule is written from
 
-Gives its argument unchanged and cuts the gradient at this point: a value passed through
-`stop_gradient` is a constant to `grad`. Any value is accepted, and the result has the
-argument's own type.
+The mathematics of the local derivative rules: the tangent of a primitive and its cotangent,
+one function per primitive and per name that primitive's rule binds on its left side.
 
-- Example: `stop_gradient(3.0)` gives `3.0`
+These functions are the right sides of the rulesets' rules and nothing else: a transform reads
+a rule's pattern and calls the function the right side names, so the tangent a transform
+produces is a value a program can call and compare with the derivative it claims, and the
+library keeps one writing of the mathematics (design principles: one law, one writing).
+`add_tangent` and its siblings are the tangent of a primitive, `add_cotangent` and its
+siblings its cotangent, and the `_c` set answers the cotangent of the rule's second name,
+which is not the first one's with the arguments swapped: `sub_cotangent(ct)` is `ct`, while
+the cotangent of `c` in `x - c` is `-ct`.
+
+The rules that attach these statements to a primitive live in the ruleset modules --
+`rulesets.jvp` for the forward rules and `rulesets.transpose` for the transposes -- because a
+transform reads those. What is here is arithmetic alone: every function but one below is a
+Camel body over `is_float` types with no operator of its own, so a rule written anywhere in the
+tree can name it, and the module outlives any one engine that uses it.
+
+The exception is `stop_gradient`, at the end of the file: a value no derivative flows through
+cannot be written as an arithmetic expression, so its body is a kernel (`stdlib/laws/`, module
+`laws`, operator `laws:stop_gradient`) and only its declaration is here. It is here rather than
+in the engine that used to hold it because a program calls it by name, and a name a program
+calls must not leave with the engine.
 
 ### The local rules of the scalar arithmetic
 
@@ -7735,6 +7923,7 @@ add_tangent: (x: T, w: T, dx: T, dw: T) => T when is_float::<T>()
 
 The tangent of `x + w` along `(dx, dw)`: `dx + dw`.
 
+- Written in Camel: a subgraph, pure when the functions passed to it are.
 - Example: `add_tangent(3.0, 5.0, 1.0, 0.0)` gives `1.0`
 
 #### `sub_tangent`
@@ -7745,6 +7934,7 @@ sub_tangent: (x: T, w: T, dx: T, dw: T) => T when is_float::<T>()
 
 The tangent of `x - w` along `(dx, dw)`: `dx - dw`.
 
+- Written in Camel: a subgraph, pure when the functions passed to it are.
 - Example: `sub_tangent(3.0, 5.0, 1.0, 0.0)` gives `1.0`
 
 #### `mul_tangent`
@@ -7755,6 +7945,7 @@ mul_tangent: (x: T, w: T, dx: T, dw: T) => T when is_float::<T>()
 
 The tangent of `x * w` along `(dx, dw)`: `dx * w + x * dw`.
 
+- Written in Camel: a subgraph, pure when the functions passed to it are.
 - Example: `mul_tangent(3.0, 5.0, 1.0, 0.0)` gives `5.0`
 
 #### `div_tangent`
@@ -7765,6 +7956,7 @@ div_tangent: (x: T, w: T, dx: T, dw: T) => T when is_float::<T>()
 
 The tangent of `x / w` along `(dx, dw)`: `dx / w - x * dw / (w * w)`.
 
+- Written in Camel: a subgraph, pure when the functions passed to it are.
 - Example: `div_tangent(6.0, 4.0, 1.0, 0.0)` gives `0.25`
 
 #### `neg_tangent`
@@ -7775,6 +7967,7 @@ neg_tangent: (x: T, dx: T) => T when is_float::<T>()
 
 The tangent of `-x` along `dx`: `-dx`.
 
+- Written in Camel: a subgraph, pure when the functions passed to it are.
 - Example: `neg_tangent(3.0, 1.0)` gives `-1.0`
 
 #### `add_cotangent`
@@ -7791,6 +7984,7 @@ so a position whose answer does not read an operand asks for no value of it; tha
 the transposed loop body answer a rule whose other operand is the round's own state (design
 principles: a value the walk does not carry costs nothing unless the rule reads it).
 
+- Written in Camel: a subgraph, pure when the functions passed to it are.
 - Example: `add_cotangent(2.0)` gives `2.0`
 
 #### `sub_cotangent`
@@ -7801,6 +7995,7 @@ sub_cotangent: (ct: T) => T when is_float::<T>()
 
 The cotangent of `x` in `x - c`: the cotangent of the difference, unchanged.
 
+- Written in Camel: a subgraph, pure when the functions passed to it are.
 - Example: `sub_cotangent(2.0)` gives `2.0`
 
 #### `mul_cotangent`
@@ -7811,6 +8006,7 @@ mul_cotangent: (c: T, ct: T) => T when is_float::<T>()
 
 The cotangent of `x` in `x * c`: `ct * c`.
 
+- Written in Camel: a subgraph, pure when the functions passed to it are.
 - Example: `mul_cotangent(5.0, 2.0)` gives `10.0`
 
 #### `div_cotangent`
@@ -7821,6 +8017,7 @@ div_cotangent: (c: T, ct: T) => T when is_float::<T>()
 
 The cotangent of `x` in `x / c`: `ct / c`.
 
+- Written in Camel: a subgraph, pure when the functions passed to it are.
 - Example: `div_cotangent(4.0, 2.0)` gives `0.5`
 
 #### `neg_cotangent`
@@ -7831,6 +8028,7 @@ neg_cotangent: (ct: T) => T when is_float::<T>()
 
 The cotangent of `x` in `-x`: `-ct`.
 
+- Written in Camel: a subgraph, pure when the functions passed to it are.
 - Example: `neg_cotangent(2.0)` gives `-2.0`
 
 ### The other half: the cotangent of each name of a rule's left side
@@ -7855,6 +8053,7 @@ add_cotangent_c: (ct: T) => T when is_float::<T>()
 
 The cotangent of `c` in `x + c`: the cotangent of the sum, unchanged.
 
+- Written in Camel: a subgraph, pure when the functions passed to it are.
 - Example: `add_cotangent_c(2.0)` gives `2.0`
 
 #### `sub_cotangent_c`
@@ -7865,6 +8064,7 @@ sub_cotangent_c: (ct: T) => T when is_float::<T>()
 
 The cotangent of `c` in `x - c`: `-ct`, the opposite sign of `sub_cotangent(ct)`.
 
+- Written in Camel: a subgraph, pure when the functions passed to it are.
 - Example: `sub_cotangent_c(2.0)` gives `-2.0`
 
 #### `mul_cotangent_c`
@@ -7875,6 +8075,7 @@ mul_cotangent_c: (x: T, ct: T) => T when is_float::<T>()
 
 The cotangent of `c` in `x * c`: `ct * x`.
 
+- Written in Camel: a subgraph, pure when the functions passed to it are.
 - Example: `mul_cotangent_c(3.0, 2.0)` gives `6.0`
 
 #### `div_cotangent_c`
@@ -7885,7 +8086,23 @@ div_cotangent_c: (x: T, c: T, ct: T) => T when is_float::<T>()
 
 The cotangent of `c` in `x / c`: `-(ct * x / (c * c))`.
 
+- Written in Camel: a subgraph, pure when the functions passed to it are.
 - Example: `div_cotangent_c(6.0, 4.0, 2.0)` gives `-0.75`
+
+### The one name a program calls through this module
+
+#### `stop_gradient`
+
+```camel
+stop_gradient: (x: T) => T pure
+```
+
+Gives its argument unchanged and cuts the gradient at this point: a value passed through
+`stop_gradient` is a constant to `grad`. Any value is accepted, and the result has the
+argument's own type.
+
+- A native operator of this module: an opaque node, pure.
+- Example: `stop_gradient(3.0)` gives `3.0`
 
 <a id="rulesets.jvp"></a>
 
@@ -8039,27 +8256,27 @@ Two laws and the two tangents they write, indexed by the axis the call names.
 #### `softmax_jvp`
 
 ```camel
-softmax_jvp: (x: T[...], dx: T[...], axis: int) => T[...] when is_float::<T>()
+softmax_jvp: (x: T[...], dx: T[...], axis: int) => T[...]
 ```
 
 The tangent the rule above writes, with the axis handed over as an ordinary value: the softmax
 itself (`y`), the tangent's own sum over the axis, and the subtraction element by element. Written
 as one function and not in the rule's right side for the reason `reshape_jvp` gives.
 
-- Written in Camel: a subgraph, pure when the functions passed to it are.
+- A native operator of this module: an opaque node, pure.
 - Example: `softmax_jvp([0.0, 0.0] as float[], [1.0, 0.0] as float[], 0)` gives `[0.25, -0.25]`
 
 #### `log_softmax_jvp`
 
 ```camel
-log_softmax_jvp: (x: T[...], dx: T[...], axis: int) => T[...] when is_float::<T>()
+log_softmax_jvp: (x: T[...], dx: T[...], axis: int) => T[...]
 ```
 
 The tangent the rule above writes: `p = exp(log_softmax<axis>(x))`, the product `p * dx` summed
 over the axis, and that sum subtracted from the tangent element by element -- `p` inside the sum,
 which is what makes this the forward reading and not `log_softmax_t`'s.
 
-- Written in Camel: a subgraph, pure when the functions passed to it are.
+- A native operator of this module: an opaque node, pure.
 - Example: `log_softmax_jvp([1.0, 2.0] as float[], [1.0, 0.0] as float[], 0)` gives `[0.7310585786300049, -0.2689414213699951]`
 
 ### The forward rule of `layer_norm`
@@ -8112,13 +8329,13 @@ reverse walk stops there and names it. That is the `split` wall, and it is not t
 #### `layer_norm_tangent`
 
 ```camel
-layer_norm_tangent: (gamma: T[...], dgamma: T[...], dbeta: T[...], xhat: T[...], jx: T[...]) => T[...] when is_float::<T>()
+layer_norm_tangent: (gamma: T[...], dgamma: T[...], dbeta: T[...], xhat: T[...], jx: T[...]) => T[...]
 ```
 
 The three terms of `d(layer_norm)`, from the normalized value `xhat` and the input's tangent
 already through the normalization's jacobian (`jx = J dx`).
 
-- Written in Camel: a subgraph, pure when the functions passed to it are.
+- A native operator of this module: an opaque node, pure.
 - Example: `layer_norm_tangent([1.0, 2.0] as float[], [0.0, 0.0] as float[], [0.0, 0.0] as float[], [0.0, 0.0] as float[], [1.0, 1.0] as float[])` gives `[1.0, 2.0]`
 
 #### `layer_norm_neutral`
@@ -8638,13 +8855,13 @@ batched shape is `[the batch's rows, the written extents...]`.
 #### `vmap_reshape`
 
 ```camel
-vmap_reshape: (xs: T[...], dims: int[...]) => T[...] when is_numeric::<T>()
+vmap_reshape: (xs: T[...], dims: int[...]) => T[...]
 ```
 
 `reshape<dims>(xs)` batched: each row laid out in the shape the call wrote, the batch's axis in
 front of it.
 
-- Written in Camel: a subgraph, pure when the functions passed to it are.
+- A native operator of this module: an opaque node, pure.
 - Example: `vmap_reshape([[1.0, 2.0, 3.0, 4.0]] as float[1, 4], [2, 2])` gives `[[[1.0, 2.0], [3.0, 4.0]]]`
 
 ### Unsqueeze
@@ -8655,12 +8872,12 @@ of it: the written axis moves one place in, exactly as a reduction's axis does (
 #### `vmap_unsqueeze`
 
 ```camel
-vmap_unsqueeze: (xs: T[...], axis: int[]) => T[...] when is_numeric::<T>()
+vmap_unsqueeze: (xs: T[...], axis: int[]) => T[...]
 ```
 
 `unsqueeze<axis>(xs)` batched: the row's axis of extent one, one place further in.
 
-- Written in Camel: a subgraph, pure when the functions passed to it are.
+- A native operator of this module: an opaque node, pure.
 - Example: `vmap_unsqueeze([[1.0, 2.0]] as float[1, 2], [0])` gives `[[[1.0, 2.0]]]`
 
 ### Transpose, permute, concat and dim
@@ -8686,24 +8903,24 @@ row's last two.
 #### `vmap_permute`
 
 ```camel
-vmap_permute: (xs: T[...], perm: int[...]) => T[...] when is_numeric::<T>()
+vmap_permute: (xs: T[...], perm: int[...]) => T[...]
 ```
 
 `permute<perm>(xs)` batched: the row's axes in the written order, the batch's axis in front.
 
-- Written in Camel: a subgraph, pure when the functions passed to it are.
+- A native operator of this module: an opaque node, pure.
 - Example: `vmap_permute([[[1.0, 2.0], [3.0, 4.0]]] as float[1, 2, 2], [1, 0])` gives `[[[1.0, 3.0], [2.0, 4.0]]]`
 
 #### `vmap_concat`
 
 ```camel
-vmap_concat: (a: T[...], b: T[...], axis: int[]) => T[...] when is_numeric::<T>()
+vmap_concat: (a: T[...], b: T[...], axis: int[]) => T[...]
 ```
 
 `concat<axis>(xs, ys)` batched: the axis the row joins along is one place further in, and the two
 operands are the batch's rows, so the join is along the row's axis of the batch.
 
-- Written in Camel: a subgraph, pure when the functions passed to it are.
+- A native operator of this module: an opaque node, pure.
 - Example: `vmap_concat([[1.0]] as float[1, 1], [[2.0]] as float[1, 1], [0])` gives `[[[1.0], [2.0]]]`
 
 #### `vmap_dim`
@@ -8731,12 +8948,12 @@ condition to name the rule's `T`.
 #### `vmap_where`
 
 ```camel
-vmap_where: (cond: bool[...], a: T[...], b: T[...]) => T[...] when is_numeric::<T>()
+vmap_where: (cond: bool[...], a: T[...], b: T[...]) => T[...]
 ```
 
 `where(cond, a, b)` batched: the operator over the batch, all three operands one axis in front.
 
-- Written in Camel: a subgraph, pure when the functions passed to it are.
+- A native operator of this module: an opaque node, pure.
 - Example: `vmap_where([[true, false, true]] as bool[1, 3], [[1.0, 2.0, 3.0]] as float[1, 3], [[4.0, 5.0, 6.0]] as float[1, 3])` gives `[[1.0, 5.0, 3.0]]`
 
 <a id="sim"></a>
@@ -8820,3 +9037,17 @@ one that runtime has (`'none'` switches the check off).
 - Example: `export_model<out: "/tmp/model.onnx">((x: float) => x * 2.0, 2.0)`
 - Example: `export_model<out: "/tmp/model.onnx", dynamic_axes: [0]>((xs: f32[2, 3]) => xs[0][0], [[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]] as f32[2, 3])`
 - Example: `export_model<out: "/tmp/model.onnx", target: "onnxruntime-cpu">((x: float) => x * 2.0, 2.0)`
+
+#### `export_model`
+
+```camel
+export_model: <out: string = '', trace: bool = false, dump: bool = false, prep_stats: bool = false> (f: F) => F! when is_function::<F>()
+```
+
+Writes the model of the program's `main` (or of the one `export_model` call it makes) as an
+ONNX file, translating the function `main` refers to itself. `out` overrides the file the
+`out` argument of `export_model` names (then exactly one call is allowed) and names the file
+when the program makes no request. The three readings below print to standard error and
+change nothing the exporter does: `trace` every lowered call with the facts of its arguments,
+`dump` the simplified graph that is translated (as `std::rgir` does), `prep_stats` the size of
+the function when the export receives it and after the export's own simplification.

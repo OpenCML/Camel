@@ -24,6 +24,7 @@
 #include "camel/runtime/specializations.h"
 
 #include <span>
+#include <unordered_set>
 #include <vector>
 
 namespace camel::core::context {
@@ -52,6 +53,11 @@ class Program final : public camel::core::rtdata::Object {
         count_           = other.count_;
         root_            = other.root_;
         specializations_ = other.specializations_;
+        // A copy is a new program and made nothing itself: the commit that produces one records
+        // what it made on it (setMadeGraphs). Carrying the source's record would let a work table
+        // or a satellite claim graphs it did not make.
+        made_.clear();
+        madeRecorded_ = false;
         if (manager_ != nullptr) {
             noteAll();
         }
@@ -83,9 +89,20 @@ class Program final : public camel::core::rtdata::Object {
     /// The graphs a graph refers to, read in this program (graph.h, GCGraph::refs): the graph
     /// of FUNC node `ref`, and the graph a graph is written in. A loop names no graph -- it is its
     /// regions (design principles 3.10). nullptr where the id names no graph of the program.
-    GCGraph *calleeOf(const GCGraph &graph, gc_node_ref_t ref) const {
-        return this->graph(graph.calleeIdOf(ref));
+    ///
+    /// `graph` is the graph **as a value**: the identity a reader holds (`camel::graph::Graph`,
+    /// what a `CalleeRef` names and what a fact is anchored on), not a representation. The program
+    /// finds the version it holds of that value (`holds`) and reads the call out of it; a value the
+    /// program does not hold -- a draft, a graph of another program -- answers nullptr rather than
+    /// naming a graph by a number or by an address. This is the one place a reader hands over a
+    /// graph and gets a graph back without knowing which representation either one is.
+    GCGraph *calleeOf(const camel::graph::Graph &graph, gc_node_ref_t ref) const {
+        const GCGraph *held = heldGraph(graph);
+        return held == nullptr ? nullptr : this->graph(held->calleeIdOf(ref));
     }
+    /// True when `graph` is one of the graphs this program holds -- by the identity it names, so a
+    /// draft and a value of another program answer false whatever their addresses are.
+    bool holds(const camel::graph::Graph &graph) const { return heldGraph(graph) != nullptr; }
     GCGraph *outerOf(const GCGraph &graph) const { return this->graph(graph.outerGraphId()); }
     /// The graphs `ids` name that the program holds, in order.
     std::vector<GCGraph *> resolve(std::span<const GraphId> ids) const {
@@ -181,22 +198,33 @@ class Program final : public camel::core::rtdata::Object {
         const size_t index = toValue(id);
         return index < own_.size() && own_[index] != 0;
     }
-    /// Binds `graph` as one the satellite adds.
+    /// Binds `graph` as one the satellite adds. A graph this program adds is one it made, and that
+    /// identity travels with the graph: `adoptMissing` hands it on, and a session that adopts it
+    /// carries it into the commit's record (`RuntimeGraphDraftSession::adoptProgram`), so a pass
+    /// that adopts a graph another program made is not refused for a graph it did not introduce.
+    /// `bind` records nothing -- the encoder of a library or definition program uses it -- which is
+    /// what keeps a real adoption refused and named.
     void bindOwn(GraphId id, GCGraph *graph) {
         satellite_ = true;
         bind(id, graph);
         markOwn(id, kOwnAddedHere);
+        made_.insert(toValue(id));
     }
     /// Binds `graph` as one the satellite takes in rather than inherits: a graph it adopted from
     /// another program, or one a session encoded for it. It is not a version the base had, so
     /// handing it on to a third program is as safe as handing on one it adds -- and that is what
     /// carries a chain of programs (a cut of a cut, a gradient of a gradient) the whole way down.
     /// A program that is not a satellite owns everything it holds already, and taking a graph in
-    /// must not turn it into one that owns only part of its table.
-    void bindTaken(GraphId id, GCGraph *graph) {
+    /// must not turn it into one that owns only part of its table. `made` says the source declared
+    /// the graph its own (see `Program::madeGraphs`): the maker's identity travels with the graph,
+    /// so the program that takes it in holds it as made too.
+    void bindTaken(GraphId id, GCGraph *graph, bool made = false) {
         bind(id, graph);
         if (satellite_) {
             markOwn(id, kOwnTakenIn);
+        }
+        if (made) {
+            made_.insert(toValue(id));
         }
     }
     /// Makes the program a satellite of what it holds.
@@ -206,7 +234,10 @@ class Program final : public camel::core::rtdata::Object {
     /// the whole chain `other` stands on, and no program is ever walked: two programs that adopted
     /// each other cannot recurse, and a second call adds nothing because a graph already held is
     /// left as it is. An entry `other` inherited from its base is not handed on; that version is
-    /// the base's, and a later commit may have moved past it.
+    /// the base's, and a later commit may have moved past it. The graphs `other` made are handed
+    /// on as made, closed the same way: a program that took such a graph in records it as made
+    /// (its own `bindTaken`), so the maker's identity travels down a chain as far as the graph
+    /// does.
     void adoptMissing(const Program &other) {
         if (&other == this) {
             return;
@@ -214,7 +245,8 @@ class Program final : public camel::core::rtdata::Object {
         for (size_t index = 0; index < other.byId_.size(); ++index) {
             const GraphId id = static_cast<GraphId>(index);
             if (other.byId_[index] != nullptr && other.owns(id) && graph(id) == nullptr) {
-                bindTaken(id, other.byId_[index]);
+                const uint32_t key = static_cast<uint32_t>(index);
+                bindTaken(id, other.byId_[index], other.made_.contains(key));
             }
         }
     }
@@ -241,6 +273,29 @@ class Program final : public camel::core::rtdata::Object {
     /// built into a graph -- is forgotten by the manager, so that nothing destructs or traces it.
     void abandonConstruction(std::span<GCGraph *const> unconstructed);
 
+    /// The graphs the commit that made this program made itself (a specialization, an outlined
+    /// region, a graph a transaction built): the ids a pass may find in the table it hands back
+    /// beside the ones the program it was given held. `hasMadeGraphs` says whether a commit
+    /// recorded them at all: a program that no such commit produced has no record, and a reader
+    /// that needs `made` must say it cannot see rather than take `produced - given` for it --
+    /// that difference would make "nothing was introduced" true by construction
+    /// (src/kernel/execute/pass.cpp, `introducedGraphsViolation`). Carried forward by a commit
+    /// from the program it rewrites, so a pass that makes a graph in one commit and hands the
+    /// program on in another does not lose it.
+    ///
+    /// Written by three places only, and each says who made the graph: `setMadeGraphs` (the commit
+    /// that produced this program), `bindOwn` (a satellite program adds it) and
+    /// `bindTaken(..., made)` (a program that declared the graph made handed it on through
+    /// `adoptMissing`). `bind` writes none of them: a library or definition program is encoded with
+    /// `bind`, so it declares no made graph and adopting its graphs is still the violation the
+    /// boundary names.
+    bool hasMadeGraphs() const { return madeRecorded_; }
+    const std::unordered_set<uint32_t> &madeGraphs() const { return made_; }
+    void setMadeGraphs(std::unordered_set<uint32_t> ids) {
+        made_         = std::move(ids);
+        madeRecorded_ = true;
+    }
+
     /// The specializations made over the graphs of this program (specializations.h): copied
     /// with the program, so a rewrite that carries a program forward carries what it already
     /// made.
@@ -249,6 +304,19 @@ class Program final : public camel::core::rtdata::Object {
 
   private:
     friend class GCGraphManager;
+    /// The graph this program holds that *is* `graph`: a graph's identity is the value itself
+    /// (design principles 2.3), so the entry whose value the caller named is the answer, and the
+    /// search compares identities and nothing else -- not the id an address would stand for, and
+    /// not the node a caller read from. nullptr when this program holds no such value, which is a
+    /// real answer: a draft, a graph of another program, a graph a commit replaced.
+    const GCGraph *heldGraph(const camel::graph::Graph &graph) const {
+        for (GCGraph *held : byId_) {
+            if (held != nullptr && static_cast<const camel::graph::Graph *>(held) == &graph) {
+                return held;
+            }
+        }
+        return nullptr;
+    }
     void note(GCGraph *graph);
     void noteAll();
     /// What own_ records of a graph a satellite owns: it adds it, or it took it in.
@@ -271,6 +339,10 @@ class Program final : public camel::core::rtdata::Object {
     size_t count_            = 0;
     GCGraph *root_           = nullptr;
     RuntimeSpecializationTable specializations_;
+    /// The ids of the graphs the commit that made this program made (see hasMadeGraphs): not a
+    /// copy of the table it came from, and not a difference of tables.
+    std::unordered_set<uint32_t> made_;
+    bool madeRecorded_ = false;
 };
 
 /// Makes the function values among the static values of `graph` name `to` where `to` holds the

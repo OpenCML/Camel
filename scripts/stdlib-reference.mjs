@@ -385,12 +385,27 @@ const MODULES = [
         name: 'autodiff',
         title: '`autodiff`: gradients of functions',
         kind: 'cpp',
-        // `stop_gradient` is declared in stdlib/autodiff.cml; `grad` and `with_grad` answer a
-        // function built from their argument's type, so their entries are in the signature file
-        // named by `computed:`.
+        // `grad` and `with_grad` answer a function built from their argument's type, so their
+        // entries are in the signature file named by `computed:`. The `.cml` declares nothing now
+        // -- `stop_gradient`, the last name a program could write here, is `laws`' -- but it is
+        // still the module's documentation, and that is what this page prints before the entries.
         source: 'autodiff.cml',
         declaration: true,
         computed: 'signatures/autodiff.cml',
+    },
+    {
+        name: 'laws',
+        title: '`laws`: the mathematics a derivative rule is written from',
+        kind: 'camel',
+        // The tangent and the cotangent of each primitive: one function per name a rule's left
+        // side binds. `rulesets.jvp` and `rulesets.transpose` name one of these on a rule's right
+        // side, and nothing else reads the module -- it declares no rule, which is why it is not
+        // a ruleset and not part of `autodiff`.
+        //
+        // It is not pure Camel: `stop_gradient` declares a body-less function whose kernel is the
+        // module's own (`stdlib/laws/`, operator `laws:stop_gradient`), because "no derivative
+        // flows through this value" cannot be written as arithmetic. The declaration is still the
+        // one this page prints, and the build checks it against the registered operator.
     },
     {
         name: 'rulesets.jvp',
@@ -668,6 +683,23 @@ function closingBracket(text, open) {
     return -1
 }
 
+// A declaration and the line it ends on. The formatter writes a long parameter list one parameter
+// per line -- `export func tee_note::<T>(` / `hint: int,` / ... / `) => void` -- which is one
+// declaration on several lines, not a declaration and a run of unreadable text. Every reader here
+// takes the whole declaration: read from its first line alone, `bracketed` throws on the `(` it
+// cannot close, and `--write` stops on the library's 20 such declarations.
+function declarationText(lines, lineIndex, trimmed) {
+    const open = trimmed.indexOf('(')
+    if (open < 0) return { text: trimmed, end: lineIndex }
+    let text = trimmed
+    let end = lineIndex
+    while (closingBracket(text, open) < 0 && end + 1 < lines.length) {
+        end++
+        text += ` ${lines[end].trim()}`
+    }
+    return { text, end }
+}
+
 // `{ a: int, b: string }` is a struct type; the brace group an old-form declaration wrote after
 // its result type (`{ return '<uri>' }`) is not.
 function isFieldList(text) {
@@ -693,6 +725,16 @@ function isFieldList(text) {
 
 // Whether the text after a declaration's `)` carries a body. The old form is
 // `: R { return '<uri>' }`; a body may also open with `sync {` or on the following line.
+//
+// The text after the `)` is a return type first. The corpus writes one after `=>` and nowhere
+// else (`export func argmax::<T>(xs: T[...]) => int[...]`, 686 such declarations outside the
+// signature files), so a tail with no `:` in it is a declaration, not a body. Reading it the
+// other way -- "no colon, so it must be a body" -- made every declaration that states an
+// ordinary result type a function with an implementation: 81 of the 93 declarations in the
+// signature files, which is the whole of `nn`, `tensor` and `tiles` and one apiece in
+// `autodiff`, `ckpt` and `transforms`, and it refused `--write` for every one of them. The
+// discriminator was never the spelling: a colon appeared in the tail only when the declaration
+// wrote a `when` clause (`when is_numeric::<T>()`), so 12 of the 93 passed and 81 did not.
 function declarationBody(rest, lines, lineIndex) {
     // A `match type` result is a type, not a body: the brace group it opens holds one case per line
     // and closes. Read as a body, every declaration that states a type function became a function
@@ -702,9 +744,12 @@ function declarationBody(rest, lines, lineIndex) {
     if (/^\s*(?::\s*)?match\s+type\b/.test(rest)) return false
     // A type has no statement keyword; a `sync` body marker is unambiguous.
     if (/\b(sync|return)\b/.test(rest)) return true
-    const colon = rest.indexOf(':')
-    if (colon < 0) return rest.trim() !== ''
-    for (let i = colon + 1; i < rest.length; ) {
+    // Walk the tail as an expression: a group is a type -- a tuple, an array shape, a handle, a
+    // struct field list -- and a brace group that does not read as a field list is a body. The walk
+    // starts at the beginning of the tail rather than after the first `:`, because a colon may sit
+    // inside the result type itself (`=> (v: float, d: float) => float`), and starting inside a
+    // group made its own closing `)` read as a body.
+    for (let i = 0; i < rest.length; ) {
         const c = rest[i]
         if (c === '=' && rest[i + 1] === '>') {
             i += 2
@@ -741,9 +786,10 @@ function signatureBodyProblems() {
             const trimmed = lines[i].trim()
             const decl = trimmed.match(/^(?:export\s+)?func\s+([A-Za-z_][\w:]*)\s*(?:::<[^>]*>)?\s*\(/)
             if (!decl) continue
-            const close = closingBracket(trimmed, decl[0].length - 1)
+            const one = declarationText(lines, i, trimmed)
+            const close = closingBracket(one.text, decl[0].length - 1)
             if (close < 0) continue
-            if (declarationBody(trimmed.slice(close + 1), lines, i)) {
+            if (declarationBody(one.text.slice(close + 1), lines, one.end)) {
                 problems.push(
                     `${relative}:${i + 1}: the declaration '${decl[1]}' has a body; a signature ` +
                         `file declares operators without one (the old \`return '<uri>'\` form is gone)`
@@ -918,13 +964,15 @@ function readDeclarations(file, module, options = {}) {
     if (trimmed.startsWith(keyword + ' ') ||
         (options.kernels === true && /^func\s+\S/.test(trimmed))) {
             const isKernel = !trimmed.startsWith(keyword + ' ')
-            const rest = trimmed.slice(isKernel ? 'func'.length + 1 : keyword.length + 1)
+            // The whole declaration, joined when its parameter list runs over several lines.
+            const one = declarationText(lines, i, trimmed)
+            const rest = one.text.slice(isKernel ? 'func'.length + 1 : keyword.length + 1)
             const name = rest.slice(0, rest.indexOf('(')).replace(/::<.*>$/, '')
             const args = bracketed(rest, rest.indexOf('('))
             const after = rest.slice(args.end + 1)
             // A private function with a body is not an operator at all: it ends the pending
             // comment as any other private declaration of a library does.
-            if (isKernel && declarationBody(after, lines, i)) {
+            if (isKernel && declarationBody(after, lines, one.end)) {
                 doc = []
                 withText = ''
                 pendingUri = null
@@ -959,7 +1007,7 @@ function readDeclarations(file, module, options = {}) {
             // (`export func name(g: Graph) => string spelling`, design principles 9.5). The clause is
             // not part of the type, so the result every comparison reads is the type alone and the
             // clause is printed back where the declaration wrote it (signatureText).
-            const stated = readResultType(after, lines, i)
+            const stated = readResultType(after, lines, one.end)
             const spelling = /\bspelling\s*$/.test(stated.text)
             const result = spelling ? stated.text.replace(/\s+spelling\s*$/, '').trim() : stated.text
             const entry = {

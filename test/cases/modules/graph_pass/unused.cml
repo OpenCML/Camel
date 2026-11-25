@@ -2,11 +2,13 @@ import { flatten } from array
 import { Node, Graph, NodeKind, nodes, kind, is_pure, is_constant, is_anchor, value_users, open, erase, commit, graphs_of } from graph
 import { is_function } from types
 
-/// Whether the node is no more than its value: a constant, a conversion, a copy, an access, a
-/// fill or a pure operation.
+/// Whether the node is no more than its value: a constant, an access, a fill or a pure operation.
+/// A conversion and a copy were kinds of their own once (`NodeKind::Cast`, `NodeKind::Copy`); they
+/// are calls of `:op/cast` and `:op/copy` now, both declared pure, so `is_pure` answers for them
+/// and no clause of their own is left to write.
 func valueOnly(n: Node) => bool {
     let k = kind(n)
-    return (k == NodeKind::Data && is_constant(n)) || k == NodeKind::Cast || k == NodeKind::Copy || k == NodeKind::Accs || k == NodeKind::Fill || is_pure(n)
+    return (k == NodeKind::Data && is_constant(n)) || k == NodeKind::Accs || k == NodeKind::Fill || is_pure(n)
 }
 
 func isUnused(n: Node) => bool {

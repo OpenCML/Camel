@@ -32,6 +32,10 @@ args = ["${case}"]
 expect_exit = 0
 expect_stdout_contains = ["Defunctionalization gives function values one form without changing results: PASS"]
 timeout_ms = 120000
+# Slow layer: over the 2 s the fast layer allows -- 2.46 s of
+# child wall clock in the 2026-11-12 record (appendix B of
+# internal/reports/2026-11-24-test-suite-inventory.cn.md).
+tier = "slow"
 
 [[tests]]
 name = "defun.higher_order.plain"

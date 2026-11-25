@@ -205,7 +205,7 @@ name = "inferred.recursive_is_empty"
 desc = "A recursive function that wrote no clause settles at the set its body reaches: the measurement starts every body at the empty set and grows it round by round, so the call to itself reads the round before and `step` ends at the empty set -- its type says `pure`, and a caller taking its value reads that, not `Generic`."
 kind = "behavior"
 case = "../../../cases/effects/inferred_recursive_is_empty.cml"
-args = ["${case}", "std::gir"]
+args = ["${case}", "std::gir", "std::nop"]
 expect_exit = 0
 expect_output_contains = ["Function(graph=step", "value_type=\"(n: int) => int pure\""]
 verify_script = """

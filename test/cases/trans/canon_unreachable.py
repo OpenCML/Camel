@@ -164,7 +164,12 @@ def main():
         # 2. The canonical documents, and the unreachable node read off each of them.
         documents, hashes = {}, {}
         for name in ("a", "b", "c"):
-            code, out, err = run([str(paths[name]), "std::jgir", "canonical=true"])
+            # Why the pipeline ends in `std::nop`: this step reads the document itself -- it hashes
+            # its bytes and parses it as one JSON document -- and `std::jgir` hands the graph on, so
+            # the fallback would run the program behind it. `WRITING_A` returns a value from `main`,
+            # so that run is a nonzero exit code plus its own bytes, which is what made this
+            # `json.loads` refuse "Extra data". The document is the subject; the run is not.
+            code, out, err = run([str(paths[name]), "std::jgir", "canonical=true", "std::nop"])
             if code != 0:
                 say(f"FAIL: the canonical dump of writing {name} failed (exit {code}): "
                     f"{err.strip()[:400]}")
@@ -188,8 +193,9 @@ def main():
                 failures.append(
                     f"writing {name} has no unreachable node: the reading is about nothing")
 
-        # A document has to be one document: dumping the same file twice is the same bytes.
-        code, again, err = run([str(paths["a"]), "std::jgir", "canonical=true"])
+        # A document has to be one document: dumping the same file twice is the same bytes. The
+        # `std::nop` is here for the same reason as above -- the bytes compared are the document's.
+        code, again, err = run([str(paths["a"]), "std::jgir", "canonical=true", "std::nop"])
         if code != 0 or hashlib.sha256(again).hexdigest() != hashes["a"]:
             failures.append("two dumps of one file are two documents")
 

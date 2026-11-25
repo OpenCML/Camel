@@ -11,11 +11,11 @@ namespace camel::transforms {
 /// not copy, and why. A build that answered with a graph anyway would be a graph that computes
 /// something else (design principles 9.9).
 bool refuseAt(
-    SplitGraph &refusal, const rt::GCGraph *source, gc_node_ref_t ref, std::string construct,
-    std::string why) {
-    refusal.refusedOrigin = ref < source->nodeCount()
-                                ? static_cast<camel::source::origin_id_t>(source->nodeOrigin(ref))
-                                : camel::source::kInvalidOriginId;
+    SplitGraph &refusal, const camel::graph::GraphView &source, gc_node_ref_t ref,
+    std::string construct, std::string why) {
+    refusal.refusedOrigin    = ref < source.nodeSlotCount()
+                                   ? static_cast<camel::source::origin_id_t>(source.originOf(ref))
+                                   : camel::source::kInvalidOriginId;
     refusal.refusedConstruct = std::move(construct);
     refusal.refusedWhy       = std::move(why);
     return false;
@@ -302,8 +302,9 @@ ExitHalves exitHalvesOf(const rt::GCGraph &graph, gc_node_ref_t exit, const Type
         halves.why = "the exit is not a node with a type";
         return halves;
     }
-    const std::span<const gc_node_ref_t> members = graph.withInputsOf(exit);
-    const LiftedShape shape                      = liftedShapeOf(const_cast<Type *>(exitType));
+    const std::span<const gc_node_ref_t> members =
+        graph.view().inputs(exit, camel::graph::PortGroup::Context);
+    const LiftedShape shape = liftedShapeOf(const_cast<Type *>(exitType));
     if (shape.pair) {
         if (members.size() != 2) {
             halves.why =
@@ -319,9 +320,9 @@ ExitHalves exitHalvesOf(const rt::GCGraph &graph, gc_node_ref_t exit, const Type
         return halves;
     }
     for (gc_node_ref_t member : members) {
-        const rt::GCNode *made = graph.node(member);
+        const Type *madeType = graph.view().typeOf(member);
         const LiftedMember read =
-            liftedMemberOf(made != nullptr ? const_cast<Type *>(made->dataType()) : nullptr);
+            liftedMemberOf(madeType != nullptr ? const_cast<Type *>(madeType) : nullptr);
         if (read.forward == nullptr) {
             halves.why = "a member of the answer is not a form `Lift` writes: it is neither a "
                          "(value, tangent) pair nor a lifted function";
@@ -333,7 +334,8 @@ ExitHalves exitHalvesOf(const rt::GCGraph &graph, gc_node_ref_t exit, const Type
             halves.forward.push_back(ungated(&graph, member));
             continue;
         }
-        const std::span<const gc_node_ref_t> legs = graph.withInputsOf(member);
+        const std::span<const gc_node_ref_t> legs =
+            graph.view().inputs(member, camel::graph::PortGroup::Context);
         if (legs.size() != 2) {
             halves.why = "a value member of the answer is a pair, and its fill does not hold the "
                          "value and its tangent";
@@ -359,8 +361,8 @@ calleeGraphOf(const rt::GCGraph &graph, const rt::Program *program, gc_node_ref_
 /// the same question `answersAPair` asks of a callee graph, asked of the signature where there is
 /// no graph to ask yet. Which graph the value turns out to be is asked at run time by `split(v)`
 /// itself, which refuses there, by name, when the graph does not answer a pair.
-bool answersAPairByValueAt(const rt::GCGraph &graph, gc_node_ref_t ref) {
-    camel::core::type::FunctionType *valueType = callValueSignatureOf(graph.view(), ref);
+bool answersAPairByValueAt(const camel::graph::GraphView &graph, gc_node_ref_t ref) {
+    camel::core::type::FunctionType *valueType = callValueSignatureOf(graph, ref);
     if (valueType == nullptr) {
         return false;
     }
@@ -377,7 +379,7 @@ bool answersAPairAt(const rt::GCGraph &graph, const rt::Program *program, gc_nod
         return false;
     }
     if (graph.node(ref)->kind == rt::GCNodeKind::Call) {
-        return answersAPairByValueAt(graph, ref);
+        return answersAPairByValueAt(graph.view(), ref);
     }
     if (graph.node(ref)->kind != rt::GCNodeKind::Func) {
         return false;
@@ -655,7 +657,7 @@ residualsOf(const rt::GCGraph &lifted, const rt::Program *program, std::string *
                 const size_t withArguments                 = lifted.withInputsOf(ref).size();
                 const size_t ordinary =
                     arguments.size() > withArguments ? arguments.size() - withArguments : 0;
-                if (answersAPair(lateCallee) || answersAPairByValueAt(lifted, ref)) {
+                if (answersAPair(lateCallee) || answersAPairByValueAt(lifted.view(), ref)) {
                     // Which of the call's ordinary arguments are values is the callee's
                     // signature's answer, read from its type by the one reader of that law
                     // (`valuePortsOf`): the arguments the second half walks into are those ports,
@@ -737,7 +739,7 @@ residualsOf(const rt::GCGraph &lifted, const rt::Program *program, std::string *
                 const auto *calleeGraph = program != nullptr && rt::isValid(calleeId)
                                               ? program->graph(calleeId)
                                               : nullptr;
-                if (!answersAPair(calleeGraph) && !answersAPairByValueAt(lifted, ref)) {
+                if (!answersAPair(calleeGraph) && !answersAPairByValueAt(lifted.view(), ref)) {
                     found.push_back(ref);
                     continue;
                 }
@@ -848,7 +850,7 @@ residualsOf(const rt::GCGraph &lifted, const rt::Program *program, std::string *
             }
             const GraphId calleeId  = lifted.calleeIdOf(ref);
             const auto *calleeGraph = rt::isValid(calleeId) ? program->graph(calleeId) : nullptr;
-            return answersAPair(calleeGraph) || answersAPairByValueAt(lifted, ref);
+            return answersAPair(calleeGraph) || answersAPairByValueAt(lifted.view(), ref);
         });
     }
     // The linear halves are the remaining members of the list: a computed value like any other, in
@@ -1319,7 +1321,7 @@ bool cutArm(
     if (root == rt::kInvalidNodeRef) {
         return refuseAt(
             refusal,
-            half.source,
+            half.source->view(),
             rt::kInvalidNodeRef,
             "an arm",
             "the arm's yield does not hold the half this cut keeps");
@@ -1344,7 +1346,7 @@ bool buildHalfBranch(
     if (armCount == 0 || conditionCopy == rt::kInvalidNodeRef) {
         return refuseAt(
             refusal,
-            half.source,
+            half.source->view(),
             rt::kInvalidNodeRef,
             "the branch",
             "the branch has no arm or no condition the cut can name");
@@ -2147,7 +2149,7 @@ SplitGraph buildSplitGraph(
             }
             refuseAt(
                 refusal,
-                function,
+                function->view(),
                 exit,
                 "the exit",
                 "this graph's exit is the Join of a branch (the arm the condition picks writes the "
@@ -2179,7 +2181,7 @@ SplitGraph buildSplitGraph(
         SplitGraph refusal;
         refuseAt(
             refusal,
-            function,
+            function->view(),
             exit,
             "the exit",
             "this graph's exit is a Join that holds the pair and no branch names it, so the two "
@@ -2213,7 +2215,7 @@ SplitGraph buildSplitGraph(
         SplitGraph refusal;
         refuseAt(
             refusal,
-            function,
+            function->view(),
             exit,
             "the exit",
             "a lifted function answers with the pair (result, tangent); here the pair is a call's "

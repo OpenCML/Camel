@@ -5766,7 +5766,7 @@ std::cml cannot print {0}: {1}.
 This version prints expressions, `let` and `var`, branches, loops, closures, `with` and `var` parameters, `sync` blocks, and one `type` statement for each named struct type the program names. Tags, generic instances and the other region kinds are refused.
 ```
 
-**Example** (`test/cases/trans/cml/nullable_null.cml`, run as `camel test/cases/trans/cml/nullable_null.cml std::cml`)
+**Example** (`test/cases/trans/cml/nullable_null.cml`, run as `camel test/cases/trans/cml/nullable_null.cml std::cml std::nop`)
 
 ```camel
 // A `T?` that holds nothing is not a value `std::cml` writes, and the reason is measured rather than
@@ -8476,7 +8476,7 @@ A value declared without a right side (`export let inf: float`) is supplied by t
 **Example** (`test/cases/modules/math_kernels/err_value_missing/math.cml`, run as `camel test/cases/modules/math_kernels/err_value_missing/math.cml`)
 
 ```camel
-import { timeit } from perf
+import { mean } from array // loads the C++ module `math`: a file named `math` importing `math` is a self-import with no effect
 
 export let tau: float
 
@@ -8508,7 +8508,7 @@ A value declared without a right side is the one the C++ module registers: write
 **Example** (`test/cases/modules/math_kernels/err_value_type/math.cml`, run as `camel test/cases/modules/math_kernels/err_value_type/math.cml`)
 
 ```camel
-import { timeit } from perf
+import { mean } from array // loads the C++ module `math`: a file named `math` importing `math` is a self-import with no effect
 
 export let inf: int
 
@@ -10234,7 +10234,7 @@ Translation pass '{0}' refused the graph: {1}.
 A translation pass only translates the graph the preceding passes left. Run the passes named in the message before it, or remove the construct it cannot express.
 ```
 
-**Example** (`test/cases/compile/collections/refuse_export.cml`, run as `camel test/cases/compile/collections/refuse_export.cml std::cpp`)
+**Example** (`test/cases/compile/collections/refuse_export.cml`, run as `camel test/cases/compile/collections/refuse_export.cml std::cpp std::nop`)
 
 ```camel
 // A pure `main` that goes through a set: what the translation passes (std::cpp,
@@ -11756,13 +11756,13 @@ None: runtime: the fault is raised while the program runs, and the repair is in 
 **Message**
 
 ```text
-Pass '{0}' consumes the graph, so {1} written after it will not run.
+Pass '{0}' answered with an empty graph, so {1} written after it will not run.
 ```
 
 **Help**
 
 ```text
-A scheduling pass executes the program and a translation pass translates it; neither hands a graph on, and the pipeline ends there. Remove the passes written after it, or move them before it.
+A scheduling pass executes the program and answers with the residual graph or an empty one. This one answered with an empty graph, so the pipeline ended there; a rewriting pass and a translating pass both hand a graph on and would have run. Remove the passes written after it, or move them before it -- std::nop is a scheduling pass too, and it is how a pipeline that only prints says so.
 ```
 
 **Example** (`test/cases/linear/byref/order_direct_user.cml`, run as `camel test/cases/linear/byref/order_direct_user.cml std::nvm std::cxx::inline std::fvm`)
@@ -11845,7 +11845,7 @@ std::cpp has no standalone translation of {0}: the program it writes calls the C
 Every other operator is translated into C++ that needs only the standard library (docs/cpp_export_build.md). The comment at the top of the C++ file gives the command that builds it with the runtime.
 ```
 
-**Example** (`test/cases/trans/cpp/runtime_bridge.cml`, run as `camel test/cases/trans/cpp/runtime_bridge.cml std::cpp`)
+**Example** (`test/cases/trans/cpp/runtime_bridge.cml`, run as `camel test/cases/trans/cpp/runtime_bridge.cml std::cpp std::nop`)
 
 ```camel
 /// std::cpp has no standalone translation of a string operator: the program links the runtime.

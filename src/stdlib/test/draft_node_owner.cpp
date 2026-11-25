@@ -105,14 +105,26 @@ DraftNodeOwnerTestPass::apply(const camel::runtime::Program *program, std::ostre
     const bool staleIsNamed    = builderB->view().isNamedBy(stale);
     const bool staleHasOwner   = DraftGraphBuilder::fromRef(stale) != nullptr;
     const int kindAtTheAddress = static_cast<int>(nodeKindOf(liveB));
-    say(os, std::format("kind_when_made={} kind_at_the_address_now={}", kindWhenMade, kindAtTheAddress));
+    // The kinds are numbers that move with the enum (`GCNodeKind`): the copy kind this case was
+    // written with is deleted, and a copy is a call of `:op/copy` now, so the number the node was
+    // made with is not the one the table used to give it. What the case needs is not two numbers
+    // but one fact: the kind the stale handle was made with is not the kind at the address now, so
+    // a read through the stale handle would misname the node even if the epoch check were gone.
+    const bool kindChanged = kindWhenMade != kindAtTheAddress;
+    say(
+        os,
+        std::format(
+            "kind_when_made={} kind_at_the_address_now={} kind_changed={}",
+            kindWhenMade,
+            kindAtTheAddress,
+            kindChanged ? 1 : 0));
     say(
         os,
         std::format(
             "stale_is_named={} stale_owner={}",
             staleIsNamed ? 1 : 0,
             staleHasOwner ? "live" : "none"));
-    if (!liveOwned || staleIsNamed || staleHasOwner || !sameAddress) {
+    if (!liveOwned || staleIsNamed || staleHasOwner || !sameAddress || !kindChanged) {
         say(os, "MISSING the stale handle resolved to the draft that holds its address");
         return program;
     }

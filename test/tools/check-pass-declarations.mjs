@@ -138,20 +138,108 @@ const declarations = []
         }
     }
 }
+/// The pass names the tree keeps in a constant instead of writing them at the registration: the
+/// identifiers a registration may read, mapped to the string they stand for. Two spellings exist
+/// and both are read here:
+///   - a class's own name (`NopPass::kName`, `sched.h`), because the registration and the question
+///     "does this pipeline end without executing" must not be two copies of the string;
+///   - a file-scope constant (`kBoundsFlipTestPass`, the test family's header), whose names live
+///     outside `std::` and are therefore not part of the set this check compares.
+/// A registration that reads one of these is a registration; before this, the scan read literals
+/// only, so `std::nop`'s kernel was invisible and its declaration reported as implemented by
+/// nothing. That is the failure this check exists to prevent, stated backwards.
+function passNameConstants() {
+    const constants = new Map()
+    for (const root of SOURCE_ROOTS) {
+        for (const file of files(path.join(REPO_ROOT, root))) {
+            const extension = path.extname(file)
+            if (extension !== '.h' && extension !== '.hpp') {
+                continue
+            }
+            let owner
+            for (const line of fs.readFileSync(file, 'utf8').split(/\r?\n/)) {
+                const declared = line.match(/^(?:class|struct)\s+([A-Za-z_][A-Za-z0-9_]*)/)
+                if (declared) {
+                    owner = declared[1]
+                    continue
+                }
+                // `const char *` in any of its const/constexpr/inline spellings: the value is what
+                // a registration reads, and how the constant is declared is not this check's
+                // subject.
+                const named = line.match(
+                    /(?:\b(?:inline|static|constexpr|const)\b[\s*]*)*\bchar\s*\*\s*(?:const\s*)?([A-Za-z_][A-Za-z0-9_]*)\s*=\s*"([^"]*)"/,
+                )
+                if (!named) {
+                    continue
+                }
+                // The bare name is what a registration writes from outside the class's scope; the
+                // qualified one is what it writes from inside another file. Both are the same
+                // constant, so both keys are the same value.
+                constants.set(named[1], named[2])
+                if (owner !== undefined) {
+                    constants.set(`${owner}::${named[1]}`, named[2])
+                }
+            }
+        }
+    }
+    return constants
+}
+
 const implementations = []
 {
     // Every kernel is registered by the file that implements the pass, as a `PassKernel` object
     // holding the Camel function's path (camel/execute/pass/registration.h), so the scan is the
     // sources rather than one file: the pipeline reads the registry, and what it reads there is
     // this set.
+    //
+    // Most registrations write the name as a literal, and one does not: `std::nop` is named by
+    // `NopPass::kName`, because the registration and the question "does this pipeline end without
+    // executing" (design principles 9) must not be two copies of the string that can disagree
+    // (`sched.h`). A scan that only read literals therefore reported `std.cml declares 'nop' and
+    // no kernel implements it` -- a declaration with no kernel, when the truth was a kernel this
+    // scan did not see. That is the failure this check exists to prevent, stated backwards, so it
+    // resolves a constant to the value the tree gives it, and a registration it can read in
+    // neither spelling is reported as exactly that: not as a pass without a declaration.
+    const constants = passNameConstants()
     for (const root of SOURCE_ROOTS) {
         for (const file of files(path.join(REPO_ROOT, root))) {
             if (!file.endsWith('.cpp')) {
                 continue
             }
             const text = fs.readFileSync(file, 'utf8')
-            for (const match of text.matchAll(/PassKernel\s+[A-Za-z_][A-Za-z0-9_]*\(\s*"std::([a-z_][a-z0-9_:]*)"/g)) {
-                implementations.push(match[1])
+            const relative = path.relative(REPO_ROOT, file).replace(/\\/g, '/')
+            const lines = text.split(/\r?\n/)
+            // Over the whole text, not line by line: a registration may wrap its arguments onto a
+            // second line, and a scan that read lines would stop finding those kernels -- which is
+            // the same silence, in the population that has no problem.
+            for (const match of text.matchAll(
+                /PassKernel\s+[A-Za-z_][A-Za-z0-9_]*\(\s*([^,()]+?)\s*[,)]/g
+            )) {
+                const index = text.slice(0, match.index).split('\n').length - 1
+                const trimmed = (lines[index] ?? '').trim()
+                if (trimmed.startsWith('//') || trimmed.startsWith('*')) {
+                    continue
+                }
+                const written = match[1].trim()
+                const literal = written.match(/^"([^"]*)"/)
+                const value = literal
+                    ? literal[1]
+                    : constants.get(written) ?? constants.get(written.replace(/^.*::/, ''))
+                if (value === undefined) {
+                    problems.push(
+                        `${relative}:${index + 1}: a kernel is registered under a name this ` +
+                            `check cannot read (${written}): a registration nothing counted ` +
+                            `is not a pass without a declaration: ${trimmed}`
+                    )
+                    continue
+                }
+                // `test::...` registrations are the test family's, not the core's: they were
+                // never in this population, and counting them now would report a kernel with
+                // no declaration in `std.cml` for each one.
+                const core = value.match(/^std::([a-z_][a-z0-9_:]*)$/)
+                if (core) {
+                    implementations.push(core[1])
+                }
             }
         }
     }

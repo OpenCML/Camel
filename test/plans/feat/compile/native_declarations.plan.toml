@@ -48,7 +48,7 @@ name = "native.operator_on_the_graph"
 desc = "On the graph a call of a declaration is an OPER of the operator's URI, instantiated: the index operator over `int` and over `string`, not a CALL of `at` and not a graph of the declaration."
 kind = "behavior"
 case = "../../../cases/compile/native/generic.cml"
-args = ["${case}", "std::gir"]
+args = ["${case}", "std::gir", "std::nop"]
 expect_exit = 0
 verify_script = """
 ({ input, assert }) => {
@@ -205,7 +205,7 @@ name = "native.math_on_the_graph"
 desc = "A call of `abs`, `min`, `sqrt`, `shl` or `shr` at a type that has a kernel is an OPER of the kernel's concrete URI (`math:abs_l`, `math:min_l`, `math:sqrt_d`, `math:shl_l`), not a CALL of the instance (`#impl`, design principles 10.4); `clamp` has no kernel and is a function of Camel."
 kind = "behavior"
 case = "../../../cases/compile/native/math_declaration_import.cml"
-args = ["${case}", "std::gir"]
+args = ["${case}", "std::gir", "std::nop"]
 expect_exit = 0
 verify_script = """
 ({ input, assert }) => {
@@ -471,7 +471,7 @@ name = "native.when_order_at_call.on_the_graph"
 desc = "The operator each call reaches, on the graph: the `i32` call is an OPER of `:op/sub_i` with `value_type=\"i32\"` and the `int` call an OPER of `:op/add_l` with `value_type=\"int\"`, in the file whose `int` declaration is written first. No node pairs `:op/sub_i` with an `int` value or `:op/add_l` with an `i32` value -- the type-and-operator mismatch that writing order used to produce."
 kind = "behavior"
 case = "../../../cases/compile/native/when_order_at_call_int_first.cml"
-args = ["${case}", "std::gir"]
+args = ["${case}", "std::gir", "std::nop"]
 expect_exit = 0
 verify_script = """
 ({ input, assert }) => {
@@ -1047,16 +1047,16 @@ expect_stdout_exact = "7\ntext\n2\n"
 
 [[tests]]
 name = "native.autodiff_wrong_arity"
-desc = "`autodiff:stop_gradient` is declared with one ordinary argument: a second one is refused at the call, and the overload the message lists is the declaration's `(x: T) => T` — `stdlib/autodiff.cml`, not the C++ module."
+desc = "`laws:stop_gradient` is declared with one ordinary argument: a second one is refused at the call, and the overload the message lists is the declaration's `(x: T) => T` — `stdlib/laws.cml`, not the kernel."
 kind = "negative"
 case = "../../../cases/compile/native/autodiff_arity.cml"
 args = ["${case}"]
 expect_exit = 1
-expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "autodiff_arity.cml:10:26", "argument types: <> (float, float)", "<autodiff:stop_gradient>: (x: T) => T"]
+expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "autodiff_arity.cml:10:26", "argument types: <> (float, float)", "<laws:stop_gradient>: (x: T) => T"]
 
 [[tests]]
 name = "native.autodiff_result_type"
-desc = "The result of `autodiff:stop_gradient` is the declaration's type variable instantiated with the argument's type: binding a `float` result to an `int` is refused with the value's type taken from the declaration. A type-variable parameter has no wrong-type case, so this is the type case the declaration can have."
+desc = "The result of `laws:stop_gradient` is the declaration's type variable instantiated with the argument's type: binding a `float` result to an `int` is refused with the value's type taken from the declaration. A type-variable parameter has no wrong-type case, so this is the type case the declaration can have."
 kind = "negative"
 case = "../../../cases/compile/native/autodiff_result_type.cml"
 args = ["${case}"]

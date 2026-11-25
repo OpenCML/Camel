@@ -24,7 +24,7 @@ name = "graph"
 desc = "The OPER nodes of an annotated function have its permissions; those of a lambda and of the arms written in it too; a block's grant joins the function's for the code in the block; a function it calls (plain) and main have none."
 kind = "behavior"
 case = "../../../cases/compile/numeric/permissions.cml"
-args = ["${case}", "std::gir"]
+args = ["${case}", "std::gir", "std::nop"]
 expect_exit = 0
 verify_script = """
 ({ input, assert }) => {
@@ -52,7 +52,7 @@ name = "graph.inline"
 desc = "std::cxx::inline keeps each node's own permissions: the inlined body of plain has none in its annotated caller, the inlined lambda keeps reassociate."
 kind = "behavior"
 case = "../../../cases/compile/numeric/permissions.cml"
-args = ["${case}", "std::cxx::inline", "std::gir"]
+args = ["${case}", "std::cxx::inline", "std::gir", "std::nop"]
 expect_exit = 0
 verify_script = """
 ({ input, assert }) => {
@@ -69,7 +69,7 @@ name = "cse"
 desc = "std::cxx::cse merges `a * b` with `a * b` of the same permissions, and not across them: one product without permissions, one with contract."
 kind = "behavior"
 case = "../../../cases/compile/numeric/cse.cml"
-args = ["${case}", "std::cxx::cse", "std::gir"]
+args = ["${case}", "std::cxx::cse", "std::gir", "std::nop"]
 expect_exit = 0
 verify_script = """
 ({ input, assert }) => {
@@ -94,7 +94,7 @@ name = "fuse"
 desc = "tensor::fuse changes no operator: it writes tensor.kernel (the 7.3 decision) and tensor.fusion (the group) on the nodes. The default policy lets the plain product use the library GEMM while the `#strict` block's matmul runs the canonical algorithm (7.4); both matmul+add patterns are groups even though their permissions differ."
 kind = "behavior"
 case = "../../../cases/compile/numeric/fuse.cml"
-args = ["${case}", "tensor::fuse", "std::gir"]
+args = ["${case}", "tensor::fuse", "std::gir", "std::nop"]
 expect_exit = 0
 verify_script = """
 ({ input, assert }) => {
@@ -115,7 +115,7 @@ name = "fuse.safe"
 desc = "tensor::fuse safe_fp=true records the canonical algorithm on every matmul (7.4) and still marks the groups: the safe mode's graph is the same graph."
 kind = "behavior"
 case = "../../../cases/compile/numeric/fuse.cml"
-args = ["${case}", "tensor::fuse safe_fp=true", "std::gir"]
+args = ["${case}", "tensor::fuse safe_fp=true", "std::gir", "std::nop"]
 expect_exit = 0
 verify_script = """
 ({ input, assert }) => {
@@ -154,7 +154,7 @@ name = "library_gemm"
 desc = "Per 7.3 the CPU library GEMM is available by default, so in default mode every matmul records tensor.kernel=\"library\" while the operator stays tensor:matmul; the `#[reassociate, change_precision]` tag is no longer needed (an accumulation reorder is reassociate's business). The choice is the policy's, not the build's: without a CBLAS the library path runs the canonical kernel, and the attribute still says library."
 kind = "behavior"
 case = "../../../cases/compile/numeric/library_gemm.cml"
-args = ["${case}", "tensor::fuse", "std::gir"]
+args = ["${case}", "tensor::fuse", "std::gir", "std::nop"]
 expect_exit = 0
 verify_script = """
 ({ input, assert }) => {
@@ -173,7 +173,7 @@ name = "library_gemm.safe"
 desc = "tensor::fuse safe_fp=true withholds the library GEMM from every matmul (7.4): the operator is unchanged, only the attribute differs."
 kind = "behavior"
 case = "../../../cases/compile/numeric/library_gemm.cml"
-args = ["${case}", "tensor::fuse safe_fp=true", "std::gir"]
+args = ["${case}", "tensor::fuse safe_fp=true", "std::gir", "std::nop"]
 expect_exit = 0
 verify_script = """
 ({ input, assert }) => {
@@ -228,6 +228,10 @@ verify_script = """
   assert(diff <= bound, `library GEMM difference ${diff} leaves the licence bound ${bound}`)
 }
 """
+# Slow layer: over the 2 s the fast layer allows -- 2.37 s of
+# child wall clock in the 2026-11-12 record (appendix B of
+# internal/reports/2026-11-24-test-suite-inventory.cn.md).
+tier = "slow"
 
 [[tests]]
 name = "library_gemm.tolerance.safe"
@@ -245,6 +249,10 @@ verify_script = """
   assert(Number(m[3]) === 0, `safe mode must be bit-identical, got diff ${m[3]}`)
 }
 """
+# Slow layer: over the 2 s the fast layer allows -- 2.30 s of
+# child wall clock in the 2026-11-12 record (appendix B of
+# internal/reports/2026-11-24-test-suite-inventory.cn.md).
+tier = "slow"
 
 [[tests]]
 name = "grad_library"

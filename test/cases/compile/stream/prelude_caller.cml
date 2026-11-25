@@ -1,0 +1,16 @@
+// A module that is not the program's entry: the shape every module of the standard library has.
+// The prelude is the built-in layer, and it is one layer for the whole program (design principles
+// 10.2), so a function of the prelude is written here without an import, exactly as the entry
+// module writes it. `stdlib/random.cml` and `stdlib/str.cml` write `to_array` the same way.
+
+/// The integers of `0 .. n`, gathered by the prelude's own conversion.
+export func gather(n: int) => int[] {
+    return to_array(0 .. n)
+}
+
+/// The same name in a generic body. A template's body is checked where it is declared, before any
+/// instance exists, and that check asks the layers a plain body asks: `to_array` is in scope here
+/// too, so the instance built for one element type comes from a body that already resolved it.
+export func count::<T>(xs: T[]) => int {
+    return len(to_array(0 .. len(xs)))
+}

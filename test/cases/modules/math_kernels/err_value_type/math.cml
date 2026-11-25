@@ -1,4 +1,4 @@
-import { timeit } from perf
+import { mean } from array // loads the C++ module `math`: a file named `math` importing `math` is a self-import with no effect
 
 export let inf: int
 

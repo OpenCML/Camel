@@ -15,7 +15,7 @@
 # bought nothing.
 #
 # The holder and everyone waiting are published to build-state.json, in the directory the local
-# settings file names (`stateDir`; see camel-gate.example.json), so a reader (the build-queue panel)
+# settings file names (`stateDir`; see camel-gate.example.json), so a reader (the desk panel, panel-deck)
 # can show who is compiling and who is waiting:
 #
 #   { "updatedAt": iso,
@@ -49,6 +49,8 @@ param(
 $ErrorActionPreference = 'Stop'
 
 . (Join-Path $PSScriptRoot 'camel-gate-config.ps1')
+# The run registry's writer, the same one the host runner uses (`internal/tools/run-registry.ps1`).
+. (Join-Path $PSScriptRoot 'run-registry.ps1')
 $cfg = Get-CamelGateConfig -LocalConfig $LocalConfig -ScriptRoot $PSScriptRoot -Override @{ stateDir = $StateDir }
 if (-not $cfg.stateDir) { Stop-CamelGateConfig 'camel-build' $cfg 'stateDir' }
 $statePath = Join-Path $cfg.stateDir 'build-state.json'
@@ -58,6 +60,78 @@ $buildMutex = New-Object System.Threading.Mutex($false, 'Global\CamelBuildSerial
 $stateMutex = New-Object System.Threading.Mutex($false, 'Global\CamelBuildState')
 $acquired = $false
 $startedAt = $null
+
+# --- the run registry -------------------------------------------------------
+# The panel's one list of runs is `run-registry.jsonl`, and a local build that is missing there is a
+# build nobody can see. So this helper publishes the same row shape the host runner does. What it
+# cannot publish is the one thing a local build does not have: `tokens`. The token pool lives on the
+# build host; a build run here draws nothing from it, so the key is *absent* from these rows and a
+# reader is told "not reported" -- writing 0 would say the pool was empty, which is a different fact.
+$runRegistryPath = Join-Path $cfg.stateDir 'run-registry.jsonl'
+$runRegistryMutex = New-Object System.Threading.Mutex($false, 'Global\CamelRunRegistry')
+$runStartedAt = Get-Date
+$runId = "$PID-$($runStartedAt.ToString('yyyyMMddHHmmss'))"
+$stageStartedAt = $runStartedAt
+$publishedPhase = $null
+$lastRunPublish = [datetime]::MinValue
+$buildRow = @{
+    runId           = $runId
+    pid             = $PID
+    worktree        = $worktree
+    path            = $Path
+    remote          = 'local'
+    local           = $true
+    startedAt       = $runStartedAt.ToString('o')
+    updatedAt       = $runStartedAt.ToString('o')
+    phase           = 'queued'
+    state           = $null
+    slots           = 0
+    slot            = '0'
+    testSlot        = 0
+    noslotWaitedFor = $null
+    overlapping     = @{ atStart = $null; atEnd = $null }
+    loadAtStart     = $null
+    loadAtEnd       = $null
+    queuedAt        = $runStartedAt.ToString('o')
+    # Local admission: the machine-wide mutex this helper takes, not a host slot and not a token.
+    queuedAtKind    = 'local'
+    queueSeconds    = 0
+    buildStartedAt  = $null
+    buildFinishedAt = $null
+    planStartedAt   = $null
+    finishedAt      = $null
+    exit            = $null
+    buildExit       = $null
+    done            = 0
+    total           = 0
+    jobs            = $Parallel
+    jobsRequested   = $Parallel
+    buildJobs       = $Parallel
+    tier            = ''
+    plan            = @()
+    target          = ''
+    lastLine        = "[camel-build] waiting for the machine-wide build lock ($worktree)"
+    stageSeconds    = 0
+}
+
+function Publish-LocalBuild([string]$phase, [string]$lastLine = '') {
+    try {
+        $now = Get-Date
+        if ($phase -ne $publishedPhase) {
+            $script:publishedPhase = $phase
+            $script:stageStartedAt = $now
+        }
+        $buildRow.phase = $phase
+        $buildRow.stageSeconds = [int](($now - $stageStartedAt).TotalSeconds)
+        $buildRow.updatedAt = $now.ToString('o')
+        if ($lastLine) { $buildRow.lastLine = $lastLine }
+        [void](Add-RunRegistryRow -Path $runRegistryPath -Mutex $runRegistryMutex -Row $buildRow)
+        $script:lastRunPublish = $now
+    } catch {
+        # A registry write must never fail the build it describes.
+    }
+}
+Publish-LocalBuild 'queued'
 
 function Read-State {
     if (-not (Test-Path $statePath)) {
@@ -129,6 +203,13 @@ function Update-Progress([string]$line) {
     if ($line -match '^\[(\d+)/(\d+)\]') {
         $done = [int]$Matches[1]
         $total = [int]$Matches[2]
+        $buildRow.done = $done
+        $buildRow.total = $total
+        $buildRow.lastLine = $line.Trim()
+        # The compiler prints several lines a second; the registry needs a heartbeat, not a transcript.
+        if (((Get-Date) - $lastRunPublish).TotalSeconds -ge 3) {
+            Publish-LocalBuild 'building' $line.Trim()
+        }
         Edit-State {
             param($state)
             if ($null -ne $state.holder) {
@@ -189,6 +270,9 @@ try {
         lastLine  = ''
     })
     Write-Host "[camel-build] $worktree has the lock"
+    $buildRow.buildStartedAt = $startedAt.ToString('o')
+    $buildRow.queueSeconds = [int](($startedAt - $runStartedAt).TotalSeconds)
+    Publish-LocalBuild $(if ($Check -gt 0) { 'checks' } else { 'building' }) "[camel-build] building $worktree ($Config)"
 
     if ($Check -gt 0) {
         Start-Sleep -Seconds $Check
@@ -224,6 +308,11 @@ try {
         }) + $recent
     }
     Write-Host "[camel-build] done ($worktree), exit $code, $seconds s"
+    $buildRow.buildFinishedAt = (Get-Date).ToString('o')
+    $buildRow.finishedAt = $buildRow.buildFinishedAt
+    $buildRow.exit = $code
+    $buildRow.buildExit = $code
+    Publish-LocalBuild $(if ($code -eq 0) { 'done' } else { 'fail' }) "[camel-build] done, exit $code"
     exit $code
 } finally {
     if ($acquired) {

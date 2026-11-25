@@ -150,8 +150,8 @@ class GradResolver final : public type::FuncTypeResolver {
     bool hasAux_;
 };
 
-/// stop_gradient: (x: T) => T is declared in `stdlib/autodiff.cml`; the kernel below and the
-/// traits in `AutodiffModule::load` stay here.
+/// The four transforms share one body: `grad(f)` is `gradFunction` with no value and no aux, and
+/// `with_grad`, `grad(has_aux: true)` and `with_grad(has_aux: true)` are the other three flags.
 slot_t gradFunction(ArgsView &norm, Context &ctx, bool withValue, bool hasAux) {
     auto *function = norm.get<::Function *>(0);
     if (function == nullptr || function->graph() == nullptr) {
@@ -199,12 +199,6 @@ slot_t valueAndGradAuxKernel(ArgsView &with, ArgsView &norm, Context &ctx) {
     return gradFunction(norm, ctx, true, true);
 }
 
-slot_t stopGradientKernel(ArgsView &with, ArgsView &norm, Context &ctx) {
-    (void)with;
-    (void)ctx;
-    return norm.get<slot_t>(0);
-}
-
 } // namespace
 
 const std::vector<oper_group_ptr_t> &operatorGroups() {
@@ -223,8 +217,9 @@ const std::vector<oper_group_ptr_t> &operatorGroups() {
             "with_grad",
             {{"autodiff:with_grad", std::make_shared<GradResolver>(true, false)},
              {"autodiff:with_grad_aux", std::make_shared<GradResolver>(true, true)}}),
-        // `stop_gradient` is not here: its signature is declared in `stdlib/autodiff.cml`,
-        // and its kernel and traits stay in this module.
+        // `stop_gradient` is not here either, and no longer in this module: its declaration, its
+        // kernel and its rule are the `laws` module's (`stdlib/laws.cml`), which is where a
+        // program that only writes Camel can keep it after this engine is gone.
     };
     return groups;
 }
@@ -235,7 +230,6 @@ std::unordered_map<std::string, operator_t> operatorKernels() {
         {"grad_aux", &gradAuxKernel},
         {"with_grad", &valueAndGradKernel},
         {"with_grad_aux", &valueAndGradAuxKernel},
-        {"stop_gradient", &stopGradientKernel},
     };
 }
 
@@ -265,26 +259,20 @@ void registerOperatorMetadata() {
         camel::core::OperatorTable::instance().set(
             name, {.pure = true, .readsGraphs = true, .macro = true});
     }
-    camel::core::OperatorTable::instance().set(
-        "autodiff:stop_gradient",
-        {.pure = true, .elementwise = false});
-    // `stop_gradient` is declared in `stdlib/autodiff.cml`, and its clause (`pure`) is what the
-    // declaration says it touches: nothing. A native operator has to say the same thing here, so
-    // the two are compared instead of one being taken on faith (design principles 3.3).
+    // `stop_gradient` used to be declared in `stdlib/autodiff.cml` with its kernel and its rule
+    // here, which made deleting this engine delete a name a program can call. All three are the
+    // `laws` module's now (`stdlib/laws.cml`, `laws:stop_gradient`); what is left in this engine is
+    // the four transforms.
     //
     // The four transforms say it the same way, because the table refuses any other answer: an
     // operator that is not pure must touch, allocate or affect something ("declare it pure
     // instead"), and these touch nothing -- returning a function value is not a touch.
     camel::core::OperatorTable::instance().declareResources(
         "autodiff",
-        {{"stop_gradient", camel::core::sem::ResourceSpec{}},
-         {"grad", camel::core::sem::ResourceSpec{}},
+        {{"grad", camel::core::sem::ResourceSpec{}},
          {"grad_aux", camel::core::sem::ResourceSpec{}},
          {"with_grad", camel::core::sem::ResourceSpec{}},
          {"with_grad_aux", camel::core::sem::ResourceSpec{}}});
-    camel::core::DerivativeRegistry::instance().setRule(
-        "autodiff:stop_gradient",
-        camel::core::noGradient);
 }
 
 } // namespace camel::autodiff

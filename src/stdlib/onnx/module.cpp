@@ -183,8 +183,9 @@ bool OnnxModule::load() {
     // Where an export would stop: an operator the ONNX backend has no lowering for.
     camel::runtime::NodeRoleRegistry::instance().add(
         {"export-capability", "export capability (no ONNX lowering)", "#cfe2f3"},
-        [](const camel::graph::GraphView &graph,
+        [](const camel::runtime::NodeRoleSite &site,
            camel::graph::NodeRef ref) -> std::optional<std::string> {
+            const camel::graph::GraphView &graph = site.view;
             // An operator that names one: the four kinds the view folds into `NodeKind::Oper` keep
             // their own payload today, so they answer `kNoOper` and the old reading (a stored OPER)
             // is this condition.

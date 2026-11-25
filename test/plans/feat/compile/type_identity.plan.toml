@@ -27,6 +27,10 @@ args = ["${case}", "--camel", "${camel}"]
 expect_stdout_contains = ["0 that fail"]
 expect_output_not_contains = ["FAIL"]
 timeout_ms = 600000
+# Slow layer: over the 2 s the fast layer allows -- 11.68 s of
+# child wall clock in the 2026-11-12 record (appendix B of
+# internal/reports/2026-11-24-test-suite-inventory.cn.md).
+tier = "slow"
 
 [[tests]]
 name = "type_identity.branch_unify"

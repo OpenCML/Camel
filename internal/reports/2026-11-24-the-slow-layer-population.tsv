@@ -1,0 +1,561 @@
+class	plan	case	base_fast_layer	slow_layer	cause_class	first_line_of_the_red
+green-in-both	?	01_scalar_boundary	PASS	PASS	-	
+green-now-was-already-slow	?	aggregate_outputs.fvm	not-run (already slow)	SKIP	-	
+green-now-was-already-slow	?	aggregate_outputs.jit	not-run (already slow)	SKIP	-	
+green-now-was-already-slow	?	aggregate_outputs.nvm	not-run (already slow)	SKIP	-	
+green-now-was-already-slow	?	arithmetic_bit_contract	not-run (already slow)	SKIP	-	
+green-in-both	?	arm_call_then_effect.opt.nvm	PASS	PASS	-	
+green-now-was-already-slow	?	async_native_submissions	not-run (already slow)	SKIP	-	
+green-now-was-already-slow	?	async_public_completion	not-run (already slow)	SKIP	-	
+green-in-both	?	attempt.forms.fvm	PASS	PASS	-	
+green-in-both	?	attempt.forms.jit	PASS	PASS	-	
+green-in-both	?	attempt.forms.nvm	PASS	PASS	-	
+green-in-both	?	attempt.forms.prl	PASS	PASS	-	
+green-in-both	?	attempt.not_isolated.exit.fvm	PASS	PASS	-	
+green-in-both	?	attempt.not_isolated.exit.jit	PASS	PASS	-	
+green-in-both	?	attempt.not_isolated.exit.nvm	PASS	PASS	-	
+green-in-both	?	attempt.not_isolated.exit.prl	PASS	PASS	-	
+green-in-both	?	attempt.resources.exit.fvm	PASS	PASS	-	
+green-in-both	?	attempt.resources.exit.jit	PASS	PASS	-	
+green-in-both	?	attempt.resources.exit.nvm	PASS	PASS	-	
+green-in-both	?	attempt.resources.exit.prl	PASS	PASS	-	
+green-in-both	?	attempt.resources.fault.fvm	PASS	PASS	-	
+green-in-both	?	attempt.resources.fault.jit	PASS	PASS	-	
+green-in-both	?	attempt.resources.fault.nvm	PASS	PASS	-	
+green-in-both	?	attempt.resources.fault.prl	PASS	PASS	-	
+green-in-both	?	attempt.resources.isolated.fvm	PASS	PASS	-	
+green-in-both	?	attempt.resources.isolated.jit	PASS	PASS	-	
+green-in-both	?	attempt.resources.isolated.nvm	PASS	PASS	-	
+green-in-both	?	attempt.resources.isolated.prl	PASS	PASS	-	
+green-in-both	?	attempt.resources.normal.fvm	PASS	PASS	-	
+green-in-both	?	attempt.resources.normal.jit	PASS	PASS	-	
+green-in-both	?	attempt.resources.normal.nvm	PASS	PASS	-	
+green-in-both	?	attempt.resources.normal.prl	PASS	PASS	-	
+green-now-was-already-slow	?	benchmark_gradients_vs_torch	not-run (already slow)	PASS	-	
+green-now-was-already-slow	?	benchmark_permission_gate	not-run (already slow)	SKIP	-	
+green-now-was-already-slow	?	benchmark_protocol	not-run (already slow)	SKIP	-	
+green-now-was-already-slow	?	boundaries.fvm	not-run (already slow)	SKIP	-	
+green-now-was-already-slow	?	boundaries.jit	not-run (already slow)	SKIP	-	
+green-now-was-already-slow	?	boundaries.nvm	not-run (already slow)	SKIP	-	
+green-in-both	?	boundary32.-0.false.fvm	PASS	PASS	-	
+green-in-both	?	boundary32.-0.false.jit	PASS	PASS	-	
+green-in-both	?	boundary32.-0.false.nvm	PASS	PASS	-	
+green-in-both	?	boundary32.-0.false.prl	PASS	PASS	-	
+green-in-both	?	boundary32.-0.true.fvm	PASS	PASS	-	
+green-in-both	?	boundary32.-0.true.jit	PASS	PASS	-	
+green-in-both	?	boundary32.-0.true.nvm	PASS	PASS	-	
+green-in-both	?	boundary32.-0.true.prl	PASS	PASS	-	
+green-in-both	?	boundary32.1.401298464324817e-45.true.fvm	PASS	PASS	-	
+green-in-both	?	boundary32.1.401298464324817e-45.true.jit	PASS	PASS	-	
+green-in-both	?	boundary32.1.401298464324817e-45.true.nvm	PASS	PASS	-	
+green-in-both	?	boundary32.1.401298464324817e-45.true.prl	PASS	PASS	-	
+green-in-both	?	boundary32.3e38.false.fvm	PASS	PASS	-	
+green-in-both	?	boundary32.3e38.false.jit	PASS	PASS	-	
+green-in-both	?	boundary32.3e38.false.nvm	PASS	PASS	-	
+green-in-both	?	boundary32.3e38.false.prl	PASS	PASS	-	
+green-in-both	?	boundary32.3e38.true.fvm	PASS	PASS	-	
+green-in-both	?	boundary32.3e38.true.jit	PASS	PASS	-	
+green-in-both	?	boundary32.3e38.true.nvm	PASS	PASS	-	
+green-in-both	?	boundary32.3e38.true.prl	PASS	PASS	-	
+green-in-both	?	boundary32.7.006492321624085e-45.false.fvm	PASS	PASS	-	
+green-in-both	?	boundary32.7.006492321624085e-45.false.jit	PASS	PASS	-	
+green-in-both	?	boundary32.7.006492321624085e-45.false.nvm	PASS	PASS	-	
+green-in-both	?	boundary32.7.006492321624085e-45.false.prl	PASS	PASS	-	
+green-in-both	?	boundary32.7.006492321624085e-45.true.fvm	PASS	PASS	-	
+green-in-both	?	boundary32.7.006492321624085e-45.true.jit	PASS	PASS	-	
+green-in-both	?	boundary32.7.006492321624085e-45.true.nvm	PASS	PASS	-	
+green-in-both	?	boundary32.7.006492321624085e-45.true.prl	PASS	PASS	-	
+green-in-both	?	boundary64.-0.algebra.fvm	PASS	PASS	-	
+green-in-both	?	boundary64.-0.algebra.jit	PASS	PASS	-	
+green-in-both	?	boundary64.-0.algebra.nvm	PASS	PASS	-	
+green-in-both	?	boundary64.-0.algebra.prl	PASS	PASS	-	
+green-in-both	?	boundary64.1e308.reference.fvm	PASS	PASS	-	
+green-in-both	?	boundary64.1e308.reference.jit	PASS	PASS	-	
+green-in-both	?	boundary64.1e308.reference.nvm	PASS	PASS	-	
+green-in-both	?	boundary64.1e308.reference.prl	PASS	PASS	-	
+green-in-both	?	boundary64.1e308.safe.fvm	PASS	PASS	-	
+green-in-both	?	boundary64.1e308.safe.jit	PASS	PASS	-	
+green-in-both	?	boundary64.1e308.safe.nvm	PASS	PASS	-	
+green-in-both	?	boundary64.1e308.safe.prl	PASS	PASS	-	
+green-in-both	?	boundary64.2.5e-323.algebra.fvm	PASS	PASS	-	
+green-in-both	?	boundary64.2.5e-323.algebra.jit	PASS	PASS	-	
+green-in-both	?	boundary64.2.5e-323.algebra.nvm	PASS	PASS	-	
+green-in-both	?	boundary64.2.5e-323.algebra.prl	PASS	PASS	-	
+green-in-both	?	boundary64.2.5e-323.safe.fvm	PASS	PASS	-	
+green-in-both	?	boundary64.2.5e-323.safe.jit	PASS	PASS	-	
+green-in-both	?	boundary64.2.5e-323.safe.nvm	PASS	PASS	-	
+green-in-both	?	boundary64.2.5e-323.safe.prl	PASS	PASS	-	
+green-in-both	?	boundary64.5e-324.reference.fvm	PASS	PASS	-	
+green-in-both	?	boundary64.5e-324.reference.jit	PASS	PASS	-	
+green-in-both	?	boundary64.5e-324.reference.nvm	PASS	PASS	-	
+green-in-both	?	boundary64.5e-324.reference.prl	PASS	PASS	-	
+green-in-both	?	boundary64.inf.algebra.fvm	PASS	PASS	-	
+green-in-both	?	boundary64.inf.algebra.jit	PASS	PASS	-	
+green-in-both	?	boundary64.inf.algebra.nvm	PASS	PASS	-	
+green-in-both	?	boundary64.inf.algebra.prl	PASS	PASS	-	
+green-in-both	?	boundary64.inf.safe.fvm	PASS	PASS	-	
+green-in-both	?	boundary64.inf.safe.jit	PASS	PASS	-	
+green-in-both	?	boundary64.inf.safe.nvm	PASS	PASS	-	
+green-in-both	?	boundary64.inf.safe.prl	PASS	PASS	-	
+green-in-both	?	boundary64.nan.algebra.fvm	PASS	PASS	-	
+green-in-both	?	boundary64.nan.algebra.jit	PASS	PASS	-	
+green-in-both	?	boundary64.nan.algebra.nvm	PASS	PASS	-	
+green-in-both	?	boundary64.nan.algebra.prl	PASS	PASS	-	
+green-in-both	?	build_stamp.options_change	PASS	PASS	-	
+green-in-both	?	capacity.fanout	PASS	PASS	-	
+green-in-both	?	capacity.wide_graph	PASS	PASS	-	
+green-in-both	?	catalog.coverage_report	PASS	PASS	-	
+green-in-both	?	catalog.failure_paths	PASS	PASS	-	
+green-in-both	?	clean.tiers	PASS	PASS	-	
+green-in-both	?	cli.plan_arg_domain_refused	PASS	PASS	-	
+green-in-both	?	cli.plan_stdout_matches	PASS	PASS	-	
+green-now-was-already-slow	?	cml.corpus_sweep	not-run (already slow)	PASS	-	
+green-now-was-already-slow	?	consistency.fvm	not-run (already slow)	SKIP	-	
+green-now-was-already-slow	?	consistency.jit	not-run (already slow)	SKIP	-	
+green-now-was-already-slow	?	consistency.nvm	not-run (already slow)	SKIP	-	
+green-in-both	?	control_data.graph	PASS	PASS	-	
+green-in-both	?	control_data.unused_argument.ctrl_inline.fvm	PASS	PASS	-	
+green-in-both	?	control_data.unused_argument.ctrl_inline.jit	PASS	PASS	-	
+green-in-both	?	control_data.unused_argument.ctrl_inline.nvm	PASS	PASS	-	
+green-in-both	?	control_data.unused_argument.ctrl_inline.prl	PASS	PASS	-	
+green-in-both	?	control_data.unused_argument.inline_fold.fvm	PASS	PASS	-	
+green-in-both	?	control_data.unused_argument.inline_fold.jit	PASS	PASS	-	
+green-in-both	?	control_data.unused_argument.inline_fold.nvm	PASS	PASS	-	
+green-in-both	?	control_data.unused_argument.inline_fold.prl	PASS	PASS	-	
+green-in-both	?	control_data.unused_argument.inline.fvm	PASS	PASS	-	
+green-in-both	?	control_data.unused_argument.inline.jit	PASS	PASS	-	
+green-in-both	?	control_data.unused_argument.inline.nvm	PASS	PASS	-	
+green-in-both	?	control_data.unused_argument.inline.prl	PASS	PASS	-	
+green-in-both	?	control_data.unused_argument.reference.fvm	PASS	PASS	-	
+green-in-both	?	control_data.unused_argument.reference.jit	PASS	PASS	-	
+green-in-both	?	control_data.unused_argument.reference.nvm	PASS	PASS	-	
+green-in-both	?	control_data.unused_argument.reference.prl	PASS	PASS	-	
+green-in-both	?	control.pipeline_contract	PASS	PASS	-	
+green-now-was-already-slow	?	core_view_maps	not-run (already slow)	SKIP	-	
+green-in-both	?	cse_arm_constants.inline_arm_cse.nvm	PASS	PASS	-	
+green-in-both	?	cse_arm_constants.inline_cse.fvm	PASS	PASS	-	
+green-in-both	?	cse_arm_constants.inline_cse.jit	PASS	PASS	-	
+green-in-both	?	debugger.cli_session	PASS	PASS	-	
+green-now-was-already-slow	?	debugger.dap_faults	not-run (already slow)	PASS	-	
+green-in-both	?	debugger.dap_frames	PASS	PASS	-	
+green-in-both	?	debugger.dap_fusion_group	PASS	PASS	-	
+green-in-both	?	debugger.dap_pipeline	PASS	PASS	-	
+green-now-was-already-slow	?	debugger.dap_protocol	not-run (already slow)	PASS	-	
+green-in-both	?	debugger.dap_tail_steps	PASS	PASS	-	
+green-in-both	?	debugger.http_gateway	PASS	PASS	-	
+green-in-both	?	debugger.loop_frames	PASS	PASS	-	
+green-in-both	?	defun.four_backends	PASS	PASS	-	
+green-in-both	?	dependent_names	PASS	PASS	-	
+green-now-was-already-slow	?	device_parameter_tree_training	not-run (already slow)	SKIP	-	
+green-in-both	?	docs.no_unfinished_merge_left_in_the_tree	PASS	PASS	-	
+green-in-both	?	docs.no_unfinished_merge_pattern_sees_all_four_forms	PASS	PASS	-	
+green-in-both	?	every_expect_program_five_times	PASS	PASS	-	
+green-in-both	?	every_fault_program_says_what_fvm_says	PASS	PASS	-	
+green-in-both	?	execution.algebra.fvm	PASS	PASS	-	
+green-in-both	?	execution.algebra.jit	PASS	PASS	-	
+green-in-both	?	execution.algebra.nvm	PASS	PASS	-	
+green-in-both	?	execution.algebra.prl	PASS	PASS	-	
+green-in-both	?	execution.opt_safe.fvm	PASS	PASS	-	
+green-in-both	?	execution.opt_safe.jit	PASS	PASS	-	
+green-in-both	?	execution.opt_safe.nvm	PASS	PASS	-	
+green-in-both	?	execution.opt_safe.prl	PASS	PASS	-	
+green-in-both	?	execution.opt.fvm	PASS	PASS	-	
+green-in-both	?	execution.opt.jit	PASS	PASS	-	
+green-in-both	?	execution.opt.nvm	PASS	PASS	-	
+green-in-both	?	execution.opt.prl	PASS	PASS	-	
+green-in-both	?	execution.safe.fvm	PASS	PASS	-	
+green-in-both	?	execution.safe.jit	PASS	PASS	-	
+green-in-both	?	execution.safe.nvm	PASS	PASS	-	
+green-in-both	?	execution.safe.prl	PASS	PASS	-	
+green-in-both	?	export_loop_cond	PASS	PASS	-	
+green-now-was-already-slow	?	extrema_canonical_bits	not-run (already slow)	SKIP	-	
+green-in-both	?	fault_narrow_div_zero	PASS	PASS	-	
+green-in-both	?	fixes_apply	PASS	PASS	-	
+green-in-both	?	frontend.format_keeps_ast	PASS	PASS	-	
+green-now-was-already-slow	?	frontend.fuzz_lossless_tree	not-run (already slow)	PASS	-	
+green-in-both	?	fused_grad_check.fused	PASS	PASS	-	
+green-now-was-already-slow	?	fusion.fvm	not-run (already slow)	SKIP	-	
+green-now-was-already-slow	?	fusion.jit	not-run (already slow)	SKIP	-	
+green-now-was-already-slow	?	fusion.nvm	not-run (already slow)	SKIP	-	
+green-in-both	?	gate.case_ledger	PASS	PASS	-	
+green-in-both	?	gate.conformance_matrix	PASS	PASS	-	
+green-in-both	?	gate.plan_inventory	PASS	PASS	-	
+green-now-was-already-slow	?	gc_pacing.adopted_block	not-run (already slow)	PASS	-	
+green-now-was-already-slow	?	gc_pacing.training_400	not-run (already slow)	PASS	-	
+green-now-was-already-slow	?	gc_pacing.training_800	not-run (already slow)	PASS	-	
+green-in-both	?	gpu_preference.named_device	SKIP	SKIP	-	
+green-in-both	?	gpu_scope.host_effect_synchronises	SKIP	SKIP	-	
+green-in-both	?	gpu_scope.placement_with_a_device	SKIP	SKIP	-	
+green-now-was-already-slow	?	grad_expand.a_function_the_run_chooses_is_refused	not-run (already slow)	PASS	-	
+green-now-was-already-slow	?	grad_expand.expanded_values_are_identical	not-run (already slow)	PASS	-	
+green-now-was-already-slow	?	grad_expand.missing_prerequisite_is_named	not-run (already slow)	PASS	-	
+green-now-was-already-slow	?	grad_expand.runtime_operator_values	not-run (already slow)	PASS	-	
+green-now-was-already-slow	?	grad_expand.scope_sees_the_derived_graph	not-run (already slow)	PASS	-	
+green-now-was-already-slow	?	grad_expand.untagged_graph_keeps_the_runtime_operator	not-run (already slow)	PASS	-	
+green-now-was-already-slow	?	grad_expand.untagged_graph_runs_without_the_pass	not-run (already slow)	PASS	-	
+green-now-was-already-slow	?	grad_expand.untagged_graph_unchanged	not-run (already slow)	PASS	-	
+green-now-was-already-slow	?	gradients.fvm	not-run (already slow)	SKIP	-	
+green-now-was-already-slow	?	gradients.jit	not-run (already slow)	SKIP	-	
+green-now-was-already-slow	?	gradients.nvm	not-run (already slow)	SKIP	-	
+green-in-both	?	graph_faces.readings_absolute	PASS	PASS	-	
+green-now-was-already-slow	?	graph_facts.fvm	not-run (already slow)	SKIP	-	
+green-now-was-already-slow	?	graph_facts.jit	not-run (already slow)	SKIP	-	
+green-now-was-already-slow	?	graph_facts.nvm	not-run (already slow)	SKIP	-	
+green-now-was-already-slow	?	index_maps.fvm	not-run (already slow)	SKIP	-	
+green-now-was-already-slow	?	index_maps.jit	not-run (already slow)	SKIP	-	
+green-now-was-already-slow	?	index_maps.nvm	not-run (already slow)	SKIP	-	
+green-in-both	?	inline_cycle.splice_place	PASS	PASS	-	
+green-in-both	?	inline_keeps_stdout.drop.nvm	PASS	PASS	-	
+green-in-both	?	inline_keeps_stdout.inline.nvm	PASS	PASS	-	
+green-in-both	?	inline_keeps_stdout.twice_inline.nvm	PASS	PASS	-	
+green-in-both	?	inline_keeps_stdout.twice_write.nvm	PASS	PASS	-	
+green-in-both	?	inline_keeps_stdout.write.nvm	PASS	PASS	-	
+green-in-both	?	integrated.graph.false	PASS	PASS	-	
+green-in-both	?	integrated.graph.true	PASS	PASS	-	
+green-now-was-already-slow	?	large_upload_completion	not-run (already slow)	SKIP	-	
+green-in-both	?	literal_rank	PASS	PASS	-	
+green-in-both	?	literal_rows_computed	PASS	PASS	-	
+green-in-both	?	literal_rows_filled	PASS	PASS	-	
+green-in-both	?	load_class.explain_under_load	PASS	PASS	-	
+green-in-both	?	load_class.shared_place	PASS	PASS	-	
+green-now-was-already-slow	?	loop_boundaries_faults_permissions	not-run (already slow)	SKIP	-	
+green-now-was-already-slow	?	lsp.robustness	not-run (already slow)	PASS	-	
+green-now-was-already-slow	?	mapped_fusion.fvm	not-run (already slow)	SKIP	-	
+green-now-was-already-slow	?	mapped_fusion.jit	not-run (already slow)	SKIP	-	
+green-now-was-already-slow	?	mapped_fusion.nvm	not-run (already slow)	SKIP	-	
+green-in-both	?	match.complete.fvm	PASS	PASS	-	
+green-in-both	?	match.complete.jit	PASS	PASS	-	
+green-in-both	?	match.complete.nvm	PASS	PASS	-	
+green-in-both	?	match.complete.prl	PASS	PASS	-	
+green-in-both	?	matmul	PASS	SKIP	-	
+green-now-was-already-slow	?	matmul_edges.fvm	not-run (already slow)	SKIP	-	
+green-now-was-already-slow	?	matmul_edges.jit	not-run (already slow)	SKIP	-	
+green-now-was-already-slow	?	matmul_edges.nvm	not-run (already slow)	SKIP	-	
+green-now-was-already-slow	?	matmul_rounding.fvm	not-run (already slow)	SKIP	-	
+green-now-was-already-slow	?	matmul_rounding.jit	not-run (already slow)	SKIP	-	
+green-now-was-already-slow	?	matmul_rounding.nvm	not-run (already slow)	SKIP	-	
+green-now-was-already-slow	?	max_grid_stride	not-run (already slow)	SKIP	-	
+green-now-was-already-slow	?	max_special_values	not-run (already slow)	SKIP	-	
+green-now-was-already-slow	?	module_lease	not-run (already slow)	SKIP	-	
+green-now-was-already-slow	?	monte_carlo_pi.min_cores_refused	not-run (already slow)	PASS	-	
+green-now-was-already-slow	?	multi_state_loop_device	not-run (already slow)	SKIP	-	
+green-in-both	?	narrow_reductions_four_backends	PASS	PASS	-	
+green-in-both	?	narrow_reductions_needs_no_runtime	PASS	PASS	-	
+green-in-both	?	native_state_checkpoints	PASS	PASS	-	
+green-in-both	?	nested_return.compile_time	PASS	PASS	-	
+green-now-was-already-slow	?	nofallback.branch_arms_are_segments	not-run (already slow)	PASS	-	
+green-now-was-already-slow	?	nofallback.branch_scope_returns_what_the_host_returns	not-run (already slow)	PASS	-	
+green-now-was-already-slow	?	nofallback.branch_segment_is_written_in_the_arm	not-run (already slow)	PASS	-	
+green-now-was-already-slow	?	nofallback.cpu_escape_is_visible_in_the_source	not-run (already slow)	PASS	-	
+green-now-was-already-slow	?	nofallback.loop_is_a_segment	not-run (already slow)	PASS	-	
+green-now-was-already-slow	?	nofallback.one_diagnostic_lists_every_refused_operator	not-run (already slow)	PASS	-	
+green-now-was-already-slow	?	nofallback.operator_without_a_program_is_a_compile_error	not-run (already slow)	PASS	-	
+green-now-was-already-slow	?	nofallback.outside_a_scope_host_path_is_temporary	not-run (already slow)	SKIP	-	
+green-now-was-already-slow	?	nofallback.run_time_shape_is_refused_not_host_ran	not-run (already slow)	SKIP	-	
+green-now-was-already-slow	?	nofallback.shape_generic_call_still_retries	not-run (already slow)	SKIP	-	
+green-now-was-already-slow	?	nofallback.shape_without_a_program_is_a_compile_error	not-run (already slow)	PASS	-	
+green-now-was-already-slow	?	nofallback.supported_runs_on_device	not-run (already slow)	SKIP	-	
+green-now-was-already-slow	?	numeric_permission_boundaries	not-run (already slow)	SKIP	-	
+green-now-was-already-slow	?	numeric_permissions_moving_gc	not-run (already slow)	SKIP	-	
+green-in-both	?	optimization_namespace	PASS	PASS	-	
+green-now-was-already-slow	?	ordered_reduction_fusion	not-run (already slow)	SKIP	-	
+green-in-both	?	ort_argmax	PASS	PASS	-	
+green-in-both	?	ort_branch	PASS	PASS	-	
+green-in-both	?	ort_const_under_as	PASS	PASS	-	
+green-in-both	?	ort_duplicate_outputs	PASS	PASS	-	
+green-in-both	?	ort_dynamic_batch	PASS	PASS	-	
+green-in-both	?	ort_dynamic_params	PASS	PASS	-	
+green-in-both	?	ort_entry_export	PASS	PASS	-	
+green-in-both	?	ort_grad_loop	PASS	PASS	-	
+green-in-both	?	ort_grad_loop_values	PASS	PASS	-	
+green-in-both	?	ort_grad_matmul_batched	PASS	PASS	-	
+green-in-both	?	ort_linear_recursion	PASS	PASS	-	
+green-in-both	?	ort_loop_loaded_weights	XFAIL	XFAIL	-	
+green-in-both	?	ort_loop_values	PASS	PASS	-	
+green-in-both	?	ort_slice_bounds	PASS	PASS	-	
+green-in-both	?	ort_slice_grad_stride	PASS	PASS	-	
+green-in-both	?	ort_slice_start	PASS	PASS	-	
+green-in-both	?	ort_struct_casts	PASS	PASS	-	
+green-in-both	?	ort_struct_loop	PASS	PASS	-	
+green-in-both	?	ort_time_axis	PASS	PASS	-	
+green-in-both	?	ort_train_step_dynamic	PASS	PASS	-	
+green-in-both	?	ort_var_parameter	PASS	PASS	-	
+green-in-both	?	pass_written.inventory.nvm	PASS	PASS	-	
+green-in-both	?	pb_statics_gc.runtime.fvm	PASS	PASS	-	
+green-in-both	?	pb_statics_gc.runtime.nvm	PASS	PASS	-	
+green-in-both	?	python_binding.session	PASS	PASS	-	
+green-in-both	?	reshape_view_gc.fold_specialize.nvm	PASS	PASS	-	
+green-now-was-already-slow	?	resident_compute.fvm	not-run (already slow)	SKIP	-	
+green-now-was-already-slow	?	resident_compute.jit	not-run (already slow)	SKIP	-	
+green-now-was-already-slow	?	resident_compute.nvm	not-run (already slow)	SKIP	-	
+green-now-was-already-slow	?	resident_outputs.fvm	not-run (already slow)	SKIP	-	
+green-now-was-already-slow	?	resident_outputs.jit	not-run (already slow)	SKIP	-	
+green-now-was-already-slow	?	resident_outputs.nvm	not-run (already slow)	SKIP	-	
+green-now-was-already-slow	?	resident_scalars.fvm	not-run (already slow)	SKIP	-	
+green-now-was-already-slow	?	resident_scalars.jit	not-run (already slow)	SKIP	-	
+green-now-was-already-slow	?	resident_scalars.nvm	not-run (already slow)	SKIP	-	
+green-now-was-already-slow	?	resident_transfers.fvm	not-run (already slow)	SKIP	-	
+green-now-was-already-slow	?	resident_transfers.jit	not-run (already slow)	SKIP	-	
+green-now-was-already-slow	?	resident_transfers.nvm	not-run (already slow)	SKIP	-	
+green-in-both	?	residual_mlp_gir	PASS	PASS	-	
+green-in-both	?	residual_mlp_inline_large	PASS	PASS	-	
+green-in-both	?	residual_mlp.simplify.fvm	PASS	PASS	-	
+green-in-both	?	rules.accuracy_scalar_every_backend.fvm	PASS	PASS	-	
+green-in-both	?	rules.accuracy_scalar_every_backend.jit	PASS	PASS	-	
+green-in-both	?	rules.accuracy_scalar_every_backend.nvm	PASS	PASS	-	
+green-in-both	?	rules.fusion_bit_identical_fused.fvm	PASS	PASS	-	
+green-in-both	?	rules.fusion_bit_identical_fused.jit	PASS	PASS	-	
+green-in-both	?	rules.fusion_bit_identical_fused.nvm	PASS	PASS	-	
+green-in-both	?	rules.the_coverage_check_refuses_every_refuted_law	PASS	PASS	-	
+green-in-both	?	runner.exit_reporting_names_the_signal	PASS	PASS	-	
+green-in-both	?	runner.provenance_line_names_the_artifact	PASS	PASS	-	
+green-in-both	?	runner.tier_declared_against_started	PASS	PASS	-	
+green-now-was-already-slow	?	runtime_scalars	not-run (already slow)	SKIP	-	
+green-now-was-already-slow	?	scalar_arithmetic.fvm	not-run (already slow)	SKIP	-	
+green-now-was-already-slow	?	scalar_arithmetic.jit	not-run (already slow)	SKIP	-	
+green-now-was-already-slow	?	scalar_arithmetic.nvm	not-run (already slow)	SKIP	-	
+green-now-was-already-slow	?	scalar_predicates.fvm	not-run (already slow)	SKIP	-	
+green-now-was-already-slow	?	scalar_predicates.jit	not-run (already slow)	SKIP	-	
+green-now-was-already-slow	?	scalar_predicates.nvm	not-run (already slow)	SKIP	-	
+green-now-was-already-slow	?	scalar_zero_control.fvm	not-run (already slow)	SKIP	-	
+green-now-was-already-slow	?	scalar_zero_control.jit	not-run (already slow)	SKIP	-	
+green-now-was-already-slow	?	scalar_zero_control.nvm	not-run (already slow)	SKIP	-	
+green-now-was-already-slow	?	scalar_zero_positive	not-run (already slow)	SKIP	-	
+green-now-was-already-slow	?	scalar_zero.fvm	not-run (already slow)	SKIP	-	
+green-now-was-already-slow	?	scalar_zero.jit	not-run (already slow)	SKIP	-	
+green-now-was-already-slow	?	scalar_zero.nvm	not-run (already slow)	SKIP	-	
+green-now-was-already-slow	?	scope.one_compilation_for_two_calls	not-run (already slow)	SKIP	-	
+green-now-was-already-slow	?	shared_row_regions	not-run (already slow)	SKIP	-	
+green-in-both	?	siamese_shared_encoder	PASS	PASS	-	
+green-in-both	?	siamese_shared_encoder.opt.tf	PASS	PASS	-	
+green-in-both	?	simplify_arm_write_lost.simplify_fvm	PASS	PASS	-	
+green-in-both	?	simplify_arm_write_lost.simplify_jit	PASS	PASS	-	
+green-in-both	?	simplify_growth_budget.simplify.nvm	PASS	PASS	-	
+green-in-both	?	softmax	PASS	SKIP	-	
+green-in-both	?	specialize_element_type_nest.refused	PASS	PASS	-	
+green-now-was-already-slow	?	specialized_branches.fvm	not-run (already slow)	SKIP	-	
+green-now-was-already-slow	?	specialized_branches.jit	not-run (already slow)	SKIP	-	
+green-now-was-already-slow	?	specialized_branches.nvm	not-run (already slow)	SKIP	-	
+green-in-both	?	static_branches.simplify	PASS	PASS	-	
+green-in-both	?	static_branches.simplify.rgir	PASS	PASS	-	
+green-now-was-already-slow	?	static_loop_device	not-run (already slow)	SKIP	-	
+green-now-was-already-slow	?	strict_sum_bits	not-run (already slow)	SKIP	-	
+green-in-both	?	surface.lambda_call.fvm	PASS	PASS	-	
+green-in-both	?	surface.lambda_call.jit	PASS	PASS	-	
+green-in-both	?	surface.lambda_call.nvm	PASS	PASS	-	
+green-in-both	?	surface.lambda_call.prl	PASS	PASS	-	
+green-in-both	?	surface.member_chain.fvm	PASS	PASS	-	
+green-in-both	?	surface.member_chain.jit	PASS	PASS	-	
+green-in-both	?	surface.member_chain.nvm	PASS	PASS	-	
+green-in-both	?	surface.member_chain.prl	PASS	PASS	-	
+green-in-both	?	surface.minus.fvm	PASS	PASS	-	
+green-in-both	?	surface.minus.jit	PASS	PASS	-	
+green-in-both	?	surface.minus.nvm	PASS	PASS	-	
+green-in-both	?	surface.minus.prl	PASS	PASS	-	
+green-in-both	?	surface.operator_values.fvm	PASS	PASS	-	
+green-in-both	?	surface.operator_values.jit	PASS	PASS	-	
+green-in-both	?	surface.operator_values.nvm	PASS	PASS	-	
+green-in-both	?	surface.operator_values.prl	PASS	PASS	-	
+green-in-both	?	surface.zip_many.fvm	PASS	PASS	-	
+green-in-both	?	surface.zip_many.jit	PASS	PASS	-	
+green-in-both	?	surface.zip_many.nvm	PASS	PASS	-	
+green-in-both	?	surface.zip_many.prl	PASS	PASS	-	
+green-in-both	?	tiny_cnn_gir	PASS	PASS	-	
+green-in-both	?	tools.find_fix_asks_who_already_fixed_it	PASS	PASS	-	
+green-now-was-already-slow	?	transcendental_ulp_contract	not-run (already slow)	SKIP	-	
+green-now-was-already-slow	?	tree_expansion_autodiff_and_device_update	not-run (already slow)	SKIP	-	
+green-in-both	?	type_identity.corpus	PASS	PASS	-	
+green-in-both	?	type_text.roundtrip	PASS	PASS	-	
+green-in-both	?	unused_values.called_fallible	PASS	PASS	-	
+green-in-both	?	unused_values.called_fallible_pipeline	PASS	PASS	-	
+green-in-both	?	unused_values.help_function_body_sync_runs	PASS	PASS	-	
+green-in-both	?	unused_values.help_if_arm_else_sync_runs	PASS	PASS	-	
+green-in-both	?	unused_values.help_if_arm_then_sync_runs	PASS	PASS	-	
+green-in-both	?	unused_values.help_let_sync_is_not_a_program	PASS	PASS	-	
+green-now-was-already-slow	?	value_gradient.fvm	not-run (already slow)	SKIP	-	
+green-now-was-already-slow	?	value_gradient.jit	not-run (already slow)	SKIP	-	
+green-now-was-already-slow	?	value_gradient.nvm	not-run (already slow)	SKIP	-	
+green-in-both	?	value.deep_enum_chain.fvm	PASS	PASS	-	
+green-in-both	?	value.deep_enum_chain.jit	PASS	PASS	-	
+green-in-both	?	value.deep_enum_chain.nvm	PASS	PASS	-	
+green-in-both	?	value.deep_enum_chain.prl	PASS	PASS	-	
+green-in-both	?	var_grad.inline_tf	PASS	PASS	-	
+green-in-both	?	var_grad.opt_tf	PASS	PASS	-	
+green-in-both	?	var_grad.simplify_jit	PASS	PASS	-	
+green-in-both	?	var_read_before_callee_write.macro_simplify_fvm	PASS	PASS	-	
+green-in-both	?	var_tensor_read.opt_macro_nvm	PASS	PASS	-	
+green-now-was-already-slow	?	vector_add	not-run (already slow)	SKIP	-	
+green-in-both	?	warn.werror_pass_warning	PASS	PASS	-	
+green-in-both	?	with_defaults.applied.fvm	PASS	PASS	-	
+green-in-both	?	with_defaults.applied.jit	PASS	PASS	-	
+green-in-both	?	with_defaults.applied.nvm	PASS	PASS	-	
+green-in-both	?	with_defaults.applied.prl	PASS	PASS	-	
+red-in-both	compile.collections	collfuzz.quick	FAIL	FAIL	never-reached-its-verdict-line	[INFO] expected exit 0, got exit 1
+red-in-both	compile.diag_catalog	catalog.doc_is_generated	FAIL	FAIL	exit-1-with-no-line-saying-why	[INFO] expected exit 0, got exit 1
+red-in-both	compile.numeric_permissions	library_gemm.tolerance	FAIL	FAIL	to_array-not-in-the-compiler	[INFO] expected exit 0, got exit 1
+red-in-both	compile.numeric_permissions	library_gemm.tolerance.safe	FAIL	FAIL	to_array-not-in-the-compiler	[INFO] expected exit 0, got exit 1
+red-in-both	compile.unused_values	unused_values.one_input_one_answer	FAIL	FAIL	to_array-not-in-the-compiler	[INFO] expected exit 0, got exit 1
+red-in-both	consistency.attempt	attempt.bad_call.argument	FAIL	FAIL	an-expected-line-is-missing	[INFO] output does not contain 'bad_call_argument.cml:9:27'
+red-in-both	consistency.attempt	attempt.bad_calls	FAIL	FAIL	unclassified	[INFO] verification exited 1
+red-in-both	consistency.attempt	attempt.collector.stress_both.fvm	FAIL	FAIL	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+red-in-both	consistency.attempt	attempt.collector.stress_both.jit	FAIL	FAIL	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+red-in-both	consistency.attempt	attempt.collector.stress_both.nvm	FAIL	FAIL	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+red-in-both	consistency.attempt	attempt.collector.stress_both.prl	FAIL	FAIL	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+red-in-both	consistency.attempt	attempt.collector.stress.fvm	FAIL	FAIL	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+red-in-both	consistency.attempt	attempt.collector.stress.jit	FAIL	FAIL	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+red-in-both	consistency.attempt	attempt.collector.stress.nvm	FAIL	FAIL	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+red-in-both	consistency.attempt	attempt.collector.stress.prl	FAIL	FAIL	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+red-in-both	consistency.attempt	attempt.compiled.fvm	FAIL	FAIL	golden-behind-the-recording	[INFO] snapshot differs from golden
+red-in-both	consistency.attempt	attempt.compiled.jit	FAIL	FAIL	golden-behind-the-recording	[INFO] snapshot differs from golden
+red-in-both	consistency.attempt	attempt.compiled.nvm	FAIL	FAIL	golden-behind-the-recording	[INFO] snapshot differs from golden
+red-in-both	consistency.attempt	attempt.compiled.prl	FAIL	FAIL	golden-behind-the-recording	[INFO] snapshot differs from golden
+red-in-both	consistency.attempt	attempt.concurrent.fvm	FAIL	FAIL	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+red-in-both	consistency.attempt	attempt.concurrent.jit	FAIL	FAIL	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+red-in-both	consistency.attempt	attempt.concurrent.nvm	FAIL	FAIL	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+red-in-both	consistency.attempt	attempt.concurrent.prl	FAIL	FAIL	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+red-in-both	consistency.attempt	attempt.depth.fvm	FAIL	FAIL	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+red-in-both	consistency.attempt	attempt.depth.jit	FAIL	FAIL	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+red-in-both	consistency.attempt	attempt.depth.nvm	FAIL	FAIL	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+red-in-both	consistency.attempt	attempt.depth.prl	FAIL	FAIL	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+red-in-both	consistency.attempt	attempt.effects.fvm	FAIL	FAIL	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+red-in-both	consistency.attempt	attempt.effects.jit	FAIL	FAIL	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+red-in-both	consistency.attempt	attempt.effects.nvm	FAIL	FAIL	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+red-in-both	consistency.attempt	attempt.effects.prl	FAIL	FAIL	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+red-in-both	consistency.attempt	attempt.library.fvm	FAIL	FAIL	golden-behind-the-recording	[INFO] snapshot differs from golden
+red-in-both	consistency.attempt	attempt.library.jit	FAIL	FAIL	golden-behind-the-recording	[INFO] snapshot differs from golden
+red-in-both	consistency.attempt	attempt.library.nvm	FAIL	FAIL	golden-behind-the-recording	[INFO] snapshot differs from golden
+red-in-both	consistency.attempt	attempt.library.prl	FAIL	FAIL	golden-behind-the-recording	[INFO] snapshot differs from golden
+red-in-both	consistency.attempt	attempt.many.fvm	FAIL	FAIL	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+red-in-both	consistency.attempt	attempt.many.jit	FAIL	FAIL	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+red-in-both	consistency.attempt	attempt.many.nvm	FAIL	FAIL	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+red-in-both	consistency.attempt	attempt.many.prl	FAIL	FAIL	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+red-in-both	consistency.attempt	attempt.not_isolated.fault_in_argument.fvm	FAIL	FAIL	unclassified	[INFO] expected diagnostic RuntimeDiag::DivisionByZero, line 11, column 31
+red-in-both	consistency.attempt	attempt.not_isolated.fault_in_argument.jit	FAIL	FAIL	unclassified	[INFO] expected diagnostic RuntimeDiag::DivisionByZero, line 11, column 31
+red-in-both	consistency.attempt	attempt.not_isolated.fault_in_argument.nvm	FAIL	FAIL	unclassified	[INFO] expected diagnostic RuntimeDiag::DivisionByZero, line 11, column 31
+red-in-both	consistency.attempt	attempt.not_isolated.fault_in_argument.prl	FAIL	FAIL	unclassified	[INFO] expected diagnostic RuntimeDiag::DivisionByZero, line 11, column 31
+red-in-both	consistency.attempt	attempt.not_isolated.fault_outside.fvm	FAIL	FAIL	unclassified	[INFO] expected diagnostic RuntimeDiag::DivisionByZero, line 7, column 38
+red-in-both	consistency.attempt	attempt.not_isolated.fault_outside.jit	FAIL	FAIL	unclassified	[INFO] expected diagnostic RuntimeDiag::DivisionByZero, line 7, column 38
+red-in-both	consistency.attempt	attempt.not_isolated.fault_outside.nvm	FAIL	FAIL	unclassified	[INFO] expected diagnostic RuntimeDiag::DivisionByZero, line 7, column 38
+red-in-both	consistency.attempt	attempt.not_isolated.fault_outside.prl	FAIL	FAIL	unclassified	[INFO] expected diagnostic RuntimeDiag::DivisionByZero, line 7, column 38
+red-in-both	consistency.attempt	attempt.partial_fault.fvm	FAIL	FAIL	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+red-in-both	consistency.attempt	attempt.partial_fault.jit	FAIL	FAIL	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+red-in-both	consistency.attempt	attempt.partial_fault.nvm	FAIL	FAIL	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+red-in-both	consistency.attempt	attempt.partial_fault.prl	FAIL	FAIL	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+red-in-both	consistency.attempt	attempt.pipeline.cse_dce.fvm	FAIL	FAIL	golden-behind-the-recording	[INFO] expected exit 0, got exit 1
+red-in-both	consistency.attempt	attempt.pipeline.cse_dce.jit	FAIL	FAIL	golden-behind-the-recording	[INFO] expected exit 0, got exit 1
+red-in-both	consistency.attempt	attempt.pipeline.cse_dce.nvm	FAIL	FAIL	golden-behind-the-recording	[INFO] expected exit 0, got exit 1
+red-in-both	consistency.attempt	attempt.pipeline.cse_dce.prl	FAIL	FAIL	golden-behind-the-recording	[INFO] expected exit 0, got exit 1
+red-in-both	consistency.attempt	attempt.pipeline.fold.fvm	FAIL	FAIL	golden-behind-the-recording	[INFO] expected exit 0, got exit 1
+red-in-both	consistency.attempt	attempt.pipeline.fold.jit	FAIL	FAIL	golden-behind-the-recording	[INFO] expected exit 0, got exit 1
+red-in-both	consistency.attempt	attempt.pipeline.fold.nvm	FAIL	FAIL	golden-behind-the-recording	[INFO] expected exit 0, got exit 1
+red-in-both	consistency.attempt	attempt.pipeline.fold.prl	FAIL	FAIL	golden-behind-the-recording	[INFO] expected exit 0, got exit 1
+red-in-both	consistency.attempt	attempt.pipeline.inline_opt.fvm	FAIL	FAIL	golden-behind-the-recording	[INFO] expected exit 0, got exit 1
+red-in-both	consistency.attempt	attempt.pipeline.inline_opt.jit	FAIL	FAIL	golden-behind-the-recording	[INFO] expected exit 0, got exit 1
+red-in-both	consistency.attempt	attempt.pipeline.inline_opt.nvm	FAIL	FAIL	golden-behind-the-recording	[INFO] expected exit 0, got exit 1
+red-in-both	consistency.attempt	attempt.pipeline.inline_opt.prl	FAIL	FAIL	golden-behind-the-recording	[INFO] expected exit 0, got exit 1
+red-in-both	consistency.attempt	attempt.pipeline.macro_opt.fvm	FAIL	FAIL	golden-behind-the-recording	[INFO] expected exit 0, got exit 1
+red-in-both	consistency.attempt	attempt.pipeline.macro_opt.jit	FAIL	FAIL	golden-behind-the-recording	[INFO] expected exit 0, got exit 1
+red-in-both	consistency.attempt	attempt.pipeline.macro_opt.nvm	FAIL	FAIL	golden-behind-the-recording	[INFO] expected exit 0, got exit 1
+red-in-both	consistency.attempt	attempt.pipeline.macro_opt.prl	FAIL	FAIL	golden-behind-the-recording	[INFO] expected exit 0, got exit 1
+red-in-both	consistency.attempt	attempt.pipeline.nested_opt.fvm	FAIL	FAIL	golden-behind-the-recording	[INFO] snapshot differs from golden
+red-in-both	consistency.attempt	attempt.pipeline.nested_opt.jit	FAIL	FAIL	golden-behind-the-recording	[INFO] snapshot differs from golden
+red-in-both	consistency.attempt	attempt.pipeline.nested_opt.nvm	FAIL	FAIL	golden-behind-the-recording	[INFO] snapshot differs from golden
+red-in-both	consistency.attempt	attempt.pipeline.nested_opt.prl	FAIL	FAIL	golden-behind-the-recording	[INFO] snapshot differs from golden
+red-in-both	consistency.attempt	attempt.pipeline.places_opt.fvm	FAIL	FAIL	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+red-in-both	consistency.attempt	attempt.pipeline.places_opt.jit	FAIL	FAIL	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+red-in-both	consistency.attempt	attempt.pipeline.places_opt.nvm	FAIL	FAIL	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+red-in-both	consistency.attempt	attempt.pipeline.places_opt.prl	FAIL	FAIL	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+red-in-both	consistency.attempt	attempt.pipeline.simplify.fvm	FAIL	FAIL	golden-behind-the-recording	[INFO] expected exit 0, got exit 1
+red-in-both	consistency.attempt	attempt.pipeline.simplify.jit	FAIL	FAIL	golden-behind-the-recording	[INFO] expected exit 0, got exit 1
+red-in-both	consistency.attempt	attempt.pipeline.simplify.nvm	FAIL	FAIL	golden-behind-the-recording	[INFO] expected exit 0, got exit 1
+red-in-both	consistency.attempt	attempt.pipeline.simplify.prl	FAIL	FAIL	golden-behind-the-recording	[INFO] expected exit 0, got exit 1
+red-in-both	consistency.attempt	attempt.refuse.grad	FAIL	FAIL	unclassified	[INFO] expected diagnostic RuntimeDiag::RuntimeError, line 13
+red-in-both	consistency.attempt	attempt.refuse.onnx	FAIL	FAIL	unclassified	[INFO] expected diagnostic RuntimeDiag::TranslationRefused, line 10, column 12
+red-in-both	consistency.attempt	attempt.siblings.fvm	FAIL	FAIL	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+red-in-both	consistency.attempt	attempt.siblings.jit	FAIL	FAIL	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+red-in-both	consistency.attempt	attempt.siblings.nvm	FAIL	FAIL	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+red-in-both	consistency.attempt	attempt.siblings.prl	FAIL	FAIL	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+red-in-both	consistency.attempt	attempt.translate.cpp	FAIL	FAIL	an-expected-line-is-missing	[INFO] output does not contain 'rt::attempt<double>(depth, at_10_12, tagged0, x)'
+red-in-both	consistency.runner	runner.backend_matrix	FAIL	FAIL	exit-1-with-no-line-saying-why	[INFO] expected exit 0, got exit 1
+red-in-both	docs.links	docs.links.citations	FAIL	FAIL	exit-1-with-no-line-saying-why	[INFO] expected exit 0, got exit 1
+red-in-both	docs.links	docs.snippets_compile	FAIL	FAIL	exit-1-with-no-line-saying-why	[INFO] expected exit 0, got exit 1
+red-now-was-already-slow	linear.var_reference	var_pipelines	not-run (already slow)	FAIL	never-reached-its-verdict-line	[INFO] expected exit 0, got exit 1
+red-in-both	mm.capacity	capacity.dead_function_closure_verify	FAIL	FAIL	exit-1-with-no-line-saying-why	[INFO] expected exit 0, got exit 1
+red-in-both	mm.capacity	capacity.growth_fvm_gc_stress	FAIL	FAIL	parser-rejects-the-old-spelling	[INFO] expected exit 0, got exit 1
+red-in-both	mm.capacity	capacity.growth_simplify_gc_stress	FAIL	FAIL	parser-rejects-the-old-spelling	[INFO] expected exit 0, got exit 1
+red-in-both	mm.capacity	capacity.scale_check	FAIL	FAIL	parser-rejects-the-old-spelling	[INFO] expected exit 0, got exit 1
+red-now-was-already-slow	mm.gc_pacing	gc_pacing.churn_fvm	not-run (already slow)	FAIL	exit-1-with-no-line-saying-why	[INFO] expected exit 0, got exit 1
+red-now-was-already-slow	mm.gc_pacing	gc_pacing.churn_mark_sweep	not-run (already slow)	FAIL	exit-1-with-no-line-saying-why	[INFO] expected exit 0, got exit 1
+red-now-was-already-slow	mm.gc_pacing	gc_pacing.churn_nursery8	not-run (already slow)	FAIL	exit-1-with-no-line-saying-why	[INFO] expected exit 0, got exit 1
+red-now-was-already-slow	mm.gc_pacing	gc_pacing.churn_nvm	not-run (already slow)	FAIL	exit-1-with-no-line-saying-why	[INFO] expected exit 0, got exit 1
+red-now-was-already-slow	mm.gc_pacing	gc_pacing.churn_prl	not-run (already slow)	FAIL	exit-1-with-no-line-saying-why	[INFO] expected exit 0, got exit 1
+red-now-was-already-slow	mm.gc_pacing	gc_pacing.live_fvm	not-run (already slow)	FAIL	exit-1-with-no-line-saying-why	[INFO] expected exit 0, got exit 1
+red-now-was-already-slow	mm.gc_pacing	gc_pacing.live_nvm	not-run (already slow)	FAIL	exit-1-with-no-line-saying-why	[INFO] expected exit 0, got exit 1
+red-now-was-already-slow	mm.gc_pacing	gc_pacing.live_steps	not-run (already slow)	FAIL	exit-1-with-no-line-saying-why	[INFO] expected exit 0, got exit 1
+red-now-was-already-slow	mm.gc_pacing	gc_pacing.promoted_floor	not-run (already slow)	FAIL	exit-1-with-no-line-saying-why	[INFO] expected exit 0, got exit 1
+red-now-was-already-slow	mm.gc_pacing	gc_pacing.promoted_fvm	not-run (already slow)	FAIL	exit-1-with-no-line-saying-why	[INFO] expected exit 0, got exit 1
+red-now-was-already-slow	mm.gc_pacing	gc_pacing.promoted_steps	not-run (already slow)	FAIL	exit-1-with-no-line-saying-why	[INFO] expected exit 0, got exit 1
+red-now-was-already-slow	mm.gc_pacing	gc_pacing.views_once	not-run (already slow)	FAIL	exit-1-with-no-line-saying-why	[INFO] expected exit 0, got exit 1
+red-now-was-already-slow	mm.gc_soak	gc_heap_limit.generational.fits	not-run (already slow)	FAIL	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+red-now-was-already-slow	mm.gc_soak	gc_heap_limit.generational.fvm	not-run (already slow)	FAIL	range-takes-no-higher-order-function	[INFO] output does not contain 'MemoryExhausted'
+red-now-was-already-slow	mm.gc_soak	gc_heap_limit.generational.nvm	not-run (already slow)	FAIL	range-takes-no-higher-order-function	[INFO] output does not contain 'MemoryExhausted'
+red-now-was-already-slow	mm.gc_soak	gc_heap_limit.mark_sweep.fits	not-run (already slow)	FAIL	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+red-now-was-already-slow	mm.gc_soak	gc_heap_limit.mark_sweep.fvm	not-run (already slow)	FAIL	range-takes-no-higher-order-function	[INFO] output does not contain 'MemoryExhausted'
+red-now-was-already-slow	mm.gc_soak	gc_heap_limit.mark_sweep.nvm	not-run (already slow)	FAIL	range-takes-no-higher-order-function	[INFO] output does not contain 'MemoryExhausted'
+red-now-was-already-slow	mm.gc_soak	gc_live_large.generational.fvm	not-run (already slow)	FAIL	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+red-now-was-already-slow	mm.gc_soak	gc_live_large.generational.nvm	not-run (already slow)	FAIL	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+red-now-was-already-slow	mm.gc_soak	gc_live_large.generational.prl	not-run (already slow)	FAIL	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+red-now-was-already-slow	mm.gc_soak	gc_live_large.mark_sweep.fvm	not-run (already slow)	FAIL	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+red-now-was-already-slow	mm.gc_soak	gc_live_large.mark_sweep.nvm	not-run (already slow)	FAIL	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+red-now-was-already-slow	mm.gc_soak	gc_live_large.mark_sweep.prl	not-run (already slow)	FAIL	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+red-now-was-already-slow	mm.gc_soak	gc_prl_blocked_worker.generational	not-run (already slow)	FAIL	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+red-now-was-already-slow	mm.gc_soak	gc_prl_blocked_worker.mark_sweep	not-run (already slow)	FAIL	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+red-now-was-already-slow	mm.gc_soak	gc_soak.generational.12000.fvm	not-run (already slow)	FAIL	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+red-now-was-already-slow	mm.gc_soak	gc_soak.generational.3000.fvm	not-run (already slow)	FAIL	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+red-now-was-already-slow	mm.gc_soak	gc_soak.generational.3000.nvm	not-run (already slow)	FAIL	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+red-now-was-already-slow	mm.gc_soak	gc_soak.generational.3000.prl	not-run (already slow)	FAIL	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+red-now-was-already-slow	mm.gc_soak	gc_soak.mark_sweep.12000.fvm	not-run (already slow)	FAIL	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+red-now-was-already-slow	mm.gc_soak	gc_soak.mark_sweep.3000.fvm	not-run (already slow)	FAIL	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+red-now-was-already-slow	mm.gc_soak	gc_soak.mark_sweep.3000.nvm	not-run (already slow)	FAIL	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+red-now-was-already-slow	mm.gc_soak	gc_soak.mark_sweep.3000.prl	not-run (already slow)	FAIL	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+red-in-both	mm.graph_space	graph_space.function_value_keeps_program	FAIL	FAIL	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+red-in-both	mm.process_state	process_state.stw_give_up_escalates	FAIL	FAIL	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+red-in-both	mm.process_state	process_state.stw_sleep_leaves_its_region	FAIL	FAIL	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+red-in-both	modules.autodiff	grad_structures	FAIL	FAIL	parser-rejects-the-old-spelling	[INFO] expected exit 0, got exit 1
+red-now-was-already-slow	modules.autodiff	resnet_gradient_relu_kinks_vs_torch64	not-run (already slow)	FAIL	exit-1-with-no-line-saying-why	[INFO] expected exit 0, got exit 1
+red-now-was-already-slow	modules.autodiff	resnet_gradient_smooth_vs_torch64	not-run (already slow)	FAIL	exit-1-with-no-line-saying-why	[INFO] expected exit 0, got exit 1
+red-now-was-already-slow	modules.autodiff	resnetbn_gradient_relu_kinks_vs_torch64	not-run (already slow)	FAIL	exit-1-with-no-line-saying-why	[INFO] expected exit 0, got exit 1
+red-now-was-already-slow	modules.autodiff	resnetbn_gradient_smooth_vs_torch64	not-run (already slow)	FAIL	exit-1-with-no-line-saying-why	[INFO] expected exit 0, got exit 1
+red-in-both	modules.autodiff	tensor_grad_check.simplify.jit	FAIL	FAIL	to_array-not-in-the-compiler	[INFO] expected exit 0, got exit 1
+red-in-both	modules.import_audit	import.audit	FAIL	FAIL	exit-1-with-no-line-saying-why	[INFO] expected exit 0, got exit 1
+red-in-both	modules.onnx	export_loop_for	FAIL	FAIL	exit-1-with-no-line-saying-why	[INFO] expected exit 0, got exit 1
+red-in-both	modules.onnx	ort_core_slice	FAIL	FAIL	never-reached-its-verdict-line	[INFO] expected exit 0, got exit 1
+red-now-was-already-slow	modules.random	keyed_random.std_cpp_agrees	not-run (already slow)	FAIL	never-reached-its-verdict-line	[INFO] expected exit 0, got exit 1
+red-in-both	modules.stdlib_registry	registry.docs_complete	FAIL	FAIL	exit-1-with-no-line-saying-why	[INFO] expected exit 0, got exit 1
+red-in-both	modules.stdlib_registry	registry.migrations_stay_migrated	FAIL	FAIL	exit-1-with-no-line-saying-why	[INFO] expected exit 0, got exit 1
+red-in-both	opt.algebra	gradient.false	FAIL	FAIL	to_array-not-in-the-compiler	[INFO] expected exit 0, got exit 1
+red-in-both	opt.algebra	gradient.true	FAIL	FAIL	to_array-not-in-the-compiler	[INFO] expected exit 0, got exit 1
+red-in-both	opt.effects_kept	opt_matches_interpreter.mnist.nvm	FAIL	FAIL	exit-1-with-no-line-saying-why	[INFO] expected exit 0, got exit 1
+red-in-both	opt.gate_value	branch.42.opt.fvm	FAIL	FAIL	to_array-not-in-the-compiler	[INFO] expected exit 0, got exit 1
+red-in-both	opt.gate_value	branch.42.opt.jit	FAIL	FAIL	to_array-not-in-the-compiler	[INFO] expected exit 0, got exit 1
+red-in-both	opt.gate_value	branch.42.opt.nvm	FAIL	FAIL	to_array-not-in-the-compiler	[INFO] expected exit 0, got exit 1
+red-in-both	opt.gate_value	branch.42.opt.prl	FAIL	FAIL	to_array-not-in-the-compiler	[INFO] expected exit 0, got exit 1
+red-in-both	opt.gate_value	covered_value.graph.false	FAIL	FAIL	to_array-not-in-the-compiler	[INFO] expected exit 0, got exit 1
+red-in-both	opt.gate_value	covered_value.graph.true	FAIL	FAIL	to_array-not-in-the-compiler	[INFO] expected exit 0, got exit 1
+red-in-both	opt.gate_value	other_wait.graph	FAIL	FAIL	to_array-not-in-the-compiler	[INFO] expected exit 0, got exit 1
+red-in-both	opt.pass_params	docs.word_form_only	FAIL	FAIL	exit-1-with-no-line-saying-why	[INFO] expected exit 0, got exit 1
+red-in-both	parse.frontend	frontend.ast_snapshot	FAIL	FAIL	exit-1-with-no-line-saying-why	[INFO] expected exit 0, got exit 1
+red-now-was-already-slow	perf.para_speedup	monte_carlo_pi.speedup	not-run (already slow)	FAIL	range-takes-no-higher-order-function	[INFO] expected exit 0, got exit 1
+red-now-was-already-slow	perf.reduce_layout_counts	reduce_layout.count	not-run (already slow)	FAIL	to_array-not-in-the-compiler	[INFO] expected exit 0, got exit 1
+red-now-was-already-slow	perf.step_counts	step.count	not-run (already slow)	FAIL	to_array-not-in-the-compiler	[INFO] expected exit 0, got exit 1
+red-now-was-already-slow	perf.step_counts	step.elementwise	not-run (already slow)	FAIL	to_array-not-in-the-compiler	[INFO] expected exit 0, got exit 1
+red-in-both	tools.autodiff_migration_ledger	tools.autodiff_migration_ledger.ratchet	FAIL	FAIL	exit-1-with-no-line-saying-why	[INFO] expected exit 0, got exit 1
+red-now-was-already-slow	tools.debugger	debugger.dap_session	not-run (already slow)	FAIL	exit-1-with-no-line-saying-why	[INFO] expected exit 0, got exit 1
+red-now-was-already-slow	tools.debugger	debugger.dap_stepping	not-run (already slow)	FAIL	exit-1-with-no-line-saying-why	[INFO] expected exit 0, got exit 1
+red-in-both	tools.load_class	load_class.tree	FAIL	FAIL	exit-1-with-no-line-saying-why	[INFO] expected exit 0, got exit 1
+red-in-both	tools.portability	portability.std_includes	FAIL	FAIL	exit-1-with-no-line-saying-why	[INFO] expected exit 0, got exit 1
+red-in-both	trans.canonical_gir	canonical_document_and_equivalence	FAIL	FAIL	exit-1-with-no-line-saying-why	[INFO] expected exit 0, got exit 1
+red-in-both	trans.cml	print_and_recompile	FAIL	FAIL	exit-1-with-no-line-saying-why	[INFO] note: On the Debug tier this is red with `Camel Debug Assertion Failed: Location: ../src/core/type/base.cpp(335), Function: bool camel::core::type::Type::assignableFrom(Type *) const, Expressio
+red-in-both	trans.cml	print_then_run_agrees_with_the_origin	FAIL	FAIL	exit-1-with-no-line-saying-why	[INFO] expected exit 0, got exit 1
+red-in-both	trans.cpp	every_expect_program_links_no_runtime	FAIL	FAIL	exit-1-with-no-line-saying-why	[INFO] expected exit 0, got exit 1
+red-in-both	trans.cpp	narrow_one_program_twenty_times	FAIL	FAIL	an-expected-line-is-missing	[INFO] stdout does not contain '20 of 20: exit 0'

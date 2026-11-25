@@ -25,7 +25,7 @@
 // `position=0`, "the rule's right side reads a value the caller does not carry" -- and it is
 // deliberately one level deeper than the user-facing sentence, because that sentence ("transpose has
 // no transpose for this function") says nothing about *which* value is missing.
-import { mul_tangent } from autodiff
+import { mul_tangent } from laws
 import rulesets.jvp
 import rulesets.transpose
 import { jvp, split, transpose } from transforms
