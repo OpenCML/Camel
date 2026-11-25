@@ -63,7 +63,7 @@ std::optional<entity> mergeImportedEntities(const std::vector<entity> &entities)
         }
         bool functionForm = false;
         if (EntityAccess::isGraphSet(ent)) {
-            functionForm = true;
+            functionForm    = true;
             const auto &set = EntityAccess::graphSet(ent);
             if (set) {
                 if (graphs == nullptr) {
@@ -98,8 +98,8 @@ std::optional<entity> mergeImportedEntities(const std::vector<entity> &entities)
             other = ent;
         }
     }
-    const bool hasGroup     = group != nullptr && !groupName.empty();
-    const int formsOfName   = (hasGroup ? 1 : 0) + (graphs != nullptr ? 1 : 0) +
+    const bool hasGroup   = group != nullptr && !groupName.empty();
+    const int formsOfName = (hasGroup ? 1 : 0) + (graphs != nullptr ? 1 : 0) +
                             (decorated != nullptr ? 1 : 0) + (!tmpls.empty() ? 1 : 0);
     if (formsOfName == 0) {
         return other;
@@ -339,6 +339,16 @@ Module::namesImportedMoreThanOnce() const {
 
 bool Module::hasImportedRef(const Reference &ref, ImportLayer layer) const {
     return !importedBindingsForRef(ref, layer).empty();
+}
+
+std::vector<std::shared_ptr<Module>> Module::namedImportSourcesOf(const Reference &ref) const {
+    std::vector<std::shared_ptr<Module>> sources;
+    for (const ImportedRefBinding &binding : importedBindingsForRef(ref, ImportLayer::Named)) {
+        if (binding.mod != nullptr && std::ranges::find(sources, binding.mod) == sources.end()) {
+            sources.push_back(binding.mod);
+        }
+    }
+    return sources;
 }
 
 bool Module::hasImportedPrefix(const Reference &prefix) const {

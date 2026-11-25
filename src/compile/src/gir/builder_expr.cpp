@@ -17,7 +17,6 @@
 #include "camel/core/trace.h"
 #include <format>
 
-
 #include "camel/compile/gir/static_function.h"
 #include "camel/core/data/composite/struct.h"
 #include "camel/core/numeric_convert.h"
@@ -509,8 +508,8 @@ node_handle_t Builder::visitNRefNode(const GCT::node_ptr_t &gct) {
     // to count, so a box behind such a cell is released while the name still holds
     // it -- `state::get` of a disposed handle. A handle is a value and a name of one needs no cell
     // (design principles 3.5), so the cell goes rather than being taught to hold.
-    Type *heldValue = node != nullptr ? valueTypeOf(nodeTypeOf(node)) : nullptr;
-    const bool aHandle = isVar && !typedCell && RefType::is(heldValue);
+    Type *heldValue     = node != nullptr ? valueTypeOf(nodeTypeOf(node)) : nullptr;
+    const bool aHandle  = isVar && !typedCell && RefType::is(heldValue);
     const bool ssaValue = isVar && !typedCell && ssaDeclarationIsEligible(gct, ident, aHandle);
     node_handle_t bound = (isVar && !typedCell && !ssaValue) ? newVariable(node) : node;
     if (isVar && !ssaValue) {
@@ -855,7 +854,8 @@ node_handle_t Builder::valueVersionOf(node_handle_t variable) {
             return *modifier;
         }
         return callValuePartOf(
-            *modifier, value->second.hasReturn ? 1 + version.position : version.position);
+            *modifier,
+            value->second.hasReturn ? 1 + version.position : version.position);
     }
     // The call is this variable's writer -- recordWrite recorded it through the callee -- but the
     // parts of the call's value say nothing about it: the parts come from the callee's
@@ -972,7 +972,7 @@ std::any Builder::resolveDRefNode(const GCT::node_ptr_t &gct) {
         // is written -- this module's `map`, an import's -- is still not read: the compiler's name
         // is the built-in module's alone.
         OperatorOverloads set;
-        set.ops                             = entity->operGroup();
+        set.ops                                = entity->operGroup();
         const OperatorOverloads &builtinBodies = preludeOperatorOverloadsOf(plain);
         for (const auto &graph : builtinBodies.graphs) {
             set.graphs.push_back(graph);
@@ -1109,9 +1109,8 @@ std::any Builder::resolveDRefNode(const GCT::node_ptr_t &gct) {
     // is asked only where no scope inside the module has the name: a function of a body named
     // like an operator (`func add`, returned by its name) is that function, not the operator.
     const auto declaredInsideAFunction = [&] {
-        for (graph_scope_ptr_t scope = graphScope_;
-             scope != nullptr && scope->outer() != nullptr;
-             scope = scope->outer()) {
+        for (graph_scope_ptr_t scope = graphScope_; scope != nullptr && scope->outer() != nullptr;
+             scope                   = scope->outer()) {
             if (scope->get(name, false).has_value()) {
                 return true;
             }
@@ -1125,8 +1124,8 @@ std::any Builder::resolveDRefNode(const GCT::node_ptr_t &gct) {
         }
         return false;
     };
-    auto mergedOverloads = declaredInsideAFunction() ? std::optional<OperatorOverloads>{}
-                                                     : mergedOverloadsNamed(name);
+    auto mergedOverloads =
+        declaredInsideAFunction() ? std::optional<OperatorOverloads>{} : mergedOverloadsNamed(name);
     if (mergedOverloads.has_value()) {
         node_handle_t drefNode{currGraph_->addDrefNode(
             std::variant<graph_vec_ptr_t, oper_group_ptr_t, graph_ptr_t>{mergedOverloads->ops})};
@@ -1257,6 +1256,33 @@ std::any Builder::resolveDRefNode(const GCT::node_ptr_t &gct) {
     const bool importedName = answer.holds;
     const std::optional<camel::core::module::entity> opt =
         answer.holds && answer.found.has_value() ? answer.found->entity : std::nullopt;
+    // Whether the layer that answered is the built-in one. A name of that layer is not what one
+    // module's answer holds: the prelude IS the built-in layer, and its `#op` declarations install
+    // their rules into the built-in module's group of the name (`builder_modules.cpp`), so the set
+    // `filter`, `map`, `len` and `reduce` stand for is assembled from both places
+    // (`builtinLayerNamed`). A name imported by name from the prelude is that layer's name; one
+    // from any other module is that module's own, and takes the first layer having it.
+    const bool builtinLayer = [&] {
+        switch (answer.row) {
+        case NameRow::ImportedByName:
+            for (const auto &source : module_->namedImportSourcesOf(written)) {
+                if (context_ != nullptr && source == context_->preludeModule()) {
+                    return true;
+                }
+            }
+            return false;
+        case NameRow::EveryImport:
+            // An operator's overloads come from every layer and `importedEntity` has already
+            // merged them; only an ordinary name's answer here is one layer's, which may be half
+            // of the name (`builtinLayerNamed`).
+            return !isOperatorName(written);
+        case NameRow::AmbientImport:
+        case NameRow::Prelude:
+            return true;
+        default:
+            return false;
+        }
+    }();
     if (importedName && answer.found.has_value() && !answer.found->openedName.empty()) {
         // A name of this module, opened by a `using namespace` of one of its namespaces.
         GCT::node_ptr_t resolved = tree_->makeDRef(answer.found->openedName);
@@ -1271,6 +1297,28 @@ std::any Builder::resolveDRefNode(const GCT::node_ptr_t &gct) {
             throw BuildAbortException();
         }
         const auto &e = opt.value();
+        // The layer's own name as one call's set: a module exports a body-less `#op` declaration
+        // of a name and a declaration of the same name with a body as ONE entity (design
+        // principles 6.4), and this call site used to take one half of it. The layers are not
+        // merged: what a layer below declares under the same spelling is not a candidate beside
+        // this layer's name (10.2), and the built-in layer is one name of two places
+        // (`builtinLayerNamed`).
+        std::optional<OperatorOverloads> oneLayer =
+            builtinLayer ? builtinLayerNamed(name, e) : overloadsOfLayer(e);
+        if (!oneLayer.has_value() && builtinLayer) {
+            // The assembled set is one of the forms alone: a name of the built-in layer that has
+            // no rules at all (`to_array`) is an ordinary function, and one with rules and no
+            // function (`__add__`) is a group.
+            oneLayer = overloadsOfLayer(e);
+        }
+        if (oneLayer.has_value()) {
+            node_handle_t drefNode{graph->addDrefNode(
+                std::variant<graph_vec_ptr_t, oper_group_ptr_t, graph_ptr_t>{oneLayer->ops})};
+            registerNodeOrigin(context_, drefNode, gct, "gir.dref");
+            operatorOverloads_[drefNode] = std::move(*oneLayer);
+            LEAVE("DREF");
+            return drefNode;
+        }
         if (e.isValue()) {
             // A constant a C++ module exports (`math::pi`; design principles 10.1): the
             // constant itself, here, as the same value written as a literal would be. It has

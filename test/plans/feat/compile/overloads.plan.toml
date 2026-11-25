@@ -362,3 +362,36 @@ expect_diagnostic_column = 17
 expect_output_contains = ["SemanticDiag::NoMatchingFunction", "(float)", "<:op/idx_arr>: (xs: T[], i: int) => T", "op_body_lib::pick: (s: string) => string"]
 normalizers = ["strip_ansi", "normalize_newlines", "normalize_paths"]
 timeout_ms = 8000
+
+# ---- A name takes the first layer that has it (design principles 10.2) ----
+#
+# The DREF of a name that has a body here was answered from every layer at once: this module's
+# functions, the rules of the name's operator group, and the built-in layer's rules of the same
+# spelling. Two layers are not one overload set, so the built-in `len` was a candidate beside a
+# module's own `len`, and a call was answered by whichever layer the merge happened to fit.
+
+[[tests]]
+name = "layer_shadow_own"
+desc = "A name this module declares answers on its own, with no second candidate from the built-in layer below: `len('abc')` reaches the module's `len(string)` and prints 99. While the layers were merged into one set, the call was refused as an ambiguity between the module's `len` and the built-in rules of the same name."
+kind = "behavior"
+case = "../../../cases/compile/overloads/layer_shadow_own.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_exact = "99\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "layer_shadow_below"
+desc = "The layer below is not a fallback for a name this module declares: `len` here takes a `string`, so `len(int[])` fits no overload and is refused, the report listing only the module's `len`. While the layers were merged into one set, the built-in `len` of the array answered the call and the program printed 3."
+kind = "negative"
+case = "../../../cases/compile/overloads/layer_shadow_below.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::NoMatchingFunction"
+expect_diagnostic_line = 13
+expect_diagnostic_column = 16
+expect_output_contains = ["SemanticDiag::NoMatchingFunction", "(int[])", "len: (s: string) => int"]
+expect_output_not_contains = ["never printed", "UnknownInternalError"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
