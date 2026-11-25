@@ -8,7 +8,7 @@
  * reading of "the same width" could call them the same type. This is the shape the check must not
  * be relaxed into accepting.
  *
- * Measured 2026-11-04, before the seal judged every declared exit type: `4612811918334230528` and
+ * Measured before the seal judged every declared exit type: `4612811918334230528` and
  * exit 0 -- the double's bits read as an integer. After: refused with
  * `RuntimeDiag::ExitTypeMismatch`, exit 1.
  *

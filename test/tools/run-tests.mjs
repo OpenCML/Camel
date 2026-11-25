@@ -1263,7 +1263,7 @@ function parseArgs(argv) {
             // named an option this checkout does not have -- normally because the caller is newer
             // than the tree it was pointed at -- and pushing it as a target made `walkPlans` stat
             // `.../--list-cases` and throw ENOENT, which every consumer reads as "this selection
-            // could not be read". Measured 2026-11-24: a lane cut at 0beeecb9fb, before this tree
+            // could not be read". Measured: a lane cut at 0beeecb9fb, before this tree
             // had `--list-cases`, answered the host's `[RUNNER, ...targets, '--list-cases',
             // '--tier', fast]` with a stack trace and exit 1, and `scripts/selection-cases.mjs`
             // reported `the plan loader refused this selection (exit 1)` -- a version mismatch
@@ -3069,7 +3069,7 @@ async function runOneTest(test, sharedVars, logContext, scratch, scratchRelative
         // The checkout root, and not the test's scratch directory, because `${test_tmp}` is a
         // *repository-relative* path (docs/test-plans.md, "Test Scratch"): a plan writes
         // `ONNX_OUT=${test_tmp}/m.onnx`, and a program started anywhere but here resolves that one
-        // level deeper, under its own cwd. Measured on 2026-11-16 with `cwd: scratch` here: 98
+        // level deeper, under its own cwd. Measured with `cwd: scratch` here: 98
         // failures in `feat/modules` against 3 on the base and every one of the 95 new ones
         // `ENOENT ... /tmp/test/run-<pid>/<plan>/<test>/<file>`, because the model had been written
         // to `<scratch>/tmp/test/...` while the verification script looked for the absolute path.
@@ -3262,7 +3262,7 @@ async function runOneTest(test, sharedVars, logContext, scratch, scratchRelative
     // nothing examined: a margin that cannot be read is not a margin. A test whose own CPU exceeds
     // its wall clock is multi-threaded work: the reading sums its threads, so this rule reads the
     // work, not the schedule, and such a test states its cost as a `cpu_budget_ms` if its total work
-    // is what it wants bounded. Measured over the whole fast layer on 2026-10-24: 21 of 5,873 tests
+    // is what it wants bounded. Measured over the whole fast layer: 21 of 5,873 tests
     // used more CPU than their wall clock (all ONNX-runtime, dlpack and fuzz cases), and every test
     // in the layer had at least four times its own CPU time of room under its timeout, so no bound
     // in the layer is read differently in a green run than it was before this rule.
@@ -5357,7 +5357,7 @@ async function main() {
     // directory when there is one, because that is the mistake this refusal exists for:
     // `test/plans/feat/docs_links` is the fixture directory beside `docs_links.plan.toml`.
     // Written to stdout on purpose: the helper that runs this on the host loses the run's stderr,
-    // so a refusal written there would be a red with no reason (measured 2026-11-03 -- the old
+    // so a refusal written there would be a red with no reason (the old
     // `[FAIL] this run selected no test at all` line never reached the operator from a host run).
     if (selected.reachedNothing.length > 0) {
         for (const target of selected.reachedNothing) {

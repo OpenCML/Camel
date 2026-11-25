@@ -7,7 +7,7 @@
 // the flat spelling never went through the cut's residual list, so a fix that moved this number
 // would be a fix that broke the path that was already right.
 //
-// Measured 2026-11-04, before this case: `grad(g)` answered **0.0** and answered it silently -- the
+// Measured before this case: `grad(g)` answered **0.0** and answered it silently -- the
 // linear half the cut handed out was a constant function of the direction (see
 // split_linear_across_a_call, which reads `lin` itself), so the pullback found no cotangent to send
 // and assembled the answer from nothing. The two-level reading was worse than wrong: it stopped the

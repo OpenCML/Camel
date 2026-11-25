@@ -62,7 +62,7 @@
 //
 // Why this measurement is CPU too, and not the wall time the report had carried since the wall
 // clock of those same phases read 21 us per declaration on the quiet host and 75-104 us in the
-// windows of 2026-10-23 at load 106-112 -- three to five times the number for the same declarations,
+// windows at load 106-112 -- three to five times the number for the same declarations,
 // because a wall clock follows whatever else the host is doing. A ceiling on it is red on a busy day
 // and green on a quiet one for the same binary, which is the wall-clock reading that was retired; the CPU time
 // of the same rounds read 27-29 us in every window measured at load 68-112. So the compiler writes
@@ -396,7 +396,7 @@ function declarationCost(rounds) {
 // reading is the median of the samples and the spread is min..max; a ceiling nobody can reproduce is
 // worse than none, so a crossed one has to be a regression a reader could reproduce on a quiet host.
 //
-// Re-measured on tangshan88 (32 threads) on 2026-10-31: the entry run alone (`--jobs 1`) five times in
+// Re-measured on tangshan88 (32 threads): the entry run alone (`--jobs 1`) five times in
 // a row, twelve fresh processes per sample, five samples per command. The medians per run, and the
 // load average beside them:
 //
@@ -457,9 +457,9 @@ const CASES = [
 
 // A single-run reading with half again of headroom: 132.7 us per declaration measured with the
 // entry run alone (`--jobs 1`) on tangshan88 (32 threads, load average 27.6/40.6/43.7 when it was
-// taken, 2026-10-31, `declarations=302`), times 1.5, rounded to 200. It is written in the CPU
+// taken, `declarations=302`), times 1.5, rounded to 200. It is written in the CPU
 // seconds of one run because that is the unit this assertion measures; the 60 it replaces was
-// calibrated against 27.5-28.5 us readings from 2026-10-23 and this host reads more than four
+// calibrated against 27.5-28.5 us readings and this host reads more than four
 // times that at the same tree, so the old number priced a machine rather than the compiler.
 // A reader on another host must measure again before trusting it.
 const DECLARATION_CEILING_US = 200
@@ -473,7 +473,7 @@ const DECLARATION_CEILING_US = 200
 // the quiet total plus the regression the line was chosen to name, 1.2 times the busiest median
 // measured there.
 //
-// Re-baselined on 2026-10-27 to twenty, for this tree's declaration count, which is what the number
+// Re-baselined to twenty, for this tree's declaration count, which is what the number
 // prices and what the printed `declarations=` says by how much. Three readings of this tree on the
 // Linux host, twenty-one rounds each:
 //

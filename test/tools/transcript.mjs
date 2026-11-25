@@ -44,7 +44,7 @@ export const CASE_LINE = /^\[(PASS|FAIL|SKIP|XFAIL)\] /
  *
  * The colours are stripped first, and that is not tidiness: a captured console carries
  * `\e[32m[PASS]\e[0m`, so `^\[PASS\]` matches nothing and a complete green capture counts zero
- * rows. Measured here on 2026-11-24: a 25-line capture of a 6-case run counted 0 case lines raw
+ * rows. Measured here: a 25-line capture of a 6-case run counted 0 case lines raw
  * and 6 after the strip, and the same mistake was made twice in one night while reading the seed
  * transcripts (0 of 9159 rows). A reader that can report 0 for a complete transcript is a reader
  * whose "the rows are missing" cannot be believed.

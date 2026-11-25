@@ -485,7 +485,7 @@ if (!endsPasses) {
 // contains it verbatim (`output does not contain 'ARRIVED fixture=knownfail quoted-only ...'`). A
 // condition read against the runner's message would be satisfied by the sentence explaining that it
 // is unmet, and a legitimate mark would be reported as ended; that is the shape the merge rehearsal
-// of 2026-11-25 measured as three reds (`modules.onnx/ort_loop_values_dynamic` and the two
+// measured as three reds (`modules.onnx/ort_loop_values_dynamic` and the two
 // `stated_mean_axis_*` gradients). The entry stays `[XFAIL]`, the ending block is not printed for it,
 // and its end condition still reaches the roster. Read off the output, and off this fixture's own
 // line rather than the run's, so a neighbour that prints the same words cannot answer for it.

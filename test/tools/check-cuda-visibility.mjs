@@ -69,11 +69,11 @@ const CUDA_AWARE_MODULES = [
  * a new CUDA-aware Python test, which is the moment to decide its visibility on purpose. The
  * second number is the Python tests of the plans tagged `gpu`, the layer that must keep the cards.
  *
- * 31 -> 32 on 2026-10-26: `ort_core_slice` joined, the ONNX Runtime probe of the core's own slice
+ * 31 -> 32: `ort_core_slice` joined, the ONNX Runtime probe of the core's own slice
  * (`feat/modules/onnx.plan.toml`). It is a CPU-only program -- it exports a model and compares
  * values -- so it names no device and the runner hides the machine's cards from it, like every
  * other ONNX Runtime probe in that plan.
- * 32 -> 33 on 2026-10-26: `ort_core_slice_grad` joined, the ONNX Runtime probe of that slice's
+ * 32 -> 33: `ort_core_slice_grad` joined, the ONNX Runtime probe of that slice's
  * adjoint in the same plan. It is CPU-only too -- `providers=["CPUExecutionProvider"]` on a model
  * it exports and compares -- so it names no device either, and the runner's default hides the
  * machine's cards from it as it does for `ort_core_slice` beside it. The lane that added it left
@@ -82,7 +82,7 @@ const CUDA_AWARE_MODULES = [
  * 33 -> 34: `ort_slice_grad_stride` joined, the ONNX Runtime probe of a slice whose step is not 1
  * in the same plan. CPU-only in the same way, so it names no device and the runner's default
  * hides the machine's cards from it.
- * 34 -> 35 on 2026-10-27: `ort_grad_matmul_batched` joined, the ONNX Runtime probe of a batched
+ * 34 -> 35: `ort_grad_matmul_batched` joined, the ONNX Runtime probe of a batched
  * matmul's gradient in the same plan (`test/cases/modules/onnx/ort_grad_matmul_batched.py`). It is
  * CPU-only too -- `providers=["CPUExecutionProvider"]` on a model it exports and compares -- so it
  * names no device either, and the runner's default hides the machine's cards from it.
@@ -95,7 +95,7 @@ const CUDA_AWARE_MODULES = [
  * device and the runner's default hides the machine's cards from both. The lane that added the
  * Loop export left this pin at 35, and the pin is what makes that visible: the runner's self-test
  * reads the same audit, so the stale number was red there before anyone ran the guard alone.
- * 37 -> 38 on 2026-11-18: `opt.writings.greedy_fusion_reads_no_writing` joined, the greedy-fusion
+ * 37 -> 38: `opt.writings.greedy_fusion_reads_no_writing` joined, the greedy-fusion
  * reading of `feat/opt/writings.plan.toml`. Its case
  * (`test/cases/opt/writings/greedy_fusion_writings.py`) names the `torch.fx` control beside it
  * (`test/cases/opt/writings/fx_greedy_fusion.py`, which imports `torch`), and this guard reads the

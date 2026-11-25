@@ -10,7 +10,7 @@
  *
  * **Declared smaller than started is normal**: a run expands a test that names `backends` into one
  * test per back end, and a `compare_to` companion joins the run without being declared for the
- * layer. On 2026-11-02 the milestone layer was `3330 declared / 3404 started`, and nobody had ever
+ * layer. The milestone layer was `3330 declared / 3404 started`, and nobody had ever
  * printed the pair, so 3330 was read as "the layer" while a run of it was 3404.
  *
  * **Declared larger than started is a defect**, and the one this module exists for: an entry the

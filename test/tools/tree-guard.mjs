@@ -223,7 +223,7 @@ export function readTreeState(root) {
  * Why the second shape exists: the run's pre-test window is two readings that do not depend on one
  * another -- this `git status` and the watcher's walk over the checkout (startTreeWatch) -- and the
  * runner used to take them one after the other, paying their sum before its first test could start.
- * Started together they cost the longer of the two instead. Measured 2026-11-16, nine samples of
+ * Started together they cost the longer of the two instead. Measured over nine samples of
  * each shape, on the two trees a run is made on:
  *
  *   the gate checkout (Linux, Node 20.20.2, 2,392 directories): `git status` 25.8 ms, the walk and

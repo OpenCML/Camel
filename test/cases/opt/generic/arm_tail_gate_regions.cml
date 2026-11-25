@@ -8,7 +8,7 @@
  * `arm_tail_gate.cml` the arms read the body's ports and its condition -- the four parameters,
  * and `t >= steps` -- so every body value is one an arm reads, and a block put around the body's
  * values would be read from an arm, across two branches. There is no legal set of five body nodes
- * on that graph (measured 2026-11-03: two). This file is that graph with the body work added, so
+ * on that graph (measured: two). This file is that graph with the body work added, so
  * the blocks can take values that nothing outside the body reads, and the answer is unchanged.
  */
 

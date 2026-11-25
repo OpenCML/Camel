@@ -37,7 +37,7 @@
 //     host's reading: the ratio is the parallel side's average core count over the serial side's, so
 //     on a host with C cores the quiet reading is about C, and 1.5 is the point where "more than one
 //     core did the work" is beyond argument. Measured on the reference host (AMD EPYC 7343, 32
-//     threads) on 2026-10-23: 14.33 at load 58.6/72.1/79.3 and 16.18 at 94.5/80.6/80.0 -- the two
+//     threads): 14.33 at load 58.6/72.1/79.3 and 16.18 at 94.5/80.6/80.0 -- the two
 //      readings differ by 13% where the load differs by 20%, which is the insensitivity
 //     bought. The noise of a single round is known too: the planted red ran the identical command
 //     twice (73,126.2 ms and 67,448.1 ms, both `--timeit std::nvm/1`, at load 87) and the ratio of

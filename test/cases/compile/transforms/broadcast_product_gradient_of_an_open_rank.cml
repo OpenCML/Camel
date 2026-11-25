@@ -20,7 +20,7 @@
 // Why this case exists and must stay: the `known_fail` above is the honest reading, but the tempting
 // "fix" is to make each side of the law read the operand it is **not** answering for
 // (`sum_to(ct * w, w)`), which removes the refusal and answers a wrong shape on exactly this program
-// -- measured 2026-11-04, that spelling answers `d/dx numel=1 d/dx=[6.0]` and
+// -- that spelling answers `d/dx numel=1 d/dx=[6.0]` and
 // `d/dw numel=3 d/dw=[1.0, 2.0, 3.0]` here. `sum_to`'s second argument is the *target shape*, so it
 // can only be the operand whose cotangent is being built; and "the two shapes are equal" is
 // invisible on an open rank, so no spelling is safe for both. This case is the clock: it goes green
