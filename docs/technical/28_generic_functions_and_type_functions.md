@@ -14,7 +14,7 @@ structure knows about either construct.
 | a call `first([1, 2])` | a call of the subgraph `first<int>`, built once for `T = int` |
 | type function `type Pair<T> = (T, T)` | nothing: applied where a type is written |
 
-A graph only ever holds concrete types. `camel x.cml std::rgir` shows one subgraph per set of
+A graph only ever holds concrete types. `camel x.cml std::rgir std::nop` shows one subgraph per set of
 types a generic function is called with, named `name<types>`; `camel inspect --gir x.cml`
 also prints each subgraph's signature. Types are named as source text names them (design
 principles 5.1): `first<int>`, not `first<i64>`. That is the display name only: the mangled

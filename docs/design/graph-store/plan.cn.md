@@ -360,20 +360,20 @@ GIR 是**无损数据转储**：它能打印语言写不出的图（两张写法
 ```powershell
 $env:CAMEL_HOME='D:\Projects\Camel\out\latest'
 $env:PATH="$env:CAMEL_HOME\bin;$env:PATH"
-camel p1_regions.cml std::jgir
-camel p1_regions.cml std::gir_regions
-camel p2_tags.cml std::jgir
-camel test\cases\compile\tags\decl.cml std::jgir
-camel test\cases\modules\rules\check_rules.cml std::jgir
-camel test\cases\compile\closure\bound_closures.cml std::jgir
-camel p6_generic.cml std::jgir
-camel p8_literals.cml std::jgir
-camel p11_sync.cml std::jgir
-camel p12_syncblock.cml std::jgir
-camel p17_forms.cml std::jgir
-camel test\cases\compile\enum\generic_tree.cml std::jgir
-camel test\cases\compile\tags\strict_algebra.cml std::jgir
-camel p9_opt.cml std::opt std::jgir
+camel p1_regions.cml std::jgir std::nop
+camel p1_regions.cml std::gir_regions std::nop
+camel p2_tags.cml std::jgir std::nop
+camel test\cases\compile\tags\decl.cml std::jgir std::nop
+camel test\cases\modules\rules\check_rules.cml std::jgir std::nop
+camel test\cases\compile\closure\bound_closures.cml std::jgir std::nop
+camel p6_generic.cml std::jgir std::nop
+camel p8_literals.cml std::jgir std::nop
+camel p11_sync.cml std::jgir std::nop
+camel p12_syncblock.cml std::jgir std::nop
+camel p17_forms.cml std::jgir std::nop
+camel test\cases\compile\enum\generic_tree.cml std::jgir std::nop
+camel test\cases\compile\tags\strict_algebra.cml std::jgir std::nop
+camel p9_opt.cml std::opt std::jgir std::nop
 ```
 
 探针源码（节选，完整版在测量目录，未提交）：

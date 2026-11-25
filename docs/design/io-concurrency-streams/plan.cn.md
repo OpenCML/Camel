@@ -216,7 +216,7 @@ G5/G7/G8 + GPU/JAX ── G11 ── G12
   - 验收：
     ```powershell
     camel cases\...\t4_comp.cml          # 期望 stdout: 4   （= dbl(inc(3))，不是 inc(dbl(3)) 的 8）
-    camel cases\...\t4_comp.cml std::gir # 期望：组合是函数类型的一个值，不再有 :macro/cmp
+    camel cases\...\t4_comp.cml std::gir std::nop # 期望：组合是函数类型的一个值，不再有 :macro/cmp
     ```
     另加：`xs->map<inc..dbl>` 与 `xs->map<inc>->map<dbl>` 结果相同（尖括号里放组合）。
 - **A3（区间，已定：原则"函数组合 `f..g`"一条，两边是整数时 `a..b` 是左闭右开区间）**：`1..5`。**本片先落地 G14 的"函数"分支并保留"数"分支的现状诊断，等问题 3 的裁决**——因为「闭/半开、与 `range(start, end)` 是否同物、是否与切片 `t[a:b]` 冲突」都没有依据，不许自己定。
@@ -252,7 +252,7 @@ G5/G7/G8 + GPU/JAX ── G11 ── G12
   ```powershell
   camel cases\...\t1_stream_type.cml   # 期望 exit 0
   camel cases\...\t2_as_stream.cml     # 期望 exit 0
-  camel cases\...\t1_stream_type.cml std::jgir   # 期望 outputType 写成 `int..`
+  camel cases\...\t1_stream_type.cml std::jgir std::nop   # 期望 outputType 写成 `int..`
   # 与既有开秩数组共存（附录 A 的 t14）：今天已通过，改动后必须仍通过
   camel cases\...\t14_open_rank.cml    # 期望 stdout: [1.0, 2.0]
   camel cx.cml std::cml                # std::cml 往返：打印出的源码要能重新编译（2.5）
@@ -399,7 +399,7 @@ G5/G7/G8 + GPU/JAX ── G11 ── G12
   **左式的拼写因此定死为 `map<f>(map<g>(xs))`。**
 - 验收：
   ```powershell
-  camel t_fuse.cml "rules::fusion" std::gir
+  camel t_fuse.cml "rules::fusion" std::gir std::nop
   # 期望：链上只剩一个 map，它的 with 参数是 inc..dbl（不是两个 map）
   camel t_fuse.cml std::nvm     # 期望：结果与融合前逐字相同（逐元素、全量）
   ```

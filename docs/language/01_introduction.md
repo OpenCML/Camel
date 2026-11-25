@@ -19,7 +19,7 @@ Camel 是图原生的通用编程语言，AI 是它首要的应用领域。
   ```bash
   camel prog.cml                      # 默认：在节点虚拟机上运行
   camel prog.cml std::opt std::fvm    # 先优化，再在字节码虚拟机上运行
-  camel prog.cml std::rgir            # 打印图
+  camel prog.cml std::rgir std::nop   # 打印图
   ```
 
 最小的程序：

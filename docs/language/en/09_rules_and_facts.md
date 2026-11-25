@@ -369,7 +369,7 @@ func main() => int sync {
 ```
 
 ```bash
-camel fired.cml fired::simplify std::gir
+camel fired.cml fired::simplify std::gir std::nop
 ```
 
 ```text
@@ -387,7 +387,7 @@ camel fired.cml fired::simplify std::gir
         }
 ```
 
-Without the pass (`camel fired.cml std::gir`) the same cluster also holds the `math:abs_l` node: it takes the
+Without the pass (`camel fired.cml std::gir std::nop`) the same cluster also holds the `math:abs_l` node: it takes the
 result of the addition node and hands it to the exit, and after the pass the exit's input comes straight from
 the addition node, so the `math:abs_l` node is gone.
 

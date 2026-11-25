@@ -59,7 +59,7 @@ out/latest/bin/camel hello.cml
 同一个程序的图可以直接看：
 
 ```bash
-out/latest/bin/camel hello.cml std::gir
+out/latest/bin/camel hello.cml std::gir std::nop
 # digraph GraphIR { ... N00 [label="process:user_name", type="OPER", ...] ... }
 ```
 

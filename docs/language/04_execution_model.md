@@ -231,7 +231,7 @@ func main() => int sync {
 }
 ```
 
-`camel m.cml` 与 `camel m.cml std::macro std::nvm` 都打印 `27`；后者的图里 `cube(3)` 已经是常量 `27`（用 `camel m.cml std::macro std::rgir` 可以看到）。
+`camel m.cml` 与 `camel m.cml std::macro std::nvm` 都打印 `27`；后者的图里 `cube(3)` 已经是常量 `27`（用 `camel m.cml std::macro std::rgir std::nop` 可以看到）。
 
 `#macro` 只是声明上的标记，不是函数类型的一部分：函数类型仍然和普通函数一样。它只能写在函数声明上；写在类型、字段、参数或块上是标签位置错误，写成 `#macro<...>` 是标签参数个数错误。lambda 没有声明可附，不能写 `#macro`。
 
