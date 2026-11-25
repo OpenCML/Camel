@@ -477,7 +477,24 @@ void declareBuiltinOperatorFaults() {
         {":tangent/last_arr", true},
         {":tangent/scatter_slice_arr", true},
         {":tangent/zeros_arr", true},
+        // The shape check a call site makes on an extent (design principles 5.4): the value's
+        // shape against the extents the call fixed, made where the call runs. It states `panic`
+        // because it exists only where the two static types do not settle the question -- there is
+        // no call of it that cannot fail. Its kernel is `:op/cast`'s own
+        // (`operators/cast.cpp#__cast_value__`), which raises nothing in its own text: what
+        // refuses a value of another shape is the type layer's conversion to the parameter's type
+        // (`src/kernel/core/type/composite/array.cpp`), so the raise is not in the kernel's file.
+        // That is the position `:op/cast` is in, and the reason `scripts/check-operator-panic.mjs`
+        // reads both as `unkept`: the check follows calls within one file, and a raise reached
+        // through a helper in another is not followed.
+        {":op/refine_extent", true},
     };
+    // The one operator whose fault is a shape rather than an operand's value: the check a call site
+    // makes on an extent fails when the value's shape is not the one the call fixed, and nothing
+    // else about it fails (`FaultKind::ShapeMismatch`, the value being operand 0). The read-back in
+    // the loop below is what says the record agrees with the table that a call can fault; this
+    // states *how*.
+    table.declareFaults(":op/refine_extent", {{FaultKind::ShapeMismatch, 0}});
     for (const CppPanicStatement &statement : kCppPanicStatementsFaulting) {
         camel::ops::CppRegistration registration(statement.uri, statement.panic);
         camel::ops::Registry::instance().registerOperator(registration);

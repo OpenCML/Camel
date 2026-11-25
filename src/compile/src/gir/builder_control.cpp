@@ -119,6 +119,50 @@ Builder::conversionNodeOf(node_handle_t value, Type *target, const GCT::node_ptr
     throw BuildAbortException();
 }
 
+node_handle_t Builder::refineExtentNodeOf(
+    node_handle_t value, Type *target, const GCT::node_ptr_t &origin) {
+    // The check a call site makes on an extent (design principles 5.4). A parameter's type may
+    // write its extent over the names the call bound (`f32[n - w + 1]`) or leave one open (`?`);
+    // the argument's own type says what the compiler knows and no more, so where the two do not
+    // meet as types the check that the value really has that shape is made when the value exists.
+    // That is the same check `as` makes -- and it is **not** `as`:
+    //
+    //   - it is not a conversion the program wrote. `:op/cast` is the conversion a program writes
+    //     (`T(x)`, `x as T`), and a program may bind or shadow the name it is written with; the
+    //     check here is the language's, is written by the compiler, and no name in scope decides
+    //     it. A graph that holds `:op/refine_extent` says which of the two the compiler meant,
+    //     and a reader that looks a conversion up (a lowering, an exporter, a rule about
+    //     conversions) is not sent to the wrong one.
+    //   - it is not a conversion at all. What it does is check a shape and hand the value on: the
+    //     two types are the same type once the extents are read, and the value is the same value.
+    //
+    // So the operator is its own, and the operator's record says what a reader needs to hear: it
+    // states `panic` (`src/stdlib/std/builtin/executors/builtin_semantics.cpp`), so a pass that
+    // moves, drops or recomputes a node reads that running the check can stop the program. A
+    // conversion of a pair whose types are `Safe` states the same thing only after asking the two
+    // types; this one states it outright, because it exists only where they are not `Safe`.
+    //
+    // The node is written by its URI, which is the operator's identity: no declaration answers
+    // the call (`kRefineExtentOperatorUri` says why nothing declares it), so there is no rule to
+    // resolve and no written type arguments. Its result type is the refined one, and the kernel is
+    // the conversion's own -- the check is one statement of what a shape is, shared with `as` --
+    // so a type layer that changes what a shape check does changes both.
+    if (value == nullptr || target == nullptr) {
+        diags_->of(InternalDiag::UnknownInternalError)
+            .atOrigin(origin != nullptr ? origin->origin() : camel::source::kInvalidOriginId)
+            .commit(
+                "the shape check of a call site got " +
+                std::string(target == nullptr ? "no target type" : "no value to check"));
+        throw BuildAbortException();
+    }
+    const node_handle_t node =
+        currGraph_->addOperNode(target, camel::core::kRefineExtentOperatorUri);
+    stampPermissions(node);
+    linkNodes(LinkType::Norm, value, node);
+    registerNodeOrigin(context_, node, origin, "gir.refine_extent");
+    return node;
+}
+
 node_handle_t Builder::copyNodeOf(node_handle_t value, Type *type) {
     // `copy::<T>(x: T): T` says a copy is a call of the operator rather than a node kind (plan 2.3,
     // step 1): the type copied is the call's one written type argument and the value is its one

@@ -830,17 +830,17 @@ Builder::visitLinkNode(const GCT::node_ptr_t &gct, std::optional<GCT::Assignment
     const auto linkedNode = [](Argument &input) -> node_handle_t & {
         return input.early != nullptr ? input.early : input.node;
     };
-    // The dimension names a call binds (design principles 5.4), remembered for the checked
-    // conversion of the returned value below.
+    // The dimension names a call binds (design principles 5.4), remembered for the shape check of
+    // the returned value below.
     ExtentValues dimValues;
     ExtentPacks dimPacks;
     const auto enterParameters = [&](FunctionType *funcType) {
         // The parameter types may write their extents over names the signature binds, e.g.
         // `func f(x: f32[n], y: f32[n])`. Bind each name
         // from every argument whose extent is statically known; what the arguments leave open is
-        // checked when the call runs, by passing the argument through the checked conversion
-        // (`as`) to the refined parameter type. Nothing here depends on the values at runtime,
-        // and no second instance of the function is built.
+        // checked when the call runs, by passing the argument through the language's shape check
+        // (`:op/refine_extent`, `refineExtentNodeOf`) to the refined parameter type. Nothing here
+        // depends on the values at runtime, and no second instance of the function is built.
         struct NamedExtentArg {
             Argument *input;
             type_vec_t *types;
@@ -908,8 +908,14 @@ Builder::visitLinkNode(const GCT::node_ptr_t &gct, std::optional<GCT::Assignment
             if (refined->castSafetyFrom(arg.actual) == CastSafety::Forbidden) {
                 continue;
             }
+            // The two static types do not contradict each other and are not the same type: what is
+            // left is the shape of the value, which only the value answers. The argument goes
+            // through the language's shape check -- the check `as` makes, as its own operator and
+            // not as a conversion the program wrote (design principles 5.4,
+            // `Builder::refineExtentNodeOf`).
             node_handle_t &refinedArg = linkedNode(*arg.input);
-            refinedArg                = castNodeTo(valueOf(refinedArg), refined, arg.input->expr);
+            refinedArg                = refineExtentNodeOf(
+                valueOf(refinedArg), refined, arg.input->expr);
             (*arg.types)[arg.index]   = refined;
         }
         const auto enter = [&](std::vector<Argument> &inputs, type_vec_t &types, bool with) {
@@ -2844,8 +2850,10 @@ Builder::visitLinkNode(const GCT::node_ptr_t &gct, std::optional<GCT::Assignment
         targetFuncType != nullptr && targetFuncType->hasExitType()) {
         // The return type may speak about the names the parameters bound (`: f32[n, k]`).
         // The function still has one graph: what varies with the call is only the static type,
-        // and the value is passed through the checked conversion to it (the same check `as`
-        // makes), so a body that breaks the relation is caught where the call runs.
+        // and the value is passed through the language's shape check to it (the same check `as`
+        // makes, as its own operator and not as a conversion the program wrote; design principles
+        // 5.4, `Builder::refineExtentNodeOf`), so a body that breaks the relation is caught where
+        // the call runs.
         Type *namedExit = targetFuncType->exitType();
         std::vector<ExtentForm> forms;
         if (namedExit != nullptr && namedExit->extentForms(forms)) {
@@ -2873,7 +2881,7 @@ Builder::visitLinkNode(const GCT::node_ptr_t &gct, std::optional<GCT::Assignment
             if (refined != nullptr && refined != namedExit && actualExit != nullptr &&
                 !refined->equals(actualExit) &&
                 refined->castSafetyFrom(actualExit) != CastSafety::Forbidden) {
-                targetNode = castNodeTo(targetNode, refined, gct);
+                targetNode = refineExtentNodeOf(targetNode, refined, gct);
             }
         }
     }
