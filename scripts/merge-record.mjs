@@ -189,15 +189,28 @@ function doWrite() {
         // A comparison names a case as `plan/test`; the `new` set carries that name beside the
         // reading that moved, so the comparison is on the name and not on the object that holds it.
         const regressedNames = regressed.map((row) => (typeof row === 'string' ? row : row?.name)).filter(Boolean)
-        const extra = regressedNames.filter((name) => !names.has(name))
+        // The same fact in its second shape: a case this merge adds and that is red in its own tree.
+        // The first parent never had it, so it is not a regression; it is still red where it stands,
+        // and the allowance covers it on the same three facts.
+        const addedRedNames = (Array.isArray(diff.addedRed) ? diff.addedRed : []).map((row) => (typeof row === 'string' ? row : row?.name)).filter(Boolean)
+        const candidates = [...new Set([...regressedNames, ...addedRedNames])]
+        const extra = candidates.filter((name) => !names.has(name))
         if (extra.length > 0) {
-            refuse(2, `--known-at-snapshot does not cover ${extra.join(', ')}: the comparison calls it new and the list does not name it`)
+            refuse(2, `--known-at-snapshot does not cover ${extra.join(', ')}: the comparison calls it new or adds it red and the list does not name it`)
         }
-        const missing = entries.filter((entry) => !regressedNames.includes(entry.case))
+        const missing = entries.filter((entry) => !candidates.includes(entry.case))
         if (missing.length > 0) {
-            refuse(2, `--known-at-snapshot names ${missing.map((entry) => entry.case).join(', ')}, which the comparison does not call new: a stale allowance is refused rather than carried`)
+            refuse(2, `--known-at-snapshot names ${missing.map((entry) => entry.case).join(', ')}, which the comparison neither calls new nor adds red: a stale allowance is refused rather than carried`)
         }
-        knownAtSnapshot = { tip: list.tip, evidence: list.run ? String(list.run) : '', entries }
+        // Which of the two each entry is, written down: "red where it stood" and "added red" are
+        // different claims about a tree, and a report that counts them has to be able to split them.
+        const withKind = entries.map((entry) => ({
+            case: entry.case,
+            kind: regressedNames.includes(entry.case) ? 'new' : 'added-red',
+            snapshot: entry.snapshot,
+            fixedAt: entry.fixedAt,
+        }))
+        knownAtSnapshot = { tip: list.tip, evidence: list.run ? String(list.run) : '', entries: withKind }
     }
     let knownHeaderAtSnapshot = null
     if (knownHeaderFile) {

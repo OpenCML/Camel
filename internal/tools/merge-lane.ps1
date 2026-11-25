@@ -2092,6 +2092,13 @@ $transcript = Join-Path ([System.IO.Path]::GetTempPath()) ("camel-merge-rows-$PI
             $summary = Get-Content -LiteralPath $runSummary -Raw | ConvertFrom-Json
             $diff = Get-Content -LiteralPath (Join-Path $diffDir 'diff.json') -Raw | ConvertFrom-Json
             $newRed = @($diff.new | ForEach-Object { if ($_ -is [string]) { $_ } elseif ($_.name) { "$($_.name)" } else { "$_" } })
+            # The second shape of the same fact: a case this merge *adds* and that is red in its own
+            # tree -- not a regression, because the first parent never had it. A backfill meets them
+            # for the same reason it meets `new`: the tree was fixed forward. The record says which of
+            # the two each entry is, because "red where it stood" and "added red" are different claims
+            # and a reader counting them must be able to tell them apart.
+            $addedRed = @($diff.addedRed | ForEach-Object { if ($_ -is [string]) { $_ } elseif ($_.name) { "$($_.name)" } else { "$_" } })
+            $candidates = @($newRed + $addedRed)
             $named = @()
             foreach ($entry in @($list.entries)) {
                 if (-not $entry.case -or -not $entry.snapshot -or -not $entry.fixedAt) {
@@ -2110,20 +2117,21 @@ $transcript = Join-Path ([System.IO.Path]::GetTempPath()) ("camel-merge-rows-$PI
                 if ("$($row[0].status)" -ne 'pass') {
                     Stop-With "-KnownAtSnapshot entry $($entry.case) is $($row[0].status) on the tip $($tipSha.Substring(0, 9)), not pass" 'The allowance is for a case that is green now; this one is not.'
                 }
-                if ($newRed -notcontains $entry.case) {
-                    Stop-With "-KnownAtSnapshot entry $($entry.case) is not one of the cases this comparison calls new" 'A stale allowance is refused rather than carried: it would let a later case through.'
+                if ($candidates -notcontains $entry.case) {
+                    Stop-With "-KnownAtSnapshot entry $($entry.case) is neither new nor an added case that is red here" 'A stale allowance is refused rather than carried: it would let a later case through.'
                 }
-                $allowed += [pscustomobject]@{ case = $entry.case; snapshot = $snapshot; fixedAt = $fixing }
+                $kind = if ($newRed -contains $entry.case) { 'new' } else { 'added-red' }
+                $allowed += [pscustomobject]@{ case = $entry.case; kind = $kind; snapshot = $snapshot; fixedAt = $fixing }
             }
-            $uncovered = @($newRed | Where-Object { $name = $_; -not ($allowed | Where-Object { $_.case -eq $name }) })
+            $uncovered = @($candidates | Where-Object { $name = $_; -not ($allowed | Where-Object { $_.case -eq $name }) })
             if ($uncovered.Count -gt 0) {
                 $compare | ForEach-Object { "  $_" }
-                Stop-With "-KnownAtSnapshot does not cover $($uncovered -join ', ')" "Everything the comparison calls new has to be named in the list, with the commit that fixed it and a pass on the tip. $($allowed.Count) of $($newRed.Count) were."
+                Stop-With "-KnownAtSnapshot does not cover $($uncovered -join ', ')" "Everything the comparison calls new or adds red has to be named in the list, with the commit that fixed it and a pass on the tip. $($allowed.Count) of $($candidates.Count) were."
             }
             $compare | Where-Object { "$_".StartsWith('merge-readings:') } | ForEach-Object { "  $_" }
             foreach ($entry in $allowed) {
-                Write-Host ("  allowed: {0} is red at this snapshot ({1}) and pass at {2}; fixed at {3}" -f `
-                    $entry.case, $mergeCommit.Substring(0, 9), $tipSha.Substring(0, 9), $entry.fixedAt.Substring(0, 9))
+                Write-Host ("  allowed: {0} is {1} at this snapshot ({2}) and pass at {3}; fixed at {4}" -f `
+                    $entry.case, $(if ($entry.kind -eq 'new') { 'red' } else { 'added red' }), $mergeCommit.Substring(0, 9), $tipSha.Substring(0, 9), $entry.fixedAt.Substring(0, 9))
             }
             Write-Host ("  -KnownAtSnapshot: the record carries these as `knownAtSnapshot` (red at the snapshot, fixed later); no other case moved ({0:N0} s)" -f ((Get-Date) - $rowsStarted).TotalSeconds)
             # The comparer's exit describes a comparison that has now been judged acceptable, case by
