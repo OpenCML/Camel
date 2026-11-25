@@ -4,7 +4,7 @@
 # place at the read, and which therefore comes back at the loop's exit (item 6).
 #
 # They are probes and not cases under test/cases: the parse plan's golden lists every `.cml` there by
-# path and hash, so a new case there is a golden update as well, and this lane's change is the count,
+# path and hash, so a new case there is a golden update as well, and this change's change is the count,
 # not the parser. `tier = "debug"` keeps them out of the fast and all layers so that a plan added
 # beside them cannot slow a gate down; naming this file runs it in any build.
 #

@@ -313,7 +313,7 @@ normalizers = ["normalize_newlines"]
 timeout_ms = 60000
 
 # A law's cotangent port and the body written against it. Nothing compared the two sentences until
-# this case: on 2026-11-04 `lane-rank0` measured 8 of 8 runs dying in `numelKernel`, because a law
+# this case: on 2026-11-04 measured 8 of 8 runs dying in `numelKernel`, because a law
 # handed `numel` a value the port had promised as something else, and neither the index nor the
 # transform had an opinion about the pair. `scripts/law-cotangent-ports.mjs` reads the laws of
 # `stdlib/rulesets` as text -- no build, no compiler -- and states, for each port, which requirement

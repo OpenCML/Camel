@@ -1,5 +1,5 @@
 # The rule of a captured value (design principles 3.5): what the
-# main line pins about it after `lane-varclos`.
+# main line pins about it after .
 #
 # Where the rule stands today: the fourth step of "`var` becomes SSA" removed the three conservative
 # gates of `decideCaptureByValue`, so a closure of the program captures a NAME BY VALUE wherever it is
@@ -9,9 +9,9 @@
 # the last two because the write they make has to land in the cell
 # (`requireCapturedNameWritable` exempts both). A by-reference capture's write USED TO BE legal: it
 # landed in the cell the closure was handed, which is how `byref` was written and how the `stream`
-# packer was written. It is not legal any more. `lane-closurediag` refuses that write (the three `err.*`
+# packer was written. It is not legal any more. refuses that write (the three `err.*`
 # entries at the end), which is why the `byref` cases and the `stream` packer went red: the cases are
-# the migration this plan's third step owes, and the packer holds four `Ref`s since `lane-teeref`.
+# the migration this plan's third step owes, and the packer holds four `Ref`s since .
 #
 # The other half of the rule (a closure may not assign an outer name, and a captured `var` may not be
 # assigned between the making of the closure and its last use) was NOT REPORTED when this plan was
@@ -19,8 +19,8 @@
 # ruler into a red one, and that the migration is the next step of the same item rather than a later
 # round -- applying by-value capture everywhere made `tee`'s five cases fail with `Runtime graph
 # 'side0' breaks its edge invariants`. `tee` itself no longer keeps cells: it holds four `Ref`s
-# (`lane-teeref`), so its five
-# outputs never depended on this choice, and `lane-closurediag` is the step that reports the
+# , so its five
+# outputs never depended on this choice, and is the step that reports the
 # rule. The three `err.*` entries at the end of this plan are the three ways that write is written. The
 # three `transitional.*` entries that stood between them are GONE: they were the same programs, accepted
 # while the capture port was a cell, and they were refused from the day the rule reports -- the step that

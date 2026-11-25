@@ -2,7 +2,7 @@
 // answers `[4]` and never reads `t`.
 //
 // The type argument is the whole question, so a parameter whose value the function does not have --
-// or does not touch -- is answered from the declaration. Measured 2026-11-04 on `lane-extentof`
+// or does not touch -- is answered from the declaration. Measured 2026-11-04 on 
 // (host `88zjwei`), `std::gir` of this program:
 //
 //   subgraph cluster_F01 {            // shape_of

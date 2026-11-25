@@ -4,7 +4,7 @@
 
 /**
  * The operators whose effect neither entrance stated, and the operators whose two entrances
- * disagree: the debt this lane is paying off, as a number the gate keeps.
+ * disagree: the debt this change is paying off, as a number the gate keeps.
  *
  * --- why the reading is taken from the record ---------------------------------
  * The effect of an operator is stated at one of two equal entrances (design principles 9.3): the

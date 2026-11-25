@@ -8,7 +8,7 @@
 # What is checked here is the guard and only the guard: a promise is repaired when it holds nothing
 # but such merges, and it is left alone when it holds a commit a person made. Both runs are made in a
 # throwaway repository with a bare origin beside it, and both stop at or just after the guard --
-# `-Branch lane/absent` is deliberate, because the guard runs before the lane name is resolved and
+# `-Branch` names a branch that does not exist, because the guard runs before the name is resolved and
 # that keeps this test away from the host, the build and the gates.
 #
 #   pwsh -NoProfile -File internal/tools/merge-lane-start.test.ps1
@@ -122,8 +122,8 @@ Check 'the merge is still reachable from that tag' ($reachable.Count -eq 2 -and 
 
 Check 'local develop is back on origin/develop' ((Get-GitText $work rev-parse develop) -eq $base) (Get-GitText $work rev-parse develop)
 
-# The run stops right after the repair because `lane/absent` does not resolve; the exit code is the
-# lane name's, and what it proves is that the repair happened before any merge was tried.
+# The run stops right after the repair because the branch does not resolve; the exit code is the
+# branch name's, and what it proves is that the repair happened before any merge was tried.
 Check 'the run stopped after the repair, at the lane name' ($run.Code -eq 1 -and $run.Text -match 'STOPPED: branch lane/absent does not resolve to a commit') "exit $($run.Code)"
 Check 'and it says the truth about develop: unchanged, equal to origin' `
     ($run.Text -match "Nothing was committed and nothing was pushed: local develop is still $base, which is origin/develop.") $run.Text

@@ -358,7 +358,7 @@ expect_stdout_contains = ["50 checks, 0 failed"]
 normalizers = ["normalize_newlines"]
 timeout_ms = 300000
 
-# Slow: 29 s. It was 12 s before this lane repaired its fixture, because every scenario died at
+# Slow: 29 s. It was 12 s before this change repaired its fixture, because every scenario died at
 # load; the fixture is now every `internal/tools/*.ps1` rather than a hand-kept list that had
 # fallen behind `merge-push-shape.ps1` and `camel-gate-config.ps1` (18 checks / 14 failed).
 [[tests]]

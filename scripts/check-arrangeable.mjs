@@ -35,7 +35,7 @@
  *   2. an OPER row has no disagreement in either direction. `kind_free_pred_kept` is the fact
  *      saying "freely arrangeable" about a node a pass keeps where the program wrote it;
  *      `kind_kept_pred_free` is the predicate offering a placement the fact will not answer for.
- *      Both are two answers to one question, and this lane's subject is the second of them.
+ *      Both are two answers to one question, and this change's subject is the second of them.
  *
  * The rows of the other node kinds are printed and **not decided**: they are a reading of their own
  * (`internal/reports/2026-11-25-the-arrangeable-disagreements.cn.md`) and a red this tool invented

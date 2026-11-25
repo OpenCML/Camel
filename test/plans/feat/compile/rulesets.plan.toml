@@ -518,12 +518,12 @@ timeout_ms = 20000
 # many rows as it has -- `println(vmap(width)(planes))` prints `[2]` after the pass where the same
 # program with no pass prints `[2, 2]`. It is not the pass that does this: `vmap((x: float) => 3.0)`
 # over a `float[4]` prints `[3.0]` with no pass at all (measured 2026-11-14 on b72d59535, and on
-# `lane-idorder` after the walk was put in dependency order). A differential pair here would compare
+# after the walk was put in dependency order). A differential pair here would compare
 # two answers that differ for that reason and could never be green, so the case is left out of the
 # pair and the defect is left where it is: it is not an order, and answering it is
 # -- spreading a one-row batch over an unknown number of rows needs a node this tier cannot write
 # today (`rulesets.vmap#vmap_dim` writes that spread per row, in Camel, over `shape(xs)[0]`). The
-# question is written up for the author, with the three ways to answer it and the default this lane
+# question is written up for the author, with the three ways to answer it and the default this change
 # works by until then:
 # `internal/reviews/2026-11-14-a-vmap-of-a-constant-body-answers-one-line.cn.md`.
 #

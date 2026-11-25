@@ -268,7 +268,7 @@ assert(num(gate, 'both_kept') === num(gate, 'nodes'), `a gate is not refused by 
 """
 timeout_ms = 20000
 
-# The call: the second disagreement the readers comparison found, and the one this lane answered.
+# The call: the second disagreement the readers comparison found, and the one this change answered.
 # Before the change, on this program, `main`'s call of `f` was answered 1111 by the kind (the walk
 # read the body of `f` and found it pure, infallible and ending) and 0 by the predicate a pass asks
 # (`FACTS_COMPARE reader_diff graph=main node=1 node_kind=func oper=- kind=1 moved=0 terms=1111`),
@@ -302,7 +302,7 @@ assert(diffs.length === 0, `a reader_diff line is still printed: ${diffs.join(' 
 timeout_ms = 20000
 
 # The framework holds a draft. `core.arrangeable` is a fact about a graph, and a graph is the
-# frozen one a program holds *or* the one an editing session is building; until this lane only the
+# frozen one a program holds *or* the one an editing session is building; until this change only the
 # frozen half had a store, so the kind could not be asked where a draft was all a caller had (the
 # freeze decides `dropsOrder` from a draft). The `draft` line reads the same kind off a transaction
 # this pass decodes each graph into: every node is answered (`no_fact=0`), no graph failed to get a

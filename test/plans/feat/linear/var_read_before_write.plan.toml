@@ -23,7 +23,7 @@ tags = ["feat", "linear", "var", "effects"]
 # Every value is asserted on both sides: the read before the write keeps the old value, and the
 # read after it takes the new one.
 #
-# The entries also asserted, until this lane, that three writes here -- 52:7, 85:7 and 87:7 -- have
+# The entries also asserted, until this change, that three writes here -- 52:7, 85:7 and 87:7 -- have
 # values nobody reads. They do not: each of the three is read by the `let` written right after it.
 # The expectation was true of the diagnostic's implementation and false of its text: the warning
 # asked whether the write's own node had a consumer, and a read of a `var` in a body that is not a

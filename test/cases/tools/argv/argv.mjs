@@ -107,7 +107,7 @@ const FACETS = {
             '[ARGV] this tree is',
             'built by synthesis, not by archive',
         ],
-        // The two sentences a gate printed before this lane, one about a selection and one about the
+        // The two sentences a gate printed before this change, one about a selection and one about the
         // cases it could not compute: neither may come back for a version mismatch.
         absent: ['refused this selection', 'the cases this change selects could not be computed'],
     },

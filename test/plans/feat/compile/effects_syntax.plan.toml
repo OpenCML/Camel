@@ -809,7 +809,7 @@ expect_output_contains = ["err_write_readonly_resource.cml:8:", "'graph'", "'rea
 # ---- The write a body leaves in a `var` parameter is a result of the function ----
 #
 # Came from the retired `hold/varexit-cases` branch, where the same property was built as a source
-# change; the main line has it (`lane-varparam`), so only the measurement is kept.
+# change; the main line has it , so only the measurement is kept.
 
 [[tests]]
 name = "var_parameter.write_outside_sync"

@@ -74,7 +74,7 @@ timeout_ms = 30000
 name = "compositions.jvp_vjp_f"
 desc = "jvp(vjp(f)) with f(x) = x*x, cotangent 1 and direction [0.5, 1.0, 1.5]: the pullback is 2vx, its derivative in x is 2v, so the directional derivative is [1, 2, 3]."
 known_fail = ["nvm", "fvm"]
-known_fail_owner = "lane-grad-form"
+known_fail_owner = ""
 known_fail_reason = "the wall is one layer deeper than the port count: `transpose` reads a signature that eats only tangents, so the member it builds is `((f32, f32)) => (f32, f32)` against `Transpose<F>`'s own (ports=1 promised=1), and the walk then refuses at `TRANSPOSE function=jvp_of_split_of_jvp_of_sq_backward skip=call-value-missing param=2 node=4 arg=0` -- the lifted body's adjoint law wants the value half's primal as an operand, which the lifted signature cannot state and no closure carries"
 known_fail_ends_when = { passes = "compositions.jvp_vjp_f" }
 known_fail_note = "Corrected twice, and the two case mistakes it used to pin are neither of them the wall now. One: `vjp(sq)(x, v)` handed the cotangent to the forward call, while `lib/vjp/vjp.cml#vjp` answers `(value, pullback)` -- the case reads `vjp(sq)(x).1(v).0`. Two: `vmap(jvp(pull))` is not a call the batch pass can accept at all, because `vmap` takes a function of exactly one parameter (`lib/array/array.cml#vmap`) and `jvp(f)` is `(x, dx) => (value, tangent)`, so the batch is three points, one `jvp` each. The wall is not the cut: `split`'s `lin` already eats only tangents (`(f32) => f32`, the primal in its closure). It is now one layer past the value half: the lift of a function that eats only tangents is read as linear, so the value half is no port and the promise is met (`ports=1 promised=1`), and what stops the run is the lifted body's own adjoint law asking for that value half as an operand -- a value the signature cannot state and no closure carries. That is a fact about where the value has to come from, not about the operator's promise. The numbers are unchanged -- 1, 2, 3, the tangents of `2v*dx` at `v = 1` -- and they are what a flat twin of the same body answers: `jvp(x => 2.0 * x)` at (1, 0.5), (2, 1.0), (3, 1.5) prints 1.0, 2.0, 3.0 on both back ends. The mark comes off when this entry prints them, not before."
@@ -150,7 +150,7 @@ timeout_ms = 30000
 name = "compositions.nested_grad_min"
 desc = "The nest of `grad` in `grad` at its smallest, through the library's transform: f(x)=x*x, f'(x)=2x, f''(x)=2, so the second derivative at 2 is 2.0. The call form is the restored one: `grad(f)` keeps the weight in the `with` list (`Gradient<F>`), so the outer `grad` finds the first `with` parameter the inner one differentiated and the nest is the same composition twice (design principles 9.9). The mark is on that number and not on the refusal the nest stops at today: 2.0, not 4.0 (the first derivative read twice) and not 0.0 (a cut that lost the first pass)."
 known_fail = ["nvm", "fvm", "jit", "prl"]
-known_fail_owner = "lane-grad-form"
+known_fail_owner = ""
 known_fail_reason = "the nest builds and both layers lift; what refuses today is one step past them -- `transforms: transpose has no transpose for this function`, with the cause `the callee's transpose was built, but the parameter at position 3 reads a value this call does not carry`, `modules/transforms/transpose_operator.cpp#refusalSentence`. Read as the wall it is: the mark is on the number, so this sentence moving again does not touch this entry"
 known_fail_ends_when = { passes = "compositions.nested_grad_min" }
 kind = "behavior"
@@ -166,7 +166,7 @@ timeout_ms = 30000
 name = "compositions.nested_grad_through_a_binding"
 desc = "The same nest written through two bindings (`let inner = grad(cube)`, `let outer = grad(inner)`): f(x)=x*x*x, f'(x)=3x^2, f''(x)=6x, so the second derivative at 2 is 12.0. Two writings, one reading -- the inner gradient's weight is a `with` value, so the outer `grad` differentiates it the way it differentiates any `with` parameter (design principles 9.9). 12.0 is the mark's target and not 6.0, which is the first derivative read once and the answer a nest that differentiated its subject only once would print."
 known_fail = ["nvm", "fvm", "jit", "prl"]
-known_fail_owner = "lane-grad-form"
+known_fail_owner = ""
 known_fail_reason = "as `compositions.nested_grad_min`: the nest builds and both layers lift, and what refuses today is one step past them -- `transforms: transpose has no transpose for this function`, raised with the cause `the callee's transpose was built, but the parameter at position 3 reads a value this call does not carry` from `modules/transforms/transpose_operator.cpp#refusalSentence`. The mark is on the number, so that sentence moving again does not touch this entry"
 known_fail_ends_when = { passes = "compositions.nested_grad_through_a_binding" }
 kind = "behavior"
@@ -182,7 +182,7 @@ timeout_ms = 30000
 name = "compositions.hessian_of_a_quadratic"
 desc = "A Hessian element by element, through the library's `grad` nested: f(a,b) = a^2 + 3ab + 2b^2 has df/da = 2a + 3b and df/db = 3a + 4b, so the matrix is [[2, 3], [3, 4]]. `grad` differentiates the first `with` parameter, so the pure second derivatives are read on two declarations of the same body, `<a, b>` and `<b, a>`, and each mixed member on a function of the order the step after it needs whose body is one first derivative already computed; nothing here is a derivative written by hand. The last line pins the symmetry as a number: 0.0, not 'close'. An order lost between the two `with` values -- the weight moved onto the ordinary list -- puts 4 in one mixed member and 2 in the other, which is what this entry is here to catch. All five readings are targets and not reached yet: every one of them is a nest, so each dies one step past both lifts (the wall the two entries above hit), and the mark states the five lines that end it rather than today's refusal. They are the same five on all four back ends."
 known_fail = ["nvm", "fvm", "jit", "prl"]
-known_fail_owner = "lane-grad-form"
+known_fail_owner = ""
 known_fail_reason = "every reading here is a nest of the library's `grad`, so each one dies one step past the lift: `transforms: transpose has no transpose for this function`, with the cause `the callee's transpose was built, but the parameter at position 3 reads a value this call does not carry`, `modules/transforms/transpose_operator.cpp#refusalSentence`. Nothing in this entry is blocked by the declaration or by the writing: with `grad(square)<2.0>()` first-order readings on the same build are green. The mark is on the five numbers, not on that sentence"
 known_fail_ends_when = { passes = "compositions.hessian_of_a_quadratic" }
 kind = "behavior"

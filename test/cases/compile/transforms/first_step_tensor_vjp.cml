@@ -12,7 +12,7 @@
 //
 // The case was the measured boundary of that wall, not a wish. It said: "it flips the day the
 // reverse of the product is filed, and the number it must then answer is the one above." The law is
-// filed (`stdlib/rulesets/transpose.cml#matmul_t`, `lane-withport`), the wall is down, and the
+// filed (`stdlib/rulesets/transpose.cml#matmul_t`,), the wall is down, and the
 // program now answers the number above:
 //
 //     first_step tensor vjp loss=10.34375 dL/dw=([[3.75, 13.5], [5.5, 19.5]])

@@ -364,7 +364,7 @@ try {
             Stop-With "$trimmed changes no file" 'A lane whose commits change no file has nothing for any plan to read.' 1
         }
 
-        # The plans this lane's change selects, without a checkout of it: the same selection code the
+        # The plans this change selects, without a checkout of it: the same selection code the
         # gate's `--changed` runs, given the file list as a file (`test/runner.mjs`
         # `--changed-files`), which is what a run on another machine is given too.
         $listFile = Join-Path $ScratchRoot ("changed-{0}.txt" -f ($trimmed -replace '[^A-Za-z0-9]+', '-'))

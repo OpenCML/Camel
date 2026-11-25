@@ -97,7 +97,7 @@ timeout_ms = 60000
 # of halves: the port it used to stop on read
 # `construct=a port uri=- why=the port is not a parameter of the graph, so neither half takes it`,
 # and the cut reads the captured value's port now. The reverse of the product was the last piece
-# missing (`stdlib/rulesets/transpose.cml#matmul_t`, landed by `lane-withport`).
+# missing (`stdlib/rulesets/transpose.cml#matmul_t`, landed by).
 #
 # This entry was a *negative* one until 2026-11-04, and it was written that way on purpose: it
 # pinned the two readings `split` printed and demanded exit 1, because an entry that only demanded a

@@ -33,7 +33,7 @@
 // evidence that the guarding half works on the tree the defect was found on. It says the change broke
 // nothing here, and nothing about the program it was written for; a full green reading looks like an
 // endorsement and is not one. That evidence is two runs of `benchmarks/mlp/model.cml` on the tree that
-// carries the batch, lane-chainplace at 19e6876a6: `exit=1` and the arm-invariant sentence without the
+// carries the batch, at 19e6876a6: `exit=1` and the arm-invariant sentence without the
 // fix, `exit=0` with `compile_ms=0.5404949188232422` and three `latency_ms` lines with it.
 
 func pick(x: int) => int sync {

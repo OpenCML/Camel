@@ -49,7 +49,7 @@
 # form on the other four is one line each, and it is the capture port's repair that makes it green --
 # another lane's step, named in the lane report, not done here.
 #
-# The module top level is a scope under the same rules, and that half is still NOT in this lane: a
+# The module top level is a scope under the same rules, and that half is still NOT in this change: a
 # module `var` works as it did, and its own rule (design principles 3.5, "a module's top level holds
 # declarations only: a top-level `var` has no use") is a lane of its own. It is filed as
 # internal/reviews/2026-11-14-who-migrates-the-module-level-var.cn.md.
@@ -247,7 +247,7 @@ assert(out.trim() === '23', 'the read travels two closures down as the value at 
 
 [[tests]]
 name = "compile.state_escape.top_level_value"
-desc = "The top level is untouched by this lane, and this is its legal half: a `let` constant and a function value are read by the functions that name them (10 + 1 = 11, doubled 22), and nothing is reported -- what a module declares is a value, and no evaluation of it is over."
+desc = "The top level is untouched by this change, and this is its legal half: a `let` constant and a function value are read by the functions that name them (10 + 1 = 11, doubled 22), and nothing is reported -- what a module declares is a value, and no evaluation of it is over."
 kind = "behavior"
 case = "../../../cases/compile/state_escape/ok_top_level_value.cml"
 args = ["${case}"]

@@ -2587,7 +2587,7 @@ else
 fi
 # --- the tree under test, as it was handed over -----------------------------
 # The baseline for `tree_probe` below, taken once the tree is in the state this run asked for: the
-# commit, this lane's own uncommitted change (the patch above), and its untracked files. A porcelain
+# commit, this run's own uncommitted change (the patch above), and its untracked files. A porcelain
 # line that shows up in a later reading but not in this one was written *during* this run, which is
 # the question -- a lane's own dirty tree is its business, not the build's doing.
 tree_handover='$remoteScratch/tree-handover'
@@ -2747,7 +2747,7 @@ echo '__CAMEL_REMOTE_SYNCED__'
 # is no number to report, and "no number" must not be printed as zero).
 #
 # `show` is the pool's verifiable reading, and the lane in each holder record is how a token is
-# attributed to this run: `mine` counts the tokens whose holder record names this lane. The record
+# attributed to this run: `mine` counts the tokens whose holder record names this change. The record
 # is only believed for a token that is actually held (show prints only held tokens), so a stale
 # record cannot inflate the count. One printf per line: a short line reaches the stream whole, so a
 # concurrent line from the run cannot be spliced into the middle of it.

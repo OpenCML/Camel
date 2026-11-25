@@ -463,7 +463,7 @@ expect_output_contains = ["cannot differentiate through this call of a function 
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 6000
 known_fail = true
-known_fail_owner = "lane-holdmerge (hold/vjpgrad)"
+known_fail_owner = "(hold/vjpgrad)"
 known_fail_msg = "is not a function that is named or built in it"
 known_fail_ends_when = { prints = "which function it calls is not evident where it is called: the function is computed at run time" }
 known_fail_reason = "同一个程序在标签在场时读的是另一句：`#macro` 落在 `lib/vjp/vjp.cml#vjp` 上之后，调用点拿到的是「一次具名调用交回的图」，`whyNotEvident` 于是走 `GCNodeKind::Func` 那一支。拒绝、位置、前半句都没变，只有尾巴按值的种类换。这一条钉 `Oper` 那种值的措辞，今天不出现；`second_order_refused_vjp_func` 钉另一种。"

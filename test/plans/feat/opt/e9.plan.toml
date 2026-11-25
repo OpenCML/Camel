@@ -345,7 +345,7 @@ expect_output_not_contains = ["enters region", "PassInternalError", "internal er
 #   rc09_seed15  A16e  `std::cxx::inline std::cxx::fold` printed the blank line then `L4 0 `; the
 #                      program prints `L4 0 ` then the blank line.
 #
-# A16b, A16c and A16d are green on the develop this lane started from (they were red on the build
+# A16b, A16c and A16d are green on the develop this change started from (they were red on the build
 # of 2026-11-12 the campaign reduced them with); their entries stay, because a reduction of this
 # campaign that is not in the plan is a defect that can come back unseen.
 #
@@ -597,7 +597,7 @@ timeout_ms = 20000
 #   rc18_seed429                clang: "expected expression" at a `= ;` the C++ writer left. One.
 #   rc19_seed70                 clang: "no matching function for call to 'f1'". One program.
 #   rc20_seed262                `binding != nullptr` in `Builder::rebindSsa`. Eight programs, and
-#                               the one shape here that is not this lane's: it arrived with the
+#                               the one shape here that is not this change's: it arrived with the
 #                               merge (S1), and its entry is the one at the end of this section.
 #
 # Six shapes are fixed, and their programs are entries below. The first pair used to end the
@@ -942,7 +942,7 @@ expect_stdout_exact = "P 5\n"
 #     reaches it`) and nothing else makes that exit needed. The whole `match` is then unreachable when
 #     the graph is frozen -- the graph holds no `BRCH`, no `JOIN` and no call to `q`, and the run
 #     prints the warning below instead of `P 5`.
-#   the owner  -- this lane's rework: the exit `GATE` that reads the region's writes.
+#   the owner  -- this change's rework: the exit `GATE` that reads the region's writes.
 #   the unhide -- when that rework is merged, delete the mark; the case prints `P 5` and reports
 #     nothing. The rework landed in the merge that brought the region exit GATE (a region's exit GATE forwards
 #     the value its reader takes), the run below passed on all four back ends, and the four fields are

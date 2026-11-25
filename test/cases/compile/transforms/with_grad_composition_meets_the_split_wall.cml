@@ -24,7 +24,7 @@
 // A third wall stood where the weight's direction was supposed to come from, and it is **not** a wall
 // this composition is built on any more. The body used to write the weight as a lambda's parameter --
 // `(ww) => loss_with<ww, b>(x, t)` -- and relied on the forward lift promoting a *callee's* `with`
-// parameters so a direction could be handed in at the call (`lane-withtan`). That path
+// parameters so a direction could be handed in at the call . That path
 // (`modules/transforms/jvp.cpp`) was deleted on 2026-11-05: a `with` value is a
 // constant the lifted body reads and its tangent is the zero of its type, so the lifted chain was
 // constant in the weight and the composition answered `w=0.0` -- the number this case exists to

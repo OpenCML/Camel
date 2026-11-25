@@ -3,8 +3,8 @@
 # `camel-remote.ps1` removes host checkouts whose worktree is gone. On 2026-11-17 that removed trees
 # whose worktree very much existed, three times, in the same minutes as a gate:
 #
-#   lane-e9full  died at 200/500 and at 25/500, the whole checkout gone
-#   lane-e9gate  died at 300/500 with FileNotFoundError: .../out/latest/bin/camel, and even `uv_cwd`
+#   died at 200/500 and at 25/500, the whole checkout gone
+#   died at 300/500 with FileNotFoundError: .../out/latest/bin/camel, and even `uv_cwd`
 #                failed -- the reading of a working directory that no longer existed
 #
 # and `e9gate`'s own note says what makes it a defect rather than bad luck: "e9full was in every

@@ -1,4 +1,4 @@
-# The angle-bracket arguments of a rule's two sides (lane-rulesargs)
+# The angle-bracket arguments of a rule's two sides 
 #
 # `reshape<shape>(x)` and `softmax<axis>(x)` state the parameter that decides which function they
 # are in `<>` (design principles 4.4), and `mean<axis, keepdims>(xs)` -- the operator's other

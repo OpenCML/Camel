@@ -109,7 +109,7 @@ const histogram = (file) => {
     // Why the pipeline ends in `std::nop`: what this function counts is the JSON `std::jgir` writes,
     // and that pass hands the graph on, so the fallback ran the program behind the document. The
     // corpus is chosen so its programs have observable exits -- `dce_effect_under_pure_arithmetic.cml`
-    // exits 7 by design -- so the run was what `run.status` saw: measured on `lane/std-nop`, every
+    // exits 7 by design -- so the run was what `run.status` saw: measured against one scheduler, every
     // corpus file threw here with `... std::opt std::jgir exited 7`, while `develop` reads the same
     // documents and passes. The document is the subject; the programs are counted, not executed.
     const run = spawnSync(CAMEL, [file, 'std::opt', 'std::jgir', 'std::nop'], { env, encoding: 'utf8' })
