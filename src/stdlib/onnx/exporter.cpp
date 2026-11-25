@@ -3973,8 +3973,14 @@ Value Evaluator::applyOper(
     // A type name applied to an array is the core's conversion, not a tensor definition: extents
     // of the input, element type of the name. The node's own type is the generic one for a name
     // applied to an array -- the element type it writes, every extent unknown -- so reading it
-    // lost extents the value has (a conversion moves no element).
-    if (def == nullptr && uri.starts_with(":op/ato") && resultType != nullptr) {
+    // lost extents the value has (a conversion moves no element). Which operators these are is
+    // what the operator states when it is registered (`declareConversion`): one that reads an
+    // array and writes the named element type. The letters of the URI are not that statement -- a
+    // conversion a library registers need not spell `ato`, and one that spells it need not convert
+    // an array -- so it is asked of the declaration, which is the one place it is written.
+    const std::optional<core::ConversionTypes> conversion =
+        def == nullptr ? core::OperatorTable::instance().conversionTypesOf(uri) : std::nullopt;
+    if (conversion.has_value() && conversion->source == TypeCode::Array && resultType != nullptr) {
         if (type::Type *answer = camel::core::type::valueTypeOf(resultType);
             tensor::isTensorType(answer)) {
             const TensorFacts named = tensor::tensorFactsOf(answer);

@@ -152,6 +152,15 @@ inline constexpr OperId kWellKnownCount = 22; // kNoOper included
 /// Builder::markNonRetainingReads and __builtin__var_peek__). Whatever looks at reads of
 /// variables treats the two alike.
 inline constexpr bool isVariableRead(OperId id) { return id == VarGet || id == VarPeek; }
+
+/// One of the core's six variable operators: the cell's creation (`:var/new`, and the empty cell a
+/// generator's local starts as), its three readings, and the take. The `:var/` namespace is the
+/// core's -- no module declares an operator in it -- so the six are ids, and a reader of a graph
+/// asks this instead of the prefix of the URI it happens to hold.
+inline constexpr bool isVariableOperator(OperId id) {
+    return id == VarNew || id == VarNewEmpty || id == VarGet || id == VarPeek || id == VarTake ||
+           id == VarAfter;
+}
 } // namespace oper
 
 /// The URIs of the ids in namespace `oper`, indexed by id (index 0, kNoOper, is empty).
