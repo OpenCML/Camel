@@ -420,8 +420,16 @@ void compareDraft(
         return;
     }
     gc_node_ref_t lastRef = kInvalidNodeRef;
+    const camel::graph::GraphView &frozenView = graph.view();
+    const camel::graph::GraphView &draftView  = draft.view();
     for (gc_node_ref_t ref = 0; ref < static_cast<gc_node_ref_t>(draft.nodeSlotCount()); ++ref) {
-        if (!draft.alive(ref) || ref >= static_cast<gc_node_ref_t>(graph.nodeCount())) {
+        // The places the view calls nodes, on both sides, for the reason the three walks above
+        // give: a JOIN holds a place of the numbering, the fact layer refuses an anchor on one
+        // ("node N is not a node of its graph"), and a walk that counted those places made the
+        // whole pass give up with an internal error on every program that carries a branch.
+        const camel::graph::NodeRef node = static_cast<camel::graph::NodeRef>(ref);
+        if (ref >= static_cast<gc_node_ref_t>(graph.nodeCount()) || !frozenView.contains(node) ||
+            !draft.alive(ref) || !draftView.contains(node)) {
             continue;
         }
         ++counts.nodes;
