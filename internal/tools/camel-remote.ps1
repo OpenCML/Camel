@@ -1777,7 +1777,21 @@ $buildCmd = if ($Config -eq 'Debug') { "npm run debug$stackTraceArg" } else { "n
     # The plan runs as a child of `camel-run`, which takes the slot and holds it until that command
     # exits. The command travels as a file, byte for byte: quoting it into `bash -c` would rewrite it,
     # and a rewritten command is exactly how a run ends up looking normal while running less.
-    $runPlanExec = 'exec "$CAMEL_RUN" plan --lane "${CAMEL_LANE:-}" --branch "${CAMEL_BRANCH:-}" -- bash ''' +
+    #
+    # NOT `exec`, and that is not style. This script's last lines are the run's own report of its
+    # exit -- `RUN_EXIT=` and the `__CAMEL_REMOTE_EXIT__` marker the caller takes the code from --
+    # and `exec` replaces the shell that would print them, so a plan started that way finishes and
+    # the marker is never written; the caller then has every reading and no exit, which is the
+    # defect the marker exists to end. The two halves cannot both hold. It takes the EXIT trap with
+    # it as well (`trap finish_probe EXIT`, which takes the end load and stops the token reporter),
+    # because a replaced shell has no exit to trap.
+    #
+    # Measured on the merged tree 2026-11-25 (`-Plan smoke`): with `exec` the stream carried
+    # `[SUMMARY] total: 10, pass: 9, fail: 1` and `[SPLIT]`, then nothing -- no `RUN_EXIT`, no
+    # marker -- and the reporter kept the pipe open, so the finish timeout never fired either: the
+    # reading was complete and the run never returned. That is the same state the seat reported
+    # twice, reproduced through the merge rather than through the defect.
+    $runPlanExec = '"$CAMEL_RUN" plan --lane "${CAMEL_LANE:-}" --branch "${CAMEL_BRANCH:-}" -- bash ''' +
         $remoteScratch + '/plan.sh'''
     # --- does a plan in this run declare itself time sensitive? ---------------
     # A reading that is a duration (perf/**, a `perf_budget_*` entry, an `opt_twice`-style
