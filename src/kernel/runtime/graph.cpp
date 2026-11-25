@@ -120,10 +120,12 @@ bool nodeMayFault(
     case camel::ops::OperShape::Conversion:
         return castMayFault(castTarget, castSource);
     case camel::ops::OperShape::Entering:
-        // No node kind stands for an entering or a refinement: both are OPER nodes, answered above.
-        // The labels are here because the switch has to name every shape, and an answer of "cannot
-        // fault" is the one that would be true of them if a kind ever did.
     case camel::ops::OperShape::Refining:
+        // Unreachable, and the two are not one answer: `shapeOfKind` names no kind for either --
+        // both are OPER nodes, answered above, and it answers `None` for every kind but `Fill` and
+        // `Accs`. The labels are here only because the switch names every shape; `false` is the
+        // entering's answer, while a refinement's is the record's `panic`, which is what the OPER
+        // branch above falls through to and not what this line would say.
         return false;
     case camel::ops::OperShape::Clone:
     case camel::ops::OperShape::Construction:
