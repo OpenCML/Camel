@@ -1010,7 +1010,7 @@ Arrangeable termsOfOperator(camel::ops::OperId oper) {
 /// folds into `Oper` -- never reaches this function: `ArrangeWalk::at` answers it from the
 /// operation the view reports (`GraphView::shapeOf`), because a construction and an access are
 /// operations the four terms state in full and an operator record is not what decides them
-/// (`graph_view.h`; `internal/questions/2026-11-23-is-this-node-a-real-oper-record.cn.md`).
+/// (`graph_view.h`).
 Arrangeable termsOfOperNode(
     const graph::GraphView &view, graph::NodeRef ref, camel::ops::OperId oper, ReadLog &log) {
     Arrangeable terms = termsOfOperator(oper);

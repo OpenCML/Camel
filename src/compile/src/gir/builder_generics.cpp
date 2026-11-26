@@ -1317,13 +1317,10 @@ bool Builder::genericCandidateBinds(
     // the instance is bound (`instantiateForCallBinding`, the loop over every argument with the
     // `with` ones first). Binding alone does not answer it: `bindTypeVars` returns true for a
     // pattern whose variables are all bound already -- "Nothing to bind below: whether the argument
-    // fits is the ordinary check's question" -- so `initial: U` with `U` bound to `int[]` "bound" a
-    // `Range` here while the binder refused the call, and the two readers of one question
-    // disagreed. That disagreement is what the retry of a refused call could not get past
-    // (`instantiateForCall`): this reader said the candidate takes the arguments, the binder said
-    // it does not, and the retry asked this one again (measured on
-    // `(0 .. 3)->reduce<keep, 0 .. 3>`). The ordinary check this one leaves to the binder, the norm
-    // parameters above already make; a `with` argument makes it here for the same reason.
+    // fits is the ordinary check's question" -- so `initial: U` with `U` bound to `int[]` binds a
+    // `Range` without refusing it, and the answer has to be given here as well. The ordinary check
+    // stays with the binder, as the norm parameters above do; a `with` argument makes it here for
+    // the same reason.
     // The positions end before a `with` pack's `void` slot (`with <..ws>`): what a call writes
     // beyond the fixed parameters is the pack's, and no parameter of it is one argument.
     const size_t withParams = signature->withTypesCount() - (signature->hasWithRest() ? 1 : 0);
