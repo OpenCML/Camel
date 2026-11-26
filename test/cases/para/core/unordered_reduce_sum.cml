@@ -6,7 +6,7 @@ import { unordered_reduce } from para
 
 func main() => int sync {
     let n = 16
-    let nums = 1 .. (n + 1)
+    let nums = (1 .. (n + 1))->to_array()
     let actual = unordered_reduce<func (acc: int, item: int) => int {
         acc + item
     }, 0>(nums)
