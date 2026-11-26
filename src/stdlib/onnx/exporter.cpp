@@ -519,13 +519,11 @@ gc_node_ref_t declaringCellOf(const graph::GraphView &g, graph::NodeRef version)
 /// never leaves the function, so reads and assignments of it are not effects of the model. A
 /// read names the version its writer gave rather than the cell, so the version chain is walked
 /// back to the declaration.
-/// `:struct/append_arr_in_place` has no well-known id, so the module that recognises it interns the
-/// URI once and compares ids from then on (`camel/core/operator_table.h`): the text is how the
-/// operator is written down in the table, not how a node is recognised.
+/// The in-place append a compound assignment to a local array writes: the table gives it a
+/// well-known id (`oper::AppendInPlace`), so a node is recognised by that id and the URI is left to
+/// the places that show a program what it wrote.
 camel::core::OperId appendInPlaceOper() {
-    static const camel::core::OperId id =
-        camel::core::OperatorTable::instance().intern(":struct/append_arr_in_place");
-    return id;
+    return camel::core::oper::AppendInPlace;
 }
 
 bool isLocalVariable(const graph::GraphView &g, graph::NodeRef cell) {
@@ -554,14 +552,30 @@ AssignmentKind assignmentKindOf(std::string_view uri) {
     if (!plain || plain->size() <= 4) {
         return {.isAssignment = true, .binary = {}};
     }
-    // `__add__` -> `add`; the type tag (`_l`, `_i`, ...) is the part of the URI's tail the group
-    // name does not carry, and the lowering is registered under the tagged URI, so the tag is kept.
+    // `__add__` -> `add`: the group name carries the operator, the type tag (`_l`, `_i`, ...) does
+    // not, so the tag is read off this URI and the plain operator is the one overload of that group
+    // whose URI ends with the same tag. Exactly one has to have it -- the two are one operator seen
+    // through a compound assignment -- and a group that answers none or several means the table and
+    // the lowering disagree, which is a defect rather than something to guess at.
     const std::string_view inner = plain->substr(2, plain->size() - 4);
-    std::string binary           = ":op/";
-    binary.append(inner);
-    const size_t at = uri.rfind(inner);
-    if (at != std::string_view::npos) {
-        binary.append(uri.substr(at + inner.size()));
+const size_t at             = uri.rfind(inner);
+    const std::string_view tag =
+        at == std::string_view::npos ? std::string_view{} : uri.substr(at + inner.size());
+    std::string binary;
+    size_t matching = 0;
+    for (const std::string &form : camel::core::OperatorTable::instance().groupOperators(*plain)) {
+        if (form.size() >= tag.size() && form.compare(form.size() - tag.size(), tag.size(), tag) == 0) {
+            binary = form;
+            ++matching;
+        }
+    }
+    if (matching != 1) {
+        throw ExportError(
+            std::format(
+                "the operator a compound assignment follows is one operator of its group: {} of "
+                "the forms of '{}' end with '{}'",
+                matching, *plain, tag),
+            {}, 0, ExportError::Kind::Other);
     }
     return {.isAssignment = true, .binary = std::move(binary)};
 }
