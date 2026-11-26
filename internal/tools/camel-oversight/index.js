@@ -25,7 +25,7 @@
 //                        the model sends, and the claimed session ending, as they happen;
 //   POST /oversee/reload put the pushed plugin into the live directory, reload this one plugin, and
 //                        answer with the commit it came from (the band's button);
-//   tools oversight_claim, oversight_ack, oversight_tell, oversight_readings  the model's side.
+//   tools oversight_claim, oversight_ack, oversight_tell, oversight_readings, oversight_bind, oversight_unbind  the model's side.
 //
 // The routes are raw web-server routes, outside the GUI's launch-token login. The gate is the network:
 // the web server stays on loopback and `tailscale serve` publishes it to the tailnet, whose ACL decides
@@ -44,6 +44,7 @@ import path from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import * as bootMeasure from './measure.js'
 import * as bootRules from './rules.js'
+import { SLOTS, applyEntry, classify } from './slots.js'
 
 // The parts that change most often -- the rules, their limits and texts, and what is measured --
 // are reloaded when they change, at the next beat, without restarting the host: a restart stops
@@ -209,6 +210,7 @@ export function apply(ctx, rawConfig) {
     let dmLastSeen = null // the last request the oversight client made
     const promptReach = { target: 0, other: 0, none: 0 } // whom the prompt context was assembled for
     const tells = [] // what the model sent with oversight_tell
+    const binding = new Map() // child (id or name) -> its slot row; see slots.js
     const record = (entry) => {
         try {
             mkdirSync(path.dirname(config.logFile), { recursive: true })
@@ -227,6 +229,7 @@ export function apply(ctx, rawConfig) {
                 if (entry.kind === 'superseded') superseded.set(entry.id, entry.by)
                 if (entry.kind === 'claim') claimed = entry.session
                 if (entry.kind === 'tell') tells.push(entry)
+                if (entry.kind === 'bind' || entry.kind === 'unbind') applyEntry(binding, entry)
             } catch {
                 // A torn last line from a crash is skipped; the rest of the log still holds.
             }
@@ -472,7 +475,17 @@ export function apply(ctx, rawConfig) {
             }
             members.push({ id: String(agent.id), name, activity: agent.status === 'running' ? 'running' : 'idle', since: since.get(String(agent.id)) ?? null })
         }
-        return { running: members.filter((m) => m.activity === 'running').length, total: members.length, lanes: members }
+        // Every child is counted in `running`/`total`; what the reminders and the band judge is `slots`,
+        // by the binding table (children with no row are buffer, rows with no child are `stale`).
+        const placed = classify(members, binding)
+        return {
+            running: members.filter((m) => m.activity === 'running').length,
+            total: members.length,
+            devSlots: limitsNow().devSlots,
+            slots: placed.slots,
+            stale: placed.stale,
+            lanes: placed.members,
+        }
     }
 
     // ---- the watch ----------------------------------------------------------------------------------
@@ -1104,6 +1117,65 @@ export function apply(ctx, rawConfig) {
                 record(entry)
                 emit(entry)
                 return { result: `${id}: ${status}` }
+            },
+        }),
+    )
+
+    ctx.effect(() =>
+        ctx.tools.register({
+            name: 'oversight_bind',
+            description:
+                'Bind one of your children to a slot and a lane. This table is the one place a lane is bound: call it when you start a lane, and again to change it (the same agent replaces its row). A child with no row counts as buffer. Slots: merge (merge seats), dev (the standing development slots; the reminders judge "full" against these), misc (the standing chores lane), buffer (not kept full).',
+            parameters: {
+                type: 'object',
+                properties: {
+                    agent: { type: 'string', description: "The child's id or name." },
+                    slot: { type: 'string', enum: SLOTS },
+                    lane: { type: 'string', description: 'The lane branch, e.g. lane/arrangeable. Required for dev and misc; optional for merge and buffer.' },
+                    worktree: { type: 'string', description: "The lane's worktree path. Optional." },
+                },
+                required: ['agent', 'slot'],
+                additionalProperties: false,
+            },
+            output: {
+                schema: { type: 'object', properties: { result: { type: 'string' } }, required: ['result'], additionalProperties: false },
+                render: (_args, value) => [{ type: 'text', text: value.result }],
+            },
+            async execute({ agent, slot, lane, worktree }) {
+                if (!SLOTS.includes(slot)) return { result: `slot must be one of ${SLOTS.join(', ')}` }
+                if (!agent || !String(agent).trim()) return { result: 'agent is required' }
+                if ((slot === 'dev' || slot === 'misc') && !lane) return { result: `a ${slot} slot needs the lane (its branch)` }
+                const entry = { kind: 'bind', at: Date.now(), agent: String(agent).trim(), slot, lane: lane ? String(lane) : null, worktree: worktree ? String(worktree) : null }
+                applyEntry(binding, entry)
+                record(entry)
+                const seen = await lanesOf(claimed)
+                const live = Array.isArray(seen.lanes) && seen.lanes.some((m) => m.id === entry.agent || m.name === entry.agent)
+                return { result: `bound ${entry.agent} to ${slot}${entry.lane ? ` (${entry.lane})` : ''}${live ? '' : '; no live child has that id or name, so the row shows as stale until one does'}` }
+            },
+        }),
+    )
+
+    ctx.effect(() =>
+        ctx.tools.register({
+            name: 'oversight_unbind',
+            description: "Remove a child's row from the binding table (after a merge, when its lane is done). A child still alive then counts as buffer.",
+            parameters: {
+                type: 'object',
+                properties: { agent: { type: 'string', description: "The child's id or name, as it was bound." } },
+                required: ['agent'],
+                additionalProperties: false,
+            },
+            output: {
+                schema: { type: 'object', properties: { result: { type: 'string' } }, required: ['result'], additionalProperties: false },
+                render: (_args, value) => [{ type: 'text', text: value.result }],
+            },
+            async execute({ agent }) {
+                const key = String(agent || '').trim()
+                if (!binding.has(key)) return { result: `no row for ${key}` }
+                const entry = { kind: 'unbind', at: Date.now(), agent: key }
+                applyEntry(binding, entry)
+                record(entry)
+                return { result: `unbound ${key}` }
             },
         }),
     )
