@@ -3,16 +3,13 @@
  *
  * This is one side of the pair `arm_var.cml` / `arm_let.cml`; the two files are one program in two
  * writings, and `std::jgir canonical=true` must print the same bytes for both (design principles
- * 3.5: a `var` is a resource and a unit is a representation).
+ * 3.5: a `var` is a name for values, and an assignment inside an arm is the branch's result).
  *
- * It was red for one reason: the arm's write kept its `:var/get` (the value the arm writes could not
- * be named by the fold, because an arm's write reaches the cell through the branch's JOIN), so the
- * `var` writing still built a unit and its `if` was a statement. The `let` writing makes the same
- * choice the branch's value, and has no unit. It is green now: the branch carries the write as its
- * own value (the read after the branch takes the JOIN, and the arm's result is the value it wrote),
- * and what the carry leaves unread -- `:var/new`, its stores, the GATEs that handed the statement's
- * value out and the value the cell was made with -- is dropped at the end of the graph
- * (Builder::dropCarriedVariableUnits).
+ * The branch carries the write as its own value: the read after the branch takes the JOIN, and the
+ * arm's result is the value it wrote. What the carry leaves unread -- `:var/new`, its stores, the
+ * GATEs that handed the statement's value out and the value the cell was made with -- is dropped at
+ * the end of the graph (Builder::dropCarriedVariableUnits), so the two writings print the same
+ * bytes.
  *
  * Run: camel test/cases/compile/var/arm_var.cml
  */

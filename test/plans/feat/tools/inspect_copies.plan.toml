@@ -2,24 +2,23 @@ id = "tools.inspect_copies"
 order = 919
 tier = "fast"
 tags = ["feat", "tools", "inspect", "copies", "storage_reuse"]
-desc = "`camel inspect --copies` reports, for every update node, whether the update reuses the storage of the value it is given -- the ruler the direct-SSA plan's S3b is read with (internal/plans/2026-11-16-direct-ssa-construction.cn.md)"
+desc = "`camel inspect --copies` reports, for every update node, whether the update reuses the storage of the value it is given -- the reading the execution plan's reuse decision is checked with (design principles 10.5, `StorageReuse`)"
 
 # The plan's storage-reuse table (camel/runtime/exec_plan.h, StorageReuse) decides, once, whether an
 # update -- `v = v->append(x)`, a path assignment, a sort rebinding -- reuses the storage of the
-# value it is given or allocates new storage. Nothing printed that decision per update, so the
-# author's S3b ("the SSA value hands its storage to the update at its last use; the criterion is
-# `camel inspect --copies` reporting in-place for the `v = v->append(x)` loop and for the case
-# study's training step") had no ruler. `camel inspect --copies` is that ruler
+# value it is given or allocates new storage. An update at the value's last use reuses it, and one
+# whose value another name still holds copies (design principles 10.5). The decision was in the
+# plan's table and nothing printed it per update, so `camel inspect --copies` is the ruler
 # (camel/runtime/storage_reuse.h), and these entries are what make it a reading instead of an
 # intention.
 #
 # What is pinned here is that the tool reports, and that what it reports is readable and
 # self-consistent -- NOT which answer it gives. `in-place`, `by-count` and `copied` are all
 # readings, and the tool's job is to say which one the tree gives today: if `v = v->append(x)`
-# reports `copied`, that is exactly what S3b has to change, and a test that demanded `in-place`
-# today would be a test that makes the ruler lie. So every entry below reads the verdict out of
-# the line and checks it against the three the plan can give, and the readings themselves are the
-# summary counts. After an intended change of what the plan decides, the reading to re-record is
+# reports `copied`, that is a reading the reuse decision has to change, and a test that demanded
+# `in-place` today would be a test that makes the ruler lie. So every entry below reads the verdict
+# out of the line and checks it against the three the plan can give, and the readings themselves are
+# the summary counts. After an intended change of what the plan decides, the reading to re-record is
 # the `[SUMMARY]` line of this plan together with the `COPIES` lines the cases print.
 #
 # The entries live under `tools` and not under `compile` or `opt`: adding a test to those layers
@@ -29,7 +28,7 @@ desc = "`camel inspect --copies` reports, for every update node, whether the upd
 # `COPIES`'s "in place" is two answers, not one: `in-place` (the plan decided at compile time that
 # the storage is reused) and `by-count` (the update asks the array's own count at run time and reuses
 # the storage when it is the only holder -- design principles 10.5, and it IS in place, only decided
-# later). S3b's criterion is "not `copied`"; `in-place` and `by-count` both pass it. Writing the
+# later). The criterion is "not `copied`"; `in-place` and `by-count` both pass it. Writing the
 # criterion as "only `in-place`" would fail every site in today's tree, including the ones that
 # already work in place, and it would fail them over a wording.
 #
@@ -82,7 +81,7 @@ verify_script = '''
   const placeless = updates.filter(f => !/^rebinding_loop\.cml:\d+:\d+$/.test(f[1]))
   assert(placeless.length === 0,
     'every update names its place in the source: ' + placeless.map(f => f.join(' ')).join(' | '))
-  // The shape the S3b criterion reads: the append of the loop, named the way the program writes it.
+  // The shape the reuse criterion reads: the append of the loop, named the way the program writes it.
   const appends = lines.filter(l => /^COPIES rebinding_loop\.cml:\d+:\d+ append (in-place|by-count|declared|copied)$/.test(l))
   assert(appends.length > 0,
     'the append of the loop is one row named append: ' + lines.join(' | '))

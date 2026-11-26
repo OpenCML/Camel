@@ -2611,7 +2611,8 @@ void Builder::attachRegionStatement(
         // parameter of `__assn__` is a `var` parameter). Here the write is the branch's own value
         // and the cell never leaves the graph, so the mark is taken back for this one variable --
         // not for assignments in general, which is what broke a write inside a loop (carried state,
-        // the third item of the schedule).
+        // design principles 3.5: a write to an outer `var` in a loop body becomes the loop's
+        // carried state).
         escapingVariables_.erase(versionOf);
     }
     // The name the program wrote, for a variable a closure captured: the port stands for the
@@ -3009,7 +3010,7 @@ node_handle_t Builder::visitLoopNode(const GCT::node_ptr_t &gct) {
             }
             const node_handle_t cell = bound;
             if (escapingVariables_.contains(cell) || captureOriginOf_.contains(cell)) {
-                continue; // a closure or a call holds the cell: it stays a resource
+                continue; // a closure or a call holds the cell: it keeps its cell
             }
             Type *stored = valueTypeOf(nodeTypeOf(cell));
             if (stored == nullptr || stored->code() == TypeCode::Void) {

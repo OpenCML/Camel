@@ -596,7 +596,7 @@ timeout_ms = 20000
 #                               branch that gave it was no longer the sequence's last word. Two.
 #   rc18_seed429                clang: "expected expression" at a `= ;` the C++ writer left. One.
 #   rc19_seed70                 clang: "no matching function for call to 'f1'". One program.
-#   rc20_seed262                `binding != nullptr` in `Builder::rebindSsa`. Eight programs, and
+#   rc20_seed262                `binding != nullptr` in `SsaEnv::rebind`. Eight programs, and
 #                               the one shape here that is not this change's: it arrived with the
 #                               merge (S1), and its entry is the one at the end of this section.
 #
@@ -685,7 +685,7 @@ expect_stdout_exact = ""
 #
 #   func main(): int sync { if false then sync { var v1 = 1; v1 = 2; null; }; return 0; }
 #
-# It aborted with no pass at all, on every back end, in `Builder::rebindSsa`:
+# It aborted with no pass at all, on every back end, in `SsaEnv::rebind`:
 #
 #   Camel Invariant Violation: binding != nullptr
 #   Reading: An SSA `var` is written where its declaration is in scope.
@@ -697,8 +697,8 @@ expect_stdout_exact = ""
 # has), a `var` declared in an arm and written in an arm nested in it, and a `var` declared in an arm
 # and never written again.
 #
-# What was wrong was S2's *choice* of the name to carry, not the carrying, and not this
-# guarantee: `branchBeforeValues_` is written by every `rebindSsa` an arm's body reaches, and it cannot
+# What was wrong was the branch's *choice* of the name to carry, not the carrying, and not this
+# guarantee: `branchBeforeValues_` is written by every `SsaEnv::rebind` an arm's body reaches, and it cannot
 # tell a name the branch found in scope from one an arm declared, so a name that dies with the arm was
 # carried to a JOIN built after that arm's scope had been popped. The rule that forbids it was already
 # written in `src/compile/gir/builder_control.cpp` ("A name declared inside an arm dies with it and is
@@ -711,7 +711,7 @@ expect_stdout_exact = ""
 
 [[tests]]
 name = "rc20_seed5_arm_decl.without_the_pass"
-desc = "The 85-byte reduction of seed 5, with no pass at all: it runs, says nothing, exits 0. It used to abort in `Builder::rebindSsa` (`binding != nullptr`) in the front end, before any pass, so this arm is the claim and `std::opt` is the same claim again below."
+desc = "The 85-byte reduction of seed 5, with no pass at all: it runs, says nothing, exits 0. It used to abort in `SsaEnv::rebind` (`binding != nullptr`) in the front end, before any pass, so this arm is the claim and `std::opt` is the same claim again below."
 case = "../../../cases/opt/e9/rc20_seed5_arm_decl.cml"
 args = ["${case}", "${backend}"]
 expect_exit = 0
@@ -817,7 +817,7 @@ normalizers = ["strip_ansi", "normalize_newlines"]
 # in the graph builder --
 #
 #   Location   : ../src/compile/gir/builder_expr.cpp(3148)
-#   Function   : void camel::compile::gir::Builder::rebindSsa(const std::string &, node_handle_t)
+#   Function   : void camel::compile::gir::SsaEnv::rebind(const std::string &, node_handle_t)
 #   Guarantee  : binding != nullptr
 #   Reading    : An SSA `var` is written where its declaration is in scope.
 #
@@ -835,7 +835,7 @@ normalizers = ["strip_ansi", "normalize_newlines"]
 
 [[tests]]
 name = "rc20_seed262.without_the_pass"
-desc = "The program with no pass at all: it runs, says nothing and exits 0. It used to stop in the graph builder at `rebindSsa`'s `binding != nullptr`, and was carried here as a known failure under an owner that named S1; the carry's own choice of name is what it was, and the arm's name is no longer carried out of the join."
+desc = "The program with no pass at all: it runs, says nothing and exits 0. It used to stop in the graph builder at `SsaEnv::rebind`'s `binding != nullptr`, and was carried here as a known failure under an owner that named the wrong line; the branch's own choice of name is what it was, and the arm's name is no longer carried out of the join."
 case = "../../../cases/opt/e9/rc20_seed262.cml"
 args = ["${case}", "${backend}"]
 expect_exit = 0

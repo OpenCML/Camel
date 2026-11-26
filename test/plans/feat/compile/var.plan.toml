@@ -1,10 +1,10 @@
 # Writing freedom: one program, two writings, one canonical graph.
 #
-# The author's acceptance for the `var`-to-SSA work (queue item 1, 2026-11-15): a training step
-# written with an assignment to a `var` and the same step written as a chain of `let` bindings must
-# have `std::jgir canonical=true` print the same bytes, and the canonical output of the derivative
-# of the two writings must be the same bytes again (design principles 3.5: a `var` is a resource,
-# and a unit is a representation).
+# A training step written with an assignment to a `var` and the same step written as a chain of
+# `let` bindings must have `std::jgir canonical=true` print the same bytes, and the canonical output
+# of the derivative of the two writings must be the same bytes again (design principles 3.5: a `var`
+# is a name for values; an assignment rebinds it, and the compiler turns it into connections between
+# values, so which of the two spellings a program uses cannot show in its graph).
 #
 # The pair is `test/cases/compile/var/step_var.cml` and `step_let.cml`: one gradient step on a
 # scalar weight, the two writings of it, and nothing else. `test/tools/writing-freedom.mjs` runs
@@ -15,27 +15,11 @@
 # and the other does not). "Not identical" alone is not a usable report over a document of a
 # thousand lines.
 #
-# It is red on 96a27e435, and it is meant to be: the `var` writing still builds a unit. Measured
-# 2026-11-15 by this tool,
-#   [graph] differs first_difference_byte=4083 line=201 column=18 var_bytes=10930 let_bytes=9179
-#   shape: graph 2 nodes var=18 let=13
-#   shape: operators only in the var document: :op/assn_d@1.0 x1, :var/get@1.0 x3, :var/new@1.0 x1
-# and on the derivative side `std::macro` cannot evaluate `grad` at all:
-#   [grad] failed side=var exit=1: error[RuntimeDiag::MacroEvaluationFailed]: 'autodiff:grad' could
-#   not be evaluated by std::macro: RuntimeError: An error has occurred: autodiff: a variable of a
-#   differentiable type that is declared inside the differentiated function is read there. Gradients
-#   do not flow through variables: bind the value with let instead.
-# Both are the one reason -- a `var` is still a unit -- so the entry goes green with item 1 and must
-# not be added to `known_fail`: a red here is the statement that the work is not done.
-#
-# Measured again 2026-11-15 in the evening on f4bb08f241: the entry now **passes**, and the reading
-# above is why it can pass while the work is not done. The step it names has a `var` chain that
-# folds entirely into values, so `:var/new` is left with no user and is pruned; two documents with
-# no unit in either are the same bytes whether or not a unit is ever lowered. A green there is not
-# evidence. The entries at the end of this file are the ones that carry a `var` a fold cannot
-# take out -- one written in a loop and read after it, one read by a closure -- and they are red,
-# for the reason the pair above is red on an older tree. Its assertions are left exactly as they
-# were: they are a real reading again once the pair it names keeps a unit.
+# The top pair is the straight-line shape, where a `var` chain folds entirely into values: two
+# documents with no cell in either are the same bytes whether or not any other `var` is built as a
+# value, so a green there is not by itself evidence that the lowering happens. The entries at the
+# end of this file are the discriminating half -- a `var` written in a loop, in an arm and read by a
+# closure, where the value has to travel as carried state, as the branch's result or as a capture.
 #
 # The comparison is on the canonical document only, so nothing here fixes the *format* of that
 # document; a change to `canonical=true` is a change to what equivalence means and is not this
@@ -48,7 +32,7 @@ tags = ["feat", "compile", "var", "gir", "autodiff"]
 
 [[tests]]
 name = "var.assignment_and_let_chain_are_one_graph"
-desc = "An assignment to a `var` and the equivalent `let` chain have one canonical graph: `std::jgir canonical=true` prints the same bytes for the two writings of one gradient step, and so does the canonical output of the derivative (`std::macro std::jgir canonical=true`). Red on 96a27e435 because the `var` writing still builds a unit (var/new, three :var/get and :var/assn_d in its graph) and `grad` refuses it outright; green when a unit is lowered to SSA. **It is green on f4bb08f241 for the opposite of that reason**: the whole `var` chain folds, `:var/new` is pruned, and a document with no unit in it proves nothing about lowering one. Read the six entries below for the discriminating half."
+desc = "An assignment to a `var` and the equivalent `let` chain have one canonical graph: `std::jgir canonical=true` prints the same bytes for the two writings of one gradient step, and so does the canonical output of the derivative (`std::macro std::jgir canonical=true`). The step's `var` chain folds into values, so both documents have no cell in either; a document with no cell proves nothing on its own about a `var` a fold cannot take out. Read the six entries below for the discriminating half."
 kind = "behavior"
 tool = "node"
 case = "../../../../test/tools/writing-freedom.mjs"
@@ -88,16 +72,13 @@ expect_stdout_not_contains = ["0"]
 normalizers = ["normalize_newlines"]
 timeout_ms = 20000
 # A loop body that writes an outer `var`, and the same accumulation written as the loop's carried
-# value: one program in two writings, so the canonical documents must be the same bytes. Red today,
-# and a red here is the statement that queue item 1 is not done -- specifically, the third of the
-# author's three places: a loop assignment must become the loop's state. A write inside a loop body
-# keeps its `:var/get` (the value the previous turn carried is not any node's input), so the `var`
-# writing still builds a unit while the `let` writing has none. Do not add this entry to
-# `known_fail`: it must stay red until the lowering exists, and it is meant to be the acceptance that
-# can tell "the unit was lowered" from "the unit was folded away".
+# value: one program in two writings, so the canonical documents must be the same bytes. The write
+# inside the loop body is the loop's carried state (design principles 3.5), so the `var` writing is
+# the LOOP's state and the two writings build one graph. The entry is the acceptance that can tell a
+# value travelling between turns from a value folded away in one turn.
 [[tests]]
 name = "var.a_loop_assignment_is_the_loops_state"
-desc = "`var total = 0` written in a loop body and the same accumulation written as the loop's carried value have one canonical graph: `std::jgir canonical=true` prints the same bytes. Red today because the write in a loop body keeps its `:var/get`/`:var/new` while the `let` writing is the LOOP's state."
+desc = "`var total = 0` written in a loop body and the same accumulation written as the loop's carried value have one canonical graph: `std::jgir canonical=true` prints the same bytes. The write inside the loop body is the loop's carried state, so both writings are the LOOP's state; a difference means a turn's write stopped being the next turn's value."
 kind = "behavior"
 tool = "node"
 case = "../../../../test/tools/writing-freedom.mjs"
@@ -108,13 +89,11 @@ normalizers = ["normalize_newlines"]
 timeout_ms = 120000
 
 # The same question for an arm of an `if`: `var x = 0; if c then { x = 1 } else { x = 2 }` against
-# `let x = if c then 1 else 2`. Red today, and a red here is the statement that the second of the
-# author's three places is not done either: a branch assignment must become the branch's result.
-# The arm's write reaches the cell through the JOIN, so its `:var/get` stays and the `var` writing
-# still builds a unit. Not `known_fail`, for the same reason.
+# `let x = if c then 1 else 2`. An assignment in each arm is the branch's result: the read after the
+# branch takes the JOIN, so no `:var/get` is left, and the two writings build one graph.
 [[tests]]
 name = "var.an_arm_assignment_is_the_branch_result"
-desc = "`var x = 0` written in each arm of an `if` and the same choice written as the branch's value have one canonical graph: `std::jgir canonical=true` prints the same bytes. It was red because an arm's write kept its `:var/get`/`:var/new` while the `let` writing was the branch's own result. It is green because the branch carries the write as its own value (the read after it takes the JOIN, so no `:var/get`, and the arm's result is the value it wrote) and the unit the carry left unread -- `:var/new`, its stores, the GATEs that handed the statement's value out and the value the cell was made with -- is dropped at the end of the graph (dropCarriedVariableUnits, each node only when it has no user of any kind). Both writings now print the same bytes."
+desc = "`var x = 0` written in each arm of an `if` and the same choice written as the branch's value have one canonical graph: `std::jgir canonical=true` prints the same bytes. The branch carries the write as its own value (the read after it takes the JOIN, so no `:var/get`, and the arm's result is the value it wrote), and what the carry leaves unread -- `:var/new`, its stores, the GATEs that handed the statement's value out and the value the cell was made with -- is dropped at the end of the graph (dropCarriedVariableUnits, each node only when it has no user of any kind). Both writings print the same bytes."
 kind = "behavior"
 tool = "node"
 case = "../../../../test/tools/writing-freedom.mjs"
@@ -127,12 +106,12 @@ timeout_ms = 120000
 # --- the discriminating half: a `var` a fold cannot take out of the program --------------------
 #
 # The entry at the top compares two writings of one gradient step, and that step's `var` chain folds
-# away, so both documents are the same bytes with no unit in either and the entry says nothing
-# about lowering one. The two programs below are the author's counterexample shape (2026-11-15 in
-# the evening): the `var` is written in a loop and read outside it, or read by a closure. A read in
-# another place cannot be answered by the value alone, so `:var/new` keeps a user, a unit is built,
-# and the two writings of the same program do not print the same document until a unit is lowered
-# to SSA.
+# away, so both documents are the same bytes with no cell in either and the entry says nothing
+# about a `var` that has to travel. The two programs below are the counterexample shape: the `var` is
+# written in a loop and read outside it, or read by a closure. A read in another place cannot be
+# answered by the value alone, so the value has to travel as the loop's carried state (design
+# principles 3.5) or as a capture port, and both writings of the same program must still print the
+# same document.
 #
 # Each shape is three entries and has two halves:
 #   * the program's own behavior -- it runs under `std::nvm` and prints the value the write wrote
@@ -142,11 +121,11 @@ timeout_ms = 120000
 #     (`compare_fields = ["stdout_normalized"]`), which is the shape the first entry uses and the
 #     shape the author asked for: one canonical graph for two writings.
 #
-# Red today, and red only because a unit is still built: the `var` writing's document carries
-# `:var/new`, the `:var/get` the read runs (and, in the closure, a `:var/get` inside the closure's
-# own graph instead of the value arriving there), and `:op/assn_l` for the write, while the `let`
-# writing carries none of them. The entries go green with the SSA lowering and must not be added to
-# `known_fail`: a red here is the statement that the work is not done.
+# Both halves are green: the write inside the loop body is carried state the loop head hands to the
+# next round and to the read after the loop, and the closure's read is a capture of the value the
+# assignment wrote, so the `var` writing and the `let` writing build one graph. A red here means the
+# value travelling between regions is wrong (a read answered with the value from before the write,
+# or with the value the `var` started with), which is a defect, not a shape.
 
 # The loop writing: `total` is written on every round and read after the loop, so the write is
 # carried state the fold cannot put where the read is. Three rounds add `i * 7`, so the read must
@@ -176,14 +155,12 @@ expect_exit = 0
 normalizers = ["normalize_newlines"]
 timeout_ms = 20000
 
-# The same program without `var`: the accumulated value is the loop's second carried state. Red
-# today: the `var` writing carries the value in a unit (one loop state plus `:var/new`,
-# `:op/assn_l` and the `:var/get` after the loop), the `let` writing carries it as a loop state
-# (two states, the body's tuple, and the extraction of the value after the loop), so the two
-# documents part wherever the unit is.
+# The same program without `var`: the accumulated value is the loop's second carried state, which is
+# the state the `var` writing builds too. Both documents carry the value as a loop state, the body's
+# tuple, and the extraction of the value after the loop, so the two are the same bytes.
 [[tests]]
 name = "var.loop_write_outside_read_is_the_let_writing"
-desc = "`loop_write_outside_read.cml` and `loop_write_outside_read_let.cml` are one program written with a `var` and with a loop whose state carries the value instead; `std::jgir canonical=true` must print the same bytes for the two. Red today: the `var` writing still carries the value in a unit (`:var/new`, `:op/assn_l`, the `:var/get` after the loop, and one loop state) where the `let` writing carries it as the loop's second state; green when a unit is lowered to SSA. This entry must stay red until step a of the `var`-to-SSA work lands, and it is meant to be red: a green here means the fold took a chain out of the program that the design says is carried state (the read is after the loop, so no written value can answer it), which is a defect, not progress."
+desc = "`loop_write_outside_read.cml` and `loop_write_outside_read_let.cml` are one program written with a `var` and with a loop whose state carries the value instead; `std::jgir canonical=true` must print the same bytes for the two. The write inside the loop body is the loop's carried state (design principles 3.5), so the `var` writing and the `let` writing build one graph; a difference means the value travelling between turns or out of the loop is not the value the write wrote."
 kind = "differential"
 case = "../../../cases/compile/var/loop_write_outside_read_let.cml"
 args = ["${case}", "std::jgir", "canonical=true", "std::nop"]
@@ -218,13 +195,12 @@ expect_exit = 0
 normalizers = ["normalize_newlines"]
 timeout_ms = 20000
 
-# Same program, the value captured instead of a cell. Red today: the `var` writing keeps the unit
-# (`:var/new`, `:op/assn_l`, a `:var/get` inside the closure's graph, which reads the cell through
-# the closure's context), while the `let` writing hands the value to the closure and its graph
-# holds a port and nothing else.
+# Same program, the value captured instead of a cell: the closure's read of the name is a capture of
+# the value the write left, so the `var` writing hands the closure a port the same way the `let`
+# writing does, and the two documents are the same bytes.
 [[tests]]
 name = "var.closure_read_is_the_let_writing"
-desc = "`closure_read.cml` and `closure_read_let.cml` are one program written with a `var` read by a closure and with a `let` binding the closure captures; `std::jgir canonical=true` must print the same bytes for the two. Red today: the `var` writing's closure graph holds a `:var/get` that reads the unit through the closure's context, and its body graph holds `:var/new` and `:op/assn_l`, where the `let` writing's closure receives the value as a captured input and has no such nodes; green when a unit is lowered to SSA. This entry must stay red until step a of the `var`-to-SSA work lands, and it is meant to be red: a green here means the fold took a chain out of the program that the design says another place reads (the closure reads the cell from its own graph), which is a defect, not progress."
+desc = "`closure_read.cml` and `closure_read_let.cml` are one program written with a `var` read by a closure and with a `let` binding the closure captures; `std::jgir canonical=true` must print the same bytes for the two. The read is in the closure's own graph, and the value it reads is the one the assignment wrote, so the closure is handed that value as a capture port in both writings; a difference means the closure is reading a place instead of the value, which is a defect, not progress."
 kind = "differential"
 case = "../../../cases/compile/var/closure_read_let.cml"
 args = ["${case}", "std::jgir", "canonical=true", "std::nop"]
@@ -249,7 +225,7 @@ expect_stdout_exact = "6\n6\n"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 30000
 
-# --- Step b of the `var`-to-SSA work: the write a body leaves on a `var` parameter ---------------
+# --- the write a body leaves on a `var` parameter ------------------------------------------------
 #
 # A `var` parameter is a cell the caller made. The cell outlives the call, so the write the body
 # leaves in it is a result of the function beside the returned value (design principles 3.1), and
@@ -316,8 +292,8 @@ timeout_ms = 30000
 # --- The guard is on the link, not on the name ---------------------------------------------------
 #
 # `x += 1` is `x = x + 1`, and it reads the name it writes, so the report of a dropped value has
-# never stood on it (that read is what `storedValueIsRead` answered for a cell). S1 keeps the report
-# off the link a compound assignment rebuilds, and the question that guard has to answer is whether
+# never stood on it (that read is what `storedValueIsRead` answers for a cell). The guard keeps the
+# report off the link a compound assignment rebuilds, and the question it has to answer is whether
 # it is scoped to that link or to that name: if it leaked past the statement, the `x = 5` below it
 # would be swallowed with it, which is a missed report rather than a fixed one. So the case writes
 # both in one body, and one is reported while the other is not.
@@ -380,12 +356,9 @@ timeout_ms = 30000
 
 # --- A `var` written inside one arm of a statement branch ----------------------------------------
 #
-# Stage S2 builds such a `var` as a value: the branch's JOIN carries it, and every read after the
-# branch takes the join. Before S2 any write outside the declaring region made the name a cell for
-# the rest of its life. The corpus contains no case of this shape -- measured, not assumed: after
-# S2 the capture census reads `var_new=228`, `list_sha=ffab8200...` and `ok=2694 refused=1162`, all
-# three byte-identical to the run before it, so no case in `test/cases/**` changed. These five
-# programs are therefore the only thing that holds S2 up, and each one pins one number:
+# A `var` written inside one arm is the branch's JOIN: the JOIN carries the value each arm wrote and
+# every read after the branch takes the join. The corpus contains no case of this shape, which is why
+# these five programs exist, and each one pins one number:
 #
 #   taken_writes            1   the arm that runs wrote it
 #   untaken_keeps_initialiser 7  the arm that runs wrote nothing: the value from before the branch
@@ -541,36 +514,35 @@ assert(!text.includes(':var/get'), `and no read of a cell either: ${text.slice(0
 """
 timeout_ms = 30000
 
-# --- A `var` written inside a loop body is the loop head's phi (stage S3) -------------------------
+# --- a `var` written inside a loop body is the loop head's phi ----------------------------------
 #
-# The author's third place (design principles 3.5: "a write to an outer `var` in a loop body becomes
-# the loop's carried state"). Before S3 a write inside a loop body kept the name a cell for the rest
-# of its life: the body's write was a store, the read in the next round was a `:var/get`, and the
-# loop's state was the cell. The graph ran -- the readings below were the right numbers before this
-# stage too, because a cell with one store per round is a correct program -- and that is exactly why
-# the numbers alone are not the acceptance: what S3 changes is *how many writings* one value has.
-# The criterion is two-sided and both sides are pinned here:
+# Design principles 3.5: "a write to an outer `var` in a loop body becomes the loop's carried state".
+# The body's write is the round's next value, the read in the next round is that value, and the
+# loop's state is the value itself. The readings below are the same numbers a store-per-round
+# lowering prints -- a cell with one store per round is a correct program -- so the numbers alone are
+# not the acceptance: what the shape changes is *how many writings* one value has. The criterion is
+# two-sided and both sides are pinned here:
 #
 #   * the head carries the name as a value: the LOOP's state is the name, the body's port is the
 #     value, a write rebinds it, and no `:var/new` or `:var/get` is in the graph (entries 7 and 8,
 #     and `var.a_loop_assignment_is_the_loops_state` above, which is the canonical-graph half);
-#   * the value is still the one the program wrote: every number below is the number the cell
-#     lowering printed, so the stage bought a shape and not a different answer. The five shapes are
+#   * the value is still the one the program wrote: every number below is the number a cell
+#     lowering prints, so the shape is a shape and not a different answer. The five shapes are
 #     one loop and one name (13), two names in one head (3, 8), two heads nested (6), an arm inside
 #     a head (22), and a read inside the round that wrote it (1, 2, 3, 3): the `[0, 1, 25, 3]`
 #     incident's shape is the last of them, and it is pinned by all four lines rather than one.
 #
-# The corpus contains no case of this shape -- measured, not assumed: the census after S2 reads
-# `var_new=228` and after S3 it is read again, and the number moves by exactly the units these six
-# programs have, never by more. These six are therefore the only thing that holds S3 up.
+# The corpus contains no case of this shape, and that is why these six exist: they are the only
+# thing that holds the shape up. The numbers move by exactly the values these six programs carry,
+# never by more.
 #
 #   phi_two_sources   13  the entry value is the last write before the loop (10), not the
 #                         initialiser (5); the back edge is 10 + 0 + 1 + 2
 #   two_states         3  `a` accumulates `i`: one head, two values, each with its own back edge
 #                      8  ... and `b` doubles three times
 #   nested             6  three outer rounds of two inner ones: two heads, two phis, one value
-#   write_in_an_arm      --  does not compile, before this stage or after it: S2's join inside S3's
-#                         head reaches the branch-arm invariant, and the entry is a known failure
+#   write_in_an_arm      --  does not compile: a branch's join inside a loop head reaches the
+#                         branch-arm invariant, and the entry is a known failure
 #   write_then_read  1,2,3  the value read in the round that wrote it
 #                    3  ... and after the loop
 #   append             3  the value is an array the body appends to, so the copies reading applies
@@ -749,12 +721,11 @@ assert(varNodes.length === 0, `neither name is a cell: ${varNodes.join(', ')}`)
 timeout_ms = 30000
 
 # The copies reading is the other half of "one writing": a value that is the loop's state and is
-# updated by an append is exactly the shape S3b has to make in-place, and a `copied` here is not a
-# red for S3 (that is S3b's criterion) -- but a verdict that differs from the one before this stage
-# is a regression, so the summary line is pinned as it stands.
+# updated by an append is the shape the in-place copies reading applies to, and the verdict for it
+# is pinned here as it stands, so a change to that verdict shows as a red.
 [[tests]]
 name = "var.loop_carry_append_copies_verdict"
-desc = "`camel inspect --copies` on the append-in-a-loop program: the plan's verdict for the append, pinned. S3 changes the value's shape from a cell to the head's state; the pin is that the verdict it reports stays what it was before the change."
+desc = "`camel inspect --copies` on the append-in-a-loop program: the verdict for the append, pinned. The value is the loop head's state and the body appends to it; the pin is the verdict the copies reading reports for that shape."
 kind = "behavior"
 tool = "camel"
 case = "../../../cases/compile/var/loop_append_copies.cml"
