@@ -1,0 +1,21 @@
+/**
+ * A number of one type does not enter a position of another, however safe the widening is
+ * (design principles 5.1: "数值类型之间不做隐式转换"). `i32` into `int` is the widening no value can
+ * lose, and it is still a conversion: the compiler inserts no step for it, so the call is a type
+ * error that names both types, and the program has to write `int(x)`.
+ *
+ * Entering is judged by the structure of the two types -- a value into `T?` / `T!`, `null` into
+ * `T?`, a failed value into a `T!`, the rank-zero slot of an open rank -- and never by the
+ * conversion table: a pair the table calls `Safe` is not an entering for being safe, and a pair it
+ * refuses is not one for being a widening.
+ */
+
+func takes_int(x: int) => int {
+    return x
+}
+
+func main() => int sync {
+    let narrowed: i32 = 7
+    println(takes_int(narrowed))
+    return 0
+}

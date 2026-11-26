@@ -199,6 +199,19 @@ bool CollectionType::assignableFrom(Type *sourceType) const {
     return sourceType != nullptr && sameTypeWithUnwrittenResources(this, sourceType);
 }
 
+// A collection handed to a position of a collection type enters it when the position's type is
+// the value's own with the arguments' resource clauses written in (`assignableFrom`): the same
+// container, the same handles, nothing copied and nothing checked at run time. What is left of
+// the relation -- an array becoming a collection -- is a conversion the program writes, and only
+// the table below answers it.
+bool CollectionType::castEntersFrom(Type *sourceType) const {
+    if (sourceType == nullptr)
+        return false;
+    if (equals(sourceType) || sourceType->code() == TypeCode::Never)
+        return true;
+    return complete() && assignableFrom(sourceType);
+}
+
 CastSafety CollectionType::castSafetyFrom(Type *sourceType) const {
     if (sourceType == nullptr || !complete()) {
         return CastSafety::Forbidden;

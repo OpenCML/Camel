@@ -217,10 +217,13 @@ Builder::conversionNodeOf(node_handle_t value, Type *target, const GCT::node_ptr
 
 node_handle_t Builder::refineExtentNodeOf(
     node_handle_t value, Type *target, const GCT::node_ptr_t &origin) {
-    // The check a call site makes on an extent (design principles 5.4). A parameter's type may
-    // write its extent over the names the call bound (`f32[n - w + 1]`) or leave one open (`?`);
-    // the argument's own type says what the compiler knows and no more, so where the two do not
-    // meet as types the check that the value really has that shape is made when the value exists.
+    // The check the compiler makes where a shape is not in the type (design principles 5.4). A
+    // parameter's type may write its extent over the names the call bound (`f32[n - w + 1]`) or
+    // leave one open (`?`); the argument's own type says what the compiler knows and no more, so
+    // where the two do not meet as types the check that the value really has that shape is made
+    // when the value exists. `T[..]` read as `T` is the same check in the other direction: the
+    // element of the open rank *is* the value only when it has no dimension, and the rank is the
+    // value's (`Builder::coerceTo` is where that step is inserted).
     // That is the same check `as` makes -- and it is **not** `as`:
     //
     //   - it is not a conversion the program wrote. `:op/cast` is the conversion a program writes

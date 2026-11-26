@@ -22,6 +22,7 @@
 #include "camel/core/rtdata/func.h"
 #include "camel/core/rtdata/tuple.h"
 #include "camel/core/type/composite/func.h"
+#include "camel/runtime/draft.h"
 #include "camel/runtime/loop.h"
 #include "camel/runtime/oper_shape.h"
 #include "camel/runtime/operator_instance.h"
@@ -2266,6 +2267,41 @@ std::optional<CommitViolation> orderIncomplete(
     return found;
 }
 
+/// Where the edit that made `node` was written, read off the draft's record: the position of the
+/// last entry whose region is the node's own region or a region around it (a note records the region
+/// its primitives touched, and a node an edit made inside a branch is under the region the note
+/// names; the walk up is the one `touchedRegions` makes when it decides which regions a commit
+/// answers for). 0 when no entry names a position -- a record written by a caller that did not know
+/// where its edit stood says nothing rather than pointing at a place it made up.
+uint64_t editOriginOf(
+    std::span<const EditNote> edits, const GCGraph &graph, const CommitViolation &violation) {
+    if (edits.empty()) {
+        return 0;
+    }
+    for (const gc_node_ref_t node : {violation.second, violation.first}) {
+        if (node == kInvalidNodeRef || graph.node(node) == nullptr) {
+            continue;
+        }
+        uint32_t region = graph.nodeRegion(node);
+        for (uint32_t steps = 0; steps <= graph.regionCount(); ++steps) {
+            for (auto note = edits.rbegin(); note != edits.rend(); ++note) {
+                if (note->origin != 0 && note->region == region) {
+                    return note->origin;
+                }
+            }
+            if (region == 0 || region >= graph.regionCount()) {
+                break;
+            }
+            const GCRegion *const one = graph.region(region);
+            if (one == nullptr || one->parent == region) {
+                break;
+            }
+            region = one->parent;
+        }
+    }
+    return 0;
+}
+
 } // namespace
 
 /// What a graph's own type declares about what it may reach, as one line a reader can compare: the
@@ -2293,7 +2329,7 @@ std::string declaredEffectText(const GCGraph &graph) {
 std::optional<CommitViolation> commitViolation(
     const Program &program, const GCGraph &graph, std::span<const gc_node_ref_t> made,
     std::span<const gc_node_ref_t> changed, const GCGraph *before, const Program *beforeProgram,
-    bool asksEffects, bool asksOrder) {
+    bool asksEffects, bool asksOrder, std::span<const EditNote> edits) {
     // The tier first, and before any resolver runs: docs/design/graph-editing/README.cn.md 8.1's
     // table decides which of the six checks a commit is asked, and what decides that is which edit
     // the draft used -- read off the draft's edit record (`GraphDraft::editTier`) and not derived
@@ -2313,6 +2349,14 @@ std::optional<CommitViolation> commitViolation(
     // names, and this is the clause that stopped covering it. Both branches that answer the effect
     // question go through here, so a signature that moved is named whether the commit also made a
     // node or only republished the graph under another type.
+    // The edit that made the node the reading names, read off the draft's record: the commit is what
+    // refuses, and the node it refuses about may be one an edit put there rather than one the
+    // program's text wrote. The diagnostic then carries both positions -- the node's (`origin`) and
+    // the edit's (`editOrigin`) -- which is design 8.3's "which step of the block made it".
+    const auto withEditOrigin = [&](CommitViolation violation) {
+        violation.editOrigin = editOriginOf(edits, graph, violation);
+        return violation;
+    };
     const auto withSignatureNote = [&](CommitViolation violation) {
         if (signatureChanged) {
             violation.text += std::format(
@@ -2321,7 +2365,7 @@ std::optional<CommitViolation> commitViolation(
                 declaredEffectText(*before),
                 declaredEffectText(graph));
         }
-        return violation;
+        return withEditOrigin(violation);
     };
     if (!asksEffects && !asksOrder) {
         if (!signatureChanged) {
@@ -2459,6 +2503,13 @@ void reportCommitViolation(
     auto diag = ctx->rtmDiags()->of(which);
     if (violation.origin != 0) {
         diag.atOrigin(violation.origin);
+    }
+    // Where the edit that put the node there was written, when the draft's record knows: the node's
+    // own position says what the refused graph has, and this says which edit made it (design 8.3).
+    // Nothing is attached when no note carries a position -- a record that does not know where its
+    // edit stood says nothing rather than pointing at the node again under another name.
+    if (violation.editOrigin != 0) {
+        diag.relatedOrigin(violation.editOrigin, "the edit that made this node was made here");
     }
     diag.commit(site, violation.text);
 }

@@ -68,7 +68,7 @@ void addToUnion(std::vector<uint32_t> &unionOf, uint32_t region) {
 
 } // namespace
 
-void GraphDraft::recordEdit(EditKind kind, std::span<const uint32_t> regions) {
+void GraphDraft::recordEdit(EditKind kind, std::span<const uint32_t> regions, uint64_t origin) {
     // A rollback replays the journal by writing bodies and tables back; that is not an edit of the
     // graph and must not appear in the record a commit reads.
     if (undoSuspended_) {
@@ -82,7 +82,7 @@ void GraphDraft::recordEdit(EditKind kind, std::span<const uint32_t> regions) {
     ++editCount_;
     editKinds_ |= static_cast<uint32_t>(1) << static_cast<uint32_t>(kind);
     for (uint32_t region : regions) {
-        editNotes_.push_back(EditNote{.kind = kind, .region = region});
+        editNotes_.push_back(EditNote{.kind = kind, .region = region, .origin = origin});
     }
     // The listeners are told once per edit and not once per region: the edit is the unit both
     // entries work in, and a listener that had to fold several calls back together would be
@@ -161,11 +161,10 @@ EditTier GraphDraft::editTier() const {
     //                       reading narrows it to the callees that carry an access.
     //   `low_level`:        the last row, which owes all six.
     //
-    // Which kinds a record can name today: `replace`, `erase` and `order` are opened by the graph
-    // module's operators, and `inline`, `outline` and `eval` are not marked yet -- they arrive as
-    // the last row, which is what they were before the record existed. So this reading asks no less
-    // than the commit asked before it: the rows above the last are the ones that say no, and only a
-    // caller that opens a `NamedEdit` says one.
+    // Which kinds a record can name: every one of the nine. `replace`, `erase`, `eval`, `order`,
+    // `inline`, `outline` and a parameter port are opened by the graph module's operators; a kind
+    // that arrives as the last row widens this reading and never narrows it, because the last row
+    // asks both questions.
     tier.effects = editedWith(EditKind::Inline) || editedWith(EditKind::LowLevel);
     tier.order   = editedWith(EditKind::Inline) || editedWith(EditKind::Outline) ||
                    editedWith(EditKind::LowLevel);
@@ -184,11 +183,13 @@ void GraphDraft::removeEditListener(EditListener *listener) {
     std::erase(editListeners_, listener);
 }
 
-GraphDraft::NamedEdit::NamedEdit(GraphDraft &draft, EditKind kind) : draft_(draft) {
+GraphDraft::NamedEdit::NamedEdit(GraphDraft &draft, EditKind kind, uint64_t origin) : draft_(draft) {
     if (draft_.namedEdits_ == 0) {
         // The outermost edit is the one the table names, and it is the one that records: a named
         // edit written in terms of another is still one row of the table.
-        draft_.namedEditKind_ = kind;
+        draft_.namedEditKind_      = kind;
+        draft_.namedEditOrigin_    = origin;
+        draft_.namedEditDismissed_ = false;
         draft_.namedEditRegions_.clear();
     }
     ++draft_.namedEdits_;
@@ -199,13 +200,23 @@ GraphDraft::NamedEdit::~NamedEdit() {
     if (draft_.namedEdits_ != 0) {
         return;
     }
-    const EditKind kind = draft_.namedEditKind_;
+    const EditKind kind     = draft_.namedEditKind_;
+    const uint64_t origin   = draft_.namedEditOrigin_;
+    const bool dismissed    = draft_.namedEditDismissed_;
+    draft_.namedEditOrigin_ = 0;
+    draft_.namedEditDismissed_ = false;
     std::vector<uint32_t> regions;
     regions.swap(draft_.namedEditRegions_);
+    if (dismissed) {
+        // The operator refused what it was asked to do, so no edit happened: nothing is recorded and
+        // no listener is told. The regions the aborted primitives touched belong to a segment the
+        // journal takes back, not to an edit of this graph.
+        return;
+    }
     // A named edit whose primitives touched nothing that records a region still is an edit: it is
     // recorded with the empty region list, so that the kind is in the record and the listeners were
     // told, and a draft that used only it owes the tier its row says.
-    draft_.recordEdit(kind, regions);
+    draft_.recordEdit(kind, regions, origin);
 }
 
 } // namespace camel::runtime

@@ -440,6 +440,19 @@ Type *FunctionType::unify(Type *other) const {
     return exit == nullptr ? nullptr : withExitType(exit);
 }
 
+// A function value handed to a position of a signature enters it when that signature holds the
+// value's own (`assignableFrom`): the parameters line up, a `void` exit is satisfied by any exit,
+// and a stream's step function is the stream's value. What is handed on is the same function, so
+// nothing moves and nothing can fail -- a structural relation of the two signatures, and the
+// conversion table is not consulted.
+bool FunctionType::castEntersFrom(Type *sourceType) const {
+    if (sourceType == nullptr)
+        return false;
+    if (equals(sourceType) || sourceType->code() == TypeCode::Never)
+        return true;
+    return assignableFrom(sourceType);
+}
+
 CastSafety FunctionType::castSafetyFrom(Type *sourceType) const {
     if (sourceType == nullptr)
         return CastSafety::Forbidden;

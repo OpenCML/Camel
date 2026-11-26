@@ -1,0 +1,41 @@
+id = "modules.rules_quant"
+order = 396
+tier = "fast"
+tags = ["feat", "modules", "rules", "rewrite", "int8", "quantization"]
+desc = "A rule that quantizes a product's fixed weight to int8 and restores it before the operator runs, measured against the same program with no rule: the `int8` ruleset (`src/stdlib/rulesets/int8.cml`) is applied to one matmul by `rewrite::run`, and the case prints both writings, their elementwise difference and its largest element, and compares that against a tolerance the plan gives. The tolerance lives in the plan's `--arg` and not in the program, so one entry is green at the error the rule is allowed and one entry is red at a tolerance under the error the first entry printed -- a tightened number, not a different program. A third entry writes the same product without `#[change_precision]`, the permission the rule asks for, and pins that the rule does not fire at all there."
+
+[[tests]]
+name = "rules.quant_int8_weight_round_trip"
+desc = "The int8 ruleset's rule applied to a product whose weight is fixed in the body: the case writes that function twice, once rewritten by the rule and once untouched, and compares the two element by element against the tolerance this entry gives (`--arg tol=0.05`). The reference is the same function value before the rewrite, on the same tree and through the same pipeline, so what the difference measures is that one rule. The tolerance is the error the rule is allowed, not a number read off the run: the scale is `max(|w|) / 127 = 4.9 / 127 = 0.0386`, an element moves by at most half of it (`0.0193`), and a row of two weights by at most `0.0386` -- under the 0.05 written here, and the run prints `0.0238`."
+kind = "behavior"
+case = "../../../cases/modules/rules/quant_int8.cml"
+args = ["${case}", "--arg", "tol=0.05", "${backend}"]
+backends = ["nvm", "fvm"]
+expect_exit = 0
+expect_stdout_contains = ["matmul_int8 diff=", "max_abs_diff=0.023818897637795544 rewrites=1 fired=yes tol=0.05", "matmul_int8 verdict=PASS"]
+expect_stdout_not_contains = ["verdict=FAIL"]
+timeout_ms = 20000
+
+[[tests]]
+name = "rules.quant_int8_tolerance_is_compared"
+desc = "The same case with a tolerance under the error the entry above printed (`--arg tol=0.02` against 0.0238, and under the rule's own bound of 0.0386): the elementwise comparison fails, the verdict flips to `FAIL` and the program exits 1. Without this entry the tolerance would be a number nothing compares, and a quantization error larger than the number written would still read as green."
+kind = "negative"
+case = "../../../cases/modules/rules/quant_int8.cml"
+args = ["${case}", "--arg", "tol=0.02", "${backend}"]
+backends = ["nvm", "fvm"]
+expect_exit = 1
+expect_stdout_contains = ["max_abs_diff=0.023818897637795544 rewrites=1 fired=yes tol=0.02", "matmul_int8 verdict=FAIL"]
+expect_stdout_not_contains = ["verdict=PASS"]
+timeout_ms = 20000
+
+[[tests]]
+name = "rules.quant_int8_needs_the_precision_permission"
+desc = "The same product written without `#[change_precision]`: the rule asks for that permission (design principles 7.2-7.3), so it does not fire, the two writings are equal, and the case is red -- which is what the case's own `fired` column is for: a rule that stopped applying would leave a diff of zero, and a diff of zero must not read as a quantization that happened."
+kind = "negative"
+case = "../../../cases/modules/rules/quant_int8_without_change_precision.cml"
+args = ["${case}", "--arg", "tol=0.05", "${backend}"]
+backends = ["nvm", "fvm"]
+expect_exit = 1
+expect_stdout_contains = ["max_abs_diff=0.0 rewrites=0 fired=no tol=0.05", "matmul_int8 verdict=FAIL"]
+expect_stdout_not_contains = ["verdict=PASS"]
+timeout_ms = 20000

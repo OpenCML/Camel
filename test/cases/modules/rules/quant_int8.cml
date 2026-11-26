@@ -1,0 +1,68 @@
+/**
+ * One `matmul` whose weight is fixed in the body, written twice: with the `int8` ruleset's rule and
+ * with no rule at all. The case *is* the comparison -- the reference is the same function value, on
+ * the same tree, through the same pipeline, with the rule left out -- so a number that moves is the
+ * rule and not something else in the program.
+ *
+ * The tolerance is not in this file: it is the `tol` parameter of `main`, which the plan gives
+ * (`test/plans/feat/modules/rules_quant.plan.toml`). Given a `tol` below the quantization error, this
+ * program prints `verdict=FAIL` and exits 1, which is the plan's second entry: the comparison can be
+ * read, and tightened, without touching the program that computes it, and a tolerance that is too
+ * small really does turn the case red. The plan's first entry gives the error the rule is allowed,
+ * `rows * scale / 2` for a row of two weights: the scale is read off the weight (`4.9 / 127`), so the
+ * bound is `0.0193` per element and `0.0386` per sum.
+ *
+ * `#[change_precision]` is the permission the rule asks for (design principles 7.2-7.3): quantization
+ * changes values on purpose, so a function written without that permission is never quantized --
+ * which is what `test/cases/modules/rules/quant_int8_without_change_precision.cml` measures.
+ */
+import { run } from rewrite
+import { abs, matmul, max } from tensor
+import { matmul_int8 } from rulesets.int8
+
+/// The product whose weight this case quantizes: four weights, none of them already on the grid.
+#[change_precision]
+func model(x: float[2, 2]) => float[2, 2] {
+    return matmul(x, [[1.3, 2.7], [3.1, 4.9]] as float[2, 2])
+}
+
+/// The input both writings are given. Two distinct rows, so a weight row that was quantized wrongly
+/// shows up as two different sums rather than as one number twice.
+func inputs() => float[2, 2] {
+    return [[1.0, 0.5], [0.25, 2.0]] as float[2, 2]
+}
+
+/// The lines the case prints: the reference, the quantized value, the elementwise difference, the
+/// largest element of it with the count of rewrites, and the verdict. `FAIL` when an element is
+/// outside `tol`, and `FAIL` when the rule did not fire: a rule that stopped firing would leave the
+/// two writings equal, and equal writings must not read as a quantization that happened.
+func measure(label: string, quantized: float[2, 2], reference: float[2, 2], rewrites: int, tol: float) => (string[], bool) {
+    let diff = abs(quantized - reference)
+    let worst = max(diff)
+    let within = worst <= tol
+    let fired = rewrites > 0
+    let ok = within && fired
+    return (
+        [
+            `${label} reference=${reference}`,
+            `${label} quantized=${quantized}`,
+            `${label} diff=${diff}`,
+            `${label} max_abs_diff=${worst} rewrites=${rewrites} fired=${if fired then "yes" else "no"} tol=${tol}`,
+            `${label} verdict=${if ok then "PASS" else "FAIL"}`
+        ],
+        ok
+    )
+}
+
+func main(tol: float) => int sync {
+    let xs = inputs()
+    let reference = model(xs)
+    let quantized = match model->run<[matmul_int8]> {
+        case error e => ([`matmul_int8 error ${e.kind}: ${e.message}`, 'matmul_int8 verdict=FAIL'], false)
+        case r => measure('matmul_int8', r.result(xs), reference, r.rewrites, tol)
+    }
+    quantized.0->foreach<func (line: string) => void {
+        println(line)
+    }>
+    return if quantized.1 then 0 else 1
+}

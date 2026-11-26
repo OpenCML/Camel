@@ -172,6 +172,62 @@ EditRecordTestPass::apply(const camel::runtime::Program *program, std::ostream &
             namedTier.effects ? 1 : 0,
             namedTier.order ? 1 : 0));
 
+    // ---- the four kinds the graph module's operators name, one draft each ---------------------
+    // A row of the table is a claim about what an edit can have broken, so each named edit is read
+    // alone: a draft that holds one `inline` and nothing else owes both questions, one that holds
+    // one `outline` owes the order question and not the effect one (it moves a pure group out and
+    // leaves no access behind), and one that holds one `eval` owes neither (a constant carries no
+    // access and orders nothing). The kinds are read from the record and not from the constructor
+    // argument, so a close that recorded another kind would show here.
+    const auto tierOfOne = [&](camel::runtime::EditKind kind) {
+        compile_graph_ptr_t one   = make();
+        auto &only                = one->edit();
+        CountingListener counting;
+        only.addEditListener(&counting);
+        {
+            const camel::runtime::GraphDraft::NamedEdit named(only, kind);
+        }
+        struct Reading {
+            bool recorded;
+            bool effects;
+            bool order;
+            size_t notes;
+            size_t calls;
+        };
+        // The kind is read back through `editedWith` and not through the notes: an edit whose
+        // primitives touched no region records no entry (`GraphDraft::recordEdit`), and the kind is
+        // still in the record -- that is what the bit is for (`editKinds_`).
+        const Reading reading{
+            .recorded = only.editedWith(kind),
+            .effects  = only.editTier().effects,
+            .order    = only.editTier().order,
+            .notes    = only.editNotes().size(),
+            .calls    = counting.calls()};
+        only.removeEditListener(&counting);
+        return reading;
+    };
+    const auto inlineReading  = tierOfOne(camel::runtime::EditKind::Inline);
+    const auto outlineReading = tierOfOne(camel::runtime::EditKind::Outline);
+    const auto evalReading    = tierOfOne(camel::runtime::EditKind::Eval);
+    say(os,
+        std::format(
+            "one_of_each inline={},{},{},{},{} outline={},{},{},{},{} eval={},{},{},{},{}",
+            inlineReading.recorded ? 1 : 0,
+            inlineReading.effects ? 1 : 0,
+            inlineReading.order ? 1 : 0,
+            inlineReading.notes,
+            inlineReading.calls,
+            outlineReading.recorded ? 1 : 0,
+            outlineReading.effects ? 1 : 0,
+            outlineReading.order ? 1 : 0,
+            outlineReading.notes,
+            outlineReading.calls,
+            evalReading.recorded ? 1 : 0,
+            evalReading.effects ? 1 : 0,
+            evalReading.order ? 1 : 0,
+            evalReading.notes,
+            evalReading.calls));
+
     // A witness that could not run its own case must say so instead of reporting nothing wrong.
     if (notified == 0 || notified != notes) {
         say(os, "MISSING the record and the listeners do not agree");
@@ -195,6 +251,25 @@ EditRecordTestPass::apply(const camel::runtime::Program *program, std::ostream &
     }
     if (namedOnlyCalls != 1 || namedOnlyEdits != 1) {
         say(os, "MISSING the named edit was not one edit");
+        return program;
+    }
+    // The three kinds the graph module's operators open: the name in the record is the operator's
+    // row, and the tier is the row's two answers. A draft that recorded the last row instead would
+    // read `low_level` here, which is what this line is for.
+    if (!inlineReading.recorded || !inlineReading.effects || !inlineReading.order) {
+        say(os, "MISSING a named inline is not one edit owing both questions");
+        return program;
+    }
+    if (!outlineReading.recorded || outlineReading.effects || !outlineReading.order) {
+        say(os, "MISSING a named outline is not one edit owing only the order question");
+        return program;
+    }
+    if (!evalReading.recorded || evalReading.effects || evalReading.order) {
+        say(os, "MISSING a named eval is not one edit owing neither question");
+        return program;
+    }
+    if (inlineReading.calls != 1 || outlineReading.calls != 1 || evalReading.calls != 1) {
+        say(os, "MISSING one of the three named edits did not tell its listener once");
         return program;
     }
     say(os, "ok");

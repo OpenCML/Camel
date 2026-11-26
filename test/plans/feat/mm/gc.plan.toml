@@ -1,7 +1,23 @@
 id = "mm.gc"
 order = 365
-tier = "milestone"
+tier = "fast"
 tags = ["feat", "mm", "gc"]
+
+# The whole file is the fast layer, measured on 2026-11-25 at `2dcda93c7c` (`-Plan
+# test/plans/feat/mm -Tier milestone -Jobs 8`, 4,889 cases): the 44 entries it had in the milestone
+# layer cost 0.12-0.86 s each, the slowest ones being `live_table.generational.*` (0.74-0.86 s, a
+# 56,000-row table swept once) and `tuple_trace_guard` (0.34 s); the two that were already fast are
+# the same order. Every one of them is under the 2 s line that separates the developer loop from
+# `slow` (docs/test-plans.md, "Layers"), so the file's default tier is `fast` and a new entry that
+# is not cheap has to say so itself -- the layer is a reading of cost, not the name of the directory
+# it lives in.
+#
+# It was `milestone` until then, and the cost was not the reason: the entries run under
+# `--gc-stress` and `--gc-check verify=both`, which reads as "stress plan" in a list, while the
+# programs they stress are small on purpose. The two entries below that already said
+# `tier = "fast"` are why this was visible: `gc.rewrite_condition_keeps_drafts_rooted` argues in
+# its own comment that "the slow tier is what let the rooting regression this guards against land
+# unnoticed", and 42 of its neighbours were in exactly that position.
 
 [[tests]]
 name = "gc.verify_stress_nvm"

@@ -1,0 +1,30 @@
+/**
+ * A counted `for` that collects one value per round into an array and returns it: `acc` starts
+ * as `[]` and the body only appends, so the compiler gives the LOOP node a collection slot
+ * (design principles 3.10, Builder::collectLoopAppends), and the loop's value carries the array
+ * of the rounds beside the state the program reads.
+ *
+ * The rounds are the elements of the model input, so how many values the array holds is a fact
+ * about the data: the loop is an ONNX `Loop` and the array is its scan output.
+ */
+import { get_env } from env
+import { export_model } from onnx
+
+func build(x: f32[?]) => int[] {
+    return loop acc = [] as int[] for v in x do acc->append<int(v * 10.0)>
+}
+
+func main() => string! sync {
+    let x = [0.1, 0.2, 0.3, 0.4] as f32[?]
+    let xs = build(x)
+    println(len(xs))
+    println(xs[3])
+    return match export_model<out: get_env('ONNX_OUT') ?? '', dynamic_axes: [0]>(func (x: f32[?]) => int[] {
+        build(x)
+    }, (x)) {
+        case error e => {
+            return e
+        }
+        case v => 'exported'
+    }
+}

@@ -515,7 +515,7 @@ ff143e01e0e4dbb0 ok src/stdlib/bytes.cml
 7962d89c131ca828 ok src/stdlib/ckpt.cml
 091e49283aec1438 ok src/stdlib/env.cml
 0797036114bc4a4c ok src/stdlib/fs.cml
-31e8e689ef33dd80 ok src/stdlib/graph.cml
+3fbfab05c72cef5e ok src/stdlib/graph.cml
 c653d7d211aed8b2 ok src/stdlib/hash.cml
 f915d61cc7f06dc8 ok src/stdlib/io.cml
 70530f2be80f49bf ok src/stdlib/json.cml
@@ -554,6 +554,7 @@ ba52a9c1204641a6 ok src/stdlib/vjp.cml
 a2ca595975c02dee ok src/stdlib/autodiff/signatures/autodiff.cml
 6ae5ad8be3ee4eec ok src/stdlib/ckpt/signatures/ckpt.cml
 483b0496470b41ad no src/stdlib/nn/signatures/nn.cml
+b9b23c3234979dee ok src/stdlib/rulesets/int8.cml
 1d27a3dc0b0c111c ok src/stdlib/rulesets/jvp.cml
 8375a530eff268c4 ok src/stdlib/rulesets/probe_batch.cml
 7a11798394cc6e2c ok src/stdlib/rulesets/probe_missing.cml
@@ -2361,11 +2362,14 @@ c4b6abfbcc3857dd ok test/cases/consistency/entering/err_assignment_other_payload
 aaac8730da9df233 ok test/cases/consistency/entering/err_error_arm_no_type.cml
 41323046ee4c5bb9 ok test/cases/consistency/entering/err_numeric.cml
 98613e7ecc0d899f ok test/cases/consistency/entering/err_other_payload.cml
+056e1419387dd6b8 ok test/cases/consistency/entering/err_widening_position.cml
 e3ce67fcb2b4ee14 ok test/cases/consistency/entering/error_arm.cml
 dad0d62b3722fc5d ok test/cases/consistency/entering/fallback_chain.cml
 debac9969e64d467 ok test/cases/consistency/entering/graph_explicit.cml
 32af8279a3e182ce ok test/cases/consistency/entering/graph_implicit.cml
 3fb2303fc2d4caa6 ok test/cases/consistency/entering/positions.cml
+b118668f656aa978 ok test/cases/consistency/entering/rank_not_zero.cml
+4301a1dbc7eb188b ok test/cases/consistency/entering/rank_zero_edges.cml
 596cbf3eb8420f30 ok test/cases/consistency/entering/void_arm.cml
 e844178e3870aaa0 ok test/cases/consistency/entry/declared_int.cml
 cb18bb34987aa27c ok test/cases/consistency/entry/declared_string.cml
@@ -3364,6 +3368,11 @@ a65670b279b62d81 ok test/cases/modules/onnx/entry/forward.cml
 421072a941d6c848 ok test/cases/modules/onnx/entry/tuple.cml
 2bf68d00c8499d3e ok test/cases/modules/onnx/entry/unknown_shape.cml
 36dc080291b2aab0 ok test/cases/modules/onnx/entry/weights.cml
+97ab767e10d83a8b ok test/cases/modules/onnx/loop_collect/collect_outside.cml
+9ff1f6d3acba7db2 ok test/cases/modules/onnx/loop_collect/for_collect.cml
+fd769b1a2b6f9912 ok test/cases/modules/onnx/loop_collect/for_collect_static.cml
+225e1d7c12268392 ok test/cases/modules/onnx/loop_collect/ort_collect.cml
+842eb0dcddf0e8b0 ok test/cases/modules/onnx/loop_collect/while_collect.cml
 2a4eb9a95506b512 ok test/cases/modules/onnx/refusals/as_always_fails.cml
 de83b3de99a9fd4d ok test/cases/modules/onnx/refusals/as_constant_fails.cml
 17990328fb0cf2c6 ok test/cases/modules/onnx/refusals/as_unproven.cml
@@ -3513,6 +3522,8 @@ d4157ef887476da6 ok test/cases/modules/rules/multiset_target.cml
 eb03015684ec91f3 no test/cases/modules/rules/node_of_misuse.cml
 f8b05291682f5150 ok test/cases/modules/rules/pair_target.cml
 bd5b6aa2a8f3cb02 ok test/cases/modules/rules/parts_order.cml
+7bc3c402dd88bafa ok test/cases/modules/rules/quant_int8.cml
+26538d6d93bea18a ok test/cases/modules/rules/quant_int8_without_change_precision.cml
 213f6c1c1736013c ok test/cases/modules/rules/reads_pass.cml
 4602f1ce59b0ead2 ok test/cases/modules/rules/reads_target.cml
 6ff13f40bdaececa ok test/cases/modules/rules/requires.cml
@@ -4280,11 +4291,14 @@ a3d372c4bd6d36c5 ok test/cases/probe/dpack_dots_ok.cml
 835ae3d0fb2bacf6 ok test/cases/resources/conflict_per_resource.cml
 1dfda197c555a488 ok test/cases/resources/effects.cml
 1308a35af80d20f6 ok test/cases/resources/names.cml
+794dca840bdad542 ok test/cases/runtime/add_param/one_parameter.cml
+e50e5ccab0349e4c ok test/cases/runtime/add_param/one_parameter_runs.cml
 4f2ce016e07193d7 ok test/cases/runtime/adopt_chain/grad_three_calls.cml
 3db534466b9a5f2b ok test/cases/runtime/adopt_chain/jvp_three_calls.cml
 705bcd78e5fa266f ok test/cases/runtime/adopt_chain/split_three_calls.cml
 a0be62aef00668ca ok test/cases/runtime/draft_erase_unread/refusal_keeps_the_set.cml
 af4bb3052e55257a ok test/cases/runtime/draft_node_owner/owner_after_the_graph.cml
+bc5155c245e51ec0 ok test/cases/runtime/edit_origin/spliced_write.cml
 d9c9c90db93e9ff5 ok test/cases/runtime/edit_record/a_program.cml
 16d6b9aa86a88229 ok test/cases/runtime/exit_type/float_declared_array_returned.cml
 d3e8c0b8b69de9a2 ok test/cases/runtime/exit_type/int_declared_float_returned.cml
