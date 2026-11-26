@@ -11,6 +11,20 @@
 
 `integration` 只有集成步骤一个写者。两格同时推 = 两个写者，所以 2 号位只能准备。
 
+## 晋级：一条命令（`scripts/promote.mjs`，`fsh-dev 0addc031b`）
+
+```powershell
+node scripts/promote.mjs start [--tip <ref>] [--publish]   # 起了就走，几秒返回任务号
+node scripts/promote.mjs status [<id>]                     # 轮询进度与结果
+node scripts/promote.mjs cancel [<id>]                     # 取消
+```
+
+- 工作进程**有心跳**：进程死了，下一次 `status` 就判死、清理并放锁 —— 所以“卡住”的判据是 `status` 说它死了，不是“我等了很久”。
+- `--publish` **只推量过的那一笔**；没有 `--publish` 就只量不推。
+- 默认整层命令用 `camel-remote`；`summary.json` 里有每个计划的 `plan_path` 与每行 `test_timings`（含 `timed_out`）。
+- **比红表时把“红”和“超时”分开**：`timed_out` 为真的先重跑一次，仍是超时才按红处理。
+- 第一次真跑要在构建机上核五件：`-FetchFile summary.json -Latest` 能否取到工作树、`CAMEL_TEST_TIMEOUT_SCALE=2` 能否经 ssh 传到主机、远端清理 `-Clean` 是否合适、`plan_path` 能否直接喂 `-Plan`、`--publish` 时钩子是否放行。
+
 ## 怎么合：一条命令
 
 成批乐观合并（`internal/plans/2026-11-26-optimistic-merge.cn.md`）只有一个工具，`scripts/merge-batch.mjs`。
@@ -96,11 +110,17 @@ node scripts/merge-batch.mjs --seat <座位工作树> --lanes <lanes.json> --pus
 
 ## 车道的绑定与清理：一条车道 = 一个工作树 + 一个 teammate
 
-绑定表只记在这里（`internal/collab/merge-seat.md`），不散在派工单里：
+绑定表**不记在这里**：绑定只记一处，就是插件按格子算车道的 `oversight_bind({agent, slot: merge|dev|misc|buffer, lane?, worktree?})` / `oversight_unbind({agent})`；条带显示「开发 x/8」与合并、杂项、缓冲各几条。下面这张表只说明每个格子该放什么，**具体的 agent↔车道对应以插件那张表为准**：
 
-| 车道 | 工作树 | teammate | 状态 |
-|---|---|---|---|
-| `<lane 名>` | `D:\Projects\Camel-wt\<名字>` | `<list_agents 里的 target>` | 在跑 / 已停 / 已合 |
+| 格子 | 放什么 | 命名 |
+|---|---|---|
+| `merge` | 成批合并位（1 号）、晋级位（2 号） | `seat-merge-<n>` |
+| `dev` | 瘦身 4 + 论文难项 3 + 提速 1 = 8 格 | `lane-<主题>` |
+| `misc` | 常驻杂项（只动文档、脚本、工具、测试，不改语义） | `lane-misc` |
+| `buffer` | 加急修复、唤起换底、探针、临时活 | 任意 |
+
+- **「车道不足」只看开发位**：`dev` 少于 8 才报，合并/杂项/缓冲不参与这条提醒。
+- 开一条车道＝`spawn_teammate` 之后**立刻** `oversight_bind`；合进 `integration` 后 `oversight_unbind`。
 
 - **车道用 `spawn_teammate` 建，不用 `subagent`**：`subagent` 建出来的会话**无法按 id 寻址**（`send_message` 回
   `active teammate … not found`），只能重新派一个 —— 那就是冷启动。`subagent` 只用于一次性探针与读数活。
