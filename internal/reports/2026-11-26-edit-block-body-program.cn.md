@@ -462,3 +462,32 @@ BLOCK_ARRANGE stops family=may fault all=0 terminates=1 foldable_field=1
 `family=may fault` 是另一件事：块的记录声明了 `mayFault=false`，但算子的**缺省故障表**没被写成
 "永不故障"（`set(uri, traits)` 只在显式声明时才写），所以族层照保守读法说"可能故障"。这条不影响
 终止那一项，也不把两者混在一起——族名是**逐项**报的，这正是它比一个布尔值有用的地方。
+
+### 14 两种缺失不是一种
+
+`body` 与 `stops` 的族名里原来有 `may fault`，而块的记录明明白白写着 `mayFault=false`。原因不是"保守"，
+是**把两种缺失当成了同一种**：
+
+| 记录里 | 读者的读法 | 该读成 |
+|---|---|---|
+| 没写 `panic` | `mayFault() == true` | **不知道** |
+| 写了 `panic = false` | `mayFault() == false` | **确定不会** |
+
+写记录的那一处（`OperatorTable::set`）只为**显式声明**写了故障表，没声明的什么都不写；于是"确定不会"
+落进了"不知道"那一格。修法与效应那一侧完全对称：`set` 在 `mayFault=false` 时把 `panic = false` **写进
+记录**（`stateFaultsInRecord`，`byCpp = true`），`mayFault=true` 时**不写**——"不知道"就还是"不知道"。
+一句话：**没写就写"没写"，写了就写"写了"**。
+
+改后的读数（族名逐项报，所以两种缺失在输出里分得开）：
+
+```
+BLOCK_ARRANGE body  family=freely arrangeable all=1 terminates=1 foldable_field=1
+BLOCK_ARRANGE spin  family=may not terminate all=0 terminates=0 foldable_field=1
+BLOCK_ARRANGE stops family=freely arrangeable all=1 terminates=1 foldable_field=1
+```
+
+- `body`/`stops`：族名里**没有** `may fault` 了——它们的体只有算术，记录现在把"不会故障"写了出来。
+- `spin`：只剩 `may not terminate`。原来那条 `may fault` 也消失了，而这**不是漏**：`spin` 的体是一次
+  自调用，效应走查给它的 `mayFault` 就是 `false`——它不会失败，只是不会停。**族名跟着体走，不跟着
+  直觉走**；上一版把它读成"可能故障"才是错的。
+- 三条 `terminates` 读数与改前**一致**（1/0/1），`foldable_field` 三条都 1。

@@ -139,6 +139,32 @@ void stateUsesInRecord(
     statement.uses.byCpp = true;
     registry.declare(recordId, statement);
 }
+
+/// The fault fact of the record `recordId` names, stated as "no call of it fails" -- the other
+/// entrance to the same record, called by `set` when the traits say `mayFault = false`.
+///
+/// The two absences are not one: a record whose `panic` nobody stated says **not known**, and a
+/// record that states `panic = false` says **there are none**. The reader (`Record::mayFault`)
+/// answers "may fail" for the first and "cannot fail" for the second, which is right -- but only if
+/// a stated false is written where a declaration made one. Writing both as "no statement" would
+/// read a declared certainty as ignorance, and writing both as "may fail" would read ignorance as a
+/// fact.
+void stateFaultsInRecord(std::uint32_t recordId, std::string_view uri) {
+    if (recordId == 0) {
+        return;
+    }
+    auto &registry = camel::ops::Registry::instance();
+    if (const camel::ops::Record *record = registry.find(recordId);
+        record != nullptr && record->panic.stated()) {
+        return; // already stated by whoever owns the record: one writer of one fact
+    }
+    camel::ops::Record statement;
+    statement.key         = sem::OperatorKey::of(uri);
+    statement.panic.value = false;
+    statement.panic.byCpp = true;
+    registry.declare(recordId, statement);
+}
+
 } // namespace
 
 void OperatorTable::set(std::string_view uri, OperatorTraits traits) {
@@ -198,6 +224,12 @@ void OperatorTable::set(std::string_view uri, OperatorTraits traits) {
     // states one.
     if (declarations_.back()->resources) {
         stateUsesInRecord(entry.record, uri, *declarations_.back()->resources);
+    }
+    // And the fault fact, the same way: a trait that says "never faults" is a statement, so it is
+    // written into the record as one. A trait that says it may fault writes nothing -- the record
+    // then says "not known", and inventing a statement for it would turn an absence into a value.
+    if (!traits.mayFault) {
+        stateFaultsInRecord(entry.record, uri);
     }
 }
 
