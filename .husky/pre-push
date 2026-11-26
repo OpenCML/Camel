@@ -18,5 +18,12 @@ top=$(git rev-parse --show-toplevel 2>/dev/null) || top='.'
 sh "$top/scripts/hooks/pre-push" "$@" || exit $?
 
 if [ "$1" = "origin" ]; then
-    node scripts/check-process-traces.mjs
+    # The tree is named, not inherited. The checker has no default root, because the directory a
+    # process runs in is not the tree a reader meant -- and a hook's directory is whatever git gave
+    # it, so `.` here would be that directory and not the tree the push leaves from. `top` is the
+    # worktree this hook already resolved for the develop lock, and both the script and the tree are
+    # read from it, so the reading names the same tree the push publishes. When git can name no
+    # worktree, `top` is `.` and the checker reads nothing, which it reports and refuses: a tree it
+    # could not read is not a tree it passed.
+    node "$top/scripts/check-process-traces.mjs" --root "$top"
 fi
