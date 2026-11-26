@@ -12,7 +12,7 @@
 
 func main() => int sync {
     let n = 2000000
-    let a: int[] = 0 .. n
+    let a: int[] = to_array(0 .. n)
     println(len(a))
     return 0
 }
