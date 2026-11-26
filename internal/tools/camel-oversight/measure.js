@@ -86,9 +86,11 @@ async function branchesOf(git) {
 /// Branches already merged into develop and not deleted, local and on origin.
 async function mergedOf(git) {
     const merged = (ref) => git(['merge-base', '--is-ancestor', ref, 'origin/develop']).then(() => true, () => false)
+    // Only the work branches a lane leaves behind (lane/, and the b/ copies a batch merge rehangs);
+    // probes, records and baselines are kept on purpose (agents/branching.md) and are not leftovers.
     const local = (await git(['for-each-ref', '--format=%(refname:short)', 'refs/heads']))
         .split('\n')
-        .filter((name) => name && !PROTECTED.includes(name))
+        .filter((name) => name && !PROTECTED.includes(name) && /^(lane|b)\//.test(name))
     const remote = (await git(['for-each-ref', '--format=%(refname:short)', 'refs/remotes/origin']))
         .split('\n')
         .map((name) => name.replace(/^origin\//, ''))
