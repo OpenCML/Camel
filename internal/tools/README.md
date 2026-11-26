@@ -49,7 +49,7 @@ work that is not a full gate run and hold a machine-wide lock so two of them can
 
 ## What `scripts/hooks/pre-push` refuses
 
-Two rules, and both can be bypassed in one way:
+Three rules, and all of them can be bypassed in one way:
 
 - **`develop` is written from the merge worktree only.** The tree is read from this machine's
   settings file (`mergeWorktree`); a push from any other tree is refused with the key to set.
@@ -60,20 +60,41 @@ Two rules, and both can be bypassed in one way:
   that says what the operator was doing and the command that redoes it on the tip, `rerere`
   included. `merge-lane.ps1` and `merge-batch.ps1` assert the same thing before their own pushes --
   the hook is what covers a push made by hand or by a branch re-landed somewhere else.
+- **That merge carries a pass record** (`scripts/merge-record.mjs verify <remote> <local>`). The
+  record is what the merge tool writes after its gates and before its push, so a merge that went
+  through the gate is in the hook's set and a merge that was refused is not. The range is the one the
+  push sends, walked by first parent: a commit reachable only through a side branch is part of a merge
+  that already had its reading, and a single-parent commit such as a documentation page is not asked
+  for a record at all.
 
-`git push --no-verify` runs no hook at all, so neither rule can stop a push that asks to skip them.
+`git push --no-verify` runs no hook at all, so no rule can stop a push that asks to skip them.
 That is written here instead of being locked down, because a lock in a hook that git itself offers to
 skip is a lock in name only. **A push made with `--no-verify` says so in its conclusion line**, and
 the chain it wrote is then the thing to repair (the shape is re-read by the next merge, and
 `internal/backlog.md` is where a wrong arrival is recorded).
 
-Beside those two rules the hook runs `scripts/merge-record.mjs verify` over the push's first-parent
-range: every merge commit in it needs a pass record in `.git/camel-passed/<sha>.json`, and the record
-now carries the measured run's own `exit`. **`exit` absent means `"0"`** -- records written before the
-field existed stay valid, no migration -- and any other value is refused in its own words, so a
-record that says `exit=unknown` (the gate's exit 7: readings complete, exit code not obtained, see
-`camel-remote.ps1`) exists for the reader who wants the reading but opens no door. Only merge commits
-are read: a single-parent commit such as a documentation page is not asked for a record at all.
+### Two readings, one per branch
+
+`merge-record.mjs` answers two different questions, and a push is checked against the one its branch
+asks:
+
+- **Pushing `develop` publishes a tip**, so the hook runs `verify-promotion <tip>`: the tip has to
+  carry a promotion record, `internal/reports/<date>-promotion-<n>.record.json`, which says which
+  tip was measured, the whole layer's four counts and its `tier`/`scope`, what it was compared with
+  case by case (`comparison.against`, `new_reds`, `vanished_reds`), and what the run's timeouts did
+  when they were run alone (`timeouts_rerun`: `count`, `green[]`, `still_red_not_timeout[]` -- every
+  timeout accounted for in one of the two, because a timeout is not a red until it was re-run alone
+  and failed again). A tip without one is refused in the words that name what is missing: *缺的是
+  晋级记录，不是合并记录*. The record is read from this checkout's tree: a commit cannot contain a
+  file that names its own sha, so a record is always written above the tip it names, one merge or one
+  push after that tip was measured. A tip that is not on this checkout's history is exit 2 -- a
+  checkout that cannot see a commit has answered nothing about it.
+- **A push to `integration` publishes a merge**, so the hook runs `verify <remote> <local>` and the
+  reading is the one pass record per merge described above. The record carries the measured run's own
+  `exit`. **`exit` absent means `"0"`** -- records written before the field existed stay valid, no
+  migration -- and any other value is refused in its own words, so a record that says `exit=unknown`
+  (the gate's exit 7: readings complete, exit code not obtained, see `camel-remote.ps1`) exists for
+  the reader who wants the reading but opens no door.
 
 ## The machine-local settings file
 

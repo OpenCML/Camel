@@ -500,7 +500,7 @@ timeout_ms = 300000
 # Slow: 18 s.
 [[tests]]
 name = "selfchecks.merge_record"
-desc = "`internal/tools/merge-record.test.ps1`: the two ends of the hole where a gate refused a push and not a commit -- the merge is made in a detached checkout and the push sends the merge commit itself, so a refusal leaves the branch where it was, and the hook refuses a first-parent range carrying a merge with no pass record (41 checks)."
+desc = "`internal/tools/merge-record.test.ps1`: the two ends of the hole where a gate refused a push and not a commit -- the merge is made in a detached checkout and the push sends the merge commit itself to `integration`, so a refusal leaves the branch where it was, and the hook refuses a first-parent range carrying a merge with no pass record (42 checks)."
 kind = "behavior"
 tier = "slow"
 tool = "node"
@@ -508,7 +508,7 @@ case = "../../../../internal/tools/merge-record.test.ps1"
 args = ["test/tools/pwsh-selfcheck.mjs", "${case}"]
 skip_unless = ["node", "test/tools/pwsh-selfcheck.mjs", "--probe"]
 expect_exit = 0
-expect_stdout_contains = ["41 checks, 0 failed"]
+expect_stdout_contains = ["42 checks, 0 failed"]
 normalizers = ["normalize_newlines"]
 timeout_ms = 300000
 
@@ -526,3 +526,22 @@ expect_exit = 0
 expect_stdout_contains = ["36 checks, 0 failed"]
 normalizers = ["normalize_newlines"]
 timeout_ms = 300000
+
+# Fast: 2 s. The develop-push reading, which is a different question from the per-merge one above
+# (`selfchecks.merge_record`): a push to `develop` publishes a *tip*, and what has to hold is the
+# promotion record of that tip -- the whole layer's counts, the comparison against the previous
+# promotion case by case, and what its timeouts did when they were run alone. The last two checks
+# start the real `scripts/hooks/pre-push`, because the wiring (which mode the hook calls, and the
+# words it refuses in) is the half neither file shows alone: a hook still calling `verify` lets a
+# develop push through, which the fixture with no record catches.
+[[tests]]
+name = "selfchecks.promotion_record"
+desc = "`test/tools/promotion-record.test.mjs`: `merge-record.mjs verify-promotion` accepts a tip whose record sits above it and refuses the records that cannot answer which tip, which layer, what it was compared with or what its timeouts did; a tip this checkout does not carry is exit 2; and the real push hook refuses a develop push whose tip has no promotion record, in the words that name it (10 checks)."
+kind = "behavior"
+tool = "node"
+case = "../../../../test/tools/promotion-record.test.mjs"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_contains = ["promotion-record: 10 checks, 0 failed"]
+normalizers = ["normalize_newlines"]
+timeout_ms = 120000
