@@ -140,6 +140,23 @@ export func after_call_right(a: int, b: int) => int {
 }
 )cml";
 
+/// Two bodies whose only difference is inside a region, and behind the node the outer edges stop
+/// at: the loop's condition reads one of the two state values in the first body and the other in
+/// the second. The state values are ports of the condition region, so what the walk has to know is
+/// which position of that region a port is -- a region port hashed as an anonymous node reads the
+/// same wherever it sits, and the two bodies would then be one block.
+constexpr const char *kLoopStateLeftText = R"cml(export func loop_state_left(n: int) => int {
+    let r = loop a = 0, b = n while a < n do (a + 1, b)
+    return r.0
+}
+)cml";
+
+constexpr const char *kLoopStateRightText = R"cml(export func loop_state_right(n: int) => int {
+    let r = loop a = 0, b = n while b < n do (a + 1, b)
+    return r.0
+}
+)cml";
+
 /// A body that may fault: dividing by a parameter can divide by zero (design principles 3.9).
 constexpr const char *kRiskyText  = R"cml(export func risky(x: int) => int {
     return 10 / x
@@ -349,6 +366,10 @@ BlockBodyTestPass::apply(const camel::runtime::Program *program, std::ostream &o
         // signature is still what the walk holds when it comes back from the callee.
         {.what = "after_call_left", .function = "after_call_left", .text = kAfterCallLeftText},
         {.what = "after_call_right", .function = "after_call_right", .text = kAfterCallRightText},
+        // Two bodies that differ only in which state value a loop's condition reads: a region's
+        // ports are named by their positions in that region, not by what the nodes happen to hold.
+        {.what = "loop_state_left", .function = "loop_state_left", .text = kLoopStateLeftText},
+        {.what = "loop_state_right", .function = "loop_state_right", .text = kLoopStateRightText},
     };
     for (Compiled &compiled : blocks) {
         compiled.program = compileBody(compiled.text, compiled.function, compiled.what, os);

@@ -70,10 +70,10 @@ cost_lines = [line for line in lines if line.startswith("BLOCK_COST ")]
 for line in body_lines + trait_lines + arrange_lines + cost_lines + call_lines:
     print(line)
 
-# Fifteen bodies, each a program of its own: a root graph and the function's graph, in a program
+# Seventeen bodies, each a program of its own: a root graph and the function's graph, in a program
 # that is not the one they were compiled for.
 built = [line for line in body_lines if line.startswith("BLOCK_BODY built ")]
-assert len(built) == 15, f"expected fifteen bodies to compile, got: {body_lines}"
+assert len(built) == 17, f"expected seventeen bodies to compile, got: {body_lines}"
 bodies = {}
 for line in built:
     what = line[len("BLOCK_BODY built ") :].split(" ")[0]
@@ -122,7 +122,15 @@ print(
     "block_body uris: "
     + " ".join(
         f"{what}={uris[what]}"
-        for what in ("hot", "chill", "hot_again", "after_call_left", "after_call_right")
+        for what in (
+            "hot",
+            "chill",
+            "hot_again",
+            "after_call_left",
+            "after_call_right",
+            "loop_state_left",
+            "loop_state_right",
+        )
     )
 )
 # Four bodies that compute different things are four blocks.
@@ -201,6 +209,14 @@ assert uris["hot"] == uris["hot_again"], (uris["hot"], uris["hot_again"])
 assert uris["after_call_left"] != uris["after_call_right"], (
     uris["after_call_left"],
     uris["after_call_right"],
+)
+# Two bodies whose only difference is *inside a region* are two blocks, down to which state value
+# the region reads: the state values are ports of the region, so the walk has to name each one by
+# its position in the region it belongs to. A region port hashed by what its node holds makes the
+# two bodies one block.
+assert uris["loop_state_left"] != uris["loop_state_right"], (
+    uris["loop_state_left"],
+    uris["loop_state_right"],
 )
 
 # The entry program, read in the same run: the numbers it had before the bodies were built are the
