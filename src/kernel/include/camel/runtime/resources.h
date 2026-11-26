@@ -413,6 +413,16 @@ std::string_view commitCheckName(CommitCheck check);
 /// One region one edit changed, with its kind and the position it was written at
 /// (`camel::runtime::EditNote`, draft.h). Declared here and defined there: this header needs only
 /// to name the record a commit reads its `editOrigin` out of, and the record is the draft's.
+///
+/// The name is the only thing this header may have of the record, so the parameter that carries
+/// the draft's record (`commitViolation` below) is a pointer and a count rather than a
+/// `std::span<const EditNote>`. A span of an incomplete element type cannot be built here: the
+/// standard library's span builds its iterator out of the element pointer where the parameter is
+/// written down, and pointer arithmetic on an incomplete type is ill-formed. MSVC's `<span>` does
+/// that construction at the declaration; libstdc++'s does it later, if at all, which is why one
+/// implementation accepted the declaration and the other did not. A pointer to an incomplete type
+/// carries no arithmetic, so `const EditNote *edits = nullptr` is a default argument this header
+/// can write without the record's definition, and the two headers need not include each other.
 struct EditNote;
 
 /// A commit that must be refused: which of the two checks, the graph, the nodes the reading names,
@@ -504,7 +514,7 @@ std::optional<CommitViolation> commitViolation(
     const Program &program, const GCGraph &graph, std::span<const gc_node_ref_t> made = {},
     std::span<const gc_node_ref_t> changed = {}, const GCGraph *before = nullptr,
     const Program *beforeProgram = nullptr, bool asksEffects = true, bool asksOrder = true,
-    std::span<const EditNote> edits = {});
+    const EditNote *edits = nullptr, std::size_t editCount = 0);
 
 /// Whether a commit of `graph` added an access: some node `made` names carries an access (or an
 /// effect outside the program). This is the first half of the tier; the

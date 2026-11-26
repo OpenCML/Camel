@@ -2274,8 +2274,9 @@ std::optional<CommitViolation> orderIncomplete(
 /// answers for). 0 when no entry names a position -- a record written by a caller that did not know
 /// where its edit stood says nothing rather than pointing at a place it made up.
 uint64_t editOriginOf(
-    std::span<const EditNote> edits, const GCGraph &graph, const CommitViolation &violation) {
-    if (edits.empty()) {
+    const EditNote *edits, size_t editCount, const GCGraph &graph,
+    const CommitViolation &violation) {
+    if (edits == nullptr || editCount == 0) {
         return 0;
     }
     for (const gc_node_ref_t node : {violation.second, violation.first}) {
@@ -2284,9 +2285,10 @@ uint64_t editOriginOf(
         }
         uint32_t region = graph.nodeRegion(node);
         for (uint32_t steps = 0; steps <= graph.regionCount(); ++steps) {
-            for (auto note = edits.rbegin(); note != edits.rend(); ++note) {
-                if (note->origin != 0 && note->region == region) {
-                    return note->origin;
+            for (size_t i = editCount; i-- > 0;) {
+                const EditNote &note = edits[i];
+                if (note.origin != 0 && note.region == region) {
+                    return note.origin;
                 }
             }
             if (region == 0 || region >= graph.regionCount()) {
@@ -2329,7 +2331,7 @@ std::string declaredEffectText(const GCGraph &graph) {
 std::optional<CommitViolation> commitViolation(
     const Program &program, const GCGraph &graph, std::span<const gc_node_ref_t> made,
     std::span<const gc_node_ref_t> changed, const GCGraph *before, const Program *beforeProgram,
-    bool asksEffects, bool asksOrder, std::span<const EditNote> edits) {
+    bool asksEffects, bool asksOrder, const EditNote *edits, size_t editCount) {
     // The tier first, and before any resolver runs: docs/design/graph-editing/README.cn.md 8.1's
     // table decides which of the six checks a commit is asked, and what decides that is which edit
     // the draft used -- read off the draft's edit record (`GraphDraft::editTier`) and not derived
@@ -2354,7 +2356,7 @@ std::optional<CommitViolation> commitViolation(
     // program's text wrote. The diagnostic then carries both positions -- the node's (`origin`) and
     // the edit's (`editOrigin`) -- which is design 8.3's "which step of the block made it".
     const auto withEditOrigin = [&](CommitViolation violation) {
-        violation.editOrigin = editOriginOf(edits, graph, violation);
+        violation.editOrigin = editOriginOf(edits, editCount, graph, violation);
         return violation;
     };
     const auto withSignatureNote = [&](CommitViolation violation) {
