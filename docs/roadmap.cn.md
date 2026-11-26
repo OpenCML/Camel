@@ -5,7 +5,7 @@
 ## 0. 当前排期（2026-11-21，负责人定：CC 截稿前瘦身重构优先）
 
 ECOOP 已交稿。CC 2027（摘要 12-01、全文 12-03）之前，**第一优先是瘦身重构**：按目标架构 `docs/design/architecture/README.cn.md` 的五条路线。**标准是架构干净健康，不是行数**：每件事只有一处定义与一个读者（四个"唯一"）、层次单向、每个文件说得出自己只管什么、没有按名字的特例与第二份真相、新功能有地方放而不必就近堆。行数、大文件数只是把问题照出来的信号，不是目标；为降行数而压缩、为过阈值而拆搬，都不算。顺序（各自独立成格，可并行）：
-1. **两套实现收成一套**（路线五）：求导引擎 `src/stdlib/autodiff/` 与它的 C++ 规则表（`src/compile/src/gir/rule_templates.cpp`、`src/stdlib/autodiff/pullback.cpp` 等 10 个文件）、对照脚本 `scripts/vjp-parity.mjs` 在库侧定律覆盖全部用户后删除；剩下的引擎 `grad` 用户先迁。**验收是 62 个名字分成三份互不相交的清单、各自归零**：`engine-only`（库侧无律）＋`forward-only`（引擎有反向、库只有前向）＋`neither-half`（库的律不答微分），每一份都由 `node scripts/vjp-parity.mjs --json` 的对应数组逐名字列出。判据不是「`engine-only = 0`」——那个数可以在反向缺失时达成。
+1. **求导以库为准**（路线五）：库侧定律覆盖求导引擎 `src/stdlib/autodiff/` 的全部用法，剩下走引擎的 `grad` 用户迁到库。**验收是 62 个名字分成三份互不相交的清单、各自归零**：`engine-only`（库侧无律）＋`forward-only`（引擎有反向、库只有前向）＋`neither-half`（库的律不答微分），每一份都由 `node scripts/vjp-parity.mjs --json` 的对应数组逐名字列出。判据不是「`engine-only = 0`」——那个数可以在反向缺失时达成。**C++ 引擎与它的规则表不删**（负责人 2026-11-26）：冻结、不再加东西，留作表达力与性能的对照，`vjp-parity` 继续两边比；各项做得差不多后集中测试优化一轮，删不删由负责人定。
 2. **执行语义一份**（路线一）：四个后端与宏求值器不再各自解释节点，边的种类、尾调用、转换与复制节点各只一处；差分测试守着。
 3. **算子定义一份**（路线三）：签名、纯度、故障、读写只在定义里；编译器里按算子名字的特例清零。
 4. **事实一份**（路线二）：效应、故障、"是不是语句"同源；建图器与提交共用。
@@ -55,7 +55,7 @@ ECOOP 已交稿。CC 2027（摘要 12-01、全文 12-03）之前，**第一优�
 - 收口反向 `has_aux` 和泛型 `with_grad` 组合，不保留前向实现与反向目标并存的中间态。
 - S2 从直接 `vjp` 改为真正的 `grad`，权重放回第一个 `with` 参数；复杂 Transformer 继续暴露缺规则和函数值调用问题，不绕开。
 - 删除 `GCNode::tangentArgs`，切向实参身份改由类型和端口内容推导。
-- 库层与旧引擎在全部自动微分用例上对齐后，删除 `buildGradientGraph`、`GradResolver` 和 `pullback.cpp`，不留双实现兼容层。
+- 库层与旧引擎在全部自动微分用例上对齐后，用户全部走库；`buildGradientGraph`、`GradResolver`、`pullback.cpp` 冻结，留作表达力与性能的对照，删不删由负责人在集中测试优化之后定。
 - 后续再做完整 `vmap` 覆盖、组合变换和 `remat`。
 
 依据：`docs/design/program-transforms/README.cn.md` 与 `internal/archive/batches-2026-10-31-72h.cn.md`。
