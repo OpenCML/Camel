@@ -188,6 +188,7 @@ std::atomic<bool> gVariantTrace{false};
 /// `gUpdatePlannedByCount` are the marks of every plan built during the run, and
 /// `gArrayCountInPlace` / `gArrayCountCopied` the answers of the update operators that asked the
 /// array itself. The first pair is what the plan decided, the second what happened.
+std::atomic<uint64_t> gUpdatePlans{0};
 std::atomic<uint64_t> gUpdatePlannedReuse{0};
 std::atomic<uint64_t> gUpdatePlannedByCount{0};
 std::atomic<uint64_t> gUpdatePlannedCopy{0};
@@ -596,6 +597,7 @@ void reset() {
 }
 
 void planUpdateMarks(size_t reuseInput, size_t byArrayCount, size_t copy) noexcept {
+    gUpdatePlans.fetch_add(1, std::memory_order_relaxed);
     gUpdatePlannedReuse.fetch_add(reuseInput, std::memory_order_relaxed);
     gUpdatePlannedByCount.fetch_add(byArrayCount, std::memory_order_relaxed);
     gUpdatePlannedCopy.fetch_add(copy, std::memory_order_relaxed);
@@ -607,6 +609,17 @@ void arrayCountAnswer(bool inPlace) noexcept {
     } else {
         gArrayCountCopied.fetch_add(1, std::memory_order_relaxed);
     }
+}
+
+UpdateReuseCounters updateReuseCounters() noexcept {
+    UpdateReuseCounters counters;
+    counters.plans        = gUpdatePlans.load(std::memory_order_relaxed);
+    counters.reuseInput   = gUpdatePlannedReuse.load(std::memory_order_relaxed);
+    counters.byArrayCount = gUpdatePlannedByCount.load(std::memory_order_relaxed);
+    counters.copy         = gUpdatePlannedCopy.load(std::memory_order_relaxed);
+    counters.inPlace      = gArrayCountInPlace.load(std::memory_order_relaxed);
+    counters.copied       = gArrayCountCopied.load(std::memory_order_relaxed);
+    return counters;
 }
 
 void streamTee(const void *stream, const StreamTee &record) {

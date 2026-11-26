@@ -116,6 +116,8 @@ extern bool
 extern bool dumpAttrs;  // Whether to dump the attribute-fate table and check its coverage
 extern bool dumpTies;   // Whether to dump the tie groups of the canonical numbering
 extern bool dumpCopies; // Whether to dump what the plan decided about every update node
+extern bool
+    dumpReuse; // Whether to dump each operator node's uses, last use and the run's reuse counts
 extern bool geneCode;   // Whether to dump generate code from GIR
 extern int passUntil;   // Pass until the given pass
 } // namespace Inspect

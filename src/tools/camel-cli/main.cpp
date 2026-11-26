@@ -25,6 +25,7 @@
 #include "camel/runtime/canonical.h"
 #include "camel/runtime/facts.h"
 #include "camel/runtime/operator_instance.h"
+#include "camel/runtime/operator_reuse.h"
 #include "camel/runtime/storage_reuse.h"
 #include "camel/utils/command_line.h"
 #include "camel/utils/install_layout.h"
@@ -447,7 +448,7 @@ int runCommand(int argc, char *argv[]) {
             if (!Inspect::dumpGCT && !Inspect::dumpGIR && !Inspect::dumpTNS && !Inspect::dumpOps &&
                 !Inspect::dumpInstances && !Inspect::dumpFacts && !Inspect::dumpTags &&
                 !Inspect::dumpAttrs && !Inspect::dumpTies && !Inspect::dumpCopies &&
-                Inspect::factKind.empty()) {
+                !Inspect::dumpReuse && Inspect::factKind.empty()) {
                 // Inspect Command ends here if only
                 // tokens, CST or AST is requested
                 return 0;
@@ -465,7 +466,7 @@ int runCommand(int argc, char *argv[]) {
             if (Inspect::dumpGIR || Inspect::dumpTNS || Inspect::dumpOps ||
                 Inspect::dumpInstances || Inspect::dumpFacts || Inspect::dumpTags ||
                 Inspect::dumpAttrs || Inspect::dumpTies || Inspect::dumpCopies ||
-                !Inspect::factKind.empty()) {
+                Inspect::dumpReuse || !Inspect::factKind.empty()) {
                 camel::core::module::compileForLoad(mainModule, CompileStage::Done);
             }
             // Every dump below reads something the compile produced, so the question is asked
@@ -626,6 +627,17 @@ int runCommand(int argc, char *argv[]) {
                 // `camel/runtime/storage_reuse.h`: the tool reports, it does not make an update
                 // in-place.
                 camel::runtime::dumpStorageReuse(
+                    *ctx->runtimeProgram(),
+                    os,
+                    ctx->sourceContext().get());
+            }
+            if (Inspect::dumpReuse) {
+                // What each operator node's value was told and what the run recorded about storage
+                // reuse: the second reading of the same subject --copies answers for update nodes
+                // (camel/runtime/operator_reuse.h). Read here, beside --copies, because both read
+                // the plan the compile produced; the observed half is the counters, which are the
+                // run's and stay 0 under inspect (nothing executes).
+                camel::runtime::dumpOperatorReuse(
                     *ctx->runtimeProgram(),
                     os,
                     ctx->sourceContext().get());
@@ -924,6 +936,13 @@ int runCommand(int argc, char *argv[]) {
             memperf::stop();
 
             memperf::report(os);
+
+            // `--reuse` on a run: the observed half of the reading, at the end, where both groups
+            // of counters exist -- what the plans decided and what the arrays answered. The rows
+            // themselves are the compile-time half and belong to `inspect`.
+            if (Inspect::dumpReuse) {
+                camel::runtime::dumpObservedReuse(os);
+            }
 
             // `std::profile`: the report of the whole run. It is written here because only the
             // driver has seen the compilation, the pipeline and the fallback pass; the session
