@@ -24,6 +24,16 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 
 [[tests]]
+name = "editview.view_semantic"
+desc = "`view d = f { f }` through the semantic check: a view block's value is the body's value, so this is the smallest block whose type is decided."
+kind = "behavior"
+case = "../../cases/probe/editview/view_only.cml"
+args = ["check", "${case}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
 name = "editview.sec2_fold"
 desc = "Design section 2, example 1 (`fold_zero_adds`): an edit block over `nodes`, `filter`, `foreach` and `replace`."
 kind = "behavior"

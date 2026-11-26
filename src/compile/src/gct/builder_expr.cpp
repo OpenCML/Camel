@@ -151,6 +151,35 @@ node_ptr_t Builder::makeExec(bool synced, bool operands) {
 }
 
 /*
+EditExpr(Function) : Data over, StmtBlock body, StmtBlock block ;
+ViewExpr(Function) : Data over, StmtBlock body, StmtBlock block ;
+A block over a function value (graph-editing design 15.1): the head binds the name the body reads
+the graph by, and the body is what runs. It is read as a block applied at once -- a function with
+no parameters whose body is that block, called where the block stands -- which is how the value of
+a block is already read elsewhere (a decorated block, an arm whose value is used): the block's own
+value is the last statement's, and the closure is made where the block is written, so a name the
+body uses from outside is captured as any block's is.
+Both kinds have the same lowering here. What differs -- `view` has no draft, `edit` commits one --
+is what the body does with the binding, not how the block becomes a value.
+*/
+node_ptr_t Builder::visitBlockHeaded(const AST::node_ptr_t &ast) {
+    ENTER("BlockHeaded");
+    node_ptr_t execNode   = visitStmtBlock(ast->atAs<AST::StmtBlockLoad>(2), false);
+    FunctionTypeFactory factory; // no parameters; the result is the block's value
+    FunctionType *type   = factory.buildOpen();
+    node_ptr_t typeNode  = tree_->makeType(type);
+    node_ptr_t funcNode  = tree_->makeFunc("");
+    *funcNode << typeNode << execNode;
+    node_ptr_t linkNode = tree_->makeLink(0);
+    *linkNode << funcNode;
+    setOriginFromAst(context_, typeNode, ast, camel::source::OriginKind::GctNode, "gct.block.type");
+    setOriginFromAst(context_, funcNode, ast, camel::source::OriginKind::GctNode, "gct.block.func");
+    setOriginFromAst(context_, linkNode, ast, camel::source::OriginKind::GctNode, "gct.block.call");
+    LEAVE("BlockHeaded");
+    return linkNode;
+}
+
+/*
 StmtBlock(bool sync) : Stmt* stmts ;
 */
 node_ptr_t Builder::visitDecoratedBlock(const AST::node_ptr_t &ast) {
@@ -308,6 +337,10 @@ node_ptr_t Builder::visitData(const AST::node_ptr_t &ast) {
         break;
     case AST::DataType::LoopExpr:
         dataNode = visitLoopExpr(ast);
+        break;
+    case AST::DataType::EditExpr:
+    case AST::DataType::ViewExpr:
+        dataNode = visitBlockHeaded(ast);
         break;
     case AST::DataType::Literal:
         dataNode = visitLiteral(ast);
