@@ -52,10 +52,11 @@
  * normalized away: no number is compared at a tolerance, no line is dropped. A difference whose only
  * text is a hexadecimal address -- which the compiler writes and the run chooses -- is named as such
  * in the field it moved (`stdout(address)`, `stderr(address)`) and stays a difference, so a reader
- * can see how much of what moved is that. The one word the two commands do not share is the side's
- * pass, which this tool appends to the end of every pipeline (`std::nvm` or `std::fvm`): a diagnostic
- * that names the pass written after the last one names this tool's own argument, so both texts read
- * that word as one placeholder before they are compared or shown.
+ * can see how much of what moved is that. Two things are not the program's answer and are read as
+ * placeholders: the side's pass, which this tool appends to the end of every pipeline (`std::nvm` or
+ * `std::fvm`, and a diagnostic that names the pass written after the last one names this tool's own
+ * argument), and a duration the program measured (a fractional number followed by a time unit, which
+ * the run's clock chose).
  *
  * **A disagreement is confirmed before it is reported.** Each difference is measured a second time,
  * both sides. A side that does not agree with its own first run is reported as `unstable`: the
@@ -421,10 +422,18 @@ function maskAddresses(text) {
 /// argument the tool was called with.
 const APPENDED_PASS = /\bstd::(?:nvm|fvm)\b/g
 
+/// A duration the program measured -- the number a case prints with a time unit after it, as
+/// `{:.2f}` and the other fixed-point formats print it. The program's answer does not depend on the
+/// clock, so that number is the run's, not the program's, and it is read as one placeholder. Only a
+/// fractional number is read this way, so a count that happens to precede a word like "seconds" stays
+/// compared.
+const MEASURED_DURATION = /\b\d+\.\d+(?=\s*(?:seconds?|milliseconds?|microseconds?|nanoseconds?|ms|us|µs|ns)\b)/g
+
 /// What the two sides are read against each other on: the text each one printed, after the words the
-/// harness itself put on its command line are taken out of the comparison.
+/// harness itself put on its command line and the number the run's own clock put into it are taken out
+/// of the comparison.
 function comparableText(text) {
-    return String(text).replace(APPENDED_PASS, '<side>')
+    return String(text).replace(APPENDED_PASS, '<side>').replace(MEASURED_DURATION, '<time>')
 }
 
 /// A field whose only difference is the text of a hexadecimal address, which the compiler writes and
