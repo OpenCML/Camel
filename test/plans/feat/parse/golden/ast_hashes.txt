@@ -4125,7 +4125,7 @@ cf88afb1f448ddca ok test/cases/opt/generic/algebra_commutative.cml
 4d3c098a8c72ef87 ok test/cases/opt/generic/equal_branch_values.cml
 44384faeff93fcfe ok test/cases/opt/generic/fold_cast.cml
 a7aaad217099fbd9 ok test/cases/opt/generic/fold_cast_fails.cml
-a15c4fd6587b95d2 ok test/cases/opt/generic/fold_constant_clone_limit.cml
+550a1de4d96a3458 ok test/cases/opt/generic/fold_constant_clone_limit.cml
 6e2649af4f0841bb ok test/cases/opt/generic/fold_constant_fault.cml
 4d6aff1635c79b1b ok test/cases/opt/generic/fold_constant_fault_reached.cml
 55db085f52f99312 ok test/cases/opt/generic/fold_constant_loop.cml
