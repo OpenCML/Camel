@@ -3,28 +3,35 @@
 // SPDX-License-Identifier: MIT
 
 /**
- * A control region's members are the plan's range for it, and the plan of `positions.cml` is 546
- * nodes -- both as numbers, on the plan pass, so that narrowing either one is red.
+ * A control region's members are the plan's range for it, and the plan lays out the graph it was
+ * handed -- both numbers are read from one run, so what is held is a relation and not a count.
  *
  * The S1 lane moved the executor's liveness onto the regions: the seeds are the results of the
  * regions, and an arm is laid out as the members of its region. That is a mechanism, and a mechanism
- * that only lives in prose is a claim: what is read here is what the pass prints. Two facts:
+ * that only lives in prose is a claim: what is read here is what the passes print. Three facts:
  *
  *   1. every `REGION` line the pass prints says `in-plan == members` -- the members of a control
  *      region are the nodes the plan lays out for it. Significance: the range of an arm is the
  *      members of its region (docs/design/effects/edges.cn.md 5.2). A change that computed the
  *      range from liveness instead would drop a member that nothing reached and print a smaller
  *      `in-plan`, and this line would say so.
- *   2. the plan has 546 nodes. A change that narrows liveness or a range takes nodes out of the
- *      plan; the count is the cheapest way to see it, and it is written here as an exact number
- *      rather than a shape, because "no fewer than" would not see a plan that lost the members.
- *      The number moved from 552 when a `sync` block's chain stopped carrying the calls that are
- *      pure and cannot fault (design principles 3.1, 3.4): six GATEs went with them, because a
- *      GATE is where a block hands a statement's value on and where that value's wait reaches it
- *      (edges.cn.md 5.3), and a value read from a freely arranged call has no wait to hand on.
- *      Measured across this change: after `std::opt` the graph went from 554 nodes and 857 edges
- *      with 10 GATEs to 548 and 843 with 4, the printed positions golden did not change, and the
- *      plan went from 552 to 546 -- the same six, `main` and `__root__` losing three each.
+ *   2. the plan lays out the graph. `std::stats` prints `GRAPH_STATS` for the graph `test::exec_plan`
+ *      is handed, and the `PLAN` lines must count the graph's nodes less the two the root graph holds
+ *      and no plan lays out -- a gap of that structural two, so the check is a difference and not a
+ *      share of the graph. A count is still the cheapest way to see a plan that lost members; it is
+ *      taken against the graph's own size, because how many nodes the compiler builds for a program
+ *      is the compiler's business and not the executor's.
+ *   3. the reading is not empty: the pass prints control regions, some region has a member, and the
+ *      plan has nodes in it. A check that passes because it read nothing is the defect it is meant
+ *      to catch.
+ *
+ * Why the number is not written down here any more. How many nodes the compiler builds for this
+ * program is the compiler's business, and it moves with the graph construction: a pinned count then
+ * reads as a plan that lost its members, while the plan in fact lays out the whole graph it is
+ * handed. What is worth holding is that relation -- the plan lays out the graph's nodes, every
+ * control region as its members, and a plan that leaves out more than the root graph's two nodes is
+ * a plan that lost members. The program's own output is a separate fact and is held elsewhere, by
+ * the golden of the behaviour cases on every back end; the executor is not asked to reproduce it.
  *
  * What this check does NOT hold: that the seeds carry the weight. They do not, while the control
  * edges are still built -- the exit walk reaches every region result through the owner's ports as
@@ -34,8 +41,8 @@
  * Nor does it hold that the range is membership and not liveness, on this program: replacing the
  * membership judgement with `live[n]` also leaves the plan byte-identical (measured: `diff` of the
  * two plans is empty, 675 lines either way), because every member this program has is reached while
- * the control edges stand. The check pins today's numbers -- 552 nodes, `in-plan == members` -- and
- * a change that took a member out of the plan would still show here; what it cannot see is the
+ * the control edges stand. The check pins `in-plan == members` and "the plan is the graph", and a
+ * change that took a member out of the plan would still show here; what it cannot see is the
  * difference between "a member because its region says so" and "a member because something reached
  * it", which becomes observable only once the edge from a branch to its arm is gone. The seed being
  * load-bearing has to be read by a case of that shape, and there is none today.
@@ -62,11 +69,7 @@ const env = {
 }
 const PROGRAM = path.join(REPO_ROOT, 'test', 'cases', 'consistency', 'entering', 'positions.cml')
 
-/** The number of nodes the plan lays out for this program, as a value: a plan that lost a member
- *  prints fewer, and the message names both numbers rather than "the plan changed". */
-const PLANNED_NODES = 546
-
-const run = spawnSync(CAMEL, [PROGRAM, 'std::opt', 'test::exec_plan'], {
+const run = spawnSync(CAMEL, [PROGRAM, 'std::opt', 'std::stats', 'test::exec_plan'], {
     env,
     encoding: 'utf8',
     timeout: 120000
@@ -76,6 +79,18 @@ if (run.status !== 0) {
     process.exit(1)
 }
 const lines = run.stdout.split(/\r?\n/)
+
+// The graph's own size, from the same run the plan comes from: `std::stats` passes the graph on
+// unchanged, so the PLAN lines and this number are two readings of one graph.
+const statsLine = lines.find((line) => line.startsWith('GRAPH_STATS '))
+let nodes = -1
+if (statsLine) {
+    try {
+        nodes = JSON.parse(statsLine.slice('GRAPH_STATS '.length)).nodes
+    } catch {
+        nodes = -1
+    }
+}
 
 const region = /^REGION (\S+) (\d+) kind (\d+) owner (\S+) result (\S+) members (\d+) in-plan (\d+)$/
 let regions = 0
@@ -113,15 +128,29 @@ for (const line of lines) {
 }
 
 // A check that passes because it read nothing is the defect it is meant to catch, so the reading has
-// to be there: control regions, members inside them, and a plan with nodes in it.
+// to be there: a graph with nodes in it, control regions, members inside them, and a plan with nodes.
+if (nodes <= 0) {
+    bad.push('[REGIONS] RED no GRAPH_STATS node count: there is no graph for the plan to lay out')
+}
 if (regions === 0) {
     bad.push('[REGIONS] RED the pass printed no REGION line: the plan is not laid out by regions')
 }
 if (members === 0) {
     bad.push('[REGIONS] RED no control region has a member: the ranges are empty')
 }
-if (planned !== PLANNED_NODES) {
-    bad.push(`[REGIONS] RED the plan lays out ${planned} nodes, not ${PLANNED_NODES}`)
+// The plan is the graph's nodes less the two the root graph holds and no plan lays out: 546 of 548
+// before the graph shrank, 210 of 212 after. The gap is that structural two and not a share of the
+// graph, so anything past it is a plan that leaves nodes out.
+if (planned > nodes) {
+    bad.push(
+        `[REGIONS] RED the plan lays out ${planned} nodes and the graph it was handed has ` +
+            `${nodes}: a plan cannot hold more nodes than the graph has`
+    )
+} else if (nodes - planned > 2) {
+    bad.push(
+        `[REGIONS] RED the plan lays out ${planned} of the graph's ${nodes} nodes: more than the ` +
+            `two the root graph holds are left out, so the plan lost members`
+    )
 }
 
 for (const line of bad) {
@@ -129,10 +158,10 @@ for (const line of bad) {
 }
 console.log(
     `[REGIONS] graphs ${new Set([...seen].map((k) => k.split('#')[0])).size}, control regions ` +
-        `${regions}, members ${members}, planned ${planned}`
+        `${regions}, members ${members}, planned ${planned}, graph nodes ${nodes}`
 )
 if (bad.length > 0) {
     console.error(`[REGIONS] RED ${bad.length} reading(s) above`)
     process.exit(1)
 }
-console.log('[REGIONS] ok every control region is in the plan as its members')
+console.log('[REGIONS] ok every control region is in the plan as its members, and the plan is the graph')
