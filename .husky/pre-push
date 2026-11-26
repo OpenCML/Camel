@@ -1,39 +1,61 @@
 # A push to the project's remote is where a merge stops being a local arrangement. The merge gate
 # measures the tree a lane hands over; the merge result, and every commit made straight on
 # develop, was read by nothing before it became public. A clean `git merge` does not run
-# pre-commit at all, develop is not a CI trigger, and the checker for this reads a tree in the
-# gate only when the caller names it there. This is the layer that runs on every push to origin,
-# merge or not, so the tree this reads is the tree that becomes public.
+# pre-commit at all, and develop is not a CI trigger. This is the layer that runs on every push to
+# the project's remote, merge or not.
 #
-# The staging push a gate run makes goes to the host's bare repository by URL and not to
-# `origin`, so it is left out: a measurement stays possible on a tree whose comments still have
-# to be cleaned, which is the order the work happens in.
+# The remote is recognised by its URL, which git passes as the second argument whatever the remote
+# is called and also when the push names the URL itself. `scripts/hooks/pre-push` holds the one test
+# for that (`--is-project-remote`), so the develop lock and this check agree on what the project's
+# remote is. The staging push a gate run makes goes to the host's bare repository by URL and is not
+# the project's remote, so it is left out: a measurement stays possible on a tree whose comments
+# still have to be cleaned, which is the order the work happens in.
 #
-# The develop lock runs first, and not for tidiness: it decides from the refs git passes on stdin,
-# and a reader that runs after another one may find the stream already drained. An empty stream
-# reads as "no push to develop", which is how a lock that is installed would let through the thing
-# it exists to stop. It applies to every remote and not only `origin`: `refs/heads/develop` is
-# develop wherever it is being sent. See scripts/hooks/pre-push.
+# git writes the refs it is about to send on stdin and the develop lock reads them, so they are read
+# once here and handed to it again; a reader that runs after another one may find the stream
+# drained, and an empty stream reads as "no push to develop", which is how a lock that is installed
+# would let through the thing it exists to stop. The lock applies to every remote and not only the
+# project's: `refs/heads/develop` is develop wherever it is being sent.
 top=$(git rev-parse --show-toplevel 2>/dev/null) || top='.'
-sh "$top/scripts/hooks/pre-push" "$@" || exit $?
+refs=$(cat)
+printf '%s\n' "$refs" | sh "$top/scripts/hooks/pre-push" "$@" || exit $?
 
-if [ "$1" = "origin" ]; then
-    # The tree is named, not inherited. The checker has no default root, because the directory a
-    # process runs in is not the tree a reader meant -- and a hook's directory is whatever git gave
-    # it, so `.` here would be that directory and not the tree the push leaves from. `top` is the
-    # worktree this hook already resolved for the develop lock, and both the script and the tree are
-    # read from it, so the reading names the same tree the push publishes. When git can name no
-    # worktree, `top` is `.` and the checker reads nothing, which it reports and refuses: a tree it
-    # could not read is not a tree it passed.
-    #
-    # The debt the tree inherited is a file beside the checker, judged per file and only ever going
-    # down, so that a push is refused for the traces it adds and not for the ones it was handed. When
-    # that file is gone -- the day the debt is at zero -- the run is the one at the threshold of
-    # zero, which is how this hook ends: the baseline is the scaffolding, not the check.
-    baseline="$top/scripts/process-traces-baseline.json"
-    if [ -f "$baseline" ]; then
-        node "$top/scripts/check-process-traces.mjs" --root "$top" --baseline "$baseline"
-    else
-        node "$top/scripts/check-process-traces.mjs" --root "$top"
-    fi
+if sh "$top/scripts/hooks/pre-push" --is-project-remote "${2:-}" </dev/null; then
+    # A push is judged on the lines it adds: the diff from what the remote has to what is sent, so a
+    # push is refused for the traces it writes and not for the ones the tree already held. The tree
+    # is named, not inherited: a hook's directory is whatever git gave it, and `top` is the worktree
+    # resolved above. A push that only deletes refs sends no commit and has nothing to read.
+    status=0
+    while IFS=' ' read -r local_ref local_sha remote_ref remote_sha; do
+        [ -n "${local_sha:-}" ] || continue
+        [ "$local_ref" != '(delete)' ] || continue
+        case "$local_sha" in
+            *[!0]*) : ;;
+            *) continue ;;
+        esac
+        base="${remote_sha:-}"
+        case "$base" in
+            '' | *[!0]*) : ;;
+            *) base='' ;;
+        esac
+        # A remote tip this clone does not hold cannot be diffed against; it is read like a new ref.
+        if [ -n "$base" ] && ! git cat-file -e "$base^{commit}" 2>/dev/null; then
+            base=''
+        fi
+        if [ -z "$base" ]; then
+            # A new ref: what it adds is what no remote-tracking ref already has, measured from the
+            # nearest commit that one has. A ref that adds no commit reads an empty range.
+            fresh=$(git rev-list --boundary "$local_sha" --not --remotes 2>/dev/null)
+            if printf '%s\n' "$fresh" | grep -qv -e '^-' -e '^$'; then
+                base=$(printf '%s\n' "$fresh" | sed -n 's/^-//p' | head -n 1)
+                [ -n "$base" ] || base='4b825dc642cb6eb9a060e54bf8d69288fbee4904'
+            else
+                base="$local_sha"
+            fi
+        fi
+        node "$top/scripts/check-process-traces.mjs" --root "$top" --range "$base..$local_sha" || status=1
+    done <<EOF
+$refs
+EOF
+    exit $status
 fi

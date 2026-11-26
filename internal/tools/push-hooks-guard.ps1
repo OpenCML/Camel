@@ -11,10 +11,16 @@
 # So the question here is not "does a file exist" but "does the guard speak". The hook is run the way
 # git runs it -- same interpreter (`sh` beside `git --exec-path`), same working directory (the
 # worktree), same PATH (git's own `/usr/bin` and `/mingw64/bin` first, because the hook calls `cat`,
-# `tr` and `sed`) -- with an empty stdin and one ref that no rule is about, so the develop lock and
-# the arrival shape both return early and what is left is the checker that reads this tree. Its own
-# reading is the proof: `scanned N files, M comment lines, no trace`, or
-# `process traces in comments: ...`.
+# `tr` and `sed`) -- with one ref on stdin that no rule is about (the commit the tree is at, sent
+# to where it already is), a push URL that is the project's, and a time limit. The hook has two
+# halves, and the guard passes only when both answer, each with a line it recognises: the trace
+# check with its reading (`scanned N files, M comment lines, no trace`, or
+# `process traces in comments: ...`), and `scripts/hooks/pre-push` -- the develop lock and the
+# arrival rules -- with `pre-push: probe answered by scripts/hooks/pre-push`, which it prints when
+# `CAMEL_HOOK_PROBE` is set. A `.husky/pre-push` that skips either half fails the guard. A hook that
+# does not exit within the limit is stopped with every process it started and reported as a timeout.
+#
+# The file runs under Windows PowerShell 5.1 and under PowerShell 7.
 #
 # An empty reading with exit 0 is the failure this check exists for, and it is not a pass: it is
 # exactly what a hooks directory whose `.husky/pre-push` is absent, or does not delegate, produces.
@@ -59,8 +65,32 @@ function Resolve-GitHooksDir {
     return $dir
 }
 
-# Run the hook with an empty stdin and one ref no rule is about. Returns the exit code and the two
-# streams, or $null when the child could not be started or did not answer in time.
+# Quote one argument for a Windows command line. `ProcessStartInfo.ArgumentList` does not exist on
+# Windows PowerShell 5.1 (.NET Framework), so the argument string is built here and the same code
+# runs under both editions.
+function ConvertTo-QuotedArgument {
+    param([Parameter(Mandatory)][AllowEmptyString()][string] $Text)
+    return '"' + ($Text -replace '(\\*)"', '$1$1\"' -replace '(\\+)$', '$1$1') + '"'
+}
+
+# Stop a process and everything it started. `Process.Kill()` ends the interpreter and leaves the
+# commands it was running (a hook that is waiting on `sleep` or on `node`) holding the pipes, so on
+# Windows the whole tree is taken with `taskkill /T /F`; elsewhere the .NET tree kill is used.
+function Stop-ProcessTree {
+    param([Parameter(Mandatory)][System.Diagnostics.Process] $Process)
+
+    if ($env:OS -eq 'Windows_NT') {
+        & taskkill.exe /PID $Process.Id /T /F 2>$null | Out-Null
+    } else {
+        try { $Process.Kill($true) } catch { try { $Process.Kill() } catch { } }
+    }
+    try { $Process.Kill() } catch { }
+}
+
+# Run the hook with one ref on stdin and the probe variable set. Returns the exit code and the two
+# streams, or $null when the child could not be started. The streams are read asynchronously and the
+# wait carries the time limit: reading to the end first would wait for the hook to close its output,
+# so a hook that never exits would never reach the line that stops it.
 function Invoke-PushHookProbe {
     param(
         [Parameter(Mandatory)][string] $Tree,
@@ -87,19 +117,29 @@ function Invoke-PushHookProbe {
         # The hook names its directory from `$0` and reads the tree from `git rev-parse
         # --show-toplevel`, so it gets an absolute path and a working directory inside the tree:
         # a relative `$0` would be resolved against whatever directory the caller happened to be in.
-        foreach ($argument in @(
-                $HookFile, 'origin', 'https://example.invalid/x',
-                'refs/heads/x', $Sha, 'refs/heads/x', $Sha)) {
-            $psi.ArgumentList.Add($argument)
-        }
+        # The URL is the project's, because the trace check runs only for a push to the project's
+        # remote and a probe that is not one would get no answer from it. The variable asks
+        # `scripts/hooks/pre-push` to say that it ran.
+        $psi.EnvironmentVariables['CAMEL_HOOK_PROBE'] = '1'
+        $psi.Arguments = (@($HookFile, 'origin', 'https://github.com/OpenCML/Camel.git') |
+                ForEach-Object { ConvertTo-QuotedArgument $_ }) -join ' '
         $process = [System.Diagnostics.Process]::Start($psi)
-        # Closed rather than left open: git writes the refs it is about to send on stdin, and this
-        # probe sends none. An open stdin would block the hook's `cat` until the timeout.
+        $outTask = $process.StandardOutput.ReadToEndAsync()
+        $errTask = $process.StandardError.ReadToEndAsync()
+        # What git writes on stdin: one ref, the commit this tree is at, sent to where it already is.
+        # Nothing is created or moved, so no rule refuses it, and the trace check reads an empty
+        # range and still reports. Closed afterwards, or the hook's `cat` would wait for more.
+        $process.StandardInput.Write("refs/heads/x $Sha refs/heads/x $Sha`n")
         $process.StandardInput.Close()
-        $stdout = $process.StandardOutput.ReadToEnd()
-        $stderr = $process.StandardError.ReadToEnd()
-        if (-not $process.WaitForExit($TimeoutSeconds * 1000)) {
-            try { $process.Kill() } catch { }
+        $finished = $process.WaitForExit($TimeoutSeconds * 1000)
+        if (-not $finished) { Stop-ProcessTree -Process $process }
+        # Once the tree is gone the pipes close and the reads complete; a short wait keeps a pipe
+        # that somehow stays open from becoming the hang this was written to avoid.
+        $null = $outTask.Wait(5000)
+        $null = $errTask.Wait(5000)
+        $stdout = if ($outTask.IsCompleted) { $outTask.Result } else { '' }
+        $stderr = if ($errTask.IsCompleted) { $errTask.Result } else { '' }
+        if (-not $finished) {
             return [pscustomobject]@{ Exit = $null; TimedOut = $true; Stdout = $stdout; Stderr = $stderr; Sh = $sh }
         }
         return [pscustomobject]@{ Exit = $process.ExitCode; TimedOut = $false; Stdout = $stdout; Stderr = $stderr; Sh = $sh }
@@ -110,15 +150,20 @@ function Invoke-PushHookProbe {
     }
 }
 
-# The sentences a hooks directory that is in force answers with. A probe that comes back with one of
-# these spoke; a probe that comes back with nothing, or with something else, did not.
+# The sentences a hooks directory that is in force answers with, one per half of the hook. A probe
+# counts as answered only when both came back: the trace check speaks with its reading, and
+# `scripts/hooks/pre-push` (the develop lock and the arrival rules) speaks when the probe variable is
+# set. A `.husky/pre-push` that skips either half answers with one of them at most.
 $script:PushHookGuardReadingPattern = 'process traces in comments:|scanned \d+ files, \d+ comment lines'
+$script:PushHookGuardLockPattern = 'pre-push: probe answered by scripts/hooks/pre-push'
 
 function Test-PushHookGuard {
     param(
         [Parameter(Mandatory)][string] $Tree,
         # Only for the refusal: the branch the caller was about to write.
-        [Parameter(Mandatory)][string] $Target
+        [Parameter(Mandatory)][string] $Target,
+        # How long the hook may take to answer before it is stopped with everything it started.
+        [int] $TimeoutSeconds = 300
     )
 
     $result = {
@@ -170,7 +215,7 @@ function Test-PushHookGuard {
     $sha = "$(& git -C $treeFull rev-parse --verify --quiet 'HEAD^{commit}' 2>$null)".Trim()
     if (-not $sha) { $sha = '0000000000000000000000000000000000000000' }
 
-    $probe = Invoke-PushHookProbe -Tree $treeFull -HookFile $hookFile -Sha $sha
+    $probe = Invoke-PushHookProbe -Tree $treeFull -HookFile $hookFile -Sha $sha -TimeoutSeconds $TimeoutSeconds
     if (-not $probe) {
         return (& $result $false 'not run' $hooksPath $hookFile $null @() @(
                 "refusing to push to $Target from ${treeFull}: '$hookFile' could not be run, so whether a rule would run on this push cannot be answered. A guard that was not observed is not a guard that passed.",
@@ -183,11 +228,19 @@ function Test-PushHookGuard {
 
     if ($probe.TimedOut) {
         return (& $result $false 'timeout' $hooksPath $hookFile $null $combined @(
-                "refusing to push to $Target from ${treeFull}: '$hookFile' did not answer with an empty stdin, so it was stopped and this push was not started.",
+                "refusing to push to $Target from ${treeFull}: '$hookFile' did not answer within $TimeoutSeconds seconds, so it was stopped with every process it had started and this push was not started.",
                 "   Nothing was pushed."))
     }
 
     $spoke = @($combined | Where-Object { $_ -match $script:PushHookGuardReadingPattern })
+    $lockSpoke = @($combined | Where-Object { $_ -match $script:PushHookGuardLockPattern })
+    if ($spoke.Count -eq 0 -and $lockSpoke.Count -gt 0) {
+        return (& $result $false 'no trace reading' $hooksPath $hookFile $probe.Exit $combined @(
+                "refusing to push to $Target from ${treeFull}: the hook answered, but the process-trace check did not: this hook never ran it for a push to the project's remote.",
+                "   The reading it answers with is `scanned N files, M comment lines, no trace` or `process traces in comments: ...`.",
+                "   Bring the tree up to date and run 'npx husky' in it.",
+                "   Nothing was pushed."))
+    }
     if ($spoke.Count -eq 0) {
         # Two shapes, and a reader acts differently on each: nothing at all means the hooks directory
         # does not delegate anywhere, and something unrecognised means the chain behind it ran and
@@ -210,7 +263,15 @@ function Test-PushHookGuard {
         return (& $result $false 'no reading' $hooksPath $hookFile $probe.Exit $combined $message)
     }
 
-    # The guard spoke. Whether the tree passes it is the hook's to say on the real push, and this
+    if ($lockSpoke.Count -eq 0) {
+        return (& $result $false 'no lock answer' $hooksPath $hookFile $probe.Exit $combined @(
+                "refusing to push to $Target from ${treeFull}: the hook answered, but scripts/hooks/pre-push did not: the develop lock and the arrival rules were not run.",
+                "   Its answer to a probe is the line `pre-push: probe answered by scripts/hooks/pre-push`.",
+                "   Bring the tree up to date and run 'npx husky' in it.",
+                "   Nothing was pushed."))
+    }
+
+    # Both halves spoke. Whether the tree passes it is the hook's to say on the real push, and this
     # reports it rather than refusing on it.
     $verdict = @($spoke | ForEach-Object { "   $_" })
     if ($probe.Exit -ne 0) {

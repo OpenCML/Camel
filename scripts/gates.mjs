@@ -13,9 +13,8 @@
  * left `internal/questions/` with an answered page still listed as pending, which
  * `check-doc-links.mjs --questions-index` reports. Neither check was broken. Neither was on the list.
  *
- * So the list is this file, and it is ten long. A number in a name goes stale -- "the six gates" was
- * already wrong when it was still being said -- so the count is printed by the run and not written
- * anywhere else.
+ * So the list is this file. A number in a name goes stale -- "the six gates" was already wrong when it
+ * was still being said -- so the count is printed by the run and not written anywhere else.
  *
  * What each one answers, in the order they run (cheapest and most structural first, the one that
  * starts the compiler last):
@@ -24,7 +23,8 @@
  *   2  check-doc-links --citations      no source is cited by line outside internal, where a
  *                                       line number is that day's reading and the index says so
  *   3  check-doc-links --questions-index  no page answered in reviews/ is still listed as pending
- *   4  check-process-traces             every trace a page describes is a reading the tree takes
+ *   4  check-process-traces             no process trace in the lines a change adds (`--range`), or,
+ *                                       with no range, a report of the whole tree that does not fail
  *   5  check-plan-fields                a field the entry's kind never reads is not a test, and no
  *                                       rule of test/plan-selection.json names a path that is not
  *                                       there (a rule that matches no file selects nothing)
@@ -53,10 +53,11 @@
  * This is the whole-tree static layer: it needs no install and no build except where a gate says so
  * (8 reads the tree through the parsecheck tool, which a build produces; 10 regenerates the files the
  * node generators write and names the one that needs a build instead of passing over it). It is not
- * `scripts/release-gate.mjs`: that one runs the plan layers and the thirteen static checks a release
- * decision needs. These ten are the ones a change must pass before it is handed over.
+ * `scripts/release-gate.mjs`: that one runs the plan layers and the static checks a release
+ * decision needs. These are the ones a change must pass before it is handed over.
  *
- *   node scripts/gates.mjs              # all ten
+ *   node scripts/gates.mjs              # all of them
+ *   node scripts/gates.mjs --range A..B # the process-trace gate judges the lines A..B adds
  *   node scripts/gates.mjs --list       # the list, and nothing run
  *   node scripts/gates.mjs --only 5,8   # a PARTIAL run, and it says so in the summary
  *   node scripts/gates.mjs --timeout 60 # one limit, in seconds, for every gate of this run
@@ -91,11 +92,13 @@ let GATES = [
         args: ['scripts/check-doc-links.mjs', '--questions-index'],
     },
     {
-        name: 'process traces: every trace a page describes is a reading the tree takes',
+        name: 'process traces: none in the lines a change adds (a report of the tree when no range is given)',
         // The tree is named here rather than left to the checker's own default: a checker that
-        // chose its tree from the process's directory would read the main checkout (iron rule 17)
-        // when this runs from anywhere else. Every gate already runs with `cwd: ROOT` below.
-        args: ['scripts/check-process-traces.mjs', '--root', ROOT],
+        // chose its tree from the process's directory would read a different checkout when this
+        // runs from anywhere else. With a range the gate asks what the push hook asks of a push --
+        // do the lines it adds carry a trace; without one it lists the whole tree and judges
+        // nothing, because a tree that holds older traces is not what a change is answerable for.
+        args: ['scripts/check-process-traces.mjs', '--root', ROOT, '--list'],
     },
     {
         name: 'plan fields: no field a kind does not read, no selection rule naming a path the tree lacks',
@@ -128,11 +131,12 @@ let GATES = [
 ]
 
 function usage() {
-    console.log('Usage: node scripts/gates.mjs [--list] [--only N,M,...] [--timeout SECONDS] [--script FILE]')
+    console.log('Usage: node scripts/gates.mjs [--list] [--only N,M,...] [--range A..B] [--timeout SECONDS] [--script FILE]')
     console.log('')
-    console.log('Runs the ten gates a change must pass before it is handed over, one after another, and')
+    console.log('Runs the gates a change must pass before it is handed over, one after another, and')
     console.log("prints each one's exit code. Exit status 1 when any gate failed, 2 when the command line")
     console.log('is not understood (nothing is run in that case).')
+    console.log('--range A..B makes the process-trace gate judge the lines that range adds instead of listing the tree.')
     console.log('--timeout SECONDS replaces the time limit of every gate; a gate over its limit is killed with its')
     console.log('whole process tree and counts as failed. --script FILE runs FILE as the only gate (the self-check of')
     console.log('this tool uses it to run a gate that does not return).')
@@ -188,6 +192,17 @@ async function main(argv) {
                     return 2
                 }
                 only.push(number)
+            }
+        } else if (argument === '--range') {
+            if (index + 1 >= argv.length || !/^[^.s]+..[^.s]+$/.test(argv[index + 1])) {
+                console.error('gates: --range needs a range of the form A..B')
+                return 2
+            }
+            const range = argv[++index]
+            for (const gate of GATES) {
+                if (gate.args[0] === 'scripts/check-process-traces.mjs') {
+                    gate.args = gate.args.filter((word) => word !== '--list').concat(['--range', range])
+                }
             }
         } else if (argument === '--timeout') {
             const seconds = Number(argv[index + 1])

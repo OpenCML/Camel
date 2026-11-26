@@ -79,6 +79,8 @@ try {
     try { Invoke-Git $scratch init --quiet --initial-branch=main $repo } finally { Pop-Location }
     Invoke-Git $repo config user.email 'probe@example.invalid' | Out-Null
     Invoke-Git $repo config user.name 'probe' | Out-Null
+    # No line-ending conversion: git's warning about it on stderr is an error under Windows PowerShell 5.1.
+    Invoke-Git $repo config core.autocrlf false | Out-Null
     Write-FixtureFile $repo 'a.txt' 'one line'
     Invoke-Git $repo add . | Out-Null
     Invoke-Git $repo commit --quiet -m 'fixture' | Out-Null
@@ -96,13 +98,21 @@ console.log('scanned 12 files, 34 comment lines, no trace');
 process.exit(0);
 '@
 
+    # The hook's second half, in the shape the guard asks it for: it reads the refs git sends and says
+    # that it ran when the probe variable is set.
+    Write-FixtureFile $repo 'scripts/hooks/pre-push' @'
+cat >/dev/null
+[ -z "${CAMEL_HOOK_PROBE:-}" ] || echo 'pre-push: probe answered by scripts/hooks/pre-push'
+exit 0
+'@
+
     # husky's own shape: a stub in the hooks directory that names the tracked hook beside it by
     # position -- which is why a hooks directory in the wrong place finds nothing and says nothing.
     Write-FixtureFile $repo '.husky/pre-push' @'
 top=$(git rev-parse --show-toplevel 2>/dev/null) || top='.'
-if [ "$1" = "origin" ]; then
-    node "$top/scripts/check-process-traces.mjs" --root "$top"
-fi
+refs=$(cat)
+printf '%s\n' "$refs" | sh "$top/scripts/hooks/pre-push" "$@" || exit $?
+node "$top/scripts/check-process-traces.mjs" --root "$top"
 '@
     Write-FixtureFile $repo '.husky/_/h' @'
 n=$(basename "$0")
@@ -159,9 +169,9 @@ sh -e "$s" "$@"
     # --- 4. the real shape: the shim delegates, the checker answers ------------
     Write-FixtureFile $repo '.husky/pre-push' @'
 top=$(git rev-parse --show-toplevel 2>/dev/null) || top='.'
-if [ "$1" = "origin" ]; then
-    node "$top/scripts/check-process-traces.mjs" --root "$top"
-fi
+refs=$(cat)
+printf '%s\n' "$refs" | sh "$top/scripts/hooks/pre-push" "$@" || exit $?
+node "$top/scripts/check-process-traces.mjs" --root "$top"
 '@
     $guarded = Test-PushHookGuard -Tree $repo -Target integration
     $reading = @($guarded.Message | Where-Object { $_ -match 'scanned 12 files, 34 comment lines, no trace' }).Count -gt 0
@@ -169,12 +179,41 @@ fi
         ($guarded.Ok -and $guarded.Kind -eq 'guarded') "Ok=$($guarded.Ok) Kind=$($guarded.Kind) Exit=$($guarded.Exit)"
     Check 'what it reports is the checker own line, not the hook' $reading ($guarded.Message -join ' / ')
 
+    # --- 4b. a hook that skips one of its two halves ---------------------------
+    Write-FixtureFile $repo '.husky/pre-push' @'
+top=$(git rev-parse --show-toplevel 2>/dev/null) || top='.'
+cat >/dev/null
+node "$top/scripts/check-process-traces.mjs" --root "$top"
+'@
+    $noLock = Test-PushHookGuard -Tree $repo -Target integration
+    Check 'a hook that never runs scripts/hooks/pre-push is refused, though the checker answers' `
+        ((-not $noLock.Ok) -and $noLock.Kind -eq 'no lock answer') "Ok=$($noLock.Ok) Kind=$($noLock.Kind)"
+    Write-FixtureFile $repo '.husky/pre-push' @'
+top=$(git rev-parse --show-toplevel 2>/dev/null) || top='.'
+cat | sh "$top/scripts/hooks/pre-push" "$@"
+'@
+    $noTrace = Test-PushHookGuard -Tree $repo -Target integration
+    Check 'a hook that never runs the trace checker is refused, though the lock half answers' `
+        ((-not $noTrace.Ok) -and $noTrace.Kind -eq 'no trace reading') "Ok=$($noTrace.Ok) Kind=$($noTrace.Kind)"
+
+    # --- 4c. a hook that never exits: stopped within the limit, with its children --
+    Write-FixtureFile $repo '.husky/pre-push' @'
+sleep 120
+'@
+    $clock = [System.Diagnostics.Stopwatch]::StartNew()
+    $hung = Test-PushHookGuard -Tree $repo -Target integration -TimeoutSeconds 4
+    $clock.Stop()
+    Check 'a hook that never exits is reported as a timeout' `
+        ((-not $hung.Ok) -and $hung.Kind -eq 'timeout') "Ok=$($hung.Ok) Kind=$($hung.Kind)"
+    Check 'and the guard came back within its limit plus the time to stop the tree' `
+        ($clock.Elapsed.TotalSeconds -lt 30) "took $([int]$clock.Elapsed.TotalSeconds) s for a 4 s limit"
+
     # --- 5. the checker answers with traces: reported, not refused -------------
     Write-FixtureFile $repo '.husky/pre-push' @'
 top=$(git rev-parse --show-toplevel 2>/dev/null) || top='.'
-if [ "$1" = "origin" ]; then
-    node "$top/scripts/check-process-traces.mjs" --root "$top" --tick
-fi
+refs=$(cat)
+printf '%s\n' "$refs" | sh "$top/scripts/hooks/pre-push" "$@" || exit $?
+node "$top/scripts/check-process-traces.mjs" --root "$top" --tick
 '@
     $red = Test-PushHookGuard -Tree $repo -Target integration
     $sawHits = @($red.Message | Where-Object { $_ -match 'process traces in comments: 2' }).Count -gt 0

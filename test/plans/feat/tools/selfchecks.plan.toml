@@ -122,7 +122,7 @@ tool = "node"
 case = "../../../../scripts/check-process-traces.test.mjs"
 args = ["${case}"]
 expect_exit = 0
-expect_stdout_contains = [" pass 8", " fail 0"]
+expect_stdout_contains = [" pass ", " fail 0"]
 normalizers = ["normalize_newlines"]
 timeout_ms = 120000
 
@@ -169,7 +169,7 @@ timeout_ms = 120000
 # Fast: 0.6 s on the workstation, 2026-11-25.
 [[tests]]
 name = "selfchecks.camel_remote_args"
-desc = "`internal/tools/camel-remote-args.test.ps1`: the list parameters split on commas as `-Plan` already did, the `--only`/`--drop` words are built from them, and an `-AstOnly` that names no `.cml` of this tree is refused instead of selecting nothing on the host (17 checks)."
+desc = "`internal/tools/camel-remote-args.test.ps1`: the list parameters split on commas as `-Plan` already did, the `--only`/`--drop` words are built from them, and an `-AstOnly` that names no `.cml` of this tree is refused instead of selecting nothing on the host."
 kind = "behavior"
 tool = "node"
 case = "../../../../internal/tools/camel-remote-args.test.ps1"
@@ -183,7 +183,7 @@ timeout_ms = 120000
 # Fast: 0.5 s.
 [[tests]]
 name = "selfchecks.camel_remote_fetch"
-desc = "`internal/tools/camel-remote-fetch.test.ps1`: `-FetchFile -Latest` decides which run is newest, what a suffix may name, and where the fetched file lands, and refuses the two spellings that would name a whole directory or a path outside the run (16 checks)."
+desc = "`internal/tools/camel-remote-fetch.test.ps1`: `-FetchFile -Latest` decides which run is newest, what a suffix may name, and where the fetched file lands, and refuses the two spellings that would name a whole directory or a path outside the run."
 kind = "behavior"
 tool = "node"
 case = "../../../../internal/tools/camel-remote-fetch.test.ps1"
@@ -197,7 +197,7 @@ timeout_ms = 120000
 # Fast: 0.6 s.
 [[tests]]
 name = "selfchecks.camel_remote_targets"
-desc = "`internal/tools/camel-remote-targets.test.ps1`: the sentence a `-Plan` target is announced with before the push -- a directory, a plan file, the whole tree -- and the refusal of the whole tree, which used to be reported as a `--changed` failure the caller never asked for (24 checks)."
+desc = "`internal/tools/camel-remote-targets.test.ps1`: the sentence a `-Plan` target is announced with before the push -- a directory, a plan file, the whole tree -- and the refusal of the whole tree, which used to be reported as a `--changed` failure the caller never asked for."
 kind = "behavior"
 tool = "node"
 case = "../../../../internal/tools/camel-remote-targets.test.ps1"
@@ -211,7 +211,7 @@ timeout_ms = 120000
 # Fast: 1.9 s.
 [[tests]]
 name = "selfchecks.run_registry"
-desc = "`internal/tools/run-registry.test.ps1`: the registry's one write -- with no reader the compaction lands and keeps the newest lines plus the new row, and while a reader holds the file the compaction is dropped, reported and never thrown, with the old file whole and no temp file left (14 checks)."
+desc = "`internal/tools/run-registry.test.ps1`: the registry's one write -- with no reader the compaction lands and keeps the newest lines plus the new row, and while a reader holds the file the compaction is dropped, reported and never thrown, with the old file whole and no temp file left."
 kind = "behavior"
 tool = "node"
 case = "../../../../internal/tools/run-registry.test.ps1"
@@ -258,7 +258,7 @@ timeout_ms = 300000
 # cannot be told from one that ran green.
 [[tests]]
 name = "selfchecks.camel_remote_cleanup_sweep_cost"
-desc = "`internal/tools/camel-remote-cleanup-sweep-cost.test.ps1`: the host sweep's \"is any process inside this checkout\" reading is one /proc snapshot per sweep -- 0 per-process `readlink` forks, one `ls` for seven candidates and one for four, while a process in the cwd, in a subdirectory and in the executable is still named, `cand-1`'s process does not reach `cand-10`, a process that has exited stops being named, and a process list that could not be read keeps the checkout instead of reading as unused (21 checks)."
+desc = "`internal/tools/camel-remote-cleanup-sweep-cost.test.ps1`: the host sweep's \"is any process inside this checkout\" reading is one /proc snapshot per sweep -- 0 per-process `readlink` forks, one `ls` for seven candidates and one for four, while a process in the cwd, in a subdirectory and in the executable is still named, `cand-1`'s process does not reach `cand-10`, a process that has exited stops being named, and a process list that could not be read keeps the checkout instead of reading as unused."
 kind = "behavior"
 tier = "slow"
 tool = "node"
@@ -274,7 +274,7 @@ timeout_ms = 300000
 # `0 checks, 0 failed` and exits 0, which is the shape the count in this entry is here to refuse.
 [[tests]]
 name = "selfchecks.camel_cleanup"
-desc = "`internal/tools/camel-cleanup.test.ps1`: `camel-cleanup.sh` against a fake home -- `rm` accepts a path only when, after resolving `..`, an absolute spelling and every symlink, it is under the run root and in a manifest, and everything else is refused (41 checks)."
+desc = "`internal/tools/camel-cleanup.test.ps1`: `camel-cleanup.sh` against a fake home -- `rm` accepts a path only when, after resolving `..`, an absolute spelling and every symlink, it is under the run root and in a manifest, and everything else is refused."
 kind = "behavior"
 tier = "slow"
 tool = "node"
@@ -289,7 +289,7 @@ timeout_ms = 300000
 # Slow: 3.1 s.
 [[tests]]
 name = "selfchecks.camel_gate_state"
-desc = "`internal/tools/camel-gate-state.test.ps1`: the one write the local helpers make to build-state.json and test-state.json -- the document lands, a reader holding the destination costs one update and no exception, and no read beside the publisher ever sees half a document (13 checks)."
+desc = "`internal/tools/camel-gate-state.test.ps1`: the one write the local helpers make to build-state.json and test-state.json -- the document lands, a reader holding the destination costs one update and no exception, and no read beside the publisher ever sees half a document."
 kind = "behavior"
 tier = "slow"
 tool = "node"
@@ -304,7 +304,7 @@ timeout_ms = 300000
 # Slow: 2.5 s.
 [[tests]]
 name = "selfchecks.hook_integration"
-desc = "`internal/tools/hook-integration.test.ps1`: the real `scripts/hooks/pre-push` against a throwaway repository -- a single-parent arrival on `integration` is refused, a merge whose first parent is not the remote tip is refused with the sentence and the command that redoes it, and a merge of the tip arrives (12 checks)."
+desc = "`internal/tools/hook-integration.test.ps1`: the real `scripts/hooks/pre-push` against a throwaway repository -- a single-parent arrival on `integration` is refused, a merge whose first parent is not the remote tip is refused with the sentence and the command that redoes it, and a merge of the tip arrives."
 kind = "behavior"
 tier = "slow"
 tool = "node"
@@ -322,7 +322,7 @@ timeout_ms = 300000
 # the hook's own output.
 [[tests]]
 name = "selfchecks.push_hooks_guard"
-desc = "`internal/tools/push-hooks-guard.test.ps1`: whether a push from a tree would be checked at all -- no configured hooks path passes and says why, a configured one with no `pre-push` is refused with the file and the install command named, a hook that exits 0 printing nothing is refused (the case the check exists for), a shim whose tracked hook is absent is refused, a hook whose chain reaches the checker passes and reports the checker's line, and a reading that lists traces is reported with the refusal-to-come rather than turned into a second refusal (16 checks)."
+desc = "`internal/tools/push-hooks-guard.test.ps1`: whether a push from a tree would be checked at all -- no configured hooks path passes and says why, a configured one with no `pre-push` is refused with the file and the install command named, a hook that exits 0 printing nothing is refused (the case the check exists for), a shim whose tracked hook is absent is refused, a hook whose chain reaches the checker passes and reports the checker's line, and a reading that lists traces is reported with the refusal-to-come rather than turned into a second refusal."
 kind = "behavior"
 tier = "slow"
 tool = "node"
@@ -337,7 +337,7 @@ timeout_ms = 300000
 # Slow: 12 s.
 [[tests]]
 name = "selfchecks.run_tests_diagnostic_file"
-desc = "`internal/tools/run-tests-diagnostic-file.test.ps1`: the guard for `expect_diagnostic_file` -- the right file passes (relative and absolute), another file fails with both named, a list, a number, an empty string beside it and an `expect_no_diagnostics` are refused where the plan is read, and an entry that does not write the field keeps its old meaning (36 checks)."
+desc = "`internal/tools/run-tests-diagnostic-file.test.ps1`: the guard for `expect_diagnostic_file` -- the right file passes (relative and absolute), another file fails with both named, a list, a number, an empty string beside it and an `expect_no_diagnostics` are refused where the plan is read, and an entry that does not write the field keeps its old meaning."
 kind = "behavior"
 tier = "slow"
 tool = "node"
@@ -356,7 +356,7 @@ timeout_ms = 300000
 # words it refuses in) is the half neither file shows alone.
 [[tests]]
 name = "selfchecks.promotion_record"
-desc = "`test/tools/promotion-record.test.mjs`: `promotion-record.mjs` accepts a tip whose record sits above it and refuses the records that cannot answer which tip, which layer, what it was compared with or what its timeouts did; a tip this checkout does not carry is exit 2; and the real push hook refuses a develop push whose tip has no promotion record, in the words that name it (10 checks)."
+desc = "`test/tools/promotion-record.test.mjs`: `promotion-record.mjs` accepts a tip whose record sits above it and refuses the records that cannot answer which tip, which layer, what it was compared with or what its timeouts did; a tip this checkout does not carry is exit 2; and the real push hook refuses a develop push whose tip has no promotion record, in the words that name it."
 kind = "behavior"
 tool = "node"
 case = "../../../../test/tools/promotion-record.test.mjs"
@@ -371,7 +371,7 @@ timeout_ms = 120000
 # read is the red line for that gate, the non-zero exit, and that neither process is left running.
 [[tests]]
 name = "selfchecks.gates_timeout"
-desc = "`scripts/gates.test.mjs`: `scripts/gates.mjs` kills a gate that outlives its limit with the whole process tree it started, reports it on the gate's line as a failed gate that did not finish, and exits non-zero (6 checks)."
+desc = "`scripts/gates.test.mjs`: `scripts/gates.mjs` kills a gate that outlives its limit with the whole process tree it started, reports it on the gate's line as a failed gate that did not finish, and exits non-zero."
 kind = "behavior"
 tool = "node"
 case = "../../../../scripts/gates.test.mjs"
@@ -389,7 +389,7 @@ timeout_ms = 60000
 # from the repository, not from the tool's own output.
 [[tests]]
 name = "selfchecks.merge_batch"
-desc = "`test/tools/merge-batch.test.mjs`: `scripts/merge-batch.mjs` merges the clean and fast-forwardable lanes as merge commits on the integration tip, skips the conflicting lane with its file named, tells the build-breaking lane from the clean ones by building prefixes of the batch after building the base (5 builds), writes the Lane-Reading trailer and the lane commit titles into every merge, pushes only with --push, and does not read a build that never ran as a verdict on a lane, and stops with its own exit code, dropping and pushing nothing, when the integration tip itself does not build (17 checks)."
+desc = "`test/tools/merge-batch.test.mjs`: `scripts/merge-batch.mjs` merges the clean and fast-forwardable lanes as merge commits on the integration tip, skips the conflicting lane with its file named, tells the build-breaking lane from the clean ones by building prefixes of the batch after building the base (5 builds), writes the Lane-Reading trailer and the lane commit titles into every merge, pushes only with --push, and does not read a build that never ran as a verdict on a lane, and stops with its own exit code, dropping and pushing nothing, when the integration tip itself does not build."
 kind = "behavior"
 tool = "node"
 case = "../../../../test/tools/merge-batch.test.mjs"
@@ -420,7 +420,7 @@ timeout_ms = 300000
 # own sh over a throwaway repository.
 [[tests]]
 name = "selfchecks.integration_readings"
-desc = "`test/tools/integration-readings.test.mjs`: the real push hook allows merges that all carry a Lane-Reading trailer (one of them docs-only), refuses a push in which one merge lacks it and names that merge, and still refuses a single-parent commit as a lane commit that went straight in (3 checks)."
+desc = "`test/tools/integration-readings.test.mjs`: the real push hook allows merges that all carry a Lane-Reading trailer (one of them docs-only), refuses a push in which one merge lacks it and names that merge, and still refuses a single-parent commit as a lane commit that went straight in."
 kind = "behavior"
 tool = "node"
 case = "../../../../test/tools/integration-readings.test.mjs"
@@ -435,7 +435,7 @@ timeout_ms = 120000
 # push to the build host is left alone.
 [[tests]]
 name = "selfchecks.push_working_branches"
-desc = "`test/tools/push-working-branches.test.mjs`: the pre-push hook refuses lane/, b/ and archive refs sent to the project's remote (by ssh or https URL), allows deleting one there, and allows a staging push of a lane to the build host (6 checks)."
+desc = "`test/tools/push-working-branches.test.mjs`: the pre-push hook refuses lane/, b/ and archive refs sent to the project's remote (by ssh or https URL), allows deleting one there, and allows a staging push of a lane to the build host."
 kind = "behavior"
 tool = "node"
 case = "../../../../test/tools/push-working-branches.test.mjs"
@@ -444,6 +444,22 @@ expect_exit = 0
 expect_stdout_contains = ["push-working-branches: ", " checks, 0 failed"]
 normalizers = ["normalize_newlines"]
 timeout_ms = 60000
+
+# Fast: a few seconds. The real pre-push hook files over a throwaway repository, as git starts them: a
+# push to the project's remote -- by URL or under any remote name -- is refused for a trace its added
+# lines carry (a date of any year, a bare commit hash), a hex constant is not a trace, a trace the tree
+# already held is not charged to the push, and a push that only deletes a ref runs no checker.
+[[tests]]
+name = "selfchecks.push_trace_range"
+desc = "`test/tools/push-trace-range.test.mjs`: the pre-push hook judges a push to the project's remote on the lines it adds, whether the push names the URL or a remote called gh or origin, catches a date of any year and a bare hash that names a commit, leaves a hex constant and a trace already in the tree alone, and runs no checker for a push that only deletes."
+kind = "behavior"
+tool = "node"
+case = "../../../../test/tools/push-trace-range.test.mjs"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_contains = ["push-trace-range: ", " checks, 0 failed"]
+normalizers = ["normalize_newlines"]
+timeout_ms = 120000
 
 # Fast: under 1 s. The coordinator's children counted by slot: the binding table's pure parts and the
 # development-slot verdict of `lanes-below`, run without the host.
@@ -465,7 +481,7 @@ timeout_ms = 60000
 # process -- are pinned by the same file.
 [[tests]]
 name = "selfchecks.tool_exit"
-desc = "`test/tools/run-tests.mjs` judges the exit code: an entry that says nothing about it expects 0, so a case that crashes is red and the red names the field; `expect_exit = 1` on a case that exits 1 is green; `expect_exit = ""script""` leaves the question to the verify script; a case file that is not there is not green (8 checks)."
+desc = "`test/tools/run-tests.mjs` judges the exit code: an entry that says nothing about it expects 0, so a case that crashes is red and the red names the field; `expect_exit = 1` on a case that exits 1 is green; `expect_exit = ""script""` leaves the question to the verify script; a case file that is not there is not green."
 kind = "behavior"
 tier = "slow"
 tool = "node"

@@ -45,6 +45,8 @@ const cases = [
     ['test', 'cases/compile/loop.cml', '// The notation the author gave on 2026-11-23.\n'],
     ['test', 'cases/compile/tuple.cml', '// It was 当时 read the other way round.\n'],
     ['test', 'cases/compile/branch.cml', '// Green today, measured 2026-11-05: exit 0.\n'],
+    // A date of any year: the pattern does not name the years the project has lived through.
+    ['test', 'cases/compile/later.cml', '// Measured 2031-04-02 on the same host.\n'],
     // The name is what the other entries cite and what a reader quotes, so a trace in one is refused
     // where it was written, not only in the `desc` beside it.
     ['test', 'plans/feat/mm/named.plan.toml', '[[tests]]\nname = "extract_D-1123-78"\ndesc = "Two writings of `a + 1` are one value."\n'],
