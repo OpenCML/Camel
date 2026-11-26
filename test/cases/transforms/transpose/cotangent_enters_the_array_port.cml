@@ -20,7 +20,7 @@
  * value's type goes from `T` to `T[..]` the value is handed over through an **entering**, spelled
  * `:op/enter`. Design principles 5.1 makes entering not a conversion -- it always succeeds, it has
  * its own operator, it goes through no conversion safety table -- and the author's
- * `enter-by-structure` ruling (`dd71a1293b`) says a `T` read as `T[..]` is an entering, its rank
+ * `enter-by-structure` ruling says a `T` read as `T[..]` is an entering, its rank
  * coming from the value. `:op/cast` is what a *program* writes when it converts, and it is
  * `mayFault = true`, which this step cannot be: the step is taken only after
  * `port->assignableFrom(ctType)` has held, so the entering's own guard passes.
