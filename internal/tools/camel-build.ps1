@@ -26,6 +26,9 @@
 #     "recent": [ { "worktree": "...", "queuedAt": iso, "startedAt": iso, "finishedAt": iso,
 #                   "exit": 0, "seconds": 600 } ] }
 #
+# A waiter is shown only while its process exists: it removes itself on every way out of the wait, and
+# every touch of the file drops the entries of processes that are gone (`Select-LiveCamelWaiters`).
+#
 # "recent" keeps the last 30 builds, which is what a timeline of the queue is drawn from: the gap
 # between queuedAt and startedAt is the time the build waited for the lock.
 #
@@ -40,6 +43,9 @@ param(
     [string]$LocalConfig = '',
     # The directory holding build-state.json. Empty means the local settings file decides.
     [string]$StateDir = '',
+    # Appended to the names of the machine-wide locks. Empty is the one lock every real build takes; a
+    # test that must hold a lock without blocking real builds names its own.
+    [string]$LockScope = '',
     [int]$Parallel = 16,
     [int]$Check = 0,
     # Release is what every ordinary task builds; Debug exists so the assertions that are compiled
@@ -59,9 +65,11 @@ if (-not $cfg.stateDir) { Stop-CamelGateConfig 'camel-build' $cfg 'stateDir' }
 $statePath = Join-Path $cfg.stateDir 'build-state.json'
 $worktree = Split-Path -Leaf (Resolve-Path $Path)
 # Builds only. Test runs take Global\CamelTestSerialized in camel-test.ps1.
-$buildMutex = New-Object System.Threading.Mutex($false, 'Global\CamelBuildSerialized')
-$stateMutex = New-Object System.Threading.Mutex($false, 'Global\CamelBuildState')
+$buildMutex = New-Object System.Threading.Mutex($false, "Global\CamelBuildSerialized$LockScope")
+$stateMutex = New-Object System.Threading.Mutex($false, "Global\CamelBuildState$LockScope")
 $acquired = $false
+# True from the moment this process is in the queue file's waiters until it has taken itself out.
+$waiting = $false
 $startedAt = $null
 # How many state updates this run could not publish. Advisory: reported at the end, never the exit
 # code, and the first one is said out loud when it happens.
@@ -167,6 +175,10 @@ function Edit-State([scriptblock]$change) {
     }
     try {
         $state = Read-State
+        # Every touch of the file, under its mutex, first drops the waiters whose process is gone
+        # (`camel-gate-state.ps1#Select-LiveCamelWaiters`), so a crash that skipped a `finally` is
+        # cleaned by whoever comes next.
+        $state.waiters = Select-LiveCamelWaiters $state.waiters
         $change.Invoke($state)
         $state.updatedAt = (Get-Date).ToString('o')
         $json = $state | ConvertTo-Json -Depth 6
@@ -186,6 +198,7 @@ function Edit-State([scriptblock]$change) {
 }
 
 function Add-Waiter {
+    $script:waiting = $true
     Edit-State {
         param($state)
         $waiters = @($state.waiters | Where-Object { $_ -and $_.pid -ne $PID })
@@ -203,6 +216,7 @@ function Remove-Waiter {
         param($state)
         $state.waiters = @($state.waiters | Where-Object { $_ -and $_.pid -ne $PID })
     }
+    $script:waiting = $false
 }
 
 function Set-Holder($holder) {
@@ -264,7 +278,6 @@ try {
         $acquired = $true
     }
     if (-not $acquired) {
-        Remove-Waiter
         Write-Host '[camel-build] timed out waiting for the build lock'
         exit 3
     }
@@ -333,6 +346,11 @@ try {
     }
     exit $code
 } finally {
+    # Every way out of the wait -- the lock taken, the timeout, an error, Ctrl-C -- removes this
+    # process from the waiters; the removal in the body is the same call, made early.
+    if ($waiting) {
+        try { Remove-Waiter } catch { }
+    }
     if ($acquired) {
         if ($null -ne $startedAt -and $Check -le 0) {
             $null = $startedAt
