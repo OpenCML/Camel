@@ -559,11 +559,30 @@ bool ProgramExports::exportEntity(const Module &module, const Reference &ref, co
     if (!exports_[&module].entities->insert(ref, ent)) {
         return false;
     }
+    // An operator is referred to by the URI its rules answer for, not only by the name it is
+    // exported under: a reader that holds the id and no name -- the DREF the compiler makes for an
+    // operator it emits itself -- has nothing to ask with otherwise. So the way from the id back
+    // to the group is recorded once, here, the moment the entity is exported. This is the one
+    // place it is recorded for a program export, as Module::exportEntity is for the entities the
+    // module itself declares: both export the same kind of thing and differ only in the table they
+    // land in, and a program's exports are not the module's (the module object is shared by every
+    // program that loads it).
+    if (ent.isOperGroup() && ent.operGroup() != nullptr) {
+        auto &table = camel::core::OperatorTable::instance();
+        for (const auto &[uri, resolver] : ent.operGroup()->resolvers()) {
+            operatorGroups_[table.intern(uri)] = ent.operGroup();
+        }
+    }
     // A merged imported name may have been cached before this name existed (a module's exports
     // are written while the program is declared; a decorated form is added after its body is
     // built), so no cached merge survives a write.
     imported_.clear();
     return true;
+}
+
+oper_group_ptr_t ProgramExports::operatorGroup(camel::core::OperId oper) const {
+    const auto it = operatorGroups_.find(oper);
+    return it == operatorGroups_.end() ? nullptr : it->second;
 }
 
 std::optional<entity>

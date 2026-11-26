@@ -78,21 +78,19 @@ oper_group_ptr_t Builder::internalOperatorGroup(camel::core::OperId oper) {
 }
 
 oper_group_ptr_t Builder::operatorGroupOf(camel::core::OperId oper) {
-    // The built-in module registers the operators of the core, and a library module registers the
-    // ones its own declarations name; both did it at registration, when the URI a rule answers for
-    // was interned and the group recorded under it (Module::exportEntity). So the id alone finds
-    // the group: a module that does not declare the operator answers with nothing, and the search
-    // goes on to the next one.
+    // The way from the id back to the group is recorded where the group is registered, and every
+    // operator of the core and of the program's exports goes through one of the two: the built-in
+    // module when it is loaded, and the program's own export table when a declaration of the
+    // program is exported (ProgramExports::exportEntity). So the id alone finds the group, and no
+    // name of the program takes part.
     if (const auto builtins = context_->importModule(""); builtins != nullptr) {
         if (oper_group_ptr_t group = builtins->nativeOperatorGroup(oper); group != nullptr) {
             return group;
         }
     }
-    for (const auto &module : context_->allUserModules()) {
-        if (module == nullptr) {
-            continue;
-        }
-        if (oper_group_ptr_t group = module->nativeOperatorGroup(oper); group != nullptr) {
+    {
+        const auto &exports = context_->programExports();
+        if (oper_group_ptr_t group = exports.operatorGroup(oper); group != nullptr) {
             return group;
         }
     }

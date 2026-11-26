@@ -524,6 +524,11 @@ class ProgramExports {
     /// of that name, the module's own (native) entity of that name.
     std::optional<entity> exportedEntity(const Module &module, const Reference &ref) const;
 
+    /// The group that answers for the operator `oper` in this program, or null when no export of
+    /// the program declares it: the way from the id back to the group the declaration made, so a
+    /// reader holding only the id asks no name.
+    oper_group_ptr_t operatorGroup(camel::core::OperId oper) const;
+
     /// Calls `visit` for every name `module` brings to this program: the ones this program
     /// declared, then the module's own (native) names that no program name hides.
     void forEachExportedEntity(
@@ -562,6 +567,9 @@ class ProgramExports {
     };
     std::unordered_map<const Module *, ModuleExports> exports_;
     std::unordered_map<const Module *, ImportedEntities> imported_;
+    /// The group each operator id these exports declare answers for: one entry per rule URI of
+    /// every operator group exported into this program (exportEntity).
+    std::unordered_map<camel::core::OperId, oper_group_ptr_t> operatorGroups_;
 };
 
 using module_ptr_t = std::shared_ptr<Module>;
