@@ -1136,6 +1136,13 @@ export func filter(r: Range) => int[] {
     return to_array(r)->filter<f>
 }
 
+/// Calls f for every integer r names, in order, as `foreach` on the array the range names.
+/// @example (0 .. 3)->foreach<func (x) { println(x) }>
+with <f: (item: int) => void>
+export func foreach(r: Range) => void {
+    return to_array(r)->foreach<f>
+}
+
 /// The integers of r for which pred is true, counted. The calls of pred have no order among
 /// them.
 /// @example (0 .. 5)->count<func (x: int) => bool { x % 2 == 0 }>    // 3
