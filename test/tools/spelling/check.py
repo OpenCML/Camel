@@ -41,6 +41,13 @@ and `println("(x) => y")` says nothing about how a lambda is written. Two except
 there the text is code nevertheless, are in `code_lines`: a `/// @example` line is the Camel the
 doc-snippet check compiles, and in a generator's own source `.cpp`/`.h` the string is what it
 prints.
+
+The reading set is a list of directories and files, read whole: `scripts` and `test/tools` are read
+as directories rather than through a hand-picked few of their leaves, because a generator added
+beside the others is exactly the one nobody remembers to add here. `LINT_EXEMPT` names the files
+whose whole text is a list of spellings -- the parse check's probes, this file's own prose, and the
+law check's probes, which its own reader parses back -- and prints them as `ok   exempt` so that
+they are counted in the output rather than silently missing from it.
 """
 
 import argparse
@@ -69,13 +76,28 @@ TOKEN = re.compile(r"[A-Za-z_]\w*|\d+(?:\.\d+)?|'(?:[^'\\]|\\.)*'|\"(?:[^\"\\]|\
 # group that is not in a type position (not after `:`, and not after a name, which is what tells
 # `f(x)` from `(x)`). A function type's parameters are typed, so `(x: int) => int` does not match;
 # an unnamed one is written after `:`, so it does not match either.
+#
+# The parens must hold a parameter list of bare names, one or more. An empty one is the function
+# type with no parameters (`commit::<() => int>`, `f: <x: float>() => float`), and a group that
+# holds a number or an operator is an expression: `x * (-47.0) => x` is a rule's rewrite, and the
+# `=>` after it divides the pattern from the replacement. Neither is an untyped lambda, and the old
+# spelling this entry is for cannot be written without at least one parameter.
+#
+# A generator that writes its sample from a template -- `func f{i}(x: int)` for the i-th function
+# -- spells the name with a hole, so `\w+` alone does not reach it and a colon written there read
+# as "no hit". The name therefore takes one `{...}` hole: `0 hits` on such a generator is then a
+# reading about the text, not about the shape of the pattern.
 LINT = [
-    ("result-type colon", re.compile(r"func\s+(?:operator\s+\S+|\w+)\s*(?:::)?\s*(?:<[^>]*>)?\s*\([^)]*\)\s*:\s*[A-Za-z_(]"), None),
+    (
+        "result-type colon",
+        re.compile(r"func\s+(?:operator\s+\S+|\w+(?:\{[^}]*\})?)\s*(?:::)?\s*(?:<[^>]*>)?\s*\([^)]*\)\s*:\s*[A-Za-z_(]"),
+        None,
+    ),
     ("named type argument =", re.compile(r"::<[^>]*\b[A-Za-z_]\w*\s*=\s*[^=>]"), None),
     ("paren lambda", re.compile(r"(?<!func )\([^()]*\)\s*:\s*[\w(\[]+\s*=>"), None),
     (
         "paren lambda (untyped)",
-        re.compile(r"(?<![\w:])(?<!func )(?<!func)(?<!: )\([^():]*\)\s*=>"),
+        re.compile(r"(?<![\w:])(?<!func )(?<!func)(?<!: )\([A-Za-z_]\w*(?:\s*,\s*[A-Za-z_]\w*)*\)\s*=>"),
         {".cml", ".tsv", ".cpp", ".h"},
     ),
 ]
@@ -84,16 +106,28 @@ LINT = [
 LINT_FILES = [
     "src/kernel/diagnostics/registry.tsv",
     "src/stdlib/std/cml/cml.cpp",
-    "scripts/stdlib-reference.mjs",
-    "test/tools/progen",
-    "test/tools/scale",
-    "test/tools/perfbaseline",
+    "scripts",
+    "test/tools",
     "test/cases/trans",
     "test/cases/measured",
     "test/cases/tools",
     "test/cases/modules",
     "benchmarks",
 ]
+
+# Two files whose whole text is a list of spellings. The parse check's probes name the forms the
+# parser must refuse beside the ones it must accept, and this check's own prose quotes the old
+# spellings it lints; a hit there is the reading, not a defect. They are printed as `ok   exempt`,
+# so the two are visible in the output instead of being silently absent from it.
+LINT_EXEMPT = {
+    "test/tools/parsecheck/probes.py": "names the old spellings as probes, for the parser to refuse",
+    "test/tools/spelling/check.py": "quotes the old spellings it lints",
+    # The probe modules this check writes are read back by its own `parseDeclarations`, which takes
+    # the result type after a top-level `:` in the `func` head. Until that reader takes `=>` as
+    # well, the probes have to stay in the spelling it parses; changing them here would make the
+    # reader see no result type and the check compare nothing.
+    "scripts/law-cotangent-ports.mjs": "its probes are read back by its own signature reader",
+}
 
 # The five forms, written the way the ruling writes them. The formatter must hand them back
 # unchanged (it may reindent): the check is that it invents none of the old ones.
@@ -231,12 +265,18 @@ def code_lines(path, text):
 
 
 def lint_hits():
+    """The hits, and the exempt files that were read but not counted."""
     hits = []
+    exempted = set()
     for item in LINT_FILES:
         base = ROOT / item
         paths = [base] if base.is_file() else sorted(p for p in base.rglob("*") if p.is_file())
         for path in paths:
             if path.suffix not in (".py", ".mjs", ".cpp", ".tsv", ".h", ".cml"):
+                continue
+            relative = path.relative_to(ROOT).as_posix()
+            if relative in LINT_EXEMPT:
+                exempted.add(relative)
                 continue
             try:
                 text = path.read_text(encoding="utf-8")
@@ -248,7 +288,7 @@ def lint_hits():
                         continue
                     if pattern.search(line):
                         hits.append(f"{path.relative_to(ROOT)}:{number}: {label}: {line.strip()[:80]}")
-    return hits
+    return hits, sorted(exempted)
 
 
 def main() -> int:
@@ -260,10 +300,12 @@ def main() -> int:
     args = parser.parse_args()
 
     if args.lint_only:
-        hits = lint_hits()
+        hits, exempted = lint_hits()
         for hit in hits:
             print(f"FAIL lint {hit}")
-        print(f"SOURCE-SPELLING lint={len(LINT)} files={len(LINT_FILES)} hits={len(hits)}")
+        for path in exempted:
+            print(f"ok   exempt {path}: {LINT_EXEMPT[path]}")
+        print(f"SOURCE-SPELLING lint={len(LINT)} files={len(LINT_FILES)} hits={len(hits)} exempt={len(exempted)}")
         return 1 if hits else 0
 
     if not args.camel:
@@ -350,8 +392,9 @@ def main() -> int:
             if rows[-1].startswith("FAIL"):
                 failures += 1
 
-    # 4. The lint over the generators that cannot be run here.
-    hits = lint_hits()
+    # 4. The lint over the generators that cannot be run here, and the two files that are lists of
+    # spellings rather than text in one spelling.
+    hits, exempted = lint_hits()
     failures += len(hits)
     for hit in hits:
         rows.append(f"FAIL lint {hit}")
@@ -359,8 +402,19 @@ def main() -> int:
     print(f"SOURCE-SPELLING generators={generators} samples={samples} lint={len(LINT)} files={len(LINT_FILES)}")
     for row in rows:
         print(row)
+    for path in exempted:
+        print(f"ok   exempt {path}: {LINT_EXEMPT[path]}")
     if failures:
-        print(f"SOURCE-SPELLING FAIL: {failures} of {samples + len(LINT)} readings")
+        files_with_hits = len({hit.split(":")[0] for hit in hits})
+        # The numerator is the hits, the denominator the readings that produced them; a sample that
+        # failed is a reading that produced no text to lint, and it is named apart so that the two
+        # numbers cannot be read as one.
+        rest = failures - len(hits)
+        apart = "" if rest == 0 else f", and {rest} sample(s) failing"
+        print(
+            f"SOURCE-SPELLING FAIL: {len(hits)} hits in {files_with_hits} files{apart} "
+            f"({samples + len(LINT)} readings, {len(exempted)} exempt)"
+        )
         return 1
     print("SOURCE-SPELLING PASS: every sample parses, and no generator writes one of the five old forms")
     return 0

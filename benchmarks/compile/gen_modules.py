@@ -83,16 +83,16 @@ def module_source(index: int, shape: str, fan: int, funcs: int) -> str:
     if deps:
         lines.append("")
     for k in range(funcs):
-        lines.append(f"export func f_{k}(x: int): int {{")
+        lines.append(f"export func f_{k}(x: int) => int {{")
         lines.append(f"    let a = if x % 2 == 0 then x * 3 else x + {index % 7} + {k}")
         lines.append(f"    return a + f_{k - 1}(x)" if k > 0 else "    return a")
         lines.append("}")
         lines.append("")
-    lines.append(f"export func local_{index:04d}(x: int): int {{")
+    lines.append(f"export func local_{index:04d}(x: int) => int {{")
     lines.append(f"    return f_{funcs - 1}(x)")
     lines.append("}")
     lines.append("")
-    lines.append(f"export func entry_{index:04d}(x: int): int {{")
+    lines.append(f"export func entry_{index:04d}(x: int) => int {{")
     if deps:
         imported = " + ".join(f"{imported_function(dep, shape)}(x)" for dep in deps)
         lines.append(f"    return local_{index:04d}(x) + ({imported}) % 97")

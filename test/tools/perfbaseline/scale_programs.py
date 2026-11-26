@@ -57,7 +57,7 @@ def unit(i):
         body = f"pick({prev}, x + {c}, x > {k})"
     else:
         body = f"len(pick('s{i}', 'abc', x > {k})) + {prev}"
-    return f"func f{i}(x: int): int {{\n    return {body}\n}}\n"
+    return f"func f{i}(x: int) => int {{\n    return {body}\n}}\n"
 
 
 def program(units):
@@ -69,7 +69,7 @@ def program(units):
     helpers = []
     for start in range(0, units, HELPER):
         calls = " + ".join(f"f{i}(1)" for i in range(start, min(units, start + HELPER)))
-        helpers.append(f"func sum{start // HELPER}(): int {{\n    return {calls}\n}}\n")
+        helpers.append(f"func sum{start // HELPER}() => int {{\n    return {calls}\n}}\n")
     parts.extend(helpers)
     main = ["func main() => int sync {", "    var total = 0"]
     main += [f"    total = total + sum{h}()" for h in range(len(helpers))]
