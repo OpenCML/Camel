@@ -399,6 +399,22 @@ expect_stdout_contains = ["merge-batch: ", " checks, 0 failed"]
 normalizers = ["normalize_newlines"]
 timeout_ms = 120000
 
+# Slow: about 70 s. The promotion job over a throwaway repository with stubbed layer, re-run, cleanup and
+# publish commands: the stubs sleep a few seconds and the stub layer starts a grandchild process whose pid is
+# read back, so what is checked is the processes and the files the job leaves, not its own report of them.
+[[tests]]
+name = "selfchecks.promote"
+desc = "`test/tools/promote.test.mjs`: `scripts/promote.mjs` `start` returns at once and leaves a running worker, `status` follows the phases to the verdict (a timeout that passes on re-run is not a new red, one that fails again is), the records name the immediately previous promotion's table and a previous promotion with a record and no table is refused, `cancel` and a worker killed without warning leave no process of the job alive and free the lock, a silent worker is reported dead, and `--publish` hands the publish command exactly the measured sha."
+kind = "behavior"
+tier = "slow"
+tool = "node"
+case = "../../../../test/tools/promote.test.mjs"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_contains = ["promote: ", " checks, 0 failed"]
+normalizers = ["normalize_newlines"]
+timeout_ms = 300000
+
 # Fast: 1 s. What the pre-push hook asks of a push to `integration` beside the shape rule: every
 # merge in the pushed range carries a Lane-Reading trailer. The hook is the real one, run by git's
 # own sh over a throwaway repository.
