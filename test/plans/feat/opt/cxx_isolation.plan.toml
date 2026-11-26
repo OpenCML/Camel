@@ -29,22 +29,33 @@ tags = ["feat", "opt", "cxx", "differential", "fold", "cse"]
 #                control of the isolation itself, read in the negative: a rename that left the old
 #                spelling resolving would turn this case red, which is what makes it a control.
 #
-# FOLD: the two readings are one document, byte for byte. The C++ fold and the Camel fold agree on
-# every node, every constant and every edge of the corpus. The name they were separated from is
-# not a third reading: it is refused, and the refusal is asserted here rather than assumed.
+# A reading's `flags` word is what a commit opened, not what the graph is. A pass edits a draft and
+# the draft is the graph it edits, so a graph the pass rewrote nothing in stays the graph it decoded
+# and the commit that closes the session gives it no `kGraphFlagGatesDissolved` bit
+# (include/camel/runtime/graph.h); the bit only says "the gates of this graph have been looked at",
+# which the first commit that reaches it would otherwise do. Both implementations of a pass leave
+# that word where their own writing left it, and the C++ and the Camel fold do not write the same
+# graphs -- the C++ fold commits every graph of the program, the Camel fold the ones it rewrites --
+# while the two CSE readings agree on it, because neither sweep rewrites `chain`, the folding corpus
+# and the graph with no expression written twice in it. So the word is a memo, and the entries write
+# it down instead of letting one side stand in for the other.
 #
-# CSE: the two readings are one document except for one field -- the `flags` word of the one graph
-# neither implementation rewrites (`chain`, the folding corpus, which has no expression written
-# twice). The C++ sweep writes the graphs its screen selects, so nobody ever commits `chain` and its
-# `flags` stay 0; the Camel sweep opens one transaction over the program and commits once, and a
-# commit looks at the gates of every graph it opened, so `chain` carries `kGraphFlagGatesDissolved`
-# (2, include/camel/runtime/graph.h). That is a memo -- "a graph without it is looked at by the
-# first commit that reaches it" -- not a difference in the graph: the two readings have the same
-# graphs, the same nodes in the same order, the same operators, the same operands and the same
-# entry. So the CSE entries cannot be a text comparison today; they are the two readings themselves,
-# each asserted (a canonical document, the program's own graph set, the sweep reached its fixpoint,
-# and the `flags` word the run prints), which is the difference written down where a change to
-# either side turns it red.
+# `flags` is the commit's own memo: a graph it looked at and found unchanged is not decoded again
+# (kernel/runtime/draft_session.cpp, the commit's skip). No pass reads it to decide anything, so a
+# reading that differs only in this word is the same graph reached by doing more work.
+#
+# FOLD: the two readings hold the same five graphs -- the same nodes, the same constants and the same
+# edges of the corpus -- and differ only in the `flags` word of the graphs the Camel fold did not
+# write, so no text comparison is possible between them. Each is asserted itself: a canonical
+# document, the program's own graph set, no operation over two constants left, and the `flags` word
+# the run prints. The name they were separated from is not a third reading: it is refused, and the
+# refusal is asserted here rather than assumed.
+#
+# CSE: the two readings are one document, `flags` word included: neither sweep rewrites `chain`, so
+# neither commits it and both print 0 for it. The entries are still the two readings themselves,
+# each asserted, rather than one compared against the other: the comparison a text differential would
+# make is made where it is a graph comparison, and the memo word is asserted on each side so that a
+# change to either one turns its entry red.
 
 [[tests]]
 name = "cxx_isolation.fold.by_cpp"
@@ -78,22 +89,43 @@ for (const g of graphs) {
 
 [[tests]]
 name = "cxx_isolation.fold.by_camel"
-desc = "The Camel constant folding (`opt::fold`, stdlib/opt.cml) on the same graph: its canonical document is the one the C++ pass printed, byte for byte and with no normalizer between them."
-kind = "differential"
+desc = "The Camel constant folding (`opt::fold`, stdlib/opt.cml) on the same graph, read the same way as the C++ one: the canonical document of the same five graphs with no operation over two constants remaining, and the `flags` word the run prints -- the memo of which graphs its commit opened, which is the two graphs the fold rewrote nothing in."
+kind = "behavior"
 case = "../../../cases/opt/cxx_isolation/subject.cml"
 args = ["${case}", "opt::fold", "std::jgir canonical=true", "std::nop"]
 expect_exit = 0
 timeout_ms = 20000
-compare_to = "cxx_isolation.fold.by_cpp"
-compare_fields = ["exit_code", "stdout_normalized"]
 verify_script = """
 const doc = JSON.parse(input.normalized.stdout)
+const fail = (why) => {
+    throw new Error("opt::fold: " + why)
+}
 if (doc.format !== "camel.gir" || doc.canonical !== true) {
-    throw new Error("opt::fold: the run did not print the canonical document: " + input.normalized.stdout.slice(0, 200))
+    fail("the run did not print the canonical document: " + input.normalized.stdout.slice(0, 200))
 }
 const graphs = doc.graphs || []
 if (graphs.length < 5) {
-    throw new Error("opt::fold: the document holds " + graphs.length + " graph(s), not the five the program has")
+    fail("the document holds " + graphs.length + " graph(s), not the five the program has")
+}
+const operands = (n) => (n.inputs || []).filter((i) => i.kind === "norm").map((i) => i.source)
+for (const g of graphs) {
+    const constants = new Set((g.nodes || []).filter((n) => n.kind === "DATA").map((n) => n.id))
+    for (const n of g.nodes || []) {
+        if (n.kind !== "OPER") continue
+        const ins = operands(n)
+        if (ins.length >= 2 && ins.every((s) => constants.has(s))) {
+            fail("an operation over constants is left in the graph, so the fold did not reach its fixpoint: " + n.id)
+        }
+    }
+}
+// The `flags` word is written down rather than compared with the C++ reading, which commits every
+// graph and so prints 2 five times: this fold commits the graphs it rewrote, and the two it did not
+// rewrite keep the 0 that says no commit has looked at their gates yet. The bit is a memo (see the
+// file comment) and the graphs are the C++ ones, node for node.
+const flags = graphs.map((g) => g.flags).sort().join(",")
+if (flags !== "0,0,2,2,2") {
+    fail("the graph set prints flags [" + flags + "], not [0,0,2,2,2]: the fold rewrites three of the "
+        + "five graphs of this corpus, and a graph it rewrote nothing in is not committed by this pass")
 }
 """
 
@@ -120,7 +152,7 @@ if (/camel\.gir|"graphs"\s*:/.test(input.normalized.stdout)) {
 
 [[tests]]
 name = "cxx_isolation.cse.by_cpp"
-desc = "The C++ common-subexpression elimination (`std::cxx::cse`) on the corpus whose expression is written twice over one value: the canonical document of the graph it leaves, the sweep reached its fixpoint, and the `flags` word it prints -- the one field that tells it from the Camel reading."
+desc = "The C++ common-subexpression elimination (`std::cxx::cse`) on the corpus whose expression is written twice over one value: the canonical document of the graph it leaves, the sweep reached its fixpoint, and the `flags` word it prints -- the memo of which graphs its commit opened, asserted on this side and on the Camel one instead of compared across."
 kind = "behavior"
 case = "../../../cases/opt/cxx_isolation/subject.cml"
 args = ["${case}", "std::cxx::cse", "std::jgir canonical=true", "std::nop"]
@@ -161,7 +193,7 @@ if (flags !== "0,2,2,2,2") {
 
 [[tests]]
 name = "cxx_isolation.cse.by_camel"
-desc = "The Camel common-subexpression elimination (`opt::cse`, stdlib/opt.cml) on the same graph, read the same way: the same graphs, nodes, operators and operands, the sweep reached its fixpoint, and every graph prints the gates-dissolved bit because a program-wide commit looked at all of them."
+desc = "The Camel common-subexpression elimination (`opt::cse`, stdlib/opt.cml) on the same graph, read the same way: the same graphs, nodes, operators and operands, the sweep reached its fixpoint, and the `flags` word it prints -- 0 for the graph it merged nothing in, because this sweep writes only the graphs it rewrites, as the C++ one does."
 kind = "behavior"
 case = "../../../cases/opt/cxx_isolation/subject.cml"
 args = ["${case}", "opt::cse", "std::jgir canonical=true", "std::nop"]
@@ -193,11 +225,12 @@ for (const g of graphs) {
     }
 }
 const flags = graphs.map((g) => g.flags).sort().join(",")
-if (flags !== "2,2,2,2,2") {
-    fail("the graph set prints flags [" + flags + "], not [2,2,2,2,2]: this sweep opens one "
-        + "transaction over the program and commits it once, so a commit has looked at the gates of "
-        + "every graph, including the one it merged nothing in (internal/reports/"
-        + "2026-11-18-two-implementations-of-one-pass.md)")
+if (flags !== "0,2,2,2,2") {
+    fail("the graph set prints flags [" + flags + "], not [0,2,2,2,2]: this sweep writes the graphs "
+        + "its screen selects, so the one graph it merges nothing in -- `chain`, which has no "
+        + "expression written twice -- is never committed by it and keeps the 0 that says no commit "
+        + "has looked at its gates yet. The C++ reading prints the same word, so a change on either "
+        + "side moves this entry.")
 }
 """
 # The one name the rework kept. `std::opt` is not a spelling of a sub-pass: it is the name of the
