@@ -1,0 +1,10 @@
+/**
+ * An array of floats is not a position a range reaches: nothing converts the integers of a range
+ * to `f32` (design principles 5.1), so the conversion that makes `int[]` of a range does not
+ * apply, and the declaration is the mismatch it was before.
+ */
+
+func main() => int sync {
+    let fs: f32[] = 0 .. 3
+    return len(fs)
+}

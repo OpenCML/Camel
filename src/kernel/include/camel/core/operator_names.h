@@ -71,6 +71,15 @@ inline std::string compilerNamedOperator(std::string_view plain) {
     return std::string(kBuiltinPrefix) + std::string(plain);
 }
 
+/// The one conversion the library writes from a range to the array of its integers (`to_array` in
+/// the prelude). A range is a value of its own type and not an array (design principles 5.4), so a
+/// position that expects `int[]` materializes one by this declaration, whose signature also says
+/// which two types take part in it -- the compiler reads both from there and names neither. It is
+/// a function and not an operator, and its name is stated here for the same reason as the names
+/// above: the compiler writes it, and a declaration of the program that happens to have the name
+/// must not be read in its place.
+inline constexpr std::string_view kRangeToArray = "to_array";
+
 /// The name the compiler writes for `a..b`, the interval (design principles 4.2; the rule on
 /// the rule): the integers from `a` to `b - 1`, and nothing else -- the composition is `f <> g`
 /// and has the name of its own below. The graph builder writes the construct as one call of this

@@ -840,6 +840,13 @@ Builder::visitLinkNode(const GCT::node_ptr_t &gct, std::optional<GCT::Assignment
                 compositeLiteralEntersIn(inputs[i].node, param, inputs[i].expr)) {
                 entered[i] = param;
             }
+            // A range where the parameter wants the array of its integers enters through the
+            // conversion the library declares for it (design principles 5.4): the position states
+            // the array, and the range answers it. The conversion itself is made once the callee
+            // is known (enterParameters, coerceTo), here as for every other entrance.
+            if (rangeEntersArray(param, entered[i])) {
+                entered[i] = param;
+            }
         }
         return entered;
     };

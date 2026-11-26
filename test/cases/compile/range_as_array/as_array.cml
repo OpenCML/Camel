@@ -1,0 +1,23 @@
+/**
+ * A range is a value of its own type (design principles 5.4), and the array of its integers is
+ * what a position that expects one materializes: a typed `let`, a `return` under `int[]`, and an
+ * argument written for a parameter of `int[]`. Elsewhere the range stays the value it is, so the
+ * same three numbers still answer `len` as a range does.
+ */
+
+func count(xs: int[]) => int {
+    return len(xs)
+}
+
+func first_four() => int[] {
+    return 1 .. 5
+}
+
+func main() => int sync {
+    let xs: int[] = 0 .. 3
+    let ys = count(2 .. 6)
+    let zs = first_four()
+    let r = 0 .. 3
+    'xs={} ys={} zs={} r_len={}'->format<len(xs), ys, len(zs), len(r)>->println
+    return 0
+}

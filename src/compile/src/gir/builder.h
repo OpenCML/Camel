@@ -3755,6 +3755,12 @@ class Builder {
     /// prelude does not change while a program is built.
     const OperatorOverloads &preludeOperatorOverloadsOf(const std::string &group);
     std::map<std::string, OperatorOverloads> preludeOperators_;
+    /// The two types the range conversion is declared with, and the declaration itself, read once
+    /// (`rangeValueType`).
+    bool rangeTypesRead_                     = false;
+    camel::core::type::Type *rangeValueType_ = nullptr;
+    camel::core::type::Type *rangeArrayType_ = nullptr;
+    compile_graph_ptr_t rangeConversionGraph_;
     /// The DREF for a use of the operator `group` (visitDRefNode).
     node_handle_t operatorDrefOf(const std::string &group, const GCT::node_ptr_t &gct);
     /// The program's overload a call of an operator takes (an instance for a generic one), or
@@ -4051,6 +4057,24 @@ class Builder {
     node_handle_t memberReadNodeOf(
         node_handle_t value, camel::core::type::Type *target, const std::string &key,
         const GCT::node_ptr_t &origin = nullptr);
+    /// The range type and the array of integers it converts to, read from the one conversion the
+    /// library declares for it (`to_array` in the prelude): the parameter type and the exit type
+    /// of that declaration. A range is a value of its own type, and the array is what a position
+    /// that expects it materializes (design principles 5.4: `let xs: int[] = 0..n`). null inside
+    /// the prelude's own build -- the layer the answer comes from -- and for a program built
+    /// without it.
+    camel::core::type::Type *rangeValueType();
+    camel::core::type::Type *rangeArrayType();
+    /// Fills the two above from that declaration, once (`rangeTypesRead_`).
+    void readRangeConversion();
+    /// Whether a value of type `value` reaches the array `param` through that conversion: the
+    /// question a call asks before its callee is known (builder_call.cpp, enteringTypes), the
+    /// same one `coerceTo` answers with the conversion itself.
+    bool rangeEntersArray(camel::core::type::Type *param, camel::core::type::Type *value);
+    /// The range `node` materialized as its array, by that same conversion. The call is written
+    /// the way a program writes it (`to_array(r)`) except that its callee is the declaration
+    /// itself and not a name of the program.
+    node_handle_t rangeArrayNode(node_handle_t node, const GCT::node_ptr_t &origin);
     /// `node` where a value of type `target` is expected (design principles 5.5): `node`
     /// itself when its type is assignable; otherwise the value put into `T?` / `T!` (one
     /// CAST per level), `null` as a `T?`, or the empty literal `[]` given the element type of
