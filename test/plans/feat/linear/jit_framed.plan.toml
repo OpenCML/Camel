@@ -56,7 +56,7 @@ name = "framed.operators.gc_stress"
 tier = "milestone"
 desc = "The same with a collection at every seventh safepoint and the heap verified before and after: framed code keeps every reference in its pool frame, where the collector finds it."
 backends = ["fvm", "jit", "inline_jit"]
-args = ["--gc-stress", "safepoint=7", "--gc-check", "verify=both", "${case}"]
+args = ["--gc-stress", "safepoint=7", "--gc-check", "verify=both", "${case}", "${backend}"]
 sweep = false
 timeout_ms = 240000
 expect_exit = 0
@@ -66,7 +66,7 @@ expect_stdout_starts_with = "collatz 111 118\nrepeat >ababababab\nsum_at 31\nmea
 name = "framed.operators.moving"
 desc = "The same with the generational collector and safepoint poisoning: every safepoint moves every young object and poisons where it was, so a reference that compiled code kept in a register or baked into its code across a safepoint would fault."
 backends = ["fvm", "jit_hot_threshold0", "inline_jit_hot_threshold0"]
-args = ["--gc-check", "poison", "${case}"]
+args = ["--gc-check", "poison", "${case}", "${backend}"]
 sweep = false
 timeout_ms = 240000
 expect_exit = 0
@@ -168,7 +168,7 @@ tier = "milestone"
 desc = "The allocating loops with a collection at every safepoint and the heap verified: the self tail call of compiled code polls the collector as the interpreter's does."
 case = "../../../cases/linear/jit/framed_loops.cml"
 backends = ["fvm", "jit", "inline_jit"]
-args = ["--gc-stress", "safepoint=1", "--gc-check", "verify=both", "${case}"]
+args = ["--gc-stress", "safepoint=1", "--gc-check", "verify=both", "${case}", "${backend}"]
 envs = ["N=20000"]
 sweep = false
 timeout_ms = 240000
@@ -260,7 +260,7 @@ name = "framed.loops.moving"
 desc = "The loops with safepoint poisoning: the allocating loop and the loop that builds an array run across thousands of collections that move what they hold."
 case = "../../../cases/linear/jit/framed_loops.cml"
 backends = ["fvm", "jit_hot_threshold0", "inline_jit_hot_threshold0"]
-args = ["--gc-check", "poison", "${case}"]
+args = ["--gc-check", "poison", "${case}", "${backend}"]
 envs = ["N=20000"]
 sweep = false
 timeout_ms = 240000
@@ -272,7 +272,7 @@ name = "framed.faults.moving"
 desc = "The isolated faults with safepoint poisoning."
 case = "../../../cases/linear/jit/framed_faults.cml"
 backends = ["fvm", "jit_hot_threshold0", "inline_jit_hot_threshold0"]
-args = ["--gc-check", "poison", "${case}"]
+args = ["--gc-check", "poison", "${case}", "${backend}"]
 envs = ["FAULT=none"]
 sweep = false
 expect_exit = 0

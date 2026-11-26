@@ -3566,6 +3566,22 @@ function expandBackends(test) {
 }
 
 /**
+ * An entry that runs over more than one back end must put `${backend}` in its final `args`
+ * (after `[defaults]` is applied). An entry that writes its own `args` replaces the default, and
+ * without the variable every copy runs the same command with no back end pass: the plan is green
+ * while the case never ran on most of the back ends.
+ */
+function requireBackendArg(test, planPath) {
+    if (!Array.isArray(test.backends) || test.backends.length < 2) return test
+    const args = Array.isArray(test.args) ? test.args : []
+    if (args.some((arg) => String(arg).includes('${backend}'))) return test
+    throw new Error(
+        `${planLabel(planPath)}: test '${test.name}' runs over back ends [${test.backends.join(', ')}] ` +
+            `but its args do not contain '\${backend}', so every back end runs the same command`,
+    )
+}
+
+/**
  * The tests of one plan file, own and backend-expanded. Exported because the plan inventory
  * (`scripts/plan-inventory.mjs`) must see the same tests this runner selects: two readings of a
  * plan file drift, one of them silently.
@@ -3576,6 +3592,7 @@ export function loadPlanTests(planPath) {
     const planId = doc.id || path.basename(planPath, '.plan.toml')
     const tests = (doc.tests || [])
         .map((test) => ({ ...(doc.defaults || {}), ...test, __planPath: planPath, __planId: planId }))
+        .map((test) => requireBackendArg(test, planPath))
         .flatMap(expandBackends)
     return { doc, tests }
 }

@@ -176,7 +176,7 @@ name = "generic_values.candidate_body_fails"
 desc = "Two generic overloads of one name and a position that fixes the types of both: the first one's body does not compile for them and the second one's does, so the name is the second (it returns its `y`: 2 + 4). The same name at the same types is bound twice: the instance that failed is remembered as failed and is not built again."
 kind = "behavior"
 case = "../../../cases/consistency/generic_values/candidate_body_fails.cml"
-args = ["${case}"]
+args = ["${case}", "${backend}"]
 expect_exit = 0
 expect_stdout_starts_with = "6\n"
 
