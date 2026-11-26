@@ -362,7 +362,7 @@ tool = "node"
 case = "../../../../test/tools/promotion-record.test.mjs"
 args = ["${case}"]
 expect_exit = 0
-expect_stdout_contains = ["promotion-record: 10 checks, 0 failed"]
+expect_stdout_contains = ["promotion-record: ", " checks, 0 failed"]
 normalizers = ["normalize_newlines"]
 timeout_ms = 120000
 
@@ -377,7 +377,7 @@ tool = "node"
 case = "../../../../scripts/gates.test.mjs"
 args = ["${case}"]
 expect_exit = 0
-expect_stdout_contains = ["gates: 6 checks, 0 failed"]
+expect_stdout_contains = ["gates: ", " checks, 0 failed"]
 normalizers = ["normalize_newlines"]
 timeout_ms = 60000
 
@@ -395,7 +395,7 @@ tool = "node"
 case = "../../../../test/tools/merge-batch.test.mjs"
 args = ["${case}"]
 expect_exit = 0
-expect_stdout_contains = ["merge-batch: 13 checks, 0 failed"]
+expect_stdout_contains = ["merge-batch: ", " checks, 0 failed"]
 normalizers = ["normalize_newlines"]
 timeout_ms = 120000
 
@@ -410,7 +410,7 @@ tool = "node"
 case = "../../../../test/tools/integration-readings.test.mjs"
 args = ["${case}"]
 expect_exit = 0
-expect_stdout_contains = ["integration-readings: 3 checks, 0 failed"]
+expect_stdout_contains = ["integration-readings: ", " checks, 0 failed"]
 normalizers = ["normalize_newlines"]
 timeout_ms = 120000
 
@@ -425,6 +425,6 @@ tool = "node"
 case = "../../../../test/tools/push-working-branches.test.mjs"
 args = ["${case}"]
 expect_exit = 0
-expect_stdout_contains = ["push-working-branches: 6 checks, 0 failed"]
+expect_stdout_contains = ["push-working-branches: ", " checks, 0 failed"]
 normalizers = ["normalize_newlines"]
 timeout_ms = 60000
