@@ -1121,6 +1121,7 @@ const KNOWN_ARGV = [
     '--compile-only',
     '--list-known',
     '--list-cases',
+    '--print-time-sensitive',
     '--selection-cases[=<file>]',
     '--selection-layer <plans>',
     '--selection-empty',
@@ -1183,6 +1184,7 @@ function parseArgs(argv) {
         // compared against; a second implementation of "which cases are in this selection" would
         // agree on the day it was written and disagree the first time a plan learned a sweep.
         listCases: false,
+    printTimeSensitive: false,
         // `--selection-cases <file>` runs exactly the cases a recorded selection names
         // (`{"cases": ["<plan id>/<case name>", ...]}`), instead of every case of the selected
         // plans. A case list computed from the change is only meaningful if the run executes that
@@ -1196,7 +1198,9 @@ function parseArgs(argv) {
             options.updateGolden = true
         } else if (arg === '--selection-empty') {
             options.selectionEmpty = true
-        } else if (arg === '--list-cases') {
+        } else if (arg === '--print-time-sensitive') {
+        options.printTimeSensitive = true
+    } else if (arg === '--list-cases') {
             options.listCases = true
         } else if (arg === '--selection-cases' && i + 1 < argv.length) {
             options.selectionCases = path.resolve(process.cwd(), argv[++i])
@@ -5499,6 +5503,13 @@ async function main() {
         const when = gitOutput(['log', '-1', '--format=%cI']) || 'unknown'
         console.error(`[ARGV] this tree is ${sha} (committed ${when}); a word this list lacks is newer than it`)
         process.exit(1)
+    }
+    if (options.printTimeSensitive) {
+        // A question about plan files, not a run: nothing executes and no lock is taken, which is
+        // what lets the gate ask it before it decides to take the host.
+        const status = printTimeSensitive(options)
+        process.exitCode = status
+        return status
     }
     if (options.listCases) {
         // A question about the plan tree, not a run: nothing executes, so no install is consulted.
