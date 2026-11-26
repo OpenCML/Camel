@@ -1,0 +1,56 @@
+// `eval(n)`: `n` is a node the program *got at run time* -- not a name written in the source and not
+// something the compiler knows -- and the answer is a node holding the value the operator computes
+// over its constant operands. The reading folds two different nodes of the same draft and puts each
+// answer where the function's value goes, so the printed numbers are the folded values: 42 and 3 for
+// two different `n`, not one number a type check could have predicted.
+
+import { Graph, Node, graph_of, nodes, inputs, exit, open, replace, eval, commit, op, op_name } from graph
+
+// Two operations of constant operands: one multiplies, one adds. Which of them is folded is decided
+// at run time, by looking at the draft.
+func subject() => int sync {
+    println('subject runs')
+    let a = 21 * 2
+    let b = 1 + 2
+    return a + b
+}
+
+func exitOf(g: Graph) => Node spelling {
+    return match exit(g) {
+        case null => nodes(g)[0]
+        case n => n
+    }
+}
+
+// The operator a node names, as the graph writes it.
+func opText(n: Node) => string spelling {
+    return match op(n) {
+        case null => ''
+        case o => op_name(o)
+    }
+}
+
+// The pure arithmetic of the body, in the graph's own order. Picking one of them by an index the
+// program computes is the point: `eval` is handed a node value, not a spelling.
+func arith(g: Graph) => Node[] spelling {
+    return nodes(g)->filter<func (n: Node) => bool opText(n) == ':op/mul_l' || opText(n) == ':op/add_l'>
+}
+
+// Folds the `which`-th arithmetic node and makes the function give that value, then runs the result:
+// the number printed is what the folded node computes.
+func foldAndRun(which: int) => int spelling sync {
+    let d = open(subject)
+    let picks = arith(d)
+    let n = picks[which]
+    println(`[eval] which=${which} op=${opText(n)} operands=${len(inputs(n))}`)
+    let folded = eval(n) ?? n
+    replace(exitOf(d), folded)
+    let edited = commit::<() => int>(d) !! subject
+    println(`[run] the edited function: ${edited()}`)
+    return 0
+}
+
+func main() => int spelling sync {
+    foldAndRun(0)
+    return 0
+}
