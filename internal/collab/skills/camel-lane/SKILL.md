@@ -124,6 +124,7 @@ pwsh -NoProfile -File <你的工作树>\internal\tools\camel-remote.ps1 `
   ⇒ **读到 `[SUMMARY]` / `RUN_EXIT` / `[TREE]` 就当读数到手，立刻按你记录的 PID `taskkill /T /F` 收掉整棵进程树**，锁随之释放；不要等它、也不要为了绕锁去抢别人的树。
 · **要换一把宿主 tree lock，就换 checkout 路径**：锁是按 checkout 路径的 cksum 建的。合法的换法只有“另开一棵树”（`-Detach <sha>` 造测量树，或 `git worktree add --detach`）并跑完删掉；**不要动别人的树，也不要去动别人的锁**。
 · **新开的树没有钩子**：`git worktree add` 不会装 `.husky/_`，而 `npx husky` 需要那棵树里有 `node_modules`。缺钩子时 git **不报错**（`core.hooksPath` 指向不存在的目录 ⇒ 每一次 push 的所有钩子静默跳过）。要么用 `new-worktree.ps1` 建（它把这件事做成一步），要么从主检出复制 **husky 自己的 `_` 目录**（不是手写），再用 `-VerifyOnly` 读到检查器自己的输出才算有守卫。
+· **新开的树还缺 `internal/tools/camel-gate.local.json`**（git-ignored 的本地闸门配置）：2026-11-27 一条车道换到新树后，第一次起跑直接报错退出，把本地配置从原树复制过去才跑起来。`new-worktree.ps1` 不管这个文件（它不入库，所以也不该入库）。换树时先 `Test-Path <新树>\internal\tools\camel-gate.local.json`，缺就从原树复制（同机、只读来源）。
 · **`-Check` 这一步现在是坏的**：出现 `[camel-remote] --- check <name>: node   ---`（脚本路径为空）之后 `node`
   会等 stdin 永久挂住，40 分钟后才 `exit 124`。见到这一行**不要等**：记下它、结束自己那个作业，改按
   `[SUMMARY]` / `RUN_EXIT` / `[TREE]` 取数，并在交回里写一行「该检查未取到、工具态」。
