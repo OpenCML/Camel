@@ -213,7 +213,8 @@ async function run() {
     // ---- 6. loaded from the live directory: the reload path, including the order of the two --------
     const liveD = path.join(sandbox, 'live-d')
     fs.mkdirSync(liveD, { recursive: true })
-    for (const name of ['index.js', 'measure.js', 'rules.js', 'client.js', 'package.json']) {
+    // Every module the plugin imports, so a module added to the plugin is copied without editing this list.
+    for (const name of fs.readdirSync(pluginDir).filter((entry) => entry.endsWith('.js') || entry === 'package.json')) {
         fs.copyFileSync(path.join(pluginDir, name), path.join(liveD, name))
     }
     const calls = []
