@@ -2,22 +2,22 @@
 // SPDX-License-Identifier: MIT
 
 #include "fastvm.h"
-#include "version_state.h"
 #include "camel/core/mm.h"
 #include "camel/core/module/module.h"
 #include "camel/core/rtdata/aggregate.h"
 #include "camel/core/rtdata/view.h"
 #include "camel/execute/fault_isolation.h"
 #include "camel/execute/loop_driver.h"
+#include "camel/execute/loop_frame.h"
 #include "camel/execute/observer.h"
 #include "camel/execute/operator_call.h"
 #include "camel/execute/pass/registration.h"
 #include "camel/profile/profile.h"
-#include "camel/execute/loop_frame.h"
 #include "camel/runtime/exec_plan.h"
 #include "camel/runtime/graph.h"
 #include "camel/utils/log.h"
 #include "opperf.h"
+#include "version_state.h"
 
 #include <algorithm>
 #include <limits>
@@ -80,9 +80,8 @@ inline void setFastVmGraphLengthOf(camel::runtime::GCGraph *graph, size_t length
 
 #if ENABLE_FASTVM_JIT
 inline jit::JitEntryFn fastVmJitEntryOf(camel::runtime::GCGraph *graph) {
-    return graph
-               ? reinterpret_cast<jit::JitEntryFn>(camel::runtime::fastVmStateOf(*graph).jitEntry)
-               : nullptr;
+    return graph ? reinterpret_cast<jit::JitEntryFn>(camel::runtime::fastVmStateOf(*graph).jitEntry)
+                 : nullptr;
 }
 
 inline void setFastVmJitEntryOf(camel::runtime::GCGraph *graph, jit::JitEntryFn fn) {
@@ -526,10 +525,10 @@ void FastVMSchedPass::reportConfig(std::ostream &os) const {
     // compiles nothing whichever mode its declaration asked for, and the MIR the JIT would keep
     // is kept by nobody. Everything else is what the constructor mapped in.
 #if ENABLE_FASTVM_JIT
-    const char *mode = jitConfig_.policy == jit::JitPolicy::Always
-                           ? "Always"
-                           : (jitConfig_.policy == jit::JitPolicy::OnDemand ? "OnDemand"
-                                                                           : "Disabled");
+    const char *mode =
+        jitConfig_.policy == jit::JitPolicy::Always
+            ? "Always"
+            : (jitConfig_.policy == jit::JitPolicy::OnDemand ? "OnDemand" : "Disabled");
     const size_t threshold = jitConfig_.hotThreshold;
     const bool traceMir    = enableJitTraceMir_;
 #else
@@ -931,8 +930,8 @@ slot_t FastVMSchedPass::invokeOwnedJitFrame(JitEntryFn fn, Frame *frame, void *j
         result = fn(slots, jitCtx);
     } catch (...) {
         // A frame goes back with a loop still open only when the run is unwinding past that loop's
-        // exit; what the loop held comes home before the slots are reset (camel/execute/loop_frame.h,
-        // `releaseWithOpenLoops`).
+        // exit; what the loop held comes home before the slots are reset
+        // (camel/execute/loop_frame.h, `releaseWithOpenLoops`).
         camel::core::mm::detail::nativeCodeDepth.fetch_sub(1, std::memory_order_relaxed);
         camel::execute::releaseWithOpenLoops(framePool_, frame);
         throw;
@@ -966,8 +965,9 @@ void FastVMSchedPass::raiseJitFault(void *jitCtx, Frame *frame) {
     const ExecutionSite site =
         makePcExecutionSite(context_->sourceContext(), frame, pc, 0, "", ExecutionSiteKind::JitPc);
     const std::string graphName = frame->graphName();
-    // A loop this frame is still inside gives back what it held: the frame is released at once and the
-    // slots that name the value go with it (camel/execute/loop_frame.h, `releaseWithOpenLoops`).
+    // A loop this frame is still inside gives back what it held: the frame is released at once and
+    // the slots that name the value go with it (camel/execute/loop_frame.h,
+    // `releaseWithOpenLoops`).
     camel::execute::releaseWithOpenLoops(framePool_, frame);
     const RuntimeFault fault =
         kind == x64::JitFaultKind::DivisionByZero ? RuntimeFault::make(RuntimeDiag::DivisionByZero)
@@ -1010,19 +1010,27 @@ slot_t FastVMSchedPass::runFramedJit(JitEntryFn fn, Frame *frame, void *jitCtx) 
     // has framed code, that code becomes `cur` and nothing is returned: the loop enters it.
     // Otherwise the callee runs to its end here, in frameless code or in the interpreter, and
     // its result is returned.
+    //
+    // `entry` is the callee's compiled entry and `framedEntry` the shape of that code, both read by
+    // the caller from the call's own bytecode, where the compile wrote them (fastvm.cpp,
+    // `compileAndCacheGraph`; bytecode.h, `getFuncExtraFramed`). A call whose target was compiled
+    // therefore costs no read of the graph's version state here. A callee reached through an
+    // interpreted tail call has no call bytecode in hand and asks the state, as before: that is a
+    // graph reached this way, not the steady state of a call.
     auto startCallee = [&](camel::runtime::GCGraph *target,
-                           Frame *callee) -> std::optional<slot_t> {
+                           Frame *callee,
+                           JitEntryFn entry,
+                           bool framedEntry) -> std::optional<slot_t> {
         for (;;) {
-            JitEntryFn targetFn = jitFnOf(target);
-            if (targetFn != nullptr && fastVmJitFramedOf(target)) {
+            if (entry != nullptr && framedEntry) {
                 cur    = callee;
-                curFn  = targetFn;
+                curFn  = entry;
                 resume = 0;
                 return std::nullopt;
             }
             cur = callee;
-            if (targetFn != nullptr) {
-                return invokeOwnedJitFrame(targetFn, callee, jitCtx);
+            if (entry != nullptr) {
+                return invokeOwnedJitFrame(entry, callee, jitCtx);
             }
             // The interpreter nests on the native stack here; like its own nested calls it
             // is refused when the stack is nearly full.
@@ -1042,9 +1050,20 @@ slot_t FastVMSchedPass::runFramedJit(JitEntryFn fn, Frame *frame, void *jitCtx) 
                 return interpreted.result;
             }
             // It ended in a tail call of compiled code: that code is the callee now.
-            callee = interpreted.rootFrame;
-            target = callee->graph();
+            callee      = interpreted.rootFrame;
+            target      = callee->graph();
+            entry       = jitFnOf(target);
+            framedEntry = entry != nullptr && fastVmJitFramedOf(target);
         }
+    };
+
+    // Where the caller continues when the activation it starts returns: its own entry, kept beside
+    // the pc and the resume address of the call, so that a return needs no read of the version
+    // state either.
+    auto saveCallerEntry = [&](size_t depth, JitEntryFn entry) {
+        if (callerEntryStack_.size() < pcStack_.size())
+            callerEntryStack_.resize(pcStack_.size());
+        callerEntryStack_[depth] = entry;
     };
 
     try {
@@ -1070,22 +1089,27 @@ slot_t FastVMSchedPass::runFramedJit(JitEntryFn fn, Frame *frame, void *jitCtx) 
                 switch (exitKind) {
                 case x64::JitExitKind::Call: {
                     fastVmCallBoundarySafepoint();
-                    bc                 = materializeCallTarget(pc, bc);
-                    auto *target       = getFuncExtraRuntimeGraph(bc);
-                    const size_t depth = stackDepth_;
+                    bc           = materializeCallTarget(pc, bc);
+                    auto *target = getFuncExtraRuntimeGraph(bc);
+                    // What the compile wrote onto this call's own bytecode: the callee's entry and
+                    // whether its code is framed (bytecode.h, `getFuncExtraFramed`).
+                    const JitEntryFn entry = reinterpret_cast<JitEntryFn>(getFuncExtraFn(bc));
+                    const bool framedEntry = entry != nullptr && getFuncExtraFramed(bc);
+                    const size_t depth     = stackDepth_;
                     push(pc, cur);
                     if (resumeStack_.size() < pcStack_.size())
                         resumeStack_.resize(pcStack_.size());
                     resumeStack_[depth] = resume;
-                    Frame *caller       = cur;
-                    Frame *callee       = framePool_.acquire(target);
-                    cur                 = callee;
+                    saveCallerEntry(depth, curFn);
+                    Frame *caller = cur;
+                    Frame *callee = framePool_.acquire(target);
+                    cur           = callee;
                     populateDirectCallFrame(
                         caller,
                         callee,
                         bc->directCallSrcArgs(),
                         bc->directCallDstSlots());
-                    if (auto value = startCallee(target, callee)) {
+                    if (auto value = startCallee(target, callee, entry, framedEntry)) {
                         result          = *value;
                         activationEnded = true;
                     }
@@ -1095,6 +1119,10 @@ slot_t FastVMSchedPass::runFramedJit(JitEntryFn fn, Frame *frame, void *jitCtx) 
                     fastVmCallBoundarySafepoint();
                     bc           = materializeCallTarget(pc, bc);
                     auto *target = getFuncExtraRuntimeGraph(bc);
+                    // The callee's entry and its code's shape, from this call's bytecode; a tail
+                    // call replaces the activation, so there is no caller entry to keep.
+                    const JitEntryFn entry = reinterpret_cast<JitEntryFn>(getFuncExtraFn(bc));
+                    const bool framedEntry = entry != nullptr && getFuncExtraFramed(bc);
                     captureCallArgValues(cur, bc->directCallSrcArgs(), tailArgValuesScratch_);
                     framePool_.release(cur);
                     Frame *callee = framePool_.acquire(target);
@@ -1103,7 +1131,7 @@ slot_t FastVMSchedPass::runFramedJit(JitEntryFn fn, Frame *frame, void *jitCtx) 
                         callee,
                         bc->directCallDstSlots(),
                         tailArgValuesScratch_);
-                    if (auto value = startCallee(target, callee)) {
+                    if (auto value = startCallee(target, callee, entry, framedEntry)) {
                         result          = *value;
                         activationEnded = true;
                     }
@@ -1177,7 +1205,7 @@ slot_t FastVMSchedPass::runFramedJit(JitEntryFn fn, Frame *frame, void *jitCtx) 
             pc                    = callPc;
             writeCallSlot(caller, bytecodes_[callPc].result, result);
             cur    = caller;
-            curFn  = jitFnOf(caller->graph());
+            curFn  = callerEntryStack_[stackDepth_];
             resume = resumeStack_[stackDepth_];
         }
     } catch (...) {
@@ -1243,8 +1271,7 @@ void FastVMSchedPass::attachJitEntry(camel::runtime::GCGraph *graph, JitEntryFn 
     // The entry names the version: the lease of its bytecode range clears the entry when the
     // collector frees the version. The hook holds the cache weakly, as the version may outlive
     // the pass (and, with it, the cache it names).
-    auto *lease =
-        static_cast<CodeLease *>(camel::runtime::fastVmStateOf(*graph).codeLease.get());
+    auto *lease = static_cast<CodeLease *>(camel::runtime::fastVmStateOf(*graph).codeLease.get());
     if (lease == nullptr) {
         return;
     }
@@ -1385,8 +1412,15 @@ void FastVMSchedPass::compileAndCacheGraph(camel::runtime::GCGraph *graph, size_
         for (size_t pc = 0; pc < bytecodes_.size();) {
             Bytecode &bc = bytecodes_[pc];
             if (bc.opcode == OpCode::FUNC || bc.opcode == OpCode::TAIL) {
-                if (getFuncExtraFn(&bc) == nullptr && getFuncExtraRuntimeGraph(&bc) == graph)
+                if (getFuncExtraFn(&bc) == nullptr && getFuncExtraRuntimeGraph(&bc) == graph) {
+                    // The entry and the shape of the code it enters, together: the driver of framed
+                    // code reads both from the call's own bytecode (bytecode.h,
+                    // `getFuncExtraFramed`) rather than asking the graph's version state at every
+                    // call -- a plan read from the fact store plus a locked table, three times per
+                    // call on a workload that calls once per iteration.
                     setFuncExtraFn(&bc, reinterpret_cast<void *>(fn));
+                    setFuncExtraFramed(&bc, framed);
+                }
             }
             pc += bc.opsize;
         }
@@ -1570,8 +1604,7 @@ FastVMConfig makeDefaultFastVmJitConfig() {
 /// `std::fvm` is the bytecode VM, and `std::fastvm::jit` is the same VM with the JIT switched on;
 /// `std::jit` is the alias its declaration gives it.
 const PassKernel fastVmKernel(
-    "std::fvm",
-    [](const camel::core::context::context_ptr_t &ctx, const PassArgs &args) {
+    "std::fvm", [](const camel::core::context::context_ptr_t &ctx, const PassArgs &args) {
         FastVMConfig config{};
         config.statsPath    = pathArgument(args, "stats");
         config.reportConfig = args.getBool("config");
@@ -1579,11 +1612,10 @@ const PassKernel fastVmKernel(
     });
 
 const PassKernel fastVmJitKernel(
-    "std::fastvm::jit",
-    [](const camel::core::context::context_ptr_t &ctx, const PassArgs &args) {
-        FastVMConfig config = makeDefaultFastVmJitConfig();
-        config.statsPath    = pathArgument(args, "stats");
-        config.reportConfig = args.getBool("config");
+    "std::fastvm::jit", [](const camel::core::context::context_ptr_t &ctx, const PassArgs &args) {
+        FastVMConfig config     = makeDefaultFastVmJitConfig();
+        config.statsPath        = pathArgument(args, "stats");
+        config.reportConfig     = args.getBool("config");
         const int64_t threshold = args.getInt("hot_threshold");
         config.jitHotThreshold  = threshold < 0 ? 0 : static_cast<size_t>(threshold);
         return std::make_unique<FastVMSchedPass>(ctx, config);
