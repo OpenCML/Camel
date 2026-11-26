@@ -1,0 +1,12 @@
+// The reverse direction of the same name: an `int[]` still selects the array operator's rule, and
+// the prelude's `Range` functions of the same spelling do not take the call away from it
+// (design principles 4.3, 4.4).
+func double(x: int) => int {
+    return x * 2
+}
+
+func main() => int sync {
+    println([1, 2, 3]->map<double>)
+    println(map<double>([1, 2, 3]))
+    return 0
+}
