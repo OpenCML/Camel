@@ -112,3 +112,47 @@ function New-CamelRunDirCommand {
     $root = $LogRootOnHost.TrimEnd('/')
     return "if [ -d `"$root/$Run`" ]; then ( cd `"$root/$Run`" && pwd ); fi"
 }
+
+# `-FetchFile <path>` without `-FromThisRun`: did this run write the file?
+#
+# The tool pushes the local copy of that file to the host on purpose, so that a two-run comparison
+# finds the previous reading there. A run that does not write the file (a tool that now reports under
+# another name) then leaves the pushed copy in place, and fetching it back would hand last run's
+# reading over as this run's. So the host takes the file's modification time (or its absence) once the
+# checkout and the untracked files are in place and before the plan starts, and compares it when the
+# fetch comes. Unchanged means the run did not write it: nothing is sent, and the line says so.
+#
+# Both halves are generated here from the one path, so they cannot disagree about what is compared.
+# The stamp is the nanosecond mtime, so a rewrite within the same second is still seen.
+function New-CamelFetchStampCommand {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true)][string]$Rel
+    )
+    return 'camel_fetch_stamp=$(stat -c %y "$R/' + $Rel + '" 2>/dev/null || echo absent)'
+}
+
+function New-CamelFetchStageCommand {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true)][string]$Rel
+    )
+    $text = @'
+camel_fetch_now=$(stat -c %y "$R/FETCHREL" 2>/dev/null || echo absent)
+if [ "$camel_fetch_now" = "$camel_fetch_stamp" ] && [ "$camel_fetch_now" = absent ]; then
+echo 'FETCH_MISSING=FETCHREL'
+echo '[camel-remote] -FetchFile: the run did not write FETCHREL, and the host has none; nothing was fetched'
+elif [ "$camel_fetch_now" = "$camel_fetch_stamp" ]; then
+echo 'FETCH_UNCHANGED=FETCHREL'
+echo '[camel-remote] -FetchFile: the run did not write FETCHREL; the file on the host is the copy this run pushed in; nothing was fetched'
+elif [ -f "$R/FETCHREL" ]; then
+echo '__CAMEL_REMOTE_FETCH_BEGIN__'
+base64 "$R/FETCHREL"
+echo '__CAMEL_REMOTE_FETCH_END__'
+else
+echo 'FETCH_MISSING=FETCHREL'
+echo '[camel-remote] -FetchFile: the host has no FETCHREL (the run removed it); nothing was fetched'
+fi
+'@
+    return $text.Replace('FETCHREL', $Rel)
+}
