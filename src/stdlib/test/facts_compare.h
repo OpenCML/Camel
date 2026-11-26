@@ -25,12 +25,35 @@
  * view calls a node: `free` is "a pass may arrange it anywhere" -- the conjunction of the four terms
  * of design principles 3.4 -- `kept` is "a pass must leave it where the program wrote it", and
  * `no_fact` is a node the store answered nothing for. The three tables under the total cut the same
- * answers by node kind, by the family the answer comes from (an operator that may fault, one that
- * writes or reaches outside the program, a branch, a loop, a call, a gate -- that is, *which term*
- * the kept nodes failed), and by node kind and operator together. `kept_example` is the first node of
- * a row the fact kept, so a split row carries a node to look at and not only a count. A row that is
- * absent is a row the program does not carry, which is why a case asks for the rows it expects by
- * name instead of reading a missing line as agreement.
+ * answers by node kind, by the family the answer comes from, and by node kind and operator together.
+ * `kept_example` is the first node of a row the fact kept, so a split row carries a node to look at
+ * and not only a count. A row that is absent is a row the program does not carry, which is why a case
+ * asks for the rows it expects by name instead of reading a missing line as agreement.
+ *
+ * The families are the four terms of 3.4 read as places to stand a count, plus the node kinds whose
+ * answer is not an operator record's. A family is the *first* term the node fails, in the order 3.4
+ * states them, so one node is one row and never two:
+ *
+ *   the term 3.4 states    the family the row lands in   what that row means
+ *   `pure`                 `oper_not_free`               it writes a cell of its own graph
+ *   `noExternalEffect`     `oper_not_free`               it reaches outside the program
+ *   `cannotFault`          `oper_may_fault`              it may raise a fault where it is written
+ *   `terminates`           `oper_not_free`               it may not end
+ *   all four hold          `oper`                        the row that is free
+ *   --                     `oper_no_record`              an OPER node naming no operator: a FILL or
+ *                                                        an ACCS (`graph/gc_graph_view.h`), answered
+ *                                                        from the operation the node performs
+ *   --                     `value`, `call`, `brch`,      the answer is not an operator record's: a
+ *                          `loop`, `gate`                value is computed from what it reads, a
+ *                                                        call and a gate are anchors, a branch and a
+ *                                                        loop stand for what runs inside them
+ *
+ * `oper_not_free` is one row for three of the four terms on purpose. A row per term would be four
+ * tables where the reader's question is one -- may a pass move this node -- and a node kept for a
+ * write, for a reach outside the program, or for an end nobody promised is one row of that question.
+ * A caller that needs the exact bit reads the terms themselves: `Arrangeable::all()`,
+ * `operatorArrangeable` and `toString` (`camel/facts/arrangeable.h`) carry all four, and that is what
+ * a placement decision acts on. The families are a census, not a second answer.
  *
  * There is nothing here to compare `core.arrangeable` with: one question has one answer, and a copy
  * of an older answer kept in a test to agree with would be a second statement of the same answer.

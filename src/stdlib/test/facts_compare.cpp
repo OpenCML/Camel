@@ -323,26 +323,12 @@ const char *nodeKindName(camel::graph::NodeKind kind) {
     return "?";
 }
 
-/// The families the table counts, in the order the terms of design principles 3.4 are stated: an
-/// operator fails the fault term first, then the purity and the reach it declares; a value, a branch,
-/// a loop, a call and a gate are one family each, because their answer does not come from an operator
-/// record at all.
-///
-///   `value`           a value, a port or a binding: computed from what it reads, with nothing to
-///                     write, nothing to fail and nothing to wait for, so it is free;
-///   `oper`            an operator that answers all four terms: pure, reaching nothing outside the
-///                     program, unable to fault where it is written, and known to end;
-///   `oper_may_fault`  an operator whose fault term is false: it may raise a fault where the program
-///                     wrote it, so 3.4 keeps it there;
-///   `oper_not_free`   an operator that cannot fault and is still not free: it writes a cell or
-///                     reaches outside the program -- the `pure` and `noExternalEffect` terms;
-///   `oper_no_record`  an OPER node whose operator the view cannot name -- a FILL or an ACCS
-///                     (`graph/gc_graph_view.h`: the two kinds answer `NodeKind::Oper` and
-///                     `kNoOper`), which the fact answers from the operation the node performs;
-///   `call`            a CALL or a FUNC node: an anchor that may be an effect, and a body that is
-///                     another graph's content, so the kind declines;
-///   `brch` / `loop`   a branch or a loop: it stands for what runs inside it;
-///   `gate`            the hand-on of an order, refused whatever its four terms are.
+/// The families the table counts, and the index each one has. What a family *means* -- which term of
+/// design principles 3.4 a row reports, and which node kinds answer without an operator record -- is
+/// the roster in `facts_compare.h`, kept there and not repeated here so the two cannot say different
+/// things. What this enumeration fixes is the order the lines print in and the index `familyIndex`
+/// returns: `value` first for the kind that is most of every program, then the operator families in
+/// the order 3.4 states its terms, then the kinds whose answer is not a record's.
 constexpr size_t kFamilyCount = 9;
 constexpr const char *kFamilyNames[kFamilyCount] = {
     "value",
