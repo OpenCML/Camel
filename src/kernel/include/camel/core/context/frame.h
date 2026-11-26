@@ -47,6 +47,10 @@ class Frame : public rtdata::Object {
     const camel::runtime::GCGraph *runtimeGraph() const { return runtimeGraph_; }
     bool hasRuntimeGraph() const { return runtimeGraph_ != nullptr; }
 
+    // These two stay inline: `codeAt`, `typeAt`, `get` and `set` reach them, and the interpreter
+    // runs those for every node it executes -- a static-area operand or a typed read costs one
+    // call per instruction if the layout lookup is out of line. Their bodies are what keeps
+    // `runtime/graph.h` in this header (frame.cpp, `Frame::graphName`).
     const type::TupleType *runtimeDataLayout() const {
         GUARD(runtimeGraph_ != nullptr, "Runtime frame has no runtime graph for data layout.");
         return runtimeGraph_->runtimeDataType();
@@ -55,10 +59,10 @@ class Frame : public rtdata::Object {
         GUARD(runtimeGraph_ != nullptr, "Runtime frame has no runtime graph for static layout.");
         return runtimeGraph_->staticDataType();
     }
-    const std::string &graphName() const {
-        GUARD(runtimeGraph_ != nullptr, "Runtime frame has no runtime graph name.");
-        return runtimeGraph_->name();
-    }
+    // Out of line (frame.cpp): its callers are the two debug log lines below, the frame printer,
+    // and the virtual machine's fault, recursion-limit and stack-exhaustion paths -- none of them
+    // runs per dispatch, so the call it costs buys a smaller header for everyone who includes it.
+    const std::string &graphName() const;
 
     type::TypeCode codeAt(data_idx_t index) const {
         GUARD(index != 0, "Data index is invalid.");
