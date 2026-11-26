@@ -18,7 +18,6 @@
 #include <algorithm>
 #include <array>
 #include <atomic>
-#include <cstdlib>
 #include <cstring>
 #include <stdexcept>
 
@@ -40,22 +39,18 @@ BlockStats &stats() {
     return *value;
 }
 
-// CAMEL_MM_BLOCK_TRACE=1 asks where the block space's bytes go: live blocks are counted per size
-// class, and the counts are copied when the live-byte peak is reached, so the answer says what was
-// alive at the high-water mark rather than what is alive at exit (which is usually a tenth of it).
-// The counters are the same bytes noteBytesAdded already adds, only bucketed; nothing runs when the
-// switch is off.
+// The trace asks where the block space's bytes go: live blocks are counted per size class, and the
+// counts are copied when the live-byte peak is reached, so the answer says what was alive at the
+// high-water mark rather than what is alive at exit (which is usually a tenth of it). The counters
+// are the same bytes noteBytesAdded already adds, only bucketed; nothing runs while the switch is
+// off. The switch is the pass parameter `std::profile block_trace=true`, which the pass hands to
+// mm::enableBlockTrace (camel/core/mm.h): what a run records is decided by the program and its
+// command line, not by the environment (design principles 9.3).
 constexpr size_t kTraceBucket    = 256 * 1024;
 constexpr size_t kTraceBuckets   = 257; // 0 .. 64 MB in 256 KB steps, the last one is "larger"
 constexpr size_t kTraceReportTop = 6;
 
-bool traceBlocks() {
-    static const bool on = [] {
-        const char *value = std::getenv("CAMEL_MM_BLOCK_TRACE");
-        return value != nullptr && value[0] != '\0' && value[0] != '0';
-    }();
-    return on;
-}
+bool traceBlocks() noexcept { return camel::core::mm::blockTraceEnabled(); }
 
 struct BlockTrace {
     std::array<std::atomic<uint64_t>, kTraceBuckets> liveBlocks{};

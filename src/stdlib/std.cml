@@ -132,7 +132,12 @@ with <
     opstats: bool = false,
     /// Print one line for every value whose type the runtime reads while relocating it: the value,
     /// the type it is read as, and the tag and field count it carries.
-    variant_trace: bool = false
+    variant_trace: bool = false,
+    /// Record where the data blocks' bytes go: live blocks are counted per size class, and the
+    /// counts are snapshotted when the live-byte peak is reached, so the `blocks-at-peak:` lines of
+    /// the exit report say what was alive at the high-water mark. Off by default; needs gc_stats
+    /// to be on for the line to be printed.
+    block_trace: bool = false
 >
 export func profile::<F>(f: F) => F! when is_function::<F>()
 

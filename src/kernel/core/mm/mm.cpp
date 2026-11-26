@@ -50,6 +50,10 @@ std::atomic<bool> blockSpaceCreated{false};
 std::atomic<int> requestedStatsLevel{0};
 std::once_flag statsAtExitOnce;
 
+// std::profile block_trace=true: count live blocks per size class and snapshot the counts at the
+// live-byte peak. Read by the block allocator (block.cpp), set by the pass; off unless asked for.
+std::atomic<bool> requestedBlockTrace{false};
+
 // The allocator whose statistics are printed at exit.
 GenerationalAllocatorWithGC *statsInstance = nullptr;
 
@@ -212,6 +216,10 @@ void enableStatsReport(int level) {
 }
 
 bool statsReportEnabled() { return requestedStatsLevel.load(std::memory_order_acquire) != 0; }
+
+void enableBlockTrace(bool on) { requestedBlockTrace.store(on, std::memory_order_release); }
+
+bool blockTraceEnabled() noexcept { return requestedBlockTrace.load(std::memory_order_acquire); }
 
 // Managed automatically by the GC system and must remain reachable from roots.
 GenerationalAllocatorWithGC &autoSpace() {
