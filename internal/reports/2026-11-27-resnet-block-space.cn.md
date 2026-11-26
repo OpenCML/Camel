@@ -192,10 +192,13 @@ cpu  nn:conv2d_input_grad    40 次调用     40 个块载荷   81.38 MiB
 
 ```
 · `std::profile gc_stats=1` 的退出报告新增两行：`[camel] blocks:`（四项计数，已有值）与
-  `[camel] blocks-at-peak:`（仅 CAMEL_MM_BLOCK_TRACE=1 时才非空）。
-· 按大小类统计只在 CAMEL_MM_BLOCK_TRACE=1 时计数：每次分配/释放各一次放宽原子加，峰值时刻拷一份快照。
+  `[camel] blocks-at-peak:`（仅按大小类统计开启时才非空）。
+· 按大小类统计只在 `std::profile block_trace=true` 时计数：每次分配/释放各一次放宽原子加，
+  峰值时刻拷一份快照。
+  （这条读数最早是用一个环境变量开的；该开关已按设计原则 9.3 改成 pass 参数 `block_trace`，
+   环境里不再有任何 `CAMEL_MM_*` 开关 —— 见第 11 节。）
   快照在其它线程仍在分配时取得，各类可能各差一个块 —— 足以指出哪些大小类撑起了峰值，不足以做精确账。
-· 关闭时这两处都不执行（`traceBlocks()` 一次静态初始化后的布尔读）。
+· 关闭时这两处都不执行（`traceBlocks()` 一次原子读，读到关闭就跳过计数）。
 ```
 
 ## 9. "原地累加能消掉多少"的两个比例（`task-99` ②）
@@ -388,3 +391,48 @@ pwsh -NoProfile -File internal\tools\camel-test.ps1 -Path D:\Projects\Camel-wt\p
      -Plan test/plans/probe/resnet_block_space.plan.toml -Jobs 1
 # 计划自己的判据现在是 "limit=128 completed" / "limit=3840 completed"（读数，不是目标）
 ```
+
+## 11 按大小类的统计改成 pass 参数：环境开关 → `std::profile block_trace=true`
+
+§8.6 里按大小类的那套计数，最早是用一个**环境变量**开的。它是诊断，但它违反了两条：
+
+```
+· 设计原则 9.3：一次运行记录什么，由程序、命令行与构建选项决定，不由环境决定；
+· test/tools/check-env-switches.mjs 的账本"只减不增"（文件头写明收缩到一个 CAMEL_TILES_NVRTC），
+  加一行把它变成登记表，就等于把守卫的作用反过来。
+⇒ 修法不是进账本，而是走已有的那条通道：pass 参数。
+```
+
+改动（四个点，都是"把开关交给已经在传信息的那条路"）：
+
+```
+· src/stdlib/std.cml              `std::profile` 增加 `block_trace: bool = false`
+· src/stdlib/std/profile/profile.cpp  参数 → ProfilePass → `mm::enableBlockTrace(true)`
+                                    （与 `gc_stats` → `enableStatsReport` 同一条路，profile.cpp:126 旁）
+· src/kernel/include/camel/core/mm.h  `enableBlockTrace` / `blockTraceEnabled`
+· src/kernel/core/mm/block.cpp    `traceBlocks()` 从 getenv 改成读这个标志；
+                                  头文件 `block.h` 与 <cstdlib> 同步清理
+```
+
+读数（同一条命令，只差一个参数）：
+
+```
+$ camel.exe test\cases\...\rebinding_loop.cml "std::profile" gc_stats=1 block_trace=true std::nvm
+  [camel] blocks: live=63 bytes=13160 peak=13160 created=63 freed=0
+  [camel] blocks-at-peak: blocks=61 of 63 created
+  [camel] blocks-at-peak: size=0KB blocks=61 bytes=13088
+
+$ camel.exe ... "std::profile" gc_stats=1 std::nvm            （不带 block_trace）
+  [camel] blocks: live=63 bytes=13160 peak=13160 created=63 freed=0
+  （没有 blocks-at-peak: 行 —— 开关是开关，不是常开）
+```
+
+守卫与判据：
+
+```
+node test/tools/check-env-switches.mjs     → exit 0（PASS: 6 CAMEL_ 读取全部有账本行，0 处账本外）
+git grep -n 'CAMEL_MM_BLOCK_TRACE'         → 0 命中（改动前 6：2 处代码/注释、2 处 block.h 文档、2 处本报告）
+registry.no_env_switches                   → [PASS]
+```
+
+⇒ 统计功能一行没删：`[camel] blocks: peak=` 照旧，按大小类明细只是从"环境变量开"变成"pass 参数开"。

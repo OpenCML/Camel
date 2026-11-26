@@ -95,11 +95,10 @@ std::string joined(const std::vector<std::string> &texts, size_t limit = 6) {
 ProfilePass::ProfilePass(
     const camel::core::context::context_ptr_t &ctx, camel::profile::ReportOptions options,
     std::string jsonPath, int gcStats, bool typeStats, std::string effectTracePath, bool opStats,
-    bool variantTrace)
+    bool variantTrace, bool blockTrace)
     : RuntimeGraphRewritePass(ctx), options_(options), jsonPath_(std::move(jsonPath)),
-      gcStats_(gcStats), typeStats_(typeStats),
-      effectTracePath_(std::move(effectTracePath)), opStats_(opStats),
-      variantTrace_(variantTrace) {
+      gcStats_(gcStats), typeStats_(typeStats), effectTracePath_(std::move(effectTracePath)),
+      opStats_(opStats), variantTrace_(variantTrace), blockTrace_(blockTrace) {
     // The kernel-timing table is turned on here, in the constructor, not in apply(): a module's
     // kernel map is built while the program compiles, which is before any pass is applied, so a
     // reading that decides what the map holds has to be named before that. The driver constructs
@@ -130,6 +129,12 @@ const Program *ProfilePass::apply(const Program *program, std::ostream &os) {
     }
     if (!effectTracePath_.empty()) {
         camel::core::effect_trace::setTraceFile(effectTracePath_);
+    }
+    if (blockTrace_) {
+        // Where the block space's bytes go, counted per size class: the reading is of the
+        // allocator, and its line is printed with the rest of the exit report (mm.h,
+        // enableBlockTrace).
+        camel::core::mm::enableBlockTrace(true);
     }
     if (variantTrace_) {
         // A reading of the runtime, not of the session: one line per value whose type is read while
@@ -278,7 +283,8 @@ const PassKernel profileKernel(
             args.getBool("type_stats"),
             pathArgument(args, "effect_trace"),
             args.getBool("opstats"),
-            args.getBool("variant_trace"));
+            args.getBool("variant_trace"),
+            args.getBool("block_trace"));
     });
 
 } // namespace

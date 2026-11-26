@@ -162,12 +162,13 @@ struct BlockTraceEntry {
 };
 
 /// The size classes that held the block space's high-water mark, largest first. Only meaningful
-/// under `CAMEL_MM_BLOCK_TRACE=1`, which is what counts them; returns how many entries were
-/// written, at most `capacity`.
+/// while the trace is on (`std::profile block_trace=true`; mm.h, enableBlockTrace), which is what
+/// counts them; returns how many entries were written, at most `capacity`.
 size_t blockTraceAtPeak(BlockTraceEntry *out, size_t capacity) noexcept;
 
 /// How many blocks of every size were alive when the high-water mark was reached (the sum over
-/// the classes `blockTraceAtPeak` reports). Under `CAMEL_MM_BLOCK_TRACE=1`, else 0.
+/// the classes `blockTraceAtPeak` reports). With the trace on (`std::profile block_trace=true`),
+/// else 0.
 uint64_t blockTraceLiveAtPeak() noexcept;
 
 } // namespace camel::core::mm

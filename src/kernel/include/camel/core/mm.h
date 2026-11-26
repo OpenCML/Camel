@@ -74,6 +74,19 @@ void enableStatsReport(int level);
 /// counters) print their line under the same switch.
 bool statsReportEnabled();
 
+/// Asks where the block space's bytes go, the way `std::profile block_trace=true` does: live blocks
+/// are counted per size class and the counts are copied when the live-byte peak is reached, so the
+/// `blocks-at-peak:` lines of reportBlockUsage say what was alive at the high-water mark rather
+/// than what is alive at exit (which is usually a tenth of it). Off by default, and nothing runs
+/// while it is off. It is a pass parameter and not an environment variable because what a run
+/// records is decided by the program and its command line (design principles 9.3), and because the
+/// ledger of environment switches this project keeps may only shrink.
+void enableBlockTrace(bool on);
+
+/// True once enableBlockTrace(true) was called: the block allocator's per-size-class counters are
+/// the only thing that reads it (camel/core/mm/block.h, blockTraceAtPeak).
+bool blockTraceEnabled() noexcept;
+
 /// Selects the collector for this process. It has to be called before the auto space is first
 /// used (the spaces are laid out once); it returns false, and changes nothing, when that has
 /// already happened.
