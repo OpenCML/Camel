@@ -1236,6 +1236,10 @@ void FunctionEmitter::lowerOperator(Frame &frame, gc_node_ref_t ref, Block &out)
     bind(frame, ref, std::move(*expr), rule->inlinable, out, operatorHint(uri));
 }
 
+// The iterables this lowering has are the array and the interval, and those are all of them: a
+// `for` over a stream -- one the program wrote, or the one a range answers with -- arrives as a
+// loop with no iterable, whose round pulls with a call of the stream's value (the builder's
+// buildStreamLoop), and that call is lowered as the call it is. A third branch would not be taken.
 void FunctionEmitter::lowerLoop(
     Frame &frame, gc_node_ref_t loop, const std::vector<gc_node_ref_t> &order, Block &out) {
     auto *g = frame.graph;
