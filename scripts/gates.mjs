@@ -70,7 +70,7 @@
 import { spawn } from 'node:child_process'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { DETACH_TREE, killProcessTree } from './kill-tree.mjs'
+import { DETACH_TREE, killProcessTree } from '../test/tools/kill-tree.mjs'
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 
