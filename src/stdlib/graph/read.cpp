@@ -752,12 +752,30 @@ GraphId calledGraphOf(const GCGraph &graph, gc_node_ref_t call) {
 }
 
 /// The graph a CALL or FUNC node names, null for any other node. A node of the draft being
-/// rewritten names no graph: a draft is not a published version, so a condition cannot follow a
-/// call (and a rule's pattern cannot match one).
+/// rewritten answers the graph the program has, because the callee of a call the draft holds is a
+/// published graph: the draft names it by `GraphId` and the program resolves it (design 15.1 -- the
+/// draft is the graph it edits, so a query about one of its nodes is answered from the draft). A
+/// CALL node of a draft is not answered: it carries its callee as a function value, and the value's
+/// graph is not a record the draft stores.
 slot_t calleeKernel(ArgsView &, ArgsView &norm, Context &) {
     const auto *handle = norm.get<Handle *>(0);
     if (handle->transaction() != nullptr) {
-        return NullSlot;
+        const NodeView node = viewOf(handle, "graph.callee");
+        if (node.kind() != GCNodeKind::Func) {
+            return NullSlot;
+        }
+        // The draft keeps the callee as a `GraphId`, and the program holds the graph it names: the
+        // handle is the published one, so `name(g)` and the other graph reads answer the function
+        // the call names. The program is the draft's, not the handle's: a handle that names a
+        // transaction keeps no program of its own.
+        const Program *program = node.draft().program();
+        const GraphId callee   = node.draft().calleeIdOf(handle->index());
+        if (program == nullptr || !isValid(callee) || program->graph(callee) == nullptr) {
+            return NullSlot;
+        }
+        return makeSome(
+            toSlot(graphHandle(program, callee)),
+            nullableOf(HandleType::get(HandleKind::Graph)));
     }
     const GCNode &node   = nodeOfFrozen(handle, "graph.callee");
     const GCGraph &graph = graphOf(handle, "graph.callee");
