@@ -17,12 +17,12 @@
  * are clean, so a non-zero exit can only be the argument contract. Nothing is pushed and no remote
  * is contacted: the hook is started by hand, in a directory that is a repository and nothing else.
  *
- * The remote name handed to the hook is `origin` and not a made-up one. The checker call sits behind
- * the hook's `origin` test, so any other name skips the call and every assertion below would hold
- * over an invocation that never happened -- the vacuous reading is the one a reader reaches for
- * first. The hook's other half, the integration shape lock, is a no-op stand-in here: that is
- * another file's subject, and its own text carries a work item number and a date, which the checker
- * this fixture runs would refuse and turn into a red this file does not mean.
+ * The URL handed to the hook is the project's. The checker call sits behind the hook's test for the
+ * project's remote, so any other URL skips the call and every assertion below would hold over an
+ * invocation that never happened -- the vacuous reading is the one a reader reaches for first. The
+ * push also names a real commit, because a push of nothing (or of a delete) reads no lines. The
+ * hook's other half, the develop lock and the integration shape lock, is a stand-in here that
+ * answers the project-remote question and nothing else: the real one is another file's subject.
  *
  * `--hook <file>` reads another hook instead of `.husky/pre-push`. It is how the negative control is
  * run without editing the hook: a copy with the required name removed must turn this file red. The
@@ -44,7 +44,7 @@ const checkerFile = path.join(treeRoot, 'scripts', 'check-process-traces.mjs');
 const checkerName = 'check-process-traces.mjs';
 const zeros = '0'.repeat(40);
 const branch = 'refs/heads/a-branch-this-fixture-never-sends';
-const url = 'https://example.invalid/Camel.git';
+const url = 'https://github.com/OpenCML/Camel.git';
 const notNamed = '--root <dir> is required';
 
 // --- the interpreter git itself would use ------------------------------------------------------
@@ -149,6 +149,12 @@ function buildFixture(hookSource, sh) {
         '#!/bin/sh\n' +
             '# The develop lock and the arrival shape are the other hook\'s subject, and this fixture\n' +
             '# sends neither a develop push nor an integration one: it exits where that hook does.\n' +
+            '# The project-remote test is answered the way the real one answers it, by URL.\n' +
+            'if [ "${1:-}" = --is-project-remote ]; then\n' +
+            '    case "${2:-}" in *github.com[:/]OpenCML/Camel*) exit 0 ;; esac\n' +
+            '    exit 1\n' +
+            'fi\n' +
+            'cat >/dev/null\n' +
             'exit 0\n',
     );
     write(dir, 'src/clean.c', '// The program reads nothing and answers zero.\nint main(void) { return 0; }\n');
@@ -159,7 +165,15 @@ function buildFixture(hookSource, sh) {
         standIn(recordPath, path.join(dir, 'checker-real', 'check-process-traces.mjs')),
     );
     execFileSync('git', ['init', '--quiet', '--initial-branch=main', dir], { encoding: 'utf8' });
-    return { dir, recordPath };
+    // The push names a commit, and the hook reads the lines that commit adds.
+    const inFixture = (...gitArgs) =>
+        execFileSync('git', ['-C', dir, '-c', 'user.email=t@example.invalid', '-c', 'user.name=t', ...gitArgs], {
+            encoding: 'utf8',
+        });
+    inFixture('add', '-A');
+    inFixture('commit', '--quiet', '-m', 'fixture');
+    const sha = inFixture('rev-parse', 'HEAD').trim();
+    return { dir, recordPath, sha };
 }
 
 // One path, two spellings: a hook's `$top` comes out of git with forward slashes and the drive in
@@ -178,7 +192,7 @@ function asKey(one, base) {
 }
 
 function measure(hookSource, shell) {
-    const { dir, recordPath } = buildFixture(hookSource, shell.sh);
+    const { dir, recordPath, sha } = buildFixture(hookSource, shell.sh);
     const readings = { dir, recordPath, entries: [] };
     let removed = false;
     let removeError = '';
@@ -190,11 +204,11 @@ function measure(hookSource, shell) {
         // husky's dispatcher starts the hook as `sh -e`, and the line it prints when the hook fails
         // is that dispatcher's; the same flag is used here, or a hook whose first command fails
         // would run on and this file would measure a state a real push never reaches.
-        const refLine = `${branch} ${zeros} ${branch} ${zeros}\n`;
+        const refLine = `${branch} ${sha} ${branch} ${zeros}\n`;
         try {
             readings.hookOutput = execFileSync(
                 shell.sh,
-                ['-e', '.husky/pre-push', 'origin', url, branch, zeros, branch, zeros],
+                ['-e', '.husky/pre-push', 'origin', url],
                 { cwd: dir, env: hookEnv(shell.root), input: refLine, encoding: 'utf8' },
             );
             readings.hookStatus = 0;

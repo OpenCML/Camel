@@ -36,10 +36,28 @@
 # develop", which is exactly how this hook would let through what it exists to stop.
 set -u
 
+# Whether a URL is the project's remote. A remote is recognised by where it points and never by the
+# name a clone gave it: `origin`, `gh` and a push made straight to the URL are the same remote.
+# `.husky/pre-push` asks this script (`--is-project-remote <url>`) instead of keeping a second
+# copy of the test, so both halves of the hook recognise it one way.
+is_project_remote() {
+    case "${1:-}" in
+        *github.com[:/]OpenCML/Camel | *github.com[:/]OpenCML/Camel.git) return 0 ;;
+    esac
+    return 1
+}
+if [ "${1:-}" = '--is-project-remote' ]; then
+    is_project_remote "${2:-}"
+    exit $?
+fi
+
 target_ref='refs/heads/develop'
 integration_ref='refs/heads/integration'
 
 refs=$(cat)
+# A caller that only wants to know whether this script ran sets the variable and reads this line;
+# no push is described by it.
+[ -z "${CAMEL_HOOK_PROBE:-}" ] || echo 'pre-push: probe answered by scripts/hooks/pre-push'
 develop_push=''
 develop_local=''
 develop_remote=''
@@ -65,23 +83,21 @@ EOF
 # shows only the lines people build on. So a push to the project's remote that would create or
 # move one of them is refused here. A delete is allowed, so that one that went out can be taken
 # back. The gate's staging pushes go to the build host by URL and are not to this remote.
-case "${2:-}" in
-    *github.com[:/]OpenCML/Camel | *github.com[:/]OpenCML/Camel.git)
-        while IFS=' ' read -r local_ref local_sha remote_ref remote_sha; do
-            [ -n "${remote_ref:-}" ] || continue
-            [ "$local_ref" != '(delete)' ] || continue
-            case "$remote_ref" in
-                refs/heads/lane/* | refs/heads/b/* | refs/heads/seat/* | refs/heads/meta/* | refs/tags/archive/*)
-                    echo "pre-push: refusing to push $remote_ref to the project's remote: working branches and archive tags stay in the local repository." >&2
-                    echo 'pre-push: the merge tools read lane branches locally; nothing needs them on the remote.' >&2
-                    exit 1
-                    ;;
-            esac
-        done <<EOF
+if is_project_remote "${2:-}"; then
+    while IFS=' ' read -r local_ref local_sha remote_ref remote_sha; do
+        [ -n "${remote_ref:-}" ] || continue
+        [ "$local_ref" != '(delete)' ] || continue
+        case "$remote_ref" in
+            refs/heads/lane/* | refs/heads/b/* | refs/heads/seat/* | refs/heads/meta/* | refs/tags/archive/*)
+                echo "pre-push: refusing to push $remote_ref to the project's remote: working branches and archive tags stay in the local repository." >&2
+                echo 'pre-push: the merge tools read lane branches locally; nothing needs them on the remote.' >&2
+                exit 1
+                ;;
+        esac
+    done <<EOF
 $refs
 EOF
-        ;;
-esac
+fi
 
 # --- every arrival on `integration` is a merge onto the tip it landed on ---------
 #
