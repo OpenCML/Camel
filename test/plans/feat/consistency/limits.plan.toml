@@ -382,6 +382,7 @@ backends = ["nvm", "fvm", "prl"]
 backends_agree = []
 envs = ["N=900000"]
 timeout_ms = 120000
+expect_exit = "script"
 verify_script = """
 assert(input.signal === null, `ended by signal ${input.signal}`)
 const stopped = input.exit_code === 1
@@ -399,6 +400,7 @@ backends_agree = []
 case = "../../../cases/consistency/limits/depth_value.cml"
 envs = ["N=400000"]
 timeout_ms = 120000
+expect_exit = "script"
 verify_script = """
 assert(input.signal === null, `ended by signal ${input.signal}`)
 assert(input.exit_code === 1, `exit ${input.exit_code}`)
@@ -493,6 +495,7 @@ backends = ["nvm", "fvm", "jit", "prl", "inline_jit"]
 backends_agree = []
 envs = ["N=9999"]
 timeout_ms = 60000
+expect_exit = "script"
 verify_script = """
 assert(input.signal === null, `ended by signal ${input.signal}`)
 const fault = input.diagnostics.find((d) => d.name === 'RuntimeDiag::MaxRecursionDepthExceeded')
@@ -539,6 +542,7 @@ backends_agree = []
 timeout_ms = 120000
 args = ["--max-recursion-depth", "100000", "${case}", "${backend}"]
 envs = ["N=50000"]
+expect_exit = "script"
 verify_script = """
 assert(input.signal === null, `ended by signal ${input.signal}`)
 const fault = input.diagnostics.find((d) => d.name === 'RuntimeDiag::MaxRecursionDepthExceeded')
@@ -555,6 +559,7 @@ backends_agree = []
 timeout_ms = 120000
 args = ["--max-recursion-depth", "100000", "${case}", "${backend}"]
 envs = ["N=100000"]
+expect_exit = "script"
 verify_script = """
 assert(input.signal === null, `ended by signal ${input.signal}`)
 const fault = input.diagnostics.find((d) => d.name === 'RuntimeDiag::MaxRecursionDepthExceeded')
@@ -571,6 +576,7 @@ backends_agree = []
 timeout_ms = 120000
 args = ["--max-recursion-depth", "100000", "${case}", "${backend}"]
 envs = ["N=900000"]
+expect_exit = "script"
 verify_script = """
 assert(input.signal === null, `ended by signal ${input.signal}`)
 const fault = input.diagnostics.find((d) => d.name === 'RuntimeDiag::MaxRecursionDepthExceeded')
@@ -587,6 +593,7 @@ backends_agree = []
 timeout_ms = 120000
 args = ["--max-recursion-depth", "1000000", "${case}", "${backend}"]
 envs = ["N=50000"]
+expect_exit = "script"
 verify_script = """
 assert(input.signal === null, `ended by signal ${input.signal}`)
 const fault = input.diagnostics.find((d) => d.name === 'RuntimeDiag::MaxRecursionDepthExceeded')
@@ -603,6 +610,7 @@ backends_agree = []
 timeout_ms = 120000
 args = ["--max-recursion-depth", "1000000", "${case}", "${backend}"]
 envs = ["N=100000"]
+expect_exit = "script"
 verify_script = """
 assert(input.signal === null, `ended by signal ${input.signal}`)
 const fault = input.diagnostics.find((d) => d.name === 'RuntimeDiag::MaxRecursionDepthExceeded')
@@ -619,6 +627,7 @@ backends_agree = []
 timeout_ms = 120000
 args = ["--max-recursion-depth", "1000000", "${case}", "${backend}"]
 envs = ["N=900000"]
+expect_exit = "script"
 verify_script = """
 assert(input.signal === null, `ended by signal ${input.signal}`)
 const fault = input.diagnostics.find((d) => d.name === 'RuntimeDiag::MaxRecursionDepthExceeded')
@@ -653,6 +662,7 @@ backends = ["nvm", "fvm", "jit", "prl", "inline_jit"]
 backends_agree = []
 envs = ["N=900000"]
 timeout_ms = 120000
+expect_exit = "script"
 verify_script = """
 assert(input.signal === null, `ended by signal ${input.signal}`)
 assert(input.exit_code === 0, `exit ${input.exit_code}`)

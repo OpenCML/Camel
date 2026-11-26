@@ -1,5 +1,5 @@
-// Copyright (c) 2026 The Camel Authors. All rights reserved.
-// Use of this source code is governed by the Apache License 2.0.
+// Copyright (c) the OpenCML Organization
+// SPDX-License-Identifier: MIT
 //
 // A case that crashes is not a green.
 //

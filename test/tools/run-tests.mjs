@@ -593,6 +593,26 @@ function validatePlanSchema(doc, planPath) {
                 )
             }
         }
+        // The exit code is expected in one of three writings, and the third exists because a
+        // `verify_script` may already own the question: its payload carries `exit_code` and
+        // `signal`, and an entry that states both a number here and an assertion there says one
+        // thing twice with two chances to disagree -- which is how twelve cases asserting "exit 1 or
+        // exit 0, never a signal" read as red the day the number here started being enforced.
+        // `"script"` says the script decides. No other word is a second form: a range, an "either",
+        // a "whatever" is a script's to say, not a field's to spell.
+        if (typeof entry.expect_exit === 'string' && entry.expect_exit !== 'script') {
+            throw new PlanSchemaError(
+                `${planLabel(planPath)}: ${where}: expect_exit: the only word it takes is "script" ` +
+                    `(then the verify script judges the exit code and the signal); an expected ` +
+                    `number is written as one`
+            )
+        }
+        if (entry.expect_exit === 'script' && !(typeof entry.verify_script === 'string' && entry.verify_script.length > 0)) {
+            throw new PlanSchemaError(
+                `${planLabel(planPath)}: ${where}: expect_exit = "script" without verify_script: ` +
+                    `that asks a script to judge a code it never sees`
+            )
+        }
     }
 }
 
@@ -2721,7 +2741,7 @@ async function validateTest(test, result, context) {
         }
     } else if (typeof test.expect_exit === 'number' && result.exitCode !== test.expect_exit) {
         failures.push(`expected exit ${test.expect_exit}, got ${describeExit(result)}`)
-    } else if (typeof test.expect_exit !== 'number' && !result.timedOut && result.exitCode !== 0) {
+    } else if (typeof test.expect_exit !== 'number' && test.expect_exit !== 'script' && !result.timedOut && result.exitCode !== 0) {
         // The default the schema documents -- `expectedSignalNumber` above says it in one sentence,
         // "an entry that says nothing is asserting it" -- was not the default this check applied: it
         // ran only when a plan wrote `expect_exit`, so an entry that forgot the field judged nothing

@@ -925,9 +925,11 @@ Every `[[tests]]` entry may use these common fields:
 - `args`
   Required in practice. Argument vector passed to `camel`. Variable tokens like `${case}` or `${run_jit}` are expanded before execution.
 - `expect_exit`
-  Optional integer expected process exit code. It and `expect_signal` are one question with one
-  answer: a table that writes both is a plan error, because a process killed by a signal has no exit
-  code to compare.
+  Optional integer expected process exit code, or the word `"script"` when the entry's
+  `verify_script` judges the exit code and the signal itself (its payload carries `exit_code` and
+  `signal`); an entry that writes neither expects `0`. It and `expect_signal` are one question with
+  one answer: a table that writes both is a plan error, because a process killed by a signal has no
+  exit code to compare.
 - `expect_signal`
   Optional signal the test's process must have been killed by, written as a name (`"ABRT"`,
   `"SIGABRT"`) or as the number this platform numbers it by (`15`, which is SIGTERM on both Windows
