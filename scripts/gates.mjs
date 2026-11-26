@@ -53,7 +53,7 @@
  * This is the whole-tree static layer: it needs no install and no build except where a gate says so
  * (8 reads the tree through the parsecheck tool, which a build produces; 10 regenerates the files the
  * node generators write and names the one that needs a build instead of passing over it). It is not
- * `scripts/release-gate.mjs`: that one runs the plan layers and the fourteen static checks a release
+ * `scripts/release-gate.mjs`: that one runs the plan layers and the thirteen static checks a release
  * decision needs. These ten are the ones a change must pass before it is handed over.
  *
  *   node scripts/gates.mjs              # all ten
