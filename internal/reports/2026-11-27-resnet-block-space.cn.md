@@ -197,3 +197,63 @@ cpu  nn:conv2d_input_grad    40 次调用     40 个块载荷   81.38 MiB
   快照在其它线程仍在分配时取得，各类可能各差一个块 —— 足以指出哪些大小类撑起了峰值，不足以做精确账。
 · 关闭时这两处都不执行（`traceBlocks()` 一次静态初始化后的布尔读）。
 ```
+
+## 9. "原地累加能消掉多少"的两个比例（`task-99` ②）
+
+### 9.1 比例一：2997 个 `tensor:add` 块载荷里多少来自反向的累加链（有分子分母的命令）
+
+同一份 `model.cml`、同一台工作站、同一 `--block-limit`，只改工作负载：
+
+```
+# 只前向（CAMEL_BENCH_WORKLOAD 空）
+  camel --block-limit 512 benchmarks/resnet/model.cml std::macro "std::profile" report=true std::nvm
+  → cpu  tensor:add   18 次调用   18 个块载荷   30.0 MiB
+
+# 一步训练（CAMEL_BENCH_WORKLOAD=train）
+  camel --block-limit 8192 ... 同上
+  → cpu  tensor:add 3489 次调用 2997 个块载荷 3.49 GiB
+```
+```
+分母：3489 次 add 调用（2997 个块载荷，3.49 GiB）
+分子：训练 − 只前向 = 3471 次（3471/3489 = 99.5%）、3.46 GiB（99.2%）
+⇒ **add 的块载荷几乎全部（99%）来自反向的梯度累加**，不是模型里手写的 `+`（手写的是 18 次/前向）。
+```
+
+### 9.2 比例二：这些累加的"目标只有一个写者"与"同布局"，一半是构造性的、一半还差一次读数
+
+```
+· 构造性（读代码可得，无需读数）：反向的累加全部由 `addTangentSum` 造 ——
+  src/stdlib/autodiff/pullback.cpp:2129-2159（`add(acc, contribution)`），
+  调用点 pullback.cpp:2228（反向循环的每一轮 `carried = carried + round`）与 :2141（聚合元素逐个累加）。
+  ⇒ 累加链上 `acc_old` 的唯一消费者就是这次 add（线程式累加），**"单写者"在构造上成立**，
+    且两个操作数都是同一 primal 的切向量（gradient_ops.cpp:549-552 的 `TangentSpace.addUri`），
+    同一 dtype / 同一 shape，`k::binary` 的产物是连续数组（elementwise_ops.cpp:43-49）
+  ⇒ **"同布局"在构造上成立**。
+· 还差的那一半：`acc_old` 是否可能是一个**视图**（切片/转置的别名）。`tensor:add` 的产物是连续数组，
+  但累加链的起点可能是 `row_add_at` 之类写进某个张量的行，此时"原地写进 acc_old"需要知道它背后没有别的活引用。
+  这一项**现有读数里没有**：`--copies` / `StorageReuse`（exec_plan.h、storage_reuse.h）只对 **update 节点**
+  （append／路径赋值／sort 重绑定）做"能否复用存储"的判定并打印，`tensor:add` 这类**算子节点**没有这个判定，
+  也没有消费者数的转储（`git grep consumers` 在 src 下只有 CLI 的一个开关名）。
+```
+
+### 9.3 一句话结论（给方向一定量）
+
+```
+若把反向的累加改成原地写：**能消掉 ≈3471 个块载荷 / 3.46 GiB（add 的 99%）**，
+即 §8 里 3.3 GB 峰值的主要来源；前提是"目标无别名"，而这正是缺的那一次读数。
+⇒ 最小的一步不是先改 autodiff，而是把 `StorageReuse` 的判定**扩展到算子节点**：
+  它复用现有判定机制（写者数已在计划里算过），既是那把"能不能原地写"的读数，也是方向一的实现入口。
+```
+
+### 9.4 本节的可复算命令
+
+```
+cd D:\Projects\Camel-wt\perf
+$env:CAMEL_HOME='D:\Projects\Camel-wt\perf\out\latest'
+$env:CAMEL_PACKAGES='D:\Projects\Camel-wt\perf\benchmarks\common'
+$env:CAMEL_BENCH_WEIGHTS='...\benchmarks\artifacts\resnet\weights'
+$env:CAMEL_BENCH_INPUT='...\benchmarks\artifacts\resnet\input.npy'
+$env:CAMEL_BENCH_THREADS='28'; $env:CAMEL_BENCH_WARMUP='1'; $env:CAMEL_BENCH_REPS='1'
+# 训练：$env:CAMEL_BENCH_WORKLOAD='train'  前向：$env:CAMEL_BENCH_WORKLOAD=''
+& out\latest\bin\camel.exe --block-limit 8192 benchmarks\resnet\model.cml std::macro "std::profile" report=true std::nvm
+```
