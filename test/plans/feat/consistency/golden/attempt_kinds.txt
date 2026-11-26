@@ -1,9 +1,9 @@
 value 3
-DivisionByZero | Attempted division by zero. | kinds.cml:8:14
-DivisionByZero | Attempted division by zero. | kinds.cml:11:14
-DivisionByZero | kinds.cml:14:14
+DivisionByZero | Attempted division by zero. | kinds.cml:7:42
+DivisionByZero | Attempted division by zero. | kinds.cml:8:42
+DivisionByZero | kinds.cml:9:49
 value 3
-IndexOutOfRange | Index 3 is out of range for an array of length 3. | kinds.cml:17:14
+IndexOutOfRange | Index 3 is out of range for an array of length 3. | kinds.cml:10:44
 value 42
-InvalidNumberText | Cannot convert the string 'forty-two' to int. | kinds.cml:20:12
+InvalidNumberText | Cannot convert the string 'forty-two' to int. | kinds.cml:11:38
 end
