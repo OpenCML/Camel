@@ -16,7 +16,7 @@ type TinyCnn = {
 
 with <model: TinyCnn>
 func features(x: f32[...]) => f32[...] {
-    return tanh(conv2d(x, model.kernel, model.bias))
+    return tanh(conv2d<1, 0>(x, model.kernel, model.bias))
 }
 
 with <model: TinyCnn>

@@ -158,8 +158,8 @@ func block(
     rm2: f32[...],
     rv2: f32[...]
 ) => (f32[...], f32[...], f32[...], f32[...], f32[...]) {
-    let r1 = batch_norm_train(conv2d(x, c1w, c1b, 1, 1), g1, b1, rm1, rv1)
-    let r2 = batch_norm_train(conv2d(relu(r1.0), c2w, c2b, 1, 1), g2, b2, rm2, rv2)
+    let r1 = batch_norm_train(conv2d<1, 1>(x, c1w, c1b), g1, b1, rm1, rv1)
+    let r2 = batch_norm_train(conv2d<1, 1>(relu(r1.0), c2w, c2b), g2, b2, rm2, rv2)
     return (relu(r2.0 + x), r1.1, r1.2, r2.1, r2.2)
 }
 
@@ -184,15 +184,15 @@ func block_ds(
     rmd: f32[...],
     rvd: f32[...]
 ) => (f32[...], f32[...], f32[...], f32[...], f32[...], f32[...], f32[...]) {
-    let r1 = batch_norm_train(conv2d(x, c1w, c1b, 2, 1), g1, b1, rm1, rv1)
-    let r2 = batch_norm_train(conv2d(relu(r1.0), c2w, c2b, 1, 1), g2, b2, rm2, rv2)
-    let rd = batch_norm_train(conv2d(x, dsw, dsb, 2, 0), gd, bd, rmd, rvd)
+    let r1 = batch_norm_train(conv2d<2, 1>(x, c1w, c1b), g1, b1, rm1, rv1)
+    let r2 = batch_norm_train(conv2d<1, 1>(relu(r1.0), c2w, c2b), g2, b2, rm2, rv2)
+    let rd = batch_norm_train(conv2d<2, 0>(x, dsw, dsb), gd, bd, rmd, rvd)
     return (relu(r2.0 + rd.0), r1.1, r1.2, r2.1, r2.2, rd.1, rd.2)
 }
 
 with <m: Resnet>
 func forward(x: f32[...], s: BnStats) => (f32[...], BnStats) {
-    let r_stem = batch_norm_train(conv2d(x, m.stem_w, m.stem_b, 1, 1), m.stem_bn_g, m.stem_bn_b, s.stem_bn_rm, s.stem_bn_rv)
+    let r_stem = batch_norm_train(conv2d<1, 1>(x, m.stem_w, m.stem_b), m.stem_bn_g, m.stem_bn_b, s.stem_bn_rm, s.stem_bn_rv)
     let r_b11 = block(relu(r_stem.0), m.b11_c1_w, m.b11_c1_b, m.b11_c1_bn_g, m.b11_c1_bn_b, s.b11_c1_bn_rm, s.b11_c1_bn_rv, m.b11_c2_w, m.b11_c2_b, m.b11_c2_bn_g, m.b11_c2_bn_b, s.b11_c2_bn_rm, s.b11_c2_bn_rv)
     let r_b12 = block(r_b11.0, m.b12_c1_w, m.b12_c1_b, m.b12_c1_bn_g, m.b12_c1_bn_b, s.b12_c1_bn_rm, s.b12_c1_bn_rv, m.b12_c2_w, m.b12_c2_b, m.b12_c2_bn_g, m.b12_c2_bn_b, s.b12_c2_bn_rm, s.b12_c2_bn_rv)
     let r_b21 = block_ds(r_b12.0, m.b21_c1_w, m.b21_c1_b, m.b21_c1_bn_g, m.b21_c1_bn_b, s.b21_c1_bn_rm, s.b21_c1_bn_rv, m.b21_c2_w, m.b21_c2_b, m.b21_c2_bn_g, m.b21_c2_bn_b, s.b21_c2_bn_rm, s.b21_c2_bn_rv, m.b21_ds_w, m.b21_ds_b, m.b21_ds_bn_g, m.b21_ds_bn_b, s.b21_ds_bn_rm, s.b21_ds_bn_rv)

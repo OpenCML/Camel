@@ -13,12 +13,12 @@ func main() => int sync {
     let plus = reshape<[1, 1, 2, 2]>([0.101, 0.2, 0.3, 0.4] as f32[])
     let minus = reshape<[1, 1, 2, 2]>([0.099, 0.2, 0.3, 0.4] as f32[])
     
-    let grad_kernel = conv2d_kernel_grad(x, kernel, dy)
+    let grad_kernel = conv2d_kernel_grad<1, 0>(x, kernel, dy)
     let grad_bias = conv2d_bias_grad(bias, dy)
     let grad0 = sum(grad_kernel * reshape<[1, 1, 2, 2]>([1.0, 0.0, 0.0, 0.0] as f32[]))
     let bias_sum = sum(grad_bias)
-    let score_plus = sum(conv2d(x, plus, bias) * dy)
-    let score_minus = sum(conv2d(x, minus, bias) * dy)
+    let score_plus = sum(conv2d<1, 0>(x, plus, bias) * dy)
+    let score_minus = sum(conv2d<1, 0>(x, minus, bias) * dy)
     let finite = (score_plus - score_minus) / 0.002
     
     'conv2d_grad_sanity grad0={} finite={} bias_sum={}'->format<grad0, finite, bias_sum>->println

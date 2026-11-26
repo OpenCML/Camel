@@ -56,12 +56,12 @@ func table() => f32[...] {
 
 with <x: f32[...]>
 func conv_input() => float {
-    return float(sum(tanh(conv2d(x, kernel(), bias())) * weights()))
+    return float(sum(tanh(conv2d<1, 0>(x, kernel(), bias())) * weights()))
 }
 
 with <x: f32[...]>
 func pools() => float {
-    return float(sum(tanh(max_pool2d(x, 2)))) + float(sum(tanh(avg_pool2d(x, 2, 1))))
+    return float(sum(tanh(max_pool2d<2, 2, 0>(x)))) + float(sum(tanh(avg_pool2d<2, 1, 0>(x))))
 }
 
 with <t: f32[...]>

@@ -460,7 +460,7 @@ Driven by the four benchmark models:
 | Linear algebra | matmul (batched, broadcasting), linear (matmul + bias) |
 | Shape | reshape, flatten, transpose/permute, concat, slice, squeeze/unsqueeze |
 | Indexing | take (first-dimension rows; ONNX `Gather` on axis 0) |
-| NN | softmax, log_softmax (any axis), conv2d (stride, padding), max_pool2d, avg_pool2d, layer_norm, batch_norm (inference), dropout (identity at inference), embedding |
+| NN | softmax, log_softmax (any axis), conv2d (stride and padding as `with` parameters), max_pool2d, avg_pool2d (kernel, stride and padding as `with` parameters), layer_norm, batch_norm (inference), dropout (identity at inference), embedding |
 | Recurrent | expressed in Camel from the primitives above (GRU cell as a function), not as a fused op |
 
 ## 5. Benchmark Harness (`benchmarks/`)
@@ -550,6 +550,32 @@ rejection reason. That resolver extension is part of step 2.
   `grad`, `sgd`, `apply_gradients`, `vjp`, ...) keep hand-written groups,
   because they operate on Parameter objects and graphs, not tensors. The
   conv2d VJP forwards stride and padding; pooling has VJP rules.
+- **The window is a compile-time parameter of the call**, written in angle brackets
+  (`conv2d<2, 1>(x, w, b)`, `max_pool2d<2, 2, 0>(x)`), so the type a call reads states
+  the shape the window gives and the graph records the window as the node's operand
+  (a `with` argument, which is a `context` edge). Every window value is required: a
+  call writes all of them. A node a pass builds may leave them out, and then means
+  stride 1, no padding, and a pooling stride equal to the kernel. One limitation is
+  known and not yet closed: a window written as a value the compiler cannot fold
+  (`conv2d<len(x) / 3, 0>`) is **not** refused when the call is compiled -- the result
+  type states no extents and the kernel faults at run time -- so "the shape is in the
+  type" holds for a literal window only.
+- **A law names one window.** A rule's right side can only pass angle-bracket
+  arguments that are constants of the rule's own graph: `transforms/rule_expand.cpp`
+  refuses a right side that passes a context argument the rule does not carry ("the
+  rule's right side passes a context argument it does not carry"). Every law that
+  mentions a convolution or a pooling therefore fixes its window -- `conv2d<1, 0>`
+  for `jvp_conv2d` and `conv2d_t`, `max_pool2d<2, 2, 0>` (and likewise
+  `avg_pool2d`) for the pooling laws -- and a call with any other window has no law at
+  all: the program refuses by name, saying which law had no cotangent for which
+  operator (`test/cases/modules/nn/conv2d_stride2_transpose.cml` and
+  `max_pool2d_window_transpose.cml` pin the refusal). Two changes would widen the
+  coverage, and both are owed: the shaped gradients of `conv2d` take the window as a
+  parameter (`conv2d_input_grad_shaped<stride, padding>(kernel, dy)`, which lets the
+  law's angle brackets be the law's own), and the transform can carry a matched node's
+  `with` argument into a rule's right side. Until then the library stays narrow on
+  purpose: a law that quietly answered for the wrong window is the defect the refusal
+  prevents.
 - `tensor.load_npy::<T>` / `tensor.save_npy` read and write NumPy files; the load declares the
   element type of the array it reads and faults at the call when the file's is another.
 

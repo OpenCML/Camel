@@ -19,7 +19,7 @@ import { jvp } from transforms
 /// The engine's spelling: the input is the `with` parameter.
 with <x: float[1, 1, 4, 4]>
 func loss_engine() => float {
-    return sum(avg_pool2d(x, 2))
+    return sum(avg_pool2d<2, 2, 0>(x))
 }
 
 func main() => int sync {
@@ -41,7 +41,7 @@ func main() => int sync {
         [13.0, 14.0, 15.0, 16.0]]]] as float[1, 1, 4, 4]>()
     
     let library_loss = func (xx: float[1, 1, 4, 4]) => float {
-        return sum(avg_pool2d(xx, 2))
+        return sum(avg_pool2d<2, 2, 0>(xx))
     }
     let (_, forward) = jvp(library_loss)(x, seed)
     

@@ -10749,7 +10749,7 @@ func main() => int sync {
     let x = reshape<[1, 1, 2, 2]>([1, 2, 3, 4])
     let kernel = reshape<[1, 1, 1, 1]>([1])
     let bias = reshape<[1]>([0])
-    let y = conv2d(x, kernel, bias, 1, 0)
+    let y = conv2d<1, 0>(x, kernel, bias)
     println(sum(y))
     return 0
 }

@@ -27,7 +27,7 @@ import { jvp } from transforms
 /// The engine's spelling: the kernel is the `with` parameter (design principles 9.9).
 with <w: float[1, 1, 2, 2]>
 func loss_engine(x: float[1, 1, 3, 3], b: float[1]) => float {
-    return sum(conv2d(x, w, b))
+    return sum(conv2d<1, 0>(x, w, b))
 }
 
 func main() => int sync {
@@ -41,7 +41,7 @@ func main() => int sync {
     
     // The library's leg: the same function with the kernel as an ordinary parameter, captured x and
     let library_loss = func (ww: float[1, 1, 2, 2]) => float {
-        return sum(conv2d(x, ww, b))
+        return sum(conv2d<1, 0>(x, ww, b))
     }
     let (_, forward) = jvp(library_loss)(w, seed)
     

@@ -6,9 +6,12 @@
  * convolution and its gradients, pooling and its gradients, inference-mode
  * batch normalization, embedding, and the fused softmax cross-entropy loss.
  *
- * Spatial arguments (stride, padding, pooling window) are optional trailing
- * ints; they default to stride 1, no padding, and a pooling stride equal to
- * the kernel size.
+ * The window of a convolution or a pooling operator (the stride, the padding, and the
+ * pooling kernel) is a compile-time parameter of the call, written in angle brackets
+ * (`conv2d<2, 1>(x, w, b)`, `max_pool2d<2, 2, 0>(x)`), so the type a call reads states
+ * the shape that window gives. A node a pass builds may leave them out, and the reading
+ * functions below then mean stride 1, no padding, and a pooling stride equal to the
+ * kernel.
  */
 
 #include "layers.h"
@@ -105,6 +108,8 @@ slot_t conv2dKernel(ArgsView &, ArgsView &norm, context::Context &) {
                 tensorArg(norm, 0),
                 tensorArg(norm, 1),
                 tensorArg(norm, 2),
+                // A call writes the window (`conv2d<2, 1>(x, w, b)`); a node a pass builds may
+                // leave these out, and these are the values it then means.
                 optInt(norm, 3, 1),
                 optInt(norm, 4, 0),
                 resultAllocator()));
@@ -113,6 +118,8 @@ slot_t conv2dKernel(ArgsView &, ArgsView &norm, context::Context &) {
 
 std::optional<Type *> conv2dInfer(const InferContext &ctx) {
     const TensorFacts x = ctx.facts(0), w = ctx.facts(1);
+    // A call writes the window; a node a pass builds may leave it out, and this is the window it
+    // then means (`conv2dKernel` reads the same defaults).
     const auto stride = optConstInt(ctx, 3, 1), pad = optConstInt(ctx, 4, 0);
     if ((x.shape && x.shape->size() != 4) || (w.shape && w.shape->size() != 4)) {
         return std::nullopt;
@@ -142,6 +149,7 @@ slot_t conv2dInputGradKernel(ArgsView &, ArgsView &norm, context::Context &) {
                 tensorArg(norm, 0),
                 tensorArg(norm, 1),
                 tensorArg(norm, 2),
+                // As `conv2dKernel`: a call writes the window, a node a pass builds may omit it.
                 optInt(norm, 3, 1),
                 optInt(norm, 4, 0),
                 resultAllocator()));
@@ -156,6 +164,7 @@ slot_t conv2dKernelGradKernel(ArgsView &, ArgsView &norm, context::Context &) {
                 tensorArg(norm, 0),
                 tensorArg(norm, 1),
                 tensorArg(norm, 2),
+                // As `conv2dKernel`: a call writes the window, a node a pass builds may omit it.
                 optInt(norm, 3, 1),
                 optInt(norm, 4, 0),
                 resultAllocator()));
@@ -280,6 +289,8 @@ slot_t conv2dBiasGradShapedKernel(ArgsView &, ArgsView &norm, context::Context &
 
 k::Window2d windowArg(ArgsView &norm, size_t first) {
     const int64_t kernel = intArg(norm, first);
+    // A call writes the window (`max_pool2d<2, 2, 0>(x)`); a node a pass builds may leave the
+    // stride and the padding out, and these are the values it then means.
     const int64_t stride = optInt(norm, first + 1, kernel);
     const int64_t pad    = optInt(norm, first + 2, 0);
     return k::Window2d{kernel, kernel, stride, stride, pad, pad};
@@ -311,6 +322,8 @@ std::optional<Type *> poolInfer(const InferContext &ctx) {
     if (x.shape && x.shape->size() != 4) {
         return std::nullopt;
     }
+    // A call writes the window; a node a pass builds may leave it out, and this is the window it
+    // then means (`windowArg` reads the same defaults).
     const auto kernel   = ctx.constInt(1);
     const auto stride   = ctx.has(2) ? ctx.constInt(2) : kernel;
     const auto pad      = optConstInt(ctx, 3, 0);
@@ -652,13 +665,17 @@ std::optional<Type *> softmaxCrossEntropyLabelsInfer(const InferContext &ctx) {
 
 const OpTraits kPure{};
 
+// The three convolution operators and the four pooling ones take their window as `with`
+// parameters (`conv2d<stride, padding>(x, w, b)`, `max_pool2d<kernel, stride, padding>(x)`): the
+// window is a compile-time fact, so the result's type states the shape it gives, and a call writes
+// every one of them. A node a pass builds may leave them out -- see the reading functions below.
 std::vector<ParamSpec> convParams(std::string_view third) {
     return {
         {"input", ParamKind::Tensor},
         {"kernel", ParamKind::Tensor},
         {third, ParamKind::Tensor},
-        {"stride", ParamKind::Int, true},
-        {"padding", ParamKind::Int, true},
+        {"stride", ParamKind::Int},
+        {"padding", ParamKind::Int},
     };
 }
 
@@ -668,8 +685,8 @@ std::vector<ParamSpec> poolParams(bool withDy) {
         params.push_back({"dy", ParamKind::Tensor});
     }
     params.push_back({"kernel", ParamKind::Int});
-    params.push_back({"stride", ParamKind::Int, true});
-    params.push_back({"padding", ParamKind::Int, true});
+    params.push_back({"stride", ParamKind::Int});
+    params.push_back({"padding", ParamKind::Int});
     return params;
 }
 
@@ -708,8 +725,8 @@ void embeddingVjp(VjpBuilder &b, const VjpCall &call) {
     }
 }
 
-/// conv2d(input, kernel, bias, stride?, padding?): stride and padding are forwarded unchanged to
-/// the gradient operators.
+/// conv2d<stride, padding>(input, kernel, bias): the window is forwarded unchanged to the gradient
+/// operators, which take it in the same angle brackets.
 void conv2dVjp(VjpBuilder &b, const VjpCall &call) {
     requireVjpInputs(call, 3, 5);
     auto dy = b.gradientOf(call.output);
@@ -758,7 +775,8 @@ void batchNormTrainVjp(VjpBuilder &b, const VjpCall &call) {
 constexpr char kMaxPoolGradUri[] = "nn:max_pool2d_grad";
 constexpr char kAvgPoolGradUri[] = "nn:avg_pool2d_grad";
 
-/// pool2d(input, kernel, stride?, padding?) -> pool2d_grad(input, dy, kernel, stride?, padding?)
+/// pool2d<kernel, stride, padding>(input) -> pool2d_grad<kernel, stride, padding>(input, dy): the
+/// gradient operator takes the window the pooling took, in the same angle brackets.
 template <const char *GradUri> void pool2dVjp(VjpBuilder &b, const VjpCall &call) {
     requireVjpInputs(call, 2, 4);
     auto dy = b.gradientOf(call.output);
@@ -774,31 +792,37 @@ std::vector<OpDef> nnTensorOps() {
     std::vector<OpDef> defs;
     defs.push_back(
         OpDef{
-            .name      = "conv2d",
-            .exports   = {"conv2d"},
-            .params    = convParams("bias"),
-            .resultDoc = "Tensor",
-            .infer     = conv2dInfer,
-            .kernel    = &conv2dKernel,
-            .traits    = kPure});
+            .name           = "conv2d",
+            .exports        = {"conv2d"},
+            .params         = convParams("bias"),
+            .resultDoc      = "Tensor",
+            .infer          = conv2dInfer,
+            .kernel         = &positionally<conv2dKernel>,
+            .traits         = kPure,
+            .withAfterNorm  = true,
+            .ordinaryParams = 3});
     defs.push_back(
         OpDef{
-            .name      = "conv2d_input_grad",
-            .exports   = {"conv2d_input_grad"},
-            .params    = convParams("dy"),
-            .resultDoc = "Tensor",
-            .infer     = shapedLike(0),
-            .kernel    = &conv2dInputGradKernel,
-            .traits    = kPure});
+            .name           = "conv2d_input_grad",
+            .exports        = {"conv2d_input_grad"},
+            .params         = convParams("dy"),
+            .resultDoc      = "Tensor",
+            .infer          = shapedLike(0),
+            .kernel         = &positionally<conv2dInputGradKernel>,
+            .traits         = kPure,
+            .withAfterNorm  = true,
+            .ordinaryParams = 3});
     defs.push_back(
         OpDef{
-            .name      = "conv2d_kernel_grad",
-            .exports   = {"conv2d_kernel_grad"},
-            .params    = convParams("dy"),
-            .resultDoc = "Tensor",
-            .infer     = shapedLike(1),
-            .kernel    = &conv2dKernelGradKernel,
-            .traits    = kPure});
+            .name           = "conv2d_kernel_grad",
+            .exports        = {"conv2d_kernel_grad"},
+            .params         = convParams("dy"),
+            .resultDoc      = "Tensor",
+            .infer          = shapedLike(1),
+            .kernel         = &positionally<conv2dKernelGradKernel>,
+            .traits         = kPure,
+            .withAfterNorm  = true,
+            .ordinaryParams = 3});
     defs.push_back(
         OpDef{
             .name      = "conv2d_bias_grad",
@@ -845,44 +869,52 @@ std::vector<OpDef> nnTensorOps() {
             .traits    = kPure});
     defs.push_back(
         OpDef{
-            .name      = "max_pool2d",
-            .exports   = {"max_pool2d"},
-            .params    = poolParams(false),
-            .resultDoc = "Tensor",
-            .infer     = poolInfer,
-            .kernel    = &poolKernel<k::PoolKind::Max>,
-            .traits    = kPure,
-            .semantics = poolSemantics(true),
-            .index     = poolIndexing(true)});
+            .name           = "max_pool2d",
+            .exports        = {"max_pool2d"},
+            .params         = poolParams(false),
+            .resultDoc      = "Tensor",
+            .infer          = poolInfer,
+            .kernel         = &positionally<poolKernel<k::PoolKind::Max>>,
+            .traits         = kPure,
+            .withAfterNorm  = true,
+            .ordinaryParams = 1,
+            .semantics      = poolSemantics(true),
+            .index          = poolIndexing(true)});
     defs.push_back(
         OpDef{
-            .name      = "avg_pool2d",
-            .exports   = {"avg_pool2d"},
-            .params    = poolParams(false),
-            .resultDoc = "Tensor",
-            .infer     = poolInfer,
-            .kernel    = &poolKernel<k::PoolKind::Average>,
-            .traits    = kPure,
-            .semantics = poolSemantics(false),
-            .index     = poolIndexing(false)});
+            .name           = "avg_pool2d",
+            .exports        = {"avg_pool2d"},
+            .params         = poolParams(false),
+            .resultDoc      = "Tensor",
+            .infer          = poolInfer,
+            .kernel         = &positionally<poolKernel<k::PoolKind::Average>>,
+            .traits         = kPure,
+            .withAfterNorm  = true,
+            .ordinaryParams = 1,
+            .semantics      = poolSemantics(false),
+            .index          = poolIndexing(false)});
     defs.push_back(
         OpDef{
-            .name      = "max_pool2d_grad",
-            .exports   = {"max_pool2d_grad"},
-            .params    = poolParams(true),
-            .resultDoc = "Tensor",
-            .infer     = shapedLike(0),
-            .kernel    = &poolGradKernel<k::PoolKind::Max>,
-            .traits    = kPure});
+            .name           = "max_pool2d_grad",
+            .exports        = {"max_pool2d_grad"},
+            .params         = poolParams(true),
+            .resultDoc      = "Tensor",
+            .infer          = shapedLike(0),
+            .kernel         = &positionally<poolGradKernel<k::PoolKind::Max>>,
+            .traits         = kPure,
+            .withAfterNorm  = true,
+            .ordinaryParams = 2});
     defs.push_back(
         OpDef{
-            .name      = "avg_pool2d_grad",
-            .exports   = {"avg_pool2d_grad"},
-            .params    = poolParams(true),
-            .resultDoc = "Tensor",
-            .infer     = shapedLike(0),
-            .kernel    = &poolGradKernel<k::PoolKind::Average>,
-            .traits    = kPure});
+            .name           = "avg_pool2d_grad",
+            .exports        = {"avg_pool2d_grad"},
+            .params         = poolParams(true),
+            .resultDoc      = "Tensor",
+            .infer          = shapedLike(0),
+            .kernel         = &positionally<poolGradKernel<k::PoolKind::Average>>,
+            .traits         = kPure,
+            .withAfterNorm  = true,
+            .ordinaryParams = 2});
     defs.push_back(
         OpDef{
             .name    = "batch_norm",
