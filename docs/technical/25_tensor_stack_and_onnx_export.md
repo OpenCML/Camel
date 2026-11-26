@@ -460,7 +460,7 @@ Driven by the four benchmark models:
 | Linear algebra | matmul (batched, broadcasting), linear (matmul + bias) |
 | Shape | reshape, flatten, transpose/permute, concat, slice, squeeze/unsqueeze |
 | Indexing | take (first-dimension rows; ONNX `Gather` on axis 0) |
-| NN | softmax, log_softmax (any axis), conv2d (stride, padding), max_pool2d, avg_pool2d, layer_norm, batch_norm (inference), dropout (identity at inference), embedding |
+| NN | softmax, log_softmax (any axis), conv2d (stride and padding as `with` parameters), max_pool2d, avg_pool2d (kernel, stride and padding as `with` parameters), layer_norm, batch_norm (inference), dropout (identity at inference), embedding |
 | Recurrent | expressed in Camel from the primitives above (GRU cell as a function), not as a fused op |
 
 ## 5. Benchmark Harness (`benchmarks/`)

@@ -42,7 +42,7 @@ func regrouped(x: f32[4, 5]) => f32[...] {
 }
 
 func pooled(x: f32[1, 1, 4, 4]) => f32[...] {
-    return max_pool2d(x, 2, 2, 1)
+    return max_pool2d<2, 2, 1>(x)
 }
 
 func main() => int sync {

@@ -24,11 +24,11 @@ func lin(x: f32[...], w: f32[...]) => float {
 }
 
 func conv_s1_p2(x: f32[...], w: f32[...], b: f32[...]) => float {
-    return float(mean(conv2d(x, w, b, 1, 2)))
+    return float(mean(conv2d<1, 2>(x, w, b)))
 }
 
 func conv_s1_p0(x: f32[...], w: f32[...], b: f32[...]) => float {
-    return float(mean(conv2d(x, w, b, 1, 0)))
+    return float(mean(conv2d<1, 0>(x, w, b)))
 }
 
 func warm(step: () => float, remaining: int) => int {

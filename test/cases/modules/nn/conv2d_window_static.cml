@@ -1,0 +1,35 @@
+/**
+ * The window of a convolution is a compile-time parameter of the call: `conv2d<2, 0>` is stride 2
+ * with no padding, written in angle brackets after the name, so the type the call reads states the
+ * shape that window gives. What this case pins is that arithmetic of the type, asked with three
+ * windows of one input: the annotations are the assertion, and the printed line is the spatial
+ * extents read off the results.
+ *
+ * `x` is `[1, 1, 6, 6]` and the kernel `[1, 1, 3, 3]`, so the same input answers `[1, 1, 2, 2]`
+ * under stride 2 and no padding (`(6 - 3) / 2 + 1 = 2`) and `[1, 1, 4, 4]` under stride 1 and no
+ * padding. A `[1, 1, 7, 7]` input under padding 1 answers `[1, 1, 7, 7]`: the ring the padding
+ * writes fits the window back in, which is what `OH = (H + 2 * padding - KH) / stride + 1` says.
+ *
+ * The window used to be two trailing value arguments (`conv2d(x, w, b, 2, 0)`), which the shape of
+ * the result then could not state: this case is the reading of the change (design principles 5.4,
+ * "the shape is computed in the type").
+ */
+
+import { conv2d } from nn
+import { dim, ones, zeros } from tensor
+
+func main() => int sync {
+    let narrow = ones::<f32>([1, 1, 6, 6])
+    let wide = ones::<f32>([1, 1, 7, 7])
+    let kernel = ones::<f32>([1, 1, 3, 3])
+    let bias = zeros::<f32>([1])
+
+    let strided: f32[1, 1, 2, 2] = conv2d<2, 0>(narrow, kernel, bias)
+    let plain: f32[1, 1, 4, 4] = conv2d<1, 0>(narrow, kernel, bias)
+    let padded: f32[1, 1, 7, 7] = conv2d<1, 1>(wide, kernel, bias)
+
+    'conv2d_window stride2={}x{} plain={}x{}'->format<
+        dim<2>(strided), dim<3>(strided), dim<2>(plain), dim<3>(plain)>->println
+    'conv2d_window padded={}x{}'->format<dim<2>(padded), dim<3>(padded)>->println
+    return 0
+}

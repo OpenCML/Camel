@@ -1,0 +1,30 @@
+/**
+ * The window of a convolution is a compile-time parameter of the call, and the transpose law the
+ * library writes is the plain window's alone: `conv2d_t`'s pattern says `conv2d<1, 0>`, because the
+ * shaped gradients that invert the output shape take no window of their own
+ * (`conv2d_input_grad_shaped(kernel, dy)` derives the extents with stride 1 and padding 0). A
+ * convolution called with stride 2 therefore has **no transposed law**, and what this file pins is
+ * that the program says so -- instead of answering a cotangent computed with the wrong geometry,
+ * which is the failure a law binding the window as variables would have shipped.
+ *
+ * The repair is owed by two other changes: the shaped gradients must take the window
+ * (`conv2d_input_grad_shaped<stride, padding>(kernel, dy)`), and the transform must be able to carry
+ * a matched node's `with` argument into a rule's right side -- `transforms/rule_expand.cpp` refuses
+ * that today, which is why every law that names a convolution or a pooling is written for one window
+ * rather than for the node's own. When both land, this case turns from a refusal into an answer.
+ */
+
+import { conv2d } from nn
+import rulesets.transpose
+import { sum } from tensor
+import { transpose } from transforms
+
+func loss_conv(x: float[1, 1, 6, 6], w: float[1, 1, 3, 3], b: float[1]) => float {
+    return sum(conv2d<2, 0>(x, w, b))
+}
+
+func main() => int sync {
+    let back = transpose(loss_conv)(1.0)
+    'transpose should have been refused, and it answered {}'->format<back.0>->println
+    return 0
+}

@@ -65,8 +65,8 @@ func block(
     c2w: f32[...],
     c2b: f32[...]
 ) => f32[...] {
-    let h = relu(conv2d(x, c1w, c1b, 1, 1))
-    return relu(conv2d(h, c2w, c2b, 1, 1) + x)
+    let h = relu(conv2d<1, 1>(x, c1w, c1b))
+    return relu(conv2d<1, 1>(h, c2w, c2b) + x)
 }
 
 func block_ds(
@@ -78,13 +78,13 @@ func block_ds(
     dsw: f32[...],
     dsb: f32[...]
 ) => f32[...] {
-    let h = relu(conv2d(x, c1w, c1b, 2, 1))
-    return relu(conv2d(h, c2w, c2b, 1, 1) + conv2d(x, dsw, dsb, 2, 0))
+    let h = relu(conv2d<2, 1>(x, c1w, c1b))
+    return relu(conv2d<1, 1>(h, c2w, c2b) + conv2d<2, 0>(x, dsw, dsb))
 }
 
 with <m: Resnet>
 func forward(x: f32[...]) => f32[...] {
-    let h0 = relu(conv2d(x, m.stem_w, m.stem_b, 1, 1))
+    let h0 = relu(conv2d<1, 1>(x, m.stem_w, m.stem_b))
     let h1 = block(block(h0, m.b11_c1_w, m.b11_c1_b, m.b11_c2_w, m.b11_c2_b), m.b12_c1_w, m.b12_c1_b, m.b12_c2_w, m.b12_c2_b)
     let h2 = block(block_ds(h1, m.b21_c1_w, m.b21_c1_b, m.b21_c2_w, m.b21_c2_b, m.b21_ds_w, m.b21_ds_b), m.b22_c1_w, m.b22_c1_b, m.b22_c2_w, m.b22_c2_b)
     let h3 = block(block_ds(h2, m.b31_c1_w, m.b31_c1_b, m.b31_c2_w, m.b31_c2_b, m.b31_ds_w, m.b31_ds_b), m.b32_c1_w, m.b32_c1_b, m.b32_c2_w, m.b32_c2_b)

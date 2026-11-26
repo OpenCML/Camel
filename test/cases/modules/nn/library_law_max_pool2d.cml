@@ -1,10 +1,11 @@
 // `max_pool2d`'s derivative through the library's forward transform, against the engine's.
 //
-// The law is **not** `max_pool2d(dx, kernel)`: which position of a window survives is decided by
-// `x` and not by the tangent, so pooling the tangent would answer the tangent's own maximum.
-// `src/stdlib/rulesets/jvp.cml#jvp_max_pool2d` writes the engine's own
-// `max_pool2d_grad(x, ones_like(y), k)` as a residual mask, sums each window's one survivor with
-// `avg_pool2d`, and scales back by the window's area.
+// The law is **not** `max_pool2d<kernel, stride, padding>(dx)`: which position of a window survives
+// is decided by `x` and not by the tangent, so pooling the tangent would answer the tangent's own
+// maximum. `src/stdlib/rulesets/jvp.cml#jvp_max_pool2d` writes the engine's own
+// `max_pool2d_grad<kernel, stride, padding>(x, ones_like(y))` as a residual mask, sums each
+// window's one survivor with `avg_pool2d<kernel, stride, padding>`, and scales back by the window's
+// area.
 //
 // The sixteen values are all distinct and the seed alternates sign, so a law that read the wrong
 // position answers a different number: the survivors are 6, 8, 14 and 16, the seed's components
@@ -26,7 +27,7 @@ import { jvp } from transforms
 /// The engine's spelling: the input is the `with` parameter.
 with <x: float[1, 1, 4, 4]>
 func loss_engine() => float {
-    return sum(max_pool2d(x, 2))
+    return sum(max_pool2d<2, 2, 0>(x))
 }
 
 func main() => int sync {
@@ -48,7 +49,7 @@ func main() => int sync {
         [13.0, 14.0, 15.0, 16.0]]]] as float[1, 1, 4, 4]>()
     
     let library_loss = func (xx: float[1, 1, 4, 4]) => float {
-        return sum(max_pool2d(xx, 2))
+        return sum(max_pool2d<2, 2, 0>(xx))
     }
     let (_, forward) = jvp(library_loss)(x, seed)
     

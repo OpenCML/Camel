@@ -1523,9 +1523,24 @@ export rule linear_t::<T, A, B>(x: A, w: B) when is_float::<T>() { linear(x, w) 
 // forward half has (`jvp_conv2d` records it: the tangent's extents have to be reduced, and the
 // operator that would state them does not exist yet).
 
-/// The cotangents of `conv2d(x, w, b)`: one per operand, from the kernel's own three gradients --
-/// the **shaped** twins of them, which derive the answered operand's extents from the operands the
-/// gradient does read where the plain ones read the tensor.
+/// The cotangents of `conv2d<stride, padding>(x, w, b)`: one per operand, from the kernel's own
+/// three gradients -- the **shaped** twins of them, which derive the answered operand's extents from
+/// the operands the gradient does read where the plain ones read the tensor.
+///
+/// The window is the call's compile-time parameter, and this law is written for the plain window
+/// alone: its pattern says `conv2d<1, 0>`, because the shaped twins invert the output shape with
+/// stride 1 and padding 0 (`conv2d_input_grad_shaped(kernel, dy)`, `conv2d_kernel_grad_shaped
+/// (input, dy)`) and take no window of their own. A convolution called with another window
+/// therefore **has no transposed law**: the walk reports the operator it could not answer and this
+/// law answers nothing for it -- a refusal, not a cotangent computed with the wrong geometry.
+///
+/// Two changes are owed before this law can speak for another window, and neither is this lane's:
+/// the shaped twins must take the window (`conv2d_input_grad_shaped<stride, padding>(kernel, dy)`),
+/// and the transform must be able to carry a matched node's `with` argument into a rule's right
+/// side. `transforms/rule_expand.cpp` refuses that today -- what a right side passes in angle
+/// brackets has to be a constant of the rule's own graph, and the matched node's own context
+/// argument is not one -- which is why `jvp_conv2d` and the pooling laws are written for one window
+/// each as well.
 ///
 /// The plain spelling reads a value at the position it answers: `conv2d_input_grad(x, w, ct)` reads
 /// `w` and `conv2d_kernel_grad(x, w, ct)` reads `x`, and at the position the law answers that operand
@@ -1545,7 +1560,7 @@ export rule linear_t::<T, A, B>(x: A, w: B) when is_float::<T>() { linear(x, w) 
 /// plain operator calls.
 ///
 /// The bias needs no inversion: `conv2dBiasGrad` reads `dy` alone and answers `[O]`.
-export rule conv2d_t::<T, X, Y, Z>(x: X, w: Y, b: Z) when is_float::<T>() { conv2d(x, w, b) => func (ct: T[...]) {
+export rule conv2d_t::<T, X, Y, Z>(x: X, w: Y, b: Z) when is_float::<T>() { conv2d<1, 0>(x, w, b) => func (ct: T[...]) {
     (
         conv2d_input_grad_shaped(w, ct),
         conv2d_kernel_grad_shaped(x, ct),
@@ -1553,22 +1568,27 @@ export rule conv2d_t::<T, X, Y, Z>(x: X, w: Y, b: Z) when is_float::<T>() { conv
     )
 } }
 
-/// The cotangent of `max_pool2d(x, kernel)`: the kernel's gradient, which gives each window's
-/// cotangent to the position the window chose -- the same convention the forward law's mask uses
-/// (`jvp_max_pool2d`), so the two halves are adjoints of one map even on a window whose maximum is
-/// tied. The kernel is an `int` and takes no cotangent, so the law answers one value.
-export rule max_pool2d_t::<T>(x: T[...], kernel: int) when is_float::<T>() { max_pool2d(x, kernel) => func (ct: T[...]) {
-    max_pool2d_grad(x, ct, kernel)
+/// The cotangent of `max_pool2d<2, 2, 0>(x)`: the kernel's gradient, which gives
+/// each window's cotangent to the position the window chose -- the same convention the forward law's
+/// mask uses (`jvp_max_pool2d`), so the two halves are adjoints of one map even on a window whose
+/// maximum is tied. The window is `int` and takes no cotangent, so the law answers one value.
+///
+/// The window is the call's compile-time parameter and this law is written for the one the forward
+/// law writes: a rule's right side cannot hand on a window it bound (what it passes in angle
+/// brackets must be a constant of the rule's own graph -- `transforms/rule_expand.cpp`), so a
+/// pooling called with another window has no transposed law either.
+export rule max_pool2d_t::<T>(x: T[...]) when is_float::<T>() { max_pool2d<2, 2, 0>(x) => func (ct: T[...]) {
+    max_pool2d_grad<2, 2, 0>(x, ct)
 } }
 
-/// The cotangent of `avg_pool2d(x, kernel)`: the kernel's gradient. A mean of a window is linear, so
-/// this is also the adjoint of the `avg_pool2d` a forward law writes in its **linear** half
-/// (`jvp_max_pool2d` does). No walk reaches it: it is refused at `position = 0` with
+/// The cotangent of `avg_pool2d<2, 2, 0>(x)`: the kernel's gradient. A mean of a window is linear,
+/// so this is also the adjoint of the `avg_pool2d` a forward law writes in its
+/// **linear** half (`jvp_max_pool2d` does). No walk reaches it: it is refused at `position = 0` with
 /// `skip=law-reads-a-value` and `reason=the rule's right side reads a value the caller does not
-/// carry`, because `avg_pool2d_grad(x, ct, kernel)` reads `x` and a transposed half is handed the
+/// carry`, because `avg_pool2d_grad(x, ct, ...)` reads `x` and a transposed half is handed the
 /// cotangent and nothing else.
-export rule avg_pool2d_t::<T>(x: T[...], kernel: int) when is_float::<T>() { avg_pool2d(x, kernel) => func (ct: T[...]) {
-    avg_pool2d_grad(x, ct, kernel)
+export rule avg_pool2d_t::<T>(x: T[...]) when is_float::<T>() { avg_pool2d<2, 2, 0>(x) => func (ct: T[...]) {
+    avg_pool2d_grad<2, 2, 0>(x, ct)
 } }
 
 /// The cotangent of `embedding(table, indices)`: the table's rows added back where the indices

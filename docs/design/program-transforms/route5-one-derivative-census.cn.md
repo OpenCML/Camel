@@ -392,7 +392,7 @@ promotion-3 记的是晋级 3 那次（基线在 develop 的 `d6503a197c` 一带
 
 | # | 模块 | 键 | 引擎侧登记（文件 · 形式） | 行 | 库侧今天 | 要补什么 |
 |---:|---|---|---|---:|---|---|
-| 1 | `nn` | `conv2d` | `src/stdlib/nn/tensor_ops.cpp` · setVjp | 863 | 规则集不提这个名字 | 一条 `jvp_conv2d`（左式 `conv2d(...)`）+ 一条 `conv2d_t`；规则集得先 `import nn`（今天零依赖） |
+| 1 | `nn` | `conv2d` | `src/stdlib/nn/tensor_ops.cpp` · setVjp | 863 | 规则集不提这个名字 | 一条 `jvp_conv2d`（左式 `conv2d<stride, padding>(...)`）+ 一条 `conv2d_t`；规则集得先 `import nn`（今天零依赖） |
 | 2 | `nn` | `batch_norm_train` | 同上 · setVjp | 864 | 同上 | 同上 |
 | 3 | `nn` | `max_pool2d` | 同上 · setVjp | 865 | 同上 | 同上 |
 | 4 | `nn` | `avg_pool2d` | 同上 · setVjp | 866 | 同上 | 同上 |

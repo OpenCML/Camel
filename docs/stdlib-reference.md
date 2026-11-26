@@ -7433,40 +7433,43 @@ array type; nothing here needs PyTorch or a GPU.
 #### `conv2d`
 
 ```camel
-conv2d: (input: f32[...], kernel: f32[...], bias: f32[...], stride?: int, padding?: int) => f32[...]
+conv2d: <stride: int, padding: int> (input: f32[...], kernel: f32[...], bias: f32[...]) => f32[...]
 ```
 
 2-D convolution: `input` is `[N, C, H, W]` f32, `kernel` is `[O, C, KH, KW]` f32 and `bias` is
-`[O]` f32. `stride` defaults to 1 and `padding` to 0; the result is `[N, O, OH, OW]` f32 with
-`OH = (H + 2*padding - KH) / stride + 1` and `OW` likewise. An input or kernel that is not
-rank 4, or a window that does not fit, is refused when the call is compiled.
+`[O]` f32. The window is the call's compile-time configuration, written in angle brackets --
+`conv2d<2, 1>(input, kernel, bias)` is stride 2 with padding 1 -- so the extents of the result are
+computed where the call stands: `[N, O, OH, OW]` f32 with `OH = (H + 2*padding - KH) / stride + 1`
+and `OW` likewise. A call writes both. An input or kernel that is not rank 4, or a
+window that does not fit, is refused when the call is compiled.
 
 - Pure.
-- Example: `conv2d(input, kernel, bias, 1, 0)` gives `[N, O, OH, OW]`
+- Example: `conv2d<1, 0>(input, kernel, bias)` gives `[N, O, OH, OW]`
 
 #### `conv2d_input_grad`
 
 ```camel
-conv2d_input_grad: (input: f32[...], kernel: f32[...], dy: f32[...], stride?: int, padding?: int) => f32[...]
+conv2d_input_grad: <stride: int, padding: int> (input: f32[...], kernel: f32[...], dy: f32[...]) => f32[...]
 ```
 
 The gradient of `conv2d` with respect to its input, given the upstream gradient `dy` shaped
-like the convolution's result; the result is shaped like `input`.
+like the convolution's result; the result is shaped like `input`. The window is the call's, as
+on `conv2d`: `conv2d_input_grad<2, 1>(input, kernel, dy)`.
 
 - Pure.
-- Example: `conv2d_input_grad(input, kernel, dy, 1, 0)` gives `like x`
+- Example: `conv2d_input_grad<1, 0>(input, kernel, dy)` gives `like x`
 
 #### `conv2d_kernel_grad`
 
 ```camel
-conv2d_kernel_grad: (input: f32[...], kernel: f32[...], dy: f32[...], stride?: int, padding?: int) => f32[...]
+conv2d_kernel_grad: <stride: int, padding: int> (input: f32[...], kernel: f32[...], dy: f32[...]) => f32[...]
 ```
 
 The gradient of `conv2d` with respect to its kernel, given `dy` shaped like the convolution's
-result; the result is shaped like `kernel`.
+result; the result is shaped like `kernel`. The window is the call's, as on `conv2d`.
 
 - Pure.
-- Example: `conv2d_kernel_grad(input, kernel, dy, 1, 0)` gives `like w`
+- Example: `conv2d_kernel_grad<1, 0>(input, kernel, dy)` gives `like w`
 
 #### `conv2d_bias_grad`
 
@@ -7528,52 +7531,56 @@ so this is the same operator under the name a rule answers its third cotangent w
 #### `max_pool2d`
 
 ```camel
-max_pool2d: (input: f32[...], kernel: int, stride?: int, padding?: int) => f32[...]
+max_pool2d: <kernel: int, stride: int, padding: int> (input: f32[...]) => f32[...]
 ```
 
-Max pooling over a square window of `kernel` on `input` `[N, C, H, W]` f32. `stride` defaults
-to `kernel`, `padding` to 0, and the result is `[N, C, OH, OW]`. A window that lies entirely in
-the padding contributes -inf (the identity of the maximum).
+Max pooling over a square window of `kernel` on `input` `[N, C, H, W]` f32. The window is the
+call's compile-time configuration, written in angle brackets -- `max_pool2d<2, 2, 0>(input)` is a
+2x2 window taking every second element -- so the extents of the result are computed where the
+call stands: `[N, C, OH, OW]` with `OH = (H + 2*padding - kernel) / stride + 1`. A call writes
+all three. A window that lies entirely in the padding contributes -inf (the identity of the
+maximum).
 
 - Pure.
-- Example: `max_pool2d(input, 2)` gives `[N, C, H/2, W/2]`
+- Example: `max_pool2d<2, 2, 0>(input)` gives `[N, C, H/2, W/2]`
 
 #### `avg_pool2d`
 
 ```camel
-avg_pool2d: (input: f32[...], kernel: int, stride?: int, padding?: int) => f32[...]
+avg_pool2d: <kernel: int, stride: int, padding: int> (input: f32[...]) => f32[...]
 ```
 
 Average pooling over a square window of `kernel`: the window's elements plus +0 for those in
-the padding are summed in an f64 accumulator and divided by `kernel*kernel`. `stride` defaults
-to `kernel`, `padding` to 0, and the result is `[N, C, OH, OW]`.
+the padding are summed in an f64 accumulator and divided by `kernel*kernel`. The window is the
+call's compile-time configuration, as on `max_pool2d`, and the extents of the result are computed
+from it.
 
 - Pure.
-- Example: `avg_pool2d(input, 2)` gives `[N, C, H/2, W/2]`
+- Example: `avg_pool2d<2, 2, 0>(input)` gives `[N, C, H/2, W/2]`
 
 #### `max_pool2d_grad`
 
 ```camel
-max_pool2d_grad: (input: f32[...], dy: f32[...], kernel: int, stride?: int, padding?: int) => f32[...]
+max_pool2d_grad: <kernel: int, stride: int, padding: int> (input: f32[...], dy: f32[...]) => f32[...]
 ```
 
 The gradient of `max_pool2d` with respect to its input, given `dy` shaped like the pooling
-result; the result is shaped like `input`.
+result; the result is shaped like `input`. The window is the call's, as on `max_pool2d`.
 
 - Pure.
-- Example: `max_pool2d_grad(input, dy, 2)` gives `like x`
+- Example: `max_pool2d_grad<2, 2, 0>(input, dy)` gives `like x`
 
 #### `avg_pool2d_grad`
 
 ```camel
-avg_pool2d_grad: (input: f32[...], dy: f32[...], kernel: int, stride?: int, padding?: int) => f32[...]
+avg_pool2d_grad: <kernel: int, stride: int, padding: int> (input: f32[...], dy: f32[...]) => f32[...]
 ```
 
 The gradient of `avg_pool2d` with respect to its input, given `dy` shaped like the pooling
-result; the result is shaped like `input`.
+result; the result is shaped like `input`. The window is the call's, as on `avg_pool2d`.
 
 - Pure.
-- Example: `avg_pool2d_grad(input, dy, 2)` gives `like x`
+- Example: `avg_pool2d_grad<2, 2, 0>(input, dy)` gives `like x`
 
 ### Batch normalization
 

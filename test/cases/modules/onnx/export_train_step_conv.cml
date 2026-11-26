@@ -22,8 +22,8 @@ type Cnn = {
 
 with <m: Cnn>
 func loss(x: float[...]) => float {
-    let c1 = relu(conv2d(x, m.conv1_w, m.conv1_b, 1, 1))
-    let c2 = max_pool2d(relu(conv2d(c1, m.conv2_w, m.conv2_b)), 2)
+    let c1 = relu(conv2d<1, 1>(x, m.conv1_w, m.conv1_b))
+    let c2 = max_pool2d<2, 2, 0>(relu(conv2d<1, 0>(c1, m.conv2_w, m.conv2_b)))
     // conv2d, max_pool2d and relu answer in f32 while this model works in f64, so the value is
     // converted where it meets the model's weights (design principles 5.1: the element type is
     // exact, and a conversion is written).

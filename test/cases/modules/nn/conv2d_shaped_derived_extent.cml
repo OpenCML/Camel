@@ -10,7 +10,7 @@
  * kernel's side recovers the *largest* kernel that fits, four instead of three.
  *
  * Three readings, one line each:
- *   plain    conv2d_input_grad(x, w, dy, 2)                 the extents of the operand it reads
+ *   plain    conv2d_input_grad<2, 0>(x, w, dy)               the extents of the operand it reads
  *   derived  conv2d_input_grad_shaped(w, dy, 2)             the type's answer (folded: static)
  *   value    conv2d_input_grad_shaped(w, opaque(dy), 2)     the kernel's answer (the shape it builds)
  *
@@ -44,8 +44,8 @@ func main() => int sync {
     let b = ones::<f32>([1])
     let dy = ones::<f32>([1, 1, 2, 2])
 
-    let dx = conv2d_input_grad(x, w, dy, 2)
-    let dw = conv2d_kernel_grad(x, w, dy, 2)
+    let dx = conv2d_input_grad<2, 0>(x, w, dy)
+    let dw = conv2d_kernel_grad<2, 0>(x, w, dy)
     let db = conv2d_bias_grad(b, dy)
     let dbs = conv2d_bias_grad_shaped(dy)
     `plain  dx={} dw={}`->format<shape(dx), shape(dw)>->println

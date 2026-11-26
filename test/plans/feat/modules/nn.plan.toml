@@ -1477,3 +1477,55 @@ assert(Number(abs3[1]) > 0 && Number(abs3[2]) > 0 && Number(abs3[3]) > 0, `a gra
 }
 """
 timeout_ms = 10000
+
+[[tests]]
+name = "conv2d_window"
+desc = "The window of a convolution is a compile-time parameter of the call (`conv2d<2, 0>`), so the type a call reads states the shape that window gives: a `[1, 1, 6, 6]` input and a `[1, 1, 3, 3]` kernel answer `[1, 1, 2, 2]` under stride 2 and `[1, 1, 4, 4]` under stride 1, and a `[1, 1, 7, 7]` input under padding 1 answers `[1, 1, 7, 7]`. The annotation is the assertion -- a window whose shape the type could not state would not compile there -- and the printed line is the spatial extents read off the results."
+kind = "behavior"
+case = "../../../cases/modules/nn/conv2d_window_static.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_exact = "conv2d_window stride2=2x2 plain=4x4\nconv2d_window padded=7x7\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "conv2d_window_gir"
+desc = "The same program, read as a graph: the stride and the padding are operands of the convolution node (its `context` edges, which is where a `with` argument sits), each a constant `int`, and the node's `outputType` is the shape the window gives -- `f32[1, 1, 2, 2]` for stride 2, `f32[1, 1, 4, 4]` for stride 1 and `f32[1, 1, 7, 7]` for padding 1. That the window is an operand and not a port is the design principle: it is a compile-time fact, so it is folded into the type of the result."
+kind = "behavior"
+case = "../../../cases/modules/nn/conv2d_window_static.cml"
+args = ["${case}", "std::jgir", "std::nop"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const doc = JSON.parse(input.normalized.stdout)
+const graphs = doc.graphs ?? []
+const nodes = graphs.flatMap((g) => (g.nodes ?? []).map((n) => ({ ...n, graph: g.name })))
+const edges = graphs.flatMap((g) => g.edges ?? [])
+const byId = new Map(nodes.map((n) => [n.id, n]))
+const convs = nodes.filter((n) => n.kind === 'OPER' && n.label === 'nn:conv2d')
+const dump = JSON.stringify(nodes.filter((n) => n.kind === 'OPER').map((n) => [n.label, n.outputType]))
+assert(convs.length === 3, `expected the three convolution calls, found ${convs.length}; the OPER nodes are ${dump}`)
+const window = { 'f32[1, 1, 2, 2]': [2, 0], 'f32[1, 1, 4, 4]': [1, 0], 'f32[1, 1, 7, 7]': [1, 1] }
+const stated = convs.map((n) => String(n.outputType ?? '')).sort().join(' | ')
+const expected = Object.keys(window).sort().join(' | ')
+assert(stated === expected, `the convolution nodes state ${stated}, not ${expected}`)
+for (const conv of convs) {
+  const context = edges.filter((e) => e.target === conv.id && e.kind === 'context').sort((a, b) => a.targetIndex - b.targetIndex)
+  assert(context.length === 2, `the node of ${conv.outputType} has ${context.length} window operand(s)`)
+  const values = context.map((e) => {
+    const source = byId.get(e.source)
+    assert(source !== undefined, `a window operand of ${conv.outputType} has no node`)
+    assert(source.kind === 'DATA' && source.outputType === 'int', `a window operand of ${conv.outputType} is ${JSON.stringify([source.kind, source.outputType])}, not a constant int`)
+    return Number(String(source.label ?? '').trim())
+  })
+  const want = window[conv.outputType]
+  assert(values.length === 2 && values.every((v, i) => v === want[i]), `the node of ${conv.outputType} states the window ${values.join(',')}, not ${want.join(',')}`)
+}
+}
+"""
+timeout_ms = 20000
+

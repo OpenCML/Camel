@@ -244,6 +244,10 @@ expect_output_not_contains = ["unreachable"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 10000
 
+# The column is the call's `(`: with the window written in angle brackets, the call's
+# parentheses stand six characters further right, and the reading names the window as
+# `<int, int>` before the operands -- a native operator's with-arguments are part of the
+# sentence the call is refused with.
 [[tests]]
 name = "conv2d"
 desc = "A static shape conflict in `conv2d` fails compilation at the call, naming both shapes."
@@ -253,7 +257,7 @@ args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::ArgumentsRejected"
 expect_diagnostic_line = 10
-expect_diagnostic_column = 19
+expect_diagnostic_column = 25
 expect_output_contains = ["conv2d input channels 3 do not match"]
 expect_output_not_contains = ["unreachable"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]

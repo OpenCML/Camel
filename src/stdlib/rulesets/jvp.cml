@@ -1688,10 +1688,18 @@ export rule jvp_log_d(x: float) { log_d(x) => func (dx: float) {
 // that the library answers the default spelling and refuses the stated one by port count, which is
 // a refusal and not a wrong number.
 
-/// `conv2d(input, kernel, bias)` is linear in each of its three tensors, so its tangent is the same
-/// convolution with one tangent in the place of one operand and a zero in the others:
+/// `conv2d<1, 0>(input, kernel, bias)` is linear in each of its three tensors, so its tangent is the
+/// same convolution with one tangent in the place of one operand and a zero in the others:
 ///
-///     dy = conv2d(dx, w, 0) + conv2d(x, dw, 0) + conv2d(0, 0, db)
+///     dy = conv2d<1, 0>(dx, w, 0) + conv2d<1, 0>(x, dw, 0) + conv2d<1, 0>(0, 0, db)
+///
+/// The window is the call's compile-time parameter, and this law is written for the plain window
+/// alone -- a rule's right side **cannot** hand on a window it bound: what it passes in angle
+/// brackets has to be a constant of the rule's own graph, and the matched node's own context argument
+/// is not one (`transforms/rule_expand.cpp`: "the rule's right side passes a context argument it does
+/// not carry"). A convolution called with another window therefore has no forward law, and `jvp`
+/// refuses it by name -- a refusal, not a tangent computed with the wrong geometry. When the transform
+/// can carry a matched node's context argument, these angle brackets become the law's own parameters.
 ///
 /// The bias's tangent arrives as the third operand of a neutral convolution and not as a
 /// broadcast, which is how the kernel reads a bias at all (`tensor/kernels/conv.cpp`: one value
@@ -1705,26 +1713,33 @@ export rule jvp_log_d(x: float) { log_d(x) => func (dx: float) {
 /// law and reads no tangent: the law is correct and computes the forward value twice, and a
 /// `conv2d_stated` is the one change that would remove the four calls below.
 export rule jvp_conv2d::<T>(x: T[...], w: T[...], b: T[...]) when is_float::<T>() {
-    conv2d(x, w, b) => func (dx: T[...], dw: T[...], db: T[...]) {
+    conv2d<1, 0>(x, w, b) => func (dx: T[...], dw: T[...], db: T[...]) {
         add_stated(
             add_stated(
-                conv2d(dx, w, zeros_like(b)),
-                conv2d(x, dw, zeros_like(b)),
-                shape(conv2d(x, w, b)),
-                shape(conv2d(x, w, b))),
-            conv2d(zeros_like(x), zeros_like(w), db),
-            shape(conv2d(x, w, b)),
-            shape(conv2d(x, w, b)))
+                conv2d<1, 0>(dx, w, zeros_like(b)),
+                conv2d<1, 0>(x, dw, zeros_like(b)),
+                shape(conv2d<1, 0>(x, w, b)),
+                shape(conv2d<1, 0>(x, w, b))),
+            conv2d<1, 0>(zeros_like(x), zeros_like(w), db),
+            shape(conv2d<1, 0>(x, w, b)),
+            shape(conv2d<1, 0>(x, w, b)))
     }
 }
 
-/// `d(max_pool2d(x, kernel))`: the window each output reads is chosen by `x` and **not by the
-/// tangent**, so the law cannot be `max_pool2d(dx, kernel)` -- that would answer the maximum of the
+/// `d(max_pool2d<2, 2, 0>(x))`: the window each output reads is chosen by `x` and **not by the
+/// tangent**, so the law cannot be `max_pool2d<2, 2, 0>(dx)` -- that would answer the maximum of the
 /// tangents in each window, which is a different matrix. What it is instead is the selection the
 /// engine's own pullback uses, read as a mask:
 ///
-///     mask    = max_pool2d_grad(x, ones_like(y), kernel)        // 1 at each window's maximum
-///     dy      = avg_pool2d(mask ⊙ dx, kernel) * kernel²         // the window's one survivor, summed
+///     mask    = max_pool2d_grad<2, 2, 0>(x, ones_like(y))   // 1 at each window's maximum
+///     dy      = avg_pool2d<2, 2, 0>(mask ⊙ dx) * kernel²    // the window's one survivor, summed
+///
+/// The window is the call's compile-time parameter, and this law is written for one window -- a
+/// 2x2 kernel taking every second element -- because a rule's right side cannot hand on a window it
+/// bound: what it passes in angle brackets has to be a constant of the rule's own graph, and the
+/// matched node's own context argument is not one (`transforms/rule_expand.cpp`, "the rule's right
+/// side passes a context argument it does not carry"). A pooling called with another window has no
+/// forward law and `jvp` refuses it by name.
 ///
 /// The mask is a **residual** (it reads `x` and the output's shape, no tangent), and the two
 /// operators over the tangent are linear, so the linear half is transposable: `avg_pool2d_t` and
@@ -1737,33 +1752,33 @@ export rule jvp_conv2d::<T>(x: T[...], w: T[...], b: T[...]) when is_float::<T>(
 /// reads a value the transposed function is not handed"). `jvp_maximum` pays the same price, with
 /// `shape(maximum(x, w))` written four times.
 ///
-/// The window's area is written `T(kernel * kernel)` and not `float(kernel * kernel)`: `full(shape,
+/// The window's area is written `T(2 * 2)` and not `float(2 * 2)`: `full(shape,
 /// value)` takes the array's element type from the value's own type, so a `float` fill is a second
 /// element type beside the tangent's and the `mul_stated` it feeds has no instance. `T` is the
 /// law's own element type, so both operands of that product are one type at every width the
 /// operator has.
-export rule jvp_max_pool2d::<T>(x: T[...], kernel: int) when is_float::<T>() {
-    max_pool2d(x, kernel) => func (dx: T[...]) {
+export rule jvp_max_pool2d::<T>(x: T[...]) when is_float::<T>() {
+    max_pool2d<2, 2, 0>(x) => func (dx: T[...]) {
         mul_stated(
-            avg_pool2d(
+            avg_pool2d<2, 2, 0>(
                 mul_stated(
-                    max_pool2d_grad(x, ones_like(max_pool2d(x, kernel)), kernel),
+                    max_pool2d_grad<2, 2, 0>(x, ones_like(max_pool2d<2, 2, 0>(x))),
                     dx,
                     shape(x),
-                    shape(x)),
-                kernel),
-            full(shape(max_pool2d(x, kernel)), T(kernel * kernel)),
-            shape(max_pool2d(x, kernel)),
-            shape(max_pool2d(x, kernel)))
+                    shape(x))),
+            full(shape(max_pool2d<2, 2, 0>(x)), T(2 * 2)),
+            shape(max_pool2d<2, 2, 0>(x)),
+            shape(max_pool2d<2, 2, 0>(x)))
     }
 }
 
-/// `d(avg_pool2d(x, kernel)) = avg_pool2d(dx, kernel)`: a mean of a window is a sum of its elements
-/// divided by a count that reads no element, so the tangent is the mean of the tangents -- and the
-/// padding's `+0` terms are `+0` on both sides.
-export rule jvp_avg_pool2d::<T>(x: T[...], kernel: int) when is_float::<T>() {
-    avg_pool2d(x, kernel) => func (dx: T[...]) {
-        avg_pool2d(dx, kernel)
+/// `d(avg_pool2d<2, 2, 0>(x)) = avg_pool2d<2, 2, 0>(dx)`: a mean of a window is a sum
+/// of its elements divided by a count that reads no element, so the tangent is the mean of the
+/// tangents -- and the padding's `+0` terms are `+0` on both sides. The window is the one the
+/// neighbouring `jvp_max_pool2d` writes, for the same reason.
+export rule jvp_avg_pool2d::<T>(x: T[...]) when is_float::<T>() {
+    avg_pool2d<2, 2, 0>(x) => func (dx: T[...]) {
+        avg_pool2d<2, 2, 0>(dx)
     }
 }
 
