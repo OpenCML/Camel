@@ -3,8 +3,8 @@ order = 365
 tier = "fast"
 tags = ["feat", "mm", "gc"]
 
-# The whole file is the fast layer, measured on 2026-11-25 at `2dcda93c7c` (`-Plan
-# test/plans/feat/mm -Tier milestone -Jobs 8`, 4,889 cases): the 44 entries it had in the milestone
+# The whole file is the fast layer: read with `-Plan test/plans/feat/mm -Tier milestone -Jobs 8`
+# (4,889 cases), the 44 entries it had in the milestone
 # layer cost 0.12-0.86 s each, the slowest ones being `live_table.generational.*` (0.74-0.86 s, a
 # 56,000-row table swept once) and `tuple_trace_guard` (0.34 s); the two that were already fast are
 # the same order. Every one of them is under the 2 s line that separates the developer loop from

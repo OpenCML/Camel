@@ -5,7 +5,7 @@
 # candidate cost the host's process count times two forks and a sweep cost that times its candidate
 # count, and the reading that judged the last candidate was as old as the sweep was long.
 #
-# Measured on 2026-11-25 on the build host (32 cores, 1 m load 15-20, ~1780 processes), the sweep
+# On the build host (32 cores, 1 m load 15-20, ~1780 processes), the sweep
 # extracted from this tree and run against a fixture of N empty candidates:
 #
 #     N = 1   7 042 ms        N = 2   14 636 ms       N = 4   27 537 ms      N = 40   290 120 ms
@@ -35,7 +35,7 @@
 #             * the sweep states how old its snapshot got.
 #
 #   pwsh -NoProfile -File internal/tools/camel-remote-cleanup-sweep-cost.test.ps1
-#   pwsh -NoProfile -File internal/tools/camel-remote-cleanup-sweep-cost.test.ps1 -BashHost 88zjwei
+#   pwsh -NoProfile -File internal/tools/camel-remote-cleanup-sweep-cost.test.ps1 -BashHost <host>
 #
 # Part B needs a bash that can hold a fifo and read /proc. Without one its checks are counted as
 # skipped and the summary says how many, so a run that did not make them cannot pass for a green one.

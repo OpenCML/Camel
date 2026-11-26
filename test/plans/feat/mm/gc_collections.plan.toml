@@ -72,7 +72,7 @@ desc = "Maps and sets under collection stress: a table keeps its keys and values
 # twenty-four's were, and every run of them since has stayed inside the bound they set.
 #
 # The layer of the 33 small arms -- the twelve `collections_*`, the three `collection_constants_*`
-# and the eighteen `collections_tiny_*` -- is `fast`: measured on 2026-11-25 at `2dcda93c7c`
+# and the eighteen `collections_tiny_*` -- is `fast`, read in the milestone-layer run
 # (`-Plan test/plans/feat/mm -Tier milestone -Jobs 8`), they cost 0.14-1.00 s each and 25.6 s
 # together, every one of them under the 2 s line of docs/test-plans.md, "Layers". The other 40
 # entries stay in the milestone layer: the 36 `collection_trees_*` read 9.2-20.8 s and the four

@@ -16,7 +16,7 @@ tests cover that: the nested map at full size, and every program at a small size
 collection, heap verification before and after, at every safepoint the scheduler polls.
 """
 
-# The layer, measured on 2026-11-25 at `2dcda93c7c` (`-Plan test/plans/feat/mm -Tier milestone
+# The layer follows from cost, read across the corpus (`-Plan test/plans/feat/mm -Tier milestone
 # -Jobs 8`, 4,889 cases, wall 334.6 s): this file's 22 entries cost 0.38-8.47 s each, so none of
 # them belongs to the milestone layer, whose line is "minutes, or whose number depends on what else
 # the machine is doing" (docs/test-plans.md, "Layers").
@@ -34,7 +34,7 @@ collection, heap verification before and after, at every safepoint the scheduler
 #
 # The measurement is not the one that motivated the move, and the difference is the point: while the
 # four `reduce` entries were red they died of SIGSEGV before compiling and cost 0.1 s each
-# (`8bb9ff937d`, the case seeded its accumulator with the interval), so "cheap" was a property of
+# (the case seeded its accumulator with the interval), so "cheap" was a property of
 # the *defect* and not of the case. A cheap crash is not a cheap case: green, the same entry is
 # 6.10-8.47 s, and a layer decided on the red reading would have put a 8.47 s case in the loop.
 

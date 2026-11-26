@@ -250,7 +250,7 @@ timeout_ms = 300000
 # Slow: 3.0 s over `-BashHost <host>` (three sweeps of a seven-candidate fixture). The number that
 # matters here is the one its first part-B check prints: `readlink` calls for one sweep over seven
 # candidates, **0** with the snapshot and **17 231** on the guard this replaces, which resolved two
-# links per host process per candidate -- measured 2026-11-25 at ~1780 processes: 7.0 s per candidate,
+# links per host process per candidate -- on a host of ~1780 processes: 7.0 s per candidate,
 # 290 s for the 40-candidate sweep a remote run pays before it starts, and a reading minutes old by
 # the time the last candidate was judged. Part A needs a `pwsh` and part B a bash, so a run with no
 # bash prints `21 checks, 0 failed, 18 skipped`; the count below is the one both readings contain,

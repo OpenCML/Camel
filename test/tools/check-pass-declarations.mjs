@@ -353,8 +353,8 @@ for (const entry of fs.readdirSync(LIBRARY)) {
         // shape declares an operator of a function value, and one with a body is a pass written in
         // Camel: neither has a registration in C++.
         //
-        // The result type is written after `=>`: the notation pass `eb20efab7b` rewrote the corpus
-        // one way, and this reader kept the `): F!` spelling it was written against. It then matched
+        // The result type is written after `=>`: the corpus was rewritten to that spelling, and this
+        // reader kept the `): F!` spelling it was written against. It then matched
         // no declaration at all, so a module that contributes a pass was reported as one whose
         // declaration had not been read, and the run said the relation held over zero modules. The
         // shape below is the one the corpus writes; a declaration left in the retired spelling is
