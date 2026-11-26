@@ -53,3 +53,20 @@
 - 不杀 git 进程；`index.lock` 用 `scripts/check-index-lock.mjs` 查持有者。
 - 不重写历史提交去补说明；缺内容的在报告页补账。
 - 别人的分支上做预解，先问协调者。
+## 零待合内容的分支：存档后删，不要合（D-1126-3）
+
+`merge-tree` 出的树与 `integration` 自己的树**逐字节相同** ⇒ 内容已进树，**合进去什么都不会变**。
+这种分支**不要合**：合并位会正确地拒绝它（`the base and this tree are the same commit … there was no change to measure`，exit 2），
+因为门禁不肯把“没测”写成“绿”。**处理办法是存档后删**：
+
+```
+① 打存档标签（本地，不推）：`git tag archive/<日期>-<lane> <tip>`
+② 工作树必须干净、无 `.git/index.lock`、无活会话
+③ `git worktree remove <路径>`（**不许 `--force`**）→ `git branch -D <分支>`
+   —— 这里 `-d` 会拒绝（它不是祖先），所以用 `-D`；依据是第 ①/② 步的读数，不是“我看它像已合”
+④ 报：五条各自的标签名、tip、删除前后的 `lane/*` 计数
+```
+
+**常驻规矩：**经 `b/<lane>` 重挂副本合进去的车道，**合完当轮就按上面这一步删原分支**，不要留到计数里去。
+2026-11-26 的实例：5 条（cc-int8 / cc-onnx-loop / docs-pass-forms / milestone-fast / overload-guard）挂在“未合 21”里，
+其中没有一条是待办；删掉后闸门 21 → 16。
