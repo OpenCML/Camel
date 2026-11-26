@@ -567,13 +567,26 @@ rejection reason. That resolver extension is part of step 2.
   mentions a convolution or a pooling therefore fixes its window -- `conv2d<1, 0>`
   for `jvp_conv2d` and `conv2d_t`, `max_pool2d<2, 2, 0>` (and likewise
   `avg_pool2d`) for the pooling laws -- and a call with any other window has no law at
-  all: the program refuses by name, saying which law had no cotangent for which
-  operator (`test/cases/modules/nn/conv2d_stride2_transpose.cml` and
-  `max_pool2d_window_transpose.cml` pin the refusal). Two changes would widen the
+  all. What a reader sees then depends on whether the law can be built at the call:
+  `conv2d_t` names four type parameters and is asked for six once the call's two window
+  arguments are among them, so it does not instantiate and the refusal names the law
+  (`test/cases/modules/nn/conv2d_stride2_transpose.cml` pins that sentence); a pooling
+  law instantiates -- its right side is `max_pool2d_grad<2, 2, 0>(x, ct)` -- and the
+  walk then stops one step later, on the **value** that gradient reads
+  (`skip=law-reads-a-value`, "the rule's right side reads a value the transposed
+  function is not handed", `test/cases/modules/nn/max_pool2d_window_transpose.cml` pins
+  that one). The second refusal is not about the window: a law is chosen on the
+  operands' types (`transforms/transpose/rules.cpp#chooseTransposedRule`) and the node's
+  `with` arguments are not compared when it is chosen, so every pooling window is
+  refused for the same reason, the library's own included. Two changes would widen the
   coverage, and both are owed: the shaped gradients of `conv2d` take the window as a
   parameter (`conv2d_input_grad_shaped<stride, padding>(kernel, dy)`, which lets the
   law's angle brackets be the law's own), and the transform can carry a matched node's
-  `with` argument into a rule's right side. Until then the library stays narrow on
+  `with` argument into a rule's right side. A third is owed before a window can be
+  *enforced* rather than merely documented: choosing a law on the operands' types alone
+  means a law written for one window would be applied to any window whose operands have
+  the same types, so the values a law's right side reads are what keeps that from
+  happening today. Until then the library stays narrow on
   purpose: a law that quietly answered for the wrong window is the defect the refusal
   prevents.
 - `tensor.load_npy::<T>` / `tensor.save_npy` read and write NumPy files; the load declares the

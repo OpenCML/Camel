@@ -1,17 +1,18 @@
 /**
- * The same refusal as `conv2d_stride2_transpose`, for a pooling, and for the reason the library's
- * own wording gives: a law's right side cannot hand on a window it bound
- * (`transforms/rule_expand.cpp` refuses a rule that writes the matched node's own `with` argument),
- * so `max_pool2d_t`'s pattern says `max_pool2d<2, 2, 0>` -- the library's window -- and a pooling
- * called with a 3x3 window has **no transposed law**. What this file pins is that the program says
- * so, instead of answering a cotangent computed with the wrong window, which is what a law that
- * quietly matched only its own window would have shipped.
+ * A pooling's transposed law is refused instead of answered, because the law reads a value the
+ * transposed half is not handed: `max_pool2d_t`'s right side is `max_pool2d_grad<2, 2, 0>(x, ct)`,
+ * and `transpose(loss_pool)(1.0)` carries the cotangent alone. The walk stops at the operator and
+ * says which value is missing (`skip=law-reads-a-value uri=nn:max_pool2d position=0`,
+ * `reason=the rule's right side reads a value the caller does not carry`).
  *
- * The case matters beyond this one call: a pooling called with any window but `<2, 2, 0>` has no
- * forward law either (`jvp_max_pool2d`, `jvp_avg_pool2d`), and `conv2d_t` is in the same position
- * for a convolution that is not `conv2d<1, 0>`. The library states the coverage and refuses the
- * rest by name; the two debts that would widen it are the two owed changes
- * `docs/technical/25_tensor_stack_and_onnx_export.md` states ("A law names one window").
+ * **The window is not what this refusal is about.** The window `3, 1, 0` is in the case because a
+ * pooling written with a window is the program a reader meets; the law is *chosen* on the operands'
+ * types (`transforms/transpose/rules.cpp#chooseTransposedRule` builds the instance from the
+ * cotangent's element type and the node's operands, not from its `with` arguments), so every
+ * window -- `<2, 2, 0>` included -- is refused here for this same reason. The two debts that would
+ * widen a law's coverage are the two owed changes `docs/technical/25_tensor_stack_and_onnx_export.md`
+ * states ("A law names one window"), and the window not being compared when a law is chosen is
+ * recorded there beside them.
  */
 
 import { max_pool2d } from nn

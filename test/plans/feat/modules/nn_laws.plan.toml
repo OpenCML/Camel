@@ -86,14 +86,14 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 [[tests]]
 name = "max_pool2d_window_transpose"
-desc = "The same refusal for a pooling: `max_pool2d_t`'s pattern says `max_pool2d<2, 2, 0>`, because a law's right side cannot hand on a window it bound (`transforms/rule_expand.cpp` refuses a right side that passes a context argument the rule does not carry). A pooling called `max_pool2d<3, 1, 0>` therefore has no transposed law, and the program says so instead of answering a cotangent computed with the wrong window. The window is the library's default for every law that names a pooling -- `jvp_max_pool2d` and `jvp_avg_pool2d` are in the same position -- and the two changes that would widen it are the two owed changes `docs/technical/25_tensor_stack_and_onnx_export.md` states."
+desc = "A pooling's transposed law is refused, not answered: `max_pool2d_t`'s right side is `max_pool2d_grad<2, 2, 0>(x, ct)` and reads `x`, while `transpose(loss_pool)(1.0)` hands it the cotangent alone, so the walk stops with `skip=law-reads-a-value uri=nn:max_pool2d position=0 reason=the rule's right side reads a value the caller does not carry`. The window `3, 1, 0` is not what this refusal is about: the law is chosen on the operands' types (`transforms/transpose/rules.cpp#chooseTransposedRule`), not on the node's `with` arguments, so every window is refused here for the same reason. The program must not answer a cotangent computed for another window, which is what the marker pins."
 kind = "negative"
 case = "../../../cases/modules/nn/max_pool2d_window_transpose.cml"
 args = ["${case}", "${backend}"]
 backends = ["nvm"]
 expect_exit = 1
 expect_diagnostic_name = "RuntimeDiag::RuntimeError"
-expect_output_contains = ["the law `max_pool2d_t` has no cotangent for `nn:max_pool2d`"]
+expect_output_contains = ["the rule's right side reads a value the transposed function is not handed"]
 expect_output_not_contains = ["pooling transpose should have been refused, and it answered"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
