@@ -4390,6 +4390,15 @@ node_handle_t Builder::visitBodyNode(const GCT::node_ptr_t &gct) {
     return result;
 }
 
+/// `:struct/append_arr` has no well-known id, so the layer that recognises it interns the URI once
+/// and compares the id a declaration holds (`OperatorIndex::oper`, camel/core/operator_table.h);
+/// the owned form has a well-known id of its own (`oper::AppendOwned`).
+camel::core::OperId appendArrayOper() {
+    static const camel::core::OperId id =
+        camel::core::OperatorTable::instance().intern(":struct/append_arr");
+    return id;
+}
+
 bool Builder::inferLoopStateFromAppend(
     const arm_ptr_t &body, const arm_ptr_t &cond, const GCT::node_ptr_t &loop,
     std::vector<node_handle_t> &initial, std::vector<Type *> &stateTypes, size_t index,
@@ -4398,7 +4407,7 @@ bool Builder::inferLoopStateFromAppend(
         return false;
     }
     const oper_idx_ptr_t *op = nodeGraphOf(next)->operTarget(next);
-    if (op == nullptr || (*op)->uri() != ":struct/append_arr") {
+    if (op == nullptr || (*op)->oper() != appendArrayOper()) {
         return false;
     }
     const auto normIns = normInputsOf(next);
@@ -4492,8 +4501,7 @@ std::vector<Type *> Builder::collectLoopAppends(
         if (op == nullptr) {
             continue;
         }
-        const std::string_view uri = (*op)->uri();
-        if (uri != ":struct/append_arr" && uri != ":struct/append_arr_owned") {
+        if ((*op)->oper() != appendArrayOper() && (*op)->oper() != camel::core::oper::AppendOwned) {
             continue;
         }
         const auto normIns = normInputsOf(next[j]);
@@ -4690,7 +4698,7 @@ void Builder::markLoopStateInPlaceOne(
             return;
         }
         const oper_idx_ptr_t *op = nodeGraphOf(next)->operTarget(next);
-        if (op == nullptr || (*op)->uri() != ":struct/append_arr") {
+        if (op == nullptr || (*op)->oper() != appendArrayOper()) {
             return;
         }
         const auto normIns = normInputsOf(next);
