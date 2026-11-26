@@ -14,6 +14,7 @@
 #include "camel/core/type/composite/tuple.h"
 #include "camel/execute/graph_runtime_support.h"
 #include "camel/execute/shaped_operators.h"
+#include "camel/runtime/block_programs.h"
 #include "graph/graph_view.h"
 
 #include <algorithm>
@@ -1117,6 +1118,26 @@ void FunctionEmitter::lowerOperator(Frame &frame, gc_node_ref_t ref, Block &out)
     // `tensor:ones` and `tensor:zeros` are rules of the table now (operator_rules.cpp); a tensor
     // builder the table has no rule for is refused below like any other operator, on the type of
     // the value it takes or builds.
+    // An operator whose implementation is a program of this context's block store is a block
+    // (camel/runtime/block_programs.h). Its program was compiled for the run that made it and
+    // lives in this context's store; the program std::cpp writes builds its own context from the
+    // install and has no block of it, so the call would reach no kernel. Handing the call the
+    // operator identity instead would not help -- the generated program has no entry to find it
+    // in -- so the export is refused here, at the node, and the reason says what would have to
+    // change for such a body to cross.
+    if (program_.sites.context() != nullptr &&
+        program_.sites.context()->blockPrograms().byUri(uri) != nullptr) {
+        refuse(
+            g,
+            ref,
+            std::format(
+                "{} calls the block operator '{}', whose implementation is a program the run that "
+                "compiled it holds: a program std::cpp writes builds its own context from the "
+                "install and has no block in it, so the call would reach no kernel. Export the "
+                "body as a function of the program instead",
+                describeFunction(g),
+                uri));
+    }
     if (rule == nullptr) {
         for (const auto types : {&normTypes, &withTypes}) {
             for (const Type *t : *types) {
