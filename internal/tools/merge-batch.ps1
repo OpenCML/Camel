@@ -130,6 +130,11 @@ $ErrorActionPreference = 'Stop'
 # fast-forward.
 . (Join-Path $PSScriptRoot 'merge-push-shape.ps1')
 
+# And the other precondition of a push: `.husky/_` is a path relative to the tree that pushes, so a
+# batch run out of a worktree husky never ran in would publish with every rule skipped. One
+# implementation, shared with `merge-lane.ps1` and with the worktree entry that installs the hooks.
+. (Join-Path $PSScriptRoot 'push-hooks-guard.ps1')
+
 # `pwsh -File` makes `-Branch a,b` one word, and `-Branch a -Branch b` is a PowerShell binding error
 # (the engine refuses it before this body runs). So the list is split on commas exactly as
 # `-Plan`/`-AstOnly` are elsewhere in this directory (camel-remote-args.ps1), and both spellings
@@ -870,6 +875,20 @@ try {
     if ($remoteNow -ne $base) {
         Stop-With "$($targetInfo.Origin) moved to $remoteNow while this batch was being measured" "The comparison was against $($script:baseShort), so a push now would publish a tree nothing compared. Run the batch again against the new $($targetInfo.Name)." 2
     }
+
+    # --- and that the push has a guard at all ---------------------------------
+    # A hooks directory git cannot find is not an error to git: the push below would succeed with the
+    # develop lock, the arrival shape, the merge record and the process-trace check all skipped. The
+    # trees a batch makes are made by this tool, so the guard is read in the tree the push leaves
+    # from, before the attempt, and the pass records go with the refusal for the same reason they go
+    # with a failed push: a record is a claim about a commit that was published.
+    $hooksGuard = Test-PushHookGuard -Tree $MergeWorktree -Target $targetInfo.Name
+    if (-not $hooksGuard.Ok) {
+        foreach ($m in $built.Merges) { Remove-Item -LiteralPath (Join-Path $passedDir "$($m.Sha).json") -Force -ErrorAction SilentlyContinue }
+        Stop-With "this push would have no guard: $($hooksGuard.Kind)" `
+            (((@($hooksGuard.Message) + "The pass records were removed along with the push they were written for. The merged tree is kept at $($script:mergeTree).") -join "`n")) 2
+    }
+    foreach ($line in @($hooksGuard.Message)) { Write-Host "  $line" }
 
     $pushOk = $false
     for ($attempt = 1; $attempt -le 3; $attempt++) {
