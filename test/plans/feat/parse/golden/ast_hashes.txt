@@ -2481,7 +2481,7 @@ cb76444ba7eb7bfd ok test/cases/consistency/logical/right_not_bool.cml
 debcaec04cbc75be ok test/cases/consistency/match/no_case_matches_int.cml
 1edd7b07689c9307 ok test/cases/consistency/match/no_case_matches_string.cml
 100a4a95d3d3f6e5 ok test/cases/consistency/match/one_bool_case.cml
-163d136bfddd6a59 ok test/cases/consistency/narrowing/after_narrowing.cml
+ad11ee603825b09d ok test/cases/consistency/narrowing/after_narrowing.cml
 fb11fd9e40b40d29 ok test/cases/consistency/narrowing/compare_functions.cml
 1586ff13d52cdcc7 ok test/cases/consistency/narrowing/compare_plain_with_null.cml
 14e60c1ad9352140 ok test/cases/consistency/narrowing/compare_two_nullables.cml
@@ -2638,6 +2638,9 @@ d406f841a8d38ce9 ok test/cases/effects/err_pure_parameter_write.cml
 23cf0dc29fb3b3b3 ok test/cases/effects/err_read_entry_writes.cml
 f49849657e7213b6 ok test/cases/effects/err_recursive_pure.cml
 0ee7d24581d5beb0 ok test/cases/effects/err_resource_not_imported.cml
+4cdbd41e16faa84f ok test/cases/effects/err_resource_observed_readonly.cml
+d705e17d90a03ec0 ok test/cases/effects/err_resource_readonly_write_word.cml
+12ce73bc1dda8807 ok test/cases/effects/err_resource_unordered_overwriting.cml
 c6cafaec407121fd ok test/cases/effects/err_unknown_resource.cml
 85424fc02d90b707 ok test/cases/effects/err_uses_live.cml
 f77d7bc7b5bd82cc ok test/cases/effects/err_variable_in_clause.cml
@@ -2665,6 +2668,7 @@ e7cd40104434b71f ok test/cases/effects/pure_reads_a_ref.cml
 5ab9e8d38a94fe34 ok test/cases/effects/pure_writes_an_external_resource_is_refused.cml
 46cea4fb0d846587 ok test/cases/effects/read_write_entries.cml
 47a182f53863ba2e ok test/cases/effects/readonly_resource_read.cml
+9ffc66b585c54f02 ok test/cases/effects/resource_modifier_words.cml
 508e12374592e493 ok test/cases/effects/two_calls_through_values_keep_both_writes.cml
 bcc1197c6f1ab51f ok test/cases/effects/two_references_write_one_object.cml
 7270fb8f16307c2c ok test/cases/effects/two_references_write_one_object_unsynced.cml
