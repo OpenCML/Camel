@@ -48,7 +48,7 @@ import { erfc as math_erfc, erf as math_erf, exp as math_exp, log as math_log, p
 // design principles 10.1 allows between modules (only a *type* cycle is diagnosed; the one-way
 // layering the build enforces is the C++ kernel's, 10.5) and `rulesets.jvp` records the same
 // import from the forward side.
-import { avg_pool2d, avg_pool2d_grad, conv2d, conv2d_bias_grad, conv2d_bias_grad_stated, conv2d_input_grad, conv2d_input_grad_stated, conv2d_kernel_grad, conv2d_kernel_grad_stated, embedding, embedding_table_grad, max_pool2d, max_pool2d_grad, softmax_cross_entropy, softmax_cross_entropy_grad } from nn
+import { avg_pool2d, avg_pool2d_grad, conv2d, conv2d_bias_grad, conv2d_bias_grad_shaped, conv2d_input_grad, conv2d_input_grad_shaped, conv2d_kernel_grad, conv2d_kernel_grad_shaped, embedding, embedding_table_grad, max_pool2d, max_pool2d_grad, softmax_cross_entropy, softmax_cross_entropy_grad } from nn
 import { abs, add_stated, broadcast_like, div_stated, erf, erfc, exp, full, gelu, layer_norm, layer_norm_grad, linear, log, log_softmax, matmul, matmul_stated, max, max_axis_stated, maximum, mean, mean_axis_stated, mean_stated, min, min_axis_stated, minimum, mul_stated, numel, permute, pick_at, relu, reshape, rsqrt, shape, sigmoid, softmax, softmax_grad, sqrt, subtract, subtract_stated, sum, sum_axis_stated, sum_stated, sum_to, take, take_stated, tanh, transpose, where, zeros, zeros_like } from tensor
 import { is_float } from types
 
@@ -1516,29 +1516,32 @@ export rule linear_t::<T, A, B>(x: A, w: B) when is_float::<T>() { linear(x, w) 
 // operator that would state them does not exist yet).
 
 /// The cotangents of `conv2d(x, w, b)`: one per operand, from the kernel's own three gradients --
-/// the **stated** twins of them, which take the shape of the operand they answer where the plain
-/// ones take the tensor.
+/// the **shaped** twins of them, which derive the answered operand's extents from the operands the
+/// gradient does read where the plain ones read the tensor.
 ///
 /// The plain spelling reads a value at the position it answers: `conv2d_input_grad(x, w, ct)` reads
-/// `w`, and `conv2d_kernel_grad` reads `x`, and at `position = 0` / `1` the operand the law answers
-/// is the one whose cotangent the caller holds and whose **value** nobody does -- in a transposed
-/// graph that slot is the tangent (`stdlib/rulesets/jvp.cml#jvp_conv2d`), so the walk refused this
-/// law with `law-reads-a-value`. The twin answers the same tensor from the same kernel: the three
-/// gradient kernels never read the values of the operand they are the gradient of -- `col2im` writes
-/// every element of `dx` from the geometry and `dw` is accumulated from zero -- so its extents are
-/// the whole of what the law needs, and `shape(x)` of an operand and `shape(w)` of an operand are
-/// values the transposed half holds (design principles 9.3: the operand's declared type decides
-/// them). `shape(b)` likewise, and `conv2d_bias_grad` reads `dy` alone.
+/// `w` and `conv2d_kernel_grad(x, w, ct)` reads `x`, and at the position the law answers that operand
+/// is the tangent the caller hands over (`stdlib/rulesets/jvp.cml#jvp_conv2d` writes the tangent
+/// convolution with the primal in the other two places, and the answered place holds the tangent).
+/// Nobody holds its value, so the walk refuses the plain law with `law-reads-a-value`, and no
+/// spelling of `shape` of it helps: a tangent states no extents (design principles 5.4), so the
+/// extended `shape(x)` is not a value a transposed half holds either.
 ///
-/// The numbers do not move: each component calls the same kernel entry point the plain operator
-/// calls, with the same operands in the same order (`src/stdlib/nn/tensor_ops.cpp`, and
-/// `src/stdlib/tensor/kernels/conv.cpp`: `conv2dInputGradStated` and `conv2dKernelGradStated` differ
-/// from their siblings only in where the answer's shape comes from).
+/// What the transposed half *does* hold is the other two operands, and they are enough: a
+/// convolution's output shape is `OH = (H + 2 * padding - KH) / stride + 1`, so `H` is
+/// `(OH - 1) * stride + KH - 2 * padding`, and the kernel's window follows from the input and `dy`
+/// the same way. The shaped twins read exactly that (`src/stdlib/tensor/kernels/conv.cpp
+/// #conv2dInputGradShaped`), and the gradients themselves never read the values of the operand they
+/// are the gradient of -- `col2im` writes every element of `dx` from the geometry and `dw` is
+/// accumulated from zero -- so the numbers cannot move: each component calls the same kernel the
+/// plain operator calls.
+///
+/// The bias needs no inversion: `conv2dBiasGrad` reads `dy` alone and answers `[O]`.
 export rule conv2d_t::<T, X, Y, Z>(x: X, w: Y, b: Z) when is_float::<T>() { conv2d(x, w, b) => func (ct: T[...]) {
     (
-        conv2d_input_grad_stated(shape(x), w, ct),
-        conv2d_kernel_grad_stated(x, shape(w), ct),
-        conv2d_bias_grad_stated(shape(b), ct)
+        conv2d_input_grad_shaped(w, ct),
+        conv2d_kernel_grad_shaped(x, ct),
+        conv2d_bias_grad_shaped(ct)
     )
 } }
 

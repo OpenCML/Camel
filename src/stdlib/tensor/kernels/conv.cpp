@@ -515,50 +515,59 @@ Array *conv2dKernelGrad(
     });
 }
 
-// The stated twins of the two gradients: the operand they answer is named by its extents instead of
-// by a tensor, and every other operand is read exactly as the unstested entry point reads it. This
-// is the same arithmetic, not a second reading of it -- the geometry, `requireDy`, the element type
-// and the kernels are the ones above -- so a stated call and an unstated call of the same operands
-// answer the same bits. The only thing the extents change is where the answer's shape comes from,
-// which is the point: a reverse rule of `conv2d` is handed a cotangent for one operand and no value
-// of it
-// (`stdlib/rulesets/transpose.cml#conv2d_t`), and `shape` of that operand is a value the transposed
-// half holds while the operand's own tensors are not.
-Array *conv2dInputGradStated(
-    std::span<const int64_t> inputExtents, const Array *kernel, const Array *dy, int64_t stride,
-    int64_t padding, mm::IAllocator &allocator) {
+// The two gradients with the answered operand's extents derived from the operands they do read. The
+// arithmetic is the two kernels above, unchanged -- the geometry, `requireDy`, the element type and
+// the loops are theirs -- and the only thing this adds is where the answer's shape comes from. That
+// is the point: a reverse rule of `conv2d` is handed a cotangent for one operand and no value of it
+// (`stdlib/rulesets/transpose.cml#conv2d_t`), and nothing in a transposed half states that
+// operand's extents (a tangent states none, design principles 5.4). The derivation is the
+// definition of the output shape read backwards, and `requireDy` checks it: a derivation that
+// disagrees with `dy` throws here rather than answering a gradient of the wrong shape.
+Array *conv2dInputGradShaped(
+    const Array *kernel, const Array *dy, int64_t stride, int64_t padding,
+    mm::IAllocator &allocator) {
+    if (kernel->rank() != 4 || dy->rank() != 4) {
+        throw ShapeError(
+            "conv2d_input_grad_shaped expects a rank-4 kernel and dy, got " +
+            dims(kernel->shapeSpan()) + " and " + dims(dy->shapeSpan()));
+    }
+    // H = (OH - 1) * stride + KH - 2 * padding, and the same for W (`conv2dShape`, inverted).
+    const int64_t inputExtents[] = {
+        dy->dim(0),
+        kernel->dim(1),
+        (dy->dim(2) - 1) * stride + kernel->dim(2) - 2 * padding,
+        (dy->dim(3) - 1) * stride + kernel->dim(3) - 2 * padding};
     const ConvGeometry g = geometry(inputExtents, kernel->shapeSpan(), stride, padding);
     requireDy(g, dy);
-    const TypeCode code = computableElementType("conv2d_input_grad_stated", {kernel, dy});
+    const TypeCode code = computableElementType("conv2d_input_grad_shaped", {kernel, dy});
     return forElementType(code, [&]<typename T>() {
         return conv2dInputGradIn<T>(g, inputExtents, kernel, dy, allocator);
     });
 }
 
-Array *conv2dKernelGradStated(
-    const Array *input, std::span<const int64_t> kernelExtents, const Array *dy, int64_t stride,
-    int64_t padding, mm::IAllocator &allocator) {
+Array *conv2dKernelGradShaped(
+    const Array *input, const Array *dy, int64_t stride, int64_t padding,
+    mm::IAllocator &allocator) {
+    if (input->rank() != 4 || dy->rank() != 4) {
+        throw ShapeError(
+            "conv2d_kernel_grad_shaped expects a rank-4 input and dy, got " +
+            dims(input->shapeSpan()) + " and " + dims(dy->shapeSpan()));
+    }
+    // KH = H + 2 * padding - (OH - 1) * stride, and the same for KW.
+    const int64_t kernelExtents[] = {
+        dy->dim(1),
+        input->dim(1),
+        input->dim(2) + 2 * padding - (dy->dim(2) - 1) * stride,
+        input->dim(3) + 2 * padding - (dy->dim(3) - 1) * stride};
     const ConvGeometry g = geometry(input->shapeSpan(), kernelExtents, stride, padding);
     requireDy(g, dy);
-    const TypeCode code = computableElementType("conv2d_kernel_grad_stated", {input, dy});
+    const TypeCode code = computableElementType("conv2d_kernel_grad_shaped", {input, dy});
     return forElementType(code, [&]<typename T>() {
         return conv2dKernelGradIn<T>(g, input, kernelExtents, dy, allocator);
     });
 }
 
-Array *conv2dBiasGradStated(
-    std::span<const int64_t> biasExtents, const Array *dy, mm::IAllocator &allocator) {
-    if (biasExtents.size() != 1) {
-        throw ShapeError(
-            "conv2d bias gradient expects a one-dimension bias, got " + dims(biasExtents));
-    }
-    // `conv2dBiasGrad` reads `dy` alone and answers `[O]`: the extents are checked against that
-    // answer before any work is done, and then it is the unstested reading that answers.
-    if (dy->rank() != 4 || dy->dim(1) != biasExtents[0]) {
-        throw ShapeError(
-            "conv2d bias gradient: the stated bias " + dims(biasExtents) +
-            " disagrees with the channels of dy, " + dims(dy->shapeSpan()));
-    }
+Array *conv2dBiasGradShaped(const Array *dy, mm::IAllocator &allocator) {
     return conv2dBiasGrad(dy, allocator);
 }
 
