@@ -183,6 +183,10 @@ pwsh -NoProfile -File <你的工作树>\internal\tools\camel-remote.ps1 `
   ③ 暂停之前
   ④ 恢复之后再换一次
 换底后原有读数不算数：在新尖端上重测，交回里写明「读数是在哪个尖端上量的」。
+**一条踩过的坑**：`git fetch origin integration` 只写 `FETCH_HEAD`，**不动 `refs/remotes/origin/integration`**；
+之后拿 `origin/integration` 核“某笔是不是已进去”会得到**反结论**（2026-11-27 一条车道因此报「我的改动被回退了」，
+实际是它本地的远程追踪 ref 落后 40 多笔）。一律 `git fetch origin`（无 refspec），
+并先打印 `git log -1 --format=%h origin/integration` 的 sha 再动手。
 **被唤起续做时，第一件事是重读本 skill**，再 `git log --oneline -5` 认自己的位置。
 ```
 
