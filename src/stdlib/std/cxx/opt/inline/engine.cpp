@@ -197,11 +197,11 @@ size_t inlinedNodeCount(const GCGraph *graph) {
     return count;
 }
 
-/// True when running `graph` has a node that is not freely schedulable (camel/runtime/graph.h): an
-/// effect, an operator that may fault, a conversion that can fail, a call of a function value
-/// (callee unknown here), or a graph it reaches that has one. A body like that runs after the
-/// effects its arguments waited for, and must keep doing so once it is spliced in. A cycle of
-/// graphs is free when none of its members has such a node of its own.
+/// True when running `graph` has a node that is not freely schedulable
+/// (camel/facts/arrangeable.h): an effect, an operator that may fault, a conversion that can
+/// fail, a call of a function value (callee unknown here), or a graph it reaches that has one. A
+/// body like that runs after the effects its arguments waited for, and must keep doing so once it
+/// is spliced in. A cycle of graphs is free when none of its members has such a node of its own.
 bool bodyNeedsOrder(
     const camel::runtime::Program &program, const GCGraph *graph,
     std::unordered_set<const GCGraph *> &seen) {

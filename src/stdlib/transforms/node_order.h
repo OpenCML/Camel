@@ -22,7 +22,7 @@ namespace camel::transforms {
  *   * a rewrite appends what it writes *after* the nodes it repoints (`src/passes/opt/generic`);
  *     and a frozen graph keeps the ids of the version it came from, so a node a rewrite removed
  *     leaves a `Dead` place with its old id and the replacements sit past the readers they now
- *     feed (`include/camel/runtime/graph.h`, `GCNodeKind::Dead`);
+ *     feed (`include/camel/runtime/node_kind.h`, `GCNodeKind::Dead`);
  *   * a draft that is numbered anew (`GraphDraft::keepsNodeIds`, include/camel/runtime/draft.h)
  *     numbers the nodes by their place in the rewritten draft, which is the order the pass wrote
  *     them in and not the order of construction either.

@@ -30,6 +30,7 @@
 #include "camel/runtime/cycle.h"
 #include "camel/runtime/graph.h"
 #include "camel/runtime/graph_exit_type.h"
+#include "camel/runtime/graph_placement.h"
 #include "camel/runtime/graph_ref_check.h"
 #include "camel/runtime/oper_shape.h"
 #include "camel/runtime/program.h"

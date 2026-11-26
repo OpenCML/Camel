@@ -19,6 +19,7 @@
 #include "camel/runtime/effect_liveness.h"
 #include "camel/runtime/exec_plan.h"
 #include "camel/runtime/fact_slots.h"
+#include "camel/runtime/graph_placement.h"
 #include "camel/runtime/graph_txn.h"
 #include "camel/runtime/loop.h"
 #include "camel/runtime/region_roots.h"

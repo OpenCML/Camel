@@ -1610,9 +1610,9 @@ std::vector<gc_node_ref_t> draftRuntimeNodeRefs(const GraphTransaction &transact
 /// operator's record. `None` for a node that performs none of them.
 camel::ops::OperShape draftOperationShape(const GraphDraft &draft, gc_node_ref_t id);
 
-/// `isChainStatement` (camel/runtime/graph.h) asked of a node of a draft: the operator from the
-/// node's payload, a cast's types from its input, and whether it owns a region from the draft's
-/// own regions.
+/// `isChainStatement` (camel/runtime/graph_placement.h) asked of a node of a draft: the operator
+/// from the node's payload, a cast's types from its input, and whether it owns a region from the
+/// draft's own regions.
 bool isChainStatement(const GraphDraft &draft, gc_node_ref_t id);
 /// The entry and exit of the statement `id` names. A JOIN maps back to its BRCH at the entry; a
 /// BRCH maps to its JOIN at the exit. Every other node is its own entry and exit.
@@ -1625,9 +1625,9 @@ bool occupiesChainPlace(const GraphDraft &draft, gc_node_ref_t id);
 /// Whether `id` is the value the draft's graph or one of its live regions hands on.
 bool isBlockValue(const GraphDraft &draft, gc_node_ref_t id);
 
-/// `nodeMayFault` (camel/runtime/graph.h) asked of a node of a draft, with the same `byShape`
-/// reading of an elementwise operator: the fault half of the arrangeable question, which the fact
-/// `core.arrangeable` answers as one of its four terms.
+/// `nodeMayFault` (camel/runtime/graph_placement.h) asked of a node of a draft, with the same
+/// `byShape` reading of an elementwise operator: the fault half of the arrangeable question, which
+/// the fact `core.arrangeable` answers as one of its four terms.
 bool nodeMayFault(const GraphDraft &draft, gc_node_ref_t id, bool byShape = false);
 
 /// Whether a node carries the program's order instead of being a value a pass may compute for

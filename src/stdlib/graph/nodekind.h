@@ -11,7 +11,7 @@
 #pragma once
 
 #include "camel/core/type/enum.h"
-#include "camel/runtime/graph.h"
+#include "camel/runtime/node_kind.h"
 
 #include <optional>
 

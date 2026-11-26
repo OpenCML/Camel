@@ -41,6 +41,7 @@
 #include "camel/graph/graph.h"
 #include "camel/runtime/fact_slots.h"
 #include "camel/runtime/graph.h"
+#include "camel/runtime/graph_placement.h"
 #include "camel/runtime/oper_shape.h"
 #include "graph/graph_view.h"
 
