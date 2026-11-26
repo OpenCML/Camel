@@ -212,10 +212,12 @@ git checkout HEAD -- <那一个文件>          # 恢复，git status --porcelai
 > 动手前先查这条用例的历史（`internal/reports/*-the-slow-layer-population.tsv` 这类 census，或 `git log` 该用例）。
 > 回归要**找到那一笔**并说清它把什么改成了什么；欠账要先判“它原来绿过没有”。
 
-> **改了「诊断往哪一路走 / 诊断怎么渲染 / 什么算一次故障」的代码，必须跑诊断那两组计划**：
-> `test/plans/feat/compile/diag_render.plan.toml` 与 `test/plans/feat/linear/runtime_negative.plan.toml`
-> （外加 `modules.definitions` / `modules.nn` 里那几条 fault 用例）。这类改动不红在自己那条计划上，
-> 它会红在“**该报的错没报、程序跑出了值**”上——那是静默的错误结果，红表上离你很远。
+> **改了「诊断往哪一路走 / 诊断怎么渲染 / 什么算一次故障」的代码，会红在“该报的错没报、程序跑出了值”上**——
+> 那是静默的错误结果，红表上离你很远。**这件事不靠你记**：`test/plan-selection.json` 里有一条文件规则，
+> 把 `src/kernel/core/error/`、`src/kernel/execute/`、`src/tools/camel-cli/`、`src/stdlib/std/nvm/`、
+> `src/stdlib/std/fvm/` 映射到 `feat/compile/diag_render`、`feat/compile/diag_options`、`feat/linear/runtime_negative`
+> ⇒ `node scripts/test.js --changed` 会自动带上它们。**若你改了这些路径而 `--changed` 没选上那三份计划，
+> 那是那条规则漏了，先补规则、再干活。**
 
 ```
 · **车道自己的活**：目标用例要**真绿** —— 那条断言从红变 PASS。
