@@ -1,0 +1,42 @@
+id = "compile.range_as_array"
+order = 500
+tier = "fast"
+tags = ["feat", "compile", "range", "array"]
+desc = "A range is a value of its own type and the array of its integers is what a position that expects one materializes (design principles 5.4): `let xs: int[] = 0..n`, a `return` under `int[]`, an argument for a parameter of `int[]`. The conversion is the library's one declaration (`to_array`), and no other position converts: an array of another element type and a scalar are still refused."
+
+[[tests]]
+name = "range.as_array"
+desc = "The three numbers of a range become the array of integers where the position expects `int[]` — a typed declaration, an argument, a return — and the same range still answers as a range where nothing expects an array."
+kind = "behavior"
+case = "../../../cases/compile/range_as_array/as_array.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_exact = "xs=3 ys=4 zs=4 r_len=3\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "err.range_as_float_array"
+desc = "`let fs: f32[] = 0 .. 3`: the conversion a range has is the array of its integers, and nothing converts integers to `f32` (design principles 5.1), so the declaration is refused as it was before."
+kind = "negative"
+case = "../../../cases/compile/range_as_array/err_float_array.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::DeclaredTypeMismatch"
+expect_diagnostic_code = "0x000110"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "err.range_as_scalar"
+desc = "`let n: int = 0 .. 3`: a position that expects one integer does not take the array of a range, and the range is not converted to the first of them; the declaration is refused."
+kind = "negative"
+case = "../../../cases/compile/range_as_array/err_scalar.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::DeclaredTypeMismatch"
+expect_diagnostic_code = "0x000110"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000

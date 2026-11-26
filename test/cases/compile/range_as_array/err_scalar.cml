@@ -1,0 +1,10 @@
+/**
+ * A range in a position that expects its first integer is still refused: the conversion asks for
+ * the array of the range, and an `int` is not one. The value stays a range (design principles
+ * 5.4), so what the position holds decides, not what the range could become.
+ */
+
+func main() => int sync {
+    let n: int = 0 .. 3
+    return n
+}

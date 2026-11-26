@@ -416,6 +416,82 @@ node_handle_t Builder::convertStructValue(
     return out;
 }
 
+void Builder::readRangeConversion() {
+    // The array a range converts to, the range type that conversion takes, and the declaration
+    // itself, of the one the prelude writes for it: `to_array(r: Range): int[]`. Read from the
+    // declaration's signature, so the compiler names neither type itself.
+    rangeTypesRead_ = true;
+    const OperatorOverloads &overloads =
+        preludeOperatorOverloadsOf(std::string(camel::core::kRangeToArray));
+    for (const compile_graph_ptr_t &graph : overloads.graphs) {
+        FunctionType *type = graph != nullptr ? graph->funcType() : nullptr;
+        if (type == nullptr || type->normTypesCount() != 1 || !type->hasExitType()) {
+            continue;
+        }
+        Type *param = type->normTypeAt(0);
+        Type *exit  = type->exitType();
+        if (param == nullptr || exit == nullptr || exit->code() != TypeCode::Array) {
+            continue;
+        }
+        rangeValueType_       = param;
+        rangeArrayType_       = exit;
+        rangeConversionGraph_ = graph;
+        return;
+    }
+}
+
+Type *Builder::rangeValueType() {
+    if (!rangeTypesRead_) {
+        readRangeConversion();
+    }
+    return rangeValueType_;
+}
+
+Type *Builder::rangeArrayType() {
+    if (!rangeTypesRead_) {
+        readRangeConversion();
+    }
+    return rangeArrayType_;
+}
+
+bool Builder::rangeEntersArray(Type *param, Type *value) {
+    if (param == nullptr || value == nullptr || param->code() != TypeCode::Array) {
+        return false;
+    }
+    Type *rangeValue = rangeValueType();
+    Type *rangeArray = rangeArrayType();
+    return rangeValue != nullptr && rangeArray != nullptr && value->equals(rangeValue) &&
+           param->assignableFrom(rangeArray);
+}
+
+node_handle_t Builder::rangeArrayNode(node_handle_t node, const GCT::node_ptr_t &origin) {
+    // The call is written the way `to_array(r)` is, except that its callee is the declaration
+    // itself, held under a name of this graph and called through it: no name of the program is
+    // read, and the argument enters the range parameter as written. The two names are the graph's
+    // own and are dropped again, as the interval's are (builder_composition.cpp).
+    if (rangeArrayType() == nullptr || rangeConversionGraph_ == nullptr) {
+        return nullptr;
+    }
+    const auto make = [&](GCT::node_ptr_t made) {
+        if (origin != nullptr) {
+            made->setOrigin(origin->origin());
+        }
+        return made;
+    };
+    node_handle_t callee = createFuncDataNode(rangeConversionGraph_, true, false);
+    if (callee == nullptr) {
+        return nullptr;
+    }
+    const std::string calleeName = bindTemporary(callee);
+    const std::string argName    = bindTemporary(node);
+    GCT::node_ptr_t call         = make(tree_->makeLink(1));
+    *call << make(tree_->makeDRef(calleeName)) << make(tree_->makeDRef(argName));
+    node_handle_t value = visitLinkNode(call);
+    nodeScope_->erase(calleeName, false);
+    nodeScope_->erase(argName, false);
+    return value;
+}
+
 node_handle_t Builder::coerceTo(node_handle_t node, Type *target, const GCT::node_ptr_t &origin) {
     Type *source = valueTypeOf(nodeTypeOf(node));
     if (target->assignableFrom(source)) {
@@ -437,6 +513,21 @@ node_handle_t Builder::coerceTo(node_handle_t node, Type *target, const GCT::nod
             return castNodeTo(valueOf(node), target, origin);
         }
         return node;
+    }
+    // A range is a value of its own type, not an array (design principles 5.4), and the array of
+    // its integers is what a position that expects one makes of it: `let xs: int[] = 0..n`, a
+    // `return 0..n` under `int[]`, an argument written for `xs: int[]`. The conversion is the
+    // library's own declaration (`to_array`), so this is the position asking for an array and the
+    // range only answering it -- a range in any other position stays a range.
+    {
+        Type *rangeValue = rangeValueType();
+        Type *rangeArray = rangeArrayType();
+        if (rangeValue != nullptr && rangeArray != nullptr && source->equals(rangeValue) &&
+            target->assignableFrom(rangeArray)) {
+            if (node_handle_t materialized = rangeArrayNode(node, origin)) {
+                return materialized;
+            }
+        }
     }
     // A literal takes the type of its context (design principles 5.1): `let x: float = 1`,
     // `f(2)` with `f(x: f32)`, `return 2` under `f32`. A value that does not fit the target
