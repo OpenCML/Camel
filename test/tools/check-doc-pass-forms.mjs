@@ -518,9 +518,6 @@ const PASS_NAMES = new Set()
             else continue // `module + "::" + function`: a Camel pass, named at run time
             PASS_NAMES.add(value)
         }
-        for (const match of text.matchAll(/registerPassAlias\(\s*"([^"]+)"/g)) {
-            PASS_NAMES.add(match[1])
-        }
     }
 }
 

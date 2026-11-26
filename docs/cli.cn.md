@@ -188,7 +188,7 @@
 
 ### 模块的遍
 
-`std::` 前缀只给核心自带的遍。模块的遍用模块自己的名字：`tiles::compile`、`tensor::fuse`、`onnx::export_model`（短别名 `onnx::export`）。每个遍，无论核心的还是模块的，都是模块 `.cml` 文件里的一条无函数体声明——`export func fuse::<F>(f: F): F! when is_function::<F>()`——`registerModulePass` 只绑定它的内核；编译器不为这样的声明建图或算子组。模块可以为自己的遍登记别名（`registerPassAlias`），核心不认识任何模块的名字。
+`std::` 前缀只给核心自带的遍。模块的遍用模块自己的名字：`tiles::compile`、`tensor::fuse`、`onnx::export`。每个遍，无论核心的还是模块的，都是模块 `.cml` 文件里的一条无函数体声明——`export func fuse::<F>(f: F): F! when is_function::<F>()`——`registerModulePass` 只绑定它的内核；编译器不为这样的声明建图或算子组。核心不认识任何模块的名字。
 
 模块的遍只在流水线写出它们的位置运行：流水线是显式组合的，导入模块不会加入任何遍。需要某个遍的库（如自动微分需要它之前的 `std::macro`）在前提不满足时给出诊断并说明要加哪个遍；标签没有读到它的遍时给出警告。模块遍的参数就是它声明的 `with` 列表，和核心的遍用同一套检查。
 
@@ -361,7 +361,7 @@
 
 其他标为“否”的上限是编译期常量（`generic.h`、内联器的配置）；它们没有命令行选项，也没有 `.opencmlrc` 键（`.opencmlrc` 只配置遍列表）。
 
-`std::opt` 对实参是常量的递归每轮展开一层（`fib(15)` 会变成它的整棵调用树）；让它停下的是增长预算。`onnx::export_model` 化简它所导出的函数时不受增长预算和内联大小上限约束，因为导出必须得到直线代码；通过 `std::opt onnx::export` 导出的流水线则受它们约束，对大模型可能需要在做内联的那个遍上调高 `growth_budget`，例如 `std::opt growth_budget=8192`（此时导出遍以 `TranslationRefused` 拒绝，而不是写出不完整的模型，拒绝消息给出预算、它的值、设置它的遍和参数）。
+`std::opt` 对实参是常量的递归每轮展开一层（`fib(15)` 会变成它的整棵调用树）；让它停下的是增长预算。`onnx::export` 化简它所导出的函数时不受增长预算和内联大小上限约束，因为导出必须得到直线代码；通过 `std::opt onnx::export` 导出的流水线则受它们约束，对大模型可能需要在做内联的那个遍上调高 `growth_budget`，例如 `std::opt growth_budget=8192`（此时导出遍以 `TranslationRefused` 拒绝，而不是写出不完整的模型，拒绝消息给出预算、它的值、设置它的遍和参数）。
 
 ---
 

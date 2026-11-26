@@ -302,7 +302,7 @@ What stays in the environment is the environment of the process, not of a pass: 
 
 ### Passes of modules
 
-The `std::` prefix belongs to the passes of the core. A pass of a module is named by the module: `tiles::compile`, `tensor::fuse`, `onnx::export_model` (short alias `onnx::export`). Every pass, core or module, is a body-less declaration of the module's `.cml` file — `export func fuse::<F>(f: F): F! when is_function::<F>()` — and `registerModulePass` binds only its kernel. The compiler builds neither a graph nor an operator group for such a declaration. A module may register aliases for its passes (`registerPassAlias`); the core does not know the names of modules.
+The `std::` prefix belongs to the passes of the core. A pass of a module is named by the module: `tiles::compile`, `tensor::fuse`, `onnx::export`. Every pass, core or module, is a body-less declaration of the module's `.cml` file — `export func fuse::<F>(f: F): F! when is_function::<F>()` — and `registerModulePass` binds only its kernel. The compiler builds neither a graph nor an operator group for such a declaration. The core does not know the names of modules.
 
 A module's passes run only where the pipeline writes them: the pipeline is composed explicitly, so importing a module never adds a pass. A library whose pass is needed (autodiff needs `std::macro` before it) diagnoses the missing pass and says which one to add, and a tag whose reading pass is absent draws a warning. The parameters of a module's pass are its declaration's `with` list, checked like the core's.
 
@@ -580,7 +580,7 @@ The three space limits bound the size of the compiled program, not of one graph:
 
 The other limits marked "no" are compile-time constants (`generic.h`, the inliner's configuration); there is no command-line option or `.opencmlrc` key for them (`.opencmlrc` only configures the pass list).
 
-`std::opt` unrolls a recursion whose arguments are constants one level per round (`fib(15)` would become its whole call tree); the growth budget is what stops it. `onnx::export_model` simplifies the function it exports without the growth budget and the inline size cap, because an export has to reach straight-line code; a pipeline that exports through `std::opt onnx::export` is held to them and may need a larger `growth_budget` on the pass that inlines, for example `std::opt growth_budget=8192` (the export pass then refuses with `TranslationRefused` rather than writing a partial model, and the refusal names the budget, its value, the pass and the parameter).
+`std::opt` unrolls a recursion whose arguments are constants one level per round (`fib(15)` would become its whole call tree); the growth budget is what stops it. `onnx::export` simplifies the function it exports without the growth budget and the inline size cap, because an export has to reach straight-line code; a pipeline that exports through `std::opt onnx::export` is held to them and may need a larger `growth_budget` on the pass that inlines, for example `std::opt growth_budget=8192` (the export pass then refuses with `TranslationRefused` rather than writing a partial model, and the refusal names the budget, its value, the pass and the parameter).
 
 ---
 

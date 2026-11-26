@@ -244,7 +244,7 @@ class ParamEchoTestPass : public GraphIRPass {
     const camel::runtime::Program *
     apply(const camel::runtime::Program *program, std::ostream &os) override {
         os << std::format(
-            "test_echo: n={} ratio={} label={} flag={}\n",
+            "echo: n={} ratio={} label={} flag={}\n",
             args_.getInt("n"),
             args_.getFloat("ratio"),
             args_.getString("label"),
