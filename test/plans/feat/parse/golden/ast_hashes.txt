@@ -2666,7 +2666,7 @@ f962b5091be05977 ok test/cases/effects/var_parameter_write_outside_sync.cml
 5c38e3cf95bfaf7d ok test/cases/effects/writer_table_through_callee.cml
 9211698a2d4dc4e8 ok test/cases/effects/unreachable_pair/with/reading.cml
 6b2e1a764bb0a3e5 ok test/cases/effects/unreachable_pair/without/reading.cml
-64682756bdcf7e2e ok test/cases/facts/a_body_exit_gate_reads_its_writes.cml
+6bad929530b4943e ok test/cases/facts/a_body_exit_gate_reads_its_writes.cml
 b8a31f67e7f14d2a ok test/cases/facts/a_gradient_value.cml
 65dc8fca38021082 ok test/cases/facts/conversions.cml
 dda16fde3dcff7ec ok test/cases/facts/tensors_and_loops.cml
