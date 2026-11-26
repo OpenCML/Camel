@@ -142,10 +142,12 @@ analysis look into its two regions, and nothing turns it into graphs in the shar
 
 ### 3.1 Collection slots
 
-A loop can give one value per round for the executor to collect into an array (the tape of a
-future autodiff rewrite, and ONNX `Loop`'s scan output). Neither the grammar nor the builder
-writes such a loop yet; `collectionCount` (`s`) is part of the payload, and a pass or a later
-front end sets it. With `s > 0`:
+A loop can give one value per round for the executor to collect into an array: the tape of a
+differentiated loop (section 3.2) and ONNX `Loop`'s scan output (section 4). The builder writes
+one for a `for` whose state starts as the empty array and whose body only appends to it,
+recognising the state and giving the loop a slot for the appended values
+(`Builder::collectLoopAppends`, `src/compile/src/gir/builder.h`); a pass can set it too.
+`collectionCount` (`s`) is part of the payload either way. With `s > 0`:
 
 ```
 value        (state_0 … state_{k-1}, T_0[] … T_{s-1}[])
@@ -204,7 +206,7 @@ contribution would be dropped without a sign of it.
 | `std::macro` evaluator | natively, in the frame of the function (`stepLoops`), at most 1,000,000 rounds |
 | `std::prl` | a graph with a loop is evaluated node by node, with the same events as NodeVM's (`stepLoops`), or, when it is serial, run as bytecode |
 | `std::cpp` | a `for (;;)` of its own: the state in variables, the condition and the body in the loop, the next components computed before any variable is assigned (`FunctionEmitter::lowerLoop`) |
-| ONNX export | refused where the loop is written (the LOOP to ONNX Loop translation is the next step) |
+| ONNX export | one ONNX `Loop` whose condition and body are one subgraph (`Evaluator::evalLoopNode`, `src/stdlib/onnx/exporter.cpp`): the state is what the Loop carries, the sequence its trip count. A loop that collects a value every round is that Loop's scan outputs, one row a round, the collected array's first dimension being the trip count when the export knows it (`modules.onnx_loop_collect`). A `while` that collects is refused, naming the graph: how many values it collects is decided while it runs, and the collected array's length would have to be a dimension the model states (`loop_collect_while_refused`) |
 | autodiff | differentiated through a synthesized reverse loop (section 3.2); the forward loop collects the tape |
 | debugger | the condition and the body are regions of the graph of their function: part of its frame, with the names of their ports |
 
@@ -393,8 +395,7 @@ Next steps, in the order they are worth measuring: a superinstruction for the ro
 the test and the body of a loop whose regions are straight-line bytecode run by one instruction —
 the interpreter's remaining 16 ns a round, of which two dispatches and one back jump are the part
 this removes); the native lowering of the common loop shape (LTST/LEND inline, state in registers);
-the k values of the state passed as arguments to a compiled loop body; the translation of a loop to
-an ONNX Loop; autodiff on the regions.
+the k values of the state passed as arguments to a compiled loop body; autodiff on the regions.
 
 ## 6. Tests
 
