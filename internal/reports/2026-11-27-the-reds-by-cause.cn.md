@@ -127,3 +127,31 @@ test/cases/consistency/faults/mod_zero_in_function.cml
 
 > 一句话：**这 531 条里一半以上是"记录没跟上改写"，不是"程序坏了"**；真正需要动代码的，最大一处是
 > `src/stdlib/prelude.cml:1229` 的 `range_from`，其次是一批逐用例的编译期判断。
+## 附：第 3 类（84 条“用例自带校验脚本 exit 1”）的分类读数
+
+取数：`D:\Temp\t122\fail\**` 里已落盘的 `meta.json.failures[]`（脚本自己那一句就在 `verification output:` 段，不用翻日志）。
+
+**84 条是怎么来的**：531 里带 `verification` 记录 100 条、脚本退出非 0 共 88 条；88 减 4 条首行为
+`expected diagnostic RuntimeDiag::…`（属“诊断位置过期”）后得 84，落 26 个计划 —— 与该页第 3 类的 `84 / 26` 对上。
+
+| 类 | 条数 | 判据 |
+|---|---|---|
+| A 断言值不同 | **84** | 84/84 都是脚本自身 assert 抛出的“期望 vs 实际”不符 |
+| B 脚本自己崩 | 0 | 88 条里 `TypeError/SyntaxError/ReferenceError/…` 一次未出现 |
+| C 缺输入或路径 | 0 | `ENOENT/Cannot find module/no such file` 0 次 |
+| D 超时或被杀 | 0 | `timed_out=False`、`signal=null`（runner 的 `meta` 与 `verification` 两处都查过） |
+| E 其他 | 0 | 84/84 都带得出一句脚本消息 |
+
+**A 的三种形状**：位置漂移 G2 30 条/9 计划 · 程序不再跑得起来 G1 10 条/3 计划 · 输出文本/值/计数 G3 44 条/17 计划。
+
+**按“程序到底跑起来没有”再切一刀（这一刀决定处置）**：
+- **46 条** stderr 有 `[Error]` ⇒ 程序根本没跑到输出，是**第 2 类（编译期拒绝）的下游**，与第 2 类一起消失，不单开车道；
+- **37 条** 程序正常跑完、只是脚本期望不符 ⇒ **记录过期，但过期的不在计划字段里**，在计划 inline `verify` 的 JS 文本（外加 3 个用例自带的 `.mjs`）；
+- **1 条** 退出 1、stderr 空、stdout 是一整张 GIR ⇒ 单独记。
+
+**处置**：不单开修复车道；G2 那 21 条（程序跑得起来、只差位置）与“位置重录”同一批（同一次 run 取位置），
+单列子项“计划 inline verify 脚本的期望文本”；其余 16 条 G3 之后逐条判。
+
+**口径补一处**：`test/tools/writing-freedom.mjs`、`have-native-jit.mjs` 这类**计划级脚本**在 531 里有 10 条
+（如 `compile.chain` 4 条），失败时首行同样是 `expected exit 0, got exit 1` 但 `verification` 字段为空 ⇒
+按“脚本 exit 1”口径会被漏掉。故这一类实际为 **84 + 10 = 94**；本页表仍按“失败首行”口径记 531，不重算。
