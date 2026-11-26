@@ -17,7 +17,18 @@ speaks back, and both are pushed as they happen.
 | `/oversee/events` | GET | server-sent events: acknowledgements, `oversight_tell`, reminders, the claimed session ending, and a `beat` after each measurement |
 | `/oversee/reload` | POST | sync the plugin directory out of the pushed line (`origin/integration`, or `origin/develop` without it) into the live directory, reload this one plugin, and answer with the commit it came from; a tree that fails a check is refused with `file:line` and the live directory is left alone |
 
-Model tools: `oversight_claim`, `oversight_ack`, `oversight_tell`, `oversight_readings`.
+Model tools: `oversight_claim`, `oversight_ack`, `oversight_tell`, `oversight_readings`, `oversight_bind`, `oversight_unbind`.
+
+**The slots** (`slots.js`). The coordinator's children are counted by slot, up to 16 at once: `merge` (merge
+seats, counted apart), `dev` (the standing development slots, `limits.devSlots` = 8; the band and the
+`lanes-below` reminder judge "full" against these), `misc` (the standing chores lane) and `buffer` (the rest,
+not kept full and not counted toward the development slots). The binding table is the one place a lane is
+bound to a child: `oversight_bind({ agent, slot, lane?, worktree? })` writes a row (`agent` is the child's id or
+name; `lane` is the branch, required for `dev` and `misc`; calling it again for the same agent replaces the
+row), `oversight_unbind({ agent })` removes it (after a merge). A child with no row counts as `buffer`; a row
+whose child no longer exists is listed as `stale`, not dropped. Every call is a log entry and the table is
+rebuilt from the log at load. `/oversee/state` carries it as `lanes.slots` (running and total per slot),
+`lanes.stale` and, per child, its `slot` and `lane`.
 
 **The watch.** Every `watchSeconds` (300) the plugin measures the repository (develop's age, fsh-dev not
 yet merged, the main checkout, lane branches ahead and behind, merged branches not deleted), the backlog,
@@ -37,9 +48,9 @@ Once an hour, while the coordinator is at work, the watch also re-states the sta
 replaces the coordinator's scheduled prompts; the thresholds live in `rules.js` and nowhere else.
 
 **The panel** (`client.js`). Above the composer of the claimed session, a band: the coordinator idle or
-running, lanes running/total, develop's age, unacknowledged dispatches, the build host's load, open alerts,
+running, development slots running/limit (`开发 x/8`) beside the merge, misc and buffer counts, develop's age, unacknowledged dispatches, the build host's load, open alerts,
 the plugin's version, and a **reload button** (see below). Click the band for each alert, the recent
-reminders and the lanes. Toasts at the top right for every reminder, acknowledgement and coordinator
+reminders and each child with its slot and lane. Toasts at the top right for every reminder, acknowledgement and coordinator
 message; an urgent reminder stays until clicked.
 
 ## Setup on the machine that runs DSH
@@ -69,8 +80,9 @@ merges in flight and lane half-work, and DSH's replacement does not fall back to
    live one, and gates every `.js` with `node --check`, then imports the staged `index.js` and `client.js` in
    a child process. A file that fails stops everything: the temporary directory is removed, the live
    directory is not touched, and the answer carries `file` and `line`;
-2. reloads this one plugin through DSH's profile reconciliation (`ctx.hmr.reconcileProfile`, which is what
-   the Plugin Manager's own private `reload` calls -- it has no public method for this);
+2. does not restart the plugin: reconciling it in place (`ctx.hmr.reconcileProfile`) took the whole DSH process
+   down, every session and subagent with it. The answer says the files are published and asks for a restart
+   in the plugin manager (or of DSH), made on purpose;
 3. answers with the commit sha the directory came from, which the band shows.
 
 Content decides, not timestamps: when the live directory already holds that commit's bytes, the route

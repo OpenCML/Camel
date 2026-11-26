@@ -8,7 +8,7 @@
     ".": "./index.js",
     "./client": "./client.js"
   },
-  "files": ["index.js", "measure.js", "rules.js", "client.js", "cordis.patch.yml"],
+  "files": ["index.js", "measure.js", "rules.js", "slots.js", "client.js", "cordis.patch.yml"],
   "dsh": {
     "bundle": { "patch": "./cordis.patch.yml" },
     "client": {

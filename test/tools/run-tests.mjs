@@ -4546,6 +4546,8 @@ function slotTiming(entry, clock, marks, windows) {
         plan_path: entry.plan.__planPath,
         test: entry.test.name,
         status: entry.outcome ? entry.outcome.status : 'fail',
+        // The child was ended at its limit: what separates a case that is slow from one that is wrong.
+        timed_out: result ? result.timedOut === true : false,
         serial: clock.serial === true,
 // This test's own CPU time (user + system, the whole process tree), the figure its
         // `cpu_budget_ms` and the timeout margin are judged against -- and `cpu_reason` where this

@@ -14,12 +14,13 @@
  * Four properties are the ones worth pinning, because each of them is a way to lose the plugin:
  *
  *   1. a sync that fails leaves the live directory alone, and says `file:line`;
- *   2. a sync that changes nothing does not reload -- a push that leaves the plugin untouched must not
- *      hiccup a coordinator mid-turn;
+ *   2. a sync that changes nothing, on a process that loaded that very commit, asks for nothing -- a push
+ *      that leaves the plugin untouched must not ask anyone to restart a coordinator mid-turn;
  *   3. a plugin that is not loaded from the live directory refuses rather than re-importing the old
  *      files and reporting success;
- *   4. the HTTP answer is written before `ctx.hmr.reconcileProfile` is called, because that call stops
- *      this very plugin: a response written after it would come from a module the process let go of.
+ *   4. the route never reconciles the plugin in place (`ctx.hmr.reconcileProfile`): doing so took the
+ *      whole host process down, so when the files on disk are not the ones running the answer asks for
+ *      a restart made on purpose.
  *
  * The home directory is redirected first, so the plugin's machine-local config (log path, repo) and
  * the log it appends to are the test's own; nothing here reads or writes `%USERPROFILE%\.camel-oversight`.
@@ -181,7 +182,7 @@ async function run() {
 
     // ---- 2. the same commit again is not a reload -------------------------------------------------
     const second = await call(routesA, '/oversee/reload')
-    check('an unchanged tree answers 200 and does not reload', second.status === 200 && second.body.changed === false && second.body.reload === 'not-needed', JSON.stringify(second.body))
+    check('an unchanged tree on a process loaded from elsewhere still refuses', second.status === 409 && second.body.changed === false && second.body.reload === 'refused', JSON.stringify(second.body))
 
     // ---- 3. the band's version field ----------------------------------------------------------------
     const state = await call(routesA, '/oversee/state', 'GET')
@@ -212,7 +213,8 @@ async function run() {
     // ---- 6. loaded from the live directory: the reload path, including the order of the two --------
     const liveD = path.join(sandbox, 'live-d')
     fs.mkdirSync(liveD, { recursive: true })
-    for (const name of ['index.js', 'measure.js', 'rules.js', 'client.js', 'package.json']) {
+    // Every module the plugin imports, so a module added to the plugin is copied without editing this list.
+    for (const name of fs.readdirSync(pluginDir).filter((entry) => entry.endsWith('.js') || entry === 'package.json')) {
         fs.copyFileSync(path.join(pluginDir, name), path.join(liveD, name))
     }
     const calls = []
@@ -225,11 +227,10 @@ async function run() {
     }
     const routesD = await instance({ loadFrom: liveD, liveDir: liveD, hmr })
     const reloaded = await call(routesD, '/oversee/reload')
-    check('a plugin loaded from the live directory schedules the reload', reloaded.status === 200 && reloaded.body.reload === 'scheduled', JSON.stringify(reloaded.body))
-    check('the scheduled reload names this plugin alone', reloaded.body.loadedFrom === liveD, JSON.stringify(reloaded.body.loadedFrom))
+    check('a plugin loaded from the live directory is told to restart', reloaded.status === 200 && reloaded.body.reload === 'restart-needed', JSON.stringify(reloaded.body))
+    check('the answer names the loading path', reloaded.body.loadedFrom === liveD, JSON.stringify(reloaded.body.loadedFrom))
     await new Promise((resolve) => setTimeout(resolve, 700))
-    check('reconciliation runs once, for camel-oversight', calls.length === 1 && calls[0].ids.length === 1 && calls[0].ids[0] === 'camel-oversight', JSON.stringify(calls))
-    check('the answer is written before reconciliation starts', calls.length === 1 && calls[0].at > reloaded.endedAt, `${calls[0] && calls[0].at} vs ${reloaded.endedAt}`)
+    check('the route never reconciles the plugin in place', calls.length === 0, JSON.stringify(calls))
 
     // ---- 7. a process running an older live directory than the last sync reads as "pending" --------
     // This is the band's 待重载: `loaded` is read once, when the instance starts; `synced` follows the
@@ -239,9 +240,12 @@ async function run() {
     const before = (await call(routesE, '/oversee/state', 'GET')).body.plugin || {}
     check('a process loaded from the live directory reports the version it loaded', typeof before.loaded === 'string' && before.loaded === before.synced, JSON.stringify(before))
     const unavailable = await call(routesE, '/oversee/reload')
-    check('without an hmr service the route refuses instead of claiming a reload', unavailable.status === 409 && unavailable.body.reload === 'unavailable', JSON.stringify(unavailable.body))
+    check('a sync that moved the live directory asks for a restart, with or without an hmr service', unavailable.status === 200 && unavailable.body.reload === 'restart-needed', JSON.stringify(unavailable.body))
     const after = (await call(routesE, '/oversee/state', 'GET')).body.plugin || {}
     check('state then reads the synced version as newer than the loaded one', after.synced === fix.first && after.loaded !== after.synced, JSON.stringify(after))
+    const routesF = await instance({ loadFrom: liveD, liveDir: liveD, repoPath: fix.root, ref: fix.first, hmr: null })
+    const current = await call(routesF, '/oversee/reload')
+    check('a process that loaded the commit the live directory holds is asked for nothing', current.status === 200 && current.body.changed === false && current.body.reload === 'not-needed', JSON.stringify(current.body))
 
     // ---- 7. nothing above wrote to the machine's own home or log ----------------------------------
     check('the test used its own log', fs.readFileSync(logFile, 'utf8').length > 0)

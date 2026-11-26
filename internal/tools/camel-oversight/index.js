@@ -25,7 +25,7 @@
 //                        the model sends, and the claimed session ending, as they happen;
 //   POST /oversee/reload put the pushed plugin into the live directory, reload this one plugin, and
 //                        answer with the commit it came from (the band's button);
-//   tools oversight_claim, oversight_ack, oversight_tell, oversight_readings  the model's side.
+//   tools oversight_claim, oversight_ack, oversight_tell, oversight_readings, oversight_bind, oversight_unbind  the model's side.
 //
 // The routes are raw web-server routes, outside the GUI's launch-token login. The gate is the network:
 // the web server stays on loopback and `tailscale serve` publishes it to the tailnet, whose ACL decides
@@ -44,6 +44,7 @@ import path from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import * as bootMeasure from './measure.js'
 import * as bootRules from './rules.js'
+import { SLOTS, applyEntry, classify } from './slots.js'
 
 // The parts that change most often -- the rules, their limits and texts, and what is measured --
 // are reloaded when they change, at the next beat, without restarting the host: a restart stops
@@ -143,6 +144,11 @@ const DEFAULTS = {
     blockWarnMinutes: 10,
     blockCancelMinutes: 30,
     blockExempt: [],
+    // Calls that only wait (on a background job, on a subagent). A queued dispatch reaches the session
+    // only when its turn ends, so a session that waits in a loop of these never reads one: once a
+    // dispatch has been held heldDispatchMinutes, the wait is ended and the turn handed back.
+    waitTools: ['job_output', 'wait_agent'],
+    heldDispatchMinutes: 2,
     limits: {},
     // Where the pushed plugin is put and loaded from. The script that puts it there and the line it is
     // taken from are not paths of a checkout: a checkout's working tree may stand on another branch or
@@ -209,6 +215,7 @@ export function apply(ctx, rawConfig) {
     let dmLastSeen = null // the last request the oversight client made
     const promptReach = { target: 0, other: 0, none: 0 } // whom the prompt context was assembled for
     const tells = [] // what the model sent with oversight_tell
+    const binding = new Map() // child (id or name) -> its slot row; see slots.js
     const record = (entry) => {
         try {
             mkdirSync(path.dirname(config.logFile), { recursive: true })
@@ -227,6 +234,7 @@ export function apply(ctx, rawConfig) {
                 if (entry.kind === 'superseded') superseded.set(entry.id, entry.by)
                 if (entry.kind === 'claim') claimed = entry.session
                 if (entry.kind === 'tell') tells.push(entry)
+                if (entry.kind === 'bind' || entry.kind === 'unbind') applyEntry(binding, entry)
             } catch {
                 // A torn last line from a crash is skipped; the rest of the log still holds.
             }
@@ -472,7 +480,17 @@ export function apply(ctx, rawConfig) {
             }
             members.push({ id: String(agent.id), name, activity: agent.status === 'running' ? 'running' : 'idle', since: since.get(String(agent.id)) ?? null })
         }
-        return { running: members.filter((m) => m.activity === 'running').length, total: members.length, lanes: members }
+        // Every child is counted in `running`/`total`; what the reminders and the band judge is `slots`,
+        // by the binding table (children with no row are buffer, rows with no child are `stale`).
+        const placed = classify(members, binding)
+        return {
+            running: members.filter((m) => m.activity === 'running').length,
+            total: members.length,
+            devSlots: limitsNow().devSlots,
+            slots: placed.slots,
+            stale: placed.stale,
+            lanes: placed.members,
+        }
     }
 
     // ---- the watch ----------------------------------------------------------------------------------
@@ -921,10 +939,9 @@ export function apply(ctx, rawConfig) {
     //      live directory, refuses a tree whose `.js` fails `node --check` or whose `index.js` or
     //      `client.js` fails to import, and leaves the live directory untouched when it refuses. The
     //      refusal is returned with the file and the line; nothing here decides what "broken" means.
-    //   2. reload -- DSH's own profile reconciliation (`ctx.hmr.reconcileProfile`), which replaces the
-    //      running plugins whose loaded files changed on disk and restarts their Loader entries. It is
-    //      the only interface that means "re-read this plugin's modules" (see README: the Plugin
-    //      Manager has no such method; its `reload` is private and does exactly this call).
+    //   2. restart -- not done here. Reconciling the running plugin in place (`ctx.hmr.reconcileProfile`)
+    //      took the whole DSH process down, so the answer says the files are published and the restart
+    //      is made on purpose, in the plugin manager or by restarting DSH.
     //   3. report -- the commit the plugin directory came from, so the band writes down which version
     //      is live instead of which version somebody believed.
     //
@@ -1026,11 +1043,14 @@ export function apply(ctx, rawConfig) {
             loadedFrom: LOADED_FROM,
             reload: 'not-needed',
         }
-        if (!payload.changed) {
-            // The live directory already holds this commit: nothing to reload, and a reload here would
-            // be a hiccup bought for nothing on every push that leaves the plugin alone.
+        if (!payload.changed && outcome.sha === loadedSha) {
+            // The live directory holds this commit and this process loaded it: nothing to reload, and a
+            // reload here would be a hiccup bought for nothing on every push that leaves the plugin alone.
             return answer(res, 200, payload)
         }
+        // Otherwise either the sync just changed the live directory, or something else synced it after
+        // this process started (a sync run by hand) and the process still runs the older files: in both
+        // cases the files on disk are not the ones running, which is what the button is for.
         if (path.resolve(LOADED_FROM).toLowerCase() !== path.resolve(config.liveDir).toLowerCase()) {
             payload.ok = false
             payload.reload = 'refused'
@@ -1040,24 +1060,13 @@ export function apply(ctx, rawConfig) {
                 'the live directory and restart DSH once; from then on the button works.'
             return answer(res, 409, payload)
         }
-        const hmr = ctx.get('hmr')
-        if (!hmr || typeof hmr.reconcileProfile !== 'function') {
-            payload.ok = false
-            payload.reload = 'unavailable'
-            payload.reason = 'this process has no hmr service (started without a profile), so the new files wait for the next DSH start'
-            return answer(res, 409, payload)
-        }
-        payload.reload = 'scheduled'
-        record({ kind: 'reload', sha: outcome.sha, at: Date.now(), from: LOADED_FROM })
-        answer(res, 200, payload)
-        // The answer first, the restart second: reconciliation stops this plugin's own Loader entry,
-        // and a response written after that would come from a module the process has let go of.
-        setTimeout(() => {
-            hmr.runExclusive(() => hmr.reconcileProfile(['camel-oversight'])).then(
-                (result) => record({ kind: 'reloaded', sha: outcome.sha, at: Date.now(), warnings: result.warnings.length, pending: result.pending.length }),
-                (error) => record({ kind: 'reload-failed', sha: outcome.sha, at: Date.now(), message: clip((error && error.message) || error, 300) }),
-            )
-        }, 250)
+        // The button publishes the files and stops there. Reconciling the running plugin in place took the
+        // whole DSH process down with it (every session and subagent ended), so the restart is the plugin
+        // manager's or DSH's own, done on purpose, and the answer says so.
+        payload.reload = 'restart-needed'
+        payload.reason = 'the files are published; restart camel-oversight in the plugin manager (or restart DSH) to run them'
+        record({ kind: 'reload', sha: outcome.sha, at: Date.now(), from: LOADED_FROM, reload: payload.reload })
+        return answer(res, 200, payload)
     })
 
     // ---- the model's side ------------------------------------------------------------------------
@@ -1113,6 +1122,65 @@ export function apply(ctx, rawConfig) {
                 record(entry)
                 emit(entry)
                 return { result: `${id}: ${status}` }
+            },
+        }),
+    )
+
+    ctx.effect(() =>
+        ctx.tools.register({
+            name: 'oversight_bind',
+            description:
+                'Bind one of your children to a slot and a lane. This table is the one place a lane is bound: call it when you start a lane, and again to change it (the same agent replaces its row). A child with no row counts as buffer. Slots: merge (merge seats), dev (the standing development slots; the reminders judge "full" against these), misc (the standing chores lane), buffer (not kept full).',
+            parameters: {
+                type: 'object',
+                properties: {
+                    agent: { type: 'string', description: "The child's id or name." },
+                    slot: { type: 'string', enum: SLOTS },
+                    lane: { type: 'string', description: 'The lane branch, e.g. lane/arrangeable. Required for dev and misc; optional for merge and buffer.' },
+                    worktree: { type: 'string', description: "The lane's worktree path. Optional." },
+                },
+                required: ['agent', 'slot'],
+                additionalProperties: false,
+            },
+            output: {
+                schema: { type: 'object', properties: { result: { type: 'string' } }, required: ['result'], additionalProperties: false },
+                render: (_args, value) => [{ type: 'text', text: value.result }],
+            },
+            async execute({ agent, slot, lane, worktree }) {
+                if (!SLOTS.includes(slot)) return { result: `slot must be one of ${SLOTS.join(', ')}` }
+                if (!agent || !String(agent).trim()) return { result: 'agent is required' }
+                if ((slot === 'dev' || slot === 'misc') && !lane) return { result: `a ${slot} slot needs the lane (its branch)` }
+                const entry = { kind: 'bind', at: Date.now(), agent: String(agent).trim(), slot, lane: lane ? String(lane) : null, worktree: worktree ? String(worktree) : null }
+                applyEntry(binding, entry)
+                record(entry)
+                const seen = await lanesOf(claimed)
+                const live = Array.isArray(seen.lanes) && seen.lanes.some((m) => m.id === entry.agent || m.name === entry.agent)
+                return { result: `bound ${entry.agent} to ${slot}${entry.lane ? ` (${entry.lane})` : ''}${live ? '' : '; no live child has that id or name, so the row shows as stale until one does'}` }
+            },
+        }),
+    )
+
+    ctx.effect(() =>
+        ctx.tools.register({
+            name: 'oversight_unbind',
+            description: "Remove a child's row from the binding table (after a merge, when its lane is done). A child still alive then counts as buffer.",
+            parameters: {
+                type: 'object',
+                properties: { agent: { type: 'string', description: "The child's id or name, as it was bound." } },
+                required: ['agent'],
+                additionalProperties: false,
+            },
+            output: {
+                schema: { type: 'object', properties: { result: { type: 'string' } }, required: ['result'], additionalProperties: false },
+                render: (_args, value) => [{ type: 'text', text: value.result }],
+            },
+            async execute({ agent }) {
+                const key = String(agent || '').trim()
+                if (!binding.has(key)) return { result: `no row for ${key}` }
+                const entry = { kind: 'unbind', at: Date.now(), agent: key }
+                applyEntry(binding, entry)
+                record(entry)
+                return { result: `unbound ${key}` }
             },
         }),
     )
