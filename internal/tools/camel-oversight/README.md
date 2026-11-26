@@ -23,7 +23,7 @@ Model tools: `oversight_claim`, `oversight_ack`, `oversight_tell`, `oversight_re
 seats, counted apart), `dev` (the standing development slots, `limits.devSlots` = 8; the band and the
 `lanes-below` reminder judge "full" against these), `misc` (the standing chores lane) and `buffer` (the rest,
 not kept full and not counted toward the development slots). The binding table is the one place a lane is
-bound to a child: `oversight_bind({ agent, slot, lane?, worktree? })` writes a row (`agent` is the child's id or
+bound to a child: `oversight_bind({ slot, lane?, worktree?, agent? })` writes a row (`agent` is the child's id or
 name; `lane` is the branch, required for `dev` and `misc`; calling it again for the same agent replaces the
 row), `oversight_unbind({ agent })` removes it (after a merge). A child with no row counts as `buffer`; a row
 whose child no longer exists is listed as `stale`, not dropped. Every call is a log entry and the table is
