@@ -43,7 +43,7 @@ golden = "golden/content_equality_trees.txt"
 name = "value.content_equality_trees.small_nodes"
 desc = "The same with leaves of two entries and a fan-out of four (`--coll leaf=2` `--coll fanout=4`, every tree validated), where the three ways of building give trees of different shapes."
 case = "../../../cases/consistency/values/content_equality_trees.cml"
-args = ["--coll", "validate=on,leaf=2,fanout=4", "${case}"]
+args = ["--coll", "validate=on,leaf=2,fanout=4", "${case}", "${backend}"]
 golden = "golden/content_equality_trees.txt"
 
 [[tests]]

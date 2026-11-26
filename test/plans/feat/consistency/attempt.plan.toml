@@ -182,7 +182,7 @@ name = "attempt.collector.stress"
 desc = "Isolated faults under allocation pressure, with heap verification around every collection and a major collection every 5 allocations and at every safepoint: what a boundary dropped is collectable, what is used after it survived."
 kind = "behavior"
 case = "../../../cases/consistency/attempt/collector.cml"
-args = ["--gc-stress", "alloc=5,safepoint=1,kind=major", "--gc-check", "verify=both", "${case}"]
+args = ["--gc-stress", "alloc=5,safepoint=1,kind=major", "--gc-check", "verify=both", "${case}", "${backend}"]
 envs = ["N=300"]
 timeout_ms = 120000
 verify_script = """
@@ -197,7 +197,7 @@ name = "attempt.collector.stress_both"
 desc = "The same with minor and major collections requested."
 kind = "behavior"
 case = "../../../cases/consistency/attempt/collector.cml"
-args = ["--gc-stress", "alloc=5,safepoint=1,kind=both", "--gc-check", "verify=both", "${case}"]
+args = ["--gc-stress", "alloc=5,safepoint=1,kind=both", "--gc-check", "verify=both", "${case}", "${backend}"]
 envs = ["N=300"]
 timeout_ms = 120000
 verify_script = """
