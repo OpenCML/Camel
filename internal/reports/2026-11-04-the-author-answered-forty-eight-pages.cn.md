@@ -117,4 +117,4 @@
 5. **七**：`modules/transforms/split.h#SplitGraph` 的 `standing` 链删掉，收养改由程序传递地按 id 去重（`lane-batch3` 已在做）。
 6. **二**：`modules/transforms/transpose.cpp#shapeFromTypeOf` 的零载体回落删掉。
 
-48 页挪到 `reviews/` 留档，`internal/questions/` 现在**空**（0 页），`README.md` 已由生成器重写为"目录为空"。"类型层拆包"这件要负责人定的已在 `d05035fed` 到了（见上一节）；本批之外没有新增要负责人定的事。有一处定位假设我们照做了、打印出来指向别处，单独写了一页：`internal/questions/2026-11-04-the-refusal-was-not-a-closure-member.cn.md`。
+48 页挪到 `reviews/` 留档，`internal/questions/` 现在**空**（0 页），`README.md` 已由生成器重写为"目录为空"。"类型层拆包"这件要负责人定的已在 `d05035fed` 到了（见上一节）；本批之外没有新增要负责人定的事。有一处定位假设我们照做了、打印出来指向别处，单独写了一页：`internal/reviews/2026-11-04-the-refusal-was-not-a-closure-member.cn.md`。

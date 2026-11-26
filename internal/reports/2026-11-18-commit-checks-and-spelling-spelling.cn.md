@@ -102,7 +102,7 @@ BUILD_EXIT=0
 [SUMMARY] total: 14, pass: 12, fail: 2
 ```
 
-根因写在 `internal/questions/2026-11-18-an-in-place-call-now-builds-as-ssa-rebinding.cn.md`：`v = v->sort` 现在被 `Builder::ssaAssignmentOf` 接走，`inPlaceRebindingOf` 永远轮不到，`inPlaceCalls_` 为空，in-place 形式不再被选中。搜索范围 `b62b76de5..2e1e77324`，默认归执行计划那条线（F/H）。
+根因写在 `internal/reviews/2026-11-18-an-in-place-call-now-builds-as-ssa-rebinding.cn.md`：`v = v->sort` 现在被 `Builder::ssaAssignmentOf` 接走，`inPlaceRebindingOf` 永远轮不到，`inPlaceCalls_` 为空，in-place 形式不再被选中。搜索范围 `b62b76de5..2e1e77324`，默认归执行计划那条线（F/H）。
 
 ## 6. 默认顺序变了，动到哪些用例（一条一条）
 

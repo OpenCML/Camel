@@ -49,7 +49,7 @@ TRANSPOSE function=split_of_jvp_of_sum_of_product_backward skip=cotangent-needs-
 （`modules/transforms/rule_expand.cpp#expandRuleRightSide`，`why = "the rule's right side reads a value the caller does not carry"`），
 于是一个「改声明」的问题被读成「这条律要一个拿不到的值」。**这处没有改**：`cotangent-needs-a-value` 有
 **18 条断言**押着（110 行 / 39 个文件），把这一支改写成 `ParameterShape` 是另一笔、要先裁「一个类两个词」——
-那件事单独成了一页：`internal/questions/2026-11-04-which-word-does-a-declaration-that-states-no-shape-get.cn.md`
+那件事单独成了一页：`internal/reviews/2026-11-04-which-word-does-a-declaration-that-states-no-shape-get.cn.md`
 （默认：一个类一个词，`TransposeNeedsParameterShape` 是那个词）。
 
 ## 四、树里现在有什么：两条红 + 两条证据
@@ -105,7 +105,7 @@ TRANSPOSE function=split_of_jvp_of_sum_of_product_backward skip=cotangent-needs-
 
 一处应当保留的分野：§3.2 的「乙」（`x: float[..]` 开秩，`grad` 返回的切线是运行时长度的数组）是真的答不出，
 `float[..]` 里连 rank 都没有，那是 `sum_to_at`/孪生算子那条待裁的路
-（`internal/questions/2026-11-04-a-sum-to-that-takes-the-length-itself.cn.md`）；本页的两条不是它。
+（`internal/reviews/2026-11-04-a-sum-to-that-takes-the-length-itself.cn.md`）；本页的两条不是它。
 
 **给下一个人的一句**：先把失败位置的**操作数类型**抄出来（`float[2]` 还是 `float[]`），再决定「补值 / 改律 / 改声明」。
 这一族的三次判断——先是「B3 删了供给」（证伪，见 `internal/reports/2026-11-04-b3-reverted-and-the-ten-it-does-not-explain.cn.md`），

@@ -18,7 +18,7 @@
 
 **档案（不重写）**：`internal/archive/m3-transpose-branch-questions.cn.md:17`、`internal/reviews/questions-2026-11-01-whether-transpose-takes-the-cotangent-beside-the-parameters.md` 等 —— 那是"当时为什么这么定"的记录，改了就和自身对不上。
 
-**一页相关但还没人裁归属的**：`internal/questions/2026-11-02-transpose-tangent-parameters.cn.md` 问的正是这件事（「`transpose(lin)` 该收一个还是收一串」），11:30 的裁定已经回答它。**这页是 `lane-resid` 的，我不动它，也不擅自挪进 `reviews/`**：挪页和落裁定是同一笔，应由它的作者做。
+**一页相关但还没人裁归属的**：`internal/reviews/2026-11-02-transpose-tangent-parameters.cn.md` 问的正是这件事（「`transpose(lin)` 该收一个还是收一串」），11:30 的裁定已经回答它。**这页是 `lane-resid` 的，我不动它，也不擅自挪进 `reviews/`**：挪页和落裁定是同一笔，应由它的作者做。
 
 ## 二、为什么"作废"这件事必须写成页而不是改那两行
 

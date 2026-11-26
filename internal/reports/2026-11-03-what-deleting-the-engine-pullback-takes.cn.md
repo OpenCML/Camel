@@ -68,7 +68,7 @@
 `rhs=sum_t,mul_tensor_t,exp_t`），三例被拒（`softmax<1>`、`sum<0,true>`、`vjp_loop` 里
 `index_into` 的数组参数）。新句比旧句强的地方：它解释了为什么 `log_softmax` 拒而 `mean_axis`
 改完就过——`mean_axis` 的 `axis` 现在是**操作数**，不是 `<>`。判据与代价写在
-`internal/questions/2026-11-04-when-a-recomputed-call-carries-an-unreachable-context-argument-should-the-cut-inline-it.cn.md`。
+`internal/reviews/2026-11-04-when-a-recomputed-call-carries-an-unreachable-context-argument-should-the-cut-inline-it.cn.md`。
 
 **第三边界单记一行（不计入"过"）**：`log_softmax`（`lane-logsoftmax` `a65be8a25`）**律对、库层仍拒**。
 `jvp_log_softmax` + `log_softmax_t` 已写，引擎数 `[0.7299082804888587, 0.2658145868356071,
@@ -98,7 +98,7 @@ whose input was not copied uri=- why=an operand of the node is not reachable fro
    都过，被拦的是**重算的调用带着出口不可达的参数**（`softmax<1>` 的轴、`sum<1,true>` 的
    `keepdims`、`vjp_loop` 里 `index_into` 的数组），这正是 `mean_axis` 那条 `skip=arity` 的另一面。
    收窄后的问题与两条路的代价写在
-   `internal/questions/2026-11-03-when-the-tangent-recomputes-a-value-what-does-split-carry.cn.md`。
+   `internal/reviews/2026-11-03-when-the-tangent-recomputes-a-value-what-does-split-carry.cn.md`。
 
 **缺口（= "对齐"的度量）**：引擎 61 个张量名字里，库 `transpose` 覆盖 8–9 个，
 **约 38 个只能走引擎**（`gelu`、`log`、`sqrt`、`rsqrt`、`abs`、
@@ -112,7 +112,7 @@ whose input was not copied uri=- why=an operand of the node is not reachable fro
 | # | 条件 | 今天怎么勾 |
 |---|---|---|
 | D1 | 引擎有真规则的每个张量算子，`stdlib/rulesets/transpose.cml` 里都有它的头 | 一个 diff 工具：`setVjp` 名字集合 − 规则头集合 = 空（今天差 ~42） |
-| D2 | `grad`/`with_grad`/`_aux` 有**库层声明**：`Gradient<F>`、`ValueAndGradient<F>`、`…AndAux<F>` 成为类型函数。**已单独开页**：`internal/questions/2026-11-03-can-gradient-of-a-function-be-a-library-type-function.cn.md`（默认 A：记为永久例外；要达成须先动那条否决） | **未达成，且要作者裁决**：`stdlib/signatures/autodiff.cml` 自己写着 "`grad` has no declaration in standard library types: its result type is computed here"，今天由 C++ `GradResolver`（`gradientSignature`）算；要写成 `Tangent<With 的第一个>`，正撞上作者 2026-11-01 对"一长元组取元素"的否决 |
+| D2 | `grad`/`with_grad`/`_aux` 有**库层声明**：`Gradient<F>`、`ValueAndGradient<F>`、`…AndAux<F>` 成为类型函数。**已单独开页**：`internal/reviews/2026-11-03-can-gradient-of-a-function-be-a-library-type-function.cn.md`（默认 A：记为永久例外；要达成须先动那条否决） | **未达成，且要作者裁决**：`stdlib/signatures/autodiff.cml` 自己写着 "`grad` has no declaration in standard library types: its result type is computed here"，今天由 C++ `GradResolver`（`gradientSignature`）算；要写成 `Tangent<With 的第一个>`，正撞上作者 2026-11-01 对"一长元组取元素"的否决 |
 | D3 | 每个算子的数字对齐：库层 `grad`/`vjp` 与今天引擎读数 `max_abs_diff = 0` | 语料可数：`test/cases` 里 **239 个** case `import {…} from autodiff`、**125 个**提到 `with_grad`；对齐后这些数一个不动 |
 | D4 | 引擎今天**拒**的，库层按名拒、词不合并 | 非标量结果、无 `with`、首参 `var`（`differentiationRefusal`）、未知被调（`call-no-transpose`）、loop（`skip=state`）逐个有 case |
 | D5 | **嵌套 `grad`**（被微分的体里再调 `grad`）有库层答案 | 今天是引擎在 `ForwardRewrite::rewriteClosureCall` 里就地建图；作者的句子没提这条，但删了就没人答 |

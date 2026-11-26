@@ -24,7 +24,7 @@ COPIES step updates 1 in-place 0 by-count 0 declared 1 copied 0
 
 S3b 的另一条判据（`v = v->append(x)` 循环，`test/cases/consistency/new_values/rebinding_loop.cml`）同期读数是
 `collect 1 by-count`、`push_all 1 copied`、`snapshots 2 copied`、`boxes 1 by-count`——与
-`internal/questions/2026-11-16-what-counts-as-an-update-for-a-training-step.cn.md` 记的一致，没有漂移。
+`internal/reviews/2026-11-16-what-counts-as-an-update-for-a-training-step.cn.md` 记的一致，没有漂移。
 
 ## 2. 为什么 `in-place` 到不了：三道门，每一道都在别的文件里
 

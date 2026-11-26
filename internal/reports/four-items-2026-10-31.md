@@ -7,7 +7,7 @@
 - **替身已删**：`531477399`，−25 行（函数体 22 + `builder.h` 2 + `builder_operators.cpp:4279` 1）。
 - **读改走版本算子**：`:var/after(cell, call)` 的第二实参接受任意值（含 `void`），读写成 `:var/get(:var/after(…))`；`ab9268f24`。
 - **"删完重量"的读数**：作者点的那把尺子是 `133`（"块外补丁 + 版本边同时在树上"那个中间态的整闸红数，133 行 / 129 个用例名）。**删掉替身后同一把尺子是 `4`**，且这 4 条没有一条由替身造成。**所以 `133 → 4`。**
-- **块外那一半没有上**：整份补丁套上整闸是 `total 8041 / pass 7882 / fail 150`（新增 146 条：`var_tensor` 33、`var_param` 33、`optim` 24、`callback` 21、`fault` 8、`var_params` 8、`mutable_reference` 7、其余 12）。**之前报的"66 条"只是伤害的 45%。** 这一条按页等作者：`internal/questions/questions-2026-10-31-what-executes-a-value-taken-by-a-position.md`。
+- **块外那一半没有上**：整份补丁套上整闸是 `total 8041 / pass 7882 / fail 150`（新增 146 条：`var_tensor` 33、`var_param` 33、`optim` 24、`callback` 21、`fault` 8、`var_params` 8、`mutable_reference` 7、其余 12）。**之前报的"66 条"只是伤害的 45%。** 这一条按页等作者：`internal/reviews/questions-2026-10-31-what-executes-a-value-taken-by-a-position.md`。
 
 ## 二、`reinterp<jvp>` 的逐原语替换
 
