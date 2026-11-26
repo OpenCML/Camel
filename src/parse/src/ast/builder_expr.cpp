@@ -1567,4 +1567,37 @@ Value Builder::visitLoopExpr(cst::LoopExpr context) {
     return loopNode;
 }
 
+/*
+editExpr : 'edit' identDef '=' logicalOrExpr stmtBlock ;
+viewExpr : 'view' identDef '=' logicalOrExpr stmtBlock ;
+The children of the node are described at BlockHeadLoad.
+*/
+Value Builder::visitEditExpr(cst::EditExpr context) {
+    return visitBlockHeaded(context, DataType::EditExpr);
+}
+
+Value Builder::visitViewExpr(cst::ViewExpr context) {
+    return visitBlockHeaded(context, DataType::ViewExpr);
+}
+
+Value Builder::visitBlockHeaded(syn::Node context, DataType type) {
+    const char *kindName = type == DataType::EditExpr ? "EditExpr" : "ViewExpr";
+    ENTER(kindName);
+    node_ptr_t node =
+        createNodeAs<BlockHeadLoad>(type, Reference(context.get<cst::IdentDef>().text()));
+    setNodeTokenRangeByContext(node, context);
+    // [0] the function the block is over. [1] the body: a StmtBlock whether the source wrote
+    // statements or a single expression, as the arm of an `if` is (design 15.1, "块里最后一个
+    // 表达式是块的值"). A head that lost a piece to a syntax error is built with the pieces it
+    // kept.
+    if (const syn::Node over = context.expr(); over) {
+        *node << any2node(visitExpr(over));
+    }
+    if (const syn::Child body = context.lastChild(); body.isNode()) {
+        *node << any2node(visitBlockExpr(body.node()));
+    }
+    LEAVE(kindName);
+    return node;
+}
+
 // ---- Dispatch on the kind of a node ----

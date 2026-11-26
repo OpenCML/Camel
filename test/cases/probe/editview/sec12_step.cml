@@ -1,0 +1,9 @@
+// Design `docs/design/graph-editing/README.cn.md` section 12, first example, verbatim in the
+// block; the surrounding function is the least a block needs to be written in.
+func drop_two::<F>(f: F) => F! when is_function::<F>() {
+    let g = edit d = f {
+        replace(nodes(d)[3], nodes(d)[7])   // 第 2 行
+        erase(nodes(d)[5])                  // 第 3 行
+    }
+    return g
+}

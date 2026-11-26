@@ -1,0 +1,4 @@
+// The smallest view block there is: the head, the binding and the block.
+func identity_view::<F>(f: F) => F when is_function::<F>() {
+    return view d = f { f }
+}

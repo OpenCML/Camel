@@ -1,0 +1,14 @@
+// `edit` and `view` are contextual keywords: where no block head is written they are ordinary
+// names, and these are the two shapes that must keep working.
+func a::<T>(x: T) => T { return x }
+
+func edit_is_a_name() => int {
+    let edit = 5;
+    return edit
+}
+
+func view_is_a_name() => int {
+    return a(view(3))
+}
+
+func view::<T>(x: T) => T { return x }

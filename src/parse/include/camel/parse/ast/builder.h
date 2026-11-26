@@ -33,9 +33,9 @@ namespace camel::parse::ast {
 /// refuses where it is built (design principles 4.4). The parser keeps the two
 /// lists apart; the third field is the evidence that they were interleaved.
 struct ArgumentValues {
-    node_ptr_t data                   = nullptr;
-    node_ptr_t named                  = nullptr;
-    node_ptr_t positionalAfterNamed   = nullptr;
+    node_ptr_t data                 = nullptr;
+    node_ptr_t named                = nullptr;
+    node_ptr_t positionalAfterNamed = nullptr;
 };
 
 class Builder {
@@ -162,7 +162,8 @@ class Builder {
     Value visitKeyParamPair(syntax::cst::KeyParamPair context);
     Value visitTupleParam(syntax::cst::TupleParam context);
 
-    /// How many destructured lambda parameters this file has had: the internal name of the next one.
+    /// How many destructured lambda parameters this file has had: the internal name of the next
+    /// one.
     size_t tupleParams_ = 0;
     Value visitDataList(syntax::cst::DataList context);
     Value visitIdentList(syntax::cst::IdentList context);
@@ -183,10 +184,15 @@ class Builder {
     Value visitStaticForExpr(syntax::cst::StaticForExpr context);
     Value visitStaticLoopExpr(syntax::cst::StaticLoopExpr context);
     TypeCaseKind typeCaseKindOf(syntax::cst::TypeCasePattern pattern);
-    std::vector<TypeCasePattern> typeCasePatternsOf(const std::vector<syntax::cst::TypeCasePattern> &patterns);
+    std::vector<TypeCasePattern>
+    typeCasePatternsOf(const std::vector<syntax::cst::TypeCasePattern> &patterns);
     /// IfExpr, MatchExpr, MatchTypeExpr, StaticForExpr.
     Value visitCtrlExpr(syntax::Node context);
     Value visitLoopExpr(syntax::cst::LoopExpr context);
+    Value visitEditExpr(syntax::cst::EditExpr context);
+    Value visitViewExpr(syntax::cst::ViewExpr context);
+    /// The two above, which differ only in the node kind the block is built as.
+    Value visitBlockHeaded(syntax::Node context, DataType type);
     Value visitAssignExpr(syntax::cst::AssignExpr context);
     Value visitLogicalOrExpr(syntax::cst::LogicalOrExpr context);
     Value visitLogicalAndExpr(syntax::cst::LogicalAndExpr context);
@@ -243,4 +249,3 @@ class Builder {
 };
 
 } // namespace camel::parse::ast
-

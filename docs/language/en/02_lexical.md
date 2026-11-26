@@ -98,6 +98,8 @@ The other way round, `func` and `type` among the position names are reserved wor
 | Tag position names | `nodes` | after the `on` of a tag declaration: the tag holds for the nodes written lexically in a region |
 | Tag position names | `param` | after the `on` of a tag declaration: the tag holds for a function parameter |
 | Expression positions | `range` | a slice with a step: a whole dimension of a subscript written `range(a, b, s)`, whose three arguments are the start, the end and the step (`xs[range(0, n, 2)]`) |
+| Expression positions | `edit` | the head of an edit block: `edit` followed by a name, `=` and the function the block is over, then the block (`edit d = f { … }`, whose value is the changed function) |
+| Expression positions | `view` | the head of a view block: `view` followed by a name, `=` and the function the block reads, then the block (`view d = f { … }`, whose value is the body's) |
 
 <!-- context-keywords:end -->
 

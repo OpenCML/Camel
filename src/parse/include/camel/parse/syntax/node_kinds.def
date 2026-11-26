@@ -96,6 +96,8 @@ CAMEL_NODE(LoopExpr, Expr)             // 'loop' loopState (',' loopState)* loop
 CAMEL_NODE(LoopState, Other)           // identDef '=' logicalOrExpr
 CAMEL_NODE(LoopFor, Other)             // 'for' identDef 'in' logicalOrExpr
 CAMEL_NODE(LoopWhile, Other)           // 'while' logicalOrExpr
+CAMEL_NODE(EditExpr, Expr)             // 'edit' identDef '=' logicalOrExpr blockExpr
+CAMEL_NODE(ViewExpr, Expr)             // 'view' identDef '=' logicalOrExpr blockExpr
 CAMEL_NODE(AssignExpr, Expr)           // logicalOrExpr (('=' | '+=' | ...) logicalOrExpr)?
 CAMEL_NODE(LogicalOrExpr, Expr)        // logicalAndExpr ('||' logicalAndExpr)*
 CAMEL_NODE(LogicalAndExpr, Expr)       // orExpr ('&&' orExpr)*

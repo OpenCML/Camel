@@ -150,7 +150,7 @@ keyParamPair       : ('var' | 'const')? identDef (':' typeExpr ('=' dataExpr)?)?
 pairedParams       : keyParamPair (',' keyParamPair)*
 parentParams       : '(' pairedParams? ','? ')'
 angledParams       : '<' pairedParams? ','? '>'
-dataExpr           : ctrlExpr | loopExpr
+dataExpr           : ctrlExpr | loopExpr | editExpr | viewExpr
 ctrlExpr           : 'if' logicalOrExpr 'then' blockExpr ('else' blockExpr)?
                      | 'match' identRef '{' matchCase+ '}'
                      | 'match' 'type' typeExpr '{' typeCase* '}'
@@ -220,6 +220,8 @@ loopExpr           : 'loop' loopState (',' loopState)* loopFor? loopWhile? 'do' 
 loopState          : identDef '=' logicalOrExpr
 loopFor            : 'for' identDef 'in' logicalOrExpr
 loopWhile          : 'while' logicalOrExpr
+editExpr           : 'edit' identDef '=' logicalOrExpr stmtBlock
+viewExpr           : 'view' identDef '=' logicalOrExpr stmtBlock
 typeExpr           : '...' typeExpr | arrayType ('?' | '!' | '..')*
 arrayType          : specType arrayDim+
 arrayDim           : '[' (']' | arrayDimItem (',' arrayDimItem)* ','?)? ']'

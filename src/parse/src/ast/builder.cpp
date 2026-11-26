@@ -856,6 +856,10 @@ Value Builder::visitExpr(syn::Node context) {
         return visitCtrlExpr(context);
     case NK::LoopExpr:
         return visitLoopExpr(cst::LoopExpr(context));
+    case NK::EditExpr:
+        return visitEditExpr(cst::EditExpr(context));
+    case NK::ViewExpr:
+        return visitViewExpr(cst::ViewExpr(context));
     case NK::StaticLoopExpr:
         return visitStaticLoopExpr(cst::StaticLoopExpr(context));
     case NK::AssignExpr:
