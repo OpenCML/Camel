@@ -1,0 +1,46 @@
+// The facts of a draft before it is edited are the facts of the graph it was opened from.
+//
+// Every query the graph module answers through the fact system is asked twice here, once on a
+// node of the published graph and once on the node the draft copied it from: the permissions, the
+// tags, the region and the shape. The draft's answers must be the published answers, one for one,
+// in the same order -- a draft is a copy, and nothing was edited, so nothing may read differently.
+//
+// The comparison is made by the plan's verify script, which pairs each `published <query>` line
+// with the `draft <query>` line under it and refuses a pair that differs.
+
+import { Node, RegionKind, graph_of, nodes, open, abort, permissions, tags, region_of, region_kind, shape_text } from graph
+import { reshape } from tensor
+
+func subject(xs: f32[]) => f32[...] {
+    let ys = xs * 2.0
+    return reshape<[2, 3]>(ys)
+}
+
+func main() => int spelling sync {
+    let published = graph_of(subject)
+    let draft = open(subject)
+    let p = nodes(published)
+    let d = nodes(draft)
+    println('published nodes')
+    println(p)
+    println('draft nodes')
+    println(d)
+    println('published permissions')
+    println(p->map<func (n: Node) => int { permissions(n) }>)
+    println('draft permissions')
+    println(d->map<func (n: Node) => int { permissions(n) }>)
+    println('published tags')
+    println(p->map<func (n: Node) => string { tags(n) }>)
+    println('draft tags')
+    println(d->map<func (n: Node) => string { tags(n) }>)
+    println('published region')
+    println(p->map<func (n: Node) => RegionKind { region_kind(region_of(n)) }>)
+    println('draft region')
+    println(d->map<func (n: Node) => RegionKind { region_kind(region_of(n)) }>)
+    println('published shape')
+    println(p->map<func (n: Node) => string { shape_text(n) ?? '-' }>)
+    println('draft shape')
+    println(d->map<func (n: Node) => string { shape_text(n) ?? '-' }>)
+    abort(draft)
+    return 0
+}
