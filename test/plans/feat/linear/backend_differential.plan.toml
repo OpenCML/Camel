@@ -22,20 +22,27 @@ tags = ["feat", "linear", "fvm", "nvm", "differential"]
 # count of differences written here would have to be edited every time one is fixed, and an entry
 # that is green because the number was updated is the entry that stops being a check.
 #
-# **Why it is slow and not a gate leg.** It runs one program twice for every program the tree
-# declares -- a few thousand processes -- which is the cost of a full-layer reading, not of a test a
-# developer runs after a change. It is named as a plan file when it is needed (`node
-# scripts/test.js test/plans/feat/linear/backend_differential.plan.toml`), the way the timing plans
-# are, and it is not one of the slow plans the release gate names.
+# **Why it is slow.** It runs one program twice for every program the tree declares -- a few thousand
+# processes -- which is the cost of a full-layer reading, not of a test a developer runs after a
+# change: it is named in `SLOW_PLANS` (`scripts/plan-inventory.mjs`), so the release gate runs it and
+# a change to the tool reaches it through the file rule kept ahead of the general `test/tools/` one.
+#
+# **Where the reading is kept.** The console keeps a test's standard output only when the entry
+# fails, and this entry is meant to be green while it finds differences, so the tool also writes its
+# record to `test/results/backend-differential/report.json` (a path `.gitignore` covers, so a record
+# can never be committed): the `[DIFFERENTIAL]` line, the exclusion counts, and one row per program
+# with its verdict, its words and its blocks. `internal/tools/camel-remote.ps1 -FetchFile
+# test/results/backend-differential/report.json` brings it back from the build host, which is how two
+# readings of this entry are compared.
 
 [[tests]]
 name = "backend_differential.tree"
-desc = "Every program the plan tree declares over the cases under test/cases/ is run on std::nvm and on std::fvm and the two answers are compared: the tool's selection is reported with its exclusion counts, each program gets a verdict line (`agree`, `agree-empty`, `differ`, `no-answer`, `refused`, `unstable`), a disagreement is measured twice so a program that cannot agree with itself is reported as `unstable` rather than as a back-end difference, and the run closes with the `[DIFFERENTIAL]` line of counts. The two controls are part of the entry: a program must agree with itself when both sides are `std::nvm`, and a scratch copy of one case with a single character of a printed literal changed must be seen as a difference -- a harness that cannot fail that way would report agreement for everything."
+desc = "Every program the plan tree declares over the cases under test/cases/ is run on std::nvm and on std::fvm and the two answers are compared: the tool's selection is reported with its exclusion counts, each program gets a verdict line (`agree`, `agree-empty`, `differ`, `no-answer`, `refused`, `unstable`), a disagreement is measured twice so a program that cannot agree with itself is reported as `unstable` rather than as a back-end difference, and the run closes with the `[DIFFERENTIAL]` line of counts. The two controls are part of the entry: a program must agree with itself when both sides are `std::nvm`, and one real case beside a scratch copy of it with one character of a line it printed changed -- same back end, same pipeline -- must be seen as a difference; a harness that cannot fail that way would report agreement for everything."
 kind = "behavior"
 tool = "node"
 case = "../../../tools/backend-differential.mjs"
-args = ["${case}", "--camel", "${camel}", "--self-test"]
+args = ["${case}", "--camel", "${camel}", "--self-test", "--report", "test/results/backend-differential/report.json"]
 expect_exit = 0
 expect_stdout_contains = ["[differential] ", "[self-test] self-agreement (std::nvm against std::nvm)", "seen=yes", "[DIFFERENTIAL] "]
-expect_stdout_not_contains = ["seen=no", "[self-test] a program disagreed with itself", "no program was selected"]
+expect_stdout_not_contains = ["seen=no", "[self-test] a program disagreed with itself", "[self-test] planted difference: no line"]
 timeout_ms = 1800000

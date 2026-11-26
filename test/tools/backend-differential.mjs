@@ -75,8 +75,9 @@
  * **The controls** (`--self-test`). A harness that answered "agree" for everything would pass every
  * acceptance read on it, so the tool has to be seen answering both ways: it runs a handful of the
  * selected programs with `std::nvm` on *both* sides and requires `differ=0` (a program must agree
- * with itself), and then a scratch copy of one real case with one character of a printed literal
- * changed and requires that pair to be seen as `differ`. Exit code 0 only when both hold.
+ * with itself), and then one real case beside a scratch copy of it in which one character of a line
+ * it printed is changed -- same back end, same pipeline, so the planted difference is the only one
+ * there is -- and requires that pair to be seen as `differ`. Exit code 0 only when both hold.
  *
  * Usage:
  *
@@ -593,26 +594,39 @@ async function selfTest(programs, camel, env, options, out) {
         out('[self-test] a program disagreed with itself: FAIL')
         ok = false
     }
-    // (b) A planted difference must be seen: a scratch copy of one real case with one character of a
-    // printed literal changed, run on both sides like any other program.
+    // (b) A difference that was planted must be seen, and planted on one side only: run one real case,
+// then a scratch copy of it with one character of what it printed changed, on the same back end.
+// Neither the back end nor the pipeline differs, so the only difference is the one planted, and a
+// comparator that reads "agree" here cannot be trusted with a real pair.
     const preferred = programs.find((program) => program.caseRel === 'test/cases/linear/nvm/hello.cml')
     const source = preferred || programs.find((program) => program.prefix.length === 0) || programs[0]
     const text = fs.readFileSync(source.casePath, 'utf8')
-    const literal = /'([^'\\\n]{3,})'/.exec(text)
-    if (!literal) {
-        out(`[self-test] no printed literal to change in ${source.caseRel}: FAIL`)
+    const real = await commandFor(source, SIDES[0], camel, env, options.timeoutMs)
+    // What the case printed and what the source says: a line that is in both can be changed in one
+    // place of the source and is certain to move the output. Where the program prints nothing of its
+    // own (a dump, a diagnostic), fall back to the first quoted string of the source, and if there is
+    // none either, say so rather than pass the control by luck.
+    const printed = real.stdout
+        .split('\n')
+        .map((line) => line.trim())
+        .find((line) => line.length >= 3 && text.includes(line))
+    const literal = printed ? null : /'([^'\\\n]{3,})'/.exec(text)
+    const from = printed || (literal && literal[0])
+    if (!from) {
+        out(`[self-test] planted difference: no line of ${source.caseRel}'s output can be found in its source: FAIL`)
         return false
     }
-    const planted = { ...source, prefix: [], normalizers: DEFAULT_NORMALIZERS }
+    const changed = text.replace(from, `${from.slice(0, -1)}?`)
+    if (changed === text) {
+        out(`[self-test] planted difference: nothing changed in ${source.caseRel}: FAIL`)
+        return false
+    }
     const scratch = fs.mkdtempSync(path.join(os.tmpdir(), 'camel-backend-differential-'))
-    planted.casePath = path.join(scratch, path.basename(source.casePath))
-    fs.writeFileSync(planted.casePath, text.replace(literal[0], `'${literal[1].slice(0, -1)}?'`))
-    const [left, right] = await Promise.all([
-        commandFor(planted, SIDES[0], camel, env, options.timeoutMs),
-        commandFor(planted, SIDES[1], camel, env, options.timeoutMs)
-    ])
+    const planted = { ...source, casePath: path.join(scratch, path.basename(source.casePath)) }
+    fs.writeFileSync(planted.casePath, changed)
+    const right = await commandFor(planted, SIDES[0], camel, env, options.timeoutMs)
     fs.rmSync(scratch, { recursive: true, force: true })
-    const verdict = classifyPair(left, right)
+    const verdict = classifyPair(real, right)
     const seen = verdict.verdict === 'differ'
     out(
         `[self-test] planted difference: seen=${seen ? 'yes' : 'no'} ` +
@@ -723,9 +737,11 @@ async function main(argv) {
         return result
     })
     const wallMs = performance.now() - started
-    out(summaryLine(results, options, wallMs))
+    const summary = summaryLine(results, options, wallMs)
+    out(summary)
     if (options.report) {
         const document = {
+            summary,
             tree: treeIdentity(),
             install,
             camel,
@@ -742,7 +758,9 @@ async function main(argv) {
                 fvm: { exit: result.b.exit, stdout_bytes: result.b.stdout.length, stderr_bytes: result.b.stderr.length }
             }))
         }
-        fs.writeFileSync(options.report, `${JSON.stringify(document, null, 1)}\n`)
+        const target = path.resolve(REPO_ROOT, options.report)
+        fs.mkdirSync(path.dirname(target), { recursive: true })
+        fs.writeFileSync(target, `${JSON.stringify(document, null, 1)}\n`)
     }
     const broke = results.filter((result) => ['differ', 'no-answer'].includes(result.verdict.verdict))
     if (options.strict && broke.length) return 1
