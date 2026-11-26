@@ -2681,8 +2681,8 @@ a1044e65884eae2c ok test/cases/feat/bindings/python_rules.cml
 42b0f68dfea95ade ok test/cases/feat/mm/gc/context_lifetime.cml
 89a03d6821efd3b3 ok test/cases/feat/mm/gc/contexts.cml
 a62d4139857684ad ok test/cases/feat/mm/gc/gc_block_adopted.cml
-5175cd1ba1722c3c ok test/cases/feat/mm/gc/gc_block_churn.cml
-67911b6610d1acea ok test/cases/feat/mm/gc/gc_block_pacing.cml
+b883fb1ea535dc26 ok test/cases/feat/mm/gc/gc_block_churn.cml
+125463d482d120ea ok test/cases/feat/mm/gc/gc_block_pacing.cml
 9c17eb064774062f ok test/cases/feat/mm/gc/gc_block_views.cml
 9b9b3452602dd85b ok test/cases/feat/mm/gc/gc_born_old.cml
 4c8fd241aa4fdae6 ok test/cases/feat/mm/gc/gc_collection_trees.cml
@@ -2699,7 +2699,7 @@ b88c50baed163e9e ok test/cases/feat/mm/gc/gc_live_large.cml
 6218fd983c63e7ce ok test/cases/feat/mm/gc/gc_nested_reduce.cml
 36acd7796374c270 ok test/cases/feat/mm/gc/gc_prl_blocked_worker.cml
 eccf7536af3a7885 ok test/cases/feat/mm/gc/gc_prl_scheduler.cml
-39d012e21a3dfae1 ok test/cases/feat/mm/gc/gc_promoted_blocks.cml
+f8d507921f863c82 ok test/cases/feat/mm/gc/gc_promoted_blocks.cml
 077166aa54b3fc01 ok test/cases/feat/mm/gc/gc_soak.cml
 3c63fb9e21ebcbd4 ok test/cases/feat/mm/gc/gc_training_peak.cml
 28b1161ed3290fba ok test/cases/feat/mm/gc/gc_view_frame_store.cml
