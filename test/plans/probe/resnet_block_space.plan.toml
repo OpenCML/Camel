@@ -1,0 +1,16 @@
+id = "probe.resnet_block_space"
+tier = "fast"
+tags = ["probe"]
+desc = "Probe: how much data-block space one full-batch resnet run needs, and whether the default limit is what stops it. Not a check of behaviour: it prints the allocator's block statistics at several `--block-limit` settings so the peak can be compared with the tensors the run holds."
+
+[[tests]]
+name = "resnet_block_space"
+desc = "One full-batch resnet run at four block limits: whether it completes, and the block statistics it reports at exit."
+kind = "behavior"
+tool = "python"
+case = "../../cases/probe/resnet_block_space.py"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_contains = ["BLOCKSPACE limit=8192 ok", "blocks:"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 900000
