@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 // Copyright (c) the OpenCML Organization
 // SPDX-License-Identifier: MIT
+
 //
 // How many translation units a header reaches: the reading the header-weight report takes, as a
 // script the plan runner can run.
