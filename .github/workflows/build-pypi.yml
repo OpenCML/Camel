@@ -650,7 +650,7 @@ jobs:
           # A module of our own with one array entry point, so the interop run below calls a
           # function rather than only reading the names of the surface: `totals: f32[]` is the
           # shape `examples/python/rules/rules.cml` exports.
-          printf 'export func double_totals(values: f32[]): f32[] {\n    return values->map<(value: f32): f32 => f32(float(value) * 2.0)>\n}\n' > "$RUNNER_TEMP/shared/rules.cml"
+          printf 'export func double_totals(values: f32[]) => f32[] {\n    return values->map<func (value: f32) => f32 {\n        f32(float(value) * 2.0)\n    }>\n}\n' > "$RUNNER_TEMP/shared/rules.cml"
           cat > "$RUNNER_TEMP/shared/smoke.sh" <<'SMOKE'
           set -eu
           # A clean container with nothing but the wheel: 5.37 item 4. `numpy` is what the

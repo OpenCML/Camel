@@ -406,8 +406,9 @@ const MODULES = [
         //
         // It is not pure Camel: `stop_gradient` declares a body-less function whose kernel is the
         // module's own (`stdlib/laws/`, operator `laws:stop_gradient`), because "no derivative
-        // flows through this value" cannot be written as arithmetic. The declaration is still the
-        // one this page prints, and the build checks it against the registered operator.
+        // flows through this value" cannot be written as arithmetic. As in `array`, the page says
+        // which declaration is native, and that one is checked against the registered operator.
+        native: true,
     },
     {
         name: 'rulesets.jvp',
