@@ -320,7 +320,7 @@ desc = "A reference keeps its content across collections, including a value writ
 kind = "behavior"
 case = "../../../cases/compile/ref/ref_content_survives.cml"
 backends = ["nvm", "fvm", "jit", "prl"]
-args = ["--gc-stress", "alloc=3,safepoint=1,kind=both", "--gc-check", "poison,verify=both", "--gc", "generational", "${case}", "${backend}"]
+args = ["--gc-stress", "alloc=3,safepoint=1,kind=both", "--gc-check", "poison,verify=both", "--gc", "kind=generational", "${case}", "${backend}"]
 backends_agree = ["exit_code", "stdout_normalized"]
 expect_exit = 0
 verify_script = '''
@@ -339,7 +339,7 @@ desc = "A box's whole lifetime is a count, so the count is read: `--gc-check for
 kind = "behavior"
 case = "../../../cases/compile/ref/ref_boxes_are_counted.cml"
 backends = ["nvm", "fvm", "jit", "prl"]
-args = ["--gc-stress", "alloc=7,safepoint=3,kind=both", "--gc-check", "foreign,verify=both", "--gc", "generational", "${case}", "${backend}"]
+args = ["--gc-stress", "alloc=7,safepoint=3,kind=both", "--gc-check", "foreign,verify=both", "--gc", "kind=generational", "${case}", "${backend}"]
 backends_agree = ["exit_code"]
 expect_exit = 0
 verify_script = '''
@@ -381,7 +381,7 @@ desc = "The same place makes ten boxes, one per element of a range, and each is 
 kind = "behavior"
 case = "../../../cases/compile/ref/ref_boxes_loop_ten.cml"
 backends = ["nvm", "fvm", "jit", "prl"]
-args = ["--gc-stress", "alloc=7,safepoint=3,kind=both", "--gc-check", "foreign,verify=both", "--gc", "generational", "${case}", "${backend}"]
+args = ["--gc-stress", "alloc=7,safepoint=3,kind=both", "--gc-check", "foreign,verify=both", "--gc", "kind=generational", "${case}", "${backend}"]
 backends_agree = ["exit_code"]
 expect_exit = 0
 verify_script = '''
@@ -418,7 +418,7 @@ desc = "The same program as `ref.boxes_loop_ten` over a range a hundred times lo
 kind = "behavior"
 case = "../../../cases/compile/ref/ref_boxes_loop_thousand.cml"
 backends = ["nvm", "fvm", "jit", "prl"]
-args = ["--gc-stress", "alloc=7,safepoint=3,kind=both", "--gc-check", "foreign,verify=both", "--gc", "generational", "${case}", "${backend}"]
+args = ["--gc-stress", "alloc=7,safepoint=3,kind=both", "--gc-check", "foreign,verify=both", "--gc", "kind=generational", "${case}", "${backend}"]
 backends_agree = ["exit_code"]
 expect_exit = 0
 verify_script = '''
@@ -463,7 +463,7 @@ desc = "`live` = 0 is not reached and not asserted: a call makes a box and drops
 kind = "behavior"
 case = "../../../cases/compile/ref/ref_boxes_made_per_call_ten.cml"
 backends = ["nvm", "fvm", "jit", "prl"]
-args = ["--gc-stress", "alloc=7,safepoint=3,kind=both", "--gc-check", "foreign,verify=both", "--gc", "generational", "${case}", "${backend}"]
+args = ["--gc-stress", "alloc=7,safepoint=3,kind=both", "--gc-check", "foreign,verify=both", "--gc", "kind=generational", "${case}", "${backend}"]
 backends_agree = ["exit_code"]
 expect_exit = 0
 verify_script = '''
@@ -501,7 +501,7 @@ desc = "`live` = 0 is not reached and not asserted: the same program as `ref.box
 kind = "behavior"
 case = "../../../cases/compile/ref/ref_boxes_made_per_call_thousand.cml"
 backends = ["nvm", "fvm", "jit", "prl"]
-args = ["--gc-stress", "alloc=7,safepoint=3,kind=both", "--gc-check", "foreign,verify=both", "--gc", "generational", "${case}", "${backend}"]
+args = ["--gc-stress", "alloc=7,safepoint=3,kind=both", "--gc-check", "foreign,verify=both", "--gc", "kind=generational", "${case}", "${backend}"]
 backends_agree = ["exit_code"]
 expect_exit = 0
 verify_script = '''
@@ -834,7 +834,7 @@ name = "ref.array_element.default"
 desc = "The same program through the default pipeline (the interpreter), answering what `ref.array_element` pins, so the reading is not one back end's."
 kind = "behavior"
 case = "../../../cases/compile/ref/ref_array_element.cml"
-args = ["-E", "short", "${case}"]
+args = ["--diag-format", "short", "${case}"]
 expect_exit = 0
 verify_script = '''
 ({ input, assert }) => {

@@ -1,0 +1,342 @@
+id = "tools.cli_removed_options"
+order = 922
+tier = "fast"
+tags = ["feat", "tools", "cli"]
+desc = "Every option the command line no longer has is refused as an unknown option, exit 1: the spellings that were renamed or merged into a subcommand are gone, not kept as aliases"
+
+# The command line has one spelling for each setting (the command line design). An option
+# that was renamed, merged into a key=value option, or turned into a subcommand is deleted: a
+# command line that still writes it must fail, and say that the option is unknown. These cases
+# hold the negative side of each deletion -- without them, "deleted" and "still there but never
+# read" look the same from the outside.
+
+[[tests]]
+name = "removed.error_format"
+desc = "`--error-format` is gone: the diagnostics format is `--diag-format`, in every command."
+kind = "negative"
+case = "../../../cases/compile/check/clean.cml"
+args = ["--error-format", "short", "${case}"]
+expect_exit = 1
+expect_stderr_contains = ["unknown option '--error-format'"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "removed.short_error_format"
+desc = "`-E` is gone with it."
+kind = "negative"
+case = "../../../cases/compile/check/clean.cml"
+args = ["-E", "short", "${case}"]
+expect_exit = 1
+expect_stderr_contains = ["unknown option '-E'"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "removed.output_format"
+desc = "`--output-format` is gone: one name for the diagnostics format."
+kind = "negative"
+case = "../../../cases/compile/check/clean.cml"
+args = ["--output-format", "json", "${case}"]
+expect_exit = 1
+expect_stderr_contains = ["unknown option '--output-format'"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "removed.check_short_output_format"
+desc = "`check -O` is gone with it: `check --diag-format` is the same option as the run's."
+kind = "negative"
+case = "../../../cases/compile/check/clean.cml"
+args = ["check", "-O", "json", "${case}"]
+expect_exit = 1
+expect_stderr_contains = ["unknown option '-O'"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "removed.max_warning"
+desc = "`--max-warning` is gone: the option is `--max-warnings`, plural."
+kind = "negative"
+case = "../../../cases/compile/check/clean.cml"
+args = ["--max-warning", "5", "${case}"]
+expect_exit = 1
+expect_stderr_contains = ["unknown option '--max-warning'"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "removed.short_max_warning"
+desc = "`-N` is gone: the option keeps no single letter."
+kind = "negative"
+case = "../../../cases/compile/check/clean.cml"
+args = ["-N", "5", "${case}"]
+expect_exit = 1
+expect_stderr_contains = ["unknown option '-N'"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "removed.block_limit"
+desc = "`--block-limit` is gone: the data-block space is `--spaces block_mb=N`."
+kind = "negative"
+case = "../../../cases/compile/check/clean.cml"
+args = ["--block-limit", "64", "${case}"]
+expect_exit = 1
+expect_stderr_contains = ["unknown option '--block-limit'"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "removed.graph_gc_mb"
+desc = "`--graph-gc-mb` is gone: the graph's collection floor is `--gc graph_mb=N`."
+kind = "negative"
+case = "../../../cases/compile/check/clean.cml"
+args = ["--graph-gc-mb", "8", "${case}"]
+expect_exit = 1
+expect_stderr_contains = ["unknown option '--graph-gc-mb'"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "removed.gc_nursery"
+desc = "`--gc-nursery-mb` is gone: the collector is one option, `--gc kind=...,nursery_mb=N`."
+kind = "negative"
+case = "../../../cases/compile/check/clean.cml"
+args = ["--gc-nursery-mb", "1", "${case}"]
+expect_exit = 1
+expect_stderr_contains = ["unknown option '--gc-nursery-mb'"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "removed.gc_promotion_age"
+desc = "`--gc-promotion-age` is gone: it is `--gc promotion_age=N`."
+kind = "negative"
+case = "../../../cases/compile/check/clean.cml"
+args = ["--gc-promotion-age", "2", "${case}"]
+expect_exit = 1
+expect_stderr_contains = ["unknown option '--gc-promotion-age'"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "removed.gc_large_threshold"
+desc = "`--gc-large-threshold-kb` is gone: it is `--gc large_threshold_kb=N`."
+kind = "negative"
+case = "../../../cases/compile/check/clean.cml"
+args = ["--gc-large-threshold-kb", "8", "${case}"]
+expect_exit = 1
+expect_stderr_contains = ["unknown option '--gc-large-threshold-kb'"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "removed.gc_large_budget"
+desc = "`--gc-large-budget-mb` is gone: it is `--gc large_budget_mb=N`."
+kind = "negative"
+case = "../../../cases/compile/check/clean.cml"
+args = ["--gc-large-budget-mb", "1", "${case}"]
+expect_exit = 1
+expect_stderr_contains = ["unknown option '--gc-large-budget-mb'"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "removed.gc_growth_percent"
+desc = "`--gc-growth-percent` is gone: it is `--gc growth_percent=N`."
+kind = "negative"
+case = "../../../cases/compile/check/clean.cml"
+args = ["--gc-growth-percent", "50", "${case}"]
+expect_exit = 1
+expect_stderr_contains = ["unknown option '--gc-growth-percent'"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "removed.gc_heap_limit"
+desc = "`--gc-heap-limit-mb` is gone: it is `--gc heap_limit_mb=N`."
+kind = "negative"
+case = "../../../cases/compile/check/clean.cml"
+args = ["--gc-heap-limit-mb", "8", "${case}"]
+expect_exit = 1
+expect_stderr_contains = ["unknown option '--gc-heap-limit-mb'"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "removed.space_segment"
+desc = "`--space-segment-kb` is gone: it is `--spaces segment_kb=N`."
+kind = "negative"
+case = "../../../cases/compile/check/clean.cml"
+args = ["--space-segment-kb", "4", "${case}"]
+expect_exit = 1
+expect_stderr_contains = ["unknown option '--space-segment-kb'"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "removed.meta_space_limit"
+desc = "`--meta-space-limit-mb` is gone: it is `--spaces meta_mb=N`."
+kind = "negative"
+case = "../../../cases/compile/check/clean.cml"
+args = ["--meta-space-limit-mb", "1", "${case}"]
+expect_exit = 1
+expect_stderr_contains = ["unknown option '--meta-space-limit-mb'"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "removed.graph_space_limit"
+desc = "`--graph-space-limit-mb` is gone: it is `--spaces graph_mb=N`."
+kind = "negative"
+case = "../../../cases/compile/check/clean.cml"
+args = ["--graph-space-limit-mb", "1", "${case}"]
+expect_exit = 1
+expect_stderr_contains = ["unknown option '--graph-space-limit-mb'"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "removed.perm_space_limit"
+desc = "`--perm-space-limit-mb` is gone: it is `--spaces perm_mb=N`."
+kind = "negative"
+case = "../../../cases/compile/check/clean.cml"
+args = ["--perm-space-limit-mb", "1", "${case}"]
+expect_exit = 1
+expect_stderr_contains = ["unknown option '--perm-space-limit-mb'"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "removed.no_cache_short"
+desc = "`-n` is gone: the option keeps only `--no-cache`."
+kind = "negative"
+case = "../../../cases/compile/check/clean.cml"
+args = ["-n", "${case}"]
+expect_exit = 1
+expect_stderr_contains = ["unknown option '-n'"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "removed.docs_option"
+desc = "`--docs` is gone: the documentation is the subcommand `camel docs`."
+kind = "negative"
+case = "../../../cases/compile/check/clean.cml"
+args = ["--docs"]
+expect_exit = 1
+expect_stderr_contains = ["unknown option '--docs'"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "removed.docs_short"
+desc = "`-d` is gone with it: the information commands take no single letter."
+kind = "negative"
+case = "../../../cases/compile/check/clean.cml"
+args = ["-d"]
+expect_exit = 1
+expect_stderr_contains = ["unknown option '-d'"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "removed.about_option"
+desc = "`--about` is gone: the copyright is the subcommand `camel about`."
+kind = "negative"
+case = "../../../cases/compile/check/clean.cml"
+args = ["--about"]
+expect_exit = 1
+expect_stderr_contains = ["unknown option '--about'"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "removed.about_short"
+desc = "`-a` is gone with it."
+kind = "negative"
+case = "../../../cases/compile/check/clean.cml"
+args = ["-a"]
+expect_exit = 1
+expect_stderr_contains = ["unknown option '-a'"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "removed.zen_option"
+desc = "`--zen` is gone: the Zen is the subcommand `camel zen`."
+kind = "negative"
+case = "../../../cases/compile/check/clean.cml"
+args = ["--zen"]
+expect_exit = 1
+expect_stderr_contains = ["unknown option '--zen'"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "removed.zen_short"
+desc = "`-z` is gone with it."
+kind = "negative"
+case = "../../../cases/compile/check/clean.cml"
+args = ["-z"]
+expect_exit = 1
+expect_stderr_contains = ["unknown option '-z'"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "removed.explain_option"
+desc = "`--explain` is gone: a diagnostic is described by the subcommand `camel explain <name>`."
+kind = "negative"
+case = "../../../cases/compile/check/clean.cml"
+args = ["--explain", "IndexOutOfRange"]
+expect_exit = 1
+expect_stderr_contains = ["unknown option '--explain'"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+# The positive side of each rename lives with the option it belongs to: `--diag-format` in
+# compile.diag_options, `--spaces`/`--gc` in the sizing plans, and the subcommands here.
+
+[[tests]]
+name = "subcommand.docs"
+desc = "`camel docs` is the documentation command: it exits 0 and prints the documentation it has."
+kind = "behavior"
+case = "../../../cases/compile/check/clean.cml"
+args = ["docs"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 10000
+
+[[tests]]
+name = "subcommand.about"
+desc = "`camel about` prints the copyright and the build, and exits 0."
+kind = "behavior"
+case = "../../../cases/compile/check/clean.cml"
+args = ["about"]
+expect_exit = 0
+expect_stdout_contains = ["Camel v"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 10000
+
+[[tests]]
+name = "subcommand.zen"
+desc = "`camel zen` prints the Zen of Camel, and exits 0."
+kind = "behavior"
+case = "../../../cases/compile/check/clean.cml"
+args = ["zen"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 10000
+
+[[tests]]
+name = "subcommand.explain"
+desc = "`camel explain <name>` describes a diagnostic by name, the same text the option printed."
+kind = "behavior"
+case = "../../../cases/compile/check/clean.cml"
+args = ["explain", "IndexOutOfRange"]
+expect_exit = 0
+expect_stdout_contains = ["RuntimeDiag::IndexOutOfRange"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 10000

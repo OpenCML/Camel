@@ -20,7 +20,7 @@ let failed = false
 {
     const proc = spawnSync(
         CAMEL,
-        ['--output-format', 'json', program, '--arg', 'n=3', '--arg', 'rate=0.5', '--arg', 'name=hi', '--arg', 'loud=true', '--timeit', 'std::fvm/2'],
+        ['--diag-format', 'json', program, '--arg', 'n=3', '--arg', 'rate=0.5', '--arg', 'name=hi', '--arg', 'loud=true', '--timeit', 'std::fvm/2'],
         { env, encoding: 'utf8' },
     )
     let samples = -1

@@ -276,7 +276,7 @@ function selfCheck() {
             failed = true
         }
     }
-    if (!compareSets(new Set(collectorSaid.values), collectorFound, '--gc collectors', report)) failed = true
+    if (!compareSets(new Set(collectorSaid.values), collectorFound, '--gc kind=collectors', report)) failed = true
 
     // A block whose words this table does not mention at all would pass every comparison above by
     // being empty; both sides must have been read.

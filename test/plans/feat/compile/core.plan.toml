@@ -132,7 +132,7 @@ name = "semantic.assign_to_temporary"
 desc = "An assignment whose target is a temporary (`point().x = 9`): a path must start at a variable, so the store would go nowhere. The message now says a path from a variable is a target, since a field or an element of one is."
 kind = "negative"
 case = "../../../cases/compile/semantic/assign_to_temporary.cml"
-args = ["-E", "short", "${case}"]
+args = ["--diag-format", "short", "${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::AssignmentTargetNotVariable"
 expect_diagnostic_line = 14

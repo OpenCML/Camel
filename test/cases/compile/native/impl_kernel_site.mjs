@@ -55,7 +55,7 @@ function run(name, files, entry) {
     const dir = path.join(SCRATCH, name)
     fs.mkdirSync(dir, { recursive: true })
     for (const [file, text] of Object.entries(files)) fs.writeFileSync(path.join(dir, file), text)
-    const proc = spawnSync(CAMEL, ['--output-format', 'json', path.join(dir, entry)], {
+    const proc = spawnSync(CAMEL, ['--diag-format', 'json', path.join(dir, entry)], {
         env,
         encoding: 'utf8',
         cwd: dir,

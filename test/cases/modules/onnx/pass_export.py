@@ -152,7 +152,7 @@ def refuse(out: Path) -> bool:
     for program, passes, fragment, line in REFUSALS:
         model = out / f"{Path(program).stem}.refused.onnx"
         proc = camel(
-            ["--output-format", "json", rel(program), *with_out(passes, model)],
+            ["--diag-format", "json", rel(program), *with_out(passes, model)],
             {"ONNX_OUT": str(model)},
         )
         label = f"{program} [{' '.join(passes)}]"

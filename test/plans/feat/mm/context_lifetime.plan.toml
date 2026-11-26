@@ -54,7 +54,7 @@ name = "context_lifetime.second_context_is_destroyed"
 desc = "The second context's only owner is the scope that built it, so it is destroyed when that scope ends: it gives the object root set it registered back and drains the deferred-release queue its teardown queued, and the running program survives a major collection taken afterwards. The pinned reading: it read held=5, live_after=2, root_given_back=0 and ran=0 before the back-references were made non-owning."
 kind = "behavior"
 case = "../../../cases/feat/mm/gc/context_lifetime.cml"
-args = ["--gc", "generational", "${case}", "test::context_lifetime", "${run_nvm}"]
+args = ["--gc", "kind=generational", "${case}", "test::context_lifetime", "${run_nvm}"]
 
 expect_exit = 0
 expect_stdout_contains = ["CONTEXTS-PROBE held=1 live_before=1 live_second=2 live_after=1 rootset_before=1 rootset_second=2 rootset_after=1 root_given_back=1 deferred_before=1 deferred_after=0 ran=1 alive=1", "contexts-1-2-3"]
@@ -66,7 +66,7 @@ name = "context_lifetime.second_context_is_destroyed_fvm"
 desc = "The same reading on the bytecode back end, where the contexts of a run are not the ones the node VM made."
 kind = "behavior"
 case = "../../../cases/feat/mm/gc/context_lifetime.cml"
-args = ["--gc", "generational", "${case}", "test::context_lifetime", "${run_fvm}"]
+args = ["--gc", "kind=generational", "${case}", "test::context_lifetime", "${run_fvm}"]
 
 expect_exit = 0
 expect_stdout_contains = ["CONTEXTS-PROBE held=1 live_before=1 live_second=2 live_after=1 rootset_before=1 rootset_second=2 rootset_after=1 root_given_back=1 deferred_before=1 deferred_after=0 ran=1 alive=1", "contexts-1-2-3"]

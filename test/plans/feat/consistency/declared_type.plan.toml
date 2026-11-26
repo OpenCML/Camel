@@ -26,6 +26,6 @@ name = "declared_type.mismatch"
 desc = "An `int` value declared `float` is refused at the declaration (DeclaredTypeMismatch): numbers are not converted implicitly."
 kind = "negative"
 case = "../../../cases/consistency/declared_type/mismatch.cml"
-args = ["-E", "short", "${case}"]
+args = ["--diag-format", "short", "${case}"]
 expect_exit = 1
 expect_output_contains = ["SemanticDiag::DeclaredTypeMismatch", ".cml:4:5:", "This value has type 'int', which is not the declared type 'float'"]

@@ -15,5 +15,5 @@ normalizers = ["normalize_newlines"]
 name = "failing_pass"
 desc = "The timed pass divides by zero, so the payload has `failed` and no `mean_ms`."
 case = "benchmark_failure.cml"
-args = ["--timeit", "std::nvm/2", "--output-format", "json", "${case}", "std::nvm"]
+args = ["--timeit", "std::nvm/2", "--diag-format", "json", "${case}", "std::nvm"]
 expect_exit = 0

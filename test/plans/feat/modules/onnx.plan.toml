@@ -900,7 +900,7 @@ timeout_ms = 10000
 
 [[tests]]
 name = "pass_export_refusals_json"
-desc = "The refusals of onnx::export in --output-format json: name RuntimeDiag::TranslationRefused, stage pass:onnx::export, a source position, no model file (no simplify; no std::macro; a recursive call that is not in tail position, so the recursion is no loop)."
+desc = "The refusals of onnx::export in --diag-format json: name RuntimeDiag::TranslationRefused, stage pass:onnx::export, a source position, no model file (no simplify; no std::macro; a recursive call that is not in tail position, so the recursion is no loop)."
 kind = "behavior"
 tool = "python"
 case = "../../../cases/modules/onnx/pass_export.py"
@@ -977,7 +977,7 @@ name = "pass_export_ctrl_effect_json"
 desc = "onnx::export refuses the same control-path effect: TranslationRefused, stage pass:onnx::export, the range of the println, no model file."
 kind = "behavior"
 case = "../../../cases/modules/onnx/export_ctrl_effect.cml"
-args = ["--output-format", "json", "${case}", "std::macro", "std::opt", 'onnx::export out="${test_tmp}/pass_export_ctrl_effect.onnx"', "std::nop"]
+args = ["--diag-format", "json", "${case}", "std::macro", "std::opt", 'onnx::export out="${test_tmp}/pass_export_ctrl_effect.onnx"', "std::nop"]
 expect_exit = 1
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
@@ -1026,7 +1026,7 @@ name = "pass_export_ctrl_effect_in_callee_json"
 desc = "onnx::export finds the effect inside a function the exported one calls and reports the println there (the pass inlines the callee, as export_model does, so the position is the same on both entries); no model file."
 kind = "behavior"
 case = "../../../cases/modules/onnx/export_ctrl_effect_callee.cml"
-args = ["--output-format", "json", "${case}", "std::macro", "std::opt", 'onnx::export out="${test_tmp}/pass_export_ctrl_effect_callee.onnx"', "std::nop"]
+args = ["--diag-format", "json", "${case}", "std::macro", "std::opt", 'onnx::export out="${test_tmp}/pass_export_ctrl_effect_callee.onnx"', "std::nop"]
 expect_exit = 1
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
@@ -2735,10 +2735,10 @@ timeout_ms = 8000
 
 [[tests]]
 name = "pass_export_refusal_located.growth_budget_json"
-desc = "The same refusal in --output-format json: one diagnostic, TranslationRefused, stage pass:onnx::export, the range of `main`, the budget and the pass parameter in the message, no model file."
+desc = "The same refusal in --diag-format json: one diagnostic, TranslationRefused, stage pass:onnx::export, the range of `main`, the budget and the pass parameter in the message, no model file."
 kind = "behavior"
 case = "../../../cases/modules/onnx/refusals/growth_budget.cml"
-args = ["--output-format", "json", "${case}", "std::macro", "std::opt growth_budget=0", "onnx::export", "std::nop"]
+args = ["--diag-format", "json", "${case}", "std::macro", "std::opt growth_budget=0", "onnx::export", "std::nop"]
 expect_exit = 1
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
@@ -2866,10 +2866,10 @@ timeout_ms = 8000
 
 [[tests]]
 name = "pass_export_refusal_located.request_in_arm_json"
-desc = "The same refusal in --output-format json: one diagnostic, TranslationRefused, stage pass:onnx::export, the range of the branch (it starts at the `if` on line 19 and ends with the else arm on line 23), no model file."
+desc = "The same refusal in --diag-format json: one diagnostic, TranslationRefused, stage pass:onnx::export, the range of the branch (it starts at the `if` on line 19 and ends with the else arm on line 23), no model file."
 kind = "behavior"
 case = "../../../cases/modules/onnx/refusals/request_in_arm.cml"
-args = ["--output-format", "json", "${case}", "std::macro", "std::opt", "onnx::export", "std::nop"]
+args = ["--diag-format", "json", "${case}", "std::macro", "std::opt", "onnx::export", "std::nop"]
 expect_exit = 1
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """

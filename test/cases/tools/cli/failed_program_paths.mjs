@@ -93,22 +93,22 @@ function checkTimeitFailed(label, result, diagnosticName, passName = 'std::nvm')
 }
 
 // 1. A semantic error: run, check and timeit all refuse it.
-const semRun = camel(['-E', 'short', semantic])
+const semRun = camel(['--diag-format', 'short', semantic])
 check('semantic error: run exits 1', semRun.status === 1, String(semRun.status))
 check('semantic error: run reports the diagnostic', semRun.stderr.includes('UnresolvedReference'), semRun.stderr)
 
-const semCheck = camel(['check', '-O', 'short', semantic])
+const semCheck = camel(['check', '--diag-format', 'short', semantic])
 check('semantic error: check exits 1', semCheck.status === 1, String(semCheck.status))
 check('semantic error: check reports the diagnostic', semCheck.stderr.includes('UnresolvedReference'), semCheck.stderr)
 
 checkTimeitFailed('semantic error: timeit', camel(['--timeit', 'std::nvm/1', semantic]), 'UnresolvedReference')
 
 // 2. An import of a module that does not exist.
-const missingRun = camel(['-E', 'short', missingImport])
+const missingRun = camel(['--diag-format', 'short', missingImport])
 check('missing import: run exits 1', missingRun.status === 1, String(missingRun.status))
 check('missing import: run reports the diagnostic', missingRun.stderr.includes('ModuleNotFound'), missingRun.stderr)
 
-const missingCheck = camel(['check', '-O', 'short', missingImport])
+const missingCheck = camel(['check', '--diag-format', 'short', missingImport])
 check('missing import: check exits 1', missingCheck.status === 1, String(missingCheck.status))
 check('missing import: check reports the diagnostic', missingCheck.stderr.includes('ModuleNotFound'), missingCheck.stderr)
 
@@ -117,7 +117,7 @@ checkTimeitFailed('missing import: timeit', camel(['--timeit', 'std::nvm/1', mis
 // 3. An import of a module that exists and does not compile. The import is a dependency of the
 // program, so every command that compiles it must fail at the compile step; a pass library that
 // does not compile is not this case (it is not a dependency, and pass resolution reports it).
-const brokenRun = camel(['-E', 'short', brokenImport])
+const brokenRun = camel(['--diag-format', 'short', brokenImport])
 check('broken import: run exits 1', brokenRun.status === 1, String(brokenRun.status))
 check(
     'broken import: run reports the imported module\'s diagnostic',
@@ -126,7 +126,7 @@ check(
     brokenRun.stdout,
 )
 
-const brokenCheck = camel(['check', '-O', 'short', brokenImport])
+const brokenCheck = camel(['check', '--diag-format', 'short', brokenImport])
 check('broken import: check exits 1', brokenCheck.status === 1, String(brokenCheck.status))
 check(
     'broken import: check reports the imported module\'s diagnostic',
@@ -143,7 +143,7 @@ checkTimeitFailed(
 )
 
 // 4. A declaration module that exists and fails to load.
-const badRun = camel(['-E', 'short', healthy], STDLIB)
+const badRun = camel(['--diag-format', 'short', healthy], STDLIB)
 check('declaration load failure: run exits 1', badRun.status === 1, String(badRun.status))
 check(
     'declaration load failure: run reports the diagnostic',
@@ -151,7 +151,7 @@ check(
     badRun.stdout,
 )
 
-const badCheck = camel(['check', '-O', 'short', healthy], STDLIB)
+const badCheck = camel(['check', '--diag-format', 'short', healthy], STDLIB)
 check('declaration load failure: check exits 1', badCheck.status === 1, String(badCheck.status))
 check(
     'declaration load failure: check reports the diagnostic',
