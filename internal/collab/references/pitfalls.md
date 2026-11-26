@@ -24,7 +24,7 @@
 | **本机构建** | 0x50 PAGE_FAULT 蓝屏，日志/状态文件损坏 | 一次都别在本机 `cmake --build` / `npm run build` / `node scripts/test.js` |
 | 并发太高 | `-Jobs 12` 下 `gpu_preference.no_device.*` 撞 10 s 超时假红，`nested_return.compile_time` 撞 5 s | 用 `-Jobs 8`；判断假红前先单独重跑该计划 |
 | 互斥量混用 | 编译与测试共用一个锁会互相阻塞 | 两个独立互斥量：`Global\CamelBuildSerialized` / `Global\CamelTestSerialized`；`AbandonedMutexException` 来自 `WaitOne` 说明**已获得**锁 |
-| **远程 wrapper 的两把锁**（2026-11-03） | 7 条车道同时压满主机时读数不可比；更隐蔽的是**同一棵树**上两条并发：第二条的构建覆写 `out/latest`，第一条的 plan 半途 `exit 1`（看起来像用例红了） | `camel-remote.ps1` 主机侧两把锁：`/tmp/camel-host-test.lock`（**全局，只锁 plan**，为的是负载）与 `/tmp/camel-tree-<路径 cksum>.lock`（**按树，锁 build+plan**，为的是同一棵树不互相覆写）。等锁超 30 分钟 ⇒ `exit 4`（**与构建/测试失败的退出码分开**），**等锁本身不算失败**。实测：两条并发长跑后者 `waited 271.6 s`；加树锁前同树并发的第二条会 `exit 1` |
+| **远程 wrapper 的两把锁**（2026-11-03） | 7 条车道同时压满主机时读数不可比；更隐蔽的是**同一棵树**上两条并发：第二条的构建覆写 `out/latest`，第一条的 plan 半途 `exit 1`（看起来像用例红了） | `camel-remote.ps1` 主机侧：按树的 `/tmp/camel-tree-<路径 cksum>.lock`（**锁 build+plan**，为的是同一棵树不互相覆写）；负载由令牌池管（原先的全局 plan 锁已撤）。等锁或等令牌超 30 分钟 ⇒ `exit 4`（**与构建/测试失败的退出码分开**），**等锁本身不算失败**。实测：两条并发长跑后者 `waited 271.6 s`；加树锁前同树并发的第二条会 `exit 1` |
 | 状态写失败杀掉构建 | 面板读者占用目标文件时 `Move-Item` 抛错，构建被终止 | 重试 25×40 ms 后放弃；状态发布是**非致命**的 |
 | 黄金文件过期 | 合入改了语法后 `frontend.ast_snapshot` 红 | 在**合并后的树**上、主机跑 `python3 test/tools/parsecheck/check.py snapshot --update`、`scp` 回来提交。**别让每个任务只提交自己那几行**：分支的黄金是从比它树更新的构建里记的，最后攒出 77 条互不相同的偏差（2026-10 一次全量刷新 2501 文件才对上） |
 | 参考页过期 | `stdlib-reference.mjs --verify-ops` 红 | 标准库声明合并后同机跑 `--write`，把 `docs/stdlib-reference.md` 一起提交；`--verify-ops` 的算子数会随迁移上下变（343→341→365），别当常量 |

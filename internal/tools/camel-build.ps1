@@ -101,7 +101,6 @@ $buildRow = @{
     state           = $null
     slots           = 0
     slot            = '0'
-    testSlot        = 0
     noslotWaitedFor = $null
     overlapping     = @{ atStart = $null; atEnd = $null }
     loadAtStart     = $null

@@ -6026,6 +6026,9 @@ async function main() {
             + `, cases with a token ${tokenTaking.cases}`
             + `, queued ${tokenTaking.queued}`
             + `, tokenWaitSeconds=${(tokenTaking.waitMs / 1000).toFixed(1)}`
+            // A plan run on the host holds its width as one hold of tokens (`camel-run plan`), and its cases
+            // run inside it instead of taking one each: the count of cases with a token is then 0 by design.
+            + (process.env.CAMEL_TOKENS_COVERED === '1' ? `, cases run inside the run's own ${process.env.CAMEL_TOKENS_HELD || '?'} token(s)` : '')
         )
     }
     console.log(formatGateSplit(split))

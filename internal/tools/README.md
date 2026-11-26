@@ -180,20 +180,18 @@ stops with PowerShell's "no positional parameter accepts 'smoke'" instead of qui
 `-LocalConfig smoke` -- a run that looks right and reads another settings file.
 
 Exit codes: the build's or the plan's own; `5` when the gpu observation read a case red that its
-baseline does not record, and also when the host script could not get a shared hold on the old test
-lock within its wait (`internal/tools/host/camel-run.sh`, which uses `4` for "no test slot in time"):
-both are runs that measured nothing, and a run that measured nothing is not a red; `4` when the
-`-NoBuild` guard refused or a host lock was not obtained; `3` when the host is short of disk; `2` when
+baseline does not record; `4` when the `-NoBuild` guard refused, a host lock was not obtained, or the
+pool gave no token within the wait (`internal/tools/host/camel-run.sh` prints `HOST_STATE=noslot` with
+it): a run that measured nothing is not a red; `3` when the host is short of disk; `2` when
 the worktree, the push, the transfer or a `-Check` name was wrong.
 
-Reading the host's lock files: `fuser -v /tmp/camel-host-test*.lock` lists the processes that have each
-file **open**, which is not the same as holding the lock. A run that opened the descriptor and never
-took the lock still appears; a descriptor inherited by a child appears under the child's pid; a process
-that has released the lock can still have the file open. So a `fuser` listing answers "who could be
-holding this" and nothing else -- the authority is `flock`, and the tool that takes it prints what it
-holds on its own lines (`HOST_TEST_SLOT=`, `lockFrom=`, `oldLockWaitSeconds=`). Read a slot number
-there and not off a `fuser` listing: on 2026-11-24 an open descriptor on the old single lock was read as
-"the old lock is held", and those are two different code paths.
+Reading the host's locks: `fuser -v` lists the processes that have a file **open**, which is not the
+same as holding the lock. A run that opened the descriptor and never took the lock still appears; a
+descriptor inherited by a child appears under the child's pid; a process that has released the lock
+can still have the file open. So a `fuser` listing answers "who could be holding this" and nothing
+else -- the authority is `/proc/locks`, and the pool prints what a run holds on its own lines
+(`HOST_JOBS=`, `HOST_BUILD_JOBS=`, `host-tokens.sh show`). The host has one admission, the token pool
+below; there is no test slot and no single plan lock.
 
 The gpu plans are in no other gate: the fast layer is `test/plans/smoke` plus `test/plans/feat`, and
 `test/plans/gpu` is under neither, so a red case there was read by nothing. Every run that takes a
@@ -293,14 +291,15 @@ Who takes one:
 
 | caller | how | what it holds |
 | --- | --- | --- |
-| each test case | `internal/tools/host-case.sh`, the one line of shell in front of every case on the host | one token for the case's whole process tree, returned when it exits |
+| a plan run | `camel-run plan` -> `host-tokens.sh take-up-to N -- CMD`, `N` being `-Jobs` (at most 16) | what is free at start, up to `N` and never fewer than one; the plan runs at that many jobs (`HOST_JOBS=`) and everything under it runs inside that hold: with `CAMEL_TOKENS_COVERED=1` `host-tokens.sh` `take`/`take-up-to`/`run` take nothing (and `take-up-to` reports the run's `CAMEL_JOBS`), so a nested sweep or case cannot wait on the pool while its run holds tokens. Returned when the run ends or is killed; the merge seat queues like every other run |
+| a test case outside a plan run | `internal/tools/host-case.sh`, the one line of shell in front of every case on the host | one token for the case's whole process tree, returned when it exits |
 | a build | the run's own `run.sh` -> `host-tokens.sh take-up-to N -- npm run build` | what is free at start, up to `N` (default 8) and never fewer than one; that count is `CMAKE_BUILD_PARALLEL_LEVEL`, so the width is the tokens it got |
 | the clang syntax sweep | `scripts/check-clang-syntax.mjs` -> `host-tokens.sh run N -- docker ...` | `min(--jobs, pool)` for the container's life, which is also its `-P` |
 
 Queuing is not failing. A taker that finds the pool empty waits, printing who holds what; when the wait
 runs out (`CAMEL_TOKEN_WAIT_S`, default 1800) it exits **6** -- nothing was measured -- which is
 neither `2` (this tool was asked something it cannot do) nor `1` (a reading came back red). A test case
-never pays that price for a full pool: the runner reports it as `tokenWaitSeconds` and moves on.
+never pays that price for a full pool: the runner reports it as `tokenWaitSeconds` and moves on. A plan run that gets no token at all within the wait ends with exit `4` and `HOST_STATE=noslot`.
 
 The readings are the pool's own, and this is the same rule as the lock files below: `fuser` cannot tell
 an open descriptor from a held lock, so "held" comes from `/proc/locks` matched against the inodes the
