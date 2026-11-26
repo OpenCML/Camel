@@ -2187,8 +2187,8 @@ verify_script = """
 const text = input.normalized.output
 const errors = text.split('\n').filter((line) => line.includes('[Error]'))
 assert(errors.length === 1, 'expected one diagnostic (a run-time refusal stops the run at the first): ' + text)
-assert(errors[0].includes('grad_function_value_branch.cml:10:13'), 'the diagnostic is not located at the first call in source order (11:13): ' + text)
-assert(!/[(]at [^)]*grad_function_value_branch[.]cml:11:13[)]/.test(text), 'the position is written into the message: ' + text)
+assert(errors[0].includes('grad_function_value_branch.cml:14:13'), 'the diagnostic is not located at the first call in source order (11:13): ' + text)
+assert(!/[(]at [^)]*grad_function_value_branch[.]cml:15:13[)]/.test(text), 'the position is written into the message: ' + text)
 assert(text.includes('[the function value is chosen here at 9:13]'), 'missing the related position of the branch that chooses the function: ' + text)
 assert(text.includes('which function it calls is not evident where it is called'), 'missing: which function it calls is not evident where it is called in: ' + text)
 assert(text.includes('the function is chosen by a branch at run time'), 'missing: the function is chosen by a branch at run time in: ' + text)
@@ -2209,8 +2209,8 @@ verify_script = """
 const text = input.normalized.output
 const errors = text.split('\n').filter((line) => line.includes('[Error]'))
 assert(errors.length === 1, 'expected one diagnostic: ' + text)
-assert(errors[0].includes('grad_function_value_branch.cml:10:13'), 'the diagnostic is not located at the first call in source order (11:13): ' + text)
-assert(!/[(]at [^)]*grad_function_value_branch[.]cml:11:13[)]/.test(text), 'the position is written into the message: ' + text)
+assert(errors[0].includes('grad_function_value_branch.cml:14:13'), 'the diagnostic is not located at the first call in source order (11:13): ' + text)
+assert(!/[(]at [^)]*grad_function_value_branch[.]cml:15:13[)]/.test(text), 'the position is written into the message: ' + text)
 assert(text.split('[the function value is chosen here at 9:13]').length === 3, 'each refused call must carry the branch that chooses the function as its related position: ' + text)
 const alsoRefused = text.match(/\[[^\]]*the function is chosen by a branch[^\]]*at 11:13\]/g) || []
 assert(alsoRefused.length === 1, 'the second refused call is not named with its own position and its own reason: ' + text)
@@ -2234,8 +2234,8 @@ verify_script = """
 const text = input.normalized.output
 const errors = text.split('\n').filter((line) => line.includes('[Error]'))
 assert(errors.length === 1, 'expected one diagnostic: ' + text)
-assert(errors[0].includes('grad_function_value_static_branch.cml:10:22'), 'the diagnostic is not located at the call (11:22): ' + text)
-assert(!/[(]at [^)]*grad_function_value_static_branch[.]cml:11:22[)]/.test(text), 'the position is written into the message: ' + text)
+assert(errors[0].includes('grad_function_value_static_branch.cml:14:22'), 'the diagnostic is not located at the call (11:22): ' + text)
+assert(!/[(]at [^)]*grad_function_value_static_branch[.]cml:15:22[)]/.test(text), 'the position is written into the message: ' + text)
 assert(text.includes('[the function value is chosen here at 9:13]'), 'missing the related position of the branch that chooses the function: ' + text)
 assert(text.includes('which function it calls is not evident where it is called'), 'missing: which function it calls is not evident where it is called in: ' + text)
 assert(text.includes('the function is chosen by a branch at run time'), 'missing: the function is chosen by a branch at run time in: ' + text)
@@ -2256,8 +2256,8 @@ verify_script = """
 const text = input.normalized.output
 const errors = text.split('\n').filter((line) => line.includes('[Error]'))
 assert(errors.length === 1, 'expected one diagnostic (the program has one refused call): ' + text)
-assert(errors[0].includes('grad_function_value_static_branch.cml:10:22'), 'the diagnostic is not located at the call (11:22): ' + text)
-assert(!/[(]at [^)]*grad_function_value_static_branch[.]cml:11:22[)]/.test(text), 'the position is written into the message: ' + text)
+assert(errors[0].includes('grad_function_value_static_branch.cml:14:22'), 'the diagnostic is not located at the call (11:22): ' + text)
+assert(!/[(]at [^)]*grad_function_value_static_branch[.]cml:15:22[)]/.test(text), 'the position is written into the message: ' + text)
 assert(text.includes('[the function value is chosen here at 9:13]'), 'missing the related position of the branch that chooses the function: ' + text)
 assert(text.includes('the function is chosen by a branch at run time'), 'missing: the function is chosen by a branch at run time in: ' + text)
 assert(text.includes('could not be evaluated by std::macro'), 'not a macro error: ' + text)
@@ -2323,8 +2323,8 @@ verify_script = """
 const text = input.normalized.output
 const errors = text.split('\n').filter((line) => line.includes('[Error]'))
 assert(errors.length === 1, 'expected one diagnostic: ' + text)
-assert(errors[0].includes('grad_function_value_container.cml:10:22'), 'the diagnostic is not located at the call (11:22): ' + text)
-assert(!/[(]at [^)]*grad_function_value_container[.]cml:11:22[)]/.test(text), 'the position is written into the message: ' + text)
+assert(errors[0].includes('grad_function_value_container.cml:14:22'), 'the diagnostic is not located at the call (11:22): ' + text)
+assert(!/[(]at [^)]*grad_function_value_container[.]cml:15:22[)]/.test(text), 'the position is written into the message: ' + text)
 assert(text.includes('[the function value is chosen here at 9:13]'), 'missing the related position of the read that selects the function: ' + text)
 assert(text.includes('the function is read from a tuple, a struct or an array'), 'missing: the function is read from a tuple, a struct or an array in: ' + text)
 }
@@ -2344,8 +2344,8 @@ verify_script = """
 const text = input.normalized.output
 const errors = text.split('\n').filter((line) => line.includes('[Error]'))
 assert(errors.length === 1, 'expected one diagnostic (the program has one refused call): ' + text)
-assert(errors[0].includes('grad_function_value_container.cml:10:22'), 'the diagnostic is not located at the call (11:22): ' + text)
-assert(!/[(]at [^)]*grad_function_value_container[.]cml:11:22[)]/.test(text), 'the position is written into the message: ' + text)
+assert(errors[0].includes('grad_function_value_container.cml:14:22'), 'the diagnostic is not located at the call (11:22): ' + text)
+assert(!/[(]at [^)]*grad_function_value_container[.]cml:15:22[)]/.test(text), 'the position is written into the message: ' + text)
 assert(text.includes('[the function value is chosen here at 9:13]'), 'missing the related position of the read that selects the function: ' + text)
 assert(text.includes('the function is read from a tuple, a struct or an array'), 'missing: the function is read from a tuple, a struct or an array in: ' + text)
 assert(text.includes('could not be evaluated by std::macro'), 'not a macro error: ' + text)
@@ -2479,8 +2479,8 @@ verify_script = """
 const text = input.normalized.output
 const errors = text.split('\n').filter((line) => line.includes('[Error]'))
 assert(errors.length === 1, 'expected one diagnostic: ' + text)
-assert(errors[0].includes('grad_function_value_passed.cml:14:12'), 'the diagnostic is not located at the call (15:12): ' + text)
-assert(!/[(]at [^)]*grad_function_value_passed[.]cml:15:12[)]/.test(text), 'the position is written into the message: ' + text)
+assert(errors[0].includes('grad_function_value_passed.cml:18:12'), 'the diagnostic is not located at the call (15:12): ' + text)
+assert(!/[(]at [^)]*grad_function_value_passed[.]cml:19:12[)]/.test(text), 'the position is written into the message: ' + text)
 assert(text.includes('[the function value is chosen here at 13:13]'), 'missing the related position of the branch that chooses the function: ' + text)
 assert(text.includes('cannot differentiate through this call of'), 'missing: cannot differentiate through this call of in: ' + text)
 assert(text.includes('call0'), 'missing: call0 in: ' + text)
@@ -2503,8 +2503,8 @@ verify_script = """
 const text = input.normalized.output
 const errors = text.split('\n').filter((line) => line.includes('[Error]'))
 assert(errors.length === 1, 'expected one diagnostic (the program has one refused call): ' + text)
-assert(errors[0].includes('grad_function_value_passed.cml:14:12'), 'the diagnostic is not located at the call (15:12): ' + text)
-assert(!/[(]at [^)]*grad_function_value_passed[.]cml:15:12[)]/.test(text), 'the position is written into the message: ' + text)
+assert(errors[0].includes('grad_function_value_passed.cml:18:12'), 'the diagnostic is not located at the call (15:12): ' + text)
+assert(!/[(]at [^)]*grad_function_value_passed[.]cml:19:12[)]/.test(text), 'the position is written into the message: ' + text)
 assert(text.includes('[the function value is chosen here at 13:13]'), 'missing the related position of the branch that chooses the function: ' + text)
 assert(text.includes('cannot differentiate through this call of'), 'missing: cannot differentiate through this call of in: ' + text)
 assert(text.includes('call0'), 'missing: call0 in: ' + text)
