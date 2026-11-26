@@ -1,0 +1,15 @@
+id = "runtime.program_graphs"
+order = 388
+tier = "fast"
+tags = ["feat", "runtime", "graph"]
+
+[[tests]]
+name = "runtime.program_graphs.the_program_is_the_graphs_its_entry_reaches"
+desc = "A program is the graphs its entry reaches and nothing else: `std::stats` counts them, `std::jgir` writes the same set, and naming a pass written in Camel (`opt::cse`, after `std::nop`, where it never runs) adds no graph and no node -- the pass's library is compiled as a program of its own. Two readings of one number, on one program: graphs, nodes and the graph names must be equal with and without the named pass, and no graph of the document may be a library graph (`opt::`, `rules::`, `types::`)."
+kind = "behavior"
+tool = "python"
+case = "../../../cases/runtime/program_graphs.py"
+args = ["${case}", "--camel", "${camel}"]
+expect_exit = 0
+expect_stdout_contains = ["program_graphs: graphs=", "Program graphs: PASS"]
+timeout_ms = 60000
