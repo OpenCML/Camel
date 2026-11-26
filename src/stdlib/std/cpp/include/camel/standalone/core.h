@@ -221,8 +221,9 @@ inline std::size_t stackBytesFor(uint32_t limit) {
 ///
 /// `entry` returns the exit code the program's `main` gives (the generated code decides it
 /// from main's declared type, design principles 9.8). A fault ends the program: the output
-/// written so far is flushed, then the report is written to standard output (where `camel`
-/// writes its diagnostics) and the exit code is 1. `exit(n)` ends it with n.
+/// written so far is flushed, then the report is written to standard error, which is where
+/// `camel` writes its own diagnostics (src/tools/camel-cli/check.cpp), so the program's
+/// standard output stays the program's own, and the exit code is 1. `exit(n)` ends it with n.
 ///
 /// The program runs on a thread of its own whose stack has room for the recursion limit;
 /// `translatedLimit` is the limit the program was translated with.
@@ -239,8 +240,13 @@ template <typename Entry> int run(uint32_t translatedLimit, Entry &&entry) {
             code = entry();
         } catch (const Fault &f) {
             std::fflush(stdout);
-            write(f.report(detail::briefReports()));
-            write("\n");
+            // The program's own output is standard output; a fault's report is a diagnostic and
+            // goes to standard error, where `camel` writes its diagnostics, so a program's output
+            // is the same whether it ended in a fault or not (see run()).
+            const std::string report = f.report(detail::briefReports());
+            std::fwrite(report.data(), 1, report.size(), stderr);
+            std::fwrite("\n", 1, 1, stderr);
+            std::fflush(stderr);
             code = 1;
         } catch (const ExitRequest &request) {
             code = request.code;
