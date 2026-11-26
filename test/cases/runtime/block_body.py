@@ -67,7 +67,8 @@ trait_lines = [line for line in lines if line.startswith("BLOCK_TRAITS ")]
 # checked as text and not only as the numbers the assertions below derive from it.
 arrange_lines = [line for line in lines if line.startswith("BLOCK_ARRANGE ")]
 cost_lines = [line for line in lines if line.startswith("BLOCK_COST ")]
-for line in body_lines + trait_lines + arrange_lines + cost_lines + call_lines:
+bits_lines = [line for line in lines if line.startswith("BLOCK_BITS ")]
+for line in body_lines + trait_lines + bits_lines + arrange_lines + cost_lines + call_lines:
     print(line)
 
 # Seventeen bodies, each a program of its own: a root graph and the function's graph, in a program
@@ -223,8 +224,9 @@ assert uris["loop_state_left"] != uris["loop_state_right"], (
 # a hash can set comes out of one statement of the layout, and an operator the table does not know
 # is the marker no packing can produce. A bit dropped from that one statement is a bit both hashes
 # lose together, which is what the two copies of it did not do.
-bits = re.search(r"BLOCK_BITS stated=(\w+) unknown=(\w+)", with_body.stdout)
-assert bits and bits.group(1) == "7f" and bits.group(2) == "ff", bits
+bits = [line for line in bits_lines if line.startswith("BLOCK_BITS stated=")]
+assert len(bits) == 1, bits_lines
+assert bits[0] == "BLOCK_BITS stated=7f unknown=ff", bits[0]
 
 # The entry program, read in the same run: the numbers it had before the bodies were built are the
 # numbers it has after, and they are the numbers of a run without the pass at all.
