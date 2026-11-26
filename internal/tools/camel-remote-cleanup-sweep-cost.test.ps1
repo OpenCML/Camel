@@ -228,14 +228,14 @@ if (-not $guard) {
         # A `bash` on PATH is not enough: this machine's resolves to WSL, which cannot open a Windows
         # path at all, so the harness would "fail" for a reason that has nothing to do with the guard.
         $probe = Join-Path ([IO.Path]::GetTempPath()) 'sweep-cost-bashprobe.sh'
-        [IO.File]::WriteAllText($probe, "echo BASHOK`n")
+        [IO.File]::WriteAllText($probe, "echo BASHOK`nif command -v flock >/dev/null 2>&1; then echo FLOCKOK; fi`n")
         $probeOut = @(& $gitBash $probe 2>$null)
         Remove-Item $probe -Force -ErrorAction SilentlyContinue
-        if (@($probeOut) -contains 'BASHOK') {
+        if (@($probeOut) -contains 'BASHOK' -and @($probeOut) -contains 'FLOCKOK') {
             $raw = @(& $gitBash $local)
             $raw += 'RC=' + $LASTEXITCODE
         } else {
-            Skip 'the bash on PATH cannot read a Windows path; give -BashHost <ssh alias>'
+            Skip 'the bash here cannot read a Windows path or has no flock (Git for Windows has none); give -BashHost <ssh alias>'
         }
     } else {
         Skip 'no bash on this machine; give -BashHost <ssh alias>'
