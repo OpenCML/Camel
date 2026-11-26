@@ -8,7 +8,7 @@
   "scope": "test/plans (the whole plan tree)",
   "jobs": 8,
   "host": "88 (the build host), tree /home/zjwei/camel-work/gate1",
-  "binary_built": "2026-11-25T22:55:44-05:00",
+  "binary_built": "2026-11-26T11:55:44+08:00",
   "readings": {
     "total": 9739,
     "pass": 9055,
@@ -58,5 +58,9 @@
     "red_names_file": "internal/reports/2026-11-26-promotion-8-reds-73aebe80b3.tsv",
     "why_not_the_basis": "D-1126-30: develop is pushed to the commit the whole layer measured for this promotion; this later reading is evidence for the next one"
   },
-  "ruling": "D-1126-30: a develop push is checked against the promotion record of the pushed tip, not against one pass record per merge; the tip's whole-layer reading already covers every merge in range"
+  "ruling": "D-1126-30: a develop push is checked against the promotion record of the pushed tip, not against one pass record per merge; the tip's whole-layer reading already covers every merge in range",
+  "red_table": "internal/reports/2026-11-26-promotion-8-reds.tsv",
+  "red_table_rows": 627,
+  "next_promotion_compares_against": "internal/reports/2026-11-26-promotion-8-reds.tsv (D-1126-34: each promotion compares with the one immediately before it)",
+  "pushed_develop_sha": "1a7cf9ff32f9282a3155dafda5028099b39638ce"
 }
