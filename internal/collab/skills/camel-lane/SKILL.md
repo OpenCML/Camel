@@ -70,6 +70,11 @@ description: Camel 项目里一条实现车道（子代理）要遵守的一切�
 · 测试描述与用例名同理：写被钉住的行为，不写「某次评审要求的」。
 · **提交信息也不写编号与车道名**。写清：这件事是什么、为什么这样改、被实测否掉的另一种改法。
 · 判据可以写进提交（§8），但用技术语言写：写「为什么这个检查能分辨这两件事」，不写「谁要求加的」。
+· **`pre-push` 真的会拦，而且拦得比你想的宽**（2026-11-27 连拒两次，同一个文件第 8 行）：
+  第 1 次拒「`# internal/reports/2026-11-27-resnet-block-space.cn.md, section 10)`」= **日期 + 内部页路径**；
+  第 2 次拒「`# report this lane wrote, under the internal reports ...`」= **`lane` 这个词本身**也算过程痕迹。
+  ⇒ 一条注释里想说“读数记在哪”时，写成**不含日期、不含 `internal/` 路径、不含 `lane`/角色词**的说法，例如
+  「the report the repository keeps under its internal reports」；**不要**为了过钩子把注释删空 —— 钩子拦的是措辞，不是内容。
 ```
 
 ## 5. 不计兼容
