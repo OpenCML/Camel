@@ -55,6 +55,7 @@ function Check {
 }
 
 $cleanupScript = Join-Path $PSScriptRoot 'camel-cleanup.sh'
+. (Join-Path $PSScriptRoot 'git-bash.ps1')
 if (-not (Test-Path $cleanupScript)) { throw "missing $cleanupScript" }
 
 # The harness is shipped as bytes and sources nothing: it runs `bash camel-cleanup.sh` the way any
@@ -204,14 +205,14 @@ if ($BashHost) {
     if ($LASTEXITCODE -ne 0) { throw "scp of the harness to $BashHost failed" }
     $raw = @(ssh -o ConnectTimeout=60 $BashHost "bash $remoteDir/run.sh; echo RC=`$?")
     ssh -o ConnectTimeout=15 $BashHost "rm -rf $remoteDir" | Out-Null
-} elseif (Get-Command bash -ErrorAction SilentlyContinue) {
+} elseif ($gitBash = Get-GitBash) {
     # A `bash` on PATH is not enough: this machine's is WSL and cannot open a Windows path, so the
     # harness would fail for a reason that has nothing to do with the script.
     $probe = Join-Path $localDir 'probe.sh'
     [IO.File]::WriteAllText($probe, "echo BASHOK`n")
-    $probeOut = @(& bash $probe 2>$null)
+    $probeOut = @(& $gitBash $probe 2>$null)
     if (@($probeOut) -contains 'BASHOK') {
-        $raw = @(& bash $localHarness)
+        $raw = @(& $gitBash $localHarness)
         $raw += 'RC=' + $LASTEXITCODE
     } else {
         Write-Host '  SKIP  the bash on PATH cannot read a Windows path; give -BashHost <ssh alias>'
