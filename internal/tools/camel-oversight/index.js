@@ -143,6 +143,11 @@ const DEFAULTS = {
     blockWarnMinutes: 10,
     blockCancelMinutes: 30,
     blockExempt: [],
+    // Calls that only wait (on a background job, on a subagent). A queued dispatch reaches the session
+    // only when its turn ends, so a session that waits in a loop of these never reads one: once a
+    // dispatch has been held heldDispatchMinutes, the wait is ended and the turn handed back.
+    waitTools: ['job_output', 'wait_agent'],
+    heldDispatchMinutes: 2,
     limits: {},
     // Where the pushed plugin is put and loaded from. The script that puts it there and the line it is
     // taken from are not paths of a checkout: a checkout's working tree may stand on another branch or
