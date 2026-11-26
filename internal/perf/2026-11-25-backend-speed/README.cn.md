@@ -1,7 +1,7 @@
 # 标准后端提速：交接一（只量，不改）
 
 本目录是车道 `backend-speed`（D-1125-35）交接一的读数与脚本。计划页：
-`internal/plans/2026-11-25-backend-speed.cn.md`（在 `origin/fsh-dev` 上；见下）。
+`internal/plans/2026-11-25-backend-speed.cn.md`（现在在 `origin/integration` 里；见下）。
 
 **机器：`KOGLER-WORKSTATION`（工作站的读数，不与 88 主机构建机的读数相比）。**
 
@@ -14,14 +14,18 @@
 |---|---|---|
 | 11-13 审计 | `15165a9333436377fe02c1a15b41c4de5008ec28` | `git log --all --since=2026-11-12 --until=2026-11-15` 里唯一的审计笔：`2026-11-13 15:04:00 +0000 Record the architecture audit and schedule a consolidation phase`。同日无第二笔审计提交。 |
 | 阶段 2 之前 | `1fa180c4fbfb174547021817d7aa9e88d5db3106` | `internal/reports/2026-11-22-round-failures.cn.md:11` 记 `45001457388` 跑在 `1fa180c4f` 上、红腿「**无**」、注明「搬家窗口关闭的那一跑，五腿全绿」。阶段 1 就是搬家窗口（`internal/plans/2026-11-22-refactor-stage1-move.cn.md`），其关窗步骤第 6 条要求「宣布关窗」。`1fa180c4f` 的子提交 `3c20f91c7` 是 `docs(review): the move window closes on five green legs`（纯文档），再下一笔 `a5ef403bea`/`fb314bd282` 起才是 `merge lane/stage2-*`。所以 `1fa180c4f` 是**第一笔阶段 2 内容之前**的树；`3c20f91c7` 与它代码相同（仅文档），计时等价。 |
-| 当前 integration | `6fcee16d0cb82c3b1a494823e5a094e44fe084e9` | `git fetch origin` 后 `origin/integration` 的头：`2026-11-25 18:01:31 +0800 merge fsh-dev: the daily review, the broken-graph ruling and the transpose-port ruling`。 |
+| 11-25 integration | `6fcee16d0cb82c3b1a494823e5a094e44fe084e9` | `git fetch origin` 后 `origin/integration` 的头：`2026-11-25 18:01:31 +0800 merge fsh-dev: the daily review, the broken-graph ruling and the transpose-port ruling`。 |
 
 `lane/backend-speed` 工作树从 `origin/integration` 开（`git worktree add ... -b lane/backend-speed origin/integration`）。
 
-**一处必须说明的偏差**：计划页 `internal/plans/2026-11-25-backend-speed.cn.md` 目前只在
-`origin/fsh-dev` 上（`9f6d8840b2` 引入），`git merge-base --is-ancestor` 证明它**不在** `origin/integration` 里——
-18:01 那次 `merge fsh-dev` 只带进了当天的日常复查，没带这一页。计划页是文档，我从 `origin/fsh-dev` 读它，
-没有改任何仓内文件。
+**2026-11-26 重定基**：这条车道被错档过一次，恢复出来时已经落后 300 多笔，于是把它重放到
+当时的 `origin/integration` 头 `250346d8d`（旧基底 `6fcee16d0`）。四笔提交只加本目录的文件，重放没有冲突；
+重放之后的树是 `c542b0666`。同一天用 `run-timing.mjs` 在 `6fcee16d0c` 与重定基后的头各量了一轮，
+两个点、同一台机器、同一套选项、同一段安静窗口，那份读数在 `reading-2026-11-26.cn.md`。
+
+**计划页的位置变过一次**：它一开始只在 `origin/fsh-dev` 上（`9f6d8840b2` 引入），当时那一笔
+`merge fsh-dev` 没带它，所以交接一是照着 `origin/fsh-dev` 读的；之后它随 fsh-dev 进了 `origin/integration`，
+现在从本树读同一页。除此之外没有改过本目录以外的文件。
 
 ## 基准集（五个，全部在三个点上都能跑）
 
@@ -70,9 +74,14 @@
 「整进程跑 5 次」，并注明那一列是整进程墙钟（含起动与解析，约 +65 ms 的常量）。
 
 **已验证的端点**：同一句 `--timeit std::nvm/2` 在阶段 2 之前（`1fa180c4f`）能跑完两次、两次都有采样；
-在当前 integration（`6fcee16d0c`）第 2 次迭代编译失败。**所以它是这个区间引入的编译缺陷，与「量不了」无关。**
+在 11-25 的 integration（`6fcee16d0c`）第 2 次迭代编译失败。**所以它是这个区间引入的编译缺陷，与「量不了」无关。**
 审计点也曾跑过一次同一句探针，输出里没有失败标记 —— 但那次只看了有没有 `failed` 字样，**没有逐条核对采样**，
 所以这里不把它算作已验证的端点。
+
+2026-11-26 在重定基后的头 `250346d8d` 上再跑一次同一句：**仍然失败，仍是第 2 次迭代，诊断一字不差**
+（`<(place: int) => bool pure> (Range)`，可用重载仍是 `prelude::filter: <f: (item: int) => bool> (r: Range) => int[]`，
+那句 `filter` 的定义在 `src/stdlib/prelude.cml`）。所以这个端点在今天也成立：**它没有在这个区间里被修掉**，
+这一格至今只能用整进程墙钟量。
 
 ## 这一目录里有什么
 
@@ -87,4 +96,5 @@
 | `table.cn.md` | **60 格表 + >20% 清单 + stdout 一致性**（`analyze.mjs` 生成） |
 | `table.expanded.json` | 同一张表，一格一行（含每格全部采样） |
 | `bisect.cn.md` | 二分：`small_calls` × `std::jit` 的 16 倍落在哪一组提交上 |
-| `results/` | 三个点的原始 JSON/CSV、负载日志、构建日志尾巴、二分日志 |
+| `reading-2026-11-26.cn.md` | 重定基后的一轮读数：`6fcee16d0c` 与 `250346d8d` 两点、同机同选项、安静窗口 |
+| `results/` | 各点的原始 JSON/CSV、负载日志、构建日志尾巴与 `build-info.json`、二分日志 |

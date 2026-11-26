@@ -1,0 +1,60 @@
+
+      |             ^~~~~~~~~~
+
+2 warnings generated.
+
+[745/793] Linking CXX executable src\tools\camel-cpp\Release\camel-cpp.exe
+[746/793] Building CXX object src/tools/debugger/CMakeFiles/camel-debugger_objects.dir/Release/src/command/commands.cpp.obj
+[747/793] Building CXX object src/tools/debugger/CMakeFiles/camel-debugger_objects.dir/Release/server.cpp.obj
+[748/793] Building CXX object src/tools/debugger/CMakeFiles/camel-debugger_objects.dir/Release/src/dap/adapter.cpp.obj
+[749/793] Generating libcamel exports for Release from the dependent targets' objects
+[exports] Release: 1002 exported symbols (1000 derived from 385 objects, 2 manual)
+[750/793] Linking CXX shared library Release\libcamel.dll
+[751/793] Linking CXX shared library src\stdlib\para\Release\para.cmo
+[752/793] Linking CXX executable src\stdlib\tiles\Release\tiles-async-check.exe
+[753/793] Linking CXX shared library src\stdlib\this\Release\this.cmo
+[754/793] Linking CXX shared library src\stdlib\io\Release\io.cmo
+[755/793] Linking CXX shared library src\stdlib\env\Release\env.cmo
+[756/793] Linking CXX shared library src\stdlib\math\Release\math.cmo
+[757/793] Linking CXX shared library src\stdlib\hash\Release\hash.cmo
+[758/793] Linking CXX shared library src\stdlib\time\Release\time.cmo
+[759/793] Linking CXX executable src\tools\profiler\Release\camel-pr.exe
+[760/793] Linking CXX shared library src\stdlib\graph\Release\graph.cmo
+[761/793] Linking CXX executable src\stdlib\tiles\Release\tiles-plan-check.exe
+[762/793] Linking CXX shared library src\stdlib\sim\Release\sim.cmo
+[763/793] Linking CXX shared library src\stdlib\fs\Release\fs.cmo
+[764/793] Linking CXX shared library src\stdlib\laws\Release\laws.cmo
+[765/793] Linking CXX shared library src\stdlib\state\Release\state.cmo
+[766/793] Linking CXX shared library src\stdlib\process\Release\process.cmo
+[767/793] Linking CXX shared library src\stdlib\str\Release\str.cmo
+[768/793] Linking CXX executable test\tools\oprecord\Release\camel-oprecord.exe
+[769/793] Linking CXX shared library src\stdlib\test_support\Release\test_support.cmo
+[770/793] Linking CXX shared library src\stdlib\python\Release\python.cmo
+[771/793] Linking CXX shared module python\Release\_camel.pyd
+[772/793] Linking CXX shared library src\stdlib\re\Release\re.cmo
+[773/793] Linking CXX shared library src\stdlib\pyplot\Release\pyplot.cmo
+[774/793] Linking CXX executable test\tools\facts\Release\camel-facts.exe
+[775/793] Linking CXX shared library src\stdlib\bytes\Release\bytes.cmo
+[776/793] Linking CXX executable src\tools\codegen\Release\camel-codegen.exe
+[777/793] Linking CXX executable src\tools\camel-cli\Release\camel.exe
+[778/793] Linking CXX shared library src\stdlib\json\Release\json.cmo
+[779/793] Linking CXX executable src\tools\lang-server\Release\camel-ls.exe
+[780/793] Linking CXX executable src\tools\format\Release\camel-format.exe
+[781/793] Linking CXX shared library src\stdlib\transforms\Release\transforms.cmo
+[782/793] Linking CXX executable test\tools\parsecheck\Release\camel-parsecheck.exe
+[783/793] Linking CXX shared library src\stdlib\autodiff\Release\autodiff.cmo
+[784/793] Linking CXX shared library src\stdlib\test\Release\test.cmo
+[785/793] Linking CXX shared library src\stdlib\rewrite\Release\rewrite.cmo
+[786/793] Linking CXX executable src\tools\debugger\Release\camel-db.exe
+[787/793] Linking CXX shared library src\stdlib\tensor\Release\tensor.cmo
+[788/793] Linking CXX shared library src\stdlib\random\Release\random.cmo
+[789/793] Linking CXX shared library src\stdlib\nn\Release\nn.cmo
+[790/793] Linking CXX shared library src\stdlib\ckpt\Release\ckpt.cmo
+[791/793] Linking CXX shared library src\stdlib\tiles\Release\tiles.cmo
+[792/793] Linking CXX shared library src\stdlib\onnx\Release\onnx.cmo
+source tree artifacts: 1444 files under src, include, modules, tools, stdlib, third_party, cmake, kernel, parse, compile, lib, no build output in the source tree
+[32m[DONE][0m Copied all build artifacts
+[36m[STEP][0m Collecting Release build artifacts to out/latest/
+[32m[DONE][0m Artifacts collected to out/latest/
+[36m[STEP][0m Stamped out/latest/build-info.json: 6fcee16d0c (dirty: 1 file(s)), 1446 source files, fingerprint 145de4233703, options 3cb13550dff5 (defaults)
+[32m[DONE][0m Release build completed
