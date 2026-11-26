@@ -990,7 +990,6 @@ Arrangeable termsOfOperator(camel::ops::OperId oper) {
     // limits out of the fault fact. So an operator that may not end is still an operator that does
     // not fail: it does not fail, it does not stop. Not a gap in this walk.
     terms.terminates = !(traits.has_value() && traits->mayNotTerminate);
-    terms.terminates = !(traits.has_value() && traits->mayNotTerminate);
     return terms;
 }
 
@@ -1002,15 +1001,16 @@ Arrangeable termsOfOperator(camel::ops::OperId oper) {
 /// which is true of every cast and of none in particular. The pair is the node's own content -- the
 /// type of its result and the type of its one input -- and the kernel already has **one** reader of
 /// it, `runtime::nodeMayFault` (`castMayFault` inside it), which is what the predicate a pass asks
-/// (`runtime::may_be_rearranged`) is built on. So the kind asks there instead of stating a second
+/// (`graph.may_be_rearranged`) is built on. So the kind asks there instead of stating a second
 /// answer from the types, and for a conversion the two cannot disagree: one function, one pair.
 ///
 /// Nothing else moves. Every other operator is answered from the same record by `nodeMayFault` (its
 /// elementwise refinement needs the shape argument this kind does not pass, and the predicate does
-/// not pass it either), and a node whose operator is `kNoOper` -- a FILL or an ACCS the view still
-/// folds into `Oper` -- stays the four false terms it was: the view has no query for "which
-/// operation this node performs", so this reader has nothing to ask (`graph_view.h`, the file
-/// comment; `internal/questions/2026-11-23-is-this-node-a-real-oper-record.cn.md`).
+/// not pass it either). A node whose operator is `kNoOper` -- a FILL or an ACCS the view still
+/// folds into `Oper` -- never reaches this function: `ArrangeWalk::at` answers it from the
+/// operation the view reports (`GraphView::shapeOf`), because a construction and an access are
+/// operations the four terms state in full and an operator record is not what decides them
+/// (`graph_view.h`; `internal/questions/2026-11-23-is-this-node-a-real-oper-record.cn.md`).
 Arrangeable termsOfOperNode(
     const graph::GraphView &view, graph::NodeRef ref, camel::ops::OperId oper, ReadLog &log) {
     Arrangeable terms = termsOfOperator(oper);
@@ -1041,7 +1041,7 @@ Arrangeable termsOfOperNode(
 /// body anywhere?" -- which is not the question this kind asks ("may a pass arrange **this node**
 /// anywhere?"). The two answers were read as one and they disagreed with the predicate a pass
 /// asks: on `test/cases/facts/two_functions.cml` the node that calls `f` was answered 1111 (the
-/// body of `f` is pure, cannot fail and ends) while `runtime::nodeIsFreelySchedulable` answered 0,
+/// body of `f` is pure, cannot fail and ends) while the predicate a pass asked answered 0,
 /// because a call is an anchor that may be an effect and nothing in this graph says otherwise
 /// (`docs/design/effects/edges.cn.md` 4.6). That is the same reading `graph::is_chain_statement`
 /// takes on purpose -- "a call runs a graph: what it does is not in the operator table, and nothing
@@ -1068,6 +1068,28 @@ class ArrangeWalk {
         case graph::NodeKind::Oper: {
             const camel::ops::OperId oper = view.operatorOf(ref);
             log_.record(oper);
+            if (oper == camel::ops::kNoOper) {
+                // An OPER node that names no operator is one of the operations the kind states in
+                // full: a construction (`FILL`) and an access (`ACCS`), which keep their own
+                // payload and answer `kNoOper` (`gc_graph_view.h`). What a pass may do with one is
+                // decided by what it *does*, and `shapeOf` says that, so this is the one place the
+                // question is asked of the operation instead of the operator.
+                //
+                // A construction makes a value out of a template and its fields and an access reads
+                // a member out of one: neither writes a cell, reaches outside the program, raises a
+                // fault where the program wrote it, or fails to end -- the four terms of design
+                // principles 3.4, and the answer `runtime::nodeMayFault` gave for both kinds before
+                // this fact learned to read them. A node whose shape is one of the other four has a
+                // record to read (`:op/cast`, `:op/copy`) and a node whose shape is `None` states
+                // nothing, so both decline rather than guess.
+                switch (view.shapeOf(ref)) {
+                case camel::ops::OperShape::Construction:
+                case camel::ops::OperShape::Access:
+                    return Arrangeable{true, true, true, true};
+                default:
+                    return Arrangeable{};
+                }
+            }
             return termsOfOperNode(view, ref, oper, log_);
         }
         case graph::NodeKind::Data:
@@ -1088,15 +1110,14 @@ class ArrangeWalk {
             // carries is written in one of the three forms the seal reads (`runtime/graph.cpp`,
             // "GATE node without a wait"): a control input, a sync predecessor, or the values it
             // hands on beside the value itself -- a region's exit gate reads what the region wrote
-            // after the value it hands out (`Builder::layRegionWriteEdges`, and
-            // `test::facts_compare` prints that count as `reads`). Only the first two are an
-            // `EdgeKind::Wait`, so a reader that asked that edge kind alone answered "carries
+            // after the value it hands out (`Builder::layRegionWriteEdges`). Only the first two are
+            // an `EdgeKind::Wait`, so a reader that asked that edge kind alone answered "carries
             // nothing" for a region's gate and called it freely arrangeable; a gate that carries
             // none of the three is the seal's internal error and is not a node a program can run,
-            // so refusing it costs nothing, while answering it "yes" would be a second answer
-            // beside the predicate a pass asks
-            // (`nodeIsFreelySchedulable` refuses every gate: a gate is the anchor an order sits on,
-            // and a pass that moved it would move the order with it -- edges.cn.md 4.6, 5.3).
+            // so refusing it costs nothing, while answering it "yes" would be one answer in one
+            // place and a refusal in every other (every reader refuses a gate: a gate is the anchor
+            // an order sits on, and a pass that moved it would move the order with it --
+            // edges.cn.md 4.6, 5.3).
             return Arrangeable{};
         }
         case graph::NodeKind::Brch: {
@@ -1150,6 +1171,22 @@ Arrangeable operatorArrangeable(camel::ops::OperId oper) { return termsOfOperato
 Arrangeable nodeArrangeable(const graph::GraphView &view, NodeId node, ReadLog &log) {
     ArrangeWalk walk{log};
     return walk.at(view, node);
+}
+
+bool nodeIsFreelyArrangeable(const graph::Graph &graph, NodeId node) {
+    // A node the graph's own face does not have -- a JOIN, a DREF, a place that was removed -- is
+    // not a node this fact can be asked about: the store rejects an anchor whose node the view does
+    // not contain (`checkAnchors`), because "no such node" is a caller's mistake and not a fact.
+    // The answer a placement decision gets is "not freely arrangeable", which is where a node a
+    // pass cannot place belongs.
+    if (!graph.view().contains(static_cast<graph::NodeRef>(node))) {
+        return false;
+    }
+    Store *store = storeHolding(graph);
+    if (store == nullptr) {
+        return false;
+    }
+    return store->obtain<Arrangeable>(arrangeableKind(), Anchor{&graph, node})->all();
 }
 
 std::string toString(const Arrangeable &arrangeable) {

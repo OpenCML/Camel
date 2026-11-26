@@ -2,47 +2,47 @@
 // SPDX-License-Identifier: MIT
 
 /*
- * `core.arrangeable` against the predicate a pass asks, over every case the tree has, cut by node
- * kind and by operator.
+ * `core.arrangeable`'s own answers, over every case the tree has, cut by node kind, by operator and
+ * by the family the answer comes from.
  *
- * `test::facts_compare` prints one `tally` row per (node kind, operator): how many nodes of that row
- * the fact calls freely arrangeable and the predicate a pass asks (`runtime::nodeIsFreelySchedulable`)
- * lets move, in the four ways two answers can meet. One program says almost nothing about it -- a
- * tree of 200,000 nodes has kinds and operators that one case does not write -- so this tool starts
- * one `camel` per `.cml` the tree tracks and sums the rows:
+ * `test::facts_compare` prints one `answers_row` per (node kind, operator): how many nodes of that
+ * row the fact answers freely arrangeable (`free`, all four terms of design principles 3.4),
+ * answers no (`kept`), or answers nothing for at all (`no_fact`). One program says almost nothing
+ * about it -- a tree of a quarter of a million nodes has kinds and operators that one case does not
+ * write -- so this tool starts one `camel` per `.cml` the tree tracks and sums the rows:
  *
- *   ARRANGEABLE_SWEEP files=<n> read=<n> skipped=<n> silent=<n> nodes=<n> rows=<n>
- *   ARRANGEABLE_KIND node_kind=<kind> nodes=<n> both_free=<n> both_kept=<n>
- *       kind_free_pred_kept=<n> kind_kept_pred_free=<n>
- *   ARRANGEABLE_ROW node_kind=<kind> oper=<uri|-> nodes=<n> both_free=<n> both_kept=<n>
- *       kind_free_pred_kept=<n> kind_kept_pred_free=<n>
+ *   ARRANGEABLE_SWEEP files=<n> read=<n> skipped=<n> silent=<n> nodes=<n> free=<n> kept=<n>
+ *       no_fact=<n> rows=<n>
+ *   ARRANGEABLE_KIND node_kind=<kind> nodes=<n> free=<n> kept=<n> no_fact=<n>
+ *   ARRANGEABLE_FAMILY family=<name> nodes=<n> free=<n> kept=<n> no_fact=<n>
+ *   ARRANGEABLE_ROW node_kind=<kind> oper=<uri|-> nodes=<n> free=<n> kept=<n> no_fact=<n>
+ *   ARRANGEABLE_SAMPLE <family> <file> <graph>:<node>
  *
- * a `KIND` line for every node kind (the four counts summed over its operators: the column a
- * reader compares between two revisions of the fact), and a `ROW` line for every (kind, operator)
- * row that has a disagreement in it -- the rows with none say nothing this file is about, and
- * printing all of them buried the ones that do. `--rows N` prints the first N rows of every kind
- * instead (0: all of them), which is the reading when a reader wants to see agreement too.
+ * a `KIND` line for every node kind, a `FAMILY` line for every family the tree answered in, and a
+ * `ROW` line for the first `--rows N` rows (default 60, `0` for all) plus every operator named with
+ * `--always` (default `:op/cast`, the conversion) whether or not it is inside that window: the
+ * reading "this operator's row is as it is" must not be the reason its row is missing from the table.
+ * `SAMPLE` gives up to three nodes per family, with the program they came from -- a count says a
+ * family is kept, an example says in which program and at which node to look.
  *
- * The row of an operator named with `--always` (default `:op/cast`, the conversion) prints whether
- * or not it disagrees: the reading "this operator agrees now" must not be the reason its row is
- * gone from the table, or a converged operator and an operator the sweep never saw read the same.
+ * and then the verdicts it is allowed to make:
  *
- * and then the two verdicts it is allowed to make:
+ *   1. the sweep read something: `read` at or above `ARRANGEABLE_MIN_READ` (1700). A table summed
+ *      over nothing prints zeros in every column and reads exactly like a tree whose nodes are all
+ *      free, which is why the lower bound is part of the verdict and not a comment.
+ *   2. no node went unanswered: `no_fact` is zero. The fact answers at every node of every graph, or
+ *      it does not, and "does not" is a fact-layer defect rather than a placement decision -- there
+ *      is no reading of an absent answer, so the sweep refuses one.
+ *   3. nothing was dropped in the reading: `silent` is zero. A case that printed an answers line but
+ *      whose row this tool cannot parse would otherwise leave the table smaller without saying so.
  *
- *   1. the sweep read something: `read` at or above `ARRANGEABLE_MIN_READ` (2000). A table summed
- *      over nothing prints zeros in every column and reads exactly like a tree with no
- *      disagreement, which is why the lower bound is part of the verdict and not a comment.
- *   2. an OPER row has no disagreement in either direction. `kind_free_pred_kept` is the fact
- *      saying "freely arrangeable" about a node a pass keeps where the program wrote it;
- *      `kind_kept_pred_free` is the predicate offering a placement the fact will not answer for.
- *      Both are two answers to one question, and this change's subject is the second of them.
+ * There is no fourth verdict about *agreement*: `core.arrangeable` is one answer to one question, and
+ * this tool would have to hold a second copy of it to compare against. What the tables are for is the
+ * opposite reading -- which kinds, operators and families the tree's nodes fall into, so that a change
+ * to the fact moves a row a reader can name instead of a total.
  *
- * The rows of the other node kinds are printed and **not decided**: they are a reading of their own
- * (`internal/reports/2026-11-25-the-arrangeable-disagreements.cn.md`) and a red this tool invented
- * about a kind no lane has moved yet would be a wall somebody has to switch off.
- *
- *   node scripts/check-arrangeable.mjs            # sweep, print the table, decide the two verdicts
- *   node scripts/check-arrangeable.mjs --rows 200  # print more than the first 100 rows (0: all)
+ *   node scripts/check-arrangeable.mjs            # sweep, print the tables, decide the three verdicts
+ *   node scripts/check-arrangeable.mjs --rows 200  # print more than the first 60 rows (0: all)
  *
  * Every case runs in a directory of its own, under the runner's scratch (`CAMEL_TEST_TMPDIR`) or the
  * system temporary directory when run by hand, for the reason `check-plan-refs.mjs` gives: a program
@@ -53,8 +53,8 @@
  * fallback (`std::nvm`). `std::gir` prints the graph and answers an empty one, so the pipeline ends
  * there and nothing a case does at run time is in the reading. The DOT is discarded.
  *
- * Exit codes: 0 both verdicts hold; 1 a verdict is red (the reading is complete); 2 the sweep could
- * not be taken at all (no binary, no case list) -- not a zero.
+ * Exit codes: 0 all three verdicts hold; 1 a verdict is red (the reading is complete); 2 the sweep
+ * could not be taken at all (no binary, no case list) -- not a zero.
  */
 
 import { spawn } from 'node:child_process'
@@ -68,11 +68,11 @@ const HERE = path.dirname(fileURLToPath(import.meta.url))
 const REPO = path.dirname(HERE)
 const CONCURRENCY = Number(process.env.ARRANGEABLE_JOBS || 8)
 const TIMEOUT_MS = Number(process.env.ARRANGEABLE_TIMEOUT_MS || 60000)
-// The floor under the sweep's coverage, and not a coverage goal: this tree reads 1,892 of its 4,376
+// The floor under the sweep's coverage, and not a coverage goal: this tree reads 2,981 of its 4,400
 // cases, and the rest want the arguments or the module roots their own plans give them (the same
-// reason `check-plan-refs.mjs` skips 1,235 of the cases it sweeps). 1,700 is under that reading on
-// purpose, so a case that stops compiling for a real reason moves the number visibly instead of
-// turning the sweep red for a count it never promised.
+// reason `check-plan-refs.mjs` skips the cases it sweeps that do the same). 1,700 is well under that
+// reading on purpose, so a case that stops compiling for a real reason moves the number visibly
+// instead of turning the sweep red for a count it never promised.
 const MIN_READ = Number(process.env.ARRANGEABLE_MIN_READ || 1700)
 
 const RUN_ROOT = process.env.CAMEL_TEST_TMPDIR
@@ -117,12 +117,38 @@ function trackedCases() {
     return files
 }
 
+const ROW_FIELDS = ['nodes', 'free', 'kept', 'no_fact']
+const FAMILY_FIELDS = ['nodes', 'free', 'kept', 'no_fact']
+
+/// One line of the pass's census into its fields, or null when a field is missing: a line the pass
+/// printed short is a defect of the pass, and this tool is not the place to paper over it.
+function parseFields(line, prefix, names) {
+    const body = line.slice(prefix.length).trim()
+    const fields = {}
+    for (const word of body.split(/\s+/)) {
+        const at = word.indexOf('=')
+        if (at <= 0) continue
+        fields[word.slice(0, at)] = word.slice(at + 1)
+    }
+    for (const name of names) {
+        if (!/^\d+$/.test(fields[name] || '')) return null
+    }
+    const row = {}
+    for (const name of names) row[name] = Number(fields[name])
+    for (const [key, value] of Object.entries(fields)) {
+        if (names.includes(key)) continue
+        row[key] = value
+    }
+    return row
+}
+
 function run(binary, args, cwd) {
     return new Promise((resolve) => {
         const child = spawn(binary, args, { cwd, stdio: ['ignore', 'pipe', 'pipe'] })
-        // Only the tally rows are kept: `std::gir` writes the whole graph to stdout, and a
-        // 200,000-node tree's DOT held in memory per worker is not a reading.
+        // Only the census lines are kept: `std::gir` writes the whole graph to stdout, and a
+        // 100,000-node tree's DOT held in memory per worker is not a reading.
         const rows = []
+        const families = []
         const samples = []
         let ran = false
         let stdoutFirst = ''
@@ -132,7 +158,7 @@ function run(binary, args, cwd) {
             if (finished) return
             finished = true
             clearTimeout(timer)
-            resolve({ ...result, rows, samples, ran, stdoutFirst, stderr })
+            resolve({ ...result, rows, families, samples, ran, stdoutFirst, stderr })
         }
         const timer = setTimeout(() => {
             child.kill('SIGKILL')
@@ -147,14 +173,11 @@ function run(binary, args, cwd) {
                 const line = partial.slice(0, newline)
                 partial = partial.slice(newline + 1)
                 if (stdoutFirst === '' && line.trim().length > 0) stdoutFirst = line.trim()
-                if (line.startsWith('FACTS_COMPARE tally ')) rows.push(line)
-                // One node of a disagreed row, as the pass saw it: the four terms the kind answered,
-                // the predicate's answer, and the wait/order/sync edges the node carries. It is what
-                // says *which field* answered differently, and it is not reconstructible from counts.
-                else if (line.startsWith('FACTS_COMPARE reader_diff ')) samples.push(line)
-                // The readers line is what says the comparison ran on this program: a program with
-                // no nodes prints no tally row and is still a case the sweep read.
-                if (line.startsWith('FACTS_COMPARE kind=core.arrangeable readers ')) ran = true
+                if (line.startsWith('FACTS_COMPARE answers_row ')) rows.push(line)
+                else if (line.startsWith('FACTS_COMPARE answers_family ')) families.push(line)
+                // The answers line is what says the census ran on this program: a program with no
+                // nodes prints no row and is still a case the sweep read.
+                if (line.startsWith('FACTS_COMPARE kind=core.arrangeable answers ')) ran = true
                 newline = partial.indexOf('\n')
             }
         })
@@ -185,30 +208,15 @@ function dropTree(dir) {
     }
 }
 
-/// `FACTS_COMPARE tally node_kind=oper oper=:op/cast nodes=12 both_free=3 ...` into its fields.
-/// A row the pass printed with a field missing is a defect of the pass, and this tool is not the
-/// place to paper over it: the row is refused and the run is red.
-function parseRow(line) {
-    const fields = {}
-    for (const word of line.slice('FACTS_COMPARE tally '.length).trim().split(/\s+/)) {
-        const at = word.indexOf('=')
-        if (at <= 0) return null
-        fields[word.slice(0, at)] = word.slice(at + 1)
-    }
-    const numbers = ['nodes', 'both_free', 'both_kept', 'kind_free_pred_kept', 'kind_kept_pred_free']
-    if (!fields.node_kind || !fields.oper) return null
-    for (const name of numbers) {
-        if (!/^\d+$/.test(fields[name] || '')) return null
-    }
-    const row = { node_kind: fields.node_kind, oper: fields.oper }
-    for (const name of numbers) row[name] = Number(fields[name])
-    return row
+function addCounts(target, row, names) {
+    for (const name of names) target[name] = (target[name] || 0) + row[name]
 }
 
 async function main() {
     const binary = camelBinary()
     const files = trackedCases()
     const totals = new Map()
+    const familyTotals = new Map()
     const samplesOf = new Map()
     const unread = []
     const refused = []
@@ -226,13 +234,11 @@ async function main() {
             dropTree(cwd)
             const relative = path.relative(REPO, file)
             if (!result.ran) {
-                // No readers line: the case does not compile on its own (its plan gives it arguments
+                // No answers line: the case does not compile on its own (its plan gives it arguments
                 // or modules this sweep does not), or the pass said nothing about a program it was
                 // handed. The first is a case this sweep cannot read; the second would be a defect,
                 // and either way it is counted and not silently dropped.
                 const first = firstLine(result.stderr) || firstLine(result.stdoutFirst)
-                // A case the pass itself gave up on is not a case that did not compile, and the two
-                // are counted apart: one is this sweep's coverage, the other is a defect.
                 const cause = result.timedOut
                     ? 'timeout'
                     : first.includes('failed with an internal error')
@@ -244,39 +250,32 @@ async function main() {
                 continue
             }
             read += 1
-            for (const line of result.samples) {
-                // Three nodes per disagreed row: enough that a row whose two answers differ for more
-                // than one reason cannot read like a row that differs for one.
-                const kindOf = / node_kind=(\S+)/.exec(line)
-                const operOf = / oper=(\S+)/.exec(line)
-                if (!kindOf || !operOf) continue
-                const key = `${kindOf[1]}\u0000${operOf[1]}`
-                const kept = samplesOf.get(key) || []
-                if (kept.length < 3) {
-                    kept.push(`${relative} ${line}`)
-                    samplesOf.set(key, kept)
-                }
-            }
             for (const line of result.rows) {
-                const row = parseRow(line)
-                if (row === null) {
+                const row = parseFields(line, 'FACTS_COMPARE answers_row ', [...ROW_FIELDS])
+                if (row === null || !row.node_kind || !row.oper) {
                     refused.push(`${relative}: ${line}`)
                     continue
                 }
                 const key = `${row.node_kind}\u0000${row.oper}`
-                const sum = totals.get(key) || {
-                    node_kind: row.node_kind,
-                    oper: row.oper,
-                    nodes: 0,
-                    both_free: 0,
-                    both_kept: 0,
-                    kind_free_pred_kept: 0,
-                    kind_kept_pred_free: 0,
-                }
-                for (const name of ['nodes', 'both_free', 'both_kept', 'kind_free_pred_kept', 'kind_kept_pred_free']) {
-                    sum[name] += row[name]
-                }
+                const sum = totals.get(key) || { node_kind: row.node_kind, oper: row.oper }
+                addCounts(sum, row, ROW_FIELDS)
                 totals.set(key, sum)
+            }
+            for (const line of result.families) {
+                const row = parseFields(line, 'FACTS_COMPARE answers_family ', [...FAMILY_FIELDS])
+                if (row === null || !row.family) {
+                    refused.push(`${relative}: ${line}`)
+                    continue
+                }
+                const sum = familyTotals.get(row.family) || { family: row.family }
+                addCounts(sum, row, FAMILY_FIELDS)
+                familyTotals.set(row.family, sum)
+                const kept = samplesOf.get(row.family) || []
+                const example = row.kept_example
+                if (example && example !== '-' && kept.length < 3) {
+                    kept.push(`${relative} ${example}`)
+                    samplesOf.set(row.family, kept)
+                }
             }
         }
     }
@@ -286,31 +285,35 @@ async function main() {
     const rows = [...totals.values()].sort(
         (left, right) =>
             left.node_kind.localeCompare(right.node_kind) || left.oper.localeCompare(right.oper))
-    let nodes = 0
-    for (const row of rows) nodes += row.nodes
+    const families = [...familyTotals.values()].sort((left, right) =>
+        left.family.localeCompare(right.family))
+    const total = { nodes: 0, free: 0, kept: 0, no_fact: 0 }
+    for (const row of rows) addCounts(total, row, ROW_FIELDS)
 
     console.log(
         `ARRANGEABLE_SWEEP files=${files.length} read=${read} skipped=${unread.length} ` +
-            `silent=${refused.length} nodes=${nodes} rows=${rows.length}`)
+            `silent=${refused.length} nodes=${total.nodes} free=${total.free} ` +
+            `kept=${total.kept} no_fact=${total.no_fact} rows=${rows.length}`)
 
-    // The four counts summed over each node kind: the column a reader compares between two
-    // revisions of the fact. A kind's row here moves only if that kind's answer moved.
+    // The counts summed over each node kind and each family: the columns a reader compares between
+    // two revisions of the fact. A kind's line moves only if that kind's answer moved, and a family's
+    // line moves only if the term that decides it moved.
     const kinds = new Map()
     for (const row of rows) {
-        const sum = kinds.get(row.node_kind) || {
-            nodes: 0, both_free: 0, both_kept: 0, kind_free_pred_kept: 0, kind_kept_pred_free: 0,
-        }
-        for (const name of ['nodes', 'both_free', 'both_kept', 'kind_free_pred_kept', 'kind_kept_pred_free']) {
-            sum[name] += row[name]
-        }
+        const sum = kinds.get(row.node_kind) || {}
+        addCounts(sum, row, ROW_FIELDS)
         kinds.set(row.node_kind, sum)
     }
     for (const name of [...kinds.keys()].sort()) {
         const sum = kinds.get(name)
         console.log(
-            `ARRANGEABLE_KIND node_kind=${name} nodes=${sum.nodes} both_free=${sum.both_free} ` +
-                `both_kept=${sum.both_kept} kind_free_pred_kept=${sum.kind_free_pred_kept} ` +
-                `kind_kept_pred_free=${sum.kind_kept_pred_free}`)
+            `ARRANGEABLE_KIND node_kind=${name} nodes=${sum.nodes} free=${sum.free} ` +
+                `kept=${sum.kept} no_fact=${sum.no_fact}`)
+    }
+    for (const family of families) {
+        console.log(
+            `ARRANGEABLE_FAMILY family=${family.family} nodes=${family.nodes} free=${family.free} ` +
+                `kept=${family.kept} no_fact=${family.no_fact}`)
     }
 
     const limit = (() => {
@@ -325,24 +328,20 @@ async function main() {
         }
         return named.length > 0 ? named : [':op/cast']
     })()
+    const named = (row) => row.node_kind === 'oper' && always.includes(row.oper)
     const shown = limit > 0
-        ? rows.filter((row) =>
-            row.kind_free_pred_kept > 0 ||
-            row.kind_kept_pred_free > 0 ||
-            (row.node_kind === 'oper' && always.includes(row.oper))).slice(0, limit)
+        ? rows.filter((row, index) => index < limit || named(row))
         : rows
     for (const row of shown) {
         console.log(
             `ARRANGEABLE_ROW node_kind=${row.node_kind} oper=${row.oper} nodes=${row.nodes} ` +
-                `both_free=${row.both_free} both_kept=${row.both_kept} ` +
-                `kind_free_pred_kept=${row.kind_free_pred_kept} ` +
-                `kind_kept_pred_free=${row.kind_kept_pred_free}`)
+                `free=${row.free} kept=${row.kept} no_fact=${row.no_fact}`)
     }
-    // The row above says how many; these say of what. A count cannot say which of the four terms the
-    // kind answered and which edge the node carries, and that is the whole of "which side is wrong".
-    for (const row of shown) {
-        for (const sample of samplesOf.get(`${row.node_kind}\u0000${row.oper}`) || []) {
-            console.log(`ARRANGEABLE_SAMPLE ${sample}`)
+    // The row above says how many; these say where. A count cannot say which program and node a kept
+    // family came from, and that is what a reader needs to look at the answer itself.
+    for (const family of families) {
+        for (const sample of samplesOf.get(family.family) || []) {
+            console.log(`ARRANGEABLE_SAMPLE ${family.family} ${sample}`)
         }
     }
     // Why a case went unread, counted: a sweep whose coverage is a fraction of the tree has to say
@@ -359,17 +358,6 @@ async function main() {
     }
     for (const file of refused.slice(0, 12)) console.log(`ARRANGEABLE_SILENT ${file}`)
 
-    // The verdicts are about **named** operators. A row under `oper=-` is a node whose operation the
-    // fact cannot name (a FILL or an ACCS the view still folds into `Oper`, `graph_view.h`): the
-    // kind declines and the predicate answers by the node's shape, which is a second class with its
-    // own size and its own fix (`internal/reports/2026-11-25-the-arrangeable-disagreements.cn.md`
-    // 5). Counting it here would make this plan red for a change no lane has made, and counting it
-    // nowhere would make 4,238 nodes disappear from a reading about two answers -- so it is printed
-    // in the table, summed in the success line, and not decided.
-    const named = (row) => row.node_kind === 'oper' && row.oper.startsWith(':op/')
-    const operRows = rows.filter(named)
-    const wrongWay = rows.filter((row) => named(row) && row.kind_free_pred_kept > 0)
-    const otherWay = rows.filter((row) => named(row) && row.kind_kept_pred_free > 0)
     let red = false
     if (read < MIN_READ) {
         console.log(
@@ -377,37 +365,25 @@ async function main() {
                 'the table is not a reading of the tree')
         red = true
     }
-    if (wrongWay.length > 0) {
-        const count = wrongWay.reduce((sum, row) => sum + row.kind_free_pred_kept, 0)
+    if (total.no_fact > 0) {
+        const declined = rows.filter((row) => row.no_fact > 0)
         console.log(
-            `ARRANGEABLE_VERDICT kind_free_pred_kept=${count} over ${wrongWay.length} operator row(s): ` +
-                'the fact calls a node freely arrangeable that a pass keeps where it was written')
-        red = true
-    }
-    if (otherWay.length > 0) {
-        const count = otherWay.reduce((sum, row) => sum + row.kind_kept_pred_free, 0)
-        console.log(
-            `ARRANGEABLE_VERDICT kind_kept_pred_free=${count} over ${otherWay.length} operator row(s): ` +
-                'the predicate offers a placement the fact will not answer for')
+            `ARRANGEABLE_VERDICT no_fact=${total.no_fact} over ${declined.length} row(s): ` +
+                'a node the fact answered nothing for has no reading at all ' +
+                declined.slice(0, 8).map((row) => `${row.node_kind}/${row.oper}`).join(' '))
         red = true
     }
     if (refused.length > 0) {
         console.log(
             `ARRANGEABLE_VERDICT silent=${refused.length}: a case compiled and the pass printed no ` +
-                'tally row, or a row this tool cannot parse')
+                'row, or a row this tool cannot parse')
         red = true
     }
     if (!red) {
-        // The rows the verdicts do not decide are named here rather than left to the reader: a
-        // success line that said "everything agrees" over a table with 4,238 rows in it would be
-        // the reading this tool exists to refuse.
-                                const undecided = rows
-            .filter((row) => row.node_kind === 'oper' && !row.oper.startsWith(':op/'))
-            .reduce((sum, row) => sum + row.kind_free_pred_kept + row.kind_kept_pred_free, 0)
         console.log(
-            `every operator's answer agrees, over ${read} cases, ${nodes} nodes and ` +
-                `${operRows.length} operator rows; ${undecided} node(s) of oper=- and of the other ` +
-                'node kinds are in the table and are not decided here')
+            `every node the sweep read was answered by the fact: ${read} cases, ${total.nodes} nodes, ` +
+                `${total.free} free, ${total.kept} kept, ${rows.length} (kind, operator) rows and ` +
+                `${families.length} families`)
     }
     process.exit(red ? 1 : 0)
 }

@@ -8,6 +8,7 @@
 #include "rewrite.h"
 #include "camel/execute/pass/base.h"
 #include "camel/execute/shaped_operators.h"
+#include "camel/facts/arrangeable.h"
 #include "camel/runtime/control.h"
 #include "camel/runtime/cycle.h"
 
@@ -99,13 +100,13 @@ bool isValueOnly(const camel::runtime::GraphTransaction &transaction, gc_node_re
     // reader, and they are asked by their shape (`camel/execute/shaped_operators.h`), not by the
     // four node kinds that still spell them.
     if (camel::execute::shapeOfKind(h->kind) != camel::execute::OperShape::None) {
-        return camel::runtime::nodeIsFreelySchedulable(draft, id, true);
+        return camel::facts::nodeIsFreelyArrangeable(draft, id);
     }
     switch (h->kind) {
     case GCNodeKind::Data:
         return h->dataIndex < 0;
     case GCNodeKind::Oper:
-        return camel::runtime::nodeIsFreelySchedulable(draft, id, true);
+        return camel::facts::nodeIsFreelyArrangeable(draft, id);
     default:
         return false;
     }
@@ -202,7 +203,7 @@ orderedSources(const camel::runtime::GraphTransaction &transaction, gc_node_ref_
             continue;
         }
         seen[n] = true;
-        if (carriesOrdering(draft, n, true)) {
+        if (carriesOrdering(draft, n)) {
             sources.push_back(n);
             continue;
         }
@@ -241,11 +242,11 @@ bool isObservedRun(const camel::runtime::GraphTransaction &transaction, gc_node_
     // A conversion runs when it is read, and may fail, so its running is observed like an
     // operator's; the shape says it is one (`camel/execute/shaped_operators.h`).
     if (camel::execute::shapeOfKind(header->kind) == camel::execute::OperShape::Conversion) {
-        return !camel::runtime::nodeIsFreelySchedulable(draft, id, true);
+        return !camel::facts::nodeIsFreelyArrangeable(draft, id);
     }
     switch (header->kind) {
     case GCNodeKind::Oper:
-        return !camel::runtime::nodeIsFreelySchedulable(draft, id, true);
+        return !camel::facts::nodeIsFreelyArrangeable(draft, id);
     case GCNodeKind::Call:
     case GCNodeKind::Func:
         return true;
@@ -551,7 +552,7 @@ void replaceNode(
     if (!draft.syncUsersOf(id).empty()) {
         std::vector<gc_node_ref_t> lastRead;
         for (gc_node_ref_t source : orderedSources(transaction, id)) {
-            if (!camel::runtime::carriesOrdering(draft, source, true)) {
+            if (!camel::runtime::carriesOrdering(draft, source)) {
                 continue;
             }
             bool readElsewhere = false;
@@ -610,19 +611,20 @@ void replaceNode(
     draft.eraseNode(id);
     // Closing the chain over a node hands its successor the place that node stood in -- and that
     // place is the removed node's chain predecessor alone. What the removed node waited on outside
-    // the chain is not in it: the effects it was written after, and the nodes its value was computed
-    // from. A successor of another block keeps none of the place either (the chain of a block joins
-    // its own statements, docs/design/effects/edges.cn.md 4.6), and one that already holds a wait of
-    // its own kept only that wait. Either way the successor is left with no edge to those nodes, and
-    // everything the removed node waited on stops being reached from the program's result, which is
-    // what ran those effects (section 2) -- or, when the two are accesses to one resource, the two
-    // are published unordered (`docs/design/graph-editing/README.cn.md` 8.1 item six, which is what
-    // `std::opt` over `bump(s)` inlined into a `sync` block tripped: the write of the cell and the
-    // branch that reads it were ordered through the GATE the inliner left standing for the call, and
-    // sweeping that GATE took the only edge between them). The successor keeps that wait instead: it
-    // runs where the removed code did, which is where its own statement was written. This is the
-    // control-edge half of what `eraseNode` does for order edges (`spliceOrderEdgesOver`, docs/
-    // design/effects/edges.cn.md 4: what a node waited on, what stands where it stood waits on).
+    // the chain is not in it: the effects it was written after, and the nodes its value was
+    // computed from. A successor of another block keeps none of the place either (the chain of a
+    // block joins its own statements, docs/design/effects/edges.cn.md 4.6), and one that already
+    // holds a wait of its own kept only that wait. Either way the successor is left with no edge to
+    // those nodes, and everything the removed node waited on stops being reached from the program's
+    // result, which is what ran those effects (section 2) -- or, when the two are accesses to one
+    // resource, the two are published unordered (`docs/design/graph-editing/README.cn.md` 8.1 item
+    // six, which is what `std::opt` over `bump(s)` inlined into a `sync` block tripped: the write
+    // of the cell and the branch that reads it were ordered through the GATE the inliner left
+    // standing for the call, and sweeping that GATE took the only edge between them). The successor
+    // keeps that wait instead: it runs where the removed code did, which is where its own statement
+    // was written. This is the control-edge half of what `eraseNode` does for order edges
+    // (`spliceOrderEdgesOver`, docs/ design/effects/edges.cn.md 4: what a node waited on, what
+    // stands where it stood waits on).
     for (gc_node_ref_t user : syncUsers) {
         if (user == id || !draft.alive(user)) {
             continue;

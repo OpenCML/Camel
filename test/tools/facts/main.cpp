@@ -132,6 +132,11 @@ class ThreeNodeView final : public g::GraphView {
         return ref == 2 ? camel::core::OperId(7) : camel::core::kNoOper;
     }
     g::LoopForm loopFormOf(g::NodeRef) const override { return {}; }
+    camel::ops::OperShape shapeOf(g::NodeRef) const override {
+        // Every node of this view names an operator or nothing, and none of them stands for one of
+        // the four operations a kind states in full: `None` is the answer that says so.
+        return camel::ops::OperShape::None;
+    }
 };
 
 /// The one graph the check has: an object whose address is the identity a fact is anchored on.

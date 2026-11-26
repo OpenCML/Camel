@@ -30,6 +30,7 @@
 #include "camel/core/type/other.h"
 #include "camel/core/type/typevar.h"
 #include "camel/execute/entry_args.h"
+#include "camel/facts/arrangeable.h"
 #include "camel/runtime/control.h"
 #include "camel/runtime/graph.h"
 #include "camel/runtime/oper_shape.h"
@@ -94,8 +95,7 @@ inline camel::core::OperId operIdOf(node_handle_t node);
 /// `:op/fill` says it by being that operator -- the type it makes then gives the kind
 /// (`fillKindForType`). Everything that reads a construction back asks this rather than the node
 /// kind, because both shapes say the same thing.
-inline std::optional<runtime::GCFillKind>
-constructionKindOf(node_handle_t node, const Type *type) {
+inline std::optional<runtime::GCFillKind> constructionKindOf(node_handle_t node, const Type *type) {
     if (node == nullptr) {
         return std::nullopt;
     }
@@ -133,8 +133,7 @@ inline std::vector<std::pair<size_t, node_handle_t>> constructionValuesOf(node_h
         const auto with  = withInputsOf(node);
         values.reserve(slots.size() < with.size() ? slots.size() : with.size());
         for (size_t i = 0; i < slots.size() && i < with.size(); ++i) {
-            values.emplace_back(
-                static_cast<size_t>(slots[i]), nodeDraftOf(node)->ref(with[i]));
+            values.emplace_back(static_cast<size_t>(slots[i]), nodeDraftOf(node)->ref(with[i]));
         }
         return values;
     }
@@ -274,15 +273,15 @@ inline StaticFunction *createStaticFunction(
 /// builds: the graph the node belongs to first, then the node's own id.
 ///
 /// `operator<` on a handle is not this order. The handle's `std::hash` and its ordering both reach
-/// the draft through a pointer (`include/camel/runtime/node_ref.h#DraftNodeRef`), so a table of them
-/// walked as it stands walks the allocator's order, and the compiled graph then depends on where the
-/// nodes happened to land. The node's id alone is not this order either: an id names a node **inside
-/// one graph**, and these tables hold nodes of several, so an id-first key orders two graphs' nodes
-/// by their numbering and interleaves them -- two entries whose ids are equal are then separated
-/// only by whatever their hash happened to be, which is the same defect one level down. The graph's
-/// identity is the draft's `epoch`, the number the draft was made with and that no other draft is
-/// ever given (`node_ref.h`), so `(epoch, id)` is one name per node and a total order over the whole
-/// table.
+/// the draft through a pointer (`include/camel/runtime/node_ref.h#DraftNodeRef`), so a table of
+/// them walked as it stands walks the allocator's order, and the compiled graph then depends on
+/// where the nodes happened to land. The node's id alone is not this order either: an id names a
+/// node **inside one graph**, and these tables hold nodes of several, so an id-first key orders two
+/// graphs' nodes by their numbering and interleaves them -- two entries whose ids are equal are
+/// then separated only by whatever their hash happened to be, which is the same defect one level
+/// down. The graph's identity is the draft's `epoch`, the number the draft was made with and that
+/// no other draft is ever given (`node_ref.h`), so `(epoch, id)` is one name per node and a total
+/// order over the whole table.
 inline bool walksBefore(const node_handle_t &left, const node_handle_t &right) {
     if (left.epoch != right.epoch) {
         return left.epoch < right.epoch;
@@ -759,11 +758,23 @@ inline bool nodeTakesAnOrder(node_handle_t node) {
         // The operator is the target this builder recorded, or, for a call a pass wrote by URI
         // alone, the one its payload names (`operIdOf`): the id is the identity the table gave
         // the operator, and a node that names none (`kNoOper`) is left out rather than ordered --
-        // a missing order only leaves the two writes in the order they were written.
+        // a missing order only leaves the two writes in the order they were written. The kind and
+        // the operator are both known here and nothing else is, which is what `operatorArrangeable`
+        // answers for (`camel/facts/arrangeable.h`); asking the fact of the draft is not possible
+        // -- this node's payload is not written yet, which is why the runtime seal asks the frozen
+        // graph's answer instead (`runtime/graph.cpp`, the payload plan). A branch's regions, a
+        // loop's termination and an operation's shape all need the graph, and this arithmetic node
+        // has none of them to ask about.
         const auto id = operIdOf(node);
-        return id != camel::core::kNoOper && !camel::runtime::nodeIsFreelySchedulable(kind, id);
+        return id != camel::core::kNoOper && !camel::facts::operatorArrangeable(id).all();
     }
-    return !camel::runtime::nodeIsFreelySchedulable(*nodeDraftOf(node), nodeIdOf(node));
+    // Any other kind, and the node is in the draft the fact reads: `nodeIsFreelyArrangeable` walks
+    // what a branch or a loop stands for and reads an operation's shape, so it answers with the
+    // four terms of design principles 3.4 and not with the kind's name. A node whose payload is
+    // still being written declines there (no answer), which keeps its order edge -- the same
+    // reading `nodeMayFault` gave this line before, and the safe one: a missing order leaves the
+    // two writes in the order they were written.
+    return !camel::facts::nodeIsFreelyArrangeable(*nodeDraftOf(node), nodeIdOf(node));
 }
 
 /// Whether an edge that says "after" and not "value" says anything at all: two different nodes of

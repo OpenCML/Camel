@@ -18,6 +18,7 @@
  */
 
 #include "camel/runtime/draft_inline.h"
+#include "camel/facts/arrangeable.h"
 #include "camel/runtime/control.h"
 #include "camel/runtime/effect_liveness.h"
 
@@ -1611,7 +1612,7 @@ bool splicedBodyNeedsOrder(const GraphTransaction &transaction, gc_node_ref_t id
     if (header == nullptr || header->kind == GCNodeKind::Dead || nodeOwnsRegions(header->kind)) {
         return false;
     }
-    return !nodeIsFreelySchedulable(draft, id);
+    return !camel::facts::nodeIsFreelyArrangeable(draft, id);
 }
 
 /// The node that takes the call's place in the chain of its block (docs/design/effects/edges.cn.md
@@ -2134,7 +2135,7 @@ DraftInlineResult inlineCallableInDraft(
             continue;
         }
         const gc_node_ref_t actual = actualInputs[i];
-        if (!draft.alive(actual) || actual == funcNodeId || !carriesOrdering(draft, actual, true)) {
+        if (!draft.alive(actual) || actual == funcNodeId || !carriesOrdering(draft, actual)) {
             continue;
         }
         // Only the argument whose call was its last reader is lost: one another node reads keeps
@@ -2422,13 +2423,13 @@ DraftInlineResult inlineCallableInDraft(
     // block's statements are one chain (5.3). The builder writes that chain statement by statement,
     // and it leaves one link of it out where the statement reads, as a value, the node the link
     // would run from: the data edge already orders the two, so `chainLinkSaysSomething`
-    // (src/compile/src/gir/builder_helpers.h) writes no chain link there. A body compiled on its own is
-    // entered from the call's predecessors, so the missing link costs it nothing; spliced in, the
-    // pieces of its chain are on nothing at all, and a statement on no chain is a statement that
-    // never runs (3.1). So the pieces are joined here, where both ends are known: a statement that
-    // follows nothing in the block is written after the nearest statement it reads through a chain
-    // of values -- the order the body's data edges already give it -- and the body's chain becomes
-    // the one chain a block has.
+    // (src/compile/src/gir/builder_helpers.h) writes no chain link there. A body compiled on its
+    // own is entered from the call's predecessors, so the missing link costs it nothing; spliced
+    // in, the pieces of its chain are on nothing at all, and a statement on no chain is a statement
+    // that never runs (3.1). So the pieces are joined here, where both ends are known: a statement
+    // that follows nothing in the block is written after the nearest statement it reads through a
+    // chain of values -- the order the body's data edges already give it -- and the body's chain
+    // becomes the one chain a block has.
     const bool joinBodyPieces = bodyChain.heads > 1;
     if (joinBodyPieces) {
         for (gc_node_ref_t head = static_cast<gc_node_ref_t>(slotsBefore);
@@ -2589,16 +2590,16 @@ DraftInlineResult inlineCallableInDraft(
     std::vector<gc_node_ref_t> placePreds = callSyncInputs;
     if (placePreds.empty()) {
         // A block's chain link is left out where the statement reads, as a value, the node the link
-        // would run from (docs/design/effects/edges.cn.md 5.7; src/compile/src/gir/builder_helpers.h,
-        // `chainLinkSaysSomething`): the data edge orders the two already. The statement the call
-        // is written after is then the argument the call reads, not that argument's own
-        // predecessor. Handing the body the control frontier instead writes the body's head
-        // *beside* the argument, and the block's chain forks -- two statements follow the same one.
-        // The fork resolution below (`resolvePlaceForks`) then moves the argument's place onto the
-        // body's tail, so the argument is written after the code that reads it, and the commit
-        // refuses the graph on a cycle of inputs (4.2 rule 1). A body that reads the argument
-        // through a parameter GATE is where this shows: the splice itself made the body wait on
-        // that GATE.
+        // would run from (docs/design/effects/edges.cn.md 5.7;
+        // src/compile/src/gir/builder_helpers.h, `chainLinkSaysSomething`): the data edge orders
+        // the two already. The statement the call is written after is then the argument the call
+        // reads, not that argument's own predecessor. Handing the body the control frontier instead
+        // writes the body's head *beside* the argument, and the block's chain forks -- two
+        // statements follow the same one. The fork resolution below (`resolvePlaceForks`) then
+        // moves the argument's place onto the body's tail, so the argument is written after the
+        // code that reads it, and the commit refuses the graph on a cycle of inputs (4.2 rule 1). A
+        // body that reads the argument through a parameter GATE is where this shows: the splice
+        // itself made the body wait on that GATE.
         std::vector<gc_node_ref_t> argumentPlace;
         for (gc_node_ref_t argument : draft.normInputsOf(funcNodeId)) {
             if (argument == funcNodeId || !draft.alive(argument) ||

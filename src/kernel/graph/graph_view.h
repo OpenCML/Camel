@@ -42,8 +42,9 @@
  *    does declare -- would also invite reading the kind's body as that operator's record, which
  *    `runtime/oper_shape.h` records as a real misread. So the two-step reading is the one a caller
  *    writes: `NodeKind::Oper` with a `kNoOper` is one of the two. What a node *does* is
- *    `runtime::shapeOfOperation`, which answers for both forms; this face has no counterpart yet,
- *    so a reader on it takes the two steps itself. A CAST and a COPY were the other two of the
+ *    `runtime::shapeOfOperation`, which answers for both forms; this face answers the same question
+ *    as `shapeOf` below, so a reader on it asks once instead of taking the two steps itself. A CAST
+ *    and a COPY were the other two of the
  *    four; they are stored OPER records now (`operatorOf` answers), so nothing asks twice for them.
  *  - JOIN does not appear: a BRCH owns one region per arm and its value is the selected arm's
  *    result, so the two paired payloads (`GCBrchBody::join`, `GCJoinBody::brch`) and the arm count
@@ -81,6 +82,7 @@
 #include "camel/core/slot.h"
 #include "camel/core/symbol.h"
 #include "camel/core/type/base.h"
+#include "camel/ops/oper_shape.h"
 
 #include <cstdint>
 #include <optional>
@@ -451,8 +453,8 @@ class GraphView {
     /// `#strict` revokes every permission, including the policy's default grants). Defined in
     /// `core::tag::permissionsInEffect` and implemented by each adapter over its own two columns,
     /// so that "which permission is in effect" has one definition and `#strict` one meaning.
-    virtual camel::core::sem::PermissionMask effectivePermissionsOf(
-        NodeRef ref, const camel::core::sem::NumericPolicy &policy) const = 0;
+    virtual camel::core::sem::PermissionMask
+    effectivePermissionsOf(NodeRef ref, const camel::core::sem::NumericPolicy &policy) const = 0;
 
     // -- ports, by group ---------------------------------------------------------------------
     /// The values the node takes in `group`, in port order. Replaces `normInputsOf`/`withInputsOf`.
@@ -535,6 +537,14 @@ class GraphView {
     bool isOperRecord(NodeRef ref) const {
         return kindOf(ref) == NodeKind::Oper && operatorOf(ref) != camel::core::kNoOper;
     }
+    /// Which of the operations the node performs (`camel/ops/oper_shape.h`), or `None` for a node
+    /// that performs none. The answer a reader needs when what a node *does* is what it must decide
+    /// on and `operatorOf` cannot say it: a FILL and an ACCS fold into `NodeKind::Oper` and name no
+    /// operator, and a node whose operation is not written down yet answers `None` rather than a
+    /// guess. It reads the operator's record for an OPER node, so it is the shape of the operation
+    /// and not of the kind -- `runtime::shapeOfOperation` says the same thing to a reader that
+    /// holds the representation itself.
+    virtual camel::ops::OperShape shapeOf(NodeRef ref) const = 0;
     /// The node's arguments as its kernel reads them: the two port groups, with the `with` ones
     /// moved behind the ordinary ones when the operator declares `withAfterNorm` (`OperatorTraits`,
     /// `camel/core/operator_table.h`) and `with` empty then. A node that is not a stored OPER

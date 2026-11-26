@@ -20,6 +20,7 @@
  * Violations are collected; the commit fails with all of them, named by graph and node.
  */
 
+#include "camel/facts/arrangeable.h"
 #include "runtime/graph_build.h"
 
 #include "camel/core/operator_table.h"
@@ -198,11 +199,11 @@ class EdgeChecker {
      * The two lists are walked together only as far as both of them reach, and neither list's
      * length is judged against the other's by the walk itself: an instance of a generic function
      * carries its type argument as a `with` port the signature of the instance does not declare
-     * (`math::is_inf<float>` publishes one `with` port and declares no capture, which is what a call
-     * to it passes and what the call edge counts), so the two counts are two questions and not one.
-     * The one direction that is judged is a *norm* port past the last declared parameter, below:
-     * no shape of a program has one, and it is where an edit that adds a port owes the declaration
-     * that names it.
+     * (`math::is_inf<float>` publishes one `with` port and declares no capture, which is what a
+     * call to it passes and what the call edge counts), so the two counts are two questions and not
+     * one. The one direction that is judged is a *norm* port past the last declared parameter,
+     * below: no shape of a program has one, and it is where an edit that adds a port owes the
+     * declaration that names it.
      *
      * This is asked of every graph a commit encodes, in every build (see
      * `validateRuntimeGraphPortTypes` below for where it is called). It is asked of every graph and
@@ -215,8 +216,8 @@ class EdgeChecker {
      *
      * The port of a `var` parameter holds the variable and the parameter is typed by
      * its value -- the relation `reinferDraftTypes` holds the signature to when it re-infers one
-     * (src/kernel/runtime/draft_types.cpp) -- so both sides are read by value, and the declaration and the
-     * port node are judged the same way whichever of the two a rewrite moved.
+     * (src/kernel/runtime/draft_types.cpp) -- so both sides are read by value, and the declaration
+     * and the port node are judged the same way whichever of the two a rewrite moved.
      */
     void checkPortTypes() {
         camel::core::type::FunctionType *funcType = graph_.funcType();
@@ -237,14 +238,15 @@ class EdgeChecker {
         // declare) and stays unjudged, but an ordinary parameter has no such shape: a graph that
         // holds one more port node than it declares parameters hands a caller's argument to a
         // parameter the caller was never told about (`add_param` adds the port, and the declaration
-        // that would name it -- the block head -- is a write of its own). Refusing it names the port
-        // node and the count, so the message says which one is the one the signature does not
+        // that would name it -- the block head -- is a write of its own). Refusing it names the
+        // port node and the count, so the message says which one is the one the signature does not
         // declare rather than "the graph is inconsistent".
         if (norm.size() > funcType->normTypesCount()) {
             for (size_t i = funcType->normTypesCount(); i < norm.size(); ++i) {
                 violations_.push_back(
                     std::format(
-                        "graph '{}' declares {} parameter(s) and holds {} port node(s): port node {} "
+                        "graph '{}' declares {} parameter(s) and holds {} port node(s): port node "
+                        "{} "
                         "(parameter {}) is a parameter its signature does not declare",
                         graph_.name(),
                         funcType->normTypesCount(),
@@ -559,11 +561,11 @@ class EdgeChecker {
     /// GATE each.
     ///
     /// The splice resolves a statement's place again once the body's code is in
-    /// (`resolvePlaceForks`, src/kernel/runtime/draft_inline.cpp) and moves a statement that finds itself
-    /// following one a second statement follows to the end of the chain growing from it. The move
-    /// is refused when that end waits on the statement being moved -- moving it would put the graph
-    /// on a cycle of inputs -- and the fork then stands: the splice has no other place to put the
-    /// statement, so the graph it would leave is one the model does not have. No such graph is
+    /// (`resolvePlaceForks`, src/kernel/runtime/draft_inline.cpp) and moves a statement that finds
+    /// itself following one a second statement follows to the end of the chain growing from it. The
+    /// move is refused when that end waits on the statement being moved -- moving it would put the
+    /// graph on a cycle of inputs -- and the fork then stands: the splice has no other place to put
+    /// the statement, so the graph it would leave is one the model does not have. No such graph is
     /// frozen: this names the statement the two follow, which is where the defect is looked for,
     /// instead of leaving a chain the layout may walk one way and silently drop the other.
     void checkSyncChainForks() {
@@ -1063,7 +1065,7 @@ bool nodeTakesNoOrder(const GCGraph &graph, gc_node_ref_t ref) {
     if (camel::ops::takesItsOperandAsItsType(camel::runtime::shapeOfOperation(graph, ref))) {
         return false;
     }
-    return nodeIsFreelySchedulable(graph, ref) && !nodeStandsForItsRegion(graph, ref);
+    return camel::facts::nodeIsFreelyArrangeable(graph, ref) && !nodeStandsForItsRegion(graph, ref);
 }
 } // namespace camel::runtime
 

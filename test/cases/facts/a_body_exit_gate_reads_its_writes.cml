@@ -3,13 +3,12 @@
 // so the exit is a GATE whose ordinary inputs are `[0, println]` -- two of them, and the node has
 // no sync predecessor and no control input at all.
 //
-// This is the shape `test::facts_compare` reads against the predicate a pass asks before it moves a
-// node: `core.arrangeable` called it freely arrangeable (it is pure, it reaches nothing, it cannot
-// fault and it ends) while `runtime::nodeIsFreelySchedulable` refuses every GATE, because the order
-// a gate stands in is what a reader of the graph must not be free to move. The four terms cannot
-// say "it stands here", so the kind refuses the gate too; the program is otherwise
-// plain -- no call, no branch, no `for` loop, no conversion -- so the gate is the one node whose two
-// answers the comparison has to reconcile.
+// This is the shape `core.arrangeable` refuses: its four terms are all true (it is pure, it reaches
+// nothing, it cannot fault and it ends) and it is still not freely arrangeable, because the order a
+// gate stands in is not one of the four terms and is exactly what a pass must not be free to move.
+// The program is otherwise plain -- no call, no branch, no `for` loop, no conversion -- so the gate
+// is the one node whose answer the census has to carry, and the values beside it are the control
+// that the answer is a reading of the node and not a constant.
 //
 // `main` returns `0` and not the value it hands on: a program's exit status is `main`'s value, and
 // this case is read by a test that expects exit 0.

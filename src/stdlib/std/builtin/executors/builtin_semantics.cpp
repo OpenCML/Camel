@@ -52,9 +52,9 @@ using camel::core::type::TypeCode;
 /// The four numeric suffixes of the typed `:op/` operators and their types.
 struct NumericType {
     const char *suffix = nullptr;
-    TypeCode type = TypeCode::Int32;
-    bool isFloat = false;
-    bool isComplex = false;
+    TypeCode type      = TypeCode::Int32;
+    bool isFloat       = false;
+    bool isComplex     = false;
 };
 constexpr NumericType kNumericTypes[] = {
     {"i", TypeCode::Int32, false},
@@ -92,23 +92,21 @@ std::optional<BinaryAlgebra> binaryLaws(const std::string &name, const NumericTy
     if (name == "add") {
         law.commutative      = true;
         law.exactAssociative = !t.isFloat;
-        law.neutralBits      = t.isComplex
-                                   ? std::nullopt
-                                   : std::optional<uint64_t>(
-                                         t.isFloat ? (t.type == TypeCode::Float32
-                                                          ? std::bit_cast<uint32_t>(-0.0f)
-                                                          : std::bit_cast<uint64_t>(-0.0))
-                                                   : 0);
+        law.neutralBits =
+            t.isComplex
+                ? std::nullopt
+                : std::optional<uint64_t>(
+                      t.isFloat ? (t.type == TypeCode::Float32 ? std::bit_cast<uint32_t>(-0.0f)
+                                                               : std::bit_cast<uint64_t>(-0.0))
+                                : 0);
     } else if (name == "sub") {
         law.subtractionOf = sum;
-        law.neutralBits =
-            t.isComplex ? std::nullopt : std::optional<uint64_t>(bitsOf(t, 0));
+        law.neutralBits   = t.isComplex ? std::nullopt : std::optional<uint64_t>(bitsOf(t, 0));
     } else if (name == "mul") {
         law.commutative      = true;
         law.exactAssociative = !t.isFloat;
-        law.neutralBits =
-            t.isComplex ? std::nullopt : std::optional<uint64_t>(bitsOf(t, 1));
-        law.distributesOver = sum;
+        law.neutralBits      = t.isComplex ? std::nullopt : std::optional<uint64_t>(bitsOf(t, 1));
+        law.distributesOver  = sum;
     } else {
         return std::nullopt;
     }
@@ -207,7 +205,7 @@ void declareUnorderedReduce() {
     };
     auto &table = OperatorTable::instance();
     if (const auto id = table.lookup(uri); id && table.semantics(*id) != nullptr) {
-        record = *table.semantics(*id);
+        record              = *table.semantics(*id);
         record.indexing     = indexing;
         record.laws         = {law};
         record.elementCalls = ElementCalls{.shape = ElementShape::Fold, .independent = true};
@@ -265,12 +263,12 @@ struct CppCostStatement {
 };
 
 /**
- * The fault table of the built-in operators (docs/design/op-semantics/README.cn.md 4.2): an operator
- * that can raise nothing declares an empty table, and that is the one place "never faults" is
- * written. declare above states the faults of the numeric operators; this states the empty
- * table of the operators that have no numeric semantics of their own, and the record's `panic`
- * for the same operators -- the one item at the two entrances design principles 3.9 gives it,
- * written from one list so that neither entrance can say one thing where the other says another.
+ * The fault table of the built-in operators (docs/design/op-semantics/README.cn.md 4.2): an
+ * operator that can raise nothing declares an empty table, and that is the one place "never faults"
+ * is written. declare above states the faults of the numeric operators; this states the empty table
+ * of the operators that have no numeric semantics of their own, and the record's `panic` for the
+ * same operators -- the one item at the two entrances design principles 3.9 gives it, written from
+ * one list so that neither entrance can say one thing where the other says another.
  */
 void declareBuiltinOperatorFaults() {
     auto &table = OperatorTable::instance();
@@ -279,7 +277,7 @@ void declareBuiltinOperatorFaults() {
     // design principles 3.3 leaves "may fault" undeclared-means-yes, and design principles 3.4
     // reads the answer when it decides whether a computation may be scheduled freely. The
     // passes do act on it: `src/kernel/runtime/graph.cpp#nodeMayFault` reads the trait derived from
-    // this table, and `nodeIsFreelySchedulable` hands that answer to whoever may drop, move or
+    // this table, and `core.arrangeable` hands that answer to whoever may drop, move or
     // recompute a node -- a computation left out of this table is a running the program
     // observes, so `std::opt` keeps it alive with `:op/keep` when a removal takes its last
     // read (`src/stdlib/std/cxx/opt/generic/rewrite.cpp#isObservedRun`). Integer arithmetic wraps,
@@ -415,7 +413,7 @@ void declareBuiltinOperatorFaults() {
         // the two agree, and a load that left them disagreeing would be read two different ways by
         // two readers of one graph; this refuses the load and names the operator instead.
         const std::optional<camel::core::OperatorTraits> traits = table.find(statement.uri);
-        const auto id     = table.lookup(statement.uri);
+        const auto id                                           = table.lookup(statement.uri);
         const camel::ops::Record *record = id ? table.recordOf(*id) : nullptr;
         const bool tableAnswer           = traits.has_value() ? traits->mayFault : true;
         const bool recordAnswer          = record == nullptr ? true : record->mayFault();
@@ -504,7 +502,7 @@ void declareBuiltinOperatorFaults() {
         camel::ops::CppRegistration registration(statement.uri, statement.panic);
         camel::ops::Registry::instance().registerOperator(registration);
         const std::optional<camel::core::OperatorTraits> traits = table.find(statement.uri);
-        const auto id     = table.lookup(statement.uri);
+        const auto id                                           = table.lookup(statement.uri);
         const camel::ops::Record *record = id ? table.recordOf(*id) : nullptr;
         const bool tableAnswer           = traits.has_value() ? traits->mayFault : true;
         const bool recordAnswer          = record == nullptr ? true : record->mayFault();
@@ -515,9 +513,10 @@ void declareBuiltinOperatorFaults() {
                 "cannot fault.");
         }
     }
-    // `:op/tag_unwrap` is the one operator of the tagged forms that faults: a null where the tag has
-    // already been read (`src/builtin/operators/tagged.cpp`). The fault is of no operand's value --
-    // it is the absence of one -- and it is the compiler's own error, so it names no arithmetic kind.
+    // `:op/tag_unwrap` is the one operator of the tagged forms that faults: a null where the tag
+    // has already been read (`src/builtin/operators/tagged.cpp`). The fault is of no operand's
+    // value -- it is the absence of one -- and it is the compiler's own error, so it names no
+    // arithmetic kind.
     table.declareFaults(":op/tag_unwrap", {{FaultKind::Other, 0}});
 }
 
@@ -558,11 +557,7 @@ void declareBuiltinOperatorSemantics() {
                 zeroDivisor);
             declare("mod", t, exact(t, "the remainder of a / b; b = 0 is a fault"), zeroDivisor);
         }
-        declare(
-            "neg",
-            t,
-            exact(t, t.isFloat ? "-a: the sign flipped" : "-a, wrapping"),
-            none);
+        declare("neg", t, exact(t, t.isFloat ? "-a: the sign flipped" : "-a, wrapping"), none);
         for (const char *cmp : {"lt", "le", "gt", "ge"}) {
             declare(
                 cmp,
@@ -577,19 +572,18 @@ void declareBuiltinOperatorSemantics() {
     // ordering and no `%` (cf. design principles 5.1); equality is content equality of the
     // parts and has no numeric semantics of its own.
     for (const NumericType &t : kComplexTypes) {
-        const TypeCode part = t.type == TypeCode::Complex64 ? TypeCode::Float32
-                                                            : TypeCode::Float64;
-        NumericSemantics add = rounded(
-            t, kAddMul, "a + b: each part added and rounded once in the part's type");
+        const TypeCode part = t.type == TypeCode::Complex64 ? TypeCode::Float32 : TypeCode::Float64;
+        NumericSemantics add =
+            rounded(t, kAddMul, "a + b: each part added and rounded once in the part's type");
         add.compute = part;
-        NumericSemantics sub = rounded(
-            t, kAddMul, "a - b: each part subtracted and rounded once in the part's type");
+        NumericSemantics sub =
+            rounded(t, kAddMul, "a - b: each part subtracted and rounded once in the part's type");
         sub.compute = part;
-        NumericSemantics mul = rounded(
-            t, kAddMul, "a * b: (ac - bd) + (ad + bc)i, each part rounded once");
+        NumericSemantics mul =
+            rounded(t, kAddMul, "a * b: (ac - bd) + (ad + bc)i, each part rounded once");
         mul.compute = part;
-        NumericSemantics div = rounded(
-            t, kDiv, "a / b: each part rounded once; b = 0 + 0i is a fault");
+        NumericSemantics div =
+            rounded(t, kDiv, "a / b: each part rounded once; b = 0 + 0i is a fault");
         div.compute = part;
         declare("add", t, std::move(add), none);
         declare("sub", t, std::move(sub), none);
@@ -674,8 +668,9 @@ void declareBuiltinOperatorResources(std::span<const std::string_view> names) {
         if (rest.empty() || rest == "_owned" || (rest.size() == 2 && rest[0] == '_')) {
             spec = ResourceSpec{.accesses = {cell(AccessMode::Write)}, .result = cellResult()};
         } else {
-            spec =
-                ResourceSpec{.accesses = {cell(AccessMode::ReadModifyWrite)}, .result = cellResult()};
+            spec = ResourceSpec{
+                .accesses = {cell(AccessMode::ReadModifyWrite)},
+                .result   = cellResult()};
         }
         table.declareResources(uri, std::move(spec));
     }
@@ -760,9 +755,13 @@ void declareBuiltinOperatorResources(std::span<const std::string_view> names) {
     // `with.get<Function *>(0)`. The result is a new array (or the null slot), so nothing is
     // claimed about it either.
     for (const char *uri :
-         {":mark/map_arr", ":mark/filter_arr", ":mark/foreach_arr", ":mark/unordered_foreach_arr"}) {
+         {":mark/map_arr",
+          ":mark/filter_arr",
+          ":mark/foreach_arr",
+          ":mark/unordered_foreach_arr"}) {
         table.declareResources(
-            uri, ResourceSpec{.functionOperand = ResourceBinding{.kind = ResourceBinding::Kind::With}});
+            uri,
+            ResourceSpec{.functionOperand = ResourceBinding{.kind = ResourceBinding::Kind::With}});
     }
     // The two that hand a value back out of the callback: `reduce` gives the accumulator it was
     // given or the value the last call made, and the marked call of `attempt(f)` gives what the

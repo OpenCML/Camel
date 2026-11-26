@@ -15,16 +15,17 @@
  */
 
 #include "engine.h"
+#include "camel/facts/arrangeable.h"
 #include "camel/graph/graph.h"
-#include "graph/graph_view.h"
 #include "camel/runtime/control.h"
+#include "graph/graph_view.h"
 
 #include "../generic/rewrite.h"
-#include "camel/execute/pass/base.h"
-#include "camel/execute/shaped_operators.h"
 #include "camel/core/operator_traits.h"
 #include "camel/core/rtdata/func.h"
 #include "camel/core/source/manager.h"
+#include "camel/execute/pass/base.h"
+#include "camel/execute/shaped_operators.h"
 #include "camel/passes/opt/inline.h"
 #include "camel/runtime/draft_inline.h"
 #include "camel/runtime/draft_session.h"
@@ -216,14 +217,14 @@ bool bodyNeedsOrder(
         // operator that may; the shape says it is a conversion
         // (`camel/execute/shaped_operators.h`).
         if (camel::execute::shapeOfKind(node->kind) == camel::execute::OperShape::Conversion &&
-            !camel::runtime::nodeIsFreelySchedulable(*graph, it.ref())) {
+            !camel::facts::nodeIsFreelyArrangeable(*graph, it.ref())) {
             return true;
         }
         switch (node->kind) {
         case GCNodeKind::Call:
             return true;
         case GCNodeKind::Oper:
-            if (!camel::runtime::nodeIsFreelySchedulable(*graph, it.ref())) {
+            if (!camel::facts::nodeIsFreelyArrangeable(*graph, it.ref())) {
                 return true;
             }
             break;
@@ -372,9 +373,7 @@ struct MacroOperandGraphs {
     /// The closure holds a macro operator, so the set above depends on the drafts.
     bool present = false;
 
-    bool contains(const camel::graph::Graph *graph) const {
-        return all || graphs.contains(graph);
-    }
+    bool contains(const camel::graph::Graph *graph) const { return all || graphs.contains(graph); }
 };
 
 /// The graph of the function constant `ref` of `graph` (a DATA node, or the closure template a
@@ -480,7 +479,8 @@ MacroOperandGraphs collectMacroOperandGraphs(
 }
 
 /// What one analysis of the closure's call graph says: which component each graph is in, which
-/// graphs recurse, which are entry graphs, and from which graphs a recursive graph is reachable. Every table is keyed by a graph, and the key is the graph's *identity*
+/// graphs recurse, which are entry graphs, and from which graphs a recursive graph is reachable.
+/// Every table is keyed by a graph, and the key is the graph's *identity*
 /// (`camel::graph::Graph`), not its representation: what a table stores is the pointer, and a
 /// pointer hashes and compares as the pointer it already was (design principles 2.3: a graph's
 /// identity is the value, not a number and not a class of the graph's storage). Nothing here reads
@@ -599,10 +599,10 @@ RuntimeCallGraphSccInfo analyzeRuntimeCallGraphScc(
                 }
             }
         }
-        if (isRecursive && std::ranges::none_of(
-                               graphsInComponent, [&](const camel::graph::Graph *graph) {
-                                   return info.componentEntryGraphs.contains(graph);
-                               })) {
+        if (isRecursive &&
+            std::ranges::none_of(graphsInComponent, [&](const camel::graph::Graph *graph) {
+                return info.componentEntryGraphs.contains(graph);
+            })) {
             // DCE can remove the last external call while the graph registry still retains
             // this SCC. With no known entry there is no profitable compaction boundary:
             // inlining its members into each other only expands an unused recursive cycle.
@@ -665,9 +665,9 @@ bool shouldSkipRecursiveInline(
     return false;
 }
 
-/// A direct call examined and left, while the graphs are still at hand (see InlineDeclined). The two
-/// graphs are kept as identities: what the record says about them is their names, which the view
-/// answers when the record is made.
+/// A direct call examined and left, while the graphs are still at hand (see InlineDeclined). The
+/// two graphs are kept as identities: what the record says about them is their names, which the
+/// view answers when the record is made.
 struct DeclinedCall {
     const camel::graph::Graph *caller;
     const camel::graph::Graph *callee;
@@ -683,11 +683,12 @@ struct DeclinedCall {
 
 /// Where the call `id` of the draft being examined is written: the call node's own position, or the
 /// definition of the callee it leaves when the compiler built the call and gave it none. A graph's
-/// call of the function it was compiled from -- the entry graph's call of `main` -- is of the second
-/// kind, and "inlining 'main' into '__root__'" is a statement about `main`, so the function's
-/// definition is the place the reader can look at. Neither is invented: a call with no position and
-/// a callee the compiler built (a specialization, a lifted closure) has nothing to point at, and
-/// `kInvalidOriginId` says so -- a constant inside the callee's body is not where the call is.
+/// call of the function it was compiled from -- the entry graph's call of `main` -- is of the
+/// second kind, and "inlining 'main' into '__root__'" is a statement about `main`, so the
+/// function's definition is the place the reader can look at. Neither is invented: a call with no
+/// position and a callee the compiler built (a specialization, a lifted closure) has nothing to
+/// point at, and `kInvalidOriginId` says so -- a constant inside the callee's body is not where the
+/// call is.
 camel::source::origin_id_t leftCallOrigin(
     const camel::core::context::Context *context, const camel::runtime::GraphDraft &draft,
     gc_node_ref_t id, const GCGraph *callee) {
@@ -894,8 +895,9 @@ const camel::runtime::Program *applyRuntimeOptimizeRewrite(
 
         const bool closureChanged =
             closureSet.size() != closure.size() ||
-            !std::ranges::all_of(
-                closure, [&](const camel::graph::Graph *g) { return closureSet.contains(g); });
+            !std::ranges::all_of(closure, [&](const camel::graph::Graph *g) {
+                return closureSet.contains(g);
+            });
         if (closureChanged) {
             camel::utils::PointerSet<camel::graph::Graph> members(closure.size());
             for (auto *member : closure) {
@@ -1038,15 +1040,18 @@ const camel::runtime::Program *applyRuntimeOptimizeRewrite(
                     // calls an arm's closure inside its If. No rewrite across the branch is needed,
                     // and the sibling JOINs such a rewrite would add are not executable.
                     //
-                    // A gate orders the callee value without changing it (`sync` code gates a callee
-                    // after the previous statement), so the callee is read through it: the value a
-                    // GATE hands on is the value it was given, and leaving the gate in front of the
-                    // callee hid every callee this stage can name -- the projection a differentiated
-                    // body reads its pullback out of is behind exactly such a gate. The FUNC keeps the
-                    // gate as a control input (keepCalleeOrdering), so the ordering the gate carried
-                    // stays where the statement wrote it.
+                    // A gate orders the callee value without changing it (`sync` code gates a
+                    // callee after the previous statement), so the callee is read through it: the
+                    // value a GATE hands on is the value it was given, and leaving the gate in
+                    // front of the callee hid every callee this stage can name -- the projection a
+                    // differentiated body reads its pullback out of is behind exactly such a gate.
+                    // The FUNC keeps the gate as a control input (keepCalleeOrdering), so the
+                    // ordering the gate carried stays where the statement wrote it.
                     if (camel::runtime::devirtualizeStaticCallInDraft(
-                            session, transaction, callNodeId, /*unwrapGatedCallee=*/true)) {
+                            session,
+                            transaction,
+                            callNodeId,
+                            /*unwrapGatedCallee=*/true)) {
                         changed = true;
                         if (lastChangedOut) {
                             *lastChangedOut = nextGraph;
@@ -1238,7 +1243,10 @@ const camel::runtime::Program *applyRuntimeOptimizeRewrite(
                         continue;
                     }
                     if (camel::runtime::devirtualizeStaticCallInDraft(
-                            session, transaction, id, /*unwrapGatedCallee=*/true)) {
+                            session,
+                            transaction,
+                            id,
+                            /*unwrapGatedCallee=*/true)) {
                         changed        = true;
                         roundChanged   = true;
                         graphRewritten = true;
@@ -1480,7 +1488,7 @@ const camel::runtime::Program *applyOptimizeRewritePass(
     const std::string stepName = config.growthBudget.passName.empty()
                                      ? std::string("std::opt")
                                      : config.growthBudget.passName;
-    bool changed                    = false;
+    bool changed               = false;
     std::vector<InlineDeclined> declined;
     // The graph the last session changed, by identity: the report that follows names it, which the
     // view answers.
@@ -1501,14 +1509,14 @@ const camel::runtime::Program *applyOptimizeRewritePass(
         // it (`rewriteReachableGraphs`, src/passes/opt/generic/rewrite.cpp): without it the
         // engine's own steps -- devirtualize, specialize, inline -- go unchecked, and a splice
         // that drops an effect or moves one past another on the same resource would be found only
-        // by comparing the output of the whole pipeline, one step after the one that broke it. Asked
-        // per session and on the whole program the session returned, for the reason the sibling
-        // site gives: a rewrite's edges are not the only ones it moves, so the graph is judged once
-        // it is written, not predicted from the node pair the rewrite named. A refusal records the
-        // diagnostic naming this pass and stops the chain (execute/pass.cpp reads the diagnostics
-        // after the pass). The line below the check is the other half of the reading: a run that
-        // went on says so, so "the check was asked and did not refuse" stays distinguishable from
-        // "the check was never asked" in the log rather than in a count.
+        // by comparing the output of the whole pipeline, one step after the one that broke it.
+        // Asked per session and on the whole program the session returned, for the reason the
+        // sibling site gives: a rewrite's edges are not the only ones it moves, so the graph is
+        // judged once it is written, not predicted from the node pair the rewrite named. A refusal
+        // records the diagnostic naming this pass and stops the chain (execute/pass.cpp reads the
+        // diagnostics after the pass). The line below the check is the other half of the reading: a
+        // run that went on says so, so "the check was asked and did not refuse" stays
+        // distinguishable from "the check was never asked" in the log rather than in a count.
         if (context != nullptr && checkPassBoundary(context, stepName, *program, *rewritten)) {
             return nullptr;
         }
@@ -1540,9 +1548,9 @@ const camel::runtime::Program *applyOptimizeRewritePass(
                 lastChangedGraph->view().name(),
                 config.settleRuns));
         SettleStreak &streak = *config.settleStreak;
-        // The name is what the view answers (a `std::string_view`); the streak keeps a `std::string`,
-        // so the comparison is made on the view of the stored name rather than by deducing the
-        // comparison's template from a mixed pair of types.
+        // The name is what the view answers (a `std::string_view`); the streak keeps a
+        // `std::string`, so the comparison is made on the view of the stored name rather than by
+        // deducing the comparison's template from a mixed pair of types.
         const std::string_view changedName = lastChangedGraph->view().name();
         if (std::string_view(streak.graph) == changedName) {
             ++streak.runs;
@@ -1566,10 +1574,10 @@ const camel::runtime::Program *applyOptimizeRewritePass(
     }
     if (config.enableInlining && (context != nullptr || inlineReport != nullptr)) {
         // The record of this run, made once. The caller is handed it -- the round that changed
-        // nothing has to say whether it reached the budget or a fixed point, and that answer belongs
-        // to this run, so it does not depend on a context existing -- and the same object is the
-        // pass fact a later pass reads (onnx::export, which explains a call still in the entry
-        // graph). One record, two readers; the answer is not written twice.
+        // nothing has to say whether it reached the budget or a fixed point, and that answer
+        // belongs to this run, so it does not depend on a context existing -- and the same object
+        // is the pass fact a later pass reads (onnx::export, which explains a call still in the
+        // entry graph). One record, two readers; the answer is not written twice.
         auto report                 = std::make_shared<InlineReport>();
         report->growthBudget        = growthBudget;
         report->growthSpent         = growthSpent;

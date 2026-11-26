@@ -60,6 +60,32 @@ std::string_view GCOperBody::uri() const {
     return camel::core::OperatorTable::instance().uri(oper);
 }
 
+/// Which of the four operations a node of a draft performs, whichever way it is spelled
+/// (`camel/runtime/oper_shape.h`): the kind half (`shapeOfKind`) answers for a node kind, and only
+/// `Construction` and `Access` have one -- a conversion and a copy are calls of `:op/cast` and
+/// `:op/copy` now, and their shape is the operator's own record. Every question about a draft node
+/// whose answer depends on the operation -- is it freely arrangeable, may it fault, does it take an
+/// order edge, is it a chain statement -- asks this, so the two spellings cannot be answered two
+/// ways.
+///
+/// It is declared in `camel/runtime/draft.h`, because the view a fact reads a draft through answers
+/// `GraphView::shapeOf` with it, and it is defined here where the rest of the draft's questions
+/// are.
+camel::ops::OperShape draftOperationShape(const GraphDraft &draft, gc_node_ref_t id) {
+    const DraftNodeHeader *header = draft.header(id);
+    if (header == nullptr) {
+        return camel::ops::OperShape::None;
+    }
+    if (header->kind != GCNodeKind::Oper) {
+        return camel::runtime::shapeOfKind(header->kind);
+    }
+    const std::span<const std::byte> payload = draft.payloadOf(id);
+    const camel::core::OperId oper =
+        payload.size() >= sizeof(GCOperBody)
+            ? reinterpret_cast<const GCOperBody *>(payload.data())->oper
+            : camel::core::kNoOper;
+    return shapeOfOperator(oper);
+}
 bool castMayFault(const camel::core::type::Type *target, const camel::core::type::Type *source) {
     if (target == nullptr || source == nullptr) {
         return true;
@@ -154,7 +180,8 @@ bool nodeMayFault(
             return true; // no operator, so no record: not known never to fault
         }
         // An elementwise operator fails only when its operands' shapes do not broadcast: asked
-        // with every shape the type states in full, it cannot (nodeIsFreelySchedulable). The
+        // with every shape the type states in full, it cannot (the fact's `cannotFault` term, which
+        // is the operator record's). The
         // elementwise bit is a second item and is still read from the table.
         const std::optional<camel::core::OperatorTraits> traits =
             camel::core::OperatorTable::instance().find(oper);
@@ -168,58 +195,6 @@ bool nodeMayFault(
 }
 
 namespace graph {
-
-bool may_be_rearranged(
-    GCNodeKind kind, camel::core::OperId oper, const camel::core::type::Type *castTarget,
-    const camel::core::type::Type *castSource, bool fixedShapes) {
-    // A node a pass may move is one running it cannot fail -- `nodeMayFault` above, asked of every
-    // kind -- and, for an operator, one a pass may run again. `mayBeRecomputed` is the one question
-    // the fault table does not answer: a pure operator a rule writes, and one a macro expands, does
-    // not fault, yet a pass may neither drop it nor copy it.
-    if (kind == GCNodeKind::Oper && !camel::core::OperatorTable::instance().mayBeRecomputed(oper)) {
-        return false;
-    }
-    // A call, a function, a gate, a loop: an anchor that may be an effect, and nothing refuses an
-    // order on it (docs/design/effects/edges.cn.md 4.6) -- the fault table says they may fault.
-    return !nodeMayFault(kind, oper, castTarget, castSource, fixedShapes);
-}
-
-bool may_be_rearranged(const GCGraph &graph, gc_node_ref_t ref) {
-    const GCNode *node = graph.node(ref);
-    if (node == nullptr) {
-        return false;
-    }
-    if (node->kind == GCNodeKind::Oper) {
-        const auto *body               = graph.nodeBodyAs<GCOperBody>(ref);
-        const camel::core::OperId oper = body == nullptr ? camel::core::kNoOper : body->oper;
-        if (camel::ops::takesItsOperandAsItsType(shapeOfOperator(oper))) {
-            const auto inputs    = graph.normInputsOf(ref);
-            const GCNode *source = inputs.size() == 1 ? graph.node(inputs[0]) : nullptr;
-            return may_be_rearranged(
-                node->kind,
-                oper,
-                node->dataType(),
-                source != nullptr ? source->dataType() : nullptr);
-        }
-        return may_be_rearranged(node->kind, oper);
-    }
-    if (camel::runtime::shapeOfKind(node->kind) == camel::ops::OperShape::Conversion) {
-        const auto inputs    = graph.normInputsOf(ref);
-        const GCNode *source = inputs.size() == 1 ? graph.node(inputs[0]) : nullptr;
-        return may_be_rearranged(
-            node->kind,
-            camel::core::kNoOper,
-            node->dataType(),
-            source != nullptr ? source->dataType() : nullptr);
-    }
-    switch (node->kind) {
-    case GCNodeKind::Oper: {
-        return may_be_rearranged(node->kind, graph.nodeBodyAs<GCOperBody>(ref)->oper);
-    }
-    default:
-        return may_be_rearranged(node->kind, camel::core::kNoOper);
-    }
-}
 
 bool is_chain_statement(
     GCNodeKind kind, camel::core::OperId oper, const camel::core::type::Type *castTarget,
@@ -1048,29 +1023,6 @@ size_t draftPayloadWords(const DraftNodeHeader &header) {
     return (bodyBytes + kPayloadWordBytes - 1) / kPayloadWordBytes;
 }
 
-/// Which of the four operations a node of a draft performs, whichever way it is spelled
-/// (`camel/runtime/oper_shape.h`): the kind half (`shapeOfKind`) answers for a node kind, and only
-/// `Construction` and `Access` have one -- a conversion and a copy are calls of `:op/cast` and
-/// `:op/copy` now, and their shape is the operator's own record. Every question about a draft node
-/// whose answer depends on the operation -- is it freely schedulable, may it fault, does it take an
-/// order edge, is it a chain statement -- asks this, so the two spellings cannot be answered two
-/// ways.
-camel::ops::OperShape draftOperationShape(const GraphDraft &draft, gc_node_ref_t id) {
-    const DraftNodeHeader *header = draft.header(id);
-    if (header == nullptr) {
-        return camel::ops::OperShape::None;
-    }
-    if (header->kind != GCNodeKind::Oper) {
-        return camel::runtime::shapeOfKind(header->kind);
-    }
-    const std::span<const std::byte> payload = draft.payloadOf(id);
-    const camel::core::OperId oper =
-        payload.size() >= sizeof(GCOperBody)
-            ? reinterpret_cast<const GCOperBody *>(payload.data())->oper
-            : camel::core::kNoOper;
-    return shapeOfOperator(oper);
-}
-
 /// Whether the finished node `id` carries no order edge: a node that arranges itself freely says
 /// nothing with one, so the payload the graph holds does not keep them. Two readers ask this -- the
 /// payload plan below, which decides the edge count and the edges emitted, and the delivery check
@@ -1081,6 +1033,13 @@ bool takesNoOrder(const GraphDraft &draft, gc_node_ref_t id) {
     if (header == nullptr || header->kind == GCNodeKind::Dead) {
         return false;
     }
+    // A JOIN is the exit marker of a branch and not a node the view of a graph has
+    // (`draft_view.cpp`, `viewHasNode`), so the fact cannot be asked about it and this plan answers
+    // for it alone, as it always did: the place it marks is the brch's, and an order edge on the
+    // marker orders nothing the brch's own edges do not already order.
+    if (header->kind == GCNodeKind::Join) {
+        return true;
+    }
     // A conversion that was ordered when it could fail keeps its place: its record says it may
     // fault (`:op/cast` is declared `panic`), which is the answer the class question gives, and a
     // pass that refines the types can make it infallible -- dropping the order is then the pass's
@@ -1088,7 +1047,7 @@ bool takesNoOrder(const GraphDraft &draft, gc_node_ref_t id) {
     if (camel::ops::takesItsOperandAsItsType(draftOperationShape(draft, id))) {
         return false;
     }
-    if (!nodeIsFreelySchedulable(draft, id)) {
+    if (!camel::facts::nodeIsFreelyArrangeable(draft, id)) {
         return false;
     }
     if (header->kind == GCNodeKind::Brch || header->kind == GCNodeKind::Loop) {
@@ -1188,8 +1147,8 @@ DraftPayloadPlan planDraftPayload(
         // draft holds, so the question the seal check asks of the frozen graph (nodeTakesNoOrder,
         // graph_edges.cpp) is asked of this node before it is written, and the answer decides both
         // the edge count and the edges emitted. It cannot be asked where the edge is written: a
-        // node still being built has no payload, so nodeIsFreelySchedulable answers for a half-made
-        // node and every writer believes the edge is wanted.
+        // node still being built has no payload, so the fact answers for a half-made node and
+        // every writer believes the edge is wanted.
         const bool dropsOrder  = takesNoOrder(draft, draftId);
         size_t keptOrderInputs = 0;
         for (gc_node_ref_t ref : draft.orderInputsOf(draftId)) {
@@ -1899,39 +1858,6 @@ void verifyDraftDelivery(
     }
 }
 
-bool nodeIsFreelySchedulable(const GraphDraft &draft, gc_node_ref_t id, bool byShape) {
-    const DraftNodeHeader *header = draft.header(id);
-    if (header == nullptr || !draft.alive(id)) {
-        return false;
-    }
-    const std::span<const std::byte> payload =
-        header->kind == GCNodeKind::Oper ? draft.payloadOf(id) : std::span<const std::byte>{};
-    const camel::core::OperId oper =
-        payload.size() >= sizeof(GCOperBody)
-            ? reinterpret_cast<const GCOperBody *>(payload.data())->oper
-            : camel::core::kNoOper;
-    const camel::ops::OperShape shape = draftOperationShape(draft, id);
-    if (camel::ops::takesItsOperandAsItsType(shape)) {
-        const auto inputs             = draft.normInputsOf(id);
-        const DraftNodeHeader *source = inputs.size() == 1 ? draft.header(inputs[0]) : nullptr;
-        return nodeIsFreelySchedulable(
-            header->kind,
-            oper,
-            header->dataType,
-            source != nullptr ? source->dataType : nullptr);
-    }
-    if (header->kind == GCNodeKind::Oper) {
-        bool fixed = byShape && shapesAreFixed(header->dataType);
-        for (gc_node_ref_t input : draft.normInputsOf(id)) {
-            const DraftNodeHeader *in = draft.header(input);
-            fixed                     = fixed && in != nullptr && shapesAreFixed(in->dataType);
-        }
-        return payload.size() >= sizeof(GCOperBody) &&
-               nodeIsFreelySchedulable(header->kind, oper, nullptr, nullptr, fixed);
-    }
-    return nodeIsFreelySchedulable(header->kind, camel::core::kNoOper);
-}
-
 bool isChainStatement(const GraphDraft &draft, gc_node_ref_t id) {
     const DraftNodeHeader *header = draft.header(id);
     if (header == nullptr || !draft.alive(id)) {
@@ -2385,7 +2311,7 @@ const char *aggregateTailVerdictName(AggregateTailVerdict verdict) {
     return "unknown";
 }
 
-bool carriesOrdering(const GraphDraft &draft, gc_node_ref_t node, bool byShape) {
+bool carriesOrdering(const GraphDraft &draft, gc_node_ref_t node) {
     const DraftNodeHeader *header = draft.header(node);
     if (header == nullptr) {
         return false;
@@ -2407,7 +2333,13 @@ bool carriesOrdering(const GraphDraft &draft, gc_node_ref_t node, bool byShape) 
     case GCNodeKind::Dref:
         return false; // not nodes of a graph a pass works on
     default:
-        return !nodeIsFreelySchedulable(draft, node, byShape);
+        // Every other node carries the order exactly when a pass may not move it, and that is the
+        // fact's answer (`core.arrangeable`, four terms of design principles 3.4) rather than a
+        // second reading of the node's kind and operator. A caller that used to be able to ask it
+        // with the shapes of the types (`byShape`) cannot any more: the fact has no shape term.
+        // What a pair of types decides is a conversion's fault term, which the fact reads itself at
+        // the node (`termsOfOperNode`), so a caller holding a pair asks the fact and not the shape.
+        return !camel::facts::nodeIsFreelyArrangeable(draft, node);
     }
 }
 

@@ -1,0 +1,27 @@
+/**
+ * A program that makes a gradient value and keeps it: `grad(square)<3.0>` is a node of `main`'s
+ * graph, and `std::macro` -- the pass that expands it into the differentiated graph -- is not named
+ * on this program's pipeline, so the node is still there when a pass reads the graph.
+ *
+ * It is here for one family of the arrangeable question. `autodiff:grad` is declared `pure` with
+ * `readsGraphs` and `macro`: it touches nothing outside the program and may not fault, and a call of
+ * it may not be computed by a pass and kept as a value, because its expansion is a graph rewrite
+ * (`operator_table.h`, `mayBeRecomputed`). Purity, the fault table and "known to end" are three of
+ * design principles 3.4's four terms and all three hold; foldability is not one of the four. So a
+ * node of this operator is a computation 3.4 calls freely arrangeable and one that no pass may fold
+ * -- the two are not the same question, and the difference is what `oper_unrecomputable` counts.
+ *
+ * Run: camel test/cases/facts/a_gradient_value.cml
+ */
+import { grad } from autodiff
+
+with <x: float>
+func square() => float {
+    return x * x
+}
+
+func main() => int sync {
+    let g = grad(square)<3.0>()
+    println(g)
+    return 0
+}

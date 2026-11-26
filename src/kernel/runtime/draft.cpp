@@ -1531,16 +1531,16 @@ void GraphDraft::closeChainOver(gc_node_ref_t id) {
     // cannot either: an ordering joins two statements of one block, so the successor heads its own
     // block's chain instead (docs/design/effects/edges.cn.md 4.6).
     //
-    // "Another block" is read through `sameSyncBlock`, which is the block test the rest of this file
-    // and `placeLostStatements` (src/stdlib/std/cxx/opt/generic/generic.cpp) already use, and which looks
-    // through the `Inline` region a splice gives the code it moved (docs/design/effects/edges.cn.md
-    // 5.7): that code is the code of the block it was moved into, so a predecessor still carrying
-    // the annotation of the region it came from is a predecessor of the same block. Comparing the
-    // raw `nodeRegion` instead refused that wait, and refuses it silently -- the splice has no
-    // successor to hand a place to, so the statement the erased node held keeps only the ORDER edge
-    // to the statement written after it, an order edge carries no place, and the effects it carried
-    // fall out of the execution while the graph still passes the seal check. That is how a fold
-    // after an inline lost the callee's `println` under `std::opt`.
+    // "Another block" is read through `sameSyncBlock`, which is the block test the rest of this
+    // file and `placeLostStatements` (src/stdlib/std/cxx/opt/generic/generic.cpp) already use, and
+    // which looks through the `Inline` region a splice gives the code it moved
+    // (docs/design/effects/edges.cn.md 5.7): that code is the code of the block it was moved into,
+    // so a predecessor still carrying the annotation of the region it came from is a predecessor of
+    // the same block. Comparing the raw `nodeRegion` instead refused that wait, and refuses it
+    // silently -- the splice has no successor to hand a place to, so the statement the erased node
+    // held keeps only the ORDER edge to the statement written after it, an order edge carries no
+    // place, and the effects it carried fall out of the execution while the graph still passes the
+    // seal check. That is how a fold after an inline lost the callee's `println` under `std::opt`.
     const auto survives = [&](gc_node_ref_t pred, gc_node_ref_t user) {
         pred = chainExitOf(*this, pred);
         if (header(id)->kind == GCNodeKind::Join && chainEntryOf(*this, id) == pred) {
@@ -1613,15 +1613,16 @@ void GraphDraft::closeChainOver(gc_node_ref_t id) {
     // The wait goes to a successor in one of two cases and to no other: the successor waited on
     // this node -- the wait it had here is the one about to evaporate, and `A -> C` is what
     // replaces it -- or the successor waited on nothing at all. A GATE is what the second case was
-    // first needed for: the commit refuses one that waits for nothing (src/kernel/runtime/graph.cpp, the
-    // GATE check). A successor that waits on something else and never waited on this node is left
-    // alone: its wait is the block's chain, and this node was not part of it.
+    // first needed for: the commit refuses one that waits for nothing
+    // (src/kernel/runtime/graph.cpp, the GATE check). A successor that waits on something else and
+    // never waited on this node is left alone: its wait is the block's chain, and this node was not
+    // part of it.
     //
     // The first case is what the two-case reading adds. The test is not "no wait of its own",
     // which answers the same question only while a successor has one wait or none. A successor can
     // have two -- the inlined body's completion *and* the call whose gate is going -- and then that
-    // test would leave it alone and the wait the erased gate carried would go to nobody. That is the
-    // splice: the gate standing for the call carries the statement written before the call, the
+    // test would leave it alone and the wait the erased gate carried would go to nobody. That is
+    // the splice: the gate standing for the call carries the statement written before the call, the
     // statement written after it waits on the body's tail, and `1 -> 13 -> 15` lost its `1 -> 15`.
     // The effect then stood on nothing while the graph still passed every other check.
     //
@@ -1638,9 +1639,9 @@ void GraphDraft::closeChainOver(gc_node_ref_t id) {
         // Whether `user` names the node being erased as one of its waits, and whether it waits on
         // anything else. Asked of both kinds, because a node half-way through the migration from
         // control edges to sync edges can carry the same pair in either.
-        bool waitedOnId = false;
+        bool waitedOnId      = false;
         bool waitedElsewhere = false;
-        const auto noteWait = [&](gc_node_ref_t pred) {
+        const auto noteWait  = [&](gc_node_ref_t pred) {
             if (pred == id) {
                 waitedOnId = true;
             } else {
@@ -2392,13 +2393,13 @@ void GraphDraft::replaceValueStructuralRefs(gc_node_ref_t oldId, gc_node_ref_t n
     replaceOne(returnNode_);
     // A region's `result` names a value as well, and it is read as one by everything that keeps a
     // node alive (`draft_writes`, `isNamed`): the region ends in whatever ends there now. Left
-    // naming the node it replaced, the record says the region ends where it no longer does, and that
-    // is not bookkeeping: the node that owns the region may read the region's exit and no other port
-    // of it (`graph.h`, `regionIsVisibleFrom`). `pruneBranch` is where this was met -- folding a
-    // loop body written `do if true then s else 0` to `do s` hands the body's place to the state
-    // port, the LOOP still reads its body's exit, and the exit the record named was the JOIN that
-    // went: commit refused the loop's one legitimate read as a read of a port of another region
-    // (17_graph_rewrite_api_contracts 4.1, docs/design/effects/edges.cn.md 5.7).
+    // naming the node it replaced, the record says the region ends where it no longer does, and
+    // that is not bookkeeping: the node that owns the region may read the region's exit and no
+    // other port of it (`graph.h`, `regionIsVisibleFrom`). `pruneBranch` is where this was met --
+    // folding a loop body written `do if true then s else 0` to `do s` hands the body's place to
+    // the state port, the LOOP still reads its body's exit, and the exit the record named was the
+    // JOIN that went: commit refused the loop's one legitimate read as a read of a port of another
+    // region (17_graph_rewrite_api_contracts 4.1, docs/design/effects/edges.cn.md 5.7).
     for (uint32_t id = 1; id < regions_.size(); ++id) {
         replaceOne(regions_[id].result);
     }
@@ -2610,18 +2611,19 @@ size_t GraphDraft::dissolveUnorderedGates() {
             // A gate that reads more than the value it forwards is not plain forwarding: the inputs
             // after the first are reads it takes, and the last of them is often the only read a
             // region's write has (design principles 3.1: the
-            // region `GATE` of `Builder::layRegionWriteEdges` is `[the value, the region's writes...]`).
-            // Dissolving it would take that read with it and the write would stop running, which is
-            // the one thing this walk may not do; the gate is kept and orders its reads by reading
-            // them.
+            // region `GATE` of `Builder::layRegionWriteEdges` is `[the value, the region's
+            // writes...]`). Dissolving it would take that read with it and the write would stop
+            // running, which is the one thing this walk may not do; the gate is kept and orders its
+            // reads by reading them.
             if (normInputsOf(id).size() > 1) {
                 continue;
             }
             const gc_node_ref_t value = normInputsOf(id).front();
             // Plain forwarding is a gate **with a data user**: dissolving it hands that user the
-            // value the gate carried, so nothing stops running (src/compile/src/gir/graph_encode.cpp
-            // quotes the answer that settled it). A gate with no data user and no wait forwards
-            // nothing -- the value is read by this node alone -- so dissolving it takes the last
+            // value the gate carried, so nothing stops running
+            // (src/compile/src/gir/graph_encode.cpp quotes the answer that settled it). A gate with
+            // no data user and no wait forwards nothing -- the value is read by this node alone --
+            // so dissolving it takes the last
             // **read** of whatever computed that value, and an effect that stands on a read (a
             // call, an operator with effects, a computation that may fault, design principles 3.1)
             // is then in the graph and in no chain. `std::cxx::inline` splices an inlined body's
@@ -2631,9 +2633,9 @@ size_t GraphDraft::dissolveUnorderedGates() {
             // What such a gate holds is not a value but a **place**: it is where the code after it
             // waits. That place is what the erase would take with it, so it is handed to what the
             // gate read rather than kept on the gate -- a gate without a wait is a violation of its
-            // own (src/kernel/runtime/graph.cpp, the GATE check), and keeping one to hold a place would
-            // trade a dropped effect for an unbuildable graph. The successors follow the effect
-            // through the control kind, which is the kind this wait is carried in while the
+            // own (src/kernel/runtime/graph.cpp, the GATE check), and keeping one to hold a place
+            // would trade a dropped effect for an unbuildable graph. The successors follow the
+            // effect through the control kind, which is the kind this wait is carried in while the
             // migration runs (docs/design/effects/edges.cn.md 5.3), and the gate still goes.
             //
             // Which node the place goes to, and why it is the effect and not the arm's tail:
@@ -2664,7 +2666,7 @@ size_t GraphDraft::dissolveUnorderedGates() {
             const bool holdsEffectPlace =
                 normUsersOf(id).empty() && withUsersOf(id).empty() &&
                 normUsersOf(value).size() + withUsersOf(value).size() == 1 &&
-                carriesOrdering(*this, value, true);
+                carriesOrdering(*this, value);
             std::vector<gc_node_ref_t> successors;
             if (holdsEffectPlace) {
                 for (auto group : {ctrlUsersOf(id), syncUsersOf(id)}) {
@@ -2675,10 +2677,10 @@ size_t GraphDraft::dissolveUnorderedGates() {
                     }
                 }
             }
-            // The graph's own names move off the node before it goes, through the setters that record
-            // them: `eraseNode` records this segment's scalars at its first line, so a write made
-            // here first would be the one the record holds -- a rollback would then name `value`
-            // instead of the gate it put back.
+            // The graph's own names move off the node before it goes, through the setters that
+            // record them: `eraseNode` records this segment's scalars at its first line, so a write
+            // made here first would be the one the record holds -- a rollback would then name
+            // `value` instead of the gate it put back.
             if (exit_ == id) {
                 setExitNode(value);
             }
