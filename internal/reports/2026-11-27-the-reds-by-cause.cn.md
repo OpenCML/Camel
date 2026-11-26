@@ -173,3 +173,34 @@ trans.source_spelling/every_generator_writes_source_the_parser_reads   spelling/
 **单独记的那 1 条**：`compile.higher_order_clause/node_role_reads_the_fact` —— stdout 是一整张 `digraph GraphIR`（5499 字节）、
 stderr 空、退出 1，脚本在 `<anonymous>:3:5` 断言 “camel exited 1” ⇒ **跑了、也画出了图，但退出码是 1**，
 既不是“期望 vs 实际文本不符”，也不是“没跑起来”，等第 2 类修完复测时单独看。
+
+## 附二：第 2 类（“用例不再能编译”）按诊断口径是 130，不是 103
+
+第 2 类那个 **103** 是按**失败首行的文本形态**数的。换一个可复算的口径，同一个落下目录给出 **130**：
+
+```
+口径：`meta.json.diagnostics[0].name` 以 `SemanticDiag::` 开头 **且** `diagnostics[0].path == meta.case_path`
+      （拒的正是用例自己的文件），不另筛 exit code 与 stdout 长度
+读数：130 行 · 67 个不同用例文件 · 33 个诊断名
+对照：第一条诊断是 `RuntimeDiag::*` 的 342 行、一条诊断都没有的 59 行、以 `SyntaxDiag`/`LexicalDiag` 开头的 0 行
+试过的其它口径：121（stderr 文本前缀）/ 118（exit 1 且 stdout 空）/ 78（首行 `expected exit 0, got exit 1`）/
+                 67（用例文件去重）/ 38（负向测试）/ 14（首行 `verification exited 1`）—— 无一等于 103
+```
+两个数**不冲突**：差别在“首行的形态”与“第一条诊断”不是同一件事（有些条目首行是 `expected diagnostic …`
+但第一条诊断仍是 `SemanticDiag`，前者被归到别的类）。本节不改上面那张表（它的口径是首行形态、总和 531），只补口径说明。
+
+**根因簇（130 里的 67 行 = 51.5%）**：消息正文里直接出现 `Range` ——
+`docs/design-principles.cn.md:415` 裁定“范围是值，不是数组”，`a..b` 的值是 `Range`；
+而同一段“现状（2026-11-23）”自己写着“按期望类型转 `int[]`”这条路**还没落地**；
+`f32` 的候选都带 `when is_compact_array`，`Range` 无一命中。
+归属：`internal/backlog.md` **`D-1123-41`**（拆 a/b/c 三条，整条 blocked 在 `C-1123-61` 占着同一处名字解析代码）。
+历史读数：`778e8488a2` 曾把 `f32(range(6))` 改写成 `f32((0..6))`，当时可编译 —— 这批是**迁移尾巴**，不是用例写错。
+
+**三组（合计 130）**：迁移 14 行 / 14 文件（名字与标记过期，编译器拒得对）· 缺陷 82 行 / 26 文件 ·
+其它 34 行 / 27 文件（用例仍被正确拒绝，是期望的行/列/名字/告警条数移位）。
+其中 82 行里 **67 行属 `D-1123-41`**，此时新开“修 Range 转换”的车道会与那两条抢同一处代码；
+剩下 **15 行**（loop 状态类型 6、空数组元素类型 5、分支/match 返回类型 2、声明类型 1、非 Range 的 `NoMatchingFunction` 1）
+**先派“判定”不派“修复”**：先问“设计是不是有意变严”，再决定改用例还是补实现。
+
+**与第 3 类的交叉**：第 3 类里 84 条“脚本 exit 1”的**46 条**，其 `stderr` 有 `[Error]` —— 它们正是本类（编译期拒绝）的下游，
+本类修好时一起消失，不另开车道。
