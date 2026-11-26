@@ -507,7 +507,11 @@ size_t fallBackToCopyingAppend(GraphDraft &body, uint32_t region) {
         if (payload.size() < sizeof(GCOperBody)) {
             continue;
         }
-        if (reinterpret_cast<const GCOperBody *>(payload.data())->uri() != ":struct/append_arr_owned") {
+        // The operator whose append is rewritten: its id is well known to the table
+        // (`oper::AppendOwned`), so the node is recognised by the id it holds. The rewrite below
+        // still names the plain form by URI -- `retargetOperNode` takes no id.
+        if (reinterpret_cast<const GCOperBody *>(payload.data())->oper !=
+            camel::core::oper::AppendOwned) {
             continue;
         }
         body.retargetOperNode(ref, ":struct/append_arr");

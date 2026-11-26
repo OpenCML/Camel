@@ -213,7 +213,11 @@ bool Builder::isEffectNode(DraftGraphBuilder *graph, node_handle_t node) const {
         // The effect is that call's, and it is reported by its own name when it is not run; calling
         // the reader of a version an unexecuted statement would name an operator no program can
         // write, which is how the warning says it looked at the position and not at the thing.
-        if ((*op)->uri() == ":var/after") {
+        // `:var/after` has no well-known id, so the layer that recognises it interns the URI once
+        // and compares the id the table answers for the declaration (camel/core/operator_table.h).
+        static const camel::core::OperId varAfter =
+            camel::core::OperatorTable::instance().intern(":var/after");
+        if (camel::core::OperatorTable::instance().lookup((*op)->uri()) == varAfter) {
             return false;
         }
         // A higher-order operator's accesses are the function operand's (design principles 3.3):

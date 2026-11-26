@@ -23,7 +23,9 @@
 #include "camel/core/mm/root_handle.h"
 #include "camel/core/node_attrs.h"
 #include "camel/core/operator.h"
+#include "camel/core/operator_names.h"
 #include "camel/core/operator_semantics.h"
+#include "camel/core/operator_table.h"
 #include "camel/core/rtdata/array.h"
 #include "camel/core/rtdata/func.h"
 #include "camel/core/rtdata/string.h"
@@ -42,12 +44,12 @@
 #include "camel/passes/opt/config.h"
 #include "camel/passes/opt/generic.h"
 #include "camel/passes/trans/dot/graphviz.h"
-#include "camel/runtime/oper_shape.h"
-#include "camel/runtime/operator_instance.h"
 #include "camel/runtime/draft_inline.h"
 #include "camel/runtime/draft_session.h"
 #include "camel/runtime/graph.h"
 #include "camel/runtime/loop.h"
+#include "camel/runtime/oper_shape.h"
+#include "camel/runtime/operator_instance.h"
 #include "camel/runtime/reachable.h"
 #include "camel/utils/assert.h"
 #include "graph/graph_view.h"
@@ -517,6 +519,15 @@ gc_node_ref_t declaringCellOf(const graph::GraphView &g, graph::NodeRef version)
 /// never leaves the function, so reads and assignments of it are not effects of the model. A
 /// read names the version its writer gave rather than the cell, so the version chain is walked
 /// back to the declaration.
+/// `:struct/append_arr_in_place` has no well-known id, so the module that recognises it interns the
+/// URI once and compares ids from then on (`camel/core/operator_table.h`): the text is how the
+/// operator is written down in the table, not how a node is recognised.
+camel::core::OperId appendInPlaceOper() {
+    static const camel::core::OperId id =
+        camel::core::OperatorTable::instance().intern(":struct/append_arr_in_place");
+    return id;
+}
+
 bool isLocalVariable(const graph::GraphView &g, graph::NodeRef cell) {
     return declaringCellOf(g, cell) != camel::runtime::kInvalidNodeRef;
 }
@@ -529,23 +540,30 @@ struct AssignmentKind {
 };
 
 AssignmentKind assignmentKindOf(std::string_view uri) {
-    constexpr std::string_view prefix = ":op/assn";
-    if (!uri.starts_with(prefix)) {
+    if (!camel::core::isAssignmentUri(uri)) {
         return {};
     }
-    std::string_view rest = uri.substr(prefix.size()); // "", "_l", "_add", "_add_l", ...
-    if (rest.empty()) {
+    // Which operator a compound assignment follows is a fact of the kernel's name table, not of the
+    // spelling of this URI: `groupOf` answers the group the operator was declared in
+    // (`__assn_add__`) and `plainGroupOfCompoundAssignment` the plain group behind it (`__add__`).
+    // A plain write and the forms that name no operator (`assn_owned`, `assn_i`) answer empty,
+    // which is what the type suffix said before.
+    const std::string group = camel::core::OperatorTable::instance().groupOf(uri);
+    const std::optional<std::string_view> plain =
+        camel::core::plainGroupOfCompoundAssignment(group);
+    if (!plain || plain->size() <= 4) {
         return {.isAssignment = true, .binary = {}};
     }
-    if (rest.front() != '_') {
-        return {};
+    // `__add__` -> `add`; the type tag (`_l`, `_i`, ...) is the part of the URI's tail the group
+    // name does not carry, and the lowering is registered under the tagged URI, so the tag is kept.
+    const std::string_view inner = plain->substr(2, plain->size() - 4);
+    std::string binary           = ":op/";
+    binary.append(inner);
+    const size_t at = uri.rfind(inner);
+    if (at != std::string_view::npos) {
+        binary.append(uri.substr(at + inner.size()));
     }
-    rest.remove_prefix(1);
-    const auto isTypeSuffix = [](std::string_view t) { return t.size() == 1; };
-    if (isTypeSuffix(rest)) {
-        return {.isAssignment = true, .binary = {}};
-    }
-    return {.isAssignment = true, .binary = std::format(":op/{}", rest)};
+    return {.isAssignment = true, .binary = std::move(binary)};
 }
 
 /// Why a variable that is not local to the graph using it cannot be exported.
@@ -654,15 +672,14 @@ void refuseEffectsOf(
                 const bool lowerableBySimplification =
                     beforeSimplification &&
                     (n->isMacro() || core::OperatorTable::instance().reusesOperand(uri) ||
-                     readsOrAssignsVariable(body->oper) ||
-                     uri == ":struct/append_arr_in_place");
+                     readsOrAssignsVariable(body->oper) || body->oper == appendInPlaceOper());
                 if (!onLocalVariable && !inPlaceOnLocalVariable && !lowerableBySimplification &&
                     core::OperatorTable::instance().effectOf(body->oper) != core::sem::Effect::Pure) {
                     const uint64_t origin = g->nodeOrigin(ref);
                     const std::string what =
-                        readsOrAssignsVariable(body->oper)
-                            ? std::string(kOuterVariable)
-                        : uri == ":struct/append_arr_in_place" ? std::string(kGrowingArray)
+                        readsOrAssignsVariable(body->oper) ? std::string(kOuterVariable)
+                        : body->oper == appendInPlaceOper()
+                            ? std::string(kGrowingArray)
                             : std::format("impure operator '{}' cannot be exported", uri);
                     throw ExportError(
                         isSourceName(g->name()) ? std::format("in '{}': {}", g->name(), what)
@@ -4042,7 +4059,7 @@ Value Evaluator::variableValueAt(Activation &act, gc_node_ref_t cell, gc_node_re
         if (assigned.size() == 2) {
             const gc_node_ref_t stored = forwards(assigned[1]);
             if (g->node(stored)->kind == GCNodeKind::Oper &&
-                operUriOf(g->view(), stored) == ":struct/append_arr_in_place") {
+                operIdOf(g->view(), stored) == appendInPlaceOper()) {
                 // `acc = acc->append<v>` (design principles 11.3): an array grown in a
                 // variable, which a model has no form for. The compiler writes the in-place
                 // form of `append` over what :var/take handed it.
