@@ -5,7 +5,10 @@
 
 #include "camel/core/operator_table.h"
 
+#include <algorithm>
+#include <span>
 #include <string>
+#include <string_view>
 #include <unordered_map>
 #include <vector>
 
@@ -59,33 +62,113 @@ class Walker {
         h.u64(graph->withPorts().size());
         h.u64(static_cast<uint64_t>(graph->returnKind()));
         stack_.push_back(graph);
-        // Which node is which parameter: the graph's port lists, by position. A parameter node's
-        // payload is not its identity -- two parameters of one body can carry the same payload --
-        // while a position in the signature is spelling-free and a name is not. A call inside the
-        // body hashes the callee against the callee's own signature, so the ports of the graph
-        // being left are put back once that hash is done: a node of this graph read afterwards is
-        // read against this graph's signature, not against the callee's.
-        std::unordered_map<gc_node_ref_t, uint64_t> outerPorts = std::move(ports_);
-        ports_.clear();
-        uint64_t index = 0;
-        for (gc_node_ref_t port : graph->normPorts()) {
-            ports_.emplace(port, index++);
-        }
-        for (gc_node_ref_t port : graph->withPorts()) {
-            ports_.emplace(port, index++);
-        }
+        regions_.push_back(regionsOf(*graph));
+        // Which node is which parameter: the graph's port lists, by position, and each region's
+        // form ports, by position in that region. A parameter node's payload is not its identity --
+        // two parameters can carry the same payload -- while a position in the signature it belongs
+        // to is spelling-free and a name is not. A call inside the body hashes the callee against
+        // the callee's own ports, so this map is put back when that walk returns: a node of this
+        // graph read after the call is read against this graph's signature.
+        std::unordered_map<gc_node_ref_t, uint64_t> outer = std::move(ports_);
+        ports_                                            = positionsOf(*graph);
         std::unordered_map<gc_node_ref_t, uint64_t> memo;
         h.u64(hashNode(*graph, graph->exitNodeRef(), memo));
-        ports_ = std::move(outerPorts);
+        ports_ = std::move(outer);
+        regions_.pop_back();
         stack_.pop_back();
         return h.h;
     }
 
   private:
+    /// The regions of one graph being hashed, each roster by the node that owns it, in the order
+    /// the region table names them.
+    using RegionTable = std::unordered_map<gc_node_ref_t, std::vector<uint32_t>>;
+
+    /// A region is named by what the graph says it is: its kind, its number among the regions of
+    /// its owner (an arm's arm number; a loop's condition and body are told apart by kind), and the
+    /// signature of its form ports. The order of a roster is structural, so the walk enters a
+    /// control node's regions in the same order however the graph was built; a region's own node
+    /// list is never read, since that list is in creation order.
+    static RegionTable regionsOf(const GCGraph &graph) {
+        RegionTable regions;
+        for (uint32_t id = 1; id < graph.regionCount(); ++id) {
+            const GCRegion *region = graph.region(id);
+            if (region == nullptr || region->kind == GCRegionKind::Dead) {
+                continue;
+            }
+            regions[region->owner].push_back(id);
+        }
+        for (auto &roster : regions) {
+            std::sort(
+                roster.second.begin(),
+                roster.second.end(),
+                [&graph](uint32_t one, uint32_t other) {
+                    const GCRegion *left  = graph.region(one);
+                    const GCRegion *right = graph.region(other);
+                    // An arm by its arm number, a loop's condition before the body it guards.
+                    return left->kind != right->kind ? left->kind < right->kind
+                                                     : left->index < right->index;
+                });
+        }
+        return regions;
+    }
+
+    /// The position of every parameter node of `graph`: its own ports, then each region's form
+    /// ports in the order that region writes them.
+    static std::unordered_map<gc_node_ref_t, uint64_t> positionsOf(const GCGraph &graph) {
+        std::unordered_map<gc_node_ref_t, uint64_t> positions;
+        uint64_t index = 0;
+        for (gc_node_ref_t port : graph.normPorts()) {
+            positions.emplace(port, index++);
+        }
+        for (gc_node_ref_t port : graph.withPorts()) {
+            positions.emplace(port, index++);
+        }
+        for (uint32_t id = 1; id < graph.regionCount(); ++id) {
+            const GCRegion *region = graph.region(id);
+            if (region == nullptr || region->kind == GCRegionKind::Dead) {
+                continue;
+            }
+            uint64_t position = 0;
+            for (gc_node_ref_t port : graph.regionPorts(id)) {
+                positions.emplace(port, position++);
+            }
+        }
+        return positions;
+    }
+
+    /// The canonical form of one region: what it is, the signature of its form ports, each form
+    /// port by its position in the region, and the value the region yields. The statements of a
+    /// region are reached through that value -- a region's exit reads the value it hands out and
+    /// keeps the writes it must not drop -- so a difference that lives only inside a branch arm or
+    /// a loop body is a difference in the hash. A pure computation of the region that nothing reads
+    /// is not part of the body's visible structure and is hashed nowhere else either.
+    uint64_t hashRegion(
+        const GCGraph &graph, uint32_t id, std::unordered_map<gc_node_ref_t, uint64_t> &memo) {
+        const GCRegion *region = graph.region(id);
+        Fnv h;
+        h.str("region");
+        h.u64(static_cast<uint64_t>(region->kind));
+        h.u64(region->index);
+        if (region->params != nullptr) {
+            h.str(region->params->mangle());
+        } else {
+            h.str(std::string_view{});
+        }
+        const std::span<const gc_node_ref_t> formPorts = graph.regionPorts(id);
+        h.u64(formPorts.size());
+        for (gc_node_ref_t port : formPorts) {
+            h.u64(hashNode(graph, port, memo));
+        }
+        if (region->result != kInvalidNodeRef) {
+            h.u64(hashNode(graph, region->result, memo));
+        }
+        return h.h;
+    }
+
     /// The canonical form of one node: what it is, then the canonical forms of what it takes, in
-    /// the order its ports are written. Memoised within one graph, since a node reached twice is
-    /// one node
-    /// -- the memo is a walk of this hash and never enters the value.
+    /// the order its ports are written, then its regions. Memoised within one graph, since a node
+    /// reached twice is one node -- the memo is a walk of this hash and never enters the value.
     uint64_t hashNode(
         const GCGraph &graph, gc_node_ref_t ref,
         std::unordered_map<gc_node_ref_t, uint64_t> &memo) {
@@ -105,9 +188,9 @@ class Walker {
         if (const uint32_t attrs = graph.nodeAttrs(ref); attrs != 0) {
             h.str("attrs:" + camel::core::attr::text(attrs));
         }
-        // A port node is a parameter of the body, whatever kind the builder gave it: its identity
-        // is its position in the signature. Its payload does not say which parameter it is (two
-        // parameters of one body can carry the same payload), and a name would be spelling.
+        // A port node is a parameter, whatever kind the builder gave it: its identity is its
+        // position in the signature it belongs to. Its payload does not say which parameter it is
+        // (two parameters of one body can carry the same payload), and a name would be spelling.
         if (const auto port = ports_.find(ref); port != ports_.end()) {
             h.str("param");
             h.u64(port->second);
@@ -191,13 +274,26 @@ class Walker {
         for (gc_node_ref_t child : children) {
             h.u64(hashNode(graph, child, memo));
         }
+        // The regions this node owns, after its ports: a branch's arms in arm order, a loop's
+        // condition before the body it guards. The roster is copied first, because hashing a region
+        // can hash another graph, and that walk lays its own regions down on top of these.
+        std::vector<uint32_t> owned;
+        if (const auto roster = regions_.back().find(ref); roster != regions_.back().end()) {
+            owned = roster->second;
+        }
+        h.u64(owned.size());
+        for (uint32_t id : owned) {
+            h.u64(hashRegion(graph, id, memo));
+        }
         memo[ref] = h.h;
         return h.h;
     }
 
     const Program &program_;
     std::vector<const GCGraph *> stack_;
-    /// The graph being hashed, port refs to their position in the signature.
+    /// The regions of each graph being hashed, outermost first, beside `stack_`.
+    std::vector<RegionTable> regions_;
+    /// The graph being hashed, port refs to their position in the signature they belong to.
     std::unordered_map<gc_node_ref_t, uint64_t> ports_;
 };
 
@@ -207,8 +303,7 @@ uint64_t blockFormHash(const Program &program, const GCGraph *graph) {
     if (graph == nullptr) {
         return 0;
     }
-    Walker walker(program);
-    return walker.hashGraph(graph);
+    return Walker(program).hashGraph(graph);
 }
 
 } // namespace camel::runtime

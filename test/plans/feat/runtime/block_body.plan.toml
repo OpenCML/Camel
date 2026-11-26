@@ -2,7 +2,7 @@ id = "runtime.block_body"
 order = 389
 tier = "fast"
 tags = ["feat", "runtime", "graph", "block"]
-desc = "A body handed to the compiler as text is compiled by the same compiler into a program of its own; the block's operator is named by the hash of that body's canonical form -- the region's nodes included, so two bodies that differ only inside a branch arm are two blocks and the same source parsed twice is one -- and its record is the effects read off the body's graphs, and one kernel reached through the executor manager by that name runs the body and answers its value, twice for the same block; the block's one node stands in the outer graph, and the program it was inserted into keeps every graph it had."
+desc = "A body handed to the compiler as text is compiled by the same compiler into a program of its own; the block's operator is named by the hash of that body's canonical form -- its regions entered through the nodes that own them and their form ports named by position, so two bodies that differ only inside a branch arm, or only in which state value a loop's condition reads, are two blocks and the same source parsed twice is one -- and its record is the effects read off the body's graphs, and one kernel reached through the executor manager by that name runs the body and answers its value, twice for the same block; the block's one node stands in the outer graph, and the program it was inserted into keeps every graph it had."
 
 # What the case measures, in one run of each pipeline: `test::block_body` compiles seventeen bodies as
 # programs of their own (`compileAsProgram`, encoded by the same loader a pass library goes through),

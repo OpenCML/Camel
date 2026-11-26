@@ -26,17 +26,26 @@
  *     them, which is the order they appear in the sequence;
  *   - an operator by its URI and traits, a constant by its bits, a call by the canonical form of
  *     the graph it names (never by that graph's name), a loop by its kind;
+ *   - a node that owns regions, after its ports: the regions in the order the region table names
+ *     them (a branch's arms by arm number, a loop's condition before the body it guards), each by
+ *     its kind, its number among its owner's regions, the signature of its form ports, every form
+ *     port by its position in that region, and the value the region yields -- the statements a
+ *     region's exit reads are reached through that value, so a difference that lives only inside a
+ *     branch arm or a loop body is a difference in the name;
  *   - a graph already being hashed higher up contributes a marker and its distance, so a recursive
  *     body hashes in bounded time and two different recursive shapes still differ.
  *
  * Parameter identity stays the parameter's position in the signature: a parameter *name* is
- * spelling and does not enter, while `a - b` and `b - a` are two bodies and must not collide.
+ * spelling and does not enter, while `a - b` and `b - a` are two bodies and must not collide. A
+ * region's form ports are named the same way, by their position in that region: the state values a
+ * loop hands its condition are ports of the condition's region, and a condition that reads one of
+ * them is not a condition that reads the other.
  *
- * Known gap, stated rather than hidden: the nodes *inside* a region (a branch arm, a loop body) are
- * not walked -- the region's node list is addressed by creation order, which is spelling, and there
- * is no structural entry to it here. A body whose difference lives only inside a region and that
- * has the same loop kinds and the same outer nodes therefore hashes the same. Closing it needs the
- * canonical order of 9.5 itself (the numbering that also resolves ties across a program).
+ * A region's own node list is never read: that list is in creation order, which is spelling. The
+ * region is entered at its form ports and at its exit, which are the parts of it a reader can
+ * address, and the statements are reached from the exit. What a region does not reach -- a pure
+ * computation nothing reads -- is not part of the body's visible structure, and is hashed nowhere
+ * else either.
  */
 
 #pragma once
