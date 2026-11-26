@@ -39,9 +39,7 @@ args = ["${case}", "${backend}"]
 backends = ["nvm", "fvm"]
 backends_agree = ["exit_code", "diagnostics", "stdout_normalized"]
 expect_exit = 0
-expect_stdout_exact = "[(0, a), (1, b)]
-0
-"
+expect_stdout_exact = "[(0, a), (1, b)]\n0\n"
 
 [[tests]]
 name = "array_kernels.axis_outside_rank"
