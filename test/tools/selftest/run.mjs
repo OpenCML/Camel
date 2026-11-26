@@ -30,6 +30,9 @@
 //      declare, how many it copies, and how many it leaves out (the line below `[calibration]`);
 //   * a benchmark whose timed pass fails: `--timeit` then reports the failed iteration with no
 //      mean, and the runner reports that failure instead of throwing on the missing metric;
+//   * a case whose own bound took it: the runner re-runs it once at the end, alone, with twice the
+//      bound, prints the case's one line with both attempts on it, counts it once in the total and
+//      once in the re-run count, and keeps the first attempt's record under `rerun/first/`;
 //   * the `--changed` mapping: the directory rule and the file rules together (the mirrored
 //     plan plus the plans outside that tree that catch the same change), the layered plans that
 //     follow `--tier`, the forbidden perf/GC-stress/progen boundary, the base branch and its
@@ -1706,6 +1709,90 @@ if (!/^\[PASS\] names_its_own_card\b/m.test(busy.output)) {
 // was never one of these two fixtures' claims and would have made this line red in the old shape.
 if (statusLines(busy.output).filter((line) => line.startsWith('SKIP ') && !line.startsWith('SKIP free_card')).length > 0) {
     problems.push(`free device: a skip reached an entry of another fixture:\n${busy.output}`)
+}
+
+// --- a case its own bound took gets one more attempt -------------------------------------------
+// One plan, three entries: an ordinary case, one whose bound takes the first attempt and whose
+// doubled bound lets the second finish, and one that runs past both. Its own run, because the
+// claims are about one run's line order and one run's summary.
+//
+// What the green one proves is not "the case is green": it is that the runner ran the case again,
+// judged it by its own assertions, and said on the line that the green came second. `timeout_ms` is
+// 2000 and the sleeping case waits 3000 ms, so the two attempts differ only by the bound -- which
+// is the whole mechanism.
+const rerunRun = runRunner([path.join(here, 'timeout')])
+const rerunLines = statusLines(rerunRun.output)
+const rerunOrder = ['PASS timeout.normal', 'PASS timeout.then_passes', 'FAIL timeout.twice']
+if (rerunLines.join(' | ') !== rerunOrder.join(' | ')) {
+    problems.push(`re-run: the three verdicts or their order moved (${rerunLines.join(', ') || 'none'})`)
+}
+// The counts: the case is counted once (`total` 3), its second attempt is counted as `re-run`, and
+// the red the second attempt reached is the run's one failure.
+if (!rerunRun.output.includes('[SUMMARY] total: 3, pass: 2, fail: 1, timed out: 1, re-run: 2, re-run passed: 1')) {
+    problems.push(`re-run: unexpected summary (${summaryLine(rerunRun.output)})`)
+}
+if (rerunRun.status !== 1) {
+    problems.push(`re-run: a case that timed out at both bounds did not fail the run (exit ${rerunRun.status})`)
+}
+// The two lines, as text: the green one says it was not green first time and gives the second
+// attempt's duration and the load it was taken under; the red one says both attempts timed out.
+const passedRerun = rerunRun.output.split('\n').find((line) => line.startsWith('[PASS] timeout.then_passes'))
+if (!/^\[PASS\] timeout\.then_passes .*timed out on the first pass, passed in \d+\.\d+ s on re-run \(load /.test(passedRerun || '')) {
+    problems.push(`re-run: the pass line does not say how it passed (${passedRerun || 'missing'})`)
+}
+const failedRerun = rerunRun.output.split('\n').find((line) => line.startsWith('[FAIL] timeout.twice'))
+if (!/timed out on the first pass and again on re-run \(load /.test(failedRerun || '')) {
+    problems.push(`re-run: the failed line does not say both attempts timed out (${failedRerun || 'missing'})`)
+}
+// `[SUMMARY]` closes the case lines: nothing that counts as a verdict may come after it, or a
+// reader counting case lines would read one case as two.
+const summaryAt = rerunRun.output.indexOf('[SUMMARY]')
+if (summaryAt < 0) problems.push('re-run: no [SUMMARY] in the run')
+else if (/^\[(PASS|FAIL|XFAIL|SKIP)\] /m.test(rerunRun.output.slice(summaryAt))) {
+    problems.push('re-run: a case line follows [SUMMARY]')
+}
+// The record keeps both attempts: the first attempt's `meta.json` under `rerun/first/` is the
+// timeout, the second attempt's under `rerun/second/` names the attempt it follows and the load,
+// and the second bound is exactly twice the first. Read from the files, not from the console.
+const resultsRoot = process.env.CAMEL_TEST_RESULTS_ROOT
+    ? path.resolve(process.env.CAMEL_TEST_RESULTS_ROOT)
+    : path.join(repoRoot, 'test', 'results')
+const logRoot = path.join(resultsRoot, 'log')
+const rerunRunName = fs.existsSync(logRoot)
+    ? fs.readdirSync(logRoot).filter((name) => name.endsWith(`_${rerunRun.pid}`)).sort().pop()
+    : undefined
+if (!rerunRunName) {
+    problems.push(`re-run: no log directory for the run (${logRoot}, pid ${rerunRun.pid})`)
+} else {
+    const rerunDir = path.join(logRoot, rerunRunName)
+    const metaOf = (...relative) => JSON.parse(fs.readFileSync(path.join(rerunDir, ...relative, 'meta.json'), 'utf8'))
+    try {
+        const firstMeta = metaOf('rerun', 'first', 'fail', 'selftest.timeout', 'timeout.then_passes')
+        const secondMeta = metaOf('rerun', 'second', 'pass', 'selftest.timeout', 'timeout.then_passes')
+        if (firstMeta.status !== 'fail' || firstMeta.timed_out !== true) {
+            problems.push('re-run: the first attempt of a re-run case is not recorded as a timeout')
+        }
+        if (secondMeta.status !== 'pass' || !secondMeta.rerun || secondMeta.rerun.first_pass?.timed_out !== true) {
+            problems.push('re-run: the second attempt does not record the attempt it follows')
+        }
+        if (secondMeta.timeout_ms !== 2 * firstMeta.timeout_ms) {
+            problems.push(
+                `re-run: the second bound is ${secondMeta.timeout_ms} ms against the first's ${firstMeta.timeout_ms} ms`
+            )
+        }
+        const twiceMeta = metaOf('rerun', 'second', 'fail', 'selftest.timeout', 'timeout.twice')
+        if (twiceMeta.status !== 'fail' || twiceMeta.timed_out !== true) {
+            problems.push('re-run: a case that timed out at both bounds is not recorded as one')
+        }
+        const summaryOfRun = JSON.parse(fs.readFileSync(path.join(rerunDir, 'summary.json'), 'utf8')).summary
+        if (summaryOfRun.rerun !== 2 || summaryOfRun.rerunPassed !== 1) {
+            problems.push(
+                `re-run: summary.json records ${summaryOfRun.rerun} re-run(s), ${summaryOfRun.rerunPassed} passed`
+            )
+        }
+    } catch (error) {
+        problems.push(`re-run: the run's records could not be read (${error.message})`)
+    }
 }
 
 // A reading, printed and used by nothing: how many child runs it took, what width this file put
