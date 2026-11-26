@@ -52,7 +52,10 @@
  * normalized away: no number is compared at a tolerance, no line is dropped. A difference whose only
  * text is a hexadecimal address -- which the compiler writes and the run chooses -- is named as such
  * in the field it moved (`stdout(address)`, `stderr(address)`) and stays a difference, so a reader
- * can see how much of what moved is that.
+ * can see how much of what moved is that. The one word the two commands do not share is the side's
+ * pass, which this tool appends to the end of every pipeline (`std::nvm` or `std::fvm`): a diagnostic
+ * that names the pass written after the last one names this tool's own argument, so both texts read
+ * that word as one placeholder before they are compared or shown.
  *
  * **A disagreement is confirmed before it is reported.** Each difference is measured a second time,
  * both sides. A side that does not agree with its own first run is reported as `unstable`: the
@@ -410,11 +413,27 @@ function maskAddresses(text) {
     return String(text).replace(/0x[0-9a-fA-F]+/g, '<ADDR>')
 }
 
+/// The two commands this tool runs differ in one word: the side's own pass is appended to the end of
+/// the pipeline, so a diagnostic that names the pass written after the last one (an empty graph, the
+/// pipeline a run reports, the pass that could not take the program) names a word the two commands do
+/// not share. That word is this tool's, not the program's: it reads as one placeholder on both sides
+/// before the two texts are compared or shown, and the disagreement it would otherwise report is the
+/// argument the tool was called with.
+const APPENDED_PASS = /\bstd::(?:nvm|fvm)\b/g
+
+/// What the two sides are read against each other on: the text each one printed, after the words the
+/// harness itself put on its command line are taken out of the comparison.
+function comparableText(text) {
+    return String(text).replace(APPENDED_PASS, '<side>')
+}
+
 /// A field whose only difference is the text of a hexadecimal address, which the compiler writes and
 /// the run chooses: still a difference, named apart from a value that moved.
 function differenceBetween(left, right) {
-    if (left === right) return null
-    return maskAddresses(left) === maskAddresses(right) ? 'address' : 'value'
+    const a = comparableText(left)
+    const b = comparableText(right)
+    if (a === b) return null
+    return maskAddresses(a) === maskAddresses(b) ? 'address' : 'value'
 }
 
 function fieldsThatMoved(a, b) {
@@ -506,13 +525,14 @@ const quote = (text) => JSON.stringify(String(text))
 const clip = (text, width = 120) => (text.length > width ? `${text.slice(0, width - 3)}...` : text)
 
 /// One line of the field that moved, so a reader of the report does not have to run the program to
-/// know what the disagreement is about. At most one line, and never instead of the verdict.
+/// know what the disagreement is about. At most one line, and never instead of the verdict. The line
+/// is the comparable text, so the pass this tool appended reads as the placeholder it is compared as.
 function hint(a, b, fields) {
     for (const field of fields) {
         if (!field.startsWith('stdout') && !field.startsWith('stderr')) continue
         const stream = field.startsWith('stdout') ? 'stdout' : 'stderr'
-        const left = a[stream].split('\n')
-        const right = b[stream].split('\n')
+        const left = comparableText(a[stream]).split('\n')
+        const right = comparableText(b[stream]).split('\n')
         const at = left.findIndex((line, index) => line !== right[index])
         const index = at < 0 ? Math.min(left.length, right.length) : at
         const show = (text) => (text === undefined ? '<nothing>' : quote(clip(text)))
