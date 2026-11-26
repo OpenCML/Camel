@@ -5,7 +5,7 @@
 > 这一页由 `node scripts/check-doc-links.mjs --questions-index --write` 从目录生成，不要手改：
 > 规矩在 `internal/reviews/` 的裁定里，落没落地看代码和提交，不看这张表。
 
-## 现在在等作者：19 页
+## 现在在等作者：20 页
 
 | 页 | 问什么 |
 | --- | --- |
@@ -26,6 +26,7 @@
 | [`2026-11-27-fsh-dev-remote-script-line`](2026-11-27-fsh-dev-remote-script-line.cn.md) | 元层一行：`fsh-dev` 的 `camel-remote.ps1:2999` 让整批无法合入 |
 | [`2026-11-27-how-does-a-handle-type-name-become-visible-in-a-block`](2026-11-27-how-does-a-handle-type-name-become-visible-in-a-block.cn.md) | 块体里写 `Node` 这样的句柄类型名，要谁把它带进作用域 |
 | [`2026-11-27-is-a-top-level-var-a-compile-error`](2026-11-27-is-a-top-level-var-a-compile-error.cn.md) | 模块顶层的 `var` 是编译错误，还是模块的资源？ |
+| [`2026-11-27-should-a-forwarded-element-function-still-be-reported`](2026-11-27-should-a-forwarded-element-function-still-be-reported.cn.md) | 库里的包装转发元素函数之后，原地写的那个函数体还该不该报“丢弃了值” |
 | [`2026-11-27-where-a-block-root-handle-comes-from`](2026-11-27-where-a-block-root-handle-comes-from.cn.md) | 块根那个句柄，编译器从哪拿它的类型与算子 |
 | [`2026-11-27-where-a-blocks-root-gets-the-module-that-declares-its-operator`](2026-11-27-where-a-blocks-root-gets-the-module-that-declares-its-operator.cn.md) | 块的根从哪里拿到「声明它那个算子的模块」 |
 
