@@ -263,17 +263,37 @@ slot_t replaceKernel(ArgsView &, ArgsView &norm, Context &) {
             "the replacement is not a node of the same graph");
     }
     const auto toRef = to->index();
-    if (!camel::passes::generic::isReplaceable(transaction, fromRef)) {
-        err::throwRuntimeFault(
-            err::RuntimeDiag::InvalidArgument,
-            "graph.replace",
-            "the node anchors its graph (an exit, an output, a return or the end of a branch arm)");
-    }
     if (fromRef == toRef || camel::passes::generic::reaches(transaction, fromRef, toRef)) {
         err::throwRuntimeFault(
             err::RuntimeDiag::InvalidArgument,
             "graph.replace",
             "the replacement is the node itself or is computed from it");
+    }
+    // A node the graph anchors is not deleted by a replacement: which node the graph hands out is a
+    // read of the node it hands out, so a replacement re-points that read and leaves both nodes in
+    // the graph -- `replace(exit(d), v)` changes what the function gives without taking the exit
+    // away, and a value that was the result before is still a node of the graph. Deleting an anchor
+    // is a different question and stays refused; `erase` asks it (`isReplaceable`).
+    if (!camel::passes::generic::isReplaceable(transaction, fromRef)) {
+        const std::vector<gc_node_ref_t> handed(
+            draft.normInputsOf(fromRef).begin(),
+            draft.normInputsOf(fromRef).end());
+        if (handed.size() != 1) {
+            err::throwRuntimeFault(
+                err::RuntimeDiag::InvalidArgument,
+                "graph.replace",
+                "the node anchors its graph and hands out no one value to point at another node");
+        }
+        const camel::runtime::GraphDraft::NamedEdit named(
+            draft,
+            camel::runtime::EditKind::Replace,
+            draft.nodeOrigin(fromRef));
+        // Which node the graph hands out is a read of that node -- the return the frame takes is
+        // one, and the exit gate waiting on the value is another -- so re-pointing them is what
+        // changes the answer. The node that was handed out before stays a node of the graph:
+        // nothing is erased here, and `from` (the anchor) keeps the place it had.
+        draft.replaceAllValueUses(handed[0], toRef);
+        return NullSlot;
     }
     // A named edit of the table (docs/design/graph-editing/README.cn.md 8.1), whose answer to the
     // effect and the order checks is a theorem about `replace` itself: the nodes this touches are

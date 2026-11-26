@@ -56,3 +56,26 @@ args = ["${case}", "orderprobe::order_cycle", "std::nvm"]
 expect_exit = 1
 expect_output_contains = ["graph.order", "the edge would form a cycle"]
 timeout_ms = 20000
+
+# The anchor of the graph, replaced and erased: `replace(exit(d), v)` re-points what the exit hands
+# out and leaves both nodes in the graph; `erase` of the same node is still refused. The two readings
+# are separate programs because the refusal ends a program (a fault is not a value to handle).
+[[tests]]
+name = "replace_the_exit_points_the_graph_at_another_value"
+desc = "`replace(exit(d), v)` makes the function give `v`, keeps the exit node, and leaves the node that was the result before in the graph; the committed function returns the new value"
+kind = "behavior"
+case = "../../../cases/modules/graph_function/replace_exit.cml"
+args = ["${case}", "std::nvm"]
+expect_exit = 0
+expect_stdout_exact = "[before] handed=:op/mul_l muls=1\n[after] anchor_alive=true old_alive=true old_users=0 handed= muls=1\n[committed] muls=1\n[run] the edited function:\nfirst\n7\n"
+timeout_ms = 20000
+
+[[tests]]
+name = "erase_the_exit_is_still_refused"
+desc = "`erase` of the node the graph hands its value out of is refused with the reason it names, so the rule that a replacement may re-point an anchor did not loosen what may be deleted"
+kind = "negative"
+case = "../../../cases/modules/graph_function/erase_anchor_refused.cml"
+args = ["${case}", "std::nvm"]
+expect_exit = 1
+expect_output_contains = ["graph.erase", "the node anchors its graph"]
+timeout_ms = 20000

@@ -1,0 +1,59 @@
+// `replace(exit(d), v)`: what the function gives becomes `v`, the exit that hands it out stays, and
+// the node that was the result before is still a node of the graph. A replacement of an anchor
+// re-points the read the anchor is -- the graph naming which node it hands out is a reader of that
+// node -- and it does not take the anchor away, because the anchor is the graph's, not the value's.
+
+import { Graph, Node, graph_of, nodes, inputs, value_users, exit, open, replace, add_constant, commit, op, op_name } from graph
+
+// The function every reading is about: the exit hands out `a * 3`.
+func subject() => int sync {
+    println('first')
+    let a = 1 + 1
+    return a * 3
+}
+
+// The node the graph hands its value out of (design 15.2), and what it hands out.
+func exitOf(g: Graph) => Node spelling {
+    return match exit(g) {
+        case null => nodes(g)[0]
+        case n => n
+    }
+}
+
+func handedOut(g: Graph) => Node[] spelling {
+    return inputs(exitOf(g))
+}
+
+// The operator a node names, as the graph writes it.
+func opText(n: Node) => string spelling {
+    return match op(n) {
+        case null => ''
+        case o => op_name(o)
+    }
+}
+
+// The multiplications of a graph: `a * 3` is one, and the reading counts it to see whether the node
+// that was the result before is still there.
+func muls(g: Graph) => int spelling {
+    return len(nodes(g)->filter<func (n: Node) => bool opText(n) == ':op/mul_l'>)
+}
+
+func main() => int spelling sync {
+    let g = graph_of(subject)
+    let d = open(subject)
+    let anchor = exitOf(d)
+    let before = handedOut(d)[0]
+    println(`[before] handed=${opText(before)} muls=${muls(g)}`)
+    // A value of the type the exit hands out, made in the same draft.
+    let seven = add_constant::<int>(d, 7)
+    replace(anchor, seven)
+    // The anchor is still there, still hands out the node it did, and its readers are the new
+    // value's: that is what `replace` of an anchor re-points, and nothing was erased.
+    println(`[after] anchor_alive=${exitOf(d) == anchor} old_alive=${muls(d) == 1} old_users=${len(value_users(before))} handed=${opText(handedOut(d)[0])} muls=${muls(d)}`)
+    let edited = commit::<() => int>(d) !! subject
+    let h = graph_of(edited)
+    println(`[committed] muls=${muls(h)}`)
+    println('[run] the edited function:')
+    println(edited())
+    return 0
+}
