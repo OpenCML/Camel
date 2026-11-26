@@ -29,7 +29,7 @@
  */
 
 import { flatten, all, any } from array
-import { Node, Graph, NodeKind, graphs_of, graphs, nodes, inputs, with_inputs, value_users, id, kind, op, op_name, may_be_recomputed, may_fault, may_be_rearranged, is_anchor, is_written_slot, is_constant, constant_bytes, type_of, type_name, region_of, permissions, tags, constant, open, replace, erase, eval, commit, abort } from graph
+import { Node, Graph, NodeKind, graphs_of, graphs, nodes, inputs, with_inputs, value_users, kind, op, op_name, may_be_recomputed, may_fault, may_be_rearranged, is_anchor, is_written_slot, is_constant, constant_bytes, type_of, type_name, region_of, permissions, tags, constant, open, replace, erase, eval, commit, abort } from graph
 import { saturate as saturate_rules } from rewrite
 import { algebra, distribution } from rules
 import { is_function } from types
