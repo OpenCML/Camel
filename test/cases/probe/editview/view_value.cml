@@ -1,0 +1,5 @@
+// A view block's value is the body's value (graph-editing design 15.1), so a view over a function
+// whose body hands the function back is that function, and this type-checks where it is expected.
+func value_is_the_body(f: (x: float) => float) => ((x: float) => float) {
+    return view d = f { f }
+}

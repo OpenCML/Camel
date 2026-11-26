@@ -44,6 +44,26 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 
 [[tests]]
+name = "editview.view_value_is_the_body"
+desc = "`view d = f { f }` where the function type is expected: a view block's value is its body's value, so this passes."
+kind = "behavior"
+case = "../../cases/probe/editview/view_value.cml"
+args = ["check", "${case}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "editview.view_value_is_not_an_int"
+desc = "The other side: the same view block where an `int` is expected is refused, so the body's value is what is pinned."
+kind = "behavior"
+case = "../../cases/probe/editview/view_value_is_not_an_int.cml"
+args = ["check", "${case}"]
+expect_exit = 1
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
 name = "editview.view_semantic"
 desc = "`view d = f { f }` through the semantic check: a view block's value is the body's value, so this is the smallest block whose type is decided."
 kind = "behavior"
