@@ -25,5 +25,15 @@ if [ "$1" = "origin" ]; then
     # read from it, so the reading names the same tree the push publishes. When git can name no
     # worktree, `top` is `.` and the checker reads nothing, which it reports and refuses: a tree it
     # could not read is not a tree it passed.
-    node "$top/scripts/check-process-traces.mjs" --root "$top"
+    #
+    # The debt the tree inherited is a file beside the checker, judged per file and only ever going
+    # down, so that a push is refused for the traces it adds and not for the ones it was handed. When
+    # that file is gone -- the day the debt is at zero -- the run is the one at the threshold of
+    # zero, which is how this hook ends: the baseline is the scaffolding, not the check.
+    baseline="$top/scripts/process-traces-baseline.json"
+    if [ -f "$baseline" ]; then
+        node "$top/scripts/check-process-traces.mjs" --root "$top" --baseline "$baseline"
+    else
+        node "$top/scripts/check-process-traces.mjs" --root "$top"
+    fi
 fi
