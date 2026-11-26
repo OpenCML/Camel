@@ -41,7 +41,10 @@ bool ProcessModule::load() {
             {"user_name", false},
             {"cpu_count", false},
         });
-    // What each touches (docs/design/op-semantics 8): the process and the machine.
+    // What each touches (docs/design/op-semantics 8): the process and the machine. A wait is a
+    // **write** of the clock it waits on (design principles 3.3): the moment the program resumes
+    // is not the moment it paused, so the access is an effect and a statement that reads nothing
+    // still runs.
     {
         using camel::core::sem::AccessMode;
         using camel::core::sem::externalAmbient;
@@ -49,7 +52,7 @@ bool ProcessModule::load() {
             "process",
             {
                 {"exit", externalAmbient("process:process", AccessMode::ReadModifyWrite)},
-                {"sleep", externalAmbient("clock", AccessMode::Read)},
+                {"sleep", externalAmbient("clock", AccessMode::Write)},
                 {"user_name", externalAmbient("env", AccessMode::Read)},
                 {"cpu_count", externalAmbient("env", AccessMode::Read)},
             });

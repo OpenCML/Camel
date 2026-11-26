@@ -1,0 +1,20 @@
+/**
+ * The clock moves on without the program, so taking a moment from it is a write of the resource
+ * `clock` (design principles 3.3) and a clause promises that write with `uses var clock`. The
+ * function is `sync` because a call whose value is used still runs in the block's chain, and the
+ * clause is what the call is judged by.
+ *
+ *   1
+ */
+
+import { now } from time
+
+/// A write of the clock: the entry carries `var`.
+func later_than_epoch() => bool uses var clock sync {
+    return now() > 0.0
+}
+
+func main() => int sync {
+    println(later_than_epoch())
+    return 0
+}

@@ -829,3 +829,54 @@ assert(out === want, `unexpected output: ${out}`)
 }
 """
 timeout_ms = 30000
+
+# ---- A wait on the clock is a write of it ----
+#
+# The clock is the resource whose value moves on without the program, so taking a moment from it or
+# waiting on it is a write of it rather than a read (design principles 3.3). The operators register
+# that write: `time:now` and `process:sleep` are `externalAmbient("clock", AccessMode::Write)` in
+# src/stdlib/time/module.cpp and src/stdlib/process/module.cpp. Two readings follow: a clause that
+# promises a read alone is not kept, and a statement of a wait runs even though no value is read.
+
+[[tests]]
+name = "clock.clause_promises_the_write"
+desc = "Taking a moment from the clock is a write of it, so a function whose clause says `uses var clock` keeps its promise and prints `1`."
+kind = "behavior"
+case = "../../../cases/effects/clock_clause_is_a_write.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_exact = "true\n"
+
+[[tests]]
+name = "clock.clause_read_is_refused"
+desc = "The same body with `uses clock`: the call writes the clock, so the read-only promise is refused where it is written, and the diagnostic names the resource."
+kind = "negative"
+case = "../../../cases/effects/clock_clause_read_is_refused.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::UsesPromiseViolated"
+expect_diagnostic_code = "0x030001F1"
+expect_output_contains = ["clock"]
+
+[[tests]]
+name = "clock.a_wait_statement_is_kept"
+desc = "A wait written as a statement of a body that is not `sync`, with no value read: `process:sleep` is still a node of the graph, joined to it by an edge, so the wait runs."
+kind = "behavior"
+case = "../../../cases/effects/a_wait_statement_is_kept.cml"
+args = ["${case}", "std::jgir", "std::nop"]
+backends = ["nvm"]
+expect_exit = 0
+expect_stdout_contains = ["\"format\": \"camel.gir\""]
+verify_script = '''
+({ input, assert }) => {
+  const doc = JSON.parse(input.normalized.stdout)
+  const graphs = doc.graphs.filter(g => (g.nodes || []).some(n => String(n.label).includes('process:sleep')))
+  assert(graphs.length === 1, 'the wait is not a node of the graph: ' + JSON.stringify(doc.graphs.flatMap(g => (g.nodes || []).map(n => n.label))))
+  const graph = graphs[0]
+  const wait = graph.nodes.find(n => String(n.label).includes('process:sleep'))
+  const joined = (graph.edges || []).filter(e => e.source === wait.id || e.target === wait.id)
+  assert(joined.length > 0, 'the wait stands in the graph with no edge: ' + JSON.stringify({ wait: wait.id, edges: (graph.edges || []).length }))
+}
+'''

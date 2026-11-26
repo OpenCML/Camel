@@ -1,0 +1,19 @@
+/**
+ * The other half of `clock_clause_is_a_write.cml`: the same body with a clause that promises a read
+ * alone. Taking a moment writes the clock, so the promise is not kept and the declaration is
+ * refused where it is written -- `UsesPromiseViolated`, pointing at the call that writes it.
+ *
+ * This file is expected to fail to compile; nothing here runs.
+ */
+
+import { now } from time
+
+/// A read of the clock: the entry carries no `var`, which the body does not keep.
+func later_than_epoch() => bool uses clock sync {
+    return now() > 0.0
+}
+
+func main() => int sync {
+    println(later_than_epoch())
+    return 0
+}
