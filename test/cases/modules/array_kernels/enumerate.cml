@@ -1,0 +1,12 @@
+/**
+ * `enumerate` pairs each element with its position, from 0; an empty array gives an empty array.
+ */
+
+import { enumerate } from array
+
+func main() => int sync {
+    println(['a', 'b']->enumerate)
+    let none: string[] = []
+    println(len(none->enumerate))
+    return 0
+}
