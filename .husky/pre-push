@@ -9,31 +9,10 @@
 # `origin`, so it is left out: a measurement stays possible on a tree whose comments still have
 # to be cleaned, which is the order the work happens in.
 #
-# The develop lock runs first, and not for tidiness: it decides from the refs git passes on stdin,
-# and a reader that runs after another one may find the stream already drained. An empty stream
-# reads as "no push to develop", which is how a lock that is installed would let through the thing
-# it exists to stop. It applies to every remote and not only `origin`: `refs/heads/develop` is
-# develop wherever it is being sent. See scripts/hooks/pre-push.
+# One script, and the order inside it is the order the rules need: the develop and integration
+# rules read the refs git passes on stdin, and a reader that runs after another one may find the
+# stream already drained. An empty stream reads as "no push to develop", which is how a lock that
+# is installed would let through the thing it exists to stop. The trace check is a rule of its own
+# and reads the same stream, for the same reason. See scripts/hooks/pre-push.
 top=$(git rev-parse --show-toplevel 2>/dev/null) || top='.'
 sh "$top/scripts/hooks/pre-push" "$@" || exit $?
-
-if [ "$1" = "origin" ]; then
-    # The tree is named, not inherited. The checker has no default root, because the directory a
-    # process runs in is not the tree a reader meant -- and a hook's directory is whatever git gave
-    # it, so `.` here would be that directory and not the tree the push leaves from. `top` is the
-    # worktree this hook already resolved for the develop lock, and both the script and the tree are
-    # read from it, so the reading names the same tree the push publishes. When git can name no
-    # worktree, `top` is `.` and the checker reads nothing, which it reports and refuses: a tree it
-    # could not read is not a tree it passed.
-    #
-    # The debt the tree inherited is a file beside the checker, judged per file and only ever going
-    # down, so that a push is refused for the traces it adds and not for the ones it was handed. When
-    # that file is gone -- the day the debt is at zero -- the run is the one at the threshold of
-    # zero, which is how this hook ends: the baseline is the scaffolding, not the check.
-    baseline="$top/scripts/process-traces-baseline.json"
-    if [ -f "$baseline" ]; then
-        node "$top/scripts/check-process-traces.mjs" --root "$top" --baseline "$baseline"
-    else
-        node "$top/scripts/check-process-traces.mjs" --root "$top"
-    fi
-fi

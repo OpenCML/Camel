@@ -116,15 +116,16 @@ timeout_ms = 120000
 
 [[tests]]
 name = "selfchecks.process_traces"
-desc = "`scripts/check-process-traces.mjs` reads four trees for process traces: a date or a hash that is data is not a trace, a trace in a test's name is refused where the name is written, `--list` prints the same lines and judges nothing while the same tree without the flag is refused, a listing of a tree that read nothing is still red, the GPU lane domain in the tiles compiler is refused on purpose, and a run that read nothing is red rather than green."
+desc = "`scripts/check-process-traces.mjs` reads four trees for process traces, and its verdict is about a diff: each spelling is refused in a commit that adds it, a trace the branch inherited is not refused and neither is a commit that changes only a document, a commit that adds no line passes, a base this repository does not have is its own answer rather than a pass, a date or a hash that is data is not a trace, a trace in a test's name is refused where the name is written, the whole-tree mode lists every trace and refuses no push, and a run that read nothing is red rather than green."
 kind = "behavior"
+tier = "slow"
 tool = "node"
 case = "../../../../scripts/check-process-traces.test.mjs"
 args = ["${case}"]
 expect_exit = 0
-expect_stdout_contains = [" pass 8", " fail 0"]
+expect_stdout_contains = [" pass 10", " fail 0"]
 normalizers = ["normalize_newlines"]
-timeout_ms = 120000
+timeout_ms = 300000
 
 # The pairing between the hook and the checker, which neither file shows on its own: the checker
 # reads a tree only when the caller names one, and the push hook is the caller that has to name it.
@@ -165,6 +166,25 @@ timeout_ms = 120000
 # the file the entry is about), `args` hands the runner the bridge and the absolute path, and
 # `skip_unless` asks the bridge whether there is a pwsh at all. `expect_stdout_contains` pins the
 # count the file prints, so an entry cannot stay green over a file that stopped checking.
+
+# `internal/tools/camel-waiter.ps1` decides who is in a queue, for both queues. The readings are the
+# two answers that matter: a waiter whose process runs is kept, one whose process was killed is not,
+# and the second answer arrives at the next read rather than at a sweep -- the entry left the queue
+# 8 ms after the kill, measured here. Slow: 2.6 s, because it starts a real child process to have a
+# process to kill.
+[[tests]]
+name = "selfchecks.camel_waiter"
+desc = "`internal/tools/camel-waiter.test.ps1`: a waiter made by this process reads as alive, one whose process runs is kept, one whose process was killed is dropped at the next read, the filter says how many it dropped, an entry that predates the liveness lock is judged by its pid, and two reads of one queue file agree (12 checks)."
+kind = "behavior"
+tier = "slow"
+tool = "node"
+case = "../../../../internal/tools/camel-waiter.test.ps1"
+args = ["test/tools/pwsh-selfcheck.mjs", "${case}"]
+skip_unless = ["node", "test/tools/pwsh-selfcheck.mjs", "--probe"]
+expect_exit = 0
+expect_stdout_contains = ["12 checks, 0 failed"]
+normalizers = ["normalize_newlines"]
+timeout_ms = 120000
 
 # Fast: 0.6 s on the workstation, 2026-11-25.
 [[tests]]

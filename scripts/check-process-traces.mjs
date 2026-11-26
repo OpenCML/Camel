@@ -25,10 +25,6 @@
 // a check that reads one tree cannot say anything about the others, and a green light from it was
 // read as "the tree is clean".
 //
-// The reading is printed with the verdict, and a run that read nothing is red: "0 traces" and "0
-// files scanned" print the same otherwise, and a checker whose pattern stopped matching anything
-// would then report green forever. The reading also names the directories it read.
-//
 // A pattern always catches some of the same word in another domain, and the check has met this
 // twice: `/*` in a shell comment is a glob (`out/*/`), not the start of a block, and `lane-1` or
 // `<lane>-<time>` in a documented path is a placeholder for some lane, not the name of one. Both
@@ -38,41 +34,43 @@
 // When a hit turns out to be a different domain, ask which condition distinguishes it, and put that
 // condition in the pattern.
 //
-// A tree that already carries traces has to be read before it can be worked through, so `--list`
-// prints the same report and exits 0: that flag asks for the reading, not for the verdict. It is a
-// flag on this script rather than a second script because a listing and a refusal must name the
-// same lines -- two readers of one pattern are two patterns the day one of them is edited -- and it
-// says "nothing judged" on its own line, because output that reads like a check and exits 0 is the
-// gate that passes everything. A run that read nothing stays red in both modes: an empty list is
-// not evidence of an empty tree.
+// Two questions, and only one of them is a verdict:
 //
-// Usage: node scripts/check-process-traces.mjs --root <dir> [--list]
-//        node scripts/check-process-traces.mjs --root <dir> --baseline <file> [--lower]
-//   exit 0 when clean or nothing above the baseline, 1 with a list or a baseline that rose
-//   exit 2 when the tree was not named, the baseline named was not read, or `--list` met `--baseline`
-//   `--list` prints the same list and exits 0: it lists, and judges nothing
+//   --added-from <rev> [--head <rev>]   what does this push *add*? The lines the diff from `<rev>`
+//                                       to `--head` (default `HEAD`) adds, scanned with the same
+//                                       pattern in the same trees. This is the only judging mode,
+//                                       and it is the one the pre-push hook runs.
+//
+//   --root <dir>                        the whole tree as it stands: every trace in it, listed.
+//                                       A report for the work of taking the inherited debt down.
+//                                       It decides no push, because a tree inherits the traces
+//                                       other changes wrote and the change being pushed is not
+//                                       answerable for them.
+//
+// A diff is the truth about a push, and a per-file count is not: a fixed count of traces per file
+// was a second table to keep in step with the first, so every push that added a trace anywhere
+// refused every later push until the number was lowered by hand -- and the files it named were not
+// the ones the refused author had touched. The diff answers the same question about the same lines
+// without a second copy of the tree's state to keep true.
+//
+// A whole-tree run that read nothing is red, and so is a diff whose base cannot be read: "0 traces"
+// and "0 files scanned" print the same otherwise, and a checker whose pattern stopped matching, or
+// a base commit this repository does not have, would then read as a pass forever.
+//
+// Usage: node scripts/check-process-traces.mjs --root <dir>
+//        node scripts/check-process-traces.mjs --root <dir> --added-from <rev> [--head <rev>]
+//   exit 0 when the lines added carry no trace (or when the whole-tree report found none)
+//   exit 1 with the lines the verdict is about
+//   exit 2 when the tree was not named, or when neither question was asked
+//   exit 3 when the diff's base or head could not be read, so nothing was judged
 //
 // `--root` is required and has no default: the directory a process was started in is not
 // necessarily the tree the reader meant, so the tree is named here by the caller.
-//
-// A tree that inherited traces is red for a debt, and a red that lists all of them on every run
-// names none of them as this change's: a check that refuses everything teaches the one bypass it
-// cannot see, `--no-verify`. So `--baseline <file>` names that debt written down per file, and the
-// run judges only what is above it, file by file -- a total hides a file that rose while another
-// fell. The file is in the tree so a change to it is a change in a diff, and it may only go down:
-// the working copy is compared with `HEAD:` of the same path, and an entry that grew refuses the
-// run. That comparison is the mechanical half; "the baseline only goes down" kept by convention is
-// kept until a commit would rather not. `--lower` writes the current counts down and refuses to
-// write when anything rose, and a file reading below its count is allowed and named, because the
-// slack closes when the lane that cleaned it writes the lower number down.
 import fs from 'node:fs';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 
 const args = process.argv.slice(2);
-// A listing is not a verdict, so the flag is read before anything is scanned and never changes what
-// is scanned.
-const listOnly = args.includes('--list');
 const rootAt = args.indexOf('--root');
 const root = rootAt >= 0 ? args[rootAt + 1] : '';
 if (!root || root.startsWith('--')) {
@@ -82,112 +80,19 @@ if (!root || root.startsWith('--')) {
   );
   process.exit(2);
 }
-const baselineAt = args.indexOf('--baseline');
-const baselineArg = baselineAt >= 0 ? args[baselineAt + 1] : '';
-if (baselineAt >= 0 && (!baselineArg || baselineArg.startsWith('--'))) {
-  console.log('check-process-traces: --baseline <file> was given with no file behind it.');
-  console.log('A run at the threshold of zero takes no baseline at all; say which debt it is otherwise.');
+const addedFromAt = args.indexOf('--added-from');
+const addedFrom = addedFromAt >= 0 ? args[addedFromAt + 1] : '';
+if (addedFromAt >= 0 && (!addedFrom || addedFrom.startsWith('--'))) {
+  console.log('check-process-traces: --added-from <rev> was given with no revision behind it.');
   process.exit(2);
 }
-const lower = args.includes('--lower');
-if (lower && !baselineArg) {
-  console.log('check-process-traces: --lower writes the baseline it was told about, and none was named.');
-  process.exit(2);
-}
-if (listOnly && baselineArg) {
-  console.log('check-process-traces: --list judges nothing, so it takes no baseline; drop one of the two.');
+const headAt = args.indexOf('--head');
+const head = headAt >= 0 ? args[headAt + 1] : 'HEAD';
+if (headAt >= 0 && (!head || head.startsWith('--'))) {
+  console.log('check-process-traces: --head <rev> was given with no revision behind it.');
   process.exit(2);
 }
 
-// The baseline's path is read against the tree it describes, so that the file and the tree it counts
-// travel together: a path written into a hook is one checkout's absolute path, and the next tree to
-// push would read the debt of a different one.
-const baselineFile = baselineArg ? path.resolve(root, baselineArg) : '';
-const baselineRel = baselineFile ? path.relative(root, baselineFile).split(path.sep).join('/') : '';
-const baseline = new Map();
-// A baseline that is not there yet is the first landing, and the one run that may stand where there
-// is nothing to lower: the debt it writes is the debt the tree already carries, and the alternative
-// -- starting from zero and refusing every push until it is at zero -- is the state this file ends.
-let baselineLanded = false;
-if (baselineFile) {
-  let text = '';
-  try {
-    text = fs.readFileSync(baselineFile, 'utf8');
-  } catch (error) {
-    // A baseline that cannot be read is not an empty one: starting from zero would call every
-    // inherited trace an addition and refuse every push, which is the state this file exists to end.
-    // `--lower` is the one run that may stand where there is no file yet, because writing the first
-    // one is how a baseline begins.
-    if (error.code !== 'ENOENT' || !lower) {
-      console.log(`check-process-traces: the baseline ${baselineRel || baselineArg} was not read: ${error.message}`);
-      console.log('A run at the threshold of zero names no --baseline; a missing debt file is not that run.');
-      process.exit(2);
-    }
-  }
-  // A file that was read -- even an empty one -- is a copy that the run may only lower. Only the
-  // path that had nothing at all is a first landing that writes the debt as it stands.
-  baselineLanded = text.trim().length > 0;
-  if (text.trim()) {
-    let doc;
-    try {
-      doc = JSON.parse(text);
-    } catch (error) {
-      console.log(`check-process-traces: ${baselineRel} is not JSON: ${error.message}`);
-      process.exit(2);
-    }
-    for (const [file, count] of Object.entries(doc ?? {})) {
-      if (!Number.isInteger(count) || count < 0) {
-        console.log(`check-process-traces: ${baselineRel} gives '${file}' ${JSON.stringify(count)}, and a count is a whole number.`);
-        process.exit(2);
-      }
-      baseline.set(file, count);
-    }
-  }
-  // "The baseline only goes down" is the whole of the ratchet, and a sentence in a commit message
-  // does not keep it: the number a lane would rather raise is the one it reads next. So the copy in
-  // the tree is compared with the copy in `HEAD`, and an entry that grew -- or one added for a file
-  // `HEAD` did not list -- refuses the run before anything is scanned.
-  if (baselineRel && !baselineRel.startsWith('..')) {
-    let committedText = null;
-    try {
-      committedText = execFileSync('git', ['-C', root, 'show', `HEAD:${baselineRel}`], {
-        encoding: 'utf8',
-        maxBuffer: 1 << 26,
-        stdio: ['ignore', 'pipe', 'ignore'],
-      });
-    } catch (error) {
-      committedText = null;
-    }
-    if (committedText === null) {
-      console.log(`check-process-traces: ${baselineRel} has no committed copy under HEAD; it is read as it stands.`);
-    } else {
-      // A copy is committed, so this tree has a debt written down even if the working copy is gone:
-      // `--lower` may not stand in for it and write a higher number back.
-      baselineLanded = true;
-      let committed = {};
-      try {
-        committed = JSON.parse(committedText) ?? {};
-      } catch (error) {
-        committed = null;
-      }
-      if (committed === null) {
-        console.log(`check-process-traces: the committed ${baselineRel} is not JSON, so nothing says it only went down.`);
-      } else {
-        const raised = [];
-        for (const [file, count] of baseline) {
-          const was = Number.isInteger(committed[file]) ? committed[file] : 0;
-          if (count > was) raised.push(`${file}: ${was} in HEAD, ${count} in the working copy`);
-        }
-        if (raised.length) {
-          console.log(`check-process-traces: the baseline was raised for ${raised.length} file(s), and a baseline only goes down:`);
-          for (const line of raised) console.log('  ' + line);
-          console.log('A trace that is new is fixed in the comment it is written in, not in the number that counts it.');
-          process.exit(1);
-        }
-      }
-    }
-  }
-}
 const dirs = ['src', 'scripts', 'internal/tools', 'test'];
 const exts = new Set([
   '.cpp', '.h', '.hpp', '.cc', '.c', '.inc', '.def', '.cml', '.cmake',
@@ -301,6 +206,39 @@ function tomlProse(line, inBlockString) {
   return ['', false];
 }
 
+/**
+ * Every line of one file that carries comment or prose text, as `{ index, text }` with `index`
+ * counted from 0. One reader for both questions: a whole-tree report and a diff verdict that read
+ * the same lines with two loops would be two patterns the day one of them is edited.
+ */
+function proseLines(file, text) {
+  const ext = path.extname(file);
+  const toml = ext === '.toml';
+  const lang = toml || ext === '.cmake' || ext === '.ps1' || ext === '.sh' || file.endsWith('CMakeLists.txt')
+    ? 'hash'
+    : 'c';
+  const out = [];
+  let inBlock = false;
+  let inTomlString = false;
+  text.split('\n').forEach((line, k) => {
+    let prose;
+    if (toml) {
+      const [value, still] = tomlProse(line, inTomlString);
+      inTomlString = still;
+      prose = value;
+      // A `#` comment on the same line as a prose key is still a comment, and may carry a trace.
+      const [comment] = commentText(line, false, 'hash');
+      if (comment.trim()) prose += ' ' + comment;
+    } else {
+      const [value, still] = commentText(line, inBlock, lang);
+      inBlock = still;
+      prose = value;
+    }
+    if (prose.trim()) out.push({ index: k, text: prose });
+  });
+  return out;
+}
+
 function* walk(dir) {
   if (!fs.existsSync(dir)) return;
   for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
@@ -310,56 +248,130 @@ function* walk(dir) {
   }
 }
 
+function report(lines, reading, judged, trailing) {
+  console.log(
+    judged
+      ? `process traces in comments: ${lines.length} (${reading})`
+      : `process traces in comments: ${lines.length} listed, nothing judged (${reading})`,
+  );
+  for (const line of lines) console.log('  ' + line);
+  if (trailing) console.log(trailing);
+  process.exit(judged ? 1 : 0);
+}
+
+const advice =
+  'A comment says what the code does and why; drop the dated ruling, the handover path, the role,\n' +
+  'the host, the refactor step, the lane name, the work item number and the commit hash.\n' +
+  'The history is the commit message.';
+
+// --- the push's own lines ----------------------------------------------------
+if (addedFrom) {
+  const git = (argv, maxBuffer = 1 << 26) =>
+    execFileSync('git', ['-C', root, ...argv], { encoding: 'utf8', maxBuffer, stdio: ['ignore', 'pipe', 'pipe'] });
+
+  let base;
+  let tip;
+  // `<rev>` is taken as the caller spelled it (`HEAD~3`, `<sha>^`, `<sha>`), so the commit check is a
+  // second question and not an appending of `^{commit}` to whatever arrived: `<sha>^` plus `^{commit}`
+  // is a different revision.
+  const commit = (rev) => {
+    const sha = git(['rev-parse', '--verify', '--quiet', rev]).trim();
+    git(['cat-file', '-e', `${sha}^{commit}`]);
+    return sha;
+  };
+  try {
+    base = commit(addedFrom);
+    tip = commit(head);
+  } catch (error) {
+    console.log(`check-process-traces: the diff ${addedFrom}..${head} could not be read: ${String(error.stderr || error.message).trim().split('\n')[0]}`);
+    console.log('A base this repository does not have means nothing was judged: fetch it and push again.');
+    process.exit(3);
+  }
+
+  let diffText;
+  try {
+    diffText = git(['diff', '--unified=0', '--no-color', '--no-ext-diff', '--diff-filter=ACMR', base, tip, '--', ...dirs], 1 << 28);
+  } catch (error) {
+    console.log(`check-process-traces: the diff ${base.slice(0, 12)}..${tip.slice(0, 12)} could not be read: ${String(error.stderr || error.message).trim().split('\n')[0]}`);
+    process.exit(3);
+  }
+
+  // The added line numbers per file, from the hunks: `@@ -a,b +c,d @@` says the new side starts at
+  // line `c` and holds `d` lines, and `d` of them are additions (unified 0 has no context).
+  const added = new Map();
+  let current = null;
+  for (const raw of diffText.split('\n')) {
+    if (raw.startsWith('+++ ')) {
+      const target = raw.slice(4).trim();
+      current = target === '/dev/null' ? null : target.replace(/^b\//, '');
+      if (current && !added.has(current)) added.set(current, new Set());
+      continue;
+    }
+    if (raw.startsWith('@@')) {
+      if (!current) continue;
+      const plus = raw.match(/\+(\d+)(?:,(\d+))?/);
+      if (!plus) continue;
+      const start = Number(plus[1]);
+      const count = plus[2] === undefined ? 1 : Number(plus[2]);
+      for (let n = start; n < start + count; n++) added.get(current).add(n - 1);
+    }
+  }
+
+  const named = [];
+  let addedLines = 0;
+  let commentLines = 0;
+  for (const [rel, lines] of [...added.entries()].sort()) {
+    if (lines.size === 0) continue;
+    addedLines += lines.size;
+    let text;
+    try {
+      text = git(['show', `${tip}:${rel}`]);
+    } catch (error) {
+      console.log(`check-process-traces: ${rel} could not be read at ${tip.slice(0, 12)}: ${String(error.stderr || error.message).trim().split('\n')[0]}`);
+      process.exit(3);
+    }
+    for (const line of proseLines(rel, text)) {
+      if (!lines.has(line.index)) continue;
+      commentLines += 1;
+      if (pattern.test(line.text)) named.push(`${rel}:${line.index + 1}: ${text.split('\n')[line.index].trim().slice(0, 160)}`);
+    }
+  }
+
+  const reading = `${base.slice(0, 12)}..${tip.slice(0, 12)} adds ${addedLines} line(s) in ${added.size} file(s), ${commentLines} of them comment`;
+  if (named.length === 0) {
+    console.log(
+      `process traces in comments: the lines this push adds carry none (${reading}); ` +
+        'the traces the tree inherited are not this push\'s.',
+    );
+    process.exit(0);
+  }
+  report(named, reading, true, advice);
+}
+
+// --- the whole tree as it stands ---------------------------------------------
 const hits = [];
-// The same lines counted per file: a baseline of a total cannot say which file rose, and a total
-// that held still while one file rose and another fell reads as a tree that did not change.
-const perFile = new Map();
 let filesRead = 0;
 let commentLines = 0;
 const unreadable = [];
 for (const d of dirs) {
   for (const file of walk(path.join(root, d))) {
-    let lines;
+    let text;
     try {
-      lines = fs.readFileSync(file, 'utf8').split('\n');
+      text = fs.readFileSync(file, 'utf8');
     } catch (error) {
       unreadable.push(`${path.relative(root, file)}: ${error.message}`);
       continue;
     }
     filesRead += 1;
-    const rel = path.relative(root, file);
-    // The baseline is committed, so its keys are read on whatever host checks the tree out next: a
-    // path written with one platform's separator names a file that the other platform says is gone,
-    // and a baseline of paths that do not exist is a baseline of zeros.
-    const key = rel.split(path.sep).join('/');
-    const ext = path.extname(file);
-    const toml = ext === '.toml';
-    const lang = toml || ext === '.cmake' || ext === '.ps1' || ext === '.sh' || file.endsWith('CMakeLists.txt')
-      ? 'hash'
-      : 'c';
-    let inBlock = false;
-    let inTomlString = false;
-    lines.forEach((line, k) => {
-      let text;
-      if (toml) {
-        const [prose, still] = tomlProse(line, inTomlString);
-        inTomlString = still;
-        text = prose;
-        // A `#` comment on the same line as a prose key is still a comment, and may carry a trace.
-        const [comment] = commentText(line, false, 'hash');
-        if (comment.trim()) text += ' ' + comment;
-      } else {
-        const [prose, still] = commentText(line, inBlock, lang);
-        inBlock = still;
-        text = prose;
-      }
-      if (!text.trim()) return;
+    // A path written with one platform's separator names a file the other platform says is gone, and
+    // a report of paths that do not exist is a report of nothing.
+    const rel = path.relative(root, file).split(path.sep).join('/');
+    for (const line of proseLines(file, text)) {
       commentLines += 1;
-      if (pattern.test(text)) {
-        perFile.set(key, (perFile.get(key) ?? 0) + 1);
-        hits.push({ file: key, text: `${rel}:${k + 1}: ${line.trim().slice(0, 160)}` });
+      if (pattern.test(line.text)) {
+        hits.push(`${path.relative(root, file)}:${line.index + 1}: ${text.split('\n')[line.index].trim().slice(0, 160)}`);
       }
-    });
+    }
   }
 }
 
@@ -379,92 +391,16 @@ if (filesRead === 0 || commentLines === 0) {
   process.exit(1);
 }
 
-const reading = `scanned ${filesRead} files, ${commentLines} comment lines, no trace`;
-
-// What the baseline adds to the verdict: the same scan, judged against the debt instead of against
-// nothing. A file above its count is a trace this change wrote; a file below it is a cleanup the
-// lane has made and not yet written down, which is allowed and named -- the slack closes when that
-// lane runs `--lower`, and a push that wrote the tracked file itself would be a surprise.
-if (baselineFile) {
-  const added = [];
-  const dropped = [];
-  for (const file of [...new Set([...perFile.keys(), ...baseline.keys()])].sort()) {
-    const now = perFile.get(file) ?? 0;
-    const was = baseline.get(file) ?? 0;
-    if (now > was) added.push([file, was, now]);
-    else if (now < was) dropped.push([file, was, now]);
-  }
-  const addedTotal = added.reduce((sum, [, was, now]) => sum + (now - was), 0);
-  const droppedTotal = dropped.reduce((sum, [, was, now]) => sum + (was - now), 0);
-
-  if (lower) {
-    if (addedTotal && baselineLanded) {
-      console.log(
-        `process traces in comments: not written -- ${addedTotal} trace(s) beyond the baseline in ${added.length} file(s):`,
-      );
-      for (const [file, was, now] of added) console.log(`  ${file}: baseline ${was}, now ${now} (+${now - was})`);
-      console.log('--lower writes the debt down; it does not take a raise. Fix the comments above, then lower.');
-      process.exit(1);
-    }
-    const written = {};
-    for (const file of [...perFile.keys()].sort()) {
-      const count = perFile.get(file);
-      if (count) written[file] = count;
-    }
-    fs.writeFileSync(baselineFile, JSON.stringify(written, null, 2) + '\n', 'utf8');
-    const total = Object.values(written).reduce((sum, n) => sum + n, 0);
-    const wasTotal = [...baseline.values()].reduce((sum, n) => sum + n, 0);
-    const first = baselineLanded ? '' : ' -- the first landing, which writes the debt the tree already carries';
-    console.log(
-      `check-process-traces: baseline written (${baselineRel}: ${total} trace(s) in ${Object.keys(written).length} file(s), ` +
-        `was ${wasTotal} in ${baseline.size})${first}`,
-    );
-    if (droppedTotal) console.log(`  the tree reads ${droppedTotal} trace(s) below the copy it replaces, in ${dropped.length} file(s)`);
-    process.exit(0);
-  }
-
-  if (added.length) {
-    console.log(
-      `process traces in comments: ${addedTotal} beyond the baseline in ${added.length} file(s) ` +
-        `(${baselineRel}; scanned ${filesRead} files, ${commentLines} comment lines)`,
-    );
-    for (const [file, was, now] of added) {
-      console.log(`  ${file}: baseline ${was}, now ${now} (+${now - was})`);
-      for (const hit of hits) if (hit.file === file) console.log('    ' + hit.text);
-    }
-    console.log('A comment says what the code does and why; drop the dated ruling, the handover path, the role,');
-    console.log('the host, the refactor step, the lane name, the work item number and the commit hash.');
-    console.log('The history is the commit message.');
-    process.exit(1);
-  }
-
-  console.log(
-    `process traces in comments: none beyond the baseline (${baselineRel}: ${[...baseline.values()].reduce((sum, n) => sum + n, 0)} trace(s) in ${baseline.size} file(s); ` +
-      `scanned ${filesRead} files, ${commentLines} comment lines)`,
-  );
-  if (dropped.length) {
-    console.log(`  ${dropped.length} file(s) read below it by ${droppedTotal} trace(s); --lower writes that down:`);
-    for (const [file, was, now] of dropped) console.log(`  ${file}: baseline ${was}, now ${now} (-${was - now})`);
-  }
+const reading = `scanned ${filesRead} files, ${commentLines} comment lines`;
+if (hits.length === 0) {
+  console.log(`${reading}, no trace`);
   process.exit(0);
 }
-
-if (hits.length) {
-  if (listOnly) {
-    // The same lines a refusal prints, and the line that says which of the two this is: a reader who
-    // pipes this into a gate has to meet the word "nothing judged" and not mistake a listing for a
-    // pass.
-    console.log(
-      `process traces in comments: ${hits.length} listed, nothing judged (--list; scanned ${filesRead} files, ${commentLines} comment lines)`,
-    );
-    for (const hit of hits) console.log('  ' + hit.text);
-    process.exit(0);
-  }
-  console.log(`process traces in comments: ${hits.length} (scanned ${filesRead} files, ${commentLines} comment lines)`);
-  for (const hit of hits) console.log('  ' + hit.text);
-  console.log('A comment says what the code does and why; drop the dated ruling, the handover path, the role,');
-  console.log('the host, the refactor step, the lane name, the work item number and the commit hash.');
-  console.log('The history is the commit message.');
-  process.exit(1);
-}
-console.log(listOnly ? `${reading} (--list, nothing judged)` : reading);
+// The whole tree is a report and not a verdict: a tree inherits the traces other changes wrote, so
+// refusing a push over this list refuses the wrong author. `--added-from` is the judging mode.
+console.log(
+  `process traces in comments: ${hits.length} in the tree (${reading}); ` +
+    'this is the report for taking the inherited debt down, and it refuses no push',
+);
+for (const hit of hits) console.log('  ' + hit);
+process.exit(0);
