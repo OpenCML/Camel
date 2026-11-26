@@ -22,7 +22,7 @@ PASSES = ("std::macro", "std::nvm", "std::profile", "gc_stats=1")
 def run(limit):
     grad_referee._block_limit_mb = limit
     try:
-        out = grad_referee.camel_run("resnet", None, None, PASSES)
+        out = grad_referee.camel_run("resnet", None, None, PASSES, {})
     except Exception as error:  # noqa: BLE001 - the failure text is the reading
         first = str(error).strip().splitlines()
         return None, first[0] if first else repr(error)
