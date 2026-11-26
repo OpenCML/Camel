@@ -1452,6 +1452,8 @@ $astPayloadText = $null
 # The file `-FetchFile` asks for: same shape as the AST record above.
 $fetchCapture = $null
 $fetchPayloadText = $null
+# Set when the host says the run did not write the file (or the host has none): nothing is fetched.
+$fetchRefused = $false
 # The goldens a `-UpdateGolden` run rewrote (`-UpdateGolden` only): one payload per file, the count
 # the host announced after the last one, and whether the host could read its own list at all. They
 # are written together or not at all -- a set that arrived in part is the tree-keeps-old-goldens
@@ -2093,17 +2095,11 @@ $fetchRel = ($FetchFile -replace '\\', '/')
 # travel with the plan. The run directory exists only once the plan has run, so the fetch is a
 # second, small connection after it (the block beside the AST record, further down); the stage here
 # is the named path's, unchanged.
+# What `-FetchFile` compares at fetch time: the file as it stands once the tree is in place and before
+# the plan starts (`camel-remote-fetch.ps1`).
+$fetchStamp = if ($FetchFile -ne '' -and -not $FromThisRun) { New-CamelFetchStampCommand -Rel $fetchRel } else { ':' }
 $fetchStage = if ($FetchFile -ne '' -and -not $FromThisRun) {
-@'
-if [ -f "$R/FETCHREL" ]; then
-echo '__CAMEL_REMOTE_FETCH_BEGIN__'
-base64 "$R/FETCHREL"
-echo '__CAMEL_REMOTE_FETCH_END__'
-else
-echo 'FETCH_MISSING=FETCHREL'
-echo '[camel-remote] -FetchFile: the host has no FETCHREL (whatever writes it must run in this same run)'
-fi
-'@.Replace('FETCHREL', $fetchRel)
+    New-CamelFetchStageCommand -Rel $fetchRel
 } else { ':' }
     # Whether the after-plan tree probe is taken. Two modes write tracked files on purpose, and the
     # host script prints that it stood down instead of calling the recording a defect; every other run
@@ -2860,6 +2856,7 @@ else
     if [ -f '$remoteScratch/untracked.tar' ]; then tar -xf '$remoteScratch/untracked.tar' -C "`$R" || exit 2; fi
     phase_mark apply
 fi
+$fetchStamp
 # --- the tree under test, as it was handed over -----------------------------
 # The baseline for `tree_probe` below, taken once the tree is in the state this run asked for: the
 # commit, this run's own uncommitted change (the patch above), and its untracked files. A porcelain
@@ -3416,6 +3413,9 @@ exit `$code
             # -FetchFile sends one file back the same way the AST record travels: base64 between
             # two markers, collected here and written after the run (so a truncated stream writes
             # nothing rather than half a record).
+            if ($cleanLine -match '^FETCH_(MISSING|UNCHANGED)=') {
+                $fetchRefused = $true
+            }
             if ($line -match '__CAMEL_REMOTE_FETCH_BEGIN__') {
                 $fetchCapture = New-Object System.Text.StringBuilder
                 return
@@ -4042,6 +4042,10 @@ if ($null -ne $fetchPayloadText -and $FetchFile -ne '') {
         Write-Host ("[camel-remote] -FetchFile: {0} bytes written to {1}" -f $fetchText.Length, $fetchTarget)
     }
 }
+
+# A fetch the host refused (the run did not write the file): the line it printed says why, and the
+# tool's code for "nothing was fetched" applies unless the plan already failed on its own.
+if ($fetchRefused -and $FetchFile -ne '' -and $code -eq 0) { $code = 2 }
 
 # The file `-FetchFile <suffix> -FromThisRun` asked for: this invocation's own run's copy of it,
 # brought back by two small commands after the plan. The run is named by this tool (`$runName`,
