@@ -376,8 +376,10 @@ inherited_hold() {
     [ "$bad" = 0 ]
 }
 
+# The merge seat measures commits, not lines: its own branches, and a detached commit (`camel-sha-*`,
+# the name a run of a commit with no branch is staged under), which is how a promotion measures a tip.
 merge_seat() {
-    case "$BRANCH" in seat/merge|seat/merge/*|seat/merge-*) echo 1 ;; *) echo 0 ;; esac
+    case "$BRANCH" in seat/merge|seat/merge/*|seat/merge-*|camel-sha-*) echo 1 ;; *) echo 0 ;; esac
 }
 
 cmd_plan() {
