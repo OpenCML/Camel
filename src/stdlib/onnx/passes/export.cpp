@@ -51,7 +51,7 @@ using camel::runtime::GCNodeKind;
 
 namespace {
 
-constexpr const char *kPassName = "onnx::export_model";
+constexpr const char *kPassName   = "onnx::export";
 constexpr const char *kRequestUri = "onnx:export_model";
 
 /// Why the pass does not translate, and the node it is about. A refusal that is about no
@@ -827,9 +827,6 @@ void registerOnnxPasses() {
             args.getBool("prep_stats"));
     };
     registerModulePass(kPassName, std::move(descriptor));
-    // The pass is named for the function it wraps (`onnx.export_model`); the old spelling stays
-    // an alias.
-    registerPassAlias("onnx::export", kPassName);
 }
 
 } // namespace camel::onnx::passes

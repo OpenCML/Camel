@@ -359,35 +359,12 @@ void registerModulePass(const std::string &path, PassFactory factory) {
     registerModulePass(path, passWithoutParameters(std::move(factory)));
 }
 
-void registerPassAlias(const std::string &alias, const std::string &target) {
-    // The core's namespace belongs to the core. A bare alias may not shadow a core declaration
-    // either: resolution tries the written name as a declaration before any alias.
-    if (alias.starts_with("std::") || passAliases.contains(alias)) {
-        CAMEL_LOG_WARN_S(
-            "Pass",
-            "alias '{}' -> '{}' ignored: the name belongs to the core's std:: namespace",
-            alias,
-            target);
-        return;
-    }
-    auto &registry = moduleAliases();
-    {
-        std::lock_guard lock(registry.mutex);
-        registry.aliases.insert_or_assign(alias, target);
-    }
-    // An alias of a reader is a reader too: a tag may name the short name.
-    if (camel::core::tag::isReader(target)) {
-        camel::core::tag::declareReader(alias);
-    }
-}
-
 namespace {
 
-/// The pass a written name resolves to: the core's table first, then the aliases the loaded
-/// modules registered. The core's table has one entry, `std::opt` -- the default pipeline's name,
-/// which is a choice rather than a spelling of another pass -- so no sub-pass of the optimizer is
-/// reachable under an old name; a module's short aliases (`registerPassAlias`) are the
-/// rest of what this answers.
+/// The pass a written name resolves to: the core's table first, then the names a loaded module
+/// registered. The core's table has one entry, `std::opt` -- the default pipeline's name, which is
+/// a choice rather than a spelling of another pass -- so no sub-pass of the optimizer is reachable
+/// under an old name; a module's names are the rest of what this answers.
 std::string resolveAlias(const std::string &name) {
     if (auto it = passAliases.find(name); it != passAliases.end()) {
         return it->second;

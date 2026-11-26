@@ -268,8 +268,7 @@ void registerParamEchoTestPass() {
     descriptor.make = [](const core::context::context_ptr_t &ctx, const PassArgs &args) {
         return std::make_unique<ParamEchoTestPass>(ctx, args);
     };
-    registerModulePass("tensor::test_echo", std::move(descriptor));
-    registerPassAlias("tensor::echo", "tensor::test_echo");
+    registerModulePass("tensor::echo", std::move(descriptor));
 }
 
 } // namespace
