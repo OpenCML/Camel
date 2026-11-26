@@ -1663,7 +1663,7 @@ function rerunNote(status, result, load) {
     }
     // The second attempt can end otherwise than by its bound, and each shape is said: a crash on
     // the second attempt is a failure like any other, and a line that called it a timeout would be
-    // the one reading this lane must never produce.
+    // the one reading this runner must never produce.
     if (result.timedOut) return `${opening} and again on re-run (${formatLoad(load)})`
     if (result.signal) {
         return `${opening}, killed by ${result.signal} on re-run (${formatLoad(load)})`
