@@ -2721,6 +2721,18 @@ async function validateTest(test, result, context) {
         }
     } else if (typeof test.expect_exit === 'number' && result.exitCode !== test.expect_exit) {
         failures.push(`expected exit ${test.expect_exit}, got ${describeExit(result)}`)
+    } else if (typeof test.expect_exit !== 'number' && !result.timedOut && result.exitCode !== 0) {
+        // The default the schema documents -- `expectedSignalNumber` above says it in one sentence,
+        // "an entry that says nothing is asserting it" -- was not the default this check applied: it
+        // ran only when a plan wrote `expect_exit`, so an entry that forgot the field judged nothing
+        // about a crash. Measured before this line existed, on a plan whose case called
+        // `process.exit(1)`: `[PASS]`, `total: 1, pass: 1`, run exit 0. A green a crash cannot turn
+        // red is worse than a red the machine caused, so an absent field now means zero rather than
+        // "no question asked".
+        failures.push(
+            `exited ${describeExit(result)}, and this entry says nothing about the exit code: an entry ` +
+            'expects the ordinary end of a process unless it writes `expect_exit`',
+        )
     }
     for (const rawNeedle of test.expect_stdout_contains || []) {
         const needle = expandTextTokens(rawNeedle, scope)
