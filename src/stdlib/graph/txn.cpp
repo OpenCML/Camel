@@ -43,6 +43,7 @@
 #include "camel/runtime/draft_outline.h"
 #include "camel/runtime/draft_session.h"
 #include "camel/runtime/program.h"
+#include "camel/runtime/reachable.h"
 #include "camel/runtime/region_roots.h"
 #include "graph/draft_view.h"
 #include "src/stdlib/std/cxx/opt/generic/rewrite.h"
@@ -144,16 +145,49 @@ ForeignResourceDescriptor txnDescriptor() {
     return descriptor;
 }
 
-/// The state of a transaction that is open; a fault when it was committed or aborted.
-TxnState &openState(ArgsView &norm, size_t index, const char *site) {
-    auto *wrapper = norm.get<ForeignResourceObject *>(index);
+/// The value that holds the session a draft handle names; a fault when the handle names a published
+/// program, or the session is over.
+ForeignResourceObject *draftResource(const Handle *draft, const char *site) {
+    auto *wrapper = static_cast<ForeignResourceObject *>(draft->draft());
+    if (wrapper == nullptr) {
+        err::throwRuntimeFault(
+            err::RuntimeDiag::InvalidArgument,
+            site,
+            "the graph is a published program's, and no edit changes a program");
+    }
     if (wrapper->disposed()) {
         err::throwRuntimeFault(
             err::RuntimeDiag::InvalidArgument,
             site,
-            "the transaction was committed or aborted already");
+            "the draft was committed or aborted already");
     }
-    return *wrapper->resourceAs<TxnState>();
+    return wrapper;
+}
+
+/// The state of a draft that is open; a fault when it was committed or aborted.
+TxnState &openState(const Handle *draft, const char *site) {
+    return *draftResource(draft, site)->resourceAs<TxnState>();
+}
+
+/// The transaction that owns the draft of the node a handle names, and the node. An edit names the
+/// nodes it changes and nothing else (design 15.2, 15.3): the draft is reached through the handle a
+/// node was read as, which names the transaction that holds it. A handle of a published program
+/// names no transaction, so it is refused here -- a program is immutable (design principles 3.3) --
+/// and so is a node an earlier edit removed.
+std::pair<camel::runtime::GraphTransaction &, camel::runtime::gc_node_ref_t>
+draftOf(const Handle *node, const char *site) {
+    auto *transaction = node->mutableTransaction();
+    if (transaction == nullptr) {
+        err::throwRuntimeFault(
+            err::RuntimeDiag::InvalidArgument,
+            site,
+            "the node names a published program, and no edit changes a program");
+    }
+    auto &draft = transaction->graph();
+    if (!draft.alive(node->index())) {
+        err::throwRuntimeFault(err::RuntimeDiag::InvalidArgument, site, "the node was removed");
+    }
+    return {*transaction, node->index()};
 }
 
 /// The transaction that owns the draft of the graph a Node handle names, and the node. A handle
@@ -215,27 +249,40 @@ slot_t functionOf(TxnState &state, const Program *program, const TupleType *resu
     return makeOk(toSlot(function), resultType);
 }
 
-/// `open(f)`: a transaction over a function and the graphs it reaches. The transaction commits
-/// to a program of its own, not the context's: the running program is left as it is.
+/// `open(f)`: a draft over a function and the graphs it reaches. The draft commits to a program of
+/// its own, not the context's: the running program is left as it is. What it answers is the graph
+/// of the function itself, as the draft holds it: the root query reads it, and every handle read
+/// through it carries the session the edits are written in.
 slot_t openKernel(ArgsView &, ArgsView &norm, Context &ctx) {
     auto *function = norm.get<::Function *>(0);
     auto *state = new TxnState(ctx.shared_from_this(), function->program(), function, norm.type(0));
-    return toSlot(ForeignResourceObject::create(mm::autoSpace(), txnDescriptor(), state));
+    auto *wrapper = ForeignResourceObject::create(mm::autoSpace(), txnDescriptor(), state);
+    auto *root    = function->graph();
+    if (root == nullptr) {
+        err::throwRuntimeFault(
+            err::RuntimeDiag::InvalidArgument,
+            "graph.open",
+            "the function value has no graph");
+    }
+    auto &transaction = state->session.edit(root);
+    return toSlot(
+        Handle::createDraft(transaction, wrapper, state->base, root->id(), mm::autoSpace()));
 }
 
 /// Replaces the uses of a node by another node of the same graph and removes the node. What
 /// the removed node ordered stays ordered (the same rule the optimizer's rewrites follow).
 slot_t replaceKernel(ArgsView &, ArgsView &norm, Context &) {
-    TxnState &state             = openState(norm, 0, "graph.replace");
-    const auto *from            = norm.get<Handle *>(1);
-    const auto *to              = norm.get<Handle *>(2);
-    auto [transaction, fromRef] = draftOf(state, from, "graph.replace");
+    const auto *from            = norm.get<Handle *>(0);
+    const auto *to              = norm.get<Handle *>(1);
+    auto [transaction, fromRef] = draftOf(from, "graph.replace");
     auto &draft                 = transaction.edit();
     // The replacement names this graph either way it can be named: through the program it came
     // from, or through the transaction that owns the draft a fold wrote it into.
+    // The replacement is a node of the same draft, read through it: a handle an edit answered, or
+    // one the draft's own graph gave. A node of a published program names no transaction, and is
+    // refused with the rest.
     const bool sameGraph  = to->graph() == from->graph();
-    const bool knownOwner = to->program() == state.base || (to->transaction() != nullptr &&
-                                                            to->transaction()->id() == to->graph());
+    const bool knownOwner = to->transaction() == from->transaction();
     if (!sameGraph || !knownOwner || !draft.alive(to->index())) {
         err::throwRuntimeFault(
             err::RuntimeDiag::InvalidArgument,
@@ -269,8 +316,7 @@ slot_t replaceKernel(ArgsView &, ArgsView &norm, Context &) {
 
 /// Removes a node nothing reads the value of.
 slot_t eraseKernel(ArgsView &, ArgsView &norm, Context &) {
-    TxnState &state         = openState(norm, 0, "graph.erase");
-    auto [transaction, ref] = draftOf(state, norm.get<Handle *>(1), "graph.erase");
+    auto [transaction, ref] = draftOf(norm.get<Handle *>(0), "graph.erase");
     auto &draft             = transaction.edit();
     if (!camel::passes::generic::isReplaceable(transaction, ref)) {
         err::throwRuntimeFault(
@@ -294,10 +340,10 @@ slot_t eraseKernel(ArgsView &, ArgsView &norm, Context &) {
     return NullSlot;
 }
 
-/// `add_param(t, like)`: the port node a new parameter is, of the type `like` has, in the graph
-/// `like` is a node of. The operator writes one of the two statements a parameter is -- the node
-/// its body computes with -- and not the other: the declaration is the entry of the function type a
-/// caller is told about, and nothing outside a block head can write a signature for an edit
+/// `add_param(like)`: the port node a new parameter is, of the type `like` has, in the graph `like`
+/// is a node of. The operator writes one of the two statements a parameter is -- the node its body
+/// computes with -- and not the other: the declaration is the entry of the function type a caller
+/// is told about, and nothing outside a block head can write a signature for an edit
 /// (docs/design/graph-editing/README.cn.md 8.4 puts `add_param` after that head for exactly this
 /// reason). So the graph this leaves is a graph whose port list is one entry longer than its
 /// signature, which is what a commit refuses and names (`EdgeChecker::checkPortTypes`,
@@ -305,8 +351,8 @@ slot_t eraseKernel(ArgsView &, ArgsView &norm, Context &) {
 /// `test::add_param` reads both halves.
 slot_t addParamKernel(ArgsView &, ArgsView &norm, Context &) {
     static const char *site     = "graph.add_param";
-    TxnState &state             = openState(norm, 0, site);
-    auto [transaction, likeRef] = draftOf(state, norm.get<Handle *>(1), site);
+    const auto *likeHandle      = norm.get<Handle *>(0);
+    auto [transaction, likeRef] = draftOf(likeHandle, site);
     auto &draft                 = transaction.edit();
     // The type the new parameter takes is the type of a value of the graph: a parameter is a value
     // the body computes with, and the value the caller hands in is what a call site checks against
@@ -326,7 +372,8 @@ slot_t addParamKernel(ArgsView &, ArgsView &norm, Context &) {
     const gc_node_ref_t port = camel::runtime::addParameterPort(draft, type);
     // A node the graph did not have: the port node the edit made, which the commit answers for as a
     // parameter the declaration does not name.
-    return toSlot(Handle::createInTransaction(transaction, port, mm::autoSpace()));
+    return toSlot(
+        Handle::createInTransaction(transaction, port, likeHandle->draft(), mm::autoSpace()));
 }
 
 /// The operands of an operator whose values are static slots of the graph: the argument view a
@@ -376,9 +423,9 @@ std::optional<std::pair<slot_t, Type *>> staticValue(const Draft &draft, gc_node
 /// raises the warning the C++ fold raises and answers null, and the program behaves the same
 /// with and without the fold.
 slot_t evalKernel(ArgsView &, ArgsView &norm, Context &ctx) {
-    static const char *site = "<graph::eval>";
-    TxnState &state         = openState(norm, 0, site);
-    auto [transaction, ref] = draftOf(state, norm.get<Handle *>(1), site);
+    static const char *site = "graph.eval";
+    const auto *nodeHandle  = norm.get<Handle *>(0);
+    auto [transaction, ref] = draftOf(nodeHandle, site);
     auto &draft             = transaction.edit();
     const auto *header      = draft.header(ref);
     if (header == nullptr || header->kind != GCNodeKind::Oper || header->dataType == nullptr ||
@@ -428,8 +475,11 @@ slot_t evalKernel(ArgsView &, ArgsView &norm, Context &ctx) {
     } catch (...) {
         return NullSlot; // the failure is reported when the program runs, as the C++ fold leaves it
     }
-    auto *graph = state.base->graph(norm.get<Handle *>(1)->graph());
-    if (graph == nullptr) {
+    // The draft is a copy of a graph of the program it was opened on; a handle that named a graph
+    // of another program would be no node of this draft (the node walk refused it already, and this
+    // is the same statement about the graph).
+    const TxnState &state = openState(nodeHandle, site);
+    if (state.base == nullptr || state.base->graph(nodeHandle->graph()) == nullptr) {
         err::throwRuntimeFault(err::RuntimeDiag::InvalidArgument, site, "the graph does not exist");
     }
     // The kind this edit is (`eval`, the table's row 3) and where it was written: the record names
@@ -446,7 +496,8 @@ slot_t evalKernel(ArgsView &, ArgsView &norm, Context &ctx) {
     // transaction holding it: a program-backed handle here would claim a published node that
     // does not exist yet.
     return makeSome(
-        toSlot(Handle::createInTransaction(transaction, value, mm::autoSpace())),
+        toSlot(
+            Handle::createInTransaction(transaction, value, nodeHandle->draft(), mm::autoSpace())),
         TupleType::nullable(HandleType::get(HandleKind::Node)));
 }
 
@@ -588,16 +639,15 @@ representativeIn(const camel::runtime::GraphDraft &draft, gc_node_ref_t ref, uin
 /// the same words the check does.
 slot_t orderKernel(ArgsView &, ArgsView &norm, Context &) {
     static const char *site = "graph.order";
-    TxnState &state         = openState(norm, 0, site);
-    const auto *before      = norm.get<Handle *>(1);
-    const auto *after       = norm.get<Handle *>(2);
-    // Both ends are read the same way, and not only the second: a node this transaction just made
+    const auto *before      = norm.get<Handle *>(0);
+    const auto *after       = norm.get<Handle *>(1);
+    // Both ends are read the same way, and not only the second: a node this draft just made
     // (`inline`, `outline` and `eval` answer one) names the transaction and not a program, and
     // ordering the body a splice just wrote among the accesses already there is the caller's, as
     // the documentation of `inline` promises. Two ends that resolve to one transaction are two
     // nodes of one draft; anything else is two graphs, whichever way the handles name them.
-    auto [beforeTransaction, beforeRef] = draftOf(state, before, site);
-    auto [afterTransaction, afterRef]   = draftOf(state, after, site);
+    auto [beforeTransaction, beforeRef] = draftOf(before, site);
+    auto [afterTransaction, afterRef]   = draftOf(after, site);
     if (&beforeTransaction != &afterTransaction) {
         err::throwRuntimeFault(
             err::RuntimeDiag::InvalidArgument,
@@ -739,9 +789,9 @@ hangSplicedStatements(camel::runtime::GraphDraft &draft, gc_node_ref_t atRef, si
 /// the frame the value was made in, and a splice into another graph cannot name them.
 slot_t inlineKernel(ArgsView &, ArgsView &norm, Context &) {
     static const char *site = "graph.inline";
-    TxnState &state         = openState(norm, 0, site);
-    const auto *at          = norm.get<Handle *>(1);
-    auto *function          = norm.get<::Function *>(2);
+    const auto *at          = norm.get<Handle *>(0);
+    TxnState &state         = openState(at, site);
+    auto *function          = norm.get<::Function *>(1);
     GCGraph *calleeGraph    = function != nullptr ? function->graph() : nullptr;
     if (calleeGraph == nullptr) {
         err::throwRuntimeFault(
@@ -761,7 +811,7 @@ slot_t inlineKernel(ArgsView &, ArgsView &norm, Context &) {
     if (function->program() != nullptr && function->program() != state.base) {
         state.session.adoptProgram(*function->program());
     }
-    auto [transaction, atRef]                             = draftOf(state, at, site);
+    auto [transaction, atRef]                             = draftOf(at, site);
     auto &draft                                           = transaction.edit();
     const camel::runtime::DraftNodeHeader *const atHeader = draft.header(atRef);
     const bool atIsCall = atHeader != nullptr && (atHeader->kind == GCNodeKind::Func ||
@@ -799,7 +849,12 @@ slot_t inlineKernel(ArgsView &, ArgsView &norm, Context &) {
                 "the call cannot be expanded here (a callee that writes a captured variable keeps "
                 "the value it hands on, and is left as it is)");
         }
-        return toSlot(Handle::createInTransaction(transaction, inlined.valueExit, mm::autoSpace()));
+        return toSlot(
+            Handle::createInTransaction(
+                transaction,
+                inlined.valueExit,
+                at->draft(),
+                mm::autoSpace()));
     }
     // Every other `at`: the body is made as a call of its own. `fn` takes no argument, because the
     // operator carries no argument list yet: the declaration would need one.
@@ -864,7 +919,8 @@ slot_t inlineKernel(ArgsView &, ArgsView &norm, Context &) {
         // ordering among the accesses already there is still `order`'s to say.
         hangSplicedStatements(draft, atRef, slotsBefore);
     }
-    return toSlot(Handle::createInTransaction(transaction, inlined.valueExit, mm::autoSpace()));
+    return toSlot(
+        Handle::createInTransaction(transaction, inlined.valueExit, at->draft(), mm::autoSpace()));
 }
 
 /// `outline(t, ns)`: the group `ns` of one graph becomes a graph of its own and a call of it takes
@@ -880,8 +936,7 @@ slot_t inlineKernel(ArgsView &, ArgsView &norm, Context &) {
 /// rule it broke and the draft is as the operator found it.
 slot_t outlineKernel(ArgsView &, ArgsView &norm, Context &) {
     static const char *site = "graph.outline";
-    TxnState &state         = openState(norm, 0, site);
-    auto *array             = norm.get<Array *>(1);
+    auto *array             = norm.get<Array *>(0);
     const size_t count      = array->size();
     if (count == 0) {
         err::throwRuntimeFault(err::RuntimeDiag::InvalidArgument, site, "the group is empty");
@@ -897,13 +952,14 @@ slot_t outlineKernel(ArgsView &, ArgsView &norm, Context &) {
                 site,
                 "the group holds a node that is no node");
         }
-        // A node read from a draft names the transaction and no program; one read from a program
-        // must be this transaction's program.
-        if (handle->program() != nullptr && handle->program() != state.base) {
+        // Every node of the group is read through the draft: a group of a published program is no
+        // group an edit can take out of it.
+        if (handle->transaction() == nullptr) {
             err::throwRuntimeFault(
                 err::RuntimeDiag::InvalidArgument,
                 site,
-                "a node of the group belongs to another program than the transaction");
+                "a node of the group is a node of a published program, and no edit changes a "
+                "program");
         }
         if (graphId == camel::runtime::GraphId::Invalid) {
             graphId = handle->graph();
@@ -915,7 +971,9 @@ slot_t outlineKernel(ArgsView &, ArgsView &norm, Context &) {
         }
         group.push_back(handle->index());
     }
-    auto *graph = state.base->graph(graphId);
+    // The session, from a node of the group: every handle a draft answered carries it.
+    TxnState &state = openState(array->get<Handle *>(0), site);
+    auto *graph     = state.base->graph(graphId);
     if (graph == nullptr) {
         err::throwRuntimeFault(err::RuntimeDiag::InvalidArgument, site, "the graph does not exist");
     }
@@ -941,7 +999,12 @@ slot_t outlineKernel(ArgsView &, ArgsView &norm, Context &) {
             camel::runtime::outlineDraftNodes(state.session, transaction, group, name);
         // A node the graph did not have: the call the group's value is now read from, whose callee
         // is the graph this edit made (read back with `callee`).
-        return toSlot(Handle::createInTransaction(transaction, outlined.call, mm::autoSpace()));
+        return toSlot(
+            Handle::createInTransaction(
+                transaction,
+                outlined.call,
+                array->get<Handle *>(0)->draft(),
+                mm::autoSpace()));
     } catch (const mm::MemoryExhausted &) {
         throw;
     } catch (const std::exception &failure) {
@@ -958,38 +1021,47 @@ slot_t outlineKernel(ArgsView &, ArgsView &norm, Context &) {
 /// another holder sees). Only the pass driver installs a program, the one a pass hands on
 /// (src/execute/camel_pass.cpp).
 slot_t commitKernel(ArgsView &, ArgsView &norm, Context &ctx) {
-    auto *wrapper = norm.get<ForeignResourceObject *>(0);
-    if (wrapper->disposed()) {
-        return makeError(
-            "TxnUsed",
-            "the transaction was committed or aborted already",
-            "<graph::commit>");
+    // The draft the edits were written through is the argument: it is the one value that holds the
+    // session, and it is what `open` answered (design 15.3 has no transaction value to pass).
+    auto *draft = norm.get<Handle *>(0);
+    if (draft->draft() != nullptr) {
+        auto *wrapper = static_cast<ForeignResourceObject *>(draft->draft());
+        if (wrapper->disposed()) {
+            return makeError(
+                "TxnUsed",
+                "the draft was committed or aborted already",
+                "<graph::commit>");
+        }
+        auto *state                 = wrapper->resourceAs<TxnState>();
+        const TupleType *resultType = asFallible(norm.resultType());
+        ASSERT(resultType != nullptr, "commit answers an F!");
+        slot_t result;
+        try {
+            const Program *committed = state->session.commit(true);
+            result                   = functionOf(*state, committed, resultType);
+        } catch (const mm::MemoryExhausted &) {
+            throw;
+        } catch (const camel::runtime::GraphCommitRefused &refused) {
+            // The two commit checks of analysis 4.1 refused the graphs this commit changed: one
+            // line, the same one the reading made, recorded where a diagnostic is read and handed
+            // back as the error value this `commit` answers, because a commit that cannot keep its
+            // promises is a refused commit and not a broken invariant of the graph's edges.
+            camel::runtime::reportCommitViolation(
+                ctx.shared_from_this(),
+                "graph::commit",
+                refused.violation());
+            result = makeError("GraphInvalid", refused.what(), "<graph::commit>");
+        } catch (const std::exception &failure) {
+            result = makeError("GraphInvalid", failure.what(), "<graph::commit>");
+        }
+        state->done = true;
+        wrapper->dispose();
+        return result;
     }
-    auto *state                 = wrapper->resourceAs<TxnState>();
-    const TupleType *resultType = asFallible(norm.resultType());
-    ASSERT(resultType != nullptr, "commit answers an F!");
-    slot_t result;
-    try {
-        const Program *committed = state->session.commit(true);
-        result                   = functionOf(*state, committed, resultType);
-    } catch (const mm::MemoryExhausted &) {
-        throw;
-    } catch (const camel::runtime::GraphCommitRefused &refused) {
-        // The two commit checks of analysis 4.1 refused the graphs this commit changed: one line,
-        // the same one the reading made, recorded where a diagnostic is read and handed back as the
-        // error value this `commit` answers, because a commit that cannot keep its promises is a
-        // refused commit and not a broken invariant of the graph's edges.
-        camel::runtime::reportCommitViolation(
-            ctx.shared_from_this(),
-            "graph::commit",
-            refused.violation());
-        result = makeError("GraphInvalid", refused.what(), "<graph::commit>");
-    } catch (const std::exception &failure) {
-        result = makeError("GraphInvalid", failure.what(), "<graph::commit>");
-    }
-    state->done = true;
-    wrapper->dispose();
-    return result;
+    return makeError(
+        "GraphInvalid",
+        "the graph is no draft: only `open` makes one",
+        "<graph::commit>");
 }
 
 slot_t graphOfKernel(ArgsView &, ArgsView &norm, Context &) {
@@ -1005,7 +1077,11 @@ slot_t graphOfKernel(ArgsView &, ArgsView &norm, Context &) {
 }
 
 slot_t abortKernel(ArgsView &, ArgsView &norm, Context &) {
-    auto *wrapper = norm.get<ForeignResourceObject *>(0);
+    auto *draft = norm.get<Handle *>(0);
+    if (draft->draft() == nullptr) {
+        return NullSlot; // no draft, nothing to drop: `abort` of a published graph changes nothing
+    }
+    auto *wrapper = static_cast<ForeignResourceObject *>(draft->draft());
     if (!wrapper->disposed()) {
         wrapper->resourceAs<TxnState>()->done = true;
         wrapper->dispose();
@@ -1021,21 +1097,21 @@ slot_t abortKernel(ArgsView &, ArgsView &norm, Context &) {
 /// a number is the slot itself. The transaction's tracer handles the other static values a
 /// draft holds (TxnState's descriptor, `traceStaticSlots`).
 slot_t addConstantKernel(ArgsView &, ArgsView &norm, Context &) {
-    static const char *site = "<graph::add_constant>";
-    TxnState &state         = openState(norm, 0, site);
-    const auto *handle      = norm.get<Handle *>(1);
-    Type *type              = norm.type(2);
+    static const char *site = "graph.add_constant";
+    const auto *handle      = norm.get<Handle *>(0);
+    TxnState &state         = openState(handle, site);
+    Type *type              = norm.type(1);
     if (handle->kind() != HandleKind::Graph || handle->program() != state.base) {
         err::throwRuntimeFault(
             err::RuntimeDiag::InvalidArgument,
             site,
-            "the graph belongs to another program than the transaction");
+            "the graph belongs to another program than the draft");
     }
     auto *graph = state.base->graph(handle->graph());
     if (graph == nullptr) {
         err::throwRuntimeFault(err::RuntimeDiag::InvalidArgument, site, "the graph does not exist");
     }
-    slot_t value = norm.slot(2);
+    slot_t value = norm.slot(1);
     if (type->code() == TypeCode::String) {
         auto *text = fromSlot<::String *>(value);
         value = toSlot<::String *>(static_cast<::String *>(text->clone(mm::permSpace(), type)));
@@ -1043,9 +1119,9 @@ slot_t addConstantKernel(ArgsView &, ArgsView &norm, Context &) {
     auto &transaction                      = state.session.edit(graph);
     auto &draft                            = transaction.edit();
     const camel::runtime::gc_node_ref_t id = draft.materializeStaticValue(value, type);
-    // The node was just made in the draft, so the handle names the transaction: naming the
-    // program would claim a published node that is not there.
-    return toSlot(Handle::createInTransaction(transaction, id, mm::autoSpace()));
+    // The node was just made in the draft, so the handle names the transaction and the draft that
+    // holds it: naming the program would claim a published node that is not there.
+    return toSlot(Handle::createInTransaction(transaction, id, handle->draft(), mm::autoSpace()));
 }
 
 // The fixed operators of a transaction: their signature is in stdlib/graph.cml, so the table
@@ -1072,6 +1148,28 @@ const std::vector<TxnOp> &txnOps() {
 }
 
 } // namespace
+
+/// The graph handles of the draft: the function's own graph and every graph it reaches, each as
+/// the draft of that graph, so a node read through one of them is a node an edit changes.
+std::vector<Handle *> draftGraphHandles(const Handle *draftHandle, const char *site) {
+    TxnState &state = openState(draftHandle, site);
+    auto *wrapper   = static_cast<ForeignResourceObject *>(draftHandle->draft());
+    auto *root      = state.base != nullptr ? state.base->graph(draftHandle->graph()) : nullptr;
+    if (root == nullptr) {
+        err::throwRuntimeFault(err::RuntimeDiag::InvalidArgument, site, "the graph does not exist");
+    }
+    auto graphs = camel::runtime::collectReachableGraphs(*state.base, root);
+    std::sort(graphs.begin(), graphs.end(), [](const auto *a, const auto *b) {
+        return toValue(a->id()) < toValue(b->id());
+    });
+    std::vector<Handle *> items;
+    for (auto *graph : graphs) {
+        auto &transaction = state.session.edit(graph);
+        items.push_back(
+            Handle::createDraft(transaction, wrapper, state.base, graph->id(), mm::autoSpace()));
+    }
+    return items;
+}
 
 const std::unordered_map<std::string, operator_t> &txnKernels() {
     static const std::unordered_map<std::string, operator_t> kernels = [] {

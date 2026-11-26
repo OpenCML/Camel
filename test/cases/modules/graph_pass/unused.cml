@@ -1,5 +1,5 @@
 import { flatten } from array
-import { Node, Graph, NodeKind, nodes, kind, is_pure, is_constant, is_anchor, value_users, open, erase, commit, graphs_of } from graph
+import { Node, Graph, NodeKind, nodes, graphs, kind, is_pure, is_constant, is_anchor, value_users, open, erase, abort, commit } from graph
 import { is_function } from types
 
 /// Whether the node is no more than its value: a constant, an access, a fill or a pure operation.
@@ -15,23 +15,30 @@ func isUnused(n: Node) => bool {
     return valueOnly(n) && len(value_users(n)) == 0 && !is_anchor(n)
 }
 
-func allNodes::<F>(p: F) => Node[] {
-    return flatten(graphs_of(p)->map<func (g: Graph) => Node[] {
+func allNodes(d: Graph) => Node[] {
+    return flatten(graphs(d)->map<func (g: Graph) => Node[] {
         nodes(g)
     }>)
 }
 
-func eraseAll::<F>(p: F, hits: Node[]) => F! sync {
-    let t = open(p)
+func eraseAll::<F>(d: Graph, hits: Node[]) => F! sync {
     hits->foreach<func (n: Node) {
-        erase(t, n)
+        erase(n)
     }>
-    return commit(t)
+    return commit(d)
+}
+
+// A round that found nothing commits nothing: the draft is dropped and the function it started
+// from is the answer.
+func abandon::<F>(d: Graph, p: F) => F! sync {
+    abort(d)
+    return p
 }
 
 func settle::<F>(p: F) => F! when is_function::<F>() sync {
-    let hits = allNodes(p)->filter<isUnused>
-    return if len(hits) == 0 then p else eraseAll(p, hits)->settle
+    let d = open(p)
+    let hits = allNodes(d)->filter<isUnused>
+    return if len(hits) == 0 then abandon(d, p) else eraseAll(d, hits)->settle
 }
 
 /// The constants and pure operations that no node reads, removed until none is left.

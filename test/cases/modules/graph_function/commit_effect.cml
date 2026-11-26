@@ -68,14 +68,15 @@ func firstWhere(ns: Node[]) => Node {
 }
 
 func main() => int spelling sync {
-    let g = graph_of(step)
-    let gradNode = firstWhere(nodes(g)->filter<isGrad>)
+    let d = open(step)
+    let gradNode = firstWhere(nodes(d)->filter<isGrad>)
     println(`[type] the value the call runs: ${typeText(gradNode)}`)
-    let at = firstWhere(nodes(g)->filter<isConstant>)
-    let t = open(step)
-    inline(t, at, announce)
-    let edited = commit(t) !! step
+    let at = firstWhere(nodes(d)->filter<isConstant>)
+    
+    inline(at, announce)
+    let edited = commit(d) !! step
     let h = graph_of(edited)
     println(`[commit] accepted, prints=${len(nodes(h)->filter<isPrint>)}`)
     return 0
 }
+

@@ -1,7 +1,7 @@
 // Section 1 and 3.2: a faulty stage. In `pick`, it replaces the value `x + 1`, which is read after the
 // branch, by the node `x * 7`, which is computed inside an arm of the branch. Modelled on
 // probes::break_types (test/cases/modules/graph_pass/probes.cml).
-import { Node, Graph, name, nodes, inputs, op, op_name, constant, region_of, region_kind, RegionKind, open, replace, commit, graphs_of } from graph
+import { Node, Graph, name, nodes, graphs, inputs, op, op_name, constant, region_of, region_kind, RegionKind, open, replace, commit } from graph
 
 func opText(n: Node) => string {
     return match op(n) {
@@ -28,8 +28,8 @@ func isArmMul(n: Node) => bool spelling {
     return opText(n) == ':op/mul_l' && region_kind(region_of(n)) == RegionKind::Arm
 }
 
-func pickNodes::<F>(p: F) => Node[] spelling {
-    let found = graphs_of(p)->filter<func (g: Graph) => bool {
+func pickNodes(g: Graph) => Node[] spelling {
+    let found = graphs(g)->filter<func (g: Graph) => bool {
         name(g) == 'pick'
     }>
     return nodes(found[0])
@@ -37,10 +37,11 @@ func pickNodes::<F>(p: F) => Node[] spelling {
 
 /// Makes the read after the branch read a value of one arm: commit must refuse it.
 export func move::<F>(p: F) => F! spelling sync {
-    let t = open(p)
-    let outside = pickNodes(p)->filter<isAddOne>
-    let inside = pickNodes(p)->filter<isArmMul>
+    let d = open(p)
+    let outside = pickNodes(d)->filter<isAddOne>
+    let inside = pickNodes(d)->filter<isArmMul>
     println(len(outside), len(inside))
-    replace(t, outside[0], inside[0])
-    return commit(t)
+    replace(outside[0], inside[0])
+    return commit(d)
 }
+

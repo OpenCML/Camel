@@ -32,7 +32,7 @@ namespace mm     = camel::core::mm;
 namespace rtdata = camel::core::rtdata;
 namespace type   = camel::core::type;
 
-enum class HandleKind : uint8_t { Program, Graph, Node, Region, TypeRef, Op, Tag, Txn };
+enum class HandleKind : uint8_t { Program, Graph, Node, Region, TypeRef, Op, Tag };
 
 /// The name the language knows the type by: `Program`, `Graph`, `Node`, ...
 const char *handleKindName(HandleKind kind);
@@ -45,9 +45,6 @@ class HandleType final : public type::OtherType {
     /// stands for -- a rule's or a fact's parameter (`v: T`) -- states this type (design principles
     /// 5.9).
     static HandleType *ofValueType(type::Type *valueType);
-    /// `Txn<F>`: the transaction on a function of type `F` (any type, a type variable of a
-    /// generic declaration included); `F` null is the bare `Txn`.
-    static HandleType *ofFunctionType(type::Type *functionType);
     static bool is(const type::Type *type, HandleKind kind);
 
     HandleKind kind() const { return kind_; }
@@ -62,13 +59,7 @@ class HandleType final : public type::OtherType {
     /// A node's argument is the type of the value it stands for, so the algebra reads it (design
     /// principles 5.9): `Node<T>` against `Node<int>` binds `T` to `int`. The other handle kinds
     /// take no argument.
-    /// A transaction is a state that edits change: one resource per transaction.
-    bool isResourceHandle() const override { return kind_ == HandleKind::Txn; }
-    std::string resourceHandleName() const override { return "graph::Txn"; }
-
-    bool typeArguments() const override {
-        return kind_ == HandleKind::Node || kind_ == HandleKind::Txn;
-    }
+    bool typeArguments() const override { return kind_ == HandleKind::Node; }
 
     std::string toString() const override;
     std::string mangle() const override;
@@ -82,14 +73,11 @@ class HandleType final : public type::OtherType {
         std::span<const type::TypeArgument> arguments, std::string &error) const override;
 
   private:
-    static HandleType *internWithArgument(HandleType *bare, type::Type *argument);
-
     HandleType(type::TypeCode code, HandleKind kind, type::Type *valueType)
         : OtherType(
               code, valueType == nullptr ? 0 : 1,
-              valueType == nullptr
-                  ? nullptr
-                  : copyParams(std::span<type::Type *const>(&valueType, 1))),
+              valueType == nullptr ? nullptr
+                                   : copyParams(std::span<type::Type *const>(&valueType, 1))),
           kind_(kind) {}
 
     HandleKind kind_;
@@ -114,21 +102,41 @@ class Handle final : public rtdata::Object {
     /// no draft is held that a transaction does not own: this is the only way to be in a draft.
     ///
     /// Ownership, tracing and identity, in that order:
-    /// - **Who holds it.** The session that opened the transaction holds it; a handle only
-    ///   borrows it. The handle does not keep it alive, and must not outlive it.
-    /// - **Tracing.** `updateRefs` traces the Program and nothing else: a transaction is an
-    ///   ordinary C++ object outside the collector's graph, so it takes no part in tracing, and
-    ///   the handle cannot be reached by the collector after the session closed it.
+    /// - **Who holds it.** `draft` is the value `open` answered -- the one that holds the session
+    ///   the transaction belongs to -- and the handle holds it the way it holds the Program it was
+    ///   read from, so a handle keeps its session alive for as long as the handle is alive. A node
+    ///   read through a draft therefore carries the draft, and an edit reaches the session through
+    ///   the node it is given (design 15.2, 15.3: the draft is no argument).
+    /// - **Tracing.** `updateRefs` traces the Program, and the draft a handle names. A transaction
+    ///   itself is an ordinary C++ object outside the collector's graph and takes no part in
+    ///   tracing.
     /// - **Identity.** Two handles name the same node when they name the same owner — the same
     ///   transaction pointer, or the same Program — and the same node in it.
     static Handle *createInTransaction(
         const camel::runtime::GraphTransaction &transaction, camel::runtime::gc_node_ref_t node,
+        rtdata::Object *draft, mm::IAllocator &allocator);
+
+    /// A Graph handle naming a graph a transaction is editing: the draft, and the graph it is a
+    /// draft of. `program` is the Program the transaction was opened on, and `draft` the value
+    /// that holds the session (`TxnState`), which is what `commit` and `abort` are given. A
+    /// handle that names a draft is the one thing `edit`'s `d` is (design 15.1): the root query
+    /// reads it and every edit op reaches the transaction through the nodes it names.
+    static Handle *createDraft(
+        const camel::runtime::GraphTransaction &transaction, rtdata::Object *draft,
+        const camel::runtime::Program *program, camel::runtime::GraphId graph,
         mm::IAllocator &allocator);
 
     HandleKind kind() const { return kind_; }
     const camel::runtime::Program *program() const { return program_; }
     /// The transaction this handle names a node of, or null for a handle of a published Program.
     const camel::runtime::GraphTransaction *transaction() const { return transaction_; }
+    /// The transaction as the kernels write through it: a handle is the only way to reach a
+    /// draft, and an edit is a write by construction.
+    camel::runtime::GraphTransaction *mutableTransaction() const {
+        return const_cast<camel::runtime::GraphTransaction *>(transaction_);
+    }
+    /// The value holding the session the transaction belongs to, on a handle that names a draft.
+    rtdata::Object *draft() const { return draft_; }
     camel::runtime::GraphId graph() const { return graph_; }
     uint32_t index() const { return index_; }
     type::Type *typeRef() const { return typeRef_; }
@@ -144,9 +152,9 @@ class Handle final : public rtdata::Object {
   private:
     Handle(
         HandleKind kind, const camel::runtime::Program *program,
-        const camel::runtime::GraphTransaction *transaction, camel::runtime::GraphId graph,
-        uint32_t index, type::Type *typeRef)
-        : kind_(kind), program_(program), transaction_(transaction), graph_(graph),
+        const camel::runtime::GraphTransaction *transaction, rtdata::Object *draft,
+        camel::runtime::GraphId graph, uint32_t index, type::Type *typeRef)
+        : kind_(kind), program_(program), transaction_(transaction), draft_(draft), graph_(graph),
           index_(index), typeRef_(typeRef) {}
 
     HandleKind kind_;
@@ -154,6 +162,10 @@ class Handle final : public rtdata::Object {
     // relocates the Program it was read from (handle.cpp).
     const camel::runtime::Program *program_;
     const camel::runtime::GraphTransaction *transaction_;
+    /// The value that holds the session a draft handle names, or null: a handle of a published
+    /// Program and a node of a draft hold nothing of the session, which lives as long as the
+    /// resource `open` made.
+    rtdata::Object *draft_;
     camel::runtime::GraphId graph_;
     uint32_t index_;
     type::Type *typeRef_;

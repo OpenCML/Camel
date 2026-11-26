@@ -1,4 +1,4 @@
-import { Node, Graph, name, nodes, inputs, op, op_name, constant, type_of, type_name, open, replace, erase, commit, abort, graphs_of } from graph
+import { Node, Graph, name, nodes, graphs, graphs_of, inputs, op, op_name, constant, type_of, type_name, open, replace, erase, commit, abort } from graph
 
 func opText(n: Node) => string {
     return match op(n) {
@@ -34,8 +34,8 @@ func isString(n: Node) => bool spelling {
     return typeText(n) == 'string'
 }
 
-func mainNodes::<F>(p: F) => Node[] spelling {
-    let found = graphs_of(p)->filter<func (g: Graph) => bool {
+func mainNodes(d: Graph) => Node[] spelling {
+    let found = graphs(d)->filter<func (g: Graph) => bool {
         name(g) == 'main'
     }>
     return nodes(found[0])
@@ -43,23 +43,26 @@ func mainNodes::<F>(p: F) => Node[] spelling {
 
 /// Replaces `x + 0` by `x`.
 export func fold_zero_adds::<F>(p: F) => F! spelling sync {
-    let t = open(p)
-    let hits = mainNodes(p)->filter<isAddZero>
+    let d = open(p)
+    let hits = mainNodes(d)->filter<isAddZero>
     hits->foreach<func (n: Node) {
-        replace(t, n, inputs(n)[0])
+        replace(n, inputs(n)[0])
     }>
-    return commit(t)
+    return commit(d)
 }
 
 export func count_adds::<F>(p: F) => F! spelling sync {
-    println(len(mainNodes(p)->filter<isAdd>))
+    let found = graphs_of(p)->filter<func (g: Graph) => bool {
+        name(g) == 'main'
+    }>
+    println(len(nodes(found[0])->filter<isAdd>))
     return p
 }
 
 export func commit_twice::<F>(p: F) => F! sync {
-    let t = open(p)
-    let first = commit(t)
-    let second = commit(t)
+    let d = open(p)
+    let first = commit(d)
+    let second = commit(d)
     println(match second {
         case error e => e.kind
         case v => 'ok'
@@ -69,24 +72,24 @@ export func commit_twice::<F>(p: F) => F! sync {
 
 /// A string where an integer is read: the commit refuses.
 export func break_types::<F>(p: F) => F! spelling sync {
-    let t = open(p)
-    let adds = mainNodes(p)->filter<isAddZero>
-    let texts = mainNodes(p)->filter<isString>
-    replace(t, adds[0], texts[0])
-    return commit(t)
+    let d = open(p)
+    let adds = mainNodes(d)->filter<isAddZero>
+    let texts = mainNodes(d)->filter<isString>
+    replace(adds[0], texts[0])
+    return commit(d)
 }
 
 /// The value of the node is still read.
 export func erase_read::<F>(p: F) => F! spelling sync {
-    let t = open(p)
-    let adds = mainNodes(p)->filter<isAddZero>
-    erase(t, adds[0])
-    return commit(t)
+    let d = open(p)
+    let adds = mainNodes(d)->filter<isAddZero>
+    erase(adds[0])
+    return commit(d)
 }
 
 export func abort_unused::<F>(p: F) => F! sync {
-    let t = open(p)
-    abort(t)
+    let d = open(p)
+    abort(d)
     return p
 }
 
@@ -95,9 +98,10 @@ export func abort_unused::<F>(p: F) => F! sync {
 export func conflict::<F>(p: F) => F! spelling sync {
     let first = open(p)
     let second = open(p)
-    let adds = mainNodes(p)->filter<isAddZero>
-    replace(first, adds[0], inputs(adds[0])[0])
-    replace(second, adds[0], inputs(adds[0])[0])
+    let firstAdds = mainNodes(first)->filter<isAddZero>
+    let secondAdds = mainNodes(second)->filter<isAddZero>
+    replace(firstAdds[0], inputs(firstAdds[0])[0])
+    replace(secondAdds[0], inputs(secondAdds[0])[0])
     let kept = commit(first)
     println(match commit(second) {
         case error e => e.kind
@@ -105,3 +109,5 @@ export func conflict::<F>(p: F) => F! spelling sync {
     })
     return kept
 }
+
+

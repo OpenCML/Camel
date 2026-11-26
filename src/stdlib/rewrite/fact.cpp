@@ -20,9 +20,10 @@
  * without a syntax naming the whole match (`node_of` is how it names the node of a `const`
  * parameter).
  *
- * A declaration's `with` arguments are part of what a fact is (rewrite design 7.5): the argument written at the query is read here, and the description, the fact kind
- * and the stored value are all keyed by "the name and the arguments" (`user.fact.range<5>`), so
- * `range<3>(x)` and `range<5>(x)` are two facts, each computed and kept on its own.
+ * A declaration's `with` arguments are part of what a fact is (rewrite design 7.5): the argument
+ * written at the query is read here, and the description, the fact kind and the stored value are
+ * all keyed by "the name and the arguments" (`user.fact.range<5>`), so `range<3>(x)` and
+ * `range<5>(x)` are two facts, each computed and kept on its own.
  *
  * The operands of a commutative operator are not an order: a rule's match may have paired them the
  * other way (`const c` pins which operand it is, so the matcher tries the exchange), and the parts
@@ -31,7 +32,8 @@
  * is read in the order the program wrote, as the matcher reads it.
  *
  * A query that finds no value with these parts throws `FactQueryNoValue`, which is not a fault of
- * the program: a condition is the test of whether a rule applies here, so the rule makes it false ("条件里的事实查询找不到时，条件为假（这条规则在此不适用），
+ * the program: a condition is the test of whether a rule applies here, so the rule makes it false
+ * ("条件里的事实查询找不到时，条件为假（这条规则在此不适用），
  * 而不是遍失败——条件本来就是"适用与否"的判断"), and whoever evaluates the condition catches it.
  */
 
@@ -45,10 +47,10 @@
 #include "camel/core/operator_table.h"
 #include "camel/core/rtdata/string.h"
 #include "camel/execute/graph_runtime_support.h"
-#include "camel/runtime/operator_instance.h"
 #include "camel/runtime/draft_session.h"
 #include "camel/runtime/facts.h"
 #include "camel/runtime/graph.h"
+#include "camel/runtime/operator_instance.h"
 #include "camel/runtime/program.h"
 #include "src/stdlib/std/nvm/nodevm.h"
 
@@ -65,27 +67,27 @@ namespace camel::rewritemod {
 
 namespace {
 
-namespace core     = camel::core;
-namespace rtdata   = camel::core::rtdata;
-namespace type     = camel::core::type;
-namespace mm       = camel::core::mm;
-namespace err      = camel::core::error;
+namespace core   = camel::core;
+namespace rtdata = camel::core::rtdata;
+namespace type   = camel::core::type;
+namespace mm     = camel::core::mm;
+namespace err    = camel::core::error;
 
 using camel::runtime::DraftNode;
+using camel::runtime::gc_node_ref_t;
 using camel::runtime::GCGraph;
 using camel::runtime::GCNodeKind;
-using camel::runtime::gc_node_ref_t;
 using camel::runtime::Program;
 
 /// One node of an `on` pattern, read from the graph of the pattern function.
 struct NodePattern {
     enum class Kind : uint8_t { Op, Var, Constant };
 
-    Kind kind = Kind::Var;
-    uint32_t var = 0;
-    bool constOnly = false;
-    type::Type *type = nullptr;
-    slot_t value = 0;
+    Kind kind         = Kind::Var;
+    uint32_t var      = 0;
+    bool constOnly    = false;
+    type::Type *type  = nullptr;
+    slot_t value      = 0;
     core::OperId oper = core::kNoOper;
     std::vector<NodePattern> args;
 };
@@ -121,13 +123,13 @@ struct Definition {
     /// initial, join, meet, widen, narrow, then (pattern, fact)* per case.
     std::vector<std::shared_ptr<mm::RootHandle>> roots;
     size_t initial = 0;
-    size_t join = 1;
-    size_t meet = 2;
-    size_t widen = 3;
-    size_t narrow = 4;
+    size_t join    = 1;
+    size_t meet    = 2;
+    size_t widen   = 3;
+    size_t narrow  = 4;
     struct Clause {
         NodePattern pattern;
-        size_t factFunction = 0;
+        size_t factFunction  = 0;
         uint64_t constParams = 0;
     };
     std::vector<Clause> clauses;
@@ -156,7 +158,9 @@ std::string factText(const FactValue &fact) {
     case type::TypeCode::Bool:
         return rtdata::fromSlot<rtdata::Bool>(fact.value) ? "true" : "false";
     case type::TypeCode::Float32:
-        return std::format("{}", static_cast<double>(rtdata::fromSlot<rtdata::Float32>(fact.value)));
+        return std::format(
+            "{}",
+            static_cast<double>(rtdata::fromSlot<rtdata::Float32>(fact.value)));
     default:
         return std::format("{}", rtdata::fromSlot<rtdata::Float64>(fact.value));
     }
@@ -171,15 +175,16 @@ struct Source {
     const camel::runtime::GraphTransaction *transaction = nullptr;
     // program-holder-exempt: borrow-or-foreign-type -- one query's source names the program its
     // caller holds for the length of the call.
-    const Program *program  = nullptr;
-    const GCGraph *graph    = nullptr;
+    const Program *program          = nullptr;
+    const GCGraph *graph            = nullptr;
     camel::runtime::GraphId graphId = camel::runtime::GraphId::Invalid;
 
     GCNodeKind kind(gc_node_ref_t ref) const {
         return transaction ? transaction->graph().node(ref)->header.kind : graph->node(ref)->kind;
     }
     type::Type *typeOf(gc_node_ref_t ref) const {
-        return transaction ? transaction->graph().node(ref)->header.dataType : graph->node(ref)->dataType();
+        return transaction ? transaction->graph().node(ref)->header.dataType
+                           : graph->node(ref)->dataType();
     }
     core::OperId operOf(gc_node_ref_t ref) const {
         if (transaction) {
@@ -194,10 +199,11 @@ struct Source {
     /// The arguments of an operator node as its kernel reads them (kernelArgumentsOf).
     std::vector<gc_node_ref_t> kernelInputs(gc_node_ref_t ref) const {
         return transaction ? camel::runtime::kernelArgumentsOf(transaction->graph(), ref).norm
-                     : camel::runtime::kernelArgumentsOf(*graph, ref).norm;
+                           : camel::runtime::kernelArgumentsOf(*graph, ref).norm;
     }
     std::vector<gc_node_ref_t> normInputs(gc_node_ref_t ref) const {
-        const auto inputs = transaction ? transaction->graph().normInputsOf(ref) : graph->normInputsOf(ref);
+        const auto inputs =
+            transaction ? transaction->graph().normInputsOf(ref) : graph->normInputsOf(ref);
         return std::vector<gc_node_ref_t>(inputs.begin(), inputs.end());
     }
     /// The values that read `ref` as a normal input: the candidates for the root of a
@@ -205,13 +211,15 @@ struct Source {
     std::span<const gc_node_ref_t> normUsers(gc_node_ref_t ref) const {
         return transaction ? transaction->graph().normUsersOf(ref) : graph->uses().norm(ref);
     }
-    bool alive(gc_node_ref_t ref) const { return transaction ? transaction->graph().alive(ref) : true; }
+    bool alive(gc_node_ref_t ref) const {
+        return transaction ? transaction->graph().alive(ref) : true;
+    }
     bool constant(gc_node_ref_t ref, slot_t &value, type::Type *&type) const {
         if (kind(ref) != GCNodeKind::Data) {
             return false;
         }
         const int64_t dataIndex = transaction ? transaction->graph().node(ref)->header.dataIndex
-                                        : graph->node(ref)->dataIndex;
+                                              : graph->node(ref)->dataIndex;
         if (dataIndex >= 0) {
             return false;
         }
@@ -324,13 +332,13 @@ size_t patternVariables(const NodePattern &pattern) {
 }
 
 bool matchNode(
-    Frame &frame, gc_node_ref_t ref, const NodePattern &pattern,
-    std::vector<gc_node_ref_t> &refs, std::vector<slot_t> &values, uint64_t constParams) {
+    Frame &frame, gc_node_ref_t ref, const NodePattern &pattern, std::vector<gc_node_ref_t> &refs,
+    std::vector<slot_t> &values, uint64_t constParams) {
     switch (pattern.kind) {
     case NodePattern::Kind::Var: {
         const bool isConst = (constParams >> pattern.var) & 1;
         if (isConst) {
-            slot_t value = 0;
+            slot_t value     = 0;
             type::Type *type = nullptr;
             if (!frame.source.constant(ref, value, type) || !sameType(type, pattern.type)) {
                 return false;
@@ -346,7 +354,7 @@ bool matchNode(
         return true;
     }
     case NodePattern::Kind::Constant: {
-        slot_t value = 0;
+        slot_t value     = 0;
         type::Type *type = nullptr;
         return frame.source.constant(ref, value, type) &&
                sameConstant(value, type, pattern.value, pattern.type);
@@ -418,14 +426,20 @@ slot_t evaluate(Frame &frame, gc_node_ref_t ref) {
             if ((clause.constParams >> i) & 1) {
                 continue;
             }
-            camel::graphmod::Handle *handle =
-                frame.source.transaction != nullptr
-                    ? camel::graphmod::Handle::createInTransaction(
-                          *frame.source.transaction, refs[i], mm::autoSpace())
-                    : camel::graphmod::Handle::create(
-                          camel::graphmod::HandleKind::Node, frame.source.program,
-                          frame.source.graphId, refs[i], nullptr, mm::autoSpace());
-            handles[i] = std::make_unique<mm::RootHandle>(
+            camel::graphmod::Handle *handle = frame.source.transaction != nullptr
+                                                  ? camel::graphmod::Handle::createInTransaction(
+                                                        *frame.source.transaction,
+                                                        refs[i],
+                                                        nullptr,
+                                                        mm::autoSpace())
+                                                  : camel::graphmod::Handle::create(
+                                                        camel::graphmod::HandleKind::Node,
+                                                        frame.source.program,
+                                                        frame.source.graphId,
+                                                        refs[i],
+                                                        nullptr,
+                                                        mm::autoSpace());
+            handles[i]                      = std::make_unique<mm::RootHandle>(
                 mm::autoSpace(),
                 handle,
                 camel::graphmod::HandleType::get(camel::graphmod::HandleKind::Node),
@@ -437,18 +451,18 @@ slot_t evaluate(Frame &frame, gc_node_ref_t ref) {
             if ((clause.constParams >> i) & 1) {
                 args.push_back(values[i]);
             } else {
-                args.push_back(rtdata::toSlot(
-                    static_cast<camel::graphmod::Handle *>(handles[i]->get())));
+                args.push_back(
+                    rtdata::toSlot(static_cast<camel::graphmod::Handle *>(handles[i]->get())));
             }
         }
         const slot_t fact = frame.call(clause.factFunction, args);
-        frame.memo[ref]      = fact;
+        frame.memo[ref]   = fact;
         frame.active.erase(ref);
         return fact;
     }
 
     const slot_t fact = evaluateDerived(frame, ref);
-    frame.memo[ref]    = fact;
+    frame.memo[ref]   = fact;
     frame.active.erase(ref);
     return fact;
 }
@@ -462,9 +476,8 @@ bool declaredCommutative(const Source &source, gc_node_ref_t ref) {
     if (source.kind(ref) != GCNodeKind::Oper) {
         return false;
     }
-    const core::OperId oper = source.operOf(ref);
-    const core::sem::OperatorSemantics *declared =
-        core::OperatorTable::instance().semantics(oper);
+    const core::OperId oper                      = source.operOf(ref);
+    const core::sem::OperatorSemantics *declared = core::OperatorTable::instance().semantics(oper);
     if (declared == nullptr || !declared->binary) {
         return false;
     }
@@ -474,8 +487,7 @@ bool declaredCommutative(const Source &source, gc_node_ref_t ref) {
     }
     const core::sem::BinaryAlgebra &algebra = *declared->binary;
     const std::optional<type::TypeCode> element =
-        algebra.elementOf ? algebra.elementOf(type)
-                          : std::optional<type::TypeCode>(type->code());
+        algebra.elementOf ? algebra.elementOf(type) : std::optional<type::TypeCode>(type->code());
     if (!element) {
         return false;
     }
@@ -528,25 +540,26 @@ bool matchesParts(
 /// answer does not depend on the order of a user list.
 ///
 /// Naming parts that no value has is not an error of the program: a condition is the test of
-/// whether a rule applies here, so the query says so by throwing `FactQueryNoValue`, which whoever evaluates
-/// the condition reads as `false`. A pass that let it through failed the whole rewrite over one
-/// rule that simply does not apply.
-slot_t evaluateQuery(
-    Frame &frame, std::span<const gc_node_ref_t> parts, gc_node_ref_t &anchor) {
+/// whether a rule applies here, so the query says so by throwing `FactQueryNoValue`, which whoever
+/// evaluates the condition reads as `false`. A pass that let it through failed the whole rewrite
+/// over one rule that simply does not apply.
+slot_t evaluateQuery(Frame &frame, std::span<const gc_node_ref_t> parts, gc_node_ref_t &anchor) {
     if (parts.size() == 1) {
         anchor = parts[0];
         return evaluate(frame, anchor);
     }
     for (gc_node_ref_t part : parts) {
         if (part == camel::runtime::kInvalidNodeRef) {
-            throw err::FactQueryNoValue(std::format(
-                "the fact '{}' is asked about a pattern variable the left side does not bind "
-                "to a node",
-                frame.definition->key));
+            throw err::FactQueryNoValue(
+                std::format(
+                    "the fact '{}' is asked about a pattern variable the left side does not bind "
+                    "to a node",
+                    frame.definition->key));
         }
     }
     std::vector<gc_node_ref_t> candidates(
-        frame.source.normUsers(parts[0]).begin(), frame.source.normUsers(parts[0]).end());
+        frame.source.normUsers(parts[0]).begin(),
+        frame.source.normUsers(parts[0]).end());
     std::sort(candidates.begin(), candidates.end());
     candidates.erase(std::unique(candidates.begin(), candidates.end()), candidates.end());
     for (const auto &clause : frame.definition->clauses) {
@@ -557,10 +570,11 @@ slot_t evaluateQuery(
             }
         }
     }
-    throw err::FactQueryNoValue(std::format(
-        "the fact '{}' has no value whose operands are these {} nodes",
-        frame.definition->key,
-        parts.size()));
+    throw err::FactQueryNoValue(
+        std::format(
+            "the fact '{}' has no value whose operands are these {} nodes",
+            frame.definition->key,
+            parts.size()));
 }
 
 NodePattern compilePattern(
@@ -577,8 +591,8 @@ NodePattern compilePattern(
                 "fact.pattern",
                 "the pattern reads a value that is not a parameter");
         }
-        pattern.kind = NodePattern::Kind::Var;
-        pattern.var  = static_cast<uint32_t>(found - ports.begin());
+        pattern.kind      = NodePattern::Kind::Var;
+        pattern.var       = static_cast<uint32_t>(found - ports.begin());
         pattern.constOnly = (constParams >> pattern.var) & 1;
         pattern.type = pattern.var < portTypes.size() ? portTypes[pattern.var] : node->dataType();
         return pattern;
@@ -603,7 +617,8 @@ NodePattern compilePattern(
         return pattern;
     }
     case GCNodeKind::Oper: {
-        const camel::runtime::KernelArguments arguments = camel::runtime::kernelArgumentsOf(graph, ref);
+        const camel::runtime::KernelArguments arguments =
+            camel::runtime::kernelArgumentsOf(graph, ref);
         if (!arguments.with.empty() || !graph.ctrlInputsOf(ref).empty()) {
             err::throwRuntimeFault(
                 err::RuntimeDiag::InvalidArgument,
@@ -613,8 +628,7 @@ NodePattern compilePattern(
         pattern.kind = NodePattern::Kind::Op;
         pattern.oper = graph.nodeBodyAs<camel::runtime::GCOperBody>(ref)->oper;
         for (gc_node_ref_t input : arguments.norm) {
-            pattern.args.push_back(
-                compilePattern(graph, input, constParams, portTypes, ports));
+            pattern.args.push_back(compilePattern(graph, input, constParams, portTypes, ports));
         }
         return pattern;
     }
@@ -627,15 +641,15 @@ NodePattern compilePattern(
 }
 
 std::shared_ptr<Definition> buildDefinition(
-    camel::core::context::Context &ctx, ArgsView &norm, const std::string &key,
-    size_t nodeBegin, size_t nodeCount) {
+    camel::core::context::Context &ctx, ArgsView &norm, const std::string &key, size_t nodeBegin,
+    size_t nodeCount) {
     auto definition      = std::make_shared<Definition>();
     definition->key      = key;
     const size_t count   = norm.size();
     const size_t onBegin = nodeBegin + nodeCount;
-    auto root = [&](size_t index) {
-        auto *fn      = norm.get<::Function *>(index);
-        auto *handle  = new mm::RootHandle(mm::autoSpace(), fn, nullptr, "rewrite.fact");
+    auto root            = [&](size_t index) {
+        auto *fn     = norm.get<::Function *>(index);
+        auto *handle = new mm::RootHandle(mm::autoSpace(), fn, nullptr, "rewrite.fact");
         return std::shared_ptr<mm::RootHandle>(handle);
     };
     definition->roots.push_back(root(2)); // initial
@@ -643,7 +657,7 @@ std::shared_ptr<Definition> buildDefinition(
     definition->roots.push_back(root(4)); // meet
     definition->roots.push_back(root(5)); // widen
     definition->roots.push_back(root(6)); // narrow
-    ::Function *initial = norm.get<::Function *>(2);
+    ::Function *initial  = norm.get<::Function *>(2);
     definition->factType = initial->graph()->funcType()->exitType();
     if (definition->factType == nullptr) {
         err::throwRuntimeFault(
@@ -665,12 +679,14 @@ std::shared_ptr<Definition> buildDefinition(
     // called with them.
     const size_t withCount = nodeBegin > 8 ? nodeBegin - 8 : 0;
     for (size_t i = 0; i < withCount; ++i) {
-        const size_t index = 8 + i;
+        const size_t index  = 8 + i;
         type::Type *argType = norm.type(index);
         WithValue value;
         if (argType != nullptr && type::isGCTraced(argType->code())) {
             value.object = std::shared_ptr<mm::RootHandle>(new mm::RootHandle(
-                mm::autoSpace(), norm.get<rtdata::Object *>(index), argType,
+                mm::autoSpace(),
+                norm.get<rtdata::Object *>(index),
+                argType,
                 "rewrite.fact.with"));
         } else {
             value.scalar = norm.slot(index);
@@ -681,9 +697,8 @@ std::shared_ptr<Definition> buildDefinition(
         ::Function *patternFn = norm.get<::Function *>(index);
         definition->roots.push_back(root(index));     // pattern
         definition->roots.push_back(root(index + 1)); // fact
-        const uint64_t constParams =
-            static_cast<uint64_t>(norm.get<rtdata::Int64>(index + 2));
-        const auto &graph = *patternFn->graph();
+        const uint64_t constParams = static_cast<uint64_t>(norm.get<rtdata::Int64>(index + 2));
+        const auto &graph          = *patternFn->graph();
         std::vector<gc_node_ref_t> ports(graph.normPorts().begin(), graph.normPorts().end());
         std::vector<type::Type *> portTypes;
         for (size_t i = 0; i < ports.size(); ++i) {
@@ -698,7 +713,7 @@ std::shared_ptr<Definition> buildDefinition(
                 "the pattern function has no result");
         }
         Definition::Clause clause;
-        clause.pattern = compilePattern(graph, result, constParams, portTypes, ports);
+        clause.pattern      = compilePattern(graph, result, constParams, portTypes, ports);
         clause.factFunction = definition->roots.size() - 1;
         clause.constParams  = constParams;
         definition->clauses.push_back(std::move(clause));
@@ -713,8 +728,8 @@ camel::runtime::fact::KindId factKindOf(const std::string &key, const std::strin
     if (const auto found = factKindIds.find(kindKey); found != factKindIds.end()) {
         return found->second;
     }
-    const camel::runtime::fact::KindId kind =
-        camel::runtime::fact::registerKind(camel::runtime::fact::KindSpec<FactValue>{
+    const camel::runtime::fact::KindId kind = camel::runtime::fact::registerKind(
+        camel::runtime::fact::KindSpec<FactValue>{
             .key        = "user.fact." + kindKey,
             .owner      = "user",
             .dependency = camel::runtime::fact::Dependency::Node,
@@ -772,7 +787,8 @@ slot_t factKernel(ArgsView &, ArgsView &norm, camel::core::context::Context &ctx
     // The declaration this query is of: its context and the graph of the function it generates
     // for the initial value, which no other declaration shares.
     std::string identity = std::format("{:p}", static_cast<const void *>(&ctx));
-    if (auto *initial = norm.get<::Function *>(2); initial != nullptr && initial->graph() != nullptr) {
+    if (auto *initial = norm.get<::Function *>(2);
+        initial != nullptr && initial->graph() != nullptr) {
         identity += "/" + std::string(initial->graph()->mangledName());
     }
     const size_t count     = norm.size();
@@ -826,16 +842,16 @@ slot_t factKernel(ArgsView &, ArgsView &norm, camel::core::context::Context &ctx
     // A fact reads a draft exactly when the handle names the transaction that owns one: the
     // draft is reached through it, and the handle keeps no draft pointer of its own.
     const auto *transaction = first->transaction();
-    const bool fromDraft     = transaction != nullptr;
-    const Program *program = fromDraft ? nullptr : first->program();
+    const bool fromDraft    = transaction != nullptr;
+    const Program *program  = fromDraft ? nullptr : first->program();
     const camel::runtime::GraphId graphId =
         fromDraft ? camel::runtime::GraphId::Invalid : first->graph();
     if (currentFrame != nullptr && currentFrame->definition->key == key &&
         currentFrame->definition->identity == identity) {
-        const bool sameSource =
-            fromDraft ? currentFrame->source.transaction == transaction
-                      : currentFrame->source.program == program &&
-                            currentFrame->source.graph == program->graph(graphId);
+        const bool sameSource = fromDraft
+                                    ? currentFrame->source.transaction == transaction
+                                    : currentFrame->source.program == program &&
+                                          currentFrame->source.graph == program->graph(graphId);
         if (sameSource) {
             gc_node_ref_t anchor = camel::runtime::kInvalidNodeRef;
             return evaluateQuery(*currentFrame, parts, anchor);
@@ -866,10 +882,10 @@ slot_t factKernel(ArgsView &, ArgsView &norm, camel::core::context::Context &ctx
         source.graph   = program->graph(graphId);
     }
     Frame frame;
-    frame.definition = definition.get();
-    frame.source     = source;
-    frame.context    = &ctx;
-    frame.vm         = std::make_unique<NodeVMSchedPass>(ctx.shared_from_this());
+    frame.definition     = definition.get();
+    frame.source         = source;
+    frame.context        = &ctx;
+    frame.vm             = std::make_unique<NodeVMSchedPass>(ctx.shared_from_this());
     gc_node_ref_t anchor = camel::runtime::kInvalidNodeRef;
     // `currentFrame` says which evaluation a nested query may answer from, and it names a frame on
     // this thread's stack: it has to name this frame exactly while this evaluation runs, and the
@@ -886,13 +902,12 @@ slot_t factKernel(ArgsView &, ArgsView &norm, camel::core::context::Context &ctx
         Frame *previous;
         ~RestoresCurrent() { currentFrame = previous; }
     } restore{currentFrame};
-    currentFrame = &frame;
+    currentFrame      = &frame;
     const slot_t fact = evaluateQuery(frame, parts, anchor);
 
     if (!fromDraft) {
         const camel::runtime::fact::Anchor factAnchor{source.program, source.graph, anchor};
-        FactValue stored{
-            fact, static_cast<uint8_t>(definition->factType->code())};
+        FactValue stored{fact, static_cast<uint8_t>(definition->factType->code())};
         try {
             ctx.facts().put<FactValue>(kind, factAnchor, stored);
         } catch (const std::exception &) {
