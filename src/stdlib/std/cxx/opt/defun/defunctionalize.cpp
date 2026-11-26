@@ -928,10 +928,33 @@ DefunctionalizeRewritePass::apply(const camel::runtime::Program *program, std::o
                         continue;
                     }
                     ty::Type *inputType = typeOf(input);
-                    if (inputType == nullptr || inputType->code() != TypeCode::Function) {
+                    // A stream's value is its step function and its state, and it has no other
+                    // runtime representation (design principles 5.4), so an input of a stream type
+                    // is a value of the family that names the step signature, read wherever the
+                    // graph keeps it -- as a parameter, in a tuple, in a loop's state. It is
+                    // checked like any other value of the family: a reader that does not take the
+                    // tag (a pull the pass does not rewrite, a node that carries the stream
+                    // somewhere the signature would not follow) leaves the family as written.
+                    //
+                    // What is skipped for it is the widening below: a stream carried as it stands
+                    // is not a value handed to a parameter of another signature.
+                    ty::Type *signature = inputType;
+                    bool fromStream     = false;
+                    if (inputType != nullptr && inputType->code() == TypeCode::Stream) {
+                        auto *stream = static_cast<ty::StreamType *>(inputType);
+                        signature    = nullptr;
+                        for (const auto &entry : plans) {
+                            if (sameFamily(entry.second.type, stream->stepType())) {
+                                signature = entry.second.type;
+                                break;
+                            }
+                        }
+                        fromStream = true;
+                    }
+                    if (signature == nullptr || signature->code() != TypeCode::Function) {
                         continue;
                     }
-                    const auto planned = plans.find(inputType->typeId());
+                    const auto planned = plans.find(signature->typeId());
                     if (planned == plans.end()) {
                         continue;
                     }
@@ -956,9 +979,15 @@ DefunctionalizeRewritePass::apply(const camel::runtime::Program *program, std::o
                                               input) != withs.end();
                     }
                     if (!readsAsCallee && !readsAsArgument) {
-                        refuseIfUnsaid(
-                            planned->second,
-                            "the value is read by a node that is not a call");
+                        std::string why = "the value is read by a node that is not a call";
+                        if (fromStream) {
+                            why += ": a stream of this signature is carried where the pass would "
+                                   "have to change the type that names it";
+                        }
+                        refuseIfUnsaid(planned->second, std::move(why));
+                    }
+                    if (fromStream) {
+                        continue;
                     }
                     // A value handed to a parameter declared as another function type is a widening
                     // at the call: a lambda that returns the value of its write is written where
