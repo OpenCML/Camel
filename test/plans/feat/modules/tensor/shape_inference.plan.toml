@@ -47,7 +47,7 @@ kind = "behavior"
 case = "../../../../cases/modules/tensor/shape_inference/computed_extent_run_time.cml"
 args = ["${case}"]
 expect_exit = 1
-expect_output_contains = ["ran", "reshape changes tensor element count: [6] -> [3, 3]", "computed_extent_run_time.cml:7:25"]
+expect_output_contains = ["ran", "reshape changes tensor element count: [6] -> [3, 3]", "computed_extent_run_time.cml:8:25"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 8000
 
