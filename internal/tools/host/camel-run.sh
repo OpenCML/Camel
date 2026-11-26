@@ -584,7 +584,10 @@ cmd_build() {
     echo "tokensWanted: $want"
     load_line
     [ "$#" -ge 1 ] && [ "$1" = '--' ] && shift
-    exec "$taker" run "$want" -- "$@"
+    # What it takes is what is free, not what was asked for: a build that queued while the pool held
+    # free tokens is the wait this command exists to remove, and the width it got is printed as
+    # `HOST_BUILD_JOBS` by the taker.
+    exec "$taker" take-up-to "$want" -- "$@"
 }
 cmd_status() {
     check_tools
