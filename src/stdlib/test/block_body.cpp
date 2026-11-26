@@ -11,6 +11,7 @@
 #include "camel/execute/executor.h"
 #include "camel/execute/pass/registration.h"
 #include "camel/parse/parse.h"
+#include "camel/runtime/block_form.h"
 #include "camel/runtime/block_programs.h"
 #include "camel/runtime/core_facts.h"
 #include "camel/runtime/draft_session.h"
@@ -53,6 +54,24 @@ constexpr const char *kLoudText = R"cml(export func loud(x: int) => int {
 }
 )cml";
 
+/// The same body as `body`, spelled differently: another function name, another parameter name. Its
+/// canonical form is the same, so the two are one block -- a name nobody sees cannot name a block.
+constexpr const char *kRenamedText = R"cml(export func renamed(value: int) => int {
+    return value + 1
+}
+)cml";
+
+/// Two bodies that differ only in which parameter is subtracted from which: same node kinds, same
+/// types, different structure, so two names.
+constexpr const char *kDiffText = R"cml(export func diff(a: int, b: int) => int {
+    return a - b
+}
+)cml";
+
+constexpr const char *kMirrorText = R"cml(export func mirror(right: int, left: int) => int {
+    return left - right
+}
+)cml";
 /// A body that does not end: it calls itself with the same argument, so running it never returns
 /// (the effect walk reads a call that may recurse as `mayNotTerminate`).
 constexpr const char *kSpinText = R"cml(export func spin(x: int) => int {
@@ -250,6 +269,9 @@ BlockBodyTestPass::apply(const camel::runtime::Program *program, std::ostream &o
         // The same body again: one body, one name, one program in the store.
         {.what = "twin", .function = "body", .text = kBodyText},
         {.what = "spin", .function = "spin", .text = kSpinText},
+        {.what = "renamed", .function = "renamed", .text = kRenamedText},
+        {.what = "diff", .function = "diff", .text = kDiffText},
+        {.what = "mirror", .function = "mirror", .text = kMirrorText},
     };
     for (Compiled &block : blocks) {
         block.program = compileBody(block.text, block.function, block.what, os);
@@ -280,13 +302,13 @@ BlockBodyTestPass::apply(const camel::runtime::Program *program, std::ostream &o
     }
 
     for (Compiled &block : blocks) {
-        // The block's operator is named by its body's canonical form: the hash the tree already
-        // computes for a graph's content, the same in every process (the function type, ports,
-        // permissions, every node's kind, flags, type, slot, inputs and payload, constants by
-        // value, source positions left out). Two bodies that compute the same thing are one block.
+        // The block's operator is named by its body's canonical form: the structure alone, no
+        // names, no creation order, ports read in order from the exit (camel/runtime/block_form.h).
+        // Two bodies that compute the same thing under different spellings are one block, and two
+        // that differ structurally never share a name.
         block.uri = std::format(
             "block:{:016x}",
-            camel::runtime::fact::portableGraphHash(*block.program, block.graph));
+            camel::runtime::blockFormHash(*block.program, block.graph));
         // And its record is what that body does, read from the body's own graphs: an effect outside
         // the program's variables, a write to one, a fault, a run that may not end.
         camel::runtime::fact::FactStore &facts = context_->facts();
@@ -301,13 +323,18 @@ BlockBodyTestPass::apply(const camel::runtime::Program *program, std::ostream &o
         traits.mayNotTerminate = block.effects.mayNotTerminate;
         camel::core::OperatorTable::instance().set(block.uri, traits);
         os << std::format(
-            "BLOCK_TRAITS {} uri={} pure={} mayFault={} mayNotTerminate={} foldable={}\n",
+            "BLOCK_TRAITS {} uri={} pure={} mayFault={} mayNotTerminate={} foldable={} "
+            "portable={:016x}\n",
             block.what,
             block.uri,
             traits.pure,
             traits.mayFault,
             block.effects.mayNotTerminate,
-            traits.foldable);
+            traits.foldable,
+            // The other hash, printed beside this one: it is the cache key -- names and node refs
+            // in creation order -- and not the name of a block. Where spelling differs the two
+            // disagree, which is what the case reads them for.
+            camel::runtime::fact::portableGraphHash(*block.program, block.graph));
     }
 
     // The blocks in the context's store, where an operator's node reads them from, and the one

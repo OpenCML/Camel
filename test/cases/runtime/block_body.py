@@ -70,7 +70,7 @@ for line in body_lines + trait_lines + call_lines:
 # Five bodies, each a program of its own: a root graph and the function's graph, in a program that
 # is not the one they were compiled for.
 built = [line for line in body_lines if line.startswith("BLOCK_BODY built ")]
-assert len(built) == 6, f"expected six bodies to compile, got: {body_lines}"
+assert len(built) == 9, f"expected nine bodies to compile, got: {body_lines}"
 bodies = {}
 for line in built:
     what = line[len("BLOCK_BODY built ") :].split(" ")[0]
@@ -98,13 +98,14 @@ traits = {}
 for line in trait_lines:
     match = re.fullmatch(
         r"BLOCK_TRAITS (\S+) uri=(block:[0-9a-f]{16}) pure=(\w+) mayFault=(\w+) "
-        r"mayNotTerminate=(\w+) foldable=(\w+)",
+        r"mayNotTerminate=(\w+) foldable=(\w+) portable=([0-9a-f]{16})",
         line,
     )
     assert match, line
     traits[match.group(1)] = {
         "uri": match.group(2),
         "pure": match.group(3) == "true",
+        "portable": match.group(7),
         "mayFault": match.group(4) == "true",
         "mayNotTerminate": match.group(5) == "true",
         "foldable": match.group(6) == "true",
@@ -118,13 +119,8 @@ assert len({uris["body"], uris["second"], uris["effectful"], uris["fallible"]}) 
 assert uris["twin"] == uris["body"], (uris["body"], uris["twin"])
 # The record, read from the body's graphs: arithmetic is pure and cannot fault, printing is not
 # pure, and a division can divide by zero.
-assert traits["body"] == {
-    "uri": uris["body"],
-    "pure": True,
-    "mayFault": False,
-    "mayNotTerminate": False,
-    "foldable": True,
-}, traits["body"]
+assert traits["body"]["pure"] and not traits["body"]["mayFault"], traits["body"]
+assert not traits["body"]["mayNotTerminate"] and traits["body"]["foldable"], traits["body"]
 assert traits["second"]["pure"] and not traits["second"]["mayFault"], traits["second"]
 assert not traits["effectful"]["pure"], traits["effectful"]
 assert traits["fallible"]["pure"] and traits["fallible"]["mayFault"], traits["fallible"]
@@ -133,7 +129,18 @@ assert traits["fallible"]["pure"] and traits["fallible"]["mayFault"], traits["fa
 assert traits["spin"]["mayNotTerminate"] and traits["spin"]["foldable"], traits["spin"]
 assert not any(traits[what]["mayNotTerminate"] for what in ("body", "second", "effectful", "fallible")), traits
 store = int(re.search(r"BLOCK_BODY store blocks=(\d+)", with_body.stdout).group(1))
-assert store == 5, f"six bodies, two of them the same, {store} registered"
+by_uri = {}
+for what, uri in uris.items():
+    by_uri.setdefault(uri, []).append(what)
+assert store == len(by_uri), (store, {u: w for u, w in by_uri.items() if len(w) > 1})
+# And the same body spelled another way -- another function name, another parameter name -- is the
+# same block: a name nobody sees cannot name a block. The other hash disagrees here, and it should:
+# that one is the cache key, which has to tell two candidates apart, not the name of a computation.
+assert uris["renamed"] == uris["body"], (uris["body"], uris["renamed"])
+assert traits["renamed"]["portable"] != traits["body"]["portable"], traits["renamed"]
+# Two bodies that differ only in which parameter is subtracted from which are two blocks.
+assert uris["mirror"] != uris["diff"], (uris["diff"], uris["mirror"])
+assert len({uris[what] for what in ("body", "second", "effectful", "fallible", "spin", "diff", "mirror")}) == 7, uris
 
 # The entry program, read in the same run: the numbers it had before the bodies were built are the
 # numbers it has after, and they are the numbers of a run without the pass at all.
