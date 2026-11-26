@@ -13,7 +13,7 @@
  * need the same guarantees: the plugin's own `POST /oversee/reload` (the primary path, a button on
  * the band) and, by hand, from a shell.
  *
- * `merge-lane.ps1` deliberately does not call it: the owner chose the button, so the merge position
+ * The merge seat's tool deliberately does not call it: the owner chose the button, so the merge position
  * stays out of this (`internal/plans/2026-11-24-oversight-live-reload.cn.md`, "按钮怎么做").
  *
  * What it does, in this order, and why the order matters:

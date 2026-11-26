@@ -5415,8 +5415,7 @@ async function main() {
     // the run's own output. The narration is kept, and that is a change of contract with a reason:
     // the list used to replace the narration because its only reader was a person filtering a whole
     // transcript, and a status line among the rows would have been one more thing to filter. The
-    // job that reads it now (`internal/tools/camel-remote.ps1 -ListKnown`, then
-    // `scripts/merge-readings.mjs`) brackets the rows between two markers on the way back, so
+    // job that reads it now (`internal/tools/camel-remote.ps1 -ListKnown`) brackets the rows between two markers on the way back, so
     // nothing has to be filtered and the run that records rows is still a run whose console a
     // person can watch. Nothing else changes: the same tests in the same order, the same log files
     // and summary.json, the same exit code.
@@ -5764,7 +5763,7 @@ async function main() {
     // the file the run wrote, read back from disk (test/tools/transcript.mjs). A run whose record
     // and count disagree did not measure a set of cases, so it is refused with exit 2 -- the code
     // this runner already gives a run that could not be read (`preflightBuild`, the `--changed`
-    // refusal, `merge-readings.mjs`): 1 means "measured, and not right", and this is neither.
+    // refusal): 1 means "measured, and not right", and this is neither.
     const transcriptVerdict = judgeTranscript(outcome.transcript, summaryTotal(outcome.summary))
     if (!transcriptVerdict.ok) {
         console.log('')

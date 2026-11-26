@@ -17,11 +17,5 @@
 
   "watchRepo": "<absolute path of the checkout watch-fsh-dev.ps1 follows>",
 
-  "mergeWorktree": "<absolute path of the ONE worktree allowed to push develop -- scripts/hooks/pre-push refuses every other tree; a JSON array or a ';'-separated list when this machine keeps more than one, and leaving the key out means no tree may push develop>",
-
-  "baselineWorktree": "<absolute path of the worktree merge-lane.ps1 measures the baseline in -- a tree that is NOT the one being merged, built once and kept warm; it may not exist yet, the merge tool creates it, and leaving the key out means a merge refuses to start>",
-
-  "baselineRoot": "<absolute path of the directory the per-tip baseline checkouts live under -- each tree is named by the commit it measures (<baselineRoot>/<sha>), so three seats landing on one tip share one tree and one reading; set this instead of baselineWorktree, which stays as the legacy fixed path>",
-
-  "scratchRoot": "<absolute path of the directory merge-batch.ps1 writes its two worktrees and its transcripts in>"
+  "mergeWorktree": "<absolute path of the ONE worktree allowed to push develop -- scripts/hooks/pre-push refuses every other tree; a JSON array or a ';'-separated list when this machine keeps more than one, and leaving the key out means no tree may push develop>"
 }

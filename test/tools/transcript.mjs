@@ -176,8 +176,7 @@ export function statedTotal(text) {
  *
  * They are the other per-case channel, and the one a host run actually lost: of three runs of one
  * base all three held their 9159 case lines and their `[SUMMARY] total: 9159`, and
- * the row block arrived with 9159, 5265 and 1239 lines. A row is defined the way the consumer
- * defines it (`scripts/merge-readings.mjs#readRows`): a line at column 0 that is JSON with a string
+ * the row block arrived with 9159, 5265 and 1239 lines. A row is a line at column 0 that is JSON with a string
  * `name` and a string `verdict`. Column 0 matters -- a failed test's captured output is indented
  * under its case line, and a nested run's rows must not be counted as this run's.
  */
@@ -261,7 +260,7 @@ export function capturedRefusal(verdict) {
  * "The case lines are whole" and "the row block arrived" are two questions, and a reader who is
  * told only that they disagree cannot say which of the two lost lines -- nor whether the rows are
  * absent because the run never asked for them or because the block was cut. `rows: N of M` is the
- * number the merge position compares (`scripts/merge-readings.mjs` reads exactly these rows), so it
+ * number a comparison of two readings reads, so it
  * is printed on its own and never inferred from a refusal.
  */
 export function readingLine(verdict) {

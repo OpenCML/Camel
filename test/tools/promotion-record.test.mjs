@@ -4,13 +4,12 @@
 /**
  * A push to `develop` publishes a *tip*, and the reading that covers a tip is a promotion record:
  * the whole layer measured on it, the comparison with the previous promotion case by case, and what
- * its timeouts said once they were run alone. The per-merge pass record in `.git/camel-passed`
- * answers a different question (this merge against the tree it lands on) and does not stand in for
- * it -- a tip is read against the layer, not against its parent.
+ * its timeouts said once they were run alone -- a tip is read against the layer, not against its
+ * parent.
  *
- * So the two checks are measured here separately: `merge-record.mjs verify-promotion` over records
- * that hold and records that do not, and then the real `scripts/hooks/pre-push` over a push of
- * `refs/heads/develop`, because the wiring (the hook calling the new mode, and the words it refuses
+ * So the check is measured here in two parts: `promotion-record.mjs` over records that hold and
+ * records that do not, and then the real `scripts/hooks/pre-push` over a push of
+ * `refs/heads/develop`, because the wiring (the hook calling the script, and the words it refuses
  * in) is the half that a reader cannot see in either file alone.
  *
  * The record cannot live inside the commit it names: a commit cannot contain its own sha. That is
@@ -33,8 +32,7 @@ import { fileURLToPath } from 'node:url';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const treeRoot = path.resolve(here, '..', '..');
-const recordScript = path.join(treeRoot, 'scripts', 'merge-record.mjs');
-const planSetScript = path.join(treeRoot, 'scripts', 'plan-set.mjs');
+const recordScript = path.join(treeRoot, 'scripts', 'promotion-record.mjs');
 const hookScript = path.join(treeRoot, 'scripts', 'hooks', 'pre-push');
 const zeros = '0'.repeat(40);
 const develop = 'refs/heads/develop';
@@ -87,12 +85,11 @@ function write(dir, rel, text) {
     return full;
 }
 
-// A repository whose scripts are this tree's scripts: the hook resolves `$top/scripts/merge-record.mjs`
-// and the mode under test is the shipped one, copied so that the fixture's own tree carries it.
+// A repository whose scripts are this tree's scripts: the hook resolves `$top/scripts/promotion-record.mjs`
+// and the script under test is the shipped one, copied so that the fixture's own tree carries it.
 function buildFixture(record) {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'promotion-record-'));
-    write(dir, 'scripts/merge-record.mjs', fs.readFileSync(recordScript, 'utf8'));
-    write(dir, 'scripts/plan-set.mjs', fs.readFileSync(planSetScript, 'utf8'));
+    write(dir, 'scripts/promotion-record.mjs', fs.readFileSync(recordScript, 'utf8'));
     write(dir, 'scripts/hooks/pre-push', fs.readFileSync(hookScript, 'utf8'));
     write(dir, 'internal/tools/camel-gate.local.json', JSON.stringify({ mergeWorktree: dir }, null, 2));
     write(dir, 'src/clean.c', '// The program reads nothing and answers zero.\nint main(void) { return 0; }\n');
@@ -108,7 +105,7 @@ function buildFixture(record) {
 }
 
 function verifyPromotion(dir, sha) {
-    const run = spawnSync(process.execPath, [path.join(dir, 'scripts', 'merge-record.mjs'), 'verify-promotion', sha], {
+    const run = spawnSync(process.execPath, [path.join(dir, 'scripts', 'promotion-record.mjs'), sha], {
         cwd: dir,
         encoding: 'utf8',
     });
@@ -167,7 +164,7 @@ function pushDevelop(dir, sha, shell) {
     return { status: run.status ?? -1, out: `${run.stdout ?? ''}${run.stderr ?? ''}` };
 }
 
-// --- the mode, over records that hold and records that do not ----------------
+// --- the script, over records that hold and records that do not ----------------
 const good = buildFixture(promotionRecord);
 const held = verifyPromotion(good.dir, good.tip);
 check(
@@ -179,7 +176,7 @@ check(
 const absent = verifyPromotion(good.dir, good.above);
 check(
     'a tip with no record naming it is refused, in the words that name the missing reading',
-    absent.status === 1 && absent.out.includes('缺的是晋级记录，不是合并记录'),
+    absent.status === 1 && absent.out.includes('缺晋级记录'),
     absent.out,
 );
 
@@ -225,7 +222,7 @@ if (shell.reason) {
     const refused = pushDevelop(bareFixture.dir, bareFixture.tip, shell);
     check(
         'the hook refuses a develop push whose tip has none, naming the promotion record',
-        refused.status === 1 && refused.out.includes('缺的是晋级记录，不是合并记录'),
+        refused.status === 1 && refused.out.includes('缺晋级记录'),
         refused.out,
     );
 }
