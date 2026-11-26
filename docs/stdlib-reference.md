@@ -682,7 +682,7 @@ is built at all, so what the compiler inserted never fails at run time.
 #### `fill`
 
 ```camel
-fill: (template: T, ...fields: ...F) => T panic
+fill: <...slots: int> (template: T, ...fields: ...F) => T
 ```
 
 A construction as an ordinary operator: the FILL node kind written as a call of the operator
@@ -691,11 +691,22 @@ that does the same thing (plan 2.3, step 2). `template` is the aggregate the val
 clones it -- and the rest parameters are the field values. The fill kind is the target type's
 own: a tuple is filled by position, an array by element, a struct by field and a function value
 by capture (`lib/std/builtin/operators/struct.cpp`). A caller whose field order is not the
-component order states the component each field fills as an `int` before the template.
+component order states the component each field fills as a `with` argument -- the same rule
+`:op/access` follows with `with <at: int>` -- one `int` per field, in the order the fields are
+given, because a position is a compile-time constant of the call and an ordinary parameter
+could not be told apart from a field value that is an `int`. `fill::<(int, int), int,
+int><1, 0>((0, 0), 1, 2)` reads the first value into component 1 and the second into component
+0, which is the value `(2, 1)`; with no `with` argument the fields are the components in order.
 
 A program writes a construction as the aggregate itself, `(1, 'a')` or `Point { x: 1 }`, and
 those reach this operator through the language's own rules; the call form is the name a graph
-holds the construction under.
+holds the construction under, and it is where a field order the aggregate cannot spell is
+written down.
+
+It states no `panic`: `template` is a constant of the target type and the call's result type is
+that same type, so a run clones a value that already fits and has nothing left to check. A
+construction the compiler builds for an aggregate literal is that same step, and it is the one
+that answered "cannot fault" while it was a node kind.
 
 - Pure.
 - Example: `fill((0, 0), 1, 2)` gives `(1, 2)`
@@ -703,7 +714,7 @@ holds the construction under.
 #### `access`
 
 ```camel
-access: <at: int> (x: T) => U panic
+access: <at: int> (x: T) => U
 ```
 
 A member read as an ordinary operator: the ACCS node kind written as a call of the operator
@@ -716,13 +727,17 @@ compiler puts the member in `with` and links the value as the call's operand
 A program writes a member read as `t[0]` or `s.x`, and those reach this operator through the
 language's own rules; the call form is the name a graph holds the read under.
 
+It states no `panic`: the position is a compile-time parameter of the call, so the type being
+read and the member being named are both settled before a run starts, and a run has nothing to
+check. The `ACCS` kind this operator used to be answered the same way.
+
 - Pure.
 - Example: `access::<(int, int), int><0>((1, 2))` gives `1`
 
 #### `access_key`
 
 ```camel
-access_key: <key: string> (x: T) => U panic
+access_key: <key: string> (x: T) => U
 ```
 
 The same member read by name: the field of a struct, which the compiler spells `s.x`. It is a
