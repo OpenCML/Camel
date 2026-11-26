@@ -32,8 +32,14 @@
  *            narrowing to "fast but leaky".
  *
  * Exit codes: 0 no diagnostics that the CI build would fail on; 1 at least one unit failed;
- * 2 the gate could not take a reading (no database, no command for a named file, no image) -- a
- * check that could not run is not a green one.
+ * 2 the gate could not take a reading (no database, no command for a named file, no image, a
+ * compile line whose source is not in the tree) -- a check that could not run is not a green one.
+ *
+ * A unit left unchecked because the image does not carry a package's header (`Python.h`, `cuda.h`)
+ * is a limit of the container and is counted as `unchecked`, not as this refusal: it is the same
+ * units on every run, it says nothing about the change, and refusing on it would refuse every merge.
+ * A unit whose compile line names a source this tree does not hold is `unable`, and that is a 2:
+ * the database describes some other tree, so nothing read with it is a reading about this one.
  */
 
 import { execFileSync, spawnSync } from 'node:child_process'
@@ -500,21 +506,68 @@ if (run.error || run.status !== 0) {
 }
 
 const failed = []
+// Two ways a unit is left unread, and the difference decides the exit code, so they are two lists
+// and not one. `unchecked` is about this container: the host's configuration compiles CUDA, Python
+// bindings and BLAS (whose headers the host has and the image does not), and replaying those lines
+// here fails with `'cuda.h' file not found`. Counting that as a red would refuse every merge on a
+// tree nobody has touched, and calling it green would hide the unit entirely -- so it is its own
+// reading: named, counted, never a pass, and not a refusal. The test is the tree, not the message: a
+// header the tree itself holds and cannot find is a real defect.
+const unchecked = []
+// `unable` is about the database, and it is the mirror image of the `die()` above: a compile line
+// that names a source this tree does not hold. The build that wrote the line compiled a file the
+// tree no longer has -- a deletion, a rename, a database older than the tree -- so clang answers
+// `error: no such file or directory: '<source>'` and then `error: no input files`, having read no
+// line of it. Nothing about this tree was compiled, so this is the absence of a reading (the same
+// family as a new source with no compile line), and it used to be counted as a red with the
+// compiler's own message as the evidence. It exits 2: a database that does not describe this tree
+// is not a ruler, and a reading taken with it says nothing about this tree either way. (A unit that
+// says this *and* something else has a real diagnostic in the something else: that one stays
+// `failed`, because an unchecked that swallows a red is worse than either.)
 const unable = []
-// A unit can be unchecked for a reason that is about this container and not about the tree: the
-// host's configuration compiles CUDA, Python bindings and BLAS (whose headers the host has and the
-// image does not), and replaying those lines here fails with `'cuda.h' file not found`. Counting
-// that as a red would refuse every merge on a tree nobody has touched, and calling it green would
-// hide the unit entirely -- so it is its own reading: named, counted, and never a pass. The test is
-// the tree, not the message: a header the tree itself holds and cannot find is a real defect.
 for (let i = 0; i < selected.length; i++) {
     const rc = Number(fs.readFileSync(path.join(work, 'out', `${String(i).padStart(4, '0')}.rc`), 'utf8').trim())
     if (rc === 0) continue
     const err = fs.readFileSync(path.join(work, 'out', `${String(i).padStart(4, '0')}.err`), 'utf8')
     const missing = [...err.matchAll(/fatal error: '([^']+)' file not found/g)].map((m) => m[1])
     const outside = missing.length > 0 && missing.every((h) => !existsInTree(h))
-    if (outside) unable.push({ file: selected[i], headers: missing })
+    const gone = missingSource(selected[i], err)
+    if (gone) unable.push({ file: selected[i], source: gone })
+    else if (outside) unchecked.push({ file: selected[i], headers: missing })
     else failed.push({ file: selected[i], rc })
+}
+
+/**
+ * The source a compile line names, when the tree does not hold it. clang's driver says so and
+ * compiles nothing (`error: no such file or directory: '<path>'`, then `error: no input files`).
+ * That is the database pointing its line at a file this tree does not have, not a diagnostic about
+ * this tree: no line of any source was read.
+ *
+ * Returns the path clang named, or '' when the unit's output is anything else. It is only "nothing
+ * was compiled" when that is the whole of the output -- a unit that also said something else has a
+ * real reading in the something else, so '' is returned and the caller keeps it red.
+ */
+function missingSource(file, err) {
+    const directory = byFile.get(file).entry.directory
+    // The path must be this unit's own source. A missing header, a missing `-include`, a missing
+    // object on a response file are different facts about different things (a header belongs to the
+    // image, a source belongs to the tree), and only the source can be absent because the database
+    // is older than the tree while nothing about the tree is broken.
+    const lost = (p) => path.resolve(p) === file || path.resolve(directory, p) === file
+    const named = [...err.matchAll(/error: no such file or directory: '([^']+)'/g)].map((m) => m[1])
+    if (!named.some(lost)) return ''
+    // A source that is there is not gone: a message of this shape about a file the tree holds is
+    // something else (a permission, a race), and whatever it is must stay red rather than become
+    // an excuse not to look.
+    if (fs.existsSync(file)) return ''
+    const other = err.split('\n').filter((line) => {
+        if (!/error:/.test(line)) return false
+        const m = line.match(/error: no such file or directory: '([^']+)'/)
+        if (m && lost(m[1])) return false
+        if (/error: no input files\b/.test(line)) return false
+        return true
+    })
+    return other.length > 0 ? '' : file
 }
 
 function existsInTree(name) {
@@ -549,7 +602,11 @@ for (let i = 0; i < selected.length; i++) {
 for (const bad of failed) {
     const i = selected.indexOf(bad.file)
     const err = fs.readFileSync(path.join(work, 'out', `${String(i).padStart(4, '0')}.err`), 'utf8')
-    console.log(`--- ${path.relative(ROOT, bad.file)} (exit ${bad.rc})`)
+    // The database is on the line because it is half of what a reading is. The same tree read
+    // against a database from an older configure and against a current one are two different
+    // measurements, and a line that does not say which one produced it cannot be checked by anybody
+    // -- including the person who has to fix it.
+    console.log(`--- ${path.relative(ROOT, bad.file)} (exit ${bad.rc}) database=${opt.database}`)
     console.log(err.replaceAll(ROOT, '').trimEnd())
 }
 
@@ -558,13 +615,24 @@ if (warnings.length > 0) {
     for (const w of [...new Set(warnings)].slice(0, 20)) console.log(`  ${w}`)
 }
 
+if (unchecked.length > 0) {
+    console.log(`clang-syntax: ${unchecked.length} unit(s) could not be checked here: a header they include is in no file of the tree, so it belongs to a package this image does not carry (${[...new Set(unchecked.flatMap((u) => u.headers))].join(', ')}). They are unchecked, not green:`)
+    // Every line names the database it was read from, for the reason the failed lines give above.
+    for (const u of unchecked) console.log(`  ${path.relative(ROOT, u.file)} database=${opt.database}`)
+}
+
 if (unable.length > 0) {
-    console.log(`clang-syntax: ${unable.length} unit(s) could not be checked here: a header they include is in no file of the tree, so it belongs to a package this image does not carry (${[...new Set(unable.flatMap((u) => u.headers))].join(', ')}). They are unchecked, not green:`)
-    for (const u of unable) console.log(`  ${path.relative(ROOT, u.file)}`)
+    // A different fact about a different thing, and it is the one that refuses: a header the image
+    // lacks is a limit of the container, but a compile line naming a source the tree does not hold
+    // is a database that describes some other tree -- so no reading taken with it is a reading about
+    // this one.
+    console.log(`clang-syntax: ${unable.length} unit(s) could not be checked here: the compile line names a source this tree does not hold, so there was nothing to compile. They are unable, not green:`)
+    for (const u of unable) console.log(`  ${path.relative(ROOT, u.file)} database=${opt.database}`)
 }
 
 console.log(
-    `clang-syntax: units=${summary.units} failed=${failed.length} unchecked=${unable.length} warnings=${new Set(warnings).size} ` +
+    `clang-syntax: units=${summary.units} failed=${failed.length} unchecked=${unchecked.length}` +
+        `${unable.length > 0 ? ` unable=${unable.length}` : ''} warnings=${new Set(warnings).size} ` +
         `seconds=${seconds}${widened ? ` widened=${JSON.stringify(widened)}` : ''} mode=${opt.mode}`,
 )
 // A zero here is a reading about a change that compiles nothing (a document, a plan, a golden), and
@@ -574,4 +642,11 @@ if (summary.units === 0 && opt.mode !== 'all') {
     console.log('clang-syntax: this change compiles no unit -- nothing was measured, and nothing needed to be')
 }
 
-process.exit(failed.length > 0 ? 1 : 0)
+// Three outcomes, and they are three different sentences about the tree: 1 the compiler ran and
+// said no; 2 the database does not describe this tree, so no reading was taken; 0 nothing to report.
+// 1 wins when both happened, because a red is a fact and an unread unit is the absence of one -- but
+// 2 is never folded into 1, since a unit the compiler never read must not borrow the authority of a
+// diagnostic it never printed. The container's own gap (`unchecked`: a package the image does not
+// carry) is deliberately not a 2: it is the same 13 to 20 units on every run, it says nothing about
+// the change, and refusing on it would refuse every merge.
+process.exit(failed.length > 0 ? 1 : unable.length > 0 ? 2 : 0)
