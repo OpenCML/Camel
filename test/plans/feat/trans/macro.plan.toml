@@ -452,7 +452,7 @@ kind = "behavior"
 case = "../../../cases/trans/macro/macro_graph_refused.cml"
 args = ["${case}", "std::cml", "std::nop"]
 expect_exit = 1
-expect_stdout_contains = ["it is a macro graph", "cannot print twice"]
+expect_stderr_contains = ["it is a macro graph", "cannot print twice"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 10000
 

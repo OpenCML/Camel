@@ -453,7 +453,7 @@ case = "../../../cases/consistency/entering/err_arm_cell_unrelated.cml"
 args = ["-E", "short", "${case}"]
 backends = ["nvm"]
 expect_exit = 1
-expect_stdout_contains = ["expected 'int', found 'string'"]
+expect_stderr_contains = ["expected 'int', found 'string'"]
 expect_output_not_contains = ["Segmentation fault", "dumped core", "var int", "var string", "An error has occurred"]
 expect_diagnostic_name = "SemanticDiag::BranchReturnTypeMismatch"
 

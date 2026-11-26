@@ -237,12 +237,17 @@ verify_script = """
 // The name is built from two pieces, the way fail.located's assertion is: the kind a program
 // writes is the program's own word, so the literal `RuntimeDiag::<Kind>` is not a code the
 // registry declares and must not read as a citation of one.
+//
+// The diagnostics are read in the order they are written to the one stream they now share: the
+// warning of the call that never runs is written when the program is compiled, the fault of the
+// `with` argument when it runs. The run-time one used to be alone on standard output, so reading
+// the two streams one after the other put it first; the facts asserted here are the same.
 assert(input.diagnostics.length === 2, JSON.stringify(input.diagnostics))
-assert(input.diagnostics[0].name === 'RuntimeDiag::' + 'Stopped', input.diagnostics[0].name)
-assert(input.diagnostics[0].code === '0x040001AC', input.diagnostics[0].code)
-assert(input.diagnostics[0].line === 13 && input.diagnostics[0].column === 16, JSON.stringify(input.diagnostics[0]))
-assert(input.diagnostics[1].name === 'SemanticDiag::NeverArgumentCall', input.diagnostics[1].name)
-assert(input.diagnostics[1].line === 23 && input.diagnostics[1].column === 23, JSON.stringify(input.diagnostics[1]))
+assert(input.diagnostics[1].name === 'RuntimeDiag::' + 'Stopped', input.diagnostics[1].name)
+assert(input.diagnostics[1].code === '0x040001AC', input.diagnostics[1].code)
+assert(input.diagnostics[1].line === 13 && input.diagnostics[1].column === 16, JSON.stringify(input.diagnostics[1]))
+assert(input.diagnostics[0].name === 'SemanticDiag::NeverArgumentCall', input.diagnostics[0].name)
+assert(input.diagnostics[0].line === 23 && input.diagnostics[0].column === 23, JSON.stringify(input.diagnostics[0]))
 """
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 20000

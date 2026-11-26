@@ -1940,7 +1940,7 @@ args = ["${case}", "${backend}"]
 backends = ["nvm", "fvm"]
 backends_agree = ["exit_code", "diagnostics", "stdout_normalized"]
 expect_exit = 1
-expect_stdout_contains = ["jvp has no forward rule for", ":op/idx_arr"]
+expect_stderr_contains = ["jvp has no forward rule for", ":op/idx_arr"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 30000
 
@@ -2317,8 +2317,7 @@ case = "../../../cases/compile/transforms/softmax_gradient_stops_at_split.cml"
 args = ["--trace", "transforms", "${case}", "${backend}"]
 backends = ["nvm"]
 expect_exit = 1
-expect_stdout_contains = ["transpose has no transpose for this function: this call's callee has no transpose of its own"]
-expect_stderr_contains = ["rules=jvp_softmax,jvp_mul_tensor,jvp_sum", "skip=parameter-shape uri=tensor:multiply", "skip=call-no-transpose", "callee=rulesets.jvp::softmax_jvp<float>"]
+expect_stderr_contains = ["transpose has no transpose for this function: this call's callee has no transpose of its own", "rules=jvp_softmax,jvp_mul_tensor,jvp_sum", "skip=parameter-shape uri=tensor:multiply", "skip=call-no-transpose", "callee=rulesets.jvp::softmax_jvp<float>"]
 expect_output_not_contains = ["split does not build this function", "a node whose input was not copied"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
@@ -2382,8 +2381,7 @@ case = "../../../cases/compile/transforms/transformer_step_gradient_stops_at_spl
 args = ["--trace", "transforms", "${case}", "${backend}"]
 backends = ["nvm"]
 expect_exit = 1
-expect_stdout_contains = ["split does not build this function"]
-expect_stderr_contains = ["skip=forward construct=a node whose input was not copied", "rules=jvp_matmul,jvp_transpose,jvp_divide,jvp_softmax,jvp_add_tensor,jvp_mean_axis,jvp_subtract,jvp_mul_tensor,jvp_sqrt,jvp_relu,jvp_sum"]
+expect_stderr_contains = ["split does not build this function", "skip=forward construct=a node whose input was not copied", "rules=jvp_matmul,jvp_transpose,jvp_divide,jvp_softmax,jvp_add_tensor,jvp_mean_axis,jvp_subtract,jvp_mul_tensor,jvp_sqrt,jvp_relu,jvp_sum"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 60000
 
@@ -2558,8 +2556,7 @@ case = "../../../cases/compile/transforms/log_softmax_gradient_stops_at_split.cm
 args = ["--trace", "transforms", "${case}", "${backend}"]
 backends = ["nvm"]
 expect_exit = 1
-expect_stdout_contains = ["transpose has no transpose for this function: this call's callee has no transpose of its own"]
-expect_stderr_contains = ["rules=jvp_log_softmax,jvp_sum", "skip=parameter-shape uri=tensor:subtract", "skip=call-no-transpose", "callee=rulesets.jvp::log_softmax_jvp<float>"]
+expect_stderr_contains = ["transpose has no transpose for this function: this call's callee has no transpose of its own", "rules=jvp_log_softmax,jvp_sum", "skip=parameter-shape uri=tensor:subtract", "skip=call-no-transpose", "callee=rulesets.jvp::log_softmax_jvp<float>"]
 expect_output_not_contains = ["split does not build this function", "a node whose input was not copied", "skip=parameter-shape uri=tensor:multiply"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
@@ -3228,7 +3225,7 @@ kind = "negative"
 case = "../../../cases/compile/transforms/transpose_refuses_a_nonlinear_operator.cml"
 args = ["${case}"]
 expect_exit = 1
-expect_stdout_contains = ["operator `tensor:abs`", "the family holds no rule for `tensor:abs`", "`transpose` is for linear functions", "take the gradient with `vjp`"]
+expect_stderr_contains = ["operator `tensor:abs`", "the family holds no rule for `tensor:abs`", "`transpose` is for linear functions", "take the gradient with `vjp`"]
 expect_output_not_contains = ["not linear"]
 timeout_ms = 20000
 
@@ -3239,7 +3236,7 @@ kind = "negative"
 case = "../../../cases/compile/transforms/transpose_refuses_maximum.cml"
 args = ["${case}"]
 expect_exit = 1
-expect_stdout_contains = ["operator `tensor:maximum`", "the family holds no rule for `tensor:maximum`", "take the gradient with `vjp`"]
+expect_stderr_contains = ["operator `tensor:maximum`", "the family holds no rule for `tensor:maximum`", "take the gradient with `vjp`"]
 timeout_ms = 20000
 
 [[tests]]
@@ -3341,7 +3338,7 @@ kind = "negative"
 case = "../../../cases/compile/transforms/law_answer_shape/transpose_refuses_a_law_that_answers_the_wrong_shape.cml"
 args = ["${case}"]
 expect_exit = 1
-expect_stdout_contains = ["transpose has no transpose for this function: the law `add_tensor_t` answers a `float[3]` for an operand of type `float[2, 3]`, and a cotangent of a value has that value's own type"]
+expect_stderr_contains = ["transpose has no transpose for this function: the law `add_tensor_t` answers a `float[3]` for an operand of type `float[2, 3]`, and a cotangent of a value has that value's own type"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 

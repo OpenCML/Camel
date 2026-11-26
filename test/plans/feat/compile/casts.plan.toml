@@ -213,7 +213,7 @@ kind = "behavior"
 case = "../../../cases/compile/casts/array_literal_length_mismatch.cml"
 args = ["${case}", "${run_nvm}"]
 expect_exit = 1
-expect_stdout_contains = ["has extent 3, but the position states 2 for this dimension"]
+expect_stderr_contains = ["has extent 3, but the position states 2 for this dimension"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 8000
 
@@ -240,7 +240,7 @@ kind = "behavior"
 case = "../../../cases/compile/casts/array_literal_empty_into_stated_shape.cml"
 args = ["${case}", "${run_nvm}"]
 expect_exit = 1
-expect_stdout_contains = ["has extent 0, but the position states the shape"]
+expect_stderr_contains = ["has extent 0, but the position states the shape"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 8000
 
@@ -276,7 +276,7 @@ kind = "behavior"
 case = "../../../cases/compile/casts/array_literal_in_return_length_mismatch.cml"
 args = ["${case}", "${run_nvm}"]
 expect_exit = 1
-expect_stdout_contains = ["the literal writes 2 element(s) and the type states 3"]
+expect_stderr_contains = ["the literal writes 2 element(s) and the type states 3"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 8000
 [[tests]]

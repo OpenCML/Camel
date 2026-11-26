@@ -1286,7 +1286,7 @@ expect_output_contains = ["operator '/' is not defined for these operand types"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 verify_script = """
 ({ input, assert }) => {
-const errors = (input.normalized.stdout.match(/\[Error\]/g) || []).length
+const errors = (input.normalized.stderr.match(/\[Error\]/g) || []).length
 assert(errors === 1, `${errors} errors are reported, not one`)
 }
 """

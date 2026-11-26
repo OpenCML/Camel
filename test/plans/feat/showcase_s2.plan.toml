@@ -275,8 +275,7 @@ case = "../../cases/compile/transforms/matmul_transpose_rank_three.cml"
 args = ["--trace", "transforms", "${case}", "${backend}"]
 backends = ["nvm"]
 expect_exit = 1
-expect_stdout_contains = ["transpose has no transpose for this function: the law `matmul_stated_t` has no cotangent for `tensor:matmul_stated` at operands of rank (3, 2, 1, 1)"]
-expect_stderr_contains = ["skip=rule-ranks uri=tensor:matmul_stated rule=matmul_stated_t"]
+expect_stderr_contains = ["transpose has no transpose for this function: the law `matmul_stated_t` has no cotangent for `tensor:matmul_stated` at operands of rank (3, 2, 1, 1)", "skip=rule-ranks uri=tensor:matmul_stated rule=matmul_stated_t"]
 # The node's number is where the compiler put it, so it is `<>` here and every other field of the
 # line stays exact: the function, the skip's own word, the operator URI, the law, the operand
 # position, the ranks and the operand count. The `reason=` string is left free, as the entry's own
@@ -293,7 +292,7 @@ const field = (text, name) => Number(text.split(name + '=')[1].split(/[ ,\]]/)[0
 const head = 'TRANSPOSE function=split_of_jvp_of_batched_sum_of_product_backward skip=rule-ranks uri=tensor:matmul_stated rule=matmul_stated_t node=<> position=0 ranks=(3, 2, 1, 1) operands=4'
 const hits = input.normalized.stderr.split('\n').filter((l) => new RegExp('^' + esc(head) + ' reason=').test(l))
 assert(hits.length === 1, `expected exactly one line like '${head} reason=...', found ${hits.length}`)
-const named = /\(node ([0-9]+)\)/.exec(input.normalized.stdout)
+const named = /\(node ([0-9]+)\)/.exec(input.normalized.stderr)
 assert(named, 'the sentence that says which law declined names the node it stopped at')
 assert(Number(named[1]) === field(hits[0], 'node'), `the reading names node ${field(hits[0], 'node')}` + ` and the sentence names node ${named[1]}: one node, one number`)
 }

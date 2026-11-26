@@ -145,7 +145,7 @@ kind = "negative"
 case = "../../../../cases/compile/array_shape/err_as.cml"
 args = ["${case}", "std::nvm"]
 expect_exit = 1
-expect_stdout_contains = ["conversion to 'f32[4]' failed: the array has shape [6]"]
+expect_stderr_contains = ["conversion to 'f32[4]' failed: the array has shape [6]"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 8000
 

@@ -92,8 +92,8 @@ case = "../../../cases/compile/diag_render/sem_cascade.cml"
 args = ["--error-format", "text", "${case}"]
 expect_exit = 1
 verify_script = """
-assert(!input.stdout.includes('\u001b'), 'escape codes in piped output')
-assert(input.stdout.includes('^^^^'), 'the excerpt is there')
+assert(!input.stderr.includes('\u001b'), 'escape codes in piped output')
+assert(input.stderr.includes('^^^^'), 'the excerpt is there')
 """
 timeout_ms = 8000
 
@@ -105,7 +105,7 @@ case = "../../../cases/compile/diag_render/sem_cascade.cml"
 args = ["--error-format", "short", "${case}"]
 expect_exit = 1
 verify_script = """
-assert(!input.stdout.includes('\u001b'), 'escape codes in piped output')
+assert(!input.stderr.includes('\u001b'), 'escape codes in piped output')
 """
 timeout_ms = 8000
 
@@ -117,7 +117,7 @@ case = "../../../cases/compile/diag_render/sem_cascade.cml"
 args = ["--error-format", "text", "--color", "always", "${case}"]
 expect_exit = 1
 verify_script = """
-assert(input.stdout.includes('\u001b[1;31merror[SemanticDiag::UnresolvedReference]'), 'severity is coloured')
+assert(input.stderr.includes('\u001b[1;31merror[SemanticDiag::UnresolvedReference]'), 'severity is coloured')
 """
 timeout_ms = 8000
 
@@ -129,7 +129,7 @@ case = "../../../cases/compile/diag_options/many_errors.cml"
 args = ["${case}"]
 expect_exit = 1
 verify_script = """
-const n = (input.stdout.match(/name=SemanticDiag::UnresolvedReference/g) || []).length
+const n = (input.stderr.match(/name=SemanticDiag::UnresolvedReference/g) || []).length
 assert(n === 20, '20 errors reported, got ' + n)
 """
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
@@ -143,7 +143,7 @@ case = "../../../cases/compile/diag_options/many_errors.cml"
 args = ["--max-errors", "0", "${case}"]
 expect_exit = 1
 verify_script = """
-const n = (input.stdout.match(/name=SemanticDiag::UnresolvedReference/g) || []).length
+const n = (input.stderr.match(/name=SemanticDiag::UnresolvedReference/g) || []).length
 assert(n === 25, '25 errors reported, got ' + n)
 """
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
@@ -157,7 +157,7 @@ case = "../../../cases/compile/diag_options/many_errors.cml"
 args = ["--max-errors", "1", "${case}"]
 expect_exit = 1
 verify_script = """
-const n = (input.stdout.match(/name=SemanticDiag::UnresolvedReference/g) || []).length
+const n = (input.stderr.match(/name=SemanticDiag::UnresolvedReference/g) || []).length
 assert(n === 1, '1 error reported, got ' + n)
 """
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
@@ -186,9 +186,9 @@ case = "../../../cases/compile/diag_options/two_faults.cml"
 args = ["--max-errors", "0", "${case}"]
 expect_exit = 1
 verify_script = """
-const n = (input.stdout.match(/name=RuntimeDiag::IndexOutOfRange/g) || []).length
+const n = (input.stderr.match(/name=RuntimeDiag::IndexOutOfRange/g) || []).length
 assert(n === 1, 'one fault reported, got ' + n)
-assert(input.stdout.includes('Index 5 is out of range'), 'the first fault')
+assert(input.stderr.includes('Index 5 is out of range'), 'the first fault')
 """
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000
@@ -222,10 +222,10 @@ case = "../../../cases/compile/diag_options/missing_module.cml"
 args = ["${case}"]
 expect_exit = 1
 verify_script = """
-const n = (input.stdout.match(/name=SemanticDiag::ModuleNotFound/g) || []).length
+const n = (input.stderr.match(/name=SemanticDiag::ModuleNotFound/g) || []).length
 assert(n === 2, 'two imports reported, got ' + n)
-assert(input.stdout.includes("Module 'no_such_module_a' not found") && input.stdout.includes("Module 'no_such_module_b' not found"), input.stdout)
-assert(!input.stdout.includes('UnresolvedTypeReference'), 'the use of the imported type is not reported')
+assert(input.stderr.includes("Module 'no_such_module_a' not found") && input.stderr.includes("Module 'no_such_module_b' not found"), input.stderr)
+assert(!input.stderr.includes('UnresolvedTypeReference'), 'the use of the imported type is not reported')
 """
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000
@@ -272,7 +272,7 @@ kind = "behavior"
 case = "../../../cases/compile/diag_options/warning.cml"
 args = ["-Werror", "${case}"]
 expect_exit = 1
-expect_stdout_contains = ["[Error]:", "name=SemanticDiag::UnusedAssignedValue, code=0x031001C3"]
+expect_stderr_contains = ["[Error]:", "name=SemanticDiag::UnusedAssignedValue, code=0x031001C3"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000
 
@@ -283,7 +283,7 @@ kind = "behavior"
 case = "../../../cases/compile/diag_options/warning.cml"
 args = ["-Werror=UnusedAssignedValue", "${case}"]
 expect_exit = 1
-expect_stdout_contains = ["[Error]:", "name=SemanticDiag::UnusedAssignedValue"]
+expect_stderr_contains = ["[Error]:", "name=SemanticDiag::UnusedAssignedValue"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000
 
@@ -316,7 +316,7 @@ kind = "behavior"
 case = "../../../cases/compile/diag_options/warning.cml"
 args = ["--error-format", "text", "-Werror", "${case}"]
 expect_exit = 1
-expect_stdout_contains = ["error[SemanticDiag::UnusedAssignedValue]:", "note: this warning is reported as an error because of -Werror"]
+expect_stderr_contains = ["error[SemanticDiag::UnusedAssignedValue]:", "note: this warning is reported as an error because of -Werror"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000
 
@@ -363,8 +363,8 @@ case = "../../../cases/opt/generic/fold_constant_fault.cml"
 args = ["-Werror", "${case}", "std::cxx::fold", "std::nvm"]
 expect_exit = 1
 verify_script = """
-assert(input.stdout.includes('[Error]: This constant expression faults whenever it is evaluated (DivisionByZero)'), input.stdout)
-assert(input.stdout.includes('name=RuntimeDiag::ConstantExpressionFaults, code=0x04100015'), input.stdout)
+assert(input.stderr.includes('[Error]: This constant expression faults whenever it is evaluated (DivisionByZero)'), input.stderr)
+assert(input.stderr.includes('name=RuntimeDiag::ConstantExpressionFaults, code=0x04100015'), input.stderr)
 assert(!/^7$/m.test(input.stdout), 'the program did not run: ' + input.stdout)
 """
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]

@@ -84,7 +84,7 @@ kind = "behavior"
 case = "../../../cases/compile/branch_exit/unused_arm_exit.cml"
 args = ["-Werror=ExitInUnusedBranch", "${case}"]
 expect_exit = 1
-expect_stdout_contains = ["[Error]:", "name=SemanticDiag::ExitInUnusedBranch"]
+expect_stderr_contains = ["[Error]:", "name=SemanticDiag::ExitInUnusedBranch"]
 expect_output_not_contains = ["unknown unknown unknown"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000

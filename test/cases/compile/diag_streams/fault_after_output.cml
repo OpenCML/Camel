@@ -1,0 +1,14 @@
+// A run-time fault after the program has printed: the fault is reported once, with the place it
+// was raised, on standard error -- and 'before' stays on standard output, the program's own
+// output and nothing else (docs/cli.md, "Standard streams").
+
+func zero() => int {
+    return 0
+}
+
+func main() => int sync {
+    println("before")
+    let d = zero()
+    println(1 / d)
+    return 0
+}

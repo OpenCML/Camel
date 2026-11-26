@@ -87,7 +87,7 @@ function checkTimeitFailed(label, result, diagnosticName, passName = 'std::nvm')
         new RegExp(`\\[timeit\\] 1/1 pass=${named} failed`).test(result.stdout),
         result.stdout || result.stderr,
     )
-    check(`${label}: the diagnostic is reported`, result.stdout.includes(diagnosticName), result.stdout)
+    check(`${label}: the diagnostic is reported`, (result.stdout + result.stderr).includes(diagnosticName), result.stdout + result.stderr)
     check(`${label}: no elapsed time is reported`, !result.stdout.includes('elapsed='), result.stdout)
     check(`${label}: no summary is printed`, !result.stdout.includes('mean'), result.stdout)
 }
@@ -95,22 +95,22 @@ function checkTimeitFailed(label, result, diagnosticName, passName = 'std::nvm')
 // 1. A semantic error: run, check and timeit all refuse it.
 const semRun = camel(['-E', 'short', semantic])
 check('semantic error: run exits 1', semRun.status === 1, String(semRun.status))
-check('semantic error: run reports the diagnostic', semRun.stdout.includes('UnresolvedReference'), semRun.stdout)
+check('semantic error: run reports the diagnostic', semRun.stderr.includes('UnresolvedReference'), semRun.stderr)
 
 const semCheck = camel(['check', '-O', 'short', semantic])
 check('semantic error: check exits 1', semCheck.status === 1, String(semCheck.status))
-check('semantic error: check reports the diagnostic', semCheck.stdout.includes('UnresolvedReference'), semCheck.stdout)
+check('semantic error: check reports the diagnostic', semCheck.stderr.includes('UnresolvedReference'), semCheck.stderr)
 
 checkTimeitFailed('semantic error: timeit', camel(['--timeit', 'std::nvm/1', semantic]), 'UnresolvedReference')
 
 // 2. An import of a module that does not exist.
 const missingRun = camel(['-E', 'short', missingImport])
 check('missing import: run exits 1', missingRun.status === 1, String(missingRun.status))
-check('missing import: run reports the diagnostic', missingRun.stdout.includes('ModuleNotFound'), missingRun.stdout)
+check('missing import: run reports the diagnostic', missingRun.stderr.includes('ModuleNotFound'), missingRun.stderr)
 
 const missingCheck = camel(['check', '-O', 'short', missingImport])
 check('missing import: check exits 1', missingCheck.status === 1, String(missingCheck.status))
-check('missing import: check reports the diagnostic', missingCheck.stdout.includes('ModuleNotFound'), missingCheck.stdout)
+check('missing import: check reports the diagnostic', missingCheck.stderr.includes('ModuleNotFound'), missingCheck.stderr)
 
 checkTimeitFailed('missing import: timeit', camel(['--timeit', 'std::nvm/1', missingImport]), 'ModuleNotFound')
 
@@ -121,8 +121,8 @@ const brokenRun = camel(['-E', 'short', brokenImport])
 check('broken import: run exits 1', brokenRun.status === 1, String(brokenRun.status))
 check(
     'broken import: run reports the imported module\'s diagnostic',
-    brokenRun.stdout.includes('ModuleParseFailed') &&
-        brokenRun.stdout.includes('SyntaxDiag::MissingClosingDelimiter'),
+    brokenRun.stderr.includes('ModuleParseFailed') &&
+        brokenRun.stderr.includes('SyntaxDiag::MissingClosingDelimiter'),
     brokenRun.stdout,
 )
 
@@ -130,7 +130,7 @@ const brokenCheck = camel(['check', '-O', 'short', brokenImport])
 check('broken import: check exits 1', brokenCheck.status === 1, String(brokenCheck.status))
 check(
     'broken import: check reports the imported module\'s diagnostic',
-    brokenCheck.stdout.includes('ModuleParseFailed'),
+    brokenCheck.stderr.includes('ModuleParseFailed'),
     brokenCheck.stdout,
 )
 
@@ -147,7 +147,7 @@ const badRun = camel(['-E', 'short', healthy], STDLIB)
 check('declaration load failure: run exits 1', badRun.status === 1, String(badRun.status))
 check(
     'declaration load failure: run reports the diagnostic',
-    badRun.stdout.includes('NativeDeclarationNotLoaded'),
+    badRun.stderr.includes('NativeDeclarationNotLoaded'),
     badRun.stdout,
 )
 
@@ -155,7 +155,7 @@ const badCheck = camel(['check', '-O', 'short', healthy], STDLIB)
 check('declaration load failure: check exits 1', badCheck.status === 1, String(badCheck.status))
 check(
     'declaration load failure: check reports the diagnostic',
-    badCheck.stdout.includes('NativeDeclarationNotLoaded'),
+    badCheck.stderr.includes('NativeDeclarationNotLoaded'),
     badCheck.stdout,
 )
 

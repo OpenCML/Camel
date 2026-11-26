@@ -52,7 +52,7 @@ expect_exit = 1
 expect_output_contains = ["<rewrite:rewrite>: <rules:", "<rewrite:run>: <rules:", "<rewrite:saturate>: <rules:", "ordered: bool"]
 verify_script = """
 ({ input, assert }) => {
-    assert((input.normalized.stdout.match(/SemanticDiag::NoMatchingFunction/g) || []).length === 3,
+    assert((input.normalized.stderr.match(/SemanticDiag::NoMatchingFunction/g) || []).length === 3,
         'each entry point must diagnose the wrong policy type')
 }
 """

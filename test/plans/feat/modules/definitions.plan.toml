@@ -171,9 +171,10 @@ expect_exit = 1
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout
+const err = input.normalized.stderr
 assert(out.startsWith('0.0\n'), out)
-assert(out.includes('[Error]: Attempted division by zero.') && out.includes('(name=RuntimeDiag::DivisionByZero,'), out)
-assert(out.includes('mean_empty.cml:9:13'), `located at the call: ${out}`)
+assert(err.includes('[Error]: Attempted division by zero.') && err.includes('(name=RuntimeDiag::DivisionByZero,'), err)
+assert(err.includes('mean_empty.cml:9:13'), `located at the call: ${err}`)
 }
 """
 
@@ -190,10 +191,11 @@ expect_exit = 1
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout
-assert(input.normalized.stderr.includes('EXPANDED tensor:mean 2\n'), input.normalized.stderr)
+const err = input.normalized.stderr
+assert(err.includes('EXPANDED tensor:mean 2\n'), err)
 assert(out.startsWith('0.0\n'), out)
-assert(out.includes('[Error]: Attempted division by zero.') && out.includes('(name=RuntimeDiag::DivisionByZero,'), out)
-assert(out.includes('tensor_definitions.cml:61:'), `located at the division of the definition: ${out}`)
+assert(err.includes('[Error]: Attempted division by zero.') && err.includes('(name=RuntimeDiag::DivisionByZero,'), err)
+assert(err.includes('tensor_definitions.cml:61:'), `located at the division of the definition: ${err}`)
 }
 """
 

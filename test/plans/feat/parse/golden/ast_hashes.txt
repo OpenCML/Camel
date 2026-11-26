@@ -807,6 +807,8 @@ bdcab4e2e512a7f7 no test/cases/compile/diag_render/syntax_missing_then.cml
 8b07d5578828beee no test/cases/compile/diag_render/syntax_unexpected_end.cml
 61e07e8391c4bd2c no test/cases/compile/diag_render/syntax_unexpected_token.cml
 f49dc5054000a1a6 ok test/cases/compile/diag_render/werror_no_position.cml
+9db2a31a3712180a ok test/cases/compile/diag_streams/fault_after_output.cml
+83ab8f5c7443d925 ok test/cases/compile/diag_streams/two_errors_each_once.cml
 398e22799e75ed1f ok test/cases/compile/entry_args/complex.cml
 b8a5100f72950102 ok test/cases/compile/entry_args/no_params.cml
 73a110b494919875 ok test/cases/compile/entry_args/npy_values.cml

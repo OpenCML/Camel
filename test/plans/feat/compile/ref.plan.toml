@@ -153,7 +153,7 @@ expect_diagnostic_name = "SemanticDiag::RefContentHoldsRef"
 expect_diagnostic_code = "0x03000211"
 verify_script = '''
 ({ input, assert }) => {
-  const text = ((input.output || '') + ' ' + (input.stderr || '')).replace(/\s+/g, ' ')
+  const text = ((input.normalized && input.normalized.stderr) || input.stderr || '').replace(/\s+/g, ' ')
   assert(text.includes("cannot be the content of a reference"), 'the report states the rule: ' + text)
   assert(text.includes('it holds a Ref'), 'the reason is a Ref inside the content: ' + text)
   assert(text.includes('reclaimed by counting'), 'the consequence is named: ' + text)
@@ -171,7 +171,7 @@ expect_diagnostic_name = "SemanticDiag::RefContentHoldsRef"
 expect_diagnostic_code = "0x03000211"
 verify_script = '''
 ({ input, assert }) => {
-  const text = ((input.output || '') + ' ' + (input.stderr || '')).replace(/\s+/g, ' ')
+  const text = ((input.normalized && input.normalized.stderr) || input.stderr || '').replace(/\s+/g, ' ')
   assert(text.includes("cannot be the content of a reference"), 'the report states the rule: ' + text)
   assert(text.includes('it holds a Ref'), 'the reason is a Ref inside the content: ' + text)
   assert(text.includes('captures'), 'the report names the closure capture the Ref is reached through: ' + text)
@@ -189,7 +189,7 @@ expect_diagnostic_name = "SemanticDiag::RefContentHoldsRef"
 expect_diagnostic_code = "0x03000211"
 verify_script = '''
 ({ input, assert }) => {
-  const text = ((input.output || '') + ' ' + (input.stderr || '')).replace(/\s+/g, ' ')
+  const text = ((input.normalized && input.normalized.stderr) || input.stderr || '').replace(/\s+/g, ' ')
   assert(text.includes("cannot be the content of a reference"), 'the report states the rule: ' + text)
   assert(text.includes('it holds a Ref'), 'the reason is a Ref inside the content: ' + text)
   assert(text.includes('captures'), 'the report names the closure capture the Ref is reached through: ' + text)
@@ -211,7 +211,7 @@ expect_diagnostic_name = "SemanticDiag::RefContentHoldsRef"
 expect_diagnostic_code = "0x03000211"
 verify_script = '''
 ({ input, assert }) => {
-  const text = ((input.output || '') + ' ' + (input.stderr || '')).replace(/\s+/g, ' ')
+  const text = ((input.normalized && input.normalized.stderr) || input.stderr || '').replace(/\s+/g, ' ')
   assert(text.includes("cannot be the content of a reference"), 'the report states the rule: ' + text)
   assert(text.includes('captures cannot be read'),
     'the report says the capture could not be read, not that a Ref was found: ' + text)
@@ -257,7 +257,7 @@ expect_diagnostic_name = "SemanticDiag::RefContentHoldsRef"
 expect_diagnostic_code = "0x03000211"
 verify_script = '''
 ({ input, assert }) => {
-  const text = ((input.output || '') + ' ' + (input.stderr || '')).replace(/\s+/g, ' ')
+  const text = ((input.normalized && input.normalized.stderr) || input.stderr || '').replace(/\s+/g, ' ')
   assert(text.includes("cannot be the content of a reference"), 'the report states the rule: ' + text)
   assert(text.includes('it holds a Ref'), 'the reason is a Ref inside the content: ' + text)
   assert(text.includes("'n'"),
@@ -280,7 +280,7 @@ expect_diagnostic_name = "SemanticDiag::RefContentHoldsRef"
 expect_diagnostic_code = "0x03000211"
 verify_script = '''
 ({ input, assert }) => {
-  const text = ((input.output || '') + ' ' + (input.stderr || '')).replace(/\s+/g, ' ')
+  const text = ((input.normalized && input.normalized.stderr) || input.stderr || '').replace(/\s+/g, ' ')
   const reports = (text.match(/cannot be the content of a reference/g) || []).length
   assert(reports === 2, 'one report per box, so two places: ' + reports + ' in ' + text)
   assert(text.includes("in part 0"),
@@ -302,7 +302,7 @@ expect_diagnostic_name = "SemanticDiag::RefContentHoldsRef"
 expect_diagnostic_code = "0x03000211"
 verify_script = '''
 ({ input, assert }) => {
-  const text = ((input.output || '') + ' ' + (input.stderr || '')).replace(/\s+/g, ' ')
+  const text = ((input.normalized && input.normalized.stderr) || input.stderr || '').replace(/\s+/g, ' ')
   assert(text.includes("cannot be the content of a reference"), 'the report states the rule: ' + text)
   assert(text.includes('captures cannot be read'),
     'the report says the capture could not be read, not that a Ref was found: ' + text)

@@ -1,0 +1,60 @@
+id = "compile.diag_streams"
+order = 330
+tier = "fast"
+tags = ["feat", "compile", "diagnostics"]
+
+# The behaviour this plan pins is the one docs/cli.md states: every diagnostic -- a compile
+# error, a run-time fault and a warning alike -- is printed on standard error, each once, with
+# its location when it is known, and standard output holds the program's own output only.
+#
+# The two tests are the pair that says so from both sides. `two_errors_each_once` is the
+# "a report that must appear appears exactly once" half: two unresolved names, two reports --
+# so a run that reports nothing and a run that reports one report twice are both red (that is
+# what `report exactly once` means, and it is the check the sink's de-duplication must not
+# break), and the program's own output is what is left on stdout (nothing: it never ran).
+# `fault_after_output` is the streams half: the program prints 'before' and then divides by
+# zero, so the same run has to leave 'before' alone on stdout and put one located fault on
+# stderr; reading either stream for the other is red.
+
+[[tests]]
+name = "two_errors_each_once"
+desc = "Two unresolved names in one program: two diagnostics, each printed once, on standard error; standard output stays empty because the program never ran."
+kind = "negative"
+case = "../../../cases/compile/diag_streams/two_errors_each_once.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_stdout_exact = ""
+expect_stderr_contains = ["not_defined_one", "not_defined_two"]
+verify_script = """
+({ input, assert }) => {
+const err = input.normalized.stderr
+const reports = (err.match(/\[Error\]/g) || []).length
+assert(reports === 2, `two unresolved names, two reports: ${reports} in ${JSON.stringify(err)}`)
+assert(err.includes('not_defined_one') && err.includes('not_defined_two'), `both names are reported: ${err}`)
+assert(input.normalized.stdout === '', `standard output holds the program's own output, and this program never ran: ${JSON.stringify(input.normalized.stdout)}`)
+}
+"""
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 20000
+
+[[tests]]
+name = "fault_after_output.nvm"
+desc = "A run-time fault after the program printed: 'before' stays on standard output alone, and the one located fault is on standard error (NodeVM)."
+kind = "negative"
+case = "../../../cases/compile/diag_streams/fault_after_output.cml"
+args = ["${case}", "${run_nvm}"]
+expect_exit = 1
+expect_diagnostic_name = "RuntimeDiag::DivisionByZero"
+expect_diagnostic_line = 12
+expect_stdout_exact = "before\n"
+verify_script = """
+({ input, assert }) => {
+const err = input.normalized.stderr
+const reports = (err.match(/\[Error\]/g) || []).length
+assert(reports === 1, `one fault, one report: ${reports} in ${JSON.stringify(err)}`)
+assert(/fault_after_output[.]cml:12:/.test(err), `the report names the place the fault was raised: ${err}`)
+assert(input.normalized.stdout === 'before\n', `the program's output is 'before' and nothing else: ${JSON.stringify(input.normalized.stdout)}`)
+}
+"""
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 20000

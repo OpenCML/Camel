@@ -325,6 +325,11 @@
             "plans": ["smoke", "feat/compile", "feat/trans", "feat/linear"]
         },
         {
+            "comment": "The node machine's exhaustion report. `nodevm.cpp` is where a run that runs out of memory turns the fault into a diagnostic, and where the report is written with the place it happened; the readings that pin it are the memory-exhausted ones, which compare the two streams (nothing on standard output, one located report on standard error). This rule is narrower than the `src/stdlib/std/nvm/` rule below (first match wins), so it comes first and adds the plans that read a fault's stream rather than only the plans that read when an object dies.",
+            "paths": ["src/stdlib/std/nvm/nodevm.cpp"],
+            "plans": ["smoke", "feat/linear", "feat/compile", "feat/modules", "feat/para"]
+        },
+        {
             "comment": "FastVM and the other schedulers. The scheduler is also where a collection can be asked for, which makes this the file class that decides when an object dies: `feat/opt/defun.plan.toml` reads programs whose values are function values and closures, `feat/compile/ref.plan.toml` reads the box counts a run takes and releases, and `feat/mm/graph_space.plan.toml` is the graph-space gradient case that runs a real collection. On 2026-11-15 a collection added after the entry graph returned in `nodevm.cpp` was selected by feat/linear, feat/para, feat/trans and smoke, none of which runs a program that keeps a function value alive; it passed all of them and broke eight `defun` program runs (`killed by a signal: 8`) plus one assertion, all red on a pushed HEAD until the change was reverted. The judgement this rule records is not the three plans but the class: any file that can change what may be treated as a root takes every plan that depends on when an object dies with it.",
             "paths": ["src/stdlib/std/fvm/", "src/stdlib/std/nvm/", "src/stdlib/std/prl/"],
             "plans": ["smoke", "feat/linear", "feat/para", "feat/trans", "feat/opt/defun.plan.toml", "feat/compile/ref.plan.toml", "feat/mm/graph_space.plan.toml", "feat/runtime/block_scheduler.plan.toml"]
@@ -368,6 +373,11 @@
             "comment": "GCT/GIR construction, encoding and the graph printer. `src/compile/gir/builder_support.h` is where a node handle is turned back into the draft it names and where that identity is checked, so the witness of the identity (`feat/runtime/draft_node_owner.plan.toml`) runs with it.",
             "paths": ["src/compile/src/", "src/compile/semantic/"],
             "plans": ["smoke", "feat/compile", "feat/consistency", "feat/trans", "feat/runtime/draft_node_owner.plan.toml"]
+        },
+        {
+            "comment": "The diagnostic sink itself. `diagnostics.cpp` decides when a diagnostic is written and how many times -- the de-duplication that keeps one report from one place -- so it is the file class that a reading of the form `exactly one report` depends on, on either stream. Every plan whose tests count reports or read a located diagnostic belongs here, and the rule has to come before the wide `src/kernel/core/` and `src/kernel/` rules, which name only feat/compile, feat/trans, feat/linear and feat/modules; feat/modules, feat/opt and feat/tools read the same sink and would otherwise be left out. `feat/compile/diag_streams.plan.toml` is the entry that says so from both sides: two unresolved names must be two reports and a fault one, so a sink that drops a report or repeats it is red.",
+            "paths": ["src/kernel/core/error/diagnostics/"],
+            "plans": ["smoke", "feat/compile", "feat/trans", "feat/modules", "feat/opt", "feat/linear", "feat/consistency", "feat/para", "feat/tools"]
         },
         {
             "comment": "Values, types, the collector and the runtime shell. The array type's dimensions live here, so its self-test runs too. The direct-connection ledger of graph-store step 2 b is checked here as well: its three numbers count the references to `GraphDraft`, and `src/runtime/` is where both the storage and the transaction live, so this is the directory a commit can add a direct connection from. The plan is fast and cheap (one `git grep` pass), so it rides along rather than waiting for its own gate. The witness of a node handle's identity rides along for the same reason: the epoch a handle names its draft by is minted in `src/runtime/draft.cpp`.",
@@ -493,6 +503,11 @@
             "comment": "Any other module (a module's C++ that no rule above names). `lib/` is the module tree after the layout move, `modules/` before it. A directory target, so --tier fast filters the slow cases; a module that grows a specific rule above stops using this one.",
             "paths": ["src/stdlib/"],
             "plans": ["feat/modules"]
+        },
+        {
+            "comment": "The command line's diagnostic writer. `main.cpp` decides which stream every diagnostic is written to -- one `diagOut`, chosen once from the error format -- so a change here moves a whole class of readings between standard output and standard error: every plan that asserts what a diagnostic says next to what the program printed reads the same two streams. The union below is that class, and it has to come before `src/tools/` (first match wins), which would otherwise name only feat/tools. The two-entry reading this rule is written for is feat/compile/diag_options and feat/compile/diag_streams: the same fault has to be on standard error and the program's own output alone on standard output, and a writer that picks the wrong stream leaves one of the pair empty.",
+            "paths": ["src/tools/camel-cli/"],
+            "plans": ["smoke", "feat/compile", "feat/tools", "feat/modules", "feat/linear", "feat/consistency", "feat/opt", "feat/para"]
         },
         {
             "comment": "The language server, debugger, formatter and command-line tools.",
