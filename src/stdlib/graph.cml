@@ -492,7 +492,7 @@ export func add_constant::<T>(g: Graph, value: T) => Node when is_ordered::<T>()
 /// Checks the edits and makes the changed function: the same type as the one that was opened, with
 /// the values it captured, sharing every graph nothing changed. The draft is over.
 /// @fails error value `GraphConflict` when a graph the draft touched changed since it was opened; error value `GraphInvalid` when an edit broke an invariant (the message names the graph, the node and the edge); error value `TxnUsed` when the draft was over already
-/// @example commit(open(func (x: int) => int { x + 1 }))
+/// @example commit::<(x: int) => int>(open(func (x: int) => int { x + 1 }))
 export func commit::<F>(d: Graph) => F!
 
 /// Drops the draft.
