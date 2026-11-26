@@ -5,6 +5,8 @@
 
 #include "camel/core/operator_table.h"
 
+#include "fnv.h"
+
 #include <algorithm>
 #include <span>
 #include <string>
@@ -14,28 +16,6 @@
 
 namespace camel::runtime {
 namespace {
-
-/// The same FNV-1a the portable hash uses, over explicitly little-endian words: a hash read in two
-/// processes must not depend on how a word happens to be laid out.
-struct Fnv {
-    uint64_t h = 0xcbf29ce484222325ull;
-    void bytes(const unsigned char *p, size_t size) {
-        for (size_t i = 0; i < size; ++i) {
-            h = (h ^ p[i]) * 0x100000001b3ull;
-        }
-    }
-    void u64(uint64_t value) {
-        unsigned char b[8];
-        for (int i = 0; i < 8; ++i) {
-            b[i] = static_cast<unsigned char>(value >> (8 * i));
-        }
-        bytes(b, 8);
-    }
-    void str(std::string_view text) {
-        u64(text.size());
-        bytes(reinterpret_cast<const unsigned char *>(text.data()), text.size());
-    }
-};
 
 /// One walk of one body. `stack` holds the graphs being hashed, outermost first: a call back into
 /// one of them contributes its distance instead of recursing, which is what makes a recursive body
@@ -47,13 +27,13 @@ class Walker {
     uint64_t hashGraph(const GCGraph *graph) {
         for (size_t i = 0; i < stack_.size(); ++i) {
             if (stack_[i] == graph) {
-                Fnv h;
+                Fnv1a h;
                 h.str("called-again");
                 h.u64(stack_.size() - i);
                 return h.h;
             }
         }
-        Fnv h;
+        Fnv1a h;
         h.str("graph");
         // The function type mangled: the mangling keeps the parameters' types and drops their
         // names.
@@ -146,7 +126,7 @@ class Walker {
     uint64_t hashRegion(
         const GCGraph &graph, uint32_t id, std::unordered_map<gc_node_ref_t, uint64_t> &memo) {
         const GCRegion *region = graph.region(id);
-        Fnv h;
+        Fnv1a h;
         h.str("region");
         h.u64(static_cast<uint64_t>(region->kind));
         h.u64(region->index);
@@ -179,7 +159,7 @@ class Walker {
         if (node == nullptr) {
             return 0;
         }
-        Fnv h;
+        Fnv1a h;
         h.str("node");
         h.u64(static_cast<uint64_t>(node->kind));
         h.u64(node->flags);
@@ -203,11 +183,7 @@ class Walker {
             const auto &table              = camel::core::OperatorTable::instance();
             h.str(table.uri(oper));
             const std::optional<camel::core::OperatorTraits> traits = table.find(oper);
-            h.u64(
-                !traits ? 0xFF
-                        : (uint64_t(traits->pure) | uint64_t(traits->elementwise) << 1 |
-                           uint64_t(traits->stateOnly) << 2 | uint64_t(traits->mayFault) << 3 |
-                           uint64_t(traits->mayNotTerminate) << 6));
+            h.u64(camel::core::operatorTraitBits(traits));
             break;
         }
         case GCNodeKind::Fill: {

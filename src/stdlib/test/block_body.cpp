@@ -436,6 +436,19 @@ BlockBodyTestPass::apply(const camel::runtime::Program *program, std::ostream &o
             camel::runtime::fact::portableGraphHash(*compiled.program, compiled.graph));
     }
 
+    // The trait bits are packed in one place (`camel::core::operatorTraitBits`), and both hashes
+    // that name an operator by its traits -- the block's form above and the portable hash below --
+    // read that one packing. Printed with every trait set at once and with no traits at all, so the
+    // layout is a reading and not a claim: the seven bits a hash can set are all set, and an
+    // operator the table does not know is the marker no packing of the fields can produce.
+    camel::core::OperatorTraits everyTrait;
+    everyTrait.pure = everyTrait.elementwise = everyTrait.stateOnly = everyTrait.mayFault =
+        everyTrait.callsGraphs = everyTrait.readsGraphs = everyTrait.mayNotTerminate = true;
+    os << std::format(
+        "BLOCK_BITS stated={:02x} unknown={:02x}\n",
+        camel::core::operatorTraitBits(everyTrait),
+        camel::core::operatorTraitBits(std::nullopt));
+
     // The blocks in the context's store, where an operator's node reads them from, and the one
     // executor of their protocol: a URI reaches the kernel through the manager, and the operator
     // the node names -- the store's key -- says which program.

@@ -463,10 +463,6 @@ struct Record {
     /// means. A different question from the effect, which is whether running it changes anything
     /// outside the program.
     bool foldable = true;
-    /// Running a call of it may not end (operator_table.h, OperatorTraits::mayNotTerminate).
-    /// A module whose operator may run a loop or a recursive call states it here; a record that
-    /// does not say so ends, which is what the interface lets a reader assume.
-    bool mayNotTerminate = false;
 
     /// The kernel takes the with-arguments of a call after the ordinary ones, as one list: a
     /// fact about the kernel's argument order, not about the language, where a with-argument

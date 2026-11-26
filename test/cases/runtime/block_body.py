@@ -197,11 +197,12 @@ assert traits["renamed"]["portable"] != traits["body"]["portable"], traits["rena
 assert uris["mirror"] != uris["diff"], (uris["diff"], uris["mirror"])
 assert len({uris[what] for what in ("body", "second", "effectful", "fallible", "spin", "diff", "mirror")}) == 7, uris
 # Two bodies whose only difference is *inside a region* are two blocks. The same function name, the
-# same branch, the same arms, and one string constant in one arm; nothing outside the arm reads what
-# the arm hands out, so a name read off the outer graph alone would call them one body.
+# same branch, the same arms, and one string constant in one arm: the arm's statements are reached
+# through the value the arm hands the join, so a name read off the outer nodes alone would call them
+# one body.
 assert uris["hot"] != uris["chill"], (uris["hot"], uris["chill"])
-# And the same source parsed twice is one block: the nodes of a region are walked in the order the
-# structure fixes, never in the order they happened to be created.
+# And the same source parsed twice is one block: a region is entered at its form ports and at its
+# exit, in an order the structure fixes, never in the order its nodes happened to be created.
 assert uris["hot"] == uris["hot_again"], (uris["hot"], uris["hot_again"])
 # Two bodies that call the same function and differ only in which parameter they read after the
 # call are two blocks. Hashing the callee must put the caller's signature back: a node of the
@@ -218,6 +219,12 @@ assert uris["loop_state_left"] != uris["loop_state_right"], (
     uris["loop_state_left"],
     uris["loop_state_right"],
 )
+# One packing of an operator's traits, read by both hashes that name an operator by them: every bit
+# a hash can set comes out of one statement of the layout, and an operator the table does not know
+# is the marker no packing can produce. A bit dropped from that one statement is a bit both hashes
+# lose together, which is what the two copies of it did not do.
+bits = re.search(r"BLOCK_BITS stated=(\w+) unknown=(\w+)", with_body.stdout)
+assert bits and bits.group(1) == "7f" and bits.group(2) == "ff", bits
 
 # The entry program, read in the same run: the numbers it had before the bodies were built are the
 # numbers it has after, and they are the numbers of a run without the pass at all.

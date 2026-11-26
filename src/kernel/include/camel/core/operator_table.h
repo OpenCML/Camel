@@ -297,6 +297,21 @@ struct OperatorTraits {
     bool withAfterNorm = false;
 };
 
+/// The traits as the bits a hash writes, in one place: both `blockFormHash` and the portable graph
+/// hash name an operator partly by its traits, and two packings of the same fields are two answers
+/// to one question -- the copies had already drifted apart, one of them leaving bits 4 and 5 out.
+/// Bits 0..6 are the whole of the layout. `0xFF` is "the table does not know this operator", a
+/// value no packing of the fields can produce.
+inline uint64_t operatorTraitBits(const std::optional<OperatorTraits> &traits) {
+    if (!traits) {
+        return 0xFF;
+    }
+    return uint64_t(traits->pure) | uint64_t(traits->elementwise) << 1 |
+           uint64_t(traits->stateOnly) << 2 | uint64_t(traits->mayFault) << 3 |
+           uint64_t(traits->callsGraphs) << 4 | uint64_t(traits->readsGraphs) << 5 |
+           uint64_t(traits->mayNotTerminate) << 6;
+}
+
 /**
  * The value an operator's result has whenever its arguments have the given types, for operators
  * whose result a type can fix: the shape of a tensor whose type carries its shape, its element
