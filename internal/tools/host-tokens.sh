@@ -9,7 +9,7 @@
 # queued behind it, three of them holding nothing but a hope. The budget this hands out is a
 # **token**: one worker process, one token, returned when that process exits.
 #
-#   take N            take N tokens (blocking; while waiting it prints who holds what)
+#   take N            take N tokens (blocking; while waiting it holds none and prints who holds what)
 #   take-up-to N -- CMD
 #                     take what is free now, up to N and never fewer than one, run CMD with that
 #                     many workers, and give them back when CMD exits: a build asks for a width and
@@ -225,53 +225,30 @@ show() {
     echo "free=$free held=$held peak=$PEAK_N"
 }
 
-# Take one token, blocking. The wait is not silent: a run that queues for thirty minutes without
-# saying who it is waiting for is indistinguishable from a run that hung, and on 2026-11-24 that
-# cost a whole measurement.
-take_one() {
-    local n="$1" waited=0 t0 tms
+# The one routine that takes tokens: `take`, `run` and `take-up-to` all come through here, so the
+# flock, the holder record and the report are written in one place.
+#
+#   acquire WANT all    exactly WANT tokens, or keep trying
+#   acquire WANT upto   as many as are free now, at least one, at most WANT
+#
+# Sets ACQ_N (how many are held) and ACQ_MS (how long it took).
+#
+# A taker that cannot get what it asked for **holds nothing while it waits**. Two callers that each
+# want more than half of the pool, each holding what they had so far and waiting for the rest, wait on
+# each other until the wait runs out; so a short pass gives every token back, sleeps a random while
+# (the jitter is what lets one of two symmetric takers win the next pass), and starts over. A caller
+# that can use less than it asked for says so with `upto` and never waits for a full width.
+#
+# One pass is over the whole pool without blocking: waiting on the first token while the second is
+# free would make a pool of twenty-four run exactly one thing at a time.
+acquire() {
+    local want="$1" mode="$2" n fd t0 tms held attempts=0
     now_ms; t0=$NOW_MS
     while :; do
-        # -n first: the common case is a free pool and must not pay for a message.
-        if flock -n "$n"; then
-            printf '%s %s %s %s\n' "$$" "$LANE" "$WHO" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > "$(record_path "$1")"
-            now_ms; tms=$(( NOW_MS - t0 ))
-            record_peak
-            report_take "$tms" 1
-            return 0
-        fi
-        now_ms; tms=$(( NOW_MS - t0 ))
-        if [ "$tms" -ge $((WAIT_S * 1000)) ]; then
-            die_wait "no token $n within ${WAIT_S} s ($((tms / 1000)) s waited, lane=$LANE): nothing was measured, so this exits 6"
-        fi
-        if [ "$waited" -eq 0 ]; then
-            echo "host-tokens: waiting for token $n; the pool holds $POOL_SIZE"
-            show | sed 's/^/  /'
-        fi
-        sleep 2
-        waited=$((waited + 2))
-        if [ $((waited % 60)) -eq 0 ]; then
-            echo "host-tokens: still waiting for token $n (${waited}s)"
-        fi
-    done
-}
-
-take() {
-    local want="$1" taken=0 n fd got held=' ' t0 tms waited=0
-    [ "$want" -ge 1 ] || die "take needs at least one token"
-    [ "$want" -le "$POOL_SIZE" ] || die "cannot take $want tokens from a pool of $POOL_SIZE"
-    prepare
-    now_ms; t0=$NOW_MS
-    while [ "$taken" -lt "$want" ]; do
-        # One pass over the whole pool, non-blocking. Waiting on the *first* token while the second is
-        # free would make a pool of twenty-four run exactly one thing at a time -- which is the defect
-        # this replaces, arrived at from the other side.
-        got=0
+        ACQ_N=0
+        held=' '
         n=1
-        while [ "$n" -le "$POOL_SIZE" ] && [ "$got" -eq 0 ]; do
-            case "$held" in
-                *" $n "*) n=$((n + 1)); continue ;;
-            esac
+        while [ "$n" -le "$POOL_SIZE" ] && [ "$ACQ_N" -lt "$want" ]; do
             # fds 20+ are this script's token hold, by token index. They are inherited by the worker,
             # so a token lives exactly as long as the process tree that took it. A fixed descriptor
             # number on purpose: bash's `{fd}` form can carry close-on-exec, and a token that vanishes
@@ -279,39 +256,51 @@ take() {
             fd=$((20 + n))
             eval "exec $fd>\"$(token_path "$n")\""
             if flock -n "$fd"; then
-                printf '%s %s %s %s\n' "$$" "$LANE" "$WHO" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > "$(record_path "$n")"
-                taken=$((taken + 1))
+                ACQ_N=$((ACQ_N + 1))
                 held="$held$n "
-                got=1
             else
                 eval "exec $fd>&-"
             fi
             n=$((n + 1))
         done
-        if [ "$got" -eq 0 ]; then
-            now_ms; tms=$(( NOW_MS - t0 ))
-            # Out of time is not out of tokens, and it is not a red reading either: the caller ran
-            # nothing, and that has to be its own answer (6), not "your choice was wrong" (2).
-            if [ "$tms" -ge $((WAIT_S * 1000)) ]; then
-                die_wait "no token of $POOL_SIZE within ${WAIT_S} s ($((tms / 1000)) s waited, lane=$LANE, holding $taken): nothing was measured, so this exits 6"
-            fi
-            # The wait is not silent: a run that queues without saying who it waits for looks exactly
-            # like a run that hung, and on 2026-11-24 that cost a whole measurement.
-            echo "host-tokens: waiting for a token of $POOL_SIZE (lane=$LANE, holding $taken, waited $((tms / 1000))s)"
-            show | sed 's/^/  /'
-            sleep 1
-            waited=$((waited + 1))
-            if [ $((waited % 60)) -eq 0 ]; then
-                echo "host-tokens: still waiting for a token (${waited}s, lane=$LANE)"
-            fi
+        if [ "$ACQ_N" -ge "$want" ] || { [ "$mode" = upto ] && [ "$ACQ_N" -ge 1 ]; }; then
+            break
         fi
+        # Not enough: give back what this pass took before waiting.
+        for n in $held; do eval "exec $((20 + n))>&-"; done
+        now_ms; tms=$(( NOW_MS - t0 ))
+        # Out of time is not out of tokens, and it is not a red reading either: the caller ran
+        # nothing, and that has to be its own answer (6), not "your choice was wrong" (2).
+        if [ "$tms" -ge $((WAIT_S * 1000)) ]; then
+            die_wait "no $want token(s) of $POOL_SIZE within ${WAIT_S} s ($((tms / 1000)) s waited, lane=$LANE): nothing was measured, so this exits 6"
+        fi
+        # The wait is not silent: a run that queues without saying who it waits for looks exactly
+        # like a run that hung, and on 2026-11-24 that cost a whole measurement.
+        if [ $((attempts % 30)) -eq 0 ]; then
+            echo "host-tokens: waiting for $want token(s) of $POOL_SIZE (lane=$LANE, holding none, waited $((tms / 1000))s)"
+            show | sed 's/^/  /'
+        fi
+        attempts=$((attempts + 1))
+        sleep "0.$((RANDOM % 900 + 100))"
     done
-    now_ms; tms=$(( NOW_MS - t0 ))
+    for n in $held; do
+        printf '%s %s %s %s
+' "$$" "$LANE" "$WHO" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > "$(record_path "$n")"
+    done
+    now_ms; ACQ_MS=$(( NOW_MS - t0 ))
     record_peak
-    report_take "$tms" "$want"
+    report_take "$ACQ_MS" "$ACQ_N"
+}
+
+take() {
+    local want="$1"
+    [ "$want" -ge 1 ] || die "take needs at least one token"
+    [ "$want" -le "$POOL_SIZE" ] || die "cannot take $want tokens from a pool of $POOL_SIZE"
+    prepare
+    acquire "$want" all
     # One line per case would drown the run it is measuring: a caller that hands a token to every
     # case in a plan passes CAMEL_TOKEN_QUIET=1 and hears only about waits.
-    [ "${CAMEL_TOKEN_QUIET:-0}" = '1' ] || echo "host-tokens: took $want of $POOL_SIZE tokens (lane=$LANE, waited $((tms / 1000))s)"
+    [ "${CAMEL_TOKEN_QUIET:-0}" = '1' ] || echo "host-tokens: took $want of $POOL_SIZE tokens (lane=$LANE, waited $((ACQ_MS / 1000))s)"
 }
 
 # Take what the pool has, up to a wanted width, and run a command at that width.
@@ -328,34 +317,16 @@ take() {
 # locks are. `HOST_BUILD_JOBS=<n>` is printed first, so a caller that reads the run's stream learns
 # the width the build actually got rather than the width it asked for.
 take_up_to() {
-    local want="$1" taken=0 n fd t0 tms
+    local want="$1"
     shift
     [ "$want" -ge 1 ] || die "take-up-to needs at least one token"
+    [ "$want" -le "$POOL_SIZE" ] || want="$POOL_SIZE"
     prepare
-    now_ms; t0=$NOW_MS
-    n=1
-    while [ "$n" -le "$POOL_SIZE" ] && [ "$taken" -lt "$want" ]; do
-        fd=$((20 + n))
-        eval "exec $fd>\"$(token_path "$n")\""
-        if flock -n "$fd"; then
-            printf '%s %s %s %s\n' "$$" "$LANE" "$WHO" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > "$(record_path "$n")"
-            taken=$((taken + 1))
-            report_take 0 1
-        else
-            eval "exec $fd>&-"
-        fi
-        n=$((n + 1))
-    done
-    if [ "$taken" -eq 0 ]; then
-        take 1 >/dev/null
-        taken=1
-    fi
-    record_peak
-    now_ms; tms=$(( NOW_MS - t0 ))
-    echo "host-tokens: running at $taken of $want worker(s) (lane=$LANE, $((tms / 1000))s to take them)"
-    echo "HOST_BUILD_JOBS=$taken"
-    export CAMEL_TOKENS_HELD="$taken"
-    export CMAKE_BUILD_PARALLEL_LEVEL="$taken"
+    acquire "$want" upto
+    echo "host-tokens: running at $ACQ_N of $want worker(s) (lane=$LANE, $((ACQ_MS / 1000))s to take them)"
+    echo "HOST_BUILD_JOBS=$ACQ_N"
+    export CAMEL_TOKENS_HELD="$ACQ_N"
+    export CMAKE_BUILD_PARALLEL_LEVEL="$ACQ_N"
     "$@"
 }
 
@@ -506,8 +477,38 @@ self_test() {
     kill -9 "$holder4" 2>/dev/null
     wait "$holder4" 2>/dev/null
 
+    # 13. two takers that each want more than half of the pool both finish, one after the other.
+    # Each takes two of three and holds them for a second; taking one token at a time and waiting for
+    # the second would leave each holding one and waiting on the other until the wait ran out. Inside
+    # each worker the pool must show exactly two held -- the other taker's tokens are not there -- so
+    # the two ran one after the other and the total held never passed the pool.
+    two_log=$(mktemp)
+    t0=$(date +%s%N)
+    for _ in 1 2; do
+        (
+            WAIT_S=20
+            CAMEL_TOKEN_QUIET=1 take 2 >/dev/null 2>&1 || exit 3
+            show | grep -o 'held=[0-9]*' | head -1 >> "$two_log"
+            sleep 1
+        ) &
+        two_pids="${two_pids:-} $!"
+    done
+    two_bad=0
+    for p in $two_pids; do wait "$p" || two_bad=$((two_bad + 1)); done
+    ms=$(( ($(date +%s%N) - t0) / 1000000 ))
+    seen=$(sort "$two_log" | tr '
+' ' ')
+    rm -f "$two_log"
+    peak_of
+    if [ "$two_bad" -eq 0 ] && [ "$seen" = 'held=2 held=2 ' ] && [ "$PEAK_N" -le "$POOL_SIZE" ] && [ "$ms" -lt 15000 ]; then
+        echo "ok    two takers that each want two of three both finish, one after the other (${ms}ms)"
+    else
+        echo "FAIL  two takers of two on a pool of three: $two_bad failed, held seen '$seen', peak $PEAK_N, ${ms}ms"
+        bad=$((bad + 1))
+    fi
+
     rm -rf "$root"
-    if [ "$bad" -eq 0 ]; then echo 'selftest: 12 checks, 0 failed'; return 0; fi
+    if [ "$bad" -eq 0 ]; then echo 'selftest: 13 checks, 0 failed'; return 0; fi
     echo "selftest: $bad failed"; return 1
 }
 
