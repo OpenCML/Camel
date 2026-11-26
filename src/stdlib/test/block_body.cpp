@@ -86,6 +86,34 @@ constexpr const char *kSpinText = R"cml(export func spin(x: int) => int {
 }
 )cml";
 
+/// Two bodies whose only difference is *inside a region*: one branch, the same arms, the same
+/// condition, the same function name, and one string constant in the else arm. What neither the
+/// arm's value nor the branch's value is read for -- `return x` -- so the arm's write reaches
+/// nothing outside its region: the only node that carries it is the arm's own exit.
+constexpr const char *kBranchHotText = R"cml(export func regionbody(x: int) => int {
+    if x > 0 then {
+        println("hot")
+        x + 1
+    } else {
+        println("cold")
+        x + 1
+    }
+    return x
+}
+)cml";
+
+constexpr const char *kBranchChillText = R"cml(export func regionbody(x: int) => int {
+    if x > 0 then {
+        println("hot")
+        x + 1
+    } else {
+        println("chill")
+        x + 1
+    }
+    return x
+}
+)cml";
+
 /// A body that may fault: dividing by a parameter can divide by zero (design principles 3.9).
 constexpr const char *kRiskyText  = R"cml(export func risky(x: int) => int {
     return 10 / x
@@ -280,6 +308,11 @@ BlockBodyTestPass::apply(const camel::runtime::Program *program, std::ostream &o
         {.what = "renamed", .function = "renamed", .text = kRenamedText},
         {.what = "diff", .function = "diff", .text = kDiffText},
         {.what = "mirror", .function = "mirror", .text = kMirrorText},
+        // Two bodies that differ only inside a region, and one of them again: the difference is
+        // one constant in one arm, and being parsed twice must not change a name.
+        {.what = "hot", .function = "regionbody", .text = kBranchHotText},
+        {.what = "chill", .function = "regionbody", .text = kBranchChillText},
+        {.what = "hot_again", .function = "regionbody", .text = kBranchHotText},
     };
     for (Compiled &block : blocks) {
         block.program = compileBody(block.text, block.function, block.what, os);

@@ -72,7 +72,7 @@ for line in body_lines + trait_lines + arrange_lines + cost_lines + call_lines:
 # Five bodies, each a program of its own: a root graph and the function's graph, in a program that
 # is not the one they were compiled for.
 built = [line for line in body_lines if line.startswith("BLOCK_BODY built ")]
-assert len(built) == 10, f"expected ten bodies to compile, got: {body_lines}"
+assert len(built) == 13, f"expected thirteen bodies to compile, got: {body_lines}"
 bodies = {}
 for line in built:
     what = line[len("BLOCK_BODY built ") :].split(" ")[0]
@@ -177,6 +177,13 @@ assert traits["renamed"]["portable"] != traits["body"]["portable"], traits["rena
 # Two bodies that differ only in which parameter is subtracted from which are two blocks.
 assert uris["mirror"] != uris["diff"], (uris["diff"], uris["mirror"])
 assert len({uris[what] for what in ("body", "second", "effectful", "fallible", "spin", "diff", "mirror")}) == 7, uris
+# Two bodies whose only difference is *inside a region* are two blocks. The same function name, the
+# same branch, the same arms, and one string constant in one arm; nothing outside the arm reads what
+# the arm hands out, so a name read off the outer graph alone would call them one body.
+assert uris["hot"] != uris["chill"], (uris["hot"], uris["chill"])
+# And the same source parsed twice is one block: the nodes of a region are walked in the order the
+# structure fixes, never in the order they happened to be created.
+assert uris["hot"] == uris["hot_again"], (uris["hot"], uris["hot_again"])
 
 # The entry program, read in the same run: the numbers it had before the bodies were built are the
 # numbers it has after, and they are the numbers of a run without the pass at all.
