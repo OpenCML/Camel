@@ -4,9 +4,10 @@
 /*
  * The state module: an explicit mutable reference, as a handle the core provides.
  *
- * A reference is one box a handle points at (design principles 3.3, "handle types"). `ref` makes a box and answers a handle to it;
- * `get` reads the content; `set` writes it; `update` writes `f` of it, for a `pure` `f`. The four are operators of this
- * module, so what each touches is declared where the operator contract declares it
+ * A reference is one box a handle points at (design principles 3.3, "handle types"). `ref` makes a
+ * box and answers a handle to it; `get` reads the content; `set` writes it; `update` writes `f` of
+ * it, for a `pure` `f`. The four are operators of this module, so what each touches is declared
+ * where the operator contract declares it
  * (`OperatorTable::declareResources`, principle 10.5) and not by a body the scheduler cannot see:
  *
  *   ref                     allocates one handle (`state::Ref`), result fresh
@@ -23,6 +24,7 @@
  * the box goes when the last handle does. Nothing in this module frees a box by hand.
  */
 
+#include "camel/core/operator_table.h"
 #include "ref.h"
 
 #include "camel/core/context/context.h"
@@ -204,9 +206,9 @@ class StateModule final : public BuiltinModule {
             // is `(x: T) => T pure`, so a program can hand it only a function that touches
             // nothing -- the union is then the box alone -- but which function it runs is the
             // node's business, not a fact the declaration may leave out.
-            updates.functionOperand =
-                camel::core::sem::ResourceBinding{.kind = camel::core::sem::ResourceBinding::Kind::Norm,
-                                                  .index = 1};
+            updates.functionOperand = camel::core::sem::ResourceBinding{
+                .kind  = camel::core::sem::ResourceBinding::Kind::Norm,
+                .index = 1};
 
             table.declareResources(
                 "state",

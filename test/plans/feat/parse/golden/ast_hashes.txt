@@ -553,12 +553,12 @@ facd1562ced5e6f9 ok src/stdlib/time.cml
 ba52a9c1204641a6 ok src/stdlib/vjp.cml
 a2ca595975c02dee ok src/stdlib/autodiff/signatures/autodiff.cml
 6ae5ad8be3ee4eec ok src/stdlib/ckpt/signatures/ckpt.cml
-483b0496470b41ad no src/stdlib/nn/signatures/nn.cml
+d250ff2dfba0ab19 no src/stdlib/nn/signatures/nn.cml
 b9b23c3234979dee ok src/stdlib/rulesets/int8.cml
 1d27a3dc0b0c111c ok src/stdlib/rulesets/jvp.cml
 8375a530eff268c4 ok src/stdlib/rulesets/probe_batch.cml
 7a11798394cc6e2c ok src/stdlib/rulesets/probe_missing.cml
-0b3495938e0f5394 ok src/stdlib/rulesets/transpose.cml
+15bbc56e0ac7d0f6 ok src/stdlib/rulesets/transpose.cml
 a338d98395d2f704 ok src/stdlib/rulesets/vmap.cml
 0c368faaef090af5 no src/stdlib/tensor/signatures/tensor.cml
 6f34daec70d7b4c4 ok src/stdlib/tiles/signatures/tiles.cml
@@ -4523,7 +4523,7 @@ ac352f7ec177642e ok test/cases/transforms/split/split_loop_taped_rounds.cml
 f8d6eafa7edc0cde ok test/cases/transforms/split/split_two_params.cml
 6343d2633f3bb453 ok test/cases/transforms/split/split_unread_member_with_no_zero_refused.cml
 0edbfdbc16c4ae3a ok test/cases/transforms/split/split_whole_and_member_answers.cml
-4e550462b3865211 ok test/cases/transforms/transpose/cotangent_enters_the_array_port.cml
+0daba76a4768bd69 ok test/cases/transforms/transpose/cotangent_enters_the_array_port.cml
 4c02b6ac23d1c0b5 ok test/cases/transforms/transpose/floatgate_f32_branch.cml
 48455d20b8a47f6a ok test/cases/transforms/transpose/floatgate_f32_closure.cml
 3f0d4ccbd6dffc44 ok test/cases/transforms/transpose/floatgate_f32_loop.cml

@@ -36,6 +36,7 @@
 #pragma once
 
 #include "camel/core/loop_kind.h"
+#include "camel/core/oper_id.h"
 #include "camel/core/operator.h"
 #include "camel/core/operator_semantics.h"
 #include "camel/core/rtdata/base.h"
@@ -287,7 +288,6 @@ std::vector<gc_node_ref_t> liveNodesOf(const GCGraph &graph);
 /// through the payload.
 gc_node_ref_t branchJoinOf(const GCGraph &graph, gc_node_ref_t brch);
 
-
 /// The aggregate questions of `camel/runtime/draft.h`, asked of a frozen graph: how many members
 /// the aggregate has (0 when it is not one), and whether its last member may be dropped -- no root
 /// names it, nothing but the aggregate reads that member, and every reader of the aggregate reads a
@@ -299,8 +299,8 @@ uint32_t aggregateArity(const GCGraph &graph, gc_node_ref_t ref);
 /// (`GCFillBody::slots` is a span of `gc_slot_idx_t`) and not one of the aggregate's ordinary
 /// inputs
 /// -- an aggregate with two members has one input. Guards on a root,
-/// a member with readers, a reader of the last member, or droppable would all judge "member = input",
-/// which that reading disproves; they would let the next reader believe this was covered.
+/// a member with readers, a reader of the last member, or droppable would all judge "member =
+/// input", which that reading disproves; they would let the next reader believe this was covered.
 enum class AggregateTailVerdict : uint8_t {
     NotAnAggregate,  // not an aggregate, or too few members to have a last one
     MappingMismatch, // the member count and the input count disagree: member i is not input i
@@ -603,8 +603,8 @@ struct GCOperBody {
     uint32_t reserved        = 0;
 
     /// The URI of the operator. The view is owned by the symbol table and never invalidated;
-    /// resolving it takes no lock.
-    std::string_view uri() const { return camel::core::OperatorTable::instance().uri(oper); }
+    /// resolving it takes no lock. Defined in graph.cpp, where the operator table is.
+    std::string_view uri() const;
 };
 static_assert(std::is_trivially_copyable_v<GCOperBody>);
 

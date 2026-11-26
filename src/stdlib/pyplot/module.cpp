@@ -5,15 +5,16 @@
 #include "camel/compile/gir.h"
 #include "camel/core/context/context.h"
 #include "camel/core/error/runtime.h"
+#include "camel/core/operator_table.h"
 #include "camel/core/operator_traits.h"
 #include "camel/core/resource_semantics.h"
 #include "camel/core/type.h"
 #include "camel/core/type/composite/func.h"
 #include "camel/core/type/other.h"
 #include "camel/core/type/resolver.h"
-#include "src/stdlib/python/embed.h"
 #include "executor.h"
 #include "operators.h"
+#include "src/stdlib/python/embed.h"
 
 #include <exception>
 #include <string>
@@ -36,8 +37,9 @@ void ensurePyplotInterpreter() {
     } catch (const std::exception &e) {
         throwRuntimeFault(
             RuntimeDiag::RuntimeError,
-            std::string("Failed to initialise pyplot's embedded Python interpreter at its first "
-                        "use: ") +
+            std::string(
+                "Failed to initialise pyplot's embedded Python interpreter at its first "
+                "use: ") +
                 e.what());
     }
 }
@@ -45,16 +47,17 @@ void ensurePyplotInterpreter() {
 bool PyplotModule::load() {
     if (loaded_)
         return true;
-    // `import` executes no code (design principles 3.1): loading registers the executor and the purity of the operator,
-    // which the declaration loader needs, and nothing that touches CPython. The interpreter is
-    // created by the first `plot` (`ensurePyplotInterpreter`), or attached to when `python`
-    // created it first.
+    // `import` executes no code (design principles 3.1): loading registers the executor and the
+    // purity of the operator, which the declaration loader needs, and nothing that touches CPython.
+    // The interpreter is created by the first `plot` (`ensurePyplotInterpreter`), or attached to
+    // when `python` created it first.
     context_ptr_t ctx = context_;
     context_->registerExecutorFactory("pyplot", [ctx]() { return createPyplotExecutor(ctx); });
     // The purity of the module's operator (design principles 3.3). `plot` writes an image file
     // (or opens a window when matplotlib shows one): no pass may fold, merge or drop the call.
     // Without this entry the declaration loader refuses a body-less declaration of `pyplot:plot`
-    // (`Builder::declareNativeOperator`, src/compile/gir/builder_modules.cpp#declareNativeOperator).
+    // (`Builder::declareNativeOperator`,
+    // src/compile/gir/builder_modules.cpp#declareNativeOperator).
     camel::core::OperatorTable::instance().declare("pyplot", {{"plot", false}});
     // What it touches: the image file, which is the file system under the name the fs module
     // declares, read-modify-written because the file it names may already be there. The window it

@@ -6,6 +6,7 @@
  */
 
 #include "operators.h"
+#include "camel/core/operator_table.h"
 
 #include "camel/core/context/context.h"
 #include "camel/core/derivative.h"
@@ -41,12 +42,15 @@ void registerOperatorMetadata() {
         "laws:stop_gradient",
         {.pure = true, .elementwise = false});
     camel::core::OperatorTable::instance().declareResources(
-        "laws", {{"stop_gradient", camel::core::sem::ResourceSpec{}}});
+        "laws",
+        {{"stop_gradient", camel::core::sem::ResourceSpec{}}});
     // No derivative crosses the node: the tangent of the result is a zero of its own type and the
     // cotangent of the argument the same zero, which is what `noGradient` answers. Writing it here,
     // beside the kernel, keeps the two where a reader of one reads the other -- the library route
     // also states it as a rule (`jvp_stop_gradient`, `stop_gradient_t`), and the two must agree.
-    camel::core::DerivativeRegistry::instance().setRule("laws:stop_gradient", camel::core::noGradient);
+    camel::core::DerivativeRegistry::instance().setRule(
+        "laws:stop_gradient",
+        camel::core::noGradient);
 }
 
 } // namespace camel::laws

@@ -3,6 +3,7 @@
 
 #include "camel/core/module/module.h"
 #include "camel/core/operator.h"
+#include "camel/core/operator_table.h"
 #include "camel/core/tags.h"
 #include "camel/core/type/resolver.h"
 #include "core/module/entity_internal.h"

@@ -6,6 +6,7 @@
  */
 
 #include "operators.h"
+#include "camel/core/operator_table.h"
 
 #include "pullback.h"
 
@@ -42,8 +43,8 @@ class GradResolver final : public type::FuncTypeResolver {
   public:
     explicit GradResolver(bool withValue, bool hasAux) : withValue_(withValue), hasAux_(hasAux) {}
 
-    std::optional<FunctionType *> resolve(
-        const type_vec_t &with, const type_vec_t &norm) const override {
+    std::optional<FunctionType *>
+    resolve(const type_vec_t &with, const type_vec_t &norm) const override {
         const auto gradient = signatureOf(with, norm, /*statesSplit=*/hasAux_);
         if (!gradient) {
             return std::nullopt;
@@ -56,7 +57,8 @@ class GradResolver final : public type::FuncTypeResolver {
     /// so the shape of the result may not follow a value that is only known when the program
     /// runs). A value the compiler cannot read, and a `false`, are refused with the reason.
     std::optional<FunctionType *> resolveWith(
-        const type_vec_t &with, const type_vec_t &norm, type::static_args_t statics) const override {
+        const type_vec_t &with, const type_vec_t &norm,
+        type::static_args_t statics) const override {
         if (hasAux_ && staticBool(statics) != std::optional<bool>(true)) {
             return std::nullopt;
         }
@@ -64,12 +66,12 @@ class GradResolver final : public type::FuncTypeResolver {
     }
 
     std::optional<std::string> explainRejection(
-        const type_vec_t &with, const type_vec_t &norm, type::static_args_t normStatics) const override {
+        const type_vec_t &with, const type_vec_t &norm,
+        type::static_args_t normStatics) const override {
         if (!with.empty() || norm.empty() || norm[0]->code() != TypeCode::Function) {
             return std::nullopt;
         }
-        if (norm.size() != expectedNormCount() ||
-            (hasAux_ && norm[1]->code() != TypeCode::Bool)) {
+        if (norm.size() != expectedNormCount() || (hasAux_ && norm[1]->code() != TypeCode::Bool)) {
             return std::nullopt;
         }
         if (hasAux_) {
@@ -98,11 +100,10 @@ class GradResolver final : public type::FuncTypeResolver {
     /// whose signature is computed has no signature object to answer from, and a call to
     /// `grad(f, argnums: 0)` must be refused as the unknown parameter it is, not bound to a
     /// position this rule does not name.
-    bool parameterNames(std::vector<std::string> &with, std::vector<std::string> &norm)
-        const override {
+    bool
+    parameterNames(std::vector<std::string> &with, std::vector<std::string> &norm) const override {
         with.clear();
-        norm = hasAux_ ? std::vector<std::string>{"f", "has_aux"}
-                       : std::vector<std::string>{"f"};
+        norm = hasAux_ ? std::vector<std::string>{"f", "has_aux"} : std::vector<std::string>{"f"};
         return true;
     }
 
@@ -131,8 +132,8 @@ class GradResolver final : public type::FuncTypeResolver {
         return camel::core::rtdata::fromSlot<bool>(*statics[1].value);
     }
 
-    std::optional<GradientSignature> signatureOf(
-        const type_vec_t &with, const type_vec_t &norm, bool split) const {
+    std::optional<GradientSignature>
+    signatureOf(const type_vec_t &with, const type_vec_t &norm, bool split) const {
         if (!with.empty() || norm.size() != expectedNormCount() ||
             norm[0]->code() != TypeCode::Function) {
             return std::nullopt;
@@ -208,7 +209,8 @@ const std::vector<oper_group_ptr_t> &operatorGroups() {
         // are two rules of one name, so a call is resolved by its arguments -- `grad(f)` and
         // `grad(f, has_aux: true)` -- and neither form can be reached by accident. `argnums` is
         // deliberately absent: the differentiated value is the first `with` parameter (design
-        // principles 9.9), and a call that names `argnums` is refused as the unknown parameter it is.
+        // principles 9.9), and a call that names `argnums` is refused as the unknown parameter it
+        // is.
         OperatorGroup::create(
             "grad",
             {{"autodiff:grad", std::make_shared<GradResolver>(false, false)},
@@ -257,7 +259,8 @@ void registerOperatorMetadata() {
     for (const char *name :
          {"autodiff:grad", "autodiff:grad_aux", "autodiff:with_grad", "autodiff:with_grad_aux"}) {
         camel::core::OperatorTable::instance().set(
-            name, {.pure = true, .readsGraphs = true, .macro = true});
+            name,
+            {.pure = true, .readsGraphs = true, .macro = true});
     }
     // `stop_gradient` used to be declared in `stdlib/autodiff.cml` with its kernel and its rule
     // here, which made deleting this engine delete a name a program can call. All three are the

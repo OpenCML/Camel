@@ -7,6 +7,7 @@
 
 #include "camel/core/operator_table.h"
 #include "camel/core/node_attrs.h"
+#include "camel/core/operator.h"
 #include "camel/core/operator_names.h"
 #include "camel/core/type/composite/func.h"
 #include "camel/core/type/typevar.h"
@@ -18,6 +19,26 @@
 #include <mutex>
 #include <stdexcept>
 #include <tuple>
+
+// OperatorGroup is declared at global scope (camel/core/operator.h). Defined here, where the table
+// is, so that constructing a group does not need the table's definition to compile.
+void OperatorGroup::publishResolvers() {
+    opers_.clear();
+    opers_.reserve(resolvers_.size());
+    std::vector<std::string> uris;
+    uris.reserve(resolvers_.size());
+    for (const auto &[uri, resolver] : resolvers_) {
+        if (uri.empty() || !resolver) {
+            opers_.push_back(camel::core::kNoOper);
+            continue;
+        }
+        opers_.push_back(camel::core::OperatorTable::instance().setResolver(uri, resolver));
+        uris.push_back(uri);
+    }
+    if (!uris.empty()) {
+        camel::core::OperatorTable::instance().declareGroup(name_, uris);
+    }
+}
 
 namespace camel::core {
 
@@ -370,7 +391,7 @@ std::string checkVarAgainstResources(
 OperId OperatorTable::setResolver(std::string_view uri, type::resolver_ptr_t resolver) {
     std::unique_lock lock(mutex_);
     const OperId id = internLocked(uri);
-    Entry &entry   = entries_[id];
+    Entry &entry    = entries_[id];
     if (const sem::OperatorSemantics *declared = entry.declared.load(std::memory_order_relaxed);
         declared != nullptr && declared->resources) {
         const std::string problem =
@@ -726,8 +747,7 @@ void OperatorTable::declareShape(std::string_view uri, camel::ops::OperShape sha
     camel::ops::Registry::instance().stateShape(recordId, shape);
 }
 
-void OperatorTable::declareSubscriptForm(
-    std::string_view uri, camel::ops::SubscriptForm form) {
+void OperatorTable::declareSubscriptForm(std::string_view uri, camel::ops::SubscriptForm form) {
     // A record item for the reason `declareShape` is one: a reader asks it of the operator a node
     // names while it analyses a graph, and the record is where a fact that a graph reader and a
     // back end both need lives. The statement goes through the join `recordOf` reads, and nowhere

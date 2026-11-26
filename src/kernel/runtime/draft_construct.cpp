@@ -11,6 +11,7 @@
  * hierarchy.
  */
 
+#include "camel/core/operator_table.h"
 #include "camel/runtime/draft.h"
 
 #include "camel/core/type/base.h"
@@ -102,8 +103,8 @@ ensureValueSlot(GraphDraft &draft, camel::core::type::Type *type, gc_slot_idx_t 
 /// the signature publishes. That is why this is built through the factory instead of with
 /// `FunctionType::create`, which states a list of parameter types and drops the four other things a
 /// parameter list carries.
-camel::core::type::FunctionType *withoutNormParameter(
-    const camel::core::type::FunctionType &type, size_t dropped) {
+camel::core::type::FunctionType *
+withoutNormParameter(const camel::core::type::FunctionType &type, size_t dropped) {
     camel::core::type::FunctionTypeFactory factory;
     const bool named = type.hasArgNames();
     factory.setHasCompileInfo(named);
@@ -120,7 +121,10 @@ camel::core::type::FunctionType *withoutNormParameter(
             factory.addWithConstasArg(nameAt(i), type.withTypeAt(i));
         } else {
             factory.addWithArg(
-                nameAt(i), type.withTypeAt(i), type.withIsVarAt(i), type.withNeedsValueAt(i));
+                nameAt(i),
+                type.withTypeAt(i),
+                type.withIsVarAt(i),
+                type.withNeedsValueAt(i));
         }
     }
     for (size_t i = 0; i < type.normTypesCount(); ++i) {
@@ -319,7 +323,7 @@ gc_node_ref_t GraphDraft::addFuncNode(
     ++mutations_;
     dataIndex = ensureValueSlot(*this, type, dataIndex);
     GCFuncRef body{.ref = payloadGraphIndexOf(calleeGraph), .reserved = writtenCaptures};
-    const auto payload = bytesForStruct(body);
+    const auto payload       = bytesForStruct(body);
     const gc_node_ref_t made = addNode(
         DraftNodeInit{
             .dataIndex    = dataIndex,
@@ -442,10 +446,10 @@ void GraphDraft::appendInput(
         kind == DraftEdgeKind::Sync) {
         const auto present = inputsOf(userId, kind, role);
         const auto users   = usersOf(inputId, slot);
-        const bool already = present.size() <= users.size()
-                                 ? std::find(present.begin(), present.end(), inputId) !=
-                                       present.end()
-                                 : std::find(users.begin(), users.end(), userId) != users.end();
+        const bool already =
+            present.size() <= users.size()
+                ? std::find(present.begin(), present.end(), inputId) != present.end()
+                : std::find(users.begin(), users.end(), userId) != users.end();
         if (already) {
             return;
         }
@@ -455,11 +459,13 @@ void GraphDraft::appendInput(
                 // A sync edge is one link of one chain: a statement is written directly after one
                 // other statement, so a node takes one sync predecessor (setSyncInputs, and the
                 // seal check of docs/design/effects/edges.cn.md 4.6, refuse a second).
-                throw std::logic_error(std::format(
-                    "A statement of a sync block already follows node {}, so it cannot follow node "
-                    "{} as well.",
-                    present[0],
-                    inputId));
+                throw std::logic_error(
+                    std::format(
+                        "A statement of a sync block already follows node {}, so it cannot follow "
+                        "node "
+                        "{} as well.",
+                        present[0],
+                        inputId));
             }
         }
     }
@@ -486,8 +492,8 @@ bool GraphDraft::unlinkInput(
     }
     DraftNodeHeader &h = draftNode->header;
     auto *base         = reinterpret_cast<gc_node_ref_t *>(draftNode->tail + h.payloadBytes);
-    const size_t total = static_cast<size_t>(h.normInputCount) + h.withInputCount + h.ctrlInputCount +
-                         h.orderInputCount + h.syncInputCount;
+    const size_t total = static_cast<size_t>(h.normInputCount) + h.withInputCount +
+                         h.ctrlInputCount + h.orderInputCount + h.syncInputCount;
     const size_t at    = static_cast<size_t>(&*it - base);
     std::memmove(base + at, base + at + 1, (total - at - 1) * sizeof(gc_node_ref_t));
     switch (slot) {
@@ -522,7 +528,8 @@ void GraphDraft::replaceInput(
     ++mutations_;
     ASSERT(node(userId) != nullptr, "Cannot replace input on a missing draft node.");
     ASSERT(node(newInputId) != nullptr, "Cannot replace with a missing draft node.");
-    const auto inputs = mutatedInputs(inputsOf(userId, kind, role), oldInputId, false, true, newInputId);
+    const auto inputs =
+        mutatedInputs(inputsOf(userId, kind, role), oldInputId, false, true, newInputId);
     setInputs(userId, kind, role, inputs);
 }
 
@@ -569,7 +576,7 @@ void GraphDraft::setLoopIterableInterval(gc_node_ref_t id) {
     ASSERT(
         draftNode != nullptr && draftNode->header.kind == GCNodeKind::Loop,
         "Only a LOOP node iterates an interval.");
-    auto *body          = DraftNodeView::payloadAs<GCLoopRef>(draftNode);
+    auto *body         = DraftNodeView::payloadAs<GCLoopRef>(draftNode);
     body->iterableForm = camel::core::LoopIterableForm::Interval;
 }
 
@@ -617,18 +624,19 @@ void GraphDraft::rewriteNode(gc_node_ref_t id, const DraftNodeInit &init) {
 
     // A rewritten node keeps its source origin, its numeric permissions, its attributes and
     // its source name unless the rewrite gives it others.
-    const uint64_t origin     = draftNode->header.origin;
+    const uint64_t origin                              = draftNode->header.origin;
     const camel::core::sem::PermissionMask permissions = draftNode->header.permissions;
-    const uint32_t attrs      = draftNode->header.attrs;
-    const uint32_t name       = draftNode->header.name;
-    const GCNodeKind oldKind  = draftNode->header.kind;
+    const uint32_t attrs                               = draftNode->header.attrs;
+    const uint32_t name                                = draftNode->header.name;
+    const GCNodeKind oldKind                           = draftNode->header.kind;
     replaceNodeStorage(id, rebuildNode(id, init));
     // A node's type and the slot it writes are one answer. The frame layout the collector traces
     // against is built from `runtimeSlotTypes_` (allocateRuntimeSlot records the type a slot was
     // allocated with), so a node whose type changes here changes its slot's declaration with it, in
-    // this same place. Retyping the slot afterwards would let the two say different things -- a value
-    // of one form in a slot that declared another, which the collector reads as the wrong type; a
-    // `Variant` held in a function-typed slot is exactly that (the crash at Variant::updateRefs).
+    // this same place. Retyping the slot afterwards would let the two say different things -- a
+    // value of one form in a slot that declared another, which the collector reads as the wrong
+    // type; a `Variant` held in a function-typed slot is exactly that (the crash at
+    // Variant::updateRefs).
     if (init.dataType != nullptr && init.dataIndex > 0 &&
         static_cast<size_t>(init.dataIndex) < runtimeSlotTypes_.size() &&
         runtimeSlotTypes_[static_cast<size_t>(init.dataIndex)] != init.dataType) {
@@ -656,19 +664,19 @@ void GraphDraft::rewriteNode(gc_node_ref_t id, const DraftNodeInit &init) {
     // The input lists are read back from the rebuilt node, not from `init`: a caller that
     // snapshots the node and changes some lists (snapshotNodeInit) passes spans that view the
     // node's own tail block, which rebuildNode has just laid out anew (in place when it fits).
-    // With one norm input fewer, the span that covered the control inputs before the rebuild covers other
-    // entries, and the control inputs were left without their user reference: a call
+    // With one norm input fewer, the span that covered the control inputs before the rebuild covers
+    // other entries, and the control inputs were left without their user reference: a call
     // specialized and then inlined in one session (std::opt) lost the control edge from the
     // statement before it, and that statement's effects never ran.
     const auto copy = [](std::span<const gc_node_ref_t> refs) {
         return std::vector<gc_node_ref_t>(refs.begin(), refs.end());
     };
-    const DraftNode *rebuilt = node(id);
-    const auto newNormInputs = copy(DraftNodeView::normInputs(rebuilt));
-    const auto newWithInputs = copy(DraftNodeView::withInputs(rebuilt));
-    const auto newCtrlInputs = copy(DraftNodeView::ctrlInputs(rebuilt));
+    const DraftNode *rebuilt  = node(id);
+    const auto newNormInputs  = copy(DraftNodeView::normInputs(rebuilt));
+    const auto newWithInputs  = copy(DraftNodeView::withInputs(rebuilt));
+    const auto newCtrlInputs  = copy(DraftNodeView::ctrlInputs(rebuilt));
     const auto newOrderInputs = copy(DraftNodeView::orderInputs(rebuilt));
-    const auto newSyncInputs = copy(DraftNodeView::syncInputs(rebuilt));
+    const auto newSyncInputs  = copy(DraftNodeView::syncInputs(rebuilt));
     for (gc_node_ref_t input : newNormInputs) {
         appendUserRef(input, id, DraftEdgeSlot::NormalPorts);
     }
@@ -757,8 +765,7 @@ void GraphDraft::removeNormPort(gc_node_ref_t id) {
     // nodes, and a rest pack has none), so what is erased here pairs with the signature entry at
     // the same index.
     const size_t declared = funcType_ != nullptr ? funcType_->normTypesCount() : 0;
-    const size_t fixed =
-        funcType_ != nullptr && funcType_->hasRest() ? declared - 1 : declared;
+    const size_t fixed    = funcType_ != nullptr && funcType_->hasRest() ? declared - 1 : declared;
     if (port < fixed) {
         setFuncType(withoutNormParameter(*funcType_, port));
     }
@@ -793,8 +800,8 @@ void GraphDraft::removeWithPort(gc_node_ref_t id) {
         for (size_t i = 0; i < funcType_->normTypesCount(); ++i) {
             normTypes.emplace_back(funcType_->normTypeAt(i), funcType_->normIsVarAt(i));
         }
-        setFuncType(camel::core::type::FunctionType::create(
-            withTypes, normTypes, funcType_->exitType()));
+        setFuncType(
+            camel::core::type::FunctionType::create(withTypes, normTypes, funcType_->exitType()));
     }
 }
 
@@ -824,4 +831,3 @@ gc_node_ref_t addParameterPort(GraphDraft &draft, camel::core::type::Type *type,
 }
 
 } // namespace camel::runtime
-

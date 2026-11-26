@@ -51,6 +51,7 @@
 
 #include "camel/core/mm/alloc/allocator.h"
 #include "camel/core/node_attrs.h"
+#include "camel/core/oper_id.h"
 #include "camel/core/operator_semantics.h"
 #include "camel/core/rtdata/base.h"
 #include "camel/core/symbol.h"
@@ -87,13 +88,6 @@ class FunctionType;
 } // namespace camel::core::type
 
 namespace camel::core {
-
-/// Index of an operator in the OperatorTable.
-using OperId = uint32_t;
-
-/// "No operator": the value of a zero-initialized OPER payload. Its URI is the empty string and
-/// it is never declared, so every query treats it conservatively.
-inline constexpr OperId kNoOper = 0;
 
 /// The operators the core recognises by identity, with their ids fixed at compile time. The
 /// table interns their URIs (kWellKnownOperatorUris, same order) before anything else, so

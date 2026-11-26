@@ -10,6 +10,7 @@
  */
 
 #include "camel/compile/gir/draft_graph_builder.h"
+#include "camel/core/operator_table.h"
 
 #include "camel/core/rtdata/conv.h"
 #include "camel/core/symbol.h"
@@ -194,8 +195,8 @@ runtime::DraftNodeRef DraftGraphBuilder::addStaticDataNode(
     return ref(id);
 }
 
-runtime::DraftNodeRef DraftGraphBuilder::addPortNode(
-    camel::core::type::Type *type, std::string name, bool isWith) {
+runtime::DraftNodeRef
+DraftGraphBuilder::addPortNode(camel::core::type::Type *type, std::string name, bool isWith) {
     const auto slotIndex            = addRuntimeSlot(type);
     const runtime::gc_node_ref_t id = draft().addPortNode(type, slotIndex);
     const auto node                 = ref(id);
@@ -233,7 +234,8 @@ DraftGraphBuilder::addAccsNode(camel::core::type::Type *type, uint32_t tupleInde
     return ref(draft().addAccsNode(type, tupleIndex));
 }
 
-runtime::DraftNodeRef DraftGraphBuilder::addAccsNode(camel::core::type::Type *type, std::string key) {
+runtime::DraftNodeRef
+DraftGraphBuilder::addAccsNode(camel::core::type::Type *type, std::string key) {
     return ref(draft().addAccsNode(type, key));
 }
 
@@ -262,10 +264,10 @@ runtime::DraftNodeRef DraftGraphBuilder::addFuncNode(
     const FuncTarget &target, camel::core::type::Type *type, uint32_t writtenCaptures,
     runtime::gc_slot_idx_t dataIndex) {
     GUARD(target != nullptr, "DraftGraphBuilder function target cannot be null.");
-    const uint8_t runtimeFlags =
-        target->draft().isMacroGraph() ? runtime::kGCNodeFlagMacro : 0;
-    const runtime::gc_node_ref_t id = draft().addFuncNode(
-        runtime::kInvalidGraphId, type, runtimeFlags, dataIndex, writtenCaptures);
+    const uint8_t runtimeFlags = target->draft().isMacroGraph() ? runtime::kGCNodeFlagMacro : 0;
+    const runtime::gc_node_ref_t id =
+        draft()
+            .addFuncNode(runtime::kInvalidGraphId, type, runtimeFlags, dataIndex, writtenCaptures);
     const auto node = ref(id);
     registerFuncTarget(node, target);
     return node;
@@ -376,8 +378,8 @@ void DraftGraphBuilder::eraseStaticGraphRef(const graph_ptr_t &graph) {
 }
 
 void DraftGraphBuilder::addRuleGraphRef(const graph_ptr_t &graph) {
-    if (graph && std::find(ruleGraphRefs_.begin(), ruleGraphRefs_.end(), graph) ==
-                     ruleGraphRefs_.end()) {
+    if (graph &&
+        std::find(ruleGraphRefs_.begin(), ruleGraphRefs_.end(), graph) == ruleGraphRefs_.end()) {
         ruleGraphRefs_.push_back(graph);
         // The draft keeps its own table of graph references: a graph built from it while the
         // passes run (std::macro evaluates a gradient) must name its rule too, not only the

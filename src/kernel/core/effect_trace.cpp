@@ -8,6 +8,8 @@
 #include "camel/core/effect_trace.h"
 
 #include "camel/core/context/context.h"
+#include "camel/core/operator_semantics.h"
+#include "camel/core/operator_table.h"
 #include "camel/core/operator_traits.h"
 #include "camel/core/rtdata/base.h"
 #include "camel/core/source/manager.h"
@@ -46,8 +48,8 @@ std::string sha1Hex(std::string_view data) {
         uint32_t w[80];
         for (int i = 0; i < 16; ++i) {
             const auto *p = reinterpret_cast<const unsigned char *>(msg.data() + off + i * 4);
-            w[i]          = (uint32_t(p[0]) << 24) | (uint32_t(p[1]) << 16) | (uint32_t(p[2]) << 8) |
-                            uint32_t(p[3]);
+            w[i] = (uint32_t(p[0]) << 24) | (uint32_t(p[1]) << 16) | (uint32_t(p[2]) << 8) |
+                   uint32_t(p[3]);
         }
         for (int i = 16; i < 80; ++i) {
             w[i] = rol(w[i - 3] ^ w[i - 8] ^ w[i - 14] ^ w[i - 16], 1);
@@ -173,7 +175,7 @@ Registry &registry() {
 
 void appendArgs(std::ostringstream &os, ArgsView &args) {
     for (size_t i = 0; i < args.size(); ++i) {
-        type::Type *t = args.type(i);
+        type::Type *t      = args.type(i);
         const slot_t value = args.slot(i);
         if (t == nullptr) {
             os << '?';
@@ -229,7 +231,7 @@ slot_t invoke(size_t index, ArgsView &with, ArgsView &norm, context::Context &ct
     payload << '\x1e';
     appendArgs(payload, with);
 
-    const uint64_t origin = std::exchange(tlsSiteOrigin, 0);
+    const uint64_t origin  = std::exchange(tlsSiteOrigin, 0);
     std::string originJson = "null";
     if (origin != 0) {
         if (auto sc = ctx.sourceContext()) {
@@ -262,12 +264,12 @@ slot_t invoke(size_t index, ArgsView &with, ArgsView &norm, context::Context &ct
             const std::string raw  = payload.str();
             bool truncated         = false;
             const std::string text = payloadText(raw, truncated);
-            const std::string line =
-                "{\"seq\":" + std::to_string(s.seq++) + ",\"uri\":\"" + jsonEscape(slot.uri) +
-                "\",\"stage\":\"" + (tlsMacroDepth > 0 ? "macro" : "run") +
-                "\",\"origin\":" + originJson + ",\"payload_sha1\":\"" + sha1Hex(raw) +
-                "\",\"payload\":\"" + jsonEscape(text) + "\"" +
-                (truncated ? ",\"payload_truncated\":true" : "") + "}\n";
+            const std::string line = "{\"seq\":" + std::to_string(s.seq++) + ",\"uri\":\"" +
+                                     jsonEscape(slot.uri) + "\",\"stage\":\"" +
+                                     (tlsMacroDepth > 0 ? "macro" : "run") +
+                                     "\",\"origin\":" + originJson + ",\"payload_sha1\":\"" +
+                                     sha1Hex(raw) + "\",\"payload\":\"" + jsonEscape(text) + "\"" +
+                                     (truncated ? ",\"payload_truncated\":true" : "") + "}\n";
             std::fwrite(line.data(), 1, line.size(), s.file);
             std::fflush(s.file);
         }
@@ -320,7 +322,8 @@ operator_t wrap(std::string_view uri, operator_t op) {
             warned = true;
             std::fprintf(
                 stderr,
-                "[camel] std::profile effect_trace: more than %zu effectful operators; '%s' and later "
+                "[camel] std::profile effect_trace: more than %zu effectful operators; '%s' and "
+                "later "
                 "ones are not traced\n",
                 kMaxWrapped,
                 key.c_str());

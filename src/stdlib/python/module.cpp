@@ -1,15 +1,16 @@
 // Copyright (c) the OpenCML Organization
 // SPDX-License-Identifier: MIT
 
-#include "camel/core/type/native.h"
 #include "module.h"
 #include "camel/compile/gir.h"
 #include "camel/core/context/context.h"
 #include "camel/core/error/runtime.h"
+#include "camel/core/operator_table.h"
 #include "camel/core/operator_traits.h"
 #include "camel/core/resource_semantics.h"
 #include "camel/core/type.h"
 #include "camel/core/type/composite/func.h"
+#include "camel/core/type/native.h"
 #include "camel/core/type/other.h"
 #include "camel/core/type/resolver.h"
 #include "camel/utils/env.h"
@@ -35,17 +36,17 @@ namespace py = pybind11;
 namespace {
 
 // The venv check the module has always made before creating the interpreter. It is made at the
-// module's first use now, not at `import` (design principles 3.1), so a program that imports `python` and never calls one of its
-// operators does not read the environment at all.
+// module's first use now, not at `import` (design principles 3.1), so a program that imports
+// `python` and never calls one of its operators does not read the environment at all.
 void checkActiveVenvVersion() {
     if (camel::pyembed::activeVenvMatchesBuild())
         return;
     throwRuntimeFault(
         RuntimeDiag::RuntimeError,
         "python module version mismatch (checked at the first use of python, not by import): "
-        "current build binds Python " + std::to_string(PY_MAJOR_VERSION) + "." +
-            std::to_string(PY_MINOR_VERSION) + ", but active environment reports " +
-            camel::pyembed::activeVenvVersion() +
+        "current build binds Python " +
+            std::to_string(PY_MAJOR_VERSION) + "." + std::to_string(PY_MINOR_VERSION) +
+            ", but active environment reports " + camel::pyembed::activeVenvVersion() +
             ". Use a matching venv, or provide routed multi-version bridges.");
 }
 
@@ -95,10 +96,10 @@ static void logInterpreterMetadata() {
 bool PythonModule::load() {
     if (loaded_)
         return true;
-    // `import` executes no code (design principles 3.1): loading registers the executor and the purity of the operators,
-    // which the declaration loader needs, and nothing that touches CPython. The interpreter is
-    // created by the first operator call (`ensurePythonInterpreter`), or attached to when
-    // `pyplot` created it first.
+    // `import` executes no code (design principles 3.1): loading registers the executor and the
+    // purity of the operators, which the declaration loader needs, and nothing that touches
+    // CPython. The interpreter is created by the first operator call (`ensurePythonInterpreter`),
+    // or attached to when `pyplot` created it first.
     context_ptr_t ctx = context_;
     context_->registerExecutorFactory("python", [ctx]() { return createPythonExecutor(ctx); });
     // The purity of every operator of the module (design principles 3.3), which the declaration
@@ -157,8 +158,9 @@ void ensurePythonInterpreter(camel::core::context::Context &ctx) {
         } catch (const std::exception &e) {
             throwRuntimeFault(
                 RuntimeDiag::RuntimeError,
-                std::string("Failed to initialise python's embedded Python interpreter at its "
-                            "first use: ") +
+                std::string(
+                    "Failed to initialise python's embedded Python interpreter at its "
+                    "first use: ") +
                     e.what());
         }
         // The interpreter exists here (created now, or by `pyplot` earlier) and the GIL is free:

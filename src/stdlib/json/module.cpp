@@ -7,12 +7,13 @@
  * executor that runs them, and the operator traits declared at load.
  */
 
-#include "camel/core/type/native.h"
 #include "module.h"
 #include "camel/core/context/context.h"
 #include "camel/core/operator.h"
+#include "camel/core/operator_table.h"
 #include "camel/core/operator_traits.h"
 #include "camel/core/type/composite/tuple.h"
+#include "camel/core/type/native.h"
 #include "camel/core/type/resolver.h"
 #include "executor.h"
 #include "operators.h"
