@@ -1,0 +1,634 @@
+compile.chain	sync.effect_call_stays_on_the_chain	expected exit 0, got exit 1
+compile.chain	sync.faulting_call_stays_on_the_chain	expected exit 0, got exit 1
+compile.chain	sync.pure_call_has_no_edge_to_the_statement_beside_it	expected exit 0, got exit 1
+compile.chain	sync.pure_call_is_arranged_freely	expected exit 0, got exit 1
+compile.diag_json	passes_never_run_json	verification exited 1
+compile.diag_json	passes_never_run_text	verification exited 1
+compile.diag_render	render.werror_no_position	snapshot differs from golden
+compile.equality	equality.fold	expected exit 0, got exit 1
+compile.equality	equality.inline.inline_fvm	expected exit 0, got exit 1
+compile.equality	equality.inline.inline_jit	expected exit 0, got exit 1
+compile.equality	equality.inline.inline_nvm	expected exit 0, got exit 1
+compile.equality	equality.macro_opt	expected exit 0, got exit 1
+compile.equality	equality.simplify	expected exit 0, got exit 1
+compile.expected_type_through_calls	expected.parameter_holes.jit	expected exit 0, got timeout after <duration>
+compile.higher_order_clause	node_role_reads_the_fact	expected exit 0, got exit 1
+compile.literal_context	context.empty_array.fvm	expected exit 0, got exit 1
+compile.literal_context	context.empty_array.jit	expected exit 0, got exit 1
+compile.literal_context	context.empty_array.nvm	expected exit 0, got exit 1
+compile.literal_context	context.empty_array.prl	expected exit 0, got exit 1
+compile.native_declarations	native.para_declaration_import	expected exit 0, got exit 1
+compile.native_declarations	native.para_unordered_reduce_callback_arity	output does not contain 'SemanticDiag::NoMatchingFunction'
+compile.operators	int_mat_assign	output does not contain 'SemanticDiag::NoMatchingFunction'
+compile.region_roots	region_roots.writing_freedom_of_two_writes	expected exit 0, got exit 1
+compile.stream	stream.interval_loop_not_materialised	used <duration> of CPU against a <duration> timeout, below the 4x margin: the bound is the work's own time, not a bound (raise it with a stated reason, or make the test do less). The wall clock read <duration>, which on a shared host is the neighbours'
+compile.struct_join	compile.struct_join.snake_checks	expected exit 0, got exit 1
+compositions	compositions.grad_vjp_g_zero.fvm	expected exit 0, got exit 1
+compositions	compositions.grad_vjp_g_zero.nvm	expected exit 0, got exit 1
+compositions	compositions.grad_vmap_f.fvm	expected exit 0, got exit 1
+compositions	compositions.grad_vmap_f.nvm	expected exit 0, got exit 1
+consistency.attempt	attempt.compiled.inline_jit	output does not contain 'MaxRecursionDepthExceeded at compiled.cml:12:60'
+consistency.attempt	attempt.depth.limit.fvm	snapshot differs from golden
+consistency.attempt	attempt.depth.limit.jit	snapshot differs from golden
+consistency.attempt	attempt.depth.limit.nvm	snapshot differs from golden
+consistency.attempt	attempt.depth.limit.prl	snapshot differs from golden
+consistency.attempt	attempt.kinds.fvm	snapshot differs from golden
+consistency.attempt	attempt.kinds.jit	snapshot differs from golden
+consistency.attempt	attempt.kinds.nvm	snapshot differs from golden
+consistency.attempt	attempt.kinds.prl	snapshot differs from golden
+consistency.attempt	attempt.library.inline_opt.fvm	snapshot differs from golden
+consistency.attempt	attempt.library.inline_opt.jit	snapshot differs from golden
+consistency.attempt	attempt.library.inline_opt.nvm	snapshot differs from golden
+consistency.attempt	attempt.library.inline_opt.prl	snapshot differs from golden
+consistency.attempt	attempt.lowest_index.fvm	expected exit 0, got exit 1
+consistency.attempt	attempt.lowest_index.jit	expected exit 0, got exit 1
+consistency.attempt	attempt.lowest_index.nvm	expected exit 0, got exit 1
+consistency.attempt	attempt.lowest_index.prl	expected exit 0, got exit 1
+consistency.attempt	attempt.macro.evaluated	expected diagnostic RuntimeDiag::MacroEvaluationFailed, line 15
+consistency.attempt	attempt.nested.fvm	snapshot differs from golden
+consistency.attempt	attempt.nested.jit	snapshot differs from golden
+consistency.attempt	attempt.nested.nvm	snapshot differs from golden
+consistency.attempt	attempt.nested.prl	snapshot differs from golden
+consistency.attempt	attempt.pipeline.inline.fvm	snapshot differs from golden
+consistency.attempt	attempt.pipeline.inline.jit	snapshot differs from golden
+consistency.attempt	attempt.pipeline.inline.nvm	snapshot differs from golden
+consistency.attempt	attempt.pipeline.inline.prl	snapshot differs from golden
+consistency.attempt	attempt.pipeline.none.fvm	snapshot differs from golden
+consistency.attempt	attempt.pipeline.none.jit	snapshot differs from golden
+consistency.attempt	attempt.pipeline.none.nvm	snapshot differs from golden
+consistency.attempt	attempt.pipeline.none.prl	snapshot differs from golden
+consistency.attempt	attempt.pipeline.opt.fvm	snapshot differs from golden
+consistency.attempt	attempt.pipeline.opt.jit	snapshot differs from golden
+consistency.attempt	attempt.pipeline.opt.nvm	snapshot differs from golden
+consistency.attempt	attempt.pipeline.opt.prl	snapshot differs from golden
+consistency.attempt	attempt.places.fvm	snapshot differs from golden
+consistency.attempt	attempt.places.jit	snapshot differs from golden
+consistency.attempt	attempt.places.nvm	snapshot differs from golden
+consistency.attempt	attempt.places.prl	snapshot differs from golden
+consistency.entering	entering.err_arg_reverse.nvm	output does not contain 'err_arg_reverse.cml:4:14:'
+consistency.entering	entering.err_numeric.nvm	output does not contain 'err_numeric.cml:4:14:'
+consistency.entering	entering.err_other_payload.nvm	output does not contain 'err_other_payload.cml:4:14:'
+consistency.entering	entering.positions.plan_regions.nvm	expected exit 0, got exit 1
+consistency.entry	entry.error_from_attempt.fvm	expected diagnostic RuntimeDiag::UnhandledError, line 6, column 37
+consistency.entry	entry.error_from_attempt.jit	expected diagnostic RuntimeDiag::UnhandledError, line 6, column 37
+consistency.entry	entry.error_from_attempt.nvm	expected diagnostic RuntimeDiag::UnhandledError, line 6, column 37
+consistency.entry	entry.error_from_attempt.prl	expected diagnostic RuntimeDiag::UnhandledError, line 6, column 37
+consistency.fail_never	never.argument	verification exited 1
+consistency.fail_never	never.argument_overload	verification exited 1
+consistency.fail_never	never.tagged_position	verification exited 1
+consistency.fail_never	never.tagged_position_run	verification exited 1
+consistency.faults	fault.after_map_output.fvm	stdout does not start with "line 0\nline 1\nline 2\nline 3\nline 4\nline 5\nline 6\nline 7\nline 8\nline 9\nline 10\nline 11\nline 12\nline 13\nline 14\nline 15\nline 16\nline 17\nline 18\nline 19\nbefore the map\n"
+consistency.faults	fault.after_map_output.jit	stdout does not start with "line 0\nline 1\nline 2\nline 3\nline 4\nline 5\nline 6\nline 7\nline 8\nline 9\nline 10\nline 11\nline 12\nline 13\nline 14\nline 15\nline 16\nline 17\nline 18\nline 19\nbefore the map\n"
+consistency.faults	fault.after_map_output.nvm	stdout does not start with "line 0\nline 1\nline 2\nline 3\nline 4\nline 5\nline 6\nline 7\nline 8\nline 9\nline 10\nline 11\nline 12\nline 13\nline 14\nline 15\nline 16\nline 17\nline 18\nline 19\nbefore the map\n"
+consistency.faults	fault.after_map_output.prl	stdout does not start with "line 0\nline 1\nline 2\nline 3\nline 4\nline 5\nline 6\nline 7\nline 8\nline 9\nline 10\nline 11\nline 12\nline 13\nline 14\nline 15\nline 16\nline 17\nline 18\nline 19\nbefore the map\n"
+consistency.faults	fault.float_div_zero.fvm	expected diagnostic RuntimeDiag::DivisionByZero, line 5, column 48
+consistency.faults	fault.float_div_zero.jit	expected diagnostic RuntimeDiag::DivisionByZero, line 5, column 48
+consistency.faults	fault.float_div_zero.nvm	expected diagnostic RuntimeDiag::DivisionByZero, line 5, column 48
+consistency.faults	fault.float_div_zero.prl	expected diagnostic RuntimeDiag::DivisionByZero, line 5, column 48
+consistency.faults	fault.float_nan_to_int.fvm	expected diagnostic RuntimeDiag::ConversionOutOfRange, line 5
+consistency.faults	fault.float_nan_to_int.jit	expected diagnostic RuntimeDiag::ConversionOutOfRange, line 5
+consistency.faults	fault.float_nan_to_int.nvm	expected diagnostic RuntimeDiag::ConversionOutOfRange, line 5
+consistency.faults	fault.float_nan_to_int.prl	expected diagnostic RuntimeDiag::ConversionOutOfRange, line 5
+consistency.faults	fault.float_text_overflow.fvm	expected diagnostic RuntimeDiag::ConversionOutOfRange, line 6, column 38
+consistency.faults	fault.float_text_overflow.jit	expected diagnostic RuntimeDiag::ConversionOutOfRange, line 6, column 38
+consistency.faults	fault.float_text_overflow.nvm	expected diagnostic RuntimeDiag::ConversionOutOfRange, line 6, column 38
+consistency.faults	fault.float_text_overflow.prl	expected diagnostic RuntimeDiag::ConversionOutOfRange, line 6, column 38
+consistency.faults	fault.float_text_underflow.fvm	expected diagnostic RuntimeDiag::ConversionOutOfRange, line 7, column 38
+consistency.faults	fault.float_text_underflow.jit	expected diagnostic RuntimeDiag::ConversionOutOfRange, line 7, column 38
+consistency.faults	fault.float_text_underflow.nvm	expected diagnostic RuntimeDiag::ConversionOutOfRange, line 7, column 38
+consistency.faults	fault.float_text_underflow.prl	expected diagnostic RuntimeDiag::ConversionOutOfRange, line 7, column 38
+consistency.faults	fault.float_to_int_range.fvm	expected diagnostic RuntimeDiag::ConversionOutOfRange, <hex>, line 5
+consistency.faults	fault.float_to_int_range.jit	expected diagnostic RuntimeDiag::ConversionOutOfRange, <hex>, line 5
+consistency.faults	fault.float_to_int_range.nvm	expected diagnostic RuntimeDiag::ConversionOutOfRange, <hex>, line 5
+consistency.faults	fault.float_to_int_range.prl	expected diagnostic RuntimeDiag::ConversionOutOfRange, <hex>, line 5
+consistency.faults	fault.i32_out_of_range.fvm	expected diagnostic RuntimeDiag::ConversionOutOfRange, line 5
+consistency.faults	fault.i32_out_of_range.jit	expected diagnostic RuntimeDiag::ConversionOutOfRange, line 5
+consistency.faults	fault.i32_out_of_range.nvm	expected diagnostic RuntimeDiag::ConversionOutOfRange, line 5
+consistency.faults	fault.i32_out_of_range.prl	expected diagnostic RuntimeDiag::ConversionOutOfRange, line 5
+consistency.faults	fault.in_closure.fvm	expected diagnostic RuntimeDiag::DivisionByZero, line 6, column 31
+consistency.faults	fault.in_closure.jit	expected diagnostic RuntimeDiag::DivisionByZero, line 6, column 31
+consistency.faults	fault.in_closure.nvm	expected diagnostic RuntimeDiag::DivisionByZero, line 6, column 31
+consistency.faults	fault.in_closure.prl	expected diagnostic RuntimeDiag::DivisionByZero, line 6, column 31
+consistency.faults	fault.in_filter.fvm	expected diagnostic RuntimeDiag::DivisionByZero, line 5, column 37
+consistency.faults	fault.in_filter.jit	expected diagnostic RuntimeDiag::DivisionByZero, line 5, column 37
+consistency.faults	fault.in_filter.nvm	expected diagnostic RuntimeDiag::DivisionByZero, line 5, column 37
+consistency.faults	fault.in_filter.prl	expected diagnostic RuntimeDiag::DivisionByZero, line 5, column 37
+consistency.faults	fault.in_foreach.fvm	stdout does not start with "before\n-30\n-60\n"
+consistency.faults	fault.in_foreach.jit	stdout does not start with "before\n-30\n-60\n"
+consistency.faults	fault.in_foreach.nvm	stdout does not start with "before\n-30\n-60\n"
+consistency.faults	fault.in_foreach.prl	stdout does not start with "before\n-30\n-60\n"
+consistency.faults	fault.in_map_many.fvm	verification exited 1
+consistency.faults	fault.in_map_many.jit	verification exited 1
+consistency.faults	fault.in_map_many.nvm	verification exited 1
+consistency.faults	fault.in_map_many.prl	verification exited 1
+consistency.faults	fault.in_map.fvm	expected diagnostic RuntimeDiag::DivisionByZero, line 6, column 35
+consistency.faults	fault.in_map.jit	expected diagnostic RuntimeDiag::DivisionByZero, line 6, column 35
+consistency.faults	fault.in_map.nvm	expected diagnostic RuntimeDiag::DivisionByZero, line 6, column 35
+consistency.faults	fault.in_map.prl	expected diagnostic RuntimeDiag::DivisionByZero, line 6, column 35
+consistency.faults	fault.in_nested_map.fvm	expected diagnostic RuntimeDiag::DivisionByZero, line 6, column 45
+consistency.faults	fault.in_nested_map.jit	expected diagnostic RuntimeDiag::DivisionByZero, line 6, column 45
+consistency.faults	fault.in_nested_map.nvm	expected diagnostic RuntimeDiag::DivisionByZero, line 6, column 45
+consistency.faults	fault.in_nested_map.prl	expected diagnostic RuntimeDiag::DivisionByZero, line 6, column 45
+consistency.faults	fault.in_reduce.fvm	expected diagnostic RuntimeDiag::DivisionByZero, line 6, column 52
+consistency.faults	fault.in_reduce.jit	expected diagnostic RuntimeDiag::DivisionByZero, line 6, column 52
+consistency.faults	fault.in_reduce.nvm	expected diagnostic RuntimeDiag::DivisionByZero, line 6, column 52
+consistency.faults	fault.in_reduce.prl	expected diagnostic RuntimeDiag::DivisionByZero, line 6, column 52
+consistency.faults	fault.index_out_of_range.fvm	expected diagnostic RuntimeDiag::IndexOutOfRange, line 5, column 44
+consistency.faults	fault.index_out_of_range.jit	expected diagnostic RuntimeDiag::IndexOutOfRange, line 5, column 44
+consistency.faults	fault.index_out_of_range.nvm	expected diagnostic RuntimeDiag::IndexOutOfRange, line 5, column 44
+consistency.faults	fault.index_out_of_range.prl	expected diagnostic RuntimeDiag::IndexOutOfRange, line 5, column 44
+consistency.faults	fault.int_text_blank.fvm	expected diagnostic RuntimeDiag::InvalidNumberText, line 5
+consistency.faults	fault.int_text_blank.jit	expected diagnostic RuntimeDiag::InvalidNumberText, line 5
+consistency.faults	fault.int_text_blank.nvm	expected diagnostic RuntimeDiag::InvalidNumberText, line 5
+consistency.faults	fault.int_text_blank.prl	expected diagnostic RuntimeDiag::InvalidNumberText, line 5
+consistency.faults	fault.int_text_out_of_range.fvm	expected diagnostic RuntimeDiag::ConversionOutOfRange, line 6, column 36
+consistency.faults	fault.int_text_out_of_range.jit	expected diagnostic RuntimeDiag::ConversionOutOfRange, line 6, column 36
+consistency.faults	fault.int_text_out_of_range.nvm	expected diagnostic RuntimeDiag::ConversionOutOfRange, line 6, column 36
+consistency.faults	fault.int_text_out_of_range.prl	expected diagnostic RuntimeDiag::ConversionOutOfRange, line 6, column 36
+consistency.faults	fault.int_text_trailing.fvm	expected diagnostic RuntimeDiag::InvalidNumberText, line 5, column 36
+consistency.faults	fault.int_text_trailing.jit	expected diagnostic RuntimeDiag::InvalidNumberText, line 5, column 36
+consistency.faults	fault.int_text_trailing.nvm	expected diagnostic RuntimeDiag::InvalidNumberText, line 5, column 36
+consistency.faults	fault.int_text_trailing.prl	expected diagnostic RuntimeDiag::InvalidNumberText, line 5, column 36
+consistency.faults	fault.mod_zero_in_function.fvm	expected diagnostic RuntimeDiag::DivisionByZero, line 5, column 42
+consistency.faults	fault.mod_zero_in_function.jit	expected diagnostic RuntimeDiag::DivisionByZero, line 5, column 42
+consistency.faults	fault.mod_zero_in_function.nvm	expected diagnostic RuntimeDiag::DivisionByZero, line 5, column 42
+consistency.faults	fault.mod_zero_in_function.prl	expected diagnostic RuntimeDiag::DivisionByZero, line 5, column 42
+consistency.faults	fault.negative_index.fvm	expected diagnostic RuntimeDiag::IndexOutOfRange, line 5, column 44
+consistency.faults	fault.negative_index.jit	expected diagnostic RuntimeDiag::IndexOutOfRange, line 5, column 44
+consistency.faults	fault.negative_index.nvm	expected diagnostic RuntimeDiag::IndexOutOfRange, line 5, column 44
+consistency.faults	fault.negative_index.prl	expected diagnostic RuntimeDiag::IndexOutOfRange, line 5, column 44
+consistency.faults	fault.parallel_lowest_index.fvm	expected diagnostic RuntimeDiag::IndexOutOfRange, line 7
+consistency.faults	fault.parallel_lowest_index.jit	expected diagnostic RuntimeDiag::IndexOutOfRange, line 7
+consistency.faults	fault.parallel_lowest_index.nvm	expected diagnostic RuntimeDiag::IndexOutOfRange, line 7
+consistency.faults	fault.parallel_lowest_index.prl	expected diagnostic RuntimeDiag::IndexOutOfRange, line 7
+consistency.faults	fault.parse_int.fvm	expected diagnostic line 5, column 36
+consistency.faults	fault.parse_int.jit	expected diagnostic line 5, column 36
+consistency.faults	fault.parse_int.nvm	expected diagnostic line 5, column 36
+consistency.faults	fault.parse_int.prl	expected exit 1, got timeout after <duration>
+consistency.faults	fault.slice_negative_bound.fvm	expected diagnostic RuntimeDiag::SliceOutOfRange, line 6
+consistency.faults	fault.slice_negative_bound.jit	expected diagnostic RuntimeDiag::SliceOutOfRange, line 6
+consistency.faults	fault.slice_negative_bound.nvm	expected diagnostic RuntimeDiag::SliceOutOfRange, line 6
+consistency.faults	fault.slice_negative_bound.prl	expected diagnostic RuntimeDiag::SliceOutOfRange, line 6
+consistency.faults	fault.slice_out_of_range.fvm	expected diagnostic RuntimeDiag::SliceOutOfRange, <hex>, line 5
+consistency.faults	fault.slice_out_of_range.jit	expected diagnostic RuntimeDiag::SliceOutOfRange, <hex>, line 5
+consistency.faults	fault.slice_out_of_range.nvm	expected diagnostic RuntimeDiag::SliceOutOfRange, <hex>, line 5
+consistency.faults	fault.slice_out_of_range.prl	expected diagnostic RuntimeDiag::SliceOutOfRange, <hex>, line 5
+consistency.faults_optimized	fault.after_map_output.fvm	stdout does not start with "line 0\nline 1\nline 2\nline 3\nline 4\nline 5\nline 6\nline 7\nline 8\nline 9\nline 10\nline 11\nline 12\nline 13\nline 14\nline 15\nline 16\nline 17\nline 18\nline 19\nbefore the map\n"
+consistency.faults_optimized	fault.after_map_output.jit	stdout does not start with "line 0\nline 1\nline 2\nline 3\nline 4\nline 5\nline 6\nline 7\nline 8\nline 9\nline 10\nline 11\nline 12\nline 13\nline 14\nline 15\nline 16\nline 17\nline 18\nline 19\nbefore the map\n"
+consistency.faults_optimized	fault.after_map_output.nvm	stdout does not start with "line 0\nline 1\nline 2\nline 3\nline 4\nline 5\nline 6\nline 7\nline 8\nline 9\nline 10\nline 11\nline 12\nline 13\nline 14\nline 15\nline 16\nline 17\nline 18\nline 19\nbefore the map\n"
+consistency.faults_optimized	fault.after_map_output.prl	stdout does not start with "line 0\nline 1\nline 2\nline 3\nline 4\nline 5\nline 6\nline 7\nline 8\nline 9\nline 10\nline 11\nline 12\nline 13\nline 14\nline 15\nline 16\nline 17\nline 18\nline 19\nbefore the map\n"
+consistency.faults_optimized	fault.float_div_zero.fvm	expected diagnostic RuntimeDiag::DivisionByZero, line 5, column 48
+consistency.faults_optimized	fault.float_div_zero.jit	expected diagnostic RuntimeDiag::DivisionByZero, line 5, column 48
+consistency.faults_optimized	fault.float_div_zero.nvm	expected diagnostic RuntimeDiag::DivisionByZero, line 5, column 48
+consistency.faults_optimized	fault.float_div_zero.prl	expected diagnostic RuntimeDiag::DivisionByZero, line 5, column 48
+consistency.faults_optimized	fault.float_nan_to_int.fvm	expected diagnostic RuntimeDiag::ConversionOutOfRange, line 5
+consistency.faults_optimized	fault.float_nan_to_int.jit	expected diagnostic RuntimeDiag::ConversionOutOfRange, line 5
+consistency.faults_optimized	fault.float_nan_to_int.nvm	expected diagnostic RuntimeDiag::ConversionOutOfRange, line 5
+consistency.faults_optimized	fault.float_nan_to_int.prl	expected diagnostic RuntimeDiag::ConversionOutOfRange, line 5
+consistency.faults_optimized	fault.float_text_overflow.fvm	expected diagnostic RuntimeDiag::ConversionOutOfRange, line 6, column 38
+consistency.faults_optimized	fault.float_text_overflow.jit	expected diagnostic RuntimeDiag::ConversionOutOfRange, line 6, column 38
+consistency.faults_optimized	fault.float_text_overflow.nvm	expected diagnostic RuntimeDiag::ConversionOutOfRange, line 6, column 38
+consistency.faults_optimized	fault.float_text_overflow.prl	expected diagnostic RuntimeDiag::ConversionOutOfRange, line 6, column 38
+consistency.faults_optimized	fault.float_text_underflow.fvm	expected diagnostic RuntimeDiag::ConversionOutOfRange, line 7, column 38
+consistency.faults_optimized	fault.float_text_underflow.jit	expected diagnostic RuntimeDiag::ConversionOutOfRange, line 7, column 38
+consistency.faults_optimized	fault.float_text_underflow.nvm	expected diagnostic RuntimeDiag::ConversionOutOfRange, line 7, column 38
+consistency.faults_optimized	fault.float_text_underflow.prl	expected diagnostic RuntimeDiag::ConversionOutOfRange, line 7, column 38
+consistency.faults_optimized	fault.float_to_int_range.fvm	expected diagnostic RuntimeDiag::ConversionOutOfRange, <hex>, line 5
+consistency.faults_optimized	fault.float_to_int_range.jit	expected diagnostic RuntimeDiag::ConversionOutOfRange, <hex>, line 5
+consistency.faults_optimized	fault.float_to_int_range.nvm	expected diagnostic RuntimeDiag::ConversionOutOfRange, <hex>, line 5
+consistency.faults_optimized	fault.float_to_int_range.prl	expected diagnostic RuntimeDiag::ConversionOutOfRange, <hex>, line 5
+consistency.faults_optimized	fault.i32_out_of_range.fvm	expected diagnostic RuntimeDiag::ConversionOutOfRange, line 5
+consistency.faults_optimized	fault.i32_out_of_range.jit	expected diagnostic RuntimeDiag::ConversionOutOfRange, line 5
+consistency.faults_optimized	fault.i32_out_of_range.nvm	expected diagnostic RuntimeDiag::ConversionOutOfRange, line 5
+consistency.faults_optimized	fault.i32_out_of_range.prl	expected diagnostic RuntimeDiag::ConversionOutOfRange, line 5
+consistency.faults_optimized	fault.in_closure.fvm	expected diagnostic RuntimeDiag::DivisionByZero, line 6, column 31
+consistency.faults_optimized	fault.in_closure.jit	expected diagnostic RuntimeDiag::DivisionByZero, line 6, column 31
+consistency.faults_optimized	fault.in_closure.nvm	expected diagnostic RuntimeDiag::DivisionByZero, line 6, column 31
+consistency.faults_optimized	fault.in_closure.prl	expected diagnostic RuntimeDiag::DivisionByZero, line 6, column 31
+consistency.faults_optimized	fault.in_filter.fvm	expected diagnostic RuntimeDiag::DivisionByZero, line 5, column 37
+consistency.faults_optimized	fault.in_filter.jit	expected diagnostic RuntimeDiag::DivisionByZero, line 5, column 37
+consistency.faults_optimized	fault.in_filter.nvm	expected diagnostic RuntimeDiag::DivisionByZero, line 5, column 37
+consistency.faults_optimized	fault.in_filter.prl	expected diagnostic RuntimeDiag::DivisionByZero, line 5, column 37
+consistency.faults_optimized	fault.in_foreach.fvm	stdout does not start with "before\n-30\n-60\n"
+consistency.faults_optimized	fault.in_foreach.jit	stdout does not start with "before\n-30\n-60\n"
+consistency.faults_optimized	fault.in_foreach.nvm	stdout does not start with "before\n-30\n-60\n"
+consistency.faults_optimized	fault.in_foreach.prl	stdout does not start with "before\n-30\n-60\n"
+consistency.faults_optimized	fault.in_map_many.fvm	verification exited 1
+consistency.faults_optimized	fault.in_map_many.jit	verification exited 1
+consistency.faults_optimized	fault.in_map_many.nvm	verification exited 1
+consistency.faults_optimized	fault.in_map_many.prl	verification exited 1
+consistency.faults_optimized	fault.in_map.fvm	expected diagnostic RuntimeDiag::DivisionByZero, line 6, column 35
+consistency.faults_optimized	fault.in_map.jit	expected diagnostic RuntimeDiag::DivisionByZero, line 6, column 35
+consistency.faults_optimized	fault.in_map.nvm	expected diagnostic RuntimeDiag::DivisionByZero, line 6, column 35
+consistency.faults_optimized	fault.in_map.prl	expected diagnostic RuntimeDiag::DivisionByZero, line 6, column 35
+consistency.faults_optimized	fault.in_nested_map.fvm	expected diagnostic RuntimeDiag::DivisionByZero, line 6, column 45
+consistency.faults_optimized	fault.in_nested_map.jit	expected diagnostic RuntimeDiag::DivisionByZero, line 6, column 45
+consistency.faults_optimized	fault.in_nested_map.nvm	expected diagnostic RuntimeDiag::DivisionByZero, line 6, column 45
+consistency.faults_optimized	fault.in_nested_map.prl	expected diagnostic RuntimeDiag::DivisionByZero, line 6, column 45
+consistency.faults_optimized	fault.in_reduce.fvm	expected diagnostic RuntimeDiag::DivisionByZero, line 6, column 52
+consistency.faults_optimized	fault.in_reduce.jit	expected diagnostic RuntimeDiag::DivisionByZero, line 6, column 52
+consistency.faults_optimized	fault.in_reduce.nvm	expected diagnostic RuntimeDiag::DivisionByZero, line 6, column 52
+consistency.faults_optimized	fault.in_reduce.prl	expected diagnostic RuntimeDiag::DivisionByZero, line 6, column 52
+consistency.faults_optimized	fault.index_out_of_range.fvm	expected diagnostic RuntimeDiag::IndexOutOfRange, line 5, column 44
+consistency.faults_optimized	fault.index_out_of_range.jit	expected diagnostic RuntimeDiag::IndexOutOfRange, line 5, column 44
+consistency.faults_optimized	fault.index_out_of_range.nvm	expected diagnostic RuntimeDiag::IndexOutOfRange, line 5, column 44
+consistency.faults_optimized	fault.index_out_of_range.prl	expected diagnostic RuntimeDiag::IndexOutOfRange, line 5, column 44
+consistency.faults_optimized	fault.int_text_blank.fvm	expected diagnostic RuntimeDiag::InvalidNumberText, line 5
+consistency.faults_optimized	fault.int_text_blank.jit	expected diagnostic RuntimeDiag::InvalidNumberText, line 5
+consistency.faults_optimized	fault.int_text_blank.nvm	expected diagnostic RuntimeDiag::InvalidNumberText, line 5
+consistency.faults_optimized	fault.int_text_blank.prl	expected exit 1, got timeout after <duration>
+consistency.faults_optimized	fault.int_text_out_of_range.fvm	expected diagnostic RuntimeDiag::ConversionOutOfRange, line 6, column 36
+consistency.faults_optimized	fault.int_text_out_of_range.jit	expected diagnostic RuntimeDiag::ConversionOutOfRange, line 6, column 36
+consistency.faults_optimized	fault.int_text_out_of_range.nvm	expected diagnostic RuntimeDiag::ConversionOutOfRange, line 6, column 36
+consistency.faults_optimized	fault.int_text_out_of_range.prl	expected diagnostic RuntimeDiag::ConversionOutOfRange, line 6, column 36
+consistency.faults_optimized	fault.int_text_trailing.fvm	expected diagnostic RuntimeDiag::InvalidNumberText, line 5, column 36
+consistency.faults_optimized	fault.int_text_trailing.jit	expected diagnostic RuntimeDiag::InvalidNumberText, line 5, column 36
+consistency.faults_optimized	fault.int_text_trailing.nvm	expected diagnostic RuntimeDiag::InvalidNumberText, line 5, column 36
+consistency.faults_optimized	fault.int_text_trailing.prl	expected diagnostic RuntimeDiag::InvalidNumberText, line 5, column 36
+consistency.faults_optimized	fault.mod_zero_in_function.fvm	expected diagnostic RuntimeDiag::DivisionByZero, line 5, column 42
+consistency.faults_optimized	fault.mod_zero_in_function.jit	expected diagnostic RuntimeDiag::DivisionByZero, line 5, column 42
+consistency.faults_optimized	fault.mod_zero_in_function.nvm	expected diagnostic RuntimeDiag::DivisionByZero, line 5, column 42
+consistency.faults_optimized	fault.mod_zero_in_function.prl	expected diagnostic RuntimeDiag::DivisionByZero, line 5, column 42
+consistency.faults_optimized	fault.negative_index.fvm	expected diagnostic RuntimeDiag::IndexOutOfRange, line 5, column 44
+consistency.faults_optimized	fault.negative_index.jit	expected diagnostic RuntimeDiag::IndexOutOfRange, line 5, column 44
+consistency.faults_optimized	fault.negative_index.nvm	expected diagnostic RuntimeDiag::IndexOutOfRange, line 5, column 44
+consistency.faults_optimized	fault.negative_index.prl	expected diagnostic RuntimeDiag::IndexOutOfRange, line 5, column 44
+consistency.faults_optimized	fault.parallel_lowest_index.fvm	expected diagnostic RuntimeDiag::IndexOutOfRange, line 7
+consistency.faults_optimized	fault.parallel_lowest_index.jit	expected diagnostic RuntimeDiag::IndexOutOfRange, line 7
+consistency.faults_optimized	fault.parallel_lowest_index.nvm	expected diagnostic RuntimeDiag::IndexOutOfRange, line 7
+consistency.faults_optimized	fault.parallel_lowest_index.prl	expected diagnostic RuntimeDiag::IndexOutOfRange, line 7
+consistency.faults_optimized	fault.parse_int.fvm	expected diagnostic line 5, column 36
+consistency.faults_optimized	fault.parse_int.jit	expected diagnostic line 5, column 36
+consistency.faults_optimized	fault.parse_int.nvm	expected diagnostic line 5, column 36
+consistency.faults_optimized	fault.parse_int.prl	expected diagnostic line 5, column 36
+consistency.faults_optimized	fault.slice_negative_bound.fvm	expected diagnostic RuntimeDiag::SliceOutOfRange, line 6
+consistency.faults_optimized	fault.slice_negative_bound.jit	expected diagnostic RuntimeDiag::SliceOutOfRange, line 6
+consistency.faults_optimized	fault.slice_negative_bound.nvm	expected diagnostic RuntimeDiag::SliceOutOfRange, line 6
+consistency.faults_optimized	fault.slice_negative_bound.prl	expected diagnostic RuntimeDiag::SliceOutOfRange, line 6
+consistency.faults_optimized	fault.slice_out_of_range.fvm	expected diagnostic RuntimeDiag::SliceOutOfRange, <hex>, line 5
+consistency.faults_optimized	fault.slice_out_of_range.jit	expected diagnostic RuntimeDiag::SliceOutOfRange, <hex>, line 5
+consistency.faults_optimized	fault.slice_out_of_range.nvm	expected diagnostic RuntimeDiag::SliceOutOfRange, <hex>, line 5
+consistency.faults_optimized	fault.slice_out_of_range.prl	expected diagnostic RuntimeDiag::SliceOutOfRange, <hex>, line 5
+consistency.generic_values	generic_values.err_each_waits.nvm	output does not contain 'err_each_waits.cml:4:'
+consistency.generic_values	generic_values.err_no_context.nvm	output does not contain 'err_no_context.cml:3:'
+consistency.narrowing	narrowing.after_narrowing.fvm	verification exited 1
+consistency.narrowing	narrowing.after_narrowing.jit	verification exited 1
+consistency.narrowing	narrowing.after_narrowing.nvm	verification exited 1
+consistency.narrowing	narrowing.after_narrowing.prl	verification exited 1
+consistency.narrowing	narrowing.functions	output does not contain '.cml:8:'
+consistency.narrowing	narrowing.shadowed_not_narrowed	output does not contain '.cml:4:'
+consistency.new_values	new_values.dropped_foreach_lambda	output does not contain 'dropped_foreach_lambda.cml:12:33'
+consistency.new_values	new_values.sort_rebinding.copies	verification exited 1
+consistency.partial_application	partial_application.err_ambiguous.nvm	output does not contain 'err_ambiguous.cml:12:13:'
+consistency.partial_application	partial_application.err_argument_type.nvm	output does not contain 'err_argument_type.cml:4:'
+consistency.partial_application	partial_application.err_configured_twice.nvm	output does not contain 'err_configured_twice.cml:5:'
+consistency.partial_application	partial_application.err_context_argument_name.nvm	output does not contain 'err_context_argument_name.cml:12:'
+consistency.partial_application	partial_application.err_context_argument_out_of_range.nvm	expected diagnostic SemanticDiag::LiteralNotRepresentable, line 11, column 22
+consistency.partial_application	partial_application.err_entering_ambiguous.nvm	output does not contain 'err_entering_ambiguous.cml:10:13:'
+consistency.partial_application	partial_application.err_overload_choice_name.nvm	output does not contain 'err_overload_choice_name.cml:17:13:'
+consistency.unused_fallible	unused_fallible.if_arms.fvm	verification exited 1
+consistency.unused_fallible	unused_fallible.if_arms.jit	verification exited 1
+consistency.unused_fallible	unused_fallible.if_arms.nvm	verification exited 1
+consistency.unused_fallible	unused_fallible.if_arms.prl	verification exited 1
+consistency.values	value.content_equality.fvm	expected exit 0, got exit 1
+consistency.values	value.content_equality.jit	expected exit 0, got exit 1
+consistency.values	value.content_equality.nvm	expected exit 0, got exit 1
+consistency.values	value.content_equality.prl	expected exit 0, got exit 1
+docs.ai_reference	docs.ai_reference.example_does_not_compile	stdout does not contain 'missing_name'
+examples	examples.case_study.break_rate.fvm	snapshot differs from golden
+examples	examples.case_study.break_rate.jit	snapshot differs from golden
+examples	examples.case_study.break_rate.nvm	snapshot differs from golden
+examples	examples.case_study.break_rate.prl	snapshot differs from golden
+examples	examples.text.csv_parse.fvm	expected exit 0, got exit 1
+examples	examples.text.csv_parse.jit	expected exit 0, got exit 1
+examples	examples.text.csv_parse.nvm	expected exit 0, got exit 1
+examples	examples.text.csv_parse.prl	expected exit 0, got exit 1
+exemplars	02_branch_shape_contract	expected exit 0, got exit 1
+exemplars	05_effect_order	expected exit 0, got exit 1
+floatgate	floatgate.f32_loop_state_cotangent_port.nvm	expected exit 0, got exit 1
+gpu.tiles	resident_loop_declares_its_blocks	expected exit 0, got exit 1
+linear.closures_and_state	lambda_filter.nvm	expected exit 0, got exit 1
+linear.collections_and_structs	render_grid.nvm	expected exit 0, got exit 1
+linear.faults	array_index_negative.fvm	expected diagnostic RuntimeDiag::IndexOutOfRange, <hex>, line 6, column 44
+linear.faults	array_index_negative.inline_jit	expected diagnostic RuntimeDiag::IndexOutOfRange, <hex>, line 6, column 44
+linear.faults	array_index_negative.jit	expected diagnostic RuntimeDiag::IndexOutOfRange, <hex>, line 6, column 44
+linear.faults	array_index_negative.nvm	expected diagnostic RuntimeDiag::IndexOutOfRange, <hex>, line 6, column 44
+linear.faults	array_index_negative.prl	expected diagnostic RuntimeDiag::IndexOutOfRange, <hex>, line 6, column 44
+linear.faults	array_index_negative.tf	expected diagnostic RuntimeDiag::IndexOutOfRange, <hex>, line 6, column 44
+linear.faults	array_index_out_of_range.fvm	expected diagnostic RuntimeDiag::IndexOutOfRange, <hex>, line 6, column 44
+linear.faults	array_index_out_of_range.inline_jit	expected diagnostic RuntimeDiag::IndexOutOfRange, <hex>, line 6, column 44
+linear.faults	array_index_out_of_range.jit	expected diagnostic RuntimeDiag::IndexOutOfRange, <hex>, line 6, column 44
+linear.faults	array_index_out_of_range.nvm	expected diagnostic RuntimeDiag::IndexOutOfRange, <hex>, line 6, column 44
+linear.faults	array_index_out_of_range.prl	expected diagnostic RuntimeDiag::IndexOutOfRange, <hex>, line 6, column 44
+linear.faults	array_index_out_of_range.tf	expected diagnostic RuntimeDiag::IndexOutOfRange, <hex>, line 6, column 44
+linear.loop_collect	loops.collect.large.fvm	expected exit 0, got exit 1
+linear.loop_collect	loops.collect.large.jit	expected exit 0, got exit 1
+linear.loop_collect	loops.collect.large.nvm	expected exit 0, got exit 1
+linear.loop_collect	loops.collect.large.prl	expected exit 0, got exit 1
+linear.loops	loops.grad_loop_collect	expected exit 0, got exit 1
+linear.loops	loops.native_callback.fault	output does not contain 'native_callback_fault.cml:3:61'
+linear.loops	loops.native_callback.fault.scheduler	output does not contain 'native_callback_fault.cml:3:61'
+linear.loops	loops.open_rank_round_iterate_round	output does not contain 'open_rank_round_iterate_round.cml:12:'
+linear.loops	loops.open_rank_round_scalar_read	expected diagnostic SemanticDiag::ArgumentsRejected, line 10, column 39
+linear.loops	loops.zero_leaf_state.dump	verification exited 1
+linear.loops	loops.zero_leaf_state.opt_jit	expected exit 0, got exit 1
+linear.operators	mod_assign_by_zero.prl	expected exit 1, got timeout after <duration>
+linear.same_resource_order	same_resource_order_call.jit	expected exit 123, got timeout after <duration>
+linear.subscript	subscript.step_zero_const	expected diagnostic SemanticDiag::SliceStepZero, <hex>, line 8, column 20
+linear.sync_order	sync_block_order.tf	expected exit 0, got timeout after <duration>
+linear.var_read_before_region	var_read_before_region.default	expected exit 0, got exit 1
+linear.var_read_before_region	var_read_before_region.fvm	expected exit 0, got exit 1
+linear.var_read_before_region	var_read_before_region.jit	expected exit 0, got exit 1
+linear.var_read_before_region	var_read_before_region.nvm	expected exit 0, got exit 1
+linear.var_read_before_region	var_read_before_region.opt_nvm	expected exit 0, got exit 1
+linear.var_reference	var_tensor.simplify_jit	expected exit 0, got timeout after <duration>
+linear.var_reference	var_tensor.specialize_jit	expected exit 0, got timeout after <duration>
+mm.capacity	capacity.fold_clone_limit	output does not contain 'RuntimeDiag::MemoryExhausted'
+mm.capacity	capacity.graph_limit_diagnostic	stdout does not contain '"code":"<hex>"'
+mm.capacity	capacity.growth_jit	expected exit 0, got exit 1
+mm.capacity	capacity.growth_nvm_gc_stress	expected exit 0, got exit 1
+mm.capacity	capacity.growth_tf_gc_stress	expected exit 0, got exit 1
+mm.capacity	capacity.meta_limit_diagnostic	stdout does not contain '"code":"<hex>"'
+mm.capacity	capacity.perm_limit_diagnostic	stdout does not contain '"code":"<hex>"'
+mm.gc_poison_sweep	poison:compile.equality:equality.inline.inline_nvm	expected exit 0, got exit 1
+mm.gc_poison_sweep	poison:consistency.attempt:attempt.kinds.nvm	snapshot differs from golden
+mm.gc_poison_sweep	poison:linear.collections_and_structs:render_grid.nvm	expected exit 0, got exit 1
+mm.gc_poison_sweep	poison:linear.var_read_before_region:var_read_before_region.default	expected exit 0, got exit 1
+mm.gc_poison_sweep	poison:modules.bytes:binary_io_decoding_and_atomic_replace	expected exit 0, got exit 1
+mm.gc_poison_sweep	poison:modules.graph_outline:outline_delivers_the_graph_it_makes	expect_stdout_exact differs: first difference at offset 193 (expected 633 chars, got 633 chars): expected "...\n[outline] graphs=1->2 new_id=68 in_committed=true group=5::opn[outline] call is_call=true cal...", got "...\n[outline] graphs=1->2 new_id=80 in_committed=true group=5::opn[outline] call is_call=true cal..."
+mm.gc_poison_sweep	poison:modules.graph:types_and_node_kind	expect_stdout_exact differs: first difference at offset 26 (expected 44 chars, got 44 chars): expected "true\nfalse\ntrue\nfalse\n0\n1\n47\nNodeKind::Oper\n", got "true\nfalse\ntrue\nfalse\n0\n1\n59\nNodeKind::Oper\n"
+mm.gc_poison_sweep	poison:modules.optim:optim.trajectory_matches_native.nvm	expected exit 0, got exit 1
+mm.gc_poison_sweep	poison:modules.tensor:binary_roundtrip	expected exit 0, got exit 1
+mm.gc_poison_sweep	poison:para.core:bootstrap_medians	expected exit 0, got exit 1
+modules.autodiff	grad_function_value_branch.default	verification exited 1
+modules.autodiff	grad_function_value_branch.macro	verification exited 1
+modules.autodiff	grad_function_value_container.default	verification exited 1
+modules.autodiff	grad_function_value_container.macro	verification exited 1
+modules.autodiff	grad_function_value_passed.default	verification exited 1
+modules.autodiff	grad_function_value_passed.macro	verification exited 1
+modules.autodiff	grad_function_value_recursion.macro	verification exited 1
+modules.autodiff	grad_function_value_static_branch.default	verification exited 1
+modules.autodiff	grad_function_value_static_branch.macro	verification exited 1
+modules.autodiff	vjp_old_annotation_removed	expected diagnostic SemanticDiag::InvalidAnnotation, line 9, column 1
+modules.bytes	binary_io_decoding_and_atomic_replace	expected exit 0, got exit 1
+modules.fusion_group	fusion_group.profile.none	expected exit 0, got exit 1
+modules.graph	constant_folding_makes_a_value	expected exit 0, got exit 1
+modules.graph	constant_folding_survives_a_safepoint	expected exit 0, got exit 1
+modules.graph	node_kinds_match_the_graph	expect_stdout_exact differs: first difference at offset 34 (expected 727 chars, got 727 chars): expected "...pick, total, kinds, main, __g_51__, __g_52__, __g_53__, __g_55__]\n[[NodeKind::Port, NodeKind::Port, ...", got "...pick, total, kinds, main, __g_63__, __g_64__, __g_65__, __g_67__]\n[[NodeKind::Port, NodeKind::Port, ..."
+modules.graph	types_and_node_kind	expect_stdout_exact differs: first difference at offset 26 (expected 44 chars, got 44 chars): expected "true\nfalse\ntrue\nfalse\n0\n1\n47\nNodeKind::Oper\n", got "true\nfalse\ntrue\nfalse\n0\n1\n59\nNodeKind::Oper\n"
+modules.graph_outline	outline_delivers_a_graph_the_bytecode_vm_can_compile	expect_stdout_exact differs: first difference at offset 193 (expected 633 chars, got 633 chars): expected "...\n[outline] graphs=1->2 new_id=68 in_committed=true group=5::opn[outline] call is_call=true cal...", got "...\n[outline] graphs=1->2 new_id=80 in_committed=true group=5::opn[outline] call is_call=true cal..."
+modules.graph_outline	outline_delivers_the_graph_it_makes	expect_stdout_exact differs: first difference at offset 193 (expected 633 chars, got 633 chars): expected "...\n[outline] graphs=1->2 new_id=68 in_committed=true group=5::opn[outline] call is_call=true cal...", got "...\n[outline] graphs=1->2 new_id=80 in_committed=true group=5::opn[outline] call is_call=true cal..."
+modules.index_semantics	declaration_evaluator	expected exit 0, got exit 1
+modules.index_semantics	evaluator_is_not_in_a_pipeline	expected exit 0, got exit 1
+modules.index_semantics	instances	expected exit 0, got exit 1
+modules.json_value	json.decode_as.no_document.fvm	verification exited 1
+modules.json_value	json.decode_as.no_document.jit	verification exited 1
+modules.json_value	json.decode_as.no_document.nvm	verification exited 1
+modules.json_value	json.decode_as.no_document.prl	verification exited 1
+modules.json_value	json.kind.no_document.fvm	verification exited 1
+modules.json_value	json.kind.no_document.jit	verification exited 1
+modules.json_value	json.kind.no_document.nvm	verification exited 1
+modules.json_value	json.kind.no_document.prl	verification exited 1
+modules.nn	adam_update_bits.fvm	expected exit 0, got exit 1
+modules.nn	adam_update_bits.jit	expected exit 0, got exit 1
+modules.nn	adam_update_bits.nvm	expected exit 0, got exit 1
+modules.nn	adam_update_bits.prl	expected exit 0, got exit 1
+modules.nn	mnist	expected exit 0, got exit 1
+modules.onnx	as_refusal.constant_fails.operator	output does not contain 'as_constant_fails.cml:15:13'
+modules.onnx	as_refusal.constant_fails.pass	expected diagnostic RuntimeDiag::TranslationRefused, <hex>, line 15, column 13
+modules.onnx	export_impure_op	expected diagnostic RuntimeDiag::UnhandledError, <hex>, line 13, column 89
+modules.onnx	export_loop_carried_array_field	expected diagnostic RuntimeDiag::UnhandledError, <hex>, line 22, column 81
+modules.onnx	export_unsupported_op	expected diagnostic RuntimeDiag::UnhandledError, <hex>, line 14, column 85
+modules.onnx	pass_export_refusal_located.request_in_arm_json	verification exited 1
+modules.onnx	pass_export_refusal_located.two_calls	expected diagnostic RuntimeDiag::TranslationRefused, <hex>, line 13, column 25
+modules.optim	optim.training_loop_matches_native.fvm	expected exit 0, got exit 1
+modules.optim	optim.training_loop_matches_native.jit	expected exit 0, got exit 1
+modules.optim	optim.training_loop_matches_native.nvm	expected exit 0, got exit 1
+modules.optim	optim.training_loop_matches_native.prl	expected exit 0, got exit 1
+modules.optim	optim.trajectory_matches_native.fvm	expected exit 0, got exit 1
+modules.optim	optim.trajectory_matches_native.jit	expected exit 0, got exit 1
+modules.optim	optim.trajectory_matches_native.nvm	expected exit 0, got exit 1
+modules.optim	optim.trajectory_matches_native.prl	expected exit 0, got exit 1
+modules.rules	rules.alternate_alternates_rounds	expected exit 0, got exit 1
+modules.rules	rules.fact_argument_is_not_a_constant	output does not contain 'fact_arg_not_constant.cml:16:42'
+modules.rules	rules.only_requires_before_a_rule	expected diagnostic SemanticDiag::RuleTagNotRequires, line 5, column 2
+modules.rules	rules.repeat_counts_rounds	expected exit 0, got exit 1
+modules.rules	rules.repeat_honours_the_budget	expected exit 0, got exit 1
+modules.rules	rules.requires_not_a_permission	expected diagnostic SemanticDiag::TagNotAPermission, line 5, column 11
+modules.rules	rules.requires_outside_a_rule	expected diagnostic SemanticDiag::TagUndeclared, line 3, column 2
+modules.rules	rules.requires_without_argument	expected diagnostic SemanticDiag::TagArgumentCount, line 3, column 2
+modules.rules	rules.until_honours_the_budget	expected exit 0, got exit 1
+modules.rules	rules.until_reads_the_predicate_before_a_round	expected exit 0, got exit 1
+modules.rules_conditions	rules.condition_that_commits_is_refused	expected diagnostic SemanticDiag::EffectInRuleCondition, <hex>, line 14, column 32
+modules.rules_conditions	rules.condition_that_prints_is_refused	expected diagnostic SemanticDiag::EffectInRuleCondition, <hex>, line 10, column 12
+modules.rules_conditions	rules.generic_condition_effect_is_refused	expected diagnostic SemanticDiag::EffectInRuleCondition, <hex>, line 16, column 32
+modules.std	array.sort_reference	expected exit 0, got exit 1
+modules.stdlib_faults	stdlib.fault.argmax_empty.fvm	expected diagnostic RuntimeDiag::InvalidArgument, line 138
+modules.stdlib_faults	stdlib.fault.argmax_empty.jit	expected diagnostic RuntimeDiag::InvalidArgument, line 138
+modules.stdlib_faults	stdlib.fault.argmax_empty.nvm	expected diagnostic RuntimeDiag::InvalidArgument, line 138
+modules.stdlib_faults	stdlib.fault.argmax_empty.prl	expected diagnostic RuntimeDiag::InvalidArgument, line 138
+modules.stdlib_faults	stdlib.fault.argmin_empty.fvm	expected diagnostic RuntimeDiag::InvalidArgument, line 138
+modules.stdlib_faults	stdlib.fault.argmin_empty.jit	expected diagnostic RuntimeDiag::InvalidArgument, line 138
+modules.stdlib_faults	stdlib.fault.argmin_empty.nvm	expected diagnostic RuntimeDiag::InvalidArgument, line 138
+modules.stdlib_faults	stdlib.fault.argmin_empty.prl	expected diagnostic RuntimeDiag::InvalidArgument, line 138
+modules.stdlib_faults	stdlib.fault.chunks_zero.fvm	expected diagnostic RuntimeDiag::InvalidArgument, line 54
+modules.stdlib_faults	stdlib.fault.chunks_zero.jit	expected diagnostic RuntimeDiag::InvalidArgument, line 54
+modules.stdlib_faults	stdlib.fault.chunks_zero.nvm	expected diagnostic RuntimeDiag::InvalidArgument, line 54
+modules.stdlib_faults	stdlib.fault.chunks_zero.prl	expected diagnostic RuntimeDiag::InvalidArgument, line 54
+modules.stdlib_faults	stdlib.fault.lcm_overflow.fvm	expected diagnostic RuntimeDiag::InvalidArgument, line 593
+modules.stdlib_faults	stdlib.fault.lcm_overflow.jit	expected diagnostic RuntimeDiag::InvalidArgument, line 593
+modules.stdlib_faults	stdlib.fault.lcm_overflow.nvm	expected diagnostic RuntimeDiag::InvalidArgument, line 593
+modules.stdlib_faults	stdlib.fault.lcm_overflow.opt	expected diagnostic RuntimeDiag::InvalidArgument, line 593
+modules.stdlib_faults	stdlib.fault.lcm_overflow.prl	expected diagnostic RuntimeDiag::InvalidArgument, line 593
+modules.stdlib_faults	stdlib.fault.max_empty.fvm	expected diagnostic RuntimeDiag::InvalidArgument, line 8
+modules.stdlib_faults	stdlib.fault.max_empty.jit	expected diagnostic RuntimeDiag::InvalidArgument, line 8
+modules.stdlib_faults	stdlib.fault.max_empty.nvm	expected diagnostic RuntimeDiag::InvalidArgument, line 8
+modules.stdlib_faults	stdlib.fault.max_empty.prl	expected diagnostic RuntimeDiag::InvalidArgument, line 8
+modules.stdlib_faults	stdlib.fault.mean_empty.fvm	expected diagnostic RuntimeDiag::InvalidArgument, line 138
+modules.stdlib_faults	stdlib.fault.mean_empty.jit	expected diagnostic RuntimeDiag::InvalidArgument, line 138
+modules.stdlib_faults	stdlib.fault.mean_empty.nvm	expected diagnostic RuntimeDiag::InvalidArgument, line 138
+modules.stdlib_faults	stdlib.fault.mean_empty.prl	expected diagnostic RuntimeDiag::InvalidArgument, line 138
+modules.stdlib_faults	stdlib.fault.min_empty_string.fvm	expected diagnostic RuntimeDiag::InvalidArgument, line 138
+modules.stdlib_faults	stdlib.fault.min_empty_string.jit	expected diagnostic RuntimeDiag::InvalidArgument, line 138
+modules.stdlib_faults	stdlib.fault.min_empty_string.nvm	expected diagnostic RuntimeDiag::InvalidArgument, line 138
+modules.stdlib_faults	stdlib.fault.min_empty_string.prl	expected diagnostic RuntimeDiag::InvalidArgument, line 138
+modules.stdlib_faults	stdlib.fault.min_empty.fvm	expected diagnostic RuntimeDiag::InvalidArgument, line 8
+modules.stdlib_faults	stdlib.fault.min_empty.jit	expected diagnostic RuntimeDiag::InvalidArgument, line 8
+modules.stdlib_faults	stdlib.fault.min_empty.nvm	expected diagnostic RuntimeDiag::InvalidArgument, line 8
+modules.stdlib_faults	stdlib.fault.min_empty.prl	expected diagnostic RuntimeDiag::InvalidArgument, line 8
+modules.stdlib_faults	stdlib.fault.stdev_short.fvm	expected diagnostic RuntimeDiag::InvalidArgument, line 55
+modules.stdlib_faults	stdlib.fault.stdev_short.jit	expected diagnostic RuntimeDiag::InvalidArgument, line 55
+modules.stdlib_faults	stdlib.fault.stdev_short.nvm	expected diagnostic RuntimeDiag::InvalidArgument, line 55
+modules.stdlib_faults	stdlib.fault.stdev_short.opt	expected diagnostic RuntimeDiag::InvalidArgument, line 55
+modules.stdlib_faults	stdlib.fault.stdev_short.prl	expected diagnostic RuntimeDiag::InvalidArgument, line 55
+modules.stdlib_faults	stdlib.fault.variance_short.fvm	expected diagnostic RuntimeDiag::InvalidArgument, line 55
+modules.stdlib_faults	stdlib.fault.variance_short.jit	expected diagnostic RuntimeDiag::InvalidArgument, line 55
+modules.stdlib_faults	stdlib.fault.variance_short.nvm	expected diagnostic RuntimeDiag::InvalidArgument, line 55
+modules.stdlib_faults	stdlib.fault.variance_short.opt	expected diagnostic RuntimeDiag::InvalidArgument, line 55
+modules.stdlib_faults	stdlib.fault.variance_short.prl	expected diagnostic RuntimeDiag::InvalidArgument, line 55
+modules.stdlib_faults	stdlib.fault.zip_with.fvm	expected diagnostic RuntimeDiag::InvalidArgument, line 371
+modules.stdlib_faults	stdlib.fault.zip_with.jit	expected diagnostic RuntimeDiag::InvalidArgument, line 371
+modules.stdlib_faults	stdlib.fault.zip_with.nvm	expected diagnostic RuntimeDiag::InvalidArgument, line 371
+modules.stdlib_faults	stdlib.fault.zip_with.opt	expected diagnostic RuntimeDiag::InvalidArgument, line 371
+modules.stdlib_faults	stdlib.fault.zip_with.prl	expected diagnostic RuntimeDiag::InvalidArgument, line 371
+modules.stdlib_registry	registry.match_type_signatures_read	expected exit 0, got exit 1
+modules.stdlib_registry	registry.parameter_types_match	expected exit 0, got exit 1
+modules.stdlib_registry	registry.result_types_match	expected exit 0, got exit 1
+modules.stdlib_registry	registry.signatures_match	expected exit 0, got exit 1
+modules.stdlib_values	stdlib.array_basic.fvm	expected exit 0, got exit 1
+modules.stdlib_values	stdlib.array_basic.inline_opt	expected exit 0, got exit 1
+modules.stdlib_values	stdlib.array_basic.jit	expected exit 0, got exit 1
+modules.stdlib_values	stdlib.array_basic.macro_opt	expected exit 0, got exit 1
+modules.stdlib_values	stdlib.array_basic.nvm	expected exit 0, got exit 1
+modules.stdlib_values	stdlib.array_basic.prl	expected exit 0, got exit 1
+modules.stdlib_values	stdlib.array_hof.fvm	expected exit 0, got exit 1
+modules.stdlib_values	stdlib.array_hof.inline_opt	expected exit 0, got exit 1
+modules.stdlib_values	stdlib.array_hof.jit	expected exit 0, got exit 1
+modules.stdlib_values	stdlib.array_hof.macro_opt	expected exit 0, got exit 1
+modules.stdlib_values	stdlib.array_hof.nvm	expected exit 0, got exit 1
+modules.stdlib_values	stdlib.array_hof.prl	expected exit 0, got exit 1
+modules.stdlib_values	stdlib.array_large.fvm	expected exit 0, got exit 1
+modules.stdlib_values	stdlib.array_large.inline_opt	expected exit 0, got exit 1
+modules.stdlib_values	stdlib.array_large.jit	expected exit 0, got exit 1
+modules.stdlib_values	stdlib.array_large.macro_opt	expected exit 0, got exit 1
+modules.stdlib_values	stdlib.array_large.nvm	expected exit 0, got exit 1
+modules.stdlib_values	stdlib.array_large.prl	expected exit 0, got exit 1
+modules.tensor	binary_roundtrip	expected exit 0, got exit 1
+modules.tensor	broadcast_ops	expected exit 0, got exit 1
+modules.tensor	linalg_layout	expected exit 0, got exit 1
+modules.tensor	op_stats.table.fvm	stderr does not contain 'tensor op stats:'
+modules.tensor	op_stats.table.nvm	stderr does not contain 'tensor op stats:'
+modules.tensor	take_negative_is_compile_time	stdout does not contain 'index -1 is out of range for the first dimension of extent 4'
+modules.tensor	take_one_hot.fvm	expected exit 0, got exit 1
+modules.tensor	take_one_hot.jit	expected exit 0, got exit 1
+modules.tensor	take_one_hot.nvm	expected exit 0, got exit 1
+modules.tensor	take_one_hot.prl	expected exit 0, got exit 1
+modules.tensor	take_out_of_range_is_compile_time	stdout does not contain 'index 4 is out of range for the first dimension of extent 4'
+modules.tensor	take_runtime_out_of_range.fvm	stdout does not contain 'take runtime ok=[[3, 4, 5]]'
+modules.tensor	take_runtime_out_of_range.jit	stdout does not contain 'take runtime ok=[[3, 4, 5]]'
+modules.tensor	take_runtime_out_of_range.nvm	stdout does not contain 'take runtime ok=[[3, 4, 5]]'
+modules.tensor	take_runtime_out_of_range.prl	stdout does not contain 'take runtime ok=[[3, 4, 5]]'
+modules.tensor_int_division	int_division.by_zero.fvm	expected diagnostic RuntimeDiag::DivisionByZero, line 7
+modules.tensor_int_division	int_division.by_zero.jit	expected diagnostic RuntimeDiag::DivisionByZero, line 7
+modules.tensor_int_division	int_division.by_zero.nvm	expected diagnostic RuntimeDiag::DivisionByZero, line 7
+modules.tensor_int_division	int_division.by_zero.prl	expected diagnostic RuntimeDiag::DivisionByZero, line 7
+modules.tensor_int_division	int_division.remainder_by_zero.fvm	expected diagnostic RuntimeDiag::DivisionByZero, line 7
+modules.tensor_int_division	int_division.remainder_by_zero.jit	expected diagnostic RuntimeDiag::DivisionByZero, line 7
+modules.tensor_int_division	int_division.remainder_by_zero.nvm	expected diagnostic RuntimeDiag::DivisionByZero, line 7
+modules.tensor_int_division	int_division.remainder_by_zero.prl	expected diagnostic RuntimeDiag::DivisionByZero, line 7
+modules.tensor.bounds	slice_runtime	output does not contain 'slice_runtime.cml:6:'
+modules.tensor.dtype	npy_generic_wrapper_mismatch	output does not contain 'npy_generic_wrapper_mismatch.cml:8:55'
+modules.tensor.named_dims	err_mismatch	expected diagnostic SemanticDiag::DimensionMismatch, line 6, column 47
+modules.tensor.named_dims	err_unbound_name	expected diagnostic SemanticDiag::DimensionNameNotBound, line 3, column 36
+modules.tensor.named_dims	return_extent_checked	output does not contain 'err_return_extent.cml:8:16'
+modules.tensor.named_dims	unknown_extent_mismatch	output does not contain 'unknown_extent_mismatch.cml:9:17'
+modules.tensor.shape_inference	si_as_fails	output does not contain 'as_fails.cml:8:15'
+modules.tensor.shape_inference	si_as_fails_fvm	output does not contain 'as_fails.cml:8:15'
+modules.tensor.shape_inference	si_as_fails_jit	output does not contain 'as_fails.cml:8:15'
+modules.tensor.shape_inference	si_as_fails_prl	output does not contain 'as_fails.cml:8:15'
+modules.tensor.shape_inference	si_branch_join	expected diagnostic SemanticDiag::ReturnNeedsConversion, line 7, column 5
+modules.tensor.shape_inference	si_computed_extent_run_time	output does not contain 'computed_extent_run_time.cml:7:25'
+modules.tensor.shape_inference	si_computed_extent_stays_open	expected diagnostic SemanticDiag::ArgumentNeedsConversion, line 7, column 17
+modules.tensor.shape_inference	si_computed_slice	expected diagnostic SemanticDiag::ArgumentNeedsConversion, line 7, column 15
+modules.tensor.shape_inference	si_loaded_struct	expected diagnostic SemanticDiag::ArgumentNeedsConversion, line 10, column 17
+modules.tensor.shape_inference	si_plain_result	expected diagnostic SemanticDiag::ArgumentNeedsConversion, line 11, column 14
+modules.tensor.shape_inference	si_recursion_leaf	expected diagnostic SemanticDiag::ReturnNeedsConversion, line 4, column 5
+modules.tensor.shape_inference	si_tuple_return	expected diagnostic SemanticDiag::ReturnNeedsConversion, line 8, column 5
+modules.tensor.shape_inference	si_var_argument	expected diagnostic SemanticDiag::ArgumentNeedsConversion, line 9, column 17
+modules.tensor.shape_types	as_runtime_mismatch	output does not contain 'as_runtime_mismatch.cml:8:15'
+modules.tensor.subscript	slice_step_zero	output does not contain 'The slice 't[a:b:s]' has a step of 0'
+opt.camel_passes	camel_passes.cse_written_variable.by_camel	verification exited 1
+opt.camel_passes	camel_passes.cse_written_variable.by_cpp	snapshot differs from golden
+opt.camel_passes	camel_passes.fold.constant_budget.by_camel	snapshot differs from golden
+opt.camel_passes	camel_passes.fold.constant_budget.by_cpp	snapshot differs from golden
+opt.commit_refusal	commit_refusal.loop_body_read	stdout does not contain 'refused at the commit: Runtime graph 'main' breaks the branch-arm invariant: COPY 24 runs in the body (region 0) and reads OPER 14 (:op/add_l), which lies in the body of LOOP 17 (region 2): a node reads only the values that run whenever it runs (see docs17_graph_rewrite_api_contracts.md, 4.1).'
+opt.generic	effect_order_folded.inline.fvm	expected exit 0, got exit 1
+opt.generic	effect_order_folded.inline.jit	expected exit 0, got exit 1
+opt.generic	effect_order_folded.nvm	expected exit 0, got exit 1
+opt.generic	effect_order_folded.simplify.fvm	expected exit 0, got exit 1
+opt.generic	effect_order_folded.simplify.jit	expected exit 0, got exit 1
+opt.generic	effect_order_folded.simplify.nvm	expected exit 0, got exit 1
+opt.generic	fold_cast.failing_fails_at_run_time	expected diagnostic RuntimeDiag::RuntimeError, line 13, column 13
+opt.generic	fold_constant_loop_effect.simplify_nvm	expected exit 0, got exit 1
+opt.generic	fold_constant_loop.simplify_nvm	expected exit 0, got exit 1
+opt.generic	hang_branch_00017.simplify_macro_nvm	expected exit 0, got exit 1
+opt.generic	hang_branch_00017.simplify_nvm	expected exit 0, got exit 1
+opt.generic	interval_bounds_computed.opt_fvm	expected exit 0, got exit 1
+opt.generic	interval_bounds_computed.opt_jit	expected exit 0, got exit 1
+opt.generic	interval_bounds_computed.opt_nvm	expected exit 0, got exit 1
+opt.generic	interval_bounds_computed.opt_taskflow	expected exit 0, got exit 1
+opt.generic	interval_bounds_constant.opt_fvm	expected exit 0, got exit 1
+opt.generic	interval_bounds_constant.opt_jit	expected exit 0, got exit 1
+opt.generic	interval_bounds_constant.opt_nvm	expected exit 0, got exit 1
+opt.generic	interval_bounds_constant.opt_taskflow	expected exit 0, got exit 1
+opt.generic	specialization_survives_the_round.copy_is_reused_in_a_later_round	verification exited 1
+opt.generic	specialize_dim_name_recursion.bounded	verification exited 1
+opt.inline	loop_wait_after_inline.non_contiguous_loop.refused	output does not contain 'loop #0 is the LOOP node 52'
+opt.inline	loop_wait_after_inline.two_loops_interleaved.refused	output does not contain 'test::interleave_loop_range: graph 'f8': node 31'
+opt.progen	progen_seed_4	expected exit 0, got exit 1
+opt.screens	generic.effect_order_folded	expected exit 0, got exit 1
+opt.screens	nn.checkpoint_roundtrip	expected exit 0, got exit 1
+opt.screens	nn.mnist	expected exit 0, got exit 1
+opt.second_pass	second_pass.perf_fib_smoke	expected exit 0, got exit 1
+opt.splice_place	perf_fib_smoke.opt_twice.fvm	used <duration> of CPU against a cpu_budget_ms of <duration>: the test's own work grew (its wall clock read <duration>, which is not the bound on this host)
+opt.splice_place	perf_fib_smoke.opt_twice.jit	used <duration> of CPU against a cpu_budget_ms of <duration>: the test's own work grew (its wall clock read <duration>, which is not the bound on this host)
+opt.splice_place	perf_fib_smoke.opt_twice.nvm	used <duration> of CPU against a cpu_budget_ms of <duration>: the test's own work grew (its wall clock read <duration>, which is not the bound on this host)
+opt.splice_place	perf_fib_smoke.opt_twice.prl	used <duration> of CPU against a cpu_budget_ms of <duration>: the test's own work grew (its wall clock read <duration>, which is not the bound on this host)
+opt.writings	opt.writings.greedy_fusion_reads_no_writing	expected exit 0, got exit 1
+opt.writings	opt.writings.two_effects_wall_clock	expected exit 0, got exit 1
+para.core	arm_reads_outer_value.opt_prl	expected exit 0, got timeout after <duration>
+para.core	bootstrap_medians	expected exit 0, got exit 1
+para.core	concurrent_alloc.prl	expected exit 0, got exit 1
+para.core	concurrent_alloc.prl_fans_out	expected exit 0, got exit 1
+para.core	concurrent_alloc.prl_gc_stress	expected exit 0, got exit 1
+para.core	map_chunks.nvm	expected exit 0, got exit 1
+para.core	map_chunks.prl	expected exit 0, got exit 1
+para.core	map_chunks.prl_gc_stress	expected exit 0, got exit 1
+para.core	map_chunks.prl_one_worker	expected exit 0, got exit 1
+para.core	ordered_operators_inline.prl	expected exit 0, got exit 1
+para.core	unordered_foreach_smoke.fvm	expected exit 0, got exit 1
+para.core	unordered_foreach_smoke.nvm	expected exit 0, got exit 1
+para.core	unordered_foreach_smoke.prl	expected exit 0, got exit 1
+para.core	unordered_foreach_timing.prl	expected exit 0, got exit 1
+para.core	unordered_reduce_sum.fvm	expected exit 0, got exit 1
+para.core	unordered_reduce_sum.nvm	expected exit 0, got exit 1
+para.core	unordered_reduce_sum.prl	expected exit 0, got exit 1
+para.exec_pred	fault.predecessors	verification exited 1
+para.exec_pred	sync_block.predecessors	verification exited 1
+para.handoff	fault_deep.fvm	stdout does not start with "Attempted division by zero. / 305\nAttempted division by zero. / 305\nAttempted division by zero. / 305\nbefore\n"
+para.handoff	fault_deep.nvm	stdout does not start with "Attempted division by zero. / 305\nAttempted division by zero. / 305\nAttempted division by zero. / 305\nbefore\n"
+para.handoff	fault_deep.prl	stdout does not start with "Attempted division by zero. / 305\nAttempted division by zero. / 305\nAttempted division by zero. / 305\nbefore\n"
+para.handoff	fault_deep.prl_off	stdout does not start with "Attempted division by zero. / 305\nAttempted division by zero. / 305\nAttempted division by zero. / 305\nbefore\n"
+runtime.graph_draft_ledger	runtime.graph_draft_ledger.never_rises	expected exit 0, got exit 1
+showcase_d4_mcts	mcts.selfplay.curve	expected exit 0, got exit 1
+stated_extents	stated_mean_axis_answered_by_the_engine.nvm	expected exit 0, got exit 1
+tools.compile_bench	compile_bench.smoke	expected exit 0, got exit 1
+tools.grammar	grammar.files	expected exit 0, got exit 1
+tools.grammar	grammar.tables	expected exit 0, got exit 1
+tools.inspect_copies	inspect.copies.training_step	expected exit 0, got exit 1
+tools.member_init	tools.member_init.sweep	expected exit 0, got exit 1
+trans.cpp	agree_with_fvm	expected exit 0, got exit 1
+trans.cpp	empty_struct_text	expected exit 0, got exit 1
+trans.cpp	narrow_argmax	expected exit 0, got exit 1
+trans.cpp	rc19_seed70_builds_after_specialize	expected exit 0, got exit 1
+trans.effect_trace	macro_body_effect_stage	expected exit 0, got exit 1
+trans.macro	failed_depth.error	expected diagnostic RuntimeDiag::MacroEvaluationFailed, line 15, column 13
+trans.macro	failed_evaluation.error	expected diagnostic RuntimeDiag::MacroEvaluationFailed, <hex>, line 17, column 13
+trans.macro	failed_evaluation.json	verification exited 1
+trans.macro	failed_unreached.error	expected diagnostic RuntimeDiag::MacroEvaluationFailed, line 9, column 12
+trans.macro	not_static.note	verification exited 1
+trans.macro	round_budget.error	expected diagnostic RuntimeDiag::MacroEvaluationFailed, line 10, column 13
+trans.pass_dump	dump_after_each_pass	expected exit 0, got exit 1
+trans.source_spelling	every_generator_writes_source_the_parser_reads	expected exit 0, got exit 1
+transforms	cml_var_holding_a_lambda	output does not contain '((x: int): int => x + 100)(1)'
+transforms	transpose_loop_escape.int_is_a_zero_tangent_space.nvm	expected exit 0, got exit 1
+transforms	transpose_loop_escape.names_the_value_one_read.nvm	expected exit 0, got exit 1
+transforms	transpose_loop_escape.one_value_read_twice_is_one_capture.nvm	expected exit 0, got exit 1
+transforms	transpose_loop_escape.second_state_of_the_same_loop.nvm	expected exit 0, got exit 1
+transforms	transpose_loop_escape.two_states_before_the_escape.nvm	expected exit 0, got exit 1
+transforms	transpose_loop_escape.two_values_of_two_kinds.nvm	expected exit 0, got exit 1
+transforms	transpose_runs_a_loop_rounds_backwards.nvm	expected exit 0, got exit 1
+tutorial.examples	tutorial.examples.05_arrays.fvm	expected exit 0, got exit 1
+tutorial.examples	tutorial.examples.05_arrays.jit	expected exit 0, got exit 1
+tutorial.examples	tutorial.examples.05_arrays.nvm	expected exit 0, got exit 1
+tutorial.examples	tutorial.examples.05_arrays.prl	expected exit 0, got exit 1
