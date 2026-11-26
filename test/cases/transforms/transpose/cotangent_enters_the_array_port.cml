@@ -1,0 +1,61 @@
+/**
+ * **The rank-zero cotangent entering an open-rank port** -- the one edge the transpose walk makes
+ * when a law writes `(ct: T[..])` and the cotangent really handed over is a number.
+ *
+ * `lane_mean(t: float[4]) => float` is `mean<0, false>(t)`, the axis form of the whole reduction
+ * taken along the only axis with `keepdims = false`, so its answer is the rank-zero shape of
+ * `T[...]` read as a `float`. Its transpose rule is `mean_axis_cotangent::<T>(ct: T[...], axis,
+ * keepdims, extents) => T[...]`, whose first port states `T[...]` -- the answer's type, one lane per
+ * position -- while the cotangent a transposed call receives is a `float`, one number. The port is
+ * entered from the element: `T` read as `T[..]`, its rank coming from the value.
+ *
+ * At `t = [1, 2, 3, 4]` the mean is `10/4 = 2.5`, and the transposed call at cotangent `1` spreads
+ * `1 / 4 = 0.25` over the four lanes:
+ *
+ *     lane_mean([1, 2, 3, 4])          = 2.5
+ *     transpose(lane_mean)(1.0).0      = [0.25, 0.25, 0.25, 0.25]
+ *
+ * **What this case holds is the operator, not the number.** The walk's step is written
+ * `src/stdlib/transforms/transpose/walkmachinery.cpp#ruleCotangentOf` (the `handed` block): where a
+ * value's type goes from `T` to `T[..]` the value is handed over through an **entering**, spelled
+ * `:op/enter`. Design principles 5.1 makes entering not a conversion -- it always succeeds, it has
+ * its own operator, it goes through no conversion safety table -- and the author's
+ * `enter-by-structure` ruling says a `T` read as `T[..]` is an entering, its rank
+ * coming from the value. `:op/cast` is what a *program* writes when it converts, and it is
+ * `mayFault = true`, which this step cannot be: the step is taken only after
+ * `port->assignableFrom(ctType)` has held, so the entering's own guard passes.
+ *
+ * The two kernels both call `castSlotFrom`, so the four numbers are the same whichever operator the
+ * walk writes. **The number cannot tell the two apart; the walk's own reading can.** So the case is
+ * read twice: `--trace transforms` for the step (`TRANSPOSE function=lane_mean entrance=:op/enter
+ * law=mean_axis_from_type_t port=float[...] ct=float`), and the numbers above for what the step
+ * computes. The graph cannot be asked today: `transpose` is a run-time operator, so the member is
+ * built after the passes and never enters a `std::jgir` document at all (0 nodes, measured).
+ *
+ * The step had no reader: the tree's other transform and autodiff cases reach `ruleCotangentOf`
+ * 1671 times and not one of those calls has an array port, so this is the only place the entering
+ * is made.
+ *
+ * Why the two extra imports: `rulesets.transpose` is what files the law, and importing it by its own
+ * name is refused (`no module named rulesets.transpose`), while `vjp` imports it. `vjp` itself is not
+ * called here -- it is the door the rule set comes in through, and its own route to this member is
+ * refused one step early by `split`'s exit type.
+ *
+ * A parameter that is not written `float[4]` is refused at the call (`TransposeNeedsParameterShape`),
+ * so the parameter's own shape is part of what this case needs, not decoration.
+ */
+import { mean } from tensor
+import { transpose } from transforms
+import { vjp } from vjp
+
+func lane_mean(t: float[4]) => float {
+    return mean<0, false>(t)
+}
+
+func main() => int sync {
+    let t: float[4] = [1.0, 2.0, 3.0, 4.0]
+    let d = transpose(lane_mean)(1.0).0
+    'lane_mean value={}'->format<lane_mean(t)>->println
+    'lane_mean d = {} {} {} {}'->format<d[0], d[1], d[2], d[3]>->println
+    return 0
+}

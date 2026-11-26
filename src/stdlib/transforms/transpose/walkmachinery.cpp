@@ -568,8 +568,22 @@ gc_node_ref_t ruleCotangentOf(
         if (arrayPort != nullptr && arrayPort->rankZeroType() != nullptr &&
             port->assignableFrom(ctType)) {
             const std::vector<gc_node_ref_t> source{ct};
-            handed = ctx.draft->addOperNode(port, nullptr, ":op/enter");
+            // **The one thing about this step that no other reading covers.** Both kernels call
+            // `castSlotFrom`, so the numbers are the same whichever operator is written, and the
+            // graph is out of reach: the member this walk builds lives in a `TransposeMember` fact
+            // and is made after the passes have run, so no `std::jgir` document ever holds the node
+            // (measured: zero `:op/enter` nodes in this case's document, with and without
+            // `std::macro` in the pipeline). The uri is named once, below, and both the node and the
+            // line are made from it -- a walk that wrote a different operator could not report this
+            // one, which is what the positive control in
+            // `test/plans/feat/transforms/cotangent_enter.plan.toml` asks.
+            const char *const entrance = ":op/enter";
+
+            handed = ctx.draft->addOperNode(port, nullptr, entrance);
             ctx.draft->setNormInputs(handed, std::span<const gc_node_ref_t>(source));
+            ctx.os << "TRANSPOSE function=" << ctx.function->name() << " entrance=" << entrance
+                   << " law=" << ruleName << " port=" << port->toString()
+                   << " ct=" << ctType->toString() << '\n';
         }
     }
     // **The port's declared type against the type of the value really handed.** A law is filed under
