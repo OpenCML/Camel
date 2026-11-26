@@ -155,3 +155,21 @@ test/cases/consistency/faults/mod_zero_in_function.cml
 **口径补一处**：`test/tools/writing-freedom.mjs`、`have-native-jit.mjs` 这类**计划级脚本**在 531 里有 10 条
 （如 `compile.chain` 4 条），失败时首行同样是 `expected exit 0, got exit 1` 但 `verification` 字段为空 ⇒
 按“脚本 exit 1”口径会被漏掉。故这一类实际为 **84 + 10 = 94**；本页表仍按“失败首行”口径记 531，不重算。
+**那 10 条（`verification` 字段全空，按“脚本 exit 1”口径一条都抓不到；8 个 `.mjs` + 2 个 `.py`）**：
+```
+compile.chain/sync.pure_call_is_arranged_freely                      writing-freedom.mjs
+compile.chain/sync.pure_call_has_no_edge_to_the_statement_beside_it   writing-freedom.mjs
+compile.chain/sync.effect_call_stays_on_the_chain                     writing-freedom.mjs
+compile.chain/sync.faulting_call_stays_on_the_chain                   writing-freedom.mjs
+compile.region_roots/region_roots.writing_freedom_of_two_writes        writing-freedom.mjs
+modules.stdlib_registry/registry.no_env_switches                       check-env-switches.mjs
+opt.second_pass/second_pass.perf_fib_smoke                             opt-cost/second_pass.mjs
+opt.progen/progen_seed_4                                               progen/progen.py
+trans.cpp/agree_with_fvm                                               cppexec/run.py
+trans.source_spelling/every_generator_writes_source_the_parser_reads   spelling/check.py
+```
+（`registry.no_env_switches` 这一条已在别处修好 —— `4c38e91fa5` 把块追踪改成 pass 参数并合进 integration；它留在这张名单里是因为**当时**的首行就是它。）
+
+**单独记的那 1 条**：`compile.higher_order_clause/node_role_reads_the_fact` —— stdout 是一整张 `digraph GraphIR`（5499 字节）、
+stderr 空、退出 1，脚本在 `<anonymous>:3:5` 断言 “camel exited 1” ⇒ **跑了、也画出了图，但退出码是 1**，
+既不是“期望 vs 实际文本不符”，也不是“没跑起来”，等第 2 类修完复测时单独看。
