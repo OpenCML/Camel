@@ -41,7 +41,10 @@ enum class DataType {
     SpreadArg,
     // `edit d = f { … }` and `view d = f { … }`: the same shape, two blocks; see BlockHeadLoad.
     EditExpr,
-    ViewExpr
+    ViewExpr,
+    // The root a block's body reads its `d` by: the graph the compiler opens on the function the
+    // head names. No source writes it; see BlockRootLoad.
+    BlockRoot
 };
 
 /// What a `match type` case selects (design principles 5.5, R3): the shape of a type
@@ -417,6 +420,26 @@ class BlockHeadLoad : public DataLoad {
 
   private:
     Reference root_;
+};
+
+/// The root a block's body reads its bound name by: `d` in `edit d = f { … }` stands for the
+/// graph the compiler opens on `f`, and for the graph `f` is in a `view`. The source cannot write
+/// this value -- a block's kind says which root it takes, and the operator that opens one is the
+/// compiler's to name, not a name of the program's scope (GCT, visitBlockRoot) -- so the AST says
+/// what the value is and nothing about how it is made.
+///   [0] the function the block is over.
+class BlockRootLoad : public DataLoad {
+  public:
+    BlockRootLoad(DataType kind) : DataLoad(DataType::BlockRoot), blockKind_(kind) {}
+
+    /// The kind of block this root belongs to: `EditExpr` or `ViewExpr`.
+    DataType blockKind() const { return blockKind_; }
+
+    const std::string toString() const override;
+    const std::string geneCode() const override;
+
+  private:
+    DataType blockKind_;
 };
 
 class LiteralLoad : public DataLoad {

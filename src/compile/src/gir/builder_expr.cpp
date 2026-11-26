@@ -939,12 +939,16 @@ const char *conversionNameOf(const Type *type) {
 
 std::any Builder::resolveDRefNode(const GCT::node_ptr_t &gct) {
     if (const auto oper = tree_->operRefOf(gct); oper.has_value()) {
-        // A DREF the compiler made for an operator it knows by id: the group is the built-in
-        // module's, which registered it; no name of the program takes part.
+        // A DREF the compiler made for an operator it knows by id: the group is the one the module
+        // that declares the operator registered for that id; no name of the program takes part.
         ENTER("DREF");
         genericCalleeAllowed_        = false;
         refOrigin_                   = gct->origin();
-        const oper_group_ptr_t group = internalOperatorGroup(*oper);
+        const oper_group_ptr_t group = operatorGroupOf(*oper);
+        GUARD(
+            group != nullptr,
+            "The module that declares the operator the compiler emits did not register it: " +
+                std::string(camel::core::OperatorTable::instance().uri(*oper)));
         node_handle_t drefNode{currGraph_->addDrefNode(
             std::variant<graph_vec_ptr_t, oper_group_ptr_t, graph_ptr_t>{group})};
         registerNodeOrigin(context_, drefNode, gct, "gir.dref");

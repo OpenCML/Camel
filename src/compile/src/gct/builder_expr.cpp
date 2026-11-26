@@ -230,6 +230,36 @@ node_ptr_t Builder::visitBlockHeaded(const AST::node_ptr_t &ast) {
 }
 
 /*
+BlockRoot : BlockRootLoad( Data ) ;  -- the value a block's body reads its head's name by.
+
+It is the call the compiler makes of the operator that opens the root of that kind of block (design
+15.1): `graph:open` for an `edit` block, which answers the graph the function is in a copy the
+body's changes go to, and `graph:graph_of` for a `view` block, which is the graph the function is
+and changes nothing. The head's kind decides which one, so the name never comes from the program's
+scope and no program name can take the root's place: the id is the reference (makeDRef(OperId,
+...)), and the URI is only the node's label. The module is imported before the table is asked
+because its entries exist only once the module that declares them was read.
+*/
+node_ptr_t Builder::visitBlockRoot(const AST::node_ptr_t &ast) {
+    ENTER("BlockRoot");
+    const bool isEdit = ast->loadAs<AST::BlockRootLoad>()->blockKind() == AST::DataType::EditExpr;
+    const std::string uri = isEdit ? "graph:open" : "graph:graph_of";
+    context_->importModule("graph");
+    const auto oper = camel::core::OperatorTable::instance().lookup(uri);
+    GUARD(oper.has_value(), "The table has no entry for the operator a block head binds: " + uri);
+    node_ptr_t ref = tree_->makeDRef(*oper, uri);
+    setOriginFromAst(context_, ref, ast, camel::source::OriginKind::GctNode, "gct.block.root");
+    node_ptr_t call = tree_->makeLink(1);
+    *call << ref;
+    if (ast->size() > 0) {
+        *call << visitData(ast->atAs<AST::DataLoad>(0));
+    }
+    setOriginFromAst(context_, call, ast, camel::source::OriginKind::GctNode, "gct.block.open");
+    LEAVE("BlockRoot");
+    return call;
+}
+
+/*
 StmtBlock(bool sync) : Stmt* stmts ;
 */
 node_ptr_t Builder::visitDecoratedBlock(const AST::node_ptr_t &ast) {
@@ -394,6 +424,9 @@ node_ptr_t Builder::visitData(const AST::node_ptr_t &ast) {
         break;
     case AST::DataType::Literal:
         dataNode = visitLiteral(ast);
+        break;
+    case AST::DataType::BlockRoot:
+        dataNode = visitBlockRoot(ast);
         break;
     case AST::DataType::Array:
         dataNode = visitArrayData(ast);

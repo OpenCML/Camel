@@ -77,6 +77,28 @@ oper_group_ptr_t Builder::internalOperatorGroup(camel::core::OperId oper) {
     return group;
 }
 
+oper_group_ptr_t Builder::operatorGroupOf(camel::core::OperId oper) {
+    // The built-in module registers the operators of the core, and a library module registers the
+    // ones its own declarations name; both did it at registration, when the URI a rule answers for
+    // was interned and the group recorded under it (Module::exportEntity). So the id alone finds
+    // the group: a module that does not declare the operator answers with nothing, and the search
+    // goes on to the next one.
+    if (const auto builtins = context_->importModule(""); builtins != nullptr) {
+        if (oper_group_ptr_t group = builtins->nativeOperatorGroup(oper); group != nullptr) {
+            return group;
+        }
+    }
+    for (const auto &module : context_->allUserModules()) {
+        if (module == nullptr) {
+            continue;
+        }
+        if (oper_group_ptr_t group = module->nativeOperatorGroup(oper); group != nullptr) {
+            return group;
+        }
+    }
+    return nullptr;
+}
+
 GCT::node_ptr_t Builder::internalOperatorDref(camel::core::OperId oper) {
     // The id is the reference; the entity name is only the node's label (a GCT dump, a
     // diagnostic), as it was when the DREF was made by name.
