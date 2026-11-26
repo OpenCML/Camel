@@ -270,4 +270,9 @@ git checkout HEAD -- <那一个文件>          # 恢复，git status --porcelai
   已经写过就立即 `git checkout HEAD -- <file>` 还原，再核 `git status --porcelain` 为空；改完用 `git grep -c <旧文本>` 看数**从几减到几**。
 · **报错的属性不是病因**：`graph.permissions` 报“句柄不指向任何节点”，真正的错在更上游那次“边替换边比较”——
   报错点只是第一个碰到失效句柄的地方。定位先从报错往上追一跳，别在报错那一行上改。
+· **重录金标一律带 `-Entry`**：`camel-remote.ps1 -UpdateGolden -Entry <名字>[,<名字>…]`（名字或 `计划id/名字`，
+  可用 `*` 通配）；只有选中的条目会跑、会写金标，**名字一个都没对上就退出 2**。不给 `-Entry` 仍是整份计划重录 ——
+  那会把同计划里别人的快照一起重写（`cse_written_variable.dot` 就是这么被“顺手”改掉的）。
+  重录前先判“这份计划是否整份绿”：**计划还在报错时录，会把诊断或空图写进金标**。
+  录后 `git status --porcelain` 只许出现你点名的那几份；多出来的 `git checkout HEAD -- <file>` 还原。
 ```
