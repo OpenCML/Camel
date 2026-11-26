@@ -111,6 +111,16 @@ pwsh -NoProfile -File <你的工作树>\internal\tools\camel-remote.ps1 `
 · **`-Check` 这一步现在是坏的**：出现 `[camel-remote] --- check <name>: node   ---`（脚本路径为空）之后 `node`
   会等 stdin 永久挂住，40 分钟后才 `exit 124`。见到这一行**不要等**：记下它、结束自己那个作业，改按
   `[SUMMARY]` / `RUN_EXIT` / `[TREE]` 取数，并在交回里写一行「该检查未取到、工具态」。
+· **让读数落盘，别只活在会话里**：会话被唤醒或在上下文压缩后重启时，作业表会被清空，**跑完的结果跟着丢**
+  （2026-11-27 一条车道因此丢了两次读数，白等两轮）。起跑时就把整条输出重定向到文件，并把 PID 写下来：
+  ```powershell
+  $log = 'D:\Temp\<lane>-<plan>.log'
+  $p = Start-Process pwsh -ArgumentList '-NoProfile','-Command',
+    "Set-Location '<你的工作树>'; pwsh -NoProfile -File .\internal\tools\camel-remote.ps1 -Path . -Plan <计划> -SlotWaitSeconds 5400 -Jobs 1 -NoGpuWatch *> '$log'" `
+    -PassThru -WindowStyle Hidden
+  $p.Id | Set-Content 'D:\Temp\<lane>-<plan>.pid'
+  ```
+  开工先 `Get-Content $log -Tail 40`；**PID 还活着就不起第二条**；PID 死了且 log 里没有 `[SUMMARY]`，才按同一形状再起一次。
 ```
 
 ## 7. 路径与工作树
