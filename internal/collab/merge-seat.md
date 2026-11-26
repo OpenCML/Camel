@@ -34,6 +34,35 @@ node scripts/merge-batch.mjs --seat <座位工作树> --lanes <lanes.json> --pus
 整批编不过时，工具在二分前先单独编一次起点（集成尖端）：起点本身也编不过，退出码 4，不拿掉任何车道、不推送，
 并说明"集成尖端本身编不过"，先修尖端再重跑；起点编得过才开始二分。
 
+## 晋级：一条命令，起了就走，轮询看
+
+晋级是乐观合并的安全网，约两小时一次：对 `integration` 尖端跑整个 fast 层，超时的逐个单独加倍限时重跑，
+与**紧邻上一次晋级**的红表按 `plan_id` + 用例名比，写红表、逐例耗时表和晋级记录，没有新红就把 `develop`
+快进到**被测的那个提交**。工具是 `scripts/promote.mjs`，**不在前台等它**：`start` 起后台工作进程就返回，
+进度靠 `status` 轮询。
+
+```
+node scripts/promote.mjs start [--tip <ref>] [--publish]    # 秒回：打印任务号与 status 命令
+node scripts/promote.mjs status [<任务号>]                  # 阶段、已用时、日志末尾、判词；缺省看最近一个
+node scripts/promote.mjs cancel [<任务号>]                  # 结束工作进程整棵树、清远端运行、放锁
+```
+
+- 阶段依次是 `measure`（整层）、`rerun-timeouts`、`compare`、`records`，带 `--publish` 且无新红再加 `publish`；
+  终态是 `done` / `failed` / `cancelled` / `dead`。轮询间隔随意，起一个后台提醒或每几分钟看一眼，**不要**用前台命令等。
+- 同一时刻只有一个晋级（一把锁）。锁的持有者已死就当场回收，不会一直等；持有者活着时 `start` 退出码 3 并给出它的任务号。
+- 工作进程每 20 秒心跳；`status` 发现工作进程不在了（或 pid 已被别的进程占用）、或心跳超过 180 秒没动，就记为 `dead`，
+  结束它留下的子进程树、清理远端运行、放锁。**看 `status` 本身就是清理**，没有要手工回收的孤儿。
+- 新红时判词里列出红名，并列出区间内的合并提交（`上次晋级尖端..本次尖端` 的第一父链合并）供二分；工具**不自己二分**，
+  二分用 `scripts/bisect-merge.mjs`。
+- 三份产物写在任务目录 `<stateDir>/promotion/<任务号>/reports/`：`<日期>-promotion-<n>-reds.tsv`、`-durations.tsv`、
+  `.record.json`（记录里 `comparison.against` 写明比的是哪张表；上一次晋级有记录而没有红表时报错而不是去比更早的表）。
+  **只有真正发布了的晋级，才把这三份提交进仓库的 `internal/reports/`** —— 带新红的红表进了仓库，下一次就会拿它当基线。
+- `--publish` 的步骤：在发布工作树（`--publish-worktree`，缺省取本机设置的 `mergeWorktree`）里把三份产物提交在被测提交之上
+  （钩子读的是推送所在树的 HEAD，记录写不进它自己所记的提交），再推**被测提交本身**，不是记录提交；推完读回远端核对。
+  记录提交留在分支 `record/promotion-<n>`。
+- 命令都可换：`--layer`、`--rerun`、`--cleanup`、`--publish-command`（`{worktree}` `{plan}` `{sha}` `{jobs}` 会被替换；
+  命令行按空格分词、双引号成组，**直接起程序、不经 shell**）。整层命令必须在 `{worktree}/summary.json` 留下运行器的汇总文件。
+
 ## 批号（队列页给的号，这里对上靶子）
 
 队列页 `internal/plans/2026-11-25-lane-queue.cn.md` 只写条目名、不带批号；批号活在本页，
