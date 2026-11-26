@@ -16,7 +16,9 @@
 #include "camel/utils/assert.h"
 
 #include <algorithm>
+#include <array>
 #include <atomic>
+#include <cstdlib>
 #include <cstring>
 #include <stdexcept>
 
@@ -38,17 +40,81 @@ BlockStats &stats() {
     return *value;
 }
 
+// CAMEL_MM_BLOCK_TRACE=1 asks where the block space's bytes go: live blocks are counted per size
+// class, and the counts are copied when the live-byte peak is reached, so the answer says what was
+// alive at the high-water mark rather than what is alive at exit (which is usually a tenth of it).
+// The counters are the same bytes noteBytesAdded already adds, only bucketed; nothing runs when the
+// switch is off.
+constexpr size_t kTraceBucket    = 256 * 1024;
+constexpr size_t kTraceBuckets   = 257; // 0 .. 64 MB in 256 KB steps, the last one is "larger"
+constexpr size_t kTraceReportTop = 6;
+
+bool traceBlocks() {
+    static const bool on = [] {
+        const char *value = std::getenv("CAMEL_MM_BLOCK_TRACE");
+        return value != nullptr && value[0] != '\0' && value[0] != '0';
+    }();
+    return on;
+}
+
+struct BlockTrace {
+    std::array<std::atomic<uint64_t>, kTraceBuckets> liveBlocks{};
+    std::array<std::atomic<uint64_t>, kTraceBuckets> liveBytes{};
+    std::array<uint64_t, kTraceBuckets> peakBlocks{};
+    std::array<uint64_t, kTraceBuckets> peakBytes{};
+};
+
+BlockTrace &trace() {
+    static auto *value = new BlockTrace();
+    return *value;
+}
+
+size_t traceBucketOf(size_t bytes) noexcept {
+    const size_t bucket = bytes / kTraceBucket;
+    return bucket < kTraceBuckets ? bucket : kTraceBuckets - 1;
+}
+
+void traceAdded(size_t bytes, bool newPeak) noexcept {
+    auto &t             = trace();
+    const size_t bucket = traceBucketOf(bytes);
+    t.liveBlocks[bucket].fetch_add(1, std::memory_order_relaxed);
+    t.liveBytes[bucket].fetch_add(bytes, std::memory_order_relaxed);
+    if (newPeak) {
+        // A snapshot taken while other threads are still allocating: the counts can be one block
+        // off each way, which is enough to name the size classes that hold the peak.
+        for (size_t i = 0; i < kTraceBuckets; ++i) {
+            t.peakBlocks[i] = t.liveBlocks[i].load(std::memory_order_relaxed);
+            t.peakBytes[i]  = t.liveBytes[i].load(std::memory_order_relaxed);
+        }
+    }
+}
+
+void traceRemoved(size_t bytes) noexcept {
+    auto &t             = trace();
+    const size_t bucket = traceBucketOf(bytes);
+    t.liveBlocks[bucket].fetch_sub(1, std::memory_order_relaxed);
+    t.liveBytes[bucket].fetch_sub(bytes, std::memory_order_relaxed);
+}
+
 void noteBytesAdded(size_t bytes) noexcept {
     auto &s           = stats();
     const size_t live = s.liveBytes.fetch_add(bytes, std::memory_order_acq_rel) + bytes;
     size_t peak       = s.peakBytes.load(std::memory_order_relaxed);
+    bool newPeak      = false;
     while (live > peak &&
            !s.peakBytes.compare_exchange_weak(peak, live, std::memory_order_relaxed)) {
+    }
+    newPeak = live >= s.peakBytes.load(std::memory_order_relaxed);
+    if (traceBlocks()) {
+        traceAdded(bytes, newPeak);
     }
 }
 
 void noteBytesRemoved(size_t bytes) noexcept {
     stats().liveBytes.fetch_sub(bytes, std::memory_order_acq_rel);
+    if (traceBlocks()) {
+        traceRemoved(bytes);
+    }
 }
 
 std::byte *alignUp(std::byte *pointer) noexcept {
@@ -196,6 +262,42 @@ uint64_t blockFrees() noexcept { return stats().frees.load(std::memory_order_acq
 void resetBlockStatsForTests() noexcept {
     stats().creations.store(0, std::memory_order_release);
     stats().frees.store(0, std::memory_order_release);
+}
+
+uint64_t blockTraceLiveAtPeak() noexcept {
+    if (!traceBlocks()) {
+        return 0;
+    }
+    auto &t        = trace();
+    uint64_t total = 0;
+    for (size_t i = 0; i < kTraceBuckets; ++i) {
+        total += t.peakBlocks[i];
+    }
+    return total;
+}
+size_t blockTraceAtPeak(BlockTraceEntry *out, size_t capacity) noexcept {
+    if (!traceBlocks() || out == nullptr || capacity == 0) {
+        return 0;
+    }
+    auto &t = trace();
+    // The classes are few, so the report is a selection sort over the buckets that held anything:
+    // the widest class or two is what explains the high-water mark.
+    std::array<size_t, kTraceBuckets> order{};
+    size_t used = 0;
+    for (size_t i = 0; i < kTraceBuckets; ++i) {
+        if (t.peakBytes[i] != 0) {
+            order[used++] = i;
+        }
+    }
+    std::sort(order.begin(), order.begin() + static_cast<ptrdiff_t>(used), [&](size_t a, size_t b) {
+        return t.peakBytes[a] > t.peakBytes[b];
+    });
+    const size_t written = std::min(used, capacity);
+    for (size_t i = 0; i < written; ++i) {
+        const size_t bucket = order[i];
+        out[i] = BlockTraceEntry{bucket * kTraceBucket, t.peakBlocks[bucket], t.peakBytes[bucket]};
+    }
+    return written;
 }
 
 } // namespace camel::core::mm

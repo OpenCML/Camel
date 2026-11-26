@@ -154,4 +154,20 @@ uint64_t blockCreations() noexcept;
 uint64_t blockFrees() noexcept;
 void resetBlockStatsForTests() noexcept;
 
+/// One size class of the blocks that were alive when the high-water mark was reached.
+struct BlockTraceEntry {
+    size_t bytesPerBlock; ///< the class's block size (classes are 256 KB wide, the last is wider)
+    uint64_t blocks;      ///< how many of that size were alive at the high-water mark
+    uint64_t bytes;       ///< what those blocks held together
+};
+
+/// The size classes that held the block space's high-water mark, largest first. Only meaningful
+/// under `CAMEL_MM_BLOCK_TRACE=1`, which is what counts them; returns how many entries were
+/// written, at most `capacity`.
+size_t blockTraceAtPeak(BlockTraceEntry *out, size_t capacity) noexcept;
+
+/// How many blocks of every size were alive when the high-water mark was reached (the sum over
+/// the classes `blockTraceAtPeak` reports). Under `CAMEL_MM_BLOCK_TRACE=1`, else 0.
+uint64_t blockTraceLiveAtPeak() noexcept;
+
 } // namespace camel::core::mm
