@@ -23,7 +23,7 @@ node scripts/promote.mjs cancel [<id>]                     # 取消
 - `--publish` **只推量过的那一笔**；没有 `--publish` 就只量不推。
 - 默认整层命令用 `camel-remote`；`summary.json` 里有每个计划的 `plan_path` 与每行 `test_timings`（含 `timed_out`）。
 - **超时只由运行器重跑一次**（单独、两倍时限）；晋级只读它写在 `test_timings` 行上的最终状态，不再自己重跑。层命令不是以 0 或 1 退出、或读数缺了上次读数里的用例，整个任务判失败、不发布。
-- 第一次真跑要在构建机上核五件：`-FetchFile summary.json -Latest` 能否取到工作树、远端清理 `-Clean` 是否合适、`plan_path` 能否直接喂 `-Plan`、`--publish` 时钩子是否放行。
+- 第一次真跑要在构建机上核五件：`-FetchFile summary.json -FromThisRun` 能否取到工作树、远端清理 `-Clean` 是否合适、`plan_path` 能否直接喂 `-Plan`、`--publish` 时钩子是否放行。
 
 ## 怎么合：一条命令
 
@@ -75,7 +75,7 @@ node scripts/promote.mjs cancel [<任务号>]                  # 结束工作进
   （钩子读的是推送所在树的 HEAD，记录写不进它自己所记的提交），再推**被测提交本身**，不是记录提交；推完读回远端核对。
   记录提交留在分支 `record/promotion-<n>`。
 - 命令都可换：`--layer`、`--cleanup`、`--publish-command`（`{worktree}` `{sha}` `{jobs}` 会被替换；
-  命令行按空格分词、双引号成组，**直接起程序、不经 shell**）。整层命令必须在 `{worktree}/test/results/fetched/summary.json` 留下运行器的汇总文件（默认命令用 `-FetchFile summary.json -Latest` 把构建机上最新一次运行的那份取回到这里）。
+  命令行按空格分词、双引号成组，**直接起程序、不经 shell**）。整层命令必须在 `{worktree}/test/results/fetched/summary.json` 留下运行器的汇总文件（默认命令用 `-FetchFile summary.json -FromThisRun` 把本次运行在构建机上自己名下的那份取回到这里，不会取到同一检出里后来出现的别的运行）。
 
 ## 批号（队列页给的号，这里对上靶子）
 

@@ -32,7 +32,7 @@
  *               have printed their own `[RETAIN]` line with a non-zero removal count: a runner that
  *               stopped calling the policy fails here, not silently.
  *
- * Usage: node retention.mjs --policy | --runner     (uses CAMEL_TEST_TMPDIR, else a fresh temp dir)
+ * Usage: node retention.mjs --policy | --runner | --name     (uses CAMEL_TEST_TMPDIR, else a fresh temp dir)
  */
 
 import fs from 'node:fs'
@@ -302,6 +302,35 @@ function policyMode() {
         check(fs.existsSync(path.join(movedRoot, 'log', name)), `a run directory the bound keeps was removed: ${name}`)
     }
 
+    // Runs whose name the caller chose (CAMEL_TEST_RUN_NAME) are the runner's by the pid in their
+    // run.json: four gone ones beyond a bound of one are pruned (oldest first, the newest stays),
+    // one whose pid is this live process is kept whatever its age, and a directory with a foreign
+    // name and no run.json (or a run.json without a pid) is left alone.
+    const named = buildFixture(path.join(SCRATCH, 'policy-named'))
+    for (const dir of fs.readdirSync(named.logRoot)) fs.rmSync(path.join(named.logRoot, dir), { recursive: true, force: true })
+    // The manifest is written first so that the planted mtime, which orders the runs, is the last write.
+    const plantNamed = (name, modifiedMs, manifest) => {
+        fs.mkdirSync(path.join(named.logRoot, name), { recursive: true })
+        if (manifest) fs.writeFileSync(path.join(named.logRoot, name, 'run.json'), JSON.stringify(manifest))
+        plantRunDir(named.logRoot, name, modifiedMs)
+    }
+    const namedGone = ['host-a', 'host-b', 'host-c', 'host-d']
+    namedGone.forEach((name, index) => plantNamed(name, BASE_MS + (10 + index) * MINUTE_MS, { pid: DEAD_PID }))
+    plantNamed('host-live', BASE_MS, { pid: LIVE_PID })
+    plantNamed('no-manifest', BASE_MS, null)
+    plantNamed('no-pid', BASE_MS, { started_at: 'x' })
+    const namedReport = pruneRunnerOutput({ repoRoot: named.root, keep: 1, currentScratchRoot: named.ownedScratchRoot })
+    check(
+        namedReport.run_dirs.removed === 3 && namedGone.slice(0, 3).every((name) => !fs.existsSync(path.join(named.logRoot, name))),
+        `named runs beyond the bound must be pruned: removed ${namedReport.run_dirs.removed} (${namedReport.run_dirs.removed_names.join(', ')})`
+    )
+    check(fs.existsSync(path.join(named.logRoot, 'host-d')), 'the newest named run must be kept by the bound')
+    check(fs.existsSync(path.join(named.logRoot, 'host-live')), 'a named run whose pid is alive was removed')
+    check(
+        fs.existsSync(path.join(named.logRoot, 'no-manifest')) && fs.existsSync(path.join(named.logRoot, 'no-pid')),
+        'a directory with a foreign name and no pid in a run.json was removed'
+    )
+
     summary = `PASS retention.policy: a bound of 2 removed ${report.run_dirs.removed} of ${report.run_dirs.scanned} run directories `
         + `(${report.run_dirs.entries_removed} entries, ${report.run_dirs.bytes_removed} bytes), kept the newest two, the live run's `
         + `and the foreign one; the same tree under a bound of ${control.planted.length + 1} lost nothing`
@@ -427,12 +456,81 @@ function runnerMode() {
     fs.rmSync(MARKER, { force: true })
 }
 
+/**
+ * `--name`: a run directory the caller names (`CAMEL_TEST_RUN_NAME`). The named run writes its
+ * record into exactly that directory -- beside a planted run that is newer by name -- and the
+ * retention bound (here 0) does not take it; a second run with the same name and runs with a
+ * malformed name are refused with exit 2 and change nothing.
+ */
+function nameMode() {
+    const resultsRoot = path.join(SCRATCH, 'results-named')
+    const logRoot = path.join(resultsRoot, 'log')
+    fs.rmSync(resultsRoot, { recursive: true, force: true })
+    fs.mkdirSync(logRoot, { recursive: true })
+    const newerByName = '99999999_999999_1'
+    plantRunDir(logRoot, newerByName, BASE_MS)
+    fs.mkdirSync(path.dirname(MARKER), { recursive: true })
+    fs.writeFileSync(MARKER, 'a file another run keeps\n')
+
+    const run = (name) => {
+        const proc = spawnSync(process.execPath, [RUNNER, NESTED_PLAN, '--jobs', '2'], {
+            cwd: REPO_ROOT,
+            encoding: 'utf8',
+            windowsHide: true,
+            timeout: 120000,
+            env: {
+                ...process.env,
+                CAMEL_TEST_RESULTS_ROOT: resultsRoot,
+                CAMEL_TEST_RUN_DIRS_KEEP: '0',
+                CAMEL_TEST_RUN_NAME: name,
+                SELFTEST_MARKER: MARKER,
+            },
+        })
+        return { status: proc.status, output: `${proc.stdout || ''}${proc.stderr || ''}`.replace(/[[0-9;]*m/g, '') }
+    }
+
+    const given = 'host-run-20260101_000000_1_ab12'
+    const first = run(given)
+    check(first.status === 0 && first.output.includes('[SUMMARY] total: 3, pass: 3, fail: 0'), `the named run did not pass its plan: exit ${first.status}`)
+    check(fs.existsSync(path.join(logRoot, given, 'summary.json')), 'the named run did not write its summary.json into the directory it was given')
+    check(fs.existsSync(path.join(logRoot, given, 'run.json')), 'the named run did not write its manifest into the directory it was given')
+    const namedManifest = path.join(logRoot, given, 'run.json')
+    check(
+        fs.existsSync(namedManifest) && Number.isInteger(JSON.parse(fs.readFileSync(namedManifest, 'utf8')).pid),
+        'the named run.json must carry the pid retention reads',
+    )
+    check(fs.existsSync(path.join(logRoot, newerByName)), 'a run directory the runner did not write was removed')
+    check(names(logRoot).length === 2, `the named run made another directory: ${names(logRoot).join(', ')}`)
+
+    const summaryPath = path.join(logRoot, given, 'summary.json')
+    const readSummary = () => (fs.existsSync(summaryPath) ? fs.readFileSync(summaryPath, 'utf8') : '')
+    const before = readSummary()
+    const again = run(given)
+    check(again.status === 2, `a name that already exists must be refused with exit 2, got ${again.status}`)
+    check(/CAMEL_TEST_RUN_NAME.*already names a run directory/.test(again.output), 'the refusal of an existing name does not say what it refused')
+    check(readSummary() === before, 'a refused run changed the record of the run that owns the name')
+
+    for (const bad of ['a/b', 'a\\b','..', '.hidden', '-x']) {
+        const refused = run(bad)
+        check(refused.status === 2, `the malformed name '${bad}' must be refused with exit 2, got ${refused.status}`)
+        check(/CAMEL_TEST_RUN_NAME must be a plain name/.test(refused.output), `the refusal of '${bad}' does not say what a name may be`)
+    }
+    check(names(logRoot).length === 2, `a refused run left a directory: ${names(logRoot).join(', ')}`)
+    check(!fs.existsSync(path.join(resultsRoot, 'a')), 'a name with a separator reached outside the log directory')
+
+    summary = 'PASS retention.name: a run given a name writes its record into that directory and keeps it under a bound of 0, '
+        + 'and an existing or malformed name is refused with exit 2 without changing anything'
+    fs.rmSync(MARKER, { force: true })
+}
+
 if (MODE === '--policy') {
     policyMode()
 } else if (MODE === '--runner') {
     runnerMode()
+} else if (MODE === '--name') {
+    nameMode()
 } else {
-    console.log('usage: node retention.mjs --policy | --runner')
+    console.log('usage: node retention.mjs --policy | --runner | --name')
     process.exit(2)
 }
 

@@ -77,7 +77,10 @@ export const RUN_DIRS_KEPT = 20
 export const SCRATCH_ROOT_KEEP_MS = 60 * 60 * 1000
 
 // The names the runner gives its own directories: `timestamp()_<pid>` (run-tests.mjs) and
-// `run-<pid>`. A directory that matches neither was not written by this runner.
+// `run-<pid>`. A run directory whose name the caller chose (CAMEL_TEST_RUN_NAME) matches neither;
+// the runner marks it as its own by writing its pid into the `run.json` it creates before any plan
+// starts, and that is read by `runPidOf`. A directory with neither the name nor the file was not
+// written by this runner.
 const RUN_DIR_NAME = /^\d{8}_\d{6}_(\d+)$/
 const SCRATCH_ROOT_NAME = /^run-(\d+)$/
 
@@ -176,8 +179,8 @@ function remove(full, report) {
  *     read-relevant", not "started last".
  *   * a directory a live run owns is never removed, whatever its age or position: the self-test
  *     starts nested runs while an outer run is going, and they write to the same tree.
- *   * a directory this runner did not write (a name that does not match `timestamp_pid`) is left
- *     alone and reported instead: what this module does not understand is not its to delete.
+ *   * a directory this runner did not write (a name that does not match `timestamp_pid` and no
+ *     `run.json` carrying a pid) is left alone and reported instead: what this module does not understand is not its to delete.
  *   * a directory whose `summary.json` records failed tests is kept whatever its age: that
  *     directory is the whole output of those tests, and a green run may have its twelve-line tail
  *     pruned while a red one is the record someone has to read (2026-11-02, the day two
@@ -192,6 +195,21 @@ function remove(full, report) {
  * the checkout's own tree. Everything removed is counted while it is removed, so the run prints what
  * the bound cost the tree rather than a number someone has to look up.
  */
+function manifestPid(runDir) {
+    try {
+        const pid = JSON.parse(fs.readFileSync(path.join(runDir, 'run.json'), 'utf8'))?.pid
+        return Number.isInteger(pid) && pid > 0 ? pid : null
+    } catch {
+        return null
+    }
+}
+
+/** The pid of the run that owns a run directory: from its name, else from the pid in its `run.json`; null for a directory the runner did not write. */
+function runPidOf(runDir, name) {
+    const match = name.match(RUN_DIR_NAME)
+    return match ? Number(match[1]) : manifestPid(runDir)
+}
+
 function failuresRecorded(runDir) {
     try {
         const summary = JSON.parse(fs.readFileSync(path.join(runDir, 'summary.json'), 'utf8'))
@@ -234,11 +252,10 @@ export function pruneRunnerOutput(options = {}) {
         if (!entry.isDirectory()) continue
         report.run_dirs.scanned++
         const full = path.join(logRoot, entry.name)
-        const name = entry.name.match(RUN_DIR_NAME)
         candidates.push({
             name: entry.name,
             full,
-            pid: name ? Number(name[1]) : null,
+            pid: runPidOf(full, entry.name),
             modified: modifiedMs(full),
         })
     }

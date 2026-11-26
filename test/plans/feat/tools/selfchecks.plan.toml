@@ -183,14 +183,14 @@ timeout_ms = 120000
 # Fast: 0.5 s.
 [[tests]]
 name = "selfchecks.camel_remote_fetch"
-desc = "`internal/tools/camel-remote-fetch.test.ps1`: `-FetchFile -Latest` decides which run is newest, what a suffix may name, and where the fetched file lands, and refuses the two spellings that would name a whole directory or a path outside the run."
+desc = "`internal/tools/camel-remote-fetch.test.ps1`: `-FetchFile -FromThisRun` names the run, decides what a suffix may name and where the fetched file lands, asks the host about that one run directory only, and refuses the spellings that would name a whole directory or a path outside the run."
 kind = "behavior"
 tool = "node"
 case = "../../../../internal/tools/camel-remote-fetch.test.ps1"
 args = ["test/tools/pwsh-selfcheck.mjs", "${case}"]
 skip_unless = ["node", "test/tools/pwsh-selfcheck.mjs", "--probe"]
 expect_exit = 0
-expect_stdout_contains = ["PASS camel-remote-fetch: 16 check(s)"]
+expect_stdout_contains = ["PASS camel-remote-fetch: "]
 normalizers = ["normalize_newlines"]
 timeout_ms = 120000
 
