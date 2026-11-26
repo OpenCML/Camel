@@ -153,6 +153,13 @@ pwsh -NoProfile -File <你的工作树>\internal\tools\camel-remote.ps1 `
   还没释放”的签名，不是排队，也不是负载。换一棵 checkout（`-Path`）并换车道名，一次就打出
   `host-tokens: running at 4 of 4 worker(s) (lane=<新名>, 0s to take them)`。
   ⇒ 所以：**别在同一棵树上连续重排**；看到“停在 `live worktrees` 之后没了”就换树。本地杀进程只清本地，宿主那份要等它自己回收。
+· **本地收壳 ≠ 宿主侧收壳，而宿主那棵树自己持着 `<checkout>` 的 `flock`**（2026-11-27 实测，这条解释了今晚大部分 `exit 4`）：
+  一条 run 在本地 `taskkill` 之后，**宿主侧的 `run.sh` / `timeout … host-tokens.sh` 仍然活着**，一直持着
+  `/tmp/camel-tree-<cksum>.lock`；下一条 run 于是卡在 `flock -w 1800` 里，`-FetchFile` 那次 transfer 花掉 **1,254.6 秒**
+  就是这么来的（不是宿主慢、不是负载）。按 **PID**（宿主的 `run.sh` 父进程 + 它下面 `timeout`/`host-tokens.sh`）结束之后，
+  锁立刻释放、排队的那条 run 立即跑完。
+  ⇒ 收壳要收**两处**：本地包装壳的进程树，和宿主上**这次 run 目录名对应**的那几个进程（`…-<run id>-2026…`）。
+  ⇒ 只认自己记过 PID 的进程；**不要**按名字杀（`run.sh`/`timeout` 别人也在用），也不要动 `ssh.exe`。
 ```
 
 ## 7. 路径与工作树
