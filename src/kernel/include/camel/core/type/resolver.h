@@ -3,10 +3,10 @@
 
 #pragma once
 
-#include "camel/core/error/diagnostics/messages/semantic.h"
 #include "camel/core/type/base.h"
 #include "camel/core/type/composite/func.h"
 
+#include <cstdint>
 #include <functional>
 #include <optional>
 #include <span>
@@ -14,6 +14,13 @@
 #include <utility>
 #include <vector>
 #include <stdexcept>
+
+/// The diagnostic a resolver names when it rejects a call for a reason of its own; its messages are
+/// generated into camel/core/error/diagnostics/messages/semantic.h. A resolver only names it as a
+/// return type, so it is declared here and not defined.
+namespace camel::core::error {
+enum class SemanticDiag : uint32_t;
+}
 
 namespace camel::core::type {
 
