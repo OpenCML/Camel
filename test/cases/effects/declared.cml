@@ -7,7 +7,7 @@
 // other two bodies touch nothing and the clause is the whole truth a call site reads.
 
 resource db
-resource console = [db, stdout]
+resource io = [db, console]
 
 #resource
 type Stream = { id: int }
@@ -18,7 +18,7 @@ func consume(s: Stream) => int uses var s {
 }
 
 /// The body is empty; every call touches what the group names.
-func tick() => void uses var console {}
+func tick() => void uses var io {}
 
 /// The body writes the cell it is handed: the parameter list declares the cell and the body is
 /// where writing it is written, so the clause names neither.

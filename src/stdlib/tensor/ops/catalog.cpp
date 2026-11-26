@@ -33,7 +33,7 @@ void declareResourcesAndDefinitions() {
     table.declareResources(
         "tensor",
         {
-            {"show", externalAmbient("stdout", AccessMode::Write)},
+            {"show", externalAmbient("console", AccessMode::Write)},
             {"save_npy", externalAmbient("fs", AccessMode::ReadModifyWrite)},
             {"set_num_threads", externalAmbient("tensor:threads", AccessMode::Write)},
             {"num_threads", externalAmbient("tensor:threads", AccessMode::Read)},

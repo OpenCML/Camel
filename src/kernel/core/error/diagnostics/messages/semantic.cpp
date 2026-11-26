@@ -1082,7 +1082,7 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             {
                 "UnknownResource",
                 "The name '{0}' in the resource clause of '{1}' is neither a parameter nor a resource.",
-                "A clause names a parameter of the function (the value a call touches), a resource the module declares (`resource {0}`), one of the resources every program has (stdout, stderr, stdin, clock, env, fs), or a resource imported from another module. Check the spelling, or declare the resource.",
+                "A clause names a parameter of the function (the value a call touches), a resource the module declares (`resource {0}`), one of the resources every program has (console, clock, env, fs), or a resource imported from another module. Check the spelling, or declare the resource.",
             },
         },
         {
@@ -1850,7 +1850,7 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             {
                 "ResourceInferenceConflict",
                 "The values '{0}' and '{1}' meet where one type is asked for, and the resources they write differ: '{2}' against '{3}'.",
-                "A function's resources are part of its type, so two values given for one type variable must write the same resources (design principles 3.3). Neither set is decided by the place they meet: a declaration that writes no clause has its resources measured from its own body alone, and taking one value's set for the other's would let the place a value is used decide what a function reaches. Write a resource clause on the callee that writes none ('uses var stdout', or 'pure' where it touches nothing) naming the resources both write, so that one written signature stands at the position, or keep the two values out of one position.",
+                "A function's resources are part of its type, so two values given for one type variable must write the same resources (design principles 3.3). Neither set is decided by the place they meet: a declaration that writes no clause has its resources measured from its own body alone, and taking one value's set for the other's would let the place a value is used decide what a function reaches. Write a resource clause on the callee that writes none ('uses var console', or 'pure' where it touches nothing) naming the resources both write, so that one written signature stands at the position, or keep the two values out of one position.",
             },
         },
         {

@@ -3,15 +3,15 @@
 
 /*
  * Test-only producer of one class of boundary violation: a pass that keeps every ambient resource
- * name the program had and changes only the way it is used -- `stdout` read where the program wrote
- * it. It stands where the print stood, so nothing else about the program moves: the name set is the
- * same before and after, which is what the check compared, and the access is not.
+ * name the program had and changes only the way it is used -- `console` read where the program
+ * wrote it. It stands where the print stood, so nothing else about the program moves: the name set
+ * is the same before and after, which is what the check compared, and the access is not.
  *
  * The type moves with the body: a draft that adds an access is asked
- * containment at the commit, so a read of `stdout` in a graph whose type declares the write would be
- * refused there and the boundary's admission invariant -- an effect operator with neither a value
- * reader nor a place in a chain -- would never be asked. The fixture declares the read it makes, so
- * the invariant it exists to read stays reachable.
+ * containment at the commit, so a read of `console` in a graph whose type declares the write would
+ * be refused there and the boundary's admission invariant -- an effect operator with neither a
+ * value reader nor a place in a chain -- would never be asked. The fixture declares the read it
+ * makes, so the invariant it exists to read stays reachable.
  */
 
 #include "camel/passes/test/bounds.h"
@@ -41,7 +41,7 @@ using camel::core::type::Type;
 
 /// The print, and the read of the same resource that takes its place.
 constexpr std::string_view kPrintUri = ":io/println";
-constexpr std::string_view kReadUri  = "test::bounds:stdout_read";
+constexpr std::string_view kReadUri  = "test::bounds:console_read";
 
 /// Declares the read once: never twice, since a second declaration of a uri is a defect.
 void declareRead() {
@@ -51,7 +51,8 @@ void declareRead() {
     }
     OperatorTable::instance().set(std::string(kReadUri), camel::core::OperatorTraits{.pure = false});
     OperatorTable::instance().declareResources(
-        std::string(kReadUri), externalAmbient("stdout", AccessMode::Read));
+        std::string(kReadUri),
+        externalAmbient("console", AccessMode::Read));
     declared = true;
 }
 
@@ -88,20 +89,20 @@ BoundsFlipTestPass::apply(const camel::runtime::Program *program, std::ostream &
         for (gc_node_ref_t print : prints) {
             const std::vector<gc_node_ref_t> inputs(draft.normInputsOf(print).begin(),
                                                     draft.normInputsOf(print).end());
-            // The type this graph publishes has to cover what the draft is about to make. The commit
-            // asks containment of a draft that added an access, and a read
-            // of `stdout` where the program wrote it is an access the type has to declare -- so the
-            // type moves with the body here, and the question this pass exists to reach stays the
-            // boundary's admission invariant: an effect operator with neither a value reader nor a
-            // place in a chain. Asking the same graph once at the commit and once at the boundary
-            // would make the second question unanswerable, not answered.
+            // The type this graph publishes has to cover what the draft is about to make. The
+            // commit asks containment of a draft that added an access, and a read of `console`
+            // where the program wrote it is an access the type has to declare -- so the type moves
+            // with the body here, and the question this pass exists to reach stays the boundary's
+            // admission invariant: an effect operator with neither a value reader nor a place in a
+            // chain. Asking the same graph once at the commit and once at the boundary would make
+            // the second question unanswerable, not answered.
             if (camel::core::type::FunctionType *published = graph->funcType(); published != nullptr) {
                 using Signature             = camel::core::sem::ResourceSignature;
                 Signature declared          = published->resources();
                 declared.mode               = Signature::Mode::Concrete;
                 bool named                  = false;
                 for (Signature::AmbientUse &use : declared.ambient) {
-                    if (use.name != "stdout") {
+                    if (use.name != "console") {
                         continue;
                     }
                     use.mode = AccessMode::Read;
@@ -109,7 +110,7 @@ BoundsFlipTestPass::apply(const camel::runtime::Program *program, std::ostream &
                 }
                 if (!named) {
                     declared.ambient.push_back(
-                        Signature::AmbientUse{.name = "stdout", .mode = AccessMode::Read});
+                        Signature::AmbientUse{.name = "console", .mode = AccessMode::Read});
                     std::sort(declared.ambient.begin(),
                               declared.ambient.end(),
                               [](const Signature::AmbientUse &one, const Signature::AmbientUse &two) {
@@ -125,7 +126,7 @@ BoundsFlipTestPass::apply(const camel::runtime::Program *program, std::ostream &
         }
     }
     // The reading the class is counted with: the name the program had and the two ways of using it.
-    os << "BOUNDS_FLIP flipped=" << flipped << " kind=ambient_use name=stdout before=write"
+    os << "BOUNDS_FLIP flipped=" << flipped << " kind=ambient_use name=console before=write"
        << " after=read\n";
     return session.commit();
 }

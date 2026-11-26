@@ -211,7 +211,10 @@ slot_t __io_set_terminal_raw_mode__(ArgsView &with, ArgsView &norm, Context &ctx
     return makeOk(NullSlot, resultType);
 }
 
-// Writes the prompt and reads one line of standard input, without its line end.
+// Writes the prompt, flushes standard output, then reads one line of standard input, without its
+// line end. The console is one resource with three channels (design principles 3.3): a read of
+// standard input comes after what was written to standard output is out, so the person at the
+// terminal has already seen the prompt.
 slot_t __io_input__(ArgsView &with, ArgsView &norm, Context &) {
     std::cout << norm.get<String *>(0)->view() << std::flush;
     std::string line;
@@ -220,6 +223,7 @@ slot_t __io_input__(ArgsView &with, ArgsView &norm, Context &) {
 }
 
 slot_t __io_has_input__(ArgsView &with, ArgsView &norm, Context &) {
+    std::cout.flush();
     return toSlot(Terminal::hasInput());
 }
 

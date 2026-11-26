@@ -3,10 +3,10 @@
 
 /*
  * Test-only producer of a boundary violation of one class: a pass that keeps every ambient resource
- * name the program had and changes only the way it is used -- `stdout` written where the program
- * wrote it, `stdout` read where nothing reads it. `test::bounds_flip` does that to the print of the
- * program it is given; the reading is `PassBoundaryResources` (src/execute/pass.cpp), which has to
- * name the resource and the two ways.
+ * name the program had and changes only the way it is used -- `console` written where the program
+ * wrote it, `console` read where nothing reads it. `test::bounds_flip` does that to the print of
+ * the program it is given; the reading is `PassBoundaryResources` (src/execute/pass.cpp), which has
+ * to name the resource and the two ways.
  */
 
 #pragma once

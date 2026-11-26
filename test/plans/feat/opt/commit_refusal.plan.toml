@@ -343,4 +343,4 @@ kind = "behavior"
 case = "../../../cases/opt/commit_checks/fold_function_type.cml"
 args = ["${case}", "test::value_retype_twice", "std::nvm"]
 expect_exit = 54
-expect_stdout_contains = ["value_retype_twice: graph '__root__' names 'main'", "the two clauses differ: yes", "first uses var stdout, second uses var stdout, var retype_twice", "value_retype_twice: the encode says uses var stdout, var retype_twice"]
+expect_stdout_contains = ["value_retype_twice: graph '__root__' names 'main'", "the two clauses differ: yes", "first uses var console, second uses var console, var retype_twice", "value_retype_twice: the encode says uses var console, var retype_twice"]

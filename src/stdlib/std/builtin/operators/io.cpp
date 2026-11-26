@@ -33,20 +33,36 @@ namespace {
 // What one print or println produces reaches standard output in one piece: under a parallel
 // scheduler calls with no order between them print at the same time, and a line written in
 // several steps came out with another call's text (or only its line end) in the middle.
-void writeToStdout(const std::string &text, bool flush) {
+// One lock for the standard output channel, so that a whole line reaches it in one piece and a
+// flush of what was written before another channel's write cannot land in the middle of one.
+std::mutex &stdoutMutex() {
     static std::mutex mutex;
-    std::lock_guard lock(mutex);
+    return mutex;
+}
+
+void writeToStdout(const std::string &text, bool flush) {
+    std::lock_guard lock(stdoutMutex());
     std::cout << text;
     if (flush) {
         std::cout.flush();
     }
 }
 
-// `eprintln` writes the standard error stream, which is its own resource (`stderr`), so it has
-// its own lock: a line still reaches the stream in one piece under a parallel scheduler.
+// The console is one resource with three channels (design principles 3.3): before a write reaches
+// standard error, what was written to standard output is flushed, so that the two channels reach
+// the same person in the order the program wrote them.
+void flushStdout() {
+    static std::mutex &mutex = stdoutMutex();
+    std::lock_guard lock(mutex);
+    std::cout.flush();
+}
+
+// `eprintln` writes the standard error channel of the one `console` resource: it takes the stdout
+// lock so an earlier write to standard output is out, then writes its line in one piece.
 void writeToStderr(const std::string &text) {
     static std::mutex mutex;
     std::lock_guard lock(mutex);
+    flushStdout();
     std::cerr << text;
     std::cerr.flush();
 }

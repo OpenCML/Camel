@@ -1,4 +1,4 @@
-// Two effects on the same resource (stdout) keep the written order without a sync block.
+// Two effects on the same resource (the console) keep the written order without a sync block.
 // Run: camel docs/tutorial/examples/10_same_resource.cml
 
 func report() => int {

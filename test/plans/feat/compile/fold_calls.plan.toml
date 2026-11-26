@@ -63,7 +63,7 @@ timeout_ms = 8000
 
 [[tests]]
 name = "fold_calls.effect"
-desc = "A declaration that declares effects does not fold: `reveal` writes to stdout (`uses stdout`), and the static key `t.[reveal('x')]` is FoldCallHasEffects, naming `reveal` and the resource it uses. Its body is not run while the program is built."
+desc = "A declaration that declares effects does not fold: `reveal` writes to stdout (`uses console`), and the static key `t.[reveal('x')]` is FoldCallHasEffects, naming `reveal` and the resource it uses. Its body is not run while the program is built."
 kind = "negative"
 case = "../../../cases/compile/fold_calls/effect.cml"
 args = ["${case}"]

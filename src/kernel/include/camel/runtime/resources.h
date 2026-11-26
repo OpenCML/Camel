@@ -267,7 +267,7 @@ PortPlacement portPlacement(const GCGraph &graph, gc_node_ref_t ref);
 /// the declaration spells it, and the accesses of the footprint the declaration does not cover.
 struct EffectContainment {
     gc_node_ref_t call = kInvalidNodeRef;
-    /// The declared clause, in the spelling a type uses (`pure`, `uses var stdout`).
+    /// The declared clause, in the spelling a type uses (`pure`, `uses var console`).
     std::string declared;
     /// The accesses beyond it, one line each, sorted and without repeats.
     std::vector<std::string> beyond;

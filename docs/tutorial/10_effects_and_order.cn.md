@@ -107,7 +107,7 @@ six
 0
 ```
 
-`three` 也打印了：那条 `if` 的臂不是同步块，但臂是一个区域，臂里对 `stdout` 的写由这个区域用到——`println('three')` 的结果没人要，它照样执行。臂不写 `sync` 影响的是**顺序**：这两句之间没有先后。第二个 `if` 的臂写了 `sync`，两句都在，而且有先后。
+`three` 也打印了：那条 `if` 的臂不是同步块，但臂是一个区域，臂里对 `console` 的写由这个区域用到——`println('three')` 的结果没人要，它照样执行。臂不写 `sync` 影响的是**顺序**：这两句之间没有先后。第二个 `if` 的臂写了 `sync`，两句都在，而且有先后。
 
 这条规则的理由是**一个块的含义不随它写在哪里而变**：如果臂会继承外层的 `sync`，那么同一段代码写在这里和写在
 别处就有两种意思，读代码的人得往上找才知道它是不是有序的（[设计原则 3.4](../design-principles.cn.md#34-sync-块)）。
@@ -260,7 +260,7 @@ func main() => int {
 （`println` 返回它的参数），于是它们按书写顺序发生，一条警告都没有：
 
 ```cml
-// Two effects on the same resource (stdout) keep the written order without a sync block.
+// Two effects on the same resource (the console) keep the written order without a sync block.
 // Run: camel docs/tutorial/examples/10_same_resource.cml
 
 func report() => int {
@@ -303,7 +303,7 @@ camel docs/tutorial/examples/10_same_resource.cml
 // Run: camel docs/tutorial/examples/10_resources.cml
 
 resource db
-resource console = [db, stdout]
+resource io = [db, console]
 
 #resource type Stream = { id: int }
 
@@ -311,7 +311,7 @@ func read_id(s: Stream) => int uses s {
     return s.id
 }
 
-func tick() => void uses var console {
+func tick() => void uses var io {
 }
 
 func bump(var cell: int) => int sync {
@@ -342,8 +342,8 @@ camel docs/tutorial/examples/10_resources.cml
 `resourceClause`，含义见[设计原则 3.3](../design-principles.cn.md#33-资源uses-与-pure)）：
 
 - **模块声明的资源**：`resource db`。一个模块可以声明它自己的资源，也可以把几个资源凑成一组：
-  `resource console = [db, stdout]`。
-- **每个程序都有的资源**：`stdout`、`stderr`、`stdin`、`clock`、`env`、`fs`。
+  `resource io = [db, console]`。
+- **每个程序都有的资源**：`console`、`clock`、`env`、`fs`。
 - **一个句柄形参**：`uses s`。这是"这个调用会碰你传给我的那个值"——句柄式的写法：同一个句柄的操作按书写
   顺序，不同句柄之间互不约束。`var` 形参不这样写：它是一个变量，见下一条。
 - **读写方式写在名字前面**：不带 `var` 是读，带 `var` 是写，与 `var` 形参同一个意思（设计原则 3.3）：
@@ -361,12 +361,12 @@ camel docs/tutorial/examples/10_resources.cml
 
 ```text
             tooltip="(s: Stream) => int uses s";
-            tooltip="() => void uses var db, var stdout";
+            tooltip="() => void uses var db, var console";
             tooltip="(var cell: int) => int uses var cell";
 ```
 
 三行都在说"这个调用会碰到什么"：`read_id` 碰它收到的那个句柄，`tick` 碰 `console` 这一组（展开成 `db` 与
-`stdout`），`bump` 碰调用方给它的那个格子。**这就是资源推断**：不必手写，图上看得到；手写出来的是承诺，函数体
+`console`），`bump` 碰调用方给它的那个格子。**这就是资源推断**：不必手写，图上看得到；手写出来的是承诺，函数体
 超出就是编译错误（下面几条）。
 
 写错了会看到什么（都是编译错误）：
@@ -409,7 +409,7 @@ camel docs/tutorial/examples/10_uses_beyond.cml
 ```
 
 ```text
-error[SemanticDiag::UsesPromiseViolated]: '() => int uses var db' does not keep its resource promise: stdout.
+error[SemanticDiag::UsesPromiseViolated]: '() => int uses var db' does not keep its resource promise: console.
    --> docs/tutorial/examples/10_uses_beyond.cml:8:1
     |
   8 | func stamp(): int uses var db sync {
@@ -430,7 +430,7 @@ help: A signature is a promise the compiler checks against the resources the fun
 camel: 1 error
 ```
 
-诊断说清三件事：**哪一个承诺**（`'() => int uses var db'`）、**函数体多碰了什么**（`stdout`）、**是哪一次使用越过去的**
+诊断说清三件事：**哪一个承诺**（`'() => int uses var db'`）、**函数体多碰了什么**（`console`）、**是哪一次使用越过去的**
 （`note` 指向第一个子句没写到的使用点）。改法两种：让函数体不再碰它，或者把子句改到写得下它。
 
 ## `pure`：一个资源都不碰

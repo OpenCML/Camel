@@ -1253,7 +1253,7 @@ void ParserImpl::parseTypeDeclRest(size_t m) {
 /// resourceDecl : 'export'? 'resource' identDef ('=' bracketIdents | 'unordered' | 'readonly')?
 ///
 /// A resource declaration (design effects plan 3.1, design principles 3.3): `resource fs` names
-/// an ambient resource of the module, `resource io = [stdout, fs]` a group of resources and other
+/// an ambient resource of the module, `resource io = [console, fs]` a group of resources and other
 /// groups, and `resource net unordered` says the accesses of a call may be reordered (step 8
 /// gives that meaning). `resource graph readonly` says the resource is only ever read, so it
 /// conflicts with no access and orders none (design principles 9.12: reading a graph is an effect,

@@ -29,7 +29,7 @@ case = "../../../cases/effects/err_inferred_invariant_position.cml"
 args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::ResourceInferenceConflict"
-expect_output_contains = ["The values 'f' and 'wide' meet where one type is asked for, and the resources they write differ: '(x: int) => int pure' against '(x: int) => int uses var stdout'.", "Write a resource clause on the callee that writes none"]
+expect_output_contains = ["The values 'f' and 'wide' meet where one type is asked for, and the resources they write differ: '(x: int) => int pure' against '(x: int) => int uses var console'.", "Write a resource clause on the callee that writes none"]
 
 # ---- Deleting a declaration nothing reaches ----
 

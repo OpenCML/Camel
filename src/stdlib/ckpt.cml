@@ -64,5 +64,5 @@ export func save_tree::<T>(tree: T) => void! panic uses var fs
 /// @example 'out/ckpt'->load_tree::<{ w: float, step: int }> !! { w: 0.0, step: 0 }
 #op('ckpt:load_tree')
 with <dataset_manifest_sha256: string? = null>
-export func load_tree::<T>(dir: string) => T! panic uses fs, var stderr
+export func load_tree::<T>(dir: string) => T! panic uses fs, var console
     when has_ckpt_form::<T>()
