@@ -162,9 +162,9 @@ window.__ModuleLoader__.load({
             const worst = alerts.some((a) => a.level === 'urgent') ? 'urgent' : alerts.some((a) => a.level === 'wake') ? 'wake' : alerts.length ? 'quiet' : 'ok'
             const lanesTone = lanes.running === undefined ? undefined : lanes.running < 6 ? 'wake' : 'ok'
             const unacked = (s.unacknowledged || []).length
-            // How long since the decision-maker last reached the channel. Its watch polls every few
-            // seconds and its scheduled check runs every twenty minutes, so an hour of silence means it
-            // is cut off, not merely idle; the owner sees that here without opening anything.
+            // How long since the dispatching client (`client=dm`) last reached the channel. It polls
+            // every few seconds and checks in every twenty minutes, so an hour of silence means it is
+            // cut off, not merely idle, and the band says so without anything being opened.
             const dmSeen = s.decisionMaker && s.decisionMaker.lastSeen
             const dmMinutes = dmSeen ? Math.round((Date.now() - dmSeen) / 60_000) : null
             const dmText = dmMinutes === null ? '未连' : dmMinutes < 5 ? '在线' : `${dmMinutes} 分钟没连上`
