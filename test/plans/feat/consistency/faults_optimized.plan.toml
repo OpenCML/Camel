@@ -129,8 +129,8 @@ name = "fault.in_map"
 desc = "One element function of a map faults."
 case = "../../../cases/consistency/faults/fault_in_map.cml"
 expect_diagnostic_name = "RuntimeDiag::DivisionByZero"
-expect_diagnostic_line = 6
-expect_diagnostic_column = 35
+expect_diagnostic_line = 7
+expect_diagnostic_column = 15
 expect_stdout_starts_with = "before\n"
 
 [[tests]]
@@ -138,8 +138,8 @@ name = "fault.in_filter"
 desc = "One element function of a filter faults."
 case = "../../../cases/consistency/faults/fault_in_filter.cml"
 expect_diagnostic_name = "RuntimeDiag::DivisionByZero"
-expect_diagnostic_line = 5
-expect_diagnostic_column = 37
+expect_diagnostic_line = 6
+expect_diagnostic_column = 15
 expect_stdout_starts_with = "before\n"
 
 [[tests]]
@@ -147,8 +147,8 @@ name = "fault.in_reduce"
 desc = "The function of a reduce faults at its fourth step."
 case = "../../../cases/consistency/faults/fault_in_reduce.cml"
 expect_diagnostic_name = "RuntimeDiag::DivisionByZero"
-expect_diagnostic_line = 6
-expect_diagnostic_column = 52
+expect_diagnostic_line = 7
+expect_diagnostic_column = 21
 expect_stdout_starts_with = "before\n"
 
 [[tests]]
@@ -174,8 +174,8 @@ name = "fault.in_nested_map"
 desc = "A fault in one element of a map nested in a map."
 case = "../../../cases/consistency/faults/fault_in_nested_map.cml"
 expect_diagnostic_name = "RuntimeDiag::DivisionByZero"
-expect_diagnostic_line = 6
-expect_diagnostic_column = 45
+expect_diagnostic_line = 7
+expect_diagnostic_column = 13
 expect_stdout_starts_with = "before\n"
 
 [[tests]]
@@ -183,8 +183,8 @@ name = "fault.after_map_output"
 desc = "Twenty lines written by a foreach and one by main before a fault in a later map: all of them, in order."
 case = "../../../cases/consistency/faults/fault_after_map_output.cml"
 expect_diagnostic_name = "RuntimeDiag::DivisionByZero"
-expect_diagnostic_line = 6
-expect_diagnostic_column = 35
+expect_diagnostic_line = 7
+expect_diagnostic_column = 15
 expect_stdout_starts_with = "line 0\nline 1\nline 2\nline 3\nline 4\nline 5\nline 6\nline 7\nline 8\nline 9\nline 10\nline 11\nline 12\nline 13\nline 14\nline 15\nline 16\nline 17\nline 18\nline 19\nbefore the map\n"
 
 [[tests]]
@@ -350,8 +350,8 @@ expect_output_contains = ["Cannot convert '1e-9999' to float: the value is outsi
 name = "fault.parse_int"
 desc = "int('abc') stops the program at the conversion (int() of a string is a fault; parse_int returns an error value). The name of the diagnostic is left to the agreement check."
 case = "../../../cases/consistency/faults/parse_int_fault.cml"
-expect_diagnostic_line = 5
-expect_diagnostic_column = 36
+expect_diagnostic_line = 6
+expect_diagnostic_column = 12
 expect_stdout_starts_with = "42\n"
 
 [[tests]]
@@ -433,7 +433,7 @@ name = "fault.parallel_lowest_index"
 desc = "Every element of a map faults and nothing isolates it: the program ends with the fault of element 0 (Index 10), on the four back ends alike."
 case = "../../../cases/consistency/faults/parallel_lowest_index.cml"
 expect_diagnostic_name = "RuntimeDiag::IndexOutOfRange"
-expect_diagnostic_line = 7
+expect_diagnostic_line = 10
 expect_stdout_starts_with = "before\n"
 expect_output_contains = ["Index 10 is out of range for an array of length 3."]
 
