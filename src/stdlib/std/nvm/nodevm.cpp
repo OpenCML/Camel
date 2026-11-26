@@ -227,19 +227,19 @@ Frame *NodeVMSchedPass::tailCallFrame(
     }
     // A free position directly above the source frame.
     if (source == rootFrame && tailLow == nullptr) {
-        tailLow = framePool_.acquire(target);
+        tailLow = framePool_.acquire(target->frameLayout());
         bindDirectCallFrameSlots(source, tailLow, layout, argSlots, callArgScratch_);
         return tailLow;
     }
     if (source == tailLow && tailHigh == nullptr) {
-        tailHigh = framePool_.acquire(target);
+        tailHigh = framePool_.acquire(target->frameLayout());
         bindDirectCallFrameSlots(source, tailHigh, layout, argSlots, callArgScratch_);
         return tailHigh;
     }
     if (source == tailLow) {
         // Replace the partner above the source; the source itself stays live.
         framePool_.release(tailHigh);
-        tailHigh = framePool_.acquire(target);
+        tailHigh = framePool_.acquire(target->frameLayout());
         bindDirectCallFrameSlots(source, tailHigh, layout, argSlots, callArgScratch_);
         return tailHigh;
     }
@@ -250,7 +250,7 @@ Frame *NodeVMSchedPass::tailCallFrame(
         callArgScratch_[argIndex] = source->get<slot_t>(argSlots[argIndex]);
     }
     releaseTailFrames(tailLow, tailHigh);
-    tailLow = framePool_.acquire(target);
+    tailLow = framePool_.acquire(target->frameLayout());
     for (size_t argIndex = 0; argIndex < argSlots.size(); ++argIndex) {
         tailLow->set(layout->calleePortSlots[argIndex], callArgScratch_[argIndex]);
     }
@@ -608,7 +608,7 @@ slot_t NodeVMSchedPass::call(
                             "the call has no code to enter"));
 
                     requireRecursionRoom(currRuntimeGraph);
-                    Frame *funcFrame = framePool_.acquire(funcRuntimeGraph);
+                    Frame *funcFrame = framePool_.acquire(funcRuntimeGraph->frameLayout());
                     camel::execute::fillFrameForIndirectCall(
                         currFrame,
                         funcFrame,
@@ -682,7 +682,7 @@ slot_t NodeVMSchedPass::call(
                     }
 
                     requireRecursionRoom(currRuntimeGraph);
-                    Frame *funcFrame    = framePool_.acquire(runtimeTarget);
+                    Frame *funcFrame    = framePool_.acquire(runtimeTarget->frameLayout());
                     const auto argSlots = currPlan->directCallArgSlotsOf(i);
                     const auto *layout  = &runtimeTarget->execPlan();
                     bindDirectCallFrameSlots(
@@ -924,7 +924,7 @@ NodeVMSchedPass::apply(const camel::runtime::Program *program, std::ostream &os)
         camel::profile::setBackend("std::nvm");
     }
     camel::execute::RunScope runScope(programs_, *context_, program);
-    Frame *rootFrame = framePool_.acquire(graph);
+    Frame *rootFrame = framePool_.acquire(graph->frameLayout());
     slot_t result    = call(graph, rootFrame);
     context_->captureProcessExitCode(graph, result);
     return nullptr;
@@ -957,7 +957,7 @@ slot_t NodeVMSchedPass::callGraph(
     std::span<const slot_t> arguments, std::span<const slot_t> withArguments,
     std::span<const slot_t> closure) {
     camel::execute::RunScope runScope(programs_, *context_, program);
-    Frame *frame     = framePool_.acquire(graph);
+    Frame *frame     = framePool_.acquire(graph->frameLayout());
     const auto ports = graph->normPorts();
     GUARD(ports.size() == arguments.size(), "callGraph needs one argument per parameter.");
     for (size_t i = 0; i < ports.size(); ++i) {
@@ -1031,7 +1031,7 @@ void NodeVMSchedPass::evalMarkedOperator_map_arr(
         Function *func = currFrame.get<Function *>(funcSlot);
         slot_t element = arr->getSlot(i);
         requireRecursionRoom(graph);
-        Frame *frame = framePool_.acquire(programs_.graphOf(func));
+        Frame *frame = framePool_.acquire(programs_.graphOf(func)->frameLayout());
         bindMarkedFunctionFrame(frame, func, std::span<const slot_t>(&element, 1));
         slot_t result = call(programs_.graphOf(func), frame, func->program());
         currFrame.get<Array *>(resultSlot)->set<slot_t>(i, result, resultType);
@@ -1060,7 +1060,7 @@ void NodeVMSchedPass::evalMarkedOperator_filter_arr(
         Function *func = currFrame.get<Function *>(funcSlot);
         slot_t element = arr->getSlot(i);
         requireRecursionRoom(graph);
-        Frame *frame = framePool_.acquire(programs_.graphOf(func));
+        Frame *frame = framePool_.acquire(programs_.graphOf(func)->frameLayout());
         bindMarkedFunctionFrame(frame, func, std::span<const slot_t>(&element, 1));
         slot_t result = call(programs_.graphOf(func), frame, func->program());
         if (fromSlot<bool>(result)) {
@@ -1096,7 +1096,7 @@ void NodeVMSchedPass::evalMarkedOperator_reduce_arr(
         Function *func      = currFrame.get<Function *>(funcSlot);
         const slot_t args[] = {currFrame.get<slot_t>(resultSlot), arr->getSlot(i)};
         requireRecursionRoom(graph);
-        Frame *frame = framePool_.acquire(programs_.graphOf(func));
+        Frame *frame = framePool_.acquire(programs_.graphOf(func)->frameLayout());
         bindMarkedFunctionFrame(frame, func, std::span<const slot_t>(args, 2));
         currFrame.set(resultSlot, call(programs_.graphOf(func), frame, func->program()));
     }
@@ -1118,7 +1118,7 @@ void NodeVMSchedPass::evalMarkedOperator_foreach_arr(
         Function *func = currFrame.get<Function *>(funcSlot);
         slot_t element = arr->getSlot(i);
         requireRecursionRoom(graph);
-        Frame *frame = framePool_.acquire(programs_.graphOf(func));
+        Frame *frame = framePool_.acquire(programs_.graphOf(func)->frameLayout());
         bindMarkedFunctionFrame(frame, func, std::span<const slot_t>(&element, 1));
         call(programs_.graphOf(func), frame, func->program());
     }
@@ -1147,7 +1147,7 @@ void NodeVMSchedPass::evalMarkedOperator_isolate(
     requireRecursionRoom(graph);
     const size_t depthBefore = currRecursionDepth_;
     (void)depthBefore;
-    Frame *frame = framePool_.acquire(target);
+    Frame *frame = framePool_.acquire(target->frameLayout());
     bindMarkedFunctionFrame(frame, func, args);
     slot_t value = NullSlot;
     try {
@@ -1219,7 +1219,7 @@ slot_t NodeVMSchedPass::evalNativeOperator(
                           normalArgs) {
             requireRecursionRoom(currRuntimeGraph);
             auto *target = programs_.graphOf(function);
-            Frame *frame = framePool_.acquire(target);
+            Frame *frame = framePool_.acquire(target->frameLayout());
             bindMarkedFunctionFrame(frame, function, normalArgs, withArgs);
             return call(target, frame, function->program());
         };

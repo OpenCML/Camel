@@ -31,7 +31,7 @@ slot_t FastVMSchedPass::invokeNativeOperator(const Bytecode &bc, ctx::Frame &fra
             [&](Function *callee, std::span<const slot_t> with, std::span<const slot_t> normal) {
                 requireNestedCallRoom(&frame);
                 const auto site = higherOrderCallSite(callee);
-                auto *child     = framePool_.acquire(site.runtimeGraph);
+                auto *child     = framePool_.acquire(site.runtimeGraph->frameLayout());
                 populateMarkedCallFrame(child, callee, normal, with);
                 // callElement increments nestedCalls_ before entering compiled/interpreted code.
                 // Restore it on faults as well, so an outer isolation boundary can continue.

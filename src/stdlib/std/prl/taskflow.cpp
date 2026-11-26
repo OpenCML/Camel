@@ -1488,7 +1488,7 @@ slot_t TaskflowExecSchedPass::evalGraph(
                 --tailFrames.count;
                 entry = &tailFrames.entries[tailFrames.count];
             }
-            *entry = {target, framePool_.acquire(target), targetPlan};
+            *entry = {target, framePool_.acquire(target->frameLayout()), targetPlan};
             ++tailFrames.count;
         }
         plan      = entry->plan;
@@ -1866,7 +1866,7 @@ slot_t TaskflowExecSchedPass::callGraph(
     if (plan->bytecodeEntry != kNoBytecode) {
         return handoff_->call(plan->bytecodeEntry, target, region, fill);
     }
-    Frame *callee = framePool_.acquire(target);
+    Frame *callee = framePool_.acquire(target->frameLayout());
     fill(callee);
     slot_t result = NullSlot;
     try {
@@ -2096,7 +2096,7 @@ Frame *TaskflowExecSchedPass::acquirePreparedRuntimeCallFrame(
     GUARD(sourceFrame->runtimeGraph() != nullptr, "Taskflow runtime source graph is null.");
 
     targetGraph            = planFor(targetGraph)->graph;
-    Frame *dest            = framePool_.acquire(targetGraph);
+    Frame *dest            = framePool_.acquire(targetGraph->frameLayout());
     const auto *callRecord = requireNode(sourceFrame->runtimeGraph(), callNodeRuntimeIndex);
     if (callRecord->kind == GCNodeKind::Call) {
         camel::execute::fillFrameForIndirectCall(
@@ -2118,7 +2118,7 @@ Frame *TaskflowExecSchedPass::acquirePreparedClosureCallFrame(
     GCGraph *targetGraph, Tuple *closure, std::span<const slot_t> args) {
     GUARD(targetGraph != nullptr, "Taskflow closure call requires a runtime graph target.");
     targetGraph = planFor(targetGraph)->graph;
-    Frame *dest = framePool_.acquire(targetGraph);
+    Frame *dest = framePool_.acquire(targetGraph->frameLayout());
     fillClosureCallFrame(dest, targetGraph, closure, args);
     return dest;
 }

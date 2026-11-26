@@ -2916,6 +2916,21 @@ GCGraph::GCGraph(
     // the copy of an unchanged graph replaces it (GCGraphBuildAccess::inheritRevision).
     static std::atomic<uint64_t> revisions{0};
     revision_ = revisions.fetch_add(1, std::memory_order_relaxed) + 1;
+
+    // The frame's view of this graph (camel/runtime/frame_layout.h): a plain heap object and not a
+    // value of the graph, so it stays where it is made when a collection moves the graph and a
+    // frame can hold a pointer to it for a whole call. `onMoved` is what keeps its `graph` field
+    // current; every other field is final as of here.
+    frameLayout_                  = new FrameLayout{};
+    frameLayout_->graph           = this;
+    frameLayout_->runtimeDataType = runtimeDataType;
+    frameLayout_->staticDataType  = staticDataType;
+    frameLayout_->staticArea      = staticArea;
+    frameLayout_->finalized       = runtimeDataType != nullptr;
+    frameLayout_->frameSize       = frameLayout_->finalized ? frameSize() : 0;
+    if (debugRecord != nullptr) {
+        frameLayout_->name = debugRecord->name;
+    }
 }
 
 GCGraphPayloadShape describeDraftNativePayload(
@@ -3815,6 +3830,10 @@ void setNodeFactSlotOf(
 }
 
 GCGraph::~GCGraph() {
+    // The frame's view of this graph goes with it (camel/runtime/frame_layout.h): it outlived every
+    // frame that read it, so nothing points at it by now.
+    delete frameLayout_;
+    frameLayout_ = nullptr;
     // The facts anchored on this graph end here: an address is a graph only while the graph is
     // there, and the store that was told about this one must not answer about it afterwards
     // (camel/facts/facts.h). This is also what clears the slots first, while the values they name

@@ -671,7 +671,7 @@ MacroEvaluator::tryExecuteStaticOper(GCGraph *ownerGraph, gc_node_ref_t nodeRef,
     }
 
     ::Tuple *staticAreaSnapshot = staticAreas_->cloneStaticArea(ownerGraph);
-    Frame *frame                = framePool_.acquire(ownerGraph, staticAreaSnapshot);
+    Frame *frame                = framePool_.acquire(ownerGraph->frameLayout(), staticAreaSnapshot);
     try {
         const auto normInputs = ownerGraph->normInputsOf(nodeRef);
         const auto withInputs = ownerGraph->withInputsOf(nodeRef);
@@ -777,8 +777,8 @@ slot_t MacroEvaluator::executeFunction(
     }
 
     ::Tuple *staticAreaSnapshot = staticAreas_->cloneStaticArea(runtimeGraph);
-    Frame *frame                = framePool_.acquire(runtimeGraph, staticAreaSnapshot);
-    bool enteredExecution       = false;
+    Frame *frame          = framePool_.acquire(runtimeGraph->frameLayout(), staticAreaSnapshot);
+    bool enteredExecution = false;
     try {
         fillArgs(frame, runtimeGraph);
         if (!runtimeGraph->closureNodes().empty()) {

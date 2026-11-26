@@ -419,7 +419,7 @@ class FastVMSchedPass : public RuntimeGraphSchedulePass {
     /// A frame of `graph` from this interpreter's pool, for the host to fill with the
     /// arguments of a hosted call. It must be passed to callHosted next (the pool is a stack).
     ctx::Frame *acquireHostedFrame(camel::runtime::GCGraph *graph) {
-        return framePool_.acquire(graph);
+        return framePool_.acquire(graph->frameLayout());
     }
     /// Runs the graph compiled at `pc` on `frame` (from acquireHostedFrame) and returns its
     /// value; the frame is released whether the call returns or throws. `hostOpenCalls`: the
@@ -442,7 +442,7 @@ class FastVMSchedPass : public RuntimeGraphSchedulePass {
     }
     inline ctx::Frame *acquireFrameForCall(camel::runtime::GCGraph *graph) {
         GUARD(graph != nullptr, "Runtime graph is null.");
-        return framePool_.acquire(graph);
+        return framePool_.acquire(graph->frameLayout());
     }
     inline void releaseFrameForCall(ctx::Frame *frame) {
         if (framePool_.isActive(frame))
@@ -451,7 +451,7 @@ class FastVMSchedPass : public RuntimeGraphSchedulePass {
     inline void releaseFrameUnchecked(ctx::Frame *frame) { framePool_.release(frame); }
     inline ctx::Frame *acquireFrameForTail(camel::runtime::GCGraph *graph) {
         GUARD(graph != nullptr, "Runtime graph is null.");
-        ctx::Frame *f = framePool_._acquire(graph);
+        ctx::Frame *f = framePool_._acquire(graph->frameLayout());
         framePool_._resetTop();
         return f;
     }

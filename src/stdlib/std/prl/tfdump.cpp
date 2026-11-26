@@ -118,7 +118,7 @@ void TaskflowExecSchedPass::buildAndDump(
 
     os << "digraph Taskflow {\n";
     for (auto *runtimeGraph : camel::runtime::collectReachableGraphs(programs_.of(graph), graph)) {
-        ctx::Frame *frame = framePool_.acquire(runtimeGraph);
+        ctx::Frame *frame = framePool_.acquire(runtimeGraph->frameLayout());
         try {
             mainFlow_.clear();
             instantiate_graph_instance_generic(mainFlow_, runtimeGraph, frame);
