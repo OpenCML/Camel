@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Copyright (c) the OpenCML Organization
 // SPDX-License-Identifier: MIT
-//
+
 // Turns the three rounds of `run-timing.mjs` output into the handover table.
 //
 // The grid the dispatch asks for is 5 programs x 4 back ends x 3 points = 60 cells. `std::prl`

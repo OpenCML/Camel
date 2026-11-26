@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Copyright (c) the OpenCML Organization
 // SPDX-License-Identifier: MIT
-//
+
 // Manual bisect over the lane's own measurement, for the cells the handover table shows moving by
 // more than 20%.
 //

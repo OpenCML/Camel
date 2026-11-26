@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Copyright (c) the OpenCML Organization
 // SPDX-License-Identifier: MIT
-//
+
 // Backend speed lane (D-1125-35), handover one: measure only, change nothing.
 //
 // Two modes, one command line:
