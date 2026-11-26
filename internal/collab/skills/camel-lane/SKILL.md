@@ -123,6 +123,11 @@ pwsh -NoProfile -File <你的工作树>\internal\tools\camel-remote.ps1 `
 · **要「改前读数」而仓库不许建额外工作树时**：在**同一棵树**里把要量的那几个文件 `git checkout <base> -- <paths>`，
    构建+跑，量完 `git checkout HEAD -- <paths>` 复原，贴 `git status --porcelain` 为空与那次的 `[provenance] binary built …`。
    判据不变（构建产物来自那次 build），代价只是两次构建；**不要**为了取改前读数去建第三棵树。
+   三个容易读错的地方：① 退的是**源文件**，你新加的用例与计划不退 —— 要量的计划正是你加的那一份时，它也得一起退；
+   新加的头文件留着即可（base 的源文件不 include 它，不参与编译）；② 读数里 `[TREE] … N paths were already
+   uncommitted when this run started` 会列出这几个文件，属正常，照抄进交回；③ **改前与改后要挂在同一个 base 上**：
+   跨 base 的差先当“base 的差”处理 —— 同一个用例可以在一格上红、在下一格绿，只因后者的祖先重钉了快照；
+   既不要把跨 base 的差算成自己造成的，也不要把同一 base 上的新红说成既存，两句话都要有读数。
 · **建树只走一个入口**，不要手抄 `git worktree add`：
     pwsh -NoProfile -File internal/tools/new-worktree.ps1 `
       -Path D:\Projects\Camel-wt\<lane> -Branch <branch> -Base origin/develop
@@ -208,6 +213,8 @@ git checkout <改前提交> -- <那一个文件>
 git checkout HEAD -- <那一个文件>          # 恢复，git status --porcelain 必须回到空
 ```
 两行并列写“改前 / 改后”；若改后多的红在改前就有 ⇒ 与这笔无关；若改前是绿的 ⇒ 这笔要重做。
+（改动跨几个文件时是同一手法，见 §7 那条“要「改前读数」而仓库不许建额外工作树时”——那里是它的唯一一份，
+不要在这里再写一遍。）
 
 ## 10. 「绿」有两种口径，别混用
 
