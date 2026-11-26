@@ -1,22 +1,35 @@
 # 2026-11-26 头文件的分量：两周改了几次 × 改一次重编几个 TU
 
+> **谁再想拆 `graph.h`，先读文末的「附：`graph.h` 拆成接口 + 定义值不值」。**
+> 结论是拆不动：83 个按名字包含它的 TU 里只有 **1 条**（`src/tools/debugger/src/worker.cpp`）只读声明就能编过，
+> 其余 82 条都要 `GCGraph` 的完整定义——`frame.h`、`program.h` 是成员调用，不是"存个指针"。
+> 拆出去的那一半没有调用方能用上，拆完那一行 359 → **358**（只救下那 1 条）。要真降只能改 `GCGraph` 的布局，
+> 那是设计取舍（`fvm` 默认后端的热路径上会多一次间接），**现在没有读数，所以不做**。
+>
+> 另外：页里三条候选边的收益原写成"删掉就能拿到"，**其中两条不成立**——`operator_traits.h` 删了 403/659
+> 编不过、`frame.h` 换了 100/659 编不过，真收益只能来自"把内联体挪出行 / 让调用方要得更少"，
+> 见「三条边的编译验证」。
+
 这一页只做第一件事：**量**。给"改包含关系本身"这件事一份可复现的依据——
 哪些头文件在被频繁改动，每改一次要重编多少个 TU，这两件事乘起来最贵的是哪几个，以及它们为什么被包含。
 
 ## 一句话
 
-按「被改次数 × 重编 TU 数」排出来的前 8 名，**没有一个是 `src/compile` 的私有头**；而真正值钱的不是
-"被包含得深"，是**三条可以单独拿掉的转手边**：
+按「被改次数 × 重编 TU 数」排出来的前 8 名，**没有一个是 `src/compile` 的私有头**；真正值钱的不是
+"被包含得深"，是几条转手边。但**"图上去掉一条边能少几百个 TU"和"这条边能删"是两件事**——把三条候选边
+拿去整棵树编一遍，只有第一条换一行就能落地：
 
 ```
-core/type/resolver.h  → messages/semantic.h       478 个 TU 走这条边，拿掉它 499 → 382（-117）
-core/operator_traits.h → core/operator_table.h    423 个 TU 走这条边，拿掉它 435 → 212（-223）
-core/context/frame.h   → runtime/graph.h          246 个 TU 走这条边，拿掉它 359 → 317（-42）
+core/type/resolver.h   → messages/semantic.h      478 个 TU 走这条边，拿掉它 499 → 382（-117）✔ 换一行编得过
+core/operator_traits.h → core/operator_table.h    423 个 TU 走这条边，图算 435 → 212（-223）✘ 删了 403/659 编不过
+core/context/frame.h   → runtime/graph.h          246 个 TU 走这条边，图算 359 → 317（-42） ✘ 删了 100/659 编不过
 ```
 
-前两条的转手头都不"用"它要拿的东西：`resolver.h` 只把 `SemanticDiag` 用作一个返回类型，
-`operator_traits.h` 连它的一个名字都没提到；第三条只值 42 ——
-排名第二的 `runtime/graph.h` 反而是三个里唯一拆不动的：它有 83 个 TU **按名字**直接包含它。
+原因：`operator_traits.h` 自己确实一个 `OperatorTable` 名字都没用，但它**替 403 个 TU 拿着**；
+`frame.h` 也不是只存 `GCGraph*`——第 52/56/60 行写的是 `runtimeGraph_->runtimeDataType()` /
+`staticDataType()` / `name()`，是成员调用。这两条的收益要先把调用方"要得更少"（或把内联体挪出行）才拿得到，
+不是换一行 include；`1293 → 911` 那个数因此不成立，见文末「三条边的编译验证」。
+而排名第二的 `runtime/graph.h` 是三条里唯一拆不动的：它有 83 个 TU **按名字**直接包含它。
 
 ## 读数从哪来
 
@@ -129,8 +142,8 @@ cd /home/zjwei/camel-work/73aebe80b3ad26b2a4d225dfae1c5adbf83a9bb6/build
 | # | 头文件 | 两周被改次数 | 直接 TU 数 | 传递 TU 数 | 乘积 | 包含原因分类 |
 |---|---|---|---|---|---|---|
 | 1 | `src/kernel/include/camel/core/error/diagnostics/messages/semantic.h` | 26 | 6 | 493 | **12974** | 只要类型名：一条边 -117，伞形边 -19，两条都拆到 6 |
-| 2 | `src/kernel/include/camel/runtime/graph.h` | 31 | 83 | 276 | **11129** | 混合：83 个 TU 按名字直接包含（必须整套）；转手头只剩 frame.h -42 |
-| 3 | `src/kernel/include/camel/core/operator_table.h` | 22 | 84 | 351 | **9570** | 只用一小块：删一条转发包含 -223 |
+| 2 | `src/kernel/include/camel/runtime/graph.h` | 31 | 83 | 276 | **11129** | 混合：83 个 TU 按名字直接包含（必须整套，只有 1 条只要接口）；转手头 frame.h 那 -42 要挪 6 个内联访问器 |
+| 3 | `src/kernel/include/camel/core/operator_table.h` | 22 | 84 | 351 | **9570** | 混合：删那条转发包含 403/659 编不过——它替 403 个 TU 拿着 `OperatorTable`；图算 -223，纯删上限 32 |
 | 4 | `src/kernel/include/camel/runtime/draft.h` | 38 | 31 | 131 | **6156** | 必须整套：`id()` 内联是 ABI 需要，挪不走；一条边 -20 |
 | 5 | `src/kernel/include/camel/core/resource_semantics.h` | 10 | 15 | 535 | **5500** | 必须整套：载体按值存 `sem::ResourceSignature`；一条边 -72 |
 | 6 | `src/kernel/include/camel/core/error/diagnostics/messages/runtime.h` | 14 | 5 | 377 | **5348** | 只用一小块：伞形 `messages/index.h` 一次带进 5 族，-24 |
@@ -163,7 +176,17 @@ virtual std::optional<camel::core::error::SemanticDiag> rejectionDiag() const { 
 所以不完整声明就够用。
 
 **拆法：** `src/kernel/include/camel/core/type/resolver.h:6` 的 `#include "camel/core/error/diagnostics/messages/semantic.h"`
-换成 `enum class SemanticDiag : uint32_t;` ⇒ **499 → 382**（-117）。
+换成
+
+```cpp
+#include <cstdint>
+namespace camel::core::error {
+enum class SemanticDiag : std::uint32_t;
+}
+```
+
+⇒ **499 → 382**（-117）。这条是三条候选边里**唯一整棵树编得过的**（659 个 TU `-fsyntax-only` 零失败，
+见「三条边的编译验证」）；`<cstdint>` 不能省，省了 43 条报 `unknown type name 'uint32_t'`。
 
 **再拆一层：** `messages/index.h` 把 5 个消息族一次全带进来，而它只有一条上游。让
 `core/error/diagnostics.h` 按族包含（谁要哪族自己包含）⇒ 这条边单独拿掉是 **499 → 480**，
@@ -174,6 +197,7 @@ virtual std::optional<camel::core::error::SemanticDiag> rejectionDiag() const { 
 ### 2. `runtime/graph.h`（359 个 TU）— 唯一拆不动的那个
 
 ```
+图算：这条边单独拿掉时有多少 TU 不再到达 graph.h
 载体                                        携带的 TU 数   拿掉这条边
 runtime/program.h                                  257        -0
 core/context/frame.h                               246       -42
@@ -188,31 +212,40 @@ runtime/exec_plan.h                                 49        -1
 83 个直接包含它的人里，`program.h` 是确凿地要用它的定义——内联调 `graph.refs()`、`graph.outerGraphId()`、
 `graph.staticGraphRefs()`，这种拆不掉。
 
-`core/context/frame.h` 是例外：它只用 `GCGraph*` 这一个类型——第 44–47 行把指针交出去，第 323 行存成成员，
-第 391 行比 `sizeof(GCGraph*)`，第 448–528 行 `_acquire(GCGraph*)` 转手传下去；`WritingUnion`、
-`gc_slot_idx_t`、`GCFuncRef`、`PortRole`、`GraphId` 这些 `graph.h` 定义的名字，在这个文件里出现 0 次。
+`core/context/frame.h` 看起来是例外，其实不是：它确实只把 `GCGraph*` 存成成员、传出去（第 44–47、323、
+391 行，`_acquire(GCGraph*)` 在第 448–528 行转手），`WritingUnion`、`gc_slot_idx_t`、`GCFuncRef`、
+`PortRole`、`GraphId` 这些 `graph.h` 定义的名字在这个文件里出现 0 次——但第 52/56/60 行是
+`runtimeGraph_->runtimeDataType()` / `->staticDataType()` / `->name()`，第 540/551/590 行还有两处 `name()`、
+一处 `frameSize()`：**是成员调用**，只留前置声明编不过。
 
-**拆法：** `src/kernel/include/camel/core/context/frame.h:9` 的 `#include "camel/runtime/graph.h"` 换成
-`class GCGraph;` ⇒ **359 → 317**（-42；图算得 318，差 1 见"哪里会偏"）。这只是 12%，`graph.h` 剩下的
-317 个 TU 不是拆边能拿掉的：要动它得把 1593 行的定义拆成"接口 + 定义"两个头，那是一件有设计取舍的活，
-不在这份读数的射程里。
+**拆法：把 `src/kernel/include/camel/core/context/frame.h:9` 的 `#include "camel/runtime/graph.h"` 换成
+`class GCGraph;`，同时把那 6 个内联访问器挪进 `frame.cpp`** ⇒ **359 → 317**（-42；图算得 318，差 1 见"哪里会偏"）。
+只换 include 不挪函数：全树 `-fsyntax-only` **100/659 编不过**（`member access into incomplete type`），所以
+"-42" 的价钱是 6 个函数搬家加一次 ABI 变动，不是一行 include。这只是 12%，`graph.h` 剩下的 317 个 TU
+不是拆边能拿掉的：要动它得把 1735 行（非空 1593）的定义拆成"接口 + 定义"两个头，那是一件有设计取舍的活
+——值不值，量在文末的附里。
 
-### 3. `core/operator_table.h`（435 个 TU）— 一条转发包含拿走 223
+### 3. `core/operator_table.h`（435 个 TU）— 一条转发包含"替别人拿着" 223 个
 
 ```
+图算：这条边单独拿掉时有多少 TU 不再到达 operator_table.h
 core/operator_traits.h        423 个 TU 经由它   拿掉这条边 -223（⇒ 212）
 src/kernel/graph/graph_view.h 107 个 TU 经由它   拿掉这条边 -4
 compile/gct/tree.h             45 个 TU 经由它   拿掉这条边 -1
 ```
 
+**注意这行是"图算"，不是"收益"**：下面的编译验证说明这条边删掉之后 403 个 TU 编不过——
+它们是靠这条边拿到 `OperatorTable` 的。
+
 `core/operator_traits.h` 第 14 行包含 `operator_table.h`，理由写在它自己的第 7–9 行：
 **"让调用者不必自己包含"**。而它正文（`ValueTypeRefiner`、`ValueTypeRefinerRegistry`，共 45 行）
-**一个 `operator_table.h` 定义的名字都没用到**。
+**一个 `operator_table.h` 定义的名字都没用到**——可它**替 403 个 TU 拿着**：删掉那一行，全树
+`-fsyntax-only` 有 **403/659 编不过**（`no member named 'OperatorTable' in namespace 'camel::core'`）。
 
-**拆法：** 删掉 `src/kernel/include/camel/core/operator_traits.h` 第 14 行那条转发包含，谁用 `oper::` 的 id
-常量谁自己包含 ⇒ **435 → 212**（-223），顺带把 `operator_semantics.h` 从 475 拉下来（三条边一起去掉时它剩 418）。
-收拢前要确认的是那 423 个使用方里谁真的用了 operator 表的名字——用了的补在自己的文件里，
-那个数才是落地后的数；212 是这条边单独拿掉时的读数。
+**拆法：** 删掉 `src/kernel/include/camel/core/operator_traits.h` 第 14 行那条转发包含，**并给那 403 个 TU
+各自补上它们真正要的那一块**。它们要的是 `core::OperatorTable` 这个类，补回去就还是 435 —— 所以 `-223`
+不能这么拿。能拿的只有两种：只要类型名（前置声明就够）、只要 `oper::` 的 id 常量（那得先把 `operator_table.h`
+拆成"常量"和"表"两半）。落地后的数取决于 403 条里各有几成落在两类里；`435-403≈32` 是"纯删"的上限。
 
 ### 第 4 至 8 名：原因，与为什么现在不动它们
 
@@ -229,10 +262,39 @@ operator_semantics  载体 operator_table.h 只用 const sem::OperatorSemantics 
 
 ## 结论
 
-三条便宜边——`resolver.h` 里把 `semantic.h` 换成一个枚举的前向声明、删掉 `operator_traits.h` 第 14 行那条
-转发包含、`frame.h` 里把 `graph.h` 换成 `class GCGraph;`——把**一次语义性头文件改动的重编 TU 数**从
-**499 / 359 / 435 降到 382 / 317 / 212**（三名合计 **1293 → 911**，-30%）；
-其中最贵的 `semantic.h` 若连 `messages/index.h` 那条伞形包含一起拆，是 **499 → 6**。
+三条候选边里，**只有一条是"换一行就能落地"的**：`resolver.h:6` 的 `semantic.h` 换成
+`enum class SemanticDiag : std::uint32_t;`（配 `<cstdint>`），全树 659 个 TU `-fsyntax-only` **零失败**，
+`semantic.h` **499 → 382**（-117）；再拆 `messages/index.h` 那条伞形包含，是 **499 → 6**。
+
+另外两条**单纯删/换会让树编不过**：删 `operator_traits.h` 第 14 行 403/659 失败，`frame.h` 第 9 行换
+`class GCGraph;` 100/659 失败。要拿到那 317 / 212，得先做它们各自的"把要的东西变小"——
+`frame.h` 是把 6 个内联访问器挪进 `.cpp`，`operator_traits.h` 是让 403 个调用方只要名字或只要常量。
+所以上一版写的"三名合计 **1293 → 911**（-30%）"**不成立**：那是"图上少三条边"的读法，不是
+"这三条边能删"的读法。**能落地的一条是 `resolver.h`，499 → 382。**
+
+## 三条边的编译验证（全树 `-fsyntax-only`）
+
+"图上少一条边"只说明有多少 TU 不再到达那个头，不等于这些 TU 不再需要它。所以三条边各做一次真编译：
+改动做进一份 overlay 头文件、前置到每个 TU 的 `-I` 最前面，全树 **659 个 TU** 各跑一次 `-fsyntax-only`（8 进程）。
+
+```
+基线（什么都不改）                    0 / 659 失败
+① resolver.h:6 → 枚举前置声明         0 / 659 失败    ✔
+② 删 operator_traits.h:14           403 / 659 失败   no member named 'OperatorTable' in namespace 'camel::core'
+③ frame.h:9 → class GCGraph;        100 / 659 失败   member access into incomplete type 'camel::runtime::GCGraph'
+```
+
+- ① 第一次漏了 `<cstdint>`，43 条报 `unknown type name 'uint32_t'`——那是 overlay 的错不是改动的错，
+  补上之后归零。这条读数的写法值得记住：**改动的对错会被 overlay 的对错盖住**。
+- ② 的 403 说明这条转发包含**替 403 个 TU 拿着** `OperatorTable`；它们要的是类的定义，补回去就不省。
+- ③ 的 100 说明 `frame.h` 用 `GCGraph` 不只是"存指针"（第 52/56/60、540/551/590 行是成员调用）；
+  要拿到 -42 得把那 6 个内联访问器挪进 `.cpp`。
+
+⇒ 判据：**一个头文件"自己不用某个名字"，不等于"边上没有它也没关系"——它可能是替别人拿着的。**
+
+复现：把改过的头放进一个 overlay 目录（`<overlay>/camel/core/operator_traits.h`），在 db 里那条命令的
+第一个 `-I` 之前插 `-I <overlay>`，把 `-c`/`-O*` 换成 `-fsyntax-only`，8 进程跑完 659 条；基线同法不加
+overlay，应为 0 失败（是 0 才说明这套跑法本身没坏）。
 
 ## 这份读数会在哪里偏
 
@@ -293,3 +355,32 @@ PY
 ```
 
 全表 2232 条照上面第一段跑一遍得到合计，第二段对每个头文件跑一遍得到直接，两者相减是传递。
+
+## 附：`graph.h` 拆成"接口 + 定义"值不值
+
+问法是"83 个按名字包含它的 TU 里，有多少拆完之后只读声明就能编过"，量法是把 `graph.h` 机械地砍成"接口"
+那一半：每个 TU 用 db 里那条命令去掉 `-c`/`-O`、把 stub 目录前置成第一个 `-I`、加 `-fsyntax-only`。
+（基线：83/83 本来就编得过，所以"编不过"一定来自 stub。**stub 由脚本把 class/struct、函数体、模板都换成
+声明生成**——第一版没换自由函数体，编译错误全落在 stub 自己身上，那批数作废了，下面是换干净之后的。）
+
+```
+接口 = 别名 + 枚举 + 所有 class/struct 的前置声明 + 自由函数声明（"只读声明"）
+        ⇒ 1/83 编过（src/tools/debugger/src/worker.cpp）；82 条编不过
+           76 条卡 GCGraph（frame.h 43、program.h 24、graph_build.h 3、其余在各自 .cpp）
+            4 条卡 ProgramHold（jvp.h 2、transpose.h 2）
+            2 条卡 GCGraphManager（program.h）
+```
+
+接口够用 **1** 条 / 必须整套 **82** 条 / 说不清 **0** 条 —— 0 条错误落在 stub 里，所以"说不清"是空的；
+82 条里也没有一条是因为记录类型不完整（`GCNode`、`WritingUnion` 一个都没出现），全是缺 `GCGraph` 的完整定义。
+
+**把记录布局也放进接口，救不回来。** 我试过第二半（别名 + 枚举 + 记录 POD + 类仍只留前置声明），那个
+stub 没能自检通过（嵌套 struct 的花括号跟踪不过自己的改写器，不硬凑），但上面 82 条的失败名单里没有一条
+指名记录类型 ⇒ 把记录加进接口，一条也救不回来。根因在同一处：`GCGraph` 的定义里按值嵌了
+`GCGraphNativePayload nativePayload_{}`（第 1333 行），它的内联访问器又直接读 `GCNode`/`GCRegion`/`WritingUnion`
+的字段，所以"要 `GCGraph`"等于"要两半一起 parse"。
+
+代价与估计：新增一个头文件，**可以改的 include 是 0 处**——82 条都还要 `GCGraph` 的完整定义，没有调用方
+能改用小的那一半；而且拆出去的是被 `static_assert(sizeof(GCNode) == 28, "A frozen node record is 28 bytes.")`、
+`sizeof(GCLoopRef) == 8` 这类断言钉住尺寸的记录区。**拆完 `graph.h` 那一行 359 → 358**（只救下 `worker.cpp`
+一条），能降的 42 条在 `frame.h` 上、且要挪 6 个内联访问器，跟拆 `graph.h` 不是一件事。⇒ **不值，不拆。**
