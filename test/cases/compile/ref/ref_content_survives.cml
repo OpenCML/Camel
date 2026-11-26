@@ -21,9 +21,9 @@ func main() => int sync {
     let late = state::ref('nothing yet')
     // Two allocations big enough to collect on their own, and the write below happens between the
     // box being promoted and the value being written into it.
-    let warm = 0 .. 50000
+    let warm = (0 .. 50000)->to_array()
     state::set(late, 'written after the box was promoted')
-    let warm2 = 0 .. 50000
+    let warm2 = (0 .. 50000)->to_array()
     println(len(warm) + len(warm2))
     println(state::get(early))
     let back = state::get(pair)

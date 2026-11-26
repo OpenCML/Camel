@@ -1524,7 +1524,7 @@ e345f39768d9ee5a ok test/cases/compile/ref/err_holds_ref_closure_in_collection.c
 c1c5e4b20b478998 ok test/cases/compile/ref/err_holds_ref_closure_in_struct_unread.cml
 5197cec3cbc1e34d ok test/cases/compile/ref/err_holds_ref_closure_unread.cml
 804f210fe5aa3871 ok test/cases/compile/ref/ref_array_element.cml
-eb28b57ae0c1fed6 ok test/cases/compile/ref/ref_boxes_are_counted.cml
+7e62ec6cf74b88e1 ok test/cases/compile/ref/ref_boxes_are_counted.cml
 a11c23d2e9a40893 ok test/cases/compile/ref/ref_boxes_loop_ten.cml
 bb3f1f9a6e4fa7ec ok test/cases/compile/ref/ref_boxes_loop_thousand.cml
 c3f7356e1bfb90bc ok test/cases/compile/ref/ref_boxes_made_per_call_ten.cml
@@ -1533,7 +1533,7 @@ c3f7356e1bfb90bc ok test/cases/compile/ref/ref_boxes_made_per_call_ten.cml
 4575b80afda3132b ok test/cases/compile/ref/ref_closure_capture.cml
 c326a5933e02922b ok test/cases/compile/ref/ref_closure_capture_depth.cml
 38418416adce709e ok test/cases/compile/ref/ref_closure_in_container_control.cml
-13600314feee9e87 ok test/cases/compile/ref/ref_content_survives.cml
+bfbd16550c4c76f1 ok test/cases/compile/ref/ref_content_survives.cml
 ae3d4d6cd646f5e8 ok test/cases/compile/ref/ref_float.cml
 4555ee54d18385e6 ok test/cases/compile/ref/ref_foreach_gives_back.cml
 79f4593a223dec72 ok test/cases/compile/ref/ref_one_box_two_names.cml
@@ -3637,7 +3637,7 @@ d870913623b25885 ok test/cases/modules/std/statistics/basic.cml
 0306033b4a13c02d ok test/cases/modules/stdlib/array_basic.cml
 11dcd3dac2239ee4 ok test/cases/modules/stdlib/array_hof.cml
 6d9ddc28b97eb173 ok test/cases/modules/stdlib/array_kernels_read_back.cml
-1e0f4162769b2941 ok test/cases/modules/stdlib/array_large.cml
+8377bcec94b24b78 ok test/cases/modules/stdlib/array_large.cml
 4fe1be67d7ad9f89 ok test/cases/modules/stdlib/array_merge_kernels.cml
 0218355c75895759 ok test/cases/modules/stdlib/array_reduction_arms.cml
 b55c565bf7397733 ok test/cases/modules/stdlib/array_reduction_complex_reduce.cml
@@ -4017,7 +4017,7 @@ ea123086c0149664 ok test/cases/modules/types/type_functions.cml
 2000978eeb50dfa2 ok test/cases/opt/algebra_rules/tensor_forms.cml
 4dc2612264792cf6 ok test/cases/opt/camel_passes/cse_subject.cml
 1487fe6bb0a822d1 ok test/cases/opt/camel_passes/dce_subject.cml
-82f4c5aa594b045e ok test/cases/opt/camel_passes/fold_constant_budget.cml
+f891ea141e9edf08 ok test/cases/opt/camel_passes/fold_constant_budget.cml
 a93e3247b080e42b ok test/cases/opt/camel_passes/fold_fault.cml
 913c6f4b64e9733e ok test/cases/opt/camel_passes/fold_subject.cml
 fbb1396dc7f0b6d7 ok test/cases/opt/commit_checks/branch_and_print.cml
@@ -4257,9 +4257,9 @@ c2186e075088f000 ok test/cases/para/core/merge_sort_small.cml
 b088133601509f15 ok test/cases/para/core/recursion_too_deep.cml
 d10bf713ab8f0f5e ok test/cases/para/core/scalar_recursion_inline.cml
 1385df88c9020578 ok test/cases/para/core/sync_order_with_tasks.cml
-c0c27f11f0362c59 ok test/cases/para/core/unordered_foreach_smoke.cml
-ef13b3337c18a227 ok test/cases/para/core/unordered_foreach_timing.cml
-ec2811e243e4171b ok test/cases/para/core/unordered_reduce_sum.cml
+25948a2c63efc7cb ok test/cases/para/core/unordered_foreach_smoke.cml
+e7cec9bc947a6750 ok test/cases/para/core/unordered_foreach_timing.cml
+9ff4c7885517d2c1 ok test/cases/para/core/unordered_reduce_sum.cml
 0bc0e0a878a65014 ok test/cases/para/exec_pred/branch.cml
 9200f6ef83af8b55 ok test/cases/para/exec_pred/fault.cml
 24c6ce57f8455088 ok test/cases/para/exec_pred/io.cml
