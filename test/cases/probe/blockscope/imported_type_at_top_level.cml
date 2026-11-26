@@ -1,0 +1,12 @@
+// The control: the same imported name written in a top-level signature instead of a block body.
+// A reading of the two together separates "the import does not work" from "the block's body does
+// not see it".
+import { Node } from graph
+
+func pick(n: Node) => Node {
+    return n
+}
+
+func main() => int sync {
+    return 0
+}

@@ -1,0 +1,24 @@
+// The block body reads a type name the file imports by name: `Node` is imported at the top, and
+// the function written inside the block's body takes one. That body is the only place the name is
+// written, so what the reading says is about the block's scope and nothing else.
+import { Node } from graph
+
+func inc(x: int) => int {
+    return x + 1
+}
+
+func family(f: (x: int) => int) => int sync {
+    let g = edit d = f {
+        let pick = func (n: Node) => Node { n }
+        pick
+    }
+    return match g {
+        case error e => -1
+        case h => h(5)
+    }
+}
+
+func main() => int sync {
+    println('answer=', family(inc))
+    return 0
+}
