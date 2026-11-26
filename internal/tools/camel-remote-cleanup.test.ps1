@@ -404,14 +404,14 @@ if (-not $guard) {
         # path at all, so the harness would "fail" for a reason that has nothing to do with the
         # guard. Read a one-line file first; only a bash that can do that runs part B.
         $probe = Join-Path ([IO.Path]::GetTempPath()) 'wtclean-guard-bashprobe.sh'
-        [IO.File]::WriteAllText($probe, "echo BASHOK`n")
+        [IO.File]::WriteAllText($probe, "echo BASHOK`nif command -v flock >/dev/null 2>&1; then echo FLOCKOK; fi`n")
         $probeOut = @(& $gitBash $probe 2>$null)
         Remove-Item $probe -Force -ErrorAction SilentlyContinue
-        if (@($probeOut) -contains 'BASHOK') {
+        if (@($probeOut) -contains 'BASHOK' -and @($probeOut) -contains 'FLOCKOK') {
             $raw = @(& $gitBash $local)
             $raw += 'RC=' + $LASTEXITCODE
         } else {
-            Skip 'the bash on PATH cannot read a Windows path; give -BashHost <ssh alias>'
+            Skip 'the bash here cannot read a Windows path or has no flock (Git for Windows has none); give -BashHost <ssh alias>'
         }
     } else {
         Skip 'no bash on this machine; give -BashHost <ssh alias>'

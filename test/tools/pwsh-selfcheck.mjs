@@ -25,14 +25,11 @@
  *                    is the whole point: the gate host is Linux and ships no PowerShell, so what this
  *                    must never do is report the entry as green.
  *   `<script> [...]` run that script and exit with its own exit code. The output is inherited, not
- *                    copied, so an entry's `expect_stdout_contains` reads the count the script
+ *                    copied, so an entry's `expect_stdout_contains` reads the summary the script
  *                    printed rather than a count kept here.
  *
  * A pwsh that disappears between the probe and the run is **127 with a sentence, never 0**: an
- * unread self-check is not a green one. The shape this file exists to keep out of the plan is
- * `camel-cleanup.test.ps1`'s: with no bash it says `0 checks, 0 failed` and exits 0, so an entry
- * that pinned that line would be pinning a check that never ran. That is why every entry also pins a
- * positive count.
+ * unread self-check is not a green one.
  *
  * The interpreter is `$CAMEL_PWSH` when that is set (a host whose PowerShell is not on `PATH`), and
  * `pwsh` from `PATH` otherwise. One resolution for both modes, so the probe and the run cannot

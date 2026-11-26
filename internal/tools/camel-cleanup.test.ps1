@@ -62,6 +62,8 @@ if (-not (Test-Path $cleanupScript)) { throw "missing $cleanupScript" }
 # other caller does, so the entry point and its exit codes are what is under test.
 $harness = @(
     'set -u',
+    '# MSYS bash copies instead of linking for ln -s unless asked for a real link; where that is not allowed ln fails and the symlink checks are skipped.',
+    'export MSYS=winsymlinks:nativestrict',
     'D=$(cd "$(dirname "$0")" && pwd)',
     'CC=$D/camel-cleanup.sh',
     '[ -f "$CC" ] || { echo "FAIL the script was not shipped"; echo "RC=1"; exit 1; }',
@@ -140,13 +142,14 @@ $harness = @(
     '[ -d /tmp ] && pass "5b3 /tmp is still there" || bad "5b3 /tmp"',
     '',
     '# (c) a symlink inside the root pointing outside it',
-    'ln -s "$BARE" "$RUNDIR2/link-out"',
+    'if ln -s "$BARE" "$RUNDIR2/link-out" 2>/dev/null && [ -L "$RUNDIR2/link-out" ]; then',
     'out=$(cc rm "$RUNDIR2/link-out" 2>&1); rc=$?',
     '[ "$rc" = 3 ] && pass "5c a symlink pointing out of the root is refused" || bad "5c symlink refused" "rc=$rc out=$out"',
     'case "$out" in *"is a symlink"*) pass "5c2 the reason names the symlink";; *) bad "5c2 reason" "$out";; esac',
     'cc add "$RUN2" "$RUNDIR2/link-out" --kind link >/dev/null 2>&1; rc=$?',
     '[ "$rc" = 3 ] && pass "5c3 the record cannot be made to point at it either" || bad "5c3 add refused" "rc=$rc"',
     '[ -d "$BARE" ] && pass "5c4 the bare is still there after the symlink" || bad "5c4 bare"',
+    'else echo "NOTE 5c symlinks cannot be made here; the symlink checks are skipped"; fi',
     '',
     '# (d) a `..` that lands back inside the root but outside the run dir',
     'OUTSIDE="$R/unrecorded-one"; mkdir -p "$OUTSIDE"',
@@ -193,6 +196,7 @@ $localDir = Join-Path ([IO.Path]::GetTempPath()) ('camel-cleanup-selftest-' + [g
 New-Item -ItemType Directory -Path $localDir | Out-Null
 $localHarness = Join-Path $localDir 'run.sh'
 [IO.File]::WriteAllText($localHarness, $harness)
+Copy-Item -LiteralPath $cleanupScript -Destination (Join-Path $localDir 'camel-cleanup.sh')
 
 $raw = @()
 if ($BashHost) {
