@@ -110,7 +110,7 @@ kind = "negative"
 case = "../../../cases/consistency/narrowing/outside_arm.cml"
 args = ["-E", "short", "${case}"]
 expect_exit = 1
-expect_output_contains = ["SemanticDiag::NoMatchingFunction", ".cml:4:"]
+expect_output_contains = ["SemanticDiag::NoMatchingFunction", "outside_arm.cml:4:"]
 
 [[tests]]
 name = "narrowing.two_nullables"
@@ -119,7 +119,7 @@ kind = "negative"
 case = "../../../cases/consistency/narrowing/compare_two_nullables.cml"
 args = ["-E", "short", "${case}"]
 expect_exit = 1
-expect_output_contains = ["SemanticDiag::NoMatchingFunction", ".cml:5:"]
+expect_output_contains = ["SemanticDiag::NoMatchingFunction", "compare_two_nullables.cml:5:"]
 
 [[tests]]
 name = "narrowing.plain_with_null"
@@ -166,7 +166,7 @@ kind = "negative"
 case = "../../../cases/consistency/narrowing/shadowed_not_narrowed.cml"
 args = ["-E", "short", "${case}"]
 expect_exit = 1
-expect_output_contains = ["SemanticDiag::MatchCaseTypeMismatch", "shadowed_not_narrowed.cml:4:"]
+expect_output_contains = ["SemanticDiag::MatchCaseTypeMismatch", "shadowed_not_narrowed.cml:6:"]
 expect_output_not_contains = ["KnownNotNull"]
 
 [[tests]]
@@ -176,4 +176,4 @@ kind = "negative"
 case = "../../../cases/consistency/narrowing/compare_functions.cml"
 args = ["-E", "short", "${case}"]
 expect_exit = 1
-expect_output_contains = ["SemanticDiag::NoMatchingFunction", "compare_functions.cml:8:"]
+expect_output_contains = ["SemanticDiag::NoMatchingFunction", "compare_functions.cml:12:"]
