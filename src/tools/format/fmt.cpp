@@ -920,7 +920,7 @@ any Formatter::visitDataDecl(cst::DataDecl context) {
 }
 
 /*
-resourceDecl : 'export'? 'resource' identDef ('=' bracketIdents | 'unordered' | 'readonly')?
+resourceDecl : 'export'? 'resource' identDef ('=' bracketIdents | modifier*)?
 */
 any Formatter::visitResourceDecl(cst::ResourceDecl context) {
     string result   = context->tok(TK::KwExport) ? "export " : "";

@@ -493,6 +493,9 @@ enum class SemanticDiag : uint32_t {
     OperatorAccessesUndeclared                     = 0x000218,
     OperatorSignatureUnresolved                    = 0x000219,
     ConversionNeededWhereTheCompilerWouldInsertOne = 0x00021A,
+    UnorderedOverwritingResource                   = 0x00021B,
+    ReadonlyWriteModifier                          = 0x00021C,
+    ObservedReadonlyResource                       = 0x00021D,
 
     // Warnings
     IgnoredSideEffect = 0x100002,

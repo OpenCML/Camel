@@ -21,6 +21,7 @@
 #include "camel/core/node_attrs.h"
 #include "camel/core/operator.h"
 #include "camel/core/operator_semantics.h"
+#include "camel/core/resource_semantics.h"
 
 namespace camel::compile::gir {
 class DraftGraphBuilder;
@@ -161,20 +162,18 @@ class Module : public std::enable_shared_from_this<Module> {
     };
 
     /// A resource this module declares (design effects plan 3.2): `resource NAME` (an ambient
-    /// resource of its own), `resource NAME unordered` (the accesses of a call may be
-    /// reordered), `resource NAME readonly` (nothing ever writes it, so it conflicts with no
-    /// access and orders none -- design principles 9.12, 15.5) or `resource NAME = [a, b]` (a
-    /// group naming resources and other groups). A group's `members` are names as written; expand
-    /// them once all modules are read (the GCT builder's resourceSignatureOf). Design principles
-    /// 3.3: a resource is state with an identity, and a name no value carries (`fs`, `rng`) is an
-    /// ambient resource of that name.
+    /// resource of its own), `resource NAME unordered idempotent` (the equalities the accesses of a
+    /// call satisfy -- design principles 3.3, "资源修饰词说明写满足哪些等式"), or
+    /// `resource NAME = [a, b]` (a group naming resources and other groups). A group's `members`
+    /// are names as written; expand them once all modules are read (the GCT builder's
+    /// resourceSignatureOf). Design principles 3.3: a resource is state with an identity, and a
+    /// name no value carries (`fs`, `rng`) is an ambient resource of that name.
+    ///
+    /// The modifiers are kept as one record (`sem::ResourceModifiers`) rather than as a flag per
+    /// reader: the C++ side registers the same record for a resource it declares, and
+    /// `resourceIdentities` compares the two as text (builder_modules.cpp#resourceIdentities).
     struct ResourceDecl {
-        bool unordered = false;
-        /// The declaration wrote `readonly`: a clause may read this resource and no clause may
-        /// write it (the GCT builder refuses `uses var NAME` against it). It is kept on the
-        /// declaration rather than in the signature because the rule belongs to the name, not to
-        /// one clause that happens to mention it.
-        bool readonly = false;
+        sem::ResourceModifiers modifiers;
         bool exported = false;
         /// A `var` of the top level of the module is a resource of it, named by the variable
         /// (design principles 3.5): it is always shown with its module.

@@ -102,7 +102,7 @@ ResourceSignature uniteReach(const ResourceSignature &a, const ResourceSignature
             continue;
         }
         found->mode      = sem::uniteAccess(found->mode, use.mode);
-        found->unordered = found->unordered || use.unordered;
+        found->modifiers = sem::uniteModifiers(found->modifiers, use.modifiers);
     }
     united.captures.insert(united.captures.end(), b.captures.begin(), b.captures.end());
     united.anyOf.insert(united.anyOf.end(), b.anyOf.begin(), b.anyOf.end());
@@ -255,18 +255,19 @@ std::optional<std::string> Builder::moduleVariableOf(
 }
 
 void Builder::addAmbientUse(
-    BodyReach &walk, const std::string &name, sem::AccessMode mode, bool unordered) const {
+    BodyReach &walk, const std::string &name, sem::AccessMode mode,
+    const sem::ResourceModifiers &modifiers) const {
     ResourceSignature &out = walk.reach;
     const auto found = std::find_if(out.ambient.begin(), out.ambient.end(), [&](const auto &use) {
         return use.name == name;
     });
     if (found == out.ambient.end()) {
         out.ambient.push_back(
-            ResourceSignature::AmbientUse{.name = name, .mode = mode, .unordered = unordered});
+            ResourceSignature::AmbientUse{.name = name, .mode = mode, .modifiers = modifiers});
         return;
     }
     found->mode      = sem::uniteAccess(found->mode, mode);
-    found->unordered = found->unordered || unordered;
+    found->modifiers = sem::uniteModifiers(found->modifiers, modifiers);
 }
 
 bool Builder::placeCapturedUse(
@@ -442,7 +443,7 @@ bool Builder::readCalleeSignature(
         }
     }
     for (const auto &use : sig.ambient) {
-        addAmbientUse(walk, use.name, use.mode, use.unordered);
+        addAmbientUse(walk, use.name, use.mode, use.modifiers);
     }
     for (sem::ResourceClass cls : sig.anyOf) {
         walk.reach.anyOf.push_back(cls);
@@ -767,7 +768,7 @@ bool Builder::reachOfOper(
     }
     for (const sem::ResourceAccess &access : spec.accesses) {
         if (access.binding.kind == sem::ResourceBinding::Kind::Ambient) {
-            addAmbientUse(walk, access.resource.name, access.mode, access.unordered);
+            addAmbientUse(walk, access.resource.name, access.mode, access.modifiers);
             continue;
         }
         if (access.binding.kind == sem::ResourceBinding::Kind::Capture) {
@@ -1149,10 +1150,17 @@ namespace {
 // the body, or an ambient resource (`stdout`, `fs`) by the name the declaration gave it. Two
 // effects reach the same resource exactly when their keys are equal (design principles 3.3);
 // a node whose reach the walk cannot place is `unnamed` and stands for every resource at once.
-// `unordered` ambient resources (`resource net unordered`) are left out: effects on one of them
-// keep no written order, so no order edge joins them (design principles 3.3).
+// Whether two accesses to one resource need an order edge is the resource declaration's answer,
+// asked through `sem::commute` (design principles 3.3, the resource effect system): this walk says
+// what a node touches, and the four equalities are computed in one place.
+struct ResourceKey {
+    std::string key;
+    sem::AccessMode mode = sem::AccessMode::ReadModifyWrite;
+    sem::ResourceModifiers modifiers;
+};
+
 struct ResourceKeys {
-    std::vector<std::string> keys;
+    std::vector<ResourceKey> keys;
     bool unnamed = false;
 };
 
@@ -1163,22 +1171,36 @@ struct ResourceKeys {
 ResourceKeys resourceKeysOf(const camel::core::sem::ResourceSignature &reach) {
     ResourceKeys out;
     for (const auto &use : reach.params) {
-        out.keys.push_back(std::format("p{}", static_cast<int>(use.index)));
+        // A parameter's own resource says nothing about order: a `var` cell is ordered by its value
+        // (a data edge), and a handle names a box the access itself places.
+        out.keys.push_back(ResourceKey{.key = std::format("p{}", static_cast<int>(use.index))});
     }
     for (const auto &use : reach.ambient) {
-        if (use.unordered) {
-            continue;
-        }
-        out.keys.push_back(std::format("a{}", use.name));
+        out.keys.push_back(
+            ResourceKey{
+                .key       = std::format("a{}", use.name),
+                .mode      = use.mode,
+                .modifiers = use.modifiers});
     }
     out.unnamed = !reach.anyOf.empty();
     return out;
 }
 
-// The last effect on each resource of one block, and the last effect whose resources could not be
-// named (it stands for all of them).
+// An access an effect left on a resource, kept until something that must follow it is written. The
+// accesses kept for one key are the ones the declaration lets be ordered either way, so they carry
+// no edge between them; an access that commutes with them joins the group, and one that does not is
+// ordered after every member (a read must see every write before it, and `unordered` lets a write
+// swap with a write only -- `sem::commute`).
+struct OpenAccess {
+    draft_node_ref_t node = 0;
+    sem::AccessMode mode  = sem::AccessMode::Read;
+    sem::ResourceModifiers modifiers;
+};
+
+// The accesses still free to run in either order on each resource of one block, and the last effect
+// whose resources could not be named (it stands for all of them).
 struct BlockEffectOrder {
-    std::map<std::string, draft_node_ref_t> lastOn;
+    std::map<std::string, std::vector<OpenAccess>> open;
     draft_node_ref_t lastUnnamed = 0;
 };
 
@@ -1272,16 +1294,46 @@ void Builder::orderEffectsOnOneResourceIn(DraftGraphBuilder *graph) {
         };
         if (named.unnamed) {
             // Everything written before it in the block is before it, whatever it touched.
-            for (const auto &entry : block.lastOn) {
-                addBefore(entry.second);
+            for (const auto &entry : block.open) {
+                for (const OpenAccess &access : entry.second) {
+                    addBefore(access.node);
+                }
             }
             addBefore(block.lastUnnamed);
         } else {
-            for (const std::string &key : named.keys) {
-                const auto found = block.lastOn.find(key);
-                if (found != block.lastOn.end()) {
-                    addBefore(found->second);
+            for (const ResourceKey &key : named.keys) {
+                const auto found = block.open.find(key.key);
+                if (found == block.open.end()) {
+                    // The first effect on this resource in the block: it has nothing to be ordered
+                    // after, and it is the access that stands for the resource until something that
+                    // must follow it is written. Leaving it out would let the next effect on the
+                    // resource find no predecessor and take no edge to it.
+                    block.open.emplace(
+                        key.key,
+                        std::vector<OpenAccess>{OpenAccess{
+                            .node      = stands,
+                            .mode      = key.mode,
+                            .modifiers = key.modifiers}});
+                    continue;
                 }
+                std::vector<OpenAccess> keep;
+                for (const OpenAccess &previous : found->second) {
+                    // An edge joins the two unless the resource declares they may be ordered either
+                    // way. The declaration is the same on both sides, so both ask `commute` and the
+                    // pair is free only when neither statement orders it.
+                    if (sem::commute(previous.modifiers, previous.mode, key.mode) &&
+                        sem::commute(key.modifiers, key.mode, previous.mode)) {
+                        keep.push_back(previous);
+                        continue;
+                    }
+                    addBefore(previous.node);
+                }
+                // The accesses that stay unordered stand for the resource now, together with this
+                // one: an edge to the newest alone would let the older ones run after something
+                // that must follow all of them.
+                keep.push_back(
+                    OpenAccess{.node = stands, .mode = key.mode, .modifiers = key.modifiers});
+                found->second = std::move(keep);
             }
             addBefore(block.lastUnnamed);
         }
@@ -1308,13 +1360,11 @@ void Builder::orderEffectsOnOneResourceIn(DraftGraphBuilder *graph) {
         if (named.unnamed) {
             // What it was ordered after is ordered after this one now: keeping both would say
             // the same thing twice, and this node stands for every resource.
-            block.lastOn.clear();
+            block.open.clear();
             block.lastUnnamed = stands;
-        } else {
-            for (const std::string &key : named.keys) {
-                block.lastOn[key] = stands;
-            }
         }
+        // Otherwise the group of accesses on each resource already carries this one (the loop
+        // above put it where the ones that stay unordered are kept).
     };
     for (draft_node_ref_t id = 0; id < draft.nodeSlotCount(); ++id) {
         if (!draft.alive(id)) {
@@ -1338,19 +1388,32 @@ void Builder::orderEffectsOnOneResourceIn(DraftGraphBuilder *graph) {
                     named.unnamed = true;
                     continue;
                 }
-                named.keys.push_back(std::move(key));
+                // A handle names a box, not a declaration: nothing says the accesses to it may be
+                // ordered either way, so the record is empty and `sem::commute` orders the pair.
+                named.keys.push_back(ResourceKey{.key = std::move(key)});
             }
-            // One key per resource, however many of a node's accesses name it.
-            std::sort(named.keys.begin(), named.keys.end());
-            named.keys.erase(std::unique(named.keys.begin(), named.keys.end()), named.keys.end());
+            // One key per resource, however many of a node's accesses name it. The first one wins:
+            // a handle's key and a declaration's key on one name say the same resource, and the
+            // declaration's record is the one that answers for the order.
+            std::stable_sort(
+                named.keys.begin(),
+                named.keys.end(),
+                [](const ResourceKey &left, const ResourceKey &right) {
+                    return left.key < right.key;
+                });
+            named.keys.erase(
+                std::unique(
+                    named.keys.begin(),
+                    named.keys.end(),
+                    [](const ResourceKey &left, const ResourceKey &right) {
+                        return left.key == right.key;
+                    }),
+                named.keys.end());
         } else {
             named.unnamed = true;
         }
         if (!named.unnamed && named.keys.empty()) {
-            // An effect the walk places on no resource orders with nothing -- and an effect whose
-            // only resource is `unordered` is one of those: the resource itself says the order the
-            // program wrote does not matter (design principles 3.3), so the plan is free to run
-            // two of them at the same time and `std::nvm` runs them one after the other.
+            // An effect the walk places on no resource orders with nothing.
             continue;
         }
         // The effect is written in one block, and it stands in every block around that one too:

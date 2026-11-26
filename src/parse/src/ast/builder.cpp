@@ -697,7 +697,7 @@ typeDecl
     ;
 */
 /*
-resourceDecl : 'export'? 'resource' identDef ('=' bracketIdents | 'unordered' | 'readonly')?
+resourceDecl : 'export'? 'resource' identDef ('=' bracketIdents | modifier*)?
 */
 Value Builder::visitResourceDecl(cst::ResourceDecl context) {
     ENTER("ResourceDecl");
@@ -718,10 +718,10 @@ Value Builder::visitResourceDecl(cst::ResourceDecl context) {
             }
         }
     } else {
-        // The word after the name is the modifier, a contextual word kept as a token of this
-        // declaration (so the tree stays lossless) rather than a child node: `unordered`
-        // (`resource net unordered`) or `readonly` (`resource graph readonly`, design principles
-        // 9.12). Unknown words are not read from here: the parser accepts only these two.
+        // The words after the name are the modifiers, contextual words kept as tokens of this
+        // declaration (so the tree stays lossless) rather than child nodes: `unordered`,
+        // `idempotent`, `overwriting`, `readonly`, `observed` (design principles 3.3). Unknown
+        // words are not read from here: the parser accepts only these five.
         for (size_t i = 0; i < context->childCount(); ++i) {
             const auto child = context->child(i);
             if (!child.isToken()) {
@@ -730,8 +730,14 @@ Value Builder::visitResourceDecl(cst::ResourceDecl context) {
             const std::string word = child.text();
             if (word == "unordered") {
                 decl->setUnordered(true);
+            } else if (word == "idempotent") {
+                decl->setIdempotent(true);
+            } else if (word == "overwriting") {
+                decl->setOverwriting(true);
             } else if (word == "readonly") {
                 decl->setReadonly(true);
+            } else if (word == "observed") {
+                decl->setObserved(true);
             }
         }
     }

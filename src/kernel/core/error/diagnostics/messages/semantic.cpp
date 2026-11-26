@@ -1910,6 +1910,30 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             },
         },
         {
+            SemanticDiag::UnorderedOverwritingResource,
+            {
+                "UnorderedOverwritingResource",
+                "The resource '{0}' is declared both 'unordered' and 'overwriting'.",
+                "`unordered` says two writes to the resource may be swapped; `overwriting` says that of two writes only the later one is left. Both together force the two writes to be equal, whatever values the program writes, so the declaration promises something no resource can keep (design principles 3.3, the combinations the resource effect system refuses). Drop one of the two words: keep `unordered` when the writes may in fact be swapped, and `overwriting` when the later write replaces the earlier one.",
+            },
+        },
+        {
+            SemanticDiag::ReadonlyWriteModifier,
+            {
+                "ReadonlyWriteModifier",
+                "The resource '{0}' is declared 'readonly' and '{1}'.",
+                "'{1}' describes how writes to the resource behave: that they may be swapped, that repeating one is the same as doing it once, or that a later one replaces an earlier one. A `readonly` resource is never written, so there is no write for the word to describe and the two statements cannot both hold (design principles 3.3). Drop '{1}', or drop 'readonly' if the program writes the resource.",
+            },
+        },
+        {
+            SemanticDiag::ObservedReadonlyResource,
+            {
+                "ObservedReadonlyResource",
+                "The resource '{0}' is declared both 'observed' and 'readonly'.",
+                "An `observed` resource is written so a person watching the run sees the value; a `readonly` resource is never written, so there is nothing to observe (design principles 3.3, the resource effect system's combinations). Drop one of the two words.",
+            },
+        },
+        {
             SemanticDiag::IgnoredSideEffect,
             {
                 "IgnoredSideEffect",

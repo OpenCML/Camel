@@ -25,7 +25,7 @@ CAMEL_NODE(ImportDecl, Other)          // 'import' (moduleName | (identDef | bra
 CAMEL_NODE(BracedImports, Other)       // '{' (importItem (',' importItem)*)? ','? '}'
 CAMEL_NODE(ImportItem, Other)          // identDef ('as' identDef)?
 CAMEL_NODE(ExportDecl, Other)          // 'export' (dataDecl | typeDecl | bracedIdents)
-CAMEL_NODE(ResourceDecl, Other)        // 'export'? 'resource' identDef ('=' bracketIdents | 'unordered' | 'readonly')?
+CAMEL_NODE(ResourceDecl, Other)        // 'export'? 'resource' identDef ('=' bracketIdents | modifier*)?
 CAMEL_NODE(UsingNamespaceDecl, Other)  // 'using' 'namespace' identRef
 CAMEL_NODE(NamespaceDecl, Other)       // 'namespace' identRef '{' SEP? (namespaceItem SEP?)* '}'
 CAMEL_NODE(BlockStmt, Other)           // frontMatter? ('#' tagUse)* ('sync'? stmtBlock | funcDecl | typeDecl)

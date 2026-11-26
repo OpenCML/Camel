@@ -922,3 +922,36 @@ expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::UsesPromiseViolated"
 expect_diagnostic_code = "0x030001F1"
 expect_output_contains = ["console"]
+
+[[tests]]
+name = "err.resource_unordered_overwriting"
+desc = "`resource cell_v unordered overwriting`: `unordered` says two writes to the resource may be swapped, `overwriting` says only the later of two writes is left, and both together force the two writes to be equal, which no resource can promise (design principles 3.3, the combinations the resource effect system refuses). The declaration is refused where it is written."
+kind = "negative"
+case = "../../../cases/effects/err_resource_unordered_overwriting.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::UnorderedOverwritingResource"
+expect_diagnostic_code = "0x0300021B"
+expect_output_contains = ["err_resource_unordered_overwriting.cml:", "'cell_v'"]
+
+[[tests]]
+name = "err.resource_readonly_write_word"
+desc = "`resource geometry readonly idempotent`: `idempotent` describes how writes to the resource behave, and a `readonly` resource is never written, so there is no write for the word to describe. The declaration is refused where it is written, and the report names the write word the author wrote."
+kind = "negative"
+case = "../../../cases/effects/err_resource_readonly_write_word.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::ReadonlyWriteModifier"
+expect_diagnostic_code = "0x0300021C"
+expect_output_contains = ["err_resource_readonly_write_word.cml:", "'geometry'", "'idempotent'"]
+
+[[tests]]
+name = "err.resource_observed_readonly"
+desc = "`resource trace observed readonly`: an `observed` resource is written so a person watching the run sees the value, and a `readonly` resource is never written, so there is nothing to observe (design principles 3.3). The declaration is refused where it is written."
+kind = "negative"
+case = "../../../cases/effects/err_resource_observed_readonly.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::ObservedReadonlyResource"
+expect_diagnostic_code = "0x0300021D"
+expect_output_contains = ["err_resource_observed_readonly.cml:", "'trace'"]

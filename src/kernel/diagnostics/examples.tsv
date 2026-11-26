@@ -180,6 +180,7 @@ SemanticDiag::NoMatchingFunction	test/cases/compile/array_alias/type_text.cml
 SemanticDiag::NodeOfNotAParameter	test/cases/modules/rules/node_of_misuse.cml
 SemanticDiag::NotDifferentiable	test/cases/modules/autodiff/jax_names/has_aux_plain.cml
 SemanticDiag::NullTestNeverNull	test/cases/consistency/narrowing/compare_plain_with_null.cml
+SemanticDiag::ObservedReadonlyResource	test/cases/effects/err_resource_observed_readonly.cml
 SemanticDiag::OperatorNotOverloadable	test/cases/consistency/operator_overloads/not_overloadable_logical.cml
 SemanticDiag::OperatorOverloadConflict	test/cases/consistency/operator_overloads/conflict_builtin.cml
 SemanticDiag::OperatorOverloadInvalid	test/cases/consistency/operator_overloads/arity.cml
@@ -198,6 +199,7 @@ SemanticDiag::PartialApplicationRefused	test/cases/compile/surface/name_as_value
 SemanticDiag::PureAndUses	test/cases/effects/err_pure_and_uses.cml
 SemanticDiag::RangeStepZero	test/cases/compile/static_expansion/static_loop_sequence_range_step_zero.cml
 SemanticDiag::ReadonlyResourceWritten	test/cases/effects/err_write_readonly_resource.cml
+SemanticDiag::ReadonlyWriteModifier	test/cases/effects/err_resource_readonly_write_word.cml
 SemanticDiag::Redeclaration	test/cases/compile/generics/err_redecl.cml
 SemanticDiag::RefContentHoldsRef	test/cases/compile/ref/err_holds_ref.cml
 SemanticDiag::ReservedIdentifier	test/cases/compile/surface/reserved_function_name.cml
@@ -274,6 +276,7 @@ SemanticDiag::TypeVariableNotBindable	test/cases/compile/generics/err_tf_unused.
 SemanticDiag::TypeVariableRedeclared	test/cases/compile/generic_head/err_duplicate_head_param.cml
 SemanticDiag::TypeVariableUnused	test/cases/compile/generic_head/err_unused_head_param.cml
 SemanticDiag::UnknownResource	test/cases/effects/err_unknown_resource.cml
+SemanticDiag::UnorderedOverwritingResource	test/cases/effects/err_resource_unordered_overwriting.cml
 SemanticDiag::UnresolvedReference	test/cases/compile/check/semantic_error.cml
 SemanticDiag::UnresolvedTypeReference	test/cases/compile/array_alias/bare_tensor.cml
 SemanticDiag::UnusedAssignedValue	test/cases/compile/var/unused_assigned_value.cml
