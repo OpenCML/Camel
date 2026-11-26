@@ -1,0 +1,16 @@
+id = "probe.resnet_block_space"
+tier = "fast"
+tags = ["probe"]
+desc = "Probe: how much data-block space one resnet run needs, and how much of it the backward pass adds. Not a check of behaviour: it narrows `--block-limit` over a ladder for the forward alone and for one training step, so the smallest limit that completes is the peak block usage of that workload, and the ratio between the two workloads is the reading."
+
+[[tests]]
+name = "resnet_block_space"
+desc = "The smallest `--block-limit` at which a resnet forward completes, and the smallest at which one training step completes, on the same input and weights."
+kind = "behavior"
+tool = "python"
+case = "../../cases/probe/resnet_block_space.py"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_contains = ["BLOCKSPACE forward limit=192 completed", "BLOCKSPACE train limit=4096 completed"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 900000

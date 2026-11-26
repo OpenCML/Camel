@@ -3,7 +3,10 @@
 
 #include "camel/core/mm.h"
 
+#include "camel/core/mm/block.h"
+
 #include <algorithm>
+#include <array>
 #include <cctype>
 #include <cstdlib>
 #include <iostream>
@@ -57,6 +60,7 @@ void installStatsAtExit() {
                 statsInstance->reportStats(std::cerr);
             }
             reportSpaceUsage(std::cerr);
+            reportBlockUsage(std::cerr);
         });
     });
 }
@@ -380,6 +384,22 @@ void reportSpaceUsage(std::ostream &os) {
     printSpaceUsage(os, "perm", permSpace().usage());
     printSpaceUsage(os, "meta", metaSpace().usage());
     os << '\n';
+}
+
+void reportBlockUsage(std::ostream &os) {
+    os << "[camel] blocks: live=" << blockLiveCount() << " bytes=" << blockBytesLive()
+       << " peak=" << blockBytesPeak() << " created=" << blockCreations()
+       << " freed=" << blockFrees() << '\n';
+    if (const uint64_t atPeak = blockTraceLiveAtPeak(); atPeak != 0) {
+        os << "[camel] blocks-at-peak: blocks=" << atPeak << " of " << blockCreations()
+           << " created\n";
+    }
+    std::array<BlockTraceEntry, 8> entries{};
+    const size_t written = blockTraceAtPeak(entries.data(), entries.size());
+    for (size_t i = 0; i < written; ++i) {
+        os << "[camel] blocks-at-peak: size=" << (entries[i].bytesPerBlock / 1024) << "KB"
+           << " blocks=" << entries[i].blocks << " bytes=" << entries[i].bytes << '\n';
+    }
 }
 
 } // namespace camel::core::mm
