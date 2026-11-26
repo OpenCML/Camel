@@ -1736,6 +1736,12 @@ export rule jvp_conv2d::<T>(x: T[...], w: T[...], b: T[...]) when is_float::<T>(
 /// and a local name there is a value the transposed function is not handed ("the rule's right side
 /// reads a value the transposed function is not handed"). `jvp_maximum` pays the same price, with
 /// `shape(maximum(x, w))` written four times.
+///
+/// The window's area is written `T(kernel * kernel)` and not `float(kernel * kernel)`: `full(shape,
+/// value)` takes the array's element type from the value's own type, so a `float` fill is a second
+/// element type beside the tangent's and the `mul_stated` it feeds has no instance. `T` is the
+/// law's own element type, so both operands of that product are one type at every width the
+/// operator has.
 export rule jvp_max_pool2d::<T>(x: T[...], kernel: int) when is_float::<T>() {
     max_pool2d(x, kernel) => func (dx: T[...]) {
         mul_stated(
@@ -1746,7 +1752,7 @@ export rule jvp_max_pool2d::<T>(x: T[...], kernel: int) when is_float::<T>() {
                     shape(x),
                     shape(x)),
                 kernel),
-            full(shape(max_pool2d(x, kernel)), float(kernel * kernel)),
+            full(shape(max_pool2d(x, kernel)), T(kernel * kernel)),
             shape(max_pool2d(x, kernel)),
             shape(max_pool2d(x, kernel)))
     }
