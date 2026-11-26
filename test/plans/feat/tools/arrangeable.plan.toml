@@ -13,10 +13,10 @@ desc = "`core.arrangeable`'s own answers on the one node kind whose answer canno
 # Whether the answer may live anywhere but the fact layer is the layer's own page, not this file: a
 # question a program can answer only by deriving it is class (ii) -- "可推导的事实" -- whose place is
 # the store, under a stamp, recomputed when the stamp says it went stale; what the program wrote is
-# class (i) and what depends on the target is the back end's (iii) (`docs/design/op-semantics/
-# README.cn.md`, 10.1). `core.arrangeable` is a class (ii) kind of scope Node
-# (`docs/technical/40_graph_facts.md`, 2), so the rows below are the store's answers: a second
-# derivation beside them would be exactly the second statement the layer exists to delete.
+# class (i) and what depends on the target is the back end's (iii)
+# (`docs/design/op-semantics/README.cn.md`, 10.1). `core.arrangeable` is a class (ii) kind of
+# scope Node (`docs/technical/40_graph_facts.md`, 2), so the rows below are the store's answers: a
+# second derivation beside them would be exactly the second statement the layer exists to delete.
 #
 # The first entry is the pair of types made into a program, and it is `fast`: two conversions of one
 # operator, one that cannot fail and one that may, so the reading is the same operator answered two
