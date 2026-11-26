@@ -86,7 +86,7 @@
 | C++ 遍做什么 | 模块没有提供什么 | 今天的结果 |
 | --- | --- | --- |
 | 三个遍问"这个节点能不能删／并／折"时读的那两件事 | **已补**：`may_be_recomputed(n)` 读 `OperatorTable::mayBeRecomputed`（纯且可折，C++ 的 `isPureOper`），`may_fault(n)` 读 `nodeMayFault`（算子的 `panic` 读算子记录 `Record::mayFault`，逐元素的收窄读 `OperatorTraits::elementwise`，转换读 `castMayFault`——C++ 的 `isValueOnly` 读的同一特征） | `opt::cse`、`opt::fold`、`opt::dce` 都改问这两条：`is_pure` 只说"声明为纯"，不说"算得出来"，更不说"不会出错" |
-| "能不能挪/丢/并"这一个判据（设计原则 3.4） | **已补**：`may_be_rearranged(n)` 读 `graph::may_be_rearranged`（`camel/runtime/graph.h`），也就是 C++ 遍读的 `nodeIsFreelySchedulable`——那个名字现在只是它的转发 | `opt::cse` 的 `mergeable_operation` 与 `opt::dce` 的 `value_only` 都改问这一条，不再各自写 `is_pure && may_be_recomputed && !may_fault`；`may_be_recomputed`／`may_fault` 仍是别的两个问题，各自保留 |
+| "能不能挪/丢/并"这一个判据（设计原则 3.4） | **已补**：`may_be_rearranged(n)` 读 `camel::facts::nodeIsFreelyArrangeable`（`camel/facts/arrangeable.h` 的 `core.arrangeable`），C++ 遍读的是同一个事实 | `opt::cse` 的 `mergeable_operation` 与 `opt::dce` 的 `value_only` 都改问这一条，不再各自写 `is_pure && may_be_recomputed && !may_fault`；`may_be_recomputed`／`may_fault` 仍是别的两个问题，各自保留 |
 | `opt::dce` 删掉一个节点时，若它带走的是某个可能出故障的计算的最后一个用处（设计原则 3.3） | 务写不出 `GATE`／算子节点（只有 `add_constant`），但"这个读者是不是它的最后一个读者"用 `inputs`／`value_users`／`may_fault` 就能问 | **已补**：`dead_value` 加一条 `last_read_of_a_fault`——那个读者留下，计算保住那条值的读，故障因此留在程序里（C++ 一侧走的是 `keepThroughValue`：把用处交给一个 `GATE`，数据口读原值、同步前驱是那个节点） |
 | `opt::fold`：把输入全是常量的纯算子求值 | **已补**：`eval(t, n)` 在值上求值一个算子，返回持有结果的节点，求值出故障就报同一警告并返回 `null` | 写出来了（`opt::fold`） |
 | `opt::fold` 的其余分支：转换、拷贝、访问、填充，以及按操作数类型就能定出结果的算子（`typeFolder`） | `eval` 求值的是**算子**（`NodeKind::Oper`），`Cast`／`Copy`／`Accs`／`Fill` 不是算子，`typeFolder` 也没有出口 | 这些分支仍只在 C++ 侧；`fold_subject` 只用算子的形状，所以这一层没有被两侧比过 |

@@ -6,8 +6,8 @@
  * kind and by operator.
  *
  * `test::facts_compare` prints one `tally` row per (node kind, operator): how many nodes of that row
- * the fact calls freely arrangeable and the predicate a pass asks (`runtime::nodeIsFreelySchedulable`)
- * lets move, in the four ways two answers can meet. One program says almost nothing about it -- a
+ * the fact calls freely arrangeable and the answer it replaced (the frozen baseline `OldArrangeable`
+ * in `src/stdlib/test/facts_compare.cpp`) lets move, in the four ways two answers can meet. One program says almost nothing about it -- a
  * tree of 200,000 nodes has kinds and operators that one case does not write -- so this tool starts
  * one `camel` per `.cml` the tree tracks and sums the rows:
  *
@@ -33,13 +33,13 @@
  *      over nothing prints zeros in every column and reads exactly like a tree with no
  *      disagreement, which is why the lower bound is part of the verdict and not a comment.
  *   2. an OPER row has no disagreement in either direction. `kind_free_pred_kept` is the fact
- *      saying "freely arrangeable" about a node a pass keeps where the program wrote it;
- *      `kind_kept_pred_free` is the predicate offering a placement the fact will not answer for.
- *      Both are two answers to one question, and this change's subject is the second of them.
+ *      saying "freely arrangeable" about a node the older answer keeps where the program wrote it;
+ *      `kind_kept_pred_free` is the older answer offering a placement the fact will not make.
+ *      Both are two answers to one question, and the fact is the one that stands.
  *
  * The rows of the other node kinds are printed and **not decided**: they are a reading of their own
  * (`internal/reports/2026-11-25-the-arrangeable-disagreements.cn.md`) and a red this tool invented
- * about a kind no lane has moved yet would be a wall somebody has to switch off.
+ * about a kind whose disagreement was judged outside it would be a wall somebody has to switch off.
  *
  *   node scripts/check-arrangeable.mjs            # sweep, print the table, decide the two verdicts
  *   node scripts/check-arrangeable.mjs --rows 200  # print more than the first 100 rows (0: all)
