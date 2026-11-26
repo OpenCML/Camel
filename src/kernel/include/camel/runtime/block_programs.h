@@ -6,11 +6,14 @@
  *
  * A block is an operator whose record states what it means and nothing about how it runs: the
  * implementation is resolved per context by the executor manager (`camel/core/operator_table.h`).
- * This store is the other half of that arrangement -- where the programs live. The block's URI
- * answers its ordinal, the ordinal answers the program and the graph to run, and the operator's
- * node carries the ordinal in its attributes, which is the channel through which what a pass
- * recorded about a node ("which implementation runs it") reaches the operator that runs it
- * (camel/core/operator.h, NodeAttrs).
+ * This store is the other half of that arrangement -- where the programs live.
+ *
+ * One identity, not two: a block's node names its operator by the operator table's id, the executor
+ * hands that id to the kernel through the call's views (`ArgsView::oper`,
+ * `setCallOperator`), and the id answers the program. Nothing about which program to run is stored
+ * in the node's attributes, and there is no second numbering of the store: the URI a block is
+ * registered under is the spelling of that same operator, so `byUri` is `byOper` reached through
+ * the table, and the two can never disagree.
  *
  * A program registered here is pinned by the context and lives as long as the context does: the
  * module that compiled it is gone by the time the block's node runs, and so is its name.
@@ -21,10 +24,9 @@
  */
 #pragma once
 
-#include "camel/core/node_attrs.h"
+#include "camel/core/operator_table.h"
 
 #include <cstdint>
-#include <optional>
 #include <span>
 #include <string>
 #include <string_view>
@@ -36,23 +38,27 @@ namespace camel::runtime {
 class Program;
 class GCGraph;
 
-/// One block: the URI of its operator, the program of its body and the graph of that program the
-/// call runs.
+/// One block: the URI its operator is named by, the program of its body and the graph of that
+/// program the call runs.
 struct BlockProgram {
+    /// The operator the block is: the table's id for `uri`, which is what a call of the block hands
+    /// its kernel and what this entry is keyed by (`camel/core/operator_table.h`).
+    camel::core::OperId oper = camel::core::kNoOper;
     std::string uri;
     Program *program = nullptr;
     GCGraph *root    = nullptr;
-    /// What the block's node carries in its attributes: it is not a graph id, which is a number
-    /// inside one program, and not the URI, which an attribute could carry only as a Symbol.
-    uint64_t ordinal = 0;
 };
 
 class BlockPrograms {
   public:
-    /// Registers `program`, whose root is `root`, under `uri`, and answers its ordinal. A URI
-    /// registered before keeps the entry it has: one block, one program.
-    uint64_t add(std::string uri, Program *program, GCGraph *root);
-    const BlockProgram *byOrdinal(uint64_t ordinal) const;
+    /// Registers `program`, whose root is `root`, under `uri`, and answers the entry -- nullptr
+    /// when `uri` names no operator at all. A URI registered before keeps the entry it has: one
+    /// block, one program.
+    const BlockProgram *add(std::string uri, Program *program, GCGraph *root);
+    /// The block whose operator is `oper`, or nullptr.
+    const BlockProgram *byOper(camel::core::OperId oper) const;
+    /// The block whose operator `uri` names, or nullptr: the same entry `byOper` answers, reached
+    /// by the spelling a caller that holds only a URI has.
     const BlockProgram *byUri(std::string_view uri) const;
     /// The entries, in the order they were registered.
     std::span<const BlockProgram> entries() const { return entries_; }
@@ -60,14 +66,7 @@ class BlockPrograms {
 
   private:
     std::vector<BlockProgram> entries_;
-    std::unordered_map<std::string, uint64_t> ordinals_;
+    std::unordered_map<camel::core::OperId, size_t> index_;
 };
-
-/// The attribute key a block's node carries its ordinal in: `block.program`, an Int.
-camel::core::attr::AttrKey blockProgramKey();
-/// The attribute set with the block's ordinal in it.
-camel::core::attr::AttrSetId blockProgramAttrs(uint64_t ordinal);
-/// The ordinal of the block `attrs` names, or nothing when the set names none.
-std::optional<uint64_t> blockProgramOf(camel::core::attr::AttrSetId attrs);
 
 } // namespace camel::runtime

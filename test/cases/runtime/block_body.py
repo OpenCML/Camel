@@ -12,8 +12,9 @@ This case measures the arrangement on one program, in four readings:
     the program had without the pass. The pass prints the counts it saw before and after
     (`BLOCK_BODY entry graphs a -> b nodes c -> d`), so the comparison is in one run;
   * the values two blocks answer through one kernel (`BLOCK_CALL <uri> argument=… value=…`): the
-    URI finds the operator through the executor manager (`block` protocol), the node's attribute
-    names which program of the context's store to run, and the value is the body's own arithmetic;
+    URI finds the operator through the executor manager (`block` protocol), the operator the call
+    stands for names which program of the context's store to run, and the value is the body's own
+    arithmetic;
   * the same block run a second time, after its first run is over, so "the program is pinned to the
     context" is a value and not the absence of a crash;
   * the `std::jgir` document of the same pipeline: the graphs it names are the entry program's, and
@@ -72,7 +73,7 @@ for line in body_lines + trait_lines + arrange_lines + cost_lines + call_lines:
 # Five bodies, each a program of its own: a root graph and the function's graph, in a program that
 # is not the one they were compiled for.
 built = [line for line in body_lines if line.startswith("BLOCK_BODY built ")]
-assert len(built) == 10, f"expected ten bodies to compile, got: {body_lines}"
+assert len(built) == 13, f"expected thirteen bodies to compile, got: {body_lines}"
 bodies = {}
 for line in built:
     what = line[len("BLOCK_BODY built ") :].split(" ")[0]
@@ -177,6 +178,13 @@ assert traits["renamed"]["portable"] != traits["body"]["portable"], traits["rena
 # Two bodies that differ only in which parameter is subtracted from which are two blocks.
 assert uris["mirror"] != uris["diff"], (uris["diff"], uris["mirror"])
 assert len({uris[what] for what in ("body", "second", "effectful", "fallible", "spin", "diff", "mirror")}) == 7, uris
+# Two bodies whose only difference is *inside a region* are two blocks. The same function name, the
+# same branch, the same arms, and one string constant in one arm; nothing outside the arm reads what
+# the arm hands out, so a name read off the outer graph alone would call them one body.
+assert uris["hot"] != uris["chill"], (uris["hot"], uris["chill"])
+# And the same source parsed twice is one block: the nodes of a region are walked in the order the
+# structure fixes, never in the order they happened to be created.
+assert uris["hot"] == uris["hot_again"], (uris["hot"], uris["hot_again"])
 
 # The entry program, read in the same run: the numbers it had before the bodies were built are the
 # numbers it has after, and they are the numbers of a run without the pass at all.
@@ -194,9 +202,9 @@ assert before_graphs == after_graphs, entry[0]
 assert before_nodes == plain["nodes"], (entry[0], plain["nodes"])
 assert (after_graphs, after_nodes) == (plain["graphs"], plain["nodes"] + 1), entry[0]
 
-# One kernel, two blocks, and the value each body computes: 41 -> 42, 5 -> 15. The ordinal in the
-# node's attributes is not in the call here, so the kernel could not have guessed the program from
-# the call's shape: the two calls have the same shape and different values.
+# One kernel, two blocks, and the value each body computes: 41 -> 42, 5 -> 15. The program is not in
+# the node's attributes and cannot be read off the call's shape: the two calls have the same shape,
+# and what tells the kernel which program to run is the operator the call stands for.
 values = {}
 for line in call_lines:
     match = re.fullmatch(

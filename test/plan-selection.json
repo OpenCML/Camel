@@ -307,7 +307,7 @@
         {
             "comment": "The core value/type headers and the runtime headers. The array type's dimensions live here, so its self-test runs too. The ledger's `files`/`references` count is partly a header count (`kernel/include/camel/runtime/draft.h`, `draft_session.h`, ...), so this rule names the ledger plan for the same reason the core one does. `kernel/include/camel/runtime/node_ref.h` is where a handle's identity is written down -- the address and the epoch -- so the witness of it runs here too.",
             "paths": ["src/kernel/include/camel/core/", "src/kernel/include/camel/runtime/"],
-            "plans": ["smoke", "feat/linear", "feat/consistency", "feat/mm", "feat/compile/type_array.plan.toml", "feat/runtime/graph_draft_ledger.plan.toml", "feat/runtime/draft_node_owner.plan.toml", "feat/runtime/edit_record.plan.toml"]
+            "plans": ["smoke", "feat/linear", "feat/consistency", "feat/mm", "feat/compile/type_array.plan.toml", "feat/runtime/graph_draft_ledger.plan.toml", "feat/runtime/draft_node_owner.plan.toml", "feat/runtime/edit_record.plan.toml", "feat/runtime/block_scheduler.plan.toml"]
         },
         {
             "comment": "The executor and entry-argument headers.",
@@ -322,7 +322,7 @@
         {
             "comment": "FastVM and the other schedulers. The scheduler is also where a collection can be asked for, which makes this the file class that decides when an object dies: `feat/opt/defun.plan.toml` reads programs whose values are function values and closures, `feat/compile/ref.plan.toml` reads the box counts a run takes and releases, and `feat/mm/graph_space.plan.toml` is the graph-space gradient case that runs a real collection. On 2026-11-15 a collection added after the entry graph returned in `nodevm.cpp` was selected by feat/linear, feat/para, feat/trans and smoke, none of which runs a program that keeps a function value alive; it passed all of them and broke eight `defun` program runs (`killed by a signal: 8`) plus one assertion, all red on a pushed HEAD until the change was reverted. The judgement this rule records is not the three plans but the class: any file that can change what may be treated as a root takes every plan that depends on when an object dies with it.",
             "paths": ["src/stdlib/std/fvm/", "src/stdlib/std/nvm/", "src/stdlib/std/prl/"],
-            "plans": ["smoke", "feat/linear", "feat/para", "feat/trans", "feat/opt/defun.plan.toml", "feat/compile/ref.plan.toml", "feat/mm/graph_space.plan.toml"]
+            "plans": ["smoke", "feat/linear", "feat/para", "feat/trans", "feat/opt/defun.plan.toml", "feat/compile/ref.plan.toml", "feat/mm/graph_space.plan.toml", "feat/runtime/block_scheduler.plan.toml"]
         },
         {
             "comment": "The optimization passes and the rewrite rule library they run: the opt plans, the pass dumps that print their effect, the rewrite-rule plan, and feat/compile for the module registration and operator declarations a rewrite-module change can break. stdlib/rules.cml is the data these passes run, so it selects the same set. `feat/opt` is a directory target, so `--tier fast` keeps its fast plans and filters the slow progen plan (progen is never selected by a rule). The rule library's own SMT check is selected here too: it reads stdlib/rules.cml, so a rule that stops holding under its licence is reported by the change that edited it.",
@@ -352,7 +352,7 @@
         {
             "comment": "The test-only passes (test::facts, test::regions, test::rules, ...): the plans that name them in their arguments.",
             "paths": ["src/stdlib/test/"],
-            "plans": ["smoke", "feat/compile", "feat/linear", "feat/mm", "feat/modules", "feat/opt", "feat/runtime/draft_erase_unread.plan.toml", "feat/runtime/edit_record.plan.toml"]
+            "plans": ["smoke", "feat/compile", "feat/linear", "feat/mm", "feat/modules", "feat/opt", "feat/runtime/draft_erase_unread.plan.toml", "feat/runtime/edit_record.plan.toml", "feat/runtime/block_body.plan.toml", "feat/runtime/block_scheduler.plan.toml"]
         },
         {
             "comment": "Any other pass, including the shared pass machinery.",

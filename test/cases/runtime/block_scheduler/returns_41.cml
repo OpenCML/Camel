@@ -1,0 +1,11 @@
+// What `main` returns is the process exit code (design principles 9.8), so a program whose `main`
+// returns 41 is a reading a caller outside the process can take. The value is counted in a variable
+// rather than written as a literal: the block is inserted where the exit takes its value, so the
+// exit has to read a node. `test::block_body` puts the node of a block it compiled there, and the
+// block's body is `x + 1` over what it is handed: a run that goes through the block ends 42, and
+// the number says which value the exit read.
+func main() => int sync {
+    var count = 40
+    count = count + 1
+    return count
+}

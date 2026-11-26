@@ -44,14 +44,15 @@ bool isIntegerType(const type::Type *type);
 std::vector<int64_t> intListArg(ArgsView &args, size_t index, std::string_view op);
 
 /**
- * The extents a **stated** operator carries are the value's own: everything `at` holds from `offset`
- * on is compared with `value`'s shape, and a list that disagrees is a shape refusal naming `op`.
+ * The extents a **stated** operator carries are the value's own: everything `at` holds from
+ * `offset` on is compared with `value`'s shape, and a list that disagrees is a shape refusal naming
+ * `op`.
  *
  * This is the one check the stated twins owe. Their value is the operation without the extents -- a
- * `sum_stated` sum is a sum -- and the extents are there for the reverse law, which builds its zeros
- * from them and reads nothing of the operand the cotangent comes back through. An extent nobody
- * compared would be a gradient of the wrong shape, so it is a fault and not a silently reshaped
- * answer (`tensor:pick_at`, the first of these twins, checks its length the same way).
+ * `sum_stated` sum is a sum -- and the extents are there for the reverse law, which builds its
+ * zeros from them and reads nothing of the operand the cotangent comes back through. An extent
+ * nobody compared would be a gradient of the wrong shape, so it is a fault and not a silently
+ * reshaped answer (`tensor:pick_at`, the first of these twins, checks its length the same way).
  */
 void checkStatedExtents(
     const Array *value, const std::vector<int64_t> &at, size_t offset, std::string_view op);
@@ -66,6 +67,7 @@ class JoinedArgs final : public ArgsView {
     JoinedArgs(ArgsView &norm, ArgsView &with) : norm_(norm), with_(with) {
         setResultType(norm.resultType());
         setAttrs(norm.attrs());
+        setOper(norm.oper());
     }
     size_t size() const override { return norm_.size() + with_.size(); }
     slot_t slot(size_t index) const override {

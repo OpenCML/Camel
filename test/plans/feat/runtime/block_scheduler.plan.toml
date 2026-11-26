@@ -1,0 +1,21 @@
+id = "runtime.block_scheduler"
+order = 390
+tier = "fast"
+tags = ["feat", "runtime", "graph", "block", "scheduler"]
+desc = "A block's node answers the body's value when a scheduler runs the program it stands in: the entry program's exit reads the block, the node's operator is resolved through the executor manager by the node's own URI, and the kernel runs the body's graph on the context the block was pinned to -- measured as the process exit code, 41 without the pass and 42 through the block, under `std::nvm` and `std::fvm`."
+
+# What the case measures: the number the process ends with (design principles 9.8 -- what `main`
+# returns is the exit code). The source returns 41 and the block's body is `x + 1` over what the exit
+# hands it, so the two readings are 41 and 42, and the kernel's own failure answers are -1/-2/-3
+# (255/254/253 as exit codes). The block_body plan reads the same block from inside the pass; this
+# one reads it from the other side, where a scheduler runs the node the pass inserted.
+[[tests]]
+name = "runtime.block_scheduler.the_block_answers_through_a_scheduler"
+desc = "`test::block_body` puts the node of a block it compiled into the exit of the entry program; running that program ends with the block's answer, 42, on `std::nvm` and on `std::fvm`, while the same source without the pass ends with the entry's own 41."
+kind = "behavior"
+tool = "python"
+case = "../../../cases/runtime/block_scheduler.py"
+args = ["${case}", "--camel", "${camel}"]
+expect_exit = 0
+expect_stdout_contains = ["block_scheduler: plain_nvm=41 block_nvm=42 plain_fvm=41 block_fvm=42", "Block under a scheduler: PASS"]
+timeout_ms = 60000

@@ -86,6 +86,34 @@ constexpr const char *kSpinText = R"cml(export func spin(x: int) => int {
 }
 )cml";
 
+/// Two bodies whose only difference is *inside a region*: one branch, the same arms, the same
+/// condition, the same function name, and one string constant in the else arm. What neither the
+/// arm's value nor the branch's value is read for -- `return x` -- so the arm's write reaches
+/// nothing outside its region: the only node that carries it is the arm's own exit.
+constexpr const char *kBranchHotText = R"cml(export func regionbody(x: int) => int {
+    if x > 0 then {
+        println("hot")
+        x + 1
+    } else {
+        println("cold")
+        x + 1
+    }
+    return x
+}
+)cml";
+
+constexpr const char *kBranchChillText = R"cml(export func regionbody(x: int) => int {
+    if x > 0 then {
+        println("hot")
+        x + 1
+    } else {
+        println("chill")
+        x + 1
+    }
+    return x
+}
+)cml";
+
 /// A body that may fault: dividing by a parameter can divide by zero (design principles 3.9).
 constexpr const char *kRiskyText  = R"cml(export func risky(x: int) => int {
     return 10 / x
@@ -145,17 +173,19 @@ class SlotsView final : public ArgsView {
 /// What a block's operator answers: the program of its body, run with the call's arguments.
 ///
 /// One kernel for every block, because what differs between two blocks is the program and not the
-/// code: the node's attributes name the program (`block.program`), the context's store answers it,
-/// and the reference executor's caller runs it. The URI reached this kernel through the executor
-/// manager, so a block's implementation is resolved per context and nothing about the body is in
-/// the operator's record.
+/// code: the node's own operator identity names the program (`ArgsView::oper`, the id the node's
+/// URI resolves to), the context's store answers it, and the reference executor's caller runs it.
+/// The URI reached this kernel through the executor manager, so a block's implementation is
+/// resolved per context and nothing about the body is in the operator's record; and the identity
+/// reached it the same way, on the call, so nothing about the body is in the node's attributes
+/// either.
 slot_t
 runBlockOfItsProgram(ArgsView & /*with*/, ArgsView &norm, camel::core::context::Context &ctx) {
-    const std::optional<uint64_t> ordinal = camel::runtime::blockProgramOf(norm.attrs());
-    if (!ordinal) {
+    if (norm.oper() == camel::core::kNoOper) {
+        // The call carried no operator identity: a back end that did not hand one over.
         return camel::core::rtdata::toSlot<int32_t>(-1);
     }
-    const camel::runtime::BlockProgram *block = ctx.blockPrograms().byOrdinal(*ordinal);
+    const camel::runtime::BlockProgram *block = ctx.blockPrograms().byOper(norm.oper());
     if (block == nullptr || block->program == nullptr || block->root == nullptr) {
         return camel::core::rtdata::toSlot<int32_t>(-2);
     }
@@ -163,9 +193,13 @@ runBlockOfItsProgram(ArgsView & /*with*/, ArgsView &norm, camel::core::context::
     if (call == nullptr) {
         return camel::core::rtdata::toSlot<int32_t>(-3);
     }
-    // Argument 0 of the view is the result; the parameters start at 1.
+    // Every ordinary parameter is an argument, in the order the node takes them: a call's view
+    // holds the node's inputs and nothing else -- slot 0 is the first parameter, as every kernel
+    // reads it
+    // (`:op/add_i` reads slots 0 and 1), so there is no result slot to step over.
     std::vector<slot_t> arguments;
-    for (size_t index = 1; index < norm.size(); ++index) {
+    arguments.reserve(norm.size());
+    for (size_t index = 0; index < norm.size(); ++index) {
         arguments.push_back(norm.slot(index));
     }
     return call(ctx.handle(), block->program, block->root, arguments, {}, {});
@@ -280,82 +314,88 @@ BlockBodyTestPass::apply(const camel::runtime::Program *program, std::ostream &o
         {.what = "renamed", .function = "renamed", .text = kRenamedText},
         {.what = "diff", .function = "diff", .text = kDiffText},
         {.what = "mirror", .function = "mirror", .text = kMirrorText},
+        // Two bodies that differ only inside a region, and one of them again: the difference is
+        // one constant in one arm, and being parsed twice must not change a name.
+        {.what = "hot", .function = "regionbody", .text = kBranchHotText},
+        {.what = "chill", .function = "regionbody", .text = kBranchChillText},
+        {.what = "hot_again", .function = "regionbody", .text = kBranchHotText},
     };
-    for (Compiled &block : blocks) {
-        block.program = compileBody(block.text, block.function, block.what, os);
-        if (block.program == nullptr) {
+    for (Compiled &compiled : blocks) {
+        compiled.program = compileBody(compiled.text, compiled.function, compiled.what, os);
+        if (compiled.program == nullptr) {
             return program;
         }
         os << std::format(
             "BLOCK_BODY built {} graphs={} nodes={}\n",
-            block.what,
-            graphNames(*block.program).size(),
-            nodeCount(*block.program));
-        for (const camel::runtime::GCGraph *graph : block.program->graphs()) {
+            compiled.what,
+            graphNames(*compiled.program).size(),
+            nodeCount(*compiled.program));
+        for (const camel::runtime::GCGraph *graph : compiled.program->graphs()) {
             os << std::format(
                 "BLOCK_BODY graph {} {} nodes={}\n",
-                block.what,
+                compiled.what,
                 graph->name(),
                 graph->storedNodeCount());
-            if (graph->name() == std::string(kBlockModule) + "::" + block.function) {
-                block.graph = const_cast<camel::runtime::GCGraph *>(graph);
+            if (graph->name() == std::string(kBlockModule) + "::" + compiled.function) {
+                compiled.graph = const_cast<camel::runtime::GCGraph *>(graph);
             }
         }
-        if (block.graph == nullptr) {
+        if (compiled.graph == nullptr) {
             os << std::format(
                 "BLOCK_BODY failed to name the {}: no graph for its function\n",
-                block.what);
+                compiled.what);
             return program;
         }
     }
 
-    for (Compiled &block : blocks) {
+    for (Compiled &compiled : blocks) {
         // The block's operator is named by its body's canonical form: the structure alone, no
         // names, no creation order, ports read in order from the exit (camel/runtime/block_form.h).
         // Two bodies that compute the same thing under different spellings are one block, and two
         // that differ structurally never share a name.
-        block.uri = std::format(
+        compiled.uri = std::format(
             "block:{:016x}",
-            camel::runtime::blockFormHash(*block.program, block.graph));
+            camel::runtime::blockFormHash(*compiled.program, compiled.graph));
         // And its record is what that body does, read from the body's own graphs: an effect outside
         // the program's variables, a write to one, a fault, a run that may not end.
         camel::runtime::fact::FactStore &facts = context_->facts();
-        block.effects = camel::runtime::fact::graphEffects(facts, *block.program, block.graph);
+        compiled.effects =
+            camel::runtime::fact::graphEffects(facts, *compiled.program, compiled.graph);
         camel::core::OperatorTraits traits;
-        traits.pure      = block.effects.pure();
-        traits.stateOnly = !block.effects.external && block.effects.writesVariables;
-        traits.mayFault  = block.effects.mayFault;
+        traits.pure      = compiled.effects.pure();
+        traits.stateOnly = !compiled.effects.external && compiled.effects.writesVariables;
+        traits.mayFault  = compiled.effects.mayFault;
         // Termination is a fact of its own and keeps a field of its own: a call that may not end is
         // one a pass may neither move, copy nor evaluate early, and the fact layer reads that from
         // `mayNotTerminate` rather than from `foldable`, which says only what its name says.
-        traits.mayNotTerminate = block.effects.mayNotTerminate;
-        camel::core::OperatorTable::instance().set(block.uri, traits);
+        traits.mayNotTerminate = compiled.effects.mayNotTerminate;
+        camel::core::OperatorTable::instance().set(compiled.uri, traits);
         os << std::format(
             "BLOCK_TRAITS {} uri={} pure={} mayFault={} mayNotTerminate={} foldable={} "
             "portable={:016x}\n",
-            block.what,
-            block.uri,
+            compiled.what,
+            compiled.uri,
             traits.pure,
             traits.mayFault,
-            block.effects.mayNotTerminate,
+            compiled.effects.mayNotTerminate,
             traits.foldable,
             // The other hash, printed beside this one: it is the cache key -- names and node refs
             // in creation order -- and not the name of a block. Where spelling differs the two
             // disagree, which is what the case reads them for.
-            camel::runtime::fact::portableGraphHash(*block.program, block.graph));
+            camel::runtime::fact::portableGraphHash(*compiled.program, compiled.graph));
     }
 
     // The blocks in the context's store, where an operator's node reads them from, and the one
-    // executor of their protocol: a URI reaches the kernel through the manager, the ordinal in the
-    // node's attributes says which program.
-    for (Compiled &block : blocks) {
-        const uint64_t registered =
-            context_->blockPrograms().add(block.uri, block.program, block.program->root());
+    // executor of their protocol: a URI reaches the kernel through the manager, and the operator
+    // the node names -- the store's key -- says which program.
+    for (Compiled &compiled : blocks) {
+        const camel::runtime::BlockProgram *registered =
+            context_->blockPrograms().add(compiled.uri, compiled.program, compiled.program->root());
         os << std::format(
-            "BLOCK_BODY registered {} uri={} ordinal={}\n",
-            block.what,
-            block.uri,
-            registered);
+            "BLOCK_BODY registered {} uri={} oper={}\n",
+            compiled.what,
+            compiled.uri,
+            registered != nullptr ? registered->oper : camel::core::kNoOper);
     }
     // The cost fact, read where the difference is visible: an operator that states a cost, one that
     // states nothing, and a block whose stated cost is exactly the number the silence would have
@@ -416,8 +456,8 @@ BlockBodyTestPass::apply(const camel::runtime::Program *program, std::ostream &o
         return std::make_shared<BlockExecutor>(handle);
     });
 
-    // One call per block, through the operator the manager finds, with the ordinal in the
-    // attributes: the value is the body's, computed by the program the block names.
+    // One call per block, through the operator the manager finds, with the node's own operator
+    // identity on the call: the value is the body's, computed by the program the block names.
     const auto callBlock = [this, &os](
                                const std::string &what,
                                const std::string &uri,
@@ -432,15 +472,11 @@ BlockBodyTestPass::apply(const camel::runtime::Program *program, std::ostream &o
             os << std::format("BLOCK_CALL {} not in the store\n", uri);
             return std::nullopt;
         }
-        std::vector<slot_t> slots{
-            camel::core::rtdata::toSlot<int32_t>(0),
-            camel::core::rtdata::toSlot<int32_t>(argument)};
-        std::vector<camel::core::type::Type *> types{
-            camel::core::type::Type::Int32(),
-            camel::core::type::Type::Int32()};
+        std::vector<slot_t> slots{camel::core::rtdata::toSlot<int32_t>(argument)};
+        std::vector<camel::core::type::Type *> types{camel::core::type::Type::Int32()};
         SlotsView norm(std::move(slots), std::move(types));
-        norm.setAttrs(camel::runtime::blockProgramAttrs(block->ordinal));
         SlotsView with({}, {});
+        setCallOperator(with, norm, block->oper);
         const slot_t value     = (*op)(with, norm, *context_);
         const int32_t answered = camel::core::rtdata::fromSlot<int32_t>(value);
         os << std::format("BLOCK_CALL {} {} argument={} value={}\n", what, uri, argument, answered);
@@ -473,9 +509,29 @@ BlockBodyTestPass::apply(const camel::runtime::Program *program, std::ostream &o
         camel::runtime::GraphDraft &draft                             = transaction.edit();
         const camel::runtime::gc_node_ref_t exit                      = draft.exitNode();
         const std::span<const camel::runtime::gc_node_ref_t> returned = draft.normInputsOf(exit);
-        std::vector<camel::runtime::gc_node_ref_t> arguments(returned.begin(), returned.end());
-        const camel::runtime::BlockProgram *first = context_->blockPrograms().byUri(blocks[0].uri);
-        if (first == nullptr) {
+        if (returned.empty()) {
+            os << "BLOCK_BODY failed to insert the block: the exit reads no value\n";
+            return program;
+        }
+        // What the block is handed: the exit's own inputs, as many as the body has parameters. An
+        // exit may read more than the value -- the statements before it in a `sync` body put their
+        // ordering on it -- and the rest stay the exit's: the body is a function of its parameters
+        // and of nothing else. `callGraph` refuses a count that disagrees with the body graph's
+        // ports, so an insertion that cannot supply them is refused here, by name, rather than at
+        // run time.
+        const size_t ports = blocks[0].program->root()->normPorts().size();
+        if (returned.size() < ports) {
+            os << std::format(
+                "BLOCK_BODY failed to insert the block: the body takes {} parameter(s), the exit "
+                "reads {}\n",
+                ports,
+                returned.size());
+            return program;
+        }
+        const std::vector<camel::runtime::gc_node_ref_t> arguments(
+            returned.begin(),
+            returned.begin() + ports);
+        if (context_->blockPrograms().byUri(blocks[0].uri) == nullptr) {
             os << "BLOCK_BODY failed to insert the block: it is not in the store\n";
             return program;
         }
@@ -483,10 +539,6 @@ BlockBodyTestPass::apply(const camel::runtime::Program *program, std::ostream &o
         // executor manager resolves it per context (a draft that carried a function pointer could
         // not be written out and read back). The node's type is the value's: a body answers the
         // type its parameter has, and that is what the exit now reads.
-        if (arguments.empty()) {
-            os << "BLOCK_BODY failed to insert the block: the exit reads no value\n";
-            return program;
-        }
         // An operator nobody declared is treated as having side effects (operator_table.h: an
         // undeclared operator is conservative), and a node with an effect the graph's type does
         // not declare is refused at the commit. The body here is arithmetic and nothing else, so
@@ -498,10 +550,18 @@ BlockBodyTestPass::apply(const camel::runtime::Program *program, std::ostream &o
         camel::core::type::Type *answered = draft.header(arguments[0])->dataType;
         const camel::runtime::gc_node_ref_t call =
             draft.addOperNode(answered, nullptr, blocks[0].uri);
-        draft.setNodeAttrs(call, camel::runtime::blockProgramAttrs(first->ordinal));
+        // Nothing about the program is written on the node: the node names its operator, and the
+        // scheduler hands that identity to the kernel (`ArgsView::oper`), which is where the store
+        // is read. A draft that carried it as an attribute would be a second way to say which
+        // program runs, and a dump would have to agree with it.
         draft.setNormInputs(call, arguments);
-        const camel::runtime::gc_node_ref_t toExit = call;
-        draft.setNormInputs(exit, std::span<const camel::runtime::gc_node_ref_t>(&toExit, 1));
+        // The exit answers with the block, and keeps the inputs it had after the ones the block
+        // took: the block took the value's place, not the whole port list.
+        std::vector<camel::runtime::gc_node_ref_t> exitInputs{call};
+        exitInputs.insert(exitInputs.end(), returned.begin() + ports, returned.end());
+        draft.setNormInputs(
+            exit,
+            std::span<const camel::runtime::gc_node_ref_t>(exitInputs.data(), exitInputs.size()));
         const std::string uri = blocks[0].uri;
         program               = session.commit();
         os << std::format("BLOCK_BODY inserted {} into the exit of <main>\n", uri);

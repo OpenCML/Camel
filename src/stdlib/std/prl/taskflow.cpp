@@ -587,9 +587,9 @@ bool TaskflowExecSchedPass::graphIsHeavy(GCGraph *graph) {
                 }
                 // Built-in operators have an empty protocol (":op/add_l"); the marked ones
                 // (":mark/...") are the higher-order ones.
-                const auto &table = OperatorTable::instance();
+                const auto &table              = OperatorTable::instance();
                 const camel::core::OperId oper = view.operatorOf(ref);
-                heavy = !table.isBuiltin(oper) || table.isMarked(oper);
+                heavy                          = !table.isBuiltin(oper) || table.isMarked(oper);
                 break;
             }
             case camel::graph::NodeKind::Func: {
@@ -1445,8 +1445,8 @@ slot_t TaskflowExecSchedPass::evalGraph(
         // Tail call: the frame protocol of the node-by-node evaluator. A self call refills
         // the frame in place; two graphs calling each other alternate between two frames.
         region.enter();
-        auto *callerGraph    = plan->graph;
-        auto *target         = programs_.of(callerGraph).calleeOf(*callerGraph, tailRef);
+        auto *callerGraph = plan->graph;
+        auto *target      = programs_.of(callerGraph).calleeOf(*callerGraph, tailRef);
         GUARD(target != nullptr, "Taskflow tail FUNC target graph is null.");
         GraphPlan *targetPlan = planFor(target);
         target                = targetPlan->graph;
@@ -2225,6 +2225,8 @@ slot_t TaskflowExecSchedPass::executePreparedOperator(
             const auto attrs = graph->nodeAttrs(nodeRef);
             withView.setAttrs(attrs);
             normView.setAttrs(attrs);
+            // And which node it is: the operator this one names (camel/core/operator.h).
+            setCallOperator(withView, normView, operatorBody->oper);
             if (camel::core::effect_trace::enabled()) [[unlikely]] {
                 camel::core::effect_trace::setSite(graph->nodeOrigin(nodeRef));
             }
@@ -2278,6 +2280,8 @@ slot_t TaskflowExecSchedPass::executePreparedOperator(
     const auto attrs = graph->nodeAttrs(nodeRef);
     withView.setAttrs(attrs);
     normView.setAttrs(attrs);
+    // And which node it is: the operator this one names (camel/core/operator.h).
+    setCallOperator(withView, normView, operatorBody->oper);
 
     if (camel::core::effect_trace::enabled()) [[unlikely]] {
         camel::core::effect_trace::setSite(graph->nodeOrigin(nodeRef));
@@ -2481,42 +2485,43 @@ void TaskflowExecSchedPass::buildRuntimeNodeTasks(
         // builder reads no node kind for them (plan 2.3).
         if (const camel::execute::OperShape shape = camel::execute::shapeOfKind(node->kind);
             shape != camel::execute::OperShape::None) {
-            task = buildShapedTask(
-                flowLike, graph, nodeRef, frame, camel::execute::shapeName(shape));
+            task =
+                buildShapedTask(flowLike, graph, nodeRef, frame, camel::execute::shapeName(shape));
         } else
-        switch (node->kind) {
-        case GCNodeKind::Data:
-            task = buildDataTask(flowLike, graph, nodeRef, frame);
-            break;
-        case GCNodeKind::Port:
-            task = buildPortTask(flowLike, graph, nodeRef, frame);
-            break;
-        case GCNodeKind::Func:
-            task = buildFuncTask(flowLike, graph, nodeRef, frame);
-            break;
-        case GCNodeKind::Call:
-            task = buildCallTask(flowLike, graph, nodeRef, frame);
-            break;
-        case GCNodeKind::Oper:
-            task = buildOperTask(flowLike, graph, nodeRef, frame);
-            break;
-        case GCNodeKind::Gate:
-            task = flowLike
-                       .emplace([graph, nodeRef, frame]() {
-                           const auto *node   = requireNode(graph, nodeRef);
-                           const slot_t value = readForwardedRuntimeValue(graph, nodeRef, frame);
-                           if (node->dataIndex != 0) {
-                               frame->set(node->dataIndex, value);
-                           }
-                       })
-                       .name("GATE");
-            break;
-        case GCNodeKind::Join:
-            task = flowLike.emplace([]() {}).name("JOIN");
-            break;
-        default:
-            continue;
-        }
+            switch (node->kind) {
+            case GCNodeKind::Data:
+                task = buildDataTask(flowLike, graph, nodeRef, frame);
+                break;
+            case GCNodeKind::Port:
+                task = buildPortTask(flowLike, graph, nodeRef, frame);
+                break;
+            case GCNodeKind::Func:
+                task = buildFuncTask(flowLike, graph, nodeRef, frame);
+                break;
+            case GCNodeKind::Call:
+                task = buildCallTask(flowLike, graph, nodeRef, frame);
+                break;
+            case GCNodeKind::Oper:
+                task = buildOperTask(flowLike, graph, nodeRef, frame);
+                break;
+            case GCNodeKind::Gate:
+                task = flowLike
+                           .emplace([graph, nodeRef, frame]() {
+                               const auto *node = requireNode(graph, nodeRef);
+                               const slot_t value =
+                                   readForwardedRuntimeValue(graph, nodeRef, frame);
+                               if (node->dataIndex != 0) {
+                                   frame->set(node->dataIndex, value);
+                               }
+                           })
+                           .name("GATE");
+                break;
+            case GCNodeKind::Join:
+                task = flowLike.emplace([]() {}).name("JOIN");
+                break;
+            default:
+                continue;
+            }
         taskMap[nodeRef]   = task;
         taskBuilt[nodeRef] = 1;
     }
@@ -2740,8 +2745,7 @@ namespace {
 // (OperatorSemantics::elementCalls). It asks the face for the operator the node names
 // (`operatorOf`): the payload it was read out of is the representation's, not a reader's.
 bool elementsIndependent(const camel::graph::GraphView &graph, gc_node_ref_t nodeRef) {
-    const auto *calls =
-        OperatorTable::instance().elementCalls(graph.operatorOf(nodeRef));
+    const auto *calls = OperatorTable::instance().elementCalls(graph.operatorOf(nodeRef));
     return calls != nullptr && calls->independent;
 }
 
@@ -2900,8 +2904,7 @@ void TaskflowExecSchedPass::mark_map_arr(GCGraph *graph, gc_node_ref_t nodeRef, 
     const auto arrIdx  = dataIndexOf(graph, graph->normInputsOf(nodeRef).front());
     const auto funcIdx = dataIndexOf(graph, graph->withInputsOf(nodeRef).front());
     const auto resIdx  = dataIndexOf(graph, nodeRef);
-    auto *target =
-        makeHigherOrderCallSite(programs_, frame->get<Function *>(funcIdx)).runtimeGraph;
+    auto *target = makeHigherOrderCallSite(programs_, frame->get<Function *>(funcIdx)).runtimeGraph;
     GraphPlan *plan  = planFor(target);
     const size_t n   = arrayAt(frame, arrIdx)->size();
     auto *resultType = frame->typeAt<ArrayType>(resIdx);
@@ -2938,8 +2941,7 @@ void TaskflowExecSchedPass::mark_filter_arr(GCGraph *graph, gc_node_ref_t nodeRe
     region.enter();
     const auto arrIdx  = dataIndexOf(graph, graph->normInputsOf(nodeRef).front());
     const auto funcIdx = dataIndexOf(graph, graph->withInputsOf(nodeRef).front());
-    auto *target =
-        makeHigherOrderCallSite(programs_, frame->get<Function *>(funcIdx)).runtimeGraph;
+    auto *target = makeHigherOrderCallSite(programs_, frame->get<Function *>(funcIdx)).runtimeGraph;
     GraphPlan *plan = planFor(target);
     const size_t n  = arrayAt(frame, arrIdx)->size();
     region.leave();
@@ -2986,8 +2988,7 @@ void TaskflowExecSchedPass::mark_reduce_arr(GCGraph *graph, gc_node_ref_t nodeRe
     const auto arrIdx     = dataIndexOf(graph, graph->normInputsOf(nodeRef).front());
     const auto withInputs = graph->withInputsOf(nodeRef);
     const auto funcIdx    = dataIndexOf(graph, withInputs[0]);
-    auto *target =
-        makeHigherOrderCallSite(programs_, frame->get<Function *>(funcIdx)).runtimeGraph;
+    auto *target = makeHigherOrderCallSite(programs_, frame->get<Function *>(funcIdx)).runtimeGraph;
     GraphPlan *plan   = planFor(target);
     const auto accIdx = dataIndexOf(graph, nodeRef);
     const size_t n    = arrayAt(frame, arrIdx)->size();
@@ -3021,8 +3022,7 @@ void TaskflowExecSchedPass::mark_unordered_reduce_arr(
     const auto withInputs = graph->withInputsOf(nodeRef);
     const auto funcIdx    = dataIndexOf(graph, withInputs[0]);
     const auto initIdx    = dataIndexOf(graph, withInputs[1]);
-    auto *target =
-        makeHigherOrderCallSite(programs_, frame->get<Function *>(funcIdx)).runtimeGraph;
+    auto *target = makeHigherOrderCallSite(programs_, frame->get<Function *>(funcIdx)).runtimeGraph;
     const size_t n = arrayAt(frame, arrIdx)->size();
     if (n == 0) {
         frame->set(dataIndexOf(graph, nodeRef), frame->get<slot_t>(initIdx));
@@ -3141,8 +3141,7 @@ void TaskflowExecSchedPass::mark_foreach_arr(GCGraph *graph, gc_node_ref_t nodeR
     region.enter();
     const auto arrIdx  = dataIndexOf(graph, graph->normInputsOf(nodeRef).front());
     const auto funcIdx = dataIndexOf(graph, graph->withInputsOf(nodeRef).front());
-    auto *target =
-        makeHigherOrderCallSite(programs_, frame->get<Function *>(funcIdx)).runtimeGraph;
+    auto *target = makeHigherOrderCallSite(programs_, frame->get<Function *>(funcIdx)).runtimeGraph;
     GraphPlan *plan = planFor(target);
     const size_t n  = arrayAt(frame, arrIdx)->size();
 
@@ -3174,8 +3173,7 @@ void TaskflowExecSchedPass::mark_unordered_foreach_arr(
     region.enter();
     const auto arrIdx  = dataIndexOf(graph, graph->normInputsOf(nodeRef).front());
     const auto funcIdx = dataIndexOf(graph, graph->withInputsOf(nodeRef).front());
-    auto *target =
-        makeHigherOrderCallSite(programs_, frame->get<Function *>(funcIdx)).runtimeGraph;
+    auto *target = makeHigherOrderCallSite(programs_, frame->get<Function *>(funcIdx)).runtimeGraph;
     GraphPlan *plan = planFor(target);
     const size_t n  = arrayAt(frame, arrIdx)->size();
     region.leave();
@@ -3275,8 +3273,7 @@ using camel::execute::PassKernel;
 /// `std::taskflow`: the execution of `std::nvm` on a task graph, with the parameters the scheduler
 /// declares in stdlib/std.cml.
 const PassKernel taskflowKernel(
-    "std::taskflow",
-    [](const camel::core::context::context_ptr_t &ctx, const PassArgs &args) {
+    "std::taskflow", [](const camel::core::context::context_ptr_t &ctx, const PassArgs &args) {
         TaskflowOptions options;
         options.linear         = args.getBool("linear");
         options.fanOutAll      = args.getBool("fanout_all");
