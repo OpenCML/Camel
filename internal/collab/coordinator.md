@@ -248,6 +248,11 @@ pwsh -NoProfile -File ... -Path <wt> -Clean                        # 收尾：�
 
 **工作树当池子用，但池子不是一个脚本参数**（2026-11-27 更正：`new-worktree.ps1` **没有** `-Reuse` / `-Release` / `-Pool`，它的参数只有 `Path/Branch/Base/FromCheckout/VerifyOnly/NoHusky/NoFetch`；此前那一版写着有，是错的，害得一条车道到处找开关）：合完的树**留着**（不 `worktree remove`），切成 detached head 放回 `D:\Projects\Camel-wt\`；新车道先**挑一棵 detached 且干净的**直接 `git checkout -B lane/<名字>` 用，挑不到才 `new-worktree.ps1` 新建。「空闲」只认「detached 且干净」两条。
 **换一把 `flock` 锁的合法办法**（宿主的 tree lock 按 checkout 路径的 `cksum` 建）：`new-worktree.ps1 -Path D:\Projects\Camel-wt\<新名字> -Branch lane/<名字> -Base <sha>` 另开一棵，或用 `git worktree add --detach` 到新路径 —— **换路径就是换锁**；跑完 `git worktree remove` + `git worktree prune`。
+
+**一棵树一次只归一条车道（2026-11-27 一夜两起）**：树是池子，但**同一时刻只有一个写者**。那一夜两起同形事故：
+- 一条车道在自己的树里跑到一半，另一条车道在同一棵树里 `git checkout` 了自己的分支 ⇒ 前者的页面提交落到了**后者的分支头上**（污染别人的支），而后者那笔还在工作区里的改动有被前人 `checkout --` 清掉的风险；
+- 另一条车道接手时发现 `HEAD` 已被换成**第三条车道分支的尖端**（`git worktree list` 对上了：两棵树指同一个 sha），它的 run 全部作废。
+⇒ 三条口令，写进每条派工：① **动手前先 `git log -1 --format='%h %s'` 确认 HEAD 是自己那条支**，不是就停下报；② 发现 HEAD 被别人换过 ⇒ **不要 reset、不要 checkout、不要往那棵树写**，先报；③ 接手别人的树要 `git reset --hard origin/integration` 之前，先 `git status --porcelain`（非空就停 —— 那可能是别人的未提交内容）。
 因此上面第 1、2 条判据只用于**删池子以外的树**；池子内的树按下面的收工动作处理。
 
 **收工动作（每天最后一轮做一次，不进任何定时流程）**
@@ -381,6 +386,8 @@ git worktree add --detach <旧提交>
     ② `git merge-base --is-ancestor <那格的尖端/前提提交> origin/integration`，exit 0 才算已合；
     ③ `Select-String internal/backlog.md "task-<号>"`（或 R 编号）—— 总账里已有交回记录的，先读它再决定派不派。
   一条更省事的等价写法：`git log --oneline origin/integration --grep="<那格的主题词>"`，能搜到就说明事已经做完。
+
+  **一条红记录必须写明它测的是哪棵树（2026-11-27）**：晋级红表若不带所测的 tip，“已经修好”与“还在红”就读不出来，读它的人只能重跑。那一夜一条车道量到 `feat.mm.capacity` 四条红，实际是**一个测试生成器**把返回类型写成冒号（`a76209bd22` 之前）留下的记录；它在 `065bfb1690` 与晋级 20 自己的 `28f74cab05` 上**都是 18/18 全绿**，两棵树里那四条与生成器逐字节相同。⇒ 写红表时同时写 tip；读红表时先看它记的是哪棵树，再决定“这是活，还是记录过期”。
 
   **第八次（2026-11-27 04:5x，同一条 `task-72`，被同一条车道第二次挡住）**：这一夜第十一批合并刚进（`065bfb1690`），我从**晋级位的红表清单**里看到 `feat.trans.cml` 那两条，就把它当新活派给了 `lane-editview-commit`；车道 25 分钟前报过“`1d8ca78c4e` + `e095299875` 都是祖先、新尖端复测 0 红”，我又派了一遍。**根子是我看的是“红表里有什么”，不是“这三条命令跑出来什么”** —— 红表是**过去某一刻**的读数，它不会因为修好了就自动把条目删掉。⇒ 改用这一条口令：**先把红表条目转成三条命令的输出，再决定它是不是活**；红表本身只是“去哪儿找候选”，不是判据。
   同期第二例（同一轮）：`task-75`（`facts.cpp` 的 `anchorOf` 不认草稿）—— `a56be34dcd`/`37ebd80bd0`/`34a61610f8` 都是祖先，`git grep anchorOf -- src` **零命中**（那个名字已不在树里，代码改成了 `viewOf` + `node.isDraft()`）。⇒ 派“修某处代码”之前先 `git grep <那个符号>`：**符号都不在了，活就不在了**。
