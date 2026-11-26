@@ -403,6 +403,7 @@ function readReferenceModules() {
             source: field(object, 'source'),
             registered: field(object, 'registered'),
             declaration: /\bdeclaration\s*:\s*true\b/.test(object),
+            native: /\bnative\s*:\s*true\b/.test(object),
             passes_only: /\bpasses_only\s*:\s*true\b/.test(object),
             computed: field(object, 'computed'),
         }))
