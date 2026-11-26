@@ -115,6 +115,10 @@ pwsh -NoProfile -File <你的工作树>\internal\tools\camel-remote.ps1 `
   超时先**单独重跑一次**（同一计划、同样的 `-Jobs`）再判红 —— 超时是读数缺失的一种，不是红。
 · **它只量提交**：工作树里有未提交改动时也打 `0 changed file(s)` / `measuring: the commit alone`，量的是那棵树上的提交。
   ⇒ **先 commit，再量**；拿工作树里的改动去量，量到的是上一笔。
+· **每条“取计划读数”的 run 都会自动追加 `check-doc-links`，而它现在会挂 —— 挂住期间它一直持着这棵 checkout 的 tree lock**（2026-11-27 实测）：不需要你传 `-Check`，`camel-remote.ps1:856-859` 自己会加。那个检查的空脚本让 `node` 等 stdin，挂 ~40 分钟；**这期间同一棵树的下一条 run 就是 `no slot on this checkout within 1800 s`（exit 4）**。一条车道因此连续四次 `exit 4` 并误判成“别人占着槽”，换一棵 checkout 立刻通。
+  ⇒ **读到 `[SUMMARY]` / `RUN_EXIT` / `[TREE]` 就当读数到手，立刻按你记录的 PID `taskkill /T /F` 收掉整棵进程树**，锁随之释放；不要等它、也不要为了绕锁去抢别人的树。
+· **要换一把宿主 tree lock，就换 checkout 路径**：锁是按 checkout 路径的 cksum 建的。合法的换法只有“另开一棵树”（`-Detach <sha>` 造测量树，或 `git worktree add --detach`）并跑完删掉；**不要动别人的树，也不要去动别人的锁**。
+· **新开的树没有钩子**：`git worktree add` 不会装 `.husky/_`，而 `npx husky` 需要那棵树里有 `node_modules`。缺钩子时 git **不报错**（`core.hooksPath` 指向不存在的目录 ⇒ 每一次 push 的所有钩子静默跳过）。要么用 `new-worktree.ps1` 建（它把这件事做成一步），要么从主检出复制 **husky 自己的 `_` 目录**（不是手写），再用 `-VerifyOnly` 读到检查器自己的输出才算有守卫。
 · **`-Check` 这一步现在是坏的**：出现 `[camel-remote] --- check <name>: node   ---`（脚本路径为空）之后 `node`
   会等 stdin 永久挂住，40 分钟后才 `exit 124`。见到这一行**不要等**：记下它、结束自己那个作业，改按
   `[SUMMARY]` / `RUN_EXIT` / `[TREE]` 取数，并在交回里写一行「该检查未取到、工具态」。
