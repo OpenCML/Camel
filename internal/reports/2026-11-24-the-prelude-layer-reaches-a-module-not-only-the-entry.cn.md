@@ -1,7 +1,7 @@
 # prelude 的导出层：① 实测成立 —— 每个模块都用程序共享的那张表
 
 - 日期：2026-11-24
-- 来源：`lane/red-b-fixes`，回答 `internal/questions/2026-11-24-prelude-functions-with-bodies-and-layer-5.cn.md`
+- 来源：`lane/red-b-fixes`，回答 `internal/reviews/2026-11-24-prelude-functions-with-bodies-and-layer-5.cn.md`
   （负责人裁决 `fsh-dev 238927c3b`）
 - 结论：**①**。标准库模块这一侧没有洞，不改编译器。
 

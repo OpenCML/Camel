@@ -5,40 +5,24 @@
 > 这一页由 `node scripts/check-doc-links.mjs --questions-index --write` 从目录生成，不要手改：
 > 规矩在 `internal/reviews/` 的裁定里，落没落地看代码和提交，不看这张表。
 
-## 现在在等作者：28 页
+## 现在在等作者：12 页
 
 | 页 | 问什么 |
 | --- | --- |
-| [`2026-11-19-the-card-quiets-signalling-nans`](2026-11-19-the-card-quiets-signalling-nans.cn.md) | 设备写出的 f32 差在 NaN 负载位，而这四条判据不容忍它 |
-| [`2026-11-23-an-operand-identity-is-a-uri-or-a-table-lookup`](2026-11-23-an-operand-identity-is-a-uri-or-a-table-lookup.cn.md) | 一个 Oper 的身份是 payload 里的 URI，还是算子表查出来的名字 |
-| [`2026-11-23-an-operator-uri-has-one-syntax-and-a-migration-owner`](2026-11-23-an-operator-uri-has-one-syntax-and-a-migration-owner.cn.md) | 一条算子 URI 只有一种写法，而把 2,677 处改成它归谁 |
 | [`2026-11-23-can-a-native-declaration-carry-a-constas`](2026-11-23-can-a-native-declaration-carry-a-constas.cn.md) | 一个 native 声明能不能带编译期参数 |
 | [`2026-11-23-does-a-graph-view-name-the-graph`](2026-11-23-does-a-graph-view-name-the-graph.cn.md) | 图的名字要不要在视图上，以及一份草稿答它的什么 |
 | [`2026-11-23-does-the-view-answer-the-kernels-argument-order`](2026-11-23-does-the-view-answer-the-kernels-argument-order.cn.md) | 视图要不要直接答「算子的实参次序」（`kernelArgumentsOf`） |
-| [`2026-11-23-float-and-f32-name-one-type-or-two`](2026-11-23-float-and-f32-name-one-type-or-two.cn.md) | 一个 f64 的卷积答什么：`float`，还是 `f32` —— 规则的答案从入参来，还是从注册表来 |
-| [`2026-11-23-how-a-backward-slice-names-the-position-before-the-first`](2026-11-23-how-a-backward-slice-names-the-position-before-the-first.cn.md) | 反向切片的末端怎么写：`-1` 是唯一能用的写法，而它现在是故障 |
-| [`2026-11-23-how-a-named-type-says-it-converts-to-a-stream`](2026-11-23-how-a-named-type-says-it-converts-to-a-stream.cn.md) | 命名类型怎么声明「我能变成流」，以及 `..` 换了结果类型之后 golden 算谁的 |
 | [`2026-11-23-is-this-node-a-real-oper-record`](2026-11-23-is-this-node-a-real-oper-record.cn.md) | 「这是不是一个真正的 OPER 记录」该由视图答，还是每个读者自己拼两步 |
-| [`2026-11-23-iter-cannot-be-declared-so-the-lookup-carries-it`](2026-11-23-iter-cannot-be-declared-so-the-lookup-carries-it.cn.md) | `__iter__` 写不出来，于是那条查找要替它承担 |
 | [`2026-11-23-not-a-constant-and-out-of-range-are-one-answer`](2026-11-23-not-a-constant-and-out-of-range-are-one-answer.cn.md) | 「不是常量」与「越界」现在是同一个答案 |
-| [`2026-11-23-the-dots-type-column-for-a-structural-operator`](2026-11-23-the-dots-type-column-for-a-structural-operator.cn.md) | DOT 的 `type=` 对一个写成算子的成员读/构造写哪种名字：`OPER` 加 URI，还是 `ACCS`/`FILL` 加原来的标签 |
-| [`2026-11-23-what-a-read-of-a-cell-costs`](2026-11-23-what-a-read-of-a-cell-costs.cn.md) | 「读一个格子」算不算一个效应，以及算子记录的沉默在放置判断里值多少 |
-| [`2026-11-23-who-owns-a-store`](2026-11-23-who-owns-a-store.cn.md) | 「一个 Store」由谁造、由谁结束、由谁证它对 |
-| [`2026-11-23-who-owns-freely-arrangeable`](2026-11-23-who-owns-freely-arrangeable.cn.md) | 「可自由调度」这句判断归谁：事实层给一个 kind，还是各处自己拼 |
-| [`2026-11-24-a-conversion-loses-its-order-edge-before-the-seal-sees-it`](2026-11-24-a-conversion-loses-its-order-edge-before-the-seal-sees-it.cn.md) | 转换节点上的顺序边在封存之前就没了：「能不能丢」这个判据缺「会不会出故障」一项，缺在哪几处、由谁补 |
 | [`2026-11-24-an-identity-entry-for-a-reader-the-view-cannot-serve`](2026-11-24-an-identity-entry-for-a-reader-the-view-cannot-serve.cn.md) | 给不出读取的读者，该不该有身份入口？—— `collectReachableRuntimeGraphs` 的 20 处调用点 |
 | [`2026-11-24-deleting-known-fail-ends-when-would-unmake-11-marks`](2026-11-24-deleting-known-fail-ends-when-would-unmake-11-marks.cn.md) | `known_fail_ends_when` 不删：改成可判的两种形状，跑测工具每次评估 |
-| [`2026-11-24-is-a-guarded-comprehension-over-one-overload-or-two`](2026-11-24-is-a-guarded-comprehension-over-one-overload-or-two.md) | 一个守卫过滤掉的推导，是「一个重载」还是「两个」？ |
-| [`2026-11-24-prelude-functions-with-bodies-and-layer-5`](2026-11-24-prelude-functions-with-bodies-and-layer-5.cn.md) | prelude 内建层对**标准库模块**是否也生效？ |
-| [`2026-11-24-stream-range-value-map-no-instance`](2026-11-24-stream-range-value-map-no-instance.cn.md) | `map(1..5)` 该拒绝还是该编译？ |
-| [`2026-11-24-what-stops-cxx-opt-and-rewrite`](2026-11-24-what-stops-cxx-opt-and-rewrite.cn.md) | 视图答不出什么：`cxx/opt` 与 `rewrite` 停下来的地方，按能力归类 |
-| [`2026-11-24-what-the-graph-view-does-not-answer`](2026-11-24-what-the-graph-view-does-not-answer.cn.md) | 视图答不出什么：`onnx` 与 `tiles` 停下来的地方，按能力归类 |
 | [`2026-11-24-what-transforms-and-autodiff-cannot-read-on-the-view`](2026-11-24-what-transforms-and-autodiff-cannot-read-on-the-view.cn.md) | 视图答不出什么：`transforms` 与 `autodiff` 停下来的 28 处 |
 | [`2026-11-25-does-importing-a-module-add-graphs-to-the-entry-program`](2026-11-25-does-importing-a-module-add-graphs-to-the-entry-program.cn.md) | 把模块的遍名写进流水线，为什么要把它的 205 张库图挂到用户程序上？ |
 | [`2026-11-25-range-methods-outside-prelude`](2026-11-25-range-methods-outside-prelude.cn.md) | 问作者：Range 上的方法在 prelude 之外不可用，这是缺口还是写法错 |
 | [`2026-11-25-what-a-compiler-written-conversion-does-when-the-pair-is-not-safe`](2026-11-25-what-a-compiler-written-conversion-does-when-the-pair-is-not-safe.cn.md) | 编译器自动插的转换遇到非 Safe 配对，应该是什么：编译期拒绝、运行时 fault、不插这个转换，还是别的 |
+| [`2026-11-26-oper-uri-readings`](2026-11-26-oper-uri-readings.cn.md) | 算子「按编号认」还差两件事，缺哪一件由你定 |
 
-## 生成器不会删的行：243 行（页已不在 `questions/` 里）
+## 生成器不会删的行：260 行（页已不在 `questions/` 里）
 
 > 这些行是从上一版的表里原样带过来的：**生成器只增不删**，页走了行也留着。
 > 页搬进了 `reviews/` 的行指到那一页；树里已经没有这一页的行只留名字，不编一个指不到的目标。
@@ -205,6 +189,7 @@
 | [`2026-11-19-s1-1-names-a-program-that-is-not-legal`](../reviews/2026-11-19-s1-1-names-a-program-that-is-not-legal.cn.md) | S1-1 点名的那个程序并不合法：要收窄的是哪一边 | 在 `reviews/` |
 | [`2026-11-19-the-call-construction-sites-and-the-three-sources-of-an-exit-type`](../reviews/2026-11-19-the-call-construction-sites-and-the-three-sources-of-an-exit-type.cn.md) | 调用构造的十个位置，与出口类型的三个来源 | 在 `reviews/` |
 | [`2026-11-19-the-call-site-refresh-in-the-tiles-pass`](../reviews/2026-11-19-the-call-site-refresh-in-the-tiles-pass.cn.md) | 调用点刷新在 tiles 遍里为什么没落到发布程序上 | 在 `reviews/` |
+| [`2026-11-19-the-card-quiets-signalling-nans`](../reviews/2026-11-19-the-card-quiets-signalling-nans.cn.md) | 设备写出的 f32 差在 NaN 负载位，而这四条判据不容忍它 | 在 `reviews/` |
 | [`2026-11-19-the-declaration-the-first-order-needs-is-the-field-the-second-order-deletes`](../reviews/2026-11-19-the-declaration-the-first-order-needs-is-the-field-the-second-order-deletes.cn.md) | ① 要的那份声明，正是 ② 要删的那个字段 | 在 `reviews/` |
 | [`2026-11-19-the-declared-type-slot-is-its-own-only-witness`](../reviews/2026-11-19-the-declared-type-slot-is-its-own-only-witness.cn.md) | 声明函数类型那一位：判据不冗余，但它唯一能判的是它自己 | 在 `reviews/` |
 | [`2026-11-19-the-effect-of-a-call-through-a-function-value`](../reviews/2026-11-19-the-effect-of-a-call-through-a-function-value.cn.md) | 经函数值的调用，足迹取那个值的函数类型——而那个类型今天不写子句 | 在 `reviews/` |
@@ -270,9 +255,25 @@
 | [`2026-11-22-residual-mlp-margin-was-already-thin`](../reviews/2026-11-22-residual-mlp-margin-was-already-thin.md) | `residual_mlp_large_bytecode` 的时间余量在 0.2 之前就没有，现在要不要抬 | 在 `reviews/` |
 | [`2026-11-22-where-the-rule-instantiation-happens`](../reviews/2026-11-22-where-the-rule-instantiation-happens.md) | 0.4 只把「编译一次」放在值上，实例仍按程序的类型组合预先展开——这算 0.4 还是匹配那一项 | 在 `reviews/` |
 | [`2026-11-23-a-literal-and-the-position-it-sits-in-decide-a-type-variable`](../reviews/2026-11-23-a-literal-and-the-position-it-sits-in-decide-a-type-variable.cn.md) | 位置上的载荷与字面量，谁决定类型变量的取值 | 在 `reviews/` |
+| [`2026-11-23-an-operand-identity-is-a-uri-or-a-table-lookup`](../reviews/2026-11-23-an-operand-identity-is-a-uri-or-a-table-lookup.cn.md) | 一个 Oper 的身份是 payload 里的 URI，还是算子表查出来的名字 | 在 `reviews/` |
+| [`2026-11-23-an-operator-uri-has-one-syntax-and-a-migration-owner`](../reviews/2026-11-23-an-operator-uri-has-one-syntax-and-a-migration-owner.cn.md) | 一条算子 URI 只有一种写法，而把 2,677 处改成它归谁 | 在 `reviews/` |
 | [`2026-11-23-fill-declares-its-fields-as-parameters-and-reads-them-from-with`](../reviews/2026-11-23-fill-declares-its-fields-as-parameters-and-reads-them-from-with.cn.md) | `fill` declares its fields as ordinary parameters and reads them from `with`, so neither side can call the other | 在 `reviews/` |
+| [`2026-11-23-float-and-f32-name-one-type-or-two`](../reviews/2026-11-23-float-and-f32-name-one-type-or-two.cn.md) | 一个 f64 的卷积答什么：`float`，还是 `f32` —— 规则的答案从入参来，还是从注册表来 | 在 `reviews/` |
+| [`2026-11-23-how-a-backward-slice-names-the-position-before-the-first`](../reviews/2026-11-23-how-a-backward-slice-names-the-position-before-the-first.cn.md) | 反向切片的末端怎么写：`-1` 是唯一能用的写法，而它现在是故障 | 在 `reviews/` |
+| [`2026-11-23-how-a-named-type-says-it-converts-to-a-stream`](../reviews/2026-11-23-how-a-named-type-says-it-converts-to-a-stream.cn.md) | 命名类型怎么声明「我能变成流」，以及 `..` 换了结果类型之后 golden 算谁的 | 在 `reviews/` |
+| [`2026-11-23-iter-cannot-be-declared-so-the-lookup-carries-it`](../reviews/2026-11-23-iter-cannot-be-declared-so-the-lookup-carries-it.cn.md) | `__iter__` 写不出来，于是那条查找要替它承担 | 在 `reviews/` |
+| [`2026-11-23-the-dots-type-column-for-a-structural-operator`](../reviews/2026-11-23-the-dots-type-column-for-a-structural-operator.cn.md) | DOT 的 `type=` 对一个写成算子的成员读/构造写哪种名字：`OPER` 加 URI，还是 `ACCS`/`FILL` 加原来的标签 | 在 `reviews/` |
 | [`2026-11-23-two-cases-read-one-record-file-in-opposite-directions`](../reviews/2026-11-23-two-cases-read-one-record-file-in-opposite-directions.cn.md) | 两个用例按相反方向读同一份记录文件 | 在 `reviews/` |
+| [`2026-11-23-what-a-read-of-a-cell-costs`](../reviews/2026-11-23-what-a-read-of-a-cell-costs.cn.md) | 「读一个格子」算不算一个效应，以及算子记录的沉默在放置判断里值多少 | 在 `reviews/` |
 | `2026-11-23-who-holds-the-facts-store` | 事实层在生产里没有商店：一个 Store 的形状该由谁定 | 页不在（`questions/` 与 `reviews/` 都没有） |
+| [`2026-11-23-who-owns-a-store`](../reviews/2026-11-23-who-owns-a-store.cn.md) | 「一个 Store」由谁造、由谁结束、由谁证它对 | 在 `reviews/` |
+| [`2026-11-23-who-owns-freely-arrangeable`](../reviews/2026-11-23-who-owns-freely-arrangeable.cn.md) | 「可自由调度」这句判断归谁：事实层给一个 kind，还是各处自己拼 | 在 `reviews/` |
+| [`2026-11-24-a-conversion-loses-its-order-edge-before-the-seal-sees-it`](../reviews/2026-11-24-a-conversion-loses-its-order-edge-before-the-seal-sees-it.cn.md) | 转换节点上的顺序边在封存之前就没了：「能不能丢」这个判据缺「会不会出故障」一项，缺在哪几处、由谁补 | 在 `reviews/` |
+| [`2026-11-24-is-a-guarded-comprehension-over-one-overload-or-two`](../reviews/2026-11-24-is-a-guarded-comprehension-over-one-overload-or-two.md) | 一个守卫过滤掉的推导，是「一个重载」还是「两个」？ | 在 `reviews/` |
+| [`2026-11-24-prelude-functions-with-bodies-and-layer-5`](../reviews/2026-11-24-prelude-functions-with-bodies-and-layer-5.cn.md) | prelude 内建层对**标准库模块**是否也生效？ | 在 `reviews/` |
+| [`2026-11-24-stream-range-value-map-no-instance`](../reviews/2026-11-24-stream-range-value-map-no-instance.cn.md) | `map(1..5)` 该拒绝还是该编译？ | 在 `reviews/` |
+| [`2026-11-24-what-stops-cxx-opt-and-rewrite`](../reviews/2026-11-24-what-stops-cxx-opt-and-rewrite.cn.md) | 视图答不出什么：`cxx/opt` 与 `rewrite` 停下来的地方，按能力归类 | 在 `reviews/` |
+| [`2026-11-24-what-the-graph-view-does-not-answer`](../reviews/2026-11-24-what-the-graph-view-does-not-answer.cn.md) | 视图答不出什么：`onnx` 与 `tiles` 停下来的地方，按能力归类 | 在 `reviews/` |
 | [`cc-2026-11-15-can-a-flaky-cell-wear-a-known-fail-mark`](../reviews/cc-2026-11-15-can-a-flaky-cell-wear-a-known-fail-mark.cn.md) | 一格会抽签的红，能不能戴 `known_fail` 记成常驻红？ | 在 `reviews/` |
 | [`cc-2026-11-15-who-paces-the-stress-collections`](../reviews/cc-2026-11-15-who-paces-the-stress-collections.cn.md) | 压测收集要不要按墙钟配速？ | 在 `reviews/` |
 | [`decorators-and-macro`](../reviews/decorators-and-macro.cn.md) | 装饰器的声明要不要带 `#macro`？ | 在 `reviews/` |
