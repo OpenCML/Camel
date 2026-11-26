@@ -389,7 +389,7 @@ timeout_ms = 60000
 # from the repository, not from the tool's own output.
 [[tests]]
 name = "selfchecks.merge_batch"
-desc = "`test/tools/merge-batch.test.mjs`: `scripts/merge-batch.mjs` merges the clean and fast-forwardable lanes as merge commits on the integration tip, skips the conflicting lane with its file named, tells the build-breaking lane from the clean ones by building prefixes of the batch (4 builds), writes the Lane-Reading trailer and the lane commit titles into every merge, pushes only with --push, and does not read a build that never ran as a verdict on a lane (13 checks)."
+desc = "`test/tools/merge-batch.test.mjs`: `scripts/merge-batch.mjs` merges the clean and fast-forwardable lanes as merge commits on the integration tip, skips the conflicting lane with its file named, tells the build-breaking lane from the clean ones by building prefixes of the batch after building the base (5 builds), writes the Lane-Reading trailer and the lane commit titles into every merge, pushes only with --push, and does not read a build that never ran as a verdict on a lane, and stops with its own exit code, dropping and pushing nothing, when the integration tip itself does not build (17 checks)."
 kind = "behavior"
 tool = "node"
 case = "../../../../test/tools/merge-batch.test.mjs"
