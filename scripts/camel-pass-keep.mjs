@@ -13,9 +13,10 @@
  *
  * Every entry says **why it is not patched**, in terms of what that line's stdout carries, and the
  * entries are keyed by `file` and `line` so that an entry which no longer names a pipeline is
- * reported as stale and refused by `--check` (`node scripts/camel-pass-scan.mjs --check`): a keep
- * list that cannot rot into permission. A bare path would be a decision nobody can read, which is
- * why `why` is a field rather than a comment.
+ * reported as stale and refused by `--check` (`node scripts/camel-pass-scan.mjs --check`). That
+ * refusal is that command's own answer and reaches nobody by itself: the scan is not a row of the
+ * gate's `$checkers`, so the list stands only as long as a person keeps running it. A bare path
+ * would be a decision nobody can read, which is why `why` is a field rather than a comment.
  *
  * A pipeline that is decided on its own line says so there instead
  * (`# camel-pass-scan: keep -- ...`), which is how `trans/canon_order.py` records the three pass
