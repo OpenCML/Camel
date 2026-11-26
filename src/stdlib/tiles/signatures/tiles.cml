@@ -41,24 +41,24 @@ export func download(value: Device<f32[...]>) => f32[...] uses var driver
 /// program can be made for it, the host otherwise -- and gives the resident form of its result.
 /// This is the operator `tiles::compile` inserts for an outlined region and the tests use; a
 /// program asks for the device with `#gpu`, not with this.
-/// @example (f32(2.0), f32(3.0))->run_preferred_resident<(a: f32, b: f32): f32 => a + b>    // a Device<f32>
+/// @example (f32(2.0), f32(3.0))->run_preferred_resident<func (a: f32, b: f32) => f32 { a + b }>    // a Device<f32>
 with <fn: (a: f32, b: f32) => f32>
 export func run_preferred_resident(inputs: (f32, f32)) => Device<f32> uses var driver
 
 /// The CUDA source the function compiles to, without running it.
-/// @example (f32(2.0), f32(3.0))->source<(a: f32, b: f32): f32 => a + b>
+/// @example (f32(2.0), f32(3.0))->source<func (a: f32, b: f32) => f32 { a + b }>
 with <fn: (a: f32, b: f32) => f32>
 export func source(inputs: (f32, f32)) => string uses driver
 
 /// A report on the function's device plan, without running it: the kernel, its launch shape and
 /// the values it would keep on the device.
-/// @example (f32(2.0), f32(3.0))->inspect<(a: f32, b: f32): f32 => a + b>
+/// @example (f32(2.0), f32(3.0))->inspect<func (a: f32, b: f32) => f32 { a + b }>
 with <fn: (a: f32, b: f32) => f32>
 export func inspect(inputs: (f32, f32)) => string uses driver
 
 /// Times the function on the device, and on the host for comparison, and gives the report as JSON
 /// text.
-/// @example (f32(2.0), f32(3.0))->benchmark<(a: f32, b: f32): f32 => a + b>
+/// @example (f32(2.0), f32(3.0))->benchmark<func (a: f32, b: f32) => f32 { a + b }>
 with <fn: (a: f32, b: f32) => f32>
 export func benchmark(inputs: (f32, f32)) => string uses var driver
 
@@ -67,6 +67,6 @@ export func benchmark(inputs: (f32, f32)) => string uses var driver
 /// resource -- it neither executes the graph nor initializes CUDA -- so it writes no `uses`
 /// clause, and it is not folded: the answer is an analysis of a graph the compiler cannot see
 /// through.
-/// @example regions<(a: f32, b: f32): f32 => a + b>()
+/// @example regions<func (a: f32, b: f32) => f32 { a + b }>()
 with <fn: (a: f32, b: f32) => f32>
 export func regions() => string

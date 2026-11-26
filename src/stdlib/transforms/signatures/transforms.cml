@@ -42,7 +42,7 @@ export type Tangent<T>
 /// Forward mode: `jvp(f)` gives a function that takes the parameters of `f` followed by their
 /// tangents and returns the pair `(value, tangent)`. `jvp(f)(2.0, 1.0)` is the value `f(2.0)`
 /// together with the derivative of `f` at 2 in the direction 1.
-/// @example let forward = jvp((x: float) => x * x)
+/// @example let forward = jvp(func (x: float) { x * x })
 #macro
 export func jvp::<F>(f: F) => Jvp<F> when is_function::<F>()
 /// The step of `vjp` that separates a lifted function into the part computable now and the linear
@@ -93,7 +93,7 @@ export func split(f: (v: float, d: float) => (float, float)) => (v: float, d: fl
 /// called once per step of a loop over one `lin` graph, and the transposition is what the transform
 /// costs, not what a call of it costs. What stays per call is the function value, closed over the
 /// residuals that call's `lin` carries.
-/// @example let back = transpose((x: float) => 2.0 * x + 3.0 * x)
+/// @example let back = transpose(func (x: float) { 2.0 * x + 3.0 * x })
 #macro
 export func transpose::<F>(f: F) => Transpose<F> when is_function::<F>()
 
@@ -110,7 +110,7 @@ export func transpose::<F>(f: F) => Transpose<F> when is_function::<F>()
 /// operator with no rule is refused by name at the primitive, never batched by a guess; a call, a
 /// branch or a loop in the body is refused the same way, because the elementwise tier batches
 /// straight-line bodies.
-/// @example let batched = vmap((x: f32) => x * 2.0)
+/// @example let batched = vmap(func (x: f32) { x * 2.0 })
 #macro
 export func vmap::<F>(f: F) => Vmap<F> when is_function::<F>()
 
@@ -123,7 +123,7 @@ export func vmap::<F>(f: F) => Vmap<F> when is_function::<F>()
 /// (`lib/transforms/split.cpp`). JAX writes the same transform as `jax.checkpoint`, whose other
 /// name is `jax.remat`; in this tree "checkpoint" is the persistence module `ckpt`, so the transform
 /// takes the other word.
-/// @example let remembered = remat((x: int) => x + 1)
+/// @example let remembered = remat(func (x: int) { x + 1 })
 ///
 /// The type is the argument's own: a function in, the same function out, which is the whole of what
 /// the name says. `lib/transforms/remat_operator.cpp` answers `(f: F) => F` and builds the graph

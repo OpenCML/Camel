@@ -11,14 +11,14 @@
 // The two are built-in element calls (`:mark/...`), so each carries the exact URI of its operator.
 
 /// Calls f for every element, for its effects; the calls have no order among them.
-/// @example [1, 2]->unordered_foreach<(x: int) => println(x)>
+/// @example [1, 2]->unordered_foreach<func (x: int) { println(x) }>
 #op(':mark/unordered_foreach_arr')
 with <f: (item: T) => void>
 export func unordered_foreach::<T>(xs: T[]) => void
 
 /// Combines the elements with f starting from initial; the order in which elements are combined is
 /// not fixed, so f should be associative and commutative.
-/// @example [1, 2, 3]->unordered_reduce<(acc: int, x: int): int => acc + x, 0>    // 6
+/// @example [1, 2, 3]->unordered_reduce<func (acc: int, x: int) => int { acc + x }, 0>    // 6
 #op(':mark/unordered_reduce_arr')
 with <f: (acc: T, item: T) => T, initial: T>
 export func unordered_reduce::<T>(xs: T[]) => T

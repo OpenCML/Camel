@@ -52,6 +52,6 @@ export func set::<T>(r: Ref<T>, v: T) => T panic uses var r
 /// `pure`, so an update touches the one reference and no other resource: what it writes is a
 /// function of what it read.
 /// @example-fragment the box is one the surrounding program holds, so the example names it
-/// @example update(r, (x: int) => x + 1)
+/// @example update(r, func (x: int) { x + 1 })
 #op('state:update')
 export func update::<T>(r: Ref<T>, f: (x: T) => T pure) => T panic uses var r
