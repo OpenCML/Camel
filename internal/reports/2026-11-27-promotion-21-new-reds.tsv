@@ -1,0 +1,9 @@
+plan	test	class	first_line_of_the_failure	attributed_to
+mm.gc_poison_sweep	poison:modules.rename_identity:rename.env_graph_identity	dependent	the same failure as modules.rename_identity/rename.env_graph_identity, swept	7c2411a50e merge of lane/console-rescue (c65c0bf6b6)
+modules.stdlib_registry	registry.reference_is_generated	generated record	docs/stdlib-reference.md is out of date: run `node scripts/stdlib-reference.mjs --write`	7c2411a50e merge of lane/console-rescue (c65c0bf6b6)
+modules.stdlib_registry	registry.no_env_switches	behaviour	FAIL src/kernel/core/mm/block.cpp:54: reads 'CAMEL_MM_BLOCK_TRACE' from the environment and no ledger line allows it	5d9bba938b merge of lane/backend-speed (c68e90f784)
+modules.rename_identity	rename.env_graph_identity	behaviour	Error: the graph changed beyond the module name: normalized sha256 019e3cb80de067f4c4a43ab19b52...	7c2411a50e merge of lane/console-rescue (c65c0bf6b6)
+modules.rename_identity	rename.process_graph_identity	behaviour	Error: the graph changed beyond the module name: normalized sha256 75712dab0bc04a3ed143285c94d0...	7c2411a50e merge of lane/console-rescue (c65c0bf6b6)
+tutorial.examples	tutorial.examples.10_uses_beyond	behaviour	error[SemanticDiag::UsesPromiseViolated 0x030001F1]: `() => int uses var db` does not keep its resource promise: console	7c2411a50e merge of lane/console-rescue (c65c0bf6b6)
+docs.headers	docs.headers.canonical	generated record	test/tools/header-weight.mjs: the header is not followed by a blank line (line 4 is "//")	065bfb1690 the tip's own merge (e6ad653b20)
+probe.resnet_block_space	resnet_block_space	instrument	BLOCKSPACE train no limit in the ladder completed (192/4096 no longer hold)	0e71504b74-era probe plan, tier fast; to be moved to the debug tier by lane/backend-speed
