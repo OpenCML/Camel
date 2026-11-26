@@ -88,15 +88,32 @@ tests) or on one `[[tests]]` entry (an override), with the values `fast`, `slow`
   minutes (measured on a machine that other worktrees were using at the same time, so it
   took longer).
 - `slow` is the release gate's layer: the plan files `scripts/release-gate.mjs` names in
-  `SLOW_PLANS`, run one by one. It is everything whose result is still worth having but whose cost
-  does not belong in the developer loop, and that a shared host can still carry: the large
-  front-end and debugger suites, every case that costs more than **2 s** of its own time (measured,
-  never guessed -- see below), and the GPU tile plans. 2 s is the line because below it the case is
-  cheaper than the bookkeeping around it, and above it a case that runs in every developer loop
-  spends the loop's own budget: the fast layer's whole run is about 220 s for about 9,500 cases, so
-  one case over 2 s is already a percent of it.
+  `SLOW_PLANS`. Read at `develop` `1b7b986117` on 2026-11-26, that list has **76 rows** and the
+  files it names hold **3,156 entries** -- 793 `slow`, 2,359 `fast` and 4 `milestone`;
+  `scripts/plan-inventory.mjs#SLOW_PLANS` is the truth and those numbers are one reading of it, so
+  read the list rather than these figures. The layer is started as **one command, not one plan
+  after another**: `scripts/release-gate.mjs#slowArgv` is every named file, then `--jobs N`, and
+  the gate decides that `N` and hands it to the command (`8` when no flag is given,
+  `scripts/release-gate.mjs#DEFAULT_JOBS`). Its `--dry-run` prints one command line per file,
+  which is the display and not the command. Naming a file is what makes its slow tests run, and a
+  named file runs in full, so its fast entries run in the fast phase as well as here.
+  **What is serial in this layer is a test, not a plan**: one whose plan or `[[tests]]` entry says
+  `parallel = false` takes every slot and starts only when no other test is running
+  (`test/tools/run-tests.mjs#isSerial`). Seven entries in six of these files say so, for four
+  reasons -- a path outside the test's own scratch that its neighbours read (`opt/pass_params`
+  twice, `tools/autodiff_migration_ledger`), a figure the neighbours move (`consistency/runner`, a
+  sum over its own process tree; `modules/stdlib_registry`, a count that falls when the host is
+  loaded), a speedup that needs more than one core (`perf/para_speedup`), and one kept for the
+  layer's throughput rather than for its numbers (`mm/gc_pacing`). It is everything whose result is
+  still worth having but whose cost does not belong in the developer loop, and that a shared host
+  can still carry: the large front-end and debugger suites, every case that costs more than **2 s**
+  of its own time (measured, never guessed -- see below), and the GPU tile plans. 2 s is the line
+  because below it the case is cheaper than the bookkeeping around it, and above it a case that
+  runs in every developer loop spends the loop's own budget: the fast layer's whole run is about
+  220 s for about 9,500 cases, so one case over 2 s is already a percent of it.
 - **The slow layer's only whole plan is `gpu/tiles` (103 entries, and it needs devices): it cannot
-  move into the fast layer.** Its entries skip when the cards are busy (`tiles:available()`), so
+  move into the fast layer** (103 of its 104 entries are in this layer). Its entries skip when the
+  cards are busy (`tiles:available()`), so
   the number that runs swings with what else is on the host -- a fast-layer green there would mean
   "the cards were free", not "the compiler is right" -- and a whole-plan run takes about 89 s, of
   which the fast layer's two minutes has none to give. One entry of it (the derived-graph
@@ -111,10 +128,14 @@ tests) or on one `[[tests]]` entry (an override), with the values `fast`, `slow`
   an ordinary change must not run"), and the eight cases they read mirror to the milestone
   `feat/mm/gc.plan.toml`; so the layer stays, the class stays, and nothing is renamed to route around
   either. A nightly whole run is what keeps them from being forgotten.
-  **The nightly entry is one command, and it is the whole slow layer:
-  `node scripts/test.js test/plans --tier slow --jobs 8`.** There is no `nightly` script and no
-  plan file that includes the layer (the plan format has no `includes`), so the command is the
-  entry; paste it, do not remember it. Measured on this host at `d7ab3a6ab` (clean): **163 entries**
+  **The nightly entry is one command: `node scripts/test.js test/plans --tier slow --jobs 8`.**
+  There is no `nightly` script and no plan file that includes the layer (the plan format has no
+  `includes`), so the command is the
+  entry; paste it, do not remember it. It is **not the same selection as the gate's slow phase**,
+  and the two must not be read as one: this command keeps every entry whose own tier is `slow`,
+  wherever it lives in the tree, while the gate names the files and runs each in full -- so "the
+  slow layer" is two different sets of entries, and a figure read for one is not a figure for the
+  other. Measured on this host at `d7ab3a6ab` (clean): **163 entries**
   (the three whole slow plans are 140 of them; `perf/*`, `lsp`, `debugger`, `cpp`, `autodiff`,
   `random`, `frontend`, `linear/var_reference` carry the rest as single slow entries), `wall`
   131.4-160.5 s over three runs, and **it is not green**: `agree_with_fvm` fails in every run --
@@ -125,8 +146,12 @@ tests) or on one `[[tests]]` entry (an override), with the values `fast`, `slow`
   `skip: 47` when they were not -- the same command, a different number, which is why the skip
   count is read beside the card report and never as "the GPU suite passed".
   `feat/modules/random.plan.toml`'s `keyed_random.std_cpp_agrees` is the same shape -- it compiles
-  C++ like `trans/cpp`'s `agree_with_fvm` -- but nothing runs that layer today; recorded here and
-  left alone on purpose, one move at a time.
+  C++ like `trans/cpp`'s `agree_with_fvm` -- and it is in this layer: its own line says `slow` and
+  its file is one of the named ones, so the gate runs it, and what does not run it is an ordinary
+  developer run. Many entries are still `tier = "slow"` inside plans that are mostly fast, which is
+  why those files are named at all: 10 in `feat/modules/autodiff`, 11 in `feat/tools/debugger`, 3
+  in `feat/parse/frontend`, 6 in `feat/linear/var_reference`, 10 in `feat/trans/cpp` and 1 each in
+  `feat/modules/random` and `feat/tools/lsp`, read at `1b7b986117`.
   **The layer stopped being "a few single entries" on 2026-11-24**: the first full-record inventory
   measured every case of the 2026-11-12 fast-layer run and found **261 cases over 2 s**
   (`internal/reports/2026-11-24-test-suite-inventory.cn.md`, appendix B: child wall clock, because
@@ -2101,8 +2126,8 @@ performance notes record what running the whole layer on a shared host would cos
 the exclusion is that nothing notices a performance regression, so the
 measurement has one manual entry point:
 
-Three of those plans are also in the release gate's slow layer, where a plan file is named one by
-one: `perf.para_speedup`, whose guard is a property of one run rather than a stored number, and the
+Three of those plans are also in the release gate's slow layer, where each file is named as a
+target of the layer's one command (see "Layers"): `perf.para_speedup`, whose guard is a property of one run rather than a stored number, and the
 count guards `perf.step_counts` and `perf.reduce_layout_counts`, which a rule split out
 of `perf.step_budget` and `perf.reduce_layout`. What those three assert is a count or a property --
 the operator calls one round of the step issues, the blocks `sum_to` allocates -- and never a

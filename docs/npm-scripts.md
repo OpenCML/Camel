@@ -122,26 +122,43 @@ reusable external verifier. Full field constraints and examples live in
 
 `npm run release-gate` (`scripts/release-gate.mjs`) owns the release evidence a release decision
 needs, because `npm run test` is only the fast layer: a directory target drops every `tier =
-"slow"` and every `tier = "milestone"` test, and `gpu/**` / `perf/**` are in no gate target at all.
+"slow"` and every `tier = "milestone"` test. `gpu/**` and `perf/**` reach this gate only through
+their own `tier` lines: 8 of the 146 entries under `gpu/**` are `fast` and 109 more arrive in the
+three tile files the slow layer names, while 64 of the 69 under `perf/**` are `milestone` and no
+phase here runs those (read at `1b7b986117`).
 The layers and the plans the policy holds back for a milestone live in `scripts/plan-inventory.mjs`,
 which this gate imports: a `milestone` plan file is selected by `--tier milestone` and by nothing
 this gate runs.
 
 It runs, in order:
 
-1. the fast layer -- `smoke`, `feat/**`, and the fast-tier `gpu/profile` plan at `--tier fast`;
-2. the slow layer -- fourteen explicit plan files (the runnable set), named one by one:
-   naming a file is what makes its slow tests run. It never takes a directory or `--tier all`.
-   Three of them are perf plans whose tests assert counts and properties, never a duration:
+1. the fast layer -- the whole plan tree at `--tier fast` (`scripts/plan-inventory.mjs#FAST_TARGETS`,
+   whose single entry is `['test/plans']`, so no directory set is picked by hand);
+2. the slow layer -- 76 explicit plan files at `1b7b986117` (the runnable set,
+   `scripts/plan-inventory.mjs#SLOW_PLANS`), started as **one command**: every file named as a
+   target, then `--jobs N` (`8` unless a flag says otherwise,
+   `scripts/release-gate.mjs#DEFAULT_JOBS`). Naming a file is what makes its slow tests run, and a
+   named file runs in full, its fast entries included; it never takes a directory or `--tier all`.
+   Three of those files are perf plans whose tests assert counts and properties, never a duration:
    `perf.para_speedup` and the count guards `perf.step_counts` and `perf.reduce_layout_counts`
    (the measured halves of `perf.step_budget` and `perf.reduce_layout` stay in the skip list);
-3. the static checks: `stdlib-reference --verify-ops`, `--verify-doc`, `diagnostics-catalog
-   --check`, `check-doc-links --all`, `check-doc-snippets`, `stdlib-declarations --check`,
-   `check-conformance`, `check-std-includes`, `rule-proofs`, and `check-wheel-tags` -- the last one
-   reads the wheels the last `npm run pypi:rollup` left in `dist/pypi/` and requires the two forms
-   `cp310-abi3` (with the interop extension) and `py3-none` (without it), asserting through the same
-   `scripts/check_wheel_tags.py --ruling` the build job runs; with no wheel in `dist/pypi/` it prints
-   a `SKIPPED` banner naming that command, because this gate does not build wheels;
+3. the static checks -- thirteen of them, in the order `scripts/release-gate.mjs#STATIC_CHECKS`
+   runs them: `stdlib-reference --verify-ops`, `stdlib-reference --verify-doc`,
+   `diagnostics-catalog --check`, `check-doc-links --all`, `plan-dir-markers --check`,
+   `check-doc-links --questions-index`, `check-doc-links --source-line-citations`,
+   `check-doc-snippets`, `stdlib-declarations --check`, `check-conformance`,
+   `check-std-includes`, `check-wheel-tags`, and `rule-proofs --require-solver`. The list is that
+   array, in its order and with its flags -- not a memory of which checks exist: three of these
+   are a `check-doc-links` flag each, and two of those three were missing from this list while it
+   was written from memory. `check-doc-links --questions-defaults` is still there to run as a
+   self-check, but it is not one of the gate's checks: a pending page's default is the author's to
+   state, not a release condition (ruling A12, `internal/reviews/questions-2026-10-29.md`).
+   `check-wheel-tags` reads the wheels the last `npm run pypi:rollup` left in `dist/pypi/` and
+   requires the two forms `cp310-abi3` (with the interop extension) and `py3-none` (without it),
+   asserting through the same `scripts/check_wheel_tags.py --ruling` the build job runs; with no
+   wheel in `dist/pypi/` it prints a `SKIPPED` banner naming that command, because this gate does
+   not build wheels. `rule-proofs` is given `--require-solver`, and the flag is the difference
+   between a check and a line that exits zero: without a solver every rule is unproved;
 
 then exits non-zero when any phase failed. It does not build: build once first, and it checks the
 install it measures against that build's stamp — the rule that a run must not measure another

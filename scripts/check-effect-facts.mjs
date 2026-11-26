@@ -7,7 +7,7 @@
  *
  * The target architecture (section 7, "守护") writes the invariant as "an effect is decided only
  * through the fact layer". The criterion the author set for it
- * (`internal/questions/2026-11-23-who-owns-freely-arrangeable.cn.md`) is narrower than "every use
+ * (`internal/reviews/2026-11-23-who-owns-freely-arrangeable.cn.md`) is narrower than "every use
  * of the two atoms moves": **outside the fact layer nobody assembles these atoms into "freely
  * arrangeable" or "has an effect"**. So the finding this check reports is the **statement that
  * names both atoms** -- the one that builds the conjunction itself -- and a statement that reads

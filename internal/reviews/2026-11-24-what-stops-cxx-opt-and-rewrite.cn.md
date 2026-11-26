@@ -249,6 +249,13 @@ git grep -cE '\bGCGraph\b|\bGraphDraft\b' <rev> -- src/stdlib/rewrite
 **为什么不更远**：`rewrite` 的 23 行一行没动，且这一轮核过、确认它们没有一行属于身份类——`fact.cpp` 的 `Source::graph` 与 `module.cpp` 的 `WhenCall::graph` 都既被当身份用（比较、进 `Anchor`）**又**被读内容（`graph->node(...)`、`staticSlots()`、经 `const_cast` 交给 node VM），把成员类型换掉只会在读侧塞进向下转；剩下的是 D/B/H 与 3b 的写入口。
 
 **这一轮的读数是干净的**：`test/plans/feat/opt` 全目录在 `a03836c6cf` 上是 `total: 1636, pass: 1495, fail: 141`。带这一笔改动重跑（`feat/opt` 全目录加 `smoke`）是 `total: 1646, pass: 1505, fail: 141`；`smoke` 那 10 条全过，所以 `feat/opt` 那部分仍是 1636 / 1495 / 141，红的 141 条逐 plan 分布也逐条相同（`gate_value` 60、`splice_place` 29、`camel_passes` 4、`pass_params` 4、`algebra` 2、`writings` 2、`commit_refusal` 1、`effects_kept` 1、`opt_second_pass` 1、`rounds_warning` 1）。这 141 条全部是这棵落后 `origin/develop` 二十一笔的树自己的红：`stdlib/random.cml` 的 `to_array` 未解析、`stdlib/perf.cml` 的 `<:mark/reduce_arr>` 无匹配、`test/cases/opt/writings` 找不到 stdlib、golden 里的节点号差一。没有一条落在这一笔改动能触及的地方。
+
+## 默认做法（未获裁决前本车道按此开工）
+
+默认做法：**这一侧先做 K（视图的 `nodes()` 不含 JOIN），其次 D（静态区的槽与整片读取）**；A/B/C 归 `lane/view-gaps`，F/H 维持归 3b，E/I/J 见 §4 的认领表。依据：§4 谁认领 的「默认建议」与 §2.3。
+
+> 这一页已由 §决策者答（2026-11-24）裁定（K 先做、以视图为准）；两处不一致时以页尾的答复为准。
+
 ## 决策者答（2026-11-24）
 
 这一页答的都是实现架构，不涉及语义，不用拿给负责人。按类答，排序按建议的先后：

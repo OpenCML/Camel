@@ -33,7 +33,7 @@
 | `test/plans/**/golden/**`、`test/plans/feat/parse/golden/ast_hashes.txt` | 测试金标：重录要跟提交一起进，不能各自录各自的 |
 | `docs/**/README*.md` 的索引段、`internal/questions/` 的待定表 | 生成物：由生成器写，合并位重生成 |
 | `kernel/diagnostics/registry.tsv` | 诊断码登记表：诊断码是全仓库共享的编号空间（U17 定了它进 `kernel/`，文件仍归合并位重生成） |
-| `export_matrix.csv`、`docs/stdlib-reference.md` | 生成物：`--check` 会核对它们与生成器是否一致 |
+| `export_matrix.csv`、`docs/stdlib-reference.md` | 生成物：`--check` 会核对它们与生成器是否一致。矩阵两份按 R7 **生成到 `out/`、不入库**，树里不留副本（`8d87a0a603`）；`docs/stdlib-reference.md` 仍就地生成 |
 
 ## 搬家（阶段 1）之后的八条车道
 
