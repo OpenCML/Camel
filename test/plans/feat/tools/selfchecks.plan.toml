@@ -241,7 +241,7 @@ timeout_ms = 120000
 # its last line (`N checks, 0 failed, M skipped`) instead of running them.
 [[tests]]
 name = "selfchecks.camel_remote_cleanup"
-desc = "`internal/tools/camel-remote-cleanup.test.ps1`: a reading that failed removes nothing at all, and a live, locked, fresh, unrecorded or foreign checkout is kept and named -- the sweep that deleted two live lane checkouts on 2026-11-17 (part B runs only where bash has `flock`)."
+desc = "`internal/tools/camel-remote-cleanup.test.ps1`: a reading that failed removes nothing at all, and a live, locked, fresh, unrecorded or foreign checkout is kept and named (part B runs only where bash has `flock`)."
 kind = "behavior"
 tier = "slow"
 tool = "node"
