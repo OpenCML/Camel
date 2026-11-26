@@ -657,7 +657,7 @@ language's own conversion rules; the call form is the name a graph holds the con
 The two type parameters are the pair a conversion is about, so a call names them.
 
 - Pure.
-- Example: `cast::<f32[6], f32[]>([1.0, 2.0, 3.0, 4.0, 5.0, 6.0])` gives `six values, read as f32[]`
+- Example: `cast::<int, int>(1)` gives `the pair that is already one type: no table is asked`
 
 #### `enter`
 
@@ -683,7 +683,7 @@ is built at all, so what the compiler inserted never fails at run time.
 #### `fill`
 
 ```camel
-fill: (template: T, ...fields: ...F) => T
+fill: <...slots: int> (template: T, ...fields: ...F) => T
 ```
 
 A construction as an ordinary operator: the FILL node kind written as a call of the operator
@@ -692,11 +692,17 @@ that does the same thing (plan 2.3, step 2). `template` is the aggregate the val
 clones it -- and the rest parameters are the field values. The fill kind is the target type's
 own: a tuple is filled by position, an array by element, a struct by field and a function value
 by capture (`lib/std/builtin/operators/struct.cpp`). A caller whose field order is not the
-component order states the component each field fills as an `int` before the template.
+component order states the component each field fills as a `with` argument -- the same rule
+`:op/access` follows with `with <at: int>` -- one `int` per field, in the order the fields are
+given, because a position is a compile-time constant of the call and an ordinary parameter
+could not be told apart from a field value that is an `int`. `fill::<(int, int), int,
+int><1, 0>((0, 0), 1, 2)` reads the first value into component 1 and the second into component
+0, which is the value `(2, 1)`; with no `with` argument the fields are the components in order.
 
 A program writes a construction as the aggregate itself, `(1, 'a')` or `Point { x: 1 }`, and
 those reach this operator through the language's own rules; the call form is the name a graph
-holds the construction under.
+holds the construction under, and it is where a field order the aggregate cannot spell is
+written down.
 
 It states no `panic`: `template` is a constant of the target type and the call's result type is
 that same type, so a run clones a value that already fits and has nothing left to check. A
@@ -6036,16 +6042,22 @@ The Zen of Camel, the text of the file ZEN.
 ## `graph`: the graph of a function as a value
 
 The graph of a function, as a value. A function is a graph; this module reads it and, in a
-transaction, edits it. The handles `Graph`, `Node`, `Op`, `TypeRef`, `Region` and `Tag` name
-things inside the graphs of one function and compare with `==` and `!=`. Reads are pure.
+draft, edits it. The handles `Graph`, `Node`, `Op`, `TypeRef`, `Region` and `Tag` name things
+inside the graphs of one function and compare with `==` and `!=`. Reads are pure.
+
+A draft is a `Graph`: `open(f)` answers the graph `f` is, in a copy the edits go to, and every
+handle read through it names a node of that copy. The root queries take the draft -- `nodes(d)`,
+`graphs(d)`, `params(d)`, `exit(d)` -- and an edit names the nodes it changes and nothing else:
+`replace(old, new)`, `erase(n)`. The draft is reached through the nodes, so a second argument
+naming it is not needed and not offered (docs/design/graph-editing/README.cn.md 15.2, 15.3).
 
 A pass is a function from a function to a function of the same type, `(f: F) => F!`, so it
 applies to one function, `loss->opt::fold`, or to the program's entry on the pipeline,
-`camel prog.cml opt::fold std::nvm`. A pass written in Camel opens a transaction on `f`
-(`open`), replaces and erases nodes, and commits (`commit`), which gives the changed function:
-the same type, the captured values it had, and every graph nothing changed shared. What a pass
-reads of the program around the function (declarations, tags, facts) is read through the
-function; no snapshot of the program is in this interface.
+`camel prog.cml opt::fold std::nvm`. A pass written in Camel opens a draft on `f` (`open`),
+replaces and erases nodes, and commits (`commit`), which gives the changed function: the same
+type, the captured values it had, and every graph nothing changed shared. What a pass reads of
+the program around the function (declarations, tags, facts) is read through the function; no
+snapshot of the program is in this interface.
 
 A module that holds passes is compiled as a program of its own, whose entry is the pass: its
 module-level values are computed before the pass runs. It may import modules written in C++ and
@@ -6074,23 +6086,16 @@ their ids; each graph once.
 
 - Example: `len(graphs_of(func (x: int) => int { x + 1 }))`
 
-#### `name`
+### The draft and the root queries
 
-```camel
-name: (g: Graph) => string spelling
-```
-
-The name of the graph. This is *spelling*: it is the identifier the source wrote, so reading it
-needs a declaration that writes `spelling` in its clause (design principles 9.5). A transform
-that would pick a function by its name takes the function value instead.
-
-- Example (a fragment, not compiled): `name(graph_of(func (x: int) => int { x + 1 }))`
-- Why it is not compiled: the reading needs a declaration that writes spelling in its clause, and a doc example is a body with nowhere to write one (design principles 9.5)
+The first argument of each query is the draft `d` a block binds, and is the same `Graph` a
+function value's own graph is: a query reads whichever it is handed, and an edit changes the
+copy the draft is. The names are the ones docs/design/graph-editing/README.cn.md 15.2 settled.
 
 #### `nodes`
 
 ```camel
-nodes: (g: Graph) => Node[]
+nodes: (d: Graph) => Node[]
 ```
 
 The nodes of the graph in canonical order: the order the graph's own structure decides, from the
@@ -6100,13 +6105,40 @@ ports leave open arranged for the smallest numbering table (design principles 9.
 -- two statements swapped, a variable renamed -- give one order, so a pass may pair neighbours in
 it and get one answer for both. The places of removed nodes are skipped; a node nothing reaches
 from the exit (a pure computation nobody uses) comes after the ones that are reached.
+A draft has no canonical order -- its places are the order its nodes were made in, and the
+commit replaces them -- so a draft answers its own order, and `id` of one of its nodes is
+refused rather than answered with a number that says nothing.
 
 - Example: `nodes(graph_of(func (x: int) => int { x + 1 }))`
 
-#### `exit_of`
+#### `graphs`
 
 ```camel
-exit_of: (g: Graph) => Node?
+graphs: (d: Graph) => Graph[]
+```
+
+The graphs of the draft, `d` included: every graph the function of `d` calls, directly or not,
+each once, in the order of their ids. Each is the draft of that graph, so a node read through
+one of them is a node an edit changes.
+
+- Example: `len(graphs(graph_of(func (x: int) => int { x + 1 })))`
+
+#### `params`
+
+```camel
+params: (d: Graph) => Node[]
+```
+
+The parameter ports of the graph, in the order the declaration states them: the nodes the body
+takes its parameters as. A port is where an edit adds a parameter (`add_param`), and it is the
+node a caller's argument is read into.
+
+- Example: `len(params(graph_of(func (x: int) => int { x + 1 })))`
+
+#### `exit`
+
+```camel
+exit: (d: Graph) => Node?
 ```
 
 The node the graph hands its value out of: the node a graph returns, the port of a function that
@@ -6116,7 +6148,7 @@ build the value that takes its place, and `replace` this node by that value. Nul
 that hands no value out (a function of `void`), which has no node to put anything in the place
 of.
 
-- Example: `exit_of(graph_of(func (x: int) => int { x + 1 }))`
+- Example: `exit(graph_of(func (x: int) => int { x + 1 }))`
 
 ### Reading nodes
 
@@ -6274,10 +6306,10 @@ Whether a pass may arrange the node anywhere: drop it, move it, merge it with an
 call, or leave it with no order edge after an inline. The node must be pure *and* unable to
 fault (design principles 3.4); a pure operator that must run where the program writes it, one
 that may fault, one nobody declared, a call, a loop or a gate are not free. This is the one
-predicate behind that question on both sides of the boundary: `graph::may_be_rearranged`
-(camel/runtime/graph.h) is its implementation, the C++ passes read it under its older name
-`nodeIsFreelySchedulable`, and a pass written in Camel reads this name. Ask it rather than
-writing `is_pure(n) && may_be_recomputed(n) && !may_fault(n)`: the two writings drift apart.
+predicate behind that question on both sides of the boundary: `core.arrangeable`
+(`camel/facts/arrangeable.h`, `nodeIsFreelyArrangeable`) is the fact it reads, the C++ passes
+ask that fact, and a pass written in Camel reads this name. Ask it rather than writing
+`is_pure(n) && may_be_recomputed(n) && !may_fault(n)`: the two writings drift apart.
 
 - Example (a fragment, not compiled): `may_be_rearranged(n)`
 - Why it is not compiled: n is a node of the surrounding pass
@@ -6435,6 +6467,26 @@ Null when the declaration writes none, when it writes that tag twice, and when w
 names is not a function. The name is the one the program writes, or its qualified spelling.
 
 - Example: `rule_of(graph_of(func (x: int) => int { x + 1 }), 'vjp')`
+
+### Reading spelling
+
+The reads of 15.2 whose answer is *spelling*: the name the source wrote for a graph, where a node
+was written, the number a handle was created with. Each needs its declaration to write
+`spelling` (design principles 9.5); a transform that would pick a function by its name takes the
+function value instead.
+
+#### `name`
+
+```camel
+name: (g: Graph) => string spelling
+```
+
+The name of the graph. This is *spelling*: it is the identifier the source wrote, so reading it
+needs a declaration that writes `spelling` in its clause (design principles 9.5). A transform
+that would pick a function by its name takes the function value instead.
+
+- Example (a fragment, not compiled): `name(graph_of(func (x: int) => int { x + 1 }))`
+- Why it is not compiled: the reading needs a declaration that writes spelling in its clause, and a doc example is a body with nowhere to write one (design principles 9.5)
 
 #### `origin`
 
@@ -6599,63 +6651,72 @@ of two writings is dearer (design principles 9.11, "the cost of an extraction").
 - Example (a fragment, not compiled): `relative_cost(n)`
 - Why it is not compiled: n is a node of the surrounding pass
 
-### Transactions
+### The draft
+
+The edits of the table of docs/design/graph-editing/README.cn.md 15.3, in its own spellings: the
+draft is not an argument. `open` hands the draft over as the `Graph` it is, an edit names the
+nodes it changes, and every handle read through the draft names a node of the copy the edits go
+to -- so a node is enough to say which draft, and `replace(old, new)` is the whole of it. A node
+of a published graph is refused by the fault each operation states: an edit changes a draft, and
+a program is immutable (design principles 3.3).
 
 #### `open`
 
 ```camel
-open: (f: F) => Txn<F> when is_function::<F>()
+open: (f: F) => Graph when is_function::<F>()
 ```
 
-Opens a transaction on a function: a private workspace in which its graphs are edited.
-Nothing changes until `commit`.
+Opens a function's graphs as a draft and gives the graph of the function itself: what an edit
+changes and what the root queries read. Nothing changes until `commit`, which gives the changed
+function; the draft is reached through the handles read from it, so it is passed to no edit.
 
-- Example: `let t = open(func (x: int) => int { x + 1 })`
+- Example: `let d = open(func (x: int) => int { x + 1 })`
 
 #### `replace`
 
 ```camel
-replace: (t: Txn<F>, old: Node, new: Node) => void uses var t
+replace: (old: Node, new: Node) => void
 ```
 
 Puts the node `new` of the same graph in the place of `old`, which is removed; what `old`
-ordered stays ordered.
+ordered stays ordered. Both nodes are of the draft, and `new` is normally a node `eval` or
+`add_constant` answered.
 
-- Failure: fault `InvalidArgument` when a node anchors its graph, when `new` is computed from `old`, or when the transaction is over.
-- Example (a fragment, not compiled): `replace(t, n, inputs(n)[0])`
-- Why it is not compiled: t is an open transaction and n a node of its graph
+- Failure: fault `InvalidArgument` when a node anchors its graph, when `new` is computed from `old`, when a node is of a published graph, or when the draft is over.
+- Example (a fragment, not compiled): `replace(n, inputs(n)[0])`
+- Why it is not compiled: n and its only input are nodes of the surrounding draft
 
 #### `erase`
 
 ```camel
-erase: (t: Txn<F>, n: Node) => void uses var t
+erase: (n: Node) => void
 ```
 
 Removes a node whose value nobody reads.
 
-- Failure: fault `InvalidArgument` when the value is read, when the node anchors its graph, or when the transaction is over.
-- Example (a fragment, not compiled): `erase(t, n)`
-- Why it is not compiled: t is an open transaction and n a node of its graph
+- Failure: fault `InvalidArgument` when the value is read, when the node anchors its graph, when the node is of a published graph, or when the draft is over.
+- Example (a fragment, not compiled): `erase(n)`
+- Why it is not compiled: n is a node of the surrounding draft
 
 #### `eval`
 
 ```camel
-eval: (t: Txn<F>, n: Node) => Node? uses var t
+eval: (n: Node) => Node?
 ```
 
 Evaluates the pure operator of the node over its constant operands and gives the node holding
 the result, null when there is no value to compute (an operand is no constant of the graph, the
-node is no pure operation, or evaluating it faults). The node the answer names is the
-transaction's to put in place of `n` with `replace`. A constant expression that can only fault
-is left as written and warned about, as the C++ fold does.
+node is no pure operation, or evaluating it faults). The node the answer names is the draft's to
+put in place of `n` with `replace`. A constant expression that can only fault is left as written
+and warned about, as the C++ fold does.
 
-- Example (a fragment, not compiled): `eval(t, n)`
-- Why it is not compiled: t is an open transaction and n a node of its graph
+- Example (a fragment, not compiled): `eval(n)`
+- Why it is not compiled: n is a node of the surrounding draft
 
 #### `order`
 
 ```camel
-order: (t: Txn<F>, before: Node, after: Node) => void uses var t
+order: (before: Node, after: Node) => void
 ```
 
 Adds an ordering to the graph: when both nodes run, `before` runs before `after`. An order edge
@@ -6666,14 +6727,14 @@ one graph, and the edge is refused when the graph already computes `before` from
 is the cycle it would close. Ordering two nodes that are ordered that way already changes
 nothing and is not an error.
 
-- Failure: fault `InvalidArgument` when the two nodes are not of one graph, when either is gone, or when the edge would form a cycle.
-- Example (a fragment, not compiled): `order(t, a, b)`
-- Why it is not compiled: t is an open transaction and a, b are nodes of its graph
+- Failure: fault `InvalidArgument` when the two nodes are not of one graph, when either is gone, when either is of a published graph, or when the edge would form a cycle.
+- Example (a fragment, not compiled): `order(a, b)`
+- Why it is not compiled: a and b are nodes of the surrounding draft
 
 #### `inline`
 
 ```camel
-inline: (t: Txn<F>, at: Node, fn: G) => Node
+inline: (at: Node, fn: G) => Node when is_function::<G>()
 ```
 
 Splices the body of the function value `fn` into the region `at` is in and gives the node that
@@ -6684,14 +6745,14 @@ stands in no chain only selects the region, is left as it is, and the ordering o
 writes among the accesses already there is `order`'s to say. `fn` takes no arguments, and only a
 function value that captures no variable can be expanded.
 
-- Failure: fault `InvalidArgument` when the function value captures variables, when the node anchors its graph (`at` standing in a chain), when the body cannot be spliced, or when the transaction is over.
-- Example (a fragment, not compiled): `inline(t, n, func () { 0 })`
-- Why it is not compiled: t is an open transaction and n a node of its graph
+- Failure: fault `InvalidArgument` when the function value captures variables, when the node anchors its graph (`at` standing in a chain), when the body cannot be spliced, when `at` is of a published graph, or when the draft is over.
+- Example (a fragment, not compiled): `inline(n, func () { 0 })`
+- Why it is not compiled: n is a node of the surrounding draft
 
 #### `outline`
 
 ```camel
-outline: (t: Txn<F>, ns: Node[]) => Node uses var t
+outline: (ns: Node[]) => Node
 ```
 
 Collects a group of the graph's nodes into a function of its own and puts a call of it where the
@@ -6706,19 +6767,19 @@ and go out through one node, with no anchor of the graph in it, no access, no or
 place in a chain. A group that is not that is refused with the rule it broke, before anything of
 it is copied.
 
-- Failure: fault `InvalidArgument` when the group is empty, when its nodes are not all of one graph the transaction holds, when one of them anchors its graph, when one of them is no pure operation, when the group hands on no value or more than one, or when the transaction is over.
-- Example (a fragment, not compiled): `outline(t, ns)`
-- Why it is not compiled: t is an open transaction and ns is a group of its graph's nodes
+- Failure: fault `InvalidArgument` when the group is empty, when its nodes are not all of one graph of the draft, when one of them anchors its graph, when one of them is no pure operation, when the group hands on no value or more than one, or when the draft is over.
+- Example (a fragment, not compiled): `outline(ns)`
+- Why it is not compiled: ns is a group of the surrounding draft's nodes
 
 #### `add_param`
 
 ```camel
-add_param: (t: Txn<F>, like: Node) => Node uses var t
+add_param: (like: Node) => Node
 ```
 
-Adds a parameter to the graph `like` is a node of and gives the port node it is: a node of that
-graph's own body, of the same type as `like`, whose value is what a caller passes. A parameter is
-two statements about one thing -- this node, which the body computes with, and the entry of the
+Adds a parameter to the draft's graph and gives the port node it is: a node of that graph's own
+body, of the same type as `like`, whose value is what a caller passes. A parameter is two
+statements about one thing -- this node, which the body computes with, and the entry of the
 function type a caller is told about -- and this operator writes the first alone: the second is
 the declaration, and the block head that carries a new signature is what writes it
 (docs/design/graph-editing/README.cn.md 8.4). Until that head exists the declaration is written
@@ -6728,43 +6789,44 @@ is one entry longer than its signature is refused, naming the port node.
 The type is the type of a node and not a name: a graph edited through this interface says what
 its new parameter is by naming a value of that type, which is the statement a caller can make
 today (`type_of` gives a `TypeRef?`, and nothing in the language turns one into a `TypeRef`).
+The block form of 15.3 states it in the head instead, `add_param(d)`, and needs no argument
+here.
 
-- Failure: fault `InvalidArgument` when `like` is not a node of the transaction's graph, when it has no type, or when the transaction is over.
-- Example (a fragment, not compiled): `add_param(t, n)`
-- Why it is not compiled: t is an open transaction and n a node of its graph
+- Failure: fault `InvalidArgument` when `like` is not a node of the graph the draft edits, when it has no type, or when the draft is over.
+- Example (a fragment, not compiled): `add_param(n)`
+- Why it is not compiled: n is a node of the surrounding draft
 
 #### `add_constant`
 
 ```camel
-add_constant: (t: Txn<F>, g: Graph, value: T) => Node
+add_constant: (g: Graph, value: T) => Node when is_ordered::<T>()
 ```
 
-Adds a value the transaction creates to the graph's static values and gives the node that
-holds it. The value is a number, a bool or a string; a string is copied into the permanent
-space because a value a transaction creates may be live at a safepoint where its draft is not
-traced.
+Adds a value to the graph's static values and gives the node that holds it. The value is a
+number, a bool or a string; a string is copied into the permanent space because a value a draft
+creates may be live at a safepoint where its draft is not traced.
 
-- Example: `add_constant(open(func (x: int) => int { x + 1 }), graph_of(func (x: int) => int { x + 1 }), 7)`
+- Example: `add_constant(graph_of(func (x: int) => int { x + 1 }), 7)`
 
 #### `commit`
 
 ```camel
-commit: (t: Txn<F>) => F! uses var t
+commit: (d: Graph) => F!
 ```
 
 Checks the edits and makes the changed function: the same type as the one that was opened, with
-the values it captured, sharing every graph nothing changed. The transaction is over.
+the values it captured, sharing every graph nothing changed. The draft is over.
 
-- Failure: error value `GraphConflict` when a graph the transaction touched changed since it was opened; error value `GraphInvalid` when an edit broke an invariant (the message names the graph, the node and the edge); error value `TxnUsed` when the transaction was over already.
+- Failure: error value `GraphConflict` when a graph the draft touched changed since it was opened; error value `GraphInvalid` when an edit broke an invariant (the message names the graph, the node and the edge); error value `TxnUsed` when the draft was over already.
 - Example: `commit(open(func (x: int) => int { x + 1 }))`
 
 #### `abort`
 
 ```camel
-abort: (t: Txn<F>) => void uses var t
+abort: (d: Graph) => void
 ```
 
-Drops the transaction.
+Drops the draft.
 
 - Example: `abort(open(func (x: int) => int { x + 1 }))`
 
