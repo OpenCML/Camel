@@ -279,9 +279,15 @@ class Type {
      * may fail, the program is a type error at compile time and nothing is inserted, so what the
      * compiler puts in a graph never fails at run time with a conversion fault.
      *
-     * The default is the conversions that are `Safe` -- one that cannot fail is not one anybody
-     * has to check. The tagged forms answer for one more step, because a failed value retyped as
-     * another `T!` is the same object (TupleType::castEntersFrom).
+     * It is answered by the **structure** of the two types: a value already of this type
+     * (`equals`), `never` (which has no value to convert), and the forms the composites state for
+     * themselves -- a value entering `T?` / `T!`, `null` into `T?`, a failed value into a `T!`
+     * (TupleType), the rank-zero slot and the open rank of an array (ArrayType), a struct whose
+     * fields are this type's in its order (StructType), an enum instance this one completes
+     * (EnumType). The conversion table is not what this asks: it answers the conversions a
+     * **program** writes (`x as T`, `T(x)`, `cast::<T, U>(x)`), and a pair it calls `Safe` is not
+     * an entering for being safe. A shape only the value knows (an open rank read as its element)
+     * is a check (`:op/refine_extent`) and may fail, so it is not an entering either.
      */
     virtual bool castEntersFrom(Type *sourceType) const;
     virtual slot_t castSlotFrom(slot_t value, Type *sourceType) const;

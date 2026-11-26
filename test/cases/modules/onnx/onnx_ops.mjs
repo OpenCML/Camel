@@ -74,7 +74,7 @@ const dimsOf = (buf, info) => {
 // NodeProto.op_type = 4; TensorProto.name = 8; ValueInfoProto.name = 1.
 export function readOnnxModel(path) {
     const buf = fs.readFileSync(path)
-    const model = { ops: [], initializers: [], initializerTypes: [], inputs: [], inputDims: [], outputs: [], metadata: {} }
+    const model = { ops: [], initializers: [], initializerTypes: [], inputs: [], inputDims: [], outputs: [], outputDims: [], metadata: {} }
     for (const f of fields(buf)) {
         if (f.field === 14 && f.wire === 2) {
             model.metadata[firstString(buf, f, 1)] = firstString(buf, f, 2)
@@ -101,7 +101,10 @@ export function readOnnxModel(path) {
                 model.inputs.push(firstString(buf, g, 1))
                 model.inputDims.push(dimsOf(buf, g))
             }
-            else if (g.field === 12) model.outputs.push(firstString(buf, g, 1))
+            else if (g.field === 12) {
+                model.outputs.push(firstString(buf, g, 1))
+                model.outputDims.push(dimsOf(buf, g))
+            }
         }
     }
     return model

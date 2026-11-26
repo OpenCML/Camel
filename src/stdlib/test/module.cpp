@@ -4,7 +4,7 @@
 /*
  * The test channel: the passes a plan names as `test::<name>`, which no program can reach.
  *
- * These passes were compiled into libcamel until 2026-11-25, by the `lib_module` block's glob over
+ * These passes used to be compiled into libcamel, by the `lib_module` block's glob over
  * this directory. That put the whole test surface inside the language's own library: every one of
  * them shipped with every program, and a symbol one of them needed became an export of libcamel
  * whether or not anything in the language used it. They are their own `.cmo` now, on the same
@@ -26,6 +26,15 @@
  * declares them, and the pass-declaration check exempts the `test` module for exactly that reason:
  * `isTestOnly` reads the module name (`test/tools/check-pass-declarations.mjs`). A `.cml` here
  * would have to spell out fifty signatures that exist to be called by a plan and nothing else.
+ *
+ * Two of the passes are not here, and they are the ones a case gives a `.cml` of its own:
+ * `test::params` and `test::declared` are compiled into libcamel, from
+ * `src/stdlib/std/selftest/params_test_passes.cpp`. A case runs them with `-I .` and its own
+ * `test.cml`, which declares the parameters, and a declaration in one place is paired with an
+ * implementation in another only when the kernel is already registered -- in this library, opening
+ * `test.cmo` answers the name with the case's declaration module, which declares the pass and
+ * exports nothing, so the pipeline refuses it. The comment on that file says the same thing from
+ * its side.
  */
 
 #include "camel/core/context/context.h"

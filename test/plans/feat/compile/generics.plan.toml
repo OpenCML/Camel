@@ -434,8 +434,7 @@ assert(out === want, `unexpected output: ${out}`)
 """
 timeout_ms = 8000
 # Slow layer: over the 2 s the fast layer allows -- 2.02 s of
-# child wall clock in the 2026-11-12 record (appendix B of
-# internal/reports/2026-11-24-test-suite-inventory.cn.md).
+# child wall clock.
 tier = "slow"
 
 [[tests]]

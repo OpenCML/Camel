@@ -3933,20 +3933,27 @@ class Builder {
     ///
     /// The caller is `castNodeTo`, which first asks `Type::castEntersFrom` and refuses the program
     /// where the step could fail. Call this one only for a step that relation admits.
+    ///
+    /// `sourceType` names the type that enters where the node's value type is not the answer: a
+    /// **cell** is not a value, so a `var` argument enters a `var` port as the cell it is
+    /// (design principles 3.5). Left out, the source is the value type of `value`.
     node_handle_t enterNodeOf(
-        node_handle_t value, camel::core::type::Type *target, const GCT::node_ptr_t &origin);
+        node_handle_t value, camel::core::type::Type *target, const GCT::node_ptr_t &origin,
+        camel::core::type::Type *sourceType = nullptr);
     /// A conversion written as the operator it is (`cast::<T, U>` of the prelude): an OPER
     /// node whose written type arguments are the operand's type and the target, and whose result
     /// type is the target. Where no declaration answers -- a program that shadows `cast` -- the
     /// call is still written, by its URI (`:op/cast`), which no name in scope can shadow.
     node_handle_t conversionNodeOf(
         node_handle_t value, camel::core::type::Type *target, const GCT::node_ptr_t &origin);
-    /// The shape check a call site makes on an extent (design principles 5.4): the value checked
-    /// against the extents the call bound, handed on when it has that shape and stopping the
-    /// program where it does not. An OPER node of `:op/refine_extent`, an operator of the
-    /// compiler's own -- no program declares or writes it -- and **not** a conversion: `:op/cast`
-    /// is the one the program wrote, and a graph that holds this URI says the compiler put the
-    /// check there. Its record states `panic`, so a reader of the graph sees that it can fail.
+    /// The shape check the compiler makes where a shape is not in the type (design principles 5.4):
+    /// the value checked against the extents the call bound, or against the element of an open rank
+    /// it is read as (`T[..]` -> `T`, where the rank is the value's), handed on when it has that
+    /// shape and stopping the program where it does not. An OPER node of `:op/refine_extent`, an
+    /// operator of the compiler's own -- no program declares or writes it -- and **not** a
+    /// conversion: `:op/cast` is the one the program wrote, and a graph that holds this URI says the
+    /// compiler put the check there. Its record states `panic`, so a reader of the graph sees that
+    /// it can fail.
     node_handle_t refineExtentNodeOf(
         node_handle_t value, camel::core::type::Type *target, const GCT::node_ptr_t &origin);
     /// A copy written as the operator it is (`copy::<T>` of the prelude): an OPER node whose one

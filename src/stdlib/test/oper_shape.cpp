@@ -45,6 +45,10 @@ const char *shapeText(camel::execute::OperShape shape) {
         return "construction";
     case camel::execute::OperShape::Access:
         return "access";
+    case camel::execute::OperShape::Entering:
+        return "entering";
+    case camel::execute::OperShape::Refining:
+        return "refining";
     case camel::execute::OperShape::None:
         break;
     }

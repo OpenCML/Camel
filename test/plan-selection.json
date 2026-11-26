@@ -86,6 +86,12 @@
             "plans": ["feat/tools/plan_refs_sweep.plan.toml"]
         },
         {
+            "comment": "The arrangeable sweep: its case is the tool itself, so a change there selects the plan that runs it, the same shape as the plan-refs sweep above. It is a plan of its own for the same cost reason (it starts one `camel` per tracked `.cml`, and a named plan file runs in full whatever `--tier` says), and the fact kind whose rows it sums is read by the files this rule also names: the sweep is what says whether the kind's answer and the predicate a pass asks are still one answer.",
+            "paths": ["scripts/check-arrangeable.mjs", "src/kernel/facts/facts.cpp", "src/stdlib/test/facts_compare.cpp"],
+            "plans": ["feat/tools/arrangeable.plan.toml"],
+            "layer": true
+        },
+        {
             "comment": "The progen seed 23 program of the splice defect `a1723fbb9` fixed (test/cases/opt/inline_cycle): one program, one plan. It is a file rule and not a directory rule for the reason the adb67e081 rule below is one -- the directory rule for test/cases mirrors the segments below test/cases and would look for `test/plans/feat/opt/inline_cycle`, which is a plan file, so nothing would reach it. The plan is fast, so the rule carries no layer.",
             "paths": ["test/cases/opt/inline_cycle/"],
             "plans": ["feat/opt/inline_cycle.plan.toml"]
@@ -791,6 +797,10 @@
             {
                 "plan": "gpu/tiles.plan.toml",
                 "why": "Its GPU tests share resident.cml with the fast screens plan: a case that a fast and a slow plan both exercise can break only on one of them, so the case edit must run both. The plan stays slow because it needs a CUDA device and its 83 tests take minutes."
+            },
+            {
+                "plan": "feat/modules/rules.plan.toml",
+                "why": "Since 2026-11-25 `feat/mm/gc.plan.toml` is a fast plan (its 44 entries cost 0.12-0.86 s each) and it runs two of this plan's cases under the GC stress, `when_target.cml` and `extract_boundary.cml`: a change to either path is covered by the fast layer, so this plan file need not run whole, and its own entries that read those cases still run because `--changed` selects cases and the plan names them. The plan is slow-cost by one entry, `rules.the_coverage_check_refuses_every_refuted_law` (4.52 s of child wall clock, `tier = \"slow\"` on its own line -- the same 2 s rule as the tiers above)."
             }
         ]
     }

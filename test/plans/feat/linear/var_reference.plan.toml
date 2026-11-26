@@ -2398,8 +2398,7 @@ assert(out === 'plain call: value 1.0 cnt 1 | with_grad: value 2.0 cnt 2 | with_
 """
 timeout_ms = 20000
 # Slow layer: over the 2 s the fast layer allows -- 2.08 s of
-# child wall clock in the 2026-11-12 record (appendix B of
-# internal/reports/2026-11-24-test-suite-inventory.cn.md).
+# child wall clock.
 tier = "slow"
 
 [[tests]]
@@ -2450,8 +2449,7 @@ assert(out === 'plain call: value 1.0 cnt 1 | with_grad: value 2.0 cnt 2 | with_
 """
 timeout_ms = 20000
 # Slow layer: over the 2 s the fast layer allows -- 2.10 s of
-# child wall clock in the 2026-11-12 record (appendix B of
-# internal/reports/2026-11-24-test-suite-inventory.cn.md).
+# child wall clock.
 tier = "slow"
 
 [[tests]]
@@ -2486,8 +2484,7 @@ assert(out === 'plain call: value 1.0 cnt 1 | with_grad: value 2.0 cnt 2 | with_
 """
 timeout_ms = 20000
 # Slow layer: over the 2 s the fast layer allows -- 2.01 s of
-# child wall clock in the 2026-11-12 record (appendix B of
-# internal/reports/2026-11-24-test-suite-inventory.cn.md).
+# child wall clock.
 tier = "slow"
 
 [[tests]]
@@ -2626,8 +2623,7 @@ assert(out === 'plain call: value 1.0 sum(acc) 3.0 | with_grad: value 4.0 sum(ac
 """
 timeout_ms = 20000
 # Slow layer: over the 2 s the fast layer allows -- 2.14 s of
-# child wall clock in the 2026-11-12 record (appendix B of
-# internal/reports/2026-11-24-test-suite-inventory.cn.md).
+# child wall clock.
 tier = "slow"
 
 [[tests]]
@@ -2997,8 +2993,7 @@ assert(out === 'f: 101 counter 6 | g: 101.0 counter 4', `unexpected output: ${ou
 """
 timeout_ms = 8000
 # Slow layer: over the 2 s the fast layer allows -- 2.00 s of
-# child wall clock in the 2026-11-12 record (appendix B of
-# internal/reports/2026-11-24-test-suite-inventory.cn.md).
+# child wall clock.
 tier = "slow"
 
 [[tests]]

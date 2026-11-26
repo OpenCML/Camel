@@ -681,16 +681,20 @@ $checkers = [ordered]@{
     # document edit does not. `BUILD_FOOTPRINT` is the only name a reading carries for the binary
     # that produced it, so the two properties are what make two readings comparable -- and a stamp
     # that names a wall clock instead has to be read as "the same" or "different" with the reader's
-    # own memory, which is what this lane replaced. A wall: pure static reading, about a second, no
-    # compiler and no install.
+    # own memory, which is what this check exists to keep out. A wall: pure static reading, about a
+    # second, no compiler and no install.
     'build-stamp'         = @{ script = 'scripts/check-build-stamp.mjs'; args = @(); compiler = $false }
     # A comment says what the code does and why; it does not record how the project got there. This
-    # checker reads comment text only -- after `//`, inside `/* */`, with `#` in CMake -- so a date or
-    # a path that is data in a string literal is not its business, and it counts a comment that names
-    # a dated ruling, a handover page, a role or a lane, a slice code, a host path. A wall with a
-    # threshold of zero: the tree carries none of those comments, so the first one added is this
-    # run's red, and the checker's own exit 1 -- with the `file:line` list it prints above it -- is
-    # what the gate returns.
+    # checker reads comment text only -- after `//`, inside `/* */`, with `#` in CMake, TOML, shell
+    # and PowerShell, and a test plan's `name`/`desc`/`known_fail_*` prose, which a reader takes the
+    # case by -- so a date or a path that is data in a string literal is not its business. It reads
+    # four trees (`src/`, `scripts/`, `internal/tools/`, `test/`) and counts a dated ruling, a
+    # handover page, a role or a lane, a work item number, a commit hash, the step a refactor had
+    # reached, the word that stands in for who decides what, and a sentence about what the code
+    # used to be. A wall whose threshold is zero: the tree does not meet it yet -- the checker's
+    # own reading line says how many comment lines still carry one -- and every one of those is a
+    # comment to rewrite rather than a threshold to move. The checker's exit 1, with the
+    # `file:line` list it prints above it, is what the gate returns.
     # The tree is named, not inherited: this command runs with the checkout as its working directory
     # (see the block that builds it), so `.` is that checkout, and the checker has no default that
     # could read the directory the run was started in instead (iron rule 17).
@@ -1881,20 +1885,54 @@ $buildCmd = if ($Config -eq 'Debug') { "npm run debug$stackTraceArg" } else { "n
     # The declaration is in the plan and not in a list here, because a list is a second place to
     # forget and it drifts from the plan it names. A directory target (`smoke`, `feat/opt`) and
     # `-Changed` carry no declaration of their own: only a named *.plan.toml can ask for the host.
+    #
+    # This script does not read the declaration. The runner reads it (`test/tools/toml-lite.mjs`,
+    # the same file `test/tools/run-tests.mjs` loads every plan with) and answers the question as a
+    # subcommand, `--print-time-sensitive`, one row per plan: `<path>` TAB `<token>`. That is the
+    # whole point of asking instead of deciding: the plan that takes the host has to be the plan the
+    # runner would run as a time-sensitive one, so the reading that decides this run is the runner's
+    # own. Two readers of this field -- this script's regular expressions were the second -- is how
+    # the field came to be readable two ways at once.
+    #
+    # What is still decided here is only which targets are plan files: a directory target names no
+    # plan, an absolute target is taken as given, a relative one is resolved against the tree, and an
+    # empty one is skipped. Those are path questions, not questions about the format.
     $timeSensitivePlans = @()
+    $planFileTargets = @()
     foreach ($p in $Plan) {
         $p = "$p".Trim()
         if (-not $p) { continue }
         $declared = if ([System.IO.Path]::IsPathRooted($p)) { $p } else { Join-Path $Path $p }
         if (-not (Test-Path -LiteralPath $declared -PathType Leaf)) { continue }
-        foreach ($declLine in @(Get-Content -LiteralPath $declared)) {
-            # The document's top level ends at the first `[table]` header: a `time_sensitive`
-            # inside `[defaults]` belongs to that table and is not a declaration about the host.
-            if ($declLine -match '^\s*\[') { break }
-            if ($declLine -match '^\s*time_sensitive\s*=\s*true\s*(#.*)?$') {
-                $timeSensitivePlans += $p
-                break
-            }
+        $planFileTargets += $declared
+    }
+    if ($planFileTargets.Count -gt 0) {
+        $runnerPath = Join-Path $Path 'test/tools/run-tests.mjs'
+        $nodeGap = $null
+        try {
+            $readerRows = @(& node $runnerPath '--print-time-sensitive' @planFileTargets 2>&1 | ForEach-Object { "$_" })
+            $readerExit = $LASTEXITCODE
+        } catch {
+            $nodeGap = "$_"
+        }
+        # An unread declaration is not "false". The one case where this run could take the host and
+        # not know it is a reading nobody made, so a runner that would not answer stops the run here
+        # -- the same rule as the tree probe below, where an unread probe is not a clean tree.
+        if ($nodeGap) {
+            Write-Host "[camel-remote] the runner could not be asked which plans are time sensitive: $nodeGap"
+            Write-Host '[camel-remote] install node on this side, or run from a checkout that has test/tools/run-tests.mjs; this run is refused rather than started blind'
+            exit 2
+        }
+        if ($readerExit -ne 0) {
+            Write-Host '[camel-remote] the runner could not read every plan named as a target:'
+            $readerRows | ForEach-Object { Write-Host "    $_" }
+            Write-Host '[camel-remote] this run is refused rather than started blind: a plan it cannot read is a plan whose claim on the host is unknown, and unknown is not "no"'
+            exit 2
+        }
+        foreach ($row in $readerRows) {
+            $fields = "$row" -split "`t"
+            if ($fields.Count -ne 2) { continue }
+            if ($fields[1] -eq 'true') { $timeSensitivePlans += $fields[0] }
         }
     }
     $timeSensitive = $timeSensitivePlans.Count -gt 0
@@ -2371,21 +2409,77 @@ exec 5>&-
     # Anything else keeps the checkout and prints why. A failed reading is never read as "gone": the
     # cost of keeping a dead checkout is disk, and the cost of the opposite is somebody's whole run.
     #
+    # (c)'s "no process inside" is one snapshot of /proc per sweep, not two `readlink` forks per host
+    # process per candidate directory. Measured on 2026-11-25 (32 cores, 1 m load 15, 1750 host
+    # processes): one candidate cost 7.0 s, so the 40-candidate sweep this guard runs in spent four
+    # to five minutes there, its cost rose with every process anybody else started, and by the last
+    # candidate the reading judging it was minutes old. The snapshot is taken at the first candidate
+    # that needs it and ages as the sweep goes; what protects a run that entered a checkout after the
+    # snapshot was taken is not this reading but the lock the removal below takes again.
+    #
     # A single-quoted here-string: the shell's `$` must reach the host verbatim, and this fragment is
     # also what internal/tools/camel-remote-cleanup.test.ps1 extracts and runs.
     $cleanupGuard = @'
 # --- host cleanup guard: extracted and run by internal/tools/camel-remote-cleanup.test.ps1 ---
+# The one /proc reading (c2) judges every candidate by, taken once per sweep. Two passes, both
+# fork-free after the single `ls`: keep only the links whose target is under this sweep's root --
+# a handful out of thousands -- and then answer each candidate from that short list.
+# `proc_hits` is (pid directory, link name, target) in the order `ls` printed them, which is what
+# keeps the process a candidate names identical to the one the per-process loop named.
+proc_hits=()
+proc_snapshot_ms=''
+proc_snapshot_lines=0
+proc_snapshot_age_ms=''
+proc_used_by=''
+proc_snapshot_take() {
+    local root="$1" listing line path target total=0
+    if [ -n "$proc_snapshot_ms" ]; then return 0; fi
+    proc_snapshot_ms=$(date +%s%N)
+    # No `|| listing=''` here: `ls` exits 2 when any one of the several thousand operands vanished
+    # between the glob and the read, which happens on every run and says nothing about the rest. What
+    # it printed is the listing, and only a listing with no lines at all is a reading that failed --
+    # `proc_snapshot_lines` is how (c2) tells those apart, because "I could not read" and "nothing is
+    # using it" are not the same answer.
+    listing=$(LC_ALL=C ls -l /proc/[0-9]*/cwd /proc/[0-9]*/exe 2>/dev/null)
+    while IFS= read -r line; do
+        [ -n "$line" ] || continue
+        total=$((total + 1))
+        case "$line" in *' -> '*) ;; *) continue;; esac
+        target=${line##* -> }
+        path=${line% -> *}
+        path=${path##* }
+        case "$target" in "$root"/*) proc_hits+=("${path%/*}" "${path##*/}" "$target");; esac
+    done <<< "$listing"
+    proc_snapshot_lines=$total
+}
+proc_hit_for() {
+    local dd="$1" i
+    proc_used_by=''
+    for ((i = 0; i < ${#proc_hits[@]}; i += 3)); do
+        case "${proc_hits[i + 2]}" in
+            "$dd"|"$dd"/*) proc_used_by="${proc_hits[i]} ${proc_hits[i + 1]}=${proc_hits[i + 2]}"; return 0;;
+        esac
+    done
+    return 1
+}
 cleanup_host_checkouts() {
     local root="$1"
     local live="$2"
     local trusted="$3"
     local skip="$4"
     reclaimed=0
+    # The snapshot belongs to one sweep. It is reset here and not only initialized at the top of the
+    # fragment: a caller that runs two sweeps (every test of this guard does) must not have the
+    # second one judged by the first one's minutes-old reading.
+    proc_hits=()
+    proc_snapshot_ms=''
+    proc_snapshot_lines=0
+    proc_snapshot_age_ms=''
     if [ "$trusted" != 1 ]; then
         echo '[camel-remote] not removing host checkouts this run: the workstation could not say which worktrees exist, and a failed reading is not an empty one'
         return 0
     fi
-    local d dd n key lockf busy p t
+    local d dd n key lockf
     for d in "$root"/*/; do
         [ -d "$d" ] || continue
         dd="${d%/}"
@@ -2416,15 +2510,24 @@ cleanup_host_checkouts() {
         fi
         # (c2) A build, a test, or a person inside it. The executable matters as much as the
         # directory: a plan runs out/latest/bin/camel from a checkout whose cwd can be elsewhere.
-        busy=''
-        for p in /proc/[0-9]*; do
-            t=$(readlink "$p/cwd" 2>/dev/null) || t=''
-            case "$t" in "$dd"|"$dd"/*) busy="$p cwd=$t"; break;; esac
-            t=$(readlink "$p/exe" 2>/dev/null) || t=''
-            case "$t" in "$dd"|"$dd"/*) busy="$p exe=$t"; break;; esac
-        done
-        if [ -n "$busy" ]; then
-            echo "[camel-remote] keeping host checkout $n: a process is using it ($busy)"
+        #
+        # Judged from the sweep's one snapshot, not from two forks per process per candidate (see
+        # the note above the function). `ls -l` resolves every /proc/<pid>/cwd and
+        # /proc/<pid>/exe in a single process -- 3544 links in 88 ms on the host above, against
+        # 7.0 s for one candidate's per-process loop -- prints a line per link even when the link
+        # cannot be read, with no target, which is the same "cannot see it" that a failed
+        # `readlink` produced and never a match; and it sorts by name, so the process named here is
+        # the one the per-process loop named: `cwd` before `exe`, then pids in spelling order.
+        proc_snapshot_take "$root"
+        # The one answer here that the per-process loop gave differently: when the reading failed
+        # outright, that loop found no match and this guard said "not busy". A reading that could
+        # not be taken is not an empty one, so it keeps the checkout and says so.
+        if [ "$proc_snapshot_lines" = 0 ]; then
+            echo "[camel-remote] keeping host checkout $n: the host's process list could not be read, so this sweep cannot say nothing is using it"
+            continue
+        fi
+        if proc_hit_for "$dd"; then
+            echo "[camel-remote] keeping host checkout $n: a process is using it ($proc_used_by)"
             continue
         fi
         # (c3) Something in it changed within ten minutes: a run that has just handed over, or one
@@ -2452,6 +2555,12 @@ cleanup_host_checkouts() {
             echo "[camel-remote] keeping host checkout $n: a run took its lock while it was being removed"
         fi
     done
+    # How old (c2)'s reading was when the last candidate was judged by it. A snapshot that decides
+    # every candidate in a sweep has to say how stale it got; this is that number, and
+    # camel-remote-cleanup-sweep-cost.test.ps1 is what reads it.
+    if [ -n "$proc_snapshot_ms" ]; then
+        proc_snapshot_age_ms=$(( ($(date +%s%N) - proc_snapshot_ms) / 1000000 ))
+    fi
 }
 # --- end host cleanup guard ---
 '@

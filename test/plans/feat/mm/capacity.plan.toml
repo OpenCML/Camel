@@ -33,8 +33,7 @@ expect_output_not_contains = ["FAIL"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 300000
 # Slow layer: over the 2 s the fast layer allows -- 2.76 s of
-# child wall clock in the 2026-11-12 record (appendix B of
-# internal/reports/2026-11-24-test-suite-inventory.cn.md).
+# child wall clock.
 tier = "slow"
 
 [[tests]]
@@ -50,8 +49,7 @@ expect_output_not_contains = ["FAIL"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 120000
 # Slow layer: over the 2 s the fast layer allows -- 8.51 s of
-# child wall clock in the 2026-11-12 record (appendix B of
-# internal/reports/2026-11-24-test-suite-inventory.cn.md).
+# child wall clock.
 tier = "slow"
 
 [[tests]]
@@ -80,8 +78,7 @@ expect_output_not_contains = ["FAIL"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 120000
 # Slow layer: over the 2 s the fast layer allows -- 5.27 s of
-# child wall clock in the 2026-11-12 record (appendix B of
-# internal/reports/2026-11-24-test-suite-inventory.cn.md).
+# child wall clock.
 tier = "slow"
 
 [[tests]]
@@ -200,8 +197,7 @@ for (const space of ["graph", "perm", "meta"]) {
 """
 timeout_ms = 300000
 # Slow layer: over the 2 s the fast layer allows -- 2.02 s of
-# child wall clock in the 2026-11-12 record (appendix B of
-# internal/reports/2026-11-24-test-suite-inventory.cn.md).
+# child wall clock.
 tier = "slow"
 
 [[tests]]
@@ -277,8 +273,7 @@ timeout_ms = 300000
 # of the three, and do not try `kind=all`: it is not a value `--gc-stress` accepts, the run exits
 # before doing anything, and the case would look broken instead of fast.
 # Slow layer: over the 2 s the fast layer allows -- 9.67 s of
-# child wall clock in the 2026-11-12 record (appendix B of
-# internal/reports/2026-11-24-test-suite-inventory.cn.md).
+# child wall clock.
 tier = "slow"
 [[tests]]
 name = "capacity.dead_function_closure_verify"
@@ -292,8 +287,7 @@ expect_stdout_contains = ["OK mixed n=100"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 120000
 # Slow layer: over the 2 s the fast layer allows -- 3.34 s of
-# child wall clock in the 2026-11-12 record (appendix B of
-# internal/reports/2026-11-24-test-suite-inventory.cn.md).
+# child wall clock.
 tier = "slow"
 
 [[tests]]

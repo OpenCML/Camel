@@ -84,3 +84,6 @@
 - `internal/questions/2026-11-23-float-and-f32-name-one-type-or-two.cn.md` —— 元素类型本身的裁定（答案：`float` 与 `f32` 是同一个类型）
 - `docs/design-principles.cn.md` 409 —— extents 只读维名或 `constas`
 - `src/compile/` 的 `ConstasInNativeDeclaration`（`0x0300019A`）—— 声明里不许 `constas` 的那条诊断
+## 负责人裁决（2026-11-25）
+
+选默认的 **(b)**：没有函数体的原生声明可以带编译期参数（`constas`），卷积、池化的 `stride`、`padding`、核大小成为编译期参数，输出形状在类型里算出。已写进设计原则"新的原语"一条之后，并记入日志。诊断 `ConstasInNativeDeclaration` 随之删除。

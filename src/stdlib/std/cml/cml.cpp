@@ -112,22 +112,9 @@ OperId operOf(const GCGraph &graph, gc_node_ref_t ref) {
 bool isAssignment(OperId oper) { return camel::core::OperatorTable::instance().isAssignment(oper); }
 
 /// Whether the operator is one of the core's variable operators: the cell's creation, its three
-/// readings, the in-place take and the cell a call left behind. The `:var/` namespace is the
-/// core's -- no module declares an operator in it -- so the six are the ids `operator_table.h`
-/// fixes in namespace `oper`, and that is what a reader asks instead of the URI's prefix.
-bool isVariableOperator(OperId oper) {
-    switch (oper) {
-    case camel::core::oper::VarNew:
-    case camel::core::oper::VarNewEmpty:
-    case camel::core::oper::VarGet:
-    case camel::core::oper::VarPeek:
-    case camel::core::oper::VarTake:
-    case camel::core::oper::VarAfter:
-        return true;
-    default:
-        return false;
-    }
-}
+/// readings, the in-place take and the cell a call left behind. The six are ids `operator_table.h`
+/// fixes in namespace `oper`, and that is where the list is stated; this name is the printer's.
+bool isVariableOperator(OperId oper) { return camel::core::oper::isVariableOperator(oper); }
 
 /// The compiler names a lambda's graph `__g_<graph id>__`, which is no source name: the printer
 /// writes the lambda where its value is used instead of declaring a function.
@@ -4154,11 +4141,14 @@ class CmlPrinter {
         case camel::ops::OperShape::Access:
             return memberReadExpression(ref);
         case camel::ops::OperShape::Conversion:
-            // The conversion shape covers both operators of that family: `:op/cast`, which the
-            // program writes, and `:op/enter`, the step the compiler inserts. Both are printed by
-            // the same rule -- what a position supplies is written as the conversion that position
-            // means, and `castExpression` drops the ones a position supplies by itself (a rank-zero
-            // array, a struct retype) and writes `as` for the rest.
+        case camel::ops::OperShape::Entering:
+            // Two shapes, one printed form, and two labels rather than a family: `:op/cast` is the
+            // conversion the program writes and `:op/enter` the step the compiler inserts to make
+            // two types meet (design principles 5.1), and both are printed by the same rule -- what
+            // a position supplies is written as the conversion that position means, and
+            // `castExpression` drops the ones a position supplies by itself (a rank-zero array, a
+            // struct retype) and writes `as` for the rest. A refinement is not printed here: it
+            // states no conversion the program wrote, so it keeps the default path.
             return castExpression(ref);
         default:
             break;

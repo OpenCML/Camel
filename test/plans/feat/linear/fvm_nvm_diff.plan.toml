@@ -1,0 +1,670 @@
+id = "linear.fvm_nvm_diff"
+order = 362
+tier = "slow"
+tags = ["feat", "linear", "fvm", "nvm", "differential"]
+
+# The differential plan of design principle 9.2 (`internal/plans/2026-11-24-default-is-fvm.cn.md`,
+# "the differential test"): `std::nvm` is the reference semantics, so one program is run on both
+# interpreters and the second is read against the first -- exit code, standard output and the
+# position of every diagnostic it reported, byte for byte. `linear.fvm_nvm_agree` does that on
+# seven cases chosen by hand; this plan does it on a batch chosen by a rule and named here.
+#
+# **The rule, as it was applied.** A case is in this plan when some entry of a
+# `test/plans/feat/linear/*.plan.toml` is
+#
+#   1. `kind = "behavior"` with `expect_exit = 0`, and its `args` is exactly
+#      `["${case}", <one scheduling pass>]` -- `${backend}`, `${run_nvm}`, `${run_fvm}`,
+#      `${run_jit}`, `${run_prl}`, or the same four spelled out (`std::nvm`, `std::fvm`,
+#      `std::jit`, `std::prl`). Not any `std::` pass: a translation pass in front of the run
+#      (`std::opt`, `std::macro`) is part of that case's program, and dropping it changes the
+#      program. Six cases are out for that alone: `linear/byref/{var_writes_through_recursion,
+#      var_read_before_callee_write}.cml` and `loops/grad_{array_index,loop_collect}.cml` (a
+#      translation pass and no bare run), `linear/jit/{framed_loops,framed_faults}.cml` (`envs`,
+#      which sets the size of the program the case runs).
+#   2. an entry with no `envs`, no `tool`, no `skip_unless` and no `sweep` -- nothing that
+#      makes its run differ from `camel <case> <pass>`, which is what this plan runs.
+#
+# That is: the plan already runs the case as a whole program with nothing but the scheduling pass,
+# so the program needs no back-end-specific setup, which is what "both back ends should be able to
+# run it" means; and the entry that runs it already exists, so this plan adds no case to the tree.
+# 120 cases match; the three the curated plan owns (`linear/backend_agree/{sort4,sort5,
+# ordered_effects}`) stay there.
+#
+# **Two more conditions, and they are measurements, not taste.** A batch of comparisons is only a
+# comparison of the two back ends if the program's own output does not change between two runs of
+# the same back end, and if the program comes up at all:
+#
+#   3. the program's output is the program's, not the clock's. Five matching cases print a duration
+#      read from the clock and are out: `linear/nvm/{acc,fib,fib1,fib2}.cml` (`from time`) and
+#      `linear/jit/perf_fib_smoke.cml` (`from perf`). The two readings made before this line was
+#      written ran them against each other and went red exactly as they must, on the field that
+#      carries the number: the first (123 cases) on `differs from linear.nvm.acc.nvm:
+#      stdout_normalized` with `computed in 0.003371 seconds` on one side, the second (110 cases --
+#      the `from perf` shape was found there, because the first filter looked for `time` and
+#      missed it) on `differs from linear.jit.perf_fib_smoke.nvm: stdout_normalized` with
+#      `2.3479 +/- 0.1754 ms`. That is not a back-end difference; it is the wall clock, and a case
+#      whose output carries one cannot agree with itself, let alone with its twin.
+#   4. the case comes up. Measured on `58ab2f7e68` with the rule above, three cases do not compile
+#      at that tip -- `linear/nvm/lambda.cml` (`NoMatchingFunction` for `(y: int) => string` over a
+#      `Range`), `linear/nvm/render.cml` (the same shape), `linear/runtime/var_read_before_region.cml`
+#      (a loop-state type error at its first loop) -- and they are out. Their own entries
+#      (`closures_and_state.lambda_filter.{nvm}`, `collections_and_structs.render_grid.nvm`,
+#      `var_read_before_region.nvm`) are red with them, so this plan must not become a second owner
+#      of that red. A case that never started cannot agree with its twin about anything, which is
+#      why the first reading reported it red and why it is gone from the batch rather than silenced.
+#
+# **This plan has 109 cases**, by family:
+#   linear/nvm (17)
+#   linear/byref (10)
+#   linear/jit (19)
+#   linear/runtime (10)
+#   linear/faults (2)
+#   linear/match (3)
+#   linear/operators (4)
+#   linear/subscript (3)
+#   linear/toplevel_var (5)
+#   linear/fvm (1)
+#   loops (31)
+#   macro (1)
+#   parse/syntax (1)
+#   modules/tensor (1)
+#   modules/autodiff (1)
+#
+# **Both back ends must start.** `expect_exit = 0` holds for each half, so a case that does not
+# compile (exit 1) or does not start is red on its own entry rather than agreeing with its twin
+# about nothing. A twin whose reference never ran is reported as "reference back end did not run",
+# never as a match.
+#
+# **A red here is a defect, not a difference.** Design principle 9.2 and the ruling of 2026-11-24
+# (backlog D-1124-89): there is no class of legal fvm/nvm difference -- execution semantics are one,
+# nvm is the reference, so a case whose halves disagree is fvm's defect (or a case that pins nvm-only
+# non-semantic output, which is then written with `std::nvm` explicitly, not absorbed here).
+# Nothing in this file is pinned to fvm, and nothing here normalises a difference away.
+#
+# **Why slow.** The batch is 109 programs run twice; it reads in well under a minute on a
+# quiet host but it is not part of the developer loop. It is a named target, `--tier slow` runs it,
+# and this file is named in `SLOW_PLANS` (`scripts/plan-inventory.mjs`) so the inventory reaches it.
+
+[defaults]
+kind = "behavior"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm"]
+backends_agree = ["exit_code", "stdout_normalized", "diagnostics"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 30000
+
+# --- linear/nvm: 17 cases ---
+
+[[tests]]
+name = "linear.nvm.decorator_bare"
+desc = "Verifies a decorator applied without with-arguments ('@name'), with and without std::macro."
+case = "../../../cases/linear/nvm/decorator_bare.cml"
+
+[[tests]]
+name = "linear.nvm.decorator_local"
+desc = "A decorator factory must not leak its sync-chain node into the enclosing graph."
+case = "../../../cases/linear/nvm/decorator_local.cml"
+
+[[tests]]
+name = "linear.nvm.decorator_multi"
+desc = "Verifies stacked decorators compose in declaration order and preserve captured configuration values across nested wrappers."
+case = "../../../cases/linear/nvm/decorator_multi.cml"
+
+[[tests]]
+name = "linear.nvm.decorator_single"
+desc = "Verifies a single decorator can wrap a function, capture a constant, and adjust the returned value at runtime."
+case = "../../../cases/linear/nvm/decorator_single.cml"
+
+[[tests]]
+name = "linear.nvm.decorator_value_pass"
+desc = "Verifies decorated functions remain first-class values when passed through another call boundary."
+case = "../../../cases/linear/nvm/decorator_value_pass.cml"
+
+[[tests]]
+name = "linear.nvm.duplicate_inputs"
+desc = "Verifies repeated use of the same SSA value across tuples, arrays, and calls does not alias or drop inputs during scheduling."
+case = "../../../cases/linear/nvm/duplicate_inputs.cml"
+
+[[tests]]
+name = "linear.nvm.fill_mixed"
+desc = "Verifies array literals can mix constants and computed values without losing element order or materialization."
+case = "../../../cases/linear/nvm/fill_mixed.cml"
+
+[[tests]]
+name = "linear.nvm.hello"
+desc = "Smallest executable sanity case for module loading, main dispatch, and plain stdout emission."
+case = "../../../cases/linear/nvm/hello.cml"
+
+[[tests]]
+name = "linear.nvm.index"
+desc = "Verifies tuple-field access and array indexing remain stable when values flow through a small processing pipeline."
+case = "../../../cases/linear/nvm/index.cml"
+
+[[tests]]
+name = "linear.nvm.inline_unique_subgraph"
+desc = "Verifies branch-local helper functions stay distinct so each call site keeps its own inlined subgraph semantics."
+case = "../../../cases/linear/nvm/inline_unique_subgraph.cml"
+
+[[tests]]
+name = "linear.nvm.mapping"
+desc = "Verifies match expressions, struct updates, and method-style pipelines compose correctly in one semantic path."
+case = "../../../cases/linear/nvm/mapping.cml"
+
+[[tests]]
+name = "linear.nvm.mutual_tail"
+desc = "Deep mutual recursion case used to check that tail-position jumps across functions do not overflow under linear execution."
+case = "../../../cases/linear/nvm/mutual_tail.cml"
+
+[[tests]]
+name = "linear.nvm.nested_array_type"
+desc = "The type expression 'T[][]' is an array of arrays of T (and 'T[][][]' one level more), in a parameter, a return type, a 'var' and a lambda. It used to be taken as 'T[]', so that 'u[1]' had the element type and 'first(u[1])' found no overload."
+case = "../../../cases/linear/nvm/nested_array_type.cml"
+
+[[tests]]
+name = "linear.nvm.neuro"
+desc = "Verifies a small numeric pipeline combining arrays, zip/map/reduce, and floating-point math for neural-style computation."
+case = "../../../cases/linear/nvm/neuro.cml"
+
+[[tests]]
+name = "linear.nvm.var"
+desc = "Verifies mutable variables passed by reference through sync calls are updated in place and observed by the caller."
+case = "../../../cases/linear/nvm/var.cml"
+
+[[tests]]
+name = "linear.nvm.var_params"
+desc = "'var' parameters are passed by reference: what the callee assigns to one is what the caller reads from the variable it passed, after the call (docs/language/04_execution_model.md 4.4.2, docs/technical/18_sync_control_semantics.md)."
+case = "../../../cases/linear/nvm/var_params.cml"
+
+[[tests]]
+name = "linear.nvm.zen"
+desc = "Verifies the builtin this module can be imported and executed through a trivial standard-library call."
+case = "../../../cases/linear/nvm/zen.cml"
+
+# --- linear/byref: 10 cases ---
+
+[[tests]]
+name = "linear.byref.captured_write_order"
+desc = "A function, or a branch arm, that writes a captured variable (a module-level one included) is a write of that variable where it is called or entered, exactly like a call with a 'var' argument (docs/design-principles.cn.md 3.5): reads written after it see the..."
+case = "../../../cases/linear/byref/captured_write_order.cml"
+
+[[tests]]
+name = "linear.byref.captured_write_value"
+desc = "The value a call hands on when it writes captured variables (docs/design/effects/edges.cn.md 5.6;"
+case = "../../../cases/linear/byref/captured_write_value.cml"
+
+[[tests]]
+name = "linear.byref.lambda_capture_ignored"
+desc = "The same lambda with nothing reading the 'Ref' after the call: the write runs anyway."
+case = "../../../cases/linear/byref/lambda_capture_ignored.cml"
+
+[[tests]]
+name = "linear.byref.lambda_capture_write"
+desc = "A lambda bound to a name in the same function: the call site can see its body, so 'f()' is recorded as a write of the reference 'c', and the read written after it sees the new content."
+case = "../../../cases/linear/byref/lambda_capture_write.cml"
+
+[[tests]]
+name = "linear.byref.order_before_after"
+desc = "'A(i); modify(i); B(i)' in a sync body (docs/language/04_execution_model.md 4.4): the compiler orders A -> modify -> B by the writing order of the body. A observes the old value of i, B the new one, and A has completed before modify starts."
+case = "../../../cases/linear/byref/order_before_after.cml"
+
+[[tests]]
+name = "linear.byref.order_direct_user"
+desc = "A sync body orders its statements: in 'before(i + 1); modify(i)' the call of 'before' is ordered before 'modify', even though 'before' never touches 'i'."
+case = "../../../cases/linear/byref/order_direct_user.cml"
+
+[[tests]]
+name = "linear.byref.path_assigned_allocs"
+desc = "A path assignment on a 'var' array does not copy (design principles 3.5, 10.5). 'std::mem::blocks()' counts the numeric array blocks allocated, so the writes can be asked instead of argued: the array is 40 ints (320 bytes), past the 256 bytes an array may..."
+case = "../../../cases/linear/byref/path_assigned_allocs.cml"
+
+[[tests]]
+name = "linear.byref.var_param_reference"
+desc = "A 'var' parameter is 'passed in by value, passed back by value' (docs/design-principles.cn.md 3.5): the argument's value enters the callee's own name, a write in the callee rebinds that name, and the value is written back to the caller's name when the call..."
+case = "../../../cases/linear/byref/var_param_reference.cml"
+
+[[tests]]
+name = "linear.byref.var_param_slot_array"
+desc = "Writing an element of a string array through a 'var' parameter changes that variable only: another name that holds the same array keeps its value (design principles 3.5, values)."
+case = "../../../cases/linear/byref/var_param_slot_array.cml"
+
+[[tests]]
+name = "linear.byref.var_rule_subpasses"
+desc = "One rule for every rewriting pass: a read of a variable is not moved across a write to it, and a write is not merged or dropped while a later read is reachable. One function per rewriting sub-pass, each built to tempt that sub-pass."
+case = "../../../cases/linear/byref/var_rule_subpasses.cml"
+
+# --- linear/jit: 19 cases ---
+
+[[tests]]
+name = "linear.jit.branch_join"
+desc = "Verifies JIT lowering preserves multi-level branch joins and returns the correct value from each control-flow arm."
+case = "../../../cases/linear/jit/branch_join.cml"
+
+[[tests]]
+name = "linear.jit.builtin_operator_chain"
+desc = "Verifies JIT execution can chain builtin collection and string helpers without breaking intermediate values."
+case = "../../../cases/linear/jit/builtin_operator_chain.cml"
+
+[[tests]]
+name = "linear.jit.call_chain_hot"
+desc = "Hot-call-chain case used to stress repeated small-function dispatch and accumulation under JIT execution."
+case = "../../../cases/linear/jit/call_chain_hot.cml"
+
+[[tests]]
+name = "linear.jit.comparison_matrix"
+desc = "Verifies JIT codegen for the full set of integer comparison operators and their branch-dependent packing logic."
+case = "../../../cases/linear/jit/comparison_matrix.cml"
+
+[[tests]]
+name = "linear.jit.fib_recursive"
+desc = "Verifies classic recursive call expansion and return-value joining on JIT across several Fibonacci depths."
+case = "../../../cases/linear/jit/fib_recursive.cml"
+
+[[tests]]
+name = "linear.jit.float_arith"
+desc = "Verifies JIT floating-point arithmetic keeps ordering and precision within a tight expected range."
+case = "../../../cases/linear/jit/float_arith.cml"
+
+[[tests]]
+name = "linear.jit.framed_operators"
+desc = "Hot functions whose graphs need the runtime, so that std::jit compiles them as framed code: operators inside tail loops (integer remainder, string concatenation, array length and index, int-to-float conversion), a match on an int and on a string, struct..."
+case = "../../../cases/linear/jit/framed_operators.cml"
+
+[[tests]]
+name = "linear.jit.lambda_points"
+desc = "Verifies JIT execution of lambda predicates over structs and arrays, including captured bounds checks."
+case = "../../../cases/linear/jit/lambda_points.cml"
+
+[[tests]]
+name = "linear.jit.list_transform"
+desc = "Verifies JIT execution of chained list map/slice/concat transforms that previously regressed in the language pipeline."
+case = "../../../cases/linear/jit/list_transform.cml"
+
+[[tests]]
+name = "linear.jit.list_transform_chain"
+desc = "Regression for chained map/slice/concat pipelines so JIT execution preserves list values through the full transform chain."
+case = "../../../cases/linear/jit/list_transform_chain.cml"
+
+[[tests]]
+name = "linear.jit.mutual_tail_check"
+desc = "Verifies simple mutual-call control transfer on JIT, especially around base-case selection and returned tail values."
+case = "../../../cases/linear/jit/mutual_tail_check.cml"
+
+[[tests]]
+name = "linear.jit.native_calls"
+desc = "The two calls of a graph the JIT compiles (after std::cxx::inline: a function that only calls itself), in the shapes that went wrong: a self call with more arguments than are kept in registers and with a constant argument;"
+case = "../../../cases/linear/jit/native_calls.cml"
+
+[[tests]]
+name = "linear.jit.native_division"
+desc = "Divisions by values that are not constants, in functions the JIT compiles after std::cxx::inline: dividend, divisor and quotient in every register (idiv needs rax and rdx for itself), a divisor of -1, and float divisions. None of them faults."
+case = "../../../cases/linear/jit/native_division.cml"
+
+[[tests]]
+name = "linear.jit.native_registers"
+desc = "Arithmetic and comparisons with more values alive in one basic block than the JIT has registers for, in functions it compiles after std::cxx::inline (arithmetic and self recursion only)."
+case = "../../../cases/linear/jit/native_registers.cml"
+
+[[tests]]
+name = "linear.jit.nested_call_state"
+desc = "Verifies nested local-function recursion keeps captured outer state intact across repeated JIT frames."
+case = "../../../cases/linear/jit/nested_call_state.cml"
+
+[[tests]]
+name = "linear.jit.operator_branch_mix"
+desc = "Verifies builtin operators feeding branch conditions and arithmetic remain correctly ordered after JIT lowering."
+case = "../../../cases/linear/jit/operator_branch_mix.cml"
+
+[[tests]]
+name = "linear.jit.struct_match"
+desc = "Verifies match-driven struct reconstruction on JIT, including field reads and rebuilt record values."
+case = "../../../cases/linear/jit/struct_match.cml"
+
+[[tests]]
+name = "linear.jit.tail_accumulate"
+desc = "Tail-recursive accumulator used to check JIT stability on deep recursion and large integer propagation."
+case = "../../../cases/linear/jit/tail_accumulate.cml"
+
+[[tests]]
+name = "linear.jit.tuple_pipeline"
+desc = "Verifies tuple values survive a small pipeline of calls, indexing, and reconstruction under JIT execution."
+case = "../../../cases/linear/jit/tuple_pipeline.cml"
+
+# --- linear/runtime: 10 cases ---
+
+[[tests]]
+name = "linear.runtime.effects_outside_sync"
+desc = "Effectful calls outside a 'sync' block (docs/design-principles.cn.md 3.1; the author's ruling of 2026-11-15)."
+case = "../../../cases/linear/runtime/effects_outside_sync.cml"
+
+[[tests]]
+name = "linear.runtime.float_compare_branch"
+desc = "Verifies float comparisons drive branches correctly and 64-bit integer equality compares all 64 bits, on every execution engine."
+case = "../../../cases/linear/runtime/float_compare_branch.cml"
+
+[[tests]]
+name = "linear.runtime.order_edges"
+desc = "The graph's edges are data, sync and order (docs/design/effects/edges.cn.md; design principles 3.1). An order edge only orders: it does not make either end execute."
+case = "../../../cases/linear/runtime/order_edges.cml"
+
+[[tests]]
+name = "linear.runtime.partial_application_written_var"
+desc = "A partial application of a 'sync' function that writes a module-level 'var', called, and the 'var' read afterwards."
+case = "../../../cases/linear/runtime/partial_application_written_var.cml"
+
+[[tests]]
+name = "linear.runtime.second_name_in_round"
+desc = "A name bound to a state the loop head carries holds the value the round started with, not the value the round goes on to write: the reads after the path write see the array as the round found it."
+case = "../../../cases/linear/runtime/second_name_in_round.cml"
+
+[[tests]]
+name = "linear.runtime.second_name_in_round_scalar"
+desc = "A name bound to a scalar state the loop head carries holds the value the round started with, not the value the round goes on to write."
+case = "../../../cases/linear/runtime/second_name_in_round_scalar.cml"
+
+[[tests]]
+name = "linear.runtime.sync_block_order"
+desc = "A sync block executes its expressions in written order (docs/design-principles.cn.md 3.4), also when the block ends in a plain value, is written inside another sync block, or binds several names at once."
+case = "../../../cases/linear/runtime/sync_block_order.cml"
+
+[[tests]]
+name = "linear.runtime.sync_literal_operands"
+desc = "Effects reached through the operands of a composite literal (struct, tuple, array) in a 'sync' block run in written order, between the statements before and after the literal."
+case = "../../../cases/linear/runtime/sync_literal_operands.cml"
+
+[[tests]]
+name = "linear.runtime.var_between_statements"
+desc = "A 'var' declared and read inside a 'sync' body is not a statement of the chain: the effect statements around it all run, in the order they are written."
+case = "../../../cases/linear/runtime/var_between_statements.cml"
+
+[[tests]]
+name = "linear.runtime.var_read_before_write"
+desc = "A read of a 'var' takes the value of the write written before it, never the one a write written after it leaves there -- and that holds in a body that is not a 'sync' block (docs/design/ effects/edges.cn.md 5.6: every read is tied to the write the source..."
+case = "../../../cases/linear/runtime/var_read_before_write.cml"
+
+# --- linear/faults: 2 cases ---
+
+[[tests]]
+name = "linear.faults.divide_min_by_minus_one"
+desc = "The smallest integer divided by -1: the quotient does not fit, and the machine's division traps on it. Every back end gives the negation with wraparound (the smallest integer again) and 0 for the remainder, not SIGFPE;"
+case = "../../../cases/linear/faults/divide_min_by_minus_one.cml"
+
+[[tests]]
+name = "linear.faults.subscript_step"
+desc = "A subscript slice with a step other than 1 takes every step-th element. Until the strided views the result is a copy, but the elements are the same on every back end (design principles 5.4). A negative step runs backwards;"
+case = "../../../cases/linear/faults/subscript_step.cml"
+
+# --- linear/match: 3 cases ---
+
+[[tests]]
+name = "linear.match.let_multi_binding"
+desc = "'let a, b = 1, 2' binds every name to its value (only the last name used to be bound, the others were unresolved references)."
+case = "../../../cases/linear/match/let_multi_binding.cml"
+
+[[tests]]
+name = "linear.match.multi_pattern"
+desc = "'case a | b => body' enters the body when the scrutinee equals any of its patterns (only the first used to be read). A wildcard among the alternatives makes the case the default."
+case = "../../../cases/linear/match/multi_pattern.cml"
+
+[[tests]]
+name = "linear.match.wildcard_first"
+desc = "The first case that matches is taken: nothing after the wildcard is reachable. The case after it used to be entered for every value that matched no pattern."
+case = "../../../cases/linear/match/wildcard_first.cml"
+
+# --- linear/operators: 4 cases ---
+
+[[tests]]
+name = "linear.operators.compound_assign"
+desc = "Every compound assignment on every type that has one: '+= -= *= /=' on the four numeric types, '%=' on the integers, '^=' on the numeric types, '&= |=' on bool."
+case = "../../../cases/linear/operators/compound_assign.cml"
+
+[[tests]]
+name = "linear.operators.conversions"
+desc = "The conversion functions on every argument type they take. 'string' of a value that is neither a number nor a string (bool, array, tuple, struct) is the text 'println' writes for it; 'string(true)' used to crash (progen finding F26)."
+case = "../../../cases/linear/operators/conversions.cml"
+
+[[tests]]
+name = "linear.operators.string_ordering"
+desc = "'<', '<=', '>', '>=' on strings compare byte by byte (design principles log 2.9); a proper prefix comes first. They used to compile and give false whatever the operands (progen finding F27). Each line: a < b, a <= b, a > b, a >= b."
+case = "../../../cases/linear/operators/string_ordering.cml"
+
+[[tests]]
+name = "linear.operators.string_plus_assign"
+desc = "'+=' on a string variable appends. It used to compile and leave the variable unchanged (progen finding F28). Also through a 'var' parameter."
+case = "../../../cases/linear/operators/string_plus_assign.cml"
+
+# --- linear/subscript: 3 cases ---
+
+[[tests]]
+name = "linear.subscript.bytes_slice"
+desc = "A Bytes has a length, concatenates with +, compares with == and slices by byte like a string."
+case = "../../../cases/linear/subscript/bytes_slice.cml"
+
+[[tests]]
+name = "linear.subscript.string_slice"
+desc = "A string slices like an array of rank 1, by code point (design principles 5.4, 11.1)."
+case = "../../../cases/linear/subscript/string_slice.cml"
+
+[[tests]]
+name = "linear.subscript.take_rows"
+desc = "'t[idx]' with an int array takes the rows the indices name, in that order, along the first dimension (design principles 5.4)."
+case = "../../../cases/linear/subscript/take_rows.cml"
+
+# --- linear/toplevel_var: 5 cases ---
+
+[[tests]]
+name = "linear.toplevel_var.argument_order"
+desc = "Two uses of one resource in one expression happen in written order, arguments and operands from left to right (design principles 3.3): a read of the variable written before a call that writes it sees the value from before the call, whatever the variable is."
+case = "../../../cases/linear/toplevel_var/argument_order.cml"
+
+[[tests]]
+name = "linear.toplevel_var.counter"
+desc = "A top-level 'var' as a counter: the functions that touch it are not pure, the module's functions capture it so no clause names it, and in a sync body the calls run in written order. 1 2 3 three calls 3 the variable after them"
+case = "../../../cases/linear/toplevel_var/counter.cml"
+
+[[tests]]
+name = "linear.toplevel_var.exported"
+desc = "An exported top-level 'var' is one resource of the module that declares it: the importing module reads and writes the same variable the module's own function does."
+case = "../../../cases/linear/toplevel_var/exported.cml"
+
+[[tests]]
+name = "linear.toplevel_var.initial_value"
+desc = "The initial value of a top-level 'var' is evaluated by dependency before the first read, like a top-level 'let': 'base' is written after 'cnt' and is known when 'cnt' is first read. 105 106"
+case = "../../../cases/linear/toplevel_var/initial_value.cml"
+
+[[tests]]
+name = "linear.toplevel_var.unread_write"
+desc = "An effect like any other: the write is a statement of a function that is not a sync block and nothing reads what it wrote, so it does not run (design principles 3.5). 5 0"
+case = "../../../cases/linear/toplevel_var/unread_write.cml"
+
+# --- linear/fvm: 1 case ---
+
+[[tests]]
+name = "linear.fvm.config_probe"
+desc = "The program the bytecode VM's settings are read on: one line of its own output and one value, so a case can pin standard output exactly while 'config=true' writes the run's settings to standard error."
+case = "../../../cases/linear/fvm/config_probe.cml"
+
+# --- loops: 31 cases ---
+
+[[tests]]
+name = "loops.arm_loops"
+desc = "A loop written as the value of a branch arm. The round of a loop starts where the region of the arm starts: an arm is one range of the execution order between the BRCH and the JOIN, and the first round's events (the start of the loop and the test of the..."
+case = "../../../cases/loops/arm_loops.cml"
+
+[[tests]]
+name = "loops.arm_loops_edges"
+desc = "The edges of a loop written in a branch arm: a loop that runs no round, 'for... while', a loop in an arm inside a loop's body, a loop of a loop inside an arm, a loop and another 'if' in one arm (a region three deep), the same in a macro function's arm, four..."
+case = "../../../cases/loops/arm_loops_edges.cml"
+
+[[tests]]
+name = "loops.captures"
+desc = "The condition and the body read what they use where they are (design principles 3.10): the constants 'limit' (condition) and 'step', 'scale' (body) are evaluated in place and are not captures."
+case = "../../../cases/loops/captures.cml"
+
+[[tests]]
+name = "loops.compiled"
+desc = "Loops of regions run by compiled code (docs/technical/39_loops.md, section 4): main calls these functions through the interpreter's direct call, which compiles each of them at its first call under 'std::jit hot_threshold=0'."
+case = "../../../cases/loops/compiled.cml"
+
+[[tests]]
+name = "loops.discrete_effectful_value"
+desc = "A value produced by an effectful call whose type is discrete: 'side' returns an 'int' computed from 'x', and 'float(n)' reads it as a number."
+case = "../../../cases/loops/discrete_effectful_value.cml"
+
+[[tests]]
+name = "loops.discrete_loop_iterable"
+desc = "A 'loop' iterating over an 'int[]' computed from the differentiated parameter. The elements are discrete, so their derivative is zero by definition (design principles 9.9): the sum of the elements is a constant of the call, 6 at w = 2, and the gradient is 0..."
+case = "../../../cases/loops/discrete_loop_iterable.cml"
+
+[[tests]]
+name = "loops.discrete_loop_state"
+desc = "A 'loop' state whose elements are discrete ('int[]') and whose next value is computed from the differentiated parameter."
+case = "../../../cases/loops/discrete_loop_state.cml"
+
+[[tests]]
+name = "loops.discrete_struct_field"
+desc = "A differentiable value read through a struct and turned into data: 'n' is an 'int' field computed from 'x', and 'float(n)' reads it as a number."
+case = "../../../cases/loops/discrete_struct_field.cml"
+
+[[tests]]
+name = "loops.edges"
+desc = "Edges: a 'for' over an empty array and a 'while' whose condition is false at once leave the first state; three values of state; a loop at the top level of the module; a loop whose state is an array built round by round;"
+case = "../../../cases/loops/edges.cml"
+
+[[tests]]
+name = "loops.effects"
+desc = "A loop body that is a sync block runs its effects every round, in order; the value after the last statement is the next state. A body that is not a sync block runs only what its value needs. The condition sees the state, the body the state and the element."
+case = "../../../cases/loops/effects.cml"
+
+[[tests]]
+name = "loops.grad_array_loop"
+desc = "Gradients of arrays through 'loop' (design principles 9.9, 3.10): - an array captured by a loop and read by index accumulates each round's element gradient (the reverse of the read is a scatter-add);"
+case = "../../../cases/loops/grad_array_loop.cml"
+
+[[tests]]
+name = "loops.grad_through_loop"
+desc = "Differentiating through a 'loop' (design principles 9.9): the forward loop keeps each round's residuals in its collection slots and the reverse pass is a loop of its own over them, so the gradient of f(x) = x⁴ at 2 is 4·x³ = 32."
+case = "../../../cases/loops/grad_through_loop.cml"
+
+[[tests]]
+name = "loops.hof_block_alloc"
+desc = "hof_block_alloc"
+case = "../../../cases/loops/hof_block_alloc.cml"
+
+[[tests]]
+name = "loops.iterate_empty"
+desc = "A loop with no round keeps its first state: an empty string, an empty map, a tensor whose first extent is 0, an empty array; and 'for ... while' whose condition is false at once takes no element."
+case = "../../../cases/loops/iterate_empty.cml"
+
+[[tests]]
+name = "loops.iterate_map"
+desc = "'for' over a map takes its (key, value) pairs in key order (design principles 11.3), not in insertion order: the literal below is written out of order and the keys still come out ascending."
+case = "../../../cases/loops/iterate_map.cml"
+
+[[tests]]
+name = "loops.iterate_string"
+desc = "'for' over a string takes its code points, each a one-character string, as 's[i]' gives them (design principles 11.1): an ASCII text and a text of multi-byte characters have one round per code point, the characters are the same values 's[i]' gives, an empty..."
+case = "../../../cases/loops/iterate_string.cml"
+
+[[tests]]
+name = "loops.iterate_tensor"
+desc = "'for' over a tensor takes its elements along the first dimension: a rank-2 tensor gives the rank-1 sub-tensor of each row (a view of the same data), and a rank-1 tensor gives its elements, which are values of the element type — a value with no dimension is..."
+case = "../../../cases/loops/iterate_tensor.cml"
+
+[[tests]]
+name = "loops.let_loop_then_statement"
+desc = "'let n = loop ...' with a statement after it, in functions that are not 'sync'. The loop's condition and body are regions;"
+case = "../../../cases/loops/let_loop_then_statement.cml"
+
+[[tests]]
+name = "loops.loop_collect_multi"
+desc = "A collection output in a loop with several states: the body returns the next values of the states and then the appended element, and the loop's value is the states followed by the collection arrays."
+case = "../../../cases/loops/loop_collect_multi.cml"
+
+[[tests]]
+name = "loops.open_rank_round_rank1"
+desc = "What a round of a 'for' hands over is the type its port declares (design principles 5.4, ArrayType::firstDimensionElement): the element itself for a rank-1 array, the row one dimension shorter above it, and the same open-rank array when the rank is open."
+case = "../../../cases/loops/open_rank_round_rank1.cml"
+
+[[tests]]
+name = "loops.open_rank_round_rank2"
+desc = "The same rule with a rank-2 value: 'x' is passed to a parameter of open rank ('f32[...]' is 'f32[...]'), so the round is declared as the open-rank array one dimension fewer (design principles 5.4);"
+case = "../../../cases/loops/open_rank_round_rank2.cml"
+
+[[tests]]
+name = "loops.outer_ref"
+desc = "A loop body reads a 'Ref' the loop did not make (design principles 3.10 with 10.5). The reference a counted value is born with comes back at its last use, and a loop's execution order is not linear: a round runs its range again."
+case = "../../../cases/loops/outer_ref.cml"
+
+[[tests]]
+name = "loops.recursion"
+desc = "A loop is not a recursion: running many rounds takes no depth, and a loop inside a deep (non- tail) recursion still runs. The recursion limit counts the recursion only."
+case = "../../../cases/loops/recursion.cml"
+
+[[tests]]
+name = "loops.reduce_view"
+desc = "a value that survives an element is never a compact-element view. 'reduce' keeps its accumulator across rounds."
+case = "../../../cases/loops/reduce_view.cml"
+
+[[tests]]
+name = "loops.shapes"
+desc = "The four shapes of the 'do' form (design principles 3.10): one state over an array, two states under a condition (the loop's value is their tuple), a struct as the state, and 'for ... while' with an 'if' as the body."
+case = "../../../cases/loops/shapes.cml"
+
+[[tests]]
+name = "loops.state_in_place"
+desc = "item 4: the old value of a loop state is not visible once the next round begins, so a body that only ever appends to its state may write the state's array in place (design principles 10.5), the same criterion as 't = t->relu'."
+case = "../../../cases/loops/state_in_place.cml"
+
+[[tests]]
+name = "loops.state_in_place_block"
+desc = "The in-place append of a loop state does not depend on how the body is written (design principles 10.5): a body that is a block, binds names with 'let' and hands the next state back with 'return' appends to the state's own array exactly as the body that is..."
+case = "../../../cases/loops/state_in_place_block.cml"
+
+[[tests]]
+name = "loops.state_in_place_multi"
+desc = "second item: the in-place write of a loop state, proved for several states at once. The decision is per state (Builder::markLoopStateInPlace): a state whose first value is a literal and whose only use in the body is 'state->append<v>' is appended to in place;"
+case = "../../../cases/loops/state_in_place_multi.cml"
+
+[[tests]]
+name = "loops.struct_state"
+desc = "A struct as a loop's state (item 3): the state is one value, the struct, and each round gives the next struct instead of assigning its fields."
+case = "../../../cases/loops/struct_state.cml"
+
+[[tests]]
+name = "loops.tuple_destructure"
+desc = "Several values of state: the body gives a tuple of them, the loop's value is that tuple, and 'let (a, b) = loop ...' takes it apart. The state names are seen by the condition and the body only."
+case = "../../../cases/loops/tuple_destructure.cml"
+
+[[tests]]
+name = "loops.zero_leaf_state"
+desc = "A loop whose state is a struct with no leaves, the zero-leaf case of 'a struct's fields are the loop's state components' (design principles 3.10, the split of)."
+case = "../../../cases/loops/zero_leaf_state.cml"
+
+# --- macro: 1 case ---
+
+[[tests]]
+name = "macro.hof_calls"
+desc = "The higher-order array operators called by a macro function (std::macro): they are native operators that call their function through the function-call service, which the macro evaluator provides (docs/technical/06_runtime_and_execution.md, the native operator..."
+case = "../../../cases/macro/hof_calls.cml"
+
+# --- parse/syntax: 1 case ---
+
+[[tests]]
+name = "parse.syntax.subscript_forms"
+desc = "Every form of a subscript (design principles 5.4): a slice with both bounds, with only one, with neither, with a step, an int-array index (the 'take' of the first dimension) and 'last(xs)'."
+case = "../../../cases/parse/syntax/subscript_forms.cml"
+
+# --- modules/tensor: 1 case ---
+
+[[tests]]
+name = "modules.tensor.var_tensor_reference"
+desc = "A tensor variable passed to a 'var' parameter is one object: the callee replaces the tensor the caller's variable holds (design principles 3.5, ''var' 形参是传入值、传回新值')."
+case = "../../../cases/modules/tensor/var_tensor_reference.cml"
+
+# --- modules/autodiff: 1 case ---
+
+[[tests]]
+name = "modules.autodiff.var_through_with_grad"
+desc = "A 'var' parameter of a function called through 'with_grad': the gradient function keeps the parameter a variable, so the function's write reaches the caller's variable on every pipeline."
+case = "../../../cases/modules/autodiff/var_through_with_grad.cml"

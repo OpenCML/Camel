@@ -51,7 +51,7 @@ namespace camel::compile::gir {
 
 node_handle_t
 Builder::castNodeTo(node_handle_t value, Type *target, const GCT::node_ptr_t &origin) {
-    // 装入不是转换 (design principles 5.1, the log entry of 2026-11-25): the step the compiler
+    // 装入不是转换 (design principles 5.1): the step the compiler
     // inserts to make two types meet always succeeds. It is not a conversion -- it asks no safety
     // table and it is not `:op/cast` -- and it never fails at run time. Two things follow, and both
     // are stated here:
@@ -77,15 +77,36 @@ Builder::castNodeTo(node_handle_t value, Type *target, const GCT::node_ptr_t &or
     return enterNodeOf(value, target, origin);
 }
 
-node_handle_t
-Builder::enterNodeOf(node_handle_t value, Type *target, const GCT::node_ptr_t &origin) {
+node_handle_t Builder::enterNodeOf(
+    node_handle_t value, Type *target, const GCT::node_ptr_t &origin, Type *sourceType) {
     // An entering is a call of `enter::<T, U>` like a conversion is a call of `cast::<T, U>`: the
     // source is the type of the value it reads, the target is the call's result type, and both are
     // known here. The group is the built-in one for the reason `conversionNodeOf` gives -- a
     // program that binds the name `enter` cannot decide what the compiler's own step calls -- and
     // the operator's record states `mayFault = false`, which is the same fact `castEntersFrom`
     // states about the pair.
-    Type *source = nodeTypeOf(value) != nullptr ? valueTypeOf(nodeTypeOf(value)) : nullptr;
+    //
+    // `sourceType` is for the caller that knows what enters better than the node's value type does:
+    // a **cell** is not a value, and a node of a `var` passed to a `var` port enters as the cell it
+    // is, not as the value it holds, so that caller names the cell type (design principles 3.5).
+    Type *source = sourceType != nullptr ? sourceType
+                                        : (nodeTypeOf(value) != nullptr
+                                               ? valueTypeOf(nodeTypeOf(value))
+                                               : nullptr);
+    if (sourceType != nullptr && target != nullptr) {
+        // A cell is not a value, and a declaration's type arguments are values: a cell does not
+        // stand in one, so the call is not resolved against the declaration -- it is written by the
+        // operator's URI instead, with no written type arguments and the target type as the result,
+        // the way `refineExtentNodeOf` writes the shape check. The kernel reads the pair off the
+        // node (its result type and its operand's type), so nothing is missing; and two cell types
+        // whose contents accept each other are one box, which the kernel hands on unchanged
+        // (type/composite/tuple: "the conversion of a cell into another cell type moves nothing").
+        const node_handle_t node = currGraph_->addOperNode(target, ":op/enter");
+        stampPermissions(node);
+        linkNodes(LinkType::Norm, value, node);
+        registerNodeOrigin(context_, node, origin, "gir.enter");
+        return node;
+    }
     if (source != nullptr && target != nullptr) {
         const oper_group_ptr_t group = builtinOperatorGroupNamed("enter");
         if (group != nullptr) {
@@ -196,10 +217,13 @@ Builder::conversionNodeOf(node_handle_t value, Type *target, const GCT::node_ptr
 
 node_handle_t Builder::refineExtentNodeOf(
     node_handle_t value, Type *target, const GCT::node_ptr_t &origin) {
-    // The check a call site makes on an extent (design principles 5.4). A parameter's type may
-    // write its extent over the names the call bound (`f32[n - w + 1]`) or leave one open (`?`);
-    // the argument's own type says what the compiler knows and no more, so where the two do not
-    // meet as types the check that the value really has that shape is made when the value exists.
+    // The check the compiler makes where a shape is not in the type (design principles 5.4). A
+    // parameter's type may write its extent over the names the call bound (`f32[n - w + 1]`) or
+    // leave one open (`?`); the argument's own type says what the compiler knows and no more, so
+    // where the two do not meet as types the check that the value really has that shape is made
+    // when the value exists. `T[..]` read as `T` is the same check in the other direction: the
+    // element of the open rank *is* the value only when it has no dimension, and the rank is the
+    // value's (`Builder::coerceTo` is where that step is inserted).
     // That is the same check `as` makes -- and it is **not** `as`:
     //
     //   - it is not a conversion the program wrote. `:op/cast` is the conversion a program writes

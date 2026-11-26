@@ -103,8 +103,7 @@ verify_script = """
 # What is still guardable is the half that is live: the pair inlines at all. The two entries below
 # read that number -- `direct_calls` 24 with no pass and 3 under the pair.
 # Slow layer: over the 2 s the fast layer allows -- 2.50 s of
-# child wall clock in the 2026-11-12 record (appendix B of
-# internal/reports/2026-11-24-test-suite-inventory.cn.md).
+# child wall clock.
 tier = "slow"
 [[tests]]
 name = "inline_cycle.within_call_no_pass"

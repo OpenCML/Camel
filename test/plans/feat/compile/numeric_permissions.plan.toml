@@ -229,8 +229,7 @@ verify_script = """
 }
 """
 # Slow layer: over the 2 s the fast layer allows -- 2.37 s of
-# child wall clock in the 2026-11-12 record (appendix B of
-# internal/reports/2026-11-24-test-suite-inventory.cn.md).
+# child wall clock.
 tier = "slow"
 
 [[tests]]
@@ -250,8 +249,7 @@ verify_script = """
 }
 """
 # Slow layer: over the 2 s the fast layer allows -- 2.30 s of
-# child wall clock in the 2026-11-12 record (appendix B of
-# internal/reports/2026-11-24-test-suite-inventory.cn.md).
+# child wall clock.
 tier = "slow"
 
 [[tests]]

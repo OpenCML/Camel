@@ -642,7 +642,14 @@ function planFilesOf(target) {
 function planIdOf(file) {
     try {
         const m = fs.readFileSync(file, 'utf8').match(/^\s*id\s*=\s*"([^"]+)"/m)
-        return m ? m[1] : null
+        if (m) return m[1]
+        // A plan file that declares no id is named by its file name, and the runner has always said
+        // so: `doc.id || path.basename(planPath, '.plan.toml')` (test/tools/run-tests.mjs, where the
+        // case name is built). Reading only the declared id made those plans unmappable here -- on
+        // a70b8c645 nine of fourteen targets had no `id` line and the whole comparison came back
+        // empty, which is this tool's failure to read a name the run had written, not a tree with
+        // nothing to say. The fallback is the runner's, so the two cannot disagree about a name.
+        return path.basename(file, '.plan.toml')
     } catch {
         return null
     }

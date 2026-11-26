@@ -191,6 +191,14 @@ class ArrayType : public CompositeType {
     virtual bool equals(Type *type) const override;
     virtual Type *unify(Type *other) const override;
     virtual CastSafety castSafetyFrom(Type *sourceType) const override;
+    /// Whether a value of `sourceType` enters this array type, judged by the two types' structure:
+    /// a value of the element type is the value of the open rank (the slot holds the rank-zero
+    /// array that *is* the element, design principles 5.4), and an array this type holds -- the
+    /// same element type, a rank the type states -- is the same value. Both steps move nothing and
+    /// cannot fail. A shape this type states and the source leaves open is a conversion the program
+    /// writes (`as`), not an entering, and `T[..]` read as `T` is a shape check
+    /// (`:op/refine_extent`), not one either.
+    virtual bool castEntersFrom(Type *sourceType) const override;
     virtual slot_t castSlotFrom(slot_t value, Type *sourceType) const override;
     virtual bool assignableFrom(Type *sourceType) const override;
     /// Widens every element type and keeps the shape's rank, forgetting every dimension value

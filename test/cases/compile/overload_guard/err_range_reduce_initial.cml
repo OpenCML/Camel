@@ -1,0 +1,10 @@
+// The accumulator `keep` takes and answers is `int[]`, and the `initial` written beside it is a
+// range: no `reduce` takes the call, and the two arguments were enough for every candidate to be
+// refused. What the call must answer is that refusal (the receiver is a `Range`, so the prelude's
+// range form is the candidate whose own `with` parameters are what does not fit).
+func keep(acc: int[], i: int) => int[] { return acc }
+
+func main() => int sync {
+    println((0 .. 3)->reduce<keep, 0 .. 3>)
+    return 0
+}

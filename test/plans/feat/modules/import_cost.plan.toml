@@ -30,8 +30,7 @@ timeout_ms = 120000
 # flag appears. A later change that made module-level `let`s eager at import fails the first, and
 # one that dropped the dependency fails the second.
 # Slow layer: over the 2 s the fast layer allows -- 11.79 s of
-# child wall clock in the 2026-11-12 record (appendix B of
-# internal/reports/2026-11-24-test-suite-inventory.cn.md).
+# child wall clock.
 tier = "slow"
 [[tests]]
 name = "import.unused_import_runs_nothing"

@@ -115,7 +115,11 @@
  * that says to accept the new number (`--update-baseline` is the only writer). A missing baseline is
  * a red too, never a pass over nothing. This is what makes the check a wall rather than a reading:
  * the gate runs it on every run and its exit code decides, so "may not grow" holds and "came down"
- * is the reward.
+ * is the reward. One more line states what that wall can prove and what it cannot, because the two
+ * are one sentence apart: the count it may not exceed is the count of entries it has already
+ * accepted, so a green run says "no new one" and says nothing about the ones in the baseline.
+ * `--enforce` is the mode whose red covers all of them, and the line names it rather than leaving the
+ * reader to find the flag.
  *
  * ## Two states, two reports, because a false red costs what a false green costs
  *
@@ -721,6 +725,17 @@ function ratchet(result, baselinePath) {
         `plan-fields baseline=${baseline.count} delta=${delta >= 0 ? `+${delta}` : delta} ` +
             `ratchet=${broken ? 'grown' : delta < 0 ? 'lowered' : 'ok'} ` +
             `counted(${categoryLine})`,
+    )
+    // One line on this gate's own posture, because the ratchet's red and the gate's red are not the
+    // same set: a count that may not grow cannot go red about the entries it already contains, so on
+    // every green run this gate proves "no new one" and proves nothing about the ones in the file.
+    // Read the other way, a green here was taken as "no plan field is unread" -- the sentence the
+    // baseline's 317 findings make false. `--enforce` is the mode where they are all failures, and
+    // the line names it so a reader who wants that reading knows the flag rather than the count.
+    console.log(
+        `plan-fields ratchet: the ${result.findings.length} finding(s) on this tree are compared with the ` +
+            `${baseline.count} accepted in ${where} -- growth past that count is this gate's only red, so it ` +
+            'cannot fail on the debt it already carries, and --enforce is the mode that would',
     )
     if (broken) {
         // The set of entries moved, so the baseline no longer describes the tree: say in one line

@@ -432,6 +432,11 @@ static bytecode_vec_t compileRuntimeGraph(
                 return;
             }
 
+            // No kind stands for an entering or a refinement: `shapeOfNode` answers None for an
+            // OPER node, so a call of either takes the branch below and its own kernel. The labels
+            // complete the enum and reach the same return.
+            case camel::execute::OperShape::Entering:
+            case camel::execute::OperShape::Refining:
             case camel::execute::OperShape::None:
                 return;
             }

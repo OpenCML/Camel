@@ -143,6 +143,11 @@ slot_t runShapedOperator(
         return runConstruction(graph, node, frame);
     case OperShape::Access:
         return runAccess(graph, node, frame);
+    // No kind stands for an entering or a refinement: both are OPER nodes with their own kernel
+    // (`operators/cast.cpp`), and this function runs a *kind's* frame. The labels name the shapes
+    // the switch would otherwise leave out, and they reach the answer the kind's absence deserves.
+    case OperShape::Entering:
+    case OperShape::Refining:
     case OperShape::None:
         break;
     }

@@ -340,20 +340,49 @@ CastSafety TupleType::castSafetyFrom(Type *sourceType) const {
 }
 
 bool TupleType::castEntersFrom(Type *sourceType) const {
-    if (castSafetyFrom(sourceType) == CastSafety::Safe) {
-        return true;
-    }
-    // The other half is the step `castSafetyFrom` answers `Unsafe` for alone (see the note there):
-    // a value the compiler knows has failed, passed on where another `T!` is expected. `->`, the
-    // error arm of a `match` and a `return` of an error value are where it is inserted, and it
-    // cannot fail -- `castSlotFrom` hands the same object on -- so it is an entering like the
-    // others even though it is not a conversion the safety table calls Safe.
-    if (!isFallible() || sourceType == nullptr) {
+    // The form this type states is the one a value enters by its structure -- `T` into `T?` / `T!`,
+    // `null` into `T?`, a failed value into a `T!`, one box into a cell of its own content type --
+    // and nothing of that is a conversion, so the conversion table is not asked here (design
+    // principles 5.1, "entering is not a conversion": that table answers the conversions a program
+    // writes and the values they have to check, and it is not a name this judgement mentions).
+    if (sourceType == nullptr) {
         return false;
     }
+    if (equals(sourceType)) {
+        return true;
+    }
+    if (sourceType->code() == TypeCode::Never) {
+        return true;
+    }
+    if (cell_) {
+        // A cell is one box (design principles 3.5): two cell types whose content types accept each
+        // other's values are that one box seen as either type, and the step moves nothing.
+        if (sourceType->code() != TypeCode::Tuple) {
+            return false;
+        }
+        const auto *source = static_cast<const TupleType *>(sourceType);
+        return source->cell_ && typesPtr_[0]->assignableFrom(source->typesPtr_[0]) &&
+               source->typesPtr_[0]->assignableFrom(typesPtr_[0]);
+    }
+    if (!isTagged()) {
+        return false;
+    }
+    // `null` is the literal of every nullable type: putting it in the form reaches no payload.
+    if (isNullable() && sourceType->code() == TypeCode::Void) {
+        return true;
+    }
+    // A value of the payload enters the form, one level at a time (`T` -> `T?`, `T` -> `T!`, a
+    // tagged value into the form over it: `T?` -> `T?!`). The payload's own relation decides, so a
+    // value that does not fit the payload does not enter the form either.
+    if (typesPtr_[0]->assignableFrom(sourceType)) {
+        return true;
+    }
+    // A value the compiler knows has failed, passed on where another `T!` is expected: `->`, the
+    // error arm of a `match`, a `return` of an error value. It is the same object handed on
+    // (`castSlotFrom`), so it cannot fail either -- and it is the one entering whose pair the
+    // safety table calls `Unsafe`, which is why the table is not what this judgement asks.
     const TupleType *from = asTagged(sourceType);
-    return from != nullptr && from->tag_ == tag_ && from->isFallible() &&
-           !typesPtr_[0]->assignableFrom(sourceType);
+    return from != nullptr && from->tag_ == tag_ && isFallible() && from->isFallible();
 }
 
 slot_t TupleType::castSlotFrom(slot_t value, Type *sourceType) const {

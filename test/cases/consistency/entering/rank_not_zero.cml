@@ -1,0 +1,18 @@
+/**
+ * `T[...]` read as `T` is the element the open rank holds -- when the value has no dimension, since a
+ * rank-zero array *is* that element (design principles 5.4). The rank is the value's, not the
+ * type's, so the step can fail: it is a shape check (`:op/refine_extent`), and a value of the wrong
+ * rank stops the program with the array's own words instead of being handed on as the element it is
+ * not. It is not an entering (an entering always succeeds) and not a conversion (`as`), which the
+ * compiler would only insert where the program wrote one.
+ */
+
+func element_of(x: f32[...]) => f32 {
+    return x
+}
+
+func main() => int sync {
+    println(element_of(1.5))         // rank zero: the element itself
+    println(element_of([1.0, 2.0]))  // rank one: not the element, and a rank is not a type
+    return 0
+}

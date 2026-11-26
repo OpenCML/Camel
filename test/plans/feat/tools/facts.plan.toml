@@ -137,7 +137,7 @@ timeout_ms = 20000
 
 [[tests]]
 name = "facts.compare_arrangeable"
-desc = "test::facts_compare reads core.arrangeable at every node -- through the store, so the answer a reader gets -- and the algorithm it replaced, which answered OPER nodes only: the four terms of a node's operator, read from the operator itself. Every OPER node agrees with the older answer, and the count of nodes the older algorithm never answered (values, ports, branches, loops, calls) is printed as no_old: the fact answers them, and that count is part of what moving the question into a fact added."
+desc = "test::facts_compare reads core.arrangeable at every node -- through the store, so the answer a reader gets -- and the algorithm it replaced, which answered OPER nodes only: the four terms of a node's operator, read from the operator itself. Every OPER node agrees with the older answer, and the count of nodes the older algorithm never answered (values, ports, branches, loops, calls) is printed as no_old: the fact answers them, and that count is part of what moving the question into a fact added. For a conversion the older answer is restated at the node with the pair of types it converts between (castMayFault, which the algorithm that was replaced read for those nodes and which the pass predicate reads too), and the count of nodes that took that restatement is printed as conversions -- a run that walked none of them says so instead of reading like a comparison that covered them."
 kind = "behavior"
 case = "../../../cases/facts/tensors_and_loops.cml"
 args = ["${case}", "test::facts_compare"]
@@ -159,7 +159,7 @@ assert(num('same') + num('no_old') === num('nodes'), 'the two counts do not cove
 timeout_ms = 20000
 [[tests]]
 name = "facts.compare_arrangeable_readers"
-desc = "test::facts_compare also reads `core.arrangeable` against the predicate a pass asks before it drops, moves, merges or reorders a node (`runtime::nodeIsFreelySchedulable`, the same four terms assembled inside `runtime::may_be_rearranged`): at every node of the program the two answers agree, no node is left without an answer, and both counts cover the nodes. The one node kind this comparison found disagreeing is the hand-on of an order -- a GATE carrying the chain of a `sync` block, which is pure, reaches nothing, cannot fault, ends, and still stands where the order says -- and the kind now declines for it instead of answering `freely arrangeable`, which is the answer a placement decision would act on (design principles 3.4; D-1124-65)."
+desc = "test::facts_compare also reads `core.arrangeable` against the predicate a pass asks before it drops, moves, merges or reorders a node (`runtime::nodeIsFreelySchedulable`, the same four terms assembled inside `runtime::may_be_rearranged`): at every node of the program the two answers agree, no node is left without an answer, and both counts cover the nodes. The one node kind this comparison found disagreeing is the hand-on of an order -- a GATE carrying the chain of a `sync` block, which is pure, reaches nothing, cannot fault, ends, and still stands where the order says -- and the kind now declines for it instead of answering `freely arrangeable`, which is the answer a placement decision would act on (design principles 3.4; D-1124-65). That program is a `sync` block, so the gate it pins carries a wait edge, which is only the first two of the three forms a gate's order is written in: `facts.compare_arrangeable_readers_a_body_exit_gate` pins the gate that carries its order in the third, the values it reads, and was still answered freely arrangeable after that fix."
 kind = "behavior"
 case = "../../../cases/facts/tensors_and_loops.cml"
 args = ["${case}", "test::facts_compare"]
@@ -177,6 +177,93 @@ assert(num('diff') === 0, `a node is answered differently by the fact and by the
 assert(num('agree') + num('diff') === num('nodes'), 'the two counts do not cover the nodes')
 const other = out.split('\n').find(l => l.startsWith('FACTS_COMPARE kind=core.arrangeable graphs='))
 assert(other && other.match(/nodes=([0-9]+)/)[1] === String(num('nodes')), 'the two comparisons read different graphs')
+}
+"""
+timeout_ms = 20000
+
+# The gate the entry above does not reach. That program is a `sync` block, so the gate it pins
+# carries a wait edge (a sync predecessor or a control input), and `EdgeKind::Wait` is the first two
+# of the three forms a gate's order is written in. A region's exit GATE carries its order in the
+# **third**: `[the value the region hands out, the writes it keeps alive after it]`
+# (`Builder::layRegionWriteEdges`), so it waits on nothing the wait edge kind names. `test::facts_compare`
+# answered it `freely arrangeable` -- pure, reaching nothing, unable to fault, ending, all four true --
+# while `runtime::nodeIsFreelySchedulable` refused it, which is the same node answered two ways. The
+# kind refuses every gate now (D-1124-65; `src/kernel/facts/facts.cpp`, the `Gate` case), and this is
+# the case that is red when it does not: measured on this tree before the change, the program's one
+# GATE was `kind=1 moved=0 terms=1111 waits=0 orders=0 syncs=0 reads=2` and the totals said
+# `diff=1`; after it, `diff=0` and the gate is `both_kept`.
+[[tests]]
+name = "facts.compare_arrangeable_readers_a_body_exit_gate"
+desc = "The one node kind this comparison still found answered two ways, pinned on the program that shows it without anything else in the way: a body whose exit GATE carries its order in the values it reads rather than in a wait edge. `main` prints `1` and returns `0`, so the region hands `0` out and keeps `println(1)` alive after it, and the exit is a GATE whose ordinary inputs are `[0, println]` -- two of them, no sync predecessor, no control input. `core.arrangeable` called it freely arrangeable (its four terms are all true) and `runtime::nodeIsFreelySchedulable` refused it, because the order a gate stands in is what a pass must not be free to move; the kind refuses every gate now, so the two agree at every node of this program, the gate is present (`nodes=1`) and refused by both (`both_kept=1`), and nothing else in the program is a disagreement. The program has no call to a function of its own, no branch, no `for` loop and no conversion, because those are other classes of the same comparison and are not what this case is for."
+kind = "behavior"
+case = "../../../cases/facts/a_body_exit_gate_reads_its_writes.cml"
+args = ["${case}", "test::facts_compare"]
+
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout
+const line = out.split('\n').find(l => l.startsWith('FACTS_COMPARE kind=core.arrangeable readers '))
+assert(line, 'no FACTS_COMPARE readers line for core.arrangeable')
+const num = (text, name) => { const m = text.match(new RegExp(name + '=([0-9]+)')); assert(m, `${name} is missing from: ${text}`); return Number(m[1]) }
+assert(num(line, 'nodes') > 0, 'no node was read')
+assert(num(line, 'no_fact') === 0, `a node got no answer from the kind: ${line}`)
+assert(num(line, 'diff') === 0, `a node is answered differently by the fact and by the pass predicate: ${line}\n${out.split('\n').filter(l => l.startsWith('FACTS_COMPARE reader_diff')).join('\n')}`)
+assert(num(line, 'agree') + num(line, 'diff') === num(line, 'nodes'), 'the two counts do not cover the nodes')
+const gate = out.split('\n').find(l => l.startsWith('FACTS_COMPARE readers_kind kind=gate '))
+assert(gate, 'the program carries no GATE row: the case stopped building the node it is here for')
+assert(num(gate, 'nodes') === 1, `the program carries one GATE and the table read another count: ${gate}`)
+assert(num(gate, 'both_kept') === 1, `the gate is not refused by both readers: ${gate}`)
+assert(num(gate, 'kind_free_pred_kept') === 0 && num(gate, 'kind_kept_pred_free') === 0, `the gate's two answers still differ: ${gate}`)
+}
+"""
+timeout_ms = 20000
+
+# The table itself, not one row of it. A total of `diff=0` says the two readers agreed about every
+# node the run read, and says nothing about **which** kinds were read: a program could stop carrying
+# a kind and the comparison would keep passing over what is left. So this entry reads one row per
+# node kind, and asserts that the rows are the program's nodes (each row covers its own count, the
+# rows sum to the total), that no row carries a disagreement, and that the two answers are
+# nevertheless apart in the table -- a value both readers call free, the gate both refuse. Without
+# the last two assertions a kind answered `not arrangeable` for everything would read as agreement.
+[[tests]]
+name = "facts.compare_arrangeable_readers_by_kind"
+desc = "The per-kind table `test::facts_compare` prints beside the totals, on the same program: one `FACTS_COMPARE readers_kind` line per node kind the program carries -- `data`, `oper`, `call` and `gate` here -- each counting the four combinations of the two answers (`both_free`, `both_kept`, `kind_free_pred_kept`, `kind_kept_pred_free`) and the nodes the kind answered nothing for. The rows are the program's nodes: every row's four combinations and `no_fact` cover its `nodes`, and the rows sum to the total. No row carries a disagreement, and the table is not one answer for everything: the values are `both_free` and the gate is `both_kept`, so a kind that answered `not arrangeable` for every node would fail this reading rather than pass it. A kind the table does not name is a kind the program stopped carrying, which is what the four names are asserted for."
+kind = "behavior"
+case = "../../../cases/facts/a_body_exit_gate_reads_its_writes.cml"
+args = ["${case}", "test::facts_compare"]
+
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout
+const totals = out.split('\n').find(l => l.startsWith('FACTS_COMPARE kind=core.arrangeable readers '))
+assert(totals, 'no FACTS_COMPARE readers line for core.arrangeable')
+const num = (text, name) => { const m = text.match(new RegExp(name + '=([0-9]+)')); assert(m, `${name} is missing from: ${text}`); return Number(m[1]) }
+const rows = out.split('\n').filter(l => l.startsWith('FACTS_COMPARE readers_kind '))
+assert(rows.length > 0, 'no per-kind row: the table is missing')
+const seen = []
+let sum = 0
+for (const row of rows) {
+    const kind = row.match(/kind=(\w+)/)[1]
+    seen.push(kind)
+    const nodes = num(row, 'nodes')
+    assert(nodes > 0, `a row with no node: ${row}`)
+    sum += nodes
+    assert(num(row, 'kind_free_pred_kept') === 0, `the kind says freely arrangeable where the predicate refuses: ${row}`)
+    assert(num(row, 'kind_kept_pred_free') === 0, `the kind refuses where the predicate says it may be moved: ${row}`)
+    assert(num(row, 'no_fact') === 0, `a node got no answer from the kind: ${row}`)
+    const covered = num(row, 'both_free') + num(row, 'both_kept') + num(row, 'kind_free_pred_kept') + num(row, 'kind_kept_pred_free') + num(row, 'no_fact')
+    assert(covered === nodes, `the row's answers do not cover its nodes: ${row}`)
+}
+assert(sum === num(totals, 'nodes'), `the table read ${sum} nodes and the totals read ${num(totals, 'nodes')}: ${totals}`)
+for (const kind of ['data', 'oper', 'call', 'gate']) {
+    assert(seen.includes(kind), `the table names no ${kind} row, so the kind left the program: ${seen.join(', ')}`)
+}
+const data = rows.find(l => / readers_kind kind=data /.test(l))
+assert(num(data, 'both_free') > 0, `no value is freely arrangeable for both readers, so the table reads as one answer for everything: ${data}`)
+const gate = rows.find(l => / readers_kind kind=gate /.test(l))
+assert(num(gate, 'both_kept') === num(gate, 'nodes'), `a gate is not refused by both readers: ${gate}`)
 }
 """
 timeout_ms = 20000

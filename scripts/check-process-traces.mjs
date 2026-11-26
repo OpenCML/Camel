@@ -91,7 +91,12 @@ const pattern = new RegExp(
     '负责人|决策者|协调者',
     '88zjwei',
     '/home/zjwei',
-    'camel-work',
+    // The work root is not a trace by itself: the tools define it, and they name it `$HOME/camel-work`,
+    // `~/camel-work`, `.../camel-work`, so a comment that says where a temp directory goes is
+    // describing the layout the code implements. What is a trace is one host's directory, which is
+    // written with a concrete home in front: a manifest row reads `<home>/<user>/camel-work/tmp/...`
+    // and those rows were written on one machine. The condition is the prefix, not the word.
+    '(?<=/home/[a-z0-9_-]+/)camel-work',
     '\\b20(25|26)-[01]\\d-[0-3]\\d\\b',
     // The step a refactor had reached, in the spellings it has been written in.
     '\\brefactor\\s+(?:stage|plan|step)\\b',

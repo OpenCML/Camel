@@ -27,8 +27,7 @@ expect_stdout_contains = ["diagnostics registry proof:", "checks passed"]
 normalizers = ["normalize_newlines"]
 timeout_ms = 60000
 # Slow layer: over the 2 s the fast layer allows -- 4.38 s of
-# child wall clock in the 2026-11-12 record (appendix B of
-# internal/reports/2026-11-24-test-suite-inventory.cn.md).
+# child wall clock.
 tier = "slow"
 
 [[tests]]
@@ -49,8 +48,7 @@ normalizers = ["normalize_newlines"]
 # CPU, which 120 s was 3.9x -- under the 4x the margin rule asks for. 150 s is 4.85x that figure.
 timeout_ms = 150000
 # Slow layer: over the 2 s the fast layer allows -- 14.95 s of
-# child wall clock in the 2026-11-12 record (appendix B of
-# internal/reports/2026-11-24-test-suite-inventory.cn.md).
+# child wall clock.
 tier = "slow"
 
 [[tests]]
@@ -65,8 +63,7 @@ expect_stdout_contains = ["diagnostic codes mentioned by no test:"]
 normalizers = ["normalize_newlines"]
 timeout_ms = 20000
 # Slow layer: over the 2 s the fast layer allows -- 2.27 s of
-# child wall clock in the 2026-11-12 record (appendix B of
-# internal/reports/2026-11-24-test-suite-inventory.cn.md).
+# child wall clock.
 tier = "slow"
 
 [[tests]]

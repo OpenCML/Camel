@@ -93,8 +93,7 @@ after matmul minus sigmoid 0.0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 # Slow layer: over the 2 s the fast layer allows -- 2.62 s of
-# child wall clock in the 2026-11-12 record (appendix B of
-# internal/reports/2026-11-24-test-suite-inventory.cn.md).
+# child wall clock.
 tier = "slow"
 [[tests]]
 name = "rules.accuracy_scalar_log1p_rule"
@@ -142,8 +141,7 @@ expect_stdout_contains = ["log1p tiny  1e-300 1e-300", "expm1 tiny  1e-300 1e-30
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 # Slow layer: over the 2 s the fast layer allows -- 2.84 s of
-# child wall clock in the 2026-11-12 record (appendix B of
-# internal/reports/2026-11-24-test-suite-inventory.cn.md).
+# child wall clock.
 tier = "slow"
 
 [[tests]]

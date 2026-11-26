@@ -1,0 +1,45 @@
+id = "compile.overload_guard"
+order = 1014
+tier = "fast"
+tags = ["feat", "compile", "overload", "generics"]
+desc = "A refused generic call retries the candidate set that refused it: the refusal must end in a diagnostic, not a stack overflow, and the range and array-literal receivers must report the same way; a legal generic overload over a range keeps resolving"
+
+[defaults]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 20000
+
+[[tests]]
+name = "overload_guard.retry_range_reduce"
+desc = "`(0 .. 3)->reduce<keep, 0 .. 3>`: `keep` binds `U = int[]` and `initial` is a `Range`, so no candidate takes the call; it is reported at the call (exit 1) instead of being retried until the stack runs out (it was SIGSEGV, rc 139, with no output)."
+kind = "negative"
+case = "../../../cases/compile/overload_guard/err_range_reduce_initial.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::NoMatchingFunction"
+
+[[tests]]
+name = "overload_guard.array_reduce_control"
+desc = "The same two `with` arguments over an array literal: `NoMatchingFunction` at the call, exit 1 -- the reading the range form has to match."
+kind = "negative"
+case = "../../../cases/compile/overload_guard/err_array_reduce_initial.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::NoMatchingFunction"
+
+[[tests]]
+name = "overload_guard.range_reduce_legal"
+desc = "The same prelude form with `initial` an array of the accumulator's type: the call resolves and runs (printing `[0, 0, 1, 2]`), which is the reading that says the refusal above did not narrow a legal overload."
+kind = "behavior"
+case = "../../../cases/compile/overload_guard/range_reduce_legal.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_exact = "[0, 0, 1, 2]\n"
+
+[[tests]]
+name = "overload_guard.range_reduce_literal_initial"
+desc = "`reduce<addf, 0>` with `U = float`: the int literal `0` enters the `float` position, so the candidate still fits and the call resolves and runs (printing `true`)."
+kind = "behavior"
+case = "../../../cases/compile/overload_guard/range_reduce_literal_initial.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_exact = "true\n"

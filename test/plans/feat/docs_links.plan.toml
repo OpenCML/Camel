@@ -97,8 +97,7 @@ expect_stdout_contains = ["no unverified citation", "symbol citation(s) verified
 normalizers = ["normalize_newlines"]
 timeout_ms = 30000
 # Slow layer: over the 2 s the fast layer allows -- 2.98 s of
-# child wall clock in the 2026-11-12 record (appendix B of
-# internal/reports/2026-11-24-test-suite-inventory.cn.md).
+# child wall clock.
 tier = "slow"
 
 [[tests]]
@@ -191,8 +190,7 @@ normalizers = ["normalize_newlines"]
 # reading, and still catches a genuine hang inside three minutes.
 timeout_ms = 180000
 # Slow layer: over the 2 s the fast layer allows -- 19.73 s of
-# child wall clock in the 2026-11-12 record (appendix B of
-# internal/reports/2026-11-24-test-suite-inventory.cn.md).
+# child wall clock.
 tier = "slow"
 
 # The zero reading. `--no-pending` reads the pending list as empty, so the run has nothing waiting
@@ -299,8 +297,7 @@ expect_stdout_contains = ["no conflict markers", "hunk head, a base block, a sep
 normalizers = ["normalize_newlines"]
 timeout_ms = 60000
 # Slow layer: over the 2 s the fast layer allows -- 2.71 s of
-# child wall clock in the 2026-11-12 record (appendix B of
-# internal/reports/2026-11-24-test-suite-inventory.cn.md).
+# child wall clock.
 tier = "slow"
 
 [[tests]]
@@ -334,8 +331,7 @@ timeout_ms = 60000
 # reachable from a source-only check and is recorded, with its measurement, in
 # `internal/reviews/2026-11-04-where-a-laws-port-disagrees-with-the-value-it-is-handed.cn.md`.
 # Slow layer: over the 2 s the fast layer allows -- 2.65 s of
-# child wall clock in the 2026-11-12 record (appendix B of
-# internal/reports/2026-11-24-test-suite-inventory.cn.md).
+# child wall clock.
 tier = "slow"
 
 [[tests]]

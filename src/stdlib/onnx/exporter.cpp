@@ -343,16 +343,38 @@ class Evaluator {
     using LoopBody = std::function<std::pair<std::optional<std::string>, std::vector<Value>>(
         const Value &iter, const std::vector<Value> &state)>;
     using HoleCall = std::function<Value(size_t leaf, const std::vector<Value> &args)>;
+    /// What one Loop emission gives back: the final value of every carried state, and the array
+    /// each scan output holds (the values of the rounds, stacked in round order).
+    struct LoopEmission {
+        std::vector<Value> states; // one per value in `init`
+        std::vector<Value> scans;  // one per scan output
+    };
+    /// The Loop of `init` over `body`, with `scanCount` scan outputs. `body` gives the next state
+    /// values and then one value per scan output; an ONNX Loop stacks the value of every round
+    /// along a new first axis, which is the array a collecting loop hands out
+    /// (camel/runtime/loop.h). `scanElem` is one fact per scan output -- what one round gives --
+    /// and `tripExtent` is the number of rounds when the export knows it, so that the stacked
+    /// arrays state their length (`nullopt` leaves that dimension to the model: an unknown extent
+    /// is what the format calls a dynamic axis).
+    ///
     /// `firstCond` is the condition the Loop checks before its first round, computed outside the
     /// body on the values it starts from; without one the Loop runs the body at least once (a
     /// recursion's body decides there whether it recursed, and is run once more at the final
     /// state). A LOOP node checks its condition the way the source does -- before each round --
     /// and passes its own (see evalLoopNode).
+    LoopEmission emitLoopScanning(
+        Activation &act, const std::optional<std::string> &trip, const std::vector<Value> &init,
+        const LoopBody &body, size_t scanCount, const std::vector<TensorFacts> &scanElem,
+        const std::optional<int64_t> &tripExtent,
+        const std::optional<std::string> &firstCond = std::nullopt);
     std::vector<Value> emitLoop(
         Activation &act, const std::optional<std::string> &trip, const std::vector<Value> &init,
-        const LoopBody &body, const std::optional<std::string> &firstCond = std::nullopt);
-    /// The source's LOOP node (design principles 3.10), emitted as an ONNX Loop through emitLoop:
-    /// the state is what the Loop carries, the sequence is the trip count (see evalLoopNode).
+        const LoopBody &body, const std::optional<std::string> &firstCond = std::nullopt) {
+        return emitLoopScanning(act, trip, init, body, 0, {}, std::nullopt, firstCond).states;
+    }
+    /// The source's LOOP node (design principles 3.10), emitted as an ONNX Loop through
+    /// emitLoopScanning: the state is what the Loop carries, the sequence is the trip count, and
+    /// the values the rounds are collected into are its scan outputs (see evalLoopNode).
     Value evalLoopNode(Activation &act, gc_node_ref_t ref);
     Value translateLinear(Activation &act, GCGraph *fn, std::vector<Value> args);
     Value
@@ -1952,7 +1974,11 @@ Evaluator::evalLoopBody(Activation &act, gc_node_ref_t ref, LoopFrame &loop) {
     switch (execute::shapeOfOperation(*g, ref)) {
     case execute::OperShape::Clone:
         return evalLoopBody(act, g->normInputsOf(ref).front(), loop);
-    case execute::OperShape::Conversion: {
+    case execute::OperShape::Conversion:
+    // Two shapes, one export -- two labels, not a family: an entering's pair enters by
+    // construction and it cannot fault, but to ONNX the value is taken as the node's type either
+    // way. A refinement keeps the generic operator path, as it does in the lowering table.
+    case execute::OperShape::Entering: {
         BodyOutcome out = evalLoopBody(act, g->normInputsOf(ref).front(), loop);
         if (out.result) {
             out.result = evalCast(act, ref, std::move(*out.result));
@@ -2320,11 +2346,17 @@ Value Evaluator::translateLoop(Activation &act, GCGraph *fn, std::vector<Value> 
 //     of a recursion that returns several values takes one cotangent per differentiable one).
 // Everything else is refused with a diagnostic.
 
-std::vector<Value> Evaluator::emitLoop(
+Evaluator::LoopEmission Evaluator::emitLoopScanning(
     Activation &act, const std::optional<std::string> &trip, const std::vector<Value> &init,
-    const LoopBody &body, const std::optional<std::string> &firstCond) {
-    if (init.empty()) {
+    const LoopBody &body, size_t scanCount, const std::vector<TensorFacts> &scanElem,
+    const std::optional<int64_t> &tripExtent, const std::optional<std::string> &firstCond) {
+    // A collecting loop whose every state is the array the rounds are collected into carries
+    // nothing: the scan output is the whole of what it gives back.
+    if (init.empty() && scanCount == 0) {
         unsupported(act, "a recursion changes none of its values: it never ends, or it is no loop");
+    }
+    if (scanElem.size() != scanCount) {
+        unsupported(act, "a Loop asks for fewer values than it collects");
     }
     emitter_.pushScope("loop_body");
     std::vector<ValueInfo> inputs, outputs;
@@ -2333,6 +2365,7 @@ std::vector<Value> Evaluator::emitLoop(
     // what the Loop keeps between calls.
     std::vector<std::vector<Value>> initLeaves(init.size());
     std::vector<size_t> leafArgument;
+    std::vector<TensorFacts> scanRoundFacts(scanCount);
     try {
         const std::string iter   = emitter_.fresh("loop_iter");
         const std::string condIn = emitter_.fresh("loop_cond_in");
@@ -2341,7 +2374,7 @@ std::vector<Value> Evaluator::emitLoop(
             state.push_back(placeholderState(v, "state", emitter_));
         }
         const auto [cont, next] = body(Value::symbolicScalar(iter, type::Type::Int64()), state);
-        if (next.size() != init.size()) {
+        if (next.size() != init.size() + scanCount) {
             unsupported(act, "the values a recursion carries are not the same on every path");
         }
         const TensorFacts flag{TypeCode::Bool, tensor::StaticShape{}};
@@ -2385,6 +2418,34 @@ std::vector<Value> Evaluator::emitLoop(
                 leafArgument.push_back(k);
             }
         }
+        // The scan outputs, one body output per collected value: the body gives what one round
+        // collects, and the Loop stacks the rounds along a new first axis. The body output's
+        // type is one round's -- the leading axis is the Loop's, not the body's.
+        for (size_t c = 0; c < scanCount; ++c) {
+            const Value &collected = next[init.size() + c];
+            const TensorFacts given = factsOf(collected);
+            if (!given.dtype || !given.shape) {
+                unsupported(
+                    act,
+                    std::format(
+                        "the value the loop collects in slot {} of a round is {}, and an ONNX scan "
+                        "output is a tensor whose dtype and shape the model states",
+                        c + 1,
+                        describe(collected)));
+            }
+            if (scanElem[c].dtype && *scanElem[c].dtype != *given.dtype) {
+                unsupported(
+                    act,
+                    std::format(
+                        "the value collected in slot {} has one element type here and another on "
+                        "the other path of the round, and a scan output is one tensor of one type",
+                        c + 1));
+            }
+            scanRoundFacts[c] = given;
+            const std::string name = emitter_.node(
+                "Identity", {emitter_.operand(collected, *given.dtype)}, {}, "scan_out");
+            outputs.push_back(valueInfoOf(name, given));
+        }
     } catch (...) {
         emitter_.popScope();
         throw;
@@ -2407,9 +2468,9 @@ std::vector<Value> Evaluator::emitLoop(
         "Loop",
         std::move(loopInputs),
         {Attribute::makeGraph("body", std::move(bodyGraph))},
-        leafArgument.size(),
+        leafArgument.size() + scanCount,
         "loop_state");
-    std::vector<Value> finals;
+    LoopEmission emission;
     size_t output = 0;
     for (size_t k = 0; k < init.size(); ++k) {
         std::vector<Value> leafValues;
@@ -2417,9 +2478,17 @@ std::vector<Value> Evaluator::emitLoop(
             leafValues.push_back(placeholderLike(leaf, names[output++]));
         }
         size_t next = 0;
-        finals.push_back(rebuildValue(init[k], leafValues, next));
+        emission.states.push_back(rebuildValue(init[k], leafValues, next));
     }
-    return finals;
+    // The rows are the rounds: shape [trip, one round's shape]. The trip count is the number of
+    // rounds the Loop runs, which is what the array a collecting loop hands out holds.
+    for (size_t c = 0; c < scanCount; ++c) {
+        tensor::StaticShape stacked{tripExtent};
+        const TensorFacts &one = scanRoundFacts[c];
+        stacked.insert(stacked.end(), one.shape->begin(), one.shape->end());
+        emission.scans.push_back(Value::symbolic(names[output++], one.dtype, stacked));
+    }
+    return emission;
 }
 
 // ---------------------------------------------------------------- the LOOP node of the source
@@ -2445,8 +2514,86 @@ std::vector<Value> Evaluator::emitLoop(
 //   * the body: the body region with its ports bound to the element and the state, giving the
 //     next state.
 //
-// A loop that collects a value every round is refused: no source writes one (only a graph
-// producer does, camel/runtime/loop.h), and what it would take is the Loop's scan outputs.
+// A loop that collects a value every round is a Loop with scan outputs (camel/runtime/loop.h):
+// the body gives one more value per collection slot each round, the Loop stacks them along a new
+// first axis, and that array is what the loop hands out. The state that an append-only array
+// starts as is *the same array* -- the compiler keeps it beside the collection because a driver
+// builds the collected values in one pass, and `Builder::collectLoopAppends` only makes a slot of
+// a state that starts empty and whose one use is the append -- so such a state is not carried at
+// all: the scan output is its final value. A state that is not the collection is carried as
+// usual. A loop whose rounds a condition decides (`while`, `for ... while`) is refused when it
+// collects: the model would have to state a length after the run, and the condition reads the
+// array the rounds are still appending to.
+
+/// The nodes the body of a collecting loop gives its result from: the state values in state order
+/// and then one collected value per collection slot (camel/runtime/loop.h). Empty when the body's
+/// result is not the tuple FILL of that arity -- the one shape the collection is stated in.
+std::vector<gc_node_ref_t>
+loopBodyComponents(const GCGraph &g, const camel::runtime::LoopView &loop) {
+    const size_t count = loop.stateCount() + loop.collectionCount();
+    const gc_node_ref_t result = loop.nextState();
+    if (g.node(result) == nullptr) {
+        return {};
+    }
+    const auto *fill = g.nodeBodyAs<camel::runtime::GCFillBody>(result);
+    if (fill == nullptr || fill->fillKind != camel::runtime::GCFillKind::Tuple ||
+        fill->slots().size() != count) {
+        return {};
+    }
+    const auto with = g.withInputsOf(result);
+    if (with.size() != count) {
+        return {};
+    }
+    std::vector<gc_node_ref_t> components(count);
+    for (size_t k = 0; k < count; ++k) {
+        const size_t slot = fill->slots()[k];
+        if (slot >= count) {
+            return {};
+        }
+        components[slot] = with[k];
+    }
+    return components;
+}
+
+/// Whether state `j` of a collecting loop is the array collection slot `c` collects into: the
+/// body gives it `append` of the state's own port and the value the slot collects, and its first
+/// value is the empty array. Then the two hold the same elements in the same order -- round by
+/// round, one append per round -- so the Loop does not carry it: the scan output is its value.
+/// `Builder::collectLoopAppends` is what writes this shape; anything else is not this fact.
+bool stateIsTheCollection(
+    const GCGraph &g, const camel::runtime::LoopView &loop,
+    const std::vector<gc_node_ref_t> &components, const std::vector<Value> &init, size_t j,
+    size_t c) {
+    const TensorFacts start = factsOf(init[j]);
+    if (!start.dtype || !start.shape || start.shape->size() != 1 || !(*start.shape)[0].has_value() ||
+        *(*start.shape)[0] != 0) {
+        return false;
+    }
+    type::Type *element = loop.collectionElemType(c);
+    if (element == nullptr || element->code() != *start.dtype) {
+        return false;
+    }
+    const gc_node_ref_t node = components[j];
+    if (node == camel::runtime::kInvalidNodeRef || g.node(node) == nullptr ||
+        g.node(node)->kind != GCNodeKind::Oper) {
+        return false;
+    }
+    const auto *body = g.nodeBodyAs<camel::runtime::GCOperBody>(node);
+    if (body == nullptr) {
+        return false;
+    }
+    const std::string_view uri = body->uri();
+    if (uri != ":struct/append_arr" && uri != ":struct/append_arr_owned") {
+        return false;
+    }
+    const auto norm = g.normInputsOf(node);
+    const auto with = g.withInputsOf(node);
+    if (norm.size() != 1 || with.size() != 1) {
+        return false;
+    }
+    return norm.front() == loop.bodyStateParam(j) &&
+           with.front() == components[loop.stateCount() + c];
+}
 
 /// The values a round of a loop gives the body's result: the state itself when the loop carries
 /// one value, the tuple's components when it carries several (camel/runtime/loop.h).
@@ -2501,20 +2648,61 @@ std::string int64ScalarOperand(Emitter &emitter, int64_t value) {
 Value Evaluator::evalLoopNode(Activation &act, gc_node_ref_t ref) {
     auto *g                          = act.graph;
     const camel::runtime::LoopView loop = camel::runtime::loopOf(*g, ref);
-    if (loop.collectionCount() != 0) {
-        unsupported(
-            act,
-            "a loop that collects a value every round is not exported to ONNX yet: its value "
-            "holds the arrays the rounds are collected into, which are the Loop's scan outputs");
-    }
     const size_t states = loop.stateCount();
+    const size_t scans  = loop.collectionCount();
+    // The body's components, in the layout camel/runtime/loop.h states: the state values and then
+    // one collected value per collection slot. A collecting loop's body gives them as one tuple,
+    // and the export reads them one by one (below), because a state that is the collection is
+    // not carried and its `append` is not a value the model has.
+    std::vector<gc_node_ref_t> components;
+    if (scans != 0) {
+        components = loopBodyComponents(*g, loop);
+        if (components.empty()) {
+            unsupported(
+                act,
+                "the body of a loop that collects does not give its result as the tuple of the "
+                "state values and one value per collection slot");
+        }
+        if (loop.condRegion() != 0) {
+            unsupported(
+                act,
+                "a loop that collects and checks a condition each round is not exported to ONNX "
+                "yet: how many values it collects is decided while it runs, and the length "
+                "of the collected array would have to be a dimension the model states");
+        }
+    }
     std::vector<Value> init(states);
     for (size_t j = 0; j < states; ++j) {
         init[j] = eval(act, loop.initialState(j));
     }
+    // Which state is an array the loop collects into (see stateIsTheCollection): such a state is
+    // not carried, and the scan output is the value it has after the loop.
+    std::vector<std::optional<size_t>> fromScan(states);
+    for (size_t j = 0; j < states && scans != 0; ++j) {
+        for (size_t c = 0; c < scans; ++c) {
+            if (stateIsTheCollection(*g, loop, components, init, j, c)) {
+                fromScan[j] = c;
+                break;
+            }
+        }
+    }
+    // The states the Loop carries, in the order they are carried: the ones that are no
+    // collection, and the position each has in the vector emitLoopScanning works with.
+    std::vector<Value> carriedInit;
+    std::vector<std::optional<size_t>> carriedAt(states);
+    for (size_t j = 0; j < states; ++j) {
+        if (fromScan[j].has_value()) {
+            continue;
+        }
+        carriedAt[j] = carriedInit.size();
+        carriedInit.push_back(init[j]);
+    }
     // A Loop carries tensors, scalars, and tuples or structs of them: what a recursion carries,
     // checked the same way (emitLoop checks the shapes of each round).
     for (size_t j = 0; j < states; ++j) {
+        if (fromScan[j].has_value()) {
+            continue;
+        }
         std::vector<Value> leaves;
         if (!carriableLeaves(init[j], leaves)) {
             unsupported(
@@ -2573,6 +2761,36 @@ Value Evaluator::evalLoopNode(Activation &act, gc_node_ref_t ref) {
         }
     }
 
+    // The number of rounds, when the export knows it: the length a collected array states. A
+    // trip count that depends on the input stays open, and so does the array's first dimension.
+    std::optional<int64_t> tripExtent;
+    const auto constantInt = [](const Value &v) -> std::optional<int64_t> {
+        if (!v.isConstant()) {
+            return std::nullopt;
+        }
+        const std::optional<tensor::ops::ConstArg> arg = constArgOf(v);
+        if (!arg) {
+            return std::nullopt;
+        }
+        if (const auto *asInt = std::get_if<int64_t>(&*arg)) {
+            return *asInt;
+        }
+        return std::nullopt;
+    };
+    if (loop.iterable()) {
+        if (interval) {
+            const auto low = constantInt(bounds[0]), high = constantInt(bounds[1]);
+            if (low && high) {
+                tripExtent = std::max<int64_t>(0, *high - *low);
+            }
+        } else {
+            const TensorFacts facts = factsOf(*sequence);
+            if (facts.shape && !facts.shape->empty()) {
+                tripExtent = (*facts.shape)[0];
+            }
+        }
+    }
+
     // The condition of the first round, on the values the loop starts from: an ONNX Loop checks
     // its condition input before it runs the body, and the source checks the condition of a
     // round before that round's body (design principles 3.10), so a loop whose condition is
@@ -2625,13 +2843,32 @@ Value Evaluator::evalLoopNode(Activation &act, gc_node_ref_t ref) {
             round.ports.emplace(*elementPort, std::move(element));
         }
         for (size_t j = 0; j < states; ++j) {
-            round.ports.emplace(loop.bodyStateParam(j), state[j]);
+            // A state that is the collection is bound to nothing: its one use is the `append`
+            // this round does not evaluate, and stateIsTheCollection proved that is the only one.
+            round.ports.emplace(
+                loop.bodyStateParam(j),
+                fromScan[j].has_value() ? Value{} : state[*carriedAt[j]]);
         }
         round.ports.emplace(loop.roundPort(), iter);
-        const Value result = eval(round, loop.nextState());
-        std::vector<Value> next = loopNextState(result, states);
-        if (next.empty()) {
-            unsupported(act, "the body of a loop does not give one value per state value");
+        std::vector<Value> next;
+        if (scans == 0) {
+            const Value result = eval(round, loop.nextState());
+            next = loopNextState(result, states);
+            if (next.empty()) {
+                unsupported(act, "the body of a loop does not give one value per state value");
+            }
+        } else {
+            // The components are evaluated one by one: a state that is the collection is given by
+            // `append` of its own port, which is no value of the model's, and what the round
+            // collects is the value that append takes.
+            for (size_t j = 0; j < states; ++j) {
+                if (!fromScan[j].has_value()) {
+                    next.push_back(eval(round, components[j]));
+                }
+            }
+            for (size_t c = 0; c < scans; ++c) {
+                next.push_back(eval(round, components[states + c]));
+            }
         }
         // The condition the next round is checked with: the source's condition on the state this
         // round produced, which is the state the next round starts from.
@@ -2645,13 +2882,36 @@ Value Evaluator::evalLoopNode(Activation &act, gc_node_ref_t ref) {
         return {cont, std::move(next)};
     };
 
-    const std::vector<Value> finals = emitLoop(act, trip, init, body, firstCond);
+    // One fact per scan output: the element type the loop's own type declares (what one round
+    // collects). The shape of a round's value is what the round states, which the body gives.
+    std::vector<TensorFacts> scanElem(scans);
+    for (size_t c = 0; c < scans; ++c) {
+        type::Type *element = loop.collectionElemType(c);
+        if (element == nullptr) {
+            unsupported(
+                act, std::format("collection slot {} of the loop has no element type", c + 1));
+        }
+        scanElem[c] = tensor::tensorFactsOf(element);
+    }
+
+    const LoopEmission emission =
+        emitLoopScanning(act, trip, carriedInit, body, scans, scanElem, tripExtent, firstCond);
+    // The loop's value, in the layout camel/runtime/loop.h states: the state values, then one
+    // array per collection slot. A state that is the collection is read out of the scan output.
+    std::vector<Value> fields(states + scans);
+    for (size_t j = 0; j < states; ++j) {
+        fields[j] = fromScan[j].has_value() ? emission.scans[*fromScan[j]]
+                                            : emission.states[*carriedAt[j]];
+    }
+    for (size_t c = 0; c < scans; ++c) {
+        fields[states + c] = emission.scans[c];
+    }
     if (!loop.valueIsTuple()) {
-        return finals.front();
+        return fields.front();
     }
     // Several state values: the loop's value is their tuple, which is what its consumers read
     // component by component (a struct state is one component, rebuilt as its own type).
-    return Value::aggregate(loop.valueType(), finals);
+    return Value::aggregate(loop.valueType(), std::move(fields));
 }
 
 namespace {
@@ -3145,9 +3405,11 @@ std::optional<Value> Evaluator::deferredElement(
             }
             continue;
         }
-        // A conversion and a copy pass their input on unchanged: the aggregate a projection
-        // reads is the one behind them.
-        if (shape != execute::OperShape::Conversion && shape != execute::OperShape::Clone) {
+        // An operation that takes its operand as its own type and a copy pass their input on
+        // unchanged -- asked as one question, because that is the question: the aggregate a
+        // projection reads is the one behind them, whichever of the three shapes stated the
+        // retype.
+        if (!execute::takesItsOperandAsItsType(shape) && shape != execute::OperShape::Clone) {
             return std::nullopt;
         }
         const auto norm = g->normInputsOf(source);
@@ -3814,7 +4076,12 @@ Value Evaluator::evalOper(Activation &act, gc_node_ref_t ref) {
     // names and not by the letters of its URI.
     switch (camel::runtime::shapeOfOperator(body->oper)) {
     case execute::OperShape::Conversion:
-        // The node's type is the target type, its one ordinary operand the value converted.
+    case execute::OperShape::Entering:
+        // Two shapes, one export -- and two labels, not a family: a cast is interpreted against the
+        // safety table of its pair and an entering cannot fail, so the record states two shapes; to
+        // ONNX the node's type is the target type and its one ordinary operand the value taken as
+        // it, either way. A refinement keeps the generic operator path it has today (see the
+        // lowering table above), so it is not a third label here.
         return evalCast(act, ref, eval(act, g->normInputsOf(ref).front()));
     case execute::OperShape::Clone:
         // Exported values are never mutated in place, so a copy can share its source.
@@ -3878,6 +4145,7 @@ Value Evaluator::evalOper(Activation &act, gc_node_ref_t ref) {
         }
         return evalAccs(act, ref, norm.front(), read);
     }
+    case execute::OperShape::Refining:
     case execute::OperShape::None:
         break;
     }
@@ -3973,8 +4241,14 @@ Value Evaluator::applyOper(
     // A type name applied to an array is the core's conversion, not a tensor definition: extents
     // of the input, element type of the name. The node's own type is the generic one for a name
     // applied to an array -- the element type it writes, every extent unknown -- so reading it
-    // lost extents the value has (a conversion moves no element).
-    if (def == nullptr && uri.starts_with(":op/ato") && resultType != nullptr) {
+    // lost extents the value has (a conversion moves no element). Which operators these are is
+    // what the operator states when it is registered (`declareConversion`): one that reads an
+    // array and writes the named element type. The letters of the URI are not that statement -- a
+    // conversion a library registers need not spell `ato`, and one that spells it need not convert
+    // an array -- so it is asked of the declaration, which is the one place it is written.
+    const std::optional<core::ConversionTypes> conversion =
+        def == nullptr ? core::OperatorTable::instance().conversionTypesOf(uri) : std::nullopt;
+    if (conversion.has_value() && conversion->source == TypeCode::Array && resultType != nullptr) {
         if (type::Type *answer = camel::core::type::valueTypeOf(resultType);
             tensor::isTensorType(answer)) {
             const TensorFacts named = tensor::tensorFactsOf(answer);
