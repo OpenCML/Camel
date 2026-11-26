@@ -49,7 +49,9 @@
  * normalizers the block itself declares (`normalizers`, the list `test/tools/normalizers.mjs`
  * defines) or, when it declares none, the four a plan's `[defaults]` usually carries
  * (`strip_ansi`, `normalize_newlines`, `trim_trailing_space`, `normalize_paths`). Nothing else is
- * normalized away: no number is compared at a tolerance, no line is dropped. A difference whose only
+ * normalized away: no number is compared at a tolerance, and the comparison drops only the lines a
+ * side prints about its own machinery (the bytecode VM's counters, the collector's accounting), which
+ * are not the program's output. A difference whose only
  * text is a hexadecimal address -- which the compiler writes and the run chooses -- is named as such
  * in the field it moved (`stdout(address)`, `stderr(address)`) and stays a difference, so a reader
  * can see how much of what moved is that. Two things are not the program's answer and are read as
@@ -429,11 +431,20 @@ const APPENDED_PASS = /\bstd::(?:nvm|fvm)\b/g
 /// compared.
 const MEASURED_DURATION = /\b\d+\.\d+(?=\s*(?:seconds?|milliseconds?|microseconds?|nanoseconds?|ms|us|µs|ns)\b)/g
 
+/// Lines a side prints about its own machinery: the bytecode VM's counters and the collector's
+/// accounting. Neither is the program's output -- a count of what one back end did cannot be the same
+/// number on another -- so they are dropped from the comparison rather than compared and normalized.
+const ITS_OWN_MACHINERY = [/^\s*fvm_[a-z0-9_]+=/, /^\s*\[camel\] (?:gc|spaces):/]
+
 /// What the two sides are read against each other on: the text each one printed, after the words the
 /// harness itself put on its command line and the number the run's own clock put into it are taken out
-/// of the comparison.
+/// of the comparison, and after the lines that are a side's report about itself are dropped.
 function comparableText(text) {
-    return String(text).replace(APPENDED_PASS, '<side>').replace(MEASURED_DURATION, '<time>')
+    return String(text)
+        .split('\n')
+        .filter((line) => !ITS_OWN_MACHINERY.some((pattern) => pattern.test(line)))
+        .map((line) => line.replace(APPENDED_PASS, '<side>').replace(MEASURED_DURATION, '<time>'))
+        .join('\n')
 }
 
 /// A field whose only difference is the text of a hexadecimal address, which the compiler writes and
