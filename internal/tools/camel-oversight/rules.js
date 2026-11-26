@@ -25,13 +25,34 @@ export const RULES = [
         cooldown: 60,
         check: ({ m, limits }) => {
             const b = readable(m.branches) && m.branches
-            if (!b || (b.unmerged <= limits.unmerged && b.maxBehind <= limits.maxBehind)) return null
+            // The gate holds new branches back only while too many are waiting to be merged. One lane
+            // that has fallen behind is that lane's business (it rebases, or it is judged and archived),
+            // and with integration taking batches every hour any lane a few hours old is past the line:
+            // closing the gate for it stopped every new lane for the sake of one old one.
+            if (!b || b.unmerged <= limits.unmerged) return null
             return {
                 // The news is that the gate is crossed, not each count while it stays crossed: a key
                 // holding the counts turned every new branch into a fresh urgent interruption of a
                 // coordinator who had already stopped dispatching.
                 key: 'crossed',
-                text: `分支闸门破线：未合车道分支 ${b.unmerged}（上限 ${limits.unmerged}），最落后 ${b.maxBehind} 笔（上限 ${limits.maxBehind}）。本轮停派新分支，转审计合并。`,
+                text: `分支闸门破线：未合车道分支 ${b.unmerged}（上限 ${limits.unmerged}）。本轮停派新分支，先把交回的合掉。`,
+            }
+        },
+    },
+    {
+        id: 'branch-stale',
+        level: 'quiet',
+        hold: 0,
+        cooldown: 60,
+        check: ({ m, limits }) => {
+            const b = readable(m.branches) && m.branches
+            if (!b || !Array.isArray(b.rows)) return null
+            const stale = b.rows.filter((row) => row.behind !== null && row.behind > limits.maxBehind)
+            if (stale.length === 0) return null
+            const names = stale.map((row) => `${row.branch}（落后 ${row.behind}）`).join('、')
+            return {
+                key: stale.map((row) => row.branch).sort().join(','),
+                text: `落后 integration 超过 ${limits.maxBehind} 笔的车道分支：${names}。还在做的换底到尖端；没人做的按存档后删的规矩判。不挡新车道。`,
             }
         },
     },
@@ -45,7 +66,7 @@ export const RULES = [
         check: ({ m, lanes, limits }) => {
             if (!readable(lanes) || lanes.running >= limits.minLanes) return null
             const b = readable(m.branches) && m.branches
-            if (b && (b.unmerged > limits.unmerged || b.maxBehind > limits.maxBehind)) return null
+            if (b && b.unmerged > limits.unmerged) return null
             // The host's load does not hold lanes back: every run reaches the host through a slot, so a
             // lane added while the host is busy queues for its slot and reads and edits meanwhile. (The
             // build host is shared; most of its load can be other people's work.)
