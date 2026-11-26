@@ -2,7 +2,7 @@ id = "compile.capture_order"
 order = 346
 tier = "fast"
 tags = ["feat", "compile", "gir", "determinism"]
-desc = "Two writings of one program that differ only in the order two `var` declarations are written give one byte-identical `std::jgir canonical=true` document. The tables this reads are the compile-time ones keyed by `runtime::DraftNodeRef`, whose hash is an address (`include/camel/runtime/node_ref.h`): `Builder::captureOriginOf_` and `Builder::machinePortOrigin_` are unioned to answer whether two handles are one value, and `builder_expr.cpp#dropCarriedVariableUnits` builds the units of `Builder::carriedVersions_` and `Builder::valueCapturedCells_` in the order it collected them -- so an unsorted walk numbers the nodes of one body by where the allocator put them, and one program gets as many graphs as it has runs."
+desc = "Two writings of one program that differ only in the order two `var` declarations are written give one byte-identical `std::jgir canonical=true` document. The tables this reads are the compile-time ones keyed by `runtime::DraftNodeRef`, whose hash is an address (`include/camel/runtime/node_ref.h`): `Builder::captureOriginOf_` and `Builder::machinePortOrigin_` are unioned to answer whether two handles are one value, and `builder_variables.cpp#dropCarriedVariableUnits` builds the units of `Builder::carriedVersions_` and `Builder::valueCapturedCells_` in the order it collected them -- so an unsorted walk numbers the nodes of one body by where the allocator put them, and one program gets as many graphs as it has runs."
 
 # The insertion order of those tables is the order the source declares its cells and builds its
 # closures in, so the two readings are a program and the same program with two `var` declarations

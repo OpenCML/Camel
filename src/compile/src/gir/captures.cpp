@@ -250,9 +250,9 @@ bool Builder::captureByValue(const compile_graph_ptr_t &graph, node_handle_t ori
 bool Builder::decideCaptureByValue(const compile_graph_ptr_t &graph, node_handle_t origin) const {
     // A closure written where it stands captures a cell of the body it stands in by value (design
     // principles 3.5, 197): a lambda and a function declared inside a body alike. A value of the
-    // top level of a module keeps the earlier step's rule -- it is a value where the function is
-    // used as a value -- because `uses var` and `pure` are judged on the resources a body reaches,
-    // and a module `var` a body reads is one of them until the module `var` work lands.
+    // top level of a module is captured by value only where the function itself is used as a value:
+    // `uses var` and `pure` are judged on the resources a body reaches, a module `var` a body reads
+    // is one of them, so a capture of such a value keeps the cell.
     const bool localCell = topLevelValues_.find(origin) == topLevelValues_.end();
     if (!localCell && !valuePortGraphs_.contains(graph.get()) &&
         !programMakesValueOf(graph->name())) {
@@ -272,9 +272,9 @@ bool Builder::decideCaptureByValue(const compile_graph_ptr_t &graph, node_handle
     }
     // A module-level `var` keeps its cell where some function of the program writes it: `uses var`
     // and `pure` are judged on the resources a body reaches, and a function the program made a value
-    // of still reaches the module cell it reads, so the account rides on the cell until the module
-    // `var` work lands (`test/cases/linear/toplevel_var/err_pure_parameter.cml`: `run(bump)` asks
-    // whether `bump` uses `cnt`). A cell the body declared itself does not consult this set: the set
+    // of still reaches the module cell it reads, so the account rides on the cell
+    // (`test/cases/linear/toplevel_var/err_pure_parameter.cml`: `run(bump)` asks whether `bump`
+    // uses `cnt`). A cell the body declared itself does not consult this set: the set
     // matches by NAME, and a write another function makes of a same-named variable cannot reach a
     // local cell, so consulting it there refused a capture the rule allows.
     if (!localCell && programWrites(name)) {

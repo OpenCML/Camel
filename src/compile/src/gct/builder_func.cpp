@@ -836,9 +836,10 @@ Builder::visitGeneratorBody(const AST::node_ptr_t &funcAst, const FunctionType *
     // and not as cells the round writes. The difference is not cosmetic. The machine's loop tests
     // its flag in a condition of its own, and a cell written inside the round reaches that
     // condition as the value the cell had where the loop stands, which is the value before the
-    // first round: with a local cell there, the test is folded to `flag == 0` at build time
-    // (`src/compile/gir/builder_expr.cpp`, `collapseNonEscapingVariableReads`) and the round never
-    // stops. A state, by contrast, is the one road the loop's condition reads round by round.
+    // first round: with a local cell there, the test is folded to `flag == 0` at build time (the
+    // fold in `src/compile/src/gir/builder_variables.cpp`,
+    // `collapseNonEscapingVariableReads`) and the round never stops. A state, by contrast, is the
+    // one road the loop's condition reads round by round.
     // Measured: a step whose `pc` and whose flag are its own cells hangs every generator case on this
     // tree (the flag is `0 == 0` in the graph); with the flag carried as the round's value the stream
     // plan is back to the tree's own reading.
