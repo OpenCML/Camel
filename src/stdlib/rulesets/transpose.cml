@@ -48,7 +48,7 @@ import { erfc as math_erfc, erf as math_erf, exp as math_exp, log as math_log, p
 // design principles 10.1 allows between modules (only a *type* cycle is diagnosed; the one-way
 // layering the build enforces is the C++ kernel's, 10.5) and `rulesets.jvp` records the same
 // import from the forward side.
-import { avg_pool2d, avg_pool2d_grad, conv2d, conv2d_bias_grad, conv2d_input_grad, conv2d_kernel_grad, embedding, embedding_table_grad, max_pool2d, max_pool2d_grad, softmax_cross_entropy, softmax_cross_entropy_grad } from nn
+import { avg_pool2d, avg_pool2d_grad, conv2d, conv2d_bias_grad, conv2d_bias_grad_stated, conv2d_input_grad, conv2d_input_grad_stated, conv2d_kernel_grad, conv2d_kernel_grad_stated, embedding, embedding_table_grad, max_pool2d, max_pool2d_grad, softmax_cross_entropy, softmax_cross_entropy_grad } from nn
 import { abs, add_stated, broadcast_like, div_stated, erf, erfc, exp, full, gelu, layer_norm, layer_norm_grad, linear, log, log_softmax, matmul, matmul_stated, max, max_axis_stated, maximum, mean, mean_axis_stated, mean_stated, min, min_axis_stated, minimum, mul_stated, numel, permute, pick_at, relu, reshape, rsqrt, shape, sigmoid, softmax, softmax_grad, sqrt, subtract, subtract_stated, sum, sum_axis_stated, sum_stated, sum_to, take, take_stated, tanh, transpose, where, zeros, zeros_like } from tensor
 import { is_float } from types
 
@@ -1515,11 +1515,31 @@ export rule linear_t::<T, A, B>(x: A, w: B) when is_float::<T>() { linear(x, w) 
 // forward half has (`jvp_conv2d` records it: the tangent's extents have to be reduced, and the
 // operator that would state them does not exist yet).
 
-/// The cotangents of `conv2d(x, w, b)`: one per operand, from the kernel's own three gradients.
-/// The bias's gradient takes the bias and the cotangent only -- it sums the cotangent over the
-/// batch and the two window axes, which is what makes it a gradient at all.
+/// The cotangents of `conv2d(x, w, b)`: one per operand, from the kernel's own three gradients --
+/// the **stated** twins of them, which take the shape of the operand they answer where the plain
+/// ones take the tensor.
+///
+/// The plain spelling reads a value at the position it answers: `conv2d_input_grad(x, w, ct)` reads
+/// `w`, and `conv2d_kernel_grad` reads `x`, and at `position = 0` / `1` the operand the law answers
+/// is the one whose cotangent the caller holds and whose **value** nobody does -- in a transposed
+/// graph that slot is the tangent (`stdlib/rulesets/jvp.cml#jvp_conv2d`), so the walk refused this
+/// law with `law-reads-a-value`. The twin answers the same tensor from the same kernel: the three
+/// gradient kernels never read the values of the operand they are the gradient of -- `col2im` writes
+/// every element of `dx` from the geometry and `dw` is accumulated from zero -- so its extents are
+/// the whole of what the law needs, and `shape(x)` of an operand and `shape(w)` of an operand are
+/// values the transposed half holds (design principles 9.3: the operand's declared type decides
+/// them). `shape(b)` likewise, and `conv2d_bias_grad` reads `dy` alone.
+///
+/// The numbers do not move: each component calls the same kernel entry point the plain operator
+/// calls, with the same operands in the same order (`src/stdlib/nn/tensor_ops.cpp`, and
+/// `src/stdlib/tensor/kernels/conv.cpp`: `conv2dInputGradStated` and `conv2dKernelGradStated` differ
+/// from their siblings only in where the answer's shape comes from).
 export rule conv2d_t::<T>(x: T[...], w: T[...], b: T[...]) when is_float::<T>() { conv2d(x, w, b) => func (ct: T[...]) {
-    (conv2d_input_grad(x, w, ct), conv2d_kernel_grad(x, w, ct), conv2d_bias_grad(b, ct))
+    (
+        conv2d_input_grad_stated(shape(x), w, ct),
+        conv2d_kernel_grad_stated(x, shape(w), ct),
+        conv2d_bias_grad_stated(shape(b), ct)
+    )
 } }
 
 /// The cotangent of `max_pool2d(x, kernel)`: the kernel's gradient, which gives each window's

@@ -260,12 +260,17 @@ Array *conv2dIn(
     return out;
 }
 
+// The two gradient kernels read **one** thing of the operand they answer: the extents of the tensor
+// they hand back. `conv2dInputGradIn` never touches `input`'s values (`col2im` writes the whole
+// output and reads only `g`), and `conv2dKernelGradIn` never touches `kernel`'s values (`pdw`
+// accumulates over every element and starts at zero). So the operand arrives here as extents,
+// which is what lets the statement carry them (see `conv2dInputGradStated` below).
 template <typename T>
 Array *conv2dInputGradIn(
-    const ConvGeometry &g, const Array *input, const Array *kernel, const Array *dy,
-    mm::IAllocator &allocator) {
+    const ConvGeometry &g, std::span<const int64_t> inputExtents, const Array *kernel,
+    const Array *dy, mm::IAllocator &allocator) {
     const T *pw = kernel->dataAs<T>(), *pdy = dy->dataAs<T>();
-    Array *dx = createTensor(dtypeOf<T>(), input->shapeSpan(), allocator, true);
+    Array *dx = createTensor(dtypeOf<T>(), inputExtents, allocator, true);
     T *pdx    = dx->dataAs<T>();
     parallelFor(g.N, 1, [&](int64_t begin, int64_t end) {
         std::vector<T> cols(static_cast<size_t>(g.ckk() * g.spatial()));
@@ -293,10 +298,10 @@ Array *conv2dInputGradIn(
 
 template <typename T>
 Array *conv2dKernelGradIn(
-    const ConvGeometry &g, const Array *input, const Array *kernel, const Array *dy,
-    mm::IAllocator &allocator) {
+    const ConvGeometry &g, const Array *input, std::span<const int64_t> kernelExtents,
+    const Array *dy, mm::IAllocator &allocator) {
     const T *px = input->dataAs<T>(), *pdy = dy->dataAs<T>();
-    Array *dw = createTensor(dtypeOf<T>(), kernel->shapeSpan(), allocator, true);
+    Array *dw = createTensor(dtypeOf<T>(), kernelExtents, allocator, true);
     T *pdw    = dw->dataAs<T>();
     std::vector<T> cols(static_cast<size_t>(g.ckk() * g.spatial()));
     for (int64_t n = 0; n < g.N; ++n) {
@@ -495,7 +500,7 @@ Array *conv2dInputGrad(
     requireDy(g, dy);
     const TypeCode code = computableElementType("conv2d_input_grad", {kernel, dy});
     return forElementType(code, [&]<typename T>() {
-        return conv2dInputGradIn<T>(g, input, kernel, dy, allocator);
+        return conv2dInputGradIn<T>(g, input->shapeSpan(), kernel, dy, allocator);
     });
 }
 
@@ -506,8 +511,54 @@ Array *conv2dKernelGrad(
     requireDy(g, dy);
     const TypeCode code = computableElementType("conv2d_kernel_grad", {input, dy});
     return forElementType(code, [&]<typename T>() {
-        return conv2dKernelGradIn<T>(g, input, kernel, dy, allocator);
+        return conv2dKernelGradIn<T>(g, input, kernel->shapeSpan(), dy, allocator);
     });
+}
+
+// The stated twins of the two gradients: the operand they answer is named by its extents instead of
+// by a tensor, and every other operand is read exactly as the unstested entry point reads it. This is
+// the same arithmetic, not a second reading of it -- the geometry, `requireDy`, the element type and
+// the kernels are the ones above -- so a stated call and an unstated call of the same operands answer
+// the same bits. The only thing the extents change is where the answer's shape comes from, which is
+// the point: a reverse rule of `conv2d` is handed a cotangent for one operand and no value of it
+// (`stdlib/rulesets/transpose.cml#conv2d_t`), and `shape` of that operand is a value the transposed
+// half holds while the operand's own tensors are not.
+Array *conv2dInputGradStated(
+    std::span<const int64_t> inputExtents, const Array *kernel, const Array *dy, int64_t stride,
+    int64_t padding, mm::IAllocator &allocator) {
+    const ConvGeometry g = geometry(inputExtents, kernel->shapeSpan(), stride, padding);
+    requireDy(g, dy);
+    const TypeCode code = computableElementType("conv2d_input_grad_stated", {kernel, dy});
+    return forElementType(code, [&]<typename T>() {
+        return conv2dInputGradIn<T>(g, inputExtents, kernel, dy, allocator);
+    });
+}
+
+Array *conv2dKernelGradStated(
+    const Array *input, std::span<const int64_t> kernelExtents, const Array *dy, int64_t stride,
+    int64_t padding, mm::IAllocator &allocator) {
+    const ConvGeometry g = geometry(input->shapeSpan(), kernelExtents, stride, padding);
+    requireDy(g, dy);
+    const TypeCode code = computableElementType("conv2d_kernel_grad_stated", {input, dy});
+    return forElementType(code, [&]<typename T>() {
+        return conv2dKernelGradIn<T>(g, input, kernelExtents, dy, allocator);
+    });
+}
+
+Array *conv2dBiasGradStated(
+    std::span<const int64_t> biasExtents, const Array *dy, mm::IAllocator &allocator) {
+    if (biasExtents.size() != 1) {
+        throw ShapeError(
+            "conv2d bias gradient expects a one-dimension bias, got " + dims(biasExtents));
+    }
+    // `conv2dBiasGrad` reads `dy` alone and answers `[O]`: the extents are checked against that
+    // answer before any work is done, and then it is the unstested reading that answers.
+    if (dy->rank() != 4 || dy->dim(1) != biasExtents[0]) {
+        throw ShapeError(
+            "conv2d bias gradient: the stated bias " + dims(biasExtents) +
+            " disagrees with the channels of dy, " + dims(dy->shapeSpan()));
+    }
+    return conv2dBiasGrad(dy, allocator);
 }
 
 Array *conv2dBiasGrad(const Array *dy, mm::IAllocator &allocator) {

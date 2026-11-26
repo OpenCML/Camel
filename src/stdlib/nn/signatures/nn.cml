@@ -54,6 +54,33 @@ export func conv2d_kernel_grad(input: f32[...], kernel: f32[...], dy: f32[...], 
 /// @example conv2d_bias_grad(bias, dy)    // like b
 export func conv2d_bias_grad(bias: f32[...], dy: f32[...]) => f32[...]
 
+// ---- the stated twins of the three gradients ----
+
+/// `conv2d_input_grad` with the input's extents stated instead of its tensor: same arithmetic, and
+/// the answer is the tensor `input_extents` names. The input's values are never read -- the kernel
+/// writes the whole answer and reads only the geometry -- so a caller that holds the shape and not
+/// the tensor can still ask this. It exists for the reverse rule of `conv2d`
+/// (`src/stdlib/rulesets/transpose.cml#conv2d_t`), which is handed the cotangent of one operand and
+/// no value of it.
+/// @pure
+/// @example conv2d_input_grad_stated([1, 2, 4, 4], kernel, dy, 1, 0)    // like [1, 2, 4, 4]
+export func conv2d_input_grad_stated(input_extents: int[], kernel: f32[...], dy: f32[...], stride?: int, padding?: int) => f32[...]
+
+/// `conv2d_kernel_grad` with the kernel's extents stated instead of its tensor: same arithmetic, and
+/// the answer is the tensor `kernel_extents` names. The kernel's values are never read -- `dw` is
+/// accumulated over every element and starts at zero -- so a caller that holds the shape and not the
+/// tensor can still ask this.
+/// @pure
+/// @example conv2d_kernel_grad_stated(input, [3, 2, 2, 2], dy, 1, 0)    // like [3, 2, 2, 2]
+export func conv2d_kernel_grad_stated(input: f32[...], kernel_extents: int[], dy: f32[...], stride?: int, padding?: int) => f32[...]
+
+/// `conv2d_bias_grad` with the bias's extents stated instead of its tensor. The bias's values are
+/// never read -- the answer is the sum of `dy` -- so the extents are all this needs of it, and they
+/// are checked against the channels of `dy`.
+/// @pure
+/// @example conv2d_bias_grad_stated([3], dy)    // like [3]
+export func conv2d_bias_grad_stated(bias_extents: int[], dy: f32[...]) => f32[...]
+
 // ---- pooling ----
 
 /// Max pooling over a square window of `kernel` on `input` `[N, C, H, W]` f32. `stride` defaults

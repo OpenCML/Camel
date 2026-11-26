@@ -58,6 +58,25 @@ Array *conv2dKernelGrad(
 /// dL/db given dL/dy: sum over N, OH, OW.
 Array *conv2dBiasGrad(const Array *dy, mm::IAllocator &allocator);
 
+/// The **stated** twins of the three gradients above: the operand the answer is the gradient *of* is
+/// named by its extents instead of by a tensor, and every other operand is read as its unstated
+/// sibling reads it. `conv2dInputGradIn` and `conv2dKernelGradIn` never read that operand's values,
+/// only the shape of the tensor they hand back, so the stated call and the unstated call are the
+/// same arithmetic on the same inputs. They exist for a reverse rule of `conv2d`, which is handed the
+/// cotangent of one operand and no value of it (`src/stdlib/rulesets/transpose.cml#conv2d_t`).
+Array *conv2dInputGradStated(
+    std::span<const int64_t> inputExtents, const Array *kernel, const Array *dy, int64_t stride,
+    int64_t padding, mm::IAllocator &allocator);
+
+Array *conv2dKernelGradStated(
+    const Array *input, std::span<const int64_t> kernelExtents, const Array *dy, int64_t stride,
+    int64_t padding, mm::IAllocator &allocator);
+
+/// `conv2dBiasGrad` with the bias's extents stated; they are checked against the `[O]` the dy it is
+/// handed answers.
+Array *conv2dBiasGradStated(
+    std::span<const int64_t> biasExtents, const Array *dy, mm::IAllocator &allocator);
+
 enum class PoolKind { Max, Average };
 
 /// Output shape [N, C, OH, OW] of pooling.

@@ -175,6 +175,89 @@ InferFn shapedLike(size_t index) {
     };
 }
 
+// --------------------------------------------- the stated twins of the conv2d gradients
+
+/// The extents operand of a `*_stated` gradient, read as int64: an `int[]` and nothing else. It is
+/// the same operand the tensor module's stated operators carry (`tensor/ops/elementwise_ops.cpp
+/// #mul_stated`) and it is read the same way, because it is the same kind of thing -- the shape of a
+/// tensor a reverse rule holds no value of. A `*_stated` twin answers a tensor of exactly that shape,
+/// so a list that disagrees with the tensors it reads is a fault and not a silently reshaped answer
+/// (`kernels/conv.cpp#conv2dInputGradStated` throws on it).
+std::vector<int64_t> extentsArg(ArgsView &norm, size_t index, std::string_view op) {
+    Type *type = norm.type(index);
+    if (type == nullptr || type->code() != TypeCode::Array) {
+        reportShapeError(op, "expects an operand's extents as an int[]");
+    }
+    const Type *elem = static_cast<const ArrayType *>(type)->elemType();
+    if (elem == nullptr || (elem->code() != TypeCode::Int32 && elem->code() != TypeCode::Int64)) {
+        reportShapeError(op, "expects an operand's extents as an int[]");
+    }
+    return tensor::parseIntArray(norm.get<::Array *>(index), type);
+}
+
+/// The answer of a `*_stated` gradient: the tensor its extents operand names, with the element type
+/// of the operand the gradient is of. The list reaches inference as a constant -- `shape(x)` of a
+/// stated type folds to one before the graph is built, which is the whole reason the reverse law can
+/// write it (`stdlib/rulesets/transpose.cml#conv2d_t`) -- and a list that is not a constant states no
+/// extents, the same answer a bare `Tensor` gets.
+InferFn shapedLikeExtents(size_t extentsIndex, size_t elementIndex) {
+    return [extentsIndex, elementIndex](const InferContext &ctx) -> std::optional<Type *> {
+        const auto extents = ctx.constInts(extentsIndex);
+        if (!extents) {
+            return std::nullopt;
+        }
+        return tensorOf(elementTypeOf(ctx.facts(elementIndex)), knownShape(*extents));
+    };
+}
+
+/// `conv2d_input_grad_stated(input_extents, kernel, dy, stride?, padding?)`: `conv2dInputGrad` with
+/// the input's extents stated instead of its tensor. The input's values are never read by that kernel
+/// -- only the shape of the tensor it answers -- so this is the same arithmetic, and the extents are
+/// checked against the geometry it computes (`kernels/conv.cpp#conv2dInputGradStated`).
+slot_t conv2dInputGradStatedKernel(ArgsView &, ArgsView &norm, context::Context &) {
+    return runKernel("conv2d_input_grad_stated", [&] {
+        const std::vector<int64_t> extents =
+            extentsArg(norm, 0, "conv2d_input_grad_stated");
+        return wrap(norm.resultType(),
+            k::conv2dInputGradStated(
+                extents,
+                tensorArg(norm, 1),
+                tensorArg(norm, 2),
+                optInt(norm, 3, 1),
+                optInt(norm, 4, 0),
+                resultAllocator()));
+    });
+}
+
+/// `conv2d_kernel_grad_stated(input, kernel_extents, dy, stride?, padding?)`: `conv2dKernelGrad`
+/// with the kernel's extents stated. The kernel's values are never read by that kernel either -- the
+/// whole of `dw` is accumulated and starts at zero -- so the same arithmetic answers it.
+slot_t conv2dKernelGradStatedKernel(ArgsView &, ArgsView &norm, context::Context &) {
+    return runKernel("conv2d_kernel_grad_stated", [&] {
+        const std::vector<int64_t> extents =
+            extentsArg(norm, 1, "conv2d_kernel_grad_stated");
+        return wrap(norm.resultType(),
+            k::conv2dKernelGradStated(
+                tensorArg(norm, 0),
+                extents,
+                tensorArg(norm, 2),
+                optInt(norm, 3, 1),
+                optInt(norm, 4, 0),
+                resultAllocator()));
+    });
+}
+
+/// `conv2d_bias_grad_stated(bias_extents, dy)`: `conv2dBiasGrad`, which reads `dy` alone and answers
+/// `[O]`, with the bias's extents stated and checked against that answer.
+slot_t conv2dBiasGradStatedKernel(ArgsView &, ArgsView &norm, context::Context &) {
+    return runKernel("conv2d_bias_grad_stated", [&] {
+        const std::vector<int64_t> extents =
+            extentsArg(norm, 0, "conv2d_bias_grad_stated");
+        return wrap(norm.resultType(),
+            k::conv2dBiasGradStated(extents, tensorArg(norm, 1), resultAllocator()));
+    });
+}
+
 // ------------------------------------------------------------------ pooling
 
 k::Window2d windowArg(ArgsView &norm, size_t first) {
@@ -694,6 +777,41 @@ std::vector<OpDef> nnTensorOps() {
             .resultDoc = "Tensor",
             .infer     = shapedLike(0),
             .kernel    = &conv2dBiasGradKernel,
+            .traits    = kPure});
+    defs.push_back(
+        OpDef{
+            .name      = "conv2d_input_grad_stated",
+            .exports   = {"conv2d_input_grad_stated"},
+            .params    = {{"input_extents", ParamKind::IntArray},
+                          {"kernel", ParamKind::Tensor},
+                          {"dy", ParamKind::Tensor},
+                          {"stride", ParamKind::Int, true},
+                          {"padding", ParamKind::Int, true}},
+            .resultDoc = "Tensor",
+            .infer     = shapedLikeExtents(0, 1),
+            .kernel    = &conv2dInputGradStatedKernel,
+            .traits    = kPure});
+    defs.push_back(
+        OpDef{
+            .name      = "conv2d_kernel_grad_stated",
+            .exports   = {"conv2d_kernel_grad_stated"},
+            .params    = {{"input", ParamKind::Tensor},
+                          {"kernel_extents", ParamKind::IntArray},
+                          {"dy", ParamKind::Tensor},
+                          {"stride", ParamKind::Int, true},
+                          {"padding", ParamKind::Int, true}},
+            .resultDoc = "Tensor",
+            .infer     = shapedLikeExtents(1, 0),
+            .kernel    = &conv2dKernelGradStatedKernel,
+            .traits    = kPure});
+    defs.push_back(
+        OpDef{
+            .name      = "conv2d_bias_grad_stated",
+            .exports   = {"conv2d_bias_grad_stated"},
+            .params    = {{"bias_extents", ParamKind::IntArray}, {"dy", ParamKind::Tensor}},
+            .resultDoc = "Tensor",
+            .infer     = shapedLikeExtents(0, 1),
+            .kernel    = &conv2dBiasGradStatedKernel,
             .traits    = kPure});
     defs.push_back(
         OpDef{
