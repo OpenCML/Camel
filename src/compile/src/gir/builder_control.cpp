@@ -4109,6 +4109,9 @@ node_handle_t Builder::buildStreamLoop(
                     }
                     return machineStateOf(next);
                 });
+                // The machine state the round ends with, when the body reaches its end (see the
+                // `returned` reading below the arm).
+                node_handle_t bodyState = nullptr;
                 arms[1] = buildArm(gct->loopBody(), [&] {
                     // The element this round is about and the rest of the stream, taken out of
                     // the pull that has just answered.
@@ -4187,13 +4190,35 @@ node_handle_t Builder::buildStreamLoop(
                         }
                         components[k + j] = written;
                     }
+                    // The body runs after the pull it reads its element from: the pull is ordered
+                    // before the value the body gave, which the components below read (the same
+                    // pair the pull's edge made when the machine's state was the program's value).
+                    if (k == 1) {
+                        writeControlLink(pull, components[0]);
+                    } else if (returned != nullptr) {
+                        writeControlLink(pull, returned);
+                    }
                     std::vector<node_handle_t> next{rest, booleanConstant(false)};
                     next.insert(next.end(), components.begin(), components.end());
-                    node_handle_t result = machineStateOf(next);
-                    // The body runs after the pull it reads its element from.
-                    writeControlLink(pull, result);
-                    return result;
+                    bodyState = machineStateOf(next);
+                    return bodyState;
                 });
+                // A `return` written in the body gives the arm's value, not the function's exit
+                // (design principles 5.1): the value it gives is the state of the next round, so
+                // the arm hands the machine's state on and not the value the `return` alone gave.
+                // This is the reading the `while` form takes when it replaces its body's value
+                // with the state the round ends with.
+                if (arms[1]->returned && bodyState != nullptr) {
+                    if (arms[1]->output != nullptr && arms[1]->output != arms[1]->value) {
+                        // A `sync` body's effects are ordered by the gate around the value the
+                        // `return` gave; the state the round ends with comes after them (the same
+                        // reading the `while` form takes).
+                        writeControlLink(arms[1]->output, bodyState);
+                    }
+                    arms[1]->output = bodyState;
+                    arms[1]->value  = bodyState;
+                    arms[1]->type   = nodeTypeOf(bodyState);
+                }
                 return buildBranch(gct->loopBody(), isNull, &arms);
             },
             runtime::GCRegionKind::LoopBody,
