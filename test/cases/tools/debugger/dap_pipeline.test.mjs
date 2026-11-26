@@ -30,12 +30,27 @@ await runTest(async t => {
     check((await repeated.request('terminate')).success, 'terminate at compiler stop')
     check(await repeated.waitEvent('terminated'), 'termination unblocks program thread')
 
+    // A translating pass hands the graph on: `std::gir` prints the program and returns it, and a
+    // pipeline that only prints ends with `std::nop`, the pass that ends it without running it.
     const consumed = await t.dap()
-    await consumed.launch(program, { passes: ['std::gir'], stopOnPassEntry: true })
+    await consumed.launch(program, { passes: ['std::gir', 'std::nop'], stopOnPassEntry: true })
     const boundary = await consumed.waitEvent('stopped')
+    check(!(await consumed.waitEvent('camel/stopped'))?.body.pipeline?.pass, 'the first stop is before the pipeline')
     const stepped = await consumed.request('camel/nextPass')
-    check(stepped.success, 'step a consuming translation pass', { boundary: boundary?.body, stepped })
-    check(await consumed.waitEvent('terminated'), 'consumed graph ends without a fake after snapshot')
+    check(stepped.success, 'step a translating pass', { boundary: boundary?.body, stepped })
+    checkEq(
+        (await consumed.waitEvent('camel/stopped'))?.body.pipeline?.pass,
+        'std::gir',
+        'the boundary after it names the pass that printed',
+    )
+    check(
+        (await consumed.request('camel/nextPass')).success,
+        'step into the pass that ends the pipeline without running it',
+    )
+    check(
+        await consumed.waitEvent('terminated'),
+        'a pipeline that ends without a run ends there, with no stop after the snapshot',
+    )
 
     const failed = await t.dap()
     await failed.launch(program, { passes: ['std::not_a_pass'], stopOnPassEntry: true })
