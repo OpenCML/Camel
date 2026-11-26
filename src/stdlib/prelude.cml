@@ -1004,10 +1004,15 @@ export func enter::<T, U>(x: T) => U
 /// A program writes a construction as the aggregate itself, `(1, 'a')` or `Point { x: 1 }`, and
 /// those reach this operator through the language's own rules; the call form is the name a graph
 /// holds the construction under.
+///
+/// It states no `panic`: `template` is a constant of the target type and the call's result type is
+/// that same type, so a run clones a value that already fits and has nothing left to check. A
+/// construction the compiler builds for an aggregate literal is that same step, and it is the one
+/// that answered "cannot fault" while it was a node kind.
 /// @pure
 /// @example fill((0, 0), 1, 2)    // (1, 2)
 #op(':op/fill')
-export func fill::<T, ...F>(template: T, ...fields: ...F) => T panic
+export func fill::<T, ...F>(template: T, ...fields: ...F) => T
 
 /// A member read as an ordinary operator: the ACCS node kind written as a call of the operator
 /// that does the same thing (plan 2.3, step 2). The position is a compile-time parameter of the
@@ -1018,11 +1023,15 @@ export func fill::<T, ...F>(template: T, ...fields: ...F) => T panic
 ///
 /// A program writes a member read as `t[0]` or `s.x`, and those reach this operator through the
 /// language's own rules; the call form is the name a graph holds the read under.
+///
+/// It states no `panic`: the position is a compile-time parameter of the call, so the type being
+/// read and the member being named are both settled before a run starts, and a run has nothing to
+/// check. The `ACCS` kind this operator used to be answered the same way.
 /// @pure
 /// @example access::<(int, int), int><0>((1, 2))    // 1
 #op(':op/access')
 with <at: int>
-export func access::<T, U>(x: T) => U panic
+export func access::<T, U>(x: T) => U
 
 /// The same member read by name: the field of a struct, which the compiler spells `s.x`. It is a
 /// second URI rather than a second rule of `:op/access`, because the two read different things of
@@ -1033,7 +1042,7 @@ export func access::<T, U>(x: T) => U panic
 /// @example access_key::<{ x: int, y: int }, int><'y'>({ x: 1, y: 2 })    // 2
 #op(':op/access_key')
 with <key: string>
-export func access_key::<T, U>(x: T) => U panic
+export func access_key::<T, U>(x: T) => U
 
 // ---- arrays ----
 

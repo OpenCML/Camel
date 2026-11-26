@@ -1585,12 +1585,15 @@ slot_t __fill_value__(ArgsView &with, ArgsView &norm, Context &ctx) {
 // with argument's type says whether a member is read by place or by name. The builder refuses a
 // member read whose operand count is not this shape (`Builder::memberReadNodeOf`), so a call that
 // reaches here has one value, and the two count guards below are the kernel's own invariant. The
-// place and the name are not: a program writes them (`access::<T, U><at>(x)`, the call form the
-// declaration documents), so a place the tuple does not have and a name the struct does not have
-// are the program's own faults, and they are reported where `[]` reports the same two of the same
-// value (`:op/idx_str`, builtin/operators/ops.cpp): IndexOutOfRange and FieldNotFound. That is
-// what the declaration's `panic` states (design principles 3.9), and the fault leaves the call
-// without a value instead of aborting the process.
+// place and the name are the builder's, out of the value's own type: a source call of the operator
+// is refused before a node is built (its declaration is generic over the value's type, and the
+// printer says why), and `Builder::memberReadNodeOf` writes the member the type has as a constant
+// `with` argument. So the two reports below are the kernel's guard for a graph a tool builds by
+// hand, not a fault the language raises: the record states that a read cannot fault, which is what
+// the `ACCS` kind answered and what the declaration now states (design principles 3.9). They are
+// reported where `[]` reports the same two of the same value (`:op/idx_str`,
+// builtin/operators/ops.cpp): IndexOutOfRange and FieldNotFound, leaving the call without a value
+// instead of aborting the process.
 slot_t __access_value__(ArgsView &with, ArgsView &norm, Context &ctx) {
     (void)ctx;
     GUARD(norm.size() == 1, "a member read reads one value.");

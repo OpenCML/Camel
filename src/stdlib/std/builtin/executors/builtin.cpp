@@ -798,23 +798,30 @@ void registerBuiltinOperatorTraits() {
     // where the fault table and the record are stated from one list. The three shapes plan 2.3,
     // step 2 turns into operators (`operators/cast.cpp`, `operators/struct.cpp`). Each reads the
     // values of its own call and writes nothing outside them, so each is pure and none is
-    // elementwise. Each may fault: a conversion checks the value when the pair's types make it
-    // unsafe, a construction checks that the template clones into the type it is made for, and a
-    // member read checks that the member is there. `mayFault` is stated per operator rather than
-    // per pair, which is the one thing the CAST arm could say and this record cannot: a conversion
-    // of a pair whose types make it safe is read as one that may fault, so a pass keeps it where it
-    // stands instead of moving it
+    // elementwise. A construction and a member read cannot fault, which is the answer their node
+    // kinds gave them and the one this record states here (design principles 3.9): what a
+    // construction does at run time is clone a constant template of the target type into a value of
+    // that type, and the type is the one the call already states, so a run has nothing left to
+    // check; a member read's place is a compile-time parameter of the call (its `with` argument),
+    // so the member is the one the type has. A conversion is the one shape whose fault depends on
+    // more than the operator -- it checks the value when the pair's types make it unsafe -- so
+    // `mayFault` is stated per operator rather than per pair: a conversion of a pair whose types
+    // make it safe is read as one that may fault, and a pass keeps it where it stands instead of
+    // moving it
     // (`kernel/runtime/graph.cpp#nodeMayFault` asks this answer once the node is an OPER node).
     registry.set(":op/cast", {.pure = true, .elementwise = false, .mayFault = true});
     // Entering: the fourth operation of this family and the one the compiler writes rather than
     // the program. It reads the values of its own call and writes nothing outside them, so it is
-    // pure and not elementwise; and it cannot fault -- that is the whole difference between it and
-    // `:op/cast` above, which states `mayFault` per operator because a conversion of a pair the
-    // table calls unsafe is one the program asked to have checked (design principles 5.1).
+    // pure and not elementwise; and it cannot fault, as a construction and a member read cannot
+    // either. The conversion above is the one shape that may: it states `mayFault` per operator
+    // because a conversion of a pair the table calls unsafe is one the program asked to have
+    // checked (design principles 5.1).
     registry.set(":op/enter", {.pure = true, .elementwise = false, .mayFault = false});
-    registry.set(":op/fill", {.pure = true, .elementwise = false, .mayFault = true});
-    registry.set(":op/access", {.pure = true, .elementwise = false, .mayFault = true});
-    registry.set(":op/access_key", {.pure = true, .elementwise = false, .mayFault = true});
+    // A construction of a type and a read of a member that type has: the two shapes a run cannot
+    // fail to finish, which is the answer their kinds gave before they became operators.
+    registry.set(":op/fill", {.pure = true, .elementwise = false, .mayFault = false});
+    registry.set(":op/access", {.pure = true, .elementwise = false, .mayFault = false});
+    registry.set(":op/access_key", {.pure = true, .elementwise = false, .mayFault = false});
     // Which of these each operator is: the one fact a reader of a graph asks instead of comparing
     // the letters of the URI (`camel/runtime/oper_shape.h`). Written here, where the operator is
     // registered with the kernel that runs it, and at no second place.
