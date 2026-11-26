@@ -1753,6 +1753,7 @@ try {
             }
             Write-Host "[camel-remote] refs/heads/$branch there is the helper's scratch branch, not develop. Delete it and re-run:"
             Write-Host "[camel-remote]   ssh $sshHost `"git -C $bare branch -D $branch`""
+            Write-Host "[camel-remote] a branch this repository deletes goes with its staging ref: pwsh -NoProfile -File internal/tools/camel-remote-cleanup.ps1 -Branch $branch -Apply"
         } else {
             Write-Host "[camel-remote] the staging repository has no refs/heads/$branch; check that $sshHost is reachable and $bare is writable."
         }
@@ -1898,6 +1899,28 @@ try {
         }
     } else {
         Write-Host ("[camel-remote] not cleaning up host checkouts this run: {0}; 'could not read which worktrees exist' is not 'there are no other worktrees'" -f $live.Why)
+    }
+
+    # The staging refs in the bare follow the branches that exist here (see the guard's
+    # cleanup_staging_refs): the ref a run leaves behind is what keeps the next push of that branch
+    # small, so a ref whose branch is gone is the one thing nobody ever removed. The keep list is
+    # this reading, and like the worktree reading it has to say whether it answered -- an unread
+    # list is not a list of no branches, and the host sweep deletes nothing when it cannot tell.
+    $stagingKeep = @()
+    $stagingKeepFlag = '0'
+    $stagingKeepWhy = ''
+    try {
+        $stagingKeep = @(git -C $Path for-each-ref --format='%(refname:lstrip=2)' refs/heads 2>$null |
+            ForEach-Object { "$_".Trim() } | Where-Object { $_ -ne '' })
+        $stagingKeepWhy = if ($LASTEXITCODE -ne 0) { "git exited $LASTEXITCODE" } else { 'it named no branch' }
+        if ($LASTEXITCODE -eq 0 -and $stagingKeep.Count -gt 0) { $stagingKeepFlag = '1' }
+    } catch {
+        $stagingKeep = @()
+        $stagingKeepFlag = '0'
+        $stagingKeepWhy = "$_"
+    }
+    if ($stagingKeepFlag -ne '1') {
+        Write-Host ("[camel-remote] not removing staging refs this run: {0}; 'could not read which branches exist' is not 'there are no branches'" -f $stagingKeepWhy)
     }
 
     Set-BuildPhase 'starting' "[camel-remote] syncing $name on $sshHost"
@@ -2566,6 +2589,68 @@ cleanup_host_checkouts() {
         proc_snapshot_age_ms=$(( ($(date +%s%N) - proc_snapshot_ms) / 1000000 ))
     fi
 }
+# --- staging refs follow the branches that exist here ---
+# A run pushes the branch it stages into the bare and leaves that ref behind, so the next run of
+# the same branch pushes eleven objects instead of four thousand (measured on one branch: 11 in
+# 0.9 s against 4438 in 2.0 s). Nothing else ever removed them, so every branch that ever ran keeps
+# one: the bare goes on advertising commits nobody can reach, one ref per branch, for good.
+#
+# The keep list is the workstation's own `refs/heads`, read once per run before the push, plus the
+# commit-named refs a run stages for a commit rather than for a branch (`camel-sha-*` for a detached
+# run, `camel-baseline-*` for a baseline checkout): those never had a branch, a seat that needs one
+# asks for it again, and dropping them would make the next baseline push its whole history to get
+# one back. They are counted in the line below, so what the sweep declined to look at is visible in
+# every run's output and not only in this comment.
+#
+# A ref written inside the grace period is left alone even when its name is unknown here: a seat's
+# merge pushes `seat/<...>` from a detached tree (so it has no local branch either) and then fetches
+# it back, and a full merge with its build and its suite can run for most of an hour. Six hours is
+# the wide side of that, and a dead ref waiting six hours to be reaped costs nothing it was not
+# already costing -- which is the same trade as (c3) on the checkouts above, only longer.
+#
+# `ok != 1` removes nothing at all: a branch list that could not be read is not a list of no
+# branches, and "delete every ref in the shared bare" is what acting on it would do.
+cleanup_staging_refs() {
+    local bare="$1"
+    local keep="$2"
+    local ok="$3"
+    local grace_minutes="${4:-360}"
+    staging_refs_total=0
+    staging_refs_removed=0
+    staging_refs_named=0
+    if [ "$ok" != 1 ]; then
+        echo '[camel-remote] not removing staging refs this run: the workstation could not say which branches exist, and a failed reading is not an empty one'
+        return 0
+    fi
+    if ! git -C "$bare" rev-parse --git-dir >/dev/null 2>&1; then
+        echo "[camel-remote] not removing staging refs this run: $bare is not a repository this run can read"
+        return 0
+    fi
+    local name loose age now cutoff
+    now=$(date +%s)
+    cutoff=$((now - grace_minutes * 60))
+    for name in $(git -C "$bare" for-each-ref --format='%(refname:lstrip=2)' refs/heads/ 2>/dev/null); do
+        staging_refs_total=$((staging_refs_total + 1))
+        case " $keep " in *" $name "*) continue;; esac
+        case "$name" in camel-sha-*|camel-baseline-*) staging_refs_named=$((staging_refs_named + 1)); continue;; esac
+        loose="$bare/refs/heads/$name"
+        if [ -f "$loose" ]; then
+            age=$(stat -c %Y "$loose" 2>/dev/null)
+            if [ -z "$age" ]; then
+                echo "[camel-remote] keeping staging ref refs/heads/$name: its age could not be read"
+                continue
+            fi
+            if [ "$age" -gt "$cutoff" ]; then continue; fi
+        fi
+        if git -C "$bare" update-ref -d "refs/heads/$name" 2>/dev/null; then
+            staging_refs_removed=$((staging_refs_removed + 1))
+            echo "[camel-remote] removed staging ref refs/heads/$name: no local branch of that name"
+        else
+            echo "[camel-remote] could not remove staging ref refs/heads/$name"
+        fi
+    done
+    echo "[camel-remote] staging refs: $staging_refs_total, removed $staging_refs_removed, kept $staging_refs_named commit-named"
+}
 # --- end host cleanup guard ---
 '@
     $remoteScript = @"
@@ -2604,6 +2689,7 @@ V=`$HOME/$($cfg.hostBuildEnv)
 B=`$HOME/$($cfg.hostBenchEnv)
 $cleanupGuard
 cleanup_host_checkouts "`$HOME/$($cfg.hostWorkRoot)" '$($liveNames -join ' ')' '$liveTrustedFlag' '$bareLeaf'
+cleanup_staging_refs "`$HOME/$($cfg.hostBareRepo)" '$($stagingKeep -join ' ')' '$stagingKeepFlag' '360'
 phase_mark cleanup
 # Other runs' scratch directories in /tmp are not this run's to remove (rule 12): the run that left
 # one an hour ago may still be the tree a person is reading, and a directory older than a day is not

@@ -128,9 +128,13 @@ node scripts/promote.mjs cancel [<任务号>]                  # 结束工作进
 ```
 ① 打存档标签（本地，不推）：`git tag archive/<日期>-<lane> <tip>`
 ② 工作树必须干净、无 `.git/index.lock`、无活会话
-③ `git worktree remove <路径>`（**不许 `--force`**）→ `git branch -D <分支>`
-   —— 这里 `-d` 会拒绝（它不是祖先），所以用 `-D`；依据是第 ①/② 步的读数，不是“我看它像已合”
-④ 报：五条各自的标签名、tip、删除前后的 `lane/*` 计数
+③ `git worktree remove <路径>`（**不许 `--force`**）→ 删分支**连同它在 staging 裸库里的 ref**：
+   `pwsh -NoProfile -File internal/tools/camel-remote-cleanup.ps1 -Branch <分支>`
+   先看不带 `-Apply` 的清单（tip、内容还在哪、要删什么），再加 `-Apply`
+   —— 这里 `-d` 会拒绝（它不是祖先），所以这个脚本用 `-D`；依据是第 ①/② 步的读数，不是“我看它像已合”
+   —— gate 留下的 `refs/heads/<分支>` 是下一次推同一分支只推几个对象的原因（不然要重推整段历史），
+      所以**分支没了它也就不该留**：脚本一条 ssh 删掉 ref，并把两边的条数打出来
+④ 报：五条各自的标签名、tip、删除前后的 `lane/*` 计数与 staging ref 计数
 ```
 
 **常驻规矩：**经 `b/<lane>` 重挂副本合进去的车道，**合完当轮就按上面这一步删原分支**，不要留到计数里去。
