@@ -453,7 +453,7 @@ class OperatorTable {
     /// run where the program writes it (declareUnfoldable). A pass that folds a call or merges it
     /// with an identical one asks this. Whether a pass may also drop, move or reorder the call
     /// depends on whether it can fault as well: that is `core.arrangeable`
-    /// (camel/runtime/graph.h), the one question every pass asks.
+    /// (camel/facts/arrangeable.h), the one question every pass asks.
     bool mayBeRecomputed(OperId id) const;
     bool mayBeRecomputed(std::string_view uri) const;
 

@@ -22,14 +22,14 @@ namespace camel::transforms {
  *   * a rewrite appends what it writes *after* the nodes it repoints (`src/passes/opt/generic`);
  *     and a frozen graph keeps the ids of the version it came from, so a node a rewrite removed
  *     leaves a `Dead` place with its old id and the replacements sit past the readers they now
- *     feed (`include/camel/runtime/graph.h`, `GCNodeKind::Dead`);
+ *     feed (`include/camel/runtime/node_kind.h`, `GCNodeKind::Dead`);
  *   * a draft that is numbered anew (`GraphDraft::keepsNodeIds`, include/camel/runtime/draft.h)
  *     numbers the nodes by their place in the rewritten draft, which is the order the pass wrote
  *     them in and not the order of construction either.
  *
  * So after `std::opt` the ids are neither construction order nor dependency order, and a walk in id
- * order sees a reader before its operand (a refusal at best, a dropped value at worst -- measured on
- * `transpose`, which lost the cotangent of a rewritten product this way).
+ * order sees a reader before its operand (a refusal at best, a dropped value at worst -- measured
+ * on `transpose`, which lost the cotangent of a rewritten product this way).
  *
  * `dependencyOrderOf` answers the order the graph's own edges impose, over the nodes the graph
  * *has*: `Dead` places are not named (they are not nodes), and neither are refs that are not in the

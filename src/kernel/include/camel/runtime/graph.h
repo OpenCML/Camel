@@ -31,6 +31,13 @@
  *    constants of the static area point to, the graphs written inside this one and the graphs
  *    it calls directly are entries of it, each marked with the roles it has (GCGraphRefRole).
  * 5. Hot-path data stays plain; cold debug metadata lives elsewhere (GCGraphDebugRecord).
+ *
+ * The node kinds (`GCNodeKind`, and the id and offset types) are declared in
+ * `camel/runtime/node_kind.h`, and the placement questions a pass asks of a node (`nodeMayFault`,
+ * `graph::is_chain_statement`, `castMayFault`, `shapesAreFixed`) in
+ * `camel/runtime/graph_placement.h`: this file holds the graph's layout, those two hold what is
+ * asked of a node, and a change to a question recompiles the TUs that ask it rather than every TU
+ * that holds a graph.
  */
 
 #pragma once
@@ -47,6 +54,7 @@
 #include "camel/runtime/fact_slots.h"
 #include "camel/runtime/frame_layout.h"
 #include "camel/runtime/graph_id.h"
+#include "camel/runtime/node_kind.h"
 #include "camel/utils/assert.h"
 
 #include <algorithm>
@@ -87,60 +95,6 @@ class Graph;
 }
 
 namespace camel::runtime {
-
-using gc_node_ref_t = uint32_t;
-using gc_slot_idx_t = int32_t;
-using gc_data_idx_t = gc_slot_idx_t;
-using gc_off_t      = uint32_t;
-using gc_cnt_t      = uint32_t;
-
-constexpr gc_node_ref_t kInvalidNodeRef = static_cast<gc_node_ref_t>(-1);
-constexpr gc_off_t kInvalidOffset       = static_cast<gc_off_t>(-1);
-
-// The kinds of node. The numeric values are part of the graph model (docs/design/graph-model,
-// section 3.5) and must not be renumbered.
-//
-// Two values are reserved and never appear in a frozen graph (GCGraph):
-//  - Bind: nothing creates it; partial application is a closure (a FILL of a function value).
-//  - Dref: the front end's placeholder for a name whose target is not settled yet. It lives in
-//    build-time drafts only; encoding a graph that still holds one is an error
-//    (graph_encode.cpp, validateRuntimeGraphPayload).
-// Consumers of frozen graphs therefore do not handle either.
-enum class GCNodeKind : uint8_t {
-    Data = 0,
-    Port = 1,
-    // 2 was the CAST node and 3 the COPY node, deleted: a conversion is a call of `:op/cast` and a
-    // copy a call of `:op/copy`, the operators `lib/std/prelude.cml` declares for them (plan 2.3).
-    // The numbers are not reused -- an encoded kind is a byte of the graph's format -- and a graph
-    // that still holds them is the graph an older build wrote.
-    Fill = 4,
-    Accs = 5,
-    Brch = 6,
-    Join = 7,
-    Call = 8,
-    Bind = 9, // reserved, see above
-    Func = 10,
-    Oper = 11,
-    // 12 was the SYNC node, deleted: a statement's place in its `sync` block is a sync edge, and
-    // the node it would need is not part of the model (docs/design/effects/edges.cn.md 5.3).
-    Gate = 13,
-    Dref = 14, // build-time only, see above
-    // A loop (design principles 3.10; docs/design/graph-model 3.5, the LOOP card):
-    // Norm inputs the array (For, ForWhile) then the k first values of the state; With inputs
-    // the results of its two regions and the round port; Ctrl inputs ordering. Its condition
-    // and body are regions of this graph (GCRegionKind::LoopCond and LoopBody) whose ports are
-    // the state (see camel/runtime/loop.h). Its value is the
-    // last state: the value when k = 1, the k-tuple when k > 1. A producer may also give it s
-    // collection slots (payload collectionCount): the body then returns (state…, v…) each round
-    // and the value is (state…, array…), the arrays holding the v of every round (see
-    // camel/runtime/loop.h). Consumers read it through camel/runtime/loop.h (LoopView).
-    Loop = 15,
-    // The place of a node a rewrite removed. A graph keeps the NodeIds of the version it came
-    // from, so a removed node leaves a record with this kind and no inputs, which every
-    // consumer that walks the nodes skips (GCGraph::nodes() does); ids are not reused. A
-    // graph without removed nodes has none.
-    Dead = 255,
-};
 
 /// What a validator may assume of a graph and what it must check (docs/design/graph-store 3.7,
 /// 5.4). The checks that every state shares (references, branch arms, the types of the slots, the
@@ -187,53 +141,8 @@ enum GCNodeFlag : uint8_t {
     kGCNodeFlagConstant = 1 << 1,
 };
 
-/// Whether converting a value of type `source` to `target` when a CAST runs can fail: every
-/// conversion the type does not call safe checks the value (an array's shape, a number's range).
-bool castMayFault(const camel::core::type::Type *target, const camel::core::type::Type *source);
-
-/// The fault half of the arrangeable question, on its own: whether running a node of this kind can
-/// raise a fault (`castMayFault`, `OperatorTraits::mayFault`; design principles 3.9) where it is
-/// written. It is the fact that decides whether a statement nobody reads may still be dropped, so
-/// the C++ sweep reads it here and `graph::may_fault` (modules/graph) hands the same answer to the
-/// passes written in Camel: one definition, so the two cannot disagree. A node whose operator
-/// nobody declared is not known never to fault, and neither is a kind this file does not know (a
-/// call, a loop, a gate).
-///
-/// It is **not** the answer to whether a pass may drop or move a node: that is `core.arrangeable`
-/// in the fact layer (`camel/facts/arrangeable.h`, `nodeIsFreelyArrangeable`), which states the
-/// four terms of design principles 3.4 together. This function is one term of them, kept because
-/// the sweep asks it about a node it is not otherwise reading.
-bool nodeMayFault(
-    GCNodeKind kind, camel::core::OperId oper, const camel::core::type::Type *castTarget = nullptr,
-    const camel::core::type::Type *castSource = nullptr, bool fixedShapes = false);
-
-/// Whether a type states its shape in full: not an array, or an array of fixed rank whose
-/// extents are all constants.
-bool shapesAreFixed(const camel::core::type::Type *type);
-
-/// Whether a node of this kind is a statement of a chain: an operator that has an effect or may
-/// fault, a cast whose conversion may fail, a CALL, a BRCH or LOOP that owns a control region, or a
-/// GATE. A JOIN is not an independent statement. A direct FUNC call has the same possible effects
-/// and faults as a CALL. A pure, infallible operator or cast is not one either;
-/// `core.arrangeable` answers the separate question of whether a pass may move it.
-/// `standsForRegion` is `nodeStandsForItsRegion` where the caller has a graph.
-namespace graph {
-bool is_chain_statement(
-    GCNodeKind kind, camel::core::OperId oper, const camel::core::type::Type *castTarget = nullptr,
-    const camel::core::type::Type *castSource = nullptr, bool standsForRegion = false);
-} // namespace graph
-
-inline bool isChainStatement(
-    GCNodeKind kind, camel::core::OperId oper, const camel::core::type::Type *castTarget = nullptr,
-    const camel::core::type::Type *castSource = nullptr, bool standsForRegion = false) {
-    return graph::is_chain_statement(kind, oper, castTarget, castSource, standsForRegion);
-}
-
 class GCGraph;
 
-/// `nodeMayFault` of a node of a graph, read the way the other graph questions read their operands
-/// and types: an OPER node's operator from its payload, a cast's two types from its input.
-bool nodeMayFault(const GCGraph &graph, gc_node_ref_t ref);
 /// `isUnreadClosure` of a draft, read the way the other graph questions are asked of a frozen
 /// graph.
 bool isUnreadClosure(const GCGraph &graph, gc_node_ref_t ref);
@@ -276,17 +185,12 @@ const char *aggregateTailVerdictName(AggregateTailVerdict verdict);
 AggregateTailVerdict aggregateTailVerdict(const GCGraph &graph, gc_node_ref_t ref);
 
 namespace graph {
-bool is_chain_statement(const GCGraph &graph, gc_node_ref_t ref);
 /// The exit of the statement `ref` names: a branch's JOIN, or `ref` itself for every other kind.
 gc_node_ref_t chain_exit(const GCGraph &graph, gc_node_ref_t ref);
 /// Whether `ref` can hand a chain to the next statement, either as a statement or as the JOIN of a
 /// structural statement. A JOIN gets no independent chain place of its own.
 bool is_chain_exit(const GCGraph &graph, gc_node_ref_t ref);
 } // namespace graph
-
-inline bool isChainStatement(const GCGraph &graph, gc_node_ref_t ref) {
-    return graph::is_chain_statement(graph, ref);
-}
 
 /// Whether a node owns a control region of this graph, and so stands on the outside for what runs
 /// inside it (`docs/design/effects/edges.cn.md` 4.6): a `BRCH` or a `LOOP` that carries an arm or a

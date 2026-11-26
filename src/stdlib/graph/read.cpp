@@ -36,6 +36,7 @@
 #include "camel/runtime/draft_writes.h"
 #include "camel/runtime/effects.h"
 #include "camel/runtime/graph.h"
+#include "camel/runtime/graph_placement.h"
 #include "camel/runtime/graph_txn.h"
 #include "camel/runtime/program.h"
 #include "camel/runtime/reachable.h"
@@ -680,9 +681,9 @@ slot_t mayRecomputeKernel(ArgsView &, ArgsView &norm, Context &) {
 }
 
 /// Whether running the node can raise a fault where it is written (`nodeMayFault`,
-/// camel/runtime/graph.h): the fact that decides whether a statement nobody reads may still be
-/// dropped. It is asked with the shapes the types state, the way the C++ sweep asks it, so an
-/// elementwise operator over fully fixed shapes is one that cannot fail.
+/// camel/runtime/graph_placement.h): the fact that decides whether a statement nobody reads may
+/// still be dropped. It is asked with the shapes the types state, the way the C++ sweep asks it, so
+/// an elementwise operator over fully fixed shapes is one that cannot fail.
 slot_t mayFaultKernel(ArgsView &, ArgsView &norm, Context &) {
     const auto *handle  = norm.get<Handle *>(0);
     const NodeView node = viewOf(handle, "graph.may_fault");

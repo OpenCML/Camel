@@ -13,6 +13,7 @@
 #include "camel/facts/control_regions.h"
 #include "camel/runtime/control_regions.h"
 #include "camel/runtime/graph.h"
+#include "camel/runtime/graph_placement.h"
 #include "camel/runtime/graph_txn.h"
 #include "camel/runtime/oper_shape.h"
 #include "camel/runtime/reachable.h"
