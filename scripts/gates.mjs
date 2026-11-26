@@ -59,14 +59,25 @@
  *   node scripts/gates.mjs              # all ten
  *   node scripts/gates.mjs --list       # the list, and nothing run
  *   node scripts/gates.mjs --only 5,8   # a PARTIAL run, and it says so in the summary
+ *   node scripts/gates.mjs --timeout 60 # one limit, in seconds, for every gate of this run
+ *
+ * A gate that never returns would block this command for ever, and an outer timeout that ended this
+ * process would leave the gate running on its own. So every gate has a time limit (DEFAULT_TIMEOUT_S,
+ * or the gate's own `timeoutSeconds`, or `--timeout`), and a gate that exceeds it has its whole process
+ * tree killed and counts as a failed gate that did not finish -- the same line as a gate a signal
+ * ended.
  */
-import { spawnSync } from 'node:child_process'
+import { spawn } from 'node:child_process'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { DETACH_TREE, killProcessTree } from './kill-tree.mjs'
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 
-const GATES = [
+/** Seconds a gate may run. The static gates take seconds; the limit is the line between slow and stuck. */
+const DEFAULT_TIMEOUT_S = 300
+
+let GATES = [
     {
         name: 'document links: every relative link resolves',
         args: ['scripts/check-doc-links.mjs', '--all'],
@@ -101,6 +112,8 @@ const GATES = [
     {
         name: 'ast hashes: every .cml file is the AST the golden records',
         args: ['scripts/check-ast-hashes.mjs'],
+        // Reads the whole corpus through the parser, and re-records through python when asked to.
+        timeoutSeconds: 900,
     },
     {
         name: 'operator panic: every operator that can fail declares that it can',
@@ -109,20 +122,55 @@ const GATES = [
     {
         name: 'generated artifacts: every generator\'s file is the bytes it produces now',
         args: ['scripts/check-generated.mjs'],
+        // Runs every generator in a copy of the tree, each with its own ten-minute limit.
+        timeoutSeconds: 900,
     },
 ]
 
 function usage() {
-    console.log('Usage: node scripts/gates.mjs [--list] [--only N,M,...]')
+    console.log('Usage: node scripts/gates.mjs [--list] [--only N,M,...] [--timeout SECONDS] [--script FILE]')
     console.log('')
     console.log('Runs the ten gates a change must pass before it is handed over, one after another, and')
     console.log("prints each one's exit code. Exit status 1 when any gate failed, 2 when the command line")
     console.log('is not understood (nothing is run in that case).')
+    console.log('--timeout SECONDS replaces the time limit of every gate; a gate over its limit is killed with its')
+    console.log('whole process tree and counts as failed. --script FILE runs FILE as the only gate (the self-check of')
+    console.log('this tool uses it to run a gate that does not return).')
 }
 
-function main(argv) {
+/**
+ * Runs one gate and says how it ended. A gate that ran out of time is killed with its process tree and
+ * reported as one that did not finish, with no exit code.
+ */
+function runGate(gate, ran, timeoutSeconds) {
+    return new Promise((resolve) => {
+        let timedOut = false
+        let timer = null
+        const child = spawn(process.execPath, gate.args, {
+            cwd: ROOT,
+            stdio: 'inherit',
+            env: { ...process.env, CAMEL_GATES_EXITS: JSON.stringify(ran) },
+            detached: DETACH_TREE,
+        })
+        timer = setTimeout(() => {
+            timedOut = true
+            killProcessTree(child)
+        }, timeoutSeconds * 1000)
+        child.on('error', (error) => {
+            clearTimeout(timer)
+            resolve({ status: null, signal: null, timedOut, error })
+        })
+        child.on('close', (status, signal) => {
+            clearTimeout(timer)
+            resolve({ status, signal, timedOut, error: null })
+        })
+    })
+}
+
+async function main(argv) {
     let list = false
     let only = null
+    let timeoutOverride = null
     for (let index = 0; index < argv.length; index++) {
         const argument = argv[index]
         if (argument === '--list') {
@@ -141,6 +189,20 @@ function main(argv) {
                 }
                 only.push(number)
             }
+        } else if (argument === '--timeout') {
+            const seconds = Number(argv[index + 1])
+            if (!(seconds > 0)) {
+                console.error('gates: --timeout needs a number of seconds above zero, as in --timeout 120')
+                return 2
+            }
+            timeoutOverride = seconds
+            index++
+        } else if (argument === '--script') {
+            if (index + 1 >= argv.length) {
+                console.error('gates: --script needs the path of a script')
+                return 2
+            }
+            GATES = [{ name: `script ${argv[index + 1]}`, args: [argv[++index]] }]
         } else if (argument === '--help' || argument === '-h') {
             usage()
             return 0
@@ -170,15 +232,17 @@ function main(argv) {
         const command = `node ${gate.args.join(' ')}`
         console.log(`[gate ${number}/${GATES.length}] ${gate.name}`)
         const started = Date.now()
-        const result = spawnSync(process.execPath, gate.args, {
-            cwd: ROOT,
-            stdio: 'inherit',
-            env: { ...process.env, CAMEL_GATES_EXITS: JSON.stringify(ran) },
-        })
+        const limit = timeoutOverride ?? gate.timeoutSeconds ?? DEFAULT_TIMEOUT_S
+        const result = await runGate(gate, ran, limit)
         const seconds = ((Date.now() - started) / 1000).toFixed(1)
         // A gate that a signal ended has no exit code, and a missing code is not a pass: `null`
         // there means the process was killed, which is a failed gate and not a green one.
-        const code = result.status === null ? `killed by ${result.signal || 'a signal'}` : result.status
+        // A gate that ran out of time was killed by this process, and it is the same verdict.
+        const code = result.timedOut
+            ? `killed after the ${limit} s limit`
+            : result.status === null
+              ? `killed by ${result.signal || result.error?.message || 'a signal'}`
+              : result.status
         ran.push({ number, code: result.status })
         if (code !== 0) {
             failed.push({ number, name: gate.name, code, command })
@@ -199,4 +263,4 @@ function main(argv) {
     return failed.length > 0 ? 1 : 0
 }
 
-process.exitCode = main(process.argv.slice(2))
+process.exitCode = await main(process.argv.slice(2))

@@ -532,6 +532,7 @@ if (update) {
             (drops.length > 0 ? ` (${drops.length} row(s) the diff deletes)` : '')
     )
     const recordedRun = spawnSync(python, args, {
+        timeout: 600000,
         cwd: ROOT,
         encoding: 'utf8',
         maxBuffer: 64 << 20
@@ -571,7 +572,7 @@ process.on('exit', () => {
 // knows which of the record's 4,483 lines it did not open.
 let probeFiles = []
 if (changed === null) {
-    const probeRun = spawnSync(python, [PROBES, work], { cwd: ROOT, encoding: 'utf8' })
+    const probeRun = spawnSync(python, [PROBES, work], { cwd: ROOT, encoding: 'utf8', timeout: 600000 })
     if (probeRun.error || probeRun.status !== 0) {
         const detail = probeRun.error ? probeRun.error.message : `${probeRun.stderr || ''}`.trim()
         refuse(`\`${python} ${PROBES}\` failed (${probeRun.status || 'no exit code'}): ${detail}`)
