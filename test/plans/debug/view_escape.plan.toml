@@ -48,6 +48,7 @@ expect_output_not_contains = ["VIEW_ESCAPE not-caught"]
 # schema has no `expect_signal`, and `expect_exit` compares `result.exitCode`, which a signal
 # leaves null. The abort is asserted from the runner's verify payload instead, which carries
 # `input.signal` and `input.exit_code` (docs/test-plans.md, "verify_script").
+expect_exit = "script"
 verify_script = """
 // The abort, not a plain failure: POSIX ends the process by SIGABRT and records no exit code,
 // MSVC turns `abort()` into exit status 3 and records no signal. Any other end is rejected.
@@ -73,6 +74,7 @@ expect_output_not_contains = ["VIEW_ESCAPE not-caught"]
 # schema has no `expect_signal`, and `expect_exit` compares `result.exitCode`, which a signal
 # leaves null. The abort is asserted from the runner's verify payload instead, which carries
 # `input.signal` and `input.exit_code` (docs/test-plans.md, "verify_script").
+expect_exit = "script"
 verify_script = """
 // The abort, not a plain failure: POSIX ends the process by SIGABRT and records no exit code,
 // MSVC turns `abort()` into exit status 3 and records no signal. Any other end is rejected.

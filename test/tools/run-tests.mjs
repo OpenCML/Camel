@@ -89,11 +89,6 @@ const BUILDS = {
  */
 const PLAN_FIELDS = new Set([
     'id', 'desc', 'order', 'tier', 'debug_tier', 'parallel', 'tags', 'defaults', 'tests', 'sweeps',
-    // A plan whose readings are durations says so here, and the gate takes the host for it
-    // (internal/tools/camel-remote.ps1: the plan slot and both build slots together). Nothing in
-    // this runner reads it, and that is the division: the runner measures, the gate decides what
-    // company a measurement may be taken in.
-    'time_sensitive',
 ])
 const TEST_FIELDS = new Set([
     'name', 'desc', 'kind', 'case', 'args', 'envs', 'tool', 'timeout_ms', 'cpu_budget_ms', 'verify_timeout_ms',
@@ -475,11 +470,6 @@ function checkKnownFailMark(planPath, entry, inherited, where) {
  */
 function validatePlanSchema(doc, planPath) {
     checkFields(planPath, doc, PLAN_FIELDS, 'plan')
-    // The one plan-level field that is a declaration about the host and not about a case: a plan
-    // that spells it `"yes"` would be read as "not time sensitive" by the gate and measured beside
-    // somebody else's build, which is the reading the field exists to prevent. Refused here, where
-    // the file and the value are named.
-    checkFieldType(planPath, doc, 'time_sensitive', 'plan', 'boolean')
     // The plan's own `tags` are read by a sweep (`sourceDoc.tags`), so they are a list for the same
     // reason the assertion lists below are.
     checkListFields(planPath, doc, 'plan', ['tags'])
@@ -602,6 +592,26 @@ function validatePlanSchema(doc, planPath) {
                         `ends one way, and a killed one has no exit code to compare`
                 )
             }
+        }
+        // The exit code is expected in one of three writings, and the third exists because a
+        // `verify_script` may already own the question: its payload carries `exit_code` and
+        // `signal`, and an entry that states both a number here and an assertion there says one
+        // thing twice with two chances to disagree -- which is how twelve cases asserting "exit 1 or
+        // exit 0, never a signal" read as red the day the number here started being enforced.
+        // `"script"` says the script decides. No other word is a second form: a range, an "either",
+        // a "whatever" is a script's to say, not a field's to spell.
+        if (typeof entry.expect_exit === 'string' && entry.expect_exit !== 'script') {
+            throw new PlanSchemaError(
+                `${planLabel(planPath)}: ${where}: expect_exit: the only word it takes is "script" ` +
+                    `(then the verify script judges the exit code and the signal); an expected ` +
+                    `number is written as one`
+            )
+        }
+        if (entry.expect_exit === 'script' && !(typeof entry.verify_script === 'string' && entry.verify_script.length > 0)) {
+            throw new PlanSchemaError(
+                `${planLabel(planPath)}: ${where}: expect_exit = "script" without verify_script: ` +
+                    `that asks a script to judge a code it never sees`
+            )
         }
     }
 }
@@ -1174,15 +1184,7 @@ function parseArgs(argv) {
         // compared against; a second implementation of "which cases are in this selection" would
         // agree on the day it was written and disagree the first time a plan learned a sweep.
         listCases: false,
-        // `--print-time-sensitive` answers one question per plan file named as a target: is this
-        // plan's top-level `time_sensitive` the boolean true. It prints `<path>\t<token>` and does
-        // nothing else -- no install, no lock, no plan started, nothing written -- because its one
-        // caller is the gate that decides whether to take the host for itself
-        // (`internal/tools/camel-remote.ps1`). The token is this runner's own reading of the field,
-        // which is the point: a plan that takes the host must be the plan this runner would run as
-        // a time-sensitive one, so the answer comes from the code that loads plans and not from a
-        // second reader of the same file.
-        printTimeSensitive: false,
+    printTimeSensitive: false,
         // `--selection-cases <file>` runs exactly the cases a recorded selection names
         // (`{"cases": ["<plan id>/<case name>", ...]}`), instead of every case of the selected
         // plans. A case list computed from the change is only meaningful if the run executes that
@@ -1196,10 +1198,10 @@ function parseArgs(argv) {
             options.updateGolden = true
         } else if (arg === '--selection-empty') {
             options.selectionEmpty = true
-        } else if (arg === '--list-cases') {
-            options.listCases = true
         } else if (arg === '--print-time-sensitive') {
-            options.printTimeSensitive = true
+        options.printTimeSensitive = true
+    } else if (arg === '--list-cases') {
+            options.listCases = true
         } else if (arg === '--selection-cases' && i + 1 < argv.length) {
             options.selectionCases = path.resolve(process.cwd(), argv[++i])
         } else if (arg.startsWith('--selection-cases=')) {
@@ -2743,6 +2745,18 @@ async function validateTest(test, result, context) {
         }
     } else if (typeof test.expect_exit === 'number' && result.exitCode !== test.expect_exit) {
         failures.push(`expected exit ${test.expect_exit}, got ${describeExit(result)}`)
+    } else if (typeof test.expect_exit !== 'number' && test.expect_exit !== 'script' && !result.timedOut && result.exitCode !== 0) {
+        // The default the schema documents -- `expectedSignalNumber` above says it in one sentence,
+        // "an entry that says nothing is asserting it" -- was not the default this check applied: it
+        // ran only when a plan wrote `expect_exit`, so an entry that forgot the field judged nothing
+        // about a crash. Measured before this line existed, on a plan whose case called
+        // `process.exit(1)`: `[PASS]`, `total: 1, pass: 1`, run exit 0. A green a crash cannot turn
+        // red is worse than a red the machine caused, so an absent field now means zero rather than
+        // "no question asked".
+        failures.push(
+            `exited ${describeExit(result)}, and this entry says nothing about the exit code: an entry ` +
+            'expects the ordinary end of a process unless it writes `expect_exit`',
+        )
     }
     for (const rawNeedle of test.expect_stdout_contains || []) {
         const needle = expandTextTokens(rawNeedle, scope)
@@ -5491,8 +5505,8 @@ async function main() {
         process.exit(1)
     }
     if (options.printTimeSensitive) {
-        // A question about plan files, not a run: nothing executes, so no install is consulted and
-        // no lock is taken -- which is what lets the gate ask it before it decides to take the host.
+        // A question about plan files, not a run: nothing executes and no lock is taken, which is
+        // what lets the gate ask it before it decides to take the host.
         const status = printTimeSensitive(options)
         process.exitCode = status
         return status

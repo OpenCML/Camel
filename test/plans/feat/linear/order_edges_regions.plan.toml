@@ -40,6 +40,7 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 name = "order_edges_regions.interp"
 desc = "The three shapes print `9`, then the two lines of the arm the branch takes, then the loop's rounds, and return 56, with no pass (the interpreter, which counts dependencies by region)."
 args = ["${case}"]
+expect_exit = "script"
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim().split('\n').join(' | ')
@@ -52,6 +53,7 @@ assert(input.exit_code === 56, `unexpected exit ${input.exit_code}`)
 name = "order_edges_regions.nvm"
 desc = "The three shapes print `9`, then the two lines of the arm the branch takes, then the loop's rounds, and return 56 (stdio pipeline: std::nvm)."
 args = ["${case}", "${run_nvm}"]
+expect_exit = "script"
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim().split('\n').join(' | ')
@@ -64,6 +66,7 @@ assert(input.exit_code === 56, `unexpected exit ${input.exit_code}`)
 name = "order_edges_regions.fvm"
 desc = "The three shapes print `9`, then the two lines of the arm the branch takes, then the loop's rounds, and return 56 (stdio pipeline: std::fvm)."
 args = ["${case}", "${run_fvm}"]
+expect_exit = "script"
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim().split('\n').join(' | ')
@@ -76,6 +79,7 @@ assert(input.exit_code === 56, `unexpected exit ${input.exit_code}`)
 name = "order_edges_regions.jit"
 desc = "The three shapes print `9`, then the two lines of the arm the branch takes, then the loop's rounds, and return 56 (stdio pipeline: std::jit)."
 args = ["${case}", "${run_jit}"]
+expect_exit = "script"
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim().split('\n').join(' | ')
@@ -88,6 +92,7 @@ assert(input.exit_code === 56, `unexpected exit ${input.exit_code}`)
 name = "order_edges_regions.prl"
 desc = "The three shapes print `9`, then the two lines of the arm the branch takes, then the loop's rounds, and return 56, at four threads (stdio pipeline: std::prl)."
 args = ["-t", "4", "${case}", "${run_prl}"]
+expect_exit = "script"
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim().split('\n').join(' | ')

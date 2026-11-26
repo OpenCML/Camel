@@ -52,6 +52,7 @@ expect_stderr_contains = ["Camel Invariant Violation:", "Region of a node that i
 # `signal = SIGABRT` with a null exit code, MSVC turns `abort()` into exit status 3. The abort is
 # asserted from the runner's verify payload, which carries both (docs/test-plans.md,
 # "verify_script"), the way test/plans/debug/view_escape.plan.toml does.
+expect_exit = "script"
 verify_script = """
 if (input.signal !== null) {
     assert(input.signal === 'SIGABRT', `ended by signal ${input.signal}, not the abort`)

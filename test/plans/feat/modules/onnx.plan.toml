@@ -219,6 +219,7 @@ case = "../../../cases/modules/onnx/export_import_order.cml"
 args = ["${case}"]
 envs = ["ONNX_OUT=${test_tmp}/export_import_order.onnx"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+expect_exit = "script"
 verify_script = """
 async ({ input, assert }) => {
 const fs = await import('fs')
@@ -3373,6 +3374,7 @@ case = "../../../cases/modules/onnx/export_refusal_is_visible.cml"
 args = ["${case}"]
 envs = ["ONNX_OUT=${test_tmp}/export_refusal_is_visible.onnx"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+expect_exit = "script"
 verify_script = """
 async ({ input, assert }) => {
 const fs = await import('fs')

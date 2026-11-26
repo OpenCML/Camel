@@ -63,7 +63,7 @@
  *
  * The same record lives outside those directories, and the check must not ask for it to be
  * rewritten either. A test case's header says which tree a defect was read in (`<block>/<file>.cpp`
- * at `e82fa21e`); a plan's note says which commit a `lost` or `kept` reading came from; the layout
+ * at `<sha>`); a plan's note says which commit a `lost` or `kept` reading came from; the layout
  * move renamed the file and those lines are the evidence, not a stale link. So a reference that
  * does not resolve is read a second time, and the second reading has two answers:
  *
@@ -72,7 +72,7 @@
  *    an exit 1. The markers are the ones the tree already writes: `before the layout move` and
  *    `after the layout move` (the idiom of `lib/rules/rules.cml` after the layout move,
  *    `stdlib/rules/rules.cml` before it), `as it stood at <sha>`, and a commit id -- `at <sha>`, or
- *    the bare `e82fa21e` written beside the path it is about. A token has to carry a digit and a
+ *    the bare revision written beside the path it is about. A token has to carry a digit and a
  *    letter to be read as a commit id: a measurement of that length (`1000000`) is not a date;
  *  - **broken** -- no marker. This is the list the check exists for, and `--enforce` exits 1 on it.
  *

@@ -892,16 +892,6 @@ Each plan file may define:
   Free-form string array for indexing and search.
 - `desc`
   Optional plan description shown in logs.
-- `time_sensitive`
-  `true` declares that this plan's readings are measurements — durations, budgets, counts that move
-  with the machine — and that they are only comparable on a host it has to itself. Nothing in the
-  runner reads it: the field is read by the gate (`internal/tools/camel-remote.ps1`), which then
-  takes the plan slot and both build slots together before the build and releases all three after
-  the plan. A wait that runs out is `state=noslot`, which is "not measured" rather than a red or a
-  green. It must be written at the top level, before any table header: a `time_sensitive` inside
-  `[defaults]` belongs to that table and is not a declaration about the host. A directory target
-  (`smoke`, `feat/opt`) and `--changed` carry no declaration of their own, so only a named
-  `*.plan.toml` can ask for the whole host.
 - `[defaults]`
   A table of test fields every entry of the plan inherits (see "Plan Defaults").
 - `[[tests]]`
@@ -935,9 +925,11 @@ Every `[[tests]]` entry may use these common fields:
 - `args`
   Required in practice. Argument vector passed to `camel`. Variable tokens like `${case}` or `${run_jit}` are expanded before execution.
 - `expect_exit`
-  Optional integer expected process exit code. It and `expect_signal` are one question with one
-  answer: a table that writes both is a plan error, because a process killed by a signal has no exit
-  code to compare.
+  Optional integer expected process exit code, or the word `"script"` when the entry's
+  `verify_script` judges the exit code and the signal itself (its payload carries `exit_code` and
+  `signal`); an entry that writes neither expects `0`. It and `expect_signal` are one question with
+  one answer: a table that writes both is a plan error, because a process killed by a signal has no
+  exit code to compare.
 - `expect_signal`
   Optional signal the test's process must have been killed by, written as a name (`"ABRT"`,
   `"SIGABRT"`) or as the number this platform numbers it by (`15`, which is SIGTERM on both Windows

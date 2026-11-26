@@ -558,7 +558,7 @@ gc_node_ref_t ruleCotangentOf(
     //
     // **The operator is `:op/enter`, not `:op/cast`** (design principles 5.1: entering is not a
     // conversion -- it always succeeds, it is written as its own operator, it goes through no
-    // conversion safety table; and the author's ruling on `enter-by-structure`, `dd71a1293b`: `T`
+    // conversion safety table; what the notation already decides is that `T`
     // read as `T[..]` is an entering, its rank coming from the value). `:op/cast` is the operator a
     // *program* writes when it converts, and it is `mayFault = true`, which this step cannot be:
     // the branch below already asked `port->assignableFrom(ctType)`, so the entering's own guard

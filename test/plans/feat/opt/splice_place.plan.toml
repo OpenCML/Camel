@@ -123,6 +123,7 @@ desc = "The timed helper's twenty rounds with nothing but the executor, and the 
 backends = ["nvm", "fvm", "jit", "prl"]
 backends_agree = ["exit_code"]
 args = ["${case}", "${backend}"]
+expect_exit = "script"
 verify_script = """
 ({ input, assert }) => {
     assert(input.exit_code === 0, `camel exited ${input.exit_code}`)
@@ -146,6 +147,7 @@ desc = "`std::opt` inlines the closure the helper is given: the seal reports no 
 backends = ["nvm", "fvm", "jit", "prl"]
 backends_agree = ["exit_code"]
 args = ["${case}", "std::opt", "${backend}"]
+expect_exit = "script"
 verify_script = """
 ({ input, assert }) => {
     assert(input.exit_code === 0, `camel exited ${input.exit_code}`)
@@ -171,6 +173,7 @@ backends_agree = ["exit_code"]
 args = ["${case}", "std::opt", "std::opt", "${backend}"]
 cpu_budget_ms = 5000
 timeout_ms = 20000
+expect_exit = "script"
 verify_script = """
 ({ input, assert }) => {
     assert(input.exit_code === 0, `camel exited ${input.exit_code}`)
@@ -207,6 +210,7 @@ name = "nn_grad_check.spliced_body_chain_is_one_chain"
 case = "../../../cases/modules/autodiff/nn_grad_check.cml"
 desc = "`std::cxx::inline` splices `check` six times: each copy's `:io/println` has exactly one SYNC predecessor and one SYNC successor, and the same pairs carry the control edge beside them."
 args = ["${case}", "std::cxx::inline", "std::gir", "std::nop"]
+expect_exit = "script"
 verify_script = """
 ({ input, assert }) => {
     assert(input.exit_code === 0, `camel exited ${input.exit_code}`)
