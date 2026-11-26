@@ -44,3 +44,16 @@ normalizers = ["strip_ansi", "normalize_newlines"]
 # Two nested runs of a three-test plan, which the self-test measures at ~1 s each; 120 s is the
 # 4x margin over a host busy enough to make a nested run an order of magnitude slower.
 timeout_ms = 120000
+
+[[tests]]
+name = "retention.name"
+desc = "A run given a name (CAMEL_TEST_RUN_NAME) writes its record into exactly that directory and keeps it under a retention bound of 0; a name that already exists and names that are not plain (a separator, '..', a leading dot or dash) are refused with exit 2 and change nothing."
+kind = "behavior"
+tool = "node"
+case = "../../../cases/tools/retention/retention.mjs"
+args = ["${case}", "--name"]
+expect_exit = 0
+expect_stdout_contains = ["PASS retention.name"]
+normalizers = ["strip_ansi", "normalize_newlines"]
+# Six nested runs of the three-test plan, five of which stop at the name; one real run at ~1 s.
+timeout_ms = 120000

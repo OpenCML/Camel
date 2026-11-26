@@ -49,7 +49,13 @@ function Check {
 
 function Invoke-Git {
     param([string] $Repo, [Parameter(ValueFromRemainingArguments = $true)][string[]] $Args)
-    $out = & git -C $Repo @Args 2>&1
+    # A native command that writes a warning to stderr (git does, for line endings) is not an error:
+    # under `Stop` Windows PowerShell 5.1 turns that line into a terminating exception. The fixture
+    # repositories keep `core.autocrlf` off so the warning is not written at all, and the preference is
+    # relaxed for this one call because the exit code is the reading.
+    $previous = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'
+    try { $out = & git -c core.autocrlf=false -C $Repo @Args 2>&1 } finally { $ErrorActionPreference = $previous }
     if ($LASTEXITCODE -ne 0) { throw "git $($Args -join ' ') failed in $Repo`: $($out -join ' ')" }
     @($out | ForEach-Object { "$_".Trim() })
 }
@@ -135,10 +141,14 @@ $zeros = '0000000000000000000000000000000000000000'
 function Invoke-Hook {
     param([string[]] $Lines)
     Push-Location $repo
+    $previous = $ErrorActionPreference
+    # The hook refuses on stderr; that text is the reading, not an error to stop on.
+    $ErrorActionPreference = 'Continue'
     try {
         $out = ($Lines -join "`n") | & $sh $hook 2>&1
         $code = $LASTEXITCODE
     } finally {
+        $ErrorActionPreference = $previous
         Pop-Location
     }
     return [pscustomobject]@{ Code = $code; Text = (@($out) -join "`n") }

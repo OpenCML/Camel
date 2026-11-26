@@ -1,52 +1,52 @@
-# `-FetchFile -Latest`: the pieces of it that can be decided without a host.
+# `-FetchFile <suffix> -FromThisRun`: the pieces of it that can be decided without a host.
 #
-# The trouble this answers: a run's failure log lives in a directory named after the clock
-# (`test/results/log/<stamp>/fail/<case>.nvm/stdout.txt`), the console keeps one truncated line of
-# it, and `-FetchFile` takes a path that must already be known. So a reader who has just been told
-# "output does not contain ...; [stdout] ... [Error]: ... (the r..." cannot ask for the rest of the
-# sentence, and two lanes tonight wrote "推断" where they had a measurement.
+# The trouble this answers: a run's log lives in a directory on the host
+# (`test/results/log/<run>/fail/<case>.nvm/stdout.txt`, `summary.json`), the console keeps one
+# truncated line of it, and the run's directory name used to be a clock the caller could not know.
+# Taking "the newest directory" instead was wrong whenever another, shorter runner invocation
+# appeared in the same host checkout after the real one: its nearly empty `summary.json` was fetched
+# in place of the full one.
 #
-# `-Latest` makes the run a name the tool resolves, not a name the caller has to know: the suffix is
-# resolved against the newest run's log directory, and the file lands locally with the same tail.
+# So the tool gives every plan run it starts its own name, hands it to the runner as
+# `CAMEL_TEST_RUN_NAME`, and `-FromThisRun` reads the suffix from exactly that run's directory. A
+# directory that is not there is reported and nothing is fetched; no other run is ever read instead.
 #
-# Kept here rather than inside `camel-remote.ps1` so that the three decisions -- which run is newest,
-# what a suffix may name, where the file lands -- are pure and can be read and tested without a host
-# (the same reason `camel-remote-args.ps1` is a file of its own). The tool dot-sources this file and
-# asks the host for the one command `New-CamelLatestRunCommand` writes.
+# Kept here rather than inside `camel-remote.ps1` so that the decisions -- what a run is called, what
+# a suffix may name, where the file lands -- are pure and can be read and tested without a host (the
+# same reason `camel-remote-args.ps1` is a file of its own).
 
-# The two words a refusal is written with, so that a caller who typed the flag wrong is answered by
-# the flag's own name and by a shape they can copy.
+# The words a refusal is written with, so that a caller who typed the flag wrong is answered by the
+# flag's own name and by a shape they can copy.
 $script:CamelFetchUsage =
-    'camel-remote: -FetchFile -Latest needs a suffix inside the run log directory ' +
-    '(for example -FetchFile fail/transforms/x.nvm/stdout.txt -Latest)'
+    'camel-remote: -FetchFile -FromThisRun needs a suffix inside the run log directory ' +
+    '(for example -FetchFile fail/transforms/x.nvm/stdout.txt -FromThisRun)'
 
-# Which of a run directory's children is the newest run. The names are the run's clock
-# (`20261124_123343_3556634`), so the order the names sort in is the order the runs happened in --
-# read ordinally, because a culture sort of `20261124_9320_1` and `20261124_9320_2` is not the
-# clock's order and the run named second would answer first.
-#
-# No run at all answers the empty string rather than a guess: `-Latest` with nothing to name is a
-# refusal the caller writes, not something to resolve to '' and then fetch from `/`.
-function Select-CamelLatestRun {
+# A run's name: a plain name, the same rule the runner applies to `CAMEL_TEST_RUN_NAME`
+# (`test/tools/run-tests.mjs`). No path separator and no dot-only name, so it can only ever name a
+# direct child of the log directory.
+function Test-CamelRunName {
     [CmdletBinding()]
     param(
-        [string[]]$Runs
+        [string]$Name
     )
-    if ($null -eq $Runs -or $Runs.Count -eq 0) {
-        return ''
-    }
-    $sorted = [string[]]@($Runs | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
-    if ($sorted.Count -eq 0) {
-        return ''
-    }
-    [array]::Sort($sorted, [System.StringComparer]::Ordinal)
-    return $sorted[$sorted.Count - 1]
+    return ($Name -match '^[A-Za-z0-9][A-Za-z0-9._-]*$')
+}
+
+# One run's name, unique per invocation: the local clock, the local process id and a few random
+# characters. The clock keeps the names in the order the runs were started, the pid and the random
+# tail keep two invocations in the same second apart.
+function New-CamelRunName {
+    [CmdletBinding()]
+    param()
+    $alphabet = 'abcdefghijklmnopqrstuvwxyz0123456789'
+    $tail = -join (1..4 | ForEach-Object { $alphabet[(Get-Random -Maximum $alphabet.Length)] })
+    return ('{0}_{1}_{2}' -f (Get-Date -Format 'yyyyMMdd_HHmmss'), $PID, $tail)
 }
 
 # What a suffix may name: a file *inside* the run's log directory, written the way the runner writes
 # it (`fail/<case>.<backend>/stdout.txt`). Not the live checkout, not anything above the run: a suffix
 # that climbs (`../..`) or that names an absolute path (`/etc/...`) is refused here, by the flag's own
-# name, because `-Latest` is a way to read a log and not a way to fetch any file on the host.
+# name, because `-FromThisRun` is a way to read a log and not a way to fetch any file on the host.
 #
 # A backslash is refused rather than translated: the host splits on `/`, so a suffix written with
 # backslashes would arrive as one long file name and fail there instead of here.
@@ -60,23 +60,23 @@ function Resolve-CamelFetchSuffix {
         throw $script:CamelFetchUsage
     }
     if ($text.Contains('\')) {
-        throw "camel-remote: -FetchFile -Latest takes '/' between the parts of the path, not '\' (got '$text')"
+        throw "camel-remote: -FetchFile -FromThisRun takes '/' between the parts of the path, not '\' (got '$text')"
     }
     if ($text.StartsWith('/')) {
-        throw "camel-remote: -FetchFile -Latest names a file inside the run log directory, not an absolute path (got '$text')"
+        throw "camel-remote: -FetchFile -FromThisRun names a file inside the run log directory, not an absolute path (got '$text')"
     }
     while ($text.StartsWith('./')) {
         $text = $text.Substring(2)
     }
     foreach ($part in $text.Split('/')) {
         if ($part -eq '' -or $part -eq '.' -or $part -eq '..') {
-            throw "camel-remote: -FetchFile -Latest refuses a path that is empty, names this directory or climbs out of the run (got '$Suffix')"
+            throw "camel-remote: -FetchFile -FromThisRun refuses a path that is empty, names this directory or climbs out of the run (got '$Suffix')"
         }
     }
     return $text
 }
 
-# Where the file is read from and where it lands. The host path is the newest run's own directory; the
+# Where the file is read from and where it lands. The host path is the named run's own directory; the
 # local path keeps the suffix as its tail, so a reader finds the file where the same words name it on
 # the host -- the alternative (flattening it to a bare `stdout.txt`) would make two cases of one run
 # overwrite each other.
@@ -97,15 +97,18 @@ function Get-CamelFetchPaths {
     }
 }
 
-# The one command the host is asked to name the newest run. `find` with `-maxdepth 1 -type d` answers
-# the run directories and nothing else, and `sort | tail -n 1` is the clock's order the names already
-# carry. It does not glob: a log root whose glob matches nothing would otherwise hand `find` a literal
-# `*` and print that back as a run name.
-function New-CamelLatestRunCommand {
+# The one command the host is asked about the run: it prints the run directory's absolute path (what
+# `scp` needs, since it hands the path to the remote side unexpanded) when that directory exists, and
+# nothing when it does not. It names exactly one directory and looks at no other.
+function New-CamelRunDirCommand {
     [CmdletBinding()]
     param(
-        [Parameter(Mandatory = $true)][string]$LogRootOnHost
+        [Parameter(Mandatory = $true)][string]$LogRootOnHost,
+        [Parameter(Mandatory = $true)][string]$Run
     )
+    if (-not (Test-CamelRunName -Name $Run)) {
+        throw "camel-remote: '$Run' is not a plain run name"
+    }
     $root = $LogRootOnHost.TrimEnd('/')
-    return "find '$root' -mindepth 1 -maxdepth 1 -type d -printf '%f\n' | sort | tail -n 1"
+    return "if [ -d `"$root/$Run`" ]; then ( cd `"$root/$Run`" && pwd ); fi"
 }

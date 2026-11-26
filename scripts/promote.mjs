@@ -94,7 +94,7 @@ const SCRIPT_REPO = path.resolve(path.dirname(SCRIPT), '..')
 // `-NoGpuWatch`: the gpu observation never decides green or red, and with it the layer can wait up to
 // half an hour for a second slot after the plan itself has finished.
 const DEFAULT_LAYER =
-    'pwsh -NoProfile -File "{worktree}/internal/tools/camel-remote.ps1" -Path "{worktree}" -Plan test/plans -Tier fast -Jobs {jobs} -NoGpuWatch -FetchFile summary.json -Latest'
+    'pwsh -NoProfile -File "{worktree}/internal/tools/camel-remote.ps1" -Path "{worktree}" -Plan test/plans -Tier fast -Jobs {jobs} -NoGpuWatch -FetchFile summary.json -FromThisRun'
 const DEFAULT_CLEANUP = 'pwsh -NoProfile -File "{worktree}/internal/tools/camel-remote.ps1" -Path "{worktree}" -Clean'
 const DEFAULT_TREE_MAKER =
     'pwsh -NoProfile -File "{repo}/internal/tools/new-worktree.ps1" -Path "{tree}" -Detach {sha} -FromCheckout "{repo}" -NoFetch {hooks}'
@@ -508,7 +508,7 @@ async function runWorker(flags) {
         updateJob(dir, { phase, phases: { ...(job?.phases || {}), [phase]: { startedAt: new Date().toISOString() } } })
     }
     // The runner writes its summary into its own run directory under test/results/log on the host;
-    // `-FetchFile summary.json -Latest` brings the newest run's copy back to test/results/fetched.
+    // `-FetchFile summary.json -FromThisRun` brings this invocation's own run's copy back to test/results/fetched.
     const summaryFile = path.join(tree, 'test', 'results', 'fetched', 'summary.json')
     const values = { worktree: tree, tip, jobs: config.jobs, repo, remote: config.remote, develop: config.develop, sha: tip }
 

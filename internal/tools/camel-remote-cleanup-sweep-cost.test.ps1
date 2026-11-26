@@ -82,6 +82,7 @@ function Skip {
 Write-Host 'Part A: the shipped guard'
 
 $srcText = [IO.File]::ReadAllText((Join-Path $PSScriptRoot 'camel-remote.ps1'))
+. (Join-Path $PSScriptRoot 'git-bash.ps1')
 $guardMatch = [regex]::Match($srcText, "(?s)\`$cleanupGuard = @'\r?\n(.*?)\r?\n'@")
 Check 'camel-remote.ps1 carries the guard as a single-quoted here-string' $guardMatch.Success
 $guard = if ($guardMatch.Success) { $guardMatch.Groups[1].Value } else { '' }
@@ -223,18 +224,18 @@ if (-not $guard) {
         if ($LASTEXITCODE -ne 0) { throw "scp to $BashHost failed" }
         $raw = @(ssh -o ConnectTimeout=15 $BashHost "bash /tmp/$remoteName; echo RC=`$?")
         if (-not $Keep) { ssh -o ConnectTimeout=15 $BashHost "rm -f /tmp/$remoteName" | Out-Null }
-    } elseif (Get-Command bash -ErrorAction SilentlyContinue) {
+    } elseif ($gitBash = Get-GitBash) {
         # A `bash` on PATH is not enough: this machine's resolves to WSL, which cannot open a Windows
         # path at all, so the harness would "fail" for a reason that has nothing to do with the guard.
         $probe = Join-Path ([IO.Path]::GetTempPath()) 'sweep-cost-bashprobe.sh'
-        [IO.File]::WriteAllText($probe, "echo BASHOK`n")
-        $probeOut = @(& bash $probe 2>$null)
+        [IO.File]::WriteAllText($probe, "echo BASHOK`nif command -v flock >/dev/null 2>&1; then echo FLOCKOK; fi`n")
+        $probeOut = @(& $gitBash $probe 2>$null)
         Remove-Item $probe -Force -ErrorAction SilentlyContinue
-        if (@($probeOut) -contains 'BASHOK') {
-            $raw = @(& bash $local)
+        if (@($probeOut) -contains 'BASHOK' -and @($probeOut) -contains 'FLOCKOK') {
+            $raw = @(& $gitBash $local)
             $raw += 'RC=' + $LASTEXITCODE
         } else {
-            Skip 'the bash on PATH cannot read a Windows path; give -BashHost <ssh alias>'
+            Skip 'the bash here cannot read a Windows path or has no flock (Git for Windows has none); give -BashHost <ssh alias>'
         }
     } else {
         Skip 'no bash on this machine; give -BashHost <ssh alias>'
