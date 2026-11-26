@@ -3027,7 +3027,7 @@ expect_diagnostic_name = "RuntimeDiag::UnhandledError"
 expect_diagnostic_code = "0x04000051"
 expect_diagnostic_line = 15
 expect_diagnostic_column = 13
-expect_output_contains = ["this conversion of a constant always fails: conversion to 'f32[3, 2]' failed: the array has shape [2, 3]", "as_constant_fails.cml:15:13"]
+expect_output_contains = ["this conversion of a constant always fails: conversion to 'f32[3, 2]' failed: the array has shape [2, 3]", "as_constant_fails.cml:17:13"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 20000
 
