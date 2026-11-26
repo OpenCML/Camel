@@ -66,6 +66,7 @@ class StreamType : public CompositeType {
     virtual Type *unify(Type *other) const override;
     /// The widening a `var` binding needs: the element widens, the stream stays a stream.
     virtual Type *widened() const override;
+    virtual bool castEntersFrom(Type *sourceType) const override;
     virtual CastSafety castSafetyFrom(Type *sourceType) const override;
     virtual bool assignableFrom(Type *sourceType) const override;
     /// A stream fixes no numeric type for a literal beside it: `x * 2.0` with `x: f32..` is not

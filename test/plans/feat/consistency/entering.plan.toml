@@ -486,3 +486,45 @@ expect_exit = 1
 expect_stdout_contains = ["expected 'int', found 'string'"]
 expect_output_not_contains = ["Segmentation fault", "dumped core", "var int", "var string", "An error has occurred"]
 expect_diagnostic_name = "SemanticDiag::BranchReturnTypeMismatch"
+
+[[tests]]
+name = "entering.err_numeric_widening"
+desc = "Entering is not a numeric conversion, however safe the widening: an i32 does not enter a position of int. The judgement is the two types' structure, not the safety table -- a pair the table calls Safe (here int(i32) is a widening nothing loses) is not an entering for being safe."
+kind = "negative"
+case = "../../../cases/consistency/entering/err_widening_position.cml"
+args = ["-E", "short", "${case}"]
+backends = ["nvm"]
+expect_exit = 1
+expect_output_not_contains = ["Segmentation fault", "dumped core", "internal error"]
+expect_output_contains = ["name=SemanticDiag::NoMatchingFunction"]
+
+[[tests]]
+name = "entering.rank_not_zero"
+desc = "T[...] read as T is the element only when the value has no rank: the step is a shape check (:op/refine_extent), not an entering, so a rank-one value stops the program with the array's own words instead of being handed on as the element it is not. The rank-zero value before it prints."
+kind = "negative"
+case = "../../../cases/consistency/entering/rank_not_zero.cml"
+args = ["${case}"]
+backends = ["nvm"]
+expect_exit = 1
+expect_stdout_contains = ["1.5"]
+expect_output_contains = ["conversion to 'f32' failed: the array has shape [2]"]
+expect_output_not_contains = ["Segmentation fault", "dumped core", "internal error", "castSlotFrom"]
+
+[[tests]]
+name = "entering.rank_zero_edges"
+desc = "The two rank-zero edges on the graph: a T handed to a T[...] position is :op/enter (nothing can fail), a T[...] read as T is :op/refine_extent (the rank is the value's, and the check may stop the program), and neither is :op/cast, which only a program's own `as` writes."
+kind = "behavior"
+case = "../../../cases/consistency/entering/rank_zero_edges.cml"
+args = ["${case}", "std::gir"]
+backends = ["nvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines"]
+verify_script = """
+({ input, assert }) => {
+const gir = input.normalized.stdout
+assert(gir.includes(':op/enter'), 'the entering into the open rank is not :op/enter')
+assert(gir.includes(':op/refine_extent'), 'the read of the open rank as its element is not :op/refine_extent')
+assert(!gir.includes(':op/cast'), 'the graph holds a :op/cast the program did not write')
+}
+"""
+timeout_ms = 12000

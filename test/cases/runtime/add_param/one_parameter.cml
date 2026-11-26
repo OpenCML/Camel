@@ -1,0 +1,47 @@
+// `add_param` writes one of the two statements a parameter is: the port node the body computes
+// with, of the type of the value named. The other one -- the entry of the function type a caller is
+// told about -- is the declaration, and no operator writes it (the block head of design
+// graph-editing 8.4, which the tree does not have). So a graph edited this way holds one more port
+// node than its signature declares, and the commit refuses to publish it.
+//
+// The reading is the two counts around the commit: the draft's new port is a node of the graph's
+// body of type `int` (the type of the parameter it was copied from), and the graph the program keeps
+// after the refused commit holds the port count it had -- the refusal published nothing. A commit
+// that published this graph would print `2` and be the defect.
+//
+// This is the operator's half of the reading; `test::add_param` (plan `runtime.add_param`) reads the
+// other half, where the same port node is published once a signature declares it.
+
+import { Graph, Node, NodeKind, graph_of, nodes, kind, type_of, type_name, open, add_param, commit } from graph
+
+func subject(x: int) => int {
+    return x + 1
+}
+
+func isPort(n: Node) => bool {
+    return kind(n) == NodeKind::Port
+}
+
+func portsOf(g: Graph) => Node[] {
+    return nodes(g)->filter<isPort>
+}
+
+func typeText(n: Node) => string {
+    return match type_of(n) {
+        case null => '-'
+        case t => type_name(t)
+    }
+}
+
+func main() => int spelling sync {
+    let g = graph_of(subject)
+    let before = len(portsOf(g))
+    let t = open(subject)
+    let made = add_param(t, portsOf(g)[0])
+    let madeText = typeText(made)
+    let edited = commit(t) !! subject
+    let h = graph_of(edited)
+    let after = len(portsOf(h))
+    println(`[add_param] ports=${before}->${after} made=${madeText}`)
+    return 0
+}

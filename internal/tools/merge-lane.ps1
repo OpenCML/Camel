@@ -175,7 +175,23 @@ param(
     # merge this tool would have made has: first parent == origin/<Target>, second parent == the
     # lane's tip, HEAD == the commit itself. Anything else is refused, because a commit whose parents
     # are not that is not the merge it claims to be.
-    [string] $MergeCommit = ''
+    [string] $MergeCommit = '',
+
+    # A backfill may name the cases a historical merge could not pass. `-MergeCommit` records a merge
+    # made earlier; its row reading compares that commit's tree with the commit before it, and a case
+    # that was red at that snapshot and was fixed forward afterwards makes the record unwritable
+    # forever -- the tree it measured no longer exists on the branch. The file names, for each such
+    # case, the snapshot (which must be this merge commit), the commit that fixed it, and a run of
+    # the tip whose `run.json` revision and case status are read here: the claim "green now" is
+    # checked against a reading, not against the sentence that asked for the allowance. Only the
+    # ordinary merge path is untouched by this switch -- it is refused without `-MergeCommit`.
+    [string] $KnownAtSnapshot = '',
+    # The same idea one layer up: a file that has no two-line header in the tree this merge made,
+    # and was given one by a later commit. It names the file, the snapshot (this merge commit) and
+    # the commit that wrote the header; the file has to be in this tree without a copyright line,
+    # the fix has to be an ancestor of the tip named in the list, and every file the check names
+    # has to have an entry. Also refused without `-MergeCommit`.
+    [string] $KnownHeaderAtSnapshot = ''
 )
 
 $ErrorActionPreference = 'Stop'
@@ -1533,8 +1549,71 @@ try {
     $headers = & node (Join-Path $MainCheckout 'scripts\headers.mjs') --check 2>&1
     $headersExit = $LASTEXITCODE
     $headers | Select-Object -Last 2 | ForEach-Object { "  $_" }
+    # A backfill of a merge made earlier meets trees that today's header rule rejects: the rule has
+    # grown since, and a file some later commit gave its two lines to is headless in the tree that
+    # added it. Writing the header into this commit is rewriting history and skipping the commit
+    # breaks the first-parent chain the next backfilled merge asserts, so the fact is recorded
+    # instead of hidden: `-KnownHeaderAtSnapshot` names the file, the snapshot and the commit that
+    # gave it its header, and this block re-establishes all three from the repository before it
+    # lets the push through. Without the switch this is the refusal it always was.
+    $headerAllowed = @()
     if ($headersExit -ne 0) {
-        Stop-With 'the header check failed' 'A file without its two-line header does not go to develop, because it stops a whole CI run before the build starts.' $mergeCommit
+        if (-not $KnownHeaderAtSnapshot) {
+            Stop-With 'the header check failed' 'A file without its two-line header does not go to develop, because it stops a whole CI run before the build starts.' $mergeCommit
+        }
+        if (-not $MergeCommit) {
+            Stop-With '-KnownHeaderAtSnapshot is only for a backfill' 'It records a merge made earlier, so it needs -MergeCommit. The ordinary merge path checks the tree it is merging and has nothing to be allowed for.'
+        }
+        $hlist = Get-Content -LiteralPath $KnownHeaderAtSnapshot -Raw | ConvertFrom-Json
+        if (-not $hlist.tip -or -not @($hlist.entries).Count) {
+            Stop-With "-KnownHeaderAtSnapshot $KnownHeaderAtSnapshot is not a list" 'It needs "tip" (a commit the fix has to be an ancestor of) and a non-empty "entries".'
+        }
+        $hTip = "$(& git rev-parse --verify "$($hlist.tip)^{commit}" 2>$null)".Trim()
+        if (-not $hTip) { Stop-With "-KnownHeaderAtSnapshot tip $($hlist.tip) does not resolve to a commit" 'The evidence must name a commit this repository has.' }
+        $failing = @($headers | ForEach-Object { "$_" } |
+            Where-Object { $_ -match '^\s*(\S+): missing the two-line header' } |
+            ForEach-Object { ($_ -replace '^\s*(\S+): missing the two-line header.*$', '$1').Trim() } | Select-Object -Unique)
+        foreach ($entry in @($hlist.entries)) {
+            if (-not $entry.file -or -not $entry.snapshot -or -not $entry.fixedAt) {
+                Stop-With "-KnownHeaderAtSnapshot entry $(($entry | ConvertTo-Json -Compress)) is incomplete" 'Each entry needs file, snapshot and fixedAt.'
+            }
+            $snapSha = "$(& git rev-parse --verify "$($entry.snapshot)^{commit}" 2>$null)".Trim()
+            $fixSha = "$(& git rev-parse --verify "$($entry.fixedAt)^{commit}" 2>$null)".Trim()
+            if (-not $snapSha) { Stop-With "-KnownHeaderAtSnapshot entry $($entry.file) names snapshot $($entry.snapshot), which is not a commit" 'The snapshot is the merge being recorded.' }
+            if (-not $fixSha) { Stop-With "-KnownHeaderAtSnapshot entry $($entry.file) names $($entry.fixedAt), which is not a commit" 'The fix has to be a commit this repository has.' }
+            if ($snapSha -ne $mergeCommit) {
+                Stop-With "-KnownHeaderAtSnapshot entry $($entry.file) is red at $($snapSha.Substring(0, 9))" "This run records $($mergeCommit.Substring(0, 9)); an entry about another snapshot is stale."
+            }
+            & git merge-base --is-ancestor $fixSha $hTip 2>$null
+            if ($LASTEXITCODE -ne 0) {
+                Stop-With "-KnownHeaderAtSnapshot entry $($entry.file) names $($fixSha.Substring(0, 9)), which is not an ancestor of $($hTip.Substring(0, 9))" 'A fix that is not on the line the evidence was read from did not reach the tip.'
+            }
+            # The three facts, read from the repository and not from the list: the file is in the
+            # snapshot's tree and has no copyright line there, and it has one at the fix.
+            $atSnap = @(& git show "$($snapSha):$($entry.file)" 2>$null | Select-Object -First 6)
+            if (-not $atSnap.Count) { Stop-With "-KnownHeaderAtSnapshot entry $($entry.file) is not in $($snapSha.Substring(0, 9))" 'The file the entry names has to be in the snapshot tree.' }
+            if (@($atSnap | Where-Object { $_ -match 'Copyright' }).Count -gt 0) {
+                Stop-With "-KnownHeaderAtSnapshot entry $($entry.file) already has its header at $($snapSha.Substring(0, 9))" 'The header check did not fail on this file, so the entry is not about it.'
+            }
+            $atFix = @(& git show "$($fixSha):$($entry.file)" 2>$null | Select-Object -First 6)
+            if (@($atFix | Where-Object { $_ -match 'Copyright' }).Count -eq 0) {
+                Stop-With "-KnownHeaderAtSnapshot entry $($entry.file) has no header at $($fixSha.Substring(0, 9)) either" 'The entry names a fix that did not write the header.'
+            }
+            $headerAllowed += $entry.file
+        }
+        $uncovered = @($failing | Where-Object { $headerAllowed -notcontains $_ })
+        if ($uncovered.Count -gt 0) {
+            Stop-With "-KnownHeaderAtSnapshot does not cover $($uncovered -join ', ')" 'Every file the check names has to have an entry, or the push carries a headless file.'
+        }
+        $stale = @($headerAllowed | Where-Object { $failing -notcontains $_ })
+        if ($stale.Count -gt 0) {
+            Stop-With "-KnownHeaderAtSnapshot lists $($stale -join ', '), which the check did not name" 'A stale entry hides nothing here; it only makes the record say more than the check did.'
+        }
+        foreach ($entry in @($hlist.entries)) {
+            Write-Host ("  allowed: {0} has no header at this snapshot ({1}); the header is at {2} -- it stops no CI run of this tree" -f `
+                $entry.file, $mergeCommit.Substring(0, 9), "$($entry.fixedAt)".Substring(0, [Math]::Min(9, "$($entry.fixedAt)".Length)))
+        }
+        $headersExit = 0
     }
 
     # The local gate compiles with this workstation's toolchain; CI's Linux and macOS legs compile
@@ -1834,15 +1913,60 @@ try {
             Write-Host ("  no baseline for develop {0}: measuring it there, in a worktree at {1} on the gate's own branch" -f `
                 $developTip.Substring(0, 9), $baselinePath)
             $seedStarted = Get-Date
-            # The same change, read from the other end: the seeding run lists it with `git diff
-            # --name-only` against `-ChangedBase`, taken in the baseline tree, so the base has to be the
-            # MERGE COMMIT. The files that differ between the merged tree and the baseline tree are
-            # exactly the files this merge changes; a diff against the lane head also names the lane's
-            # own files, because those two trees differ by more than the merge -- measured as
-            # `smoke`-plus-`docs.links` (31 cases) where the merge selected `docs.links` (21), and the
-            # comparison then refused, correctly, as two runs of different things.
-            $seedRun = @(& pwsh -NoProfile -File (Join-Path $toolRoot 'internal\tools\camel-remote.ps1') `
-                -Path $baselinePath -Changed -ChangedBase $comparedTree -ListKnown -NoGpuWatch 2>&1)
+            # The selection has to be the one the merged tree's run made, not merely "the same change"
+            # read by another selector. `-Changed` here asked `camel-remote.ps1`'s own selector, which
+            # resolves directory rules to whole directories, while the merged run asked
+            # `test.js --changed --list`, which lists plans -- and the two disagreed by 1509 cases
+            # (`test/plans/feat/opt/**` plus `lit2.*` and `defun` on one side only), so the comparison
+            # refused with "the two runs selected differently" and no reading could be taken for a
+            # merge whose trees were both perfectly readable. The plan set the merged run used is
+            # already in `$planTargets`; the seeding run is given exactly it.
+            $seedTargets = @($planTargets)
+            # The seeding run is measured by the gate of the tree it measures. A backfill's baseline
+            # can be old enough that its runner has never heard of a subcommand this checkout's gate
+            # asks every tree for (`--print-time-sensitive` arrived with the time-sensitive rework,
+            # 9e369c01d): asking ee34a1d66's runner for it stops the seeding run with "unknown option
+            # -- the caller is newer than this tree", which is a fact about the caller and not about
+            # the tree. The tree under measurement brings its own gate, exactly as it brings its own
+            # runner -- the reading is the snapshot's, taken by the rules in force at that snapshot.
+            $seedGate = Join-Path $baselinePath 'internal\tools\camel-remote.ps1'
+            if (-not (Test-Path -LiteralPath $seedGate)) { $seedGate = Join-Path $toolRoot 'internal\tools\camel-remote.ps1' }
+            # The gate's settings file is local configuration, not part of the tree: `camel-gate.local.json`
+            # is git-ignored, so a worktree checked out for a baseline has none and the gate that
+            # belongs to that tree stops before it starts ("the local settings file has no 'sshHost'").
+            # The seeding worktree is measured on the same host with the same settings, so it is given
+            # this checkout's file -- settings of the machine, not of a commit.
+            $seedSettings = Join-Path $baselinePath 'internal\tools\camel-gate.local.json'
+            $ourSettings = Join-Path $toolRoot 'internal\tools\camel-gate.local.json'
+            if (-not (Test-Path -LiteralPath $seedSettings) -and (Test-Path -LiteralPath $ourSettings)) {
+                Copy-Item -LiteralPath $ourSettings -Destination $seedSettings -Force
+            }
+            # A plan file the merge *adds* exists on the merged tree and nowhere else: asking the
+            # first parent's checkout for it fails the whole seeding run (ENOENT), which says nothing
+            # about the trees. Those targets are dropped here -- their cases are `added` in the
+            # comparison, which is what a case that did not exist before the merge is.
+            $absent = @($seedTargets | Where-Object { -not (Test-Path -LiteralPath (Join-Path $baselinePath ($_ -replace '/', '\'))) })
+            if ($absent.Count -gt 0) {
+                $seedTargets = @($seedTargets | Where-Object { $absent -notcontains $_ })
+                Write-Host ("  seeding without {0} plan target(s) this merge adds, which the first parent's tree does not have: {1}" -f `
+                    $absent.Count, ($absent -join ', '))
+            }
+            if ($seedTargets.Count -gt 0) {
+                # `-File` binds one value to `-Plan` and treats the second target as a positional
+                # argument, so the array has to be written into a command: this is the only form that
+                # gives the child the plan set as a set. A target is a repository path (no quotes in
+                # it); each is single-quoted here and every quote inside one is doubled.
+                $quoted = @($seedTargets | ForEach-Object { "'" + ("$_" -replace "'", "''") + "'" }) -join ','
+                $camelCommand = "& '" + $seedGate + "' -Path '" +
+                    ($baselinePath -replace "'", "''") + "' -ListKnown -NoGpuWatch -Plan @(" + $quoted + ")"
+                $seedRun = @(& pwsh -NoProfile -Command $camelCommand 2>&1)
+            }
+            else {
+                # No selection to copy (the merged run widened, or listed nothing): fall back to the
+                # change-driven selector rather than measure no plan at all.
+                $seedRun = @(& pwsh -NoProfile -File $seedGate `
+                    -Path $baselinePath -Changed -ChangedBase $comparedTree -ListKnown -NoGpuWatch 2>&1)
+            }
             $seedExit = $LASTEXITCODE
             $seedSeconds = ((Get-Date) - $seedStarted).TotalSeconds
             [System.IO.File]::WriteAllText($seedTranscript,
@@ -1915,8 +2039,20 @@ Write-Host "STOPPED: the baseline could not be measured (exit 2, no reading take
     # and once, after the push, to store this commit's own reading as the baseline for the next
     # merge -- so the plan runs once and both readers read the same run.
 $transcript = Join-Path ([System.IO.Path]::GetTempPath()) ("camel-merge-rows-$PID.txt")
-    $rowsRun = @(& pwsh -NoProfile -File (Join-Path $toolRoot 'internal\tools\camel-remote.ps1') `
-        -Path $MainCheckout -Changed -ChangedBase $developTip -ListKnown -NoGpuWatch 2>&1)
+    if ($planTargets.Count -gt 0) {
+        # The same plan set, named the same way, as the baseline seeding run below: `-Changed` applies
+        # the runner's tier rules to a plan file, `-Plan` runs the file whole, and the two sides then
+        # measured 8 different cases (`parse.frontend` and `docs.links`) for one merge whose trees were
+        # both readable. The set was computed once above; both runs are given it.
+        $rowsQuoted = @($planTargets | ForEach-Object { "'" + ("$_" -replace "'", "''") + "'" }) -join ','
+        $rowsCommand = "& '" + (Join-Path $toolRoot 'internal\tools\camel-remote.ps1') + "' -Path '" +
+            ($MainCheckout -replace "'", "''") + "' -ListKnown -NoGpuWatch -Plan @(" + $rowsQuoted + ")"
+        $rowsRun = @(& pwsh -NoProfile -Command $rowsCommand 2>&1)
+    }
+    else {
+        $rowsRun = @(& pwsh -NoProfile -File (Join-Path $toolRoot 'internal\tools\camel-remote.ps1') `
+            -Path $MainCheckout -Changed -ChangedBase $developTip -ListKnown -NoGpuWatch 2>&1)
+    }
     $rowsExit = $LASTEXITCODE
     # Byte for byte, without a BOM and with LF: the comparer splits on `\n` and matches the markers
     # exactly, and a transcript written by `>` in PowerShell would be UTF-16.
@@ -1946,14 +2082,124 @@ $transcript = Join-Path ([System.IO.Path]::GetTempPath()) ("camel-merge-rows-$PI
     # already made in this checkout (that is step 1 of this script), and it is the push that has not
     # happened. A reader who acts on "nothing was committed" would look for a merge that is there.
     if ($compareExit -eq 1) {
-        $compare | ForEach-Object { "  $_" }
-        Write-Host ''
-        Write-Host 'STOPPED: the plans this merge touches measured differently on the merged tree (exit 1: the cases are named above)' -ForegroundColor Red
-        Write-Host "  The baseline is the tree this merge lands on (develop $($developTip.Substring(0, 9))) and this merge is the only thing that moved. `newly red` was green there and is red now; `still red, failing differently` was red both times and reads differently now, which is the move a count cannot see."
-        Write-Host '  If the change makes a case fail on purpose, the merge that makes it fail that way is the one that carries the expectation with it; this one is refused until the two agree.'
-        Write-Host ''
-        Write-GitState -MergeCommit $mergeCommit
-        exit 1
+        # A backfill of a merge made earlier may find a case red at the snapshot it is recording and
+        # fixed on the branch since. That is not a defect in the merge: the judgement `-MergeCommit`
+        # applies ("this commit's tree against its first parent, no new red") is the judgement of the
+        # moment, and the moment has passed. The allowance below re-establishes the fact from a
+        # reading of the tip, one case at a time, and refuses the whole idea when anything about it
+        # does not check out. Without `-KnownAtSnapshot` this is the refusal it always was.
+        $allowed = @()
+        if ($KnownAtSnapshot) {
+            if (-not $MergeCommit) {
+                Stop-With '-KnownAtSnapshot is only for a backfill' 'It records a merge made earlier, so it needs -MergeCommit. The ordinary merge path reads the tree it is merging and has nothing to be allowed for.'
+            }
+            $list = Get-Content -LiteralPath $KnownAtSnapshot -Raw | ConvertFrom-Json
+            if (-not $list.tip -or -not $list.run -or -not @($list.entries).Count) {
+                Stop-With "-KnownAtSnapshot $KnownAtSnapshot is not a list" 'It needs "tip" (the commit the evidence was read on), "run" (the run that read it) and a non-empty "entries".'
+            }
+            $tipSha = "$(& git rev-parse --verify "$($list.tip)^{commit}" 2>$null)".Trim()
+            if (-not $tipSha) { Stop-With "-KnownAtSnapshot tip $($list.tip) does not resolve to a commit" 'The evidence must name a commit this repository has.' }
+            $runJson = Join-Path $list.run 'run.json'
+            $runSummary = Join-Path $list.run 'summary.json'
+            foreach ($f in @($runJson, $runSummary)) {
+                if (-not (Test-Path -LiteralPath $f)) { Stop-With "-KnownAtSnapshot run $($list.run) has no $(Split-Path -Leaf $f)" 'The evidence is a run of the gate: run.json and summary.json are what make it checkable.' }
+            }
+            $revision = "$((Get-Content -LiteralPath $runJson -Raw | ConvertFrom-Json).revision)".Trim()
+            if ($revision -ne $tipSha) {
+                Stop-With "-KnownAtSnapshot run $($list.run) measured $($revision.Substring(0, [Math]::Min(9, $revision.Length))), not the tip $($tipSha.Substring(0, 9))" 'A reading of another tree is not evidence about the tip.'
+            }
+            $summary = Get-Content -LiteralPath $runSummary -Raw | ConvertFrom-Json
+            $diff = Get-Content -LiteralPath (Join-Path $diffDir 'diff.json') -Raw | ConvertFrom-Json
+            $newRed = @($diff.new | ForEach-Object { if ($_ -is [string]) { $_ } elseif ($_.name) { "$($_.name)" } else { "$_" } })
+            # The second shape of the same fact: a case this merge *adds* and that is red in its own
+            # tree -- not a regression, because the first parent never had it. A backfill meets them
+            # for the same reason it meets `new`: the tree was fixed forward. The record says which of
+            # the two each entry is, because "red where it stood" and "added red" are different claims
+            # and a reader counting them must be able to tell them apart.
+            $addedRed = @($diff.addedRed | ForEach-Object { if ($_ -is [string]) { $_ } elseif ($_.name) { "$($_.name)" } else { "$_" } })
+            $candidates = @($newRed + $addedRed)
+            $named = @()
+            foreach ($entry in @($list.entries)) {
+                $removedAt = "$($entry.removedAt)".Trim()
+                $isRemoval = [bool]$removedAt
+                if (-not $entry.case -or -not $entry.snapshot -or (-not $entry.fixedAt -and -not $isRemoval)) {
+                    Stop-With "-KnownAtSnapshot entry $(($entry | ConvertTo-Json -Compress)) is incomplete" 'Each entry needs case, snapshot and fixedAt -- or case, snapshot, removedAt and note for a case that was removed instead.'
+                }
+                $snapshot = "$(& git rev-parse --verify "$($entry.snapshot)^{commit}" 2>$null)".Trim()
+                if ($snapshot -ne $mergeCommit) {
+                    Stop-With "-KnownAtSnapshot entry $($entry.case) is red at $($entry.snapshot)" "This run records $($mergeCommit.Substring(0, 9)); an allowance for another snapshot says nothing about it."
+                }
+                if ($candidates -notcontains $entry.case) {
+                    Stop-With "-KnownAtSnapshot entry $($entry.case) is neither new nor an added case that is red here" 'A stale allowance is refused rather than carried: it would let a later case through.'
+                }
+                if ($isRemoval) {
+                    # The third outcome of a red case: the tree at the tip does not carry it at all. That
+                    # is a fact about the tip, and it is checked the way the fix is -- from the
+                    # repository: the name is gone from the plans, the commit that removed it is on the
+                    # line to the tip, and that commit's own message is the one quoted in the entry.
+                    # "removed" is written as removed; it is not a synonym for fixed.
+                    if (-not $entry.note) { Stop-With "-KnownAtSnapshot entry $($entry.case) names removedAt without a note" 'The record quotes the removal commit'; }
+                    $gone = "$(& git rev-parse --verify "$removedAt^{commit}" 2>$null)".Trim()
+                    if (-not $gone) { Stop-With "-KnownAtSnapshot entry $($entry.case) names $removedAt, which is not a commit here" 'The record says which commit removed the case; a sha nobody can resolve is not that.' }
+                    & git merge-base --is-ancestor $gone $tipSha 2>$null
+                    if ($LASTEXITCODE -ne 0) { Stop-With "-KnownAtSnapshot entry $($entry.case) names $($gone.Substring(0, 9)) as the removal, and it is not on the tip $($tipSha.Substring(0, 9))" 'A removal that is not on the branch does not describe the tip.' }
+                    $leaf = "$($entry.case)"
+                    if ($leaf.Contains('/')) { $leaf = $leaf.Substring($leaf.IndexOf('/') + 1) }
+                    $stillThere = @(& git grep -l -- $leaf $tipSha -- test/plans 2>$null)
+                    if ($stillThere.Count -gt 0) {
+                        Stop-With "-KnownAtSnapshot entry $($entry.case) is still in the plans at the tip $($tipSha.Substring(0, 9))" "A case that is there has to be green to be allowed; this one is only gone if nothing in test/plans names it."
+                    }
+                    $goneBody = (@(& git log -1 --format=%B $gone 2>$null) -join "`n")
+                    if (-not $goneBody.Contains("$($entry.note)")) {
+                        Stop-With "-KnownAtSnapshot entry $($entry.case) quotes a sentence $($gone.Substring(0, 9)) does not contain" 'The quote is what makes the removal checkable; a sentence the commit does not say is not that.'
+                    }
+                    $allowed += [pscustomobject]@{ case = $entry.case; kind = 'removed-red'; snapshot = $snapshot; removedAt = $gone; note = "$($entry.note)" }
+                    continue
+                }
+                $fixing = "$(& git rev-parse --verify "$($entry.fixedAt)^{commit}" 2>$null)".Trim()
+                if (-not $fixing) { Stop-With "-KnownAtSnapshot entry $($entry.case) names $($entry.fixedAt), which is not a commit here" 'The record says which commit fixed it; a sha nobody can resolve is not that.' }
+                & git merge-base --is-ancestor $fixing $tipSha 2>$null
+                if ($LASTEXITCODE -ne 0) { Stop-With "-KnownAtSnapshot entry $($entry.case) names $($entry.fixedAt) as the fixing commit, and it is not on the tip $($tipSha.Substring(0, 9))" 'A fix that is not on the branch does not make the case green there.' }
+                $row = @($summary.test_timings | Where-Object { "$($_.plan)/$($_.test)" -eq $entry.case })
+                if ($row.Count -eq 0) { Stop-With "-KnownAtSnapshot entry $($entry.case) was not read by $($list.run)" 'The run that is offered as evidence does not hold the case.' }
+                if ("$($row[0].status)" -ne 'pass') {
+                    Stop-With "-KnownAtSnapshot entry $($entry.case) is $($row[0].status) on the tip $($tipSha.Substring(0, 9)), not pass" 'The allowance is for a case that is green now; this one is not.'
+                }
+                $kind = if ($newRed -contains $entry.case) { 'new' } else { 'added-red' }
+                $allowed += [pscustomobject]@{ case = $entry.case; kind = $kind; snapshot = $snapshot; fixedAt = $fixing }
+            }
+            $uncovered = @($candidates | Where-Object { $name = $_; -not ($allowed | Where-Object { $_.case -eq $name }) })
+            if ($uncovered.Count -gt 0) {
+                $compare | ForEach-Object { "  $_" }
+                Stop-With "-KnownAtSnapshot does not cover $($uncovered -join ', ')" "Everything the comparison calls new or adds red has to be named in the list, with the commit that fixed it and a pass on the tip -- or with the commit that removed it. $($allowed.Count) of $($candidates.Count) were."
+            }
+            $compare | Where-Object { "$_".StartsWith('merge-readings:') } | ForEach-Object { "  $_" }
+            foreach ($entry in $allowed) {
+                if ($entry.kind -eq 'removed-red') {
+                    Write-Host ("  allowed: {0} is red at this snapshot ({1}) and the tip does not carry it; case removed at {2}, not fixed" -f `
+                        $entry.case, $mergeCommit.Substring(0, 9), $entry.removedAt.Substring(0, 9))
+                }
+                else {
+                    Write-Host ("  allowed: {0} is {1} at this snapshot ({2}) and pass at {3}; fixed at {4}" -f `
+                        $entry.case, $(if ($entry.kind -eq 'new') { 'red' } else { 'added red' }), $mergeCommit.Substring(0, 9), $tipSha.Substring(0, 9), $entry.fixedAt.Substring(0, 9))
+                }
+            }
+            Write-Host ("  -KnownAtSnapshot: the record carries these as `knownAtSnapshot` (red at the snapshot, fixed later); no other case moved ({0:N0} s)" -f ((Get-Date) - $rowsStarted).TotalSeconds)
+            # The comparer's exit describes a comparison that has now been judged acceptable, case by
+            # case, with evidence. Leaving it at 1 would send this run into the "no reading taken"
+            # path below, which is about a comparison that never happened.
+            $compareExit = 0
+        }
+        else {
+            $compare | ForEach-Object { "  $_" }
+            Write-Host ''
+            Write-Host 'STOPPED: the plans this merge touches measured differently on the merged tree (exit 1: the cases are named above)' -ForegroundColor Red
+            Write-Host "  The baseline is the tree this merge lands on (develop $($developTip.Substring(0, 9))) and this merge is the only thing that moved. `newly red` was green there and is red now; `still red, failing differently` was red both times and reads differently now, which is the move a count cannot see."
+            Write-Host '  If the change makes a case fail on purpose, the merge that makes it fail that way is the one that carries the expectation with it; this one is refused until the two agree.'
+            Write-Host ''
+            Write-GitState -MergeCommit $mergeCommit
+            exit 1
+        }
     }
     if ($compareExit -ne 0) {
         $compare | ForEach-Object { "  $_" }
@@ -2065,11 +2311,20 @@ $transcript = Join-Path ([System.IO.Path]::GetTempPath()) ("camel-merge-rows-$PI
     # local `develop` -- a judgement outliving the tree it was about.
     $passedDir = Join-Path $commonDir 'camel-passed'
     New-Item -ItemType Directory -Force -Path $passedDir | Out-Null
+    # Splatted as two arguments: a single string with a space in it is one argument, and the record
+    # writer would read it as a flag nobody passed.
+    $knownArgs = @(if ($allowed.Count -gt 0) { '--known-at-snapshot'; $KnownAtSnapshot })
+    # A different layer, a different switch: the reading allowance says a case was red and is not
+    # any more, this one says a file had no header and has one later. They travel as separate
+    # fields so the record never has to be read twice to know which of the two it is.
+    if ($headerAllowed.Count -gt 0) {
+        $knownArgs += @('--known-header-at-snapshot'; $KnownHeaderAtSnapshot)
+    }
     $recordOut = @(& node (Join-Path $toolRoot 'scripts\merge-record.mjs') write `
         --diff (Join-Path $diffDir 'diff.json') --merge $mergeCommit --first-parent $developTip `
         --second-parent $head --branch $Branch --tree $MainCheckout --out $passedDir `
         --baseline-source $(if ($seededFrom) { "measured now on $($developTip.Substring(0, 9))" } else { "cached from an earlier measurement of $($developTip.Substring(0, 9))" }) `
-        --gate headers --gate clang-syntax --gate rows --exit 0 2>&1)
+        --gate headers --gate clang-syntax --gate rows --exit 0 @knownArgs 2>&1)
     $recordExit = $LASTEXITCODE
     $recordOut | ForEach-Object { "  $_" }
     if ($recordExit -ne 0) {

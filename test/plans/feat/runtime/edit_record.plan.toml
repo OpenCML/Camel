@@ -14,6 +14,16 @@ desc = "The edit record of a draft: an edit through each of the two entries says
 # The second line is the tier's control and not a repeat: that draft's whole record is one named
 # `replace`, so both flags are 0, while the first draft recorded the low-level entry and both are 1.
 # The two are printed in one run so that neither can pass on an interface that answers only one way.
+#
+# The third line is the table's own three rows that the graph module's operators name (`inline`,
+# `outline`, `eval`): each is one draft holding exactly one of them, and the five fields of each are
+# recorded/effects/order/notes/calls. That the kind is *in the record* is what says the kernel's edit
+# arrived as its own row and not as the last one; the notes are 0 because the edit's primitives
+# touched no region, which is also why the kind has to be read through `editedWith` and not off the
+# notes. `inline` keeps owing both questions (it moves code, and the accesses that code carries, into
+# a graph that may have declared less), `outline` owes only the order one (it refuses a group that
+# carries an access, `src/kernel/runtime/draft_outline.cpp#draftOutlineBoundary`), and `eval` owes
+# neither (it makes a constant).
 [[tests]]
 name = "runtime.edit_record.two_entries_one_record_and_the_tier_it_owes"
 desc = "A node made, an operand added and a named `erase` on one draft: kinds `low_level,erase`, region 0, one notification per edit and one record per notification, the named edit recording exactly once, and both tier flags owed. A second draft whose whole record is one named `replace` owes neither flag."
@@ -24,7 +34,7 @@ expect_exit = 0
 # `kinds` is the record's kinds in the order first used; `regions` the regions it changed; the
 # notification count is the listeners' -- it must equal the record's own count (`same=1`) and not be
 # zero, which is the shape the commented-out notification has.
-expect_stdout_matches = ['\[EDIT_RECORD\] kinds=low_level,erase regions=0 notified=[1-9][0-9]* notes=[1-9][0-9]* same=1 named_calls=1 named_notes=1 tier_effects=1 tier_order=1 alive_after_erase=0', '\[EDIT_RECORD\] named_kind_recorded=1 named_regions=none named_calls=1 named_edits=1 named_tier_effects=0 named_tier_order=0', '\[EDIT_RECORD\] ok']
+expect_stdout_matches = ['\[EDIT_RECORD\] kinds=low_level,erase regions=0 notified=[1-9][0-9]* notes=[1-9][0-9]* same=1 named_calls=1 named_notes=1 tier_effects=1 tier_order=1 alive_after_erase=0', '\[EDIT_RECORD\] named_kind_recorded=1 named_regions=none named_calls=1 named_edits=1 named_tier_effects=0 named_tier_order=0', '\[EDIT_RECORD\] one_of_each inline=1,1,1,0,1 outline=1,0,1,0,1 eval=1,0,0,0,1', '\[EDIT_RECORD\] ok']
 # The pass says MISSING when it could not ask its own case as the interface says. That is the defect
 # coming back in the other direction, and it is red.
 expect_stdout_not_contains = ["[EDIT_RECORD] MISSING"]

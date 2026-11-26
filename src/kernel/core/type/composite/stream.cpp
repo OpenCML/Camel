@@ -84,6 +84,20 @@ Type *StreamType::unify(Type *other) const {
 
 Type *StreamType::widened() const { return create(elemType_->widened()); }
 
+// A stream's value is its step function, so a value of that signature enters a stream position
+// (`assignableFrom`): the same function is handed on and nothing moves. Nothing else becomes a
+// stream by conversion either -- what turns another value into one (a source, a generator, `tee`)
+// is an operator of its own, and the table below has no entry for it.
+bool StreamType::castEntersFrom(Type *sourceType) const {
+    if (sourceType == nullptr) {
+        return false;
+    }
+    if (equals(sourceType) || sourceType->code() == TypeCode::Never) {
+        return true;
+    }
+    return assignableFrom(sourceType);
+}
+
 // A stream is its step function (StreamType::stepType): a value of that signature is a value of
 // this type, so the conversion is safe and moves nothing. Nothing else becomes a stream by
 // conversion -- what turns another value into one (a source, a generator, `tee`) is an operator

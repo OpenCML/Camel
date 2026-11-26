@@ -1,6 +1,6 @@
 id = "mm.gc_elder_exhaustion"
 order = 366
-tier = "milestone"
+tier = "slow"
 tags = ["feat", "mm", "gc", "higher-order"]
 desc = """
 Programs that allocate more small arrays than the elder space holds (32 MB) inside the element
@@ -16,8 +16,31 @@ tests cover that: the nested map at full size, and every program at a small size
 collection, heap verification before and after, at every safepoint the scheduler polls.
 """
 
+# The layer, measured on 2026-11-25 at `2dcda93c7c` (`-Plan test/plans/feat/mm -Tier milestone
+# -Jobs 8`, 4,889 cases, wall 334.6 s): this file's 22 entries cost 0.38-8.47 s each, so none of
+# them belongs to the milestone layer, whose line is "minutes, or whose number depends on what else
+# the machine is doing" (docs/test-plans.md, "Layers").
+#
+#   under 2 s -- 11 entries, 0.38-1.60 s: the four `nested_map` arms (1.48-1.60 s), `nested_map_tf`,
+#     the four `_tf_stress` arms (0.38-0.44 s) and the two `live_table` arms (0.75-0.85 s). They are
+#     `tier = "fast"` below, and the reason is the one the two `gc.plan` entries carry: the layer
+#     this file sat in is what let a defect live for weeks, because `--tier fast` never read it.
+#   over 2 s, under 30 s -- 11 entries, 2.09-8.47 s (`nested_filter` 3.78-5.34 s, `nested_reduce`
+#     6.10-8.47 s, `nested_foreach` 3.27-4.65 s, `nested_map_simplify_nvm` 2.09 s). They stay out of
+#     the developer loop by the same 2 s line, and they are `slow`: this file is in
+#     `scripts/plan-inventory.mjs#SLOW_PLANS`, so the release gate runs all 22 entries, one plan at a
+#     time, at every gate -- where a red is seen at the next gate rather than at the 09:00 cron that
+#     is the milestone layer's only reader.
+#
+# The measurement is not the one that motivated the move, and the difference is the point: while the
+# four `reduce` entries were red they died of SIGSEGV before compiling and cost 0.1 s each
+# (`8bb9ff937d`, the case seeded its accumulator with the interval), so "cheap" was a property of
+# the *defect* and not of the case. A cheap crash is not a cheap case: green, the same entry is
+# 6.10-8.47 s, and a layer decided on the red reading would have put a 8.47 s case in the loop.
+
 [[tests]]
 name = "gc_elder_exhaustion.nested_map_default"
+tier = "fast"
 desc = "A table built by a map inside a map element, 200 times over, across several elder-space collections. Pipeline: the default pipeline."
 kind = "behavior"
 case = "../../../cases/feat/mm/gc/gc_nested_map.cml"
@@ -29,6 +52,7 @@ timeout_ms = 120000
 
 [[tests]]
 name = "gc_elder_exhaustion.nested_map_nvm"
+tier = "fast"
 desc = "A table built by a map inside a map element, 200 times over, across several elder-space collections. Pipeline: std::nvm."
 kind = "behavior"
 case = "../../../cases/feat/mm/gc/gc_nested_map.cml"
@@ -40,6 +64,7 @@ timeout_ms = 120000
 
 [[tests]]
 name = "gc_elder_exhaustion.nested_map_fvm"
+tier = "fast"
 desc = "A table built by a map inside a map element, 200 times over, across several elder-space collections. Pipeline: std::fvm."
 kind = "behavior"
 case = "../../../cases/feat/mm/gc/gc_nested_map.cml"
@@ -51,6 +76,7 @@ timeout_ms = 120000
 
 [[tests]]
 name = "gc_elder_exhaustion.nested_map_jit"
+tier = "fast"
 desc = "A table built by a map inside a map element, 200 times over, across several elder-space collections. Pipeline: std::jit."
 kind = "behavior"
 case = "../../../cases/feat/mm/gc/gc_nested_map.cml"
@@ -183,6 +209,7 @@ timeout_ms = 120000
 
 [[tests]]
 name = "gc_elder_exhaustion.nested_map_tf"
+tier = "fast"
 desc = "A table built by a map inside a map element, 200 times over, across several elder-space collections. Pipeline: std::tf."
 kind = "behavior"
 case = "../../../cases/feat/mm/gc/gc_nested_map.cml"
@@ -194,6 +221,7 @@ timeout_ms = 240000
 
 [[tests]]
 name = "gc_elder_exhaustion.nested_map_tf_stress"
+tier = "fast"
 desc = "A table built by a map inside a map element, 48 times over, with a verified major collection at every safepoint the scheduler polls. Pipeline: std::tf. The scheduler caps the collector (after a collection the next starts no sooner than twice the time it took), so not every poll collects: the test also asserts that at least 20 collections ran while a flow was running (measured: 85 to 132 in 12 runs at 2, 4 and 18 workers, load 11; the floor is about a quarter of the lowest), read from the scheduler's statistics line (std::prl gc_stats=1). The number follows the run time. It was measured again, and the repetitions raised from 3, when the higher-order operators stopped making a task of every element and the run became several times shorter (before: 40 to 86 with 3 repetitions). With one worker an unordered operator runs on the calling thread and a program may start no flow at all; the floor is then not applied (the statistics line gives the number of workers)."
 kind = "behavior"
 case = "../../../cases/feat/mm/gc/gc_nested_map.cml"
@@ -214,6 +242,7 @@ timeout_ms = 240000
 
 [[tests]]
 name = "gc_elder_exhaustion.nested_filter_tf_stress"
+tier = "fast"
 desc = "filter nested with map both ways, the element functions building rows, 12 times over, with a verified major collection at every safepoint the scheduler polls. Pipeline: std::tf. The scheduler caps the collector (after a collection the next starts no sooner than twice the time it took), so not every poll collects: the test also asserts that at least 25 collections ran while a flow was running (measured: 94 to 232 in 12 runs at 1, 2 and 18 workers, load 12; the floor is about a quarter of the lowest), read from the scheduler's statistics line (std::prl gc_stats=1). The number follows the run time. It was measured again, and the repetitions raised from 3, when the higher-order operators stopped making a task of every element and the run became several times shorter (before: 140 to 253 with 3 repetitions). With one worker an unordered operator runs on the calling thread and a program may start no flow at all; the floor is then not applied (the statistics line gives the number of workers)."
 kind = "behavior"
 case = "../../../cases/feat/mm/gc/gc_nested_filter.cml"
@@ -234,6 +263,7 @@ timeout_ms = 240000
 
 [[tests]]
 name = "gc_elder_exhaustion.nested_reduce_tf_stress"
+tier = "fast"
 desc = "reduce nested with map both ways, one accumulator being an array rebuilt at every step, 12 times over, with a verified major collection at every safepoint the scheduler polls. Pipeline: std::tf. The scheduler caps the collector (after a collection the next starts no sooner than twice the time it took), so not every poll collects: the test also asserts that at least 115 collections ran while a flow was running (measured: 461 to 908 in 12 runs at 1, 2 and 18 workers, load 14; the floor is about a quarter of the lowest), read from the scheduler's statistics line (std::prl gc_stats=1). The number follows the run time. It was measured again, and the repetitions raised from 3, when the higher-order operators stopped making a task of every element and the run became several times shorter (before: 665 to 1297 with 3 repetitions). With one worker an unordered operator runs on the calling thread and a program may start no flow at all; the floor is then not applied (the statistics line gives the number of workers)."
 kind = "behavior"
 case = "../../../cases/feat/mm/gc/gc_nested_reduce.cml"
@@ -254,6 +284,7 @@ timeout_ms = 240000
 
 [[tests]]
 name = "gc_elder_exhaustion.nested_foreach_tf_stress"
+tier = "fast"
 desc = "foreach nested with map both ways, the bodies building rows and appending to captured variables, 12 times over, with a verified major collection at every safepoint the scheduler polls. Pipeline: std::tf. The scheduler caps the collector (after a collection the next starts no sooner than twice the time it took), so not every poll collects: the test also asserts that at least 25 collections ran while a flow was running (measured: 102 to 169 in 12 runs at 1, 2 and 18 workers, load 14; the floor is about a quarter of the lowest), read from the scheduler's statistics line (std::prl gc_stats=1). The number follows the run time. It was measured again, and the repetitions raised from 3, when the higher-order operators stopped making a task of every element and the run became several times shorter (before: 116 to 323 with 3 repetitions). With one worker an unordered operator runs on the calling thread and a program may start no flow at all; the floor is then not applied (the statistics line gives the number of workers)."
 kind = "behavior"
 case = "../../../cases/feat/mm/gc/gc_nested_foreach.cml"
@@ -274,6 +305,7 @@ timeout_ms = 240000
 
 [[tests]]
 name = "gc_elder_exhaustion.live_table_fvm"
+tier = "fast"
 desc = "A table of 56,000 rows that stays alive, built by one map whose element function also drops a temporary array per row: the elder space fills with live rows alternating with dead temporaries, and the sweep has 56,000 scattered blocks to free. Freeing them took one walk of the free list from its head per block (over 100 s for this program); it is one pass now. The program takes about a second; the timeout is the only bound, set two orders of magnitude below the old cost. Pipeline: std::fvm."
 kind = "behavior"
 case = "../../../cases/feat/mm/gc/gc_live_table.cml"
@@ -285,6 +317,7 @@ timeout_ms = 60000
 
 [[tests]]
 name = "gc_elder_exhaustion.live_table_nvm"
+tier = "fast"
 desc = "A table of 56,000 rows that stays alive, built by one map whose element function also drops a temporary array per row: the elder space fills with live rows alternating with dead temporaries, and the sweep has 56,000 scattered blocks to free. Freeing them took one walk of the free list from its head per block (over 100 s for this program); it is one pass now. The program takes about a second; the timeout is the only bound, set two orders of magnitude below the old cost. Pipeline: std::nvm."
 kind = "behavior"
 case = "../../../cases/feat/mm/gc/gc_live_table.cml"

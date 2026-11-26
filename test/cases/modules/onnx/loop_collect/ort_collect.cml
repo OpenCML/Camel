@@ -1,0 +1,31 @@
+/**
+ * A counted `for` that collects one value per round into an array, exported as an ONNX Loop whose
+ * scan output is that array, and run on ONNX Runtime against Camel's own result.
+ *
+ * `x.npy` is read from the working directory and the array the loop hands out is saved as
+ * `y.npy` (int64), so the driver compares Camel's array with the model's output for the same
+ * input -- shape and values. The model is exported when ONNX_OUT is set.
+ */
+import { get_env } from env
+import { export_model } from onnx
+import { load_npy, save_npy } from tensor
+
+func build(x: f32[?]) => int[] {
+    return loop acc = [] as int[] for v in x do acc->append<int(v * 10.0)>
+}
+
+func main() => string! sync {
+    let x = (load_npy::<f32>('x.npy')) as f32[?]
+    let xs = build(x)
+    save_npy(xs, 'y.npy')
+    let out = get_env('ONNX_OUT') ?? ''
+    return if out == '' then '0'
+    else match export_model<out: out, dynamic_axes: [0]>(func (x: f32[?]) => int[] {
+        build(x)
+    }, (x)) {
+        case error e => {
+            return e
+        }
+        case v => '1'
+    }
+}

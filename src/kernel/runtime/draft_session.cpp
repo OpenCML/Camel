@@ -2067,6 +2067,9 @@ const Program *RuntimeGraphDraftSession::runCommit(bool staged, bool detached) {
         // made. A draft this commit cannot read the record of owes both, as every commit did before
         // the record existed: no record is no promise.
         EditTier tier{.effects = true, .order = true};
+        // The edit record, for the one thing a refusal needs from it that no other reading answers:
+        // the position of the edit that made the node the check names (design 8.3, `EditNote`).
+        std::span<const EditNote> notes;
         if (!owned) {
             if (const auto at = drafts_.find(graph);
                 at != drafts_.end() && at->second->transaction) {
@@ -2074,6 +2077,7 @@ const Program *RuntimeGraphDraftSession::runCommit(bool staged, bool detached) {
                 const std::span<const gc_node_ref_t> edits =
                     at->second->transaction->edit().lowLevelEdits();
                 changed.assign(edits.begin(), edits.end());
+                notes = at->second->transaction->edit().editNotes();
             }
         }
         // `graph` is the version this session started from, and `program_` is the program that holds
@@ -2088,7 +2092,8 @@ const Program *RuntimeGraphDraftSession::runCommit(bool staged, bool detached) {
                 owned ? nullptr : graph,
                 program_,
                 tier.effects,
-                tier.order)) {
+                tier.order,
+                notes)) {
             throw GraphCommitRefused(*violation);
         }
     }

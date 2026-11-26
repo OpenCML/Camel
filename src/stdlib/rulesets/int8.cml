@@ -1,0 +1,72 @@
+// Copyright (c) the OpenCML Organization
+// SPDX-License-Identifier: MIT
+
+/**
+ * The `int8` ruleset: a product whose fixed weight is written in int8 and restored before the
+ * product runs.
+ *
+ *     matmul(x, [[1.3, 2.7], [3.1, 4.9]])->run<[matmul_int8]>
+ *
+ * The value the rule produces is the same product of the same numbers, with the second operand put
+ * through the grid of int8 codes first: `round(w / s)` is the code (an integer in `[-127, 127]`),
+ * and the operator's operand is the code scaled back by `s`. Nothing about `matmul` changes -- the
+ * operator still takes two float arrays and still multiplies them -- so what the two writings differ
+ * by is the quantization error of the weight and nothing else: at most `s / 2` per element before the
+ * product sums its row.
+ *
+ * The scale is read off the weight: `s = max(|w|) / levels`, the largest scale that writes the weight
+ * without clipping at `levels` steps (`127` for the positive half of int8). A weight of any magnitude
+ * is therefore written as finely as the format allows, and the writer does not have to know its
+ * range. `levels` is the `with` parameter, so the number of steps is the writer's and the scale is
+ * the weight's.
+ *
+ * Why the scale is computed inside the right side and not passed in as a `with` value: a `with` value
+ * is a compile-time constant, and one computed from an array is not one today. The build-time
+ * evaluation refuses it by name -- `matmul_int8<max(abs(W)) / 127.0>` reports
+ * `FoldCallArgumentNotConstant`: "The call of `__div__` cannot be evaluated at build time: it calls
+ * `abs`, which this build-time evaluation cannot read: no function of that name is declared here"
+ * (`src/compile/src/gir/builder_when.cpp#Builder::evaluateCallInsideBody`). Scalar arithmetic over
+ * literals *is* folded there (`<0.25 * 2.0>` compiles), so the boundary is the operator call over a
+ * value, not the arithmetic. Reading the scale off the matched weight in the right side needs no
+ * change to that evaluation and no new operator: the transform builds the graph of the expression,
+ * and the reduction runs where the weight runs.
+ *
+ * Three things about the shape of the rule are what the engine allows, not choices of style:
+ *
+ * - the right side may hold an operator, a constant or a parameter and nothing else (a rule whose
+ *   right side calls a function is refused with `RuleInvalid`: "the right side has a term that is not
+ *   an operator, a constant or a parameter"). So the rounding is spelled out in operators -- `where`
+ *   for the sign, `int` for the truncation -- instead of a helper function, and the clamp is one
+ *   `minimum`, because the code's magnitude is what is clamped and it is non-negative (the lower end
+ *   of `[-128, 127]` can never be reached from an absolute value).
+ * - the weight is not bound with a `const` parameter. `const` binds a *scalar* constant's value; an
+ *   array constant does not match one (measured: a rule with `const w: float[...]` fires zero times
+ *   where the same rule with `when is_constant(w)` fires once). The condition asks the graph
+ *   instead -- `is_constant(w)` -- which is the property the rule is about: a weight that is fixed in
+ *   the body, not a weight that arrives as a port.
+ * - the two parameter types are the *open-rank* arrays the operator takes: `float[2, 2]` would make
+ *   the rule apply to one shape only, and the operator's own signature is `float[...]`.
+ *
+ * One rule per operator: a second rule under `matmul/2` with these parameter types is refused with
+ * `DuplicateRuleForOperator` -- "which of them applies would be decided by the order they are written
+ * in" -- so a writer who wants a particular scale writes it in the rule, and the library keeps the
+ * one law whose scale comes from the data.
+ *
+ * A rule that changes values this way asks for the permission that says so, `change_precision`
+ * (design principles 7.2-7.3): the function it rewrites has to be written with that permission, so a
+ * program that did not ask for a precision change is never given one.
+ */
+
+import { is_constant } from graph
+import { abs, matmul, max, minimum, where } from tensor
+
+/// `matmul(x, w)` with `w` written in int8 at `max(|w|) / levels` and restored before the product:
+/// the code of an element is `round(w / scale)` clamped to the positive half of the range, so the
+/// operand the product sees is within `scale / 2` of `w`, element by element.
+/// @example-fragment a rule is not a function a program calls: the example is the writing it rewrites, and `test/cases/modules/rules/quant_int8.cml` is the program that measures the difference
+/// @example-fragment matmul(x, w)    // the left side, with `w` a constant of the body
+#requires(change_precision)
+with <levels: float = 127.0>
+export rule matmul_int8(x: float[...], w: float[...]) when is_constant(w) {
+    matmul(x, w) => matmul(x, where(w >= 0.0, 1.0, -1.0) * minimum(float(int(abs(w) / (max(abs(w)) / levels) + 0.5)), 127.0) * (max(abs(w)) / levels))
+}

@@ -20,7 +20,7 @@
  *     the relation and not the number; what the two sets must not be is empty, and that lower
  *     bound is asserted so a run that examined nothing fails here instead of passing.
  *   * every pass a module contributes is a pass-shaped declaration in the module's own
- *     `.cml` file (`src/stdlib/<module>/<module>.cml`, `when is_function::<F>()`), and every
+ *     `.cml` file (`src/stdlib/<module>.cml`, `when is_function::<F>()`), and every
  *     declaration has a registration — the same relation
  *     one level up, over the modules themselves, with each side asserted non-empty for the same
  *     reason: a module that contributes no pass (`ckpt` registers operators and resources only)
@@ -348,10 +348,21 @@ for (const entry of fs.readdirSync(LIBRARY)) {
         if (!compact.includes('whenis_function::<')) {
             continue
         }
-        // A pass is a function transform, `(f: F): F!` (design principles 9.1); a declaration of
-        // another shape declares an operator of a function value, and one with a body is a pass
-        // written in Camel: neither has a registration in C++.
-        const shaped = compact.match(/\(([A-Za-z_][A-Za-z0-9_]*):([A-Za-z_][A-Za-z0-9_]*)\):([A-Za-z_][A-Za-z0-9_]*)!/)
+        // A pass is a function transform, `(f: F) => F!` (design principles 9.1): one parameter of
+        // the type variable, the result the same variable, postfix `!`. A declaration of another
+        // shape declares an operator of a function value, and one with a body is a pass written in
+        // Camel: neither has a registration in C++.
+        //
+        // The result type is written after `=>`: the notation pass `eb20efab7b` rewrote the corpus
+        // one way, and this reader kept the `): F!` spelling it was written against. It then matched
+        // no declaration at all, so a module that contributes a pass was reported as one whose
+        // declaration had not been read, and the run said the relation held over zero modules. The
+        // shape below is the one the corpus writes; a declaration left in the retired spelling is
+        // not silently accepted, it falls through to the reverse relation ("a pass is registered and
+        // its module's .cml declares no function for it"), which names the module and the pass.
+        const shaped = compact.match(
+            /\(([A-Za-z_][A-Za-z0-9_]*):([A-Za-z_][A-Za-z0-9_]*)\)=>([A-Za-z_][A-Za-z0-9_]*)!/
+        )
         if (!shaped || shaped[2] !== shaped[3] || compact.endsWith('{')) {
             continue
         }
@@ -452,6 +463,11 @@ const registeredModules = new Set(
 const declaringModules = new Set(
     [...moduleDeclarations].map((path) => path.slice(0, path.indexOf('::')))
 )
+// The file a module's declaration is read from, named in the failure below: a module that
+// contributes a pass and whose declaration was not read is a defect in the library, and the path is
+// what tells a reader where the declaration belongs (the module's own name at the library's root)
+// apart from where a reader went looking for it.
+const moduleDeclarationPath = (module) => `src/stdlib/${module}.cml`
 if (declaringModules.size === 0 || registeredModules.size === 0) {
     problems.push(
         `the module-level bijection was checked over ${declaringModules.size} declaring module(s) ` +
@@ -461,7 +477,10 @@ if (declaringModules.size === 0 || registeredModules.size === 0) {
 }
 for (const module of registeredModules) {
     if (!declaringModules.has(module)) {
-        problems.push(`the module '${module}' contributes a pass and no declaration of it was read`)
+        problems.push(
+            `the module '${module}' contributes a pass and no declaration of it was read ` +
+                `(${moduleDeclarationPath(module)})`
+        )
     }
 }
 // A pass is told by its type, whatever implements it. A function transform a module implements
@@ -567,7 +586,10 @@ if (problems.length > 0) {
 console.log(
     `PASS passes are declarations: ${declarations.length} core declaration(s) and ` +
         `${implementations.length} kernel(s), a bijection (each declared pass exactly one kernel ` +
-        `and each kernel exactly one declaration), ${moduleDeclarations.size} contributed by ` +
-        `modules, each with one registration, ${aliasCount} aliases resolved, no C++ pass ` +
-        `registry and no parameter string`
+        `and each kernel exactly one declaration), ${moduleDeclarations.size} declaration(s) ` +
+        `contributed by modules, checked over ${declaringModules.size} declaring module(s) ` +
+        `(${[...declaringModules].sort().join(', ')}) against the ` +
+        `${registeredModules.size} module(s) that register a pass ` +
+        `(${[...registeredModules].sort().join(', ')}), ${aliasCount} aliases resolved, ` +
+        `no C++ pass registry and no parameter string`
 )

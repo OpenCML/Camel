@@ -1,0 +1,10 @@
+// The same two `with` arguments as err_range_reduce_initial.cml, over an array literal: the
+// control. `reduce` over `T[]` takes `f: (acc: U, item: T) => U` and `initial: U`, `keep` binds
+// `U = int[]`, and the range written for `initial` is not one -- the call is reported
+// (NoMatchingFunction) and exits 1.
+func keep(acc: int[], i: int) => int[] { return acc }
+
+func main() => int sync {
+    println([0, 1, 2]->reduce<keep, 0 .. 3>)
+    return 0
+}

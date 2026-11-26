@@ -472,6 +472,32 @@ Type *ArrayType::unify(Type *other) const {
         anyRank && sameSkeleton ? packName() : std::string_view());
 }
 
+// Whether the pair is an entering, by the structure of the two types and not by the conversion
+// table (design principles 5.1, "entering is not a conversion"). An array type states two forms a
+// value goes into without a check: the open rank's rank-zero slot, which holds the element as the
+// rank-zero array that *is* it (5.4), and its own shape, which an array this type holds already has.
+bool ArrayType::castEntersFrom(Type *sourceType) const {
+    if (sourceType == nullptr) {
+        return false;
+    }
+    if (equals(sourceType)) {
+        return true;
+    }
+    if (sourceType->code() == TypeCode::Never) {
+        return true;
+    }
+    if (sourceType->code() != TypeCode::Array) {
+        // A value of the element type is a value of the open rank: the slot holds the rank-zero
+        // array that is the element, and making that array checks nothing about the value.
+        return rankZeroType() != nullptr && resolved() && elemType_->assignableFrom(sourceType);
+    }
+    // An array this type holds: the same element type, a rank and extents the type states. Nothing
+    // moves between the two, so the step cannot fail. What is left out is the pair the type states
+    // and the source leaves open (an unknown rank, an unknown extent, an unstated element type):
+    // that is the conversion a program writes (`as`), checked when it runs.
+    return assignableFrom(sourceType);
+}
+
 // Converting a value to its own type is legal and does nothing (design principles 5.1). From a
 // less precise array type, what the two static types already contradict is refused now; what
 // the source leaves open is checked when the conversion runs (castSlotFrom): Unsafe.

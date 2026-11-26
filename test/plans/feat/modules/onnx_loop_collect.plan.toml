@@ -1,0 +1,111 @@
+id = "modules.onnx_loop_collect"
+order = 365
+tier = "fast"
+tags = ["feat", "modules", "onnx"]
+
+# A loop that collects a value every round into an array is a Loop with scan outputs: the body
+# gives one more value per collection slot each round, the Loop stacks them along a new first
+# axis, and that array is what the loop hands out (camel/runtime/loop.h). The state such a loop
+# starts from (`[]`, only appended to) is the same array, so it is not carried at all.
+#
+# The negative controls are the two shapes this does not cover: a `while` (how many values it
+# collects is decided while it runs, and the condition reads the array the rounds append to) and
+# an array built with no loop at all (no round to scan).
+
+[[tests]]
+name = "loop_collect_for_scan_output"
+desc = "A counted `for` that collects into an array exports as one Loop whose extra output is the array; the model's output states one dimension for the rounds."
+kind = "behavior"
+case = "../../../cases/modules/onnx/loop_collect/for_collect.cml"
+args = ["${case}"]
+envs = ["ONNX_OUT=${test_tmp}/loop_collect_for.onnx"]
+expect_exit = 0
+expect_stdout_contains = ["exported"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+async ({ input, assert }) => {
+const path = await import('path')
+const url = await import('url')
+const helper = path.join(input.repo_root, 'test/cases/modules/onnx/onnx_ops.mjs')
+const { readOnnxModel } = await import(url.pathToFileURL(helper).href)
+const model = readOnnxModel(path.join(input.test_tmp, 'loop_collect_for.onnx'))
+assert(model.ops.filter((o) => o === 'Loop').length === 1, `the collecting loop is one Loop, got ${model.ops}`)
+assert(model.outputs.join() === 'output', `unexpected graph outputs ${model.outputs}`)
+const dims = model.outputDims[0]
+assert(dims && dims.length === 1 && typeof dims[0] === 'string', `the array's length is a fact about the data, so its one dimension is symbolic; got ${JSON.stringify(dims)}`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "loop_collect_for_scan_output_shape"
+desc = "The same collection over an input whose length the program states: the collected array is four values on every call, and the model's declared output shape says so."
+kind = "behavior"
+case = "../../../cases/modules/onnx/loop_collect/for_collect_static.cml"
+args = ["${case}"]
+envs = ["ONNX_OUT=${test_tmp}/loop_collect_static.onnx"]
+expect_exit = 0
+expect_stdout_contains = ["exported"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+async ({ input, assert }) => {
+const path = await import('path')
+const url = await import('url')
+const helper = path.join(input.repo_root, 'test/cases/modules/onnx/onnx_ops.mjs')
+const { readOnnxModel } = await import(url.pathToFileURL(helper).href)
+const model = readOnnxModel(path.join(input.test_tmp, 'loop_collect_static.onnx'))
+assert(model.ops.filter((o) => o === 'Loop').length === 1, `the collecting loop is one Loop, got ${model.ops}`)
+assert(JSON.stringify(model.outputDims[0]) === '[4]', `four rounds means four values, so the model states [4]; got ${JSON.stringify(model.outputDims[0])}`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "loop_collect_while_refused"
+desc = "A `while` that collects is refused and says why: how many values it collects is decided while it runs."
+kind = "negative"
+case = "../../../cases/modules/onnx/loop_collect/while_collect.cml"
+args = ["${case}"]
+envs = ["ONNX_OUT=${test_tmp}/loop_collect_while.onnx"]
+expect_exit = 1
+expect_output_contains = ["a loop that collects and checks a condition each round is not exported to ONNX"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "loop_collect_outside_loop_no_scan"
+desc = "An array built by appends that are not in a loop exports with no Loop at all: there is no round to scan, and the value is a constant the graph states."
+kind = "behavior"
+case = "../../../cases/modules/onnx/loop_collect/collect_outside.cml"
+args = ["${case}"]
+envs = ["ONNX_OUT=${test_tmp}/loop_collect_outside.onnx"]
+expect_exit = 0
+expect_stdout_contains = ["exported"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+async ({ input, assert }) => {
+const path = await import('path')
+const url = await import('url')
+const helper = path.join(input.repo_root, 'test/cases/modules/onnx/onnx_ops.mjs')
+const { readOnnxModel } = await import(url.pathToFileURL(helper).href)
+const model = readOnnxModel(path.join(input.test_tmp, 'loop_collect_outside.onnx'))
+assert(model.ops.filter((o) => o === 'Loop').length === 0, `no round means no Loop, got ${model.ops}`)
+assert(JSON.stringify(model.outputDims[1]) === '[3]', `the collected array is three values, got ${JSON.stringify(model.outputDims[1])}`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "loop_collect_ort"
+# Slow layer: an ONNX Runtime session plus two Camel runs.
+tier = "slow"
+desc = "The exported collecting loop runs on ONNX Runtime: for inputs of two lengths the array Camel computes and the model's output have the same shape and the same values."
+kind = "behavior"
+tool = "python"
+case = "../../../cases/modules/onnx/ort_loop_collect.py"
+args = ["${case}"]
+skip_unless = ["${python}", "-c", "import numpy, onnxruntime"]
+expect_exit = 0
+expect_stdout_contains = ["camel [4] [1, 2, 3, 4] ort [4] [1, 2, 3, 4]", "camel [6] [10, 20, 30, 40, 50, 60] ort [6] [10, 20, 30, 40, 50, 60]", "ort loop collect: PASS"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 120000

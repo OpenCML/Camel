@@ -1,0 +1,11 @@
+// A generic overload whose `with` argument is a literal that enters the parameter's type: `addf`
+// binds `U = float` and `initial: U` is the int literal `0`, which is a `float` there (design
+// principles 5.1). The candidate has to be a fit: holding a `with` argument to its parameter is
+// not the same as refusing the literal entry every call allows.
+func addf(acc: float, x: int) => float { return acc + float(x) }
+
+func main() => int sync {
+    let total = (0 .. 3)->reduce<addf, 0>
+    println(total == 3.0)
+    return 0
+}

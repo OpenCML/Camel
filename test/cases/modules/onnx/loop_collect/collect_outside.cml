@@ -1,0 +1,28 @@
+/**
+ * The collected array built with no loop at all: the appends are straight-line code, so there is
+ * no round to scan and the export reaches the same array another way.
+ */
+import { get_env } from env
+import { export_model } from onnx
+
+func build(x: f32[?]) => (f32[?], int[]) {
+    let a = [7] as int[]
+    let b = a->append<8>
+    let c = b->append<9>
+    return (x, c)
+}
+
+func main() => string! sync {
+    let x = [1.0, 2.0, 3.0] as f32[?]
+    let r = build(x)
+    println(len(r.1))
+    println(r.1[0] + r.1[2])
+    return match export_model<out: get_env('ONNX_OUT') ?? '', dynamic_axes: [0]>(func (x: f32[?]) => (f32[?], int[]) {
+        build(x)
+    }, (x)) {
+        case error e => {
+            return e
+        }
+        case v => 'exported'
+    }
+}

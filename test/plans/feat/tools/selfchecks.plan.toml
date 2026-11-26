@@ -172,7 +172,7 @@ timeout_ms = 120000
 # `skip_unless` asks the bridge whether there is a pwsh at all. `expect_stdout_contains` pins the
 # count the file prints, so an entry cannot stay green over a file that stopped checking.
 
-# Fast: 0.6 s on the workstation.
+# Fast: 0.6 s on the workstation, 2026-11-25.
 [[tests]]
 name = "selfchecks.camel_remote_args"
 desc = "`internal/tools/camel-remote-args.test.ps1`: the list parameters split on commas as `-Plan` already did, the `--only`/`--drop` words are built from them, and an `-AstOnly` that names no `.cml` of this tree is refused instead of selecting nothing on the host (17 checks)."
@@ -267,6 +267,29 @@ expect_stdout_contains = ["44 checks, 0 failed"]
 normalizers = ["normalize_newlines"]
 timeout_ms = 300000
 
+# Slow: 3.0 s over `-BashHost <host>` (three sweeps of a seven-candidate fixture). The number that
+# matters here is the one its first part-B check prints: `readlink` calls for one sweep over seven
+# candidates, **0** with the snapshot and **17 231** on the guard this replaces, which resolved two
+# links per host process per candidate -- measured 2026-11-25 at ~1780 processes: 7.0 s per candidate,
+# 290 s for the 40-candidate sweep a remote run pays before it starts, and a reading minutes old by
+# the time the last candidate was judged. Part A needs a `pwsh` and part B a bash, so a run with no
+# bash prints `21 checks, 0 failed, 18 skipped`; the count below is the one both readings contain,
+# and the skipped checks are counted rather than dropped, because a part that silently does not run
+# cannot be told from one that ran green.
+[[tests]]
+name = "selfchecks.camel_remote_cleanup_sweep_cost"
+desc = "`internal/tools/camel-remote-cleanup-sweep-cost.test.ps1`: the host sweep's \"is any process inside this checkout\" reading is one /proc snapshot per sweep -- 0 per-process `readlink` forks, one `ls` for seven candidates and one for four, while a process in the cwd, in a subdirectory and in the executable is still named, `cand-1`'s process does not reach `cand-10`, a process that has exited stops being named, and a process list that could not be read keeps the checkout instead of reading as unused (21 checks)."
+kind = "behavior"
+tier = "slow"
+tool = "node"
+case = "../../../../internal/tools/camel-remote-cleanup-sweep-cost.test.ps1"
+args = ["test/tools/pwsh-selfcheck.mjs", "${case}"]
+skip_unless = ["node", "test/tools/pwsh-selfcheck.mjs", "--probe"]
+expect_exit = 0
+expect_stdout_contains = ["21 checks, 0 failed"]
+normalizers = ["normalize_newlines"]
+timeout_ms = 300000
+
 # Slow: 3.0 s (41 checks over `-BashHost <host>`). Without a usable bash the file prints
 # `0 checks, 0 failed` and exits 0, which is the shape the count in this entry is here to refuse.
 [[tests]]
@@ -358,7 +381,7 @@ expect_stdout_contains = ["50 checks, 0 failed"]
 normalizers = ["normalize_newlines"]
 timeout_ms = 300000
 
-# Slow: 29 s. It was 12 s before this change repaired its fixture, because every scenario died at
+# Slow: 29 s. It was 12 s before this lane repaired its fixture, because every scenario died at
 # load; the fixture is now every `internal/tools/*.ps1` rather than a hand-kept list that had
 # fallen behind `merge-push-shape.ps1` and `camel-gate-config.ps1` (18 checks / 14 failed).
 [[tests]]
@@ -378,7 +401,7 @@ timeout_ms = 300000
 # Slow: 11 s.
 [[tests]]
 name = "selfchecks.merge_lane_firstparent"
-desc = "`internal/tools/merge-lane-firstparent.test.ps1`: the shape a commit must have before it is pushed to a target -- a merge of the tip arrives, a merge on an older tip and a single-parent commit are refused with the redo command, and the wiring that makes both merge tools read the one implementation (30 checks)."
+desc = "`internal/tools/merge-lane-firstparent.test.ps1`: the shape a commit must have before it is pushed to a target (D-1124-78) -- a merge of the tip arrives, a merge on an older tip and a single-parent commit are refused with the redo command, and the wiring that makes both merge tools read the one implementation (30 checks)."
 kind = "behavior"
 tier = "slow"
 tool = "node"

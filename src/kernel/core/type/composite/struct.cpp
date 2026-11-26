@@ -512,6 +512,28 @@ bool camel::core::type::structFieldsMatchByName(
     return relateStructs(target, source) != StructRelation::None;
 }
 
+// Whether the pair is an entering, by the structure of the two types and not by the conversion
+// table (design principles 5.1, "entering is not a conversion"): a value whose fields are this
+// type's, in this type's order, is a value of this type, and the slot keeps its fields (5.2). A
+// copy that has to put the fields in another order moves them, so it is a conversion the program
+// writes (`as`), not the compiler's step.
+bool StructType::castEntersFrom(Type *sourceType) const {
+    if (sourceType == nullptr) {
+        return false;
+    }
+    if (equals(sourceType)) {
+        return true;
+    }
+    if (sourceType->code() == TypeCode::Never) {
+        return true;
+    }
+    if (sourceType->code() != TypeCode::Struct) {
+        return false;
+    }
+    return relateStructs(this, static_cast<const StructType *>(sourceType)) ==
+           StructRelation::SameLayout;
+}
+
 // Converting a value to its own type is legal and does nothing (design principles 5.1). An
 // unnamed struct value whose fields are those of a named type in the declaration's order is
 // that type without moving anything, so the conversion is safe too; the CAST keeps the type

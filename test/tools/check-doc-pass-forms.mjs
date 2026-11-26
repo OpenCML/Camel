@@ -62,10 +62,12 @@
  *     needs the module search paths, which this guard does not read.
  *   * A specification written in Camel source (`f->std::opt<safe_fp: true>`) is the source
  *      spelling of a named argument, which the rule kept; only the command line changed.
- *   * `changes.log` and the record directories are history: an entry states the release it
+ *   * `CHANGELOG.md` and the record directories are history: an entry states the release it
  *     belongs to, and `internal/` quotes the old spelling to say what happened. They are not
  *     scanned, and every entry of that list is asserted to still be in the tree, so a class cannot
- *     keep excusing pages it no longer describes.
+ *     keep excusing pages it no longer describes. The release log was `changes.log` until the file
+ *     itself became `CHANGELOG.md`; the entry has to follow the file, because an exclusion holding
+ *     the retired name excuses nothing and leaves the successor to be read as a page.
  *
  * A line the guard would report is excused when it says why it is not a defect: the removed form
  * is written there in order to be called removed. The exceptions are listed in EXCUSED with their
@@ -199,11 +201,13 @@ const PROBE = 'std::doc_form_probe'
 // specification written before it resolved: the pass listing an unknown name prints.
 const PROBE_REFUSED = new RegExp(`Pass <${PROBE}> not found`)
 
-// Not pages: a release log states the release it belongs to, and the handover directory quotes the
+// Not pages: the release log states the release it belongs to, and the handover directory quotes the
 // old spelling to say what happened. The list is asserted, not assumed: an entry that is not in
 // the tree any more is reported, so a class cannot keep excusing pages it no longer describes.
-// (`docs/reviews/` was a third entry until the directory was removed with the ledgers it held.)
-const NOT_A_PAGE = ['changes.log', 'internal/']
+// (`docs/reviews/` was a third entry until the directory was removed with the ledgers it held, and
+// the release log is `CHANGELOG.md`, the name the file carries since it was `changes.log` -- an
+// entry naming the retired name excuses nothing and leaves the log read as a page.)
+const NOT_A_PAGE = ['CHANGELOG.md', 'internal/']
 // Written by a script, never by hand: their text comes from the pages and the sources scanned
 // here, so a hit in them is fixed where it is written.
 const GENERATED = ['docs/diagnostics.md', 'docs/stdlib-reference.md']
@@ -808,9 +812,6 @@ if (files.length === 0) {
             )
         }
     }
-    if (!listed.error && !rel_exists('changes.log')) {
-        problems.push('changes.log is excluded from the pages and is not in the tree any more')
-    }
     if (!listed.error && trackedPages.length === 0) {
         problems.push('the tree has no tracked page at all: the walk was checked over nothing')
     }
@@ -1000,7 +1001,11 @@ if (!fs.existsSync(CAMEL)) {
 
 const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'camel-doc-pass-form-'))
 const program = path.join(tempDir, 'entry.cml')
-fs.writeFileSync(program, 'func main(): int sync {\n    return 0\n}\n')
+// The program every specification is appended to, in the spelling the parser takes: the return type
+// is written `=> int` (design principles 9.1, `examples/hello.cml`). A program the parser refuses
+// is refused before the pipeline, so the guard then reports every page as "neither parsed nor
+// reached the probe": it blames the pages for a defect of this one line.
+fs.writeFileSync(program, 'func main() => int sync {\n    return 0\n}\n')
 
 // The pipeline is resolved and refused before any pass runs, so the invocation never executes.
 // Reaching the probe means the parser read the specification; a name this build does not

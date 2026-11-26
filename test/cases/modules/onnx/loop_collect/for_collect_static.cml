@@ -1,0 +1,25 @@
+/**
+ * The same collection over an input whose length the program states (`x: f32[4]`): the rounds are
+ * four on every call, so the array the loop collects has four values and the export can state that
+ * length in the model instead of leaving it to the run.
+ */
+import { get_env } from env
+import { export_model } from onnx
+
+func build(x: f32[4]) => int[] {
+    return loop acc = [] as int[] for v in x do acc->append<int(v * 10.0)>
+}
+
+func main() => string! sync {
+    let x = [0.1, 0.2, 0.3, 0.4] as f32[4]
+    let xs = build(x)
+    println(len(xs))
+    return match export_model<out: get_env('ONNX_OUT') ?? ''>(func (x: f32[4]) => int[] {
+        build(x)
+    }, (x)) {
+        case error e => {
+            return e
+        }
+        case v => 'exported'
+    }
+}

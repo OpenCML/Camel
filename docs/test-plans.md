@@ -660,6 +660,15 @@ way to run them is to name the plan file deliberately. The ordinary opt selectio
 `feat/opt`, but as a **directory**, so `--tier fast` runs its fast plans and filters the slow
 progen plan while `--tier all` runs it.
 
+Two rows of that list stopped matching their cost on 2026-11-25, when the milestone layer of
+`feat/mm` was read case by case (`-Plan test/plans/feat/mm -Tier milestone -Jobs 8`, 4,889 cases):
+`feat/mm/gc`'s 44 milestone entries cost 0.12-0.86 s each, all under the 2 s line, so its plan file
+now says `tier = "fast"` and the fallback this list produces runs them; the row stays only because
+`test/tools/selftest/run.mjs` names that file as its example of the class, and removing the example
+is the self-test's edit, not this page's. `feat/mm/gc_elder_exhaustion` left the list outright: its
+22 entries are 0.38-8.47 s, so it says `tier = "slow"` and `SLOW_PLANS` names it -- the release gate
+reads all 22, which is the reader that would have caught the SIGSEGV instead of the 09:00 cron.
+
 The random-program plan `feat/opt/progen.plan.toml` is the one plan with a **door and a lock**. Its
 case is the generator itself, so a change under `test/tools/progen/` -- the generator, the model,
 the runner -- selects it, and nothing else does: a progen case or the plan file itself still

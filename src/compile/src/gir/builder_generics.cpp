@@ -1313,6 +1313,57 @@ bool Builder::genericCandidateBinds(
         }
         return false;
     }
+    // A `with` argument is held to its parameter as every argument is held to its parameter when
+    // the instance is bound (`instantiateForCallBinding`, the loop over every argument with the
+    // `with` ones first). Binding alone does not answer it: `bindTypeVars` returns true for a
+    // pattern whose variables are all bound already -- "Nothing to bind below: whether the argument
+    // fits is the ordinary check's question" -- so `initial: U` with `U` bound to `int[]` "bound" a
+    // `Range` here while the binder refused the call, and the two readers of one question
+    // disagreed. That disagreement is what the retry of a refused call could not get past
+    // (`instantiateForCall`): this reader said the candidate takes the arguments, the binder said
+    // it does not, and the retry asked this one again (measured on
+    // `(0 .. 3)->reduce<keep, 0 .. 3>`). The ordinary check this one leaves to the binder, the norm
+    // parameters above already make; a `with` argument makes it here for the same reason.
+    // The positions end before a `with` pack's `void` slot (`with <..ws>`): what a call writes
+    // beyond the fixed parameters is the pack's, and no parameter of it is one argument.
+    const size_t withParams = signature->withTypesCount() - (signature->hasWithRest() ? 1 : 0);
+    for (size_t i = 0; i < withParams && i < withTypes.size(); ++i) {
+        if (i < withInputs.size() && withInputs[i].left) {
+            // The call leaves this `with` argument out, and a default of the declaration fills it
+            // (the loop above has already refused the candidate when it has none). The argument the
+            // binder holds to the parameter is the default's, which the declaration wrote for that
+            // parameter; the call's stand-in for the position is `void`, a type no parameter takes.
+            // Holding the stand-in would refuse a call that names a later argument and skips a
+            // defaulted one in the middle (`x->gg<2, scale: 5>` beside `keepdims = false`).
+            continue;
+        }
+        Type *actual = valueTypeOf(withTypes[i]);
+        Type *wanted = substituteTypeVars(signature->withTypeAt(i), bindings);
+        // A parameter or an argument that still names a type variable says nothing here: what is
+        // open is the call's to report ("cannot be determined from the arguments or expected
+        // result", "leaves a type variable without a type"), and an argument that is not settled
+        // yet is one the binder settles. Answering "does not fit" for either would report the
+        // wrong thing.
+        if (containsTypeVar(wanted) || containsTypeVar(actual)) {
+            continue;
+        }
+        if (entersImplicitly(wanted, actual)) {
+            continue;
+        }
+        // A literal enters the parameter's type as it does at the call (design principles 5.1):
+        // `reduce<f, 0>` with `U` bound to `float` has `initial: float`.
+        if (i < withInputs.size()) {
+            const std::optional<literal::Value> written = literalValueOfExpr(withInputs[i].expr);
+            if (written.has_value() && wanted->isPrimitive() &&
+                literal::kindEnters(*written, wanted)) {
+                continue;
+            }
+            if (compositeLiteralEntersIn(withInputs[i].node, wanted, withInputs[i].expr)) {
+                continue;
+            }
+        }
+        return false;
+    }
     // The declaration's `when`, now that the arguments have bound its type variables: a
     // false condition makes this declaration inapplicable, not erroneous, so it is not a
     // fit and the call goes on to the other candidates (design principles 4.4).
@@ -1446,6 +1497,23 @@ compile_graph_ptr_t Builder::instantiateForCall(
         // bodies once -- the same set every other form of the name asks -- and reports the
         // refusal only when none of them accepts the call.
         OperatorOverloads collected = preludeOperatorOverloadsOf(rejected.name);
+        // The candidate that has just refused this call is not one of the bodies the retry is
+        // asking about, and asking it again is asking the question it has answered: the set is the
+        // prelude's own declarations of the name, so the declaration that refused above is in it,
+        // and the retry would hand it back. Measured on `(0 .. 3)->reduce<keep, 0 .. 3>`: the set
+        // held that one template, `genericCandidateBinds` and `instantiateForCallBinding` read the
+        // `with` arguments differently, and the retry answered itself -- `chooseOperatorOverload`
+        // chose it, `instantiateForCallBinding` refused it, `instantiateForCall` asked again --
+        // until the stack ran out (SIGSEGV, rc 139). Nothing bounded it: the depth counters
+        // (`instantiationDepth_`, `openInstances`) are taken when an instance is built, and a
+        // refused binding builds none, so both stayed at 0 through every frame. Excluding it here
+        // is what makes the search progress: every other candidate of the gathered set is still
+        // asked, and the one removed has already said no to these arguments.
+        if (rejected.call == call) {
+            collected.templates.erase(
+                std::remove(collected.templates.begin(), collected.templates.end(), tmpl),
+                collected.templates.end());
+        }
         if (!collected.graphs.empty() || !collected.templates.empty()) {
             if (compile_graph_ptr_t chosen = chooseOperatorOverload(
                     collected, withInputs, normInputs, withTypes, normTypes, call,
