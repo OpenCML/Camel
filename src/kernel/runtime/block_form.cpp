@@ -61,7 +61,11 @@ class Walker {
         stack_.push_back(graph);
         // Which node is which parameter: the graph's port lists, by position. A parameter node's
         // payload is not its identity -- two parameters of one body can carry the same payload --
-        // while a position in the signature is spelling-free and a name is not.
+        // while a position in the signature is spelling-free and a name is not. A call inside the
+        // body hashes the callee against the callee's own signature, so the ports of the graph
+        // being left are put back once that hash is done: a node of this graph read afterwards is
+        // read against this graph's signature, not against the callee's.
+        std::unordered_map<gc_node_ref_t, uint64_t> outerPorts = std::move(ports_);
         ports_.clear();
         uint64_t index = 0;
         for (gc_node_ref_t port : graph->normPorts()) {
@@ -72,6 +76,7 @@ class Walker {
         }
         std::unordered_map<gc_node_ref_t, uint64_t> memo;
         h.u64(hashNode(*graph, graph->exitNodeRef(), memo));
+        ports_ = std::move(outerPorts);
         stack_.pop_back();
         return h.h;
     }
