@@ -1,12 +1,18 @@
 // Copyright (c) the OpenCML Organization
 // SPDX-License-Identifier: MIT
 
-import { execFileSync, execSync } from 'child_process'
+import { execSync } from 'child_process'
 import fs from 'fs'
 import path from 'path'
 import { fileURLToPath } from 'url'
+import { formatWithPin, readPin } from './clang-format-pin.js'
 import { explicitFilesArg, splitLineList, uniqueFiles } from './file-list.js'
 
+// Formatting is pinned to one clang-format major version (`.clang-format-version`). Versions of
+// clang-format lay the same source out differently, so a machine with another version would rewrite
+// hundreds of lines a commit never touched. When the formatter on PATH (or the one named by
+// CAMEL_CLANG_FORMAT) is not the pinned major, or is missing, no file is rewritten and one line says so.
+//
 // The layout moved once: `src/`, `include/` and `modules/` became `src/kernel/`, `src/parse/`, `src/compile/`
 // and `src/stdlib/`. The roots are probed rather than assumed, so a tree of either layout is covered: a
 // root is formatted when this tree has it. When none of them exists the run fails instead of
@@ -43,12 +49,8 @@ const changedFiles = formatTargets(explicitFilesArg() ?? getChangedFiles())
 if (changedFiles.length === 0) {
     console.log('No modified .cpp or .h files to format.')
 } else {
-    changedFiles.forEach((file) => {
-        try {
-            execFileSync('clang-format', ['-i', file], { stdio: 'inherit' })
-            console.log(`Formatted: ${file}`)
-        } catch (error) {
-            console.error(`Failed to format: ${file}`)
-        }
+    formatWithPin(changedFiles, {
+        bin: process.env.CAMEL_CLANG_FORMAT || 'clang-format',
+        pin: readPin(repoRoot),
     })
 }
