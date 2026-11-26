@@ -3,7 +3,7 @@
 // outside the positions below it is a name like any other.
 
 export resource fs
-export resource tracer = [stdout, fs]
+export resource tracer = [console, fs]
 resource net unordered
 
 export tag finite_math = [no_nans, no_infs]

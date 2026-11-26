@@ -5,7 +5,7 @@
 // Run: camel docs/tutorial/examples/10_resources.cml
 
 resource db
-resource console = [db, stdout]
+resource io = [db, console]
 
 #resource
 type Stream = { id: int }
@@ -14,7 +14,7 @@ func read_id(s: Stream) => int uses s {
     return s.id
 }
 
-func tick() => void uses var console {}
+func tick() => void uses var io {}
 
 func bump(var cell: int) => int sync {
     cell += 1

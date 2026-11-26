@@ -1,6 +1,6 @@
 /**
  * A function that writes no clause about resources promises what its body was measured to reach:
- * `noisy` prints, so the type of the value it is known by says `uses stdout`, and a position that
+ * `noisy` prints, so the type of the value it is known by says `uses console`, and a position that
  * asks for `pure` does not take it (design principles 3.3, effects plan 5). The refusal is at the
  * call, where the position and the value meet, and it names the signature that would have matched.
  */

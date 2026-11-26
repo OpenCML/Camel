@@ -3,8 +3,8 @@
  * reads the resource and with `var` it writes it, the way a parameter is written. A resource a
  * module declares is external state, so an entry may say either: `reads` promises a read of
  * `scale`, `writes` a write of `acc`, `maybe` promises a write and its body asks for nothing more
- * -- `var` promises a write and asks for no less -- and `shout` writes the group `console`, which
- * expands to `stdout`. A variable is never written in a clause: a `var` parameter is declared by
+ * -- `var` promises a write and asks for no less -- and `shout` writes the group `io`, which
+ * expands to `console`. A variable is never written in a clause: a `var` parameter is declared by
  * the `var` in the parameter list and a module `var` by its declaration.
  *
  *   3 5 1 shout 1
@@ -12,7 +12,7 @@
 
 resource scale
 resource acc
-resource console = [stdout]
+resource io = [console]
 
 /// A read of the resource: the entry carries no `var`.
 func reads() => int uses scale {
@@ -29,8 +29,8 @@ func maybe() => int uses var scale {
     return 1
 }
 
-/// The group expands to `stdout`, which every call to this writes: the entry carries `var`.
-func shout() => int uses var console sync {
+/// The group expands to `console`, which every call to this writes: the entry carries `var`.
+func shout() => int uses var io sync {
     println('shout')
     return 1
 }

@@ -39,7 +39,7 @@ args = ["${case}", "test::camel_commit_checks", "std::nvm"]
 expect_exit = 1
 timeout_ms = 60000
 expect_diagnostic_name = "RuntimeDiag::PassEffectContainment"
-expect_output_contains = ["fold_function_type: the call site at node", "now declares '(x: int) => int pure'", "while the body it runs is 'announced'", "CAMEL_CHECKS build asks=1", "Pass 'opt::cse' returned a program whose call site reaches past the type it declares", "write stdout"]
+expect_output_contains = ["fold_function_type: the call site at node", "now declares '(x: int) => int pure'", "while the body it runs is 'announced'", "CAMEL_CHECKS build asks=1", "Pass 'opt::cse' returned a program whose call site reaches past the type it declares", "write console"]
 # Nothing is accepted and nothing is asked by the test: a build that did not ask would print
 # `accepted, asked=0` and then ask itself, and a check that had stopped firing would print
 # `accepted, asked=1`. Both are what this reading rejects.

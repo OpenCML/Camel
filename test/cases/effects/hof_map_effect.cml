@@ -5,12 +5,12 @@
  * The other half of the pair is `hof_map_pure.cml`: the same `map`, a callback without an effect.
  */
 
-func show(x: int) => int uses var stdout sync {
+func show(x: int) => int uses var console sync {
     println(x)
     return x
 }
 
-func main() => int uses var stdout sync {
+func main() => int uses var console sync {
     let xs = [1, 2, 3]
     let ys = xs->map<show>
     return ys[0]

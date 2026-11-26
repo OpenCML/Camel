@@ -46,7 +46,7 @@
 
 | 3.3 的规则 | 今天 | 判据文件 | 锁住它的测试 |
 |---|---|---|---|
-| 资源由库用 `resource` 声明（`export resource fs`），可分组 `resource io = [stdout, fs]`，共用命名空间、可导入、标准资源默认可见 | **部分**（语言层已有声明与导入）。`resource`／`export resource` 是语言声明（`resource NAME`、`resource NAME = [...]`、`resource NAME unordered`），模块内 `uses <名>` 解析到它，别的模块 `import { X } from m` 之后同样可用（`stdlib/process.cml` 的 `process`、`stdlib/tiles.cml` 的 `driver`、`stdlib/test_support.cml` 的 `rendezvous_point`）；C++ 侧的 `ResourceSpec` 字符串按 `<模块>:<名字>` 与它对齐（`process:process`、`tiles:driver`）。**缺**：`stdout`/`fs`/`rng` 等最基本的资源仍由 `externalAmbient` 写死、没有语言声明；分组形式（`resource io = [...]`）的语义没有用例 | `src/parse/src/ast/builder.cpp#ResourceDecl`（`export resource` 是它自己的声明）；`resource_semantics.h#resource`；`gir/builder_modules.cpp#resourceIdentity`（裸名归声明它的模块） | `modules/resources` 的 `resource_names` 钉的是 C++ 名字表与声明对齐后的名字 |
+| 资源由库用 `resource` 声明（`export resource fs`），可分组 `resource io = [console, fs]`，共用命名空间、可导入、标准资源默认可见 | **部分**（语言层已有声明与导入）。`resource`／`export resource` 是语言声明（`resource NAME`、`resource NAME = [...]`、`resource NAME unordered`），模块内 `uses <名>` 解析到它，别的模块 `import { X } from m` 之后同样可用（`stdlib/process.cml` 的 `process`、`stdlib/tiles.cml` 的 `driver`、`stdlib/test_support.cml` 的 `rendezvous_point`）；C++ 侧的 `ResourceSpec` 字符串按 `<模块>:<名字>` 与它对齐（`process:process`、`tiles:driver`）。**缺**：`console`/`fs`/`rng` 等最基本的资源仍由 `externalAmbient` 写死、没有语言声明；分组形式（`resource io = [...]`）的语义没有用例 | `src/parse/src/ast/builder.cpp#ResourceDecl`（`export resource` 是它自己的声明）；`resource_semantics.h#resource`；`gir/builder_modules.cpp#resourceIdentity`（裸名归声明它的模块） | `modules/resources` 的 `resource_names` 钉的是 C++ 名字表与声明对齐后的名字 |
 | 每个 `var` 自动是资源；`var` 形参是资源参数；闭包捕获 `var`，函数类型就带着它 | **部分**。`var` 单元、`var` 形参、捕获在运行期足迹里都正确；函数**类型**里没有资源。捕获只体现在足迹的 `Capture` 绑定，不进类型 | `include/camel/core/resource_semantics.h#Capture`（Port→Norm/With、捕获→Capture、Fresh 丢弃）；`src/compile/gir/builder_expr.cpp#orderAfterLastWriter` | `modules/resources` 的 `core`（`bump`、`countdown`、`__g_5__` 捕获）；`linear/captured_writes` |
 | 资源是函数类型的一部分；原生算子在签名里写 `uses`；没写的按"全局"资源，与一切效应保持顺序 | **部分/缺**。`FunctionType` 只有修饰符、参数、返回类型（`func.h#FunctionType`），没有资源；原生算子的语义在 C++ `ResourceSpec`，没写的按 `conservativeResources`（Unknown 类、碰每个操作数、external） | `func.cpp#FunctionType`（intern key 无资源）；`resources.cpp#Resolver::node`（在 `f54822a5`，`FUNC` 分支从被调用者足迹重建资源，不读类型）；`resource_semantics.h#ResourceSpec` | `modules/resources` 的 `declared_resources`；`stdlib_registry.purity_declared` |
 | Camel 函数的资源由编译器推出（所调用者之和，递归求不动点），悬停与文档以限定名显示；显式 `uses` 是承诺，超出是编译错误；导出函数推出资源变化给警告 | **部分**。运行期 `footprintOf` 就是那个不动点（含递归、捕获、局部 Fresh 丢弃），但只在需要时算，不存进类型、不在编译期检查、无悬停、无变化警告 | `resources.cpp#footprintOf`（`FootprintWalk`，`recursed_`/`grew_` 的循环在 `resources.cpp#footprintOf`） | `modules/resources` 的 `countdown`（不动点）；承诺与警告**没有测试** |
@@ -84,13 +84,13 @@
 ```
 resource fs                                  // 环境资源，按书写顺序
 resource net unordered                       // 无序资源
-resource io = [stdout, fs]                   // 组：只是两个名字的简写，不是新资源
+resource io = [console, fs]                  // 组：只是两个名字的简写，不是新资源
 export resource myres                        // 导入规则与其他名字相同
 ```
 
 - `resource`、`unordered`、`uses`、`pure` 都按**上下文关键字**处理，不进全局保留字表：`uses`/`pure` 只在函数签名（声明或函数类型）的返回类型之后被识别；`resource` 只在顶层/命名空间项的开头、后随标识符时识别；`unordered` 只在 `resource` 声明末尾。这样现有叫 `pure`/`resource` 的变量不破。
-- 组的语义：`uses io` 展开为 `uses stdout, uses fs`；组不参与"同一个组"这种匹配。`unordered` 写在组上表示组内每个成员都无序。
-- 标准资源 `stdout`、`stderr`、`stdin`、`fs`、`clock`、`env` 由核心预声明（`resource_names` 已经钉住这组名字），不需要导入。
+- 组的语义：`uses io` 展开为 `uses console, uses fs`；组不参与"同一个组"这种匹配。`unordered` 写在组上表示组内每个成员都无序。
+- 标准资源 `console`、`fs`、`clock`、`env` 由核心预声明（`resource_names` 已经钉住这组名字），不需要导入。
 
 函数声明：
 
@@ -145,7 +145,7 @@ anyOf   : 资源类列表；非空表示"说不出是哪个值"，即保守的�
 
 这几步与运行期 `Resolver::node` 对 `FUNC` 的映射完全同构（`resources.cpp#Resolver::node` 的 `bind` lambda 就是第 2 步），差别只在运行期是事后查询，本计划要在建图时就知道。`uses s` 与 `var` 形参因此共用同一条路径：**都是"用第 i 个实参的名义"**，只是类不同。
 
-**资源分量进入特化键是规则的一部分。** 只绑定类型的特化（`loop$tspec3`，`draft_inline.cpp#kTypeSpecializationTag`）以形参**类型**为键，而资源子句是函数类型身份的一部分（进 intern key 与 `mangle`，见 2.2），所以两个只差一个形参资源子句的实例是两个键、两张图——`exemplars/05_effect_order` 里的 `visit$tspec2` 正是这个形状（该实例的 `cb` 口是 `(x: int) => int uses stdout`，与基础实例的 `(x: int) => int` 不同键）。这是规则而不是效应：资源不同的实例效应不同（哪些调用在同步链上、丢掉结果时执不执行、按哪个资源排序，都可能不一样），用一个实例的效应代表另一个就会算错。
+**资源分量进入特化键是规则的一部分。** 只绑定类型的特化（`loop$tspec3`，`draft_inline.cpp#kTypeSpecializationTag`）以形参**类型**为键，而资源子句是函数类型身份的一部分（进 intern key 与 `mangle`，见 2.2），所以两个只差一个形参资源子句的实例是两个键、两张图——`exemplars/05_effect_order` 里的 `visit$tspec2` 正是这个形状（该实例的 `cb` 口是 `(x: int) => int uses console`，与基础实例的 `(x: int) => int` 不同键）。这是规则而不是效应：资源不同的实例效应不同（哪些调用在同步链上、丢掉结果时执不执行、按哪个资源排序，都可能不一样），用一个实例的效应代表另一个就会算错。
 
 调用点的结果摘要只需要存成三条事实：这个节点碰哪些类/名字、其中哪些绑到哪个输入值、哪些完全说不清（`anyValue`）。图上**不加节点、不加边**：句柄/变量本来就是该调用的普通输入边，那条边就是身份。
 
@@ -268,7 +268,7 @@ export type Stream<T> = {
 func save(p: Stream, x: int): unit uses fs, p { ... }
 func f(): unit {
     save(a)          // n1 CALL：uses fs 与句柄 p（绑定到 a）
-    println("x")     // n2 CALL：uses stdout（external）
+    println("x")     // n2 CALL：uses console（external）
     save(b)          // n3 CALL：uses fs 与句柄 p（绑定到 b）
 }
 ```
@@ -276,7 +276,7 @@ func f(): unit {
 ```
 今天：n1 n2 n3 之间只有各自的数据边，没有 ctrl。
 本计划：n1 ──ctrl──▶ n3            （同一个 fs，按书写顺序）
-      n1    n2    n3 之间不再有别的 ctrl（fs ≠ stdout；p 若 a,b 不同则无冲突）
+      n1    n2    n3 之间不再有别的 ctrl（fs ≠ console；p 若 a,b 不同则无冲突）
 ```
 
 `std::prl` 可以并发 `n2` 与 `n1`/`n3`；`n1` 与 `n3` 串行。若 `a`、`b` 是两个不同 `Fresh` 句柄，`p` 这一路也不连边。若 `a`、`b` 是同一个变量或同一句柄，`p` 这一路也连边（同一个键）。
@@ -379,7 +379,7 @@ pump(s, open("b"))   同上：被调用者不知道 s 与新句柄不同，仍�
 
 ### 步骤 4：标准库迁移（逐模块）
 
-- 每个无体声明补 `uses` 或 `pure`；`uses` 的名字用该模块的资源（`fs`、`stdout`、`rng`…）。
+- 每个无体声明补 `uses` 或 `pure`；`uses` 的名字用该模块的资源（`fs`、`console`、`rng`…）。
 - `--verify-ops` 升级为双向：声明的 `uses`/`pure` 必须与 C++ 的 `ResourceSpec` 一致（不多不少；`pure` ⇔ `spec.none()` 且 traits 纯）。
 - `registry.purity_declared` 改为读声明；`modules/resources` 的 `declared_resources` 从"C++ 文本"改为"声明文本"。
 - 建议顺序：`fs`、`io`、`time`、`random`、`env`、`process` 先（会碰环境），再 `array`/`str`/`json`/`math 等纯模块。每模块一个提交，跑一次 `--verify-ops`。
@@ -396,7 +396,7 @@ pump(s, open("b"))   同上：被调用者不知道 s 与新句柄不同，仍�
 - 6a：在资源不动点收敛之后、任何 pass 之前（link 的 settle 阶段），对"碰资源"的节点按节点创建顺序扫描冲突对（复用 `compatible`/`mayAlias`/`exclusive` 的判据），对冲突且无路径的对加 ctrl；`unordered` 资源跳过（步骤 8 之前没有这种资源，所以 6a 可以先行）。
 - 6b：换成"每个资源键保留最后一个访问节点"的链，边数从 O(冲突对) 降到 O(访问数)；语义必须与 6a 等价，用同一组快照比对。
 - `sync` 链保持不变；`wait` 仍可用（步骤 9 才删）。
-- 测试：`modules/resources` 新增"去掉 `sync` 的同一程序"，断言不再有 `unordered`；GIR 快照：同 `fs` 有边、`fs` 与 `stdout` 无边、同一个 `var` 有边、不同 `var` 无边；`values.sync_order` 与 `gir.sync.ctrl_dedup_snapshot` 不变；`--jobs` 下 `std::prl` 的执行结果与逐序执行一致。
+- 测试：`modules/resources` 新增"去掉 `sync` 的同一程序"，断言不再有 `unordered`；GIR 快照：同 `fs` 有边、`fs` 与 `console` 无边、同一个 `var` 有边、不同 `var` 无边；`values.sync_order` 与 `gir.sync.ctrl_dedup_snapshot` 不变；`--jobs` 下 `std::prl` 的执行结果与逐序执行一致。
 
 ### 步骤 7：句柄类型
 

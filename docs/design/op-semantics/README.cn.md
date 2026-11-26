@@ -714,7 +714,7 @@ granted = 节点的许可列 ∪ (law.order == Unordered ? {a} : ∅)
 
 > **实施状态（2026-10-16，`lane/opsem-p4`）**：8.1 的声明是 `sem::ResourceSpec`（`camel/core/resource_semantics.h`），作为 `OperatorSemantics::resources`，由 `OperatorTable::declareResources` 登记（没有记录的算子得到 `uri@1.0`，已有记录的次版本加一）；登记检查的第 5 条拒绝自身不一致的声明与和 traits 矛盾的声明。与下文的差别（都是窄读）：
 >
-> - **资源的类**：`Variable`（`var` 单元）、`Object`（就地改的对象）、`Foreign`（模块包装的对象，带名字，如 `tiles:device`）之外，加了 **`Ambient`**：没有值指名的状态（文件系统 `fs`、控制台 `stdout`/`stdin`、模块的随机数发生器 `rng`、时钟、进程环境），以名字为身份。下文的 `Binding` 只有三类有身份的值；文件与随机数状态没有值指名它，不加这一类就无法声明（任务要求声明它们）。`Unknown` 只是未声明时的保守读法，不能声明。
+> - **资源的类**：`Variable`（`var` 单元）、`Object`（就地改的对象）、`Foreign`（模块包装的对象，带名字，如 `tiles:device`）之外，加了 **`Ambient`**：没有值指名的状态（文件系统 `fs`、控制台 `console`、模块的随机数发生器 `rng`、时钟、进程环境），以名字为身份。下文的 `Binding` 只有三类有身份的值；文件与随机数状态没有值指名它，不加这一类就无法声明（任务要求声明它们）。`Unknown` 只是未声明时的保守读法，不能声明。
 > - **区域**：`Mapped` 不另存表达式，而是指明节点下标实例里的哪一张映射（某个操作数的访问映射或写映射），区域就是该映射在域上取到的元素；`regionBounds` 给出包围盒，`regionsMayOverlap` 判断重叠（算不出就按整体）。今天没有声明 `Mapped` 区域的算子（张量没有就地算子），由测试用手造的实例覆盖。
 > - **结果**：`ResultAlias` 照 8.1；另有 `allocates`：结果是新的资源（`:var/new` 新建单元，`tiles:upload` 新建设备内存）。
 > - **外部效应与 traits**：声明的 `externalEffect` 只能在 traits 允许外部效应时为真（不是 pure、不是 stateOnly）；反过来可以细化：赋值族在 traits 里算外部效应（没有"写变量"这一位），资源声明说它只写程序自己的单元。效应摘要（`effectSummaryOf`）仍由 traits 算出，不变（8.3）。随机数的生成照 8.1 的注释算外部效应，见 14.4 的待问。

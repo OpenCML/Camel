@@ -562,10 +562,10 @@ std::string resourceDisplayName(std::string_view key) {
 
 std::span<const std::string_view> standardResourceNames() {
     // Design principles 3.3: the state the language gives every program, with the names a
-    // declaration uses for it. `rng`, `tensor:generator` and the other module resources are
-    // declared by their modules, not here.
-    static constexpr std::array<std::string_view, 6>
-        names{"stdout", "stderr", "stdin", "clock", "env", "fs"};
+    // declaration uses for it. The console is one resource whose three channels (standard output,
+    // standard error, standard input) reach the same person; `rng`, `tensor:generator` and the
+    // other module resources are declared by their modules, not here.
+    static constexpr std::array<std::string_view, 4> names{"console", "clock", "env", "fs"};
     return names;
 }
 

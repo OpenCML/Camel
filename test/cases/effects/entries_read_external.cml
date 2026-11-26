@@ -13,7 +13,7 @@ func probe() => int uses clock {
 }
 
 /// A write of an external resource: the entry carries `var`.
-func stamp() => int uses var stdout sync {
+func stamp() => int uses var console sync {
     println('stamp')
     return 2
 }

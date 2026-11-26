@@ -123,7 +123,7 @@ six
 0
 ```
 
-`three` is printed too: that `if`'s arm is not a sync block, but the arm is a region, and a write to `stdout` in it is
+`three` is printed too: that `if`'s arm is not a sync block, but the arm is a region, and a write to `console` in it is
 used by that region -- `println('three')`'s result is wanted by nobody and it runs all the same. What the arm's missing
 `sync` decides is **order**: those two statements have none. The second `if`'s arm says `sync`, and both of its
 statements run, in order.
@@ -291,7 +291,7 @@ that both execute happen in the order written, and need no sync block**. In
 used (`println` returns its argument), so they happen in the order written with no warning at all:
 
 ```cml
-// Two effects on the same resource (stdout) keep the written order without a sync block.
+// Two effects on the same resource (the console) keep the written order without a sync block.
 // Run: camel docs/tutorial/examples/10_same_resource.cml
 
 func report() => int {
@@ -336,7 +336,7 @@ records it in the function type it displays. This program puts the forms side by
 // Run: camel docs/tutorial/examples/10_resources.cml
 
 resource db
-resource console = [db, stdout]
+resource io = [db, console]
 
 #resource type Stream = { id: int }
 
@@ -344,7 +344,7 @@ func read_id(s: Stream) => int uses s {
     return s.id
 }
 
-func tick() => void uses var console {
+func tick() => void uses var io {
 }
 
 func bump(var cell: int) => int sync {
@@ -376,8 +376,8 @@ What may follow `uses`: the grammar is `resourceClause` in
 [design principles 3.3](../design-principles.en.md#33-resources-uses-and-pure).
 
 - **A resource the module declares**: `resource db`. A module may declare its own resources, and may group several of
-  them: `resource console = [db, stdout]`.
-- **A resource every program has**: `stdout`, `stderr`, `stdin`, `clock`, `env`, `fs`.
+  them: `resource io = [db, console]`.
+- **A resource every program has**: `console`, `clock`, `env`, `fs`.
 - **A handle parameter**: `uses s`. This says "the call touches the value you hand it" -- handle-style: operations on one
   handle keep the written order, different handles do not constrain each other. A `var` parameter is not written this
   way: it is a variable, see the next entry.
@@ -399,12 +399,12 @@ Draw the graph of this program and the `tooltip` of a function node is the resou
 
 ```text
             tooltip="(s: Stream) => int uses s";
-            tooltip="() => void uses var db, var stdout";
+            tooltip="() => void uses var db, var console";
             tooltip="(var cell: int) => int uses var cell";
 ```
 
 All three lines say what a call touches: `read_id` touches the handle it is given, `tick` touches the `console` group
-(expanded to `db` and `stdout`), `bump` touches the cell the caller hands it. **That is resource inference**: you need
+(expanded to `db` and `console`), `bump` touches the cell the caller hands it. **That is resource inference**: you need
 not write it, and it is visible on the graph; what you write is a promise, and a body that goes beyond it is a compile
 error (the errors below).
 
@@ -452,7 +452,7 @@ camel docs/tutorial/examples/10_uses_beyond.cml
 ```
 
 ```text
-error[SemanticDiag::UsesPromiseViolated]: '() => int uses var db' does not keep its resource promise: stdout.
+error[SemanticDiag::UsesPromiseViolated]: '() => int uses var db' does not keep its resource promise: console.
    --> docs/tutorial/examples/10_uses_beyond.cml:8:1
     |
   8 | func stamp(): int uses var db sync {
@@ -474,7 +474,7 @@ camel: 1 error
 ```
 
 The diagnostic says three things: **which promise** (`'() => int uses var db'`), **what the body reached past it**
-(`stdout`), and **which use crossed it** (the `note` points at the first use the signature does not name). There are
+(`console`), and **which use crossed it** (the `note` points at the first use the signature does not name). There are
 two repairs: the body stops reaching for it, or the clause is widened to name it.
 
 ## `pure`: touching no resource at all

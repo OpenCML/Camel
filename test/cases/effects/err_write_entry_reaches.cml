@@ -2,7 +2,7 @@
 // that also prints reaches past the promise, and the signature the report quotes carries `var` on
 // the entry -- a reader of the message tells the two clauses apart (design principles 3.3).
 
-func shout() => int uses var stderr sync {
+func shout() => int uses var fs sync {
     println('x')
     return 1
 }

@@ -15,7 +15,7 @@ prints one entry.
 - **Message, help.** The templates; `{0}`, `{1}`, ... are filled in by the report.
 - **Example.** A program of the test suite that raises the diagnostic, where one is small enough to show.
 
-328 diagnostics: 306 errors, 22 warnings. 14 carry a machine-applicable edit, 314 say why they carry none.
+329 diagnostics: 307 errors, 22 warnings. 14 carry a machine-applicable edit, 315 say why they carry none.
 
 | Code | Name | Severity | Edit |
 |------|------|----------|------|
@@ -282,6 +282,7 @@ prints one entry.
 | `0x03000217` | [SemanticDiag::ReadonlyResourceWritten](#readonlyresourcewritten) | Error | no |
 | `0x03000218` | [SemanticDiag::OperatorAccessesUndeclared](#operatoraccessesundeclared) | Error | no |
 | `0x03000219` | [SemanticDiag::OperatorSignatureUnresolved](#operatorsignatureunresolved) | Error | no |
+| `0x0300021A` | [SemanticDiag::ConversionNeededWhereTheCompilerWouldInsertOne](#conversionneededwherethecompilerwouldinsertone) | Error | no |
 | `0x03100002` | [SemanticDiag::IgnoredSideEffect](#ignoredsideeffect) | Warn | no |
 | `0x03100090` | [SemanticDiag::ExitInUnusedBranch](#exitinunusedbranch) | Warn | no |
 | `0x031000C0` | [SemanticDiag::UnusedFallibleValue](#unusedfalliblevalue) | Warn | no |
@@ -5595,7 +5596,7 @@ The name '{0}' in the resource clause of '{1}' is neither a parameter nor a reso
 **Help**
 
 ```text
-A clause names a parameter of the function (the value a call touches), a resource the module declares (`resource {0}`), one of the resources every program has (stdout, stderr, stdin, clock, env, fs), or a resource imported from another module. Check the spelling, or declare the resource.
+A clause names a parameter of the function (the value a call touches), a resource the module declares (`resource {0}`), one of the resources every program has (console, clock, env, fs), or a resource imported from another module. Check the spelling, or declare the resource.
 ```
 
 **Example** (`test/cases/effects/err_unknown_resource.cml`, run as `camel test/cases/effects/err_unknown_resource.cml`)
@@ -6702,7 +6703,7 @@ Only a pure call is evaluated: a function with no effects and no reads of mutabl
 **Example** (`test/cases/compile/fold_calls/effect.cml`, run as `camel test/cases/compile/fold_calls/effect.cml`)
 
 ```camel
-func reveal(s: string) => string uses var stdout {
+func reveal(s: string) => string uses var console {
     println(s)
     return s
 }
@@ -8724,7 +8725,7 @@ A tag is read before the program runs, so an argument is a compile-time value --
 **Example** (`test/cases/compile/tags/err_tag_argument.cml`, run as `camel test/cases/compile/tags/err_tag_argument.cml`)
 
 ```camel
-/// A tag argument that names a tag. A tag is a declaration, not a value (the author's ruling of
+/// A tag argument that names a tag. A tag is a declaration, not a value (a tag keeps the name it is written with and does not enter the value namespace), so
 /// 2026-10-30: a tag keeps the name it is written with and does not enter the value namespace), so
 /// the refusal at the tag says what the name is. Reporting the parameter's declared type against it
 /// would read as a kind mismatch and hide the point.
@@ -8765,7 +8766,7 @@ A tag is a compile-time fact attached to a declaration or to the nodes of a regi
 
 ```camel
 /// A tag name written where a value belongs. A tag keeps its name and does not enter the value
-/// namespace (design principles 6.2, the author's ruling of 2026-10-30), so the report says the
+/// namespace (design principles 6.2), so the report says the
 /// name is a tag -- not that the name is undeclared, which it is not.
 
 tag label(x: int) on func
@@ -9170,7 +9171,7 @@ The values '{0}' and '{1}' meet where one type is asked for, and the resources t
 **Help**
 
 ```text
-A function's resources are part of its type, so two values given for one type variable must write the same resources (design principles 3.3). Neither set is decided by the place they meet: a declaration that writes no clause has its resources measured from its own body alone, and taking one value's set for the other's would let the place a value is used decide what a function reaches. Write a resource clause on the callee that writes none ('uses var stdout', or 'pure' where it touches nothing) naming the resources both write, so that one written signature stands at the position, or keep the two values out of one position.
+A function's resources are part of its type, so two values given for one type variable must write the same resources (design principles 3.3). Neither set is decided by the place they meet: a declaration that writes no clause has its resources measured from its own body alone, and taking one value's set for the other's would let the place a value is used decide what a function reaches. Write a resource clause on the callee that writes none ('uses var console', or 'pure' where it touches nothing) naming the resources both write, so that one written signature stands at the position, or keep the two values out of one position.
 ```
 
 **Example** (`test/cases/effects/err_inferred_invariant_position.cml`, run as `camel test/cases/effects/err_inferred_invariant_position.cml`)
@@ -9436,6 +9437,35 @@ A conversion or a copy the compiler writes itself is a call of a built-in operat
 ```
 
 *No example: no test small enough to show raises it.*
+
+### ConversionNeededWhereTheCompilerWouldInsertOne
+
+`0x0300021A` · Error · `SemanticDiag::ConversionNeededWhereTheCompilerWouldInsertOne`
+
+**Fix**
+
+None: choice: the conversion has to be written, and which of the two sides changes is the writer's to say
+
+**Message**
+
+```text
+This value has type '{0}', and the position it stands in has type '{1}': getting from one to the other needs a conversion that may fail, and the compiler inserts only steps that cannot.
+```
+
+**Help**
+
+```text
+A step the compiler inserts to make two types meet always succeeds (design principles 5.1, "entering is not a conversion"); a conversion that checks a value is the program's to write, and it fails when the value does not fit. Nothing is converted implicitly between numbers, and a shape the position fixes is not checked on the value's behalf. Write the conversion where the value stands ('T(x)' or 'x as T'), or give the position a type the value enters by itself.
+```
+
+**Example** (`test/cases/compile/tagged/err_enter_needs_cast.cml`, run as `camel test/cases/compile/tagged/err_enter_needs_cast.cml`)
+
+```camel
+func main() => float {
+    let x = enter::<int, float>(1)
+    return x
+}
+```
 
 ### IgnoredSideEffect
 
@@ -10315,7 +10345,7 @@ This invocation selected a pass boundary check requiring equal standard ambient 
 // other two bodies touch nothing and the clause is the whole truth a call site reads.
 
 resource db
-resource console = [db, stdout]
+resource io = [db, console]
 
 #resource
 type Stream = { id: int }
@@ -10326,7 +10356,7 @@ func consume(s: Stream) => int uses var s {
 }
 
 /// The body is empty; every call touches what the group names.
-func tick() => void uses var console {}
+func tick() => void uses var io {}
 
 /// The body writes the cell it is handed: the parameter list declares the cell and the body is
 /// where writing it is written, so the clause names neither.
@@ -10431,7 +10461,7 @@ A graph runs from its entry node to its exit node. A rewrite may replace either 
 // other two bodies touch nothing and the clause is the whole truth a call site reads.
 
 resource db
-resource console = [db, stdout]
+resource io = [db, console]
 
 #resource
 type Stream = { id: int }
@@ -10442,7 +10472,7 @@ func consume(s: Stream) => int uses var s {
 }
 
 /// The body is empty; every call touches what the group names.
-func tick() => void uses var console {}
+func tick() => void uses var io {}
 
 /// The body writes the cell it is handed: the parameter list declares the cell and the body is
 /// where writing it is written, so the clause names neither.
@@ -10584,7 +10614,7 @@ An operator node's ordinary ports are the arguments of the declaration it names,
 // other two bodies touch nothing and the clause is the whole truth a call site reads.
 
 resource db
-resource console = [db, stdout]
+resource io = [db, console]
 
 #resource
 type Stream = { id: int }
@@ -10595,7 +10625,7 @@ func consume(s: Stream) => int uses var s {
 }
 
 /// The body is empty; every call touches what the group names.
-func tick() => void uses var console {}
+func tick() => void uses var io {}
 
 /// The body writes the cell it is handed: the parameter list declares the cell and the body is
 /// where writing it is written, so the clause names neither.

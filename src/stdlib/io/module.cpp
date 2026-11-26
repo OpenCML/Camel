@@ -40,31 +40,32 @@ bool IOModule::load() {
             {"clear_input_buffer", false},
             {"input", false},
         });
-    // `input` writes its prompt and reads a line: stdin and stdout, in the order they are used.
+    // `input` writes its prompt and reads a line, both on the one console resource: the terminal's
+    // channels are one resource (design principles 3.3), and the order is the written one.
     const auto inputResources = [] {
         auto spec = camel::core::sem::externalAmbient(
-            "stdin",
+            "console",
             camel::core::sem::AccessMode::ReadModifyWrite);
         const auto out =
-            camel::core::sem::externalAmbient("stdout", camel::core::sem::AccessMode::Write);
+            camel::core::sem::externalAmbient("console", camel::core::sem::AccessMode::Write);
         spec.accesses.insert(spec.accesses.end(), out.accesses.begin(), out.accesses.end());
         return spec;
     };
     // What each touches (docs/design/op-semantics 8): raw mode writes the terminal, the readers
-    // read or read-modify-write stdin, so that they stay ordered against `input`.
+    // read or read-modify-write it, so that they stay ordered against `input`.
     //
-    // All five operators name the one `stdin` resource (design principles 3.3: terminal mode
-    // and reading input must order each other, so raw mode is not a resource of its own).
+    // All five operators name the one `console` resource (design principles 3.3: the terminal's
+    // channels are one resource, so terminal mode, reading input and printing order each other).
     {
         using camel::core::sem::AccessMode;
         using camel::core::sem::externalAmbient;
         camel::core::OperatorTable::instance().declareResources(
             "io",
             {
-                {"set_terminal_raw_mode", externalAmbient("stdin", AccessMode::Write)},
-                {"has_input", externalAmbient("stdin", AccessMode::Read)},
-                {"get_chars", externalAmbient("stdin", AccessMode::ReadModifyWrite)},
-                {"clear_input_buffer", externalAmbient("stdin", AccessMode::ReadModifyWrite)},
+                {"set_terminal_raw_mode", externalAmbient("console", AccessMode::Write)},
+                {"has_input", externalAmbient("console", AccessMode::Read)},
+                {"get_chars", externalAmbient("console", AccessMode::ReadModifyWrite)},
+                {"clear_input_buffer", externalAmbient("console", AccessMode::ReadModifyWrite)},
                 {"input", inputResources()},
             });
     }

@@ -689,19 +689,21 @@ void declareBuiltinOperatorResources(std::span<const std::string_view> names) {
             .accesses = {operandAccess(ResourceClass::Object, 0, AccessMode::ReadModifyWrite)},
             .result   = ResultAlias{.kind = ResultAlias::Kind::Same, .operand = 0}});
     // The console and the profiler: state outside the values, visible outside the program.
-    // The standard streams are named as design principles 3.3 names them (`stdout`, `stdin`,
-    // `stderr`); each writer names the stream it writes.
+    // The console is one resource with three channels (design principles 3.3): standard output,
+    // standard error and standard input all reach the person at the terminal, so a writer of any
+    // of them names the one resource, and the order the writes are written in is the order they
+    // reach that person.
     for (const char *uri : {":io/print", ":io/println"}) {
         table.declareResources(
             uri,
             ResourceSpec{
-                .accesses       = {ambientAccess("stdout", AccessMode::Write)},
+                .accesses       = {ambientAccess("console", AccessMode::Write)},
                 .externalEffect = true});
     }
     table.declareResources(
         ":io/eprintln",
         ResourceSpec{
-            .accesses       = {ambientAccess("stderr", AccessMode::Write)},
+            .accesses       = {ambientAccess("console", AccessMode::Write)},
             .externalEffect = true});
     for (const char *uri :
          {":profiler/begin", ":profiler/end", ":profiler/instant", ":profiler/enable"}) {

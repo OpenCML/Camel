@@ -132,7 +132,7 @@ class TypeDeclLoad : public StmtLoad {
 /// A resource declaration (design effects plan 3.1, design principles 3.3, 9.12):
 ///
 ///   resource fs
-///   resource io = [stdout, fs]
+///   resource io = [console, fs]
 ///   resource net unordered
 ///   resource graph readonly
 ///
@@ -155,7 +155,7 @@ class ResourceDeclLoad : public StmtLoad {
 
     void addMember(Reference member) { members_.push_back(std::move(member)); }
     const std::vector<Reference> &members() const { return members_; }
-    /// A group (`resource io = [stdout, fs]`): every use of it stands for its members.
+    /// A group (`resource io = [console, fs]`): every use of it stands for its members.
     bool isGroup() const { return group_; }
     void setGroup(bool group) { group_ = group; }
 

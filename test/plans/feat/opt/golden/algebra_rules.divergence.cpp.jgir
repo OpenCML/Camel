@@ -29,7 +29,7 @@
           "kind": "DATA",
           "label": "Function(graph=main, tupleSlots=0)",
           "origin": "<ORIGIN>",
-          "outputType": "() => int uses var stdout",
+          "outputType": "() => int uses var console",
           "roles": [],
           "source": {
             "end": {
@@ -357,7 +357,7 @@
         }
       ],
       "normalPorts": [],
-      "signature": "() => int uses var stdout"
+      "signature": "() => int uses var console"
     },
     {
       "capturePorts": [],
@@ -740,7 +740,7 @@
         }
       ],
       "normalPorts": [],
-      "signature": "() => int uses var stdout"
+      "signature": "() => int uses var console"
     }
   ],
   "root": "g0",
