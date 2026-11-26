@@ -63,7 +63,8 @@ function Check {
 
 function ConvertTo-PlainText {
     param([string]$Text)
-    $Text -replace "`e\[[0-9;]*m", ''
+    # [char]27, not "`e": Windows PowerShell 5.1 has no `e escape.
+    $Text -replace ([string][char]27 + '\[[0-9;]*m'), ''
 }
 
 $script:repo = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
