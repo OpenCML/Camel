@@ -751,17 +751,25 @@ std::optional<size_t> accessedPartOf(node_handle_t node, const Type *type) {
         if (op == nullptr) {
             return std::nullopt;
         }
-        const std::string_view uri = (*op)->uri();
-        const bool byName          = uri == ":op/access_key";
-        if (!byName && uri != ":op/access") {
-            return std::nullopt;
-        }
-        if (byName != structType) {
+        // A member read is the operator's shape (`OperShape::Access`, camel/runtime/oper_shape.h),
+        // and which of the two reads it is says itself: the member argument is a string when the
+        // field is named and a number when the place is. `:op/access_key` and `:op/access` differ in
+        // that parameter's type and in nothing a reader would have to ask their URIs about, so the
+        // two things the question needs -- "is this a read", "by name or by place" -- are the
+        // record's answer and the argument's.
+        if (camel::runtime::shapeOfOperator((*op)->oper()) != camel::ops::OperShape::Access) {
             return std::nullopt;
         }
         const auto norm = normInputsOf(node);
         const auto with = withInputsOf(node);
         if (norm.size() != 1 || with.size() != 1) {
+            return std::nullopt;
+        }
+        const Type *memberType = nodeTypeOf(nodeDraftOf(node)->ref(with.front()));
+        const bool byName      = memberType != nullptr && memberType->code() == TypeCode::String;
+        // The aggregate and the member argument are two statements of one read: a struct's members
+        // are named, a tuple's are placed. A pair that disagrees is no read this helper can name.
+        if (byName != structType) {
             return std::nullopt;
         }
         const std::optional<slot_t> member = staticValueOf(nodeDraftOf(node)->ref(with.front()));

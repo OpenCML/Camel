@@ -1838,7 +1838,15 @@ void FunctionEmitter::lowerAccess(Frame &frame, gc_node_ref_t ref) {
         const gc_node_ref_t input = norm[0];
         const Type *type          = g->node(input)->dataType();
         size_t index              = 0;
-        if (uri == ":op/access_key") {
+        // Which of the two member reads this is says itself: the member argument is a string when
+        // the field is named and a number when the place is, so the writer asks that argument's
+        // type instead of the operator's URI (design principles 3.8). What the two operators
+        // differ in is that parameter, and the refusals below keep their own reasons.
+        const camel::runtime::GCNode *memberNode = g->node(with[0]);
+        const bool byName =
+            memberNode != nullptr && memberNode->dataType() != nullptr &&
+            memberNode->dataType()->code() == camel::core::type::TypeCode::String;
+        if (byName) {
             if (type == nullptr || type->code() != camel::core::type::TypeCode::Struct) {
                 refuse(
                     g,
