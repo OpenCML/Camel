@@ -282,7 +282,7 @@ acquire() {
             die_wait "no $want token(s) of $POOL_SIZE within ${WAIT_S} s ($((tms / 1000)) s waited, lane=$LANE): nothing was measured, so this exits 6"
         fi
         # The wait is not silent: a run that queues without saying who it waits for looks exactly
-        # like a run that hung, and on 2026-11-24 that cost a whole measurement.
+        # like a run that hung, and a silent queue has cost a whole measurement.
         if [ $((attempts % 30)) -eq 0 ]; then
             echo "host-tokens: waiting for $want token(s) of $POOL_SIZE (lane=$LANE, holding none, waited $((tms / 1000))s)"
             show | sed 's/^/  /'
