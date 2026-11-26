@@ -1,0 +1,72 @@
+/**
+ * The extents `conv2d`'s `_shaped` gradients answer when the stride does not divide the window's
+ * travel, and the extents the plain spellings answer for the same call.
+ *
+ * Input [1, 1, 6, 6], kernel [1, 1, 3, 3], stride 2, no padding: the convolution's result is
+ * [1, 1, 2, 2], because `OH = floor((H + 2*padding - KH) / stride) + 1` = floor(3 / 2) + 1 = 2. The
+ * `_shaped` spellings read that definition backwards -- `H = (OH - 1) * stride + KH - 2*padding` --
+ * which recovers the *smallest* input that produces this `OH`, five, and not the six the tensor has:
+ * `(6 - 3) % 2 = 1`, and the row no window reads leaves no trace in `OH`. The same inversion on the
+ * kernel's side recovers the *largest* kernel that fits, four instead of three.
+ *
+ * Three readings, one line each:
+ *   plain    conv2d_input_grad(x, w, dy, 2)                 the extents of the operand it reads
+ *   derived  conv2d_input_grad_shaped(w, dy, 2)             the type's answer (folded: static)
+ *   value    conv2d_input_grad_shaped(w, opaque(dy), 2)     the kernel's answer (the shape it builds)
+ *
+ * `opaque` hands its argument on with a type that states no extents, which is what a reverse rule
+ * holds (design principles 5.4): the call then has no static extents, so the fourth line's numbers
+ * are the ones the kernel derived and allocated, not the ones the type folded.
+ *
+ * Red when: a `_shaped` answer is not the extents of the operand whose gradient it is -- that is,
+ * when the derived input's extents are not `plain dx`'s and the derived kernel's are not `plain
+ * dw`'s. With a stride that divides, all four readings agree; this case picks the stride that does
+ * not, which is where the backward reading loses the remainder.
+ */
+import {
+    conv2d_bias_grad,
+    conv2d_bias_grad_shaped,
+    conv2d_input_grad,
+    conv2d_input_grad_shaped,
+    conv2d_kernel_grad,
+    conv2d_kernel_grad_shaped
+} from nn
+import { dim, numel, ones, shape } from tensor
+
+/// The same tensor, under a type that states no extents.
+func opaque(t: f32[...]) => f32[...] {
+    return t
+}
+
+func main() => int sync {
+    let x = ones::<f32>([1, 1, 6, 6])
+    let w = ones::<f32>([1, 1, 3, 3])
+    let b = ones::<f32>([1])
+    let dy = ones::<f32>([1, 1, 2, 2])
+
+    let dx = conv2d_input_grad(x, w, dy, 2)
+    let dw = conv2d_kernel_grad(x, w, dy, 2)
+    let db = conv2d_bias_grad(b, dy)
+    let dbs = conv2d_bias_grad_shaped(dy)
+    `plain  dx={} dw={}`->format<shape(dx), shape(dw)>->println
+    `bias   plain={} shaped={}`->format<shape(db), shape(dbs)>->println
+
+    let sdx = conv2d_input_grad_shaped(w, dy, 2)
+    let sdw = conv2d_kernel_grad_shaped(x, dy, 2)
+    `derived dx={} dw={}`->format<shape(sdx), shape(sdw)>->println
+
+    let vdx = conv2d_input_grad_shaped(w, opaque(dy), 2)
+    let vdw = conv2d_kernel_grad_shaped(opaque(x), dy, 2)
+    `value  dx={}x{} dw={}x{} numel={},{}`->format<dim<2>(vdx), dim<3>(vdx), dim<2>(vdw), dim<3>(vdw), numel(vdx), numel(vdw)>->println
+
+    // The same readings with a stride that divides: [1, 1, 7, 7] at stride 2 gives a [1, 1, 3, 3]
+    // result and (7 - 3) % 2 = 0, so the backward reading recovers the extents exactly and the fold
+    // and the kernel both state them. This is the control for the line above: the inversion is
+    // right where the remainder is zero, and the defect is the remainder.
+    let x7 = ones::<f32>([1, 1, 7, 7])
+    let dy7 = ones::<f32>([1, 1, 3, 3])
+    let d7x = conv2d_input_grad_shaped(w, dy7, 2)
+    let d7w = conv2d_kernel_grad_shaped(x7, dy7, 2)
+    `divides dx={} dw={}`->format<shape(d7x), shape(d7w)>->println
+    return 0
+}
