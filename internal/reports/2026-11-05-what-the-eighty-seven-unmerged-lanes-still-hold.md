@@ -135,7 +135,7 @@ D 里的 `hold/fsh-dev` 与 `release` **只列不判处置**（作者的钱 / �
 | `lane-reverse` | `c+1` `f3/+150−41` | `10e097354`（同一句 subject；`modules/transforms/transpose.cpp#buildTransposeLoop` 的"rounds are undone from the last to the first"已在 develop） |
 | `lane-typelaw` | `c+1` `f3/+34−26` | `c6bcbdb70`（develop 的 `stdlib/signatures/transforms.cml#transpose` 与 `docs/stdlib-reference.md#transpose` 已是 `transpose(f)(1.0)` 那一版） |
 | `lane-zeroplan` | `c+4` `f7/+208−3` | `7374711ad`：它新增的 5 个文件（`scripts/plan-dir-markers.mjs` + 四个 `test/plans/**/README.md`）与 develop **逐字节相同**；只剩 `test/tools/run-tests.mjs` 那一半 develop 已另写 |
-| `lane-sigtable` | `c+4` `f1/+117−1` | **要改的页已经不在 `questions/` 了**：`git cat-file -e origin/develop:internal/questions/2026-11-03-who-carries-the-forward-halfs-intermediate-values.cn.md` 退出 128，页在 `internal/reviews/` 下（随 fsh-dev 的 `fdf5f36b7` 进来）。四笔提交改的全是正文 |
+| `lane-sigtable` | `c+4` `f1/+117−1` | **要改的页已经不在 `questions/` 了**：`git cat-file -e origin/develop:internal/reviews/2026-11-03-who-carries-the-forward-halfs-intermediate-values.cn.md` 退出 128，页在 `internal/reviews/` 下（随 fsh-dev 的 `fdf5f36b7` 进来）。四笔提交改的全是正文 |
 | `lane-gaterepo` | `c+1` `f4/+1582` | **闸门入口已在树里**，且已被重写取代：`internal/tools/camel-remote.ps1` 在 develop 上经 `20a2eaacb`、`d603372fc`、`e2066057d` 三次改写，与分支那份 DIFF；只差 `internal/tools/camel-remote.local.ps1.example` 一件（`git log origin/develop --` 该路径 0 命中，**从没进过 develop**）。这一件另开一笔，不要把整条合回来 |
 
 ## 6. D 类：探针与保留（11 条）

@@ -17,7 +17,7 @@ git log --all --oneline -S'place_nowait'    # 只命中 bde4db933
 
 | 位置 | 是什么 |
 |---|---|
-| `internal/questions/2026-11-03-is-the-unused-sync-block-warning-reachable-at-all.cn.md:49` | 只有这一处，是一句**待办叙述**，不是代码 |
+| `internal/reviews/2026-11-03-is-the-unused-sync-block-warning-reachable-at-all.cn.md:49` | 只有这一处，是一句**待办叙述**，不是代码 |
 
 全历史只有一笔含这个字面量：**`bde4db933`**（docs，11-03 17:21）。也就是说 `place_nowait`
 **从来不是代码里的标识符**——没有声明、没有调用点、没有注释提到它；它不是被删掉的，是从来没进过 `src/`。

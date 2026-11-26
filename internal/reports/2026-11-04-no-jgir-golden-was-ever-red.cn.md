@@ -6,7 +6,7 @@
 
 > 重建 `std::jgir` 的 golden，并在提交正文里写清「变的不是数」。
 
-它唯一的出处是 `internal/questions/2026-11-04-does-the-library-graphs-node-numbering-drift-with-a-laws-declaration.cn.md` 第 3 节「默认（照此做）」的第 1 条：「重建基线，并在提交正文写清『这不是数值变化，是四条律各少一个参数端口带来的节点下标平移』」。
+它唯一的出处是 `internal/reviews/2026-11-04-does-the-library-graphs-node-numbering-drift-with-a-laws-declaration.cn.md` 第 3 节「默认（照此做）」的第 1 条：「重建基线，并在提交正文写清『这不是数值变化，是四条律各少一个参数端口带来的节点下标平移』」。
 
 **为它背书的读数：没有。** 那一页引的两个数族（`"origin": 37871 → 37875`、`"line": 868 → 872`，节点数两侧都是 120）来自**一次手工 jgir dump 对比**，不是任何一次计划运行；「节点数相等」也只是那次手工对比里的计数。也就是说：这条待办从一页**问句**的默认建议，直接变成了施工指令，中间没有任何一次红色计划为它背书。
 

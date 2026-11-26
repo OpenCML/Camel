@@ -48,7 +48,7 @@ error[RuntimeDiag::InvalidArgument]: Invalid argument of 'graph.id': the node be
 ## 5. 三处不属于本车道、但测到了的读数
 
 1. **`region` 的编号是拼写。** 两张**互相独立**的循环图，只是两条语句对调，`std::jgir canonical=true` 给出**两个**哈希；差异**只在**节点的 `region` 字段和 `regions[]` 的 `owner` 次序 —— 区域 id 跟着源序走。这是比尾部更大的已有泄漏，落点在打印文档的那一侧，不在本车道允许的文件里。① 的判据对因此刻意只用**一个**循环，不让这个混淆混进来。给下一轮：`region` 该不该也是规范号。
-2. **`docs/stdlib-reference.md` 在基线就与源不符。** `stdlib/vjp.cml` / `grad` 的两段 2026-11-18 裁定（`split` 在哪儿切）在源里有、文档里没有，所以基线上 `node scripts/stdlib-reference.mjs --verify-doc` 是红的。本车道改了 `stdlib/graph.cml` 的文档注释，必须重生成，于是那次重生成**必然**把这两段一起带上（生成物的差异不手解）。结果是 `--verify-doc` 从红变绿。副作用：`check-doc-links --citations` 多了 1 条未验证引用 `internal/reports/2026-11-18-nested-transforms.cn.md`（那份报告属于另一条车道，本树里还没有）。基线本来就是 15 条，现在是 17 条 —— 一条来自上面这次重生成，一条是本报告（本报告写入后消失）。
+2. **`docs/stdlib-reference.md` 在基线就与源不符。** `stdlib/vjp.cml` / `grad` 的两段 2026-11-18 裁定（`split` 在哪儿切）在源里有、文档里没有，所以基线上 `node scripts/stdlib-reference.mjs --verify-doc` 是红的。本车道改了 `stdlib/graph.cml` 的文档注释，必须重生成，于是那次重生成**必然**把这两段一起带上（生成物的差异不手解）。结果是 `--verify-doc` 从红变绿。副作用：`check-doc-links --citations` 多了 1 条未验证引用 `internal/plans/2026-11-18-nested-transforms.cn.md`（那份报告属于另一条车道，本树里还没有）。基线本来就是 15 条，现在是 17 条 —— 一条来自上面这次重生成，一条是本报告（本报告写入后消失）。
 3. **`include/camel/runtime/region_roots.h` 的头不是规范形式**（第 3 行 `#pragma once` 前没有空行），基线就是这样，`headers --check` 在基线上也红。
 
 ## 6. 门禁读数

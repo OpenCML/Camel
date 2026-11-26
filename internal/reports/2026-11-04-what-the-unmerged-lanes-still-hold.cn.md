@@ -69,7 +69,7 @@
 | lane-rpath | 2 | 88 | 仍然独立 | GLIBCXX 坑与新安装的 rpath/`libs/` 记录（`internal/archive/pitfalls.cn.md`、`scripts/`） |
 | lane-rpathdoc | 1 | 2 | 仍然独立 | 只改 pitfalls 里那一行，把根修（`libs/libstdc++.so.6` + `$ORIGIN`）写进去；develop 那行仍是旧版（两处标记 0 命中） |
 | lane-sigmoid2 | 3 | 240 | 部分已被取代 | 文档那笔已进；`tanh_gradient_through_the_library.cml` 与 develop 逐字节相同；`stdlib/rulesets/jvp.cml` 的写法未进——develop 由 `b93074169` 用另一种写法（由输出取斜率）覆盖同一能力 |
-| lane-sigtable | 4 | 118 | 已过期 | 它续写的 `internal/questions/2026-11-03-who-carries-the-forward-halfs-intermediate-values.cn.md` 已被作者挪进 `internal/reviews/`，questions/ 里那份不在了 |
+| lane-sigtable | 4 | 118 | 已过期 | 它续写的 `internal/reviews/2026-11-03-who-carries-the-forward-halfs-intermediate-values.cn.md` 已被作者挪进 `internal/reviews/`，questions/ 里那份不在了 |
 | lane-slopes-wip | 3 | 176 | 仍然独立 | 三个斜率钉在整数组上，并按中心差分与引擎自己的前向对过。**有测试**（2 个新用例） |
 | lane-splitproj | 2 | 69 | 部分已被取代 | 文档那笔已进；`modules/transforms/split.cpp`"循环带上它后半段读到的每个参数的值"未进 |
 | lane-stdlibref | 1 | 18 | 已被取代 | `docs/stdlib-reference.md#may_be_rearranged` 整段（含 `graph::may_be_rearranged` 的实现指向）今天逐字在 develop 上 |

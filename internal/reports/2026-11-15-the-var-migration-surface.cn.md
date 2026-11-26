@@ -104,7 +104,7 @@ G 的内部：39 处被写、7 处只读。
 
 这一类不在作者给的 A–F 里，但它是「281 个声明 `var` 的文件」里最大的一块之一，而且**它决定了迁移能不能收尾**：
 
-- 3.5 新条款说「模块顶层只有声明……顶层的 `var` 没有用处：编译错误」，但 `test/plans/feat/compile/state_escape.plan.toml` 开头明说这半条**不在那一批**落地：「until then a module `var` works as it did -- the one way out this plan does not refuse」，并说加上拒绝会「246 plan entries go red」、要连带迁 35 个用例和 2 个文档例子，还指向一页 `internal/questions/2026-11-14-who-migrates-the-module-level-var.cn.md`——**那一页在树里不存在**（`internal/questions/` 只有 `README.md`）。
+- 3.5 新条款说「模块顶层只有声明……顶层的 `var` 没有用处：编译错误」，但 `test/plans/feat/compile/state_escape.plan.toml` 开头明说这半条**不在那一批**落地：「until then a module `var` works as it did -- the one way out this plan does not refuse」，并说加上拒绝会「246 plan entries go red」、要连带迁 35 个用例和 2 个文档例子，还指向一页 `internal/reviews/2026-11-14-who-migrates-the-module-level-var.cn.md`——**那一页在树里不存在**（`internal/questions/` 只有 `README.md`）。
 - 形状上这 46 处不是「局部状态」：`counter.cml`、`counter_lib.cml`（`export var count`）是**跨模块共享状态**，`captured_write_value.cml` 的 `p/q/n/m` 是四个函数共用的累加器。改成 `Ref` 是最直接的（`Ref` 是句柄、可以到处传），但有些用例的语义就是「顶层单元被 import 的所有模块看见」，改成 `Ref` 之后**输出可能变**（谁先写、`import` 的求值顺序）。
 - 结论：G **不能整类机械**；而且它是 37 个文件的期望输出会变成编译错的那一批，必须先有裁定。
 

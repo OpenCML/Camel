@@ -4,7 +4,7 @@
 - 车道：`lane-refcell`；基线 `origin/develop` = `eedfb3da0`
 - 裁定：作者 `9d29939c4`（merge `develop` 进 `fsh-dev` 的提交说明最后一句，逐字）
   **「answer: a cell holding a Ref is a holder, and the cell should go」**
-- 前史：`internal/questions/2026-11-18-a-cell-holding-a-ref-is-neither-counted-nor-checked.cn.md`
+- 前史：`internal/reviews/2026-11-18-a-cell-holding-a-ref-is-neither-counted-nor-checked.cn.md`
   （问句与三条路；第 4 节的默认建议「先只改判断」已随裁定作废——裁定给的答案比那页的默认更强）
 
 ## 1. 结论

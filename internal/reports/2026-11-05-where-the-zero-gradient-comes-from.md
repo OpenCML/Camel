@@ -4,7 +4,7 @@
 > `!hasTangentSpace(...)` 之后（`:2935` 那处先判 `anyReceiver`），缺律时走的是拒绝表；我们也没有出现过
 > 「`contribution=0` 而类型有切空间」那种读数。**答案在候选一，但对象不是「算子节点」而是 `fill`**：两张图
 > 里都有 `fill`（`8:fill`、`5:fill`），`operators=0` 只是我数的那一列（`Oper`）是零。**问题页：
-> `internal/questions/2026-11-05-does-the-transpose-of-a-tuple-construction-hand-each-member-its-cotangent.cn.md`**；
+> `internal/reviews/2026-11-05-does-the-transpose-of-a-tuple-construction-hand-each-member-its-cotangent.cn.md`**；
 > 本页保留两个候选与各自的读数要求，因为它们是排除过程，而不是答案。
 
 **待查的名字**：`has_aux.library.composition` 在反向组合下答 `grad=0.0`（引擎答 `6.0`）。

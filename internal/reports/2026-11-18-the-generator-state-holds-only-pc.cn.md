@@ -3,7 +3,7 @@
 - 日期：2026-11-18
 - 车道：`lane-genhalt`；基线 `origin/develop` = `e471db459`
 - 裁定：作者 `6ce3bf1f2` 的提交说明第二段，**「answer: drop the generator's halt bit」**
-- 前史：`internal/questions/2026-11-18-generator-halt-has-no-reader.cn.md`（问句、两条路、默认建议走的是路 B）；
+- 前史：`internal/reviews/2026-11-18-generator-halt-has-no-reader.cn.md`（问句、两条路、默认建议走的是路 B）；
   `internal/reports/2026-11-16-the-state-tuple-holds-nothing-but-pc-and-halt.cn.md`（`S = (pc, halt)` 那页读数，
   **一个字节没动**：它是记录，不是关于今天的树的断言）
 

@@ -378,7 +378,7 @@ function 'main' uses the operator ':op/slice_sub' on values of type 'float[2, 3]
 读数：真翻译 **0**、换桶 **0**、被拒 **15 → 15**（数字没动，动的是数字背后的原因）；坏消息说得清楚
 也算一笔。判据进页：**分母错过的读数只能当趋势；要把趋势变成结论，先把尺子重写一遍并给出复现命令。**
 
-这一处的答案不在翻译侧，已经成页交给作者：`internal/questions/questions-2026-10-31-does-rt-array-carry-a-shape.md`
+这一处的答案不在翻译侧，已经成页交给作者：`internal/reviews/questions-2026-10-31-does-rt-array-carry-a-shape.md`
 （`rt::Array` 要不要带形状，A/B/C 三个代价各一行）。页里还记着查证时撞见的一条**今天就印错**的事实：多维
 字面量 `float[3, 2] = [[1.0, 2.0], [3.0, 4.0], [5.0, 6.0]]` 生成 `rt::Array<double>{1.0, 2.0, 3.0}`、印
 `[1.0, 2.0, 3.0]`、exit 0，而 `std::fvm` 印三行——不是拒，是错。**这比拒绝更该先修。**

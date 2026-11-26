@@ -20,7 +20,7 @@
 | 19:35 | 裸 `transpose` 上的 `idx_arr_t` 不走这条路，长度由 `extent_of` 从类型取 | `extent_of::<A>()`；`7ea644415` | 否 |
 | 19:55 | 还差的两处注释（讲"第 `at` 格是第 `at` 个参数"）删掉 | `modules/transforms/transpose.cpp`、`modules/transforms/split.cpp`；`34b659107` | 否 |
 | 19:55 | 闭包成员是已知值（捕获的常量），不是线性输入，没有余切可收——乙，不收；`wantsCotangent` 对闭包端口答 `false` | `modules/transforms/transpose.cpp#buildTransposeMember` 的 `wantsCotangent`；`bbfc003ec`（合并 `a8fa16870`） | 否 |
-| 19:55 | 七条从答对变拒绝的成因（裁定说是 `forward` 不处理闭包端口）**前提没成立**：`forward` 的闭包端口转发早已在 `236d06f37`，真正缺的是 `reachesAParticipant` 只走 normal 列表 | `modules/transforms/transpose.cpp#reachesAParticipant`（走两张输入列表）；`bbfc003ec`；实测见 `internal/questions/2026-11-04-who-states-the-extents-a-product-law-reads.cn.md` | 否 |
+| 19:55 | 七条从答对变拒绝的成因（裁定说是 `forward` 不处理闭包端口）**前提没成立**：`forward` 的闭包端口转发早已在 `236d06f37`，真正缺的是 `reachesAParticipant` 只走 normal 列表 | `modules/transforms/transpose.cpp#reachesAParticipant`（走两张输入列表）；`bbfc003ec`；实测见 `internal/reviews/2026-11-04-who-states-the-extents-a-product-law-reads.cn.md` | 否 |
 | 19:55 | 两条元组用例静默变 0 ⇒ 有依赖线性输入的值被放进了闭包成员，要逐个打出来找到并修 | 成因不是"塞进闭包成员"：`Fill` 把元组成员放在 `<>` 输入里，而 walk 只走了 normal 列表，元组件的余切被丢掉；`bbfc003ec` | 否（缺陷已闭合，不必另开排查） |
 | 19:55 | 修好后两条照旧答 `(3.0)` 与 `(1.0)/(3.0)`，且 `wantsCotangent` 对闭包端口答 `false` | `test/plans/feat/compile/transforms.plan.toml` 的 `transpose_tuple_component.two_reads_of_one_tuple_add`、`transpose_no_tangent.tuple_member`；读数见本车道闸门 | 否 |
 | 19:55 | 页里那个"阈值"不用写：这条规则不随用例数改变 | `internal/reviews/2026-11-04-does-a-closure-members-cotangent-have-a-slot.cn.md` §3 保留为当时的默认，页已归档 | 否 |
@@ -29,7 +29,7 @@
 
 | 时间戳 | 裁定一句话 | 落点 | 是我们的活？ |
 | --- | --- | --- | --- |
-| 19:55 | 七条里 1 条回到原数，另 6 条往前一步停在 `skip=cotangent-needs-a-value uri=tensor:multiply`：律读的是它正给余切的那个切向操作数的形状，而 `float[..]` 不写形状 | `stdlib/rulesets/transpose.cml#mul_tensor_t`（由规则把长度写出来）；待裁页 `internal/questions/2026-11-04-who-states-the-extents-a-product-law-reads.cn.md` 默认甲 | 是，但不在本车道：要另开一条 `stdlib` 车道（`lane-batch3`、`lane-chainplace` 都不做它） |
+| 19:55 | 七条里 1 条回到原数，另 6 条往前一步停在 `skip=cotangent-needs-a-value uri=tensor:multiply`：律读的是它正给余切的那个切向操作数的形状，而 `float[..]` 不写形状 | `stdlib/rulesets/transpose.cml#mul_tensor_t`（由规则把长度写出来）；待裁页 `internal/reviews/2026-11-04-who-states-the-extents-a-product-law-reads.cn.md` 默认甲 | 是，但不在本车道：要另开一条 `stdlib` 车道（`lane-batch3`、`lane-chainplace` 都不做它） |
 | 18:55 | 发布 wheel 时照 A 带上运行时，并在发布说明里写明体积变化 | 发布车道（`changes.log`、发布说明）；体积已量到并记在 `internal/archive/pitfalls.cn.md` 的 GLIBCXX 行（wheel 约 +8 MB 压缩后） | 是，发布时才做 |
 | 19:35 | 用例的 `desc` 仍在描述一条已经不再打印的 `TRANSPOSE-NEEDS ... param=0` | `test/plans/feat/compile/transforms.plan.toml` 的六条 `desc`；`modules/` 里 0 处 | 是（文案陈旧，不是判据） |
 

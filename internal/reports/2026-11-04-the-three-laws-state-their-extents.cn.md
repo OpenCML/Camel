@@ -122,7 +122,7 @@ TRANSPOSE function=split_of_jvp_of_total_backward skip=cotangent-needs-a-value u
 `transpose_hand_closed_lambda.same_answer_as_the_cut` 上读作 `:op/mul_d position=0`，同一句话。
 
 这就是已存在的待裁页
-`internal/questions/2026-11-04-does-a-closure-members-cotangent-have-a-slot.cn.md`
+`internal/reviews/2026-11-04-does-a-closure-members-cotangent-have-a-slot.cn.md`
 （它第 1 节第 4 条量的就是这条拒绝），落点在 `modules/transforms/transpose.cpp#buildTransposeMember` 的
 `wantsCotangent` 兜底 `return true`，不在规则里。**本车道按规定不碰 `transpose.cpp` / `split.cpp`**，
 所以这一条留给那条车道；`relu_gradient_through_the_library` 的红不是本车道造成，也不是本车道能消的。

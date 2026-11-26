@@ -251,4 +251,4 @@ A/B（同一份规则、同一份程序，只差这一行变换）：关掉 →
 一档 21 条里只有 `exp` 是实测的，其余 20 条的依据是声明读法（同一个 `OpDef` 形状），要逐条落地时一条一条量。
 二档 9 条里 **7 条**已落地（`reshape`/`unsqueeze`/`transpose`/`permute`/`concat`/`dim`/`where`，四个后端、读数与数值都在上面的表里），余 2 条（`softmax`/`log_softmax`）的原因是同一个：可选的角度参数让同一个键有两种端口数，见文末那页。
 
-`softmax` / `log_softmax` 没落地，原因写成一页问作者的：`internal/questions/2026-11-01-optional-with-arguments-and-the-batching-key.md`（声明里的默认值今天没有读者、端口角色由调用写法决定、变换手里没有默认值可填；树里 `operand(i, default)` 只有 1 处 2 个算子、0 个有键）。
+`softmax` / `log_softmax` 没落地，原因写成一页问作者的：`internal/reviews/questions-2026-11-01-optional-with-arguments-and-the-batching-key.md`（声明里的默认值今天没有读者、端口角色由调用写法决定、变换手里没有默认值可填；树里 `operand(i, default)` 只有 1 处 2 个算子、0 个有键）。
