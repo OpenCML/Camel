@@ -135,7 +135,7 @@ const DEFAULTS = {
     buildHost: '',
     buildProbe: 'cat /proc/loadavg; nproc; pgrep -fc "ctest|camel" || true',
     rulesFile: 'internal/collab/rules.md',
-    rulesRefreshMinutes: 30,
+    rulesRefreshMinutes: 60,
     // Unread dispatches the coordinator may have queued before a new one is refused with 'reorganize'.
     queueLimit: 3,
     // A tool call in the claimed session that has not returned after blockWarnMinutes is reported;
