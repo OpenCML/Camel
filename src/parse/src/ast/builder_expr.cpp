@@ -1620,8 +1620,27 @@ Value Builder::visitBlockHeaded(syn::Node context, DataType type) {
         *stmts << binding;
         // The body's own statements follow the binding, in the order they were written; a body
         // written as one expression is one expression statement, as visitBlockExpr made it.
-        for (const auto &stmt : *bodyNode->atAs<RepeatedLoad>(0)) {
-            *stmts << stmt;
+        //
+        // An edit block's body is a block of its own inside this one, not a range of statements
+        // spliced into it. A `return` written in the body ends the block it is written in, and
+        // design 15.1 says it ends the body and the block still commits: spliced in, that `return`
+        // would give the value of the block the head stands for and the hand-over written after it
+        // would be a statement after a `return` -- refused, and the block would give the returned
+        // expression instead of its function.
+        if (type == DataType::EditExpr) {
+            node_ptr_t bodyBlock = createNodeAs<StmtBlockLoad>();
+            setNodeTokenRangeByContext(bodyBlock, context);
+            node_ptr_t bodyStmts = createNodeAs<RepeatedLoad>("Stmt");
+            setNodeTokenRangeByContext(bodyStmts, context);
+            for (const auto &stmt : *bodyNode->atAs<RepeatedLoad>(0)) {
+                *bodyStmts << stmt;
+            }
+            *bodyBlock << bodyStmts;
+            *stmts << bodyBlock;
+        } else {
+            for (const auto &stmt : *bodyNode->atAs<RepeatedLoad>(0)) {
+                *stmts << stmt;
+            }
         }
         // An edit block's value is the function its commit gives, not the last expression its
         // body writes (graph-editing design 6, 15.1), so the block ends by naming what the commit

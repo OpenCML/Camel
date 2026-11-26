@@ -1,0 +1,24 @@
+// The other half of the counter-proof pair: the same block, the same answer, and the body's last
+// expression changed from 42 to 43. The reading that differs between the twins is only the body's
+// line; the answer is the function's in both, so the tail of the body is not what the block hands on.
+func report(v: int) => int sync {
+    println('body last expression=', v)
+    return v
+}
+
+func inc(x: int) => int {
+    return x + 1
+}
+
+func family(f: (x: int) => int) => int sync {
+    let g = edit d = f { report(43) }
+    return match g {
+        case error e => -1
+        case h => h(5)
+    }
+}
+
+func main() => int sync {
+    println('answer=', family(inc))
+    return 0
+}

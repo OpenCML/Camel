@@ -2,6 +2,7 @@
 // writes (graph-editing design 6 and 15.1): this body ends with an int, and the block is still the
 // function, so it type-checks where that function type is expected. The types are written out
 // rather than left to a type parameter, so that what the case pins is the block and nothing else.
-func value_is_the_function(f: (x: float) => float) => ((x: float) => float) {
+// The `!` is the block's: it is the function its commit gives, or the error that stopped the commit.
+func value_is_the_function(f: (x: float) => float) => ((x: float) => float)! {
     return edit d = f { 42 }
 }

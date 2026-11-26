@@ -1,0 +1,25 @@
+// One half of the counter-proof pair: the body's last expression is `report(42)`, which runs and
+// says what it was, and the block's value is the function all the same. The twin case writes 43 in
+// that place; the two say different things about the last expression and the same thing about the
+// block, which is what pins the block's value to the function rather than to the body's tail.
+func report(v: int) => int sync {
+    println('body last expression=', v)
+    return v
+}
+
+func inc(x: int) => int {
+    return x + 1
+}
+
+func family(f: (x: int) => int) => int sync {
+    let g = edit d = f { report(42) }
+    return match g {
+        case error e => -1
+        case h => h(5)
+    }
+}
+
+func main() => int sync {
+    println('answer=', family(inc))
+    return 0
+}

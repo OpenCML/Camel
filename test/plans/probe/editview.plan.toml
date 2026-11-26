@@ -35,11 +35,49 @@ timeout_ms = 20000
 
 [[tests]]
 name = "editview.edit_value_is_not_the_body"
-desc = "The counter-proof: the same block where an `int` is expected is refused, so the body's last expression is not what decides the block's value."
+desc = "The counter-proof, first half: the body's last expression is `report(42)`, which runs and says so, and the block's value is still the function. Its twin writes `report(43)` in that place; the answer is the function's in both, only the body's own line differs."
 kind = "behavior"
-case = "../../cases/probe/editview/edit_value_is_not_the_body.cml"
-args = ["check", "${case}"]
-expect_exit = 1
+case = "../../cases/probe/editview/body_last_expression_42.cml"
+args = ["${case}", "std::nvm"]
+backends = ["nvm"]
+expect_exit = 0
+expect_stdout_contains = ["body last expression= 42", "answer= 6"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "editview.edit_value_is_not_the_body_twin"
+desc = "The counter-proof, second half: the same block with `report(43)` as the body's last expression. Read beside its twin: what the body's tail changes is the body's own line, and what it does not change is the answer, so the block's value is the function and not that tail."
+kind = "behavior"
+case = "../../cases/probe/editview/body_last_expression_43.cml"
+args = ["${case}", "std::nvm"]
+backends = ["nvm"]
+expect_exit = 0
+expect_stdout_contains = ["body last expression= 43", "answer= 6"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "editview.body_fault_keeps_function"
+desc = "An edit block whose body faults: the block's value is the error the fault became, and the function the head was given answers as it did before -- the changes of an edit block are all in or not at all (design 6, 15.1)."
+kind = "behavior"
+case = "../../cases/probe/editview/body_fault_keeps_function.cml"
+args = ["${case}", "std::nvm"]
+backends = ["nvm"]
+expect_exit = 0
+expect_stdout_contains = ["block= -1", "old= 6"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "editview.body_return"
+desc = "A `return` in an edit block's body ends the body, not the function the block stands in, and the block still commits (design 15.1). The statement after the block runs, and the answer is the function's, not the value the body returned."
+kind = "behavior"
+case = "../../cases/probe/editview/body_return.cml"
+args = ["${case}", "std::nvm"]
+backends = ["nvm"]
+expect_exit = 0
+expect_stdout_contains = ["after the block", "answer= 6"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 

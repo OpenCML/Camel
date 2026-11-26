@@ -23,6 +23,7 @@
 #include "camel/core/type/text.h"
 #include "camel/core/type/typecall.h"
 #include "camel/core/type/typevar.h"
+#include "camel/execute/fault_isolation.h"
 #include "camel/parse/ast/type.h"
 #include "camel/utils/escape.h"
 #include "camel/utils/number_text.h"
@@ -160,7 +161,7 @@ a block is already read elsewhere (a decorated block, an arm whose value is used
 value is the last statement's, and the closure is made where the block is written, so a name the
 body uses from outside is captured as any block's is.
 Both kinds have the same lowering here. What differs -- `view` has no draft, `edit` commits one --
-is what the body does with the binding, not how the block becomes a value.
+is what the body does with the binding and what the block hands on.
 */
 node_ptr_t Builder::visitBlockHeaded(const AST::node_ptr_t &ast) {
     ENTER("BlockHeaded");
@@ -170,13 +171,29 @@ node_ptr_t Builder::visitBlockHeaded(const AST::node_ptr_t &ast) {
     node_ptr_t typeNode  = tree_->makeType(type);
     node_ptr_t funcNode  = tree_->makeFunc("");
     *funcNode << typeNode << execNode;
-    node_ptr_t linkNode = tree_->makeLink(0);
-    *linkNode << funcNode;
     setOriginFromAst(context_, typeNode, ast, camel::source::OriginKind::GctNode, "gct.block.type");
     setOriginFromAst(context_, funcNode, ast, camel::source::OriginKind::GctNode, "gct.block.func");
-    setOriginFromAst(context_, linkNode, ast, camel::source::OriginKind::GctNode, "gct.block.call");
+    // An edit block's changes are all in or not at all (design 6, 15.1): the block's value is the
+    // function those changes make of the one the head named, or the error that stopped them, and
+    // never the fault itself. The steps therefore run inside a fault boundary, and what the block
+    // hands on is the value of that boundary -- `attempt`'s transform of the closure, called at
+    // the place the block stands, which is `T!` of the closure's result. A `view` block reads and
+    // changes nothing, so it keeps the plain call: a fault in a view is the program's, not a value.
+    node_ptr_t valueNode = nullptr;
+    if (ast->loadAs<AST::BlockHeadLoad>()->dataType() == AST::DataType::EditExpr) {
+        node_ptr_t transform = tree_->makeLink(1);
+        *transform << tree_->makeDRef(camel::execute::kFaultIsolationName) << funcNode;
+        setOriginFromAst(
+            context_, transform, ast, camel::source::OriginKind::GctNode, "gct.block.isolate");
+        valueNode = tree_->makeLink(0);
+        *valueNode << transform;
+    } else {
+        valueNode = tree_->makeLink(0);
+        *valueNode << funcNode;
+    }
+    setOriginFromAst(context_, valueNode, ast, camel::source::OriginKind::GctNode, "gct.block.call");
     LEAVE("BlockHeaded");
-    return linkNode;
+    return valueNode;
 }
 
 /*
