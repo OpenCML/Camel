@@ -102,6 +102,28 @@ if (argv[0] === '--probe') {
     console.error(found.reason)
     process.exit(1)
 }
+// `--probe-bash`: a PowerShell and a bash that reads Windows paths, for the self-checks that do all
+// of their measuring in bash. On Windows the bash is the one `internal/tools/git-bash.ps1` finds, so
+// the probe and the self-check cannot disagree about which bash they mean.
+if (argv[0] === '--probe-bash') {
+    const found = probe()
+    if (!found.ok) {
+        console.error(found.reason)
+        process.exit(1)
+    }
+    const helper = path.join(REPO_ROOT, 'internal', 'tools', 'git-bash.ps1')
+    const ask =
+        process.platform === 'win32'
+            ? spawnSync(found.exe, ['-NoProfile', '-Command', `. '${helper}'; $b = Get-GitBash; if ($b) { $b; exit 0 } else { exit 1 }`], { encoding: 'utf8' })
+            : spawnSync('bash', ['-c', 'command -v bash'], { encoding: 'utf8' })
+    const where = `${ask.stdout || ''}`.trim()
+    if (ask.status === 0 && where) {
+        console.log(`bash found: ${where}`)
+        process.exit(0)
+    }
+    console.error(process.platform === 'win32' ? 'no Git for Windows bash on this host' : 'no bash on this host')
+    process.exit(1)
+}
 
 const script = path.isAbsolute(argv[0]) ? argv[0] : path.resolve(REPO_ROOT, argv[0])
 if (!fs.existsSync(script)) {
@@ -113,14 +135,27 @@ if (!found.ok) {
     console.error(`the run reached a host its own probe said has a pwsh, and it does not: ${found.reason}`)
     process.exit(127)
 }
-const child = spawnSync(found.exe, [...scriptArgs(script), ...argv.slice(1)], { stdio: 'inherit' })
+const child = spawnSync(found.exe, [...scriptArgs(script), ...argv.slice(1)], {
+    encoding: 'utf8',
+    stdio: ['inherit', 'pipe', 'pipe'],
+    maxBuffer: 64 * 1024 * 1024,
+})
 if (child.error) {
     console.error(`'${found.exe} -File ${script}' could not be started: ${child.error.message}`)
     process.exit(127)
 }
+process.stdout.write(child.stdout || '')
+process.stderr.write(child.stderr || '')
 // A child that died on a signal has no exit code, and a signal is not a pass either.
 if (child.status === null) {
     console.error(`'${found.exe} -File ${script}' ended on signal ${child.signal}`)
     process.exit(126)
+}
+// A self-check whose every check was skipped here measured nothing, and its "0 checks, 0 failed"
+// must not read as green. The count is the last one its summary line printed.
+const counts = [...`${child.stdout || ''}`.matchAll(/\b(\d+) check/g)]
+if (child.status === 0 && counts.length > 0 && Number(counts[counts.length - 1][1]) === 0) {
+    console.error(`${path.basename(script)} ran no check on this host: everything it measures was skipped, which is not a pass`)
+    process.exit(3)
 }
 process.exit(child.status)
