@@ -1,0 +1,29 @@
+/**
+ * A `for ... while` that collects: the rounds are the elements of the input, and the condition
+ * ends them early. The input states its length (`x: f32[4]`) and no dynamic axis is asked for,
+ * so the export *could* state four values for the array -- and it must not: the condition stops
+ * the loop after two rounds here, so how many values the array holds is decided while it runs.
+ * The model leaves that dimension for the run to decide.
+ */
+import { get_env } from env
+import { export_model } from onnx
+import { sum } from tensor
+
+func build(x: f32[4]) => (int[], int) {
+    return loop acc = [] as int[], k = 0 for v in x while k < int(sum(x)) do (acc->append<k>, k + 1)
+}
+
+func main() => string! sync {
+    let x = [2.0, 0.0, 0.0, 0.0] as f32[4]
+    let (xs, k) = build(x)
+    println(len(xs))
+    println(k)
+    return match export_model<out: get_env('ONNX_OUT') ?? ''>(func (x: f32[4]) => (int[], int) {
+        build(x)
+    }, (x)) {
+        case error e => {
+            return e
+        }
+        case v => 'exported'
+    }
+}

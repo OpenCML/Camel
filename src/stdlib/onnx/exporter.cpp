@@ -2521,9 +2521,13 @@ Evaluator::LoopEmission Evaluator::emitLoopScanning(
 // builds the collected values in one pass, and `Builder::collectLoopAppends` only makes a slot of
 // a state that starts empty and whose one use is the append -- so such a state is not carried at
 // all: the scan output is its final value. A state that is not the collection is carried as
-// usual. A loop whose rounds a condition decides (`while`, `for ... while`) is refused when it
-// collects: the model would have to state a length after the run, and the condition reads the
-// array the rounds are still appending to.
+// usual. A loop whose rounds a condition decides (`while`, `for ... while`) collects the same
+// way: the number of values is a run-time quantity, which is what an ONNX scan output's first
+// dimension already is -- the spec leaves it a dimension with neither a value nor a name, so the
+// model states no length for it (see where `tripExtent` is cleared). What such a loop cannot do
+// is read the collection from the condition: the array a round is still appending to is not a
+// value the model has, so the condition is bound to nothing there and a read of it is refused
+// where that read is evaluated.
 
 /// The nodes the body of a collecting loop gives its result from: the state values in state order
 /// and then one collected value per collection slot (camel/runtime/loop.h). Empty when the body's
@@ -2663,13 +2667,6 @@ Value Evaluator::evalLoopNode(Activation &act, gc_node_ref_t ref) {
                 "the body of a loop that collects does not give its result as the tuple of the "
                 "state values and one value per collection slot");
         }
-        if (loop.condRegion() != 0) {
-            unsupported(
-                act,
-                "a loop that collects and checks a condition each round is not exported to ONNX "
-                "yet: how many values it collects is decided while it runs, and the length "
-                "of the collected array would have to be a dimension the model states");
-        }
     }
     std::vector<Value> init(states);
     for (size_t j = 0; j < states; ++j) {
@@ -2790,6 +2787,16 @@ Value Evaluator::evalLoopNode(Activation &act, gc_node_ref_t ref) {
             }
         }
     }
+    if (loop.condRegion() != 0) {
+        // A loop that also checks a condition each round runs *at most* the trip count's rounds:
+        // the condition can end it earlier, so how many values it collects is decided while it
+        // runs even when the iterable's length is stated (`for x in xs while ...`). The array's
+        // first dimension is therefore left for the run to decide, and ONNX states it as a
+        // dimension with neither a value nor a name (onnx/defs/controlflow/old.cc,
+        // `LoopInferenceFunction_opset13`: "per iteration output. first dimension will be number
+        // of iterations but we don't know that value yet" -- it adds an empty dimension).
+        tripExtent.reset();
+    }
 
     // The condition of the first round, on the values the loop starts from: an ONNX Loop checks
     // its condition input before it runs the body, and the source checks the condition of a
@@ -2871,11 +2878,18 @@ Value Evaluator::evalLoopNode(Activation &act, gc_node_ref_t ref) {
             }
         }
         // The condition the next round is checked with: the source's condition on the state this
-        // round produced, which is the state the next round starts from.
+        // round produced, which is the state the next round starts from. `next` holds the carried
+        // states in carried order and *then* the collected values, so a state's next value sits at
+        // its carried position (`carriedAt`), not at its state index.
         std::optional<std::string> cont;
         if (loop.condRegion() != 0) {
             for (size_t j = 0; j < states; ++j) {
-                round.ports.insert_or_assign(loop.condStateParam(j), next[j]);
+                // A state that is the collection is bound to nothing, the same way the body binds
+                // it above: the array the rounds are still appending to is not a value the model
+                // has, and its length so far is the rounds so far.
+                round.ports.insert_or_assign(
+                    loop.condStateParam(j),
+                    fromScan[j].has_value() ? Value{} : next[*carriedAt[j]]);
             }
             cont = emitter_.operand(eval(round, loop.condResult()), TypeCode::Bool);
         }
