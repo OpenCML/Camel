@@ -23,7 +23,9 @@
 #include "camel/core/mm/root_handle.h"
 #include "camel/core/node_attrs.h"
 #include "camel/core/operator.h"
+#include "camel/core/operator_names.h"
 #include "camel/core/operator_semantics.h"
+#include "camel/core/operator_table.h"
 #include "camel/core/rtdata/array.h"
 #include "camel/core/rtdata/func.h"
 #include "camel/core/rtdata/string.h"
@@ -529,23 +531,30 @@ struct AssignmentKind {
 };
 
 AssignmentKind assignmentKindOf(std::string_view uri) {
-    constexpr std::string_view prefix = ":op/assn";
-    if (!uri.starts_with(prefix)) {
+    if (!camel::core::isAssignmentUri(uri)) {
         return {};
     }
-    std::string_view rest = uri.substr(prefix.size()); // "", "_l", "_add", "_add_l", ...
-    if (rest.empty()) {
+    // Which operator a compound assignment follows is a fact of the kernel's name table, not of the
+    // spelling of this URI: `groupOf` answers the group the operator was declared in (`__assn_add__`)
+    // and `plainGroupOfCompoundAssignment` the plain group behind it (`__add__`). A plain write and
+    // the forms that name no operator (`assn_owned`, `assn_i`) answer empty, which is what the type
+    // suffix said before.
+    const std::string group = camel::core::OperatorTable::instance().groupOf(uri);
+    const std::optional<std::string_view> plain =
+        camel::core::plainGroupOfCompoundAssignment(group);
+    if (!plain || plain->size() <= 4) {
         return {.isAssignment = true, .binary = {}};
     }
-    if (rest.front() != '_') {
-        return {};
+    // `__add__` -> `add`; the type tag (`_l`, `_i`, ...) is the part of the URI's tail the group name
+    // does not carry, and the lowering is registered under the tagged URI, so the tag is kept.
+    const std::string_view inner = plain->substr(2, plain->size() - 4);
+    std::string binary         = ":op/";
+    binary.append(inner);
+    const size_t at = uri.rfind(inner);
+    if (at != std::string_view::npos) {
+        binary.append(uri.substr(at + inner.size()));
     }
-    rest.remove_prefix(1);
-    const auto isTypeSuffix = [](std::string_view t) { return t.size() == 1; };
-    if (isTypeSuffix(rest)) {
-        return {.isAssignment = true, .binary = {}};
-    }
-    return {.isAssignment = true, .binary = std::format(":op/{}", rest)};
+    return {.isAssignment = true, .binary = std::move(binary)};
 }
 
 /// Why a variable that is not local to the graph using it cannot be exported.
