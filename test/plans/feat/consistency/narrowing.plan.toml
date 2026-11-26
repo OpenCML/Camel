@@ -154,8 +154,8 @@ verify_script = """
 const lines = input.stderr.split('\n').filter((l) => l.includes('[Warn]'))
 const at = (where, name) => lines.some((l) => l.includes(where) && l.includes(name))
 assert(lines.length === 5, 'five warnings: ' + input.stderr)
-assert(at(':7:19:', 'KnownNotNull') && at(':8:17:', 'KnownNotNull') && at(':11:31:', 'KnownNotNull'), input.stderr)
-assert(at(':9:22:', 'NullTestNeverNull') && at(':10:25:', 'NullTestNeverNull'), input.stderr)
+assert(at(':7:19:', 'KnownNotNull') && at(':8:17:', 'KnownNotNull') && at(':14:31:', 'KnownNotNull'), input.stderr)
+assert(at(':12:22:', 'NullTestNeverNull') && at(':13:25:', 'NullTestNeverNull'), input.stderr)
 assert(lines.some((l) => l.includes("the null case of 'match' is never taken")), input.stderr)
 """
 

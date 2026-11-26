@@ -9,9 +9,9 @@ func describe(x: int?, ready: bool) => string {
             case null => -1
             case v => v * 2
         } // line 8: warned, `match`
-        let c = x != null // line 9: warned, always true
-        let d = if x == null then 'null' else 'set' // line 10: warned, always false
-        let e = if ready then x ?? 1 else 0 // line 11: warned, in a nested arm
+        let c = x != null // line 12: warned, always true
+        let d = if x == null then 'null' else 'set' // line 13: warned, always false
+        let e = if ready then x ?? 1 else 0 // line 14: warned, in a nested arm
         return '{} {} {} {} {}'->format<a, b, c, d, e>
     } else 'none'
 }
