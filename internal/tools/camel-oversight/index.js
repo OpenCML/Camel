@@ -1026,11 +1026,14 @@ export function apply(ctx, rawConfig) {
             loadedFrom: LOADED_FROM,
             reload: 'not-needed',
         }
-        if (!payload.changed) {
-            // The live directory already holds this commit: nothing to reload, and a reload here would
-            // be a hiccup bought for nothing on every push that leaves the plugin alone.
+        if (!payload.changed && outcome.sha === loadedSha) {
+            // The live directory holds this commit and this process loaded it: nothing to reload, and a
+            // reload here would be a hiccup bought for nothing on every push that leaves the plugin alone.
             return answer(res, 200, payload)
         }
+        // Otherwise either the sync just changed the live directory, or something else synced it after
+        // this process started (a sync run by hand) and the process still runs the older files: in both
+        // cases the files on disk are not the ones running, which is what the button is for.
         if (path.resolve(LOADED_FROM).toLowerCase() !== path.resolve(config.liveDir).toLowerCase()) {
             payload.ok = false
             payload.reload = 'refused'
