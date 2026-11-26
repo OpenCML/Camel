@@ -101,7 +101,7 @@ DSH conventions this plugin depends on: a tool's `render(args, value)` returns c
 A long session forgets its skill. Three layers keep the standing rules (`internal/collab/rules.md`) in
 front of it, each measurable: the rules are part of the claimed session's prompt context at every step
 (`promptReach` in `/oversee/state` counts whom the prompt was assembled for); they are injected every
-`rulesRefreshMinutes` (30) and right after a claim; and on sight -- a call to a question tool, or a turn
+`rulesRefreshMinutes` (60) and right after a claim; and on sight -- a call to a question tool, or a turn
 that ends by asking the owner, is answered with a reminder at once; a tool call that blocks the claimed
 session is reported at `blockWarnMinutes` (10) and its turn cancelled at `blockCancelMinutes` (30), queued
 messages kept (`blockExempt` lists tool names that may run long).
