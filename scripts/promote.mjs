@@ -34,6 +34,10 @@
  *   --cleanup <command>     drops the remote run of {worktree}; used when a job ends abnormally
  *   --publish-command <c>   publishes {sha} to develop from {worktree}
  *   --publish-worktree <p>  the tree the publish runs in (default: mergeWorktree of the local settings)
+ *   --tree-maker <command>  makes a missing tree ({repo}, {tree}, {sha}, {hooks}: '-NoHusky' for the
+ *                           measuring tree, empty for the publish tree); the default is
+ *                           internal/tools/new-worktree.ps1, which copies the machine-local settings
+ *                           file and installs the push hooks. A failure ends the job in phase 'tree'
  *   --remote <name>         default origin;  --develop <branch> default develop
  *   --reports <dir>         where the promotion records live in the repository (default internal/reports)
  *   --reports-ref <ref>     the tree the previous promotion is read from (default: the measured tip)
@@ -85,6 +89,8 @@ const DEFAULT_LAYER =
 const DEFAULT_RERUN =
     'pwsh -NoProfile -File "{worktree}/internal/tools/camel-remote.ps1" -Path "{worktree}" -Plan "{plan}" -Tier fast -Jobs 4 -FetchFile summary.json -Latest'
 const DEFAULT_CLEANUP = 'pwsh -NoProfile -File "{worktree}/internal/tools/camel-remote.ps1" -Path "{worktree}" -Clean'
+const DEFAULT_TREE_MAKER =
+    'pwsh -NoProfile -File "{repo}/internal/tools/new-worktree.ps1" -Path "{tree}" -Detach {sha} -FromCheckout "{repo}" -NoFetch {hooks}'
 const DEFAULT_PUBLISH = 'git -C "{worktree}" push {remote} {sha}:refs/heads/{develop}'
 
 function say(line) {
@@ -101,7 +107,7 @@ function fail(code, why) {
 function parseArgs(argv) {
     const out = { positional: [], flags: {} }
     const valued = new Set([
-        'tip', 'repo', 'state-dir', 'layer', 'rerun', 'cleanup', 'publish-command', 'publish-worktree', 'remote',
+        'tip', 'repo', 'state-dir', 'layer', 'rerun', 'cleanup', 'publish-command', 'publish-worktree', 'tree-maker', 'remote',
         'develop', 'reports', 'reports-ref', 'jobs', 'heartbeat-limit', 'heartbeat-interval', 'lines', 'job',
     ])
     const bare = new Set(['publish', 'no-fetch', 'no-verify-publish', 'json'])
@@ -149,6 +155,23 @@ function stateRootOf(flags, repo) {
 
 function fill(template, values) {
     return template.replace(/\{(\w+)\}/g, (whole, key) => (key in values ? String(values[key]) : whole))
+}
+
+// ---------------------------------------------------------------- trees
+
+/**
+ * Makes a tree at `sha` through the tree-maker command and throws, naming what it said, when it did
+ * not. A tree made by a bare `git worktree add` has no machine-local settings file and no push hooks;
+ * the command exists so that "made" and "usable" are one step.
+ */
+async function makeTree({ config, children, dir, repo, tree, sha, hooks, what }) {
+    fs.mkdirSync(path.dirname(tree), { recursive: true })
+    const run = await children.run(fill(config.treeMaker, { repo, tree, sha, hooks: hooks ? '' : '-NoHusky' }), { label: 'tree', cwd: repo })
+    if (run.error || run.code !== 0 || !fs.existsSync(path.join(tree, '.git'))) {
+        const why = run.error ? `could not run: ${run.error.message}` : run.code !== 0 ? `exited ${run.code}` : 'exited 0 but left no tree'
+        const said = tailLog(dir, 8).filter((line) => !/\[tree\] /.test(line)).join(' | ')
+        throw new Error(`the ${what} tree ${tree} could not be made: the tree-maker ${why}${said ? `: ${said}` : ''}`)
+    }
 }
 
 // ---------------------------------------------------------------- liveness, reaping, cleanup
@@ -243,6 +266,7 @@ function doStart(flags) {
             cleanup: flags.cleanup === undefined ? DEFAULT_CLEANUP : flags.cleanup,
             publishCommand: flags['publish-command'] || DEFAULT_PUBLISH,
             publishWorktree: flags['publish-worktree'] || null,
+            treeMaker: flags['tree-maker'] || DEFAULT_TREE_MAKER,
             reports: flags.reports || 'internal/reports',
             reportsRef: flags['reports-ref'] || null,
             jobs: Number(flags.jobs || 8),
@@ -306,7 +330,7 @@ function doStatus(flags, positional) {
     say(`job ${job.id}  tip ${job.tip.slice(0, 12)}  phase ${job.phase}  elapsed ${elapsedOf(job)}`)
     if (job.phase === 'dead') say(`dead: ${job.endedBecause}`)
     if (job.phase === 'cancelled') say(`cancelled: ${job.endedBecause}`)
-    if (job.phase === 'failed') say(`failed: ${job.error}`)
+    if (job.phase === 'failed') say(`failed${job.failedPhase ? ` in ${job.failedPhase}` : ''}: ${job.error}`)
     if (job.verdict) {
         say(`verdict: ${job.verdict}`)
         if (job.promotion) say(`promotion ${job.promotion}, compared with ${job.comparedWith}`)
@@ -433,7 +457,7 @@ async function runWorker(flags) {
         children.killAll()
         if (job && !TERMINAL.has(job.phase)) {
             cleanupRemote(dir, job)
-            updateJob(dir, { phase: 'failed', error: why, endedAt: new Date().toISOString(), children: [] })
+            updateJob(dir, { phase: 'failed', failedPhase: job.phase, error: why, endedAt: new Date().toISOString(), children: [] })
         }
         releaseLock(lockDir, id)
     }
@@ -460,14 +484,17 @@ async function runWorker(flags) {
     const values = { worktree: tree, tip, jobs: config.jobs, repo, remote: config.remote, develop: config.develop, sha: tip }
 
     try {
+        // ---- tree
+        if (!fs.existsSync(path.join(tree, '.git'))) {
+            setPhase('tree')
+            await makeTree({ config, children, dir, repo, tree, sha: tip, hooks: false, what: 'measuring' })
+        }
+
         // ---- measure
         setPhase('measure')
         if (fs.existsSync(path.join(tree, '.git'))) {
             git(tree, ['checkout', '--quiet', '--detach', '--force', tip])
             git(tree, ['clean', '-fdq'])
-        } else {
-            fs.mkdirSync(path.dirname(tree), { recursive: true })
-            git(repo, ['worktree', 'add', '--detach', tree, tip])
         }
         const at = () => git(tree, ['rev-parse', 'HEAD'])
         if (at() !== tip) throw new Error(`the measuring tree is at ${at()}, not at the tip ${tip}`)
@@ -620,7 +647,7 @@ async function runWorker(flags) {
             if (developBefore && git(repo, ['merge-base', '--is-ancestor', developBefore, tip], { allowFailure: true }) === null) {
                 throw new Error(`${config.remote}/${config.develop} (${developBefore.slice(0, 9)}) is not an ancestor of the measured tip, so it would not be a fast-forward`)
             }
-            await publish({ config, repo, tip, dir, out, names: [redsName, durationsName, recordName], promotion, children, values })
+            await publish({ config, repo, tip, dir, out, names: [redsName, durationsName, recordName], promotion, children, values, setPhase })
         }
         clearInterval(beat)
         const final = readJob(dir)
@@ -645,13 +672,17 @@ async function runWorker(flags) {
  * record cannot be inside the commit it names, so the records are committed on top of the tip in the
  * publish tree and what is pushed is the tip itself, not that commit.
  */
-async function publish({ config, repo, tip, dir, out, names, promotion, children, values }) {
+async function publish({ config, repo, tip, dir, out, names, promotion, children, values, setPhase }) {
     let tree = config.publishWorktree
     if (!tree) tree = localSettings(repo).mergeWorktree
     if (Array.isArray(tree)) tree = tree[0]
     if (typeof tree === 'string' && tree.includes(';')) tree = tree.split(';')[0]
     if (!tree || tree.startsWith('<')) tree = path.join(path.dirname(path.dirname(dir)), 'publish-tree')
-    if (!fs.existsSync(path.join(tree, '.git'))) git(repo, ['worktree', 'add', '--detach', tree, tip])
+    if (!fs.existsSync(path.join(tree, '.git'))) {
+        setPhase('publish-tree')
+        await makeTree({ config, children, dir, repo, tree, sha: tip, hooks: true, what: 'publish' })
+        setPhase('publish')
+    }
     if (git(tree, ['status', '--porcelain']) !== '') throw new Error(`the publish tree ${tree} is not clean`)
     git(tree, ['checkout', '--quiet', '--detach', tip])
     const reportsDir = path.join(tree, config.reports)
