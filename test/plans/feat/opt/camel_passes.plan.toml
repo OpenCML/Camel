@@ -300,18 +300,18 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "norma
 
 [[tests]]
 name = "camel_passes.fold.constant_budget.by_camel"
-desc = "A constant above constant_budget is left as the computation that builds it: five million elements would make this dump forty megabytes."
+desc = "A constant above constant_budget is left as the computation that builds it: the budget here is one byte, so the length of an eight-element array keeps its `:struct/len_arr` and is not folded to `8`. The pass declares eight megabytes by default, the size of constant a graphed program may carry before it is left as the computation."
 kind = "snapshot"
 case = "../../../cases/opt/camel_passes/fold_constant_budget.cml"
-args = ["${case}", "opt::fold", "std::gir", "std::nop"]
+args = ["${case}", "opt::fold", "constant_budget=1", "std::gir", "std::nop"]
 snapshot_stream = "stdout"
 golden = "./golden/camel_passes.fold.constant_budget.camel.dot"
 
 [[tests]]
 name = "camel_passes.fold.constant_budget.by_cpp"
-desc = "The reference: the same program through std::cxx::fold, which stops at the same budget."
+desc = "The reference: the same program through std::cxx::fold, which is given the same one-byte budget and leaves the same `:struct/len_arr`."
 kind = "snapshot"
 case = "../../../cases/opt/camel_passes/fold_constant_budget.cml"
-args = ["${case}", "std::cxx::fold", "std::gir", "std::nop"]
+args = ["${case}", "std::cxx::fold", "constant_budget=1", "std::gir", "std::nop"]
 snapshot_stream = "stdout"
 golden = "./golden/camel_passes.fold.constant_budget.cpp.dot"
