@@ -61,15 +61,16 @@ if with_body.returncode != 0:
 lines = with_body.stdout.splitlines()
 body_lines = [line for line in lines if line.startswith("BLOCK_BODY ")]
 call_lines = [line for line in lines if line.startswith("BLOCK_CALL ")]
+trait_lines = [line for line in lines if line.startswith("BLOCK_TRAITS ")]
 # What the pass said, on this case's own stdout: the plan pins these lines, so the reading is
 # checked as text and not only as the numbers the assertions below derive from it.
-for line in body_lines + call_lines:
+for line in body_lines + trait_lines + call_lines:
     print(line)
 
-# Two bodies, each a program of its own: a root graph and the function's graph, in a program that
+# Five bodies, each a program of its own: a root graph and the function's graph, in a program that
 # is not the one they were compiled for.
 built = [line for line in body_lines if line.startswith("BLOCK_BODY built ")]
-assert len(built) == 2, f"expected two bodies to compile, got: {body_lines}"
+assert len(built) == 5, f"expected five bodies to compile, got: {body_lines}"
 bodies = {}
 for line in built:
     what = line[len("BLOCK_BODY built ") :].split(" ")[0]
@@ -90,6 +91,47 @@ for line in body_lines:
 for what, counts in bodies.items():
     assert len(graphs_of.get(what, [])) == counts["graphs"], (what, graphs_of.get(what), counts)
     assert "__root__" in graphs_of[what], (what, graphs_of[what])
+
+# The block's operator is named by what its body computes, and its record is what the body does:
+# both are read off the body's own graph, not written by this case.
+traits = {}
+for line in trait_lines:
+    match = re.fullmatch(
+        r"BLOCK_TRAITS (\S+) uri=(block:[0-9a-f]{16}) pure=(\w+) mayFault=(\w+) "
+        r"mayNotTerminate=(\w+) foldable=(\w+)",
+        line,
+    )
+    assert match, line
+    traits[match.group(1)] = {
+        "uri": match.group(2),
+        "pure": match.group(3) == "true",
+        "mayFault": match.group(4) == "true",
+        "mayNotTerminate": match.group(5) == "true",
+        "foldable": match.group(6) == "true",
+    }
+assert set(traits) == set(bodies), (set(traits), set(bodies))
+uris = {what: entry["uri"] for what, entry in traits.items()}
+# Four bodies that compute different things are four blocks.
+assert len({uris["body"], uris["second"], uris["effectful"], uris["fallible"]}) == 4, uris
+# And the same body, compiled under another module's name, hashes differently: the tree's portable
+# hash includes the graph's own name. So it names the body's graph and not yet the body -- a block's
+# identity must not depend on what a module called its graph, and that is the one input of the
+# canonical form still missing.
+assert uris["twin"] != uris["body"], uris
+# The record, read from the body's graphs: arithmetic is pure and cannot fault, printing is not
+# pure, and a division can divide by zero.
+assert traits["body"] == {
+    "uri": uris["body"],
+    "pure": True,
+    "mayFault": False,
+    "mayNotTerminate": False,
+    "foldable": True,
+}, traits["body"]
+assert traits["second"]["pure"] and not traits["second"]["mayFault"], traits["second"]
+assert not traits["effectful"]["pure"], traits["effectful"]
+assert traits["fallible"]["pure"] and traits["fallible"]["mayFault"], traits["fallible"]
+store = int(re.search(r"BLOCK_BODY store blocks=(\d+)", with_body.stdout).group(1))
+assert store == 5, f"five distinct names, {store} registered"
 
 # The entry program, read in the same run: the numbers it had before the bodies were built are the
 # numbers it has after, and they are the numbers of a run without the pass at all.
@@ -112,10 +154,13 @@ assert (after_graphs, after_nodes) == (plain["graphs"], plain["nodes"] + 1), ent
 # the call's shape: the two calls have the same shape and different values.
 values = {}
 for line in call_lines:
-    match = re.fullmatch(r"BLOCK_CALL (\S+) argument=(-?\d+) value=(-?\d+)", line)
+    match = re.fullmatch(
+        r"BLOCK_CALL (\S+) (\S+) argument=(-?\d+) value=(-?\d+)", line
+    )
     assert match, line
-    values.setdefault(match.group(1), []).append(int(match.group(3)))
-assert values == {"block::body": [42, 2], "block::scaled": [15]}, values
+    assert match.group(2) == uris[match.group(1)], line
+    values.setdefault(match.group(1), []).append(int(match.group(4)))
+assert values == {"body": [42, 2], "second": [15]}, values
 
 again = stats(BODY_PASS)
 # One node and one operator joined the entry program -- the same thing counted twice, so both rise
@@ -141,7 +186,7 @@ assert len(written["graphs"]) == plain["graphs"], (len(written["graphs"]), plain
 
 print(
     f"block_body: body_graphs={bodies['body']['graphs']} body_nodes={bodies['body']['nodes']} "
-    f"second_nodes={bodies['second']['nodes']} block_calls={sum(len(v) for v in values.values())} "
+    f"blocks={len(bodies)} store={store} block_calls={sum(len(v) for v in values.values())} "
     f"entry_nodes={plain['nodes']}->{again['nodes']} entry_opers={plain['opers']}->{again['opers']}"
 )
 print("Block body: PASS")

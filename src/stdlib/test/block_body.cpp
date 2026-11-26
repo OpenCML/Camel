@@ -12,7 +12,11 @@
 #include "camel/execute/pass/registration.h"
 #include "camel/parse/parse.h"
 #include "camel/runtime/block_programs.h"
+#include "camel/runtime/core_facts.h"
 #include "camel/runtime/draft_session.h"
+#include "camel/runtime/effects.h"
+#include "camel/runtime/fact_persist.h"
+#include "camel/runtime/facts.h"
 #include "camel/runtime/graph.h"
 #include "graph_caller.h"
 
@@ -41,6 +45,19 @@ export func body(x: int) => int {
 
 /// A second body, so the reading can say what one kernel does with two blocks: the value differs
 /// because the program differs, not because the code does.
+/// A body with an effect outside the program's variables: what it routes through the record's
+/// effect row, and what a block over it must not be called pure for.
+constexpr const char *kLoudText = R"cml(export func loud(x: int) => int {
+    println(x)
+    return x * 2
+}
+)cml";
+
+/// A body that may fault: dividing by a parameter can divide by zero (design principles 3.9).
+constexpr const char *kRiskyText  = R"cml(export func risky(x: int) => int {
+    return 10 / x
+}
+)cml";
 constexpr const char *kScaledText = R"cml(// A second body, for the second block.
 export func scaled(x: int) => int {
     let tripled = x * 3
@@ -206,20 +223,25 @@ BlockBodyTestPass::apply(const camel::runtime::Program *program, std::ostream &o
         std::string name;
         const char *function;
         const char *text;
-        std::string uri;
         camel::runtime::Program *program = nullptr;
+        camel::runtime::GCGraph *graph   = nullptr;
+        std::string uri;
+        camel::runtime::EffectSummary effects{};
+        bool insert = false;
     };
     std::vector<Compiled> blocks{
         {.what     = "body",
          .name     = "block_body",
          .function = "body",
          .text     = kBodyText,
-         .uri      = "block::body"},
-        {.what     = "second",
-         .name     = "block_scaled",
-         .function = "scaled",
-         .text     = kScaledText,
-         .uri      = "block::scaled"},
+         .insert   = true},
+        {.what = "second", .name = "block_scaled", .function = "scaled", .text = kScaledText},
+        {.what = "effectful", .name = "block_loud", .function = "loud", .text = kLoudText},
+        {.what = "fallible", .name = "block_risky", .function = "risky", .text = kRiskyText},
+        // The same body again, under another module's name: a block is named by what its body
+        // computes, so the name a module gave the graph must not be part of it. If the two URIs
+        // differ, they do -- and that is what this line is here to say.
+        {.what = "twin", .name = "block_twin", .function = "body", .text = kBodyText},
     };
     for (Compiled &block : blocks) {
         block.program = compileBody(block.name, block.text, block.function, block.what, os);
@@ -237,7 +259,46 @@ BlockBodyTestPass::apply(const camel::runtime::Program *program, std::ostream &o
                 block.what,
                 graph->name(),
                 graph->storedNodeCount());
+            if (graph->name() == block.name + "::" + block.function) {
+                block.graph = const_cast<camel::runtime::GCGraph *>(graph);
+            }
         }
+        if (block.graph == nullptr) {
+            os << std::format(
+                "BLOCK_BODY failed to name the {}: no graph for its function\n",
+                block.what);
+            return program;
+        }
+    }
+
+    for (Compiled &block : blocks) {
+        // The block's operator is named by its body's canonical form: the hash the tree already
+        // computes for a graph's content, the same in every process (the function type, ports,
+        // permissions, every node's kind, flags, type, slot, inputs and payload, constants by
+        // value, source positions left out). Two bodies that compute the same thing are one block.
+        block.uri = std::format(
+            "block:{:016x}",
+            camel::runtime::fact::portableGraphHash(*block.program, block.graph));
+        // And its record is what that body does, read from the body's own graphs: an effect outside
+        // the program's variables, a write to one, a fault, a run that may not end.
+        camel::runtime::fact::FactStore &facts = context_->facts();
+        block.effects = camel::runtime::fact::graphEffects(facts, *block.program, block.graph);
+        camel::core::OperatorTraits traits;
+        traits.pure      = block.effects.pure();
+        traits.stateOnly = !block.effects.external && block.effects.writesVariables;
+        traits.mayFault  = block.effects.mayFault;
+        // A call that may not end is never computed ahead of time: folding it would run it while
+        // the program is being built.
+        traits.foldable = !block.effects.mayNotTerminate;
+        camel::core::OperatorTable::instance().set(block.uri, traits);
+        os << std::format(
+            "BLOCK_TRAITS {} uri={} pure={} mayFault={} mayNotTerminate={} foldable={}\n",
+            block.what,
+            block.uri,
+            traits.pure,
+            traits.mayFault,
+            block.effects.mayNotTerminate,
+            traits.foldable);
     }
 
     // The blocks in the context's store, where an operator's node reads them from, and the one
@@ -252,6 +313,7 @@ BlockBodyTestPass::apply(const camel::runtime::Program *program, std::ostream &o
             block.uri,
             registered);
     }
+    os << std::format("BLOCK_BODY store blocks={}\n", context_->blockPrograms().size());
     const camel::core::context::context_ptr_t handle = context_->handle();
     context_->registerExecutorFactory("block", [handle]() -> executor_ptr_t {
         return std::make_shared<BlockExecutor>(handle);
@@ -259,8 +321,10 @@ BlockBodyTestPass::apply(const camel::runtime::Program *program, std::ostream &o
 
     // One call per block, through the operator the manager finds, with the ordinal in the
     // attributes: the value is the body's, computed by the program the block names.
-    const auto callBlock =
-        [this, &os](const std::string &uri, int32_t argument) -> std::optional<int32_t> {
+    const auto callBlock = [this, &os](
+                               const std::string &what,
+                               const std::string &uri,
+                               int32_t argument) -> std::optional<int32_t> {
         const std::optional<operator_t> op = context_->execMgr().find(uri);
         if (!op) {
             os << std::format("BLOCK_CALL {} not found\n", uri);
@@ -282,15 +346,15 @@ BlockBodyTestPass::apply(const camel::runtime::Program *program, std::ostream &o
         SlotsView with({}, {});
         const slot_t value     = (*op)(with, norm, *context_);
         const int32_t answered = camel::core::rtdata::fromSlot<int32_t>(value);
-        os << std::format("BLOCK_CALL {} argument={} value={}\n", uri, argument, answered);
+        os << std::format("BLOCK_CALL {} {} argument={} value={}\n", what, uri, argument, answered);
         return answered;
     };
 
-    callBlock(blocks[0].uri, 41);
-    callBlock(blocks[1].uri, 5);
+    callBlock(blocks[0].what, blocks[0].uri, 41);
+    callBlock(blocks[1].what, blocks[1].uri, 5);
     // The same block again, after its first run is over: the program the context pinned is still
     // the one its operator runs, on this context, with nothing of the module left.
-    callBlock(blocks[0].uri, 1);
+    callBlock(blocks[0].what, blocks[0].uri, 1);
 
     // One OPER node in the entry program: the block stands where the function's exit took its
     // value, and takes that value as its own argument. One node and one operator -- the same thing

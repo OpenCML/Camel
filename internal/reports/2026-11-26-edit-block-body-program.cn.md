@@ -287,3 +287,67 @@ BLOCK_BODY entry graphs 2 -> 2 nodes 76 -> 77
 
 同一个道理的反面：一个块在跑之前被再次编译（同名不同体），块程序处的 `add` 会保留第一次的条目
 （一个块，一份程序），不会悄悄换成第二份。
+
+### 8 名字：块体规范形式的哈希
+
+块算子的 URI 由**块体自己的规范形式**算出，不由夹具书写：
+
+```
+uri = "block:" + hex16(fact::portableGraphHash(program, bodyGraph))
+```
+
+**输入就是树上已有的那一条规约**（`src/kernel/include/camel/runtime/fact_persist.h#portableGraphHash`），
+不是本层另写的一套规范化：
+
+- 图的**函数类型、端口、数值权限**；
+- 每个节点的 **kind、flags、类型（mangled）、slot、输入、载荷**；
+- **被它引用的图**（任意深度）按**名字 + 它自己的内容**计；
+- **算子**按 URI + 语义键（含版本）+ traits 计；
+- **静态常量**按类型与值计（标量按位，对象按打印形式）；
+- **源码位置不进**哈希。
+
+"按什么顺序规范化"因此不是这里排的：这一条规约在树里已经存在，是缓存和事实键用的那一份
+（`definitions.cpp:479` 用它填 `contentHash`）。块名直接用它——另写一套规范化就是第二个形状来源，
+正是"同一件事只有一个形状"要避免的。
+
+读数：
+
+- 四个计算不同东西的块体 → 四个不同的名字；
+- **同一个块体、换一个模块名 → 名字不同**：`block:4f8cc9d670086474` 与 `block:cbd2b9368a519e15`。
+
+第二条是**缺陷**，不是特性：`portableGraphHash` 把**图自己的名字**也算进去，于是块的身份取决于
+模块给图起的名。块的名字应当只取决于块体算什么。修法方向（本轮没做）：哈希前把块体图的名字规范化，
+或对"去掉名字的图"取哈希；case 已经把这个事实钉在今天的位置上
+（`assert uris["twin"] != uris["body"]`），修好之后反过来写就是验收。
+
+同一个机制还有一个正面读数：块程序处**按名字去重**。五个块体、五个名字，`store blocks=5`；
+两个内容相同的块体本该并成一份——现在因为名字里带着模块名而没并上，这条修好会一起变。
+
+### 9 记录：从块体自己的图里读出来
+
+块的记录不再由夹具声明，而是从块体程序的图里读：
+
+```
+EffectSummary e = fact::graphEffects(facts, *program, bodyGraph);   // 走它调用的图、它跑的循环
+traits.pure      = e.pure();                                        // 无外部副作用、不写变量
+traits.stateOnly = !e.external && e.writesVariables;
+traits.mayFault  = e.mayFault;
+traits.foldable  = !e.mayNotTerminate;                              // 可能不终止的调用绝不在编译期算
+```
+
+五个块体的读数（打印为 `BLOCK_TRAITS`，由 case 断言并由 plan 钉住三行）：
+
+| 块体 | 体是什么 | pure | mayFault | mayNotTerminate | foldable |
+|---|---|---|---|---|---|
+| `body` | `x + 1` | true | false | false | true |
+| `second` | `x * 3` | true | false | false | true |
+| `effectful` | `println(x); x * 2` | **false** | false | false | true |
+| `fallible` | `10 / x` | true | **true** | false | true |
+
+这就是 §7.3 里那两次拒绝的落点：记录里的 pure / mayFault 是**读出来的**，夹具只提供块体文本。
+
+**一处空白要记下**：`OperatorTraits`（`src/kernel/include/camel/core/operator_table.h`）没有"会不会
+终止"的字段——九个字段是 pure / elementwise / stateOnly / mayFault / callsGraphs / readsGraphs /
+macro / foldable / withAfterNorm。"可能不终止"只体现在 `foldable = false` 这一处；作为记录的一项它
+在 traits 里没有直接位置（`EffectSummary` 里有 `mayNotTerminate`）。这是表本身的空白，本车不擅自
+加字段，先记在这里。
