@@ -2996,9 +2996,9 @@ export CAMEL_TOKEN_DIR="`${CAMEL_TOKEN_DIR:-/tmp/camel-tokens}"
 export CAMEL_TOKENS="`${CAMEL_TOKENS:-24}"
 export CAMEL_LANE='$name'
 export CAMEL_BRANCH='$branch'
-# How long the pool's taker waits for a token before the run says `noslot` (-SlotWaitSeconds).
+# How long the pool's taker waits for a token before the run says noslot (-SlotWaitSeconds).
 export CAMEL_TOKEN_WAIT_S='$SlotWaitSeconds'
-# The runner names its run directory this, so the fetch after the plan (`-FromThisRun`) reads exactly
+# The runner names its run directory this, so the fetch after the plan (-FromThisRun) reads exactly
 # this run's directory whatever other runner invocations appear later in the same checkout.
 export CAMEL_TEST_RUN_NAME='$runName'
 echo "[camel-remote] run name: $runName"
