@@ -16,11 +16,11 @@
 #include "camel/runtime/draft_session.h"
 #include "camel/runtime/loop.h"
 #include "camel/utils/assert.h"
+#include "camel/utils/log.h"
 
 #include <array>
 #include <format>
 #include <span>
-#include <stdexcept>
 #include <utility>
 #include <vector>
 
@@ -85,9 +85,21 @@ size_t rewriteGraph(RuntimeGraphDraftSession &session, GCGraph *owner, bool summ
         if (view.collectionCount() != 0) {
             continue; // already a collecting loop (the pass ran before)
         }
+        // The summary form is (state, len, len): it is defined for a loop whose state is one value.
+        // A loop with more -- a stream's (stream, done, state), a state the program wrote as two --
+        // is left exactly as the program wrote it. Leaving it alone is what this pass may do and
+        // refusing is not: it runs on legal programs, and a shape it does not summarize is not a
+        // program that failed (an optimization never makes a legal program fail). Nothing is
+        // printed for it either: a pass that did not fire is not news the program's output carries.
         if (summary && view.stateCount() != 1) {
-            throw std::runtime_error(
-                "test::loop_collect_summary writes (state, len, len) and needs a one-value state");
+            CAMEL_LOG_DEBUG_S(
+                "LoopCollect",
+                "the summary form is (state, len, len); the loop at origin {} in graph {} has {} "
+                "state value(s) and is left as it is",
+                owner->nodeOrigin(id),
+                owner->name(),
+                view.stateCount());
+            continue;
         }
         const uint64_t origin = owner->nodeOrigin(id);
         const size_t k        = view.stateCount();

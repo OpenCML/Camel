@@ -14,6 +14,11 @@
  *   test::loop_collect          the value itself: the program prints (state, tape, tape)
  *   test::loop_collect_summary  (state, len(tape0), len(tape1)), so a loop of a hundred thousand
  *                               rounds prints three numbers instead of the tapes
+ *
+ * The summary form names one state value, so it is defined for a loop whose state is one value. A
+ * loop with more -- a stream built by `for x in a .. b` carries (stream, done, state); a state the
+ * program wrote as two -- is left exactly as the program wrote it, and nothing is printed about it:
+ * an optimization that does not apply is not a program that failed.
  */
 
 #pragma once
