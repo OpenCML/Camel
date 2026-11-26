@@ -706,6 +706,10 @@ function ensureDir(dir) {
     fs.mkdirSync(dir, { recursive: true })
 }
 
+// The rule for a run directory's name given in CAMEL_TEST_RUN_NAME: a plain name, so it can only be a
+// direct child of the log directory. `tools/camel-remote-fetch.ps1` applies the same rule.
+const RUN_NAME_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]*$/
+
 // CAMEL_TEST_RUN_DIRS_KEEP=<n> lowers the retention bound for one run. The default and its reason
 // live beside the policy (test/tools/runner-output.mjs); this is the one number a check sets small
 // to watch the bound hold across two real runs (docs/test-plans.md, "Runner output").
@@ -742,6 +746,7 @@ function writeRunManifest(logDir, options, plans) {
         JSON.stringify(
             {
                 started_at: new Date().toISOString(),
+                pid: process.pid,
                 build: options.build,
                 tier: options.tier,
                 jobs: options.jobs,
@@ -5676,9 +5681,31 @@ async function main() {
             return 1
         }
     }
-    // The pid keeps two runs started in the same second (the self-test does this) out of one
-    // directory, whose logs and summary.json would otherwise overwrite each other.
-    const logDir = path.join(LOG_ROOT, `${timestamp()}_${process.pid}`)
+    // The caller may name the run directory (CAMEL_TEST_RUN_NAME), so that it can read that one
+    // directory back whatever other runner invocations appear in the same results tree. Without a
+    // name the directory is the clock and the pid, which keeps two runs started in the same second
+    // (the self-test does this) out of one directory, whose logs and summary.json would otherwise
+    // overwrite each other.
+    const givenRunName = process.env.CAMEL_TEST_RUN_NAME
+    if (givenRunName !== undefined && givenRunName !== '') {
+        if (!RUN_NAME_PATTERN.test(givenRunName)) {
+            console.error(
+                `${COLORS.red}[FAIL]${COLORS.reset} CAMEL_TEST_RUN_NAME must be a plain name ` +
+                    `(letters, digits, '.', '_' and '-', starting with a letter or digit), got '${givenRunName}'`,
+            )
+            process.exitCode = 2
+            return 2
+        }
+        if (fs.existsSync(path.join(LOG_ROOT, givenRunName))) {
+            console.error(
+                `${COLORS.red}[FAIL]${COLORS.reset} CAMEL_TEST_RUN_NAME '${givenRunName}' already names a run ` +
+                    'directory; a run does not replace the record of another run',
+            )
+            process.exitCode = 2
+            return 2
+        }
+    }
+    const logDir = path.join(LOG_ROOT, givenRunName || `${timestamp()}_${process.pid}`)
     // Retention before the record. The tree this run is about to add a directory to is the one that
     // grew without bound (test/tools/runner-output.mjs has the policy and the evidence): it keeps
     // the newest RUN_DIRS_KEPT run directories, never one a live run owns, and never one this

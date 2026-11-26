@@ -581,6 +581,8 @@ The bound is a property, not a count of what happens to be there: `retention.pol
 bounds -- one that must remove and one that must not -- and then run the real runner twice into a
 scratch tree, with `CAMEL_TEST_RESULTS_ROOT` and `CAMEL_TEST_RUN_DIRS_KEEP=1`, and check what survived.
 
+`CAMEL_TEST_RUN_NAME=<name>` names the run directory (a plain name: letters, digits, `.`, `_`, `-`, starting with a letter or digit) so that a caller can read exactly that directory back whatever other runner invocations appear in the same results tree; a malformed name, or one that already names a directory, is refused with exit 2. `retention.name` checks it.
+
 `npm run clean -- --tmp` removes both trees whole, for a checkout that wants them gone now.
 
 ## Selecting Plans From A Change
