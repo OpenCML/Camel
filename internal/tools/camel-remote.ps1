@@ -78,10 +78,10 @@
 # same settings can be overridden for one run by the matching parameter.
 #
 # --- the staging push -------------------------------------------------------
-# The push is forced and the ref is dropped in the finally: that ref is this run's scratch. The host
-# fetches it just-in-time and keeps its own branch. Without the force, reusing a worktree name at
-# another commit is a non-fast-forward that stops the run before the host; without the delete, one
-# ref per worktree name outlives every run and goes stale the moment its name is reused.
+# The push is forced, and the ref is left in place afterwards: the host fetches it just-in-time and
+# keeps its own branch, and the ref is what makes the next push of the same branch incremental. The
+# force is what makes a reused name at another commit a push rather than a refusal; it is also why
+# keeping the ref is harmless, since a ref that no longer matches is overwritten rather than refused.
 #
 # --- -NoBuild is guarded ----------------------------------------------------
 # A build writes out/<tag>/build-info.json -- from scripts/collect-out.js, through
@@ -1649,14 +1649,12 @@ try {
             (New-Object System.Text.UTF8Encoding($false)))
         Write-Host ("[camel-remote] -Changed: {0} changed file(s) against {1}, listed here for the host" -f $lines.Count, $ChangedBase)
     }
-    # --force, and the ref is dropped in the finally block: the staging branch is scratch. Without
-    # the force, a worktree re-created at another commit (a rebuilt lane, an A/B run) is a
-    # non-fast-forward to the same ref name, and the run stopped before it reached the host;
-    # without the delete, one ref per worktree name outlived every run and went stale the moment
-    # that name was reused -- which is where the staging repository's pile of lane-* refs came from.
+    # --force: a worktree re-created at another commit (a rebuilt lane, an A/B run) is a
+    # non-fast-forward to the same ref name, and without the force the run stopped before it reached
+    # the host. The ref stays afterwards (see the finally block) so this push has a nearby "have".
     # A detached HEAD has no local branch to push, so the refspec names the commit and the ref it
     # becomes on the far side in one word: `HEAD:refs/heads/<the name derived from the commit>`. The
-    # rest of the run -- the host checkout, the delete in the finally -- then reads that one name.
+    # rest of the run -- the host checkout, the marker -- then reads that one name.
     $pushSource = if ($detached) { "HEAD:refs/heads/$branch" } else { $branch }
     # -TracePhases asks git for its own pack statistics ("Writing objects: ... 1.20 MiB"), which is
     # the only place the size of what this push sent is written down. `--progress` forces those lines
@@ -1704,8 +1702,8 @@ try {
         # not an ancestor of the one being pushed (a reset branch, a rebased scratch tree, an A/B
         # run). Name that ref and the two commits instead of sending the reader to the host.
         # This script is not in a repository, so the comment beside a change is the only record of
-        # it: the forced push above and the delete in the finally are what removed this cause. The
-        # block below now reports a push that fails for some other reason.
+        # it: the forced push above is what removed this cause. The block below now reports a push
+        # that fails for some other reason.
         $remoteRef = @(git -C $Path ls-remote "$sshHost`:$bare" "refs/heads/$branch" 2>$null)
         $localSha = if ($detached) { $commit } else { (git -C $Path rev-parse $branch).Trim() }
         if ($remoteRef.Count -gt 0 -and $remoteRef[0]) {
@@ -1730,7 +1728,6 @@ try {
         }
         exit 2
     }
-    $stagingPushed = $true
 
     # --- what this run would measure, said before it travels --------------------
     # The patch below carries the WORKING TREE (`git diff HEAD`), not the commit, so every reading a
@@ -4291,36 +4288,15 @@ if ($Latest -and $FetchFile -ne '') {
     }
     exit $code
 } finally {
-    # The staging branch was this run's own scratch: the host checkout fetched it and keeps its
-    # own branch, so the ref is dropped here -- after a normal finish, an exception or Ctrl-C
-    # alike. Best-effort: a ref left behind means the next run force-pushes over it, never a
-    # failed run, and the pile of stale lane-* refs this replaces is exactly what happened when
-    # nothing ever deleted them.
-    #
-    # Bounded, because this runs on the way out of a run that has already produced its readings: git
-    # starts its own ssh for it, and a git (or an ssh under it) that does not return would hold the
-    # whole gate open *after* the exit code was decided -- the same shape as the stream hang above,
-    # one layer down. A ref left behind is harmless; the next run force-pushes over it.
-    if ($stagingPushed) {
-        try {
-            $deleteOut = Join-Path ([System.IO.Path]::GetTempPath()) "camel-delete-$PID.txt"
-            $deleteErr = "$deleteOut.err"
-            $gitExe = (Get-Command git -ErrorAction SilentlyContinue)
-            $gitExe = if ($null -ne $gitExe) { $gitExe.Source } else { 'git' }
-            $gitProc = Start-HostProcess -Exe $gitExe `
-                -Arguments @('-C', $Path, 'push', '--quiet', "$sshHost`:$bare", '--delete', "refs/heads/$branch") `
-                -OutFile $deleteOut -ErrFile $deleteErr
-            if (-not $gitProc.WaitForExit([math]::Max(1000, $FinishTimeoutSeconds * 1000))) {
-                Stop-HostProcess $gitProc
-                Write-Host ("[camel-remote] the staging ref refs/heads/{0} was not deleted within {1} s; the next run force-pushes over it" -f `
-                    $branch, $FinishTimeoutSeconds)
-            }
-            foreach ($deleteFile in @($deleteOut, $deleteErr)) {
-                try { if (Test-Path -LiteralPath $deleteFile) { Remove-Item -LiteralPath $deleteFile -Force } } catch { }
-            }
-        } catch {
-        }
-    }
+    # The staging ref is left in place. It used to be deleted here, on the argument that the ref was
+    # this run's own scratch and that never deleting them had produced a pile of stale lane-* refs.
+    # What that pile actually cost was a non-fast-forward push when a name was reused, and the push
+    # has been forced since; what the deletion costs is the one nearby "have" the bare would
+    # otherwise offer the next push of the same branch. Measured on one branch at one commit: with
+    # the ref present the push sends 11 objects in 0.9 s, with it gone 4 438 objects in 2.0 s --
+    # because the bare's nearest remaining ref sat on the far side of a merge. One ref per branch
+    # name, overwritten by a forced push, and it also removes the extra ssh this delete opened after
+    # every run's exit code had already been decided.
     # Whatever happened -- normal finish, exception, Ctrl-C -- no holder may keep claiming that this
     # run is still going. This is a no-op after the normal path already completed the run. The two
     # files are cleared independently: a failure on one must not skip the other.
