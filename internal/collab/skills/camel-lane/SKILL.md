@@ -148,6 +148,11 @@ pwsh -NoProfile -File <你的工作树>\internal\tools\camel-remote.ps1 `
   ⇒ 真正能解决 `exit 4` 的两条路是：**换 checkout 路径**（锁按路径 cksum 建）与**等 `[load]` 落下来**。
 · **同一计划不要并行两条**：宿主槽位只有 8 个，2026-11-27 一夜同时在跑的 run 有 **11 条**，于是所有人的 `exit 4`
   变多却没人拿到读数。一条车道同一时刻只允许**一条** run；要换计划就等前一条出结果或 `exit 4`。
+· **`taskkill` 掉本地包装壳不会释放宿主机端的车道 token**（2026-11-27 实测）：杀了整棵 pwsh 树、`effect-audit` 的
+  `ssh.exe` 归零之后，新 run 仍停在 `live worktrees: …` 之后**九分钟不打印 `host-tokens`** —— 那是“宿主机端的车道 token
+  还没释放”的签名，不是排队，也不是负载。换一棵 checkout（`-Path`）并换车道名，一次就打出
+  `host-tokens: running at 4 of 4 worker(s) (lane=<新名>, 0s to take them)`。
+  ⇒ 所以：**别在同一棵树上连续重排**；看到“停在 `live worktrees` 之后没了”就换树。本地杀进程只清本地，宿主那份要等它自己回收。
 ```
 
 ## 7. 路径与工作树
