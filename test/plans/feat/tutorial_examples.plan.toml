@@ -617,7 +617,7 @@ golden = "golden/tutorial_examples/10_resources.txt"
 [[tests]]
 name = "tutorial.examples.10_pure_callback"
 expect_output_not_contains = ["[Error]", "Segmentation fault", "dumped core"]
-desc = "`pure` in a function type is part of the requirement: `apply` accepts only a function whose inferred resources fit the empty set the parameter asks for, and `twice` touches nothing."
+desc = "`pure` in a function type is part of the requirement: `apply` accepts only a function whose inferred resources fit the promise the parameter asks for -- no write -- and `twice` writes nothing."
 case = "../../../docs/tutorial/examples/10_pure_callback.cml"
 golden = "golden/tutorial_examples/10_pure_callback.txt"
 
@@ -645,13 +645,13 @@ expect_output_contains = ["10_pure_callback_wrong.cml:15:18: [Error]: No matchin
 # reads the position and the diagnostic name from it.
 [[tests]]
 name = "tutorial.examples.10_uses_beyond"
-desc = "A program the compiler refuses: `stamp` promises `db` and its body writes the standard output, which the clause does not name, so the declaration is refused and the resource it left out is named."
+desc = "A program the compiler refuses: `stamp` promises `db` and its body writes the console, which the clause does not name, so the declaration is refused and the resource it left out is named."
 kind = "behavior"
 case = "../../../docs/tutorial/examples/10_uses_beyond.cml"
 backends = false
 args = ["${case}"]
 expect_exit = 1
-expect_output_contains = ["10_uses_beyond.cml:8:1: [Error]: '() => int uses var db' does not keep its resource promise", "stdout", "(name=SemanticDiag::UsesPromiseViolated, code=0x030001F1)"]
+expect_output_contains = ["10_uses_beyond.cml:8:1: [Error]: '() => int uses var db' does not keep its resource promise", "console", "(name=SemanticDiag::UsesPromiseViolated, code=0x030001F1)"]
 
 [[tests]]
 name = "tutorial.examples.10_exercise"

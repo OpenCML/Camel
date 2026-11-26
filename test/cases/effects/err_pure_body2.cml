@@ -3,12 +3,12 @@
 // declaration -- the promise a caller can see is the one that is broken -- not at the call site,
 // which only reads what the declaration said (design effects plan, step 5).
 
-/// The parameter promises an empty set: whatever is passed must touch nothing.
+/// The parameter promises no write: whatever is passed must write nothing.
 func apply(f: (x: int) => int pure, x: int) => int {
     return f(x)
 }
 
-/// The clause promises the empty set; the body writes `stdout`.
+/// The clause promises no write; the body writes `console`.
 func say(x: int) => int pure {
     println('x')
     return x + 1

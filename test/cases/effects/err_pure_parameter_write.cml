@@ -1,5 +1,5 @@
 /**
- * What a `pure` parameter asks for is the empty set, and a value that writes a resource is not in
+ * What a `pure` parameter asks for is no write, and a value that writes a resource does not keep
  * it: `add` writes the module's `total` and carries that write in its type, so the call is refused
  * where the two meet (design principles 3.3). The refusal is the ordinary one for a call that no
  * signature accepts.

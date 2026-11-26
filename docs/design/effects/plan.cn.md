@@ -126,8 +126,8 @@ anyOf   : 资源类列表；非空表示"说不出是哪个值"，即保守的�
 ```
 
 - `Generic`：函数类型上**没写**资源子句。它匹配任何资源集；调用点按实际值实例化。
-- `Concrete`：写了 `uses`/`pure`，或由函数体推出。`pure` 就是 `params`/`captures`/`ambient`/`anyOf` 全空的 `Concrete`。`pure` 的函数有 `var` 形参（`var` 形参本身就是资源）是 `UsesPromiseViolated`；`uses` 里写 `var` 形参是正常的（同一个资源）。
-- `assignableFrom`：目标是 `Generic` 时接受任何源；目标是 `Concrete S` 时源必须是 `Concrete T ⊆ S`（资源少的能用在要求多的地方）；源是 `Generic`（一个还没实例化的回调形参）时**不能证明**，拒绝——除非它就是目标位置同一个泛型形参。`pure`（空集）因此可用在任何位置，而"任意资源"的函数值不能当纯函数用。
+- `Concrete`：写了 `uses`/`pure`，或由函数体推出。`pure` 就是 `params`/`captures`/`ambient`/`anyOf` 全空的 `Concrete`，而它**承诺的是"没有写"**（原则 3.3：效应就是写，读是依赖，读什么都可以）：`pure` 的函数体读句柄盒子、读外部资源都不违约，那几次读只是这个函数的隐藏输入。`pure` 的函数有 `var` 形参（`var` 形参本身就是资源）是 `UsesPromiseViolated`；`uses` 里写 `var` 形参是正常的（同一个资源）。
+- `assignableFrom`：目标是 `Generic` 时接受任何源；目标是 `Concrete S` 时源必须是 `Concrete T ⊆ S`（资源少的能用在要求多的地方）；源是 `Generic`（一个还没实例化的回调形参）时**不能证明**，拒绝——除非它就是目标位置同一个泛型形参。目标是 `pure` 时按**源没有写**判断（`sem::writesSomething`）：只读的实现照样能传进 `pure` 形参，而"写某个资源"的函数值不能当纯函数用。
 - 与 6.6 的关系：6.6 说算子的纯度、资源等事实是标准标签；`pure`/`uses` 是**表面子句**，降级后仍然是声明上的事实（存储可以就是属性/标签），不产生第二套写法。这一条写进文档，避免实现时另造一份真值。
 - 驻留与打印：`Generic`/`Concrete` 与 `params`/`ambient` 进 `FunctionType` 的 intern key（`func.cpp#FunctionType`）与 `mangle`，`toString` 打印 `uses s, fs` / `pure`；没有形参名时打印 `uses #0`。`captures` 与 `anyOf` 只出现在推断出的类型上，同样进 key。
 - 打印口径：**值的类型打印推断出的子句**（一个没写资源子句的函数，其值的类型带上函数体度量出的资源集，空集就打印 `pure`），**写出来的类型照写的样子打印**——没写就不打印子句，也不加"声明时没写"之类的标记。所以同一个签名今天可能打印成 `(x: int) => int`（写出来、没写子句）或 `(x: int) => int pure`（推断出空集），两者是不同的类型。
@@ -387,7 +387,7 @@ pump(s, open("b"))   同上：被调用者不知道 s 与新句柄不同，仍�
 ### 步骤 5：推断与承诺
 
 - 把 `FootprintWalk` 的结果在 link 后写入每个函数声明的签名（不动点，`settleEffectfulGraphs` 的位置，`builder_diagnostics.cpp#settleEffectfulGraphs`）；函数值转换在不动点后再校验一遍（0.2 第 1 条）。
-- `uses` 是承诺：推断 ⊆ 声明，超出报 `UsesPromiseViolated`；`pure` 要求空集。
+- `uses` 是承诺：推断 ⊆ 声明，超出报 `UsesPromiseViolated`；`pure` 要求没有写（读不计，见 2.2）。
 - 导出函数：文档/`inspect` 显示推出的资源；变化警告取决于 Q2。
 - 测试：新 `compile/effects`：跨函数求和、递归不动点、高阶泛型回调（`map` 的 `f` 用 `fs` → `map` 的调用点带 `fs`）、`pure` 违反、`uses` 超出、未知算子导致 `anyOf`。
 

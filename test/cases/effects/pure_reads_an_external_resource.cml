@@ -1,0 +1,18 @@
+/**
+ * The other half of the same rule: reading an external resource writes nothing either. `exists`
+ * calls `fs:exists`, which reads the file system -- a read of an external resource -- and the
+ * declaration is still `pure`, because what the promise forbids is a write.
+ *
+ *   true
+ */
+
+import fs
+
+func exists(path: string) => bool pure {
+    return fs::exists(path)
+}
+
+func main() => int sync {
+    println(exists("."))
+    return 0
+}

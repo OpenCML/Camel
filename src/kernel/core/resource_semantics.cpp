@@ -429,12 +429,54 @@ ResourceSignature signatureOf(const ResourceSpec &spec, size_t withCount) {
     return sig;
 }
 
+bool writesSomething(const ResourceSignature &signature) {
+    for (const ResourceSignature::ParamUse &use : signature.params) {
+        if (writes(use.mode)) {
+            return true;
+        }
+    }
+    for (const ResourceSignature::AmbientUse &use : signature.ambient) {
+        // An ambient resource is state the program does not own, by definition: writing one is a
+        // write outside the program whatever its name (`stdout`, `fs`, a module's own state).
+        if (writes(use.mode)) {
+            return true;
+        }
+    }
+    // A capture is recorded where it is written: the cell lives longer than the call, so writing it
+    // is an effect of the call (design principles 3.3).
+    if (!signature.captures.empty()) {
+        return true;
+    }
+    // A class the walk could not name, or a cell of the function's own making that outlives the
+    // call because a closure holding it was handed out: nothing here proves a read, so it is read
+    // the way an undeclared operator is.
+    if (!signature.anyOf.empty()) {
+        return true;
+    }
+    if (signature.allocates) {
+        // A new resource handed to the caller: what it is filled with is written after the call.
+        return true;
+    }
+    // An external effect with no ambient resource to explain it: the write an operator that
+    // declares an effect and itemizes nothing is read as. A signature that names an ambient
+    // resource is external whether it writes it or only reads it (`ambientCarriesExternal`), so
+    // the resource's own modes answer for that one.
+    return signature.external && signature.ambient.empty();
+}
+
 bool covers(const ResourceSignature &target, const ResourceSignature &source) {
     if (target.mode == ResourceSignature::Mode::Generic) {
         return true; // a signature that promises nothing asks for nothing
     }
     if (source.mode == ResourceSignature::Mode::Generic) {
         return false; // nothing is known about the source, so it is not proved to fit
+    }
+    // A `pure` target promises no write, not an empty set (design principles 3.3: "效应就是写",
+    // and "读什么都可以"): what a call reads is a dependency, not an effect, and a pure function's
+    // reads are its hidden inputs. So the source is asked what it writes, and its reads -- of a
+    // handle's box, of an external resource -- are not compared.
+    if (target.pure()) {
+        return !writesSomething(source);
     }
     // `read-modify-write` at the target allows either mode at the source: the source may read
     // less than it is allowed to. The other direction is not symmetric, which is why the mode is

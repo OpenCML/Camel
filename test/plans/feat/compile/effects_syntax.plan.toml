@@ -175,7 +175,7 @@ expect_output_contains = ["0 1 2 3"]
 
 [[tests]]
 name = "effect.parameter_promises_pure"
-desc = "The other side of the same rule: a parameter written `pure` promises the empty set, so a call through it is not an effect and a result nothing depends on is dropped without a warning. A function whose type says `pure` stands at the parameter."
+desc = "The other side of the same rule: a parameter written `pure` promises no write, so a call through it is not an effect and a result nothing depends on is dropped without a warning. A function whose type says `pure` stands at the parameter."
 kind = "behavior"
 case = "../../../cases/effects/pure_parameter_takes_pure.cml"
 args = ["${case}"]
@@ -232,7 +232,7 @@ expect_output_contains = ["err_inferred_not_pure.cml:18:", "uses var console", "
 
 [[tests]]
 name = "err.pure_parameter_write"
-desc = "A parameter written `pure` takes only a value that promises the empty set: `add` writes the module's `total` and its type says so, so the call is refused where the two meet. The type the value is known by is where the argument meets the parameter, and the signature the parameter asked for is the one the error names. Classified as borrowing the retired shape: the state is a module `var` now instead of a `var` context parameter, because a value that carries a cell cannot assign it (0x03000213); the refusal and the signature it names are unchanged."
+desc = "A parameter written `pure` takes only a value that promises no write: `add` writes the module's `total` and its type says so, so the call is refused where the two meet. The type the value is known by is where the argument meets the parameter, and the signature the parameter asked for is the one the error names. Classified as borrowing the retired shape: the state is a module `var` now instead of a `var` context parameter, because a value that carries a cell cannot assign it (0x03000213); the refusal and the signature it names are unchanged."
 kind = "negative"
 case = "../../../cases/effects/err_pure_parameter_write.cml"
 args = ["${case}"]
@@ -297,7 +297,7 @@ expect_output_contains = ["err_pure_var.cml:", "'var' parameter 'c'"]
 
 [[tests]]
 name = "err.pure_body"
-desc = "`pure` on a body that writes the console: the signature promises the empty set and the body reaches past it, so the declaration is refused at its own clause and the resource it did not name is reported."
+desc = "`pure` on a body that writes the console: the signature promises no write and the body writes past it, so the declaration is refused at its own clause and the resource it did not name is reported."
 kind = "negative"
 case = "../../../cases/effects/err_pure_body.cml"
 args = ["${case}"]
@@ -829,3 +829,96 @@ assert(out === want, `unexpected output: ${out}`)
 }
 """
 timeout_ms = 30000
+
+# ---- A wait on the clock is a write of it ----
+#
+# The clock is the resource whose value moves on without the program, so taking a moment from it or
+# waiting on it is a write of it rather than a read (design principles 3.3). The operators register
+# that write: `time:now` and `process:sleep` are `externalAmbient("clock", AccessMode::Write)` in
+# src/stdlib/time/module.cpp and src/stdlib/process/module.cpp. Two readings follow: a clause that
+# promises a read alone is not kept, and a statement of a wait runs even though no value is read.
+
+[[tests]]
+name = "clock.clause_promises_the_write"
+desc = "Taking a moment from the clock is a write of it, so a function whose clause says `uses var clock` keeps its promise and prints `1`."
+kind = "behavior"
+case = "../../../cases/effects/clock_clause_is_a_write.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_exact = "true\n"
+
+[[tests]]
+name = "clock.clause_read_is_refused"
+desc = "The same body with `uses clock`: the call writes the clock, so the read-only promise is refused where it is written, and the diagnostic names the resource."
+kind = "negative"
+case = "../../../cases/effects/clock_clause_read_is_refused.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::UsesPromiseViolated"
+expect_diagnostic_code = "0x030001F1"
+expect_output_contains = ["clock"]
+
+[[tests]]
+name = "clock.a_wait_statement_is_kept"
+desc = "A wait written as a statement of a body that is not `sync`, with no value read: `process:sleep` is still a node of the graph, joined to it by an edge, so the wait runs."
+kind = "behavior"
+case = "../../../cases/effects/a_wait_statement_is_kept.cml"
+args = ["${case}", "std::jgir", "std::nop"]
+backends = ["nvm"]
+expect_exit = 0
+expect_stdout_contains = ["\"format\": \"camel.gir\""]
+verify_script = '''
+({ input, assert }) => {
+  const doc = JSON.parse(input.normalized.stdout)
+  const graphs = doc.graphs.filter(g => (g.nodes || []).some(n => String(n.label).includes('process:sleep')))
+  assert(graphs.length === 1, 'the wait is not a node of the graph: ' + JSON.stringify(doc.graphs.flatMap(g => (g.nodes || []).map(n => n.label))))
+  const graph = graphs[0]
+  const wait = graph.nodes.find(n => String(n.label).includes('process:sleep'))
+  const joined = (graph.edges || []).filter(e => e.source === wait.id || e.target === wait.id)
+  assert(joined.length > 0, 'the wait stands in the graph with no edge: ' + JSON.stringify({ wait: wait.id, edges: (graph.edges || []).length }))
+}
+'''
+
+# ---- What `pure` promises: no write ----
+#
+# `pure` promises no write and not an empty set (design principles 3.3: an effect is a write, and a
+# read is a dependency): a body that reads a handle's box or an external resource keeps the promise,
+# and those reads are the function's hidden inputs. `sem::covers` asks a `pure` target's source what
+# it writes (`writesSomething`), so the two readings of the promise -- a declaration kept by its
+# body, and a value standing where a `pure` parameter is asked for -- agree. What breaks it is a
+# write, and the report names the write.
+
+[[tests]]
+name = "pure.reads_a_ref"
+desc = "A body that reads the box a `Ref` parameter names and writes nothing keeps a `pure` promise: `state::get` is a read of the handle, and the call prints the box's content."
+kind = "behavior"
+case = "../../../cases/effects/pure_reads_a_ref.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_exact = "41\n"
+
+[[tests]]
+name = "pure.reads_an_external_resource"
+desc = "The same for state outside the program: `fs:exists` reads the file system, which writes nothing, so a function that only asks it is `pure` and prints `true`."
+kind = "behavior"
+case = "../../../cases/effects/pure_reads_an_external_resource.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_exact = "true\n"
+
+[[tests]]
+name = "pure.write_of_an_external_resource_is_refused"
+desc = "The counter-example: writing an external resource is still refused, and the report names the resource that was written -- `console` -- rather than the reach outside the program."
+kind = "negative"
+case = "../../../cases/effects/pure_writes_an_external_resource_is_refused.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::UsesPromiseViolated"
+expect_diagnostic_code = "0x030001F1"
+expect_output_contains = ["console"]

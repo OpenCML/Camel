@@ -1,4 +1,4 @@
-// A counter-example: `noisy` prints, so the resources its body infers do not fit the empty set the
+// A counter-example: `noisy` prints, so what its body writes does not fit the promise the
 // parameter asks for. The error names the signature that would have matched.
 // Run: camel docs/tutorial/examples/10_pure_callback_wrong.cml
 

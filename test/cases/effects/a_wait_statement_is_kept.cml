@@ -1,0 +1,14 @@
+/**
+ * A wait writes the clock it waits on, so a statement of one runs even though it gives no value and
+ * the body it is written in is not a `sync` block: the effect decides whether the statement runs,
+ * not whether anything reads it (design principles 3.3).
+ *
+ * The check is on the graph: `process:sleep` is a node of `main`, joined to the graph by an edge.
+ */
+
+import { sleep } from process
+
+func main() => int {
+    sleep(0.01)
+    return 0
+}

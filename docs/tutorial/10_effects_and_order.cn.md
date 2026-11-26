@@ -374,11 +374,11 @@ camel docs/tutorial/examples/10_resources.cml
 - 子句里写了一个既不是形参也不是资源的名字：`SemanticDiag::UnknownResource`。
 - 子句里写了变量（`var` 形参、模块的 `var`、捕获的变量）：`SemanticDiag::VariableInUses`——变量只声明一次，
   读写它由函数体量出来，写在推出来的签名里。
-- 同一个签名上又写 `pure` 又写 `uses`：`SemanticDiag::PureAndUses`——`pure` 说的是"一个资源都不碰"，
+- 同一个签名上又写 `pure` 又写 `uses`：`SemanticDiag::PureAndUses`——`pure` 说的是"一次都不写"，
   `uses` 说的是"碰这些"，两者只能写一个。
 - 没有函数体的声明（原生算子）写的子句与算子不符：`SemanticDiag::NativeResourceMismatch`——那种声明就是
   算子的全部签名，资源也在里面。
-- 函数体超出了它自己的 `pure`/`uses` 承诺：`SemanticDiag::UsesPromiseViolated`——`uses` 是上界，`pure` 是空集，
+- 函数体超出了它自己的 `pure`/`uses` 承诺：`SemanticDiag::UsesPromiseViolated`——`uses` 是上界，`pure` 是不写，
   报在声明处，帮助指向第一个超出的使用点（`pure` 带 `var` 形参也在这里报：`var` 形参本身就是资源）。
 
 [`examples/10_uses_beyond.cml`](examples/10_uses_beyond.cml) 就是这样一处：子句写了 `db`，函数体却往标准输出打印。
@@ -425,7 +425,7 @@ note: the body reaches past the promise from here on: this is the first use the 
     |
   9 |     println('x')
     |     -------
-help: A signature is a promise the compiler checks against the resources the function uses. 'uses' is an upper bound, so every resource the body uses must be named there, and 'pure' promises the empty set; a 'var' parameter is a resource by itself, and so is a capture. Change the body so that it no longer reaches for it, or change the signature to name it. When the use is a call through a parameter of function type, what the call reaches is the instantiation's: write 'pure' on the parameter to promise the empty set, or write there the resources the values it takes reach.
+help: A signature is a promise the compiler checks against the resources the function uses. 'uses' is an upper bound, so every resource the body writes must be named there; 'pure' promises no write, and what the body reads keeps that promise. A 'var' parameter is written by the call, and so is a capture. Change the body so that it no longer writes it, or change the signature to name it. When the use is a call through a parameter of function type, what the call reaches is the instantiation's: write 'pure' on the parameter to promise no write, or write there the resources the values it takes write.
 
 camel: 1 error
 ```
@@ -433,17 +433,17 @@ camel: 1 error
 诊断说清三件事：**哪一个承诺**（`'() => int uses var db'`）、**函数体多碰了什么**（`console`）、**是哪一次使用越过去的**
 （`note` 指向第一个子句没写到的使用点）。改法两种：让函数体不再碰它，或者把子句改到写得下它。
 
-## `pure`：一个资源都不碰
+## `pure`：不写，读什么都可以
 
-`pure` 是"这个调用一个资源都不碰"的承诺。写在**函数类型**上时它是要求：谁要传函数进来，就得传一个**推断出的资源集
+`pure` 是"这个调用不写任何资源"的承诺：不写 `Ref`，不写外部资源；读什么都可以——读是依赖，不是效应。写在**函数类型**上时它是要求：谁要传函数进来，就得传一个**推断出的资源集
 不超过它**的函数——资源少的函数可以用在要求资源多的地方，反之不行（[设计原则 3.3](../design-principles.cn.md#33-资源uses-与-pure)）。
-**手写的是承诺，函数体超出就是编译错误**：具名函数写了子句就照子句核对，写了 `pure` 就必须推成空集；匿名函数没有
-子句，它的资源是推出来的，所以一个不碰资源的 lambda、一个没写子句却不碰资源的具名函数，都能传给 `pure` 形参。
+**手写的是承诺，函数体超出就是编译错误**：具名函数写了子句就照子句核对，写了 `pure` 就不许有写；匿名函数没有
+子句，它的资源是推出来的，所以一个只读不写的 lambda、一个没写子句却只读不写的具名函数，都能传给 `pure` 形参。
 [`examples/10_pure_callback.cml`](examples/10_pure_callback.cml) 里的 `apply` 只接受纯函数：
 
 ```cml
 // `pure` in a function type is part of the requirement: what is compared is the resources the
-// argument's body infers against the empty set the parameter asks for, and `twice` touches nothing.
+// argument's body infers against what the parameter asks for -- no write -- and `twice` writes nothing.
 // Run: camel docs/tutorial/examples/10_pure_callback.cml
 
 func apply(f: (x: int) => int pure, x: int) => int {
@@ -474,7 +474,7 @@ camel docs/tutorial/examples/10_pure_callback.cml
 <!-- camel-snippet: counter-example: 这个程序故意不编译：调用处就是不匹配，下面的 text 块是诊断，不是输出 -->
 
 ```cml
-// A counter-example: `noisy` prints, so the resources its body infers do not fit the empty set the
+// A counter-example: `noisy` prints, so what its body writes does not fit the promise the
 // parameter asks for. The error names the signature that would have matched.
 // Run: camel docs/tutorial/examples/10_pure_callback_wrong.cml
 

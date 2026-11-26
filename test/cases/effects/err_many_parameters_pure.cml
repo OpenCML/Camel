@@ -11,7 +11,7 @@ func consume(s: Stream) => int uses var s {
     return 0
 }
 
-/// The clause promises the empty set; the body writes the handle it got as its 300th parameter.
+/// The clause promises no write; the body writes the handle it got as its 300th parameter.
 func wide(
     a0: int,
     a1: int,

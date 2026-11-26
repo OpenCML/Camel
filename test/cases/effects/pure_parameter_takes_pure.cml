@@ -1,5 +1,5 @@
 /**
- * The other side of the same rule: a parameter that writes `pure` promises the empty set, so a
+ * The other side of the same rule: a parameter that writes `pure` promises no write, so a
  * call through it is not an effect and a result nothing depends on is dropped without a warning
  * (the promise is what the caller was told). A pure function stands at the parameter.
  */

@@ -1,0 +1,18 @@
+/**
+ * A top-level `var` is a resource, and what a `pure` promise forbids is writing one: a function
+ * whose body only reads `cnt` keeps the promise (a read is a dependency, not an effect), and the
+ * call is an ordinary value.
+ *
+ *   0
+ */
+
+var cnt: int = 0
+
+func peek() => int pure {
+    return cnt
+}
+
+func main() => int sync {
+    println(peek())
+    return 0
+}

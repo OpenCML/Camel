@@ -414,12 +414,12 @@ What a wrong clause looks like (all compile errors):
 - a variable in a clause (a `var` parameter, a module `var`, a captured variable): `SemanticDiag::VariableInUses` --
   a variable is declared once, and which calls touch it is measured from the body and printed in the derived
   signature.
-- `pure` together with `uses` in one signature: `SemanticDiag::PureAndUses` -- `pure` says "no resource at all",
+- `pure` together with `uses` in one signature: `SemanticDiag::PureAndUses` -- `pure` says "never a write",
   `uses` says "these", and only one of the two may be written.
 - a body-less declaration (a native operator) whose clause is not the operator's: `SemanticDiag::NativeResourceMismatch`
   -- such a declaration *is* the whole signature of the operator, resources included.
 - a body that goes beyond its own `pure`/`uses` promise: `SemanticDiag::UsesPromiseViolated`. `uses` is an upper bound
-  and `pure` is the empty set; the error is at the declaration and the note points at the first use the signature does
+  and `pure` is no write; the error is at the declaration and the note points at the first use the signature does
   not promise (a `pure` signature with a `var` parameter is reported here too: a `var` parameter is a resource by
   itself).
 
@@ -468,7 +468,7 @@ note: the body reaches past the promise from here on: this is the first use the 
     |
   9 |     println('x')
     |     -------
-help: A signature is a promise the compiler checks against the resources the function uses. 'uses' is an upper bound, so every resource the body uses must be named there, and 'pure' promises the empty set; a 'var' parameter is a resource by itself, and so is a capture. Change the body so that it no longer reaches for it, or change the signature to name it. When the use is a call through a parameter of function type, what the call reaches is the instantiation's: write 'pure' on the parameter to promise the empty set, or write there the resources the values it takes reach.
+help: A signature is a promise the compiler checks against the resources the function uses. 'uses' is an upper bound, so every resource the body writes must be named there; 'pure' promises no write, and what the body reads keeps that promise. A 'var' parameter is written by the call, and so is a capture. Change the body so that it no longer writes it, or change the signature to name it. When the use is a call through a parameter of function type, what the call reaches is the instantiation's: write 'pure' on the parameter to promise no write, or write there the resources the values it takes write.
 
 camel: 1 error
 ```
@@ -477,21 +477,22 @@ The diagnostic says three things: **which promise** (`'() => int uses var db'`),
 (`console`), and **which use crossed it** (the `note` points at the first use the signature does not name). There are
 two repairs: the body stops reaching for it, or the clause is widened to name it.
 
-## `pure`: touching no resource at all
+## `pure`: writing nothing, reading anything
 
-`pure` is the promise that a call touches no resource at all. Written in a **function type** it is a
+`pure` is the promise that a call writes nothing: no `Ref`, no external resource. What it reads is
+allowed -- a read is a dependency and not an effect. Written in a **function type** it is a
 requirement: whoever passes a function in must pass one whose **inferred** resource set does not go
 beyond it -- a function that uses fewer resources fits where more are asked for, and not the other way
 round ([design principles 3.3](../design-principles.en.md#33-resources-uses-and-pure)).
 **What is written is the promise, and a body that goes beyond it is a compile error**: a named function
-is held to the clause it writes (`pure` must come out empty), and an anonymous function has no clause --
-its resources are inferred, so a lambda that touches nothing, or a named function whose body touches
+is held to the clause it writes (`pure` must come out with no write), and an anonymous function has no clause --
+its resources are inferred, so a lambda that writes nothing, or a named function whose body writes
 nothing, fits a `pure` parameter. `apply` in
 [`examples/10_pure_callback.cml`](examples/10_pure_callback.cml) accepts only a pure function:
 
 ```cml
 // `pure` in a function type is part of the requirement: what is compared is the resources the
-// argument's body infers against the empty set the parameter asks for, and `twice` touches nothing.
+// argument's body infers against what the parameter asks for -- no write -- and `twice` writes nothing.
 // Run: camel docs/tutorial/examples/10_pure_callback.cml
 
 func apply(f: (x: int) => int pure, x: int) => int {
@@ -524,7 +525,7 @@ asks for**, and the error is raised at the call
 <!-- camel-snippet: counter-example: this program deliberately does not compile: the call is a mismatch, so the text block below is the diagnostic, not output -->
 
 ```cml
-// A counter-example: `noisy` prints, so the resources its body infers do not fit the empty set the
+// A counter-example: `noisy` prints, so what its body writes does not fit the promise the
 // parameter asks for. The error names the signature that would have matched.
 // Run: camel docs/tutorial/examples/10_pure_callback_wrong.cml
 

@@ -1187,13 +1187,15 @@ Builder::resourceSignatureOf(const AST::node_ptr_t &funcTypeAst, const FunctionT
         throw BuildAbortException();
     }
     if (clause->pure()) {
-        // `pure` promises the empty set (design effects plan 4.3, step 5). A `var` parameter is a
-        // resource by itself: the cell is shared with the caller, so a call through the parameter
-        // reads and writes that cell wherever the body is written, and no body can bring the set
-        // back to empty. So a signature that writes `pure` and gives a parameter `var` is refused
-        // where it is written, and the note points at the parameter that breaks the promise (the
-        // error is at the declaration's clause, and the note at the first use the
-        // signature does not promise).
+        // `pure` promises no write (design effects plan 4.3, step 5; design principles 3.3: a read
+        // is a dependency and not an effect, so what the body reads keeps the promise). The
+        // signature published here is the empty one, because the reads are the function's own
+        // business: a caller is told what it may assume, and what it may assume is that nothing is
+        // written. A `var` parameter is a write the signature can see without the body -- the cell
+        // is shared with the caller -- so a signature that writes `pure` and gives a parameter
+        // `var` is refused where it is written, and the note points at the parameter (the error is
+        // at the declaration's clause, and the note at the first use the signature does not
+        // promise).
         const auto varRangeOf =
             [&](const std::string &name) -> std::optional<camel::core::error::TokenRange> {
             for (size_t list = 0; list < 2; ++list) {

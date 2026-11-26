@@ -2912,9 +2912,9 @@ class Builder {
     void orderEffectsOnOneResource();
     void orderEffectsOnOneResourceIn(DraftGraphBuilder *graph);
     // Then holds each declaration of the current module to the clause it wrote: `uses` is an
-    // upper bound and `pure` promises the empty set, so a body that reaches past its clause is
-    // UsesPromiseViolated at the declaration. Reported with the other per-module diagnostics,
-    // while the bodies are still in hand.
+    // upper bound and `pure` promises no write (design principles 3.3: a read is a dependency, not
+    // an effect), so a body that writes past its clause is UsesPromiseViolated at the declaration.
+    // Reported with the other per-module diagnostics, while the bodies are still in hand.
     void checkInferredResources();
     // Records one place where two occurrences of a type variable asked for one type and the two
     // types differed in their resources alone (resource_conflict.h): the type layer asks, while the

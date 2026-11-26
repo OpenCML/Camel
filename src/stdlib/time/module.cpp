@@ -38,14 +38,18 @@ bool TimeModule::load() {
             {"strftime", true},
             {"strptime", true},
         });
-    // What each touches (docs/design/op-semantics 8): the clock.
+    // What each touches (docs/design/op-semantics 8): the clock, and taking a moment is a **write**
+    // of it (design principles 3.3: changing the outside world is a write, and reading a clock is
+    // reading something that moves on without the program). Nothing outside the program is left
+    // as it was, so the access is an effect: it cannot be reused, and it cannot be dropped because
+    // nothing reads the value.
     {
         using camel::core::sem::AccessMode;
         using camel::core::sem::externalAmbient;
         camel::core::OperatorTable::instance().declareResources(
             "time",
             {
-                {"now", externalAmbient("clock", AccessMode::Read)},
+                {"now", externalAmbient("clock", AccessMode::Write)},
             });
     }
     loaded_ = true;
