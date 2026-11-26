@@ -2682,19 +2682,28 @@ compile_graph_ptr_t Builder::instantiateGeneric(
     const size_t instanceIndex = tmpl->instances.size();
     const size_t diagsBefore   = diags_->count();
     const size_t errorsBefore  = diags_->count(Severity::Error);
+    compile_graph_ptr_t graph;
     // The bookkeeping of a body that failed, wherever it failed: the instance is remembered as
-    // failed (a second attempt at the same types is answered without building it again), and what
-    // it said is located and labelled as the instance's.
+    // failed (a second attempt at the same types is answered without building it again), what it
+    // said is located and labelled as the instance's, and its graph leaves the graph it was tried
+    // in. A candidate whose body does not compile for these types does not apply here, and its
+    // graph is not a function the program has: left a subgraph, it would be part of the program as
+    // a graph nothing calls -- encoded with the rest, walked by any pass that walks the closure,
+    // and compiled by a backend that compiles what the closure holds.
     const auto markFailed = [&] {
         if (instanceIndex < tmpl->instances.size()) {
             tmpl->instances[instanceIndex].failed = true;
+        }
+        if (graph && tmpl->ownerGraph) {
+            // The instance stays in `tmpl->instances` as the memo of the attempt, so the graph
+            // object itself is kept; only the place in its outer graph's subgraphs goes.
+            tmpl->ownerGraph->eraseSubGraph(graph);
         }
         if (foreign) {
             diags_->locateByOriginFrom(diagsBefore);
         }
         diags_->addRelatedToErrorsFrom(diagsBefore, instanceLabel, 3);
     };
-    compile_graph_ptr_t graph;
     try {
         BuildState saved(*this, *tmpl);
         AttrScope attrs(currentAttrs_, tmpl->attrs);
