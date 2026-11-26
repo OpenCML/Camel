@@ -212,6 +212,11 @@ git checkout HEAD -- <那一个文件>          # 恢复，git status --porcelai
 > 动手前先查这条用例的历史（`internal/reports/*-the-slow-layer-population.tsv` 这类 census，或 `git log` 该用例）。
 > 回归要**找到那一笔**并说清它把什么改成了什么；欠账要先判“它原来绿过没有”。
 
+> **改了「诊断往哪一路走 / 诊断怎么渲染 / 什么算一次故障」的代码，必须跑诊断那两组计划**：
+> `test/plans/feat/compile/diag_render.plan.toml` 与 `test/plans/feat/linear/runtime_negative.plan.toml`
+> （外加 `modules.definitions` / `modules.nn` 里那几条 fault 用例）。这类改动不红在自己那条计划上，
+> 它会红在“**该报的错没报、程序跑出了值**”上——那是静默的错误结果，红表上离你很远。
+
 ```
 · **车道自己的活**：目标用例要**真绿** —— 那条断言从红变 PASS。
   「它没有变红」不是完成，只有「它变绿了」才是。
