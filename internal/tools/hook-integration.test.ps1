@@ -1,19 +1,18 @@
 # The shape an arrival on `integration` must have, checked where the push is made.
 #
-# `merge-lane.ps1` asserts the shape of the commit it is about to push, and that assertion cannot see
-# a push it did not make. On 2026-11-24 the three seats pushed merges whose first parent was not the
-# tip (they merged `integration` into the seat and fast-forwarded the seat onto it) and one merge
-# went in with a single parent -- none of which went through the tool. So the assertion is also in
-# `scripts/hooks/pre-push`, which sees every ref that leaves this machine.
+# A seat that merges `integration` into itself and fast-forwards the seat onto it, or a lane commit
+# that goes in with a single parent, publishes a history whose first-parent chain reads lane
+# commits as arrivals. Nothing in the tool that makes the merges can see a push made around it,
+# so the assertion is in `scripts/hooks/pre-push`, which sees every ref that leaves this machine.
 #
 # What is locked down, against the real hook file and a throwaway repository:
 #
 #   1. a single-parent commit pushed to `refs/heads/integration` -> refused, and the refusal says
-#      一笔车道提交直接进了 integration;
+#      it went straight in;
 #   2. a merge whose first parent is not the remote tip -> refused, with the sentence about merging
-#      integration into the seat and the command that redoes it, rerere included;
+#      integration into the seat and the command that redoes it;
 #   3. a merge whose first parent IS the remote tip -> allowed (the regression that matters most:
-#      the merge lane's own pushes must keep working);
+#      the merge tool's own pushes must keep working);
 #   4. a push to another branch, and a delete of `integration`, are left alone.
 #
 # `git push --no-verify` runs no hook at all, so none of this can stop a push that asks to skip it.
@@ -116,7 +115,7 @@ Invoke-Git $repo add probe.txt | Out-Null
 Invoke-Git $repo commit -q -m 'probe: the lane change' | Out-Null
 $lane = Get-GitText $repo rev-parse HEAD
 Invoke-Git $repo checkout -q -B integration $base | Out-Null
-Invoke-Git $repo merge -q --no-ff lane/probe -m 'merge probe: the lane change' | Out-Null
+Invoke-Git $repo merge -q --no-ff lane/probe -m 'merge probe: the lane change' -m 'Lane-Reading: probe plan green' | Out-Null
 $merge = Get-GitText $repo rev-parse HEAD
 
 # The tip moving on while the merge waits: a commit on the base, so it is a child of the base and
@@ -148,18 +147,17 @@ function Invoke-Hook {
 # --- 1. a single-parent commit is not an arrival ------------------------------
 $single = Invoke-Hook @("refs/heads/probe $lane refs/heads/integration $base")
 Check 'a single-parent commit pushed to integration is refused' ($single.Code -ne 0) "exit=$($single.Code) $($single.Text)"
-Check 'and the refusal says a lane commit went straight in' ($single.Text -match '一笔车道提交直接进了 integration') $single.Text
+Check 'and the refusal says a lane commit went straight in' ($single.Text -match 'went straight in') $single.Text
 Check 'and it names the commit and the branch' ($single.Text -match $lane -and $single.Text -match 'refs/heads/integration') $single.Text
 
 # --- 2. a merge whose first parent is not the tip is refused ------------------
 $stale = Invoke-Hook @("refs/heads/integration $merge refs/heads/integration $tip")
 Check 'a merge whose first parent is not the remote tip is refused' ($stale.Code -ne 0) "exit=$($stale.Code) $($stale.Text)"
-Check 'and the refusal names both ends of the mismatch' ($stale.Text -match "first parent is $base" -and $stale.Text -match $tip) $stale.Text
-Check 'and it says the operator merged integration into the seat' ($stale.Text -match '你在把 integration 合进席位，而不是把车道合进 integration') $stale.Text
+Check 'and the refusal names both ends of the mismatch' ($stale.Text -match "first parent $base" -and $stale.Text -match $tip) $stale.Text
+Check 'and it says the operator merged integration into the seat' ($stale.Text -match 'integration was merged into the seat') $stale.Text
 Check 'and it gives the command that redoes it' ($stale.Text -match 'checkout -B tmp origin/integration' -and $stale.Text -match 'merge --no-ff') $stale.Text
-Check 'and it points at rerere for the resolutions already made' ($stale.Text -match 'rerere\.enabled true') $stale.Text
 
-# --- 3. the merge lane's own push still passes --------------------------------
+# --- 3. the merge tool's own push still passes --------------------------------
 # The regression that matters most: the tool merges on the tip and pushes, and this hook must not be
 # the thing that stops it.
 $good = Invoke-Hook @("refs/heads/integration $merge refs/heads/integration $base")

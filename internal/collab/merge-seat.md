@@ -11,6 +11,29 @@
 
 `integration` 只有集成步骤一个写者。两格同时推 = 两个写者，所以 2 号位只能准备。
 
+## 怎么合：一条命令
+
+成批乐观合并（`internal/plans/2026-11-26-optimistic-merge.cn.md`）只有一个工具，`scripts/merge-batch.mjs`。
+座位的工作树要干净；车道分支要在座位里能解析（先 `git fetch`）。每条车道给它交回时的那一行读数：
+
+```
+node scripts/merge-batch.mjs --seat <座位工作树> --lane lane/a="<读数一行>" --lane lane/b="<读数一行>"
+node scripts/merge-batch.mjs --seat <座位工作树> --lanes <lanes.json>            # [{"branch": "...", "reading": "..."}]
+node scripts/merge-batch.mjs --seat <座位工作树> --lanes <lanes.json> --push     # 编译通过后推 integration
+```
+
+它做的事：把座位放到 `origin/integration` 尖端，依次把车道合成合并提交（第一父是合并时的尖端），文本冲突的跳过、
+退回车道自己换底；整批做一次增量编译（默认是对座位跑 `internal/tools/camel-remote.ps1`，不带计划，只构建）；
+编不过就按合并顺序对前缀二分，找到第一个编不过的前缀，拿掉它的最后一条车道，把后面的在最后一个好前缀上重合，
+再编一次，直到编过。合并说明列出车道的提交标题，末尾是 `Lane-Reading: <读数一行>`（只改文档的写
+`Lane-Reading: docs-only`），推送钩子逐笔查这一行。不带 `--push` 时停在编译之后，只打印汇总：合了哪些、
+跳过哪些和原因、编译几次几秒、总共几秒。
+
+`--build "<命令>"` 换编译命令（`{seat}` 代表座位路径；退出码等于 `--red-exit`，默认 1，才算"源码编不过"，
+别的非零码是没跑成，工具停手、不拿掉任何车道）。推送被拒（尖端动了或钩子拒绝）退出码 3：从新尖端重跑。
+整批编不过时，工具在二分前先单独编一次起点（集成尖端）：起点本身也编不过，退出码 4，不拿掉任何车道、不推送，
+并说明"集成尖端本身编不过"，先修尖端再重跑；起点编得过才开始二分。
+
 ## 批号（队列页给的号，这里对上靶子）
 
 队列页 `internal/plans/2026-11-25-lane-queue.cn.md` 只写条目名、不带批号；批号活在本页，
@@ -31,8 +54,8 @@
 
 ## 每一批必须做的四件
 
-1. **说明写内容。** 合并提交的正文要列被合进来的东西，成批合并时把**每条车道自己的提交标题**汇进去
-   （`<lane>` 在前、标题照抄、sha 缩写括注）。`Lane branch: lane/x at <sha>` 单独一行不算说明（AGENTS.md）。
+1. **说明写内容。** 合并提交的正文列被合进来的东西：每条车道自己的提交标题加它的读数行，
+   由 `scripts/merge-batch.mjs` 写；`Lane branch: lane/x at <sha>` 单独一行不算说明（AGENTS.md）。
 2. **`.cml` 改动 ⇒ AST 账。** 批里改过 `.cml` 就在合并后 `-Check ast-hashes --base` 复测；红了窄口重录
    （`-UpdateAstHashes -AstOnly <精确路径逗号连接>`）**作为这一批自己的重录提交**；不许手写 hash、不许全量。
 3. **红要分级。** 语料/记录/旧切点（同类）可自修；**方向相反**（c）停手报，不自己解。

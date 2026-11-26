@@ -188,8 +188,6 @@
                 "internal/tools/sync-oversight-live.mjs",
                 "internal/tools/camel-oversight-reload.test.mjs",
                 "internal/tools/camel-pass-scan.test.mjs",
-                "internal/tools/merge-readings-cache.test.mjs",
-                "internal/tools/merge-readings-superset.test.mjs",
                 "internal/tools/red-table-context.mjs",
                 "internal/tools/red-table-context.test.mjs"
             ],
@@ -205,7 +203,8 @@
                 "scripts/check-process-traces.mjs",
                 "scripts/check-process-traces.test.mjs",
                 "scripts/count-graph-readers.mjs",
-                "scripts/merge-readings.mjs",
+                "scripts/merge-batch.mjs",
+                "scripts/promotion-record.mjs",
                 "scripts/selection-cases.mjs"
             ],
             "plans": ["feat/tools/selfchecks.plan.toml", "smoke"]
