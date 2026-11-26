@@ -794,7 +794,10 @@ std::vector<OpDef> nnTensorOps() {
         OpDef{
             .name      = "conv2d_input_grad_shaped",
             .exports   = {"conv2d_input_grad_shaped"},
-            .params    = convParams("dy"),
+            .params    = {{"kernel", ParamKind::Tensor},
+                          {"dy", ParamKind::Tensor},
+                          {"stride", ParamKind::Int, true},
+                          {"padding", ParamKind::Int, true}},
             .resultDoc = "Tensor",
             .infer     = shapedLikeDerivedExtents(0, 1, true),
             .kernel    = &conv2dInputGradShapedKernel,
@@ -803,7 +806,10 @@ std::vector<OpDef> nnTensorOps() {
         OpDef{
             .name      = "conv2d_kernel_grad_shaped",
             .exports   = {"conv2d_kernel_grad_shaped"},
-            .params    = convParams("dy"),
+            .params    = {{"input", ParamKind::Tensor},
+                          {"dy", ParamKind::Tensor},
+                          {"stride", ParamKind::Int, true},
+                          {"padding", ParamKind::Int, true}},
             .resultDoc = "Tensor",
             .infer     = shapedLikeDerivedExtents(0, 1, false),
             .kernel    = &conv2dKernelGradShapedKernel,
