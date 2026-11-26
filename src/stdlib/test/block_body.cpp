@@ -114,6 +114,32 @@ constexpr const char *kBranchChillText = R"cml(export func regionbody(x: int) =>
 }
 )cml";
 
+/// Two bodies that call the same function and differ only in which parameter they read after the
+/// call. The call's form is hashed inside the walk, so what the walk holds for the caller's
+/// signature has to come back when the walk returns: a node of the caller read after the call is
+/// read against the caller's signature, and two bodies that differ there are two bodies. The
+/// callee takes nothing, so what the walk has to put back is the caller's map and not a coincidence
+/// of where two graphs' NodeIds happen to fall.
+constexpr const char *kAfterCallLeftText = R"cml(export func helper() => int {
+    return 1
+}
+
+export func after_call_left(a: int, b: int) => int {
+    let c = helper()
+    return c + a
+}
+)cml";
+
+constexpr const char *kAfterCallRightText = R"cml(export func helper() => int {
+    return 1
+}
+
+export func after_call_right(a: int, b: int) => int {
+    let c = helper()
+    return c + b
+}
+)cml";
+
 /// A body that may fault: dividing by a parameter can divide by zero (design principles 3.9).
 constexpr const char *kRiskyText  = R"cml(export func risky(x: int) => int {
     return 10 / x
@@ -319,6 +345,10 @@ BlockBodyTestPass::apply(const camel::runtime::Program *program, std::ostream &o
         {.what = "hot", .function = "regionbody", .text = kBranchHotText},
         {.what = "chill", .function = "regionbody", .text = kBranchChillText},
         {.what = "hot_again", .function = "regionbody", .text = kBranchHotText},
+        // Two bodies that differ only in which parameter is read after the same call: the body's
+        // signature is still what the walk holds when it comes back from the callee.
+        {.what = "after_call_left", .function = "after_call_left", .text = kAfterCallLeftText},
+        {.what = "after_call_right", .function = "after_call_right", .text = kAfterCallRightText},
     };
     for (Compiled &compiled : blocks) {
         compiled.program = compileBody(compiled.text, compiled.function, compiled.what, os);

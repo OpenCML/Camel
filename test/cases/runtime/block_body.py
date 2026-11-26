@@ -70,10 +70,10 @@ cost_lines = [line for line in lines if line.startswith("BLOCK_COST ")]
 for line in body_lines + trait_lines + arrange_lines + cost_lines + call_lines:
     print(line)
 
-# Five bodies, each a program of its own: a root graph and the function's graph, in a program that
-# is not the one they were compiled for.
+# Fifteen bodies, each a program of its own: a root graph and the function's graph, in a program
+# that is not the one they were compiled for.
 built = [line for line in body_lines if line.startswith("BLOCK_BODY built ")]
-assert len(built) == 13, f"expected thirteen bodies to compile, got: {body_lines}"
+assert len(built) == 15, f"expected fifteen bodies to compile, got: {body_lines}"
 bodies = {}
 for line in built:
     what = line[len("BLOCK_BODY built ") :].split(" ")[0]
@@ -115,6 +115,16 @@ for line in trait_lines:
     }
 assert set(traits) == set(bodies), (set(traits), set(bodies))
 uris = {what: entry["uri"] for what, entry in traits.items()}
+# The names the two pair assertions below are about, printed on one line: a red here is read from
+# this line without opening the whole transcript, and the hash itself is not pinned when it is
+# right (a block's name is a reading of its body, not a constant the case writes down).
+print(
+    "block_body uris: "
+    + " ".join(
+        f"{what}={uris[what]}"
+        for what in ("hot", "chill", "hot_again", "after_call_left", "after_call_right")
+    )
+)
 # Four bodies that compute different things are four blocks.
 assert len({uris["body"], uris["second"], uris["effectful"], uris["fallible"]}) == 4, uris
 # The same body, compiled twice, is one block under one name: a body is compiled as the block's own
@@ -185,6 +195,13 @@ assert uris["hot"] != uris["chill"], (uris["hot"], uris["chill"])
 # And the same source parsed twice is one block: the nodes of a region are walked in the order the
 # structure fixes, never in the order they happened to be created.
 assert uris["hot"] == uris["hot_again"], (uris["hot"], uris["hot_again"])
+# Two bodies that call the same function and differ only in which parameter they read after the
+# call are two blocks. Hashing the callee must put the caller's signature back: a node of the
+# caller read after the call is one of the caller's parameters, not a node of the callee.
+assert uris["after_call_left"] != uris["after_call_right"], (
+    uris["after_call_left"],
+    uris["after_call_right"],
+)
 
 # The entry program, read in the same run: the numbers it had before the bodies were built are the
 # numbers it has after, and they are the numbers of a run without the pass at all.
