@@ -12,7 +12,8 @@
  * Read from the result: the lanes that went in and those skipped with their reason, the first
  * parent of every merge (the integration tip it landed on), the trailer on every merge, the
  * remote untouched without --push and advanced to the tool's tip with it, and the build count
- * (the full batch, two prefix probes, the rebuilt result).
+ * (the base, the full batch, two prefix probes, the rebuilt result); and, over a base that already
+ * carries the breaking file, exit 4 with nothing dropped and nothing pushed.
  *
  * Exit: 0 when every check holds, 1 when one does not.
  */
@@ -156,8 +157,8 @@ if (first.result) {
         JSON.stringify(first.result.skipped),
     );
     check(
-        'the build ran for the full batch, two prefix probes and the rebuilt result (4 builds)',
-        first.builds === 4 && first.result.builds === 4,
+        'the build ran for the base, the full batch, two prefix probes and the rebuilt result (5 builds)',
+        first.builds === 5 && first.result.builds === 5,
         `${first.builds} builds`,
     );
 
@@ -213,6 +214,32 @@ check(
     infra.status === 2 && !`${infra.stdout}`.includes('dropping'),
     `${infra.stdout}${infra.stderr}`,
 );
+
+// --- an integration tip that does not build is no lane's fault ----------------
+// A base that already carries BROKEN makes every prefix of the batch red; the search must not
+// blame the first lane, it must say the tip itself is red and stop.
+git(maker, ['checkout', '--quiet', '-b', 'red-base', tipBefore]);
+write(maker, 'BROKEN', 'x');
+commit(maker, 'a tip that does not build');
+git(maker, ['push', '--quiet', 'origin', 'red-base']);
+const remoteBefore = git(remote, ['rev-parse', 'integration']);
+const redBase = run(['--push', '--base', 'origin/red-base']);
+check(
+    'a base that does not build stops the tool with its own exit code (4)',
+    redBase.status === 4,
+    redBase.out,
+);
+check(
+    'a red base drops no lane and says the integration tip itself does not build',
+    !redBase.out.includes('dropping') && redBase.out.includes('integration tip itself does not build'),
+    redBase.out,
+);
+check(
+    'a red base pushes nothing',
+    git(remote, ['rev-parse', 'integration']) === remoteBefore && redBase.result === null,
+    redBase.out,
+);
+check('a red base costs the batch build and one build of the base (2 builds)', redBase.builds === 2, `${redBase.builds} builds`);
 
 if (!process.env.KEEP_TMP) fs.rmSync(root, { recursive: true, force: true });
 

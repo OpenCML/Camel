@@ -18,7 +18,9 @@
  *   4. A build that fails is searched inside the batch: the merges are a chain, so the first prefix
  *      of the chain that does not build names the lane that broke it (a binary search over
  *      prefixes). That lane is dropped, the lanes after it are merged again on top of the last good
- *      prefix, and the result is built again until it is green.
+ *      prefix, and the result is built again until it is green. The search presumes the tip the
+ *      batch started from builds; so, once, when the first build fails, the tip itself is built
+ *      before any prefix is. A tip that is red stops the tool: no lane is to blame, none is dropped.
  *   5. With --push, the result is pushed to integration.
  *
  * What lanes do to each other that a build cannot see is not this tool's question. The promotion
@@ -39,7 +41,8 @@
  * builds on the host and runs nothing else.
  *
  * Exit codes: 0 done (lanes may have been skipped; read the summary), 2 the tool could not do its
- * job (bad arguments, dirty seat, a build that did not run), 3 the push was refused.
+ * job (bad arguments, dirty seat, a build that did not run), 3 the push was refused, 4 the
+ * integration tip itself does not build (nothing dropped, nothing pushed; fix the tip first).
  */
 
 import { spawnSync } from 'node:child_process'
@@ -210,6 +213,7 @@ function main() {
 
     let buildSeconds = 0
     let builds = 0
+    let baseBuilds = false // the integration tip is known to build once this is true
     if (merged.length > 0) {
         for (;;) {
             git(['checkout', '--quiet', '--detach', merged[merged.length - 1].sha])
@@ -220,8 +224,22 @@ function main() {
             if (full.code !== args.redExit) {
                 fail(2, `the build did not run to a verdict (exit ${full.code}, a red build exits ${args.redExit}); nothing was pushed and no lane was dropped`)
             }
+            if (!baseBuilds) {
+                git(['checkout', '--quiet', '--detach', baseSha])
+                const probe = runBuild(args.build, 'the integration tip itself')
+                buildSeconds += probe.seconds
+                builds += 1
+                if (probe.code === args.redExit) {
+                    fail(4, `the integration tip itself does not build (${baseSha.slice(0, 12)}); no lane is to blame, none was dropped and nothing was pushed; fix the tip first`)
+                }
+                if (probe.code !== 0) {
+                    fail(2, `the build did not run to a verdict (exit ${probe.code}); nothing was pushed and no lane was dropped`)
+                }
+                baseBuilds = true
+                git(['checkout', '--quiet', '--detach', merged[merged.length - 1].sha])
+            }
             // The chain is a sequence of tips; the first one that does not build names its lane.
-            let good = 0 // prefix length known to build (0 is the integration tip itself)
+            let good = 0 // prefix length known to build (0 is the integration tip itself, built above)
             let bad = merged.length
             while (bad - good > 1) {
                 const mid = Math.floor((good + bad) / 2)
