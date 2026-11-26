@@ -1,6 +1,6 @@
 // Copyright (c) the OpenCML Organization
 // SPDX-License-Identifier: MIT
-//
+
 // A case that crashes is not a green.
 //
 // The runner judged an exit code only when the plan wrote `expect_exit`, so an entry that forgot the
