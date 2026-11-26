@@ -139,12 +139,19 @@ func graph_has_hit(g: Graph) => bool {
     }>
 }
 
+// Every node a round merges is paired with the node it keeps before any edit: an edit acts on the
+// draft at once, so a node replaced earlier in the round is a handle that names nothing, and
+// comparing a later node against it would ask a question of a node that is gone.
 func merge_hits_of(g: Graph) => void {
     let ns = nodes(g)
-    ns->filter<func (n: Node) => bool {
+    let hits = ns->filter<func (n: Node) => bool {
         is_hit(ns, n)
-    }>->foreach<func (n: Node) => void {
-        replace(n, keep_of(ns, n))
+    }>
+    let keeps = hits->map<func (n: Node) => Node {
+        keep_of(ns, n)
+    }>
+    zip(hits, keeps)->foreach<func ((n, k)) => void {
+        replace(n, k)
     }>
 }
 
