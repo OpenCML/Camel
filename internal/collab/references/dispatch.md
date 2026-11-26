@@ -54,15 +54,22 @@
 ## 4. 主机命令（只这一种写法）
 
 ```powershell
-# 起点（新车道）—— 必须用这个入口，不要手抄 `git worktree add`
+# 起点（新车道）—— 先看池里有没有空槽位，有就领，没有才建；都不要手抄 `git worktree add`
+pwsh -NoProfile -File internal/tools/new-worktree.ps1 -Pool D:\Projects\Camel-wt     # 列表：free 是 detached 且干净
 pwsh -NoProfile -File internal/tools/new-worktree.ps1 `
-  -Path D:\Projects\Camel-wt\<lane> -Branch <branch> -Base origin/develop
+  -Reuse D:\Projects\Camel-wt\<槽位> -Branch <branch> -Base origin/develop             # 领槽位，保留 build/ out/
+pwsh -NoProfile -File internal/tools/new-worktree.ps1 `
+  -Path D:\Projects\Camel-wt\<槽位> -Branch <branch> -Base origin/develop             # 池里没空位时第一次建一个槽位
+# 合入之后还槽位（只 detach 到 origin/integration 尖端；分支由合并的那一方删）
+pwsh -NoProfile -File internal/tools/new-worktree.ps1 -Release D:\Projects\Camel-wt\<槽位>
 
 # 六计划：**必须分六次跑**，`[SUMMARY]` 只给总数
 pwsh -NoProfile -File D:\Projects\Camel-wt\<lane>\internal\tools\camel-remote.ps1 `
   -Path D:\Projects\Camel-wt\<lane> -Plan compile -Jobs 8
 # 其余五次把 -Plan 换成 linear / opt / parse / para / tools
 ```
+
+**池位是按槽位命名、车道间轮用的，合入后还回池里而不是删目录**：目录不再随任务越攒越多，忽略的构建产物留着，下一条车道的构建是增量的。`-Pool` 列出每个槽位的分支（或 detached）、干净与否、分支是否已并入 `origin/integration`；`merged=yes` 而分支上没有自己的提交，是刚领走的新车道，**空闲只认 detached 且干净**。`-Reuse` 与 `-Release` 遇到已跟踪改动或未被忽略的未跟踪文件就拒绝并原样不动。
 
 **建树只有这一个入口，理由是它把两件 git-ignored 的事做成了一步**：`camel-gate.local.json`
 （少了它，跑起来 exit 2 而且看起来像「还没开始」）与 `.husky/_`（少了它，**git 不报错**，
