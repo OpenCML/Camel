@@ -41,8 +41,8 @@
 # reading) takes build-1, build-2 and all three test slots in the generated `run.sh` before its
 # build, and the plan step is this script in a *child* process. Locks live on descriptors, so the
 # child does not hold what the parent holds -- and it asked for the same files, so it queued behind
-# the process that started it. The lane's probe measured it on 2026-11-25 (`perf/fib`, commit
-# 1834e5b6b6): the run said `hold taken on build-1, build-2 and test-1, test-2, test-3`, then
+# the process that started it. A probe measured it on `perf/fib`: the run said `hold taken on
+# build-1, build-2 and test-1, test-2, test-3`, then
 # answered its own hold with "1 and 2 are held, and slot 3 is the merge seat's alone, so this run
 # queues rather than borrow it", and waited until the lane killed it at fifteen minutes. The hold was
 # taken twice by one run.
@@ -95,7 +95,7 @@ OLD_LOCK=/tmp/camel-host-test.lock
 SLOT_WAIT_S="${CAMEL_SLOT_WAIT_S:-1800}"
 # How often a waiting run repeats "still waiting, and this is who holds it". The wait above is the
 # deadline; this is the interval. Silence for the length of the deadline is what a hang looks like,
-# and on 2026-11-25 a run sat in exactly that for fifteen minutes (see the header).
+# and a run sat in exactly that for fifteen minutes (see the header).
 SLOT_ANNOUNCE_S="${CAMEL_SLOT_ANNOUNCE_S:-60}"
 LANE="${CAMEL_LANE:-$(basename "$PWD")}"
 BRANCH="${CAMEL_BRANCH:-}"
@@ -236,7 +236,7 @@ file_is_locked() {
 # *who could be holding it*. Neither alone is enough. `flock(1)` acquires on an inherited descriptor
 # and then exits, so the pid `/proc/locks` names is usually gone a millisecond later and cannot be
 # asked anything: a first version of this listing that trusted those pids answered "slot 1: free (no
-# process holds it)" on 2026-11-25 about a slot the reporting run's own parent was holding, and a run
+# process holds it)" about a slot the reporting run's own parent was holding, and a run
 # behind that reading waits for as long as its deadline. The processes with the descriptor open are
 # the ones that can be named.
 # A pid already gone is dropped (`ps -o args=` empty), because this script's own `$( )` substitutions
@@ -505,7 +505,7 @@ cmd_plan() {
         # Every slot this run may take is held by its own parent: the parent is waiting for this
         # process, so no amount of waiting frees one. Refused before the queue line is printed, and
         # at once, because the deadline is thirty minutes of a run that could never start -- the
-        # shape of the 2026-11-25 defect.
+        # shape of the queue-behind-itself defect.
         if slots_all_held_by_ancestor "$candidates"; then
             say "every slot this run may take ($candidates) is held by this run's own parent, so waiting for one cannot end: refusing rather than queueing behind the process that started this run (nothing was measured)"
             slots_report

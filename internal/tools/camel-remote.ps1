@@ -2765,7 +2765,7 @@ finish_probe() {
 trap finish_probe EXIT
 # --- who holds a host lock ------------------------------------------------
 # A waiting run that repeats only "still waiting" is indistinguishable from a hung one: the reader
-# cannot tell a queue from a deadlock, and on 2026-11-25 a run printed one line and then sat for
+# cannot tell a queue from a deadlock, and a run that prints one line can then sit for
 # fifteen minutes while the answer -- its own parent held every slot it wanted -- was one `ps` away.
 # So every wait below prints the holder, and the reading is taken in two halves because neither half
 # answers alone:
@@ -2777,7 +2777,7 @@ trap finish_probe EXIT
 #   * `fuser` says *who* has the descriptor, and that is the only half that names something a reader
 #     can ask. `flock(1)` acquires on an inherited descriptor and then exits, so the pid `/proc/locks`
 #     names is usually gone a millisecond later -- a report built from those pids printed
-#     "held by pid <dead>" on 2026-11-25 and could not tell a holder from its own shadow. A pid whose
+#     "held by pid <dead>" and could not tell a holder from its own shadow. A pid whose
 #     `ps -o args=` is empty is dropped, because this script's own `$( )` substitutions inherit every
 #     descriptor and would otherwise be listed as blockers.
 #
@@ -2953,7 +2953,7 @@ if [ '$timeSensitive' = 'True' ]; then
     # The plan step is `camel-run plan` in a *child* process (below), and a lock lives on a file
     # descriptor: the child inherits the descriptor's number only if this shell hands it over, and it
     # asked for the same files -- so without this line the run queues behind the very process that
-    # started it. Measured 2026-11-25 (perf/fib, commit 1834e5b6b6): hold taken here, then the plan
+    # started it. Measured on `perf/fib`: hold taken here, then the plan
     # step printed "1 and 2 are held, and slot 3 is the merge seat's alone, so this run queues
     # rather than borrow it" and waited until the lane killed it at fifteen minutes. `camel-run`
     # reads every name back against /proc/locks and the parent chain, so this is a reading the child
