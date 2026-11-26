@@ -246,6 +246,14 @@ pwsh -NoProfile -File ... -Path <wt> -Clean                        # 收尾：�
 
 另外：**正在跑的线要自己把可复现物落到树外**（`D:\Temp\` 或主机 `/tmp`，并在报告里写明路径），因为树随时可能被重建成更早的 sha，主机上的 `~/camel-work/<lane>` 也可能一起消失。
 
+**2026-11-26 起工作树改成池子**（`new-worktree.ps1 -Reuse` / `-Release` / `-Pool`，命令见 `references/dispatch.md`）：合完的树**归还**（切到 integration 尖端分离头、分支由合并者删），**不再 `worktree remove`**；新车道先 `-Reuse` 空闲槽，没有空闲槽才新建。空闲只认「detached 且干净」。因此上面第 1、2 条判据只用于**删池子以外的树**；池子内的树按下面的收工动作处理。
+
+**收工动作（每天最后一轮做一次，不进任何定时流程）**
+1. `new-worktree.ps1 -Pool D:\Projects\Camel-wt` 列空闲槽（detached 且干净）。
+2. 空闲槽 **> 16** 时，`git worktree remove` 掉**最旧的、`build/` 最小的**那些，留 16 棵（构建产物留着，下条车道是增量构建）。
+3. 删 3 小时前的 `%TEMP%\camel-remote-*`（正在跑的那几次不动；按目录名里的车道名与本轮 `list_agents` 对一遍）。
+4. 报 D 盘余量与本次释放量；`D:\Temp` 下的大目录**只清自己造的、且对应任务已合的**，别人的（负责人手上的产物、`camel-gate-state` 这类活的状态目录）一律先问。
+
 ## 5.8 写文件一律绝对路径：相对路径落在主检出
 
 2026-11-14 事故：一条实现线用 `[System.IO.File]::WriteAllText` 加**相对路径**写文件，.NET 按**进程 CWD**（= 主检出 `D:\Projects\Camel`）解析，于是三个半成品文件落进了 `develop` 的工作区。后果不是「文件放错地方」，而是：
