@@ -781,17 +781,17 @@ from_py: (obj: PyObject) => T! panic when has_python_form::<T>()
 **`nn`** — import { ... } from nn — 22 name(s)
 
 ```text
-conv2d: (input: f32[...], kernel: f32[...], bias: f32[...], stride?: int, padding?: int) => f32[...]
-conv2d_input_grad: (input: f32[...], kernel: f32[...], dy: f32[...], stride?: int, padding?: int) => f32[...]
-conv2d_kernel_grad: (input: f32[...], kernel: f32[...], dy: f32[...], stride?: int, padding?: int) => f32[...]
+conv2d: <stride: int, padding: int> (input: f32[...], kernel: f32[...], bias: f32[...]) => f32[...]
+conv2d_input_grad: <stride: int, padding: int> (input: f32[...], kernel: f32[...], dy: f32[...]) => f32[...]
+conv2d_kernel_grad: <stride: int, padding: int> (input: f32[...], kernel: f32[...], dy: f32[...]) => f32[...]
 conv2d_bias_grad: (bias: f32[...], dy: f32[...]) => f32[...]
 conv2d_input_grad_shaped: (kernel: f32[...], dy: f32[...], stride?: int, padding?: int) => f32[...]
 conv2d_kernel_grad_shaped: (input: f32[...], dy: f32[...], stride?: int, padding?: int) => f32[...]
 conv2d_bias_grad_shaped: (dy: f32[...]) => f32[...]
-max_pool2d: (input: f32[...], kernel: int, stride?: int, padding?: int) => f32[...]
-avg_pool2d: (input: f32[...], kernel: int, stride?: int, padding?: int) => f32[...]
-max_pool2d_grad: (input: f32[...], dy: f32[...], kernel: int, stride?: int, padding?: int) => f32[...]
-avg_pool2d_grad: (input: f32[...], dy: f32[...], kernel: int, stride?: int, padding?: int) => f32[...]
+max_pool2d: <kernel: int, stride: int, padding: int> (input: f32[...]) => f32[...]
+avg_pool2d: <kernel: int, stride: int, padding: int> (input: f32[...]) => f32[...]
+max_pool2d_grad: <kernel: int, stride: int, padding: int> (input: f32[...], dy: f32[...]) => f32[...]
+avg_pool2d_grad: <kernel: int, stride: int, padding: int> (input: f32[...], dy: f32[...]) => f32[...]
 batch_norm: (input: f32[...], mean: f32[...], var: f32[...], gamma: f32[...], beta: f32[...], eps?: number) => f32[...]
 batch_norm_train: (input: f32[...], gamma: f32[...], beta: f32[...], running_mean: f32[...], running_var: f32[...], momentum?: number, eps?: number) => (f32[...], f32[...], f32[...])
 batch_norm_train_grad: (input: f32[...], gamma: f32[...], dy: f32[...], eps?: number) => (f32[...], f32[...], f32[...])
