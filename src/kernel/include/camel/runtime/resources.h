@@ -42,6 +42,7 @@
 
 #include "camel/core/index_semantics.h"
 #include "camel/core/resource_semantics.h"
+#include "camel/runtime/draft.h"
 #include "camel/runtime/graph.h"
 
 #include <cstdint>
@@ -410,10 +411,20 @@ enum class CommitCheck : uint8_t {
 
 std::string_view commitCheckName(CommitCheck check);
 
-/// One region one edit changed, with its kind and the position it was written at
-/// (`camel::runtime::EditNote`, draft.h). Declared here and defined there: this header needs only
-/// to name the record a commit reads its `editOrigin` out of, and the record is the draft's.
-struct EditNote;
+/// One region one edit changed, with its kind and the position it was written at: the draft's
+/// record
+/// (`camel::runtime::EditNote`), defined in `camel/runtime/draft.h` and named by this header rather
+/// than forward-declared.
+///
+/// The include is what puts the definition before `commitViolation`'s declaration, which takes a
+/// span of the record by value. A parameter of type `std::span<const EditNote>` instantiates the
+/// span at the declaration, and the standard library's span instantiates its iterator machinery
+/// there: `const_reverse_iterator` is `const_iterator<reverse_iterator>`, whose concept check calls
+/// `ranges::iter_move`, which reaches `_Span_iterator::operator--` -- pointer arithmetic, and that
+/// needs the complete element type. An implementation that does not instantiate at the declaration
+/// (the GCC standard library does not) accepts a forward declaration, so without this include
+/// whether the header parses at all depended on the order in which each unit reached it. The record
+/// is still defined once, in draft.h.
 
 /// A commit that must be refused: which of the two checks, the graph, the nodes the reading names,
 /// and the one line the diagnostic carries. `origin` is the source position to report against (0
@@ -431,11 +442,12 @@ struct CommitViolation {
     /// program's own text, so `origin` alone points at the line the node stands on; this is what
     /// lets the diagnostic also say which edit put it there (design 8.3).
     ///
-    /// What a kernel can name is the statement it edited, not its own caller: an operator's call site
-    /// is lowered away before the kernel runs, so an edit records the position of the node it stood
-    /// at (the `at` of a splice, the node a `replace` removed, the `before` of an `order`) and the
-    /// diagnostic points there. That is the statement the edit stands at, and it is the closest
-    /// reading there is; a caller that knows its own position passes it to `NamedEdit` instead.
+    /// What a kernel can name is the statement it edited, not its own caller: an operator's call
+    /// site is lowered away before the kernel runs, so an edit records the position of the node it
+    /// stood at (the `at` of a splice, the node a `replace` removed, the `before` of an `order`)
+    /// and the diagnostic points there. That is the statement the edit stands at, and it is the
+    /// closest reading there is; a caller that knows its own position passes it to `NamedEdit`
+    /// instead.
     uint64_t editOrigin = 0;
     std::string text;
 };
@@ -490,16 +502,16 @@ struct CommitViolation {
 /// the edit record says this draft owes. Both true is the reading a caller that has no record gets
 /// -- it asks both, as the commit always has; a draft whose record names only the kinds that keep
 /// both promises passes both false and this reading returns nothing, in every build. The record is
-/// the rule (docs/design/graph-editing/README.cn.md 8.1's table), and the two flags are that table's
-/// right-hand columns.
+/// the rule (docs/design/graph-editing/README.cn.md 8.1's table), and the two flags are that
+/// table's right-hand columns.
 ///
-/// The tier is not the whole of the effect question. Containment compares two sides -- what the body
-/// reaches and what the signature declares -- and a commit that republishes a graph under another
-/// type moves the second one without making a node or adding an access. So the effect question is
-/// also asked whenever the graph's declared clause differs from the clause of the graph the commit
-/// started from (`before`), and a clause that narrowed is refused where the body already stands
-/// outside it; the refusal names the access and both clauses. The order question has no such other
-/// side: a clause says nothing about who goes first.
+/// The tier is not the whole of the effect question. Containment compares two sides -- what the
+/// body reaches and what the signature declares -- and a commit that republishes a graph under
+/// another type moves the second one without making a node or adding an access. So the effect
+/// question is also asked whenever the graph's declared clause differs from the clause of the graph
+/// the commit started from (`before`), and a clause that narrowed is refused where the body already
+/// stands outside it; the refusal names the access and both clauses. The order question has no such
+/// other side: a clause says nothing about who goes first.
 std::optional<CommitViolation> commitViolation(
     const Program &program, const GCGraph &graph, std::span<const gc_node_ref_t> made = {},
     std::span<const gc_node_ref_t> changed = {}, const GCGraph *before = nullptr,
