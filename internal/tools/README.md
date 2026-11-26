@@ -285,15 +285,15 @@ which the removal takes again.
 `host-tokens.sh` hands out the build host's budget per **process** rather than per run. A token is a
 `flock` on one of `$CAMEL_TOKEN_DIR/token-NN.lock` (default `/tmp/camel-tokens`, `$CAMEL_TOKENS` files,
 default 24), held on an inherited descriptor and returned by the kernel when the holder exits -- so a
-killed run cannot carry one away and there is no reclamation pass. `take N`, `take-all`, `run N -- CMD`,
-`show` and `self-test` are the whole interface.
+killed run cannot carry one away and there is no reclamation pass. `take N`, `take-up-to N -- CMD`,
+`run N -- CMD`, `show` and `self-test` are the whole interface.
 
 Who takes one:
 
 | caller | how | what it holds |
 | --- | --- | --- |
 | each test case | `internal/tools/host-case.sh`, the one line of shell in front of every case on the host | one token for the case's whole process tree, returned when it exits |
-| a build | `camel-run build` -> `host-tokens.sh run N -- ninja` | `N` tokens (default 8) |
+| a build | the run's own `run.sh` -> `host-tokens.sh take-up-to N -- npm run build` | what is free at start, up to `N` (default 8) and never fewer than one; that count is `CMAKE_BUILD_PARALLEL_LEVEL`, so the width is the tokens it got |
 | the clang syntax sweep | `scripts/check-clang-syntax.mjs` -> `host-tokens.sh run N -- docker ...` | `min(--jobs, pool)` for the container's life, which is also its `-P` |
 
 Queuing is not failing. A taker that finds the pool empty waits, printing who holds what; when the wait
@@ -365,14 +365,12 @@ baseline (the remote was unreachable when it started) is exit 2. `-Repo` or the 
   local one;
 - `run-registry.jsonl` is one compact JSON line per run snapshot, keyed by `runId`, so several
   concurrent host runs are a list instead of one overwritten slot;
-- a host run's line carries the width it actually ran at: `jobs` (the plan, from the plan slot or,
-  for a `time_sensitive = true` plan, the whole host), `buildJobs` (the build, from the build slot),
-  and `jobsRequested` (what `-Jobs` said on the command line). They are separate because they are
-  separate facts. The host script sets the budget from the slot number it holds — 8 per build slot,
-  16 for the plan slot, 32 for a run holding all three, which is the core count — and `-Jobs` can
-  only narrow it: `-Jobs 32` in a build slot builds 8-wide, `-Jobs 4` builds 4-wide. So a `jobs`
-  that disagrees with `jobsRequested` is the mechanism working. A convention ("load is high, lower
-  `-Jobs` by hand") is not a mechanism: it is forgotten exactly when it matters.
+- a host run's line carries the width it actually ran at: `jobs` (the plan), `buildJobs` (what the
+  token pool handed the build, printed by the taker that held them) and `jobsRequested` (what `-Jobs`
+  said on the command line). They are separate because they are separate facts: the plan asks for 16
+  at most and its cases then take tokens one at a time, and the build takes what is free up to 8. So
+  a `buildJobs` that disagrees with `jobsRequested` is the pool working, not a typo. A convention
+  ("load is high, lower `-Jobs` by hand") is not a mechanism: it is forgotten exactly when it matters.
 - all three are advisory: a locked or unwritable file never fails a build or a plan. The write is
   `camel-gate-state.ps1#Publish-CamelGateState`: one atomic rename over the old document, a short
   retry while a reader has the file open, and then a warning and a dropped update — never an
@@ -389,7 +387,7 @@ baseline (the remote was unreachable when it started) is exit 2. `-Repo` or the 
   all — absent means "not reported", and is never written as `0`, because zero reads as an empty
   pool and would invite a run that the pool cannot support.
 - `queuedAt` is the moment the run started waiting for admission, and `queuedAtKind` names the gate
-  it waited on (`slot` for a host build/test slot, `local` for a local helper's machine-wide mutex).
+  it waited on (`token` for the build host's pool, `local` for a local helper's machine-wide mutex).
   **A row without `queuedAtKind` is a transition-period row and may only be read as `slot`; every row
   written from now on says which gate it was.** That sentence is the reading rule, not a remark: the
   default is right for the old rows by accident (they were all slot waits), and a default that
