@@ -1632,26 +1632,34 @@ try {
         ForEach-Object { "  $_" }
     # Exit 1 and exit 2 are two different facts about two different things, and a gate that reports
     # them the same way teaches the next person the wrong one. 1 is a reading: the compiler ran and
-    # said no. 2 is the absence of a reading: the check itself did not run (no compile database, no
-    # container, no toolchain), so nothing has been said about this tree -- and that must read as
-    # "the gate is down", never as "your code is wrong". Both refuse the merge: a gate that lets a
-    # merge through while it is blind is the failure mode this whole lane exists to remove.
+    # said no. 2 is the absence of a reading. Both refuse the merge: a gate that lets a merge through
+    # while it is blind is the failure mode this whole lane exists to remove.
     if ($syntaxExit -eq 1) {
         Stop-With 'the clang syntax check is red (exit 1: the compiler ran and reported a diagnostic)' 'CI builds with clang 19 on linux and macos; a tree that fails its syntax pass is red there however green the local build was. The diagnostic is above: fix it.'
     }
     if ($syntaxExit -ne 0) {
         # Exit 2 rather than 1, and the same three lines Stop-With prints: the exit code is what a
-        # script wrapping this merge branches on, and "the gate is down" must not be read as "the
-        # tree is wrong" by whatever reads the code next.
+        # script wrapping this merge branches on, and "no reading" must not be read as "the tree is
+        # wrong" by whatever reads the code next.
+        #
+        # It has two shapes and the code cannot tell them apart. The checker used to have one: the
+        # gate did not run (no compile database, no clang 19 image, no toolchain). It now has a
+        # second: the gate ran and some units could not be read, because their compile line names a
+        # source this tree no longer holds (a deletion or a rename after the database was written).
+        # That second shape used to be reported as exit 1 -- a red -- with clang's own
+        # `no such file or directory` as the evidence for a unit clang never read. So the sentence
+        # says "could not measure", names both shapes, and points at the checker's line, which says
+        # which one this was. What it must not say is "your tree is fine".
         Write-Host ''
-        Write-Host "STOPPED: the clang syntax check did not run (exit $syntaxExit, no reading taken)" -ForegroundColor Yellow
+        Write-Host "STOPPED: the clang syntax check could not take a reading (exit $syntaxExit): this is not a verdict on your tree" -ForegroundColor Yellow
+        Write-Host '  Exit 2 is the absence of a reading, not a red: either the check did not run at all, or it ran and the database it read does not describe this tree (a compile line naming a source the tree does not hold), so what it measured is not a reading about this tree. Units left unchecked because the gate image lacks a package header are printed and counted but do not refuse: that is the container, not the change. The checker says which happened, and every failed or unable line it prints names the database it was read from.'
         # A message that only says "repair the gate" leaves the reader with no move when the thing
         # being repaired is what refused them: this is the one place the gate's internal state is
         # visible, so it names the state and the command that changes it. A checkout whose
         # `build/compile_commands.json` is gone cannot be merged into at all until it is built once,
         # and that includes a merge whose purpose is to fix the gate itself.
-        Write-Host '  This is not a defect in your tree: the check itself could not measure it, so nothing was pushed and nothing was learned about this change.'
-        Write-Host '  The commonest cause is that the gate checkout has no compile database (build/compile_commands.json), which only a build writes: run one on it -- internal/tools/camel-remote.ps1 -Path <that worktree>, without -NoBuild -- and merge again. The checker names the actual cause on the line above it printed; the others are a clang 19 image the host does not hold, a toolchain its compile lines cannot reach, and a commit whose first parent is the same tree (`the base and this tree are the same commit`: there is then no change to read).'
+        Write-Host '  If the check did not run, the commonest cause is that the gate checkout has no compile database (build/compile_commands.json), which only a build writes: run one on it -- internal/tools/camel-remote.ps1 -Path <that worktree>, without -NoBuild -- and merge again. The checker names the actual cause on the line above it printed; the others are a clang 19 image the host does not hold, a toolchain its compile lines cannot reach, and a commit whose first parent is the same tree (`the base and this tree are the same commit`: there is then no change to read).'
+        Write-Host '  If units could not be measured, their compile line names a source this tree does not hold: the database was written before that source was deleted or renamed, so there was nothing to compile and nothing was learned about those units. A build on that checkout writes a database for the tree it now holds, and the next merge can read them. A unit that is unchecked is not a unit that passed.'
         Write-Host ''
         Write-GitState -MergeCommit $mergeCommit
         exit 2
