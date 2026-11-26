@@ -29,6 +29,7 @@
 #include "camel/runtime/graph.h"
 #include "camel/runtime/graph_txn.h"
 #include "camel/runtime/resources.h"
+#include "camel/runtime/type_agreement.h"
 
 #include "graph/graph_view.h"
 
