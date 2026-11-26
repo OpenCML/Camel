@@ -412,9 +412,17 @@ promotion-3 记的是晋级 3 那次（基线在 develop 的 `d6503a197c` 一带
 `max_pool2d<2, 2, 0>(...)`），可规则右式搬不动匹配节点自己的 `with` 实参：`src/stdlib/transforms/rule_expand.cpp`
 拒绝右式把匹配节点的上下文实参写下去，原话是 `the rule's right side passes a context argument it does not
 carry`。所以上表第 1、3、4 条的律各自只覆盖一个窗口——`jvp_conv2d`、`conv2d_t` 是 `conv2d<1, 0>`，池化律是
-`max_pool2d<2, 2, 0>` / `avg_pool2d<2, 2, 0>`——别的窗口**没有律**，程序按名字拒绝（`the law `conv2d_t` has no
-cotangent for `nn:conv2d``），用例 `test/cases/modules/nn/conv2d_stride2_transpose.cml` 与
-`max_pool2d_window_transpose.cml` 把这条拒法钉住。这是**有意的窄**：律悄悄按错的窗口答复才是缺陷。
+`max_pool2d<2, 2, 0>` / `avg_pool2d<2, 2, 0>`——别的窗口**没有律**。读者看到的拒法取决于那条律能不能在这个调用上建起来：
+`conv2d_t` 有 4 个类型参数、算上调用自己的两个窗口实参就被问 6 个，于是建不起来，拒法点名那条律（`the law
+`conv2d_t` has no cotangent for `nn:conv2d``，用例 `test/cases/modules/nn/conv2d_stride2_transpose.cml` 钉住）；
+池化律建得起来（右式是 `max_pool2d_grad<2, 2, 0>(x, ct)`），于是走得更远一步、停在**值**上——`skip=law-reads-a-value`，
+"the rule's right side reads a value the transposed function is not handed"，用例
+`test/cases/modules/nn/max_pool2d_window_transpose.cml` 钉住的是这一句，**不是窗口**：律是按操作数类型选的
+（`src/stdlib/transforms/transpose/rules.cpp#chooseTransposedRule`），选律时并不比较节点的 `with` 实参，
+所以任何窗口（包括库自己的默认窗口）在这里都同样被拒。这是**有意的窄**：律悄悄按错的窗口答复才是缺陷。
+还有一笔债要记：选律只看操作数类型，意味着"一条律钉一个窗口"目前不是靠匹配保证的——一条为某个窗口写的律，在操作数类型相同的
+任何窗口上都会被选中，今天只是它的右式恰好要读 primal 才没被错用。这一条是**待解释的记录**，不是结论（匹配是否应当比较 `with`，
+要由语义面定）。
 要把覆盖扩到任意窗口，得两笔欠账一起落地：shaped 梯度接过窗口
 （`conv2d_input_grad_shaped<stride, padding>(kernel, dy)`，律的 angle brackets 才能是律自己的），以及变换能把
 匹配节点的 `with` 实参带进规则右式。台账行在 `internal/backlog.md`，读者向的说明在
