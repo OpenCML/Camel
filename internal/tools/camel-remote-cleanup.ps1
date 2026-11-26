@@ -18,9 +18,9 @@
 #   * every branch of the list when the staging refs cannot be read -- half a deletion is worse than
 #     none, and the read is what the whole step is for.
 #
-#   pwsh -NoProfile -File internal/tools/camel-remote-cleanup.ps1 -Branch lane/x
-#   pwsh -NoProfile -File internal/tools/camel-remote-cleanup.ps1 -Branch lane/x -Apply
-#   pwsh -NoProfile -File internal/tools/camel-remote-cleanup.ps1 -Branch lane/x -Apply -KeepLocalBranch
+#   pwsh -NoProfile -File internal/tools/camel-remote-cleanup.ps1 -Branch <branch>
+#   pwsh -NoProfile -File internal/tools/camel-remote-cleanup.ps1 -Branch <branch> -Apply
+#   pwsh -NoProfile -File internal/tools/camel-remote-cleanup.ps1 -Branch <branch> -Apply -KeepLocalBranch
 #
 # Exit codes: 0 done (or a plan printed), 2 usage, 3 refused.
 
