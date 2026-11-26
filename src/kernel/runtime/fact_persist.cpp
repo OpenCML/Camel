@@ -20,6 +20,8 @@
 #include "camel/core/type/composite/func.h"
 #include "camel/runtime/reachable.h"
 
+#include "fnv.h"
+
 #include <algorithm>
 #include <charconv>
 #include <cstring>
@@ -33,38 +35,10 @@ namespace camel::runtime::fact {
 
 namespace {
 
-/// FNV-1a, 64 bits: the same in every process and on every platform for the same bytes.
-struct Fnv {
-    uint64_t h = 0xcbf29ce484222325ULL;
-    void bytes(const void *data, size_t size) {
-        const auto *p = static_cast<const unsigned char *>(data);
-        for (size_t i = 0; i < size; ++i) {
-            h = (h ^ p[i]) * 0x100000001b3ULL;
-        }
-    }
-    void u64(uint64_t value) {
-        unsigned char b[8];
-        for (int i = 0; i < 8; ++i) {
-            b[i] = static_cast<unsigned char>(value >> (8 * i)); // little-endian, explicitly
-        }
-        bytes(b, 8);
-    }
-    void str(std::string_view text) {
-        u64(text.size());
-        bytes(text.data(), text.size());
-    }
-    void refs(std::span<const gc_node_ref_t> nodes) {
-        u64(nodes.size());
-        for (gc_node_ref_t node : nodes) {
-            u64(node);
-        }
-    }
-};
-
 std::string mangled(const camel::core::type::Type *type) { return type ? type->mangle() : ""; }
 
 /// The value of a static constant: a scalar by its bits, an object by its printed form.
-void hashStatic(Fnv &h, const GCGraph &graph, const GCNode &node) {
+void hashStatic(Fnv1a &h, const GCGraph &graph, const GCNode &node) {
     const camel::core::type::Type *type = node.dataType();
     const slot_t slot                   = graph.staticArea()->get<slot_t>(size_t(-node.dataIndex));
     if (type == nullptr || !type->isGCTraced()) {
@@ -84,7 +58,7 @@ void hashStatic(Fnv &h, const GCGraph &graph, const GCNode &node) {
 /// The content of one graph, with the graphs it refers to counted by their names.
 uint64_t ownContentHash(const Program &program, const GCGraph &graph) {
     const auto &table = camel::core::OperatorTable::instance();
-    Fnv h;
+    Fnv1a h;
     h.str(graph.name());
     h.str(mangled(graph.funcType()));
     h.refs(graph.normPorts());
@@ -116,12 +90,7 @@ uint64_t ownContentHash(const Program &program, const GCGraph &graph) {
             const auto key = table.key(oper);
             h.str(key ? key->toString() : "");
             const auto traits = table.find(oper);
-            h.u64(
-                !traits ? 0xFF
-                        : (uint64_t(traits->pure) | uint64_t(traits->elementwise) << 1 |
-                           uint64_t(traits->stateOnly) << 2 | uint64_t(traits->mayFault) << 3 |
-                           uint64_t(traits->callsGraphs) << 4 | uint64_t(traits->readsGraphs) << 5 |
-                           uint64_t(traits->mayNotTerminate) << 6));
+            h.u64(camel::core::operatorTraitBits(traits));
             break;
         }
         case GCNodeKind::Func:
@@ -242,7 +211,7 @@ template <typename T> std::optional<T> number(std::string_view text, int base = 
 
 uint64_t portableGraphHash(const Program &program, const GCGraph *graph) {
     // The graph and everything below it, each once, in the order the reference tables give.
-    Fnv h;
+    Fnv1a h;
     std::queue<const GCGraph *> work;
     std::unordered_set<const GCGraph *> seen;
     work.push(graph);

@@ -67,13 +67,14 @@ trait_lines = [line for line in lines if line.startswith("BLOCK_TRAITS ")]
 # checked as text and not only as the numbers the assertions below derive from it.
 arrange_lines = [line for line in lines if line.startswith("BLOCK_ARRANGE ")]
 cost_lines = [line for line in lines if line.startswith("BLOCK_COST ")]
-for line in body_lines + trait_lines + arrange_lines + cost_lines + call_lines:
+bits_lines = [line for line in lines if line.startswith("BLOCK_BITS ")]
+for line in body_lines + trait_lines + bits_lines + arrange_lines + cost_lines + call_lines:
     print(line)
 
-# Five bodies, each a program of its own: a root graph and the function's graph, in a program that
-# is not the one they were compiled for.
+# Seventeen bodies, each a program of its own: a root graph and the function's graph, in a program
+# that is not the one they were compiled for.
 built = [line for line in body_lines if line.startswith("BLOCK_BODY built ")]
-assert len(built) == 13, f"expected thirteen bodies to compile, got: {body_lines}"
+assert len(built) == 17, f"expected seventeen bodies to compile, got: {body_lines}"
 bodies = {}
 for line in built:
     what = line[len("BLOCK_BODY built ") :].split(" ")[0]
@@ -115,6 +116,24 @@ for line in trait_lines:
     }
 assert set(traits) == set(bodies), (set(traits), set(bodies))
 uris = {what: entry["uri"] for what, entry in traits.items()}
+# The names the two pair assertions below are about, printed on one line: a red here is read from
+# this line without opening the whole transcript, and the hash itself is not pinned when it is
+# right (a block's name is a reading of its body, not a constant the case writes down).
+print(
+    "block_body uris: "
+    + " ".join(
+        f"{what}={uris[what]}"
+        for what in (
+            "hot",
+            "chill",
+            "hot_again",
+            "after_call_left",
+            "after_call_right",
+            "loop_state_left",
+            "loop_state_right",
+        )
+    )
+)
 # Four bodies that compute different things are four blocks.
 assert len({uris["body"], uris["second"], uris["effectful"], uris["fallible"]}) == 4, uris
 # The same body, compiled twice, is one block under one name: a body is compiled as the block's own
@@ -179,12 +198,35 @@ assert traits["renamed"]["portable"] != traits["body"]["portable"], traits["rena
 assert uris["mirror"] != uris["diff"], (uris["diff"], uris["mirror"])
 assert len({uris[what] for what in ("body", "second", "effectful", "fallible", "spin", "diff", "mirror")}) == 7, uris
 # Two bodies whose only difference is *inside a region* are two blocks. The same function name, the
-# same branch, the same arms, and one string constant in one arm; nothing outside the arm reads what
-# the arm hands out, so a name read off the outer graph alone would call them one body.
+# same branch, the same arms, and one string constant in one arm: the arm's statements are reached
+# through the value the arm hands the join, so a name read off the outer nodes alone would call them
+# one body.
 assert uris["hot"] != uris["chill"], (uris["hot"], uris["chill"])
-# And the same source parsed twice is one block: the nodes of a region are walked in the order the
-# structure fixes, never in the order they happened to be created.
+# And the same source parsed twice is one block: a region is entered at its form ports and at its
+# exit, in an order the structure fixes, never in the order its nodes happened to be created.
 assert uris["hot"] == uris["hot_again"], (uris["hot"], uris["hot_again"])
+# Two bodies that call the same function and differ only in which parameter they read after the
+# call are two blocks. Hashing the callee must put the caller's signature back: a node of the
+# caller read after the call is one of the caller's parameters, not a node of the callee.
+assert uris["after_call_left"] != uris["after_call_right"], (
+    uris["after_call_left"],
+    uris["after_call_right"],
+)
+# Two bodies whose only difference is *inside a region* are two blocks, down to which state value
+# the region reads: the state values are ports of the region, so the walk has to name each one by
+# its position in the region it belongs to. A region port hashed by what its node holds makes the
+# two bodies one block.
+assert uris["loop_state_left"] != uris["loop_state_right"], (
+    uris["loop_state_left"],
+    uris["loop_state_right"],
+)
+# One packing of an operator's traits, read by both hashes that name an operator by them: every bit
+# a hash can set comes out of one statement of the layout, and an operator the table does not know
+# is the marker no packing can produce. A bit dropped from that one statement is a bit both hashes
+# lose together, which is what the two copies of it did not do.
+bits = [line for line in bits_lines if line.startswith("BLOCK_BITS stated=")]
+assert len(bits) == 1, bits_lines
+assert bits[0] == "BLOCK_BITS stated=7f unknown=ff", bits[0]
 
 # The entry program, read in the same run: the numbers it had before the bodies were built are the
 # numbers it has after, and they are the numbers of a run without the pass at all.

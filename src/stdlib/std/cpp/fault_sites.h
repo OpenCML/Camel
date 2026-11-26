@@ -43,8 +43,8 @@ uint64_t nodeOriginNear(const camel::graph::Graph *graph, camel::runtime::gc_nod
 /// the graph's own `GraphId`, and a `GraphId` is a number `GraphView` does not answer (it answers
 /// `CalleeRef`, by value, for the graphs a node names). Everything past that first try is shape,
 /// and it is read through the view.
-uint64_t graphOriginOf(
-    const camel::core::context::Context &context, const camel::runtime::GCGraph *graph);
+uint64_t
+graphOriginOf(const camel::core::context::Context &context, const camel::runtime::GCGraph *graph);
 
 class SiteTable {
   public:
@@ -79,23 +79,31 @@ class SiteTable {
     /// The name of the Site of a fault of `kind` at `origin`, a place of the program that is
     /// not a node: the entry function, for the reports of its command-line arguments.
     std::string siteAt(
-        uint64_t origin, camel::core::error::RuntimeDiag kind, const std::vector<std::string> &args);
+        uint64_t origin, camel::core::error::RuntimeDiag kind,
+        const std::vector<std::string> &args);
 
     /// A Site of a diagnostic that is not located in the program (the report of an error
     /// value nobody handled: what the value says is its location is put in when it happens).
-    std::string unlocated(camel::core::error::RuntimeDiag kind, const std::vector<std::string> &args);
+    std::string
+    unlocated(camel::core::error::RuntimeDiag kind, const std::vector<std::string> &args);
 
     /// The definitions of the sites asked for, in that order.
     std::string definitions() const;
     bool empty() const { return sites_.empty(); }
+
+    /// The context the sites are located in. A refusal is located against it too, and one question
+    /// a refusal asks is about the context itself -- whether an operator is one the context's block
+    /// store implements (a block, camel/runtime/block_programs.h) -- because a block's operator has
+    /// no name a translation could look its implementation up by: the implementation is a program.
+    const camel::core::context::context_ptr_t &context() const { return context_; }
 
   private:
     struct Site {
         std::string name;
         std::string text;
         std::string brief;
-        std::string comment; // where it is, for the reader of the generated file
-        bool place = false;  // a Place: `text` is the excerpt and `brief` the start
+        std::string comment;  // where it is, for the reader of the generated file
+        bool place = false;   // a Place: `text` is the excerpt and `brief` the start
         std::string kind;     // for an error value (attempt): the name without its prefix
         std::string message;  // for an error value: the message
         std::string location; // for an error value: `file.cml:line:col`
@@ -106,9 +114,8 @@ class SiteTable {
     /// name is `at_<line>_<column>`. Shared by siteFor and siteAt. `named` replaces the
     /// diagnostic's name in the report, for the fault a `fail` names itself.
     std::string makeSite(
-        uint64_t origin, camel::core::error::RuntimeDiag kind,
-        const std::vector<std::string> &args, std::string filled = {},
-        const std::string &named = {});
+        uint64_t origin, camel::core::error::RuntimeDiag kind, const std::vector<std::string> &args,
+        std::string filled = {}, const std::string &named = {});
 
     /// `file.cml:line:col` of `d`'s range, the file without its directory (as an error value
     /// names it, src/execute/fault_isolation.cpp).

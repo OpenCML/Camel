@@ -981,9 +981,11 @@ Arrangeable termsOfOperator(camel::ops::OperId oper) {
         terms = Arrangeable{};
     }
     // The termination term was a constant here: every operator ended, because the table had no
-    // field to say otherwise and this kind had nothing to read. The field exists now
-    // (`OperatorTraits::mayNotTerminate`), and the term is the record's like the other three --
-    // read from the same entry, so a reader of this kind and a reader of the table agree.
+    // field to say otherwise and this kind had nothing to read. It is read from the operator's
+    // traits (`OperatorTraits::mayNotTerminate`), which the table derives from the one statement of
+    // it, the semantics' -- the operator's own record carries no termination statement, and a
+    // field nothing reads is worse than no field. This is the same entry the table's readers use,
+    // so a reader of this kind and a reader of the table agree.
     const std::optional<camel::core::OperatorTraits> traits = table.find(oper);
     // Termination and fault are two questions, and a call that runs into the machine's limits
     // answers only the first: running out of stack or of memory is a resource limit, and design

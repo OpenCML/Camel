@@ -114,6 +114,49 @@ constexpr const char *kBranchChillText = R"cml(export func regionbody(x: int) =>
 }
 )cml";
 
+/// Two bodies that call the same function and differ only in which parameter they read after the
+/// call. The call's form is hashed inside the walk, so what the walk holds for the caller's
+/// signature has to come back when the walk returns: a node of the caller read after the call is
+/// read against the caller's signature, and two bodies that differ there are two bodies. The
+/// callee takes nothing, so what the walk has to put back is the caller's map and not a coincidence
+/// of where two graphs' NodeIds happen to fall.
+constexpr const char *kAfterCallLeftText = R"cml(export func helper() => int {
+    return 1
+}
+
+export func after_call_left(a: int, b: int) => int {
+    let c = helper()
+    return c + a
+}
+)cml";
+
+constexpr const char *kAfterCallRightText = R"cml(export func helper() => int {
+    return 1
+}
+
+export func after_call_right(a: int, b: int) => int {
+    let c = helper()
+    return c + b
+}
+)cml";
+
+/// Two bodies whose only difference is inside a region, and behind the node the outer edges stop
+/// at: the loop's condition reads one of the two state values in the first body and the other in
+/// the second. The state values are ports of the condition region, so what the walk has to know is
+/// which position of that region a port is -- a region port hashed as an anonymous node reads the
+/// same wherever it sits, and the two bodies would then be one block.
+constexpr const char *kLoopStateLeftText = R"cml(export func loop_state_left(n: int) => int {
+    let r = loop a = 0, b = n while a < n do (a + 1, b)
+    return r.0
+}
+)cml";
+
+constexpr const char *kLoopStateRightText = R"cml(export func loop_state_right(n: int) => int {
+    let r = loop a = 0, b = n while b < n do (a + 1, b)
+    return r.0
+}
+)cml";
+
 /// A body that may fault: dividing by a parameter can divide by zero (design principles 3.9).
 constexpr const char *kRiskyText  = R"cml(export func risky(x: int) => int {
     return 10 / x
@@ -319,6 +362,14 @@ BlockBodyTestPass::apply(const camel::runtime::Program *program, std::ostream &o
         {.what = "hot", .function = "regionbody", .text = kBranchHotText},
         {.what = "chill", .function = "regionbody", .text = kBranchChillText},
         {.what = "hot_again", .function = "regionbody", .text = kBranchHotText},
+        // Two bodies that differ only in which parameter is read after the same call: the body's
+        // signature is still what the walk holds when it comes back from the callee.
+        {.what = "after_call_left", .function = "after_call_left", .text = kAfterCallLeftText},
+        {.what = "after_call_right", .function = "after_call_right", .text = kAfterCallRightText},
+        // Two bodies that differ only in which state value a loop's condition reads: a region's
+        // ports are named by their positions in that region, not by what the nodes happen to hold.
+        {.what = "loop_state_left", .function = "loop_state_left", .text = kLoopStateLeftText},
+        {.what = "loop_state_right", .function = "loop_state_right", .text = kLoopStateRightText},
     };
     for (Compiled &compiled : blocks) {
         compiled.program = compileBody(compiled.text, compiled.function, compiled.what, os);
@@ -384,6 +435,19 @@ BlockBodyTestPass::apply(const camel::runtime::Program *program, std::ostream &o
             // disagree, which is what the case reads them for.
             camel::runtime::fact::portableGraphHash(*compiled.program, compiled.graph));
     }
+
+    // The trait bits are packed in one place (`camel::core::operatorTraitBits`), and both hashes
+    // that name an operator by its traits -- the block's form above and the portable hash below --
+    // read that one packing. Printed with every trait set at once and with no traits at all, so the
+    // layout is a reading and not a claim: the seven bits a hash can set are all set, and an
+    // operator the table does not know is the marker no packing of the fields can produce.
+    camel::core::OperatorTraits everyTrait;
+    everyTrait.pure = everyTrait.elementwise = everyTrait.stateOnly = everyTrait.mayFault =
+        everyTrait.callsGraphs = everyTrait.readsGraphs = everyTrait.mayNotTerminate = true;
+    os << std::format(
+        "BLOCK_BITS stated={:02x} unknown={:02x}\n",
+        camel::core::operatorTraitBits(everyTrait),
+        camel::core::operatorTraitBits(std::nullopt));
 
     // The blocks in the context's store, where an operator's node reads them from, and the one
     // executor of their protocol: a URI reaches the kernel through the manager, and the operator
