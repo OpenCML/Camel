@@ -2138,12 +2138,16 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
         // The names are the URI's own tail, which is the name `camel inspect --ops` reports for them
         // (`copy` / `:op/copy`) and what `--verify-ops` compares a declaration with.
         OperatorGroup::create("cast", {}),
-        // Entering (design principles 5.1, "entering is not a conversion"): the same shape as a
-        // conversion, declared the same way, because it is the same kind of operator -- a call
-        // whose target type is the call's result type. What differs is who writes it (the
-        // compiler, never the program) and that its record states no fault. Its name is the URI's
-        // own tail (`enter` / `:op/enter`), which is what `camel inspect --ops` reports and what
-        // `--verify-ops` compares a declaration with.
+        // Entering (design principles 5.1, "entering is not a conversion"): declared in the same
+        // form as a conversion, because it is the same kind of call -- the target type is the
+        // call's own result type, so neither group needs a parameter the declaration does not
+        // say. Its shape is its own and not the conversion's: `:op/enter` is registered with
+        // `OperShape::Entering` where the operator is registered with its kernel
+        // (`builtin/executors/builtin.cpp`), because a conversion is judged by the safety table of
+        // the pair it converts between and an entering asks no table. What differs besides the
+        // shape is who writes it (the compiler, never the program) and that its record states no
+        // fault. Its name is the URI's own tail (`enter` / `:op/enter`), which is what
+        // `camel inspect --ops` reports and what `--verify-ops` compares a declaration with.
         OperatorGroup::create("enter", {}),
         OperatorGroup::create("fill", {}),
         OperatorGroup::create("access", {}),
