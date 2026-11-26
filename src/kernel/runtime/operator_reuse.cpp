@@ -128,8 +128,8 @@ void dumpOperatorReuse(
 void dumpObservedReuse(std::ostream &os) {
     const camel::profile::UpdateReuseCounters counters = camel::profile::updateReuseCounters();
     os << "REUSE observed plans " << counters.plans << " reuse-input " << counters.reuseInput
-       << " by-count " << counters.byArrayCount << " copy " << counters.copy << " counts in-place "
-       << counters.inPlace << " copied " << counters.copied << "\n";
+       << " by-array-count " << counters.byArrayCount << " copy " << counters.copy
+       << " counts in-place " << counters.inPlace << " copied " << counters.copied << "\n";
 }
 
 } // namespace camel::runtime

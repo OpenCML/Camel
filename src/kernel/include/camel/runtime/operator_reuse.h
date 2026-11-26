@@ -40,12 +40,27 @@ class Program;
  *
  * and one line for the whole program, which is the run-time half:
  *
- *   REUSE observed plans <n> reuse-input <n> by-count <n> copy <n> counts in-place <n> copied <n>
+ *   REUSE observed plans <n> reuse-input <n> by-array-count <n> copy <n> counts in-place <n> copied
+ * <n>
  *
- * The first four numbers are what the plans built so far decided (profile::planUpdateMarks); the
- * last two are what the arrays themselves answered when an in-place update asked
+ * The first four numbers are what the plans built so far decided (profile::planUpdateMarks: the
+ * count of plans, then the nodes it marked StorageReuse::Input, ByArrayCount and Copy); the last
+ * two are what the arrays themselves answered when an in-place update asked
  * (profile::arrayCountAnswer). Under `inspect` nothing runs, so the counts are 0 and the line says
  * the runs it counted: none. Under a run with `--reuse` the same line is the run's answer.
+ *
+ * The mark is `by-array-count` and not `by-count` on purpose. `--copies` prints `by-count` for
+ * every update whose storage the plan left to the array -- which includes the in-place forms the
+ * plan decided nothing about (StorageReuse::None), because that is what the back end runs. The
+ * plan's mark is the narrower thing: a node it actually decided ByArrayCount. One word for both
+ * would make the two readings look like they count the same set, and a program whose only updates
+ * are the decided-by-nothing kind would read as a contradiction (rows in `--copies`, zeros here)
+ * instead of what it is: no marks, no question asked.
+ *
+ * A program can print zeros here and still reuse storage: the counts are answers to a question, and
+ * a program whose only update is `nn:sgd` (a `declared` row -- the operator says it reuses, nothing
+ * asks the array) never asks it. That is a reading of this mechanism and not a measure of how much
+ * reuse a run did; `--copies` says which of the two a row is.
  */
 void dumpOperatorReuse(
     const Program &program, std::ostream &os,
