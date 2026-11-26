@@ -50,6 +50,14 @@ bool selectBlockSpaceLimit(size_t bytes);
 /// `std::profile gc_stats=...`.
 void reportSpaceUsage(std::ostream &os);
 
+/// One line with the block space's counters (`[camel] blocks: ...`): blocks alive now, the bytes
+/// they hold, the high-water mark of those bytes, and how many blocks were ever created and
+/// released. A block's bytes are the data the program holds, so this line answers what the data
+/// of a run costs and what it peaked at, which the collector's line (bytes of collected objects)
+/// does not. Printed at exit after the spaces' line when the statistics were turned on with
+/// `std::profile gc_stats=...`.
+void reportBlockUsage(std::ostream &os);
+
 /// Which collector the auto space runs.
 enum class CollectorMode {
     MarkSweep,    // Non-moving mark-sweep: every object keeps its address (--gc mark-sweep).

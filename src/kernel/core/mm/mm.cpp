@@ -3,6 +3,8 @@
 
 #include "camel/core/mm.h"
 
+#include "camel/core/mm/block.h"
+
 #include <algorithm>
 #include <cctype>
 #include <cstdlib>
@@ -57,6 +59,7 @@ void installStatsAtExit() {
                 statsInstance->reportStats(std::cerr);
             }
             reportSpaceUsage(std::cerr);
+            reportBlockUsage(std::cerr);
         });
     });
 }
@@ -380,6 +383,12 @@ void reportSpaceUsage(std::ostream &os) {
     printSpaceUsage(os, "perm", permSpace().usage());
     printSpaceUsage(os, "meta", metaSpace().usage());
     os << '\n';
+}
+
+void reportBlockUsage(std::ostream &os) {
+    os << "[camel] blocks: live=" << blockLiveCount() << " bytes=" << blockBytesLive()
+       << " peak=" << blockBytesPeak() << " created=" << blockCreations()
+       << " freed=" << blockFrees() << '\n';
 }
 
 } // namespace camel::core::mm
