@@ -119,9 +119,9 @@ extent_of: () => int[] when is_array::<A>()
 copy: (x: T) => T
 cast: (x: T) => U panic
 enter: (x: T) => U
-fill: (template: T, ...fields: ...F) => T panic
-access: <at: int> (x: T) => U panic
-access_key: <key: string> (x: T) => U panic
+fill: <...slots: int> (template: T, ...fields: ...F) => T
+access: <at: int> (x: T) => U
+access_key: <key: string> (x: T) => U
 range: (start: int, end: int, step: int) => int[] panic
 to_range: (start: int, stop: int, step: int) => Range panic
 to_array: (r: Range) => int[]
@@ -781,13 +781,16 @@ to_py: (x: T) => PyObject! panic when has_python_form::<T>()
 from_py: (obj: PyObject) => T! panic when has_python_form::<T>()
 ```
 
-**`nn`** — import { ... } from nn — 19 name(s)
+**`nn`** — import { ... } from nn — 22 name(s)
 
 ```text
 conv2d: (input: f32[...], kernel: f32[...], bias: f32[...], stride?: int, padding?: int) => f32[...]
 conv2d_input_grad: (input: f32[...], kernel: f32[...], dy: f32[...], stride?: int, padding?: int) => f32[...]
 conv2d_kernel_grad: (input: f32[...], kernel: f32[...], dy: f32[...], stride?: int, padding?: int) => f32[...]
 conv2d_bias_grad: (bias: f32[...], dy: f32[...]) => f32[...]
+conv2d_input_grad_shaped: (kernel: f32[...], dy: f32[...], stride?: int, padding?: int) => f32[...]
+conv2d_kernel_grad_shaped: (input: f32[...], dy: f32[...], stride?: int, padding?: int) => f32[...]
+conv2d_bias_grad_shaped: (dy: f32[...]) => f32[...]
 max_pool2d: (input: f32[...], kernel: int, stride?: int, padding?: int) => f32[...]
 avg_pool2d: (input: f32[...], kernel: int, stride?: int, padding?: int) => f32[...]
 max_pool2d_grad: (input: f32[...], dy: f32[...], kernel: int, stride?: int, padding?: int) => f32[...]
