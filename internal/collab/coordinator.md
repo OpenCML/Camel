@@ -374,6 +374,13 @@ git worktree add --detach <旧提交>
   附带一条：**这条同样适用于“修一处看起来是缺陷的代码”** —— 先 `git log -S<符号>` 看那处最近被谁改过，再决定是补还是删；不然会把“已经修好留下的兼容分支”当成缺陷再修一遍。
   **第四次（同一夜，换了个形状）：前提提交根本不在基上。** 派一条活去改 `time.cml` / `process.cml` 的 `@effect` 散文，前提是另一条车道的 `ebc7f8fe96`（把 clock 改成“写”）已经进 integration —— 而它**只在本地 `lane/effect-audit`**，`origin/integration` 上 `process/module.cpp:52` 至今还是 `AccessMode::Read`。车道当场停手、给了三处证据，**没有硬做**；硬做的后果是生成物写“writes the clock”而同树的可执行声明是 Read，**文档开始说谎，比现状更坏**。
   ⇒ 于是这一步有两条命令，派工前都跑：`git merge-base --is-ancestor <前提提交> origin/integration`（exit 0 才能派）、以及判据命令本身在基上的读数。**“我以为它已经合了”不是读数；“它在某条支上”不是“它在基上”。**
+  **第五、六、七次（同一夜，形状是“那条别人的活已经做完，我又派了一遍”）：**`task-100`（前提只在本地支）、`task-105`（`lane/console-rescue` 的换底与验收刚被另一条车道交回）、`task-72`（`feat.trans.cml` 两条早已被 `e095299875`/`1d8ca78c4e` 修掉并合进 integration，总账 `R-2026-11-26-24` 记着）。三次都有车道当场用读数挡住，零损失，但**三次都是我少跑了一步**。
+  ⇒ 派工前现在是**三条命令**，缺一条就不派：
+    ① 判据命令在 `origin/integration` 尖端跑一次（判据若已成立 ⇒ 不是待做的活）；
+    ② `git merge-base --is-ancestor <那格的尖端/前提提交> origin/integration`，exit 0 才算已合；
+    ③ `Select-String internal/backlog.md "task-<号>"`（或 R 编号）—— 总账里已有交回记录的，先读它再决定派不派。
+  一条更省事的等价写法：`git log --oneline origin/integration --grep="<那格的主题词>"`，能搜到就说明事已经做完。
+
   另：**局部成立的活也跟着这条走** —— 前提在别人未合的分支上时，正确做法是把这条活排在“那次合并之后”，而不是让车道在旧树上先把文档改了。**文档与可执行声明必须同树**，这是硬边界。
 
 整理前的全文：`git show 5a0b93049^:internal/collab/rules.md` 之后各版（`git log -- internal/collab/rules.md`）。
