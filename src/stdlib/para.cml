@@ -16,6 +16,19 @@
 with <f: (item: T) => void>
 export func unordered_foreach::<T>(xs: T[]) => void
 
+// A range shares this name with `int[]` as it shares `foreach`, `map` and `filter`: the function is
+// an ordinary function of the same name, declared beside the operator of that name, and it does the
+// array's own work on the array the range names. The names of one module are one set of candidates
+// (design principles 4.4), so a call from another module reaches this one by the argument's type.
+
+/// Calls f for every integer r names, for its effects; the calls have no order among them, as
+/// `unordered_foreach` on the array the range names.
+/// @example (0 .. 3)->unordered_foreach<func (x: int) { println(x) }>
+with <f: (item: int) => void>
+export func unordered_foreach(r: Range) => void {
+    return to_array(r)->unordered_foreach<f>
+}
+
 /// Combines the elements with f starting from initial; the order in which elements are combined is
 /// not fixed, so f should be associative and commutative.
 /// @example [1, 2, 3]->unordered_reduce<func (acc: int, x: int) => int { acc + x }, 0>    // 6
