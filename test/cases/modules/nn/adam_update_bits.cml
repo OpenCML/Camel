@@ -8,6 +8,11 @@
  * that text exactly.
  *
  * The model has both kinds of trainable leaf: two tensors and a float.
+ *
+ * The inputs name the range's conversion (`to_array`): handing an interval to a call whose parameter
+ * is an integer array relies on an expected-type conversion the language describes but does not
+ * implement yet, and `to_array` is today's one conversion from a range to the integers it names
+ * (`test/cases/modules/tensor/take_ops.cml` builds its inputs the same way).
  */
 
 import { adam, adam_state } from nn
@@ -23,13 +28,13 @@ func main(steps: int, lr: float) => int sync {
     // Deterministic values with binary digits below the point: 0.0007 and 0.0011 are not
     // representable as float, so an f32 intermediate would move the result.
     let model = {
-        w: f32((0 .. 6)) * 0.0007 - 0.002,
-        b: f32((0 .. 2)) * 0.03 + 0.001,
+        w: f32(to_array(0 .. 6)) * 0.0007 - 0.002,
+        b: f32(to_array(0 .. 2)) * 0.03 + 0.001,
         scale: 0.25
     }
     let gradient = {
-        w: f32((0 .. 6)) * 0.0011 - 0.003,
-        b: f32((0 .. 2)) * -0.02 + 0.005,
+        w: f32(to_array(0 .. 6)) * 0.0011 - 0.003,
+        b: f32(to_array(0 .. 2)) * -0.02 + 0.005,
         scale: -0.5
     }
     let (trained, state, done) = loop m = model, s = adam_state(model), step = 0 while step < steps do {
