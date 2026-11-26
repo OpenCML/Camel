@@ -330,6 +330,111 @@ take_up_to() {
     "$@"
 }
 
+# --- evidence for the self-test -------------------------------------------------------------------
+#
+# The self-test judges order and concurrency from what the workers write, never from a clock: a busy,
+# shared host stretches every wait, so "it took under N ms" says how loaded the machine was. A worker
+# appends `start NAME WANT HELD` once it holds its tokens (HELD is the pool's own count of held
+# tokens at that moment) and `end NAME WANT` before it lets them go, both under one lock, so the
+# order of the lines is the order things happened in. Time appears only as a liveness bound, a limit
+# long enough that reaching it means a hang.
+
+# st_log FILE LINE: append one line, serialised.
+st_log() { ( flock 9; printf '%s\n' "$2" >> "$1" ) 9> "$1.lock"; }
+
+# st_starts FILE: how many workers have logged a start.
+st_starts() { grep -c '^start' "$1" 2> /dev/null || true; }
+
+# st_summary FILE: key=value readings of the log, for eval.
+#   starts/ends/fails  workers that started, finished, could not take
+#   maxopen            most workers holding at once
+#   maxtokens          most tokens the open workers asked for at once
+#   maxheld            largest pool-held count any worker saw when it started
+#   heldwrong          workers whose own held count was not what they asked for
+st_summary() {
+    awk '
+        $1 == "start" { s++; o++; t += $3; if (o > mo) mo = o; if (t > mt) mt = t; if ($4 > mh) mh = $4; if ($4 != $3) hw++ }
+        $1 == "end"   { e++; o--; t -= $3 }
+        $1 == "fail"  { f++ }
+        END { printf "starts=%d ends=%d fails=%d maxopen=%d maxtokens=%d maxheld=%d heldwrong=%d\n", s+0, e+0, f+0, mo+0, mt+0, mh+0, hw+0 }
+    ' "$1"
+}
+
+# st_worker FILE NAME WANT TAKER GATE: take WANT tokens with TAKER (`new` is `take`, `old` is
+# `take_old`), log the start, hold until GATE workers have started (or the liveness bound), log the
+# end. The tokens go back when the subshell running this exits.
+st_worker() {
+    local log="$1" name="$2" want="$3" taker="$4" gate="$5" i=0
+    WAIT_S="${ST_WAIT:-120}"
+    if [ "$taker" = old ]; then
+        # A taker that waited out keeps what it holds until its twin has waited out too, so the twin
+        # cannot finish on the tokens the first one gave up.
+        take_old "$want" "$log.barrier" || { st_log "$log" "fail $name"; sleep 3; return 3; }
+    else
+        CAMEL_TOKEN_QUIET=1 take "$want" > /dev/null 2>&1 || { st_log "$log" "fail $name"; return 3; }
+    fi
+    count_held
+    st_log "$log" "start $name $want $HELD_N"
+    while [ "$(st_starts "$log")" -lt "$gate" ] && [ "$i" -lt 300 ]; do sleep 0.1; i=$((i + 1)); done
+    [ "${ST_HOLD:-0}" = 0 ] || sleep "$ST_HOLD"
+    st_log "$log" "end $name $want"
+}
+
+# The old taker, kept only as the negative control: one token per pass, holding what it has while it
+# waits for the rest. `take_old WANT BARRIER` takes one token, then waits until two takers (this one
+# and its twin) each hold one -- the situation two large takers reach by chance and this makes
+# certain -- and then keeps going one token a pass, never giving anything back. Nothing is left for
+# either to finish with, so it waits out (returns 6) instead of running.
+take_old() {
+    local want="$1" barrier="$2" n fd got=0 held=' ' t0 i=0
+    prepare
+    now_ms; t0=$NOW_MS
+    while [ "$got" -lt "$want" ]; do
+        n=1
+        while [ "$n" -le "$POOL_SIZE" ]; do
+            case "$held" in *" $n "*) n=$((n + 1)); continue ;; esac
+            fd=$((20 + n))
+            eval "exec $fd>\"$(token_path "$n")\""
+            if flock -n "$fd"; then held="$held$n "; got=$((got + 1)); break; fi
+            eval "exec $fd>&-"
+            n=$((n + 1))
+        done
+        if [ "$got" -eq 1 ] && [ ! -e "$barrier.$$" ]; then
+            : > "$barrier.$$"
+            while [ "$(ls "$barrier".* 2> /dev/null | wc -l)" -lt 2 ] && [ "$i" -lt 100 ]; do sleep 0.1; i=$((i + 1)); done
+        fi
+        [ "$got" -ge "$want" ] && break
+        now_ms
+        [ $((NOW_MS - t0)) -lt $((WAIT_S * 1000)) ] || return 6
+        sleep 0.1
+    done
+    return 0
+}
+
+# settle PATTERN: poll `show` into OUT until it contains PATTERN. The limit says the pool never got
+# there; the caller's check then reports what it did see.
+settle() {
+    local i=0
+    while :; do
+        out=$(show)
+        case "$out" in *"$1"*) return 0 ;; esac
+        i=$((i + 1))
+        [ "$i" -lt 300 ] || return 1
+        sleep 0.1
+    done
+}
+
+# two_takers_log LOG WANT TAKER: two takers of WANT tokens at once, joined; the evidence is in LOG.
+two_takers_log() {
+    local log="$1" want="$2" taker="$3" pids='' p k
+    : > "$log"; rm -f "$log".barrier.*
+    for k in 1 2; do
+        ( ST_HOLD=1 st_worker "$log" "t$k" "$want" "$taker" 0 ) &
+        pids="$pids $!"
+    done
+    for p in $pids; do wait "$p" || true; done
+}
+
 self_test() {
 
     local root bad=0 out
@@ -362,8 +467,7 @@ self_test() {
     # 3. a holder keeps its tokens and a second run cannot take them
     ( take 2 >/dev/null; exec sleep 30 ) &
     holder=$!
-    sleep 0.5
-    out=$(show)
+    settle 'free=1 held=2'
     case "$out" in
         *'free=1 held=2'*) echo 'ok    two held leaves one free' ;;
         *) echo "FAIL  two held leaves one free: $out"; bad=$((bad + 1)) ;;
@@ -372,8 +476,7 @@ self_test() {
     # 4. the tokens come back when the holder dies -- the property the whole design is for
     kill -9 "$holder" 2>/dev/null
     wait "$holder" 2>/dev/null
-    sleep 0.5
-    out=$(show)
+    settle 'free=3 held=0'
     case "$out" in
         *'free=3 held=0'*) echo 'ok    a killed holder returns its tokens without a cleanup pass' ;;
         *) echo "FAIL  a killed holder returns its tokens: $out"; bad=$((bad + 1)) ;;
@@ -398,17 +501,23 @@ self_test() {
     esac
     # 8. four takers on a pool of two run two at a time. Waiting on the first token while the second
     # is free would make a pool of twenty-four run one thing at a time, which is the old defect from
-    # the other side; the wall clock is the only reading that separates the two.
-    t0=$(date +%s%N)
-    for _ in 1 2 3 4; do ( CAMEL_TOKEN_QUIET=1 take 1 >/dev/null; sleep 1 ) & done
-    wait
-    ms=$(( ($(date +%s%N) - t0) / 1000000 ))
-    if [ "$ms" -lt 3500 ]; then
-        echo "ok    four takers on a pool of two take two rounds (${ms}ms)"
+    # the other side. Each worker holds until a second one has started, so a taker that serialises
+    # the pool never sees a neighbour start and the log shows one open worker at a time; the liveness
+    # bound only keeps that case from hanging.
+    POOL_SIZE=2; prepare
+    log=$(mktemp); : > "$log"
+    pids=''
+    for i in 1 2 3 4; do ( st_worker "$log" "w$i" 1 new 2 ) & pids="$pids $!"; done
+    for p in $pids; do wait "$p" || true; done
+    eval "$(st_summary "$log")"
+    if [ "$starts" -eq 4 ] && [ "$ends" -eq 4 ] && [ "$fails" -eq 0 ] && [ "$maxtokens" -eq 2 ] && [ "$maxheld" -le 2 ]; then
+        echo 'ok    four takers on a pool of two run two at a time'
     else
-        echo "FAIL  four takers on a pool of two ran one at a time (${ms}ms, a pool of two needs under 3500)"
+        echo "FAIL  four takers on a pool of two: $(st_summary "$log") (needs starts=4 ends=4 fails=0 maxtokens=2 maxheld<=2)"
         bad=$((bad + 1))
     fi
+    rm -f "$log" "$log.lock"
+    POOL_SIZE=3; prepare
     # 6. a size that is not a number is refused rather than read as a pool of zero
     if CAMEL_TOKENS=many "$0" show >/dev/null 2>&1; then
         echo 'FAIL  a pool size of "many" was accepted'; bad=$((bad + 1))
@@ -420,16 +529,14 @@ self_test() {
     #    records it is a pool nobody can tell from an unused one.
     ( take 3 >/dev/null; exec sleep 20 ) &
     holder2=$!
-    sleep 0.5
-    out=$(show)
+    settle 'peak=3'
     case "$out" in
         *'peak=3'*) echo 'ok    the peak records three held at once' ;;
         *) echo "FAIL  the peak did not record three: $out"; bad=$((bad + 1)) ;;
     esac
     kill -9 "$holder2" 2>/dev/null
     wait "$holder2" 2>/dev/null
-    sleep 0.5
-    out=$(show)
+    settle 'free=3 held=0 peak=3'
     case "$out" in
         *'free=3 held=0 peak=3'*) echo 'ok    the peak stays at three after every token is back' ;;
         *) echo "FAIL  the peak did not stay: $out"; bad=$((bad + 1)) ;;
@@ -438,13 +545,11 @@ self_test() {
     # 10. a wait that runs out is its own answer: 6, not 2 (a refusal) and not 1 (a red reading)
     ( take 3 >/dev/null; exec sleep 20 ) &
     holder3=$!
-    sleep 0.5
-    t0=$(date +%s)
+    settle 'free=0 held=3'
     ( WAIT_S=2; take 1 >/dev/null 2>&1 )
     rc=$?
-    secs=$(( $(date +%s) - t0 ))
     if [ "$rc" -eq 6 ]; then
-        echo "ok    a wait that runs out exits 6 (${secs}s, a 2 s wait)"
+        echo 'ok    a wait that runs out exits 6'
     else
         echo "FAIL  a wait that runs out exited $rc, not 6"; bad=$((bad + 1))
     fi
@@ -467,7 +572,7 @@ self_test() {
     # width while a token sits free is the queue this verb exists to remove.
     ( take 2 >/dev/null; exec sleep 30 ) &
     holder4=$!
-    sleep 0.5
+    settle 'free=1 held=2'
     width=$("$0" take-up-to 3 -- true 2>/dev/null | sed -n 's/^HOST_BUILD_JOBS=//p' | tail -1)
     seen=$("$0" take-up-to 3 -- sh -c 'printf "width-in-cmd=%s\n" "$CAMEL_TOKENS_HELD"' 2>/dev/null | sed -n 's/^width-in-cmd=//p' | tail -1)
     case "$width:$seen" in
@@ -478,37 +583,39 @@ self_test() {
     wait "$holder4" 2>/dev/null
 
     # 13. two takers that each want more than half of the pool both finish, one after the other.
-    # Each takes two of three and holds them for a second; taking one token at a time and waiting for
-    # the second would leave each holding one and waiting on the other until the wait ran out. Inside
-    # each worker the pool must show exactly two held -- the other taker's tokens are not there -- so
-    # the two ran one after the other and the total held never passed the pool.
-    two_log=$(mktemp)
-    t0=$(date +%s%N)
-    for _ in 1 2; do
-        (
-            WAIT_S=20
-            CAMEL_TOKEN_QUIET=1 take 2 >/dev/null 2>&1 || exit 3
-            show | grep -o 'held=[0-9]*' | head -1 >> "$two_log"
-            sleep 1
-        ) &
-        two_pids="${two_pids:-} $!"
-    done
-    two_bad=0
-    for p in $two_pids; do wait "$p" || two_bad=$((two_bad + 1)); done
-    ms=$(( ($(date +%s%N) - t0) / 1000000 ))
-    seen=$(sort "$two_log" | tr '
-' ' ')
-    rm -f "$two_log"
+    # Each takes two of three and holds them; taking one token at a time and waiting for the second
+    # would leave each holding one and waiting on the other. The verdict is the log: both started and
+    # finished, never two open at once (two and two do not fit in three), each saw exactly its own two
+    # held, and the pool's held count never passed the pool.
+    log=$(mktemp)
+    ST_WAIT=120 two_takers_log "$log" 2 new
+    eval "$(st_summary "$log")"
     peak_of
-    if [ "$two_bad" -eq 0 ] && [ "$seen" = 'held=2 held=2 ' ] && [ "$PEAK_N" -le "$POOL_SIZE" ] && [ "$ms" -lt 15000 ]; then
-        echo "ok    two takers that each want two of three both finish, one after the other (${ms}ms)"
+    if [ "$starts" -eq 2 ] && [ "$ends" -eq 2 ] && [ "$fails" -eq 0 ] && [ "$maxopen" -eq 1 ]         && [ "$heldwrong" -eq 0 ] && [ "$maxheld" -le "$POOL_SIZE" ] && [ "$PEAK_N" -le "$POOL_SIZE" ]; then
+        echo 'ok    two takers that each want two of three both finish, one after the other'
     else
-        echo "FAIL  two takers of two on a pool of three: $two_bad failed, held seen '$seen', peak $PEAK_N, ${ms}ms"
+        echo "FAIL  two takers of two on a pool of three: $(st_summary "$log"), peak $PEAK_N"
         bad=$((bad + 1))
     fi
+    rm -f "$log" "$log.lock"
+
+    # 14. the negative control: the same two-large-takers check, run against the old taker (one token
+    # per pass, holding while it waits, each holding one before either asks for a second). It must
+    # fail, and by waiting out -- a taker that never got its tokens -- not by a comparison of times.
+    # Both want all three, which is what makes the two certain to meet each other's holds.
+    log=$(mktemp)
+    ST_WAIT=4 two_takers_log "$log" 3 old
+    eval "$(st_summary "$log")"
+    if [ "$fails" -ge 1 ] && ! { [ "$starts" -eq 2 ] && [ "$ends" -eq 2 ] && [ "$maxopen" -eq 1 ]; }; then
+        echo "ok    the old taker fails the two-large-takers check by waiting out ($(st_summary "$log"))"
+    else
+        echo "FAIL  the old taker passed the two-large-takers check: $(st_summary "$log")"
+        bad=$((bad + 1))
+    fi
+    rm -f "$log" "$log.lock" "$log".barrier.*
 
     rm -rf "$root"
-    if [ "$bad" -eq 0 ]; then echo 'selftest: 13 checks, 0 failed'; return 0; fi
+    if [ "$bad" -eq 0 ]; then echo 'selftest: 14 checks, 0 failed'; return 0; fi
     echo "selftest: $bad failed"; return 1
 }
 
