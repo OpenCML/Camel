@@ -9,14 +9,13 @@
 # `origin`, so it is left out: a measurement stays possible on a tree whose comments still have
 # to be cleaned, which is the order the work happens in.
 #
-# The refs git sends arrive on stdin once, and both halves of this hook read them: the develop and
-# integration rules in `scripts/hooks/pre-push`, and the trace check below. A reader that runs
-# second may find the stream already drained, and an empty stream reads as "no push to develop" --
-# the lock passing the thing it exists to stop. So the stream is read here, once, and handed to the
-# other half, which then reads the same lines it would have read from git.
+# The develop lock runs first, and not for tidiness: it decides from the refs git passes on stdin,
+# and a reader that runs after another one may find the stream already drained. An empty stream
+# reads as "no push to develop", which is how a lock that is installed would let through the thing
+# it exists to stop. It applies to every remote and not only `origin`: `refs/heads/develop` is
+# develop wherever it is being sent. See scripts/hooks/pre-push.
 top=$(git rev-parse --show-toplevel 2>/dev/null) || top='.'
-refs=$(cat)
-printf '%s\n' "$refs" | sh "$top/scripts/hooks/pre-push" "$@" || exit $?
+sh "$top/scripts/hooks/pre-push" "$@" || exit $?
 
 if [ "$1" = "origin" ]; then
     # The tree is named, not inherited. The checker has no default root, because the directory a
@@ -27,38 +26,14 @@ if [ "$1" = "origin" ]; then
     # worktree, `top` is `.` and the checker reads nothing, which it reports and refuses: a tree it
     # could not read is not a tree it passed.
     #
-    # What a push is answerable for is the lines it adds: the diff from the tip it is sent to, to the
-    # commit it sends. Judging the whole tree refused a push over files its author had never opened,
-    # which is how a check teaches the one bypass it cannot see. A ref with no tip on the remote has
-    # no range, so it says so and passes; the push that later publishes those commits to `develop`
-    # or `integration` diffs them against those tips, which is where they are judged.
-    #
-    # This is the one place the checker is called from. A second caller in `scripts/hooks/pre-push`
-    # would be the same question asked twice, and the two answers would drift.
-    # git sends `<local ref> <local sha> <remote ref> <remote sha>`, one line per ref. The sha on the
-    # left is all zeros for a delete, which sends no content and has nothing to judge; the sha on the
-    # right is all zeros for a ref the remote does not have yet, which has no range to diff.
-    while IFS=' ' read -r local_ref local_sha remote_ref remote_sha; do
-        [ -n "$remote_ref" ] || continue
-        case "$local_sha" in
-            *[!0]*) : ;;
-            *) continue ;;
-        esac
-        case "$remote_sha" in
-            *[!0]*) : ;;
-            *)
-                echo "pre-push: $remote_ref is new on origin: no tip to compare, so no line to judge." >&2
-                continue
-                ;;
-        esac
-        node "$top/scripts/check-process-traces.mjs" --root "$top" --added-from "$remote_sha" --head "$local_sha"
-        state=$?
-        if [ "$state" -ne 0 ]; then
-            echo "pre-push: refusing to push $remote_ref: the lines this push adds are named above (node exit $state)." >&2
-            echo 'pre-push: the traces a tree inherits are not this push'"'"'s; the ones it writes are.' >&2
-            exit 1
-        fi
-    done <<EOF
-$refs
-EOF
+    # The debt the tree inherited is a file beside the checker, judged per file and only ever going
+    # down, so that a push is refused for the traces it adds and not for the ones it was handed. When
+    # that file is gone -- the day the debt is at zero -- the run is the one at the threshold of
+    # zero, which is how this hook ends: the baseline is the scaffolding, not the check.
+    baseline="$top/scripts/process-traces-baseline.json"
+    if [ -f "$baseline" ]; then
+        node "$top/scripts/check-process-traces.mjs" --root "$top" --baseline "$baseline"
+    else
+        node "$top/scripts/check-process-traces.mjs" --root "$top"
+    fi
 fi

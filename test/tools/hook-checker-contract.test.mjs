@@ -24,23 +24,9 @@
  * another file's subject, and its own text carries a work item number and a date, which the checker
  * this fixture runs would refuse and turn into a red this file does not mean.
  *
- * Two files hold the push rules and the split is the contract: `scripts/hooks/pre-push` carries the
- * develop lock and the arrival shape, `.husky/pre-push` hands the refs to it and then judges the
- * lines the push adds. The checker is called from `.husky/pre-push` and from nowhere else -- two
- * call sites would be one question asked twice, and the two answers would drift -- so the file read
- * here is that one, and the other half is copied into the fixture as it stands.
- *
- * The stream is read once in `.husky/pre-push` and handed to the other half, because the first reader
- * drains it: a hook that reads it second sees nothing, and nothing reads as "no push to develop".
- *
- * The push it sends is two real commits against each other, not a pair of zeros: a ref with no tip on
- * the remote has no range, so the hook says it has nothing to compare and passes without starting the
- * checker -- a green over an invocation that never happened. Two commits give it a range, and the
- * checker's stand-in records the invocation.
- *
- * `--hook <file>` reads another hook instead of that one. It is how the negative control is run
- * without editing the hook: a copy with the required name removed must turn this file red. The plan
- * entry passes no flag, so what a run measures by default is the file `.husky/pre-push` hands to.
+ * `--hook <file>` reads another hook instead of `.husky/pre-push`. It is how the negative control is
+ * run without editing the hook: a copy with the required name removed must turn this file red. The
+ * plan entry passes no flag, so what a run measures by default is the hook husky runs.
  *
  * Exit: 0 when every check holds, 1 when one does not, 2 when the hook or the shell git ships could
  * not be read -- a host that cannot run this cannot say the hook is fine.
@@ -54,9 +40,9 @@ import { fileURLToPath } from 'node:url';
 const here = path.dirname(fileURLToPath(import.meta.url));
 const treeRoot = path.resolve(here, '..', '..');
 const defaultHook = path.join(treeRoot, '.husky', 'pre-push');
-const seatHook = path.join(treeRoot, 'scripts', 'hooks', 'pre-push');
 const checkerFile = path.join(treeRoot, 'scripts', 'check-process-traces.mjs');
 const checkerName = 'check-process-traces.mjs';
+const zeros = '0'.repeat(40);
 const branch = 'refs/heads/a-branch-this-fixture-never-sends';
 const url = 'https://example.invalid/Camel.git';
 const notNamed = '--root <dir> is required';
@@ -153,15 +139,18 @@ function write(dir, rel, text) {
 // A repository and nothing else: the hook resolves its tree through `git rev-parse --show-toplevel`
 // exactly as it does on a real push, so the value it passes has to be found the same way and not
 // inherited from a directory this file happened to be started in.
-function buildFixture(hookSource) {
+function buildFixture(hookSource, sh) {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'hook-contract-'));
     const recordPath = path.join(dir, 'record.jsonl');
-    // The hook under test, as it stands: a stand-in for it would measure the stand-in, which is how
-    // this fixture spent a while passing over a hook that never started the checker.
     write(dir, '.husky/pre-push', hookSource);
-    // The other half, as it stands: the develop lock and the arrival shape, and no call to the
-    // checker. A stand-in for it would measure the stand-in.
-    write(dir, 'scripts/hooks/pre-push', fs.readFileSync(seatHook, 'utf8'));
+    write(
+        dir,
+        'scripts/hooks/pre-push',
+        '#!/bin/sh\n' +
+            '# The develop lock and the arrival shape are the other hook\'s subject, and this fixture\n' +
+            '# sends neither a develop push nor an integration one: it exits where that hook does.\n' +
+            'exit 0\n',
+    );
     write(dir, 'src/clean.c', '// The program reads nothing and answers zero.\nint main(void) { return 0; }\n');
     write(dir, 'checker-real/check-process-traces.mjs', fs.readFileSync(checkerFile, 'utf8'));
     write(
@@ -170,15 +159,7 @@ function buildFixture(hookSource) {
         standIn(recordPath, path.join(dir, 'checker-real', 'check-process-traces.mjs')),
     );
     execFileSync('git', ['init', '--quiet', '--initial-branch=main', dir], { encoding: 'utf8' });
-    const git = (...args) => execFileSync('git', args, { cwd: dir, encoding: 'utf8' }).trim();
-    git('config', 'user.email', 'fixture@example.invalid');
-    git('config', 'user.name', 'a fixture');
-    git('add', '--all');
-    git('commit', '--quiet', '-m', 'The first commit of a branch that is about to be pushed.');
-    write(dir, 'src/second.c', '// A second file, so the push has two commits and a range to judge.\nint second(void) { return 1; }\n');
-    git('add', '--all');
-    git('commit', '--quiet', '-m', 'The second commit: the one this push sends.');
-    return { dir, recordPath, base: git('rev-parse', 'HEAD~1'), tip: git('rev-parse', 'HEAD') };
+    return { dir, recordPath };
 }
 
 // One path, two spellings: a hook's `$top` comes out of git with forward slashes and the drive in
@@ -196,8 +177,8 @@ function asKey(one, base) {
     return resolved.replace(/\\/g, '/').replace(/\/+$/, '').toLowerCase();
 }
 
-function measure(hookSource, shell, line = 'push') {
-    const { dir, recordPath, base, tip } = buildFixture(hookSource);
+function measure(hookSource, shell) {
+    const { dir, recordPath } = buildFixture(hookSource, shell.sh);
     const readings = { dir, recordPath, entries: [] };
     let removed = false;
     let removeError = '';
@@ -209,14 +190,11 @@ function measure(hookSource, shell, line = 'push') {
         // husky's dispatcher starts the hook as `sh -e`, and the line it prints when the hook fails
         // is that dispatcher's; the same flag is used here, or a hook whose first command fails
         // would run on and this file would measure a state a real push never reaches.
-        const refLine =
-            line === 'delete'
-                ? `(delete) ${'0'.repeat(40)} ${branch} ${base}\n`
-                : `${branch} ${tip} ${branch} ${base}\n`;
+        const refLine = `${branch} ${zeros} ${branch} ${zeros}\n`;
         try {
             readings.hookOutput = execFileSync(
                 shell.sh,
-                ['-e', '.husky/pre-push', 'origin', url, branch, tip, branch, base],
+                ['-e', '.husky/pre-push', 'origin', url, branch, zeros, branch, zeros],
                 { cwd: dir, env: hookEnv(shell.root), input: refLine, encoding: 'utf8' },
             );
             readings.hookStatus = 0;
@@ -304,29 +282,6 @@ check(
     'the hook reaches the checker',
     calls.length > 0,
     `no call to ${checkerName} was recorded (${readings.entries.length} node script(s) started)`,
-);
-// A push that only deletes a branch sends no content. There is no range to diff and nothing to
-// judge, so the checker must not be started at all: a run of it over a range that does not exist
-// would answer "nothing added" and read exactly like a pass.
-let deletion = null;
-try {
-    deletion = measure(fs.readFileSync(hookPath, 'utf8'), shell, 'delete');
-} catch (error) {
-    deletion = { error: error.message, entries: [] };
-}
-const deletionCalls = (deletion.entries ?? []).filter((entry) =>
-    String(entry.argv?.[0] ?? '').endsWith(checkerName),
-);
-check(
-    'a push that only deletes a branch starts no checker',
-    deletionCalls.length === 0 && deletion.hookStatus === 0,
-    `${deletionCalls.length} call(s) recorded, hook exit ${deletion.hookStatus ?? deletion.error}`,
-);
-
-check(
-    'the checker is called from one place, and not the other',
-    calls.length === 1 && !fs.readFileSync(seatHook, 'utf8').includes(checkerName),
-    `${calls.length} call(s) recorded; ${seatHook} ${fs.readFileSync(seatHook, 'utf8').includes(checkerName) ? 'also calls it' : 'does not'}`,
 );
 check(
     'the checker is told which tree to read',

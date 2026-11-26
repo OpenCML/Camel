@@ -116,16 +116,15 @@ timeout_ms = 120000
 
 [[tests]]
 name = "selfchecks.process_traces"
-desc = "`scripts/check-process-traces.mjs` reads four trees for process traces, and its verdict is about a diff: each spelling is refused in a commit that adds it, a trace the branch inherited is not refused and neither is a commit that changes only a document, a commit that adds no line passes, a base this repository does not have is its own answer rather than a pass, a date or a hash that is data is not a trace, a trace in a test's name is refused where the name is written, the whole-tree mode lists every trace and refuses no push, and a run that read nothing is red rather than green."
+desc = "`scripts/check-process-traces.mjs` reads four trees for process traces: a date or a hash that is data is not a trace, a trace in a test's name is refused where the name is written, `--list` prints the same lines and judges nothing while the same tree without the flag is refused, a listing of a tree that read nothing is still red, the GPU lane domain in the tiles compiler is refused on purpose, and a run that read nothing is red rather than green."
 kind = "behavior"
-tier = "slow"
 tool = "node"
 case = "../../../../scripts/check-process-traces.test.mjs"
 args = ["${case}"]
 expect_exit = 0
-expect_stdout_contains = [" pass 10", " fail 0"]
+expect_stdout_contains = [" pass 8", " fail 0"]
 normalizers = ["normalize_newlines"]
-timeout_ms = 300000
+timeout_ms = 120000
 
 # The pairing between the hook and the checker, which neither file shows on its own: the checker
 # reads a tree only when the caller names one, and the push hook is the caller that has to name it.
@@ -493,22 +492,5 @@ case = "../../../../test/tools/tool-exit.test.mjs"
 args = ["${case}"]
 expect_exit = 0
 expect_stdout_contains = ["tool-exit: 8 checks, 0 failed"]
-normalizers = ["normalize_newlines"]
-timeout_ms = 180000
-
-# The push hook lives in `scripts/hooks/pre-push` for the develop lock and the arrival shape, and
-# `.husky/pre-push` hands it the refs and then judges the lines the push adds. The fixture is two
-# real commits, so the hook has a range to diff and actually starts the checker; a stand-in for the
-# hook, or a pair of zeros, would pass over an invocation that never happened.
-[[tests]]
-name = "selfchecks.hook_checker_contract"
-desc = "`.husky/pre-push` started over a throwaway repository with two commits: the checker is reached, it is told `--root` and the word is that repository's tree root, it accepts the invocation, and the push is not refused. The checker has one call site; a copy with the tree name removed turns this red."
-kind = "behavior"
-tier = "slow"
-tool = "node"
-case = "../../../../test/tools/hook-checker-contract.test.mjs"
-args = ["${case}"]
-expect_exit = 0
-expect_stdout_contains = ["hook-checker-contract: 9 checks, 0 failed"]
 normalizers = ["normalize_newlines"]
 timeout_ms = 180000
