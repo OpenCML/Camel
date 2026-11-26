@@ -93,3 +93,28 @@ node scripts/merge-batch.mjs --seat <座位工作树> --lanes <lanes.json> --pus
 **常驻规矩：**经 `b/<lane>` 重挂副本合进去的车道，**合完当轮就按上面这一步删原分支**，不要留到计数里去。
 2026-11-26 的实例：5 条（cc-int8 / cc-onnx-loop / docs-pass-forms / milestone-fast / overload-guard）挂在“未合 21”里，
 其中没有一条是待办；删掉后闸门 21 → 16。
+
+## 车道的绑定与清理：一条车道 = 一个工作树 + 一个 teammate
+
+绑定表只记在这里（`internal/collab/merge-seat.md`），不散在派工单里：
+
+| 车道 | 工作树 | teammate | 状态 |
+|---|---|---|---|
+| `<lane 名>` | `D:\Projects\Camel-wt\<名字>` | `<list_agents 里的 target>` | 在跑 / 已停 / 已合 |
+
+- **车道用 `spawn_teammate` 建，不用 `subagent`**：`subagent` 建出来的会话**无法按 id 寻址**（`send_message` 回
+  `active teammate … not found`），只能重新派一个 —— 那就是冷启动。`subagent` 只用于一次性探针与读数活。
+- 续做、换底、按审查改都**唤起同一个 teammate**；唤起时第一句让它重读 `camel-lane` skill。
+- **合进 `integration` 后解绑**（从表里划掉），再按上一节清工作树与分支。
+
+### 两条禁则（都是“读数正确、对象错”）
+- **不许动还没交回的车道的工作树，哪怕它干净。** 一条刚开的车道分支，它的尖端**就是**基线 ⇒
+  `git merge-base --is-ancestor` 为 0、`dirty=0`，于是“已合 + 干净”两条都成立，但那条车道正在里面干活。
+  **判据是“车道方交回了没有”，不是“树干净不干净”。**
+- **`Lane-Reading:` 必须是说明的最后一个 trailer 段落**；夹在正文中间会被 `pre-push` 拒
+  （`merge(s) without a Lane-Reading trailer`）。
+
+### 换底与退场
+- 在跑的车道**每次交回前**换底，被点名落后超过 100 笔时**当轮**换底；**暂停前换一次、恢复后再换一次**。
+  换底是 `rebase`，不把 `integration` 合进车道分支。
+- **没做完的车道不存档退场**：要停先问协调者。存档只保住内容，停掉的是路线图上还在的事。
