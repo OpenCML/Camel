@@ -259,8 +259,8 @@ async function run() {
     check('a sync that moved the live directory asks for a restart, with or without an hmr service', unavailable.status === 200 && unavailable.body.reload === 'restart-needed', JSON.stringify(unavailable.body))
     const after = (await call(routesE, '/oversee/state', 'GET')).body.plugin || {}
     check('state then reads the synced version as newer than the loaded one', after.synced === fix.first && after.loaded !== after.synced, JSON.stringify(after))
-    const routesF = await instance({ loadFrom: liveD, liveDir: liveD, repoPath: fix.root, ref: fix.first, hmr: null })
-    const current = await call(routesF, '/oversee/reload')
+    const routesSame = await instance({ loadFrom: liveD, liveDir: liveD, repoPath: fix.root, ref: fix.first, hmr: null })
+    const current = await call(routesSame, '/oversee/reload')
     check('a process that loaded the commit the live directory holds is asked for nothing', current.status === 200 && current.body.changed === false && current.body.reload === 'not-needed', JSON.stringify(current.body))
 
     // ---- 8. the hot reload seeds from the file it imported, not from the pushed version -----------
@@ -269,7 +269,7 @@ async function run() {
     // rules stayed on the old version with every beat reporting nothing to do.
     const hotLive = path.join(sandbox, 'live-hot')
     fs.mkdirSync(hotLive, { recursive: true })
-    for (const name of ['index.js', 'measure.js', 'client.js', 'package.json']) {
+    for (const name of fs.readdirSync(pluginDir).filter((entry) => entry.endsWith('.js') || entry === 'package.json')) {
         fs.copyFileSync(path.join(pluginDir, name), path.join(hotLive, name))
     }
     const oldRules = execFileSync('git', ['-C', fix.root, 'show', `${fix.first}:internal/tools/camel-oversight/rules.js`], {
