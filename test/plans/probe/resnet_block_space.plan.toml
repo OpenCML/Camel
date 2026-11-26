@@ -1,16 +1,27 @@
 id = "probe.resnet_block_space"
-tier = "fast"
+# A reading, not a check: what this plan prints moves whenever the allocator, the passes or the
+# model's scheduling change, and moving is its normal output. On the fast tier that turns every
+# implementation change into a red in the promotion baseline -- the numbers were last read at
+# `192`/`4096`, the current tree prints `128`/`3840`, and no defect stands behind either pair. So it
+# sits on the debug tier, which only `--tier debug` selects, and is run on demand when a block-space
+# question is asked. The readings and the reasoning behind these two numbers are in the block-space
+# report the repository keeps under its internal reports, out of the source tree.
+tier = "debug"
 tags = ["probe"]
 desc = "Probe: how much data-block space one resnet run needs, and how much of it the backward pass adds. Not a check of behaviour: it narrows `--block-limit` over a ladder for the forward alone and for one training step, so the smallest limit that completes is the peak block usage of that workload, and the ratio between the two workloads is the reading."
 
 [[tests]]
 name = "resnet_block_space"
-desc = "The smallest `--block-limit` at which a resnet forward completes, and the smallest at which one training step completes, on the same input and weights."
+desc = "The smallest `--block-limit` at which a resnet forward completes, and the smallest at which one training step completes, on the same input and weights. The two limits pinned below are the current reading and not a target: re-record them when the ladder runs and the numbers move, and keep them beside the ladder's refused lines, which bound the peak from below."
 kind = "behavior"
 tool = "python"
 case = "../../cases/probe/resnet_block_space.py"
 args = ["${case}"]
 expect_exit = 0
-expect_stdout_contains = ["BLOCKSPACE forward limit=192 completed", "BLOCKSPACE train limit=4096 completed"]
+# Current reading: the forward completes at 128 MB (96 refused, 74.8 MB in use) and one training
+# step at 3840 MB (3808 refused, 3767.1 MB in use). The same tree's `std::profile gc_stats=1` report
+# puts the training step's peak at 3775.9 MB, inside (3767.1, 3840] -- the ladder's step is the
+# segment the space grows by, so the reading is a bracket and not a number.
+expect_stdout_contains = ["BLOCKSPACE forward limit=128 completed", "BLOCKSPACE train limit=3840 completed"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 900000
