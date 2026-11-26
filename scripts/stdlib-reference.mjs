@@ -397,6 +397,8 @@ const MODULES = [
         name: 'laws',
         title: '`laws`: the mathematics a derivative rule is written from',
         kind: 'camel',
+        source: 'laws.cml',
+        declaration: true,
         // The tangent and the cotangent of each primitive: one function per name a rule's left
         // side binds. `rulesets.jvp` and `rulesets.transpose` name one of these on a rule's right
         // side, and nothing else reads the module -- it declares no rule, which is why it is not
