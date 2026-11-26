@@ -4017,7 +4017,7 @@ ea123086c0149664 ok test/cases/modules/types/type_functions.cml
 2000978eeb50dfa2 ok test/cases/opt/algebra_rules/tensor_forms.cml
 4dc2612264792cf6 ok test/cases/opt/camel_passes/cse_subject.cml
 1487fe6bb0a822d1 ok test/cases/opt/camel_passes/dce_subject.cml
-82f4c5aa594b045e ok test/cases/opt/camel_passes/fold_constant_budget.cml
+f891ea141e9edf08 ok test/cases/opt/camel_passes/fold_constant_budget.cml
 a93e3247b080e42b ok test/cases/opt/camel_passes/fold_fault.cml
 913c6f4b64e9733e ok test/cases/opt/camel_passes/fold_subject.cml
 fbb1396dc7f0b6d7 ok test/cases/opt/commit_checks/branch_and_print.cml
