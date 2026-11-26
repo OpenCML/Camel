@@ -1503,12 +1503,20 @@ export rule linear_t::<T, A, B>(x: A, w: B) when is_float::<T>() { linear(x, w) 
 // recomputed a window's selection or a table's scatter would be a second implementation of the
 // kernel, and the kernels are where the padding, the ties and the repeated indices are decided.
 //
-// `avg_pool2d_t` is the one of the four that a `grad` reaches **today**, without any of these
-// operators being called by the program: `jvp_max_pool2d` writes its linear half with
-// `avg_pool2d` (`lib/rulesets/jvp.cml`), so the backward walk of a `max_pool2d` is stopped by that
-// key before any of the others. It is written with `avg_pool2d_grad` and not with `avg_pool2d`
-// applied to the cotangent, for the reason above: the two agree at stride one and no padding, and
-// the engine's rule is the one the two legs are compared against.
+// Neither pooling law is reached today, and the two stops are measured (`--trace transforms`,
+// `expect_exit = 0`) rather than assumed. A `max_pool2d` gradient stops one law before
+// `max_pool2d_t` is asked, at the `avg_pool2d` that `jvp_max_pool2d` writes in its linear half:
+//
+//     TRANSPOSE ... skip=law-reads-a-value uri=nn:avg_pool2d position=0 operand-types=f32[...],int
+//         reason=the rule's right side reads a value the caller does not carry
+//
+// The operand there is the **tangent**, and its type states no extents. An `avg_pool2d` gradient
+// stops at the same law, the same position and the same reason with the extents still in the type
+// (`operand-types=f32[1, 2, 4, 4],int`): `avg_pool2d_grad(x, ct, kernel)` reads `x` where the
+// answer is the window's geometry alone, which is not an operator this module has. It is written
+// with `avg_pool2d_grad` and not with `avg_pool2d` applied to the cotangent, for the reason above:
+// the two agree at stride one and no padding, and the engine's rule is the one the two legs are
+// compared against.
 //
 // The operand lists are the ones the forward halves write. `stride` and `padding` are not named: a
 // call that passes either reaches no law and is refused by shape, which is the same limit the
@@ -1552,7 +1560,10 @@ export rule max_pool2d_t::<T>(x: T[...], kernel: int) when is_float::<T>() { max
 
 /// The cotangent of `avg_pool2d(x, kernel)`: the kernel's gradient. A mean of a window is linear, so
 /// this is also the adjoint of the `avg_pool2d` a forward law writes in its **linear** half
-/// (`jvp_max_pool2d` does), which is the shape a `max_pool2d` gradient walks through today.
+/// (`jvp_max_pool2d` does). No walk reaches it: it is refused at `position = 0` with
+/// `skip=law-reads-a-value` and `reason=the rule's right side reads a value the caller does not
+/// carry`, because `avg_pool2d_grad(x, ct, kernel)` reads `x` and a transposed half is handed the
+/// cotangent and nothing else.
 export rule avg_pool2d_t::<T>(x: T[...], kernel: int) when is_float::<T>() { avg_pool2d(x, kernel) => func (ct: T[...]) {
     avg_pool2d_grad(x, ct, kernel)
 } }
