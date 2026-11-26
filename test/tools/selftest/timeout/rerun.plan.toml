@@ -1,12 +1,15 @@
 # Fixture of test/tools/selftest/run.mjs: a case whose own bound took it gets one more attempt, at
 # the end of the run, alone, with twice the bound.
 #
-# The three entries are one claim each: `timeout.normal` is printed where it ran and never
-# re-runs; `timeout.then_passes` runs past its bound, and the doubled bound lets the second attempt
-# finish (3000 ms against a 2000 ms bound, then against 4000 ms) -- so `expect_stdout_contains`
-# proves the second attempt really executed the case rather than being reported green; and
-# `timeout.twice` runs past both bounds, so it stays red. The plan is not under test/plans: this
-# self-test starts it by name.
+# Two entries, both green: `timeout.normal` is printed where it ran and never re-runs, and
+# `timeout.then_passes` runs past its bound while the doubled bound lets the second attempt finish
+# (3000 ms against a 2000 ms bound, then against 4000 ms). `expect_stdout_contains` is what proves
+# the second attempt really executed the case rather than being reported green: the first attempt is
+# killed before the case prints anything, and `waited 3000 ms` can only come from the second.
+#
+# The case whose bound takes it twice is a red by construction and lives in rerun_twice.plan.toml:
+# a run this self-test starts and judges, not a run anyone reads as a layer. This plan is not under
+# test/plans either, so no `--tier` selection reaches it.
 id = "selftest.timeout"
 order = 5
 tier = "fast"
@@ -32,10 +35,3 @@ args = ["${case}", "3000"]
 timeout_ms = 2000
 expect_exit = 0
 expect_stdout_contains = ["waited 3000 ms"]
-
-[[tests]]
-name = "timeout.twice"
-desc = "It runs past both bounds: the case stays red, and its line says both attempts timed out."
-args = ["${case}", "6000"]
-timeout_ms = 2000
-expect_exit = 0

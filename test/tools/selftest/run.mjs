@@ -1712,37 +1712,35 @@ if (statusLines(busy.output).filter((line) => line.startsWith('SKIP ') && !line.
 }
 
 // --- a case its own bound took gets one more attempt -------------------------------------------
-// One plan, three entries: an ordinary case, one whose bound takes the first attempt and whose
-// doubled bound lets the second finish, and one that runs past both. Its own run, because the
-// claims are about one run's line order and one run's summary.
+// Two fixture plans, each its own run, because the claims are about one run's line order and one
+// run's summary. The first is green: `timeout.normal` is printed where it ran, and
+// `timeout.then_passes` runs past its 2000 ms bound while the doubled bound lets the second attempt
+// finish (3000 ms). The second plan holds the one case that runs past both bounds -- a red by
+// design, kept in a plan of its own so that the red belongs to a run this file starts and judges,
+// never to a run a layer reads as its own.
 //
 // What the green one proves is not "the case is green": it is that the runner ran the case again,
-// judged it by its own assertions, and said on the line that the green came second. `timeout_ms` is
-// 2000 and the sleeping case waits 3000 ms, so the two attempts differ only by the bound -- which
-// is the whole mechanism.
-const rerunRun = runRunner([path.join(here, 'timeout')])
+// judged it by its own assertions, and said on the line that the green came second.
+const rerunRun = runRunner([path.join(here, 'timeout', 'rerun.plan.toml')])
 const rerunLines = statusLines(rerunRun.output)
-const rerunOrder = ['PASS timeout.normal', 'PASS timeout.then_passes', 'FAIL timeout.twice']
+const rerunOrder = ['PASS timeout.normal', 'PASS timeout.then_passes']
 if (rerunLines.join(' | ') !== rerunOrder.join(' | ')) {
-    problems.push(`re-run: the three verdicts or their order moved (${rerunLines.join(', ') || 'none'})`)
+    problems.push(`re-run: the verdicts or their order moved (${rerunLines.join(', ') || 'none'})`)
 }
-// The counts: the case is counted once (`total` 3), its second attempt is counted as `re-run`, and
-// the red the second attempt reached is the run's one failure.
-if (!rerunRun.output.includes('[SUMMARY] total: 3, pass: 2, fail: 1, timed out: 1, re-run: 2, re-run passed: 1')) {
+// The counts: the case is counted once (`total` 2), and the second attempt is its own count
+// (`re-run` 1, `re-run passed` 1), never a second case and never a second pass.
+if (!rerunRun.output.includes('[SUMMARY] total: 2, pass: 2, fail: 0, re-run: 1, re-run passed: 1')) {
     problems.push(`re-run: unexpected summary (${summaryLine(rerunRun.output)})`)
 }
-if (rerunRun.status !== 1) {
-    problems.push(`re-run: a case that timed out at both bounds did not fail the run (exit ${rerunRun.status})`)
+if (rerunRun.status !== 0) {
+    problems.push(`re-run: a run whose re-run passed did not exit green (exit ${rerunRun.status})`)
 }
-// The two lines, as text: the green one says it was not green first time and gives the second
-// attempt's duration and the load it was taken under; the red one says both attempts timed out.
+// The line, as text: it says the green was not green first time, and gives the second attempt's
+// duration and the load it was taken under -- the duration is that attempt's own wall, and the load
+// is what lets a reader tell "it fitted" from "the host was quiet by luck".
 const passedRerun = rerunRun.output.split('\n').find((line) => line.startsWith('[PASS] timeout.then_passes'))
 if (!/^\[PASS\] timeout\.then_passes .*timed out on the first pass, passed in \d+\.\d+ s on re-run \(load /.test(passedRerun || '')) {
     problems.push(`re-run: the pass line does not say how it passed (${passedRerun || 'missing'})`)
-}
-const failedRerun = rerunRun.output.split('\n').find((line) => line.startsWith('[FAIL] timeout.twice'))
-if (!/timed out on the first pass and again on re-run \(load /.test(failedRerun || '')) {
-    problems.push(`re-run: the failed line does not say both attempts timed out (${failedRerun || 'missing'})`)
 }
 // `[SUMMARY]` closes the case lines: nothing that counts as a verdict may come after it, or a
 // reader counting case lines would read one case as two.
@@ -1751,6 +1749,24 @@ if (summaryAt < 0) problems.push('re-run: no [SUMMARY] in the run')
 else if (/^\[(PASS|FAIL|XFAIL|SKIP)\] /m.test(rerunRun.output.slice(summaryAt))) {
     problems.push('re-run: a case line follows [SUMMARY]')
 }
+// The run that ends red: same mechanism, both attempts past the bound. It is asserted here rather
+// than left as a red for a layer to find -- `fail: 1` with `re-run passed: 0`, and one line that
+// says both attempts timed out instead of one that reports a green nobody earned.
+const twiceRun = runRunner([path.join(here, 'timeout', 'rerun_twice.plan.toml')])
+const twiceLines = statusLines(twiceRun.output)
+if (twiceLines.join(' | ') !== 'FAIL timeout.twice') {
+    problems.push(`re-run: the twice case's verdict moved (${twiceLines.join(', ') || 'none'})`)
+}
+if (!twiceRun.output.includes('[SUMMARY] total: 1, pass: 0, fail: 1, timed out: 1, re-run: 1, re-run passed: 0')) {
+    problems.push(`re-run: unexpected summary for the twice case (${summaryLine(twiceRun.output)})`)
+}
+if (twiceRun.status !== 1) {
+    problems.push(`re-run: a case that timed out at both bounds did not fail the run (exit ${twiceRun.status})`)
+}
+const failedRerun = twiceRun.output.split('\n').find((line) => line.startsWith('[FAIL] timeout.twice'))
+if (!/timed out on the first pass and again on re-run \(load /.test(failedRerun || '')) {
+    problems.push(`re-run: the failed line does not say both attempts timed out (${failedRerun || 'missing'})`)
+}
 // The record keeps both attempts: the first attempt's `meta.json` under `rerun/first/` is the
 // timeout, the second attempt's under `rerun/second/` names the attempt it follows and the load,
 // and the second bound is exactly twice the first. Read from the files, not from the console.
@@ -1758,17 +1774,22 @@ const resultsRoot = process.env.CAMEL_TEST_RESULTS_ROOT
     ? path.resolve(process.env.CAMEL_TEST_RESULTS_ROOT)
     : path.join(repoRoot, 'test', 'results')
 const logRoot = path.join(resultsRoot, 'log')
-const rerunRunName = fs.existsSync(logRoot)
-    ? fs.readdirSync(logRoot).filter((name) => name.endsWith(`_${rerunRun.pid}`)).sort().pop()
-    : undefined
-if (!rerunRunName) {
-    problems.push(`re-run: no log directory for the run (${logRoot}, pid ${rerunRun.pid})`)
+const runDirOf = (pid) => {
+    if (!fs.existsSync(logRoot)) return undefined
+    return fs.readdirSync(logRoot).filter((name) => name.endsWith(`_${pid}`)).sort().pop()
+}
+const rerunRunName = runDirOf(rerunRun.pid)
+const twiceRunName = runDirOf(twiceRun.pid)
+if (!rerunRunName || !twiceRunName) {
+    problems.push(`re-run: no log directory for one of the runs (${logRoot})`)
 } else {
-    const rerunDir = path.join(logRoot, rerunRunName)
-    const metaOf = (...relative) => JSON.parse(fs.readFileSync(path.join(rerunDir, ...relative, 'meta.json'), 'utf8'))
+    const metaOf = (runName, ...relative) =>
+        JSON.parse(fs.readFileSync(path.join(logRoot, runName, ...relative, 'meta.json'), 'utf8'))
+    const summaryOf = (runName) =>
+        JSON.parse(fs.readFileSync(path.join(logRoot, runName, 'summary.json'), 'utf8')).summary
     try {
-        const firstMeta = metaOf('rerun', 'first', 'fail', 'selftest.timeout', 'timeout.then_passes')
-        const secondMeta = metaOf('rerun', 'second', 'pass', 'selftest.timeout', 'timeout.then_passes')
+        const firstMeta = metaOf(rerunRunName, 'rerun', 'first', 'fail', 'selftest.timeout', 'timeout.then_passes')
+        const secondMeta = metaOf(rerunRunName, 'rerun', 'second', 'pass', 'selftest.timeout', 'timeout.then_passes')
         if (firstMeta.status !== 'fail' || firstMeta.timed_out !== true) {
             problems.push('re-run: the first attempt of a re-run case is not recorded as a timeout')
         }
@@ -1780,21 +1801,32 @@ if (!rerunRunName) {
                 `re-run: the second bound is ${secondMeta.timeout_ms} ms against the first's ${firstMeta.timeout_ms} ms`
             )
         }
-        const twiceMeta = metaOf('rerun', 'second', 'fail', 'selftest.timeout', 'timeout.twice')
+        // A case that was not deferred leaves no `rerun/` entry: the log tree a reader knows is
+        // unchanged for every case the run did not re-run.
+        const ordinaryLog = path.join(logRoot, rerunRunName, 'rerun', 'first', 'pass', 'selftest.timeout', 'timeout.normal')
+        if (fs.existsSync(ordinaryLog)) {
+            problems.push('re-run: a case that did not time out was written under rerun/')
+        }
+        const twiceMeta = metaOf(twiceRunName, 'rerun', 'second', 'fail', 'selftest.timeout_twice', 'timeout.twice')
         if (twiceMeta.status !== 'fail' || twiceMeta.timed_out !== true) {
             problems.push('re-run: a case that timed out at both bounds is not recorded as one')
         }
-        const summaryOfRun = JSON.parse(fs.readFileSync(path.join(rerunDir, 'summary.json'), 'utf8')).summary
-        if (summaryOfRun.rerun !== 2 || summaryOfRun.rerunPassed !== 1) {
+        const rerunSummary = summaryOf(rerunRunName)
+        if (rerunSummary.rerun !== 1 || rerunSummary.rerunPassed !== 1) {
             problems.push(
-                `re-run: summary.json records ${summaryOfRun.rerun} re-run(s), ${summaryOfRun.rerunPassed} passed`
+                `re-run: summary.json records ${rerunSummary.rerun} re-run(s), ${rerunSummary.rerunPassed} passed`
+            )
+        }
+        const twiceSummary = summaryOf(twiceRunName)
+        if (twiceSummary.rerun !== 1 || twiceSummary.rerunPassed !== 0) {
+            problems.push(
+                `re-run: the twice run's summary.json records ${twiceSummary.rerun} re-run(s), ${twiceSummary.rerunPassed} passed`
             )
         }
     } catch (error) {
         problems.push(`re-run: the run's records could not be read (${error.message})`)
     }
 }
-
 // A reading, printed and used by nothing: how many child runs it took, what width this file put
 // them at, and what the run cost in wall time on this host. `timeout_ms` is untouched -- that is
 // what makes this line safe to add, and why it is a reading rather than a decision.
