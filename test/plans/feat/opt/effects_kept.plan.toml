@@ -349,7 +349,8 @@ name = "dead_write_dropped_closure.reference"
 desc = "No pass: the write stands after the closure `h` was made, and `h` is put into the tuple `(1, h)`, which design principles 3.5 (198) runs to the end of the scope, so the program is refused (the rule, item 3). It printed the 1 that `p.0` gives while the rule stopped at the closure's last use."
 kind = "negative"
 case = "../../../cases/opt/effects/dead_write_dropped_closure.cml"
-args = ["${case}"]
+args = ["${case}", "${backend}"]
+backends = ["nvm"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::CapturedVarWrittenAfterTheClosure"
 expect_diagnostic_code = "0x03000214"
@@ -359,7 +360,8 @@ name = "dead_write_dropped_closure.opt"
 desc = "The same program through `std::opt`: refused before the fold runs, because the write of `c` after the closure `h` is made is `CapturedVarWrittenAfterTheClosure` (design principles 3.5, 198). What this entry used to read -- `std::opt` folding `w * 0` and leaving a write with no reader and no root -- is read on `dead_write_held_by_program` and `dead_write.opt.still_there` now."
 kind = "negative"
 case = "../../../cases/opt/effects/dead_write_dropped_closure.cml"
-args = ["${case}", "std::opt"]
+args = ["${case}", "std::opt", "${backend}"]
+backends = ["nvm"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::CapturedVarWrittenAfterTheClosure"
 expect_diagnostic_code = "0x03000214"
@@ -385,7 +387,8 @@ name = "dead_write.judgement_dropped"
 desc = "`test::deadwrite` prints what `camel::runtime::deadWrite` answers for each write, so the judgement is read on its own. The program it reads is refused since 2026-11-16: `h` is bound to a name and put into the tuple `(1, h)`, and the write `c = 41` stands after it, which design principles 3.5 (198) runs to the rest of the scope (the rule, item 3). The judgement's own readings are the two entries that follow and `dead_write.opt.still_there`."
 kind = "negative"
 case = "../../../cases/opt/effects/dead_write_dropped_closure.cml"
-args = ["${case}"]
+args = ["${case}", "${backend}"]
+backends = ["nvm"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::CapturedVarWrittenAfterTheClosure"
 expect_diagnostic_code = "0x03000214"
@@ -395,7 +398,8 @@ name = "dead_write.judgement_rooted"
 desc = "The same judgement where the place the write writes into is one the graph names: the module's cell is a root, so the write is no dead write, and the answer names the half that says so."
 kind = "behavior"
 case = "../../../cases/opt/effects/dead_write_held_by_program.cml"
-args = ["${case}", "std::opt", "test::deadwrite"]
+args = ["${case}", "std::opt", "test::deadwrite", "${backend}"]
+backends = ["nvm"]
 expect_exit = 0
 expect_stdout_contains = ["oper=:op/assn_l", "rooted=1 read=0 dead=0"]
 
@@ -549,7 +553,8 @@ name = "dead_write.opt.still_there"
 desc = "The general engine still keeps the write the judgement calls dead: its sweep does not ask the write question yet, which is what the author's third decision covers. Its program is read on `dead_write_held_by_program` since 2026-11-16 -- the dropped shape this entry used is refused (design principles 3.5, 198, the write after the tuple that holds the closure) -- and the reading is the judgement's own, after the whole pipeline."
 kind = "behavior"
 case = "../../../cases/opt/effects/dead_write_held_by_program.cml"
-args = ["${case}", "std::opt", "test::deadwrite"]
+args = ["${case}", "std::opt", "test::deadwrite", "${backend}"]
+backends = ["nvm"]
 expect_exit = 0
 expect_stdout_contains = ["oper=:op/assn_l", "rooted=1 read=0 dead=0"]
 [[tests]]
@@ -557,7 +562,8 @@ name = "dead_write.aggregate_two_members_reading"
 desc = "The shape that reaches the judgement: arity 2 with one input, which says the members are not the aggregate's inputs but the frame slots it names -- the reading this rule was built on is wrong."
 kind = "behavior"
 case = "../../../cases/opt/effects/dead_write_aggregate_two_members.cml"
-args = ["${case}", "test::deadwrite"]
+args = ["${case}", "test::deadwrite", "${backend}"]
+backends = ["nvm"]
 expect_exit = 0
 expect_stdout_contains = ["AGGREGATE graph=probe"]
 
@@ -566,7 +572,8 @@ name = "dead_write.aggregate_reading"
 desc = "The aggregate reading: the arity, the member nodes and the verdict for every aggregate left after opt, so a refusal names its guard. Read on the two-member aggregate case, whose write stands before the closure since 2026-11-16 (written after it the program is refused: design principles 3.5, 198)."
 kind = "behavior"
 case = "../../../cases/opt/effects/dead_write_aggregate_two_members.cml"
-args = ["${case}", "std::opt", "test::deadwrite"]
+args = ["${case}", "std::opt", "test::deadwrite", "${backend}"]
+backends = ["nvm"]
 expect_exit = 0
 expect_stdout_contains = ["AGGREGATE graph=probe"]
 [[tests]]
@@ -574,7 +581,8 @@ name = "dead_write.opt.same_output"
 desc = "And the program still prints the 1 that never depended on the write -- on `dead_write_held_by_program`, whose 41 is the reading since 2026-11-16: the dropped shape is refused (design principles 3.5, 198)."
 kind = "behavior"
 case = "../../../cases/opt/effects/dead_write_held_by_program.cml"
-args = ["${case}", "std::opt", "std::nvm"]
+args = ["${case}", "std::opt", "${backend}"]
+backends = ["nvm"]
 expect_exit = 0
 expect_stdout_exact = "41\n41\n"
 
