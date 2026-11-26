@@ -10,7 +10,7 @@
 
 分支与合并
 5. 写分支：合并位只写 seat/merge-<n>；integration 只有集成步骤一个写者；develop 只在晋级时从 integration 快进（负责人可直接写）。合并位用 scripts/merge-batch.mjs 把排队的车道成批合进 integration（只编译、不跑测试，编不过的车道拿掉），测试由晋级整层核对；红了的合并用 git revert -m 1 作新提交撤销，不强推。
-6. 分支闸：lane/ 下未合超过 20 条或最落后超过 100 笔，就不开新车道，只做已有车道、文档工作树里的活、提高合并吞吐的工具活。决策者的派工同样受这条约束。
+6. 分支闸：lane/ 下未合超过 20 条就不开新车道（某条落后超过 100 笔只点名它，让它换底或判删，不关闸），只做已有车道、文档工作树里的活、提高合并吞吐的工具活。决策者的派工同样受这条约束。
 7. 正在合并的检出里不提交；文档提交走 Camel-wt\docs，推往 integration（不推 develop，否则 integration 不再包含 develop、晋级没法快进），推之前核 origin/integration..HEAD 里只有文档提交。主检出 D:\Projects\Camel 归负责人：只在它干净地停在 develop 上时快进，别的一概不碰。
 
 安全
