@@ -27,6 +27,7 @@
 
 #include "camel/core/context/frame.h"
 #include "camel/core/resource_semantics.h"
+#include "camel/ops/oper_shape.h"
 #include "camel/runtime/graph.h"
 #include "camel/runtime/node_ref.h"
 #include "camel/runtime/program.h"
