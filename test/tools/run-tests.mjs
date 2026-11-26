@@ -5704,6 +5704,9 @@ async function main() {
     // (the self-test does this) out of one directory, whose logs and summary.json would otherwise
     // overwrite each other.
     const givenRunName = process.env.CAMEL_TEST_RUN_NAME
+    // The name is this run's alone. A case that starts a runner of its own (the runner's self-tests
+    // do) would otherwise inherit it, and that nested run would be refused for naming this one.
+    delete process.env.CAMEL_TEST_RUN_NAME
     if (givenRunName !== undefined && givenRunName !== '') {
         if (!RUN_NAME_PATTERN.test(givenRunName)) {
             console.error(
