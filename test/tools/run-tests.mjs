@@ -7,6 +7,7 @@ import os from 'os'
 import { performance } from 'perf_hooks'
 import { spawn, spawnSync } from 'child_process'
 import { fileURLToPath } from 'url'
+import { killProcessTree } from '../../scripts/kill-tree.mjs'
 import { parseTomlFile } from './toml-lite.mjs'
 import { compareGirDotIsomorphic } from './gir-dot.mjs'
 import { applyNormalizers } from './normalizers.mjs'
@@ -1039,33 +1040,6 @@ function runProcess(command, args, { cwd, env, timeoutMs, marks, cpuReport = fal
             }, timeoutMs)
         }
     })
-}
-
-function killProcessTree(child) {
-    if (!child || !child.pid) return
-    if (IS_WINDOWS) {
-        const killed = spawnSync('taskkill', ['/pid', String(child.pid), '/T', '/F'], {
-            stdio: 'ignore',
-            windowsHide: true,
-        })
-        if (killed.error || killed.status !== 0) {
-            try {
-                child.kill('SIGKILL')
-            } catch {
-                /* already gone */
-            }
-        }
-        return
-    }
-    try {
-        process.kill(-child.pid, 'SIGKILL')
-    } catch {
-        try {
-            child.kill('SIGKILL')
-        } catch {
-            /* already gone */
-        }
-    }
 }
 
 function walkPlans(entryPath, files = []) {
