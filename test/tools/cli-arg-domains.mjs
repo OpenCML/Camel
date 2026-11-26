@@ -28,6 +28,12 @@
  * is a bare word whose value is "". `moves`, `poison` and `config` are matched by key alone, so
  * `moves=1` is accepted by the CLI and must not be refused here.
  *
+ * `--gc` takes its words the same way -- one spelling, `kind=generational`, not a bare
+ * `generational` -- because the option parser's `gcKeys` table maps each key to a field. Its
+ * collector values are recorded under `kind=`, which is the spelling a plan must write; the
+ * self-check still compares those values with `parseCollectorMode`, whose argument is the word
+ * after the key.
+ *
  *   node test/tools/cli-arg-domains.mjs      check this table against src/tools/camel-cli/config.cpp
  */
 
@@ -85,9 +91,19 @@ export const ARG_DOMAINS = [
     },
     {
         option: '--gc',
-        kind: 'value',
-        values: ['generational', 'gen', '1', 'mark-sweep', 'marksweep', '0'],
-        summary: 'generational|gen|1|mark-sweep|marksweep|0',
+        kind: 'words',
+        words: new Map([
+            ['kind', ['generational', 'gen', '1', 'mark-sweep', 'marksweep', '0']],
+            ['nursery_mb', 'number'],
+            ['promotion_age', 'number'],
+            ['large_threshold_kb', 'number'],
+            ['large_budget_mb', 'number'],
+            ['growth_percent', 'number'],
+            ['heap_limit_mb', 'number'],
+            ['graph_mb', 'number'],
+        ]),
+        summary: 'kind=generational|gen|1|mark-sweep|marksweep|0, nursery_mb=<n>, promotion_age=<n>, ' +
+            'large_threshold_kb=<n>, large_budget_mb=<n>, growth_percent=<n>, heap_limit_mb=<n>, graph_mb=<n>',
     },
 ]
 
@@ -276,7 +292,7 @@ function selfCheck() {
             failed = true
         }
     }
-    if (!compareSets(new Set(collectorSaid.values), collectorFound, '--gc kind=collectors', report)) failed = true
+    if (!compareSets(new Set(collectorSaid.words.get('kind') || []), collectorFound, '--gc kind=collectors', report)) failed = true
 
     // A block whose words this table does not mention at all would pass every comparison above by
     // being empty; both sides must have been read.
