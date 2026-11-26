@@ -2,8 +2,8 @@
 // Copyright (c) the OpenCML Organization
 // SPDX-License-Identifier: MIT
 //
-// How many translation units a header reaches: the reading
-// `internal/reports/2026-11-26-header-weight.cn.md` takes, as a script the plan runner can run.
+// How many translation units a header reaches: the reading the header-weight report takes, as a
+// script the plan runner can run.
 //
 //   node test/tools/header-weight.mjs <header> [--db <compile_commands.json>]
 //
