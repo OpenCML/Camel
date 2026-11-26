@@ -4,6 +4,7 @@
 #pragma once
 
 #include "camel/core/node_attrs.h"
+#include "camel/core/oper_id.h"
 #include "camel/core/operator_traits.h"
 #include "camel/core/rtdata.h"
 #include "camel/core/type/base.h"
@@ -226,22 +227,7 @@ class OperatorGroup {
     /// the table which overloads this group has, so that the types it was registered for can be
     /// listed (OperatorTable::registeredTypes), and records the id the table gave each URI -- the
     /// one moment a rule's identity is resolved, which is why `resolve` never looks one up.
-    void publishResolvers() {
-        opers_.clear();
-        opers_.reserve(resolvers_.size());
-        std::vector<std::string> uris;
-        uris.reserve(resolvers_.size());
-        for (const auto &[uri, resolver] : resolvers_) {
-            if (uri.empty() || !resolver) {
-                opers_.push_back(camel::core::kNoOper);
-                continue;
-            }
-            opers_.push_back(
-                camel::core::OperatorTable::instance().setResolver(uri, resolver));
-            uris.push_back(uri);
-        }
-        if (!uris.empty()) {
-            camel::core::OperatorTable::instance().declareGroup(name_, uris);
-        }
-    }
+    /// Defined in operator_table.cpp, where the table is: a group constructed here must not need
+    /// the table's definition to compile.
+    void publishResolvers();
 };

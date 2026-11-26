@@ -3,6 +3,7 @@
 
 #include "camel/core/module/introspect.h"
 
+#include "camel/core/operator_table.h"
 #include "camel/core/operator_traits.h"
 #include "camel/core/type/resolver.h"
 #include "camel/ops/operator_record.h"

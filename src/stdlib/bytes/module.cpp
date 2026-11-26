@@ -8,6 +8,7 @@
 #include "camel/core/mm/block.h"
 #include "camel/core/mm/root_handle.h"
 #include "camel/core/module/builtin.h"
+#include "camel/core/operator_table.h"
 #include "camel/core/operator_traits.h"
 #include "camel/core/rtdata/array.h"
 #include "camel/core/rtdata/bytes.h"

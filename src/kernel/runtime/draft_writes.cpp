@@ -6,6 +6,7 @@
  * either side of a commit (see effect_liveness.h).
  */
 
+#include "camel/core/operator_table.h"
 #include "camel/runtime/draft_writes.h"
 
 #include "camel/core/mm/alloc/growable.h"

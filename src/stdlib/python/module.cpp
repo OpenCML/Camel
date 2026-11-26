@@ -1,6 +1,7 @@
 // Copyright (c) the OpenCML Organization
 // SPDX-License-Identifier: MIT
 
+#include "camel/core/operator_table.h"
 #include "camel/core/type/native.h"
 #include "module.h"
 #include "camel/compile/gir.h"

@@ -7,6 +7,7 @@
 
 #include "camel/core/operator_table.h"
 #include "camel/core/node_attrs.h"
+#include "camel/core/operator.h"
 #include "camel/core/operator_names.h"
 #include "camel/core/type/composite/func.h"
 #include "camel/core/type/typevar.h"
@@ -18,6 +19,26 @@
 #include <mutex>
 #include <stdexcept>
 #include <tuple>
+
+// OperatorGroup is declared at global scope (camel/core/operator.h). Defined here, where the table
+// is, so that constructing a group does not need the table's definition to compile.
+void OperatorGroup::publishResolvers() {
+    opers_.clear();
+    opers_.reserve(resolvers_.size());
+    std::vector<std::string> uris;
+    uris.reserve(resolvers_.size());
+    for (const auto &[uri, resolver] : resolvers_) {
+        if (uri.empty() || !resolver) {
+            opers_.push_back(camel::core::kNoOper);
+            continue;
+        }
+        opers_.push_back(camel::core::OperatorTable::instance().setResolver(uri, resolver));
+        uris.push_back(uri);
+    }
+    if (!uris.empty()) {
+        camel::core::OperatorTable::instance().declareGroup(name_, uris);
+    }
+}
 
 namespace camel::core {
 

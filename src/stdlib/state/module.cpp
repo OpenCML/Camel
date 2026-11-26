@@ -24,6 +24,7 @@
  */
 
 #include "ref.h"
+#include "camel/core/operator_table.h"
 
 #include "camel/core/context/context.h"
 #include "camel/core/module/builtin.h"

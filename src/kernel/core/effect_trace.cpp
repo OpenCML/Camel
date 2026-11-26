@@ -8,6 +8,8 @@
 #include "camel/core/effect_trace.h"
 
 #include "camel/core/context/context.h"
+#include "camel/core/operator_semantics.h"
+#include "camel/core/operator_table.h"
 #include "camel/core/operator_traits.h"
 #include "camel/core/rtdata/base.h"
 #include "camel/core/source/manager.h"

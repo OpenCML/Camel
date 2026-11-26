@@ -11,6 +11,7 @@
  * hierarchy.
  */
 
+#include "camel/core/operator_table.h"
 #include "camel/runtime/draft.h"
 
 #include "camel/core/type/base.h"

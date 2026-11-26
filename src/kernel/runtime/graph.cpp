@@ -56,6 +56,8 @@
 
 namespace camel::runtime {
 
+std::string_view GCOperBody::uri() const { return camel::core::OperatorTable::instance().uri(oper); }
+
 bool castMayFault(const camel::core::type::Type *target, const camel::core::type::Type *source) {
     if (target == nullptr || source == nullptr) {
         return true;

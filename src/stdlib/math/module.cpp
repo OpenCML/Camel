@@ -5,6 +5,7 @@
 #include "camel/core/context/context.h"
 #include "camel/core/data/primary.h"
 #include "camel/core/derivative.h"
+#include "camel/core/operator_table.h"
 #include "camel/core/operator.h"
 #include "camel/core/type.h"
 #include "camel/core/type/resolver.h"

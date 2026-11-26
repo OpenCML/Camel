@@ -6,6 +6,7 @@
  */
 
 #include "operators.h"
+#include "camel/core/operator_table.h"
 
 #include "pullback.h"
 

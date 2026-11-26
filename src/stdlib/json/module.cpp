@@ -7,6 +7,7 @@
  * executor that runs them, and the operator traits declared at load.
  */
 
+#include "camel/core/operator_table.h"
 #include "camel/core/type/native.h"
 #include "module.h"
 #include "camel/core/context/context.h"

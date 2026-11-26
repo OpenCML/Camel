@@ -36,6 +36,7 @@
 #pragma once
 
 #include "camel/core/loop_kind.h"
+#include "camel/core/oper_id.h"
 #include "camel/core/operator.h"
 #include "camel/core/operator_semantics.h"
 #include "camel/core/rtdata/base.h"
@@ -603,8 +604,8 @@ struct GCOperBody {
     uint32_t reserved        = 0;
 
     /// The URI of the operator. The view is owned by the symbol table and never invalidated;
-    /// resolving it takes no lock.
-    std::string_view uri() const { return camel::core::OperatorTable::instance().uri(oper); }
+    /// resolving it takes no lock. Defined in graph.cpp, where the operator table is.
+    std::string_view uri() const;
 };
 static_assert(std::is_trivially_copyable_v<GCOperBody>);
 

@@ -4,6 +4,7 @@
 #include "builtin.h"
 #include "camel/core/context/frame.h"
 #include "camel/core/error/diagnostics.h"
+#include "camel/core/operator_table.h"
 #include "camel/execute/fault_isolation.h"
 #include "camel/utils/log.h"
 

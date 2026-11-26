@@ -5,6 +5,7 @@
 #include "camel/compile/gir.h"
 #include "camel/core/context/context.h"
 #include "camel/core/error/runtime.h"
+#include "camel/core/operator_table.h"
 #include "camel/core/operator_traits.h"
 #include "camel/core/resource_semantics.h"
 #include "camel/core/type.h"

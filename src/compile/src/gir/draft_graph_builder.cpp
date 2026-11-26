@@ -10,6 +10,7 @@
  */
 
 #include "camel/compile/gir/draft_graph_builder.h"
+#include "camel/core/operator_table.h"
 
 #include "camel/core/rtdata/conv.h"
 #include "camel/core/symbol.h"

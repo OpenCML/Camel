@@ -41,6 +41,7 @@
 #pragma once
 
 #include "camel/core/index_semantics.h"
+#include "camel/core/operator_table.h"
 #include "camel/core/resource_semantics.h"
 #include "camel/runtime/graph.h"
 
