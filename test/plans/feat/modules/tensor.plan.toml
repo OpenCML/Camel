@@ -1084,7 +1084,7 @@ kind = "behavior"
 case = "../../../cases/modules/tensor/take_oob.cml"
 args = ["${case}"]
 expect_exit = 1
-expect_stdout_contains = ["index 4 is out of range for the first dimension of extent 4"]
+expect_stderr_contains = ["index 4 is out of range for the first dimension of extent 4"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 
@@ -1095,7 +1095,7 @@ kind = "behavior"
 case = "../../../cases/modules/tensor/take_negative.cml"
 args = ["${case}"]
 expect_exit = 1
-expect_stdout_contains = ["index -1 is out of range for the first dimension of extent 4"]
+expect_stderr_contains = ["index -1 is out of range for the first dimension of extent 4"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 
@@ -1108,7 +1108,8 @@ args = ["${case}", "${backend}"]
 backends = ["nvm", "fvm", "jit", "prl"]
 backends_agree = ["exit_code", "stdout_normalized"]
 expect_exit = 1
-expect_stdout_contains = ["take runtime ok=[[3, 4, 5]]", "RuntimeDiag::IndexOutOfRange", "Index -1 is out of range for the first dimension of the input tensor of length 4"]
+expect_stdout_contains = ["take runtime ok=[[3, 4, 5]]"]
+expect_stderr_contains = ["RuntimeDiag::IndexOutOfRange", "Index -1 is out of range for the first dimension of the input tensor of length 4"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 
