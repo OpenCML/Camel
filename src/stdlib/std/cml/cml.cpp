@@ -1514,9 +1514,8 @@ class CmlPrinter {
             }
             user = users.front();
             node = graph_->node(user);
-            if (node == nullptr ||
-                camel::transforms::nodeOperatorOf(*graph_, user) !=
-                    camel::transforms::NodeOperator::Copy) {
+            if (node == nullptr || camel::transforms::nodeOperatorOf(*graph_, user) !=
+                                       camel::transforms::NodeOperator::Copy) {
                 break;
             }
         }
@@ -2844,7 +2843,8 @@ class CmlPrinter {
             // written back builds its own (see `collectConstructionTemplates`).
             return;
         }
-        if (camel::transforms::nodeOperatorOf(*graph_, ref) == camel::transforms::NodeOperator::Copy) {
+        if (camel::transforms::nodeOperatorOf(*graph_, ref) ==
+            camel::transforms::NodeOperator::Copy) {
             // A copy the source named is the value a `var` was *declared* with, and it is the
             // declaration: a `var` the builder makes a value rather than a cell
             // (`builder_expr.cpp`'s NREF) gives the name its own copy of the initializer, and no
@@ -3344,13 +3344,15 @@ class CmlPrinter {
         if (node == nullptr) {
             fail(ref, "a missing node");
         }
-        if (camel::transforms::nodeOperatorOf(*graph_, ref) == camel::transforms::NodeOperator::Copy) {
-            // A `COPY` is the graph's own copy of one value -- a call of `:op/copy` now -- so it has
-            // one slot and the reading is that one.
+        if (camel::transforms::nodeOperatorOf(*graph_, ref) ==
+            camel::transforms::NodeOperator::Copy) {
+            // A `COPY` is the graph's own copy of one value -- a call of `:op/copy` now -- so it
+            // has one slot and the reading is that one.
             const auto inputs = graph_->normInputsOf(ref);
             return inputs.empty() ? Expr{"()", 100} : expression(inputs.back());
         }
-        if (camel::transforms::nodeOperatorOf(*graph_, ref) == camel::transforms::NodeOperator::Cast) {
+        if (camel::transforms::nodeOperatorOf(*graph_, ref) ==
+            camel::transforms::NodeOperator::Cast) {
             return castExpression(ref);
         }
         switch (node->kind) {
@@ -3859,10 +3861,16 @@ class CmlPrinter {
         if (body == nullptr || with.size() != 1 || inputs.size() != 1) {
             fail(ref, "a member read without a member and a value");
         }
-        const bool byName = body->uri() == ":op/access_key";
+        // Which of the two member reads this is says itself: the member argument is a string when
+        // the field is named and a number when the place is. `:op/access_key` and `:op/access`
+        // differ in that parameter's type and in nothing a reader would have to ask their URIs
+        // about, so the printer asks the argument (design principles 3.8).
+        const camel::runtime::GCNode *memberNode = graph_->node(with.front());
+        const bool byName = memberNode != nullptr && memberNode->dataType() != nullptr &&
+                            memberNode->dataType()->code() == TypeCode::String;
         std::string member;
         if (byName) {
-            const camel::runtime::GCNode *key = graph_->node(with.front());
+            const camel::runtime::GCNode *key = memberNode;
             if (key == nullptr || key->kind != camel::runtime::GCNodeKind::Data ||
                 key->dataIndex >= 0 || key->dataType() == nullptr ||
                 key->dataType()->code() != TypeCode::String) {
@@ -4193,6 +4201,15 @@ class CmlPrinter {
             }
             return {std::format("{}[{}{}]", parenthesize(base, 90), axes, index.text), 90};
         }
+        // **This one question is asked by name, and here is why it has to be.** What is in question
+        // is not what the operator does but how the language *writes* it: `a..b` is this call with
+        // a step of 1 (design principles 4.2, 5.4), and that spelling is a rule of the grammar
+        // (`stdlib/prelude.cml` states it where `to_range` is declared), not a property the
+        // operator's record could carry -- no reader but a printer has any use for it, and stating
+        // it on the record would be the kernel holding a fact of one printer's business. The
+        // interval's own operator (`:struct/range`, the array of the integers) is told apart from
+        // this one by its record (`Record::subscript`), which is the fact a reader wants there.
+        // Everything else this printer asks about a node is read from its operator's record.
         if (uri == ":range/to_range") {
             // The interval `a..b` is this call with its step of 1 written out (design principles
             // 4.2, 5.4), so a step of one is written back as the interval it is: that keeps the

@@ -418,7 +418,7 @@ size_t FunctionEmitter::liveUses(const GCGraph *graph, gc_node_ref_t ref) {
         }
         std::unordered_set<gc_node_ref_t> live(order.begin(), order.end());
         for (gc_node_ref_t n : order) {
-            size_t count = 0;
+            size_t count                        = 0;
             const camel::graph::GraphView &view = graph->view();
             for (const auto users :
                  {view.users(n, PortGroup::Normal), view.users(n, PortGroup::Context)}) {
@@ -631,7 +631,7 @@ void FunctionEmitter::bind(
 
 bool FunctionEmitter::lowerNode(
     Frame &frame, gc_node_ref_t ref, Block &out, bool isTailResult, const Tail &tail) {
-    const auto *g = frame.graph;
+    const auto *g    = frame.graph;
     const auto *node = g->node(ref);
     // The four shaped operators lower from the operation their node names, not from a node kind
     // this emitter reads (plan 2.3, camel/execute/shaped_operators.h): a graph may carry the kinds
@@ -764,7 +764,7 @@ void FunctionEmitter::lowerCall(
     Frame &frame, gc_node_ref_t ref, Block &out, bool isTailResult, const Tail &tail,
     bool &handled) {
     const auto *g = frame.graph;
-    auto *callee     = program_.program->calleeOf(*g, ref);
+    auto *callee  = program_.program->calleeOf(*g, ref);
     if (callee == nullptr) {
         refuse(g, ref, std::format("a call in {} has no callee", describeFunction(g)));
     }
@@ -794,7 +794,8 @@ void FunctionEmitter::lowerCall(
     std::vector<std::string> args;
     // The type each argument fills, in the order a direct call lists them: the normal ports' types,
     // then the `with` ports' -- the ports, and not the callee's declared parameter list
-    // (`funcType()`), because those two disagree exactly where a writer using the declared list would be wrong.
+    // (`funcType()`), because those two disagree exactly where a writer using the declared list
+    // would be wrong.
     //
     // A specialization that binds a value erases the formal from the copy and drops the argument
     // from the call, and the copy's declared parameter list keeps the erased position: it is
@@ -809,7 +810,8 @@ void FunctionEmitter::lowerCall(
     // same ports' types (`collectParameters`), so a call that matches the ports matches the
     // definition by construction; a callee whose type and ports agree is unaffected.
     std::vector<const Type *> parameters;
-    for (const auto ports : {callee->view().ports(PortGroup::Normal), callee->view().ports(PortGroup::Context)}) {
+    for (const auto ports :
+         {callee->view().ports(PortGroup::Normal), callee->view().ports(PortGroup::Context)}) {
         for (gc_node_ref_t port : ports) {
             const auto *node = callee->node(port);
             parameters.push_back(node != nullptr ? node->dataType() : nullptr);
@@ -1240,9 +1242,9 @@ void FunctionEmitter::lowerLoop(
     if (g->view().loopFormOf(loop).collectionCount != 0) {
         refuse(g, loop, std::format("{} has a loop that collects values", describeFunction(g)));
     }
-    const bool iterates            = camel::core::loopHasIterable(g->view().loopFormOf(loop).kind);
-    const auto norm                = g->view().inputs(loop, PortGroup::Normal);
-    const size_t k                 = norm.size() - (iterates ? 1 : 0);
+    const bool iterates = camel::core::loopHasIterable(g->view().loopFormOf(loop).kind);
+    const auto norm     = g->view().inputs(loop, PortGroup::Normal);
+    const size_t k      = norm.size() - (iterates ? 1 : 0);
     const camel::runtime::ControlRegions regions(*g);
     const auto parts               = regions.loopPartsOf(loop);
     const auto results             = g->view().inputs(loop, PortGroup::Context);
@@ -1269,9 +1271,8 @@ void FunctionEmitter::lowerLoop(
         }
     }
     std::string array, index;
-    const gc_node_ref_t element = iterates
-                                      ? g->view().regionParameters(parts[1]).front()
-                                      : static_cast<gc_node_ref_t>(kInvalidNodeRef);
+    const gc_node_ref_t element = iterates ? g->view().regionParameters(parts[1]).front()
+                                           : static_cast<gc_node_ref_t>(kInvalidNodeRef);
     if (iterates) {
         const gc_node_ref_t iterable = norm.front();
         array                        = locals_.unique(std::format("v{}_items", nextValue_++));
@@ -1616,7 +1617,8 @@ std::optional<std::string> FunctionEmitter::functionValue(
     }
     std::string params, args;
     size_t i = 0;
-    for (const auto ports : {function->view().ports(PortGroup::Normal), function->view().ports(PortGroup::Context)}) {
+    for (const auto ports :
+         {function->view().ports(PortGroup::Normal), function->view().ports(PortGroup::Context)}) {
         for (gc_node_ref_t port : ports) {
             auto t = program_.values.type(function->node(port)->dataType());
             if (!t) {
@@ -1649,7 +1651,7 @@ std::optional<std::string> FunctionEmitter::functionValue(
 }
 
 void FunctionEmitter::lowerFill(Frame &frame, gc_node_ref_t ref, Block &out) {
-    const auto *g = frame.graph;
+    const auto *g    = frame.graph;
     const auto *node = g->node(ref);
     const auto norm  = g->view().inputs(ref, PortGroup::Normal);
     const auto with  = g->view().inputs(ref, PortGroup::Context);
@@ -1679,9 +1681,8 @@ void FunctionEmitter::lowerFill(Frame &frame, gc_node_ref_t ref, Block &out) {
     }
 
     const bool closure =
-        asOperator
-            ? type != nullptr && type->code() == camel::core::type::TypeCode::Function
-            : body->fillKind == camel::runtime::GCFillKind::FunctionClosure;
+        asOperator ? type != nullptr && type->code() == camel::core::type::TypeCode::Function
+                   : body->fillKind == camel::runtime::GCFillKind::FunctionClosure;
     if (closure) {
         // A closure: the function constant and the values it captures, slot i of the closure
         // being the i-th captured port of the function's graph.
@@ -1811,10 +1812,10 @@ void FunctionEmitter::lowerFill(Frame &frame, gc_node_ref_t ref, Block &out) {
 }
 
 void FunctionEmitter::lowerAccess(Frame &frame, gc_node_ref_t ref) {
-    const auto *g     = frame.graph;
-    const auto *node  = g->node(ref);
-    const auto norm   = g->view().inputs(ref, PortGroup::Normal);
-    const auto with   = g->view().inputs(ref, PortGroup::Context);
+    const auto *g    = frame.graph;
+    const auto *node = g->node(ref);
+    const auto norm  = g->view().inputs(ref, PortGroup::Normal);
+    const auto with  = g->view().inputs(ref, PortGroup::Context);
     // A member read is written two ways (plan 2.3): a node of the ACCS kind carries the place or
     // the name in its own body, and the operator form (`access::<T, U><at>(x)` by place,
     // `access_key::<T, U><key>(x)` by name, of the prelude) carries it as the call's `with`
@@ -1838,7 +1839,14 @@ void FunctionEmitter::lowerAccess(Frame &frame, gc_node_ref_t ref) {
         const gc_node_ref_t input = norm[0];
         const Type *type          = g->node(input)->dataType();
         size_t index              = 0;
-        if (uri == ":op/access_key") {
+        // Which of the two member reads this is says itself: the member argument is a string when
+        // the field is named and a number when the place is, so the writer asks that argument's
+        // type instead of the operator's URI (design principles 3.8). What the two operators
+        // differ in is that parameter, and the refusals below keep their own reasons.
+        const camel::runtime::GCNode *memberNode = g->node(with[0]);
+        const bool byName = memberNode != nullptr && memberNode->dataType() != nullptr &&
+                            memberNode->dataType()->code() == camel::core::type::TypeCode::String;
+        if (byName) {
             if (type == nullptr || type->code() != camel::core::type::TypeCode::Struct) {
                 refuse(
                     g,
@@ -1883,7 +1891,8 @@ void FunctionEmitter::lowerAccess(Frame &frame, gc_node_ref_t ref) {
                     g,
                     ref,
                     std::format(
-                        "{} reads an element by place of a value of type '{}', and only a tuple has "
+                        "{} reads an element by place of a value of type '{}', and only a tuple "
+                        "has "
                         "elements to read by place",
                         describeFunction(g),
                         typeName(type)));
@@ -1958,8 +1967,8 @@ void FunctionEmitter::lowerCopyValue(Frame &frame, gc_node_ref_t ref) {
 void FunctionEmitter::lowerCallValue(Frame &frame, gc_node_ref_t ref, Block &out) {
     // A call of a function value (design principles 2.1): with input 0 is the value,
     // the other `with` inputs and the normal ones its arguments.
-    const auto *g = frame.graph;
-    const auto with  = g->view().inputs(ref, PortGroup::Context);
+    const auto *g   = frame.graph;
+    const auto with = g->view().inputs(ref, PortGroup::Context);
     if (with.empty()) {
         refuse(g, ref, std::format("a call in {} has no function", describeFunction(g)));
     }
@@ -2341,7 +2350,7 @@ bool FunctionEmitter::lowerAppendInPlace(Frame &frame, gc_node_ref_t ref, Block 
     if (frame.consumed.contains(ref)) {
         return true;
     }
-    const auto *g = frame.graph;
+    const auto *g    = frame.graph;
     const auto taken = g->view().inputs(ref, PortGroup::Normal);
     const auto items = g->view().inputs(ref, PortGroup::Context);
     if (taken.size() != 1 || items.size() != 1 ||
@@ -2384,8 +2393,8 @@ bool FunctionEmitter::lowerSetIndexInPlace(Frame &frame, gc_node_ref_t ref, Bloc
     if (frame.consumed.contains(ref)) {
         return true;
     }
-    const auto *g = frame.graph;
-    const auto args  = g->view().inputs(ref, PortGroup::Normal);
+    const auto *g   = frame.graph;
+    const auto args = g->view().inputs(ref, PortGroup::Normal);
     if (args.size() != 3 || g->node(args.front())->kind != GCNodeKind::Oper ||
         operatorUri(g, args.front()) != ":var/take") {
         return false;

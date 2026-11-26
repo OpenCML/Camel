@@ -89,10 +89,9 @@ node_handle_t Builder::enterNodeOf(
     // `sourceType` is for the caller that knows what enters better than the node's value type does:
     // a **cell** is not a value, and a node of a `var` passed to a `var` port enters as the cell it
     // is, not as the value it holds, so that caller names the cell type (design principles 3.5).
-    Type *source = sourceType != nullptr ? sourceType
-                                        : (nodeTypeOf(value) != nullptr
-                                               ? valueTypeOf(nodeTypeOf(value))
-                                               : nullptr);
+    Type *source = sourceType != nullptr
+                       ? sourceType
+                       : (nodeTypeOf(value) != nullptr ? valueTypeOf(nodeTypeOf(value)) : nullptr);
     if (sourceType != nullptr && target != nullptr) {
         // A cell is not a value, and a declaration's type arguments are values: a cell does not
         // stand in one, so the call is not resolved against the declaration -- it is written by the
@@ -132,8 +131,9 @@ node_handle_t Builder::enterNodeOf(
     if (group == nullptr) {
         diags_->of(InternalDiag::UnknownInternalError)
             .atOrigin(origin != nullptr ? origin->origin() : camel::source::kInvalidOriginId)
-            .commit("the built-in operator 'enter' has no group: the prelude's #op declaration of "
-                    "':op/enter' did not load");
+            .commit(
+                "the built-in operator 'enter' has no group: the prelude's #op declaration of "
+                "':op/enter' did not load");
         throw BuildAbortException();
     }
     if (source == nullptr || target == nullptr) {
@@ -197,8 +197,9 @@ Builder::conversionNodeOf(node_handle_t value, Type *target, const GCT::node_ptr
     if (group == nullptr) {
         diags_->of(InternalDiag::UnknownInternalError)
             .atOrigin(origin != nullptr ? origin->origin() : camel::source::kInvalidOriginId)
-            .commit("the built-in operator 'cast' has no group: the prelude's #op declaration of "
-                    "':op/cast' did not load");
+            .commit(
+                "the built-in operator 'cast' has no group: the prelude's #op declaration of "
+                "':op/cast' did not load");
         throw BuildAbortException();
     }
     if (source == nullptr || target == nullptr) {
@@ -216,8 +217,8 @@ Builder::conversionNodeOf(node_handle_t value, Type *target, const GCT::node_ptr
     throw BuildAbortException();
 }
 
-node_handle_t Builder::refineExtentNodeOf(
-    node_handle_t value, Type *target, const GCT::node_ptr_t &origin) {
+node_handle_t
+Builder::refineExtentNodeOf(node_handle_t value, Type *target, const GCT::node_ptr_t &origin) {
     // The check the compiler makes where a shape is not in the type (design principles 5.4). A
     // parameter's type may write its extent over the names the call bound (`f32[n - w + 1]`) or
     // leave one open (`?`); the argument's own type says what the compiler knows and no more, so
@@ -274,10 +275,9 @@ node_handle_t Builder::copyNodeOf(node_handle_t value, Type *type) {
     //
     // The group is the built-in one for the reason conversionNodeOf says: a `var` binding's copy
     // is the language's call, and a program that binds the name `copy` changes nothing about it.
-    Type *copied = type != nullptr ? type
-                                   : (nodeTypeOf(value) != nullptr
-                                          ? valueTypeOf(nodeTypeOf(value))
-                                          : nullptr);
+    Type *copied = type != nullptr
+                       ? type
+                       : (nodeTypeOf(value) != nullptr ? valueTypeOf(nodeTypeOf(value)) : nullptr);
     if (copied != nullptr) {
         const oper_group_ptr_t group = builtinOperatorGroupNamed("copy");
         if (group != nullptr) {
@@ -302,8 +302,9 @@ node_handle_t Builder::copyNodeOf(node_handle_t value, Type *type) {
     const oper_group_ptr_t group = builtinOperatorGroupNamed("copy");
     if (group == nullptr) {
         diags_->of(InternalDiag::UnknownInternalError)
-            .commit("the built-in operator 'copy' has no group: the prelude's #op declaration of "
-                    "':op/copy' did not load");
+            .commit(
+                "the built-in operator 'copy' has no group: the prelude's #op declaration of "
+                "':op/copy' did not load");
         throw BuildAbortException();
     }
     if (copied == nullptr) {
@@ -528,9 +529,8 @@ bool nodeKeepsItsInput(node_handle_t node) {
     // empty access list, and an operator nobody declared a clause for is not one (design
     // principles 3.3). This is a node of a draft, so there is no fact to read it at -- and a call a
     // pass wrote by URI alone records no declaration here, which is the same answer: a holder.
-    if (op == nullptr ||
-        camel::core::OperatorTable::instance().effectOf((*op)->uri()) !=
-            camel::core::sem::Effect::Pure) {
+    if (op == nullptr || camel::core::OperatorTable::instance().effectOf((*op)->uri()) !=
+                             camel::core::sem::Effect::Pure) {
         return true;
     }
     const Type *result = valueTypeOf(nodeTypeOf(node));
@@ -751,17 +751,25 @@ std::optional<size_t> accessedPartOf(node_handle_t node, const Type *type) {
         if (op == nullptr) {
             return std::nullopt;
         }
-        const std::string_view uri = (*op)->uri();
-        const bool byName          = uri == ":op/access_key";
-        if (!byName && uri != ":op/access") {
-            return std::nullopt;
-        }
-        if (byName != structType) {
+        // A member read is the operator's shape (`OperShape::Access`, camel/runtime/oper_shape.h),
+        // and which of the two reads it is says itself: the member argument is a string when the
+        // field is named and a number when the place is. `:op/access_key` and `:op/access` differ
+        // in that parameter's type and in nothing a reader would have to ask their URIs about, so
+        // the two things the question needs -- "is this a read", "by name or by place" -- are the
+        // record's answer and the argument's.
+        if (camel::runtime::shapeOfOperator((*op)->oper()) != camel::ops::OperShape::Access) {
             return std::nullopt;
         }
         const auto norm = normInputsOf(node);
         const auto with = withInputsOf(node);
         if (norm.size() != 1 || with.size() != 1) {
+            return std::nullopt;
+        }
+        const Type *memberType = nodeTypeOf(nodeDraftOf(node)->ref(with.front()));
+        const bool byName      = memberType != nullptr && memberType->code() == TypeCode::String;
+        // The aggregate and the member argument are two statements of one read: a struct's members
+        // are named, a tuple's are placed. A pair that disagrees is no read this helper can name.
+        if (byName != structType) {
             return std::nullopt;
         }
         const std::optional<slot_t> member = staticValueOf(nodeDraftOf(node)->ref(with.front()));
@@ -4900,4 +4908,3 @@ void Builder::setBodyResult(const compile_graph_ptr_t &graph, node_handle_t resu
 }
 
 } // namespace camel::compile::gir
-
