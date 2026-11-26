@@ -257,3 +257,53 @@ $env:CAMEL_BENCH_THREADS='28'; $env:CAMEL_BENCH_WARMUP='1'; $env:CAMEL_BENCH_REP
 # 训练：$env:CAMEL_BENCH_WORKLOAD='train'  前向：$env:CAMEL_BENCH_WORKLOAD=''
 & out\latest\bin\camel.exe --block-limit 8192 benchmarks\resnet\model.cml std::macro "std::profile" report=true std::nvm
 ```
+
+### 9.5 补上"运行时口径"：`inspect --reuse` 的 observed 那一半
+
+9.2 缺的那项别名读数，现在有了一个**只读**的出口（`camel inspect --reuse`，分支 `lane/reuse-reading`），
+它把两件一直被写、却从没被读过的计数摊开（`profile::planUpdateMarks` / `profile::arrayCountAnswer`，
+原先只有写方 `exec_plan.cpp:1043`、`array.cpp:1100`，没有任何读者）。尾部一行：
+
+```
+REUSE observed plans <n> reuse-input <n> by-array-count <n> copy <n> counts in-place <n> copied <n>
+```
+
+口径必须这么读，这是**设计上的**两条口径，不是同一件事的两次测量：
+
+```
+· plans / reuse-input / by-array-count / copy  —— **编译期**：建了多少个计划，
+  以及这些计划在更新节点上打的三种 `StorageReuse` 标记（Input / ByArrayCount / Copy）各有几个节点；
+· counts in-place / copied                    —— **运行时**：一次原地形式的更新去问数组
+  "这些字节我一个人用吗"（`Array::canWriteInPlace`）时，数组回答"能"和"不能"各多少次。
+⇒ 编译期的 `alias=unknown`（本工具的行内第三列）与运行时这两个计数是**两件事**，
+   两者不同不是缺陷；行内 `alias` 永远不猜，正是因为它该由运行时那次提问来回答。
+```
+
+**交叉核对（本次实测，resnet 训练步，`-Jobs 1` 一条 run）**
+
+```
+camel --block-limit 8192 --reuse benchmarks/resnet/model.cml std::macro "std::profile" report=true std::nvm
+→ REUSE observed plans 27 reuse-input 0 by-array-count 0 copy 0 counts in-place 0 copied 0
+
+同一程序 inspect --copies（35 行）：
+→ 只有 2 行 update，两行都是 declared（训练步的 nn:sgd），in-place / by-count / copied 各 0 行：
+   COPIES model.cml:106:16 sgd declared
+   COPIES model.cml:113:19 sgd declared
+   COPIES train_step updates 1 in-place 0 by-count 0 declared 1 copied 0
+```
+
+⇒ 两个工具的零是**同一个事实**：这条程序的更新只有 `declared`（算子自己声明复用，没人去问数组），
+所以计划没打标记、也没有一次 `canWriteInPlace` 提问。
+反证：若这是"落到默认值恰好是 0"的缺陷，`--copies` 会打出 in-place / by-count 行而 observed 仍为 0；
+实测两侧一致，故**不是缺陷**。⇒ 见到这种零的判据顺序：**先问"这个程序有没有更新计划"，再问是不是缺陷。**
+
+⇒ 本节**只补了运行时那两组计数**。9.2 里问的"这个 `tensor:add` 的目标此刻有几个持有者"
+仍然要"把 `StorageReuse` 的判定扩到算子节点"的运行时，那是另一格（9.3 的第 244 行说的那一步），
+本节的 observed 不声称补上了别名。
+
+⇒ 一个词两个集合，已分开命名（避免把这行读成与 `--copies` 自相矛盾）：
+
+```
+`--copies` 的 `by-count`  = 存储留给数组的每个更新（**包含计划什么都没决定的原地形式** None），是后端的执行形态；
+`--reuse observed` 的 `by-array-count` = 计划**真打了** `StorageReuse::ByArrayCount` 标记的节点，是更窄的那个集合。
+```
