@@ -14,7 +14,7 @@
 7. 正在合并的检出里不提交；文档提交走 Camel-wt\docs，推往 integration（不推 develop，否则 integration 不再包含 develop、晋级没法快进），推之前核 origin/integration..HEAD 里只有文档提交。主检出 D:\Projects\Camel 归负责人：只在它干净地停在 develop 上时快进，别的一概不碰。
 
 车道的一生
-8. 一条车道 = 一个工作树 + 一个**teammate**。车道用 `spawn_teammate` 建（`subagent` 建出来的会话**无法按 id 寻址**，`send_message` 会回 `active teammate … not found`，只能重新派一个；`subagent` 只用于一次性探针与读数活）。续做、换底、按审查改都**唤起同一个 teammate**，合进 integration 后解绑。绑定只记在一处。唤起时第一句让它重读 `camel-lane` skill；上下文被压缩照样续，只在它自己说接不上时才换新的，并先写交接。
+8. 一条车道 = 一个工作树 + 一个**teammate**。车道用 `spawn_teammate` 建（`subagent` 建出来的会话**无法按 id 寻址**，`send_message` 会回 `active teammate … not found`，只能重新派一个；`subagent` 只用于一次性探针与读数活，**不写车道分支**；万一写了，那些提交由该车道的 teammate 逐个文件核过才采用）。续做、换底、按审查改都**唤起同一个 teammate**，合进 integration 后解绑。绑定只记在一处。唤起时第一句让它重读 `camel-lane` skill；上下文被压缩照样续，只在它自己说接不上时才换新的，并先写交接。
 9. **交回** = 本地提交在 `lane/<名字>` 上 + 对上次晋级红表逐名比的读数（判词行原样）。交回的活**两小时内进合并队列**，没进按卡住处理。**没做完的车道不存档退场**，要停先问决策者。车道分支**不推远端**（钩子会拒）。
 10. **换底**到 integration 尖端：交回前、插件点名落后超过 100 笔时、暂停前、恢复时，四处都换。换底只接 integration 上来，不把 integration 合进车道分支。
 
