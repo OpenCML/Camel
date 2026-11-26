@@ -7,6 +7,7 @@
  * one through a transaction. Every read is pure: a Program is an immutable snapshot.
  */
 
+#include "camel/core/operator_table.h"
 #include "camel/core/type/native.h"
 #include "facts.h"
 #include "handle.h"

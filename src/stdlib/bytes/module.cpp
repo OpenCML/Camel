@@ -8,6 +8,7 @@
 #include "camel/core/mm/block.h"
 #include "camel/core/mm/root_handle.h"
 #include "camel/core/module/builtin.h"
+#include "camel/core/operator_table.h"
 #include "camel/core/operator_traits.h"
 #include "camel/core/rtdata/array.h"
 #include "camel/core/rtdata/bytes.h"
@@ -27,7 +28,7 @@ using namespace camel::core::error;
 namespace mm = camel::core::mm;
 slot_t encodeKernel(ArgsView &, ArgsView &norm, Context &) {
     // A string is always valid UTF-8 (design principles 11.1), so encoding cannot fail.
-    auto *text          = norm.get<::String *>(0);
+    auto *text                      = norm.get<::String *>(0);
     const std::string_view textView = text->view();
     if (textView.size() < mm::kInlineBlockBytes) {
         return toSlot(BytesObject::from(textView, mm::autoSpace()));
@@ -35,7 +36,7 @@ slot_t encodeKernel(ArgsView &, ArgsView &norm, Context &) {
     // Large text: copy it once, straight from the language string into a data block. The
     // string may move when the block allocation collects, so root it and re-read after.
     mm::RootHandle root(mm::autoSpace(), text, Type::String(), "bytes.encode");
-    mm::Block *block = mm::Block::create(textView.size());
+    mm::Block *block               = mm::Block::create(textView.size());
     const std::string_view current = root.getAs<::String>()->view();
     std::memcpy(block->data(), current.data(), current.size());
     block->setBytes(current.size());
@@ -73,8 +74,7 @@ slot_t fromArrayKernel(ArgsView &, ArgsView &norm, Context &) {
 }
 slot_t toArrayKernel(ArgsView &, ArgsView &norm, Context &) {
     const std::string bytes(norm.get<BytesObject *>(0)->view());
-    auto *out = ::Array::create(
-        mm::autoSpace(), ArrayType::create(Type::Int64()), bytes.size());
+    auto *out = ::Array::create(mm::autoSpace(), ArrayType::create(Type::Int64()), bytes.size());
     for (size_t i = 0; i < bytes.size(); ++i)
         out->set<int64_t>(i, static_cast<unsigned char>(bytes[i]));
     return toSlot(out);
@@ -104,10 +104,7 @@ class BytesModule final : public BuiltinModule {
         });
         camel::core::OperatorTable::instance().declare(
             "bytes",
-            {{"encode", true},
-             {"decode", true},
-             {"from_array", true},
-             {"to_array", true}});
+            {{"encode", true}, {"decode", true}, {"from_array", true}, {"to_array", true}});
         loaded_ = true;
         return true;
     }

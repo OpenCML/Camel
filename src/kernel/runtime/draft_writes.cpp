@@ -7,6 +7,7 @@
  */
 
 #include "camel/runtime/draft_writes.h"
+#include "camel/core/operator_table.h"
 
 #include "camel/core/mm/alloc/growable.h"
 #include "camel/core/operator_traits.h"
@@ -331,8 +332,8 @@ struct FrozenGraphView {
     /// last reader was dropped would be refused by its own credential check with "has effect node
     /// N with neither a read of its value nor a place in its chain". The criterion, in one line: a
     /// write may be called dead when it is no root and every node that reads it lies outside this
-    /// set. The set is asked here, once per view, from `camel::runtime::liveNodesOf` -- the same walk
-    /// the draft face asks, one kernel behind both.
+    /// set. The set is asked here, once per view, from `camel::runtime::liveNodesOf` -- the same
+    /// walk the draft face asks, one kernel behind both.
     bool isRead(gc_node_ref_t ref) const {
         const auto normUsers = graph.normUsersOf(ref);
         const auto withUsers = graph.withUsersOf(ref);
@@ -466,9 +467,9 @@ struct DraftGraphView {
 /// Whether a root holds the cell `ref` is. A GATE has no cell of its own -- it forwards the cell of
 /// its value input, which is its first normal input, the same node `isWrittenInPlace` above follows
 /// (design principles 3.1). So the cell a `var` parameter writes
-/// is the caller's cell, not the gate that carries it across the call: asking the gate alone answers
-/// "no root holds it" for every write made through a parameter, which is a write the caller can
-/// still read (design principles 3.5, 9.7).
+/// is the caller's cell, not the gate that carries it across the call: asking the gate alone
+/// answers "no root holds it" for every write made through a parameter, which is a write the caller
+/// can still read (design principles 3.5, 9.7).
 ///
 /// It follows `inputs.front()`, as `isWrittenInPlace` does: `inputs.back()` would answer about a
 /// wait's cell.

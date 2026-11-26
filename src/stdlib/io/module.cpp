@@ -13,6 +13,7 @@
 
 #include "module.h"
 #include "camel/core/context/context.h"
+#include "camel/core/operator_table.h"
 #include "camel/core/operator_traits.h"
 #include "executor.h"
 
@@ -42,9 +43,10 @@ bool IOModule::load() {
     // `input` writes its prompt and reads a line: stdin and stdout, in the order they are used.
     const auto inputResources = [] {
         auto spec = camel::core::sem::externalAmbient(
-            "stdin", camel::core::sem::AccessMode::ReadModifyWrite);
-        const auto out = camel::core::sem::externalAmbient(
-            "stdout", camel::core::sem::AccessMode::Write);
+            "stdin",
+            camel::core::sem::AccessMode::ReadModifyWrite);
+        const auto out =
+            camel::core::sem::externalAmbient("stdout", camel::core::sem::AccessMode::Write);
         spec.accesses.insert(spec.accesses.end(), out.accesses.begin(), out.accesses.end());
         return spec;
     };

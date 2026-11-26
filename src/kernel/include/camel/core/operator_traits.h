@@ -4,14 +4,13 @@
 /*
  * Hooks that modules register about the values of their own types.
  *
- * The properties of operators (purity, type rules, type folders) live in the operator table,
- * camel/core/operator_table.h, which this header includes so that a caller of one of them does not
- * have to.
+ * The properties of the operators themselves (purity, type rules, type folders) live in
+ * camel/core/operator_table.h. Nothing here names one of them, so this header does not include it
+ * and a file that reads those properties includes that header for itself.
  */
 
 #pragma once
 
-#include "camel/core/operator_table.h"
 #include "camel/core/rtdata/base.h"
 
 #include <functional>

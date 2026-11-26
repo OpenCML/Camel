@@ -56,6 +56,10 @@
 
 namespace camel::runtime {
 
+std::string_view GCOperBody::uri() const {
+    return camel::core::OperatorTable::instance().uri(oper);
+}
+
 bool castMayFault(const camel::core::type::Type *target, const camel::core::type::Type *source) {
     if (target == nullptr || source == nullptr) {
         return true;
@@ -186,7 +190,7 @@ bool may_be_rearranged(const GCGraph &graph, gc_node_ref_t ref) {
         return false;
     }
     if (node->kind == GCNodeKind::Oper) {
-        const auto *body = graph.nodeBodyAs<GCOperBody>(ref);
+        const auto *body               = graph.nodeBodyAs<GCOperBody>(ref);
         const camel::core::OperId oper = body == nullptr ? camel::core::kNoOper : body->oper;
         if (camel::ops::takesItsOperandAsItsType(shapeOfOperator(oper))) {
             const auto inputs    = graph.normInputsOf(ref);
@@ -902,12 +906,13 @@ void validateRuntimeGraphPayloadImpl(const GCGraph *graph) {
             // This is an assertion, not a rule programs reach. Measured: payload validation does
             // run on the execution path (three graphs validated for a small program, five with a
             // fault-injection pass in the pipeline), but a gate whose waits are all taken away
-            // never gets here -- `dceDraft` removes it first (src/stdlib/std/cxx/opt/generic/generic.cpp,
-            // the dead-gate branch: no reader, and it waited on something). A fault-injection pass
-            // that stripped both the control input and the sync predecessor of the first gate
-            // committed and ran with no error, and that gate was gone afterwards (2 gates before
-            // it, 1 after). If this ever fires, either `dceDraft` stopped removing such a gate or
-            // the builder started writing one that nothing waits on.
+            // never gets here -- `dceDraft` removes it first
+            // (src/stdlib/std/cxx/opt/generic/generic.cpp, the dead-gate branch: no reader, and it
+            // waited on something). A fault-injection pass that stripped both the control input and
+            // the sync predecessor of the first gate committed and ran with no error, and that gate
+            // was gone afterwards (2 gates before it, 1 after). If this ever fires, either
+            // `dceDraft` stopped removing such a gate or the builder started writing one that
+            // nothing waits on.
             if (!hasWaitEdge && !isSyncStatement && !holdsReads) {
                 throw std::runtime_error(
                     std::format(
@@ -1910,7 +1915,10 @@ bool nodeIsFreelySchedulable(const GraphDraft &draft, gc_node_ref_t id, bool byS
         const auto inputs             = draft.normInputsOf(id);
         const DraftNodeHeader *source = inputs.size() == 1 ? draft.header(inputs[0]) : nullptr;
         return nodeIsFreelySchedulable(
-            header->kind, oper, header->dataType, source != nullptr ? source->dataType : nullptr);
+            header->kind,
+            oper,
+            header->dataType,
+            source != nullptr ? source->dataType : nullptr);
     }
     if (header->kind == GCNodeKind::Oper) {
         bool fixed = byShape && shapesAreFixed(header->dataType);
@@ -2056,7 +2064,10 @@ bool nodeMayFault(const GraphDraft &draft, gc_node_ref_t id, bool byShape) {
             const auto inputs             = draft.normInputsOf(id);
             const DraftNodeHeader *source = inputs.size() == 1 ? draft.header(inputs[0]) : nullptr;
             return nodeMayFault(
-                header->kind, oper, header->dataType, source != nullptr ? source->dataType : nullptr);
+                header->kind,
+                oper,
+                header->dataType,
+                source != nullptr ? source->dataType : nullptr);
         }
         bool fixed = byShape && shapesAreFixed(header->dataType);
         for (gc_node_ref_t input : draft.normInputsOf(id)) {

@@ -6,6 +6,7 @@
 #include "camel/core/data/primary.h"
 #include "camel/core/derivative.h"
 #include "camel/core/operator.h"
+#include "camel/core/operator_table.h"
 #include "camel/core/type.h"
 #include "camel/core/type/resolver.h"
 #include "executor.h"
@@ -55,18 +56,22 @@ void erfVjp(camel::core::VjpBuilder &builder, const camel::core::VjpCall &call) 
         return;
     }
     if (auto dy = builder.gradientOf(call.output)) {
-        Type *type        = builder.nodeType(call.output);
-        const bool narrow = type->code() == TypeCode::Float32;
-        const char *mul   = narrow ? ":op/mul_f" : ":op/mul_d";
+        Type *type              = builder.nodeType(call.output);
+        const bool narrow       = type->code() == TypeCode::Float32;
+        const char *mul         = narrow ? ":op/mul_f" : ":op/mul_d";
         constexpr double kScale = 1.1283791670955126 * (Complement ? -1.0 : 1.0);
         const auto x            = call.inputs[0];
         const std::array<vjp_node_t, 2> squareInputs{x, x};
         const auto square = builder.addOper(type, mul, squareInputs);
         const std::array<vjp_node_t, 1> negInputs{square};
         const auto negated = builder.addOper(type, narrow ? ":op/neg_f" : ":op/neg_d", negInputs);
-        const auto bell = builder.addOper(type, narrow ? "math:exp_f" : "math:exp_d", std::array<vjp_node_t, 1>{negated});
-        const auto scale =
-            builder.addStatic(narrow ? toSlot<Float32>(static_cast<Float32>(kScale)) : toSlot<Float64>(kScale), type);
+        const auto bell    = builder.addOper(
+            type,
+            narrow ? "math:exp_f" : "math:exp_d",
+            std::array<vjp_node_t, 1>{negated});
+        const auto scale = builder.addStatic(
+            narrow ? toSlot<Float32>(static_cast<Float32>(kScale)) : toSlot<Float64>(kScale),
+            type);
         const std::array<vjp_node_t, 2> scaled{*dy, scale};
         const auto weighted = builder.addOper(type, mul, scaled);
         const std::array<vjp_node_t, 2> product{weighted, bell};

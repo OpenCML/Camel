@@ -3,22 +3,28 @@
 
 #pragma once
 
-#include "camel/core/error/diagnostics/messages/semantic.h"
 #include "camel/core/type/base.h"
 #include "camel/core/type/composite/func.h"
 
+#include <cstdint>
 #include <functional>
 #include <optional>
 #include <span>
+#include <stdexcept>
 #include <string>
 #include <utility>
 #include <vector>
-#include <stdexcept>
+
+/// The diagnostic a resolver names when it rejects a call for a reason of its own; its messages are
+/// generated into camel/core/error/diagnostics/messages/semantic.h. A resolver only names it as a
+/// return type, so it is declared here and not defined.
+namespace camel::core::error {
+enum class SemanticDiag : uint32_t;
+}
 
 namespace camel::core::type {
 
-using ResolverFunc = std::function<std::optional<Type *>(
-    const type_vec_t &, const type_vec_t &)>;
+using ResolverFunc = std::function<std::optional<Type *>(const type_vec_t &, const type_vec_t &)>;
 
 /**
  * What is known at compile time about the value of one argument of a call.
@@ -53,8 +59,8 @@ using static_args_t = std::span<const StaticArg>;
  * one answers from it whenever the caller has the statics -- `resolveWith`, which every call site
  * with constants reaches -- and keeps the plain callback above for a caller that has none.
  */
-using ResolverWithStaticsFunc = std::function<std::optional<Type *>(
-    const type_vec_t &, const type_vec_t &, static_args_t)>;
+using ResolverWithStaticsFunc =
+    std::function<std::optional<Type *>(const type_vec_t &, const type_vec_t &, static_args_t)>;
 
 /// The names a signature gives its parameters, the `with` ones first and the ordinary ones after;
 /// false when it records no name for some position (see FuncTypeResolver::parameterNames).
@@ -127,8 +133,8 @@ class FuncTypeResolver {
      * name): such a rule is one a call's name cannot reach, and the call is refused rather than
      * bound to a position the rule does not name.
      */
-    virtual bool parameterNames(std::vector<std::string> &with, std::vector<std::string> &norm)
-        const {
+    virtual bool
+    parameterNames(std::vector<std::string> &with, std::vector<std::string> &norm) const {
         (void)with;
         (void)norm;
         return false;
@@ -139,8 +145,8 @@ class FuncTypeResolver {
      * type depends on them (e.g. a tensor constructor whose shape is given by a shape literal).
      * The default ignores the values.
      */
-    virtual std::optional<FunctionType *> resolveWith(
-        const type_vec_t &with, const type_vec_t &norm, static_args_t normStatics) const {
+    virtual std::optional<FunctionType *>
+    resolveWith(const type_vec_t &with, const type_vec_t &norm, static_args_t normStatics) const {
         (void)normStatics;
         return resolve(with, norm);
     }
@@ -218,13 +224,13 @@ class StaticFuncTypeResolver : public FuncTypeResolver {
             FunctionType::create(withTypes, normTypes, returnType));
     }
 
-    std::optional<FunctionType *> resolve(
-        const type_vec_t &with, const type_vec_t &norm) const override;
+    std::optional<FunctionType *>
+    resolve(const type_vec_t &with, const type_vec_t &norm) const override;
 
     std::string signature() const override { return funcType_->toString(); }
 
-    bool parameterNames(std::vector<std::string> &with, std::vector<std::string> &norm)
-        const override {
+    bool
+    parameterNames(std::vector<std::string> &with, std::vector<std::string> &norm) const override {
         if (funcType_->hasRest() || funcType_->hasConstas()) {
             return false;
         }
@@ -276,8 +282,8 @@ class DynamicFuncTypeResolver : public FuncTypeResolver {
             std::move(resolver));
     }
 
-    std::optional<FunctionType *> resolve(
-        const type_vec_t &with, const type_vec_t &norm) const override;
+    std::optional<FunctionType *>
+    resolve(const type_vec_t &with, const type_vec_t &norm) const override;
 
     /// The same resolution with the call's constants in hand: a rule that declared a callback
     /// reading them (withStatics) answers from it, so its result type may follow the values the
@@ -322,8 +328,8 @@ class DynamicFuncTypeResolver : public FuncTypeResolver {
     /// result follows its arguments answers from the signature it writes, and only when that
     /// signature places every parameter: a count left unconstrained (a variadic list) or a
     /// `rest` parameter is not a position a name can mark.
-    bool parameterNames(std::vector<std::string> &with, std::vector<std::string> &norm)
-        const override {
+    bool
+    parameterNames(std::vector<std::string> &with, std::vector<std::string> &norm) const override {
         if (fixed_ != nullptr) {
             if (fixed_->hasRest() || fixed_->hasConstas()) {
                 return false;
@@ -371,9 +377,9 @@ class DynamicFuncTypeResolver : public FuncTypeResolver {
  *
  *  - a signature without type variables is a fixed rule: an argument list of the declared
  *    shape whose argument types are assignable to the declared parameter types;
- *  - a signature with type parameters declared at its head is a family: the variables are bound from the argument
- *    types, every variable must be bound, and the resulting concrete signature is checked
- *    against the arguments. Each call therefore resolves to its own concrete signature while
+ *  - a signature with type parameters declared at its head is a family: the variables are bound
+ * from the argument types, every variable must be bound, and the resulting concrete signature is
+ * checked against the arguments. Each call therefore resolves to its own concrete signature while
  *    the operator URI stays one.
  *
  * The operator table takes the number of parameters from the declaration as well, so a
@@ -387,8 +393,8 @@ class DeclaredFuncTypeResolver : public FuncTypeResolver {
         return std::make_unique<DeclaredFuncTypeResolver>(declared);
     }
 
-    std::optional<FunctionType *> resolve(
-        const type_vec_t &with, const type_vec_t &norm) const override;
+    std::optional<FunctionType *>
+    resolve(const type_vec_t &with, const type_vec_t &norm) const override;
 
     /// The declaration's own variables, fixed by the call's `::<...>` type arguments before the
     /// arguments are read: a variable the call writes is what the call is an instance of, so the
@@ -428,8 +434,8 @@ class DeclaredFuncTypeResolver : public FuncTypeResolver {
 
     /// A declaration names every parameter it writes, whatever its signature resolves to: the
     /// names are the declaration's own, and a named call reads them from here.
-    bool parameterNames(std::vector<std::string> &with, std::vector<std::string> &norm)
-        const override {
+    bool
+    parameterNames(std::vector<std::string> &with, std::vector<std::string> &norm) const override {
         if (funcType_->hasRest() || funcType_->hasConstas()) {
             return false;
         }

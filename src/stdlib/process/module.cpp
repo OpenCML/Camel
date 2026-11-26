@@ -2,8 +2,8 @@
 // SPDX-License-Identifier: MIT
 
 /*
- * The process and the machine it runs on: how long to wait (in seconds), when to end, who the user is, how many hardware
- * threads there are. The terminal is `io`'s.
+ * The process and the machine it runs on: how long to wait (in seconds), when to end, who the user
+ * is, how many hardware threads there are. The terminal is `io`'s.
  *
  * The signatures are written once, in the declaration module `stdlib/process.cml` (design
  * principles 6.4). What is left here is what only C++ knows: the
@@ -13,6 +13,7 @@
 
 #include "module.h"
 #include "camel/core/context/context.h"
+#include "camel/core/operator_table.h"
 #include "camel/core/operator_traits.h"
 #include "executor.h"
 
@@ -21,7 +22,9 @@ using namespace camel::core::module;
 
 ProcessModule::ProcessModule(context_ptr_t ctx) : BuiltinModule("process", ctx) {}
 
-module_ptr_t ProcessModule::create(context_ptr_t ctx) { return std::make_shared<ProcessModule>(ctx); }
+module_ptr_t ProcessModule::create(context_ptr_t ctx) {
+    return std::make_shared<ProcessModule>(ctx);
+}
 
 bool ProcessModule::load() {
     if (loaded_)

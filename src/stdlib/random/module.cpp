@@ -4,11 +4,12 @@
 #include "module.h"
 #include "camel/compile/gir.h"
 #include "camel/core/context/context.h"
+#include "camel/core/operator_table.h"
+#include "camel/core/operator_traits.h"
 #include "camel/core/type.h"
 #include "camel/core/type/composite/array.h"
 #include "camel/core/type/resolver.h"
 #include "camel/utils/type.h"
-#include "camel/core/operator_traits.h"
 #include "executor.h"
 #include "operators.h"
 
