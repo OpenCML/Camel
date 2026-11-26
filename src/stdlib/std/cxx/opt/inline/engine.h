@@ -22,7 +22,7 @@
 /// which changed nothing -- `std::opt`, which says the growth budget is reached rather than that the
 /// optimizer reached a fixed point -- asks the run it just made, and a run with no context to keep a
 /// fact on answers all the same. The same record is published on the context as
-/// kInlineReportFactKey for the reader that asks long after the run (onnx::export explains a call
+/// kInlineReportFactKey for the reader that asks long after the run (onnx::export_model explains a call
 /// still in the entry graph). One record with two readers, not two copies of one answer.
 const camel::runtime::Program *applyOptimizeRewritePass(
     const camel::core::context::context_ptr_t &context, const camel::runtime::Program *program,

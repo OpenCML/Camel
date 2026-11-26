@@ -85,7 +85,7 @@ timeout_ms = 20000
 # `onnx` gained a declaration module in (`stdlib/onnx.cml`), so it is now a Camel module of
 # the kind answers with the short diagnostic. The rule
 # (pass-unavailable-diagnostics 2) makes the declaration the one statement of which passes a module
-# provides: `stdlib/onnx.cml` declares `onnx::export`, so the sentence "it provides no passes" is
+# provides: `stdlib/onnx.cml` declares `onnx::export_model`, so the sentence "it provides no passes" is
 # gone -- the fact it asserted stopped being true. The generic unknown-pass answer is kept by the
 # `hash` case in feat/compile/diag_json.
 

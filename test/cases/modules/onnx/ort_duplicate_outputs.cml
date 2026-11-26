@@ -8,7 +8,7 @@
  *   computed   one computed scalar returned twice.
  *
  * Run by ort_duplicate_outputs.py, which runs the program twice (the operator in a default run,
- * the pass std::macro std::opt onnx::export) from a directory with the example input. Every
+ * the pass std::macro std::opt onnx::export_model) from a directory with the example input. Every
  * model must pass onnx.checker's full check, name every output differently, load on ONNX Runtime
  * with as many outputs as the function returns, and return the values the function computes.
  */
@@ -37,7 +37,7 @@ func computed(h: f32[...]) => (float, float) {
 }
 
 // The refusal of the first request that was refused, or 'exported' when all four were written.
-// The requests stay the program's own statements (see main): the `onnx::export` pass reads them
+// The requests stay the program's own statements (see main): the `onnx::export_model` pass reads them
 // from the top level of the entry graph, while the error they answer is handled here.
 func report(r1: void!, r2: void!, r3: void!, r4: void!) => string! {
     return match r1 {

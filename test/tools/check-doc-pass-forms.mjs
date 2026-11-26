@@ -242,7 +242,7 @@ function isPage(rel) {
 // Each shows a removed form while saying it was removed. A decision and the parser no longer
 // disagree about anything this guard reads: design principles 9.3 writes `out=model.onnx` and
 // says a string value is taken as written, and the parser now takes a `string` parameter as
-// written (`onnx::export out=model.onnx` really writes that file), so the two entries that used
+// written (`onnx::export_model out=model.onnx` really writes that file), so the two entries that used
 // to excuse that sentence are gone and the sentence needs no exception.
 const EXCUSED = [
     {

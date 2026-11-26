@@ -715,14 +715,14 @@ timeout_ms = 20000
 
 [[tests]]
 name = "refuse_onnx"
-desc = "onnx::export does not translate a model whose input goes through a map: a located TranslationRefused, no model file."
+desc = "onnx::export_model does not translate a model whose input goes through a map: a located TranslationRefused, no model file."
 kind = "negative"
 case = "../../../cases/compile/collections/refuse_onnx.cml"
-args = ["${case}", 'onnx::export out="${test_tmp}/refuse_onnx_never_written.onnx"', "std::nop"]
+args = ["${case}", 'onnx::export_model out="${test_tmp}/refuse_onnx_never_written.onnx"', "std::nop"]
 expect_exit = 1
 expect_diagnostic_name = "RuntimeDiag::TranslationRefused"
 expect_diagnostic_line = 7
-expect_output_contains = ["Translation pass 'onnx::export' refused the graph"]
+expect_output_contains = ["Translation pass 'onnx::export_model' refused the graph"]
 expect_output_not_contains = ["wrote", "Segmentation fault", "dumped core", "UnknownInternalError"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 30000

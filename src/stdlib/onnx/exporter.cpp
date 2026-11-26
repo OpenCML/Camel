@@ -5418,7 +5418,7 @@ void bindCaptures(camel::runtime::GraphTransaction &transaction, std::span<const
 enum class Preparation {
     /// onnx.export_model: macro expansion and the whole std::opt fixpoint.
     Full,
-    /// onnx::export: the same simplification without macro expansion, which is the business
+    /// onnx::export_model: the same simplification without macro expansion, which is the business
     /// of std::macro before the pass.
     ShapesOnly,
 };
@@ -5459,7 +5459,7 @@ Model exportBound(
             core::mm::autoSpace(),
             const_cast<::Tuple *>(fn->tuple()),
             fn->tupleType(),
-            "onnx::export");
+            "onnx::export_model");
     }
     DetachedGraphsGuard guard{ctx};
     const auto context = ctx.shared_from_this();

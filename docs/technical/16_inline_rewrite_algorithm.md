@@ -416,7 +416,7 @@ draft 引用的图必须在闭包内，否则编码时触发断言。引擎每�
 直接调用及其原因（`InlineDecline`）记录在一份 `InlineReport` 里，这份记录有两个读者（**同一个对象**，
 不是同一个答案的两份拷贝）：运行引擎的那一次调用经 `applyOptimizeRewritePass` 的返回值拿到它，
 `std::opt` 用它说明「这一轮什么都没改，是因为预算用完了」，而不是「到了不动点」；同一份记录又以 pass
-fact `kInlineReportFactKey` 挂在 `Context` 上，供运行结束之后再问的读者（`onnx::export`）解释某个调用
+fact `kInlineReportFactKey` 挂在 `Context` 上，供运行结束之后再问的读者（`onnx::export_model`）解释某个调用
 为何仍是调用。
 
 答案属于这一次运行，所以它不依赖 `Context`：没有 `Context` 就没有 pass fact，而预算触顶这件事照样

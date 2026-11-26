@@ -65,4 +65,4 @@ export func export_model::<F, E>(fn: F, example: E) => void! when is_function::<
 // is for the generator to read the block form. Do not
 // read this as the house style for pass parameters.
 with <out: string = '', trace: bool = false, dump: bool = false, prep_stats: bool = false>
-export func export::<F>(f: F) => F! when is_function::<F>()
+export func export_model::<F>(f: F) => F! when is_function::<F>()

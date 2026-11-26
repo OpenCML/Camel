@@ -8,7 +8,7 @@ copy into the declaration's order, exported field by field), one bound with
 `let r: Run = ...` (the CAST at a declaration), one passed to a parameter declared `Run` (the
 CAST at a call argument), and one on the path where a recursion whose depth depends on the
 model input returns (the CAST inside the ONNX Loop). The program is run twice, by the
-operator (default run) and by the pass (std::macro std::opt onnx::export); every model must
+operator (default run) and by the pass (std::macro std::opt onnx::export_model); every model must
 pass onnx.checker's full check, hold neither a Cast nor a Reshape node (an identity conversion
 exports as nothing, a reorder only identities between the initializer's fields; the loop
 condition's own Cast aside), name its outputs after the declaration's fields with the counter
@@ -145,7 +145,7 @@ def check(path: Path, model: str, label: str) -> bool:
 
 def main() -> int:
     ok = True
-    for label, passes in [("operator", []), ("pass", ["std::macro", "std::opt", "onnx::export"])]:
+    for label, passes in [("operator", []), ("pass", ["std::macro", "std::opt", "onnx::export_model"])]:
         with tempfile.TemporaryDirectory() as tmp:
             env = dict(os.environ, CAMEL_HOME=str(HOME))
             proc = subprocess.run(

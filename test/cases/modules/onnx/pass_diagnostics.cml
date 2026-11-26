@@ -1,5 +1,5 @@
 /**
- * The diagnostic readings of `onnx::export`: one model of a function of one input-dependent
+ * The diagnostic readings of `onnx::export_model`: one model of a function of one input-dependent
  * product, so the pass's `trace` has a lowered call to print and `prep_stats` a size to report.
  * No `export_model` call in the program: the pass translates `main` itself, so the plan gives the
  * model file through the pass's `out`. The plan runs this three times, once per reading, and pins

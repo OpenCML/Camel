@@ -26,7 +26,7 @@ program's inputs, and each consumer says what an open parameter means:
 | a rewriting pass (`std::cxx::*`, `std::macro`, `std::cxx::inline`) | an unknown value, as in any function |
 | a dump (`std::rgir`, `std::gir`) | a PORT node named like the parameter |
 | a scheduling pass | an error: `EntryArgumentMissing` |
-| `onnx::export` | an input of the model |
+| `onnx::export_model` | an input of the model |
 
 The origin of `main` is also registered apart from the graphs (`DebugMap::registerEntryOrigin`),
 because passes replace the entry graph; `execute::entryFunctionOrigin(ctx)` is where a diagnostic
@@ -95,7 +95,7 @@ through the context, exactly as an `import` statement would; a module registers 
 when it loads. Failure to find the module is not reported by itself: the name stays unknown and
 gets the usual `UnrecognizedGraphPass`.
 
-## 4. `onnx::export` on a program without a request (`lib/onnx/passes/export.cpp`)
+## 4. `onnx::export_model` on a program without a request (`lib/onnx/passes/export.cpp`)
 
 The pass first looks for `onnx.export_model` requests in the entry graph, as before. When
 there is none:
@@ -132,9 +132,9 @@ value is given with `--arg` at export. The convention the language suggests (dat
 parameters, weights as `with` parameters) therefore reads naturally on the command line:
 
     # weights baked in, data as input
-    camel model.cml --arg p=weights std::macro std::opt 'onnx::export out="m.onnx"'
+    camel model.cml --arg p=weights std::macro std::opt 'onnx::export_model out="m.onnx"'
     # weights as inputs (and, for a training step, as outputs)
-    camel step.cml std::macro std::opt 'onnx::export out="m.onnx"'
+    camel step.cml std::macro std::opt 'onnx::export_model out="m.onnx"'
 
 An ordinary parameter given with `--arg` is baked in the same way; the exporter does not treat
 the two kinds differently beyond their order.

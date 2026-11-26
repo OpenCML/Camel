@@ -101,7 +101,7 @@ slot_t exportKernel(ArgsView &with, ArgsView &norm, Context &ctx) {
         // slots (and key tables by their addresses), so nothing may move until it is done.
         // Its allocation is bounded by the size of the exported graph.
         camel::core::mm::NoCollectionScope noCollection;
-        const camel::onnx::Model model = camel::onnx::exportFunction(ctx, fn, examples, options);
+        const camel::onnx::Model model = camel::onnx::export_modelFunction(ctx, fn, examples, options);
         camel::onnx::writeModelFile(model, camel::utils::pathFromUtf8(path->toString()));
     } catch (const camel::onnx::ExportError &e) {
         // The refusal names the construct it is about, and that position travels in the error

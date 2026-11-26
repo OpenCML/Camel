@@ -325,15 +325,15 @@ timeout_ms = 20000
 
 [[tests]]
 name = "refuse_onnx"
-desc = "onnx::export refuses a model whose input is an enum: a model input is a tensor, a number, or a struct or tuple of those."
+desc = "onnx::export_model refuses a model whose input is an enum: a model input is a tensor, a number, or a struct or tuple of those."
 kind = "negative"
 case = "../../../cases/compile/enum/refuse_onnx.cml"
-args = ["--diag-format", "short", "${case}", "onnx::export out=\"${test_tmp}/enum_never_written.onnx\"", "std::nop"]
+args = ["--diag-format", "short", "${case}", "onnx::export_model out=\"${test_tmp}/enum_never_written.onnx\"", "std::nop"]
 expect_exit = 1
 expect_diagnostic_name = "RuntimeDiag::TranslationRefused"
 expect_diagnostic_line = 14
 expect_diagnostic_column = 1
-expect_output_contains = ["Translation pass 'onnx::export' refused the graph: parameter 's' of 'main' has type 'Shape'"]
+expect_output_contains = ["Translation pass 'onnx::export_model' refused the graph: parameter 's' of 'main' has type 'Shape'"]
 expect_output_not_contains = ["wrote", "Segmentation fault", "dumped core", "UnknownInternalError"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 30000

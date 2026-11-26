@@ -2043,7 +2043,7 @@ const camel::runtime::Program *simplifyGraph(
         // is spent (if it left one). The engine hands the record back (`applyOptimizeRewritePass`,
         // camel/passes/opt/inline/engine.h), so the round asks the run it just made rather than a
         // value a later pass has to keep fresh on the context; the same record is the pass fact
-        // onnx::export reads. `InlineDecline::GrowthBudget` is the reason the engine only gives a
+        // onnx::export_model reads. `InlineDecline::GrowthBudget` is the reason the engine only gives a
         // call it would otherwise have inlined (the owner cap and the strategy are asked first,
         // engine.cpp), so a round that changed nothing while one of these was left did not reach a
         // fixed point -- it reached the budget. The two do not print the same sentence (`std::opt:
@@ -2121,7 +2121,7 @@ const camel::runtime::Program *simplifyGraph(
                 // The warning is a pass diagnostic where there is a context to carry one, at the
                 // call the round left (`InlineDeclined::origin`): the reader's question is which
                 // call, and where it is written, and a warning that names a call yet carries no
-                // position is unreadable beside the refusal it explains (onnx::export's, which
+                // position is unreadable beside the refusal it explains (onnx::export_model's, which
                 // points at the function). With no context there is no place for it, and the
                 // sentence still goes to the log rather than the round being reported as a fixed
                 // point it did not reach.

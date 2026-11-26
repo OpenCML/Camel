@@ -7,7 +7,7 @@
 > **Implementation status**: an unmet precondition can still surface as a run-time error instead of a clear located diagnostic (e.g. "branch arms must be subgraph calls" after `std::opt` on the GRU benchmark; tracking item N3 / D21).
 
 Status: implemented through phase 5 and phase 7 (§8); phase 6 (thin ONNX) is
-partly done: `onnx::export` exists as a module-contributed translation pass,
+partly done: `onnx::export_model` exists as a module-contributed translation pass,
 but shape specialization still happens inside it and `onnx.export_model` still
 runs its own simplification (§7, "Status"). Supersedes the tape-based synthesis inside `nn.apply_gradients`, which
 has been removed together with `Parameter`.
@@ -72,7 +72,7 @@ source ── compile ──> GIR
   ── std::cxx::devirtualize / std::cxx::specialize / std::cxx::inline
   ── std::cxx::fold / cse / dce, tensor::fuse, ...
   ── execution pass (std::nvm, std::fvm)      -> runs the program
-     or translation pass (onnx::export, ...)   -> emits a format
+     or translation pass (onnx::export_model, ...)   -> emits a format
 ```
 
 `grad(f)` is a macro operator: its argument is a static function value, and its
@@ -441,7 +441,7 @@ unrolling, branch selection, shape facts). These move to general passes:
   re-run operator inference, so shapes live in node types.
 - **Static simplification:** `std::cxx::devirtualize` / `std::cxx::specialize` /
   `std::cxx::inline` / `std::cxx::fold` / branch pruning / `dce` until a fixpoint.
-- **`onnx::export` (a module-contributed translation pass):** lowers the
+- **`onnx::export_model` (a module-contributed translation pass):** lowers the
   resulting graph node by node, `BRCH`/`JOIN` to `If`, reading shapes and
   dtypes from node types. It reports anything left over (calls, unsupported
   operators) instead of evaluating it.
@@ -453,9 +453,9 @@ on `fn`.
 
 What exists (`lib/onnx/passes/export.cpp`, `docs/cli.md`):
 
-    camel m.cml std::macro std::opt 'onnx::export out="model.onnx"'
+    camel m.cml std::macro std::opt 'onnx::export_model out="model.onnx"'
 
-- `onnx::export` is registered by the `onnx` module and is the last pass of the
+- `onnx::export_model` is registered by the `onnx` module and is the last pass of the
   pipeline; it hands the graph on, so write `std::nop` after it when the program is not to run. The export
   request is the program's own `onnx.export_model<out: path>(fn, example)`
   call, which the pass finds in the entry graph with constant arguments (no new
@@ -674,7 +674,7 @@ What differs from the design above:
    `#vjp(rule)` function rules.
 5. Tree optimizers, layer library, `stop_gradient`, and `apply_gradients`
    re-expressed on `grad`.
-6. Shape specialization and simplification passes; `onnx::export` reduced to
+6. Shape specialization and simplification passes; `onnx::export_model` reduced to
    translation.
 7. End-to-end: train MLP, LeNet, GRU, and Transformer; compare gradients with
    PyTorch and benchmark training steps.

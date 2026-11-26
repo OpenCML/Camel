@@ -401,7 +401,7 @@ fault, would make an isolated fault cost a full collection).
   the compile-time error above.
 - **Autodiff and ONNX export.** Each refuses with a located diagnostic, with no change to them:
   `grad` at the `grad` call ("no derivative rule for operator ':mark/isolate'");
-  `onnx::export` at the `attempt` ("impure operator ':mark/isolate' cannot be exported",
+  `onnx::export_model` at the `attempt` ("impure operator ':mark/isolate' cannot be exported",
   reported at the name the program wrote).
 - **`std::cpp`.** It translates the value as it translates any closure: the closure becomes an
   `rt::Fn` whose lambda calls the generated function of the synthesized graph, and that
@@ -428,7 +428,7 @@ calls deep, branch arm, closure, element function of `map`/`filter`/`reduce`/`fo
 boundaries side by side; compiled callees; 200000 rounds of fault-and-isolate; collector
 stress with heap verification; parallel siblings; what is not isolated (`exit`, a fault
 outside, a fault in an argument); the type rule; eight optimisation pipelines; library
-functions written in Camel (`array`); refusals by `std::cpp`, `onnx::export`, `grad`; macro
+functions written in Camel (`array`); refusals by `std::cpp`, `onnx::export_model`, `grad`; macro
 functions; release of external resources for the four ways a run ends.
 
 ## 8. Verification results

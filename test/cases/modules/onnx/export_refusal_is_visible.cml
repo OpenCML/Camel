@@ -5,7 +5,7 @@
  * value with `let _ =` goes on to print its own `exported` line, exit 0, and leave no file. That is
  * not a hypothesis -- it is how `modules.onnx` spent a whole run reporting failures whose stdout
  * said `exported`, with the reason sitting in a value nobody read. The same program through
- * `onnx::export` prints the reason in one line.
+ * `onnx::export_model` prints the reason in one line.
  *
  * So the value is read here, and the word `exported` is produced only in the case that the export
  * returned. The export is refused by the capability check: `relu` of an int64 tensor has no ONNX

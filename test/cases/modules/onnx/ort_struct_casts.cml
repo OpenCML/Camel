@@ -13,7 +13,7 @@
  *              model input returns.
  *
  * Run by ort_struct_casts.py, which runs the program twice (the operator in a default run, the
- * pass std::macro std::opt onnx::export) from a directory with the example input. Every model
+ * pass std::macro std::opt onnx::export_model) from a directory with the example input. Every model
  * must pass onnx.checker's full check, hold no Cast node (an identity conversion exports as
  * nothing and a reorder is ONNX identities between the initializer's fields), name its outputs
  * after the declaration's fields with the counter an int64, and match NumPy on ONNX Runtime.
@@ -56,7 +56,7 @@ func walk(h: f32[...], k: int) => Run {
 }
 
 // The refusal of the first request that was refused, or 'exported' when all five were written.
-// The requests stay the program's own statements (see main): the `onnx::export` pass reads them
+// The requests stay the program's own statements (see main): the `onnx::export_model` pass reads them
 // from the top level of the entry graph, while the error they answer is handled here.
 func report(r1: void!, r2: void!, r3: void!, r4: void!, r5: void!) => string! {
     return match r1 {

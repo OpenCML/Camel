@@ -1576,7 +1576,7 @@ const camel::runtime::Program *applyOptimizeRewritePass(
         // The record of this run, made once. The caller is handed it -- the round that changed
         // nothing has to say whether it reached the budget or a fixed point, and that answer
         // belongs to this run, so it does not depend on a context existing -- and the same object
-        // is the pass fact a later pass reads (onnx::export, which explains a call still in the
+        // is the pass fact a later pass reads (onnx::export_model, which explains a call still in the
         // entry graph). One record, two readers; the answer is not written twice.
         auto report                 = std::make_shared<InlineReport>();
         report->growthBudget        = growthBudget;

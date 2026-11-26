@@ -2277,7 +2277,7 @@ instances run at the same time without seeing each other's files. A case run out
 (a benchmark, or a direct `camel` command) may keep its older fixed path as a fallback when
 `CAMEL_TEST_TMPDIR` is unset; the examples and mnist cases take it through
 `get_env('CAMEL_TEST_TMPDIR') ?? ''`, and the one ONNX refusal case that writes a model gets an
-`onnx::export out="${test_tmp}/..."` path.
+`onnx::export_model out="${test_tmp}/..."` path.
 
 **A test's own program runs from the checkout root, and a program that starts other programs must
 give them a directory of their own.** That is the rule this section is about, stated twice because
@@ -2296,7 +2296,7 @@ That script now runs each case in a directory of its own under `CAMEL_TEST_TMPDI
 case: what a case writes lands where the test's other output goes and goes with it. Any other harness
 that runs case programs owes the same.
 
-What a *user* sees is unchanged: `camel x.cml` with `onnx::export out=model.onnx` still writes to
+What a *user* sees is unchanged: `camel x.cml` with `onnx::export_model out=model.onnx` still writes to
 the directory the user ran it in. Nothing here changes how the exporter resolves a path, only where a
 test's programs are started. A `skip_unless` precondition also runs from the repository root -- it is
 a command a plan writes against the checkout, not a test's own program.

@@ -1,14 +1,14 @@
-"""The onnx::export translation pass against the onnx.export_model convenience entry.
+"""The onnx::export_model translation pass against the onnx.export_model convenience entry.
 
   equiv    each program is exported twice: by running it (`camel m.cml`, the
            export_model operator) and by the pipeline `camel m.cml std::macro
-           std::opt onnx::export` (its parameter out names the file; the
+           std::opt onnx::export_model` (its parameter out names the file; the
            program is not executed). Both models must pass
            onnx.checker.check_model(full_check=True) and give bit-identical
            ONNX Runtime outputs on the same inputs (numpy array_equal).
   refuse   pipelines that lack a required simplification are refused: non-zero
            exit, the diagnostic RuntimeDiag::TranslationRefused raised in stage
-           pass:onnx::export at a source position, and no model file.
+           pass:onnx::export_model at a source position, and no model file.
 
 Usage: python pass_export.py equiv|refuse [--keep DIR]
        (equiv needs numpy, onnx and onnxruntime; refuse needs nothing extra)
@@ -28,7 +28,7 @@ REPO_ROOT = HERE.parents[3]
 # The export consumes the graph (see `equiv` below: the program's `println` must not have run), so
 # the pipeline ends in `std::nop`: it says that nothing is left to run, and the pipeline does not fall
 # through to the default scheduling pass.
-PIPELINE = ["std::macro", "std::opt", "onnx::export", "std::nop"]
+PIPELINE = ["std::macro", "std::opt", "onnx::export_model", "std::nop"]
 # Plain forward export (closure over the weights, unrolled recursion, shape arithmetic) and a
 # training-step export (with_grad + sgd, parameters as graph inputs).
 # The rest widen the coverage: an If, dynamic axes, and Adam / batch-norm / conv training steps.
@@ -62,8 +62,8 @@ PROGRAMS = [
 ]
 # (program, passes, expected fragment of the message, expected 1-based line of the position)
 REFUSALS = [
-    ("export_train_step.cml", ["onnx::export"], "run std::opt before onnx::export", 28),
-    ("export_train_step.cml", ["std::opt", "onnx::export"], "run std::macro", 24),
+    ("export_train_step.cml", ["onnx::export_model"], "run std::opt before onnx::export_model", 28),
+    ("export_train_step.cml", ["std::opt", "onnx::export_model"], "run std::macro", 24),
     ("export_nontail_recursion.cml", PIPELINE, "several branches decide whether a function calls itself", None),
 ]
 DTYPES = {"tensor(float)": "float32", "tensor(double)": "float64", "tensor(int64)": "int64"}
@@ -77,8 +77,8 @@ def camel(args: list, env_extra: dict) -> subprocess.CompletedProcess:
 
 
 def with_out(passes: list, model: Path) -> list:
-    """The pass list with the model file given as the parameter out of onnx::export."""
-    return [f'onnx::export out="{model.as_posix()}"' if p == "onnx::export" else p for p in passes]
+    """The pass list with the model file given as the parameter out of onnx::export_model."""
+    return [f'onnx::export_model out="{model.as_posix()}"' if p == "onnx::export_model" else p for p in passes]
 
 
 def rel(program: str) -> str:
@@ -102,7 +102,7 @@ def equiv(out: Path) -> bool:
             raise SystemExit(f"{program}: pipeline failed:\n{proc.stdout}\n{proc.stderr}")
         # The pass consumes the graph: the program (its println) must not have run.
         lines = [l for l in proc.stdout.splitlines() if l.strip()]
-        executed = lines != [f"onnx::export: wrote {by_pass.as_posix()}"]
+        executed = lines != [f"onnx::export_model: wrote {by_pass.as_posix()}"]
         print(f"{program}: pipeline exit 0, program executed: {executed}")
         ok &= not executed
 
@@ -168,7 +168,7 @@ def refuse(out: Path) -> bool:
         checks = {
             "exit non-zero": proc.returncode != 0,
             "name": d["data"]["name"] == "RuntimeDiag::TranslationRefused",
-            "stage": d["data"]["stage"] == "pass:onnx::export",
+            "stage": d["data"]["stage"] == "pass:onnx::export_model",
             "position": d["data"]["modulePath"].endswith(program)
             and (got_line == line if line else got_line > 1),
             "message": fragment in d["message"],
@@ -199,7 +199,7 @@ def main() -> int:
             ok = refuse(out)
         else:
             raise SystemExit(f"unknown mode {mode}")
-    print(f"onnx::export {mode}:", "PASS" if ok else "FAIL")
+    print(f"onnx::export_model {mode}:", "PASS" if ok else "FAIL")
     return 0 if ok else 1
 
 
