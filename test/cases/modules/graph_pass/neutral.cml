@@ -1,5 +1,5 @@
 import { flatten } from array
-import { Node, Graph, nodes, inputs, with_inputs, op, op_name, constant, type_of, type_name, is_anchor, is_written_slot, open, replace, commit, graphs_of } from graph
+import { Node, Graph, nodes, graphs, inputs, with_inputs, op, op_name, constant, type_of, type_name, is_anchor, is_written_slot, open, replace, commit, abort } from graph
 import { is_function } from types
 
 func opText(n: Node) => string {
@@ -82,23 +82,30 @@ func independent(hits: Node[]) => Node[] {
     }>
 }
 
-func allNodes::<F>(p: F) => Node[] {
-    return flatten(graphs_of(p)->map<func (g: Graph) => Node[] {
+func allNodes(d: Graph) => Node[] {
+    return flatten(graphs(d)->map<func (g: Graph) => Node[] {
         nodes(g)
     }>)
 }
 
-func replaceHits::<F>(p: F, hits: Node[]) => F! sync {
-    let t = open(p)
+func replaceHits::<F>(d: Graph, hits: Node[]) => F! sync {
     independent(hits)->foreach<func (n: Node) {
-        replace(t, n, kept(n))
+        replace(n, kept(n))
     }>
-    return commit(t)
+    return commit(d)
+}
+
+// The round that found nothing commits nothing: the draft is dropped and the function it started
+// from is the answer.
+func abandon::<F>(d: Graph, p: F) => F! sync {
+    abort(d)
+    return p
 }
 
 func settle::<F>(p: F) => F! when is_function::<F>() sync {
-    let hits = allNodes(p)->filter<isHit>
-    return if len(hits) == 0 then p else replaceHits(p, hits)->settle
+    let d = open(p)
+    let hits = allNodes(d)->filter<isHit>
+    return if len(hits) == 0 then abandon(d, p) else replaceHits(d, hits)->settle
 }
 
 /// x + 0, 0 + x, x - 0, x * 1 and 1 * x of the integers, replaced by x.

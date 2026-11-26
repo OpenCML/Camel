@@ -1416,7 +1416,6 @@ a18cd5b17eddad92 ok test/cases/compile/native/when_shape_overlap.cml
 8f02646aad1dd8a9 ok test/cases/compile/native_types/identity_by_module.cml
 2d7560f216529e1f ok test/cases/compile/native_types/not_provided.cml
 bb1ffdb6259e1f63 no test/cases/compile/native_types/string_form.cml
-f256db669a55ab00 ok test/cases/compile/native_types/txn_variable.cml
 01b0dbaf065070b0 ok test/cases/compile/not_supported/list_comprehension.cml
 a15ba23228008e65 ok test/cases/compile/not_supported/pattern_identifier.cml
 6b2a1b874ed0ef00 ok test/cases/compile/numeric/bf16_permission_gate.cml

@@ -48,10 +48,10 @@ func firstWhere(ns: Node[]) => Node {
 
 func main() => int spelling sync {
     let g = graph_of(subject)
-    let at = firstWhere(nodes(g)->filter<isMul>)
-    let t = open(subject)
-    inline(t, at, announce)
-    let edited = commit(t) !! subject
+    let d = open(subject)
+    let at = firstWhere(nodes(d)->filter<isMul>)
+    inline(at, announce)
+    let edited = commit::<(x: int) => int>(d) !! subject
     let h = graph_of(edited)
     println(`[origin] prints=${len(nodes(h)->filter<isPrint>)}`)
     return 0

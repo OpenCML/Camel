@@ -30,7 +30,7 @@ kind = "behavior"
 case = "../../../cases/modules/graph_function/outline.cml"
 args = ["${case}", "std::nvm"]
 expect_exit = 0
-expect_stdout_exact = "[run] subject, before any edit\nfirst\n55\n[shape]  0/10:! 1/0: 2/3: 3/4::op/mul_l 4/5: 5/6::op/add_l 6/7: 7/8::op/mul_l 8/1: 9/2::io/println 10/9::io/println 11/11:!\n[outline] graphs=1->2 new_id=68 in_committed=true group=5::op/add_l\n[outline] call is_call=true call_reads=2\n[outline] made_graph=subject$outline6 nodes=3 exit_reads=2\n[outline] made kinds: 0/0:NodeKind::Port: 1/1:NodeKind::Port: 2/2:NodeKind::Oper::op/add_l!\n[outline] subject after: 0/10:! 1/0: 2/3: 3/4::op/mul_l 4/5: 5/12: 6/7: 7/8::op/mul_l 8/1: 9/2::io/println 10/9::io/println 11/11:!\n[outline] the edited function runs:\nfirst\n55\n[control] graphs=1->1 new_id=-1\n"
+expect_stdout_exact = "[run] subject, before any edit\nfirst\n55\n[shape]  0/10:! 1/0: 2/3: 3/4::op/mul_l 4/5: 5/6::op/add_l 6/7: 7/8::op/mul_l 8/1: 9/2::io/println 10/9::io/println 11/11:!\n[outline] graphs=1->2 new_id=81 in_committed=true group=5::op/add_l\n[outline] call is_call=true call_reads=2\n[outline] made_graph=subject$outline6 nodes=3 exit_reads=2\n[outline] made kinds: 0/0:NodeKind::Port: 1/1:NodeKind::Port: 2/2:NodeKind::Oper::op/add_l!\n[outline] subject after: 0/10:! 1/0: 2/3: 3/4::op/mul_l 4/5: 5/12: 6/7: 7/8::op/mul_l 8/1: 9/2::io/println 10/9::io/println 11/11:!\n[outline] the edited function runs:\nfirst\n55\n[control] graphs=1->1 new_id=-1\n"
 timeout_ms = 20000
 
 [[tests]]
@@ -40,5 +40,5 @@ kind = "behavior"
 case = "../../../cases/modules/graph_function/outline.cml"
 args = ["${case}", "std::fvm"]
 expect_exit = 0
-expect_stdout_exact = "[run] subject, before any edit\nfirst\n55\n[shape]  0/10:! 1/0: 2/3: 3/4::op/mul_l 4/5: 5/6::op/add_l 6/7: 7/8::op/mul_l 8/1: 9/2::io/println 10/9::io/println 11/11:!\n[outline] graphs=1->2 new_id=68 in_committed=true group=5::op/add_l\n[outline] call is_call=true call_reads=2\n[outline] made_graph=subject$outline6 nodes=3 exit_reads=2\n[outline] made kinds: 0/0:NodeKind::Port: 1/1:NodeKind::Port: 2/2:NodeKind::Oper::op/add_l!\n[outline] subject after: 0/10:! 1/0: 2/3: 3/4::op/mul_l 4/5: 5/12: 6/7: 7/8::op/mul_l 8/1: 9/2::io/println 10/9::io/println 11/11:!\n[outline] the edited function runs:\nfirst\n55\n[control] graphs=1->1 new_id=-1\n"
+expect_stdout_exact = "[run] subject, before any edit\nfirst\n55\n[shape]  0/10:! 1/0: 2/3: 3/4::op/mul_l 4/5: 5/6::op/add_l 6/7: 7/8::op/mul_l 8/1: 9/2::io/println 10/9::io/println 11/11:!\n[outline] graphs=1->2 new_id=81 in_committed=true group=5::op/add_l\n[outline] call is_call=true call_reads=2\n[outline] made_graph=subject$outline6 nodes=3 exit_reads=2\n[outline] made kinds: 0/0:NodeKind::Port: 1/1:NodeKind::Port: 2/2:NodeKind::Oper::op/add_l!\n[outline] subject after: 0/10:! 1/0: 2/3: 3/4::op/mul_l 4/5: 5/12: 6/7: 7/8::op/mul_l 8/1: 9/2::io/println 10/9::io/println 11/11:!\n[outline] the edited function runs:\nfirst\n55\n[control] graphs=1->1 new_id=-1\n"
 timeout_ms = 20000

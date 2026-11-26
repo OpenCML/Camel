@@ -18,7 +18,6 @@
 namespace camel::graphmod {
 namespace err = camel::core::error;
 
-
 using namespace camel::core::type;
 using camel::runtime::GraphId;
 using camel::runtime::Program;
@@ -39,8 +38,6 @@ const char *handleKindName(HandleKind kind) {
         return "Op";
     case HandleKind::Tag:
         return "Tag";
-    case HandleKind::Txn:
-        return "Txn";
     }
     return "?";
 }
@@ -48,7 +45,7 @@ const char *handleKindName(HandleKind kind) {
 // ---- the types ----
 
 HandleType *HandleType::get(HandleKind kind) {
-    constexpr size_t kKinds          = static_cast<size_t>(HandleKind::Txn) + 1;
+    constexpr size_t kKinds          = static_cast<size_t>(HandleKind::Tag) + 1;
     static HandleType *types[kKinds] = {};
     static std::once_flag once;
     std::call_once(once, [] {
@@ -60,7 +57,9 @@ HandleType *HandleType::get(HandleKind kind) {
             // `equals` compares, so it is what its entry is keyed by.
             const uintptr_t parts[1] = {i};
             types[i]                 = static_cast<HandleType *>(TypeTable::instance().internOther(
-                code, std::span<const uintptr_t>(parts, 1), [&]() -> Type * {
+                code,
+                std::span<const uintptr_t>(parts, 1),
+                [&]() -> Type                 *{
                     void *mem = mm::permSpace().alloc(sizeof(HandleType), alignof(HandleType));
                     ASSERT(mem != nullptr, "Failed to allocate HandleType from permSpace");
                     return new (mem) HandleType(code, k, nullptr);
@@ -70,33 +69,15 @@ HandleType *HandleType::get(HandleKind kind) {
     return types[static_cast<size_t>(kind)];
 }
 
-// One object per kind and argument, from the type table (see intern.h): `equals` compares the
-// argument types, so the argument enters by canonical id and `Txn<F>` is one type wherever it is
-// written, instead of one per argument object.
-HandleType *HandleType::internWithArgument(HandleType *bare, Type *argument) {
-    const uintptr_t parts[1] = {typeKeyWord(TypeTable::instance().canonical(argument))};
-    return static_cast<HandleType *>(TypeTable::instance().internOther(
-        bare->code(), std::span<const uintptr_t>(parts, 1), [&]() -> Type * {
-            void *mem = mm::permSpace().alloc(sizeof(HandleType), alignof(HandleType));
-            ASSERT(mem != nullptr, "Failed to allocate HandleType from permSpace");
-            return new (mem) HandleType(bare->code(), bare->kind(), argument);
-        }));
-}
-
-HandleType *HandleType::ofFunctionType(Type *functionType) {
-    HandleType *bare = get(HandleKind::Txn);
-    return functionType == nullptr ? bare : internWithArgument(bare, functionType);
-}
-
 HandleType *HandleType::ofValueType(Type *valueType) {
     HandleType *bare = get(HandleKind::Node);
     if (valueType == nullptr) {
         return bare;
     }
     // A node whose value type is itself a node is that node: `a: Node` says the parameter is a node
-    // whose value type the declaration does not state, not that the value it stands for is a node of
-    // unspecified type (language reference 9.6). The reading is the same one a node's own type has
-    // everywhere else, so `Node<Node<int>>` is `Node<int>` and `Node<Node>` is `Node`.
+    // whose value type the declaration does not state, not that the value it stands for is a node
+    // of unspecified type (language reference 9.6). The reading is the same one a node's own type
+    // has everywhere else, so `Node<Node<int>>` is `Node<int>` and `Node<Node>` is `Node`.
     if (is(valueType, HandleKind::Node)) {
         return static_cast<HandleType *>(valueType);
     }
@@ -105,7 +86,9 @@ HandleType *HandleType::ofValueType(Type *valueType) {
     // written, instead of one per value-type object.
     const uintptr_t parts[1] = {typeKeyWord(TypeTable::instance().canonical(valueType))};
     return static_cast<HandleType *>(TypeTable::instance().internOther(
-        bare->code(), std::span<const uintptr_t>(parts, 1), [&]() -> Type * {
+        bare->code(),
+        std::span<const uintptr_t>(parts, 1),
+        [&]() -> Type * {
             void *mem = mm::permSpace().alloc(sizeof(HandleType), alignof(HandleType));
             ASSERT(mem != nullptr, "Failed to allocate HandleType from permSpace");
             return new (mem) HandleType(bare->code(), HandleKind::Node, valueType);
@@ -137,7 +120,7 @@ Type *HandleType::clone(bool deep) const {
     if (paramCount_ != 1) {
         return get(kind_);
     }
-    return kind_ == HandleKind::Txn ? ofFunctionType(params_[0]) : ofValueType(params_[0]);
+    return ofValueType(params_[0]);
 }
 
 Type *HandleType::unify(Type *other) const {
@@ -157,7 +140,7 @@ Type *HandleType::unify(Type *other) const {
     if (united == nullptr) {
         return nullptr;
     }
-    return kind_ == HandleKind::Txn ? ofFunctionType(united) : ofValueType(united);
+    return ofValueType(united);
 }
 
 bool HandleType::equals(Type *other) const {
@@ -194,7 +177,7 @@ bool HandleType::assignableFrom(Type *source) const {
 }
 
 OtherType *HandleType::cloneWithParams(std::span<Type *const> params) const {
-    if (kind_ != HandleKind::Node && kind_ != HandleKind::Txn) {
+    if (kind_ != HandleKind::Node) {
         return params.empty() ? get(kind_) : nullptr;
     }
     if (params.empty()) {
@@ -203,12 +186,12 @@ OtherType *HandleType::cloneWithParams(std::span<Type *const> params) const {
     if (params.size() != 1) {
         return nullptr;
     }
-    return kind_ == HandleKind::Txn ? ofFunctionType(params[0]) : ofValueType(params[0]);
+    return ofValueType(params[0]);
 }
 
 Type *
 HandleType::cloneWithArguments(std::span<const TypeArgument> arguments, std::string &error) const {
-    if (kind_ != HandleKind::Node && kind_ != HandleKind::Txn) {
+    if (kind_ != HandleKind::Node) {
         if (!arguments.empty()) {
             error = std::string(handleKindName(kind_)) + " takes no type argument";
             return nullptr;
@@ -219,13 +202,10 @@ HandleType::cloneWithArguments(std::span<const TypeArgument> arguments, std::str
         return get(kind_);
     }
     if (arguments.size() != 1 || arguments[0].type == nullptr) {
-        error = kind_ == HandleKind::Node
-                    ? "Node takes one type argument: the type of the value the node stands for"
-                    : "Txn takes one type argument: the type of the function the transaction is on";
+        error = "Node takes one type argument: the type of the value the node stands for";
         return nullptr;
     }
-    return kind_ == HandleKind::Txn ? ofFunctionType(arguments[0].type)
-                                    : ofValueType(arguments[0].type);
+    return ofValueType(arguments[0].type);
 }
 
 // ---- the object ----
@@ -250,20 +230,49 @@ Handle *Handle::create(
     if (mem == nullptr) {
         throw std::bad_alloc();
     }
-    return new (mem) Handle(kind, program, nullptr, graph, index, typeRef);
+    return new (mem) Handle(kind, program, nullptr, nullptr, graph, index, typeRef);
 }
 
 Handle *Handle::createInTransaction(
     const camel::runtime::GraphTransaction &transaction, camel::runtime::gc_node_ref_t node,
+    rtdata::Object *draft, mm::IAllocator &allocator) {
+    void *mem = allocator.alloc(sizeof(Handle), alignof(Handle));
+    if (mem == nullptr) {
+        throw std::bad_alloc();
+    }
+    // A node handle names the transaction, and the value that holds the session the transaction
+    // belongs to: the draft is no argument of an edit, so the handle a node is read through is what
+    // carries it.
+    const auto &drafted = transaction.graph();
+    return new (mem)
+        Handle(HandleKind::Node, nullptr, &transaction, draft, drafted.id(), node, nullptr);
+}
+
+Handle *Handle::createDraft(
+    const camel::runtime::GraphTransaction &transaction, rtdata::Object *draft,
+    const Program *program, GraphId graph, mm::IAllocator &allocator) {
+    void *mem = allocator.alloc(sizeof(Handle), alignof(Handle));
+    if (mem == nullptr) {
+        throw std::bad_alloc();
+    }
+    // The graph the draft is of, and the value that holds the session editing it: the one handle
+    // that is `d`, and the only one that names the session a `commit` closes.
+    return new (mem) Handle(HandleKind::Graph, program, &transaction, draft, graph, 0, nullptr);
+}
+
+Handle *Handle::createRegionInTransaction(
+    const camel::runtime::GraphTransaction &transaction, rtdata::Object *draft, uint32_t region,
     mm::IAllocator &allocator) {
     void *mem = allocator.alloc(sizeof(Handle), alignof(Handle));
     if (mem == nullptr) {
         throw std::bad_alloc();
     }
-    // A node handle names the transaction and nothing else: the draft it reads is reached
-    // through that transaction, so no draft pointer is kept here at all.
-    const auto &draft = transaction.graph();
-    return new (mem) Handle(HandleKind::Node, nullptr, &transaction, draft.id(), node, nullptr);
+    // A region of the draft is read through the draft: the record belongs to the transaction, and
+    // the published graph has no row for a region an edit added. The draft is named for the same
+    // reason a node handle names it -- it keeps the session alive while the handle is alive.
+    const auto &drafted = transaction.graph();
+    return new (mem)
+        Handle(HandleKind::Region, nullptr, &transaction, draft, drafted.id(), region, nullptr);
 }
 
 bool Handle::equals(const rtdata::Object *other, const Type *type, bool deep) const {
@@ -278,18 +287,22 @@ bool Handle::equals(const rtdata::Object *other, const Type *type, bool deep) co
     const auto *that = static_cast<const Handle *>(other);
     // A type is its structure and nothing else (design principles 5.2): two handles of the same
     // structure name the same type, whatever names (dimensions, parameters) they were written with.
-    const bool sameType = typeRef_ == that->typeRef_ ||
-                          (kind_ == HandleKind::TypeRef && type::sameCanonicalType(typeRef_, that->typeRef_));
+    const bool sameType =
+        typeRef_ == that->typeRef_ ||
+        (kind_ == HandleKind::TypeRef && type::sameCanonicalType(typeRef_, that->typeRef_));
     return kind_ == that->kind_ && program_ == that->program_ &&
-           transaction_ == that->transaction_ && graph_ == that->graph_ &&
-           index_ == that->index_ && sameType;
+           transaction_ == that->transaction_ && graph_ == that->graph_ && index_ == that->index_ &&
+           sameType;
 }
 
 rtdata::Object *Handle::clone(mm::IAllocator &allocator, const Type *type, bool deep) const {
     (void)type;
     (void)deep;
+    if (draft_ != nullptr && kind_ == HandleKind::Graph) {
+        return createDraft(*transaction_, draft_, program_, graph_, allocator);
+    }
     if (transaction_ != nullptr) {
-        return createInTransaction(*transaction_, index_, allocator);
+        return createInTransaction(*transaction_, index_, draft_, allocator);
     }
     return create(kind_, program_, graph_, index_, typeRef_, allocator);
 }
@@ -304,7 +317,21 @@ void Handle::updateRefs(const rtdata::Object::RefRelocator &relocate, const Type
     // collector reaches after the program was freed (a dead one, not yet swept) names nothing.
     // The transaction a draft-backed handle names is borrowed, not owned: it is an ordinary C++
     // object outside the collector's graph, so it takes no part in tracing, and a handle that
-    // outlives its session names nothing either.
+    // outlives its session names nothing either. The value that holds the session is the one
+    // exception: the handle of a draft is the only holder of it, so the collector moves it with
+    // the handle.
+    if (draft_ != nullptr) {
+        draft_ = relocate(
+            draft_,
+            nullptr,
+            rtdata::RefTraceInfo{
+                .owner     = this,
+                .ownerType = type,
+                .slotType  = nullptr,
+                .ownerKind = "Handle",
+                .slotName  = "draft",
+            });
+    }
     if (program_ == nullptr || !mm::graphSpace().isAllocated(const_cast<Program *>(program_))) {
         return;
     }

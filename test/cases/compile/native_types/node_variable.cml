@@ -1,0 +1,13 @@
+/**
+ * The argument of a type a C++ module provides is any type expression, a type variable of a
+ * generic declaration included: `Node<T>` is the node whose value has whatever type `T` is.
+ */
+import { Node } from graph
+
+func same::<T>(n: Node<T>) => Node<T> {
+    return n
+}
+
+func main() => int sync {
+    return 0
+}

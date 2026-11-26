@@ -14,6 +14,7 @@
 #include "handle.h"
 #include "nodekind.h"
 #include "regionkind.h"
+#include "txn.h"
 
 #include "camel/core/context/context.h"
 #include "camel/core/error/runtime.h"
@@ -170,11 +171,11 @@ Handle *nodeHandle(const Program *program, GraphId graph, uint32_t node) {
 }
 
 /// The handle of a node read from `from`: the same draft when `from` names one, otherwise the
-/// same program and graph. A draft is named by the transaction that owns it, so the handle made
-/// here names that transaction and nothing else.
+/// same program and graph. A draft is named by the transaction that owns it, and the value that
+/// holds the session is carried along, so an edit reaches the draft through the node it is given.
 Handle *nodeHandle(const Handle *from, gc_node_ref_t node) {
     if (const auto *transaction = from->transaction()) {
-        return Handle::createInTransaction(*transaction, node, mm::autoSpace());
+        return Handle::createInTransaction(*transaction, node, from->draft(), mm::autoSpace());
     }
     return Handle::create(
         HandleKind::Node,
@@ -293,6 +294,22 @@ slot_t nameKernel(ArgsView &, ArgsView &norm, Context &) {
 slot_t nodesKernel(ArgsView &, ArgsView &norm, Context &) {
     const auto *handle = norm.get<Handle *>(0);
     std::vector<Handle *> items;
+    // A draft has no canonical order to give: its places are the order its nodes were made in, and
+    // the commit numbers them by the walk a published graph gets. So a draft answers its own nodes
+    // in that order -- the order of the slots it holds, removed ones skipped -- and `id` of one of
+    // them is what is refused (design principles 9.5).
+    if (const auto *transaction = handle->transaction()) {
+        const auto &draft = transaction->graph();
+        for (size_t slot = 0; slot < draft.nodeSlotCount(); ++slot) {
+            const auto ref     = static_cast<gc_node_ref_t>(slot);
+            const auto *header = draft.header(ref);
+            if (!draft.alive(ref) || header == nullptr || header->kind == GCNodeKind::Dead) {
+                continue;
+            }
+            items.push_back(nodeHandle(handle, ref));
+        }
+        return handleArray(HandleKind::Node, items);
+    }
     // The nodes in *canonical* order, not in NodeId order (design principles 9.5): the order the
     // graph's own structure decides, which `src/runtime/canonical.cpp` already computes for the
     // block naming and for `same_graph`. Two writings that differ only in what the source spelled
@@ -304,21 +321,72 @@ slot_t nodesKernel(ArgsView &, ArgsView &norm, Context &) {
     return handleArray(HandleKind::Node, items);
 }
 
+/// The parameter ports of the graph, in the order the declaration states them: the nodes the body
+/// takes its parameters as (design 15.2's root query, next to `nodes` and `exit`).
+slot_t paramsKernel(ArgsView &, ArgsView &norm, Context &) {
+    const auto *handle = norm.get<Handle *>(0);
+    std::vector<Handle *> items;
+    std::vector<gc_node_ref_t> refs;
+    if (const auto *transaction = handle->transaction()) {
+        const auto &draft = transaction->graph();
+        const auto ports  = draft.normPorts();
+        refs.assign(ports.begin(), ports.end());
+    } else {
+        const GCGraph &graph = graphOf(handle, "graph.params");
+        const auto ports     = graph.normPorts();
+        refs.assign(ports.begin(), ports.end());
+    }
+    for (const auto ref : refs) {
+        items.push_back(nodeHandle(handle, ref));
+    }
+    return handleArray(HandleKind::Node, items);
+}
+
+/// The graphs of the draft, `d` included: the function's own graph and every graph it calls, each
+/// as a draft of its own, so a node read through one of them is a node an edit changes.
+slot_t graphsKernel(ArgsView &, ArgsView &norm, Context &) {
+    const auto *handle = norm.get<Handle *>(0);
+    if (handle->transaction() != nullptr) {
+        return handleArray(HandleKind::Graph, draftGraphHandles(handle, "graph.graphs"));
+    }
+    // A published graph answers the graphs it reaches the same way `graphs_of` does for a
+    // function: its own and every graph it calls, once each, in the order of their ids.
+    const Program *program = handle->program();
+    auto *root             = program != nullptr ? program->graph(handle->graph()) : nullptr;
+    if (root == nullptr) {
+        err::throwRuntimeFault(
+            err::RuntimeDiag::InvalidArgument,
+            "graph.graphs",
+            "the graph does not exist");
+    }
+    auto graphs = camel::runtime::collectReachableGraphs(*program, root);
+    std::sort(graphs.begin(), graphs.end(), [](const auto *a, const auto *b) {
+        return toValue(a->id()) < toValue(b->id());
+    });
+    std::vector<Handle *> items;
+    for (const auto *graph : graphs) {
+        items.push_back(graphHandle(program, graph->id()));
+    }
+    return handleArray(HandleKind::Graph, items);
+}
+
 /// The node the graph hands its value out of: the node a graph returns, a port for a function that
 /// returns a parameter, the `JOIN` a body's branches end at. Null for a graph that hands no value
 /// out, which is the one case with no node to put anything in the place of.
-slot_t exitOfKernel(ArgsView &, ArgsView &norm, Context &) {
+slot_t exitKernel(ArgsView &, ArgsView &norm, Context &) {
     const auto *handle = norm.get<Handle *>(0);
-    // A draft has no `Graph` handle of its own (a transaction names its draft), so this reads a
-    // published graph and nothing else; the exit of a draft is the same node, alive until the graph
-    // is committed.
-    if (handle->transaction() != nullptr) {
-        err::throwRuntimeFault(
-            err::RuntimeDiag::InvalidArgument,
-            "graph.exit_of",
-            "the graph belongs to a transaction");
+    // A node that anchors a draft is the same node the published graph anchors, so a draft answers
+    // its own exit: the draft's, which the commit publishes.
+    if (const auto *transaction = handle->transaction()) {
+        const auto out = transaction->graph().exitNode();
+        if (out == kInvalidNodeRef || !transaction->graph().alive(out)) {
+            return NullSlot;
+        }
+        return makeSome(
+            toSlot(nodeHandle(handle, out)),
+            nullableOf(HandleType::get(HandleKind::Node)));
     }
-    const GCGraph &graph    = graphOf(handle, "graph.exit_of");
+    const GCGraph &graph    = graphOf(handle, "graph.exit");
     const gc_node_ref_t out = graph.exitNodeRef();
     if (out == kInvalidNodeRef || graph.node(out) == nullptr) {
         return NullSlot;
@@ -684,12 +752,30 @@ GraphId calledGraphOf(const GCGraph &graph, gc_node_ref_t call) {
 }
 
 /// The graph a CALL or FUNC node names, null for any other node. A node of the draft being
-/// rewritten names no graph: a draft is not a published version, so a condition cannot follow a
-/// call (and a rule's pattern cannot match one).
+/// rewritten answers the graph the program has, because the callee of a call the draft holds is a
+/// published graph: the draft names it by `GraphId` and the program resolves it (design 15.1 -- the
+/// draft is the graph it edits, so a query about one of its nodes is answered from the draft). A
+/// CALL node of a draft is not answered: it carries its callee as a function value, and the value's
+/// graph is not a record the draft stores.
 slot_t calleeKernel(ArgsView &, ArgsView &norm, Context &) {
     const auto *handle = norm.get<Handle *>(0);
     if (handle->transaction() != nullptr) {
-        return NullSlot;
+        const NodeView node = viewOf(handle, "graph.callee");
+        if (node.kind() != GCNodeKind::Func) {
+            return NullSlot;
+        }
+        // The draft keeps the callee as a `GraphId`, and the program holds the graph it names: the
+        // handle is the published one, so `name(g)` and the other graph reads answer the function
+        // the call names. The program is the draft's, not the handle's: a handle that names a
+        // transaction keeps no program of its own.
+        const Program *program = node.draft().program();
+        const GraphId callee   = node.draft().calleeIdOf(handle->index());
+        if (program == nullptr || !isValid(callee) || program->graph(callee) == nullptr) {
+            return NullSlot;
+        }
+        return makeSome(
+            toSlot(graphHandle(program, callee)),
+            nullableOf(HandleType::get(HandleKind::Graph)));
     }
     const GCNode &node   = nodeOfFrozen(handle, "graph.callee");
     const GCGraph &graph = graphOf(handle, "graph.callee");
@@ -975,10 +1061,27 @@ slot_t constantKernel(ArgsView &, ArgsView &norm, Context &) {
 // ---- regions ----
 
 /// The region a node is in (the innermost). Every node is in one: region 0 is the body, also in
-/// a graph whose region table is empty.
+/// a graph whose region table is empty. A node of the draft answers with a region of the draft:
+/// the draft holds the table the published graph had and the regions its edits add, so the answer
+/// comes from the draft's own record (a region `inline` made has none in the published graph).
 slot_t regionOfKernel(ArgsView &, ArgsView &norm, Context &) {
-    const auto *handle = norm.get<Handle *>(0);
-    nodeOf(handle, "graph.region_of");
+    const auto *handle  = norm.get<Handle *>(0);
+    const NodeView node = viewOf(handle, "graph.region_of");
+    if (node.isDraft()) {
+        const uint32_t id = node.draftHeader->region;
+        if (id >= node.draft().regionCount()) {
+            err::throwRuntimeFault(
+                err::RuntimeDiag::InvalidArgument,
+                "graph.region_of",
+                "the draft has no such region");
+        }
+        Handle *region = Handle::createRegionInTransaction(
+            *node.transaction,
+            handle->draft(),
+            id,
+            mm::autoSpace());
+        return toSlot(region);
+    }
     const GCGraph &graph = graphOf(handle, "graph.region_of");
     Handle *region       = Handle::create(
         HandleKind::Region,
@@ -1007,6 +1110,16 @@ GCRegion bodyRegion() { return GCRegion{}; }
 /// The region `handle` names. By value: the body of a graph with no region table is not in that
 /// table, so there is nothing to return a reference to.
 GCRegion regionOf(const Handle *handle, const char *site) {
+    if (const auto *transaction = handle->transaction()) {
+        const auto &draft = transaction->graph();
+        if (handle->index() >= draft.regionCount()) {
+            err::throwRuntimeFault(
+                err::RuntimeDiag::InvalidArgument,
+                site,
+                "the draft has no such region");
+        }
+        return draft.region(handle->index());
+    }
     const GCGraph &graph = graphOf(handle, site);
     if (handle->index() == 0) {
         return graph.region(0) != nullptr ? *graph.region(0) : bodyRegion();
@@ -1040,7 +1153,18 @@ slot_t regionParentKernel(ArgsView &, ArgsView &norm, Context &) {
         return NullSlot;
     }
     const GCRegion &region = regionOf(handle, "graph.region_parent");
-    const GCGraph &graph   = graphOf(handle, "graph.region_parent");
+    if (const auto *transaction = handle->transaction()) {
+        if (region.parent >= transaction->graph().regionCount()) {
+            return NullSlot;
+        }
+        Handle *parent = Handle::createRegionInTransaction(
+            *transaction,
+            handle->draft(),
+            region.parent,
+            mm::autoSpace());
+        return makeSome(toSlot(parent), nullableOf(HandleType::get(HandleKind::Region)));
+    }
+    const GCGraph &graph = graphOf(handle, "graph.region_parent");
     if (graph.region(region.parent) == nullptr) {
         return NullSlot;
     }
@@ -1094,7 +1218,9 @@ const std::vector<ReadOp> &readOps() {
         {"graphs_of", graphsOfKernel},
         {"name", nameKernel},
         {"nodes", nodesKernel},
-        {"exit_of", exitOfKernel},
+        {"graphs", graphsKernel},
+        {"params", paramsKernel},
+        {"exit", exitKernel},
         {"inputs", inputsKernel},
         {"with_inputs", withInputsKernel},
         {"sync_inputs", syncInputsKernel},

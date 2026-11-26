@@ -47,7 +47,7 @@ kind = "behavior"
 case = "../../../cases/modules/graph_function/inline.cml"
 args = ["${case}", "std::nvm"]
 expect_exit = 0
-expect_stdout_exact = "[run] subject, before any edit\nfirst\n5\n[pure] prints=2->2 body=0->1 sum_kept=1 sum_reads=call(inc),call(inc) sum_readers=1 value=const(42)\n[pure] body=1 node(s), region=RegionKind::Inline parent_is_sum_region=true\n[pure] chain=:io/println<-:io/println gate<-:io/println -> :io/println<-:io/println gate<-:io/println\n[pure] the edited function runs:\nfirst\n5\n[call] inc_calls=2->2 body=0->1 target_sync_in=(none) call_reads=const(2) call_feeds=1 chain_same=true value=const(42)\n[stmt] prints=2->1 body=0->1 value=gate\n[stmt] last=gate (written after :io/println) anchor=gate reading const(42)\n[stmt] chain=:io/println<-:io/println gate<-:io/println -> gate<-:io/println gate<-gate\n[stmt] the edited function runs:\nfirst\n[order] carried=:io/println ordered_after=2\n[order] prints=2->3 ordered_before=2 body=0 sum_kept=1\n[order] the edited function runs (the body runs: its write waits on the region exit gate):\nfirst\n5\nannounced\n"
+expect_stdout_exact = "[run] subject, before any edit\nfirst\n5\n[pure] prints=2->2 body=0->1 sum_kept=1 sum_reads=call(inc),call(inc) sum_readers=1 value=const(42)\n[pure] body=1 node(s), region=RegionKind::Inline parent_is_sum_region=true\n[pure] chain=:io/println<-:io/println gate<-:io/println -> :io/println<-:io/println gate<-:io/println\n[pure] the edited function runs:\nfirst\n5\n[stmt] prints=2->1 body=0->1 value=gate\n[stmt] last=gate (written after :io/println) anchor=gate reading const(42)\n[stmt] chain=:io/println<-:io/println gate<-:io/println -> gate<-:io/println gate<-gate\n[stmt] the edited function runs:\nfirst\n[order] carried=:io/println ordered_after=2\n[order] prints=2->3 ordered_before=2 body=0 sum_kept=1\n[order] the edited function runs (the body runs: its write waits on the region exit gate):\nfirst\n5\nannounced\n"
 timeout_ms = 20000
 
 # The other half of the same reading, from the other end: the effect of a call through a function value
@@ -68,3 +68,16 @@ expect_exit = 1
 timeout_ms = 20000
 expect_diagnostic_name = "RuntimeDiag::PassEffectBeyondType"
 expect_output_contains = ["[type] the value the call runs: <float> (float) => float pure", "write stdout", "reaches past the effect its own type declares"]
+# The other side of the same rule: `inline` takes over the place of a statement. A call is a statement
+# only by the rule's own words (design principles 3.1) and has no place of its own, so asking `inline`
+# to take a call's place is asking it to guess one. It refuses, and the diagnostic stands where the
+# call is written -- the node's own position, not the `inline` call that asked.
+[[tests]]
+name = "inline_refuses_a_call_that_has_no_place_to_take_over"
+desc = "a call of another function is not a place a statement holds, so `inline` at that call is refused with the position of the call itself; before this it crashed instead of answering"
+kind = "negative"
+case = "../../../cases/modules/graph_function/inline_call_place.cml"
+args = ["${case}", "std::nvm"]
+expect_exit = 1
+expect_output_contains = ["calls: 2", "graph.inline", "a call has no place of its own for a body to take over", "inline_call_place.cml:23:13"]
+timeout_ms = 20000

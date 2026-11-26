@@ -26,7 +26,7 @@
  */
 
 import { all, sort_by } from array
-import { Graph, Node, Txn, commit, constant, creation_id, graphs_of, inputs, is_constant, nodes, op, op_name, open, replace, type_name, type_of } from graph
+import { Graph, Node, commit, constant, creation_id, graphs_of, inputs, is_constant, nodes, op, op_name, open, replace, type_name, type_of } from graph
 import { is_function } from types
 
 // ---- reading a node as the key of a comparison ----
@@ -96,19 +96,19 @@ func same_product(a: Node, b: Node) => bool {
 // Fuses the pairs it finds walking the list once, from the left: when two neighbours are the same
 // product it fuses them and goes on after them, otherwise it slides by one. The pairing is the
 // greedy one, and which pairs it is offered is a fact about the order alone.
-func fuse_pairs::<F>(t: Txn<F>, muls: Node[], at: int) => void {
+func fuse_pairs(muls: Node[], at: int) => void {
     if at + 1 < len(muls) then {
         if same_product(muls[at], muls[at + 1]) then {
-            replace(t, muls[at + 1], muls[at])
-            fuse_pairs::<F>(t, muls, at + 2)
+            replace(muls[at + 1], muls[at])
+            fuse_pairs(muls, at + 2)
         } else {
-            fuse_pairs::<F>(t, muls, at + 1)
+            fuse_pairs(muls, at + 1)
         }
     }
 }
 
-func fuse_of::<F>(t: Txn<F>, muls: Node[]) => void {
-    fuse_pairs::<F>(t, muls, 0)
+func fuse_of(muls: Node[]) => void {
+    fuse_pairs(muls, 0)
 }
 
 // The multiplications in the order the source created them, which is the spelling query.
@@ -125,22 +125,22 @@ func muls_in_nodes_order(g: Graph) => Node[] {
 // One round of the greedy fusion over the canonical order: the transaction and the commit, and a
 // `sync` block because the closure that walks the graphs writes through the transaction.
 func fuse_round::<F>(f: F) => F! sync {
-    let t = open(f)
-    graphs_of(f)->foreach<func (g: Graph) => void {
-        fuse_of(t, muls_in_nodes_order(g))
+    let d = open(f)
+    graphs(d)->foreach<func (g: Graph) => void {
+        fuse_of(muls_in_nodes_order(g))
     }>
-    return commit(t)
+    return commit(d)
 }
 
 // The same round read against the spelling. It calls the spelling query, so its own declaration
 // writes the capability -- and so does the pass below, and only that one: `fuse` writes nothing of
 // the kind and could not call this function.
 func fuse_round_by_creation::<F>(f: F) => F! spelling sync {
-    let t = open(f)
-    graphs_of(f)->foreach<func (g: Graph) => void {
-        fuse_of(t, by_creation(g))
+    let d = open(f)
+    graphs(d)->foreach<func (g: Graph) => void {
+        fuse_of(by_creation(g))
     }>
-    return commit(t)
+    return commit(d)
 }
 
 /// The greedy fusion: pairs the multiplications two at a time in the canonical order `nodes` gives

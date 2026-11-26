@@ -1,0 +1,42 @@
+// `inline` asked to take over a call: a call is a statement only by the rule's own words (design
+// principles 3.1), so it is not a node whose place a statement holds. The operator refuses and names
+// where the call stands, because the alternative -- splicing the body beside the call and leaving
+// the call's value unread -- is not what the writer asked for, and an operator that guesses which
+// place was meant is an operator whose edit cannot be read back.
+
+import { Node, callee, name, nodes, open, inline } from graph
+
+// The body the operator would splice in.
+func answer() => int {
+    return 21 * 2
+}
+
+func inc(x: int) => int {
+    return x + 1
+}
+
+// The program whose graph is edited: the two calls of `inc` are nodes of its body, and neither is a
+// statement of the chain (a call of a function that writes nothing has no place of its own).
+func subject() => int sync {
+    println('first')
+    let a = inc(1)
+    let b = inc(2)
+    return a + b
+}
+
+func isIncCall(n: Node) => bool spelling {
+    return match callee(n) {
+        case null => false
+        case g => name(g) == 'inc'
+    }
+}
+
+func main() => int spelling sync {
+    let d = open(subject)
+    let calls = nodes(d)->filter<isIncCall>
+    println(`calls: ${len(calls)}`)
+    // The second call of `inc`: a call of another function than the value handed in, so there is no
+    // place of its own for the body to take over.
+    inline(calls[1], answer)
+    return 0
+}

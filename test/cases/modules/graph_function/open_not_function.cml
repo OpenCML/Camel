@@ -1,6 +1,7 @@
 import { open, abort } from graph
 
 func main() => int sync {
-    let t = open(5)
+    let d = open(5)
     return 0
 }
+

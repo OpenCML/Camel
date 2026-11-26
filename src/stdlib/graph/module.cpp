@@ -60,7 +60,6 @@ constexpr HandleKind kHandleKinds[] = {
     HandleKind::TypeRef,
     HandleKind::Op,
     HandleKind::Tag,
-    HandleKind::Txn,
 };
 
 slot_t equalHandles(ArgsView &norm) {
@@ -181,10 +180,12 @@ class GraphModule final : public BuiltinModule {
             {
                 // the reads: a Program is not changed by them
                 {"graphs_of", true},
+                {"graphs", true},
                 {"check_pass_boundary", true},
                 {"name", true},
                 {"nodes", true},
-                {"exit_of", true},
+                {"params", true},
+                {"exit", true},
                 {"inputs", true},
                 {"with_inputs", true},
                 {"sync_inputs", true},
@@ -227,8 +228,8 @@ class GraphModule final : public BuiltinModule {
                 // equality of two handles
                 {"eq", true},
                 {"ne", true},
-                // a transaction is a state that edits change: none of its operators is pure,
-                // except the two that read a function value
+                // a draft is a state the edits change: none of its operators is pure, except the
+                // reads a function value's own graph answers
                 {"open", false},
                 {"replace", false},
                 {"erase", false},
@@ -242,39 +243,54 @@ class GraphModule final : public BuiltinModule {
                 {"graph_of", true},
                 {"add_constant", false},
             });
-        // What a transaction operator touches: the transaction, whole (the declarations say
-        // `uses t`). Edits to one transaction keep the order they are written in.
+        // What an edit touches (docs/design/graph-editing/README.cn.md 15.3): the draft, whose
+        // value the node it names belongs to. The draft is not an argument of an edit -- a handle
+        // read through it is enough to say which one -- so the resource is the handle each operand
+        // is, and the access says the edit changes the draft that handle names. Two edits of one
+        // node therefore keep the order they are written in, and an edit that names a node of a
+        // published graph declares a write of a resource no read conflicts with -- the fault each
+        // edit states is what refuses it, not an order edge.
         {
             using camel::core::sem::AccessMode;
             using camel::core::sem::operandAccess;
+            using camel::core::sem::Resource;
             using camel::core::sem::ResourceClass;
-            camel::core::sem::ResourceSpec onTxn;
-            onTxn.accesses = {
-                operandAccess(ResourceClass::Handle, 0, AccessMode::ReadModifyWrite, "graph::Txn")};
+            using camel::core::sem::ResourceSpec;
+            // The edit's own answer to "where does the draft live": the handle it is given. A
+            // handle's identity is the value node, so the name is the one the class needs to be
+            // one class of thing, not a type the language can write.
+            constexpr const char *kDraft = "graph::draft";
+            const auto drafts            = [](std::initializer_list<uint8_t> operands) {
+                ResourceSpec spec;
+                for (const uint8_t operand : operands) {
+                    spec.accesses.push_back(operandAccess(
+                        ResourceClass::Handle,
+                        operand,
+                        AccessMode::ReadModifyWrite,
+                        kDraft));
+                }
+                return spec;
+            };
             table.declareResources(
                 "graph",
                 {
-                    {"replace", onTxn},
-                    {"erase", onTxn},
-                    {"eval", onTxn},
-                    {"order", onTxn},
-                    {"inline", onTxn},
-                    {"outline", onTxn},
-                    {"add_param", onTxn},
-                    {"add_constant", onTxn},
-                    {"commit", onTxn},
-                    {"abort", onTxn},
+                    {"replace", drafts({0, 1})},
+                    {"erase", drafts({0})},
+                    {"eval", drafts({0})},
+                    {"order", drafts({0, 1})},
+                    {"inline", drafts({0})},
+                    {"outline", drafts({0})},
+                    {"add_param", drafts({0})},
+                    {"add_constant", drafts({0})},
+                    {"commit", drafts({0})},
+                    {"abort", drafts({0})},
                 });
-        }
-        // What `open` touches: the transaction it makes, which is the handle the nine above then
-        // edit. It reads the function value it is handed (a value, not a resource) and writes
-        // nothing outside the program, so its whole statement is the resource it allocates.
-        {
-            using camel::core::sem::Resource;
-            using camel::core::sem::ResourceClass;
-            camel::core::sem::ResourceSpec opensTxn;
-            opensTxn.allocates = Resource{.cls = ResourceClass::Handle, .name = "graph::Txn"};
-            table.declareResources("graph", {{"open", opensTxn}});
+            // What `open` touches: the draft it makes, which is the graph handle the edits above
+            // then name. It reads the function value it is handed (a value, not a resource) and
+            // writes nothing outside the program, so its whole statement is what it allocates.
+            ResourceSpec opensDraft;
+            opensDraft.allocates = Resource{.cls = ResourceClass::Handle, .name = kDraft};
+            table.declareResources("graph", {{"open", opensDraft}});
         }
         // What the operators that read the *spelling* of the program say about themselves (design
         // principles 9.5): a graph's or a function's name, a node's source position, the text it

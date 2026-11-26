@@ -1,9 +1,9 @@
 /**
- * A transaction over the running Program (`current`, `open`, `commit`): the committed Program
- * drops the `+ 1` from `target`. The Program the transaction was opened on, and the code that is
- * running, must still see the original `target` (design principles 9.1).
+ * A draft over the running Program (`current`, `open`, `commit`): the committed Program drops the
+ * `+ 1` from `target`. The Program the draft was opened on, and the code that is running, must
+ * still see the original `target` (design principles 9.1).
  */
-import { Graph, Node, commit, constant, graph_of, inputs, name, nodes, op, op_name, open, replace, graphs_of } from graph
+import { Graph, Node, commit, constant, graph_of, graphs, graphs_of, inputs, name, nodes, op, op_name, open, replace } from graph
 import { ends_with } from str
 
 func target(x: int) => int {
@@ -44,25 +44,32 @@ func isTarget(g: Graph) => bool spelling {
     return name(g)->ends_with<'target'>
 }
 
-func targetIn::<F>(p: F) => Graph {
+/// The `target` graph of a draft (the graph the draft is of, and the graphs it calls).
+func targetInDraft(d: Graph) => Graph spelling {
+    let found = graphs(d)->filter<isTarget>
+    return found[0]
+}
+
+/// The `target` graph of the program a function value belongs to.
+func targetOf::<F>(p: F) => Graph spelling {
     let found = graphs_of(p)->filter<isTarget>
     return found[0]
 }
 
 func main() => int spelling sync {
     let p = main
-    let t = open(p)
-    nodes(targetIn(p))->filter<isAddOne>->foreach<func (n: Node) {
-        replace(t, n, inputs(n)[0])
+    let d = open(p)
+    nodes(targetInDraft(d))->filter<isAddOne>->foreach<func (n: Node) {
+        replace(n, inputs(n)[0])
     }>
-    let q = commit(t) !! p
-    println(`committed: ${addOnes(targetIn(q))}`)
-    println(`opened on: ${addOnes(targetIn(p))}`)
+    let q = commit::<() => int>(d) !! p
+    println(`committed: ${addOnes(targetOf(q))}`)
+    println(`opened on: ${addOnes(targetOf(p))}`)
     println(`running: ${target(5)} ${addOnes(graph_of(target))}`)
     let later = func (x: int) => int {
         target(x) + 1000
     }
     println(`made after: ${later(5)}`)
-    println(`current: ${addOnes(targetIn(main))}`)
+    println(`current: ${addOnes(targetOf(main))}`)
     return 0
 }

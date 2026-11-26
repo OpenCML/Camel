@@ -49,6 +49,7 @@
 #include "camel/execute/pass/params.h"
 #include "camel/execute/pass/registration.h"
 #include "camel/execute/shaped_operators.h"
+#include "camel/graph/graph.h"
 #include "camel/runtime/core_facts.h"
 #include "camel/runtime/draft_session.h"
 #include "camel/runtime/operator_instance.h"
@@ -59,7 +60,6 @@
 #include "camel/utils/assert.h"
 #include "camel/utils/phase_timer.h"
 #include "graph/graph_view.h"
-#include "camel/graph/graph.h"
 #include "src/stdlib/std/nvm/nodevm.h"
 #include "verify/translate.h"
 
@@ -261,7 +261,7 @@ struct WhenCall {
 /// A node handle for a parameter of a condition: it names the transaction the writings belong to,
 /// which is the only way a handle can be in a draft.
 Handle *nodeHandleOf(camel::runtime::DraftWritings &writings, camel::runtime::gc_node_ref_t ref) {
-    return Handle::createInTransaction(writings.transaction(), ref, mm::autoSpace());
+    return Handle::createInTransaction(writings.transaction(), ref, nullptr, mm::autoSpace());
 }
 
 /// Whether a rule's condition holds at this match (rewrite design 2 (second version) 1). A `const`
@@ -763,10 +763,12 @@ CompiledRuleSets &compiledRuleSetsOf(Context &ctx) {
 /// a fact about the declaration and the types -- unless it declares `with` parameters: those values
 /// decide its instances too, so the value itself is the key then. Two values of one declaration
 /// bound to different `with` values are different rules, and keying them by the declaration alone
-/// answered one with the other's instances (read on `modules.rules/rules.with_parameter_and_a_type_parameter`,
-/// whose dump lost two nodes). An ordinary rule stands for its value's serial: its two sides are
-/// the value's own functions, and nothing is shared between two loads of it.
-std::string ruleSetKey(Context &ctx, ArgsView &norm, size_t argument, const camel::runtime::Program *base) {
+/// answered one with the other's instances (read on
+/// `modules.rules/rules.with_parameter_and_a_type_parameter`, whose dump lost two nodes). An
+/// ordinary rule stands for its value's serial: its two sides are the value's own functions, and
+/// nothing is shared between two loads of it.
+std::string
+ruleSetKey(Context &ctx, ArgsView &norm, size_t argument, const camel::runtime::Program *base) {
     std::string key;
     const Array *values = norm.get<Array *>(argument);
     for (size_t i = 0; i < values->size(); ++i) {
@@ -802,8 +804,8 @@ std::string ruleSetKey(Context &ctx, ArgsView &norm, size_t argument, const came
 /// Compiling a rule makes constants and can collect: the array is read again from the argument,
 /// which the collector keeps up to date, each time. A generic rule has no sides of its own: it
 /// contributes one instance per type tuple of the program it is applied to, made once and kept.
-std::vector<camel::runtime::Rule>
-buildEngineRules(Context &ctx, ArgsView &norm, size_t argument, const camel::runtime::Program *base) {
+std::vector<camel::runtime::Rule> buildEngineRules(
+    Context &ctx, ArgsView &norm, size_t argument, const camel::runtime::Program *base) {
     std::vector<camel::runtime::Rule> out;
     auto vm            = std::make_shared<NodeVMSchedPass>(ctx.shared_from_this());
     uint16_t next      = 1;
@@ -870,7 +872,8 @@ buildEngineRules(Context &ctx, ArgsView &norm, size_t argument, const camel::run
         for (camel::runtime::Rule &compiled : camel::runtime::compileRule(ctx, source)) {
             mine.push_back(std::move(compiled));
         }
-        for (const camel::runtime::Rule &compiled : values.keepValue(rule->serial(), std::move(mine))) {
+        for (const camel::runtime::Rule &compiled :
+             values.keepValue(rule->serial(), std::move(mine))) {
             out.push_back(compiled);
         }
     }
@@ -1086,7 +1089,7 @@ slot_t rewriteKernel(ArgsView &with, ArgsView &norm, Context &ctx) {
     const bool strict           = with.size() > 1 && with.get<Bool>(1);
     try {
         const std::vector<camel::runtime::Rule> &compiled = engineRules(ctx, with, 0, base);
-        const Application application = applyRewrite(
+        const Application application                     = applyRewrite(
             ctx,
             base,
             subjectOf(norm)->graph(),
@@ -1138,7 +1141,7 @@ slot_t runKernel(ArgsView &with, ArgsView &norm, Context &ctx) {
     StructType *runType         = factory.build();
     const TupleType *resultType = TupleType::fallible(runType);
     try {
-        const auto start    = std::chrono::steady_clock::now();
+        const auto start                                  = std::chrono::steady_clock::now();
         const std::vector<camel::runtime::Rule> &compiled = engineRules(ctx, with, 0, base);
         RewriteRecord record;
         record.strict                 = strict;
@@ -1543,7 +1546,7 @@ slot_t whyNotKernel(ArgsView &with, ArgsView &norm, Context &ctx) {
             // and the question is about it. Which types the rule was instantiated at, and what came
             // of each, is what a reader of a generic rule needs to know.
             const auto *graph = programNow()->graph(graphId);
-            const Type *type = graph != nullptr ? graph->node(valueIndex)->dataType() : nullptr;
+            const Type *type  = graph != nullptr ? graph->node(valueIndex)->dataType() : nullptr;
             if (type == nullptr) {
                 return answer(
                     std::format(
@@ -1789,8 +1792,11 @@ class CamelCostModel final : public camel::runtime::CostModel {
         }
         // The node handle is rooted while the array of the input costs is made: that allocation
         // can collect.
-        auto *subject =
-            camel::graphmod::Handle::createInTransaction(context.transaction, node, mm::autoSpace());
+        auto *subject = camel::graphmod::Handle::createInTransaction(
+            context.transaction,
+            node,
+            nullptr,
+            mm::autoSpace());
         mm::RootHandle subjectRoot(
             mm::autoSpace(),
             subject,
@@ -1800,9 +1806,11 @@ class CamelCostModel final : public camel::runtime::CostModel {
         for (size_t i = 0; i < inputs.size(); ++i) {
             costs->set<Float64>(i, inputs[i]);
         }
-        const slot_t args[2] = {toSlot(subjectRoot.getAs<camel::graphmod::Handle>()), toSlot(costs)};
-        const slot_t answer  = vm_->callFunction(cost_.getAs<::Function>(), args);
-        const double total   = fromSlot<Float64>(answer);
+        const slot_t args[2] = {
+            toSlot(subjectRoot.getAs<camel::graphmod::Handle>()),
+            toSlot(costs)};
+        const slot_t answer = vm_->callFunction(cost_.getAs<::Function>(), args);
+        const double total  = fromSlot<Float64>(answer);
         if (!(total > 0.0)) {
             throw std::logic_error("A cost function gives every writing a positive cost.");
         }
@@ -1845,8 +1853,8 @@ class ExtractPass final : public RuntimeGraphRewritePass {
   public:
     ExtractPass(const camel::core::context::context_ptr_t &ctx, const PassFunction &cost)
         : RuntimeGraphRewritePass(ctx), cost_(cost) {}
-    const camel::runtime::Program *apply(const camel::runtime::Program *program, std::ostream &)
-        override {
+    const camel::runtime::Program *
+    apply(const camel::runtime::Program *program, std::ostream &) override {
         CamelCostModel model(*context_, fromSlot<::Function *>(cost_.value), cost_.type);
         return camel::runtime::extractWritings(context_, program, model);
     }
@@ -2038,9 +2046,9 @@ namespace wide {
 
 /// The exact sum of two doubles: `sum + error` is `a + b` with no rounding at all.
 inline void twoSum(double a, double b, double &sum, double &error) {
-    sum                 = a + b;
+    sum                  = a + b;
     const double shifted = sum - a;
-    error               = (a - (sum - shifted)) + (b - shifted);
+    error                = (a - (sum - shifted)) + (b - shifted);
 }
 
 /// The exact sum of two doubles when `|a| >= |b|`: the fast case of `twoSum`.
@@ -2136,8 +2144,10 @@ inline WideReal wideNormalize(double hi, double lo, int64_t scale) {
         }
     }
     const int exponent = std::ilogb(hi);
-    return WideReal(std::scalbn(hi, -exponent), std::scalbn(lo, -exponent),
-                    wide::clampedScale(int64_t(scale) + exponent));
+    return WideReal(
+        std::scalbn(hi, -exponent),
+        std::scalbn(lo, -exponent),
+        wide::clampedScale(int64_t(scale) + exponent));
 }
 
 /// `a * 2^digits`, exactly.
@@ -2286,14 +2296,15 @@ inline WideReal wideSqrt(const WideReal &a) {
         lo = lo * 2.0;
         scale -= 1;
     }
-    const double root      = std::sqrt(hi);
-    const WideReal refined = (WideReal(root) + WideReal(hi, lo, 0) / WideReal(root)) * WideReal(0.5);
+    const double root = std::sqrt(hi);
+    const WideReal refined =
+        (WideReal(root) + WideReal(hi, lo, 0) / WideReal(root)) * WideReal(0.5);
     return wideShift(refined, int64_t(scale) / 2);
 }
 
 /// e^x: the argument reduced by the nearest multiple of ln 2, then the Taylor series of the
-/// remainder (`|r| <= ln2/2`, whose 29th term is below 2^-106 of the sum), then the exact scaling --
-/// a shift of the scale, so an answer far below the double range survives as itself.
+/// remainder (`|r| <= ln2/2`, whose 29th term is below 2^-106 of the sum), then the exact scaling
+/// -- a shift of the scale, so an answer far below the double range survives as itself.
 inline WideReal wideExp(const WideReal &a) {
     if (!a.isFinite()) {
         return WideReal(std::exp(a.toDouble()));
@@ -2320,8 +2331,8 @@ inline WideReal wideExp(const WideReal &a) {
     return wideShift(sum, static_cast<int64_t>(steps));
 }
 
-/// ln x: `ln m + e ln 2`, with the mantissa `m` moved into `[1/sqrt2, sqrt2)` (an exact halving) and
-/// `e` the value's own scale; then `ln m = 2 atanh(t)` with `t = (m - 1) / (m + 1)`,
+/// ln x: `ln m + e ln 2`, with the mantissa `m` moved into `[1/sqrt2, sqrt2)` (an exact halving)
+/// and `e` the value's own scale; then `ln m = 2 atanh(t)` with `t = (m - 1) / (m + 1)`,
 /// `|t| <= 0.1716`, whose odd series' 31st term is below 2^-106 of the result.
 inline WideReal wideLog(const WideReal &a) {
     if (!a.isFinite() || a.hi() <= 0.0) {
@@ -2382,8 +2393,8 @@ struct RefTensor {
 };
 
 struct RefValue {
-    bool tensor        = false;
-    WideReal scalar    = WideReal(0.0);
+    bool tensor     = false;
+    WideReal scalar = WideReal(0.0);
     RefTensor t;
 
     static RefValue ofScalar(WideReal value) {
@@ -2425,8 +2436,7 @@ template <typename Fn> RefValue refMap(const RefValue &value, Fn &&fn) {
 /// `fn(a, b)` with the same broadcasting the tensor operators give: a scalar applies to every
 /// element, and two tensors are aligned from the right.
 RefValue refBinary(
-    const RefValue &a, const RefValue &b,
-    const std::function<WideReal(WideReal, WideReal)> &fn) {
+    const RefValue &a, const RefValue &b, const std::function<WideReal(WideReal, WideReal)> &fn) {
     if (!a.tensor && !b.tensor) {
         return RefValue::ofScalar(fn(a.scalar, b.scalar));
     }
@@ -2580,8 +2590,7 @@ RefValue refSoftmax(const RefTensor &x, int64_t axisArg, bool logarithm) {
                 const WideReal element =
                     x.values[static_cast<size_t>(o * extent * inner + e * inner + i)];
                 out.values[static_cast<size_t>(o * extent * inner + e * inner + i)] =
-                    logarithm ? (element - maximum) - logSum
-                              : wideExp(element - maximum) / sum;
+                    logarithm ? (element - maximum) - logSum : wideExp(element - maximum) / sum;
             }
         }
     }
@@ -2621,8 +2630,8 @@ WideReal roundToElement(const WideReal &value, TypeCode element) {
     case TypeCode::Float32:
         return WideReal(static_cast<float>(value.toDouble()));
     case TypeCode::BFloat16:
-        return WideReal(halfToFloat<BFloat16>(halfFromFloat<BFloat16>(
-            static_cast<float>(value.toDouble()))));
+        return WideReal(
+            halfToFloat<BFloat16>(halfFromFloat<BFloat16>(static_cast<float>(value.toDouble()))));
     case TypeCode::Float16:
         return WideReal(
             halfToFloat<Float16>(halfFromFloat<Float16>(static_cast<float>(value.toDouble()))));
@@ -2691,8 +2700,8 @@ class RefEvaluator {
             throw std::runtime_error("the reference reads a node that is not there");
         }
         // A conversion and a copy evaluate to what they were given: asked of the operation, because
-        // a graph may write them as the calls `cast` and `copy`, not only as the kinds the front end
-        // still builds (`camel/execute/shaped_operators.h`).
+        // a graph may write them as the calls `cast` and `copy`, not only as the kinds the front
+        // end still builds (`camel/execute/shaped_operators.h`).
         switch (camel::execute::shapeOfOperation(graph_, ref)) {
         case camel::execute::OperShape::Conversion:
         case camel::execute::OperShape::Entering:
@@ -2908,16 +2917,14 @@ class RefEvaluator {
                               : uri == "tensor:max_axis" ? RefReduce::Max
                               : uri == "tensor:min_axis" ? RefReduce::Min
                                                          : RefReduce::Mean;
-            return refReduce(
-                in[0].t, static_cast<int64_t>(in[1].scalar.toDouble()), keep, kind);
+            return refReduce(in[0].t, static_cast<int64_t>(in[1].scalar.toDouble()), keep, kind);
         }
         if (uri == "tensor:softmax" || uri == "tensor:log_softmax") {
             if (in.empty() || !in[0].tensor) {
                 throw std::runtime_error("the reference reads a softmax without its tensor");
             }
-            const int64_t axis = in.size() > 1 && !in[1].tensor
-                                     ? static_cast<int64_t>(in[1].scalar.toDouble())
-                                     : -1;
+            const int64_t axis =
+                in.size() > 1 && !in[1].tensor ? static_cast<int64_t>(in[1].scalar.toDouble()) : -1;
             return refSoftmax(in[0].t, axis, uri == "tensor:log_softmax");
         }
         throw std::runtime_error(
@@ -3560,7 +3567,7 @@ bool refScalarsAgree(
     if (x.isInf() || y.isInf()) {
         return x == y;
     }
-    const double eps       = single ? 1.2e-7 : 2.3e-16;
+    const double eps         = single ? 1.2e-7 : 2.3e-16;
     const WideReal magnitude = wideAbs(x) + wideAbs(y) + WideReal(scale);
     // The smallest subnormal: a rounding in the subnormal range is absolute, not relative.
     const WideReal smallest(single ? 1.4e-45 : 4.9e-324);
@@ -3750,11 +3757,11 @@ std::string sampleText(const Sample &s) {
                 // `withoutNaNSign` is what every path that formats a number through a library
                 // applies first, and this one prints a value of the language like any other.
                 text += std::format(
-                    "{}", camel::utils::withoutNaNSign(static_cast<float>(tensorElement(t, i))));
+                    "{}",
+                    camel::utils::withoutNaNSign(static_cast<float>(tensorElement(t, i))));
                 break;
             case TypeCode::Float64:
-                text += std::format(
-                    "{}", camel::utils::withoutNaNSign(tensorElement(t, i)));
+                text += std::format("{}", camel::utils::withoutNaNSign(tensorElement(t, i)));
                 break;
             case TypeCode::Int64:
                 text += std::to_string(static_cast<int64_t>(tensorElement(t, i)));
@@ -3860,10 +3867,9 @@ double declaredUlpsOf(const camel::runtime::GCGraph &graph) {
 
 /// The index of `ref` among the graph's form ports, the function's parameters. A port list is the
 /// graph's shape, so it is asked of the graph's face.
-std::optional<size_t> portIndexIn(
-    const camel::graph::GraphView &graph, camel::runtime::gc_node_ref_t ref) {
-    const std::vector<camel::graph::NodeRef> ports =
-        graph.ports(camel::graph::PortGroup::Normal);
+std::optional<size_t>
+portIndexIn(const camel::graph::GraphView &graph, camel::runtime::gc_node_ref_t ref) {
+    const std::vector<camel::graph::NodeRef> ports = graph.ports(camel::graph::PortGroup::Normal);
     for (size_t i = 0; i < ports.size(); ++i) {
         if (ports[i] == ref) {
             return i;
@@ -3984,15 +3990,15 @@ void checkOneRule(
         row.coverage    = coverage;
         rows.push_back(std::move(row));
     };
-    const uint64_t constParams              = constMaskOf(source);
-    const camel::runtime::Program *program  = source.program;
-    const camel::runtime::GraphId lhsId     = source.lhs;
-    const camel::runtime::GraphId rhsId     = source.rhs;
-    const auto *lhsGraph                    = program->graph(lhsId);
-    const auto *lhsType                     = lhsGraph->funcType();
-    const size_t params                     = lhsType->normTypesCount();
-    const Type *resultType                  = lhsType->exitType();
-    const size_t steps                      = stepsOf(*lhsGraph) + stepsOf(*program->graph(rhsId));
+    const uint64_t constParams             = constMaskOf(source);
+    const camel::runtime::Program *program = source.program;
+    const camel::runtime::GraphId lhsId    = source.lhs;
+    const camel::runtime::GraphId rhsId    = source.rhs;
+    const auto *lhsGraph                   = program->graph(lhsId);
+    const auto *lhsType                    = lhsGraph->funcType();
+    const size_t params                    = lhsType->normTypesCount();
+    const Type *resultType                 = lhsType->exitType();
+    const size_t steps                     = stepsOf(*lhsGraph) + stepsOf(*program->graph(rhsId));
     const double declaredUlps = declaredUlpsOf(*lhsGraph) + declaredUlpsOf(*program->graph(rhsId));
     // The bound is the numeric contract of the permissions the rule needs, read together
     // with the operators' declarations (not one uniform rounding bound).

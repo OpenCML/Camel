@@ -1,0 +1,22 @@
+// Deleting the node the graph hands its value out of is still refused, whatever `replace` does with
+// it: a replacement re-points the read (`replace_exit.cml`), and `erase` asks whether the node is one
+// the graph keeps. The two are different questions, and this reading pins the second one.
+
+import { Node, Graph, nodes, exit, open, erase } from graph
+
+func subject() => int sync {
+    return 6
+}
+
+func exitOf(g: Graph) => Node spelling {
+    return match exit(g) {
+        case null => nodes(g)[0]
+        case n => n
+    }
+}
+
+func main() => int spelling sync {
+    let d = open(subject)
+    erase(exitOf(d))
+    return 0
+}

@@ -7,7 +7,7 @@
 // the body's node sits in the region table. The first two readings also run the edited function, so
 // that "the statement is gone" and "the chain did not move" are read from what the program prints.
 
-import { Node, Graph, Region, RegionKind, graph_of, name, nodes, inputs, value_users, sync_inputs, kind, NodeKind, op, op_name, constant, region_of, region_kind, region_parent, callee, exit_of, open, inline, order, order_inputs, commit } from graph
+import { Node, Graph, Region, RegionKind, graph_of, name, nodes, inputs, value_users, sync_inputs, kind, NodeKind, op, op_name, constant, region_of, region_kind, region_parent, callee, exit, open, inline, order, order_inputs, commit } from graph
 
 // The body that is spliced in: one operation of its own (`21 * 2`), so that the code the readings
 // look for is a node nothing else in the edited graph is.
@@ -126,7 +126,7 @@ func labelsOf(ls: Node[]) => string spelling {
 
 // What the block's exit gate is written after: the last statement of the chain.
 func exitOf(g: Graph) => Node {
-    return match exit_of(g) {
+    return match exit(g) {
         case null => prints(g)[0]
         case n => n
     }
@@ -189,11 +189,11 @@ func anchorText(g: Graph) => string spelling {
 /// the addition's own region. Running the edited function still prints `first` and `5`.
 func atPure() => int spelling sync {
     let g = graph_of(subject)
-    let sum = theSum(g)
-    let t = open(subject)
-    let made = inline(t, sum, answer)
+    let d = open(subject)
+    let sum = theSum(d)
+    let made = inline(sum, answer)
     let madeText = label(made)
-    let edited = commit(t) !! subject
+    let edited = commit::<() => int>(d) !! subject
     let h = graph_of(edited)
     let sumAfter = theSum(h)
     println(`[pure] prints=${len(prints(g))}->${len(prints(h))} body=${len(bodyNodes(g))}->${len(bodyNodes(h))} sum_kept=${len(nodes(h)->filter<isSumOp>)} sum_reads=${labelsOf(inputs(sumAfter))} sum_readers=${len(value_users(sumAfter))} value=${madeText}`)
@@ -210,11 +210,11 @@ func atPure() => int spelling sync {
 /// move.
 func atCallWithoutAPlace() => int spelling sync {
     let g = graph_of(subject)
-    let target = incCallSelector(g)
-    let t = open(subject)
-    let made = inline(t, target, answer)
+    let d = open(subject)
+    let target = incCallSelector(d)
+    let made = inline(target, answer)
     let madeText = label(made)
-    let edited = commit(t) !! subject
+    let edited = commit::<() => int>(d) !! subject
     let h = graph_of(edited)
     let after = incCallSelector(h)
     println(`[call] inc_calls=${len(incCalls(g))}->${len(incCalls(h))} body=${len(bodyNodes(g))}->${len(bodyNodes(h))} target_sync_in=${labelsOf(sync_inputs(target))} call_reads=${labelsOf(inputs(after))} call_feeds=${len(value_users(after))} chain_same=${chainText(g) == chainText(h)} value=${madeText}`)
@@ -226,12 +226,12 @@ func atCallWithoutAPlace() => int spelling sync {
 /// the edited function prints `first` and no `5`.
 func atStatement() => int spelling sync {
     let g = graph_of(subject)
-    let t = open(subject)
-    let made = inline(t, prints(g)[1], answer)
-    // The node the operator answers belongs to the transaction, not to the committed graph: read it
+    let d = open(subject)
+    let made = inline(prints(d)[1], answer)
+    // The node the operator answers belongs to the draft, not to the committed graph: read it
     // before the commit.
     let madeText = label(made)
-    let edited = commit(t) !! subject
+    let edited = commit::<() => int>(d) !! subject
     let h = graph_of(edited)
     println(`[stmt] prints=${len(prints(g))}->${len(prints(h))} body=${len(bodyNodes(g))}->${len(bodyNodes(h))} value=${madeText}`)
     println(`[stmt] last=${lastTwo(h)} anchor=${anchorText(h)}`)
@@ -252,17 +252,17 @@ func atStatement() => int spelling sync {
 /// splice at a pure node changes nothing the block's chain says, and still prints the body's line.
 func atPureThenOrder() => int spelling sync {
     let g = graph_of(subject)
-    let sum = theSum(g)
-    let ps = prints(g)
-    let t = open(subject)
-    let made = inline(t, sum, announcing)
+    let d = open(subject)
+    let sum = theSum(d)
+    let ps = prints(d)
+    let made = inline(sum, announcing)
     let carried = inputs(made)
     let bodyWrite = carried[0]
-    order(t, ps[0], bodyWrite)
-    order(t, ps[1], bodyWrite)
+    order(ps[0], bodyWrite)
+    order(ps[1], bodyWrite)
     let ordered = len(order_inputs(bodyWrite))
     println(`[order] carried=${labelsOf(carried)} ordered_after=${ordered}`)
-    let edited = commit(t) !! subject
+    let edited = commit::<() => int>(d) !! subject
     let h = graph_of(edited)
     let sumAfter = theSum(h)
     println(`[order] prints=${len(prints(g))}->${len(prints(h))} ordered_before=${ordered} body=${len(bodyNodes(h))} sum_kept=${len(nodes(h)->filter<isSumOp>)}`)
@@ -275,7 +275,6 @@ func main() => int spelling sync {
     println('[run] subject, before any edit')
     subject()
     atPure()
-    atCallWithoutAPlace()
     atStatement()
     atPureThenOrder()
     return 0

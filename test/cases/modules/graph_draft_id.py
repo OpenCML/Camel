@@ -45,12 +45,12 @@ EXE, ARGV = camel_from_argv(ROOT)
 # The body both runs share: a transaction, and a constant written into the draft. What the two
 # writings differ in is one line -- where the reading of `id` stands relative to the commit.
 BEFORE = """\
-import { Graph, Node, add_constant, graph_of, id, open } from graph
+import { Graph, Node, add_constant, id, open } from graph
 
 func main() => int sync {
     let p = main
-    let t = open(p)
-    let added = add_constant(t, graph_of(p), 7)
+    let d = open(p)
+    let added = add_constant(d, 7)
     println(id(added))
     return 0
 }
@@ -69,9 +69,10 @@ func report::<F>(published: F) => int when is_function::<F>() sync {
 
 func main() => int sync {
     let p = main
-    let t = open(p)
-    let added = add_constant(t, graph_of(p), 7)
-    return match commit(t) {
+    let d = open(p)
+    let added = add_constant(d, 7)
+    let published = commit::<() => int>(d)
+    return match published {
         case error e => sync { println('refused ', e.kind); return 1 }
         case q => report(q)
     }

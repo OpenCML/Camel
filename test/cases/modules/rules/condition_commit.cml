@@ -3,7 +3,7 @@
  * the outer rewrite is still working on.
  */
 
-import { Graph, Node, open, commit, add_constant, id, graph_of } from graph
+import { Graph, Node, nodes, open, commit, add_constant, graph_of } from graph
 import { rewrite } from rewrite
 
 rule add_zero(x: int) when publish_now() { x + 0 => x }
@@ -22,10 +22,10 @@ func publish_now() => bool {
 }
 
 func do_publish::<F>(p: F) => F! sync {
-    let t = open(p)
-    let n = add_constant(t, graph_of(p), 1)
-    println('added node ', id(n))
-    return commit(t)
+    let d = open(p)
+    add_constant(d, 1)
+    println('added node ', len(nodes(d)))
+    return commit(d)
 }
 
 func redex(x: int) => int {

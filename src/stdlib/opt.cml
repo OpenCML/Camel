@@ -29,7 +29,7 @@
  */
 
 import { flatten, all, any } from array
-import { Node, Graph, Txn, NodeKind, graphs_of, nodes, inputs, with_inputs, value_users, id, kind, op, op_name, may_be_recomputed, may_fault, may_be_rearranged, is_anchor, is_written_slot, is_constant, constant_bytes, type_of, type_name, region_of, permissions, tags, constant, open, replace, erase, eval, commit, abort } from graph
+import { Node, Graph, NodeKind, graphs_of, graphs, nodes, inputs, with_inputs, value_users, id, kind, op, op_name, may_be_recomputed, may_fault, may_be_rearranged, is_anchor, is_written_slot, is_constant, constant_bytes, type_of, type_name, region_of, permissions, tags, constant, open, replace, erase, eval, commit, abort } from graph
 import { saturate as saturate_rules } from rewrite
 import { algebra, distribution } from rules
 import { is_function } from types
@@ -138,21 +138,21 @@ func graph_has_hit(g: Graph) => bool {
     }>
 }
 
-func merge_hits_of::<F>(t: Txn<F>, g: Graph) => void {
+func merge_hits_of(g: Graph) => void {
     let ns = nodes(g)
     ns->filter<func (n: Node) => bool {
         is_hit(ns, n)
     }>->foreach<func (n: Node) => void {
-        replace(t, n, keep_of(ns, n))
+        replace(n, keep_of(ns, n))
     }>
 }
 
 func merge_hits::<F>(f: F) => F! sync {
-    let t = open(f)
-    graphs_of(f)->foreach<func (g: Graph) => void {
-        merge_hits_of(t, g)
+    let d = open(f)
+    graphs(d)->foreach<func (g: Graph) => void {
+        merge_hits_of(g)
     }>
-    return commit(t)
+    return commit(d)
 }
 
 /// Equal values written twice are one node, until none is left.
@@ -201,16 +201,21 @@ func dead_value(n: Node) => bool {
 }
 
 func erase_hits::<F>(f: F, hits: Node[]) => F! sync {
-    let t = open(f)
+    let d = open(f)
     hits->foreach<func (n: Node) => void {
-        erase(t, n)
+        erase(n)
     }>
-    return commit(t)
+    return commit(d)
 }
 
 func dead_values::<F>(f: F) => F! when is_function::<F>() sync {
-    let hits = all_nodes(graphs_of(f))->filter<dead_value>
-    return if len(hits) == 0 then f else erase_hits(f, hits)->dead_values
+    let d = open(f)
+    let hits = all_nodes(graphs(d))->filter<dead_value>
+    if len(hits) == 0 then {
+        abort(d)
+        return f
+    }
+    return erase_hits(f, hits)->dead_values
 }
 
 /// Values nobody reads are erased, until none is left: the value half of `std::cxx::dce`.
@@ -263,28 +268,28 @@ func evaluated(n: Node) => bool {
 // Replaces one operation by the value its operator computes; the answer is whether it did. The
 // arm of a `match` is a graph of its own, so the edit is a call of its own: a statement inside an
 // arm has nothing that depends on it and does not run.
-func put_value::<F>(t: Txn<F>, n: Node, value: Node, budget: int) => bool sync {
-    return if foldable(n) && constant_bytes(value) < budget then replaced(t, n, value) else false
+func put_value(n: Node, value: Node, budget: int) => bool sync {
+    return if foldable(n) && constant_bytes(value) < budget then replaced(n, value) else false
 }
 
-func replaced::<F>(t: Txn<F>, n: Node, value: Node) => bool sync {
-    replace(t, n, value)
+func replaced(n: Node, value: Node) => bool sync {
+    replace(n, value)
     return true
 }
 
 // The value the round computes for this node, or null when there is nothing to compute or when
 // the expression can only fault, which is left as written and warned about.
-func fold_one::<F>(t: Txn<F>, n: Node, budget: int) => bool sync {
-    return match eval(t, n) {
+func fold_one(n: Node, budget: int) => bool sync {
+    return match eval(n) {
         case null => false
-        case v => put_value(t, n, v, budget)
+        case v => put_value(n, v, budget)
     }
 }
 
 // One round over the nodes it evaluates: whether it replaced anything.
-func fold_round::<F>(t: Txn<F>, hits: Node[], budget: int) => bool {
+func fold_round(hits: Node[], budget: int) => bool {
     return hits->map<func (n: Node) => bool {
-        fold_one(t, n, budget)
+        fold_one(n, budget)
     }>->any<func (did: bool) => bool {
         did
     }>
@@ -294,12 +299,12 @@ func fold_round::<F>(t: Txn<F>, hits: Node[], budget: int) => bool {
 // round started from is then the answer. Each is a function of its own because an effect written
 // inside an arm of a `match` or an `if` does not run, so one branch cannot commit inline while the
 // other abandons.
-func committed::<F>(t: Txn<F>) => F! sync {
-    return commit(t)
+func committed::<F>(d: Graph) => F! sync {
+    return commit(d)
 }
 
-func abandoned::<F>(t: Txn<F>, f: F) => F! sync {
-    abort(t)
+func abandoned::<F>(d: Graph, f: F) => F! sync {
+    abort(d)
     return f
 }
 
@@ -308,14 +313,13 @@ func abandoned::<F>(t: Txn<F>, f: F) => F! sync {
 // about) is such a round, and recursing on the function it started from would not stop, so it is
 // abandoned.
 func fold_rounds::<F>(f: F, budget: int) => F! when is_function::<F>() sync {
-    let t = open(f)
-    let changed = fold_round(t, all_nodes(graphs_of(f))->filter<evaluated>, budget)
-    return if changed then committed(t)->fold_rounds(budget) else abandoned(t, f)
+    let d = open(f)
+    let changed = fold_round(all_nodes(graphs(d))->filter<evaluated>, budget)
+    return if changed then committed(d)->fold_rounds(budget) else abandoned(d, f)
 }
 
 /// A pure operation whose operands are all constants is the value they compute, until none is
-/// left. A function that holds no node to evaluate at all is answered without opening a
-/// transaction.
+/// left. A function that holds no node to evaluate at all is answered without opening a draft.
 /// @example ((x: int): int => 1 + 2 + x)->fold
 with </// Bytes of constants this pass may materialize in a graph: the same measure and the same
 /// default as `std::cxx::fold` (`constantBytesOf`), read through `constant_bytes`; a value
