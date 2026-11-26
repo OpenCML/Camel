@@ -24,17 +24,11 @@ work that is not a full gate run and hold a machine-wide lock so two of them can
 | `run-registry.test.ps1` | Its test, with no build and no plan: `pwsh -NoProfile -File internal/tools/run-registry.test.ps1` prints `14 checks, 0 failed` and exits 1 on a failure. It requires a compaction with no reader to land with the newest kept lines plus the new row, and holds the destination open to require "not published, not thrown" plus a complete old registry, no temp file and a retry before giving up; the last two are red against the `Move-Item -Force` writer. |
 | `camel-remote-args.ps1` | The argument rules `camel-remote.ps1` applies before it pushes anything: comma-split lists (`-Plan`, `-AstOnly`, `-AstDrop`), the `--only`/`--drop` words built from them, and the refusal for a glob that names no `.cml` of this tree. Separated out because those rules are the part that used to fail silently on the host. |
 | `camel-remote-args.test.ps1` | Their test, run without a host: `pwsh -NoProfile -File internal/tools/camel-remote-args.test.ps1` prints `N checks, M failed` and exits 1 on a failure. |
-| `merge-lane.ps1` | The merge position for ONE lane: merge, header check, clang syntax, row readings against the tree the merge lands on, then the push. |
-| `merge-batch.ps1` | The merge position for a BATCH: three or four lanes that touch no file in common, merged into one temporary worktree, measured once over the union of their plans, with the baseline taken on a separate checkout of the merge's first parent. `-Target` names the branch it lands on and pushes to, `develop` (the default) or `integration`, with the same parameter and validation as `merge-lane.ps1`. `-ScratchRoot` is where its two trees and every transcript live, from the settings file's `scratchRoot` like `mergeWorktree`, with no built-in path and exit 2 when the seat names none. See "Batching the merge position" below. |
-| `merge-batch-sets.ps1` | The two readings a batch is composed by: the pairwise intersection of the lanes' changed-file sets, and the plan-set union with the name `scripts/plan-set.mjs` gives it; plus `Resolve-BatchTarget`, which spells every ref from the target and refuses a target it does not know, and `Resolve-BatchScratchRoot`, which takes the seat's `scratchRoot` and refuses a seat that names none. Separated out because all of it fails quietly, and so it can be checked without a host. |
-| `merge-batch-sets.test.ps1` | Their test: `pwsh -NoProfile -File internal/tools/merge-batch-sets.test.ps1` prints `29 checks, 0 failed` and exits 1 on a failure. The plan-set hash check runs `scripts/plan-set.mjs#planSetHash` through node and requires the same string; the target checks include the tool's own refusal of an unknown `-Target`, which needs no host because parameter binding stops before the body runs; the scratch-root checks run the tool against a throwaway git repository to require the exit 2 a seat with no `scratchRoot` gets. |
-| `merge-push-shape.ps1` | The shape a commit must have to be pushed to a target: `Test-PushFirstParent` fetches `origin`, resolves the target's tip, and refuses a single-parent commit (a lane commit that would go straight in) or a merge whose first parent is not that tip. One implementation, dot-sourced by `merge-lane.ps1` (before both of its pushes) and `merge-batch.ps1`; the refusal is D-1124-78 and names the commands that redo the merge on the tip. |
-| `push-hooks-guard.ps1` | The other precondition of the same push: whether a push from this tree would be checked **at all**. `Test-PushHookGuard` resolves the hooks directory git would use and, when `core.hooksPath` is configured, requires its `pre-push` to answer -- the hook is run the way git runs it (same `sh`, same working directory, same PATH) with an empty stdin and one ref no rule is about, so the develop lock and the arrival shape return early and the reading that comes back must be the checker's own: `scanned N files, M comment lines, no trace`, or `process traces in comments: ...`. **An empty reading with exit 0 is a push with no guard and is refused**, because a hooks directory that exists and delegates to nothing is the quiet half of the same defect. `core.hooksPath` unset is not refused: a repository that configures no hooks directory is never promised one, and a fixture's empty `.git/hooks` is its normal state. One implementation, dot-sourced by `merge-lane.ps1` (before both of its pushes), `merge-batch.ps1` (before its push) and `new-worktree.ps1`. |
+| `push-hooks-guard.ps1` | Whether a push from this tree would be checked **at all**. `Test-PushHookGuard` resolves the hooks directory git would use and, when `core.hooksPath` is configured, requires its `pre-push` to answer -- the hook is run the way git runs it (same `sh`, same working directory, same PATH) with an empty stdin and one ref no rule is about, so the develop lock and the arrival shape return early and the reading that comes back must be the checker's own: `scanned N files, M comment lines, no trace`, or `process traces in comments: ...`. **An empty reading with exit 0 is a push with no guard and is refused**, because a hooks directory that exists and delegates to nothing is the quiet half of the same defect. `core.hooksPath` unset is not refused: a repository that configures no hooks directory is never promised one, and a fixture's empty `.git/hooks` is its normal state. One implementation, dot-sourced by `merge-lane.ps1` (before both of its pushes), `merge-batch.ps1` (before its push) and `new-worktree.ps1`. |
 | `push-hooks-guard.test.ps1` | Its test, against a throwaway repository and a checker the test writes itself: no configured hooks path passes and says it has nothing to hold anyone to; a configured one with no `pre-push` is refused, naming the file and the command that installs it; a hook that exits 0 and prints nothing is refused (the case the check exists for); a shim whose tracked hook is absent is refused the same way; a hook whose chain reaches the checker passes and reports the checker's own line and not the hook's; a reading that lists traces passes with the refusal-to-come said out loud, because whether a tree passes the checker is the checker's business on the real push. `pwsh -NoProfile -File internal/tools/push-hooks-guard.test.ps1` prints `16 checks, 0 failed` and exits 1 on a failure. |
 | `new-worktree.ps1` | The one place a worktree is made, so that "made" and "guarded" are one step: `git fetch origin`, `git worktree add`, copy the settings file, run husky, and refuse to report the tree ready until the guard answers. `-VerifyOnly -Path <tree>` asks that last question about a tree that already exists and creates nothing -- it is what to run when a push from an unfamiliar tree is refused and the reason is not obvious. Exit 0 ready, 2 refused before anything was made, 1 the tree exists and is **not** guarded; in the last case the tree is left in place, because deleting it would delete whatever the caller has already put in it. Only the repository's own installer is run (`node_modules/.bin/husky` when the tree has one, `npx --yes husky` otherwise), so husky owns the files in that directory. |
-| `merge-lane-firstparent.test.ps1` | Its test, and the regression beside it: `pwsh -NoProfile -File internal/tools/merge-lane-firstparent.test.ps1` prints `30 checks, 0 failed`. Four cases -- a merge of the tip arrives, a merge of an older tip is refused with the sentence and the redo command, a single-parent commit is refused, and `Invoke-PushWithRecovery` still pushes when the shape is right -- plus the wiring: each tool calls the reading and neither carries a copy of it. |
-| `merge-lane-baseline.test.ps1` | The key a baseline is stored under: `pwsh -NoProfile -File internal/tools/merge-lane-baseline.test.ps1` prints `28 checks, 0 failed`. Same sha twice is a reuse and not a rebuild; a different sha is a different tree; a fixed-name tree holding another commit is called stale (`stale baseline beside the tip: rebuilding`) and moved; two seats that name different trees still resolve one tip to one tree and one branch, which spells the sha. |
-| `hook-integration.test.ps1` | The same rule at the push itself: `scripts/hooks/pre-push` refuses a push to `refs/heads/integration` whose commit is not a merge of the remote tip. `pwsh -NoProfile -File internal/tools/hook-integration.test.ps1` runs the real hook (found by its `sh`, taken from git's own install) against a throwaway repository: `13 checks, 0 failed`. |
+| `scripts/merge-batch.mjs` | The merge seat's one tool: merges the queued lane branches onto the integration tip as merge commits, skips the ones that conflict textually, builds once (no plan), finds a build-breaking lane inside the batch by building prefixes, and pushes with `--push`. See `internal/collab/merge-seat.md` for the command line. |
+| `hook-integration.test.ps1` | The same rule at the push itself: `scripts/hooks/pre-push` refuses a push to `refs/heads/integration` whose first-parent chain is not made of merges that end at the remote tip. `pwsh -NoProfile -File internal/tools/hook-integration.test.ps1` runs the real hook (found by its `sh`, taken from git's own install) against a throwaway repository: `12 checks, 0 failed`. |
 | `run-tests-diagnostic-file.test.ps1` | The guard for `expect_diagnostic_file`, the plan field that says which file a diagnostic came from (`test/tools/run-tests.mjs`). It needs no build and no plan of this tree: a plan is written under the system temp directory with `tool = "node"` entries whose probe prints one diagnostic in the runner's short format, and the runner's own exit code and message are read back. `pwsh -NoProfile -File internal/tools/run-tests-diagnostic-file.test.ps1` prints `36 checks, 0 failed` and exits 1 on a failure. The right file passes (relative and absolute), another file fails with the required file and the reported file both named, an array/number/empty string/`expect_no_diagnostics` beside it is refused where the plan is read (the probe's marker proves nothing ran), and an entry that does not write the field keeps its old meaning. |
 | `lane-audit.mjs` | Which `lane/*` branches are already inside a merged tree, and which are really unmerged: `ahead` / `behind` / `contained` / `equiv` per branch, listed in three buckets -- deletable, suspect-merged, unmerged (by `behind`) -- with `--json` and a `--check` that exits 3 when bucket 3 is over `--limit` (default 20). The base is `seat/merge-rehearsal`, else `develop`, and the report says which one on its first line. A bucket 1 row also says whether `origin/develop` holds it yet: a rehearsal tree is built on one machine, so "contained in the base" is not "published", and a branch deleted while its content is unpublished leaves the base as the only ref holding it. It reads local refs only and fetches nothing; it deletes no ref and creates none, and it takes that reading rather than claiming it: `refs/heads/lane/*` is compared before and after the run, and a sha that moved is exit 4 with the ref named. Bucket 2 means "the same content by different commits" and belongs to the lane's owner -- a row here is a conversation, never a deletion. |
 | `branch-check-strings.mjs` | The list a merge was audited by had four cells -- `GCNodeKind::Copy|::Cast` references, `addCopyNode|addCastNode` calls, diagnostic names in `registry.tsv` / `examples.tsv` / `semantic.h` -- and it passed in all four while a merge still broke a reading, because what the reading depended on was a string label: a seat commit deleted two `return "CAST"` from `src/stdlib/std/gir/gir_metadata.cpp`, git saw no conflict on those lines and took the base's version. So this program walks the population the old list had no cell for: every `"..."` / `'...'` span on every line `git diff -M -U0 <base> <lane>` puts on the lane's side, checked against the base's copy of the **same file** (and against the scan set `src/**`, `stdlib/**`, `test/tools/**` for "does the base spell it anywhere"). One row per (lane file, literal) site in three buckets: ① still spelled (in that file, or marked `elsewhere` in another), ② gone from that file while the fork point had it -- with the commit `git log -S` names, and split into `file-lost`, `file-gone` (collapsed to one line per file, and named as a modify/delete the merge stops on anyway) and `tree-gone`; ③ new to both. Exit 1 when ② is not empty, 0 when it is; `--json`, `--limit`, `--match`, `--history`, `--paths`. Prose (`.md`, `.txt`) is counted and not listed. Read-only: no file written, no ref moved, no index or build lock taken, nothing fetched, and the three shas are re-read after the run (a ref that moved is exit 4). Its header lists the seven things it cannot answer -- same spelling with another meaning, cross-file producers, run-time assembly, text-not-syntax (comments, JS regex), everything that is not a literal, undetected renames, and whether the line mattered. |
@@ -53,19 +47,17 @@ Three rules, and all of them can be bypassed in one way:
 
 - **`develop` is written from the merge worktree only.** The tree is read from this machine's
   settings file (`mergeWorktree`); a push from any other tree is refused with the key to set.
-- **An arrival on `integration` is a merge of its tip** (D-1124-78). The hook reads the refs git is
-  about to send, and for `refs/heads/integration` it requires two parents and a first parent equal to
-  the remote tip (a new branch has no tip, so only the parent count applies). A lane commit that
-  would go straight in is refused by name; a merge made on an older tip is refused with the sentence
-  that says what the operator was doing and the command that redoes it on the tip, `rerere`
-  included. `merge-lane.ps1` and `merge-batch.ps1` assert the same thing before their own pushes --
-  the hook is what covers a push made by hand or by a branch re-landed somewhere else.
-- **That merge carries a pass record** (`scripts/merge-record.mjs verify <remote> <local>`). The
-  record is what the merge tool writes after its gates and before its push, so a merge that went
-  through the gate is in the hook's set and a merge that was refused is not. The range is the one the
-  push sends, walked by first parent: a commit reachable only through a side branch is part of a merge
-  that already had its reading, and a single-parent commit such as a documentation page is not asked
-  for a record at all.
+- **An arrival on `integration` is a merge onto the tip it landed on.** The hook reads the refs git
+  is about to send, and for `refs/heads/integration` it walks the pushed range by first parent: every
+  commit on that chain is a merge, and the oldest has the remote tip as its first parent (a new branch
+  has no tip, so there is nothing to compare). A lane commit that would go straight in is refused by
+  name; a chain that does not end at the remote tip is refused with the sentence that says what the
+  operator was doing and the command that redoes it. A batch of merges is one chain, so one push may
+  carry many.
+- **Every merge in the push says what it carries.** Its message ends with a `Lane-Reading: <line>`
+  trailer, the lane's own one-line reading as `scripts/merge-batch.mjs` writes it; a merge that only
+  changes documentation carries `Lane-Reading: docs-only`. Nothing else about a merge is checked at
+  the push: the build is the batch tool's, and what lanes do to each other is the promotion's.
 
 `git push --no-verify` runs no hook at all, so no rule can stop a push that asks to skip them.
 That is written here instead of being locked down, because a lock in a hook that git itself offers to
@@ -73,28 +65,19 @@ skip is a lock in name only. **A push made with `--no-verify` says so in its con
 the chain it wrote is then the thing to repair (the shape is re-read by the next merge, and
 `internal/backlog.md` is where a wrong arrival is recorded).
 
-### Two readings, one per branch
+### The develop push
 
-`merge-record.mjs` answers two different questions, and a push is checked against the one its branch
-asks:
-
-- **Pushing `develop` publishes a tip**, so the hook runs `verify-promotion <tip>`: the tip has to
-  carry a promotion record, `internal/reports/<date>-promotion-<n>.record.json`, which says which
-  tip was measured, the whole layer's four counts and its `tier`/`scope`, what it was compared with
-  case by case (`comparison.against`, `new_reds`, `vanished_reds`), and what the run's timeouts did
-  when they were run alone (`timeouts_rerun`: `count`, `green[]`, `still_red_not_timeout[]` -- every
-  timeout accounted for in one of the two, because a timeout is not a red until it was re-run alone
-  and failed again). A tip without one is refused in the words that name what is missing: *缺的是
-  晋级记录，不是合并记录*. The record is read from this checkout's tree: a commit cannot contain a
-  file that names its own sha, so a record is always written above the tip it names, one merge or one
-  push after that tip was measured. A tip that is not on this checkout's history is exit 2 -- a
-  checkout that cannot see a commit has answered nothing about it.
-- **A push to `integration` publishes a merge**, so the hook runs `verify <remote> <local>` and the
-  reading is the one pass record per merge described above. The record carries the measured run's own
-  `exit`. **`exit` absent means `"0"`** -- records written before the field existed stay valid, no
-  migration -- and any other value is refused in its own words, so a record that says `exit=unknown`
-  (the gate's exit 7: readings complete, exit code not obtained, see `camel-remote.ps1`) exists for
-  the reader who wants the reading but opens no door.
+**Pushing `develop` publishes a tip**, so the hook runs `scripts/promotion-record.mjs <tip>`: the tip
+has to carry a promotion record, `internal/reports/<date>-promotion-<n>.record.json`, which says which
+tip was measured, the whole layer's four counts and its `tier`/`scope`, what it was compared with
+case by case (`comparison.against`, `new_reds`, `vanished_reds`), and what the run's timeouts did
+when they were run alone (`timeouts_rerun`: `count`, `green[]`, `still_red_not_timeout[]` -- every
+timeout accounted for in one of the two, because a timeout is not a red until it was re-run alone
+and failed again). A tip without one is refused in the words that name what is missing: *缺晋级记录*.
+The record is read from this checkout's tree: a commit cannot contain a file that names its own sha,
+so a record is always written above the tip it names, one merge or one push after that tip was
+measured. A tip that is not on this checkout's history is exit 2 -- a checkout that cannot see a
+commit has answered nothing about it.
 
 ## The machine-local settings file
 
@@ -144,9 +127,6 @@ The keys, and what each decides:
 | `hostLibStdCxxDir` | On the host, the toolchain's libstdc++ directory, exported for installs that predate carrying their own copy. |
 | `watchRepo` | The checkout `watch-fsh-dev.ps1` reads. |
 | `mergeWorktree` | The one worktree allowed to push `develop` (`scripts/hooks/pre-push`). One absolute path, or several separated by `;`. Leaving it out means no tree may push develop. |
-| `baselineRoot` | The directory the per-tip baseline checkouts live under: the tree for a commit is `<baselineRoot>\<sha>`, on a branch `camel-baseline-<sha12>`, so every seat that lands on that commit reuses one checkout and one host build. The reading itself is filed by `scripts/merge-readings.mjs` as `<sha12>-<planSetHash>-v<normal>.jsonl` under the repository's common `camel-readings` directory: the commit and the plan set, never the seat. |
-| `baselineWorktree` | The older shape of the same decision: one fixed tree per seat, moved to each tip. Still honoured; `Get-BaselineCheckout` checks its HEAD against the tip first, and a tree holding another commit is printed as `stale baseline beside the tip: rebuilding` and moved instead of read. |
-| `scratchRoot` | Where `merge-batch.ps1` writes its merge tree and its transcripts. Its baseline tree follows `baselineRoot` when that is set, and this root otherwise. |
 
 ## `camel-remote.ps1`
 
@@ -246,43 +226,6 @@ pwsh -NoProfile -File internal/tools/camel-remote.ps1 -Path <worktree> -Clean
 The header of the script states the rest as rules: the staging push, what the `-NoBuild` guard
 compares and why content rather than a commit, how a checker stage reports, why the plan's stderr is
 folded into its stdout, and the exact shape of the panel's state files.
-
-## The readings cache: one tree, one reading
-
-`scripts/merge-readings.mjs --read` measures one plan set on one tree and caches what it measured. The
-merge position asks for the same reading more than once per judgement (the tree the merge lands on,
-the merged tree) and a night of merges re-measures the same tip; the rows cannot differ, and the host
-should not be asked to produce them again.
-
-The key contains the identity of the thing cached and everything a reading depends on:
-
-| component | value |
-|---|---|
-| tree | `git -C <tree> rev-parse HEAD` — the commit, never the directory and never an mtime |
-| plan selection | the `<count>-<hash>` from `scripts/plan-set.mjs`, the same value the baseline cache uses |
-| jobs | the runner's `-Jobs` width |
-| tier | `release` or `debug` — two installs of one commit are two binaries |
-| tool | sha256 over `scripts/merge-readings.mjs`, `scripts/plan-set.mjs` and the runner |
-
-A hit is replayed with a line that says the reading came from the cache and names the full tree OID;
-a miss runs `camel-remote` (or `--runner`'s stand-in) and stores what came back. A dirty working tree
-is neither served nor stored: a reading of commit C is not a reading of C plus an uncommitted edit.
-An entry whose transcript holds no row block is not stored either — a build that stopped wrote no
-reading.
-
-**Who creates it, and how it is cleared:** the first successful store creates the cache root, its
-entries and `MANIFEST.md` (which repeats this). It lives *outside every work tree* — the default is
-`D:\Temp\camel-readings-cache`, `--readings-cache` or `CAMEL_READINGS_CACHE` names another one, and a
-path inside a checkout is refused, because an entry there would be a file the next measurement
-carries as a change. Clearing it is always safe; every entry can be measured again:
-
-```powershell
-Remove-Item -LiteralPath D:\Temp\camel-readings-cache -Recurse -Force
-```
-
-The self-test that pins the behaviour down — hit, miss per key component, dirty tree not stored, a
-clone and an mtime touch still hitting — is `internal/tools/merge-readings-cache.test.mjs`; it uses a
-stand-in runner and needs no build host.
 
 ## Cleaning up: the record, not the guess
 

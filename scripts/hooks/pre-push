@@ -57,16 +57,18 @@ done <<EOF
 $refs
 EOF
 
-# --- D-1124-78: every arrival on `integration` is a merge of its tip -----------
+# --- every arrival on `integration` is a merge onto the tip it landed on ---------
 #
-# The tree rule below says *who* may write develop. This says what shape a commit may have to enter
-# `integration`, and it is checked here because a push can bypass the tool that makes the merge: on
-# 2026-11-24 the three seats satisfied a weaker rule (the push was a fast-forward) by merging
-# integration into the seat and fast-forwarding the seat onto it, and `50a77d7bf2` went in with one
-# parent and `63f019685b` as its only parent. Nothing refused any of those pushes, and every reader
-# of the first-parent chain read lane commits as arrivals. `merge-lane.ps1` asserts the same thing
-# about the commit it is about to push; this hook asserts it about anything that travels, including
-# a push made by hand or by a branch that was re-landed elsewhere.
+# The tree rule below says *who* may write develop. This says what shape the commits entering
+# `integration` may have, and it is checked here because a push can bypass the tool that makes the
+# merges: a seat that merges integration into itself and fast-forwards the seat onto it publishes a
+# history whose first-parent chain reads lane commits as arrivals.
+#
+# A push may carry one merge or a batch of them. Walked by first parent from the pushed tip down to
+# the remote tip, every commit is a merge, and the oldest of them has the remote tip as its first
+# parent: each merge lands on the tip the one before it left. A single-parent commit on that chain
+# is a lane commit that went in without a merge, and a chain that does not end at the remote tip is
+# integration having been merged into the seat.
 check_integration_shape() {
     while IFS=' ' read -r local_ref local_sha remote_sha; do
         # A delete carries no commit to have a shape.
@@ -76,36 +78,36 @@ check_integration_shape() {
             *[!0]*) : ;;
             *) continue ;;
         esac
-        parents=$(git rev-list --parents -n 1 "$local_sha" 2>/dev/null)
-        state=$?
-        if [ "$state" -ne 0 ] || [ -z "$parents" ]; then
-            echo "pre-push: refusing to push $local_sha to $integration_ref: the commit could not be read" >&2
-            echo "pre-push: (git rev-list exit $state). A commit this hook cannot read is not a merge." >&2
-            exit 1
-        fi
-        set -- $parents
-        count=$(($# - 1))
-        first=''
-        if [ "$count" -ge 1 ]; then
-            first=$2
-        fi
-        if [ "$count" -lt 2 ]; then
-            echo "pre-push: refusing to push $local_sha to $integration_ref: 一笔车道提交直接进了 integration" >&2
-            echo "pre-push: (a lane commit went straight in: it has $count parent, and every arrival is a merge)." >&2
-            echo 'pre-push: D-1124-78: 每笔到达都是合并，第一父 == 尖端；请把车道合进 integration 再推。' >&2
-            exit 1
-        fi
-        # Creating the branch: there is no tip for the first parent to be. All zeros is git's
+        # Creating the branch: there is no tip for the chain to end at. All zeros is git's
         # "nothing is there", and a shape check has nothing to compare against.
         case "$remote_sha" in
             '' | *[!0]*) : ;;
             *) continue ;;
         esac
-        if [ "$first" != "$remote_sha" ]; then
-            echo "pre-push: refusing to push $local_sha to $integration_ref: its first parent is $first, and $integration_ref is $remote_sha." >&2
-            echo 'pre-push: 你在把 integration 合进席位，而不是把车道合进 integration；' >&2
-            echo 'pre-push: 请 git checkout -B tmp origin/integration; git merge --no-ff <车道>（冲突解法用 git config rerere.enabled true 复用）后重来。' >&2
-            echo 'pre-push: D-1124-78: 每笔到达都是合并，第一父 == 尖端。' >&2
+        chain=$(git rev-list --first-parent --parents "$remote_sha..$local_sha" 2>/dev/null)
+        state=$?
+        if [ "$state" -ne 0 ]; then
+            echo "pre-push: refusing to push $local_sha to $integration_ref: the commits in $remote_sha..$local_sha could not be read" >&2
+            echo "pre-push: (git rev-list exit $state). A commit this hook cannot read is not a merge." >&2
+            exit 1
+        fi
+        [ -n "$chain" ] || continue
+        oldest=''
+        while IFS=' ' read -r commit first rest; do
+            [ -n "$commit" ] || continue
+            if [ -z "$rest" ]; then
+                echo "pre-push: refusing to push $local_sha to $integration_ref: $commit is a lane commit that went straight in" >&2
+                echo 'pre-push: (it has one parent) every arrival is a merge: merge the lane into integration and push that.' >&2
+                exit 1
+            fi
+            oldest="$first"
+        done <<EOF3
+$chain
+EOF3
+        if [ "$oldest" != "$remote_sha" ]; then
+            echo "pre-push: refusing to push $local_sha to $integration_ref: the oldest merge in the push has first parent $oldest, and $integration_ref is $remote_sha." >&2
+            echo 'pre-push: integration was merged into the seat instead of the lanes into integration;' >&2
+            echo 'pre-push: redo it with scripts/merge-batch.mjs, or git checkout -B tmp origin/integration; git merge --no-ff <lane>.' >&2
             exit 1
         fi
     done <<EOF
@@ -117,17 +119,62 @@ if [ -n "$integration_pushes" ]; then
     check_integration_shape
 fi
 
-# --- the record a merge carries, and where it is asked ------------------------
+# --- every merge that arrives on `integration` says what it carries --------------
 #
-# A push is not where a merge is judged. Under D-1126-47 the merge seats land a batch of lanes on one
-# reading each -- the line the lane reports from its own tree -- and they do not gate every merge
-# again: a gate refuses a push and not a commit, so asking this hook for one record per merge refused
-# the merges that were made exactly as the protocol asks, which is a check that teaches its own bypass.
+# Lanes are merged onto `integration` in batches without a test run (scripts/merge-batch.mjs), so
+# the one thing a push can still be asked is whether each merge in it says what it brought in. The
+# merge tool writes the lane's own one-line reading into the merge message as a
+# `Lane-Reading:` trailer; a merge that only changes documentation carries
+# `Lane-Reading: docs-only`. A merge without the trailer was made by hand, and its reader has
+# nothing to go on when the promotion later finds a red.
 #
-# The record itself has not gone away: `merge-lane.ps1` still writes one per merge it gates, and
-# `scripts/merge-record.mjs verify` still reads them where a merge is made. What changed is the
-# question this hook asks: every ref it sends is judged by the lines it adds (above), and a push to
-# `develop` is judged by the promotion record of the tip it publishes (below).
+# The range is the one the push sends, walked by first parent: the merges inside a lane's own
+# history are part of what that lane brought in, and a single-parent commit such as a documentation
+# page is not a merge and is not asked for a reading. A push that creates the branch has no range.
+check_integration_readings() {
+    while IFS=' ' read -r local_ref local_sha remote_sha; do
+        [ "$local_ref" != '(delete)' ] || continue
+        [ -n "$local_sha" ] || continue
+        case "$local_sha" in
+            *[!0]*) : ;;
+            *) continue ;;
+        esac
+        case "$remote_sha" in
+            '' | *[!0]*) : ;;
+            *) continue ;;
+        esac
+        merges=$(git rev-list --first-parent --merges "$remote_sha..$local_sha" 2>/dev/null)
+        state=$?
+        if [ "$state" -ne 0 ]; then
+            echo "pre-push: refusing to push $local_ref to $integration_ref: the merges in $remote_sha..$local_sha could not be listed (git rev-list exit $state)." >&2
+            echo "pre-push: an unreadable range is not an empty one." >&2
+            exit 1
+        fi
+        missing=''
+        for merge in $merges; do
+            reading=$(git log -n 1 --format='%(trailers:key=Lane-Reading,valueonly)' "$merge" 2>/dev/null | tr -d '[:space:]')
+            if [ -z "$reading" ]; then
+                missing="$missing $merge"
+            fi
+        done
+        if [ -n "$missing" ]; then
+            echo "pre-push: refusing to push $local_ref to $integration_ref: merge(s) without a Lane-Reading trailer:" >&2
+            for merge in $missing; do
+                echo "pre-push:   $merge $(git log -n 1 --format=%s "$merge")" >&2
+            done
+            echo 'pre-push: merge lanes with scripts/merge-batch.mjs, which writes the lane reading into the message;' >&2
+            echo 'pre-push: a merge that only changes documentation carries "Lane-Reading: docs-only".' >&2
+            exit 1
+        fi
+    done <<EOF2
+$integration_pushes
+EOF2
+}
+
+if [ -n "$integration_pushes" ]; then
+    check_integration_readings
+fi
+
 # Nothing here is about another branch: a hook that speaks on every push is read as noise.
 [ -n "$develop_push" ] || exit 0
 
@@ -203,22 +250,15 @@ fi
 # The tree rule above says *who* may write develop. This says *what* may be written: the tip this
 # push publishes has to carry a promotion record -- the whole layer measured on that tip, the
 # comparison with the previous promotion case by case, and what its timeouts said once they were run
-# alone. One pass record per merge is the per-merge reading and does not stand in for it: a tip is
-# read against the layer, not against the tree it lands on.
-#
-# It exists for the same reason the per-merge record does. The per-merge record is still what the
-# merge tool writes before every push to `integration`, and that is where a merge is read, one at a
-# time. A develop push is the one step that publishes a tip rather than a merge, so it is checked
-# against the reading of a tip; and the refusal names which of the two is missing, because the
-# repair differs (write the promotion record, or merge the lane again through the tool).
+# alone. A tip is read against the layer, not against the tree it lands on.
 if [ -n "$develop_local" ]; then
-    node "$top/scripts/merge-record.mjs" verify-promotion "$develop_local" >&2
+    node "$top/scripts/promotion-record.mjs" "$develop_local" >&2
     state=$?
     if [ "$state" -eq 1 ]; then
-        echo "pre-push: refusing to push $develop_push: 缺的是晋级记录，不是合并记录" >&2
+        echo "pre-push: refusing to push $develop_push: 缺晋级记录" >&2
         echo "pre-push: (the tip $develop_local has no promotion record -- the reading that covers a tip is the" >&2
         echo "pre-push: layer measured on it, the comparison with the previous promotion, and its timeouts run" >&2
-        echo "pre-push: alone; one pass record per merge is a different reading and does not replace this one)." >&2
+        echo "pre-push: alone)." >&2
         exit 1
     elif [ "$state" -ne 0 ]; then
         echo "pre-push: refusing to push $develop_push: the promotion record could not be read (node exit $state)." >&2

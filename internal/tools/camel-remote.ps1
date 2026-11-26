@@ -60,15 +60,14 @@
 # 7 means **the reading is complete and the exit code was not obtained**, which is neither a pass nor
 # a failure. It is the run that printed every line it had -- [provenance], [SUMMARY], [SPLIT] -- and
 # then did not close: the closing session outlived its own work (`exit` ends the remote shell, not
-# the stdout fd the run's descendants inherited), so for a while the exit code, the registry entry
-# and the merge record all went missing together. The run now carries its code in-band
+# the stdout fd the run's descendants inherited), so for a while the exit code and the registry entry
+# went missing together. The run now carries its code in-band
 # (`__CAMEL_REMOTE_EXIT__=`, its last line) and the finish has a deadline
 # (`-FinishTimeoutSeconds`); a finish that misses the deadline keeps the readings and reports this
 # code. Readers must treat 7 as its own state: not a green (nothing says the run's checkers were
 # green), not a red reading (the readings are all there and can be compared), and exactly the reason
-# a record may be written with `exit=unknown` and no push may follow it. The registry entry says
-# `exit=7 phase=unknown`, and `scripts/merge-record.mjs verify` refuses a record whose `exit` is
-# anything but "0" (absent means "0": records written before the field existed stay valid).
+# a reading may be kept with `exit=unknown` and no push may follow it. The registry entry says
+# `exit=7 phase=unknown`.
 #
 # --- where the machine-specific values live ---------------------------------
 # Nothing in this file names a host, a drive or a user's home. The ssh alias, the ssh/scp binaries,
@@ -427,8 +426,7 @@ param(
     # checkers. The block's presence is the only sign the channel ran -- a consumer must not read a
     # transcript without one as "no reds" -- so the markers are printed exactly when this switch is
     # given and a plan was selected, and the run's own narration is printed unchanged either way.
-    # The rows are what `scripts/merge-readings.mjs` compares case by case; nothing in this script
-    # reads them.
+    # The rows are what a reader compares case by case; nothing in this script reads them.
     [switch]$ListKnown,
     # Which dirty tracked files a run may carry from the MAIN checkout. The patch this script sends
     # is `git diff HEAD`, i.e. the working tree, not the commit: a file somebody edited and did not

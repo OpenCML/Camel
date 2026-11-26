@@ -86,27 +86,6 @@ function Get-CamelGateConfig {
         # Empty means no tree may push develop -- the hook refuses and says what to write, because
         # a rule it cannot read must not default to "allow".
         mergeWorktree    = ''
-        # The worktree a merge position measures its baseline in (merge-lane.ps1): the tree that is
-        # NOT the one being compared, built once and kept warm between merges. One absolute path,
-        # which the merge tool creates when it is not there yet. Empty means no baseline tree is
-        # named -- the merge refuses to start and says what to write, because a baseline measured in
-        # "some path" is a reading about somebody else's tree that looks exactly like a reading about
-        # this one.
-        baselineWorktree = ''
-        # Where the per-tip baseline checkouts live (merge-lane.ps1, merge-batch.ps1): the tree each
-        # baseline is measured in is named by the commit it measures, `<baselineRoot>\<sha>`, so the
-        # three seats that land on one tip share one tree, one host build and one reading instead of
-        # making three. A key and not a default, for the same reason as `baselineWorktree`: the path
-        # is this machine's. When it is set, `baselineWorktree` above is the legacy shape (`Get-
-        # BaselineCheckout` keeps it working and checks it against the tip before reusing it).
-        baselineRoot     = ''
-        # The batch driver's own: where `merge-batch.ps1` writes the two worktrees it measures. The
-        # gate does not read it and ignores the value, but it must not call it unknown: the batch
-        # copies this one file into every tree it reads, so a key the batch writes and the gate
-        # refuses stops the measurement before a single row -- which is exactly how the first
-        # end-to-end batch run of 2026-11-24 failed, with `has an unknown key 'scratchRoot'` as the
-        # only line in its baseline transcript. A settings file is one file for both tools.
-        scratchRoot      = ''
     }
 
     if ($null -ne $file) {
