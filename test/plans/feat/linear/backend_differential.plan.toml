@@ -45,4 +45,11 @@ args = ["${case}", "--camel", "${camel}", "--self-test", "--report", "test/resul
 expect_exit = 0
 expect_stdout_contains = ["[differential] ", "[self-test] self-agreement (std::nvm against std::nvm)", "seen=yes", "[DIFFERENTIAL] "]
 expect_stdout_not_contains = ["seen=no", "[self-test] a program disagreed with itself", "[self-test] planted difference: no line"]
+# The differential is multi-threaded work: every program the tree declares is run on each side, and
+# the eight jobs it runs them on sum to much more CPU time than the wall clock. One run over this
+# tree: 3,558 programs, 1,901 s of CPU against 252 s of wall. So the timeout is the liveness bound
+# (a program that stops working crosses it) and the budget is the work's own -- `test/tools/run-tests.mjs`
+# says a test whose CPU exceeds its wall clock states its cost as a `cpu_budget_ms`. 2,400 s leaves
+# about a quarter of room over that reading; work growing past it is the finding.
 timeout_ms = 1800000
+cpu_budget_ms = 2400000
