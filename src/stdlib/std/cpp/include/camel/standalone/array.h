@@ -789,25 +789,25 @@ Array<T> sliceSub(
     const bool wroteStart = (written & 2) != 0;
     int64_t start         = 0;
     int64_t count         = 0;
-    if (step > 0) {
-        start             = wroteStart ? startRaw : 0;
-        const int64_t end = wroteEnd ? endRaw : extent;
-        if (start < 0 || start > extent || end < 0 || end > extent) [[unlikely]] {
-            fault(
-                outOfRange,
-                {std::to_string(start), std::to_string(end), "an array", std::to_string(extent)});
-        }
-        count = start < end ? (end - start + step - 1) / step : 0;
-    } else {
-        start             = wroteStart ? startRaw : extent - 1;
-        const int64_t end = wroteEnd ? endRaw : -1;
-        if ((wroteStart && (start < 0 || start >= extent)) ||
-            (wroteEnd && (end < 0 || end > extent))) [[unlikely]] {
-            fault(
-                outOfRange,
-                {std::to_string(start), std::to_string(end), "an array", std::to_string(extent)});
-        }
-        count = start > end ? (start - end + (-step) - 1) / (-step) : 0;
+    // The positions the walk takes along the axis, as camel/core/slice.h reads them -- the one
+    // place the arithmetic lives, which the interpreter reads too, so a range is the same
+    // positions and the same fault in both. A bound is a bound of an integer sequence and not a
+    // position: a backward walk stops at -1 without taking it (that is what `t[::-1]` and
+    // `t[range(5, -1, -1)]` write), and only a walk that takes a position the axis does not have
+    // is out of range.
+    start             = wroteStart ? startRaw : (step > 0 ? 0 : extent - 1);
+    const int64_t end = wroteEnd ? endRaw : (step > 0 ? extent : -1);
+    count             = step > 0 ? (start < end ? (end - start + step - 1) / step : 0)
+                                 : (start > end ? (start - end - step - 1) / (-step) : 0);
+    bool outside      = start > extent || end > extent;
+    if (count > 0) {
+        const int64_t last = start + (count - 1) * step;
+        outside            = outside || start < 0 || last < 0 || last >= extent;
+    }
+    if (outside) [[unlikely]] {
+        fault(
+            outOfRange,
+            {std::to_string(start), std::to_string(end), "an array", std::to_string(extent)});
     }
     if (severalDimensions) {
         std::size_t stride[Array<T>::kMaxRank];
@@ -1236,8 +1236,8 @@ Array<T> meanAxis(const Array<T> &xs, int64_t axisArg, bool keepDims, const Site
         });
 }
 
-/// IEEE 754-2019 maximum of two values (camel/core/math/minmax.h, `maxOf`): a NaN on either side gives
-/// the canonical quiet NaN, -0 is below +0, and otherwise the larger operand -- chosen on the
+/// IEEE 754-2019 maximum of two values (camel/core/math/minmax.h, `maxOf`): a NaN on either side
+/// gives the canonical quiet NaN, -0 is below +0, and otherwise the larger operand -- chosen on the
 /// values but returned as its own bits, so the sign of a zero survives.
 template <typename T> T maxOf(T a, T b) {
     if constexpr (std::is_floating_point_v<T>) {

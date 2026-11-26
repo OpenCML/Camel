@@ -38,7 +38,7 @@ def translate(program, passes, entry_args=()):
     """(exit code, what the run wrote) of one translation. The arguments of the program's `main`
     come before the path, as they do in run.py."""
     rel = os.path.relpath(program, ROOT).replace("\\", "/")
-    p = subprocess.run([CAMEL] + list(entry_args) + [rel] + passes + ["std::cpp"], cwd=ROOT,
+    p = subprocess.run([CAMEL] + list(entry_args) + [rel] + passes + ["std::cpp", "std::nop"], cwd=ROOT,
                        capture_output=True, text=True, timeout=300)
     return p.returncode, p.stdout + p.stderr
 
