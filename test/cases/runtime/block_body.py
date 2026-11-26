@@ -55,7 +55,9 @@ def numbered(line):
 
 plain = stats()
 with_body = invoke(SOURCE, BODY_PASS, "std::stats", "std::nop")
-assert with_body.returncode == 0, with_body.stderr
+if with_body.returncode != 0:
+    tail = (with_body.stderr or with_body.stdout).strip().splitlines()
+    raise AssertionError(f"rc={with_body.returncode} {tail[-1][:200] if tail else 'no output'}")
 lines = with_body.stdout.splitlines()
 body_lines = [line for line in lines if line.startswith("BLOCK_BODY ")]
 call_lines = [line for line in lines if line.startswith("BLOCK_CALL ")]
@@ -99,8 +101,11 @@ assert entry_numbers, entry[0]
 before_graphs, after_graphs, before_nodes, after_nodes = (
     int(value) for value in entry_numbers.groups()
 )
-assert (before_graphs, before_nodes) == (after_graphs, after_nodes), entry[0]
-assert (before_graphs, before_nodes) == (plain["graphs"], plain["nodes"]), (entry[0], plain)
+assert before_graphs == after_graphs, entry[0]
+# The entry program gained the block's one node and kept every graph: the bodies' graphs are not
+# here, and nothing else moved either.
+assert before_nodes == plain["nodes"], (entry[0], plain["nodes"])
+assert (after_graphs, after_nodes) == (plain["graphs"], plain["nodes"] + 1), entry[0]
 
 # One kernel, two blocks, and the value each body computes: 41 -> 42, 5 -> 15. The ordinal in the
 # node's attributes is not in the call here, so the kernel could not have guessed the program from
@@ -113,8 +118,16 @@ for line in call_lines:
 assert values == {"block::body": [42, 2], "block::scaled": [15]}, values
 
 again = stats(BODY_PASS)
-assert again["graphs"] == plain["graphs"], (plain["graphs"], again["graphs"])
-assert again["nodes"] == plain["nodes"], (plain["nodes"], again["nodes"])
+# One node and one operator joined the entry program -- the same thing counted twice, so both rise
+# by one. The node stands between two nodes the graph already had, so the chain it joins has one
+# link more: one node in a chain is one edge more, which is the same count seen the other way. Its
+# argument is a value the graph already had, so no value node joined it. Calls, closures, branches
+# and the graphs themselves are untouched.
+assert again["nodes"] == plain["nodes"] + 1, (plain["nodes"], again["nodes"])
+assert again["opers"] == plain["opers"] + 1, (plain["opers"], again["opers"])
+assert again["edges"] == plain["edges"] + 1, (plain["edges"], again["edges"])
+for field in ("graphs", "direct_calls", "indirect_calls", "closures", "branches", "loops"):
+    assert again[field] == plain[field], (field, plain[field], again[field])
 assert again["graph_names"] == plain["graph_names"], (plain["graph_names"], again["graph_names"])
 
 document = invoke(SOURCE, BODY_PASS, "std::jgir", "std::nop")
@@ -129,6 +142,6 @@ assert len(written["graphs"]) == plain["graphs"], (len(written["graphs"]), plain
 print(
     f"block_body: body_graphs={bodies['body']['graphs']} body_nodes={bodies['body']['nodes']} "
     f"second_nodes={bodies['second']['nodes']} block_calls={sum(len(v) for v in values.values())} "
-    f"entry_graphs={plain['graphs']} entry_nodes={plain['nodes']}"
+    f"entry_nodes={plain['nodes']}->{again['nodes']} entry_opers={plain['opers']}->{again['opers']}"
 )
 print("Block body: PASS")

@@ -238,3 +238,52 @@ BLOCK_BODY entry graphs 2 -> 2 nodes 76 -> 76
 + `draft.addOperNode(type, nullptr, uri)`（算子指针留空，VM 按节点自己的 URI 解析实现，
 `camel_pass.cpp` 的 `splicePrint` 就是这么插节点的）+ 节点属性写序号 + 把函数的出口改为读它。
 届时 nodes `76 -> 77`；`operators` 会 +1，因为 OPER 节点本身就是算子节点——这一项没法"不变"。
+
+### 7.2 那一个节点：插进去，逐项对账
+
+同一个遍接着把块放进**外层图**：拿 `<main>` 图里出口原本读的那颗值当块入参，把出口改成读块的结果。
+（`RuntimeGraphDraftSession` + `draft.addOperNode(type, nullptr, uri)`，算子指针留空，VM 按节点上的
+URI 解析实现；属性写序号，出口的 `setNormInputs` 指向新节点。）读数：
+
+```
+BLOCK_BODY inserted block::body into the exit of <main>
+BLOCK_BODY entry graphs 2 -> 2 nodes 76 -> 77
+```
+
+`std::stats` 七项逐项对账（不跑这个遍 vs 跑）：
+
+| 项 | 变化 | 为什么这一项只能这样 |
+|---|---|---|
+| nodes | 76 → **77** | 块在外层图里就是 1 个节点 |
+| opers | **+1** | 一个 OPER 节点就是一个算子：同一个东西的两种数法 |
+| edges | 81 → **82** | 节点插在链中间：一条链多一个节点就多一条边 |
+| bytes | 2860 → 2908 | 程序的字节数，节点带记录，必然变；它不是"数了什么" |
+| graphs / direct_calls / indirect_calls / closures / branches / loops | **不变** | 没有调用、没有闭包、没有分支、没有图 |
+
+三条因此是**结构性**的、不是"偏差"：`opers` +1、`edges` +1、`bytes` 变，任何"只加一个节点"的
+改法都躲不开；能要求不动的只有 graphs 与后四类计数。
+
+### 7.3 插这一格时，树上三次拒绝了它（都不是格式问题）
+
+1. **节点的类型必须是值的类型**：第一版给了 `Int32`，提交拒绝
+   `graph 'main' node 73 (13): forwards a i32 as a int` —— Camel 的 `int` 不是 `i32`。改成取出口那颗
+   值的类型（`draft.header(arg)->dataType`）才对。
+2. **没人声明的算子按"有副作用"对待**（`operator_table.h` 的保守读法），而一个带着图里没声明的
+   副作用的节点，提交也拒绝：`reaches past the effect its own type declares`。于是块算子的记录里
+   必须写清它算什么、会不会抛：这个夹具的块体只有算术，记录就写 `pure`。
+3. 这两条合起来正好是**记录里要有什么**：块的算子记录不是"块体在哪"，而是**块体带来的语义**
+   （副作用的行、会不会终止、会不会抛）。真块要把这些**从块体程序自己的图里推出来**
+   （`OperatorTraits`，设计原则 3.3/3.9），这是下一步。
+
+### 7.4 一条约束管线顺序的事实（不是实现细节）
+
+`Executor::find` **不是虚函数**（`camel/execute/executor.h`），执行器的算表在它被造出来时就定死；
+而 `ExecutorManager::find(uri)` 是先取协议、再造执行器、再**把 URI 去掉协议**丢给它（`uri.substr(pos+1)`，
+即 `:body`）。于是：
+
+> **块的程序必须先注册进上下文的块程序处，执行器才可能被造出来，算子才可能取到。**
+> 顺序被钉死为"先编块体 → 登记 → 造执行器 → 跑"。反过来（先跑、后登记）拿不到实现，
+> 且不会以"找不到算子"的形态出现，而是执行器算表里没有这一项。
+
+同一个道理的反面：一个块在跑之前被再次编译（同名不同体），块程序处的 `add` 会保留第一次的条目
+（一个块，一份程序），不会悄悄换成第二份。

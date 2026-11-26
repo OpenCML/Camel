@@ -7,10 +7,12 @@
 #include "camel/core/error/diagnostics.h"
 #include "camel/core/module/source_loader.h"
 #include "camel/core/module/userdef.h"
+#include "camel/core/operator_table.h"
 #include "camel/execute/executor.h"
 #include "camel/execute/pass/registration.h"
 #include "camel/parse/parse.h"
 #include "camel/runtime/block_programs.h"
+#include "camel/runtime/draft_session.h"
 #include "camel/runtime/graph.h"
 #include "graph_caller.h"
 
@@ -289,6 +291,60 @@ BlockBodyTestPass::apply(const camel::runtime::Program *program, std::ostream &o
     // The same block again, after its first run is over: the program the context pinned is still
     // the one its operator runs, on this context, with nothing of the module left.
     callBlock(blocks[0].uri, 1);
+
+    // One OPER node in the entry program: the block stands where the function's exit took its
+    // value, and takes that value as its own argument. One node and one operator -- the same thing
+    // counted twice -- and nothing else in the program moves: the argument is a value the graph
+    // already had, so no value node joins it either.
+    camel::runtime::GCGraph *mainGraph = nullptr;
+    for (camel::runtime::GCGraph *graph : program->graphs()) {
+        if (graph->name() == "main") {
+            mainGraph = graph;
+        }
+    }
+    if (mainGraph == nullptr) {
+        os << "BLOCK_BODY failed to insert the block: no <main> graph\n";
+        return program;
+    }
+    {
+        camel::runtime::RuntimeGraphDraftSession session(context_, program);
+        camel::runtime::GraphTransaction &transaction                 = session.edit(mainGraph);
+        camel::runtime::GraphDraft &draft                             = transaction.edit();
+        const camel::runtime::gc_node_ref_t exit                      = draft.exitNode();
+        const std::span<const camel::runtime::gc_node_ref_t> returned = draft.normInputsOf(exit);
+        std::vector<camel::runtime::gc_node_ref_t> arguments(returned.begin(), returned.end());
+        const camel::runtime::BlockProgram *first = context_->blockPrograms().byUri(blocks[0].uri);
+        if (first == nullptr) {
+            os << "BLOCK_BODY failed to insert the block: it is not in the store\n";
+            return program;
+        }
+        // The operator's implementation is left out on purpose: the node names its URI and the
+        // executor manager resolves it per context (a draft that carried a function pointer could
+        // not be written out and read back). The node's type is the value's: a body answers the
+        // type its parameter has, and that is what the exit now reads.
+        if (arguments.empty()) {
+            os << "BLOCK_BODY failed to insert the block: the exit reads no value\n";
+            return program;
+        }
+        // An operator nobody declared is treated as having side effects (operator_table.h: an
+        // undeclared operator is conservative), and a node with an effect the graph's type does
+        // not declare is refused at the commit. The body here is arithmetic and nothing else, so
+        // the block's record says so; a real block derives these traits from the program of its
+        // body (the effects its graphs declare), which is the step after this one.
+        camel::core::OperatorTraits traits;
+        traits.pure = true;
+        camel::core::OperatorTable::instance().set(blocks[0].uri, traits);
+        camel::core::type::Type *answered = draft.header(arguments[0])->dataType;
+        const camel::runtime::gc_node_ref_t call =
+            draft.addOperNode(answered, nullptr, blocks[0].uri);
+        draft.setNodeAttrs(call, camel::runtime::blockProgramAttrs(first->ordinal));
+        draft.setNormInputs(call, arguments);
+        const camel::runtime::gc_node_ref_t toExit = call;
+        draft.setNormInputs(exit, std::span<const camel::runtime::gc_node_ref_t>(&toExit, 1));
+        const std::string uri = blocks[0].uri;
+        program               = session.commit();
+        os << std::format("BLOCK_BODY inserted {} into the exit of <main>\n", uri);
+    }
 
     const std::vector<std::string> entryAfter = graphNames(*program);
     os << std::format(

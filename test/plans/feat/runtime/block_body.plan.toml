@@ -19,5 +19,5 @@ tool = "python"
 case = "../../../cases/runtime/block_body.py"
 args = ["${case}", "--camel", "${camel}"]
 expect_exit = 0
-expect_stdout_contains = ["BLOCK_BODY built body graphs=2 nodes=6", "BLOCK_BODY built second graphs=2 nodes=6", "BLOCK_CALL block::body argument=41 value=42", "BLOCK_CALL block::scaled argument=5 value=15", "BLOCK_CALL block::body argument=1 value=2", "BLOCK_BODY entry graphs 2 -> 2 nodes 76 -> 76", "block_body: body_graphs=2 body_nodes=6", "Block body: PASS"]
+expect_stdout_contains = ["BLOCK_BODY built body graphs=2 nodes=6", "BLOCK_BODY built second graphs=2 nodes=6", "BLOCK_CALL block::body argument=41 value=42", "BLOCK_CALL block::scaled argument=5 value=15", "BLOCK_CALL block::body argument=1 value=2", "BLOCK_BODY inserted block::body into the exit of <main>", "BLOCK_BODY entry graphs 2 -> 2 nodes 76 -> 77", "block_body: body_graphs=2 body_nodes=6 second_nodes=6 block_calls=3 entry_nodes=76->77 entry_opers=", "Block body: PASS"]
 timeout_ms = 60000
