@@ -1,0 +1,21 @@
+# Fixture of test/tools/selftest/run.mjs: the one case whose bound takes it twice. It is a red on
+# purpose -- "timed out on the first pass and again on re-run" is the verdict this file exists to
+# pin -- so it lives in a plan of its own that only the self-test starts and judges, never in a run
+# a layer reads. Its `expect_stdout_contains` would be satisfied by neither attempt: the case waits
+# 6000 ms and both bounds (2000 ms, then 4000 ms) kill it before it prints.
+id = "selftest.timeout_twice"
+order = 6
+tier = "fast"
+
+[defaults]
+tool = "node"
+kind = "behavior"
+case = "sleep_ms.mjs"
+normalizers = ["normalize_newlines"]
+
+[[tests]]
+name = "timeout.twice"
+desc = "It runs past both bounds: the case stays red, and its line says both attempts timed out."
+args = ["${case}", "6000"]
+timeout_ms = 2000
+expect_exit = 0

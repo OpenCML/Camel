@@ -776,6 +776,19 @@ const DEBUG_BUILD_TIMEOUT_SCALE = 4
 // say about it.
 const TIMEOUT_MARGIN = 4
 
+// What a timed-out case's second attempt is given: twice the bound the first attempt had. The
+// factor is on the *bound* and not on the case, so the double is a statement about the number that
+// decided the first verdict -- a floor would be a second bound the plan never wrote, and an
+// absolute minimum would make the same plan read differently on a fast host and a slow one.
+const RERUN_TIMEOUT_FACTOR = 2
+
+// Where a second attempt's record goes, under the run's own directory: the first attempt's logs
+// stay the first attempt's (`rerun/first/`), and a case that ends green on the second attempt is
+// not a case whose timed-out output was overwritten. Both are under `rerun/`, so a reader of a run
+// directory can tell the two attempts apart from the ordinary `pass/` and `fail/` trees.
+const RERUN_FIRST_DIR = 'rerun/first'
+const RERUN_SECOND_DIR = 'rerun/second'
+
 // What the run says where that margin cannot be read at all, and the reason a test's record carries
 // in that case. It is a sentence about the host, not about the test, so it never fails one: a host
 // with no CPU figure is asked for no margin rather than for a wall-clock one, which would make the
@@ -1592,6 +1605,72 @@ function formatMetric(result) {
     return ''
 }
 
+/**
+ * Whether this entry's line waits for a second attempt: it failed because its own bound took it.
+ *
+ * `timedOut` is `runProcess`'s own reading -- the child was killed at its `timeout_ms` -- and it is
+ * the only shape a starved case produces, which is why it is the whole condition. A failure with an
+ * exit code has already answered its question; a verification script's timeout is that script's
+ * bound (it fails the case through `verifyFailureLines`), not the case's, and is left alone.
+ *
+ * A marked known failure is not re-run: its red is already excused, and a second attempt would
+ * answer a different question ("has the mark healed?") whose rule is `known_fail_ends_when`.
+ */
+function rerunCandidate(entry, options) {
+    if (options.compileOnly) return false
+    const outcome = entry.outcome
+    if (!outcome || outcome.status !== 'fail' || !outcome.result) return false
+    if (entry.test.__knownFail) return false
+    return outcome.result.timedOut === true
+}
+
+/**
+ * The host's load average in the shape `internal/tools/camel-remote.ps1` prints it, or null where
+ * this host has no reading.
+ *
+ * A second attempt is a timing, and a timing means nothing without the load it was taken under: on
+ * this project's build host the 1-minute load is 22-31 most of the day, and the same case has been
+ * measured at 12.3 s CPU and at 80.6 s for the same work. So the line that reports the second
+ * attempt states the load beside it, and where there is no reading it says so instead of printing
+ * zeros -- `os.loadavg()` answers [0, 0, 0] on Windows, which is a reading of nothing dressed as a
+ * reading of no load.
+ */
+function hostLoadReading() {
+    try {
+        const fields = fs.readFileSync('/proc/loadavg', 'utf8').trim().split(/\s+/).slice(0, 3).map(Number)
+        if (fields.length === 3 && fields.every(Number.isFinite)) return fields
+    } catch {
+        // No /proc/loadavg on this host: the caller prints `load unreadable here`.
+    }
+    return null
+}
+
+function formatLoad(load) {
+    if (load === null) return 'load unreadable here'
+    return `load ${load.map((value) => value.toFixed(2)).join(' ')} (1m/5m/15m)`
+}
+
+/**
+ * What a re-run case's one line says beyond its verdict: that the first attempt timed out, and what
+ * the second attempt did with twice the bound. Both facts stay on the line, because the point of
+ * the mechanism is that a green reached this way is not the same reading as a green reached first
+ * time -- and a failure reached this way is not the same as one that never got a second look.
+ */
+function rerunNote(status, result, load) {
+    const opening = 'timed out on the first pass'
+    if (status === 'pass') {
+        return `${opening}, passed in ${formatDurationMs(result.wallMs)} on re-run (${formatLoad(load)})`
+    }
+    // The second attempt can end otherwise than by its bound, and each shape is said: a crash on
+    // the second attempt is a failure like any other, and a line that called it a timeout would be
+    // the one reading this lane must never produce.
+    if (result.timedOut) return `${opening} and again on re-run (${formatLoad(load)})`
+    if (result.signal) {
+        return `${opening}, killed by ${result.signal} on re-run (${formatLoad(load)})`
+    }
+    return `${opening}, failed again on re-run (${formatLoad(load)})`
+}
+
 function printPlanHeader(plan) {
     const relativePath = path.relative(PLANS_ROOT, plan.__planPath).replace(/\\/g, '/')
     const showPath = relativePath.split('.')[0].replace(/\//g, '.')
@@ -1962,10 +2041,21 @@ function printRunSummary(summary, transcript) {
     // the two it was without the reader having to look at the individual failures.
     const timedOut = summary.timedOut > 0 ? `, timed out: ${summary.timedOut}` : ''
     const crashed = summary.crashed > 0 ? `, killed by a signal: ${summary.crashed}` : ''
+    // The states a second attempt was given, as its own two fields and never inside `pass`:
+    // `pass` answers "how many cases are green", and a case that passed on its second attempt IS
+    // green -- the gate compares a case by its name, and that name is green -- so it is counted
+    // there once, not twice. `re-run` answers "how many cases were given a second attempt" and
+    // `re-run passed` how many of those came back green. Merging the pair into `pass` would hide
+    // first-attempt timeouts behind a clean number; merging them into `timed out` would give that
+    // field two meanings (today it counts the failures whose exit code the bound took), which is
+    // exactly the two-facts-one-number shape this runner keeps out of its records.
+    const rerun = summary.rerun > 0
+        ? `, re-run: ${summary.rerun}, re-run passed: ${summary.rerunPassed}`
+        : ''
     console.log('')
     const line =
         `${COLORS.cyan}[SUMMARY]${COLORS.reset} total: ${total}, pass: ${summary.pass}, fail: ${summary.fail}` +
-        `${skipped}${known}${timedOut}${crashed}${staleAllowedMark()}`
+        `${skipped}${known}${timedOut}${crashed}${rerun}${staleAllowedMark()}`
     console.log(line)
     // The same line, without its colour, closes the transcript: the file then states the total its
     // own lines were counted under, so a reader of the file alone -- `transcript.mjs --check` -- can
@@ -3014,9 +3104,16 @@ async function runOneTest(test, sharedVars, logContext, scratch, scratchRelative
     const pathKey = IS_WINDOWS ? Object.keys(env).find((key) => key.toUpperCase() === 'PATH') || 'PATH' : 'PATH'
     env[pathKey] = `${path.join(env.CAMEL_HOME, 'bin')}${path.delimiter}${env[pathKey] || ''}`
 
-    const timeoutMs =
+    // A second attempt of a case whose first attempt its own bound took gets twice that bound, and
+    // nothing else about the attempt differs: same entry, same case, same environment, same
+    // assertions. Doubling only -- no floor and no absolute minimum, because a second rule for the
+    // same number is a second truth about what the plan asked for. The plan's `timeout_ms` is
+    // multiplied, so the Debug factor and `CAMEL_TEST_TIMEOUT_SCALE` apply to both attempts in the
+    // same proportion and the second bound is the first one doubled whatever they say.
+    const attemptTimeoutMs =
         (test.timeout_ms || 10000) * TIMEOUT_SCALE *
         (logContext.options.build === 'debug' ? DEBUG_BUILD_TIMEOUT_SCALE : 1)
+    const timeoutMs = logContext.rerun ? attemptTimeoutMs * RERUN_TIMEOUT_FACTOR : attemptTimeoutMs
     // Every test on a host whose kernel reports CPU time runs under the wrapper that reports its
     // own: the command and its environment are unchanged, the wrapper reaps this test's tree and
     // puts the kernel's figure on a fourth pipe (test/tools/child-cpu.mjs). A test that declares
@@ -3269,13 +3366,13 @@ async function runOneTest(test, sharedVars, logContext, scratch, scratchRelative
  * file was rewritten once for every test in it. See test/tools/runner-output.mjs, and
  * docs/test-plans.md, "Runner Output".
  */
-/** The directory one test's log files go into: `<run>/<status>/<plan>/<test>/`. */
-function logPathOf(plan, test, status, logDir) {
-    return path.join(logDir, status, sanitizeSegment(plan.id), sanitizeSegment(test.name))
+/** The directory one test's log files go into: `<run>/<attempt>/<status>/<plan>/<test>/`. */
+function logPathOf(plan, test, status, logDir, attempt = '') {
+    return path.join(logDir, attempt, status, sanitizeSegment(plan.id), sanitizeSegment(test.name))
 }
 
-function writeLogFiles(plan, test, result, status, logDir) {
-    const statusDir = logPathOf(plan, test, status, logDir)
+function writeLogFiles(plan, test, result, status, logDir, attempt = '') {
+    const statusDir = logPathOf(plan, test, status, logDir, attempt)
     ensureDir(statusDir)
     fs.writeFileSync(path.join(statusDir, 'stdout.txt'), result.stdout)
     fs.writeFileSync(path.join(statusDir, 'stderr.txt'), result.stderr)
@@ -3321,6 +3418,12 @@ function writeLogFiles(plan, test, result, status, logDir) {
                     : null,
                 wall_ms: result.wallMs,
                 timeout_ms: result.timeoutMs ?? null,
+                // The second attempt of a case whose first attempt timed out, as its own record:
+                // which attempt this is, the load it was taken under, and the first attempt's own
+                // facts. Nested rather than merged into the fields above, because `timed_out: true`
+                // beside this one would otherwise have to mean either "this attempt" or "the case",
+                // and a field with two meanings is not a record.
+                rerun: result.rerun ?? null,
                 // The CPU reading every test records: the figure the kernel charged its own process
                 // tree, and the budget it declares if it declares one. The wall clock above is
                 // provenance, not the bound.
@@ -4871,6 +4974,10 @@ async function executePlans(plans, options, sharedVars, logDir) {
     const verifications = new Slots(options.jobs)
     const summary = {
         pass: 0, fail: 0, skip: 0, xfail: 0, timedOut: 0, crashed: 0,
+        // How many cases were given a second attempt because their first attempt timed out, and
+        // how many of those came back green. The green one is already in `pass`; these two say that
+        // it was not green first time (see `printRunSummary`).
+        rerun: 0, rerunPassed: 0,
         // One row per known failure this run accepted: the name the `[XFAIL]` line printed and the
         // sentence the plan wrote for what would end it. Collected where the verdict is counted,
         // because that is the one place that knows the mark fired -- a roster read off the plan tree
@@ -4898,6 +5005,19 @@ async function executePlans(plans, options, sharedVars, logDir) {
     const printResult = (entry) => {
         const { plan, test, outcome } = entry
         entry.logWriteMs = 0
+        // A case its own bound took is not printed here: it gets a second attempt at the end of the
+        // run (`executePlans`), and its one line then carries both attempts. Printing the timeout
+        // now would print the case's verdict twice -- once red, once whatever the second attempt
+        // decided -- and a reader counting lines would count two verdicts for one case. The first
+        // attempt's logs are written now, under `rerun/first/`, so the timeout's own output and the
+        // bound that produced it are kept instead of being overwritten by the second attempt.
+        if (rerunCandidate(entry, options)) {
+            entry.rerunPending = true
+            const writeStarted = performance.now()
+            writeLogFiles(plan, test, outcome.result, outcome.status, logDir, RERUN_FIRST_DIR)
+            entry.logWriteMs = performance.now() - writeStarted
+            return
+        }
         // The one output `--list-known` has, recorded in the order the results are printed -- plan
         // and test order, whichever test finished first -- and before the skip below returns, since
         // a skipped case is one of the four verdicts this list exists to tell apart. `xfail` is
@@ -5235,6 +5355,112 @@ async function executePlans(plans, options, sharedVars, logDir) {
 
     await Promise.all(entries.map((entry) => entry.promise))
     drain()
+    // A timeout is the one verdict a loaded host can hand a case that did nothing wrong: the child
+    // is killed at its bound, and a starved case and a slow one read the same in that kill. So every
+    // case whose bound took it gets one more attempt -- at the end of the run, one at a time, with
+    // twice the bound (`runOneTest` doubles it from `logContext.rerun`). Nothing else is re-run: a
+    // case that failed with an exit code, a diagnostic or a verification failure has answered its
+    // question with its own output.
+    //
+    // Serial and after every other case, because a timeout that came from being starved must not be
+    // re-tested beside the same crowd it was starved by. Nothing takes a slot here: there is nothing
+    // left to run beside it, and the verification lane is the only permit still needed.
+    //
+    // The second attempt is judged by `runOneTest` -- the same assertions, the same normalizers, the
+    // same CPU-budget and timeout-margin rules -- so the re-run decides exactly what the first
+    // attempt would have decided given room. It is a run, not an excuse: a case that times out
+    // again stays red, and one that dies by a signal on the second attempt is a failure too.
+    const rerunWaiting = entries.filter((entry) => entry.rerunPending === true)
+    for (const entry of rerunWaiting) {
+        const { plan, test } = entry
+        const first = entry.outcome.result
+        const load = hostLoadReading()
+        // A plan header for a case whose plan's block is already above: the line is printed where
+        // the second attempt happened, and a bare case name at the end of a multi-plan run would
+        // not say which plan it belongs to. Printed only when the plan changes, so a run whose
+        // timeouts all sit in one plan gets one header.
+        if (plan !== printedPlan) {
+            printPlanHeader(plan)
+            printedPlan = plan
+        }
+        const scratch = createTestScratchDir(test)
+        const scratchRelative = path.relative(REPO_ROOT, scratch).split(path.sep).join('/')
+        const flight = enterInFlight(test)
+        let result
+        try {
+            result = await runOneTest(
+                test,
+                sharedVars,
+                {
+                    options,
+                    completed,
+                    planId: plan.id,
+                    // Not `slotTiming`'s: a second attempt is not a slot of the layer's schedule,
+                    // and pretending it were would move the `[SLOT]` line's intervals by a number
+                    // the layer never paid. Its duration is on its line and in its `meta.json`.
+                    clock: null,
+                    verifications,
+                    releaseSlot: null,
+                    rerun: { attempt: 2 },
+                },
+                scratch,
+                scratchRelative,
+                {}
+            )
+        } catch (error) {
+            result = runnerErrorResult(
+                path.resolve(path.dirname(test.__planPath), test.case),
+                error && error.message ? error.message : String(error)
+            )
+        } finally {
+            leaveInFlight(flight)
+        }
+        // Both attempts on the case's record: the first attempt's bound and duration, the load the
+        // second was taken under. `first_pass` is named as an attempt, so nothing here reads as a
+        // field of the case that has two meanings.
+        result.rerun = {
+            attempt: 2,
+            load,
+            first_pass: { wall_ms: first.wallMs, timeout_ms: first.timeoutMs, timed_out: true },
+        }
+        const outcome = { status: result.status, result, metric: formatMetric(result), failures: result.failures }
+        // One case, one verdict, one line: the summary counts the case once (`total` does not move
+        // with an attempt), `rerun` counts the attempt, and `pass` counts the verdict it reached.
+        summary.rerun += 1
+        if (outcome.status === 'pass') {
+            summary.pass += 1
+            summary.rerunPassed += 1
+        } else {
+            summary.fail += 1
+            if (result.timedOut) summary.timedOut += 1
+            else if (result.signal) summary.crashed += 1
+        }
+        transcript.caseLine(printStatusLine(outcome.status, test.name, rerunNote(outcome.status, result, load)))
+        if (options.listKnownRows) {
+            const firstFailure = Array.isArray(outcome.failures) && outcome.failures.length > 0
+                ? outcome.failures[0]
+                : null
+            options.listKnownRows.push({
+                name: listedName(plan, test),
+                verdict: outcome.status,
+                reading: normalizeReading(firstFailure),
+                reading_version: READING_NORMAL_VERSION,
+            })
+        }
+        if (outcome.status !== 'pass') {
+            const pointer = fullOutputLine(logPathOf(plan, test, outcome.status, logDir, RERUN_SECOND_DIR))
+            printDetailLines([pointer])
+            printDetailLines(outcome.failures)
+            printMatchDiagnostics(result.matchDiagnostics)
+            printFailedOutput(result, pointer)
+        }
+        writeLogFiles(plan, test, result, outcome.status, logDir, RERUN_SECOND_DIR)
+        // What a later case reads: a `passes` condition that waits on this case's verdict sees the
+        // attempt that decided it, not the one that timed out.
+        completed.set(`${plan.id}/${test.name}`, result)
+        completed.set(test.name, result)
+        fs.rmSync(scratch, { recursive: true, force: true })
+    }
     settlePassesConditions(entries, completed, summary)
     const stalls = stopLoopMonitor()
     const timings = []
