@@ -1317,13 +1317,10 @@ bool Builder::genericCandidateBinds(
     // the instance is bound (`instantiateForCallBinding`, the loop over every argument with the
     // `with` ones first). Binding alone does not answer it: `bindTypeVars` returns true for a
     // pattern whose variables are all bound already -- "Nothing to bind below: whether the argument
-    // fits is the ordinary check's question" -- so `initial: U` with `U` bound to `int[]` "bound" a
-    // `Range` here while the binder refused the call, and the two readers of one question
-    // disagreed. That disagreement is what the retry of a refused call could not get past
-    // (`instantiateForCall`): this reader said the candidate takes the arguments, the binder said
-    // it does not, and the retry asked this one again (measured on
-    // `(0 .. 3)->reduce<keep, 0 .. 3>`). The ordinary check this one leaves to the binder, the norm
-    // parameters above already make; a `with` argument makes it here for the same reason.
+    // fits is the ordinary check's question" -- so `initial: U` with `U` bound to `int[]` binds a
+    // `Range` without refusing it, and the answer has to be given here as well. The ordinary check
+    // stays with the binder, as the norm parameters above do; a `with` argument makes it here for
+    // the same reason.
     // The positions end before a `with` pack's `void` slot (`with <..ws>`): what a call writes
     // beyond the fixed parameters is the pack's, and no parameter of it is one argument.
     const size_t withParams = signature->withTypesCount() - (signature->hasWithRest() ? 1 : 0);
@@ -1405,8 +1402,13 @@ generic_template_ptr_t Builder::chooseGenericOverload(
     // they are declared in.
     const auto binds = [&](const generic_template_ptr_t &tmpl) {
         return genericCandidateBinds(
-            tmpl, withInputs, normInputs, withTypes, normTypes, &unmetConditions);
-    };    // A name with one generic function keeps it, and its own report when the arguments do not
+            tmpl,
+            withInputs,
+            normInputs,
+            withTypes,
+            normTypes,
+            &unmetConditions);
+    }; // A name with one generic function keeps it, and its own report when the arguments do not
     // fit; only a name with several needs the choice made here.
     if (candidates.size() == 1) {
         return candidates.front();
@@ -1488,7 +1490,13 @@ compile_graph_ptr_t Builder::instantiateForCall(
     const GCT::node_ptr_t &call, Type *expectedResult) {
     try {
         return instantiateForCallBinding(
-            tmpl, withInputs, normInputs, withTypes, normTypes, call, expectedResult);
+            tmpl,
+            withInputs,
+            normInputs,
+            withTypes,
+            normTypes,
+            call,
+            expectedResult);
     } catch (const GenericCallRejected &rejected) {
         // The name's own declaration is one candidate, and the call is not an instance of it: a
         // name of a module is declared over the one type its module writes (`count` over an
@@ -1516,7 +1524,12 @@ compile_graph_ptr_t Builder::instantiateForCall(
         }
         if (!collected.graphs.empty() || !collected.templates.empty()) {
             if (compile_graph_ptr_t chosen = chooseOperatorOverload(
-                    collected, withInputs, normInputs, withTypes, normTypes, call,
+                    collected,
+                    withInputs,
+                    normInputs,
+                    withTypes,
+                    normTypes,
+                    call,
                     [](FunctionType *, bool) { return true; })) {
                 CAMEL_LOG_DEBUG_S(
                     "GIR Builder",
@@ -1528,8 +1541,7 @@ compile_graph_ptr_t Builder::instantiateForCall(
         }
         diags_->of(SemanticDiag::GenericArgumentsMismatch)
             .atOrigin(rejected.call->origin())
-            .commit(
-                rejected.name, rejected.arguments, rejected.why, rejected.signature);
+            .commit(rejected.name, rejected.arguments, rejected.why, rejected.signature);
         throw BuildAbortException();
     }
 }
@@ -1588,7 +1600,11 @@ compile_graph_ptr_t Builder::instantiateForCallBinding(
     };
     const auto reject = [&](const std::string &why) {
         throw GenericCallRejected{
-            call, tmpl->name, argTypesStr(), why, tmpl->name + ": " + signature->toString()};
+            call,
+            tmpl->name,
+            argTypesStr(),
+            why,
+            tmpl->name + ": " + signature->toString()};
     };
     if (declaredWithCount != withTypes.size()) {
         // Every argument written in the parentheses (`take(xs, 2)`): say which parameters
@@ -2136,13 +2152,17 @@ void Builder::settleGenericOperatorArguments(
             }
             for (size_t i = 0; i < withTypes.size(); ++i) {
                 if (!writtenParameterTakes(
-                        signature->withTypeAt(i), valueTypeOf(withTypes[i]), bindings)) {
+                        signature->withTypeAt(i),
+                        valueTypeOf(withTypes[i]),
+                        bindings)) {
                     return false;
                 }
             }
             for (size_t i = 0; i < normTypes.size(); ++i) {
                 if (!writtenParameterTakes(
-                        signature->normTypeAt(i), valueTypeOf(normTypes[i]), bindings)) {
+                        signature->normTypeAt(i),
+                        valueTypeOf(normTypes[i]),
+                        bindings)) {
                     return false;
                 }
             }
@@ -2188,20 +2208,20 @@ void Builder::settleGenericOperatorArguments(
             }
         } else {
             const auto &group = std::get<oper_group_ptr_t>(target);
-            const auto add = [&](const std::string &uri, camel::core::OperId oper,
-                                 FunctionType *candidate) {
-                for (const auto &known : operators) {
-                    if (known->oper() == oper && known->funcType()->equals(candidate)) {
-                        return;
+            const auto add =
+                [&](const std::string &uri, camel::core::OperId oper, FunctionType *candidate) {
+                    for (const auto &known : operators) {
+                        if (known->oper() == oper && known->funcType()->equals(candidate)) {
+                            return;
+                        }
                     }
-                }
-                if (accepts(candidate)) {
-                    operators.push_back(
-                        std::make_shared<OperatorIndex>(group->name(), candidate, uri, oper));
-                }
-            };
+                    if (accepts(candidate)) {
+                        operators.push_back(
+                            std::make_shared<OperatorIndex>(group->name(), candidate, uri, oper));
+                    }
+                };
             for (size_t i = 0; i < group->resolvers().size(); ++i) {
-                const std::string &uri = group->resolvers()[i].first;
+                const std::string &uri               = group->resolvers()[i].first;
                 const type::resolver_ptr_t &resolver = group->resolvers()[i].second;
                 if (FunctionType *fixed = resolver->fixedSignature()) {
                     add(uri, group->operAt(i), fixed);

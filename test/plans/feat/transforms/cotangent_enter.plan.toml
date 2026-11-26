@@ -5,8 +5,8 @@
 #
 # `modules/transforms/transpose/walkmachinery.cpp#ruleCotangentOf` makes a step wherever a value's
 # type goes from `T` to `T[..]`: a law that writes its cotangent port `(ct: T[..])` is entered from
-# the element, the rank coming from the value (design principles 5.1 and 5.4, the author's
-# `enter-by-structure` ruling). The operator the walk writes there is `:op/enter` --
+# the element, the rank coming from the value (design principles 5.1 and 5.4). The operator the walk
+# writes there is `:op/enter` --
 # not `:op/cast`, which is what a *program* writes when it converts and which is `mayFault = true`;
 # the step here is taken only after `port->assignableFrom(ctType)` held, so it cannot fault. Both
 # kernels call `castSlotFrom`, so the numbers are the same either way: **only the operator says

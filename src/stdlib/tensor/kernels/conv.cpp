@@ -264,7 +264,7 @@ Array *conv2dIn(
 // they hand back. `conv2dInputGradIn` never touches `input`'s values (`col2im` writes the whole
 // output and reads only `g`), and `conv2dKernelGradIn` never touches `kernel`'s values (`pdw`
 // accumulates over every element and starts at zero). So the operand arrives here as extents,
-// which is what lets the statement carry them (see `conv2dInputGradStated` below).
+// which is what lets the statement carry them (see `conv2dInputGradIn` below).
 template <typename T>
 Array *conv2dInputGradIn(
     const ConvGeometry &g, std::span<const int64_t> inputExtents, const Array *kernel,
