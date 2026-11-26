@@ -2,19 +2,22 @@ id = "runtime.block_body"
 order = 389
 tier = "fast"
 tags = ["feat", "runtime", "graph", "block"]
-desc = "A body handed to the compiler as text becomes a program of its own -- compiled by the same compiler, with its own graphs -- and the program it was compiled for keeps exactly the graphs and nodes it had: none of the body's joins it, and `std::jgir` writes none of them. The block's operator and the front end that writes such a body are the steps after this one; this locks the half that can be measured without them."
+desc = "A body handed to the compiler as text is compiled by the same compiler into a program of its own, and the block's operator -- one kernel, reached through the executor manager by its URI -- runs it and answers the body's value, twice for the same block; the program the body was compiled for keeps exactly the graphs and nodes it had, and `std::jgir` writes none of the body's. The block's own node in the outer graph, its record and the front end that writes a body are the steps after this one; this locks what can be measured without them."
 
-# What the case measures, in one run of each pipeline: `test::block_body` compiles `body` as a
-# program of its own (`compileAsProgram`, encoded by the same loader a pass library goes through)
-# and prints its graph count; `std::stats` then reads the entry program, which must be unchanged;
-# `std::jgir` writes that program's graphs, none of which may be the body's.
+# What the case measures, in one run of each pipeline: `test::block_body` compiles two bodies as
+# programs of their own (`compileAsProgram`, encoded by the same loader a pass library goes through),
+# registers them in the context's store and prints their graph counts; it then calls each block's
+# operator through the executor manager, with the ordinal in the node's attributes, and prints the
+# value the body computed -- and calls the first block a second time, after its first run is over.
+# `std::stats` then reads the entry program, which must be unchanged; `std::jgir` writes that
+# program's graphs, none of which may be a body's.
 [[tests]]
 name = "runtime.block_body.the_body_is_a_program_of_its_own"
-desc = "The body compiles into its own program with its own graphs, and the entry program's graphs and nodes are the ones it had before the body was built."
+desc = "The body compiles into its own program with its own graphs, the block's operator runs it and answers its value, and the entry program's graphs and nodes are the ones it had before the body was built."
 kind = "behavior"
 tool = "python"
 case = "../../../cases/runtime/block_body.py"
 args = ["${case}", "--camel", "${camel}"]
 expect_exit = 0
-expect_stdout_contains = ["block_body: body_graphs=", "Block body: PASS"]
+expect_stdout_contains = ["BLOCK_BODY built body graphs=2 nodes=6", "BLOCK_BODY built second graphs=2 nodes=6", "BLOCK_CALL block::body argument=41 value=42", "BLOCK_CALL block::scaled argument=5 value=15", "BLOCK_CALL block::body argument=1 value=2", "BLOCK_BODY entry graphs 2 -> 2 nodes 76 -> 76", "block_body: body_graphs=2 body_nodes=6", "Block body: PASS"]
 timeout_ms = 60000

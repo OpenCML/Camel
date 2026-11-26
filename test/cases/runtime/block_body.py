@@ -1,22 +1,26 @@
-"""A block's body compiles into a program of its own, and the program it was compiled for keeps
-its own graphs.
+"""A block's body compiles into a program of its own, the block's operator runs it, and the
+program it was compiled for keeps its own graphs.
 
 A block is an operator whose implementation is a program: it is compiled by the same compiler and
 run by the same VM, and no pass walks into it (graph-editing design 5, design principles 9.12).
-This case takes the first half of that arrangement and measures it on one program, three ways:
+This case measures the arrangement on one program, in four readings:
 
-  * `test::block_body` hands the compiler a body written as text and compiles it as a program of
-    its own. Its own reading is `BLOCK_BODY built graphs=… nodes=…` -- the body compiled, and into
-    graphs of its own;
-  * the same run's entry program, read by `std::stats`: the graphs and nodes are the ones the
-    program had without the pass. The pass prints the count it saw before and after the body was
-    built (`BLOCK_BODY entry graphs a -> b nodes c -> d`), so the comparison is in one run;
-  * the `std::jgir` document of the same pipeline: the graphs it names are the entry program's,
-    and the body added none of them to it.
+  * `test::block_body` hands the compiler two bodies written as text and compiles each as a program
+    of its own: `BLOCK_BODY built <what> graphs=… nodes=…`, and one line per graph of each
+    (`BLOCK_BODY graph <what> <graph> nodes=…`);
+  * the entry program, read in the same run and by `std::stats`: the graphs and nodes are the ones
+    the program had without the pass. The pass prints the counts it saw before and after
+    (`BLOCK_BODY entry graphs a -> b nodes c -> d`), so the comparison is in one run;
+  * the values two blocks answer through one kernel (`BLOCK_CALL <uri> argument=… value=…`): the
+    URI finds the operator through the executor manager (`block` protocol), the node's attribute
+    names which program of the context's store to run, and the value is the body's own arithmetic;
+  * the same block run a second time, after its first run is over, so "the program is pinned to the
+    context" is a value and not the absence of a crash;
+  * the `std::jgir` document of the same pipeline: the graphs it names are the entry program's, and
+    the bodies added none of them to it.
 
-The block's operator, its record, and the front end that writes such a body are not here (the
-four steps of the plan; this is the first). What is here is the one thing that could be measured
-without them: that a body compiles into a program that is not the program it was compiled for.
+The block's own node in the outer graph, its record, and the front end that writes a body are the
+steps after this one.
 """
 import json
 import re
@@ -45,37 +49,69 @@ def stats(*passes):
     return json.loads(lines[0][len("GRAPH_STATS ") :])
 
 
+def numbered(line):
+    return {name: int(value) for name, value in re.findall(r"(graphs|nodes)=(\d+)", line)}
+
+
 plain = stats()
 with_body = invoke(SOURCE, BODY_PASS, "std::stats", "std::nop")
 assert with_body.returncode == 0, with_body.stderr
-body_lines = [line for line in with_body.stdout.splitlines() if line.startswith("BLOCK_BODY ")]
-built = [line for line in body_lines if line.startswith("BLOCK_BODY built ")]
-assert len(built) == 1, f"expected the body to compile once, got: {body_lines}"
-numbers = dict(re.findall(r"(graphs|nodes)=(\d+)", built[0]))
-graphs, nodes = int(numbers["graphs"]), int(numbers["nodes"])
-assert graphs >= 1, built[0]
-assert nodes >= 1, built[0]
-# A program has a root graph (design principles 2.3): the body's program has one of its own, and
-# the graphs of a program are named among that program's graphs only, so the name is no identity
-# across programs -- the counts are the identity this case uses.
-body_graphs = [
-    line[len("BLOCK_BODY graph ") :] for line in body_lines if line.startswith("BLOCK_BODY graph ")
-]
-assert len(body_graphs) == graphs, (body_graphs, graphs)
-assert any(line.startswith("__root__ ") for line in body_graphs), body_graphs
+lines = with_body.stdout.splitlines()
+body_lines = [line for line in lines if line.startswith("BLOCK_BODY ")]
+call_lines = [line for line in lines if line.startswith("BLOCK_CALL ")]
+# What the pass said, on this case's own stdout: the plan pins these lines, so the reading is
+# checked as text and not only as the numbers the assertions below derive from it.
+for line in body_lines + call_lines:
+    print(line)
 
-# The entry program, read in the same run: the numbers it had before the body was built are the
+# Two bodies, each a program of its own: a root graph and the function's graph, in a program that
+# is not the one they were compiled for.
+built = [line for line in body_lines if line.startswith("BLOCK_BODY built ")]
+assert len(built) == 2, f"expected two bodies to compile, got: {body_lines}"
+bodies = {}
+for line in built:
+    what = line[len("BLOCK_BODY built ") :].split(" ")[0]
+    counts = numbered(line)
+    assert counts["graphs"] >= 2, line
+    assert counts["nodes"] >= 1, line
+    bodies[what] = counts
+# A program has a root graph (design principles 2.3), and the graphs of a program are named among
+# that program's graphs only: the name is no identity across two programs, so the counts are the
+# identity this case uses.
+graphs_of = {}
+for line in body_lines:
+    if not line.startswith("BLOCK_BODY graph "):
+        continue
+    parts = line[len("BLOCK_BODY graph ") :].split(" ")
+    what, graph = parts[0], parts[1]
+    graphs_of.setdefault(what, []).append(graph)
+for what, counts in bodies.items():
+    assert len(graphs_of.get(what, [])) == counts["graphs"], (what, graphs_of.get(what), counts)
+    assert "__root__" in graphs_of[what], (what, graphs_of[what])
+
+# The entry program, read in the same run: the numbers it had before the bodies were built are the
 # numbers it has after, and they are the numbers of a run without the pass at all.
 entry = [line for line in body_lines if line.startswith("BLOCK_BODY entry ")]
 assert len(entry) == 1, body_lines
 assert "took a graph of the body" not in with_body.stdout, entry[0]
-entryNumbers = re.search(
-    r"graphs (\d+) -> (\d+) nodes (\d+) -> (\d+)", entry[0]
+entry_numbers = re.search(r"graphs (\d+) -> (\d+) nodes (\d+) -> (\d+)", entry[0])
+assert entry_numbers, entry[0]
+before_graphs, after_graphs, before_nodes, after_nodes = (
+    int(value) for value in entry_numbers.groups()
 )
-assert entryNumbers, entry[0]
-beforeGraphs, afterGraphs, beforeNodes, afterNodes = (int(g) for g in entryNumbers.groups())
-assert (beforeGraphs, beforeNodes) == (afterGraphs, afterNodes), entry[0]
-assert (beforeGraphs, beforeNodes) == (plain["graphs"], plain["nodes"]), (entry[0], plain)
+assert (before_graphs, before_nodes) == (after_graphs, after_nodes), entry[0]
+assert (before_graphs, before_nodes) == (plain["graphs"], plain["nodes"]), (entry[0], plain)
+
+# One kernel, two blocks, and the value each body computes: 41 -> 42, 5 -> 15. The ordinal in the
+# node's attributes is not in the call here, so the kernel could not have guessed the program from
+# the call's shape: the two calls have the same shape and different values.
+values = {}
+for line in call_lines:
+    match = re.fullmatch(r"BLOCK_CALL (\S+) argument=(-?\d+) value=(-?\d+)", line)
+    assert match, line
+    values.setdefault(match.group(1), []).append(int(match.group(3)))
+assert values == {"block::body": [42, 2], "block::scaled": [15]}, values
+
 again = stats(BODY_PASS)
 assert again["graphs"] == plain["graphs"], (plain["graphs"], again["graphs"])
 assert again["nodes"] == plain["nodes"], (plain["nodes"], again["nodes"])
@@ -91,7 +127,8 @@ written = json.loads(document.stdout[start : end + 1])
 assert len(written["graphs"]) == plain["graphs"], (len(written["graphs"]), plain["graphs"])
 
 print(
-    f"block_body: body_graphs={graphs} body_nodes={nodes} entry_graphs={plain['graphs']} "
-    f"entry_nodes={plain['nodes']}"
+    f"block_body: body_graphs={bodies['body']['graphs']} body_nodes={bodies['body']['nodes']} "
+    f"second_nodes={bodies['second']['nodes']} block_calls={sum(len(v) for v in values.values())} "
+    f"entry_graphs={plain['graphs']} entry_nodes={plain['nodes']}"
 )
 print("Block body: PASS")

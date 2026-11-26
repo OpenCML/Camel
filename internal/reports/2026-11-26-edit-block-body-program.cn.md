@@ -201,3 +201,40 @@ BLOCK_BODY entry graphs 2 -> 2 nodes 76 -> 76
 
 **这不是块。** 块还缺：算子记录与名字（按块体规范形式哈希）、外层那一个 OPER 节点、节点属性里
 记程序编号、`block` 协议的执行器（第二步），以及前端、β、块尾提交（第三、四步）。
+
+### 7.1 算子的那一半：一个内核，两个块
+
+同一个遍接着把两份块体登记进上下文的块程序处（`camel/runtime/block_programs.h`，
+`Context::blockPrograms()`），注册 `block` 协议的那一个执行器，然后**通过执行器管理器**取算子、
+带上属性调用：
+
+```
+BLOCK_BODY built body graphs=2 nodes=6
+BLOCK_BODY built second graphs=2 nodes=6
+BLOCK_CALL block::body argument=41 value=42
+BLOCK_CALL block::scaled argument=5 value=15
+BLOCK_CALL block::body argument=1 value=2
+BLOCK_BODY entry graphs 2 -> 2 nodes 76 -> 76
+```
+
+- **两个块，一个内核**：`runBlockOfItsProgram` 只有一份。`ExecutorManager::find("block::body")`
+  取冒号前协议 `block`、造出那个执行器、**把 URI 去掉协议后**去它的算表里取（`uri.substr(pos+1)`，
+  即 `:body`，这是树上每张算表的写法）——所以"一块一核"不成立，块之间的差别是程序，不是代码。
+- **哪份程序由属性说**：内核读 `norm.attrs()` 里的 `block.program`（Int，序号），到块程序处取
+  program 与根图，再交给 `graphCaller()` 跑。算子记录里没有任何关于块体的东西。
+- **值是真的**：`41 → 42`、`5 → 15`；第三次调同一个块 `1 → 2`，发生在它自己第一次跑完之后，
+  "钉住了"因此是一条值，不是"没崩"。
+
+两条结构性事实（设计时就该写下来的）：
+
+- 新属性键要进**属性去留表**（`node_attrs.cpp`，`inspect --attrs` 的类守卫会查）：`block.program`
+  按 Int 注册，解释器与 dump 记为 Carried，ONNX 与 Tiles 记为 Refused（模型装不下"跑那份 Camel
+  程序"这件事，宁可拒绝这个节点）。
+- `Executor::find` **不是虚函数**，所以动态的块 URI 集合只能在执行器构造时铺进算表——顺序因此是
+  "先编块体、后造执行器、再跑"，这与管线天然一致，但不能反过来。
+
+**还差 ①的那一格**：外层图里那一个 OPER 节点还没插，所以 `std::stats` 的 nodes 现在仍是
+`76`（这个遍不动入口程序，读数只证明"块体不进来"）。接上它的路已经查清：`RuntimeGraphDraftSession`
++ `draft.addOperNode(type, nullptr, uri)`（算子指针留空，VM 按节点自己的 URI 解析实现，
+`camel_pass.cpp` 的 `splicePrint` 就是这么插节点的）+ 节点属性写序号 + 把函数的出口改为读它。
+届时 nodes `76 -> 77`；`operators` 会 +1，因为 OPER 节点本身就是算子节点——这一项没法"不变"。
