@@ -120,6 +120,9 @@ pwsh -NoProfile -File <你的工作树>\internal\tools\camel-remote.ps1 `
     `git -C <你的工作树> status --porcelain` 里能看到你的改动；
     `git -C D:\Projects\Camel status --porcelain` **为空**。
 · 主检出 `D:\Projects\Camel` 归负责人：不提交、不快进、不动它的 `out/latest`。
+· **要「改前读数」而仓库不许建额外工作树时**：在**同一棵树**里把要量的那几个文件 `git checkout <base> -- <paths>`，
+   构建+跑，量完 `git checkout HEAD -- <paths>` 复原，贴 `git status --porcelain` 为空与那次的 `[provenance] binary built …`。
+   判据不变（构建产物来自那次 build），代价只是两次构建；**不要**为了取改前读数去建第三棵树。
 · **建树只走一个入口**，不要手抄 `git worktree add`：
     pwsh -NoProfile -File internal/tools/new-worktree.ps1 `
       -Path D:\Projects\Camel-wt\<lane> -Branch <branch> -Base origin/develop
