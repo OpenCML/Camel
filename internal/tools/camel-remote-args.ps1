@@ -45,6 +45,13 @@ function Get-EntryArgs {
     (@($Entry | ForEach-Object { " --entry '$_'" }) -join '')
 }
 
+# The runner line of a `-UpdateGolden` run, as the host shell receives it. `$PlanArgs`, `$TierArg` and
+# `$ListKnownArg` are the already-quoted words of the caller's own selection; `--jobs` is the host
+# script's `$CAMEL_JOBS` and never the caller's width, so the line reads the budget the host set.
+function Get-UpdateGoldenCommand {
+    param([string]$PlanArgs, [string[]]$Entry = @(), [string]$TierArg = '', [string]$ListKnownArg = '')
+    "cd `$R/ && node test/tools/run-tests.mjs --update-golden $PlanArgs$(Get-EntryArgs -Entry $Entry) --jobs `$CAMEL_JOBS$TierArg$ListKnownArg"
+}
 # The same for `--drop`, the rows a recording is allowed to lose.
 function Get-AstDropArgs {
     param([string[]]$AstDrop = @())
