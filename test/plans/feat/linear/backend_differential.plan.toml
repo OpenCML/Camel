@@ -29,11 +29,13 @@ tags = ["feat", "linear", "fvm", "nvm", "differential"]
 #
 # **Where the reading is kept.** The console keeps a test's standard output only when the entry
 # fails, and this entry is meant to be green while it finds differences, so the tool also writes its
-# record to `test/results/backend-differential/report.json` (a path `.gitignore` covers, so a record
-# can never be committed): the `[DIFFERENTIAL]` line, the exclusion counts, and one row per program
-# with its verdict, its words and its blocks. `internal/tools/camel-remote.ps1 -FetchFile
-# test/results/backend-differential/report.json` brings it back from the build host, which is how two
-# readings of this entry are compared.
+# record beside `test/results/backend-differential/` (a path `.gitignore` covers, so a record can
+# never be committed): the `[DIFFERENTIAL]` line, the exclusion counts, and one row per program with
+# its verdict, its words and its blocks. The file carries the run's own stamp -- `report-<stamp>.json`
+# -- and the tool prints a `[report]` line naming the file it wrote, so the record a reader fetches
+# belongs to the run whose log names it: `internal/tools/camel-remote.ps1 -FetchFile
+# test/results/backend-differential/report-<stamp>.json` brings back that run's record, and its
+# `summary` field is the `[DIFFERENTIAL]` line that same run printed.
 
 [[tests]]
 name = "backend_differential.tree"
@@ -43,7 +45,7 @@ tool = "node"
 case = "../../../tools/backend-differential.mjs"
 args = ["${case}", "--camel", "${camel}", "--self-test", "--report", "test/results/backend-differential/report.json"]
 expect_exit = 0
-expect_stdout_contains = ["[differential] ", "[self-test] self-agreement (std::nvm against std::nvm)", "seen=yes", "[DIFFERENTIAL] "]
+expect_stdout_contains = ["[differential] ", "[self-test] self-agreement (std::nvm against std::nvm)", "seen=yes", "[DIFFERENTIAL] ", "[report] test/results/backend-differential/report-"]
 expect_stdout_not_contains = ["seen=no", "[self-test] a program disagreed with itself", "[self-test] planted difference: no line"]
 # The differential is multi-threaded work: every program the tree declares is run on each side, and
 # the eight jobs it runs them on sum to much more CPU time than the wall clock. One run over this

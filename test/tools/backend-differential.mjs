@@ -95,7 +95,11 @@
  * without running anything, which is how the size of the reading is audited before it is taken.
  *
  * `--camel` names the install to measure, by the one rule in `test/tools/camel-arg.mjs`; with none it
- * is this tree's `out/latest`. Exit status: 0 when the reading completed (whatever it found), 1
+ * is this tree's `out/latest`. `--report <file.json>` writes this run's report to that path with the
+ * run's stamp before the extension (`report.json` becomes `report-20261126_202454.json`), so two runs
+ * never share one file; the `[report]` line names what was written, and the file's `summary` field is
+ * the `[DIFFERENTIAL]` line of the same run. Exit status: 0 when the reading completed (whatever it
+ * found), 1
  * under `--strict` when a program differs or a side did not run, 2 when the arguments or the install
  * are unusable. The reading is a measurement, not a gate leg: the plan that calls this tool asserts
  * that it produced a reading (`test/plans/feat/linear/backend_differential.plan.toml`).
@@ -544,6 +548,26 @@ async function measureProgram(program, camel, env, options) {
 const quote = (text) => JSON.stringify(String(text))
 const clip = (text, width = 120) => (text.length > width ? `${text.slice(0, width - 3)}...` : text)
 
+/// The run's stamp, in the shape the runner names its own run directories (`YYYYMMDD_HHMMSS`, local
+/// time), so the report a run writes carries the run it belongs to in its name.
+function runStamp(date = new Date()) {
+    const pad = (value) => String(value).padStart(2, '0')
+    return (
+        `${date.getFullYear()}${pad(date.getMonth() + 1)}${pad(date.getDate())}_` +
+        `${pad(date.getHours())}${pad(date.getMinutes())}${pad(date.getSeconds())}`
+    )
+}
+
+/// The file a run writes its report to: the path `--report` names, with the run's stamp before the
+/// extension. Two runs in a row must not share one file -- a reader has to be able to tell whose
+/// numbers it is reading -- and the numbers are the run's own: the file's `summary` field is the
+/// `[DIFFERENTIAL]` line this run printed, and the `[report]` line names the file that was written.
+function reportPath(asked, stamp) {
+    const wanted = path.resolve(REPO_ROOT, asked)
+    const ext = path.extname(wanted)
+    return `${wanted.slice(0, wanted.length - ext.length)}-${stamp}${ext}`
+}
+
 /// One line of the field that moved, so a reader of the report does not have to run the program to
 /// know what the disagreement is about. At most one line, and never instead of the verdict. The line
 /// is the comparable text, so the pass this tool appended reads as the placeholder it is compared as.
@@ -725,6 +749,7 @@ function parseArguments(argv) {
 
 async function main(argv) {
     const { options, rest } = parseArguments(argv)
+    const stamp = runStamp()
     const { camel, rest: extra } = takeCamel(rest, REPO_ROOT, (message) => {
         process.stderr.write(`${message}\n${USAGE}\n`)
         process.exit(2)
@@ -798,9 +823,14 @@ async function main(argv) {
                 fvm: { exit: result.b.exit, stdout_bytes: result.b.stdout.length, stderr_bytes: result.b.stderr.length }
             }))
         }
-        const target = path.resolve(REPO_ROOT, options.report)
+        const target = reportPath(options.report, stamp)
         fs.mkdirSync(path.dirname(target), { recursive: true })
-        fs.writeFileSync(target, `${JSON.stringify(document, null, 1)}\n`)
+        const text = `${JSON.stringify(document, null, 1)}\n`
+        fs.writeFileSync(target, text)
+        out(
+            `[report] ${path.relative(REPO_ROOT, target)} (${Buffer.byteLength(text)} B, ` +
+                `${results.length} program(s), differ=${results.filter((result) => result.verdict.verdict === 'differ').length})`
+        )
     }
     const broke = results.filter((result) => ['differ', 'no-answer'].includes(result.verdict.verdict))
     if (options.strict && broke.length) return 1
