@@ -165,7 +165,7 @@ pwsh -NoProfile -File ... -Path <wt> -Clean                        # 收尾：�
   主机 `checkout -f -B` 后叠补丁。树干净且已在那个提交上时自动跳过检出。
 - 退出码原样带回；面板状态带 `remote: "88zjwei"` 显示为 `88`，本机显示 `本机`。
 - **并发用 `-Jobs 8`**：`-Jobs 12` 下 `gpu_preference.no_device.*` 会撞 10 秒超时而假红。
-- **主机上的并行度由令牌数决定，不由约定决定。** 预算是令牌（一个 worker 进程一枚），计划、用例、检查、构建共用一个池子；计划另占一把测试槽（一次一个），每份运行登记带 `testSlot`、`buildJobs`、`overlapping`、`loadAtStart`/`loadAtEnd`——读数自己说明它是怎么跑的，"两条同时跑、各自红"与"一条跑时红"因此分得开。构建没有固定槽：启动时拿到几枚令牌就几枚。锁与池子都在 `internal/tools/host-tokens.sh`，约定页（`agents/dispatch.md` §6）只指路。
+- **主机上的并行度由令牌数决定，不由约定决定。** 预算是令牌（一个 worker 进程一枚），计划、检查、构建共用一个池子；计划与构建一样，启动时按它要的宽度（`-Jobs`，至多 16）拿现有的令牌、至少一枚，用拿到的数跑，结束或被杀时还回——没有测试槽，也没有为合并位保留的份额，合并位与大家同样排队；每份运行登记带 `jobs`、`buildJobs`、`overlapping`、`loadAtStart`/`loadAtEnd`——读数自己说明它是怎么跑的，"两条同时跑、各自红"与"一条跑时红"因此分得开。构建与计划都没有固定槽：启动时拿到几枚令牌就几枚。锁与池子都在 `internal/tools/host-tokens.sh`，约定页（`agents/dispatch.md` §6）只指路。
 - 禁止在 agent 提示里写 `cmake --build`、`npm run build`、`node scripts/test.js`；不要跑
   stress / progen / GC-stress / PyTorch 重测试。
 
