@@ -119,6 +119,13 @@ def write_artifacts(root: Path, model: str, weights: Dict[str, np.ndarray], x: n
 
 # ---------------------------------------------------------------- camel
 
+# The data-block space the Camel run may use, in megabytes (`camel --block-limit`), or None for
+# the CLI's default. The default (2048 MB) is a guard against a runaway allocation, not a budget
+# for a benchmark: a full-batch ResNet forward folded by `std::macro` holds more than that at
+# once, which is why the four ResNet entries of test/plans/feat/modules/autodiff.plan.toml pass
+# `--block-limit` here.
+_block_limit_mb: Optional[int] = None
+
 
 # One import name list per module: `import { a, b } from module`.
 IMPORT_LIST = re.compile(r"^import \{([^}]*)\} from ([A-Za-z_][A-Za-z0-9_]*)[ \t]*$", re.MULTILINE)
@@ -220,7 +227,10 @@ def camel_run(model: str, artifacts: Optional[Path], model_file: Optional[Path],
     env.setdefault("CAMEL_BENCH_THREADS", str(os.cpu_count() or 1))
     if artifacts is not None:
         env["CAMEL_BENCH_WEIGHTS"], env["CAMEL_BENCH_INPUT"] = str(artifacts / "weights"), str(artifacts / "input.npy")
-    cmd = [str(camel_binary()), str(file), *passes]
+    cmd = [str(camel_binary())]
+    if _block_limit_mb is not None:
+        cmd += ["--block-limit", str(_block_limit_mb)]
+    cmd += [str(file), *passes]
     proc = subprocess.run(cmd, cwd=camel_model(model).parent, env=env, capture_output=True, text=True, timeout=1800)
     if proc.returncode != 0:
         raise RuntimeError(f"{' '.join(cmd)} failed ({proc.returncode}):\n{proc.stdout}\n{proc.stderr}")
@@ -692,6 +702,12 @@ def main() -> int:
     parser.add_argument("--activation", choices=ACTIVATIONS, default="relu")
     parser.add_argument("--camel-model", type=Path, help="Camel model file to run instead of the benchmark's")
     parser.add_argument("--passes", default="std::macro,std::nvm")
+    parser.add_argument(
+        "--block-limit",
+        type=int,
+        metavar="MB",
+        help="the Camel run's data-block space in megabytes (`camel --block-limit`); default: the CLI's guard, 2048",
+    )
     parser.add_argument("--rtol", type=float, default=1e-4)
     parser.add_argument("--all", action="store_true", help="print every tensor, not only those over --rtol")
     parser.add_argument("--h", type=float, default=1e-6, help="finite-difference step")
@@ -715,6 +731,8 @@ def main() -> int:
     args = parser.parse_args()
     import torch
 
+    global _block_limit_mb
+    _block_limit_mb = args.block_limit
     torch.set_num_threads(args.threads)
     os.environ["CAMEL_BENCH_THREADS"] = str(args.threads)
     results = [run(args, seed) for seed in (args.seed or [None])]
