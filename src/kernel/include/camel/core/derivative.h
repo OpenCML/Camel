@@ -47,7 +47,7 @@
 #include "camel/core/node_attrs.h"
 #include "camel/core/rtdata/base.h"
 #include "camel/core/type/base.h"
-#include "camel/runtime/graph.h"
+#include "camel/runtime/node_kind.h"
 
 #include <deque>
 #include <optional>
@@ -81,9 +81,7 @@ class VjpBuilder {
     /// emitted node. The default keeps the attributes away, so a rule that has none behaves as
     /// before; an engine that stores attributes overrides it.
     virtual vjp_node_t addOper(
-        type::Type *type,
-        std::string_view uri,
-        std::span<const vjp_node_t> normInputs,
+        type::Type *type, std::string_view uri, std::span<const vjp_node_t> normInputs,
         camel::core::attr::AttrSetId attrs) {
         (void)attrs;
         return addOper(type, uri, normInputs);
@@ -95,8 +93,7 @@ class VjpBuilder {
     /// nothing: an engine without a place for groups still differentiates, and the nodes run one
     /// by one.
     virtual void markFusionGroup(
-        camel::core::attr::AttrKey key,
-        std::string_view name,
+        camel::core::attr::AttrKey key, std::string_view name,
         std::span<const vjp_node_t> members) {
         (void)key;
         (void)name;
@@ -125,7 +122,8 @@ using tangent_node_t = camel::runtime::gc_node_ref_t;
 /// `VjpBuilder`: the same three things are asked of it, and a rule written against one reads the
 /// same way as a rule written against the other.
 ///
-///   - construction: `addStatic`, `addOper`, `addAccess` build the nodes a rule's answer is made of;
+///   - construction: `addStatic`, `addOper`, `addAccess` build the nodes a rule's answer is made
+///   of;
 ///   - accumulation: `accumulateTangent` adds a contribution to a value's tangent, which is what
 ///     every rule does to its inputs' tangents and what a rule that shares a node does to one node
 ///     twice;
@@ -146,8 +144,8 @@ class TangentBuilder {
     /// A constant node.
     virtual tangent_node_t addStatic(slot_t value, type::Type *type) = 0;
     /// An operator node with the given inputs. The operator is resolved by URI when the graph runs.
-    virtual tangent_node_t addOper(
-        type::Type *type, std::string_view uri, std::span<const tangent_node_t> normInputs) = 0;
+    virtual tangent_node_t
+    addOper(type::Type *type, std::string_view uri, std::span<const tangent_node_t> normInputs) = 0;
     /// Element `index` of an aggregate (tuple or struct) node.
     virtual tangent_node_t addAccess(tangent_node_t aggregate, size_t index);
     /// Adds `tangent` to the tangent of `primal`. Ignored for values without a tangent space.

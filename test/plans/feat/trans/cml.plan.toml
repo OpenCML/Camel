@@ -21,13 +21,13 @@ tier = "slow"
 
 [[tests]]
 name = "print_then_run_agrees_with_the_origin"
-desc = "The `std::cml` round trip measured as behaviour, not as text: each of the eight cases that behave differently after a print is printed, the printed program is run, and its `rc` and `stdout` are compared with the origin's (a diagnostic's file path is normalized to `<PATH>`, because the printed program lives in a scratch directory). One line per case -- `case=<name> rc=<n> stdout=identical` -- so the reading says which cases ran, not just that the whole thing passed. The list is eight and not nine: the reading that a call writes state and the read after it takes that version (`effects/writer_table_through_callee`) lost its subject to the closure-capture the rule (design principles 3.5) and to the `std::cml` subset, which prints neither a `Ref` nor a top-level `var`, so its entry could only ever answer `unmeasurable`. The subject is the case's own limit: a write then read through a call has no printable subject."
+desc = "The `std::cml` round trip measured as behaviour, not as text: each of the seven cases that behave differently after a print is printed, the printed program is run, and its `rc` and `stdout` are compared with the origin's (a diagnostic's file path is normalized to `<PATH>`, because the printed program lives in a scratch directory). One line per case -- `case=<name> rc=<n> stdout=identical` -- so the reading says which cases ran, not just that the whole thing passed. The list is seven and not nine: the reading that a call writes state and the read after it takes that version (`effects/writer_table_through_callee`) lost its subject to the closure-capture the rule (design principles 3.5) and to the `std::cml` subset, which prints neither a `Ref` nor a top-level `var`, so its entry could only ever answer `unmeasurable`; and `linear/runtime/var_read_before_region` lost its program, because its interval loop is a stream walk and its body no longer types, so the compiler refuses it before the printer sees it and its own entries are red with that."
 kind = "behavior"
 tool = "node"
 case = "../../../tools/roundtrip-compare.mjs"
 args = ["${case}"]
 expect_exit = 0
-expect_stdout_contains = ["ROUNDTRIP cases=8 identical=8 differs=0", "case=linear/runtime/var_read_before_region rc=0 stdout=identical", "case=linear/runtime/order_edges_regions rc=56 stdout=identical", "case=compile/escapes/raw_roundtrip rc=0 stdout=identical"]
+expect_stdout_contains = ["ROUNDTRIP cases=7 identical=7 differs=0", "case=linear/runtime/var_read_before_write rc=0 stdout=identical", "case=linear/runtime/order_edges_regions rc=56 stdout=identical", "case=compile/escapes/raw_roundtrip rc=0 stdout=identical"]
 timeout_ms = 120000
 # Slow layer: over the 2 s the fast layer allows -- 2.22 s of
 # child wall clock.

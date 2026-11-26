@@ -59,7 +59,6 @@ kind = "negative"
 case = "../../../cases/consistency/decorated_overloads_export/err_no_function_value.cml"
 args = ["-E", "short", "${case}"]
 backends = ["nvm"]
-backends_agree = []
 expect_exit = 1
 expect_output_not_contains = ["Segmentation fault", "dumped core", "internal error"]
 expect_output_contains = ["name=SemanticDiag::FunctionNameAsValue", "err_no_function_value.cml:10:29:", "names 2 functions of that name [(x: int) => int pure; (x: float) => float pure]"]

@@ -377,6 +377,11 @@ param(
     # Rewrite the goldens of the named plans instead of checking them: runs the golden tool,
     # not the runner, because a golden mismatch cannot be fixed through the checking path.
     [switch]$UpdateGolden,
+    # With -UpdateGolden: re-record only the entries named here (`<name>` or `<plan id>/<name>`, `*` is a
+    # wildcard, comma-separated). Each word reaches the runner as `--entry`, which starts only those
+    # entries, so no other entry's golden is rewritten. Without it, -UpdateGolden keeps its meaning of
+    # every entry of the named plans. A word that names no entry refuses the run.
+    [string[]]$Entry = @(),
     # Re-record the front-end AST snapshot instead of checking it: runs
     # `test/tools/parsecheck/check.py snapshot --update` on the host, after the build and before the
     # plan, and brings `test/plans/feat/parse/golden/ast_hashes.txt` back into this tree.
@@ -553,6 +558,15 @@ $remoteName = $sshHost
 $Plan = @(Split-CamelArgList -Values $Plan)
 $AstOnly = @(Split-CamelArgList -Values $AstOnly)
 $AstDrop = @(Split-CamelArgList -Values $AstDrop)
+$Entry = @(Split-CamelArgList -Values $Entry)
+if ($Entry.Count -gt 0 -and -not $UpdateGolden) {
+    Write-Host '[camel-remote] -Entry narrows a -UpdateGolden recording; a checking run selects by -Plan'
+    exit 2
+}
+if (@($Entry | Where-Object { $_.Contains("'") }).Count -gt 0) {
+    Write-Host "[camel-remote] -Entry words travel inside single quotes and may not contain one"
+    exit 2
+}
 
 # A backslash in a plan path is not a separator on the host: the path is resolved on Linux, where
 # `test\plans\feat\trans\cml.plan.toml` is one file name containing backslashes. The plan loader
@@ -1953,7 +1967,7 @@ $buildCmd = if ($Config -eq 'Debug') { "npm run debug$stackTraceArg" } else { "n
     # plan instead of a 32-wide one that oversubscribes a host whose cores are all spoken for. Width
     # `$jobsBudget` (below) sets it, between the request and this line.
     $runPlan = if ($UpdateGolden) {
-        "cd `$R/ && node test/tools/run-tests.mjs --update-golden $planArgs --jobs " + "`$CAMEL_JOBS$tierArg$listKnownArg"
+        "cd `$R/ && node test/tools/run-tests.mjs --update-golden $planArgs$(Get-EntryArgs -Entry $Entry) --jobs " + "`$CAMEL_JOBS$tierArg$listKnownArg"
     } elseif ($Changed) {
         # The list above travels with the patch: the host has the lane's commits but not the base
         # branch, so a selection made there answered "cannot read origin/develop" and the run fell

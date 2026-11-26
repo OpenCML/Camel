@@ -2614,11 +2614,21 @@ timeout_ms = 900000
 name = "resnet_gradient_smooth_vs_torch64"
 # Slow layer: measured 6.3 s in the full serial run.
 tier = "slow"
-desc = "resnet with relu replaced by tanh on both sides (benchmarks/tools/grad_referee.py --activation tanh): Camel's gradient against PyTorch float64 autograd, every weight within 1e-4 (measured 1.4e-06). The rules of conv2d with stride and padding, the residual sum, the two axis means and the linear layer, with no kink for float32 rounding to cross."
+desc = "resnet with relu replaced by tanh on both sides (benchmarks/tools/grad_referee.py --activation tanh): Camel's gradient against PyTorch float64 autograd, every weight within 1e-4 (measured 2.46e-06). The rules of conv2d with stride and padding, the residual sum, the two axis means and the linear layer, with no kink for float32 rounding to cross."
+# The four ResNet entries below pass `--block-limit 8192` because one full-batch forward of this
+# network, folded by `std::macro`, holds more than the CLI default of 2048 MB of data blocks at
+# once: with the default the Camel run inside the referee dies on `zeros_like`/`add`
+# (`The block space (data blocks) is exhausted: ... 2041.9 MB of the limit of 2048.0 MB are in
+# use`) before a gradient is compared. The default is a guard against a runaway allocation, not a
+# budget for a benchmark (docs/cli.cn.md, "the default only guards a runaway allocation"), so the
+# budget is stated here rather than the guard raised for every program. ResNet-18 needs under
+# 4096 MB and resnetbn over 4096 MB; 8192 covers both with room for the machine's other work.
+# This changes no tolerance and no reference: --rtol stays 1e-4 and the reference is still
+# PyTorch float64 autograd on the benchmark's artifacts.
 kind = "behavior"
 tool = "python"
 case = "../../../../benchmarks/tools/grad_referee.py"
-args = ["${case}", "--model", "resnet", "--activation", "tanh", "--require", "--no-fd", "--no-sensitivity"]
+args = ["${case}", "--model", "resnet", "--activation", "tanh", "--block-limit", "8192", "--require", "--no-fd", "--no-sensitivity"]
 skip_unless = ["${python}", "-c", "import numpy, psutil, torch"]
 expect_exit = 0
 expect_stdout_contains = ["verdict resnet seed=benchmark activation=tanh: PASS (", "gradient referee: PASS"]
@@ -2662,7 +2672,7 @@ desc = "resnetbn (20 training-mode batch_norms) with relu replaced by tanh on bo
 kind = "behavior"
 tool = "python"
 case = "../../../../benchmarks/tools/grad_referee.py"
-args = ["${case}", "--model", "resnetbn", "--activation", "tanh", "--require", "--no-fd", "--no-sensitivity"]
+args = ["${case}", "--model", "resnetbn", "--activation", "tanh", "--block-limit", "8192", "--require", "--no-fd", "--no-sensitivity"]
 skip_unless = ["${python}", "-c", "import numpy, psutil, torch"]
 expect_exit = 0
 expect_stdout_contains = ["verdict resnetbn seed=benchmark activation=tanh: PASS (", "gradient referee: PASS"]
@@ -2689,7 +2699,7 @@ desc = "resnet as benchmarked, against PyTorch float64 autograd. The direct comp
 kind = "behavior"
 tool = "python"
 case = "../../../../benchmarks/tools/grad_referee.py"
-args = ["${case}", "--model", "resnet", "--kinks", "--require", "--no-fd", "--no-sensitivity"]
+args = ["${case}", "--model", "resnet", "--kinks", "--block-limit", "8192", "--require", "--no-fd", "--no-sensitivity"]
 skip_unless = ["${python}", "-c", "import numpy, psutil, torch"]
 expect_exit = 0
 expect_stdout_contains = ["verdict resnet seed=benchmark activation=relu: PASS", "gradient referee: PASS"]
@@ -2721,7 +2731,7 @@ desc = "resnetbn as benchmarked, against PyTorch float64 autograd, by the criter
 kind = "behavior"
 tool = "python"
 case = "../../../../benchmarks/tools/grad_referee.py"
-args = ["${case}", "--model", "resnetbn", "--kinks", "--require", "--no-fd", "--no-sensitivity"]
+args = ["${case}", "--model", "resnetbn", "--kinks", "--block-limit", "8192", "--require", "--no-fd", "--no-sensitivity"]
 skip_unless = ["${python}", "-c", "import numpy, psutil, torch"]
 expect_exit = 0
 expect_stdout_contains = ["verdict resnetbn seed=benchmark activation=relu: PASS", "gradient referee: PASS"]

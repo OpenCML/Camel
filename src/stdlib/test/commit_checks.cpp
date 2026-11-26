@@ -20,15 +20,16 @@
 #include "camel/core/context/context.h"
 #include "camel/core/operator_table.h"
 #include "camel/core/rtdata/base.h"
+#include "camel/core/type/composite/func.h"
 #include "camel/execute/pass/base.h"
 #include "camel/execute/pass/registration.h"
 #include "camel/runtime/control_regions.h"
-#include "camel/core/type/composite/func.h"
 #include "camel/runtime/draft.h"
 #include "camel/runtime/draft_session.h"
 #include "camel/runtime/graph.h"
 #include "camel/runtime/graph_txn.h"
 #include "camel/runtime/resources.h"
+#include "camel/runtime/type_agreement.h"
 
 #include "graph/graph_view.h"
 

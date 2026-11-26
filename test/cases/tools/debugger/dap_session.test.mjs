@@ -139,7 +139,13 @@ await runTest(async (t) => {
         checkEq(shown('none'), 'int? = null', 'a nullable without one')
         checkEq(shown('good'), 'int! = 25', 'a fallible with a value')
         check(/^int! = error DivisionByZero/.test(shown('bad')), 'a fallible holding the error of an isolated fault', shown('bad'))
-        checkEq(shown('later'), 'int = 43', 'in a sync block the statements before the stop have run')
+        // Direction one: a pure computation used below this stop has no value yet, and that is
+        // right -- a node runs when a node that runs uses it (design principles 3, :116) and order
+        // does not decide execution (":117, F2): the order a sync block keeps constrains the
+        // effects that run anyway."). `table` is used at :33 and `later` at :37, both below this
+        // stop, so neither has run. Direction two, below, reads them where they are used.
+        checkEq(shown('table'), 'Map<string, int> = <not evaluated>', 'a computation used below the stop has no value yet: table')
+        checkEq(shown('later'), 'int = <not evaluated>', 'a computation used below the stop has no value yet: later')
         check(locals.xs?.variablesReference > 0, 'an array can be expanded', locals.xs)
         const xs = await dap.children(locals.xs?.variablesReference || 0)
         checkEq(Object.entries(xs).map(([k, v]) => `${k}=${v.value}`), ['[0]=1', '[1]=2', '[2]=3'], 'into its elements')
@@ -155,6 +161,21 @@ await runTest(async (t) => {
         check(await dap.waitEvent('terminated'), 'values: the program runs to its end')
         r = await dap.request('variables', { variablesReference: locals.xs?.variablesReference || 1 })
         check(!r.success, 'a variables reference is void once the program has resumed', r)
+
+        // Direction two: where their use runs, the same names have their values. The stop is at
+        // `println(later)`, so both `later` and the `table` used above it have been computed.
+        const afterUses = await t.dap()
+        const laterLine = lineOf(VALUES, 'println(later)')
+        await afterUses.launch(VALUES, { passes: ['std::fvm'] }, { [VALUES]: [laterLine] })
+        const laterStop = await afterUses.waitStop()
+        checkEq(laterStop?.line, laterLine, 'values: stopped at the line that uses later')
+        const after = (await afterUses.variables(laterStop?.top?.id)) || {}
+        const shownAfter = (name) => (after[name] ? `${after[name].type} = ${after[name].value}` : 'missing')
+        checkEq(shownAfter('later'), 'int = 43', 'a computation whose use runs has its value')
+        checkEq(shownAfter('table'), 'Map<string, int> = {a: 1, b: 2}', 'and so does the map used above it')
+        await afterUses.request('continue', { threadId: 1 })
+        check(await afterUses.waitEvent('terminated'), 'values: the session at the use runs to its end')
+        await afterUses.stop()
     }
 
     // ---- arguments of main and the exit code ---------------------------------------------

@@ -118,8 +118,8 @@ class Graph;
 
 /// A node of the graph, as the face numbers it. The same integer `gc_node_ref_t` is today; spelled
 /// here so that a reader of the view does not include a representation's header to name a node.
-/// Replaces `gc_node_ref_t` for readers of the view; `camel/runtime/graph.h` keeps the name for the
-/// two adapters and for the backends, which read the frozen payload directly and are not moved.
+/// Replaces `gc_node_ref_t` for readers of the view; `camel/runtime/node_kind.h` keeps the name for
+/// the two adapters and for the backends, which read the frozen payload directly and are not moved.
 using NodeRef = std::uint32_t;
 
 /// "no node": the answer of a query that names none (an absent exit, an absent owner).

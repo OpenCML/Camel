@@ -58,6 +58,9 @@ Check 'each glob becomes its own --only' ($onlyArgs -eq " --only 'a' --only 'b'"
 Check 'no globs means no argument text' ((Get-AstOnlyArgs -AstOnly @()) -eq '') (Get-AstOnlyArgs -AstOnly @())
 $dropArgs = Get-AstDropArgs -AstDrop @('test/cases/parse/gone.cml')
 Check 'a dropped row becomes --drop' ($dropArgs -eq " --drop 'test/cases/parse/gone.cml'") $dropArgs
+$entryArgs = Get-EntryArgs -Entry @('fold.constant_budget.*', 'plan/one')
+Check 'each entry becomes its own --entry' ($entryArgs -eq " --entry 'fold.constant_budget.*' --entry 'plan/one'") $entryArgs
+Check 'no entries means no argument text' ((Get-EntryArgs -Entry @()) -eq '') (Get-EntryArgs -Entry @())
 
 # --- 2. a narrowing that selects nothing -------------------------------------
 $scratch = Join-Path ([System.IO.Path]::GetTempPath()) ("camel-args-" + [guid]::NewGuid().ToString('N').Substring(0, 8))

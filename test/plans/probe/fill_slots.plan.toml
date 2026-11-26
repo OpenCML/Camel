@@ -10,6 +10,7 @@ tags = ["probe", "fill"]
 
 [[tests]]
 name = "fillslots.permuted_order_runs"
+kind = "behavior"
 desc = "fill::<(int, int), int, int><1, 0>((0, 0), 1, 2) makes (2, 1): the first value fills component 1 and the second fills component 0."
 case = "../../cases/probe/fill_slots.cml"
 args = ["${case}"]

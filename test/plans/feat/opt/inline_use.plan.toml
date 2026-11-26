@@ -33,7 +33,6 @@ desc = "Inlining retains stdout uses; a generic pass can intentionally erase the
 [defaults]
 kind = "behavior"
 backends = ["nvm"]
-backends_agree = []
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 

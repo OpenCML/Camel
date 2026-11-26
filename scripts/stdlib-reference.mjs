@@ -2849,9 +2849,15 @@ const EXCEPTIONS = {
                 'the rule answers `Tensor`, a named aggregate of the module; the declaration writes the `f32[...]` it produces',
             'conv2d_bias_grad (nn:conv2d_bias_grad)#result':
                 'the rule answers `Tensor`, a named aggregate of the module; the declaration writes the `f32[...]` it produces',
+            'conv2d_bias_grad_shaped (nn:conv2d_bias_grad_shaped)#result':
+                'the rule answers `Tensor`, a named aggregate of the module; the declaration writes the `f32[...]` it produces',
             'conv2d_input_grad (nn:conv2d_input_grad)#result':
                 'the rule answers `Tensor`, a named aggregate of the module; the declaration writes the `f32[...]` it produces',
+            'conv2d_input_grad_shaped (nn:conv2d_input_grad_shaped)#result':
+                'the rule answers `Tensor`, a named aggregate of the module; the declaration writes the `f32[...]` it produces',
             'conv2d_kernel_grad (nn:conv2d_kernel_grad)#result':
+                'the rule answers `Tensor`, a named aggregate of the module; the declaration writes the `f32[...]` it produces',
+            'conv2d_kernel_grad_shaped (nn:conv2d_kernel_grad_shaped)#result':
                 'the rule answers `Tensor`, a named aggregate of the module; the declaration writes the `f32[...]` it produces',
             'embedding (nn:embedding)#result':
                 'the rule answers `Tensor`, a named aggregate of the module; the declaration writes the `f32[...]` it produces',

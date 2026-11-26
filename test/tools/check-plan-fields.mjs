@@ -394,6 +394,17 @@ function scanTree(rootDir) {
                     continue
                 }
                 const inherited = !Object.prototype.hasOwnProperty.call(test, field)
+                // `backends_agree` is conditional on `backends` being a list (the table above). An
+                // entry that writes its own `backends` (`false`) has said on its own line that nothing
+                // is compared, so the inherited list claims nothing a reader could believe; an entry
+                // that does not write `backends` is still reported.
+                if (
+                    field === 'backends_agree' &&
+                    inherited &&
+                    Object.prototype.hasOwnProperty.call(test, 'backends')
+                ) {
+                    continue
+                }
                 add('unread-field', field, inherited ? 'inherited from [defaults]' : 'written on the entry')
             }
             // Every list field the runner walks is a no-op when it is empty, and every one of them

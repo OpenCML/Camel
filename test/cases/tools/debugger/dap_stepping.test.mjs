@@ -30,8 +30,8 @@ await runTest(async (t) => {
             const s = await dap.launch(ORDER, { passes: [backend] }, { [ORDER]: [L('call'), L('unused')] })
             checkEq(
                 s.breakpoints[ORDER].map((b) => b.verified),
-                [true, false],
-                on('a println nothing depends on, outside a sync block, has no node to stop at'),
+                [true, true],
+                on('the println nothing uses is an effect: it keeps a node to stop at'),
             )
             let stop = await dap.waitStop()
             checkEq(at(stop), `main:${L('call')}`, on('stopped at the call of work'))
@@ -51,15 +51,15 @@ await runTest(async (t) => {
             )
 
             stop = await step(dap, 'next')
-            checkEq(at(stop), `work:${L('c')}`, on('the line that is never executed is not a stop: execution order, not text order'))
-            checkEq(
-                stop?.body && (await dap.waitEvent('camel/stopped', (b) => b.skipped))?.body?.skipped?.map((l) => [l.line, l.names]),
-                [[L('unused'), []]],
-                on('the stop names the line the step went past, which holds no name'),
-            )
+            checkEq(at(stop), `work:${L('c')}`, on('execution order, not text order: c depends on both a and b'))
+
+            // The println above c is an effect outside a sync block: it keeps its node and it runs
+            // (design principles 3: 非同步函数体里的裸语句 `println(x)` 照样执行).
+            stop = await step(dap, 'next')
+            checkEq(at(stop), `work:${L('unused')}`, on('the println nothing uses still has a node to stop at, and runs'))
             check(
-                dap.outputOf('console').includes(`line ${L('unused')} was not executed: nothing uses its result\n`),
-                on('and the debug console says why it did not execute'),
+                !dap.outputOf('console').includes(`line ${L('unused')} was not executed`),
+                on('nothing is reported as a line that did not execute'),
                 dap.outputOf('console'),
             )
 
@@ -67,11 +67,12 @@ await runTest(async (t) => {
             checkEq(at(stop), `main:${L('print')}`, on('next at the last line of a function returns to the caller'))
             locals = await dap.variables(stop.top.id)
             checkEq(locals.r?.value, '10', on('with the result of the call'))
+            checkEq(dap.outputOf('stdout'), '6\n', on('the effect outside the sync block printed before the caller did'))
 
             await dap.request('next', { threadId: 1 })
             const exited = await dap.waitEvent('exited')
             checkEq(exited?.body?.exitCode, 0, on('a step at the last line runs the program to its end'))
-            checkEq(dap.outputOf('stdout'), '10\n', on('whose output is forwarded'))
+            checkEq(dap.outputOf('stdout'), '6\n10\n', on('whose output is forwarded, the two prints in execution order'))
             await dap.stop()
         }
 
@@ -96,6 +97,8 @@ await runTest(async (t) => {
             checkEq(at(stop), `next:${lineOf(ORDER, 'return x + 1')}`, on('a node step into a call stops at the first node of the callee'))
             stop = await step(dap, 'next', { granularity: 'instruction' })
             checkEq(at(stop), `work:${L('c')}`, on('a node step at the last node of a function returns to the caller'))
+            stop = await step(dap, 'next', { granularity: 'instruction' })
+            checkEq(at(stop), `work:${L('unused')}`, on('then the effect that nothing uses, which still has a node'))
             stop = await step(dap, 'next', { granularity: 'instruction' })
             checkEq(at(stop), `main:${L('print')}`, on('and so on, node by node'))
 

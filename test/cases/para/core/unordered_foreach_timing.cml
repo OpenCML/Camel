@@ -11,7 +11,7 @@ import { sleep } from process
 import { now } from time
 
 func main() => int sync {
-    let jobs = 0 .. 8
+    let jobs = (0 .. 8)->to_array()
     let delay_ms = 200
     
     let start = now()

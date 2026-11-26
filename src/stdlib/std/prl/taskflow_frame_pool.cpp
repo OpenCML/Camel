@@ -176,6 +176,7 @@ void TaskflowFramePool::allocateChunk(GraphArena &arena, size_t minFrameCount) {
         arena.frameSize       = arena.runtimeGraph->frameSize();
         arena.runtimeDataType = arena.runtimeGraph->runtimeDataType();
         arena.staticArea      = arena.runtimeGraph->staticArea();
+        arena.runtimeLayout   = arena.runtimeGraph->frameLayout();
         GUARD(arena.frameSize > 0, "Frame size must be positive.");
         arena.chunkFrames = std::max(minChunkFrames_, chunkBytes_ / arena.frameSize);
         if (arena.chunkFrames == 0)
@@ -197,7 +198,8 @@ void TaskflowFramePool::allocateChunk(GraphArena &arena, size_t minFrameCount) {
     arena.freeFrames.reserve(arena.freeFrames.size() + frameCount);
     for (size_t i = 0; i < frameCount; ++i) {
         std::byte *slot = chunk + i * arena.frameSize;
-        auto *frame = new (slot) Frame(arena.runtimeGraph, arena.staticArea, arena.runtimeDataType);
+        auto *frame =
+            new (slot) Frame(arena.runtimeLayout, arena.staticArea, arena.runtimeDataType);
 #ifndef NDEBUG
         std::fill_n(
             frame->slotBase(),
@@ -211,8 +213,9 @@ void TaskflowFramePool::allocateChunk(GraphArena &arena, size_t minFrameCount) {
     arena.chunks.push_back({chunk, frameCount});
 }
 
-Frame *TaskflowFramePool::acquire(camel::runtime::GCGraph *graph) {
-    LocalArena &local = localArena(graph);
+Frame *TaskflowFramePool::acquire(const camel::runtime::FrameLayout *layout) {
+    GUARD(layout != nullptr && layout->graph != nullptr, "Taskflow runtime graph is null.");
+    LocalArena &local = localArena(layout->graph);
     if (local.free.empty()) {
         GraphArena &arena = *local.arena;
         std::scoped_lock lock(arena.mutex);

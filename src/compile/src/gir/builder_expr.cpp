@@ -25,6 +25,7 @@
 #include "camel/execute/entry_args.h"
 #include "camel/runtime/control.h"
 #include "camel/runtime/graph.h"
+#include "camel/runtime/graph_placement.h"
 #include "camel/utils/log.h"
 #include "camel/utils/scope.h"
 #include "camel/utils/str.h"

@@ -1122,7 +1122,8 @@ const KNOWN_ARGV = [
     '--build release|debug|profile',
     '--camel <install>',
     '--jobs <n>',
-    '--update-golden',
+    '--update-golden  (rewrites the snapshot of every entry the run starts: with no --entry that is every entry of the named plans)',
+    '--entry <name or plan/name, * wildcard>  (repeatable; only these entries run, so only their goldens are written)',
     '--compile-only',
     '--list-known',
     '--list-cases',
@@ -1196,11 +1197,19 @@ function parseArgs(argv) {
         // list: handing the plans over and letting the tier expand them again is how a case got
         // selected because its whole plan was.
         selectionCases: null,
+        // `--entry <pattern>` runs only the entries it names: `<plan id>/<name>` or the bare name, `*`
+        // standing for any run of characters. Empty means every entry of the targets. It is what
+        // keeps `--update-golden` from rewriting the snapshot of an entry nobody selected.
+        entries: [],
     }
     for (let i = 0; i < argv.length; i++) {
         const arg = argv[i]
         if (arg === '--update-golden') {
             options.updateGolden = true
+        } else if (arg === '--entry' && i + 1 < argv.length) {
+            options.entries.push(argv[++i])
+        } else if (arg.startsWith('--entry=')) {
+            options.entries.push(arg.slice('--entry='.length))
         } else if (arg === '--selection-empty') {
             options.selectionEmpty = true
         } else if (arg === '--print-time-sensitive') {
@@ -4402,6 +4411,35 @@ function printTimeSensitive(options) {
 }
 
 /**
+ * The one rule for "which entries does this run start" beyond the layer: a recorded selection
+ * (`--selection-cases`) and the `--entry` patterns, both of which must hold. `keep` is null when
+ * neither is given. `unmatched()` lists the `--entry` patterns that named no entry, which is a
+ * selection error and never a smaller run.
+ */
+function caseKeeper(options, selection) {
+    const matchers = options.entries.map((pattern) => ({
+        pattern,
+        regex: new RegExp('^' + pattern.split('*').map((part) => part.replace(/[.+?^${}()|[\]\\]/g, '\\$&')).join('.*') + '$'),
+        hits: 0,
+    }))
+    const entryKept = (name) => {
+        const bare = name.slice(name.indexOf('/') + 1)
+        let kept = false
+        for (const matcher of matchers) {
+            if (matcher.regex.test(name) || matcher.regex.test(bare)) {
+                matcher.hits++
+                kept = true
+            }
+        }
+        return kept
+    }
+    const keep = selection === null && matchers.length === 0
+        ? null
+        : (name) => (selection === null || selection.names.has(name)) && (matchers.length === 0 || entryKept(name))
+    return { keep, unmatched: () => matchers.filter((matcher) => matcher.hits === 0).map((matcher) => matcher.pattern) }
+}
+
+/**
  * `--list-cases`: the cases this selection would run, printed as JSON rows, nothing started and no
  * install consulted. It reads the plan tree through `loadPlans`, so the `[[sweeps]]` copies, the
  * layer filter and the companion closure are the run's own; a listing that agreed with the run only
@@ -4409,7 +4447,7 @@ function printTimeSensitive(options) {
  */
 function listSelectedCases(options) {
     const selection = options.selectionCases === null ? null : readCaseSelection(options.selectionCases)
-    const keep = selection === null ? null : (name) => selection.names.has(name)
+    const { keep, unmatched } = caseKeeper(options, selection)
     const selected = loadPlans(
         options.targets,
         options.tier,
@@ -4419,6 +4457,10 @@ function listSelectedCases(options) {
         keep
     )
     if (selection !== null) refuseRecordThatNarrowsLayer(options, selection, selected)
+    if (unmatched().length > 0) {
+        console.error(`${COLORS.red}[PLAN ERROR]${COLORS.reset} --entry matched no entry: ${unmatched().join(', ')}`)
+        return 2
+    }
     if (selected.reachedNothing.length > 0) {
         for (const target of selected.reachedNothing) {
             console.error(
@@ -5577,7 +5619,7 @@ async function main() {
     // narrowing of the same load, not a second one: the plans are still the selection's targets, and
     // `keep` decides which of their entries the change touched.
     const selection = options.selectionCases === null ? null : readCaseSelection(options.selectionCases)
-    const keep = selection === null ? null : (name) => selection.names.has(name)
+    const { keep, unmatched } = caseKeeper(options, selection)
     const selected = loadPlans(
         options.targets,
         options.tier,
@@ -5587,6 +5629,17 @@ async function main() {
         keep
     )
     const plans = selected.plans
+    // An entry pattern that names nothing is a selection error: running the rest, or an update that
+    // records nothing, would read as a success.
+    const unmatchedPatterns = unmatched()
+    if (unmatchedPatterns.length > 0) {
+        console.log(
+            `${COLORS.red}[PLAN ERROR]${COLORS.reset} --entry matched no entry: ${unmatchedPatterns.join(', ')}. ` +
+                'Nothing was started.'
+        )
+        process.exitCode = 2
+        return 2
+    }
     if (selection !== null) refuseRecordThatNarrowsLayer(options, selection, selected)
     // A name the recorded selection carries that this run would not start is a stale or wrong
     // record, and running the rest of it would be a run that silently proves less than the record

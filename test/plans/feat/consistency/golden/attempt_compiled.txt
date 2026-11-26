@@ -1,10 +1,10 @@
 -29200
 14
-DivisionByZero at compiled.cml:11:53
+DivisionByZero at compiled.cml:12:24
 14
 40
-MaxRecursionDepthExceeded at compiled.cml:12:60
+MaxRecursionDepthExceeded at compiled.cml:15:38
 40
-DivisionByZero at compiled.cml:11:53
+DivisionByZero at compiled.cml:12:24
 -29200
 end

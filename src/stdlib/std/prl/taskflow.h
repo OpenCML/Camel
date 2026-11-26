@@ -45,13 +45,18 @@ class TaskflowFramePool {
     TaskflowFramePool(const TaskflowFramePool &)            = delete;
     TaskflowFramePool &operator=(const TaskflowFramePool &) = delete;
 
-    Frame *acquire(camel::runtime::GCGraph *graph);
+    /// `layout` is the graph's record (camel/runtime/frame_layout.h), the same value every other
+    /// frame pool is entered with; the graph it describes is `layout->graph`.
+    Frame *acquire(const camel::runtime::FrameLayout *layout);
     void release(Frame *frame);
     void warmup(camel::runtime::GCGraph *graph, size_t count);
 
   private:
     struct GraphArena {
         camel::runtime::GCGraph *runtimeGraph{nullptr};
+        /// The graph's record (camel/runtime/frame_layout.h): what a frame of this arena is made
+        /// with, and what keeps a frame from needing the graph's definition.
+        const camel::runtime::FrameLayout *runtimeLayout{nullptr};
         size_t frameSize{0};
         const camel::core::type::TupleType *runtimeDataType{nullptr};
         ::Tuple *staticArea{nullptr};

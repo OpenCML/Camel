@@ -120,6 +120,14 @@ pwsh -NoProfile -File <你的工作树>\internal\tools\camel-remote.ps1 `
     `git -C <你的工作树> status --porcelain` 里能看到你的改动；
     `git -C D:\Projects\Camel status --porcelain` **为空**。
 · 主检出 `D:\Projects\Camel` 归负责人：不提交、不快进、不动它的 `out/latest`。
+· **要「改前读数」而仓库不许建额外工作树时**：在**同一棵树**里把要量的那几个文件 `git checkout <base> -- <paths>`，
+   构建+跑，量完 `git checkout HEAD -- <paths>` 复原，贴 `git status --porcelain` 为空与那次的 `[provenance] binary built …`。
+   判据不变（构建产物来自那次 build），代价只是两次构建；**不要**为了取改前读数去建第三棵树。
+   三个容易读错的地方：① 退的是**源文件**，你新加的用例与计划不退 —— 要量的计划正是你加的那一份时，它也得一起退；
+   新加的头文件留着即可（base 的源文件不 include 它，不参与编译）；② 读数里 `[TREE] … N paths were already
+   uncommitted when this run started` 会列出这几个文件，属正常，照抄进交回；③ **改前与改后要挂在同一个 base 上**：
+   跨 base 的差先当“base 的差”处理 —— 同一个用例可以在一格上红、在下一格绿，只因后者的祖先重钉了快照；
+   既不要把跨 base 的差算成自己造成的，也不要把同一 base 上的新红说成既存，两句话都要有读数。
 · **建树只走一个入口**，不要手抄 `git worktree add`：
     pwsh -NoProfile -File internal/tools/new-worktree.ps1 `
       -Path D:\Projects\Camel-wt\<lane> -Branch <branch> -Base origin/develop
@@ -205,6 +213,8 @@ git checkout <改前提交> -- <那一个文件>
 git checkout HEAD -- <那一个文件>          # 恢复，git status --porcelain 必须回到空
 ```
 两行并列写“改前 / 改后”；若改后多的红在改前就有 ⇒ 与这笔无关；若改前是绿的 ⇒ 这笔要重做。
+（改动跨几个文件时是同一手法，见 §7 那条“要「改前读数」而仓库不许建额外工作树时”——那里是它的唯一一份，
+不要在这里再写一遍。）
 
 ## 10. 「绿」有两种口径，别混用
 
@@ -260,4 +270,10 @@ git checkout HEAD -- <那一个文件>          # 恢复，git status --porcelai
   已经写过就立即 `git checkout HEAD -- <file>` 还原，再核 `git status --porcelain` 为空；改完用 `git grep -c <旧文本>` 看数**从几减到几**。
 · **报错的属性不是病因**：`graph.permissions` 报“句柄不指向任何节点”，真正的错在更上游那次“边替换边比较”——
   报错点只是第一个碰到失效句柄的地方。定位先从报错往上追一跳，别在报错那一行上改。
+· **重录金标一律带 `-Entry`**：`camel-remote.ps1 -UpdateGolden -Entry <名字>[,<名字>…]`（名字或 `计划id/名字`，
+  可用 `*` 通配）；只有选中的条目会跑、会写金标，**名字一个都没对上就退出 2**。不给 `-Entry` 仍是整份计划重录 ——
+  那会把同计划里别人的快照一起重写（`cse_written_variable.dot` 就是这么被“顺手”改掉的）。
+  重录前先判“这份计划是否整份绿”：**计划还在报错时录，会把诊断或空图写进金标**。
+  录后 `git status --porcelain` 只许出现你点名的那几份；多出来的 `git checkout HEAD -- <file>` 还原。
 ```
+**读数里出现密钥先隐去**：任何 `sk-` 开头的值、`-e KEY=…`、`--token`、`api_key`、密码，贴 `ps`/命令行/环境变量原文时一律先遮成 `sk-[已隐去]` / `KEY=[已隐去]` 再报。**一次没遮，等于把密钥写进通道日志与仓库历史**；进程参数在同机任何用户 `ps` 都看得到，它本来就已经泄露过一遍。

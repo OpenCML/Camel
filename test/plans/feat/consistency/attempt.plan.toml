@@ -14,8 +14,6 @@ desc = "Fault isolation (`attempt`) on the four back ends, and the clean-up of e
 
 [defaults]
 kind = "snapshot"
-snapshot_stream = "stdout"
-snapshot_compare = "text_exact"
 args = ["${case}", "${backend}"]
 backends = ["nvm", "fvm", "jit", "prl"]
 backends_agree = ["exit_code", "stdout_normalized"]
@@ -108,7 +106,7 @@ kind = "behavior"
 backends = false
 case = "../../../cases/consistency/attempt/compiled.cml"
 args = ["-vv", "${case}", "std::cxx::inline", "std::jit"]
-expect_output_contains = ["compiled & cached graph 'depth'", "MaxRecursionDepthExceeded at compiled.cml:12:60", "DivisionByZero at compiled.cml:11:53"]
+expect_output_contains = ["compiled & cached graph 'depth'", "MaxRecursionDepthExceeded at compiled.cml:15:38", "DivisionByZero at compiled.cml:12:24"]
 verify_script = """
 assert(input.normalized.stdout.trimEnd().endsWith('-29200\nend'), JSON.stringify(input.normalized.stdout.slice(-200)))
 """
@@ -521,7 +519,7 @@ case = "../../../cases/consistency/attempt/in_macro.cml"
 args = ["${case}", "std::macro"]
 expect_exit = 1
 expect_diagnostic_name = "RuntimeDiag::MacroEvaluationFailed"
-expect_diagnostic_line = 15
+expect_diagnostic_line = 18
 expect_output_contains = ["'table' could not be evaluated by std::macro", "Macro cannot call non-macro function at compile time"]
 expect_output_not_contains = ["Segmentation fault", "dumped core"]
 

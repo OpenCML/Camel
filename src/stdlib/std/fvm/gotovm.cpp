@@ -549,7 +549,7 @@ FastVMSchedPass::CallResult FastVMSchedPass::callBorrowed(size_t pc, Frame *root
         // The call nests on the native stack: it is counted, and checked before the frame
         // is taken.
         requireNestedCallRoom(currFrame);
-        Frame *funcFrame = framePool_.acquire(runtimeTarget);
+        Frame *funcFrame = framePool_.acquire(runtimeTarget->frameLayout());
         populateIndirectCallFrame(currFrame, funcFrame, function, nargs, wargs);
 
         _timer.pause();
@@ -620,7 +620,7 @@ FastVMSchedPass::CallResult FastVMSchedPass::callBorrowed(size_t pc, Frame *root
             // compiled callee continues the count from here (invokeOwnedJitFrame).
             push(pc, currFrame);
             Frame *funcFrame = [&]() {
-                Frame *frame = framePool_.acquire(runtimeTarget);
+                Frame *frame = framePool_.acquire(runtimeTarget->frameLayout());
                 if (LIKELY(callSrcArgs.size() == 1)) {
                     fastFrameSetSlot(
                         frame,
@@ -644,7 +644,7 @@ FastVMSchedPass::CallResult FastVMSchedPass::callBorrowed(size_t pc, Frame *root
         }
         push(pc, currFrame);
         Frame *funcFrame = [&]() {
-            Frame *frame = framePool_.acquire(runtimeTarget);
+            Frame *frame = framePool_.acquire(runtimeTarget->frameLayout());
             if (LIKELY(callSrcArgs.size() == 1)) {
                 fastFrameSetSlot(
                     frame,
@@ -707,7 +707,7 @@ FastVMSchedPass::CallResult FastVMSchedPass::callBorrowed(size_t pc, Frame *root
                 "FastVM direct TAIL target of the entry graph must have a materialized runtime "
                 "graph.");
             push(pc, currFrame);
-            Frame *funcFrame = framePool_.acquire(entryTarget);
+            Frame *funcFrame = framePool_.acquire(entryTarget->frameLayout());
             populateDirectCallFrame(currFrame, funcFrame, srcArgs, dstSlots);
             pc        = getFuncExtraTargetPc(entryBc);
             currFrame = funcFrame;
@@ -761,7 +761,7 @@ FastVMSchedPass::CallResult FastVMSchedPass::callBorrowed(size_t pc, Frame *root
             }
             framePool_.release(currFrame);
             Frame *newFrame = [&]() {
-                Frame *frame = framePool_._acquire(runtimeTailTarget);
+                Frame *frame = framePool_._acquire(runtimeTailTarget->frameLayout());
                 if (LIKELY(srcArgs.size() == 1)) {
                     fastFrameSetSlot(frame, dstSlots[0], tailArg0);
                 } else {
@@ -810,7 +810,7 @@ FastVMSchedPass::CallResult FastVMSchedPass::callBorrowed(size_t pc, Frame *root
         }
         framePool_.release(currFrame);
         currFrame = [&]() {
-            Frame *frame = framePool_._acquire(runtimeTailTarget);
+            Frame *frame = framePool_._acquire(runtimeTailTarget->frameLayout());
             if (LIKELY(srcArgs.size() == 1)) {
                 fastFrameSetSlot(frame, dstSlots[0], tailArg0);
             } else {

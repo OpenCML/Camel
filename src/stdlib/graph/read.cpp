@@ -14,6 +14,7 @@
 #include "handle.h"
 #include "nodekind.h"
 #include "regionkind.h"
+#include "resolve.h"
 #include "txn.h"
 
 #include "camel/core/context/context.h"
@@ -36,6 +37,7 @@
 #include "camel/runtime/draft_writes.h"
 #include "camel/runtime/effects.h"
 #include "camel/runtime/graph.h"
+#include "camel/runtime/graph_placement.h"
 #include "camel/runtime/graph_txn.h"
 #include "camel/runtime/program.h"
 #include "camel/runtime/reachable.h"
@@ -89,78 +91,10 @@ namespace mm  = camel::core::mm;
 namespace err = camel::core::error;
 
 // ---- the arguments ----
-
-/// The graph a Graph or Node handle names; a fault when the Program holds no such graph.
-const GCGraph &graphOf(const Handle *handle, const char *site) {
-    const auto *graph =
-        handle->program() != nullptr ? handle->program()->graph(handle->graph()) : nullptr;
-    if (graph == nullptr) {
-        err::throwRuntimeFault(
-            err::RuntimeDiag::InvalidArgument,
-            site,
-            "the graph is not in its program");
-    }
-    return *graph;
-}
-
-/// The node of a frozen graph; a fault when the graph has no such node or the node is dead.
-const GCNode &nodeOfFrozen(const Handle *handle, const char *site) {
-    const GCGraph &graph = graphOf(handle, site);
-    const GCNode *node =
-        graph.containsNodeRef(handle->index()) ? graph.node(handle->index()) : nullptr;
-    if (node == nullptr || node->kind == GCNodeKind::Dead) {
-        err::throwRuntimeFault(
-            err::RuntimeDiag::InvalidArgument,
-            site,
-            "the node is not in its graph");
-    }
-    return *node;
-}
-
-/// Reads that belong to the frozen graphs only (a region, an operator, a transaction) go through
-/// this name, which is the frozen reader: there is nothing of them in a draft.
-const GCNode &nodeOf(const Handle *handle, const char *site) { return nodeOfFrozen(handle, site); }
-
-/// A node of a frozen graph or of the draft being rewritten (a rule condition reads the draft).
-/// Everything the read operators ask about a node is here; the rest of the file picks the
-/// source.
-struct NodeView {
-    const GCNode *frozen                                = nullptr;
-    const DraftNodeHeader *draftHeader                  = nullptr;
-    const camel::runtime::GraphTransaction *transaction = nullptr;
-    gc_node_ref_t ref                                   = kInvalidNodeRef;
-
-    bool isDraft() const { return transaction != nullptr; }
-    const auto &draft() const { return transaction->graph(); }
-    GCNodeKind kind() const { return isDraft() ? draftHeader->kind : frozen->kind; }
-    Type *dataType() const { return isDraft() ? draftHeader->dataType : frozen->dataType(); }
-    int64_t dataIndex() const { return isDraft() ? draftHeader->dataIndex : frozen->dataIndex; }
-    bool hasPayload() const {
-        return isDraft() ? !draft().payloadOf(ref).empty() : frozen->hasPayload();
-    }
-};
-
-NodeView viewOf(const Handle *handle, const char *site) {
-    NodeView view;
-    // A node is in the draft exactly when its handle names the transaction that owns the draft:
-    // there is no other way to be in a draft, and the handle keeps no draft pointer of its own.
-    const auto *transaction = handle->transaction();
-    if (transaction != nullptr) {
-        view.transaction = transaction;
-        view.ref         = handle->index();
-        view.draftHeader = transaction->graph().header(view.ref);
-        if (view.draftHeader == nullptr || !transaction->graph().alive(view.ref) ||
-            view.draftHeader->kind == GCNodeKind::Dead) {
-            err::throwRuntimeFault(
-                err::RuntimeDiag::InvalidArgument,
-                site,
-                "the node is not in its graph");
-        }
-        return view;
-    }
-    view.frozen = &nodeOfFrozen(handle, site);
-    return view;
-}
+//
+// `graphOf`, `nodeOfFrozen`, `nodeOf`, `NodeView` and `viewOf` are in resolve.h: the fact operators
+// of this module resolve the same handles, and one resolution is what keeps a draft node from
+// being read as a published one in one file and correctly in the other.
 
 Handle *graphHandle(const Program *program, GraphId graph) {
     return Handle::create(HandleKind::Graph, program, graph, 0, nullptr, mm::autoSpace());
@@ -680,9 +614,9 @@ slot_t mayRecomputeKernel(ArgsView &, ArgsView &norm, Context &) {
 }
 
 /// Whether running the node can raise a fault where it is written (`nodeMayFault`,
-/// camel/runtime/graph.h): the fact that decides whether a statement nobody reads may still be
-/// dropped. It is asked with the shapes the types state, the way the C++ sweep asks it, so an
-/// elementwise operator over fully fixed shapes is one that cannot fail.
+/// camel/runtime/graph_placement.h): the fact that decides whether a statement nobody reads may
+/// still be dropped. It is asked with the shapes the types state, the way the C++ sweep asks it, so
+/// an elementwise operator over fully fixed shapes is one that cannot fail.
 slot_t mayFaultKernel(ArgsView &, ArgsView &norm, Context &) {
     const auto *handle  = norm.get<Handle *>(0);
     const NodeView node = viewOf(handle, "graph.may_fault");

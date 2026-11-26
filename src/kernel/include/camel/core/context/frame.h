@@ -6,7 +6,7 @@
 #include "camel/core/operator.h"
 #include "camel/core/rtdata.h"
 #include "camel/core/rtdata/aggregate.h"
-#include "camel/runtime/graph.h"
+#include "camel/runtime/frame_layout.h"
 #include "camel/utils/log.h"
 #include "camel/utils/type.h"
 
@@ -34,30 +34,33 @@ inline constexpr size_t kFrameLogArrayLimit = 64;
 
 class Frame : public rtdata::Object {
   public:
-    static consteval size_t runtimeGraphOffset() { return 0; }
+    static consteval size_t layoutOffset() { return 0; }
     static consteval size_t nextOffset() { return sizeof(void *); }
     static consteval size_t staticAreaOffset() { return sizeof(void *) * 2; }
     static consteval size_t dynamicAreaTypeOffset() { return sizeof(void *) * 3; }
     static consteval size_t dynamicAreaOffset() { return sizeof(void *) * 4; }
 
-    // Runtime graph identity is the primary execution carrier.
-    camel::runtime::GCGraph *graph() { return runtimeGraph_; }
-    const camel::runtime::GCGraph *graph() const { return runtimeGraph_; }
-    camel::runtime::GCGraph *runtimeGraph() { return runtimeGraph_; }
-    const camel::runtime::GCGraph *runtimeGraph() const { return runtimeGraph_; }
-    bool hasRuntimeGraph() const { return runtimeGraph_ != nullptr; }
+    // Runtime graph identity is the primary execution carrier. The frame holds the graph's record
+    // (camel/runtime/frame_layout.h) and not the graph's definition: `graph` is the one field of
+    // that record the collector rewrites, and it is the record's `onMoved` hook that rewrites it.
+    camel::runtime::GCGraph *graph() { return layout_ != nullptr ? layout_->graph : nullptr; }
+    const camel::runtime::GCGraph *graph() const {
+        return layout_ != nullptr ? layout_->graph : nullptr;
+    }
+    camel::runtime::GCGraph *runtimeGraph() { return graph(); }
+    const camel::runtime::GCGraph *runtimeGraph() const { return graph(); }
 
     // These two stay inline: `codeAt`, `typeAt`, `get` and `set` reach them, and the interpreter
     // runs those for every node it executes -- a static-area operand or a typed read costs one
-    // call per instruction if the layout lookup is out of line. Their bodies are what keeps
-    // `runtime/graph.h` in this header (frame.cpp, `Frame::graphName`).
+    // call per instruction if the layout lookup is out of line. They read the frame's own record
+    // (camel/runtime/frame_layout.h), so this header does not need `runtime/graph.h`.
     const type::TupleType *runtimeDataLayout() const {
-        GUARD(runtimeGraph_ != nullptr, "Runtime frame has no runtime graph for data layout.");
-        return runtimeGraph_->runtimeDataType();
+        GUARD(layout_ != nullptr, "Runtime frame has no runtime graph for data layout.");
+        return dynamicAreaType_;
     }
     const type::TupleType *staticDataLayout() const {
-        GUARD(runtimeGraph_ != nullptr, "Runtime frame has no runtime graph for static layout.");
-        return runtimeGraph_->staticDataType();
+        GUARD(layout_ != nullptr, "Runtime frame has no runtime graph for static layout.");
+        return layout_->staticDataType;
     }
     // Out of line (frame.cpp): its callers are the two debug log lines below, the frame printer,
     // and the virtual machine's fault, recursion-limit and stack-exhaustion paths -- none of them
@@ -271,7 +274,7 @@ class Frame : public rtdata::Object {
     const slot_t *slotBase() const { return dynamicArea_; }
 
     void printSlotsTo(std::ostream &os) const {
-        os << "frame <" << (runtimeGraph_ ? graphName() : "(null)") << "> at "
+        os << "frame <" << (graph() != nullptr ? graphName() : "(null)") << "> at "
            << mm::formatAddress(this, true) << ":\n";
         for (size_t i = 1; i < dynamicAreaType_->size(); ++i) {
             slot_t s      = dynamicArea_[i];
@@ -314,9 +317,9 @@ class Frame : public rtdata::Object {
 
     // Only frame pools construct frames directly.
     Frame(
-        camel::runtime::GCGraph *runtimeGraph, ::Tuple *staticArea,
+        const camel::runtime::FrameLayout *layout, ::Tuple *staticArea,
         const type::TupleType *dynamicAreaType)
-        : runtimeGraph_(runtimeGraph), next_(nullptr), staticArea_(staticArea),
+        : layout_(layout), next_(nullptr), staticArea_(staticArea),
           dynamicAreaType_(dynamicAreaType) {
         // Do not eagerly initialize the dynamic area here. FastVM relies on
         // reusing freshly released frame memory on the hot path, and forcing
@@ -324,11 +327,13 @@ class Frame : public rtdata::Object {
         // uninitialized-slot diagnostics therefore happen at access sites.
     }
 
-    camel::runtime::GCGraph *runtimeGraph_;
+    // The graph's record (camel/runtime/frame_layout.h), not the graph: a stable pointer the
+    // collector never moves, so `next_` and the rest of the frame's fixed part stay put too.
+    const camel::runtime::FrameLayout *layout_;
     Frame *next_;
-    ::Tuple *staticArea_; // Borrowed static area owned by the graph carrier.
-    const type::TupleType *dynamicAreaType_;
-    slot_t dynamicArea_[]; // Flexible tail storage for dynamic slots.
+    ::Tuple *staticArea_;                    // Borrowed static area owned by the graph carrier.
+    const type::TupleType *dynamicAreaType_; // `layout_->runtimeDataType`, kept for the hot reads.
+    slot_t dynamicArea_[];                   // Flexible tail storage for dynamic slots.
 };
 
 class FrameView {
@@ -396,7 +401,8 @@ static_assert(sizeof(camel::runtime::GCGraph *) == sizeof(void *));
 static_assert(sizeof(Frame *) == sizeof(void *));
 static_assert(sizeof(::Tuple *) == sizeof(void *));
 static_assert(sizeof(const type::TupleType *) == sizeof(void *));
-static_assert(Frame::runtimeGraphOffset() == 0);
+static_assert(sizeof(const camel::runtime::FrameLayout *) == sizeof(void *));
+static_assert(Frame::layoutOffset() == 0);
 static_assert(Frame::nextOffset() == sizeof(void *));
 static_assert(Frame::dynamicAreaOffset() == sizeof(void *) * 4);
 
@@ -441,37 +447,47 @@ class FramePool {
     /// The slot at `top_` is read as "the frame the next acquire may reuse" and written as the
     /// sentinel that says there is nothing to reuse. Both need a Frame *object* there, not raw
     /// bytes: the pool owns the storage, and the sentinel is the frame that owns it until the
-    /// next acquire constructs over it. Setting `runtimeGraph_` through a `reinterpret_cast` to a
-    /// Frame that was never constructed is what made UBSan read an invalid vptr at this line
-    /// (CI run 41428440898: `FramePool::_resetTop` <- `acquire(GCGraph*)` <-
+    /// next acquire constructs over it. Setting the frame's first slot through a
+    /// `reinterpret_cast` to a Frame that was never constructed is what made UBSan read an invalid
+    /// vptr at this line (CI run 41428440898: `FramePool::_resetTop` <- `acquire` <-
     /// `NodeVMSchedPass::apply`).
     inline void _placeSentinel() { new (top_) Frame(nullptr, nullptr, nullptr); }
 
     inline void _resetTop() { _placeSentinel(); }
 
-    inline Frame *_acquire(camel::runtime::GCGraph *graph) {
-        return acquireImpl<false>(graph, nullptr);
+    /// The name a log line prints for a frame's graph, from the frame's record (so these lines do
+    /// not need `runtime/graph.h`).
+    static const std::string &_layoutName(const camel::runtime::FrameLayout *layout) {
+        static const std::string kNone{"(null)"};
+        return layout != nullptr ? layout->name : kNone;
     }
 
-    inline Frame *_acquire(camel::runtime::GCGraph *graph, ::Tuple *staticArea) {
-        return acquireImpl<true>(graph, staticArea);
+    inline Frame *_acquire(const camel::runtime::FrameLayout *layout) {
+        return acquireImpl<false>(layout, nullptr);
     }
 
+    inline Frame *_acquire(const camel::runtime::FrameLayout *layout, ::Tuple *staticArea) {
+        return acquireImpl<true>(layout, staticArea);
+    }
+
+    /// A frame is entered for a graph through the graph's record (camel/runtime/frame_layout.h):
+    /// the caller passes `graph->frameLayout()`, which is the one thing this header needs from the
+    /// graph, and the frame keeps that pointer for the call.
     template <bool MatchStaticArea>
-    inline Frame *acquireImpl(camel::runtime::GCGraph *graph, ::Tuple *staticArea) {
+    inline Frame *acquireImpl(const camel::runtime::FrameLayout *layout, ::Tuple *staticArea) {
         EXEC_WHEN_DEBUG({
             CAMEL_LOG_INFO_S(
                 "FramePool",
                 "[{}] Acquire request for runtime graph <{}>, top = {}, end = {}",
                 mm::formatAddress(this, true),
-                graph ? graph->name() : "(null)",
+                _layoutName(layout),
                 mm::formatAddress(top_, true),
                 mm::formatAddress(end_, true));
         });
 
         Frame *lastFrame = reinterpret_cast<Frame *>(top_);
         if (LIKELY(
-                lastFrame->runtimeGraph_ == graph &&
+                lastFrame->layout_ == layout &&
                 (!MatchStaticArea || lastFrame->staticArea_ == staticArea))) {
             if (UNLIKELY(hasGcSlots(lastFrame))) {
                 clearGcSlots(lastFrame);
@@ -481,7 +497,7 @@ class FramePool {
                     "FramePool",
                     "[{}] Reusing existing frame of runtime graph <{}> at {}",
                     mm::formatAddress(this, true),
-                    graph ? graph->name() : "(null)",
+                    _layoutName(layout),
                     mm::formatAddress(lastFrame, true));
                 frames_.push_back(lastFrame);
             });
@@ -491,18 +507,20 @@ class FramePool {
         }
 
         GUARD(
-            graph->hasFrameLayout(),
-            std::format("Runtime graph '{}' has no finalized frame layout.", graph->name()));
-        size_t frameSize = graph->frameSize();
+            layout != nullptr && layout->finalized,
+            std::format(
+                "Runtime graph '{}' has no finalized frame layout.",
+                layout != nullptr ? layout->name : "(null)"));
+        const size_t frameSize = layout->frameSize;
         // Room for the frame and for the sentinel that _resetTop() writes after it.
         if (top_ + frameSize + sizeof(Frame) > end_) {
-            throwFramePoolExhausted(graph, static_cast<size_t>(end_ - base_));
+            throwFramePoolExhausted(layout->graph, static_cast<size_t>(end_ - base_));
         }
         Frame *frame = new (top_) Frame(
-            graph,
-            MatchStaticArea ? staticArea : graph->staticArea(),
-            graph->runtimeDataType());
-        if (UNLIKELY(graph->runtimeDataType()->refCount() != 0)) {
+            layout,
+            MatchStaticArea ? staticArea : layout->staticArea,
+            layout->runtimeDataType);
+        if (UNLIKELY(layout->runtimeDataType->refCount() != 0)) {
             clearGcSlots(frame);
         }
 
@@ -511,7 +529,7 @@ class FramePool {
                 "FramePool",
                 "[{}] Allocated new Frame for runtime graph <{}> at {}, size = {}",
                 mm::formatAddress(this, true),
-                graph->name(),
+                _layoutName(layout),
                 mm::formatAddress(frame, true),
                 frameSize);
         });
@@ -523,14 +541,14 @@ class FramePool {
         return frame;
     }
 
-    inline Frame *acquire(camel::runtime::GCGraph *graph) {
-        Frame *frame = _acquire(graph);
+    inline Frame *acquire(const camel::runtime::FrameLayout *layout) {
+        Frame *frame = _acquire(layout);
         _resetTop();
         return frame;
     }
 
-    inline Frame *acquire(camel::runtime::GCGraph *graph, ::Tuple *staticArea) {
-        Frame *frame = _acquire(graph, staticArea);
+    inline Frame *acquire(const camel::runtime::FrameLayout *layout, ::Tuple *staticArea) {
+        Frame *frame = _acquire(layout, staticArea);
         _resetTop();
         return frame;
     }
@@ -541,7 +559,7 @@ class FramePool {
                 "FramePool",
                 "[{}] Releasing frame of graph <{}> at {}",
                 mm::formatAddress(this, true),
-                frame->runtimeGraph_ ? frame->runtimeGraph_->name() : "(null)",
+                _layoutName(frame->layout_),
                 mm::formatAddress(frame, true));
             GUARD(
                 reinterpret_cast<std::byte *>(frame) < top_,
@@ -552,7 +570,7 @@ class FramePool {
                 std::format(
                     "Trying to release a frame that is not on top, top frame of graph <{}> is at "
                     "{}.",
-                    last->runtimeGraph_ ? last->runtimeGraph_->name() : "(null)",
+                    _layoutName(last->layout_),
                     mm::formatAddress(last, true)));
         });
 
@@ -587,11 +605,11 @@ class FramePool {
     template <typename Visitor> void forEachActiveFrame(Visitor &&visitor) const {
         for (std::byte *cursor = base_; cursor < top_;) {
             Frame *frame = reinterpret_cast<Frame *>(cursor);
-            if (!frame->runtimeGraph_ || !frame->dynamicAreaType_) {
+            if (!frame->layout_ || !frame->dynamicAreaType_) {
                 break;
             }
             visitor(frame);
-            cursor += frame->runtimeGraph_->frameSize();
+            cursor += frame->layout_->frameSize;
         }
     }
 
@@ -618,15 +636,13 @@ class FramePool {
     void traceActiveFrames(
         const camel::core::mm::GenerationalAllocatorWithGC::RefRelocator &relocate) const {
         forEachActiveFrame([&](Frame *frame) {
-            // The graph being run stays: its version may be held by no program any more.
-            if (frame->runtimeGraph_ != nullptr) {
-                relocate(
-                    static_cast<camel::core::rtdata::Object *>(frame->runtimeGraph_),
-                    nullptr,
-                    camel::core::rtdata::RefTraceInfo{
-                        .ownerKind = "Frame",
-                        .slotName  = "graph",
-                    });
+            // The graph being run stays: its version may be held by no program any more. The frame
+            // reaches it through its record and marks it as it goes (frame.cpp, `markFrameGraph`,
+            // the one place that needs the graph's definition for the cast to its object base). The
+            // record's own pointer back to the graph is `GCGraph::onMoved`'s to rewrite when the
+            // collector moves it, so nothing here writes to the record.
+            if (frame->layout_ != nullptr) {
+                markFrameGraph(frame, relocate);
             }
             if (frame->staticArea_ && frame->staticDataLayout()) {
                 frame->staticArea_->updateRefs(relocate, frame->staticDataLayout());
@@ -636,6 +652,12 @@ class FramePool {
             }
         });
     }
+
+    /// Marks the graph an active frame runs, so a collection keeps it. Out of line in frame.cpp:
+    /// passing the graph to the collector needs its definition (it is an `rtdata::Object`), which
+    /// this header deliberately does not have. One call per active frame per collection.
+    static void markFrameGraph(
+        Frame *frame, const camel::core::mm::GenerationalAllocatorWithGC::RefRelocator &relocate);
 
     std::byte *base_;
     std::byte *top_;

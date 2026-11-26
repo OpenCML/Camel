@@ -18,6 +18,7 @@
 #include "camel/runtime/draft_session.h"
 #include "camel/runtime/exec_plan.h"
 #include "camel/runtime/graph.h"
+#include "camel/runtime/graph_placement.h"
 #include "runtime/graph_build.h"
 
 #include <algorithm>

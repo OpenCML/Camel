@@ -1,0 +1,31 @@
+// `effects` on a draft is refused, and `effects` on the published graph still answers.
+//
+// A draft is a graph being edited: `effectwalk` walks a published `GCGraph`, and the draft is not
+// one, so there is nothing to walk. Answering anyway would be worse than refusing -- the anchor
+// would resolve the GraphId in the program the draft was opened on and print the effect summary of
+// the graph *before* the edits, silently and with exit 0 (this case is the reading of that: before
+// the refusal existed, the last line below printed `true`).
+//
+// The first half is the published reading, which must keep answering; the second half is the
+// draft, which must fault with the reason.
+//
+// The plan asserts the reason on **stdout**, and that is a transitional fact, not a decision: this
+// CLI prints a runtime fault on stdout today, and task-79 moves diagnostics to stderr. When it
+// lands, this plan's assertion moves with it -- the reason stays the same string, its stream does
+// not, so do not read the current `expect_stdout_contains` as "the fault belongs on stdout".
+
+import { graph_of, open, effects } from graph
+
+func loud(x: int) => int sync {
+    println(x)
+    return x
+}
+
+func main() => int spelling sync {
+    println('published effects external')
+    println(effects(graph_of(loud)).external)
+    let draft = open(loud)
+    println('draft effects external')
+    println(effects(draft).external)
+    return 0
+}

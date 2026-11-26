@@ -9,8 +9,6 @@ desc = "A value enters a T? / T! position by itself where the target type is kno
 
 [defaults]
 kind = "snapshot"
-snapshot_stream = "stdout"
-snapshot_compare = "text_exact"
 args = ["${case}", "${backend}"]
 backends = ["nvm", "fvm", "jit", "prl"]
 backends_agree = ["exit_code", "stdout_normalized"]
@@ -43,7 +41,6 @@ desc = "The same program through std::opt, std::nvm."
 case = "../../../cases/consistency/entering/positions.cml"
 args = ["${case}", "std::opt", "std::nvm"]
 backends = ["nvm"]
-backends_agree = []
 golden = "golden/entering_positions.txt"
 
 [[tests]]
@@ -52,7 +49,6 @@ desc = "The same program through std::cxx::inline, std::fvm."
 case = "../../../cases/consistency/entering/positions.cml"
 args = ["${case}", "std::cxx::inline", "std::fvm"]
 backends = ["nvm"]
-backends_agree = []
 golden = "golden/entering_positions.txt"
 
 [[tests]]
@@ -61,7 +57,6 @@ desc = "The same program through std::opt, std::nvm."
 case = "../../../cases/consistency/entering/positions.cml"
 args = ["${case}", "std::opt", "std::nvm"]
 backends = ["nvm"]
-backends_agree = []
 golden = "golden/entering_positions.txt"
 
 [[tests]]
@@ -70,7 +65,6 @@ desc = "The same program through std::cxx::fold, std::fvm."
 case = "../../../cases/consistency/entering/positions.cml"
 args = ["${case}", "std::cxx::fold", "std::fvm"]
 backends = ["nvm"]
-backends_agree = []
 golden = "golden/entering_positions.txt"
 
 [[tests]]
@@ -79,7 +73,6 @@ desc = "The same program through std::cxx::inline, std::opt, std::jit."
 case = "../../../cases/consistency/entering/positions.cml"
 args = ["${case}", "std::cxx::inline", "std::opt", "std::jit"]
 backends = ["nvm"]
-backends_agree = []
 golden = "golden/entering_positions.txt"
 
 [[tests]]
@@ -88,7 +81,6 @@ desc = "The same program through std::macro, std::opt, std::prl."
 case = "../../../cases/consistency/entering/positions.cml"
 args = ["${case}", "std::macro", "std::opt", "std::prl"]
 backends = ["nvm"]
-backends_agree = []
 golden = "golden/entering_positions.txt"
 
 # S1's mechanism as a reading rather than a claim: every control region the pass prints reports
@@ -118,7 +110,6 @@ tool = "node"
 case = "../../../cases/consistency/entering/check_plan_regions.mjs"
 args = ["${case}"]
 backends = ["nvm"]
-backends_agree = []
 expect_exit = 0
 expect_stdout_contains = ["[REGIONS] ok", "[REGIONS] graphs ", "control regions ", "members ", "graph nodes "]
 expect_output_not_contains = ["[REGIONS] RED"]
@@ -131,7 +122,6 @@ desc = "The same program through std::opt, std::nvm."
 case = "../../../cases/consistency/entering/empty_array.cml"
 args = ["${case}", "std::opt", "std::nvm"]
 backends = ["nvm"]
-backends_agree = []
 golden = "golden/entering_empty_array.txt"
 
 [[tests]]
@@ -140,7 +130,6 @@ desc = "The same program through std::cxx::inline, std::fvm."
 case = "../../../cases/consistency/entering/empty_array.cml"
 args = ["${case}", "std::cxx::inline", "std::fvm"]
 backends = ["nvm"]
-backends_agree = []
 golden = "golden/entering_empty_array.txt"
 
 [[tests]]
@@ -149,7 +138,6 @@ desc = "The same program through std::opt, std::nvm."
 case = "../../../cases/consistency/entering/empty_array.cml"
 args = ["${case}", "std::opt", "std::nvm"]
 backends = ["nvm"]
-backends_agree = []
 golden = "golden/entering_empty_array.txt"
 
 [[tests]]
@@ -158,7 +146,6 @@ desc = "The same program through std::cxx::fold, std::fvm."
 case = "../../../cases/consistency/entering/empty_array.cml"
 args = ["${case}", "std::cxx::fold", "std::fvm"]
 backends = ["nvm"]
-backends_agree = []
 golden = "golden/entering_empty_array.txt"
 
 [[tests]]
@@ -167,7 +154,6 @@ desc = "The same program through std::cxx::inline, std::opt, std::jit."
 case = "../../../cases/consistency/entering/empty_array.cml"
 args = ["${case}", "std::cxx::inline", "std::opt", "std::jit"]
 backends = ["nvm"]
-backends_agree = []
 golden = "golden/entering_empty_array.txt"
 
 [[tests]]
@@ -176,7 +162,6 @@ desc = "The same program through std::macro, std::opt, std::prl."
 case = "../../../cases/consistency/entering/empty_array.cml"
 args = ["${case}", "std::macro", "std::opt", "std::prl"]
 backends = ["nvm"]
-backends_agree = []
 golden = "golden/entering_empty_array.txt"
 
 [[tests]]
@@ -185,7 +170,6 @@ desc = "The same program through std::opt, std::nvm."
 case = "../../../cases/consistency/entering/fallback_chain.cml"
 args = ["${case}", "std::opt", "std::nvm"]
 backends = ["nvm"]
-backends_agree = []
 golden = "golden/entering_fallback_chain.txt"
 
 [[tests]]
@@ -194,7 +178,6 @@ desc = "The same program through std::cxx::inline, std::fvm."
 case = "../../../cases/consistency/entering/fallback_chain.cml"
 args = ["${case}", "std::cxx::inline", "std::fvm"]
 backends = ["nvm"]
-backends_agree = []
 golden = "golden/entering_fallback_chain.txt"
 
 [[tests]]
@@ -203,7 +186,6 @@ desc = "The same program through std::opt, std::nvm."
 case = "../../../cases/consistency/entering/fallback_chain.cml"
 args = ["${case}", "std::opt", "std::nvm"]
 backends = ["nvm"]
-backends_agree = []
 golden = "golden/entering_fallback_chain.txt"
 
 [[tests]]
@@ -212,7 +194,6 @@ desc = "The same program through std::cxx::fold, std::fvm."
 case = "../../../cases/consistency/entering/fallback_chain.cml"
 args = ["${case}", "std::cxx::fold", "std::fvm"]
 backends = ["nvm"]
-backends_agree = []
 golden = "golden/entering_fallback_chain.txt"
 
 [[tests]]
@@ -221,7 +202,6 @@ desc = "The same program through std::cxx::inline, std::opt, std::jit."
 case = "../../../cases/consistency/entering/fallback_chain.cml"
 args = ["${case}", "std::cxx::inline", "std::opt", "std::jit"]
 backends = ["nvm"]
-backends_agree = []
 golden = "golden/entering_fallback_chain.txt"
 
 [[tests]]
@@ -230,7 +210,6 @@ desc = "The same program through std::macro, std::opt, std::prl."
 case = "../../../cases/consistency/entering/fallback_chain.cml"
 args = ["${case}", "std::macro", "std::opt", "std::prl"]
 backends = ["nvm"]
-backends_agree = []
 golden = "golden/entering_fallback_chain.txt"
 
 [[tests]]
@@ -240,7 +219,6 @@ kind = "snapshot"
 case = "../../../cases/consistency/entering/graph_implicit.cml"
 args = ["${case}", "std::gir", "std::nop"]
 backends = ["nvm"]
-backends_agree = []
 snapshot_compare = "gir_dot_isomorphic"
 golden = "golden/entering_graph.dot"
 
@@ -251,7 +229,6 @@ kind = "snapshot"
 case = "../../../cases/consistency/entering/graph_explicit.cml"
 args = ["${case}", "std::gir", "std::nop"]
 backends = ["nvm"]
-backends_agree = []
 snapshot_compare = "gir_dot_isomorphic"
 golden = "golden/entering_graph.dot"
 
@@ -262,7 +239,6 @@ kind = "negative"
 case = "../../../cases/consistency/entering/err_arg_reverse.cml"
 args = ["-E", "short", "${case}"]
 backends = ["nvm"]
-backends_agree = []
 expect_exit = 1
 expect_output_not_contains = ["Segmentation fault", "dumped core", "internal error"]
 expect_output_contains = ["name=SemanticDiag::NoMatchingFunction", "err_arg_reverse.cml:4:14:"]
@@ -274,7 +250,6 @@ kind = "negative"
 case = "../../../cases/consistency/entering/err_other_payload.cml"
 args = ["-E", "short", "${case}"]
 backends = ["nvm"]
-backends_agree = []
 expect_exit = 1
 expect_output_not_contains = ["Segmentation fault", "dumped core", "internal error"]
 expect_output_contains = ["name=SemanticDiag::NoMatchingFunction", "err_other_payload.cml:4:14:"]
@@ -286,7 +261,6 @@ kind = "negative"
 case = "../../../cases/consistency/entering/err_numeric.cml"
 args = ["-E", "short", "${case}"]
 backends = ["nvm"]
-backends_agree = []
 expect_exit = 1
 expect_output_not_contains = ["Segmentation fault", "dumped core", "internal error"]
 expect_output_contains = ["name=SemanticDiag::NoMatchingFunction", "err_numeric.cml:4:14:"]
@@ -298,7 +272,6 @@ kind = "negative"
 case = "../../../cases/consistency/entering/err_assignment_reverse.cml"
 args = ["-E", "short", "${case}"]
 backends = ["nvm"]
-backends_agree = []
 expect_exit = 1
 expect_output_not_contains = ["Segmentation fault", "dumped core", "internal error"]
 expect_output_contains = ["name=SemanticDiag::NoMatchingFunction", "err_assignment_reverse.cml:4:5:"]
@@ -310,7 +283,6 @@ kind = "negative"
 case = "../../../cases/consistency/entering/err_assignment_other_payload.cml"
 args = ["-E", "short", "${case}"]
 backends = ["nvm"]
-backends_agree = []
 expect_exit = 1
 expect_output_not_contains = ["Segmentation fault", "dumped core", "internal error"]
 expect_output_contains = ["name=SemanticDiag::NoMatchingFunction", "err_assignment_other_payload.cml:3:5:"]
@@ -322,7 +294,6 @@ kind = "negative"
 case = "../../../cases/consistency/entering/err_arms_unrelated.cml"
 args = ["-E", "short", "${case}"]
 backends = ["nvm"]
-backends_agree = []
 expect_exit = 1
 expect_output_not_contains = ["Segmentation fault", "dumped core", "internal error"]
 expect_diagnostic_name = "SemanticDiag::BranchReturnTypeMismatch"
@@ -336,7 +307,6 @@ kind = "negative"
 case = "../../../cases/consistency/entering/err_empty_array_untyped.cml"
 args = ["-E", "short", "${case}"]
 backends = ["nvm"]
-backends_agree = []
 expect_exit = 1
 expect_output_not_contains = ["Segmentation fault", "dumped core", "internal error"]
 expect_diagnostic_name = "SemanticDiag::EmptyArrayWithoutType"
@@ -350,7 +320,6 @@ kind = "negative"
 case = "../../../cases/consistency/entering/err_error_arm_no_type.cml"
 args = ["-E", "short", "${case}"]
 backends = ["nvm"]
-backends_agree = []
 expect_exit = 1
 expect_output_not_contains = ["Segmentation fault", "dumped core", "internal error"]
 expect_diagnostic_name = "SemanticDiag::BranchReturnTypeMismatch"
@@ -483,7 +452,6 @@ kind = "negative"
 case = "../../../cases/consistency/entering/err_arm_cell_unrelated.cml"
 args = ["-E", "short", "${case}"]
 backends = ["nvm"]
-backends_agree = []
 expect_exit = 1
 expect_stdout_contains = ["expected 'int', found 'string'"]
 expect_output_not_contains = ["Segmentation fault", "dumped core", "var int", "var string", "An error has occurred"]

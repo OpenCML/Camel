@@ -9,9 +9,10 @@ printed source must compile to a graph isomorphic to the original. This case pin
     `hello`), for branches (`if`, `match`, nested branches, a `return` in an arm, and an arm whose
     value is the value its write wrote, `arm_write.cml`), for loops
     (`for`, `while`, `for ... while`, two states, a struct state, a body with effects), for the
-    interval `a..b` in the sequence of a `for` and in a value position (`interval.cml`: the loop is
-    fused by the compiler and its graph holds the two bounds, so the printed source has to spell
-    the interval again), for
+    interval `a..b` in a value position (`interval.cml`: the graph holds the library's range value,
+    so the printed source has to spell the interval again; a loop over a range is a stream walk and
+    `std::cml` does not print it, which `feat.compile.stream` pins in `interval_loop` and
+    `interval_loop_cml`), for
     closures (a lambda as a value, a block body, captured source names, a returned lambda, a
     closure over a cell), for `with` parameters (including one that also reads a module value),
     for a `var` parameter, for a body whose value is a write's value (`write_value.cml`: the
@@ -98,7 +99,7 @@ MARKERS = {
     "arm_read": ["if ", "else ", "let ", "var "],
     "unused_loop": ["loop ", "while "],
     "loop": ["loop ", "for ", "while ", "sync {"],
-    "interval": ["..", "for ", "while ", "let "],
+    "interval": ["..", "let "],
     "closure": ["=>", "sync", "offset", "base"],
     "with_param": ["with <", "scale", "clamp"],
     "var_param": ["var "],

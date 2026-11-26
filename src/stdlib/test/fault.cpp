@@ -9,6 +9,7 @@
 #include "camel/passes/test/anchor.h"
 #include "camel/runtime/draft_session.h"
 #include "camel/runtime/graph.h"
+#include "camel/runtime/type_agreement.h"
 
 #include <utility>
 #include <vector>

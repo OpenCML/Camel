@@ -1,0 +1,29 @@
+# The frame's header on its own. `camel/core/context/frame.h` used to include
+# `camel/runtime/graph.h` so that a frame could read five values off the graph; those values are a
+# plain record now (`camel/runtime/frame_layout.h`), and this plan is the reading behind saying so:
+# a translation unit with one include compiles with the build's own flags, the compiler's own
+# closure for that unit names no `runtime/graph.h`, and the removed `Frame::hasRuntimeGraph` is
+# rejected by the same header -- one green and one red, from one header.
+#
+# It is a probe and not a case under test/cases: it compiles against `build/compile_commands.json`,
+# which only the build host has, and it asks for a compiler there. `tier = "debug"` keeps it out of
+# the fast and all layers; naming this file runs it in any build.
+
+id = "probe.frame_header"
+order = 9985
+tier = "debug"
+tags = ["probe"]
+
+[defaults]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 300000
+
+[[tests]]
+name = "probe.frame_header.stands_alone"
+desc = "A unit whose only include is `camel/core/context/frame.h` compiles with `frame.cpp`'s own flag line from the compile database, `-M` on that unit lists no `camel/runtime/graph.h`, and a unit that calls the removed `Frame::hasRuntimeGraph` is rejected with a diagnostic naming it. The two outcomes come from the same header, so they say the check reads the header and not only the compiler; the closure reading is there because a header can compile while still forwarding the graph's."
+kind = "behavior"
+tool = "node"
+case = "../../cases/probe/frame_header_standalone.mjs"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_contains = ["PASS frame header standalone: all readings taken"]

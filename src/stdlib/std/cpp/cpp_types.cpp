@@ -16,6 +16,7 @@
 #include "camel/core/type/collection.h"
 #include "camel/core/type/composite/array.h"
 #include "camel/core/type/composite/func.h"
+#include "camel/core/type/composite/stream.h"
 #include "camel/core/type/composite/struct.h"
 #include "camel/core/type/composite/tuple.h"
 #include "camel/core/type/enum.h"
@@ -265,6 +266,7 @@ namespace {
 
 using camel::core::type::ArrayType;
 using camel::core::type::FunctionType;
+using camel::core::type::StreamType;
 using camel::core::type::StructType;
 using camel::core::type::TupleType;
 
@@ -305,6 +307,19 @@ bool holdsSelf(const Type *member, const std::string &key, std::set<std::string>
             if (holdsSelf(record->typeAt(i), key, seen)) {
                 return true;
             }
+        }
+    }
+    if (member->code() == TypeCode::Stream) {
+        // The value of `T..` is its step function `() => (T, T..)?` (design principles 5.4), and
+        // the tuple a pull answers carries the stream beside the element. The tuple therefore
+        // reaches itself through a function type: the stream is a handle there, so the walk can
+        // follow the answer without the tuple being written, and the tuple has to have its name
+        // before the member that spells the stream.
+        const FunctionType *step = static_cast<const StreamType *>(member)->stepType();
+        const TupleType *answer =
+            step != nullptr && step->hasExitType() ? asTuple(step->exitType()) : nullptr;
+        if (answer != nullptr && answer->isNullable()) {
+            return holdsSelf(answer->payloadType(), key, seen);
         }
     }
     return false;
@@ -915,6 +930,14 @@ std::optional<std::string> ProgramValues::type(const Type *t) {
         decl += "}\n\n";
         declarations_ += decl;
         out = name;
+    } else if (t->code() == TypeCode::Stream) {
+        // `T..`'s value is its step function `() => (T, T..)?` (design principles 5.4: a stream
+        // is a value, and its value is the step function together with the state it carries), and
+        // a function value is one handle: the C++ type of `T..` is the Fn spelling of that
+        // signature, not a wrapper around it. The signature names the tuple that answers one
+        // pull, and that tuple carries the stream back -- `holdsSelf` is what lets the two spell
+        // each other, since the stream itself is only ever held by the handle.
+        out = type(static_cast<const StreamType *>(t)->stepType());
     } else if (t->code() == TypeCode::Function) {
         const auto *fn = static_cast<const FunctionType *>(t);
         auto result    = type(fn->exitType());
