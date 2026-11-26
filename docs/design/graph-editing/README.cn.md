@@ -31,9 +31,9 @@ export func fold_zero_adds::<F>(f: F) => F! when is_function::<F>() {
 }
 
 // 加了效应时，块头写出新的函数类型
-export func log_result(f: (x: float) => float) => ((x: float) => float uses console)! {
+export func log_result(f: (x: float) => float) => ((x: float) => float uses var console)! {
     return edit d = f {             // 结果类型取自函数的返回类型
-        let out = exit_of(d)
+        let out = exit(d)
         let w = inline(out, func (y: float) sync { println(`result = ${y}`); y }, out)
         replace(out, w)
     }
@@ -192,7 +192,7 @@ export func strip_debug_prints::<F>(f: F) => F! when is_function::<F>() {
 
 ## 11. 迁移
 
-- `lib/graph/graph.cml`：删除 `graph_of`、`graphs_of`、`Txn<F>`、`open`、`commit`、`abort`；查询与编辑算子的签名不变，句柄类型带上块标签；新增 `inline`、`outline`、`order`、`exit_of` 一类锚点查询；删除 `add_constant`（它是 `inline(at, () => v)` 的特例）。
+- `lib/graph/graph.cml`：删除 `graph_of`、`graphs_of`、`Txn<F>`、`open`、`commit`、`abort`；查询与编辑算子的签名不变，句柄类型带上块标签；新增 `inline`、`outline`、`order`、`exit` 一类锚点查询；删除 `add_constant`（它是 `inline(at, () => v)` 的特例）。
 - 用 Camel 写的遍（`lib/opt/opt.cml` 的 `fold`/`cse`/`dce`、`examples/case-study/edits.cml`、`test/cases/modules/graph_pass/*`）：`open … commit` 改写成 `edit d = f { … }`；只读分析改写成 `view`。遍的形状不变，仍是 `(f: F) => F!`。
 - `probe_handle`、`check_pass_boundary` 改成 `view` 块里的查询。
 - 测试：每条现有的 `Txn` 用例改写；另加反例，各报一条具名诊断：句柄作为块的值交出、存进块外的 `Ref`、被离开的闭包带走、图算子写在块外、`view` 的节点交给 `replace`。

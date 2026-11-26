@@ -8,7 +8,7 @@
 
 这两格探索 CC 稿需要、而瘦身不碰或碰得少的较难几项，按下面的先后，做完一项换下一项，不让给瘦身。现状核对见 `internal/reports/2026-11-25-cc-needs-status.cn.md`。
 
-- **`edit`/`view` 块**（车道图 L）：两个关键字与块表达式，句柄带作用域标签、出不了块，编辑算子补上 `add_param`，草稿记下用过的编辑种类。依据 `docs/design/graph-editing/` 第 2–8、15 节与设计原则 9.12。E3、E8、V1 都靠它。
+- **`edit`/`view` 块的前端**：两格都给它，A、B 并行，C 接在 A 后，见 `internal/plans/2026-11-26-edit-view-frontend.cn.md`。后端（块体编成算子实现、命名、记录、执行器）已落地。
 - **`int8` 量化规则集，加"学到的值绑定后再变换"**：`BIND` 把训练后的值作为常量放进闭包的图，`rewrite` 能看到并匹配 `const w`；量化规则写成 Camel 库。C4 和贯穿全文的示例靠它。
 - **ONNX 导出按数据收集的循环**：每轮收集一个值的循环导出为 `Loop`，收集的值作 scan output（`src/stdlib/onnx/exporter.cpp` 目前直接拒绝）。E5、E6 的梯度模型与 CC 主案例靠它。
 
@@ -29,3 +29,4 @@
 9. **合并树路径读配置**（每日审查第 ⑦ 条）：`merge-lane.ps1` 与成批合并工具从 `camel-gate.local.json` 读合并位列表，删掉写死的默认值。
 10. **过程痕迹检查器扩范围**（每日审查第 ① 条剩下的部分）：扫 `scripts/`、`internal/tools/`、`test/`，补派工编号等模式，现有的一次清干净。
 11. **`std::nop` 的注释**（D-1124-84 挂起的那句）：写"扔掉这张图，不执行：返回空图，不产生任何效应"。
+12. **打印要记成写 `console`**：设计原则写明打印是 `uses var console`（负责人 11-13、11-14），而树里 `println`/`print` 只声明 `panic`，没有 `console` 资源。在标准库里声明 `resource console`，打印类函数写 `uses var console`；没写 `uses` 子句的函数由推导自动带上，写了子句又会打印的显式补上。判据：图编辑设计第 15.1 节 `log_result` 的块头类型能写出且被提交核对。

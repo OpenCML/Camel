@@ -65,7 +65,20 @@ window.__ModuleLoader__.load({
             let value
             try {
                 const response = await fetch('/oversee/reload', { method: 'POST', cache: 'no-store' })
-                value = await response.json()
+                // Read the body as text first: an answer that is not the route's JSON (an empty body
+                // from a proxy that gave up, an HTML error page) is reported with its status and its
+                // first characters, not as a parse error that hides which of them it was.
+                const text = await response.text()
+                try {
+                    value = JSON.parse(text)
+                } catch {
+                    value = {
+                        ok: false,
+                        stage: 'request',
+                        message: `HTTP ${response.status} ${response.statusText || ''}`.trim() +
+                            (text ? `: ${text.slice(0, 200)}` : ', empty body (the request did not reach the plugin, or the connection was cut before it answered)'),
+                    }
+                }
                 value.ok = value.ok !== false && response.ok
             } catch (error) {
                 value = { ok: false, stage: 'request', message: String(error && error.message ? error.message : error) }
