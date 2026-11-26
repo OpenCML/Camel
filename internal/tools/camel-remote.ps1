@@ -1594,7 +1594,37 @@ try {
     # and the milestone stage's selection -- and both read a list that says "cannot read" rather
     # than a list that says nothing, so the widening to the whole layer has no branch left to take.
     # It is computed before the push: a base nobody can read must cost a push and a build nothing.
-    $untracked = @(git -C $Path ls-files --others --exclude-standard)
+    #
+    # One `git status` answers both questions this run has about the working tree -- what has to
+    # travel untracked, and what is dirty against HEAD -- because on this side a git process is an
+    # interpreter start plus a directory scan, and the second call was one of those. `-z` so a path
+    # with a space or a quote arrives as itself rather than in git's C-quoting, and `-uall` so an
+    # untracked *file* is listed instead of the directory holding it, which is what the tar names.
+    $statusOk = $true
+    $untracked = @()
+    $dirtyTracked = @()
+    try {
+        $statusRaw = @(git -C $Path status --porcelain -z -uall 2>$null) -join "`n"
+        $statusOk = ($LASTEXITCODE -eq 0)
+    } catch {
+        $statusRaw = ''
+        $statusOk = $false
+    }
+    if ($statusOk) {
+        $statusFields = $statusRaw -split "`0"
+        for ($i = 0; $i -lt $statusFields.Count; $i++) {
+            $entry = $statusFields[$i]
+            if ($entry.Length -lt 4) { continue }
+            $code = $entry.Substring(0, 2)
+            $rel = $entry.Substring(3)
+            if ($code[1] -eq '?') { $untracked += $rel; continue }
+            $dirtyTracked += $rel
+            # A rename or a copy is two fields: the destination, then the source. The source is
+            # stepped over -- both names are in the patch, and the guard's question is about the
+            # path that exists now.
+            if ($code[0] -eq 'R' -or $code[0] -eq 'C') { $i++ }
+        }
+    }
     # A file `-FetchFile` brought back last run is named here even when it is ignored, because the two
     # halves of the two-run check need it to travel: the fetch writes it under a path `.gitignore`
     # covers (so a record can never be committed by accident), and `--exclude-standard` then leaves
@@ -1739,14 +1769,11 @@ try {
     # --git-dir is the common directory, i.e. not a linked worktree -- refuses a dirty tree outside
     # $AllowDirty, and every run prints which files it is about to carry, so that "measured" can be
     # read off the output instead of assumed.
-    $dirtyTracked = @()
-    try {
-        $dirtyTracked = @(git -C $Path status --porcelain --untracked-files=no 2>$null |
-            ForEach-Object { $_.Substring(3).Trim() } |
-            Where-Object { $_ -ne '' })
-    } catch {
-        $dirtyTracked = @()
-    }
+    # The dirty list came from the `git status` taken before the push, beside the untracked one: one
+    # process answers both, and a second reading of the same tree would be a second chance to
+    # disagree with it. `$statusOk` is what keeps a status that could not be read from arriving as
+    # "a clean tree" -- the refusal below only ever sees a list, and a list nobody could read is
+    # empty in exactly the same way.
     Add-PhaseMark 'status'
     $gitDir = ''
     $commonDir = ''
@@ -1794,8 +1821,17 @@ try {
     }
 
     # `git diff --output=` writes the patch as raw bytes; `>` in PowerShell would write UTF-16.
+    #
+    # A clean tree has nothing to diff, and the host's script tests the patch for size, so an empty
+    # file is the same instruction as no file -- but only the status above can say "clean", and a
+    # status nobody could read is not that answer. Both cases keep the file, because the copy that
+    # follows sends the scratch directory as it finds it.
     Add-PhaseMark 'probe'
-    git -C $Path diff HEAD --binary --output=$patchFile 2>&1 | Out-Null
+    if ($statusOk -and $dirtyTracked.Count -eq 0) {
+        [System.IO.File]::WriteAllText($patchFile, '')
+    } else {
+        git -C $Path diff HEAD --binary --output=$patchFile 2>&1 | Out-Null
+    }
     Add-PhaseMark 'diff'
 
     if ($untracked.Count -gt 0) {
