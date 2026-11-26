@@ -68,7 +68,9 @@ fs.writeFileSync(
 function declaredTypeOf(file) {
     const run = spawnSync(CAMEL, [path.join(scratch, file)], { env: { ...process.env }, encoding: 'utf8' })
     const stdout = (run.stdout || '').replace(/\r\n/g, '\n')
-    const line = stdout
+    const stderr = (run.stderr || '').replace(/\r\n/g, '\n')
+    // The reading is a diagnostic, so it is on stderr; stdout is kept for the failure dump.
+    const line = (stderr + '\n' + stdout)
         .split('\n')
         .map((text) => text.trim())
         .find((text) => text.startsWith('plain::wants:'))
@@ -78,7 +80,7 @@ function declaredTypeOf(file) {
         line: `<nothing for plain::wants, exit ${run.status}>`,
         status: run.status,
         stdout,
-        stderr: (run.stderr || '').replace(/\r\n/g, '\n'),
+        stderr,
     }
 }
 

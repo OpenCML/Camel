@@ -66,6 +66,6 @@ case = "../../../cases/loops/collection_oom.cml"
 args = ["--gc-heap-limit-mb", "16", "${case}", "test::loop_collect_summary", "${backend}"]
 backends = ["nvm", "fvm", "jit", "prl"]
 expect_exit = 1
-expect_stdout_contains = ["RuntimeDiag::MemoryExhausted", "collection_oom.cml:4:13"]
+expect_stderr_contains = ["RuntimeDiag::MemoryExhausted", "collection_oom.cml:4:13"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 60000

@@ -76,7 +76,7 @@ verify_script = """
 const stats = input.normalized.stdout.split('\n').find((l) => l.startsWith('GRAPH_STATS '))
 assert(stats !== undefined, 'the graph is committed and read: ' + input.normalized.stdout)
 assert(JSON.parse(stats.slice('GRAPH_STATS '.length)).indirect_calls === 3, 'the call is still a call: ' + stats)
-assert(input.normalized.stdout.includes("Runtime indirect call norm-arity mismatch: caller graph 'main' node 4 has 2 args, target graph 'shift1' has 1 norm ports."), input.normalized.stdout)
+assert(input.normalized.stderr.includes("Runtime indirect call norm-arity mismatch: caller graph 'main' node 4 has 2 args, target graph 'shift1' has 1 norm ports."), input.normalized.stderr)
 """
 normalizers = ["strip_ansi", "normalize_newlines"]
 timeout_ms = 20000
@@ -89,10 +89,10 @@ case = "../../../cases/opt/devirtualize/recallee_arity.cml"
 args = ["${case}", "test::recallee_arity", "std::cxx::devirtualize", "std::stats"]
 expect_exit = 1
 verify_script = """
-const out = input.normalized.stdout
-assert(out.includes("Pass 'std::cxx::devirtualize' failed with an internal error"), out)
-assert(out.includes("Runtime graph 'main' has FUNC node 4 passing 2 arguments and 0 'with' arguments to 'shift1', which takes 1 and 0."), out)
-assert(out.includes('name=RuntimeDiag::PassInternalError, code=0x0400000C'), out)
+const err = input.normalized.stderr
+assert(err.includes("Pass 'std::cxx::devirtualize' failed with an internal error"), err)
+assert(err.includes("Runtime graph 'main' has FUNC node 4 passing 2 arguments and 0 'with' arguments to 'shift1', which takes 1 and 0."), err)
+assert(err.includes('name=RuntimeDiag::PassInternalError, code=0x0400000C'), err)
 """
 normalizers = ["strip_ansi", "normalize_newlines"]
 timeout_ms = 20000
@@ -105,11 +105,11 @@ case = "../../../cases/opt/devirtualize/recallee_type.cml"
 args = ["${case}", "test::recallee_type", "std::cxx::devirtualize", "std::stats"]
 expect_exit = 1
 verify_script = """
-const out = input.normalized.stdout
-assert(out.includes("Pass 'std::cxx::devirtualize' failed with an internal error"), out)
-assert(out.includes("Runtime graph 'main' breaks its edge invariants (1 violation(s)):"), out)
-assert(out.includes("graph 'main' node 3 (10): passes a int as ordinary argument 0 of 'takes_text', which takes a string."), out)
-assert(out.includes('name=RuntimeDiag::PassInternalError, code=0x0400000C'), out)
+const err = input.normalized.stderr
+assert(err.includes("Pass 'std::cxx::devirtualize' failed with an internal error"), err)
+assert(err.includes("Runtime graph 'main' breaks its edge invariants (1 violation(s)):"), err)
+assert(err.includes("graph 'main' node 3 (10): passes a int as ordinary argument 0 of 'takes_text', which takes a string."), err)
+assert(err.includes('name=RuntimeDiag::PassInternalError, code=0x0400000C'), err)
 """
 normalizers = ["strip_ansi", "normalize_newlines"]
 timeout_ms = 20000

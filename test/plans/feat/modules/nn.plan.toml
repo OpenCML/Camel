@@ -1392,7 +1392,7 @@ args = ["${case}", "${backend}"]
 backends = ["nvm", "fvm", "jit", "prl"]
 backends_agree = ["exit_code", "stdout_normalized"]
 expect_exit = 1
-expect_stdout_contains = ["RuntimeDiag::IndexOutOfRange", "Index -1 is out of range for the class dimension of softmax_cross_entropy of length 3"]
+expect_stderr_contains = ["RuntimeDiag::IndexOutOfRange", "Index -1 is out of range for the class dimension of softmax_cross_entropy of length 3"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 

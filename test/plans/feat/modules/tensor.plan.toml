@@ -1073,7 +1073,7 @@ args = ["${case}", "${backend}"]
 backends = ["nvm", "fvm", "jit", "prl"]
 backends_agree = ["exit_code", "stdout_normalized"]
 expect_exit = 1
-expect_stdout_contains = ["Invalid argument of 'max': a tensor with no element has no maximum."]
+expect_stderr_contains = ["Invalid argument of 'max': a tensor with no element has no maximum."]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 
@@ -1121,7 +1121,7 @@ args = ["${case}", "${backend}"]
 backends = ["nvm", "fvm", "jit", "prl"]
 backends_agree = ["exit_code", "stdout_normalized"]
 expect_exit = 1
-expect_stdout_contains = ["RuntimeDiag::IndexOutOfRange", "Index 3 is out of range for the class dimension of one_hot of length 3"]
+expect_stderr_contains = ["RuntimeDiag::IndexOutOfRange", "Index 3 is out of range for the class dimension of one_hot of length 3"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 

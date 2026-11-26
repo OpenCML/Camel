@@ -68,7 +68,8 @@ kind = "negative"
 case = "../../../cases/compile/transforms/extent_of_axis_outside.cml"
 args = ["${case}"]
 expect_exit = 1
-expect_stdout_contains = ["2", "dim: dim axis out of range"]
+expect_stdout_contains = ["2"]
+expect_stderr_contains = ["dim: dim axis out of range"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 

@@ -1,0 +1,10 @@
+// Two unresolved names in one program, two diagnostics: each is reported once, on standard
+// error, and standard output holds only the program's own output (docs/cli.md, "Standard
+// streams"). The reading is the pair of counts -- nothing on stdout, two reports on stderr --
+// so a run that drops a report and a run that prints one twice are both red.
+
+func main() => int sync {
+    println(not_defined_one)
+    println(not_defined_two)
+    return 0
+}

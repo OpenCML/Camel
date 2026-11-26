@@ -179,13 +179,13 @@ for (const [name, message] of [
     check(`\`${name}\` under a broken PYTHONHOME exits 1`, r.status === 1, `exit ${r.status}`)
     check(
         `\`${name}\` diagnoses the first use, not the import`,
-        r.stdout.includes('RuntimeDiag::RuntimeError') && r.stdout.includes(message),
-        r.stdout.slice(0, 600),
+        r.stderr.includes('RuntimeDiag::RuntimeError') && r.stderr.includes(message),
+        r.stderr.slice(0, 600),
     )
     check(
         `\`${name}\` places the diagnostic at the call`,
-        new RegExp(`${name}\\.cml:\\d+:\\d+`).test(r.stdout),
-        r.stdout.slice(0, 600),
+        new RegExp(`${name}\\.cml:\\d+:\\d+`).test(r.stderr),
+        r.stderr.slice(0, 600),
     )
     check(
         `\`${name}\` reports CPython's own reason`,

@@ -71,9 +71,9 @@ expect_exit = 1
 verify_script = """
 const out = input.normalized.stdout
 assert(!out.includes('820'), 'the pipeline stops before the run: ' + JSON.stringify(out))
-assert(out.includes("[Error]: `std::opt` stopped short of a fixed point: all 16 round(s) changed the program, the last changed 'main'."), out)
-assert(out.includes('name=RuntimeDiag::OptimizationStoppedShort, code=0x04100019'), out)
-assert(input.normalized.stderr.includes('[Error]: `std::opt` stopped short of a fixed point'), input.normalized.stderr)
+const err = input.normalized.stderr
+assert(err.includes("[Error]: `std::opt` stopped short of a fixed point: all 16 round(s) changed the program, the last changed 'main'."), err)
+assert(err.includes('name=RuntimeDiag::OptimizationStoppedShort, code=0x04100019'), err)
 """
 normalizers = ["strip_ansi", "normalize_newlines"]
 timeout_ms = 60000

@@ -311,9 +311,11 @@ args = ["${case}", "std::cxx::inline", "std::fvm", "std::typo_one", "std::typo_t
 expect_exit = 1
 verify_script = """
 const out = input.normalized.stdout
+const err = input.normalized.stderr
 assert(!out.includes('2011'), 'the program must not run: ' + out)
-assert(out.includes("pass 'std::typo_one'") && out.includes('name=RuntimeDiag::UnrecognizedGraphPass'), 'diagnostic: ' + out)
-assert(!out.includes('typo_two'), 'only the first unknown name is reported')
+const unrecognized = err.split('\n').filter((l) => l.includes('UnrecognizedGraphPass'))
+assert(unrecognized.length === 1, 'one error, for the first unknown name: ' + err)
+assert(unrecognized[0].includes("'std::typo_one'") && !unrecognized[0].includes('typo_two'), 'the first unknown name only: ' + unrecognized[0])
 """
 normalizers = ["strip_ansi", "normalize_newlines"]
 timeout_ms = 6000

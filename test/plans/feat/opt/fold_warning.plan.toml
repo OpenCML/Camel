@@ -89,9 +89,9 @@ args = ["${case}"]
 expect_exit = 1
 verify_script = """
 const out = input.normalized.stdout.trim().split('\n')
-assert(out.length === 2 && out[0] === 'before', 'stdout: ' + input.normalized.stdout)
-assert(out[1].includes('fold_constant_fault_reached.cml:10:15: [Error]: Attempted division by zero.') && out[1].includes('RuntimeDiag::DivisionByZero'), out[1])
-assert(input.normalized.stderr === '', 'no warning without passes: ' + input.normalized.stderr)
+assert(out.length === 1 && out[0] === 'before', 'stdout: ' + input.normalized.stdout)
+const err = input.normalized.stderr
+assert(err.includes('fold_constant_fault_reached.cml:10:15: [Error]: Attempted division by zero.') && err.includes('RuntimeDiag::DivisionByZero'), err)
 """
 normalizers = ["strip_ansi", "normalize_newlines"]
 timeout_ms = 8000
@@ -105,11 +105,11 @@ args = ["${case}", "std::cxx::fold"]
 expect_exit = 1
 verify_script = """
 const out = input.normalized.stdout.trim().split('\n')
-assert(out.length === 2 && out[0] === 'before', 'stdout: ' + input.normalized.stdout)
-assert(out[1].includes('fold_constant_fault_reached.cml:10:15: [Error]: Attempted division by zero.') && out[1].includes('RuntimeDiag::DivisionByZero'), out[1])
+assert(out.length === 1 && out[0] === 'before', 'stdout: ' + input.normalized.stdout)
 const lines = input.normalized.stderr.trim().split('\n')
-assert(lines.length === 1, 'one warning line: ' + input.normalized.stderr)
+assert(lines.length === 2, 'the warning and the fault, both on stderr: ' + input.normalized.stderr)
 assert(lines[0].includes('fold_constant_fault_reached.cml:10:15: [Warn]:') && lines[0].includes('RuntimeDiag::ConstantExpressionFaults'), lines[0])
+assert(lines[1].includes('fold_constant_fault_reached.cml:10:15: [Error]: Attempted division by zero.') && lines[1].includes('RuntimeDiag::DivisionByZero'), lines[1])
 """
 normalizers = ["strip_ansi", "normalize_newlines"]
 timeout_ms = 8000
@@ -123,11 +123,11 @@ args = ["${case}", "std::opt", "std::fvm"]
 expect_exit = 1
 verify_script = """
 const out = input.normalized.stdout.trim().split('\n')
-assert(out.length === 2 && out[0] === 'before', 'stdout: ' + input.normalized.stdout)
-assert(out[1].includes('fold_constant_fault_reached.cml:10:15: [Error]: Attempted division by zero.') && out[1].includes('RuntimeDiag::DivisionByZero'), out[1])
+assert(out.length === 1 && out[0] === 'before', 'stdout: ' + input.normalized.stdout)
 const lines = input.normalized.stderr.trim().split('\n')
-assert(lines.length === 1, 'one warning line: ' + input.normalized.stderr)
+assert(lines.length === 2, 'the warning and the fault, both on stderr: ' + input.normalized.stderr)
 assert(lines[0].includes(':10:15: [Warn]:') && lines[0].includes('RuntimeDiag::ConstantExpressionFaults'), lines[0])
+assert(lines[1].includes('fold_constant_fault_reached.cml:10:15: [Error]: Attempted division by zero.') && lines[1].includes('RuntimeDiag::DivisionByZero'), lines[1])
 """
 normalizers = ["strip_ansi", "normalize_newlines"]
 timeout_ms = 8000

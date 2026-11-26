@@ -60,7 +60,7 @@ case = "../../../cases/compile/array_alias/err_as_shape.cml"
 args = ["${case}", "${backend}"]
 backends = ["nvm"]
 expect_exit = 1
-expect_stdout_contains = ["conversion to 'f32[3, 2]' failed: the array has shape [2, 3]"]
+expect_stderr_contains = ["conversion to 'f32[3, 2]' failed: the array has shape [2, 3]"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 8000
 

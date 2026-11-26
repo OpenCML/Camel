@@ -437,7 +437,7 @@ args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::RuleRightUsesOuterVariable"
 expect_diagnostic_code = "0x03000207"
-expect_stdout_contains = ["probe_rule_mul"]
+expect_stderr_contains = ["probe_rule_mul"]
 # The whole-tensor argmax and argmin, batched: their answer is the row-major position over the row,
 # and no fold of axis positions produces it, so the rule reads the batch as one line instead --
 # `reshape<[shape(xs)[0], -1]>(xs)` puts a row's elements on its last axis and the reduction along

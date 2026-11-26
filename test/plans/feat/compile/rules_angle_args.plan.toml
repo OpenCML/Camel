@@ -176,7 +176,7 @@ backends = ["nvm", "fvm"]
 backends_agree = ["exit_code", "stdout_normalized"]
 expect_exit = 1
 expect_diagnostic_name = "RuntimeDiag::TransposeNeedsParameterShape"
-expect_stdout_contains = ["[Error]: The transpose of 'loss_mean' needs the shape of the parameter 'x', and the type 'float[...]' does not state it.", "Write the extents the parameter's value has in its declaration"]
+expect_stderr_contains = ["[Error]: The transpose of 'loss_mean' needs the shape of the parameter 'x', and the type 'float[...]' does not state it.", "Write the extents the parameter's value has in its declaration"]
 expect_stdout_not_contains = ["transpose should have been refused, and it answered"]
 # The reading names the step it stopped at by position (`node=`), so the position is `<>` and the
 # rest of the line stays exact: the function, the skip's own word, the operator URI, the parameter's
