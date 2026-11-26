@@ -1,20 +1,26 @@
 // One operation, two writings, as long as the kind that wrote it still exists. `cast`, `copy`,
 // `fill`, `access` and `access_key` are declared in stdlib/prelude.cml, so a call of one builds an
-// OPER node that names the operator; a construction the language writes as an aggregate, and a
-// member read it writes as `t.0`, still build the FILL and ACCS kinds. A conversion and a copy have
-// one writing now -- `:op/cast` and `:op/copy` -- because the CAST and COPY kinds are gone.
-// `test::oper_shape` prints the shape each node answers, one line per form, and the two lines of
-// one operation must agree: the shape is the operator's, not the node kind's.
+// OPER node that names the operator; a construction the language writes as an aggregate still builds
+// the FILL kind. A copy, a member read and an entering have one writing each: `copy(t)`, the
+// `:op/access` / `:op/access_key` a member read is lowered to, and the `:op/enter` the compiler
+// inserts where `by_rank_zero` makes an `int` meet its declared `int[...]` return.
+//
+// A number's conversion is the target's own conversion function, so `float(x)` is a call of a
+// declared function and answers none of the four operations; `:op/cast` is what the `cast::<T, U>`
+// call writes, and this case writes no such call: `cast::<int, float>` is the pair the language
+// refuses (a number converts through the target's function, not through the operator), and the
+// graph's edge check stops a program that writes it.
+//
+// `test::oper_shape` prints the shape each form answers, one line per form, and the two writings of
+// one construction must agree: the shape is the operator's, not the node kind's. The position and the
+// field a member read names are `with` parameters of `access` / `access_key`, written in the call's
+// own angle brackets (`access::<(int, int), int><0>(t)`).
 //
 // Every writing stands in a function of its own so that nothing folds: a conversion of a literal,
 // or a member read of an aggregate the builder just made, could be computed before the graph is
 // handed to the pass, and then a form would be missing from the reading.
 
 type Point = { x: int, y: int }
-
-func via_cast(x: int) => float {
-    return cast::<int, float>(x)
-}
 
 func via_copy(t: (int, int)) => (int, int) {
     return copy(t)
@@ -25,11 +31,11 @@ func via_fill(a: int, b: int) => (int, int) {
 }
 
 func via_access(t: (int, int)) => int {
-    return access::<(int, int), int>(0, t)
+    return access::<(int, int), int><0>(t)
 }
 
 func via_access_key(p: Point) => int {
-    return access_key::<Point, int>('y', p)
+    return access_key::<Point, int><'y'>(p)
 }
 
 func by_conversion(x: int) => float {
