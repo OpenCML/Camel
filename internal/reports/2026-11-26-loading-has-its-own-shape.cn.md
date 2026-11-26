@@ -63,3 +63,44 @@ $ git grep -n "the same shape as a" -- src docs          # 再跑一次
 其余 5 行（`operator_table.h:569/574`、`kernel/.../runtime/oper_shape.h:14`、`execute/shaped_operators.h:15`、
 `test/oper_shape.cpp:16`、`function_emitter.cpp:639`）在形状表 4→6、kind 4→2 之后确实旧了。它们不是把装入归进
 Conversion，而是**根本没提装入**，且横跨内核头与后端；改它要按角色拆头并报重编译单元数，是独立的一笔，本车道不动。
+
+## 5 计划读数（宿主 88，退出码取自远端脚本自己的 `RUN_EXIT`）
+
+```
+pwsh -NoProfile -File <worktree>\internal\tools\camel-remote.ps1 -Path <worktree>
+  -Plan test/plans/feat/runtime/oper_shape.plan.toml,
+        test/plans/feat/consistency/entering.plan.toml,
+        test/plans/feat/compile/tagged.plan.toml -Jobs 8 -NoGpuWatch
+```
+
+```
+[provenance] tip 529640e9f7bfbd0beb1a0aa016f5abf2757b415d | binary built 2026-11-26T17:13:38+08:00 | tier fast | jobs 8
+[SUMMARY] total: 161, pass: 157, fail: 4          （按计划：oper_shape 2/2、entering 85/89、tagged 70/70）
+[TREE] clean: 0 before, 0 after
+RUN_EXIT=1        BUILD_EXIT=0（3.5 s，增量）
+```
+
+## 6 与 promotion 9 红表逐名比对
+
+`internal/reports/2026-11-26-promotion-9-reds.tsv`（在 `docs/coordinator` 上，630 行，测于 `e0ca7ca4d`）里
+`consistency.entering` 正好 4 行，与本轮 4 个失败**逐名相同**，tier 都是 `fast`（计划级 `tier = "fast"`，测试没有
+自己的 tier）：
+
+| 本轮失败 | tier | 表里有 |
+|---|---|---|
+| `entering.err_arg_reverse.nvm` | fast | 有 |
+| `entering.err_numeric.nvm` | fast | 有 |
+| `entering.err_other_payload.nvm` | fast | 有 |
+| `entering.positions.plan_regions.nvm` | fast | 有 |
+
+`runtime.oper_shape` 与 `compile.tagged` 在表里 0 行，本轮也全绿 ⇒ **没有新红**。四个红的成因从本轮输出直接可读，
+不是猜的：
+
+- 三个 `err_*`：`eb20efab7`（11-23 的记号换写）把用例由 5 行排成 7 行（`func f(x: int): int { return x }` 换成
+  三行体），报错位置从 `:4:14` 挪到 `:6:14`，计划仍写 `:4:14`；诊断本身没变（仍是 `SemanticDiag::NoMatchingFunction`，
+  实际输出 `err_arg_reverse.cml:6:14:`）。这是计划的期望位置旧了，不是装入的形状。
+- `entering.positions.plan_regions`：计划要求 `planned 546`，本轮读到 `graphs 10, control regions 25, members 22,
+  planned 210`，`[REGIONS] RED the plan lays out 210 nodes, not 546`。这是真的漂移，不是本车道造成的（注释改动
+  不碰图），归 positions 计划的属主。
+
+本车道不更新这些期望：改断言让它变绿会把读数盖掉，而这两件事都不是「装入的形状」。
