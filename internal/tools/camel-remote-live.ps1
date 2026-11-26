@@ -109,10 +109,15 @@ function Get-CamelLiveWorktrees {
             # dozen of them -- and reading those as live worktrees would exempt their names from the
             # sweep forever. A scratch directory beside the worktrees (`_logs`, a lane's output
             # folder) is not a checkout at all and is not kept either.
-            $dotGit = Join-Path $dir '.git'
-            if (-not (Test-Path -LiteralPath $dotGit -PathType Leaf)) { continue }
-            $leaf = Split-Path -Leaf $dir
-            if ($leaf -and ($names -notcontains $leaf)) { $names += $leaf }
+            #
+            # `File.Exists` rather than `Test-Path -PathType Leaf`: the same reading (a regular file,
+            # not a container), for a twentieth of the cost. One worktree root here is a directory of
+            # 23 000 entries, and this loop tests every entry -- the cmdlet plus `Join-Path` came to
+            # 4.5 s of a 10.6 s transfer, measured per entry; the two .NET calls come to 0.6 s.
+            if ([System.IO.File]::Exists($dir + '\' + '.git')) {
+                $leaf = Split-Path -Leaf $dir
+                if ($leaf -and ($names -notcontains $leaf)) { $names += $leaf }
+            }
         }
     }
 

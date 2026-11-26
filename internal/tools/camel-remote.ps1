@@ -1753,9 +1753,16 @@ try {
     Add-PhaseMark 'status'
     $gitDir = ''
     $commonDir = ''
+    # One `rev-parse` for both, in the order the two flags were written: on Windows each git process
+    # costs an interpreter start and a directory scan, and these two readings are always taken
+    # together. A git too old to know `--path-format` refuses the whole call, and the two readings
+    # then stay empty -- which is what the separate calls reported for that case as well.
     try {
-        $gitDir = (git -C $Path rev-parse --absolute-git-dir 2>$null).Trim()
-        $commonDir = (git -C $Path rev-parse --path-format=absolute --git-common-dir 2>$null).Trim()
+        $gitDirs = @(git -C $Path rev-parse --absolute-git-dir --path-format=absolute --git-common-dir 2>$null)
+        if ($gitDirs.Count -ge 2) {
+            $gitDir = "$($gitDirs[0])".Trim()
+            $commonDir = "$($gitDirs[1])".Trim()
+        }
     } catch {
         $gitDir = ''
         $commonDir = ''
@@ -2561,11 +2568,13 @@ phase_mark cleanup
 # one an hour ago may still be the tree a person is reading, and a directory older than a day is not
 # evidence that nobody is using it. Name what is old and leave it; the run's own scratch goes at the
 # end of the run (see the `rm -rf` beside `exit`), and its name carries its own run id.
-for old in /tmp/camel-remote-*; do
-    [ -d "`$old" ] || continue
-    [ -n "`$(find "`$old" -maxdepth 0 -mmin +1440 2>/dev/null)" ] || continue
+# One `find` for the whole sweep. The per-entry `find` this replaces forked once per old scratch
+# directory -- several hundred on this host, every run, for a list that is only printed -- and the
+# batch form reads the same field (`-mmin +1440` on the directory itself) in one process. `-print0`
+# and `read -d ''` keep a worktree name with a space in it one name, which the glob did not.
+while IFS= read -r -d '' old; do
     echo "[camel-remote] leaving old scratch `$old: not created by this run (remove it yourself when you know it is done)"
-done
+done < <(find /tmp -mindepth 1 -maxdepth 1 -name 'camel-remote-*' -type d -mmin +1440 -print0 2>/dev/null)
 freekb=`$(df -P -k "`$HOME" 2>/dev/null | awk 'NR==2{print `$4}')
 # The footprint of the checkouts is informational, but measuring it walks every file under
 # ~/camel-work (43 GB here, ~50 s on a loaded host, once per run). Keep the number in a small
@@ -4194,7 +4203,7 @@ if ($Latest -and $FetchFile -ne '') {
             if ($null -eq $prevMark) { $prevMark = $mark; continue }
             # `synced` is this side's reading of the host's marker: it closes the timeline, and the
             # host segments plus `poll` already account for the seconds it spans.
-            if ($mark.name -eq 'synced') { $prevMark = $mark; continue }
+            if ($mark.name -eq 'synced') { continue }
             $label = switch ($mark.name) {
                 'push'   { 'local-before-push' }
                 'pushed' { 'push' }
