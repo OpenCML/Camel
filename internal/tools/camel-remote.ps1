@@ -2653,8 +2653,99 @@ cleanup_staging_refs() {
 }
 # --- end host cleanup guard ---
 '@
+    # The run's end when its reader is gone, and a host-side copy of what the run said. Single-quoted
+    # so the fragment is bash exactly as written; internal/tools/camel-remote-orphan.test.ps1 extracts
+    # and runs it. `orphan_dir` is set by the line before it in the remote script.
+    $orphanGuard = @'
+# --- host orphan guard: extracted and run by internal/tools/camel-remote-orphan.test.ps1 ---
+# This script is started by sshd's session process and has no terminal, so when the workstation side
+# dies (the ssh client is killed, the session is stopped, the machine sleeps) nothing sends it a
+# hangup: the session process exits, this script is reparented, and everything under it keeps running,
+# queued for a slot or a token nobody will ever read the result of. The watchdog below is what ends it.
+orphan_ppid() {
+    local s
+    s=$(cat "/proc/$1/stat" 2>/dev/null) || return 1
+    s=${s##*) }
+    set -- $s
+    printf '%s' "$2"
+}
+# Every descendant of $1 (never the subtree rooted at $2), found through the parent links in
+# /proc/*/stat: a descendant may have moved to its own process group or session, so the process group
+# says nothing about who belongs to the run.
+orphan_descendants() {
+    local root="$1" skip="$2" f s pid ppid cur
+    local -A kids=()
+    for f in /proc/[0-9]*/stat; do
+        { read -r s < "$f"; } 2>/dev/null || continue
+        pid=${f#/proc/}; pid=${pid%/stat}
+        s=${s##*) }
+        set -- $s
+        ppid=$2
+        kids[$ppid]="${kids[$ppid]:-} $pid"
+    done
+    local queue=("$root") out=()
+    while [ ${#queue[@]} -gt 0 ]; do
+        cur=${queue[0]}; queue=("${queue[@]:1}")
+        for pid in ${kids[$cur]:-}; do
+            [ "$pid" = "$skip" ] && continue
+            out+=("$pid"); queue+=("$pid")
+        done
+    done
+    echo "${out[@]:-}"
+}
+orphan_watch() {
+    local reader="$1" run="$2" log="$3" poll="${CAMEL_ORPHAN_POLL_S:-5}" grace="${CAMEL_ORPHAN_GRACE_S:-10}"
+    local me="$BASHPID" now pids p
+    while :; do
+        sleep "$poll"
+        now=$(orphan_ppid "$run") || exit 0
+        if kill -0 "$reader" 2>/dev/null && [ "$now" = "$reader" ]; then continue; fi
+        break
+    done
+    echo "[camel-remote] the process that started this run ($reader) is gone: ending the run $run and everything under it" >> "$log"
+    # Frozen first, so that the run does not go on to its next step as its children die.
+    kill -STOP "$run" 2>/dev/null
+    pids=$(orphan_descendants "$run" "$me")
+    [ -n "$pids" ] && kill -TERM $pids 2>/dev/null
+    sleep "$grace"
+    pids=$(orphan_descendants "$run" "$me")
+    [ -n "$pids" ] && kill -KILL $pids 2>/dev/null
+    kill -KILL "$run" 2>/dev/null
+    # Ending the processes closes their descriptors, and that is how the host test slot and the token
+    # this run was queued on (both `flock`s) are given back: nothing here releases them by name.
+    exit 0
+}
+orphan_begin() {
+    local stamp base f n
+    mkdir -p "$orphan_dir" 2>/dev/null || return 0
+    stamp=$(date +%Y%m%d-%H%M%S)-$$
+    base="$orphan_dir/$stamp"
+    # The host's copy of the run's output. Each stream still reaches ssh byte for byte; a tee whose
+    # reader went away ignores the broken pipe and keeps writing the file, so what came before is kept.
+    exec > >(trap '' PIPE; exec tee --output-error=warn-nopipe -a "$base.out") \
+         2> >(trap '' PIPE; exec tee --output-error=warn-nopipe -a "$base.err" >&2)
+    # Only the newest 20 pairs stay.
+    n=0
+    for f in $(ls -1t "$orphan_dir"/*.out 2>/dev/null); do
+        n=$((n + 1))
+        if [ "$n" -gt 20 ]; then rm -f "$f" "${f%.out}.err"; fi
+    done
+    orphan_watch "$1" "$$" "$base.err" </dev/null >/dev/null 2>&1 &
+    orphan_watch_pid=$!
+    trap orphan_end EXIT
+}
+# The watchdog ends with the run. A later `trap ... EXIT` replaces this one, so it calls this itself.
+orphan_end() {
+    [ -n "${orphan_watch_pid:-}" ] && kill "$orphan_watch_pid" 2>/dev/null
+    return 0
+}
+orphan_begin "$PPID"
+# --- end host orphan guard ---
+'@
     $remoteScript = @"
 set -u
+orphan_dir="`$HOME/$($cfg.hostWorkRoot)/.remote-runs"
+$orphanGuard
 # The host's half of -TracePhases: one monotonic mark per segment of "get this checkout to the run's
 # commit". Nothing is printed unless the caller asked, and the mark is taken at the line *after* the
 # work it names -- so a segment's duration is the distance between two marks. `date +%s%N` is
@@ -2874,6 +2965,7 @@ finish_probe() {
     echo "HOST_LOAD_END=`$(cut -d' ' -f1 /proc/loadavg 2>/dev/null || echo unknown)"
     echo "HOST_OVERLAP_END=`$(others_now)"
     rm -f "`$RUN_NOTE_DIR/'$($run.runId)'"
+    orphan_end
 }
 # Every exit path, including a failed build and a wait that runs out: the end reading is taken on
 # the way out, so a run that never reached the plan still says how the host looked when it stopped.
