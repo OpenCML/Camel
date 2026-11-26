@@ -146,7 +146,7 @@
 
 | 判据 | 今天 | 缺什么 |
 |---|---|---|
-| ① 结构：块体只贡献 1 个节点、独立程序在上下文里（记录只有规范） | **量不出**：没有块，也没有写块体的语法 | 第 3 节 ①② |
+| ① 结构：块体只贡献 1 个节点、独立程序在上下文里（记录只有规范） | **一半**：文本编成一份自己的程序已量出（第 7 节）；块本身仍无 | 第 3 节 ①② |
 | ② 「遍里写块、块里再写遍」递归切断 | **量不出** | 同上，且要两条块（外层一条、遍里一条） |
 | ③ 句柄出不了块，越界必须是诊断 | **量不出**：今天块外拿句柄是允许的写法（`graph_of`、`graphs_of`，`src/stdlib/graph.cml:52`、`:57`） | ③ |
 | ④ 块尾自动提交与错误值 | **半**：显式 `commit` 的三种错误值有实现与文档，提交诊断已带两步位置；块尾自动提交、以及「失败即放弃整份草稿」无 | ④ |
@@ -167,9 +167,7 @@
 
 ## 6. 下一笔怎么开头（一步一格读数，按「实现走执行器」重排）
 
-1. **文本 → 一份程序**：一个 `test::` 遍把一段文本交给模块加载器（第 2 节那两行：`attach` 交来的
-   reader 已有 AST 时 `readSource` 不读文件），编成**自己的程序**，登记进上下文的块程序登记处。
-   读数两条：`std::stats` 的图数不变，`std::jgir` 里找不到它。这一步不碰前端。
+1. ~~**文本 → 一份程序**~~ **已做，读数见第 7 节**（`test::block_body`）。
 2. **执行器 + 块节点**：给 `block` 协议注册一个工厂（`module.cpp:171` 的写法），核按
    `norm.attrs()` 取编号、取程序、`GraphCaller` 跑；手造一个 OPER 节点（C++ 的图原语，不经前端）。
    读数：`std::stats` 里块体只贡献 **1 个节点**并跑出块体的值，且 `std::stats`/`std::jgir` 的
@@ -177,3 +175,29 @@
 3. **前端先 `view` 后 `edit`**：`view` 没有提交、没有错误值，只需要块头、β 与「体不出现在程序里」；
    判据③的五条里有两条（交出、闭包带走）在 `view` 上就能量。
 4. `edit` 接上 ④ 的块尾提交与错误值；最后是 ② 的「遍改遍」用例。
+## 7. 第一步做完了：一处读数
+
+`test::block_body`（`src/stdlib/test/block_body.cpp`）把一段文本交给编译器，编成一份**自己的程序**，
+并把三个数打出来。跑 `test/cases/loops/captures.cml`：
+
+```
+BLOCK_BODY built graphs=2 nodes=6
+BLOCK_BODY graph __root__ nodes=3
+BLOCK_BODY graph block_body::body nodes=3
+BLOCK_BODY entry graphs 2 -> 2 nodes 76 -> 76
+```
+
+- 块体（这里写的是 `export func body(x: int) => int`）编成一份自己的程序：**2 张图 6 个节点**，
+  根图 `__root__` 与函数图 `block_body::body` 各 3 个节点；
+- 被编的那份程序**一张图没多、一个节点没多**：**2 张图 76 个节点**，编之前与编之后同数，与不跑
+  这个遍的读数也同数；
+- `std::jgir` 写出的图集合**同数**（2 张）。
+
+机制落点：`UserDefinedModule(name, "", ctx, reader)`（路径空、reader 已经解析过文本，
+`readSource` 因此不开文件）→ `compileAsProgram` 编成自己的程序（它自己开一个 `Builder`）→
+装载器 `encodeProgram(..., freshIds=true)` 编码成一份独立的运行时程序 → `context->pinRuntimeProgram`
+把它钉住（模块随这次调用结束，图会跟着走）。计划：`feat.runtime.block_body`，用例
+`the_body_is_a_program_of_its_own`。
+
+**这不是块。** 块还缺：算子记录与名字（按块体规范形式哈希）、外层那一个 OPER 节点、节点属性里
+记程序编号、`block` 协议的执行器（第二步），以及前端、β、块尾提交（第三、四步）。

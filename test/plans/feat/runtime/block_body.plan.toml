@@ -1,0 +1,20 @@
+id = "runtime.block_body"
+order = 389
+tier = "fast"
+tags = ["feat", "runtime", "graph", "block"]
+desc = "A body handed to the compiler as text becomes a program of its own -- compiled by the same compiler, with its own graphs -- and the program it was compiled for keeps exactly the graphs and nodes it had: none of the body's joins it, and `std::jgir` writes none of them. The block's operator and the front end that writes such a body are the steps after this one; this locks the half that can be measured without them."
+
+# What the case measures, in one run of each pipeline: `test::block_body` compiles `body` as a
+# program of its own (`compileAsProgram`, encoded by the same loader a pass library goes through)
+# and prints its graph count; `std::stats` then reads the entry program, which must be unchanged;
+# `std::jgir` writes that program's graphs, none of which may be the body's.
+[[tests]]
+name = "runtime.block_body.the_body_is_a_program_of_its_own"
+desc = "The body compiles into its own program with its own graphs, and the entry program's graphs and nodes are the ones it had before the body was built."
+kind = "behavior"
+tool = "python"
+case = "../../../cases/runtime/block_body.py"
+args = ["${case}", "--camel", "${camel}"]
+expect_exit = 0
+expect_stdout_contains = ["block_body: body_graphs=", "Block body: PASS"]
+timeout_ms = 60000
