@@ -194,8 +194,8 @@ runtime/exec_plan.h                                 49        -1
 
 **拆法：** `src/kernel/include/camel/core/context/frame.h:9` 的 `#include "camel/runtime/graph.h"` 换成
 `class GCGraph;` ⇒ **359 → 317**（-42；图算得 318，差 1 见"哪里会偏"）。这只是 12%，`graph.h` 剩下的
-317 个 TU 不是拆边能拿掉的：要动它得把 1593 行的定义拆成"接口 + 定义"两个头，那是一件有设计取舍的活，
-不在这份读数的射程里。
+317 个 TU 不是拆边能拿掉的：要动它得把 1735 行（非空 1593）的定义拆成"接口 + 定义"两个头，那是一件
+有设计取舍的活——值不值，量在文末的附里。
 
 ### 3. `core/operator_table.h`（435 个 TU）— 一条转发包含拿走 223
 
@@ -293,3 +293,28 @@ PY
 ```
 
 全表 2232 条照上面第一段跑一遍得到合计，第二段对每个头文件跑一遍得到直接，两者相减是传递。
+
+## 附：`graph.h` 拆成"接口 + 定义"值不值
+
+问法是"83 个按名字包含它的 TU 里，有多少拆完之后只读声明就能编过"，量法是把 `graph.h` 机械地砍成两半
+各测一遍：每个 TU 用 db 里那条命令去掉 `-c`/`-O`、把 stub 目录前置成第一个 `-I`、加 `-fsyntax-only`
+（基线：83/83 本来就编得过；stub 由脚本把 class/struct 的函数体换成前置声明生成，其余原样）。
+
+```
+半 A = 别名 + 枚举 + 所有 class/struct 的前置声明 + 自由函数声明（"只读声明"）
+        ⇒ 0/83 编过；83 条全部报 incomplete type 'camel::runtime::GCGraph'
+半 B = 半 A + 全部记录的 POD 布局（GCNode、各式 body、WritingUnion …），类仍只留前置声明
+        ⇒ 0/83 编过；83 条仍全部卡在 GCGraph 不完整（其中 6 条还卡 ProgramHold）
+```
+
+接口够用 **0** 条 / 必须整套 **83** 条 / 说不清 **0** 条 —— 每一条的失败原因都指名到 `GCGraph`，
+没有落到"其它错误"这一桶里。
+
+**拆了也不会让 359 掉。** `GCGraph` 的定义里按值嵌了 `GCGraphNativePayload nativePayload_{}`（第 1333 行），
+它的内联访问器又直接读 `GCNode` / `GCRegion` / `WritingUnion` 的字段；所以任何需要 `GCGraph` 的 TU
+必须两半一起 parse。拆出去的那一半只能被"既不要 `GCGraph` 也不要记录"的 TU 采用，而这种 TU 一条都没有。
+
+代价与估计：新增一个头文件，**可以改的 include 是 0 处**（没有调用方能改用小的那一半）；要动的是被
+`static_assert(sizeof(GCNode) == 28, "A frozen node record is 28 bytes.")`、`sizeof(GCLoopRef) == 8`
+这类断言钉住尺寸的记录区。拆完 `graph.h` 那一行仍然是 **359**；能降的 42 条在 `frame.h` 上，
+已经算在三边里。
