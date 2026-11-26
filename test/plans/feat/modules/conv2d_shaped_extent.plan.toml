@@ -1,0 +1,60 @@
+id = "modules.conv2d_shaped_extent"
+order = 960
+tier = "fast"
+tags = ["feat", "modules", "nn", "conv2d", "shapes"]
+desc = "The extents `conv2d`'s two gradient spellings answer when the stride does not divide the window's travel: the plain spellings keep the extents of the operand they read, the `_shaped` ones derive the operand's extents from `dy` and recover the smallest input (and the largest kernel) that would have produced it, losing the remainder `(H + 2*padding - KH) % stride`."
+
+# The input is [1, 1, 6, 6] and the kernel [1, 1, 3, 3] at stride 2, so the result is [1, 1, 2, 2]
+# with `(6 - 3) % 2 = 1`. `derivedInputExtents` (src/stdlib/nn/tensor_ops.cpp) and the copy inside
+# `conv2dInputGradShaped` (src/stdlib/tensor/kernels/conv.cpp) both invert the output shape as
+# `H = (OH - 1) * stride + KH - 2 * padding`, which is exact only when the forward division is exact:
+# here it answers 5 for an input of 6, and 4 for a kernel of 3.
+
+[[tests]]
+name = "conv2d_shaped.plain_spellings_keep_their_operand_extents"
+desc = "The plain gradients answer the extents of the operand they read -- 6x6 for the input's gradient and 3x3 for the kernel's -- the two bias gradients answer the same [1], and with a stride that divides ([1, 1, 7, 7] at stride 2) the `_shaped` spellings answer 7x7 and 3x3 as well. This is the control: the same program states the extents the input and the kernel really have, and shows that the inversion is right where the remainder is zero."
+kind = "behavior"
+case = "../../../cases/modules/nn/conv2d_shaped_derived_extent.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = []
+expect_exit = 0
+expect_stdout_contains = ["plain  dx=[1, 1, 6, 6] dw=[1, 1, 3, 3]", "bias   plain=[1] shaped=[1]", "divides dx=[1, 1, 7, 7] dw=[1, 1, 3, 3]"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "conv2d_shaped.derived_input_states_the_input_extents"
+desc = "`conv2d_input_grad_shaped(w, dy, 2)` and `conv2d_kernel_grad_shaped(x, dy, 2)` fold their answer's extents from the type: they must state the extents the plain spellings state (6x6 and 3x3), because a gradient's shape is the shape of the operand it is the gradient of. Today the fold states 5x5 and 4x4."
+kind = "behavior"
+case = "../../../cases/modules/nn/conv2d_shaped_derived_extent.cml"
+args = ["${case}"]
+backends = ["nvm"]
+backends_agree = []
+expect_exit = 0
+expect_stdout_contains = ["derived dx=[1, 1, 6, 6] dw=[1, 1, 3, 3]"]
+known_fail = ["nvm"]
+known_fail_owner = "the reading-port work that replaces the derived spellings"
+known_fail_reason = "`src/stdlib/nn/tensor_ops.cpp#derivedInputExtents` inverts the output shape as `H = (OH - 1) * stride + KH - 2 * padding`, which recovers the smallest input that produces this `OH`; `(6 - 3) % 2 = 1`, so the remainder is lost and the fold states 5x5 (and `derivedKernelExtents` states 4x4 for a kernel of 3)."
+known_fail_msg = "derived dx=[1, 1, 5, 5] dw=[1, 1, 4, 4]"
+known_fail_ends_when = { prints = "derived dx=[1, 1, 6, 6] dw=[1, 1, 3, 3]" }
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "conv2d_shaped.kernel_builds_what_it_derived"
+desc = "With `dy` handed on under a type that states no extents, the call has no static extents, so the numbers printed are the ones `conv2dInputGradShaped` derived and allocated: they must be the input's 6x6 (36 elements) and the kernel's 3x3 (9). Today the kernel builds 5x5 and 4x4 -- the second, independent copy of the same inversion."
+kind = "behavior"
+case = "../../../cases/modules/nn/conv2d_shaped_derived_extent.cml"
+args = ["${case}"]
+backends = ["nvm"]
+backends_agree = []
+expect_exit = 0
+expect_stdout_contains = ["value  dx=6x6 dw=3x3 numel=36,9"]
+known_fail = ["nvm"]
+known_fail_owner = "the reading-port work that replaces the derived spellings"
+known_fail_reason = "`src/stdlib/tensor/kernels/conv.cpp#conv2dInputGradShaped` derives `H = (OH - 1) * stride + KH - 2 * padding` itself (its own copy of the type's formula), and `requireDy` accepts the smaller answer because `(H' + 2*padding - KH)` divides exactly by the stride for `H' = H - ((H + 2*padding - KH) % stride)`."
+known_fail_msg = "value  dx=5x5 dw=4x4 numel=25,16"
+known_fail_ends_when = { prints = "value  dx=6x6 dw=3x3 numel=36,9" }
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
