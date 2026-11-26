@@ -1,0 +1,41 @@
+id = "tools.plan_launch"
+order = 922
+tier = "fast"
+tags = ["feat", "tools"]
+desc = "How the runner starts an entry: a `tool = \"node\"` entry gets exactly the arguments its plan wrote, and a `skip_unless` probe is skipped when it fails, failed when it does not return, and never takes a card"
+
+[[tests]]
+name = "plan_launch.node_argv"
+desc = "A `tool = \"node\"` entry is started as the interpreter, the script and the entry's own `args`, in that order, and nothing else: no compiler option and no case are added. `${camel}` is a substitution the plan places where the script wants it, and here it lands in the position the plan wrote."
+kind = "behavior"
+tool = "node"
+case = "../../../tools/argv-echo.mjs"
+args = ["${case}", "first", "two words", "--flag", "${camel}"]
+expect_exit = 0
+expect_stdout_exact = "argv [\"first\",\"two words\",\"--flag\",\"<camel>\"]\n"
+normalizers = ["normalize_newlines"]
+timeout_ms = 30000
+
+[[tests]]
+name = "plan_launch.node_argv_empty"
+desc = "A `tool = \"node\"` entry whose plan writes no `args` after the script starts the script with none: the runner adds nothing of its own."
+kind = "behavior"
+tool = "node"
+case = "../../../tools/argv-echo.mjs"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_exact = "argv []\n"
+normalizers = ["normalize_newlines"]
+timeout_ms = 30000
+
+[[tests]]
+name = "plan_launch.probe_and_selection"
+desc = "A nested run of fixture plans: a failing `skip_unless` skips the entry at once and takes no card, a probe that outlives `skip_unless_timeout_ms` fails the entry with a message naming the probe while the entries after it still run, `--entry` selects entries in an ordinary run, and a plan file target says the tier does not filter it only when `--tier` was typed."
+kind = "behavior"
+tool = "node"
+case = "../../../tools/plan-launch.test.mjs"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_contains = ["plan-launch: ", " checks, 0 failed"]
+normalizers = ["normalize_newlines"]
+timeout_ms = 180000
