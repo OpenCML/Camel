@@ -50,8 +50,9 @@ param(
     [string] $FromCheckout,
     # Read an existing tree instead of making one.
     [switch] $VerifyOnly,
-    # Make the tree and skip husky. For a fixture that is about to be deleted, and for nothing else:
-    # the point of this script is that the two steps are one.
+    # Make the tree and skip husky, for a tree that never pushes: a fixture about to be deleted, or a
+    # tree that only measures a commit. The guard is then not asked for, and the last line says the
+    # tree has no hooks; every other tree gets both steps as one.
     [switch] $NoHusky,
     # Skip the fetch. For a caller that has just fetched.
     [switch] $NoFetch
@@ -215,6 +216,11 @@ if ($hooksPathBefore -ne $hooksPathAfter) {
 }
 
 # --- prove the guard speaks -------------------------------------------------
+if ($NoHusky) {
+    Write-Host ''
+    Write-Host "ready: $pathFull on $checkoutName at $($baseSha.Substring(0, 9)), with no hooks (-NoHusky): a push from it runs no rule" -ForegroundColor Yellow
+    exit 0
+}
 # The claim "husky exited 0" is about a directory; this claim is about a push.
 $guard = Test-PushHookGuard -Tree $pathFull -Target $(if ($detached) { 'the commit it publishes' } else { $Branch })
 if (-not $guard.Ok) {
