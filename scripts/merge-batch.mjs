@@ -35,6 +35,8 @@
  *        [--lanes <file.json>]      a JSON array of {"branch": ..., "reading": ...}
  *        [--build <command>]        run in the seat; {seat} is replaced by the seat path
  *        [--red-exit <n>]           the build's exit code that means "the sources do not build"
+        [--build-timeout <s>]      a build still running after this long is ended with its whole tree
+                                   and counts as "no verdict", not as red (default 5400)
  *        [--remote origin] [--integration integration] [--base <ref>] [--no-fetch] [--push]
  *
  * The default build command runs `internal/tools/camel-remote.ps1` on the seat with no plan, which
@@ -49,6 +51,7 @@ import { spawnSync } from 'node:child_process'
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
+import { runLimitedSync } from './lib/job.mjs'
 
 const DEFAULT_BUILD =
     'pwsh -NoProfile -File "{seat}/internal/tools/camel-remote.ps1" -Path "{seat}" -Jobs 8'
@@ -65,6 +68,7 @@ function parseArgs(argv) {
         lanesFile: null,
         build: DEFAULT_BUILD,
         redExit: 1,
+        buildTimeout: 5400,
         remote: 'origin',
         integration: 'integration',
         base: null,
@@ -87,6 +91,7 @@ function parseArgs(argv) {
         } else if (name === '--lanes') out.lanesFile = value()
         else if (name === '--build') out.build = value()
         else if (name === '--red-exit') out.redExit = Number(value())
+        else if (name === '--build-timeout') out.buildTimeout = Number(value())
         else if (name === '--remote') out.remote = value()
         else if (name === '--integration') out.integration = value()
         else if (name === '--base') out.base = value()
@@ -117,6 +122,7 @@ function parseArgs(argv) {
         seen.add(lane.branch)
     }
     if (!Number.isInteger(out.redExit)) fail(2, '--red-exit needs an integer')
+    if (!(out.buildTimeout > 0)) fail(2, '--build-timeout needs a positive number of seconds')
     if (!out.base) out.base = `${out.remote}/${out.integration}`
     return out
 }
@@ -167,18 +173,32 @@ function mergeOne(lane, laneSha, intoName) {
     return { ok: true, sha: head() }
 }
 
+let buildTimeout = 5400
+
 function runBuild(command, label) {
     const started = Date.now()
     process.stdout.write(`merge-batch: build (${label}) ...\n`)
-    const run = spawnSync(command.split('{seat}').join(seat), { cwd: seat, shell: true, stdio: 'inherit' })
+    const run = runLimitedSync(command.split('{seat}').join(seat), { cwd: seat, shell: true, timeoutMs: buildTimeout * 1000 })
     const seconds = (Date.now() - started) / 1000
-    process.stdout.write(`merge-batch: build (${label}) exit ${run.status} in ${seconds.toFixed(1)} s\n`)
-    return { code: run.status ?? -1, seconds }
+    process.stdout.write(
+        run.timedOut
+            ? `merge-batch: build (${label}) ran past its limit of ${buildTimeout} s and was ended with its process tree\n`
+            : `merge-batch: build (${label}) exit ${run.code} in ${seconds.toFixed(1)} s\n`,
+    )
+    return { code: run.code ?? -1, seconds, timedOut: run.timedOut }
+}
+
+/** Why a build gave no verdict: it was cut off at its limit, or it exited with something other than 0 and the red code. */
+function noVerdict(run, redExit) {
+    return run.timedOut
+        ? `the build did not run to a verdict (it ran past its limit of ${buildTimeout} s and was ended)`
+        : `the build did not run to a verdict (exit ${run.code}, a red build exits ${redExit})`
 }
 
 function main() {
     const args = parseArgs(process.argv.slice(2))
     seat = path.resolve(args.seat)
+    buildTimeout = args.buildTimeout
     const startedAt = Date.now()
     if (git(['status', '--porcelain']).out) fail(2, `the seat ${seat} has uncommitted changes; a batch starts on a clean tree`)
     if (args.fetch) {
@@ -220,20 +240,20 @@ function main() {
             const full = runBuild(args.build, `${merged.length} merge(s)`)
             buildSeconds += full.seconds
             builds += 1
-            if (full.code === 0) break
-            if (full.code !== args.redExit) {
-                fail(2, `the build did not run to a verdict (exit ${full.code}, a red build exits ${args.redExit}); nothing was pushed and no lane was dropped`)
+            if (full.code === 0 && !full.timedOut) break
+            if (full.timedOut || full.code !== args.redExit) {
+                fail(2, `${noVerdict(full, args.redExit)}; nothing was pushed and no lane was dropped`)
             }
             if (!baseBuilds) {
                 git(['checkout', '--quiet', '--detach', baseSha])
                 const probe = runBuild(args.build, 'the integration tip itself')
                 buildSeconds += probe.seconds
                 builds += 1
-                if (probe.code === args.redExit) {
+                if (!probe.timedOut && probe.code === args.redExit) {
                     fail(4, `the integration tip itself does not build (${baseSha.slice(0, 12)}); no lane is to blame, none was dropped and nothing was pushed; fix the tip first`)
                 }
-                if (probe.code !== 0) {
-                    fail(2, `the build did not run to a verdict (exit ${probe.code}); nothing was pushed and no lane was dropped`)
+                if (probe.timedOut || probe.code !== 0) {
+                    fail(2, `${noVerdict(probe, args.redExit)}; nothing was pushed and no lane was dropped`)
                 }
                 baseBuilds = true
                 git(['checkout', '--quiet', '--detach', merged[merged.length - 1].sha])
@@ -247,9 +267,10 @@ function main() {
                 const probe = runBuild(args.build, `first ${mid} merge(s)`)
                 buildSeconds += probe.seconds
                 builds += 1
+                if (probe.timedOut) fail(2, `${noVerdict(probe, args.redExit)}; nothing was pushed and no lane was dropped`)
                 if (probe.code === 0) good = mid
                 else if (probe.code === args.redExit) bad = mid
-                else fail(2, `the build did not run to a verdict (exit ${probe.code}); nothing was pushed and no lane was dropped`)
+                else fail(2, `${noVerdict(probe, args.redExit)}; nothing was pushed and no lane was dropped`)
             }
             const culprit = merged[bad - 1]
             skipped.push({ branch: culprit.lane.branch, reason: 'the build fails with it (found by building prefixes of the batch)' })

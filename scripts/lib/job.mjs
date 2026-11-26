@@ -23,7 +23,9 @@
 
 import { spawn, spawnSync } from 'node:child_process'
 import fs from 'node:fs'
+import os from 'node:os'
 import path from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { DETACH_TREE, killProcessTree } from '../../test/tools/kill-tree.mjs'
 
 const IS_WINDOWS = process.platform === 'win32'
@@ -71,21 +73,71 @@ export function pidExists(pid) {
 }
 
 /**
- * Whether `{pid, start}` is still the process it was recorded as. A recorded start time that the
- * pid no longer has means the pid was reused: that process is gone.
+ * What `{pid, start}` is now: `'same'` (the pid runs, and its start time is the recorded one),
+ * `'other'` (the pid runs but started at another time: it was reused), `'gone'`, or `'unknown'`
+ * (the pid runs but the recorded start time was never taken or the system will not say the current
+ * one, so nothing tells the two processes apart).
  */
-export function isSameProcess(who) {
-    if (!who || !pidExists(who.pid)) return false
-    if (!who.start) return true
+export function identify(who) {
+    if (!who || !pidExists(who.pid)) return 'gone'
+    if (!who.start) return 'unknown'
     const now = startTimeOf(who.pid)
-    return now === null ? true : now === who.start
+    if (now === null) return 'unknown'
+    return now === who.start ? 'same' : 'other'
 }
 
-/** Ends the process tree of `who` when it is still the recorded process. Returns whether it was. */
+/** Whether `{pid, start}` is, provably, the process it was recorded as. */
+export function isSameProcess(who) {
+    return identify(who) === 'same'
+}
+
+/**
+ * Whether the recorded process may still be running: it is, or it cannot be told from the one that
+ * is. For deciding that something is alive; never for deciding to kill it.
+ */
+export function mayStillRun(who) {
+    const state = identify(who)
+    return state === 'same' || state === 'unknown'
+}
+
+/**
+ * Ends the process tree of `who` when it is provably the recorded process. Returns `'killed'`,
+ * `'unknown'` (it runs and cannot be told from the recorded one: left alone, for the caller to
+ * report) or `'none'` (gone, or a different process).
+ */
 export function killRecorded(who) {
-    if (!isSameProcess(who)) return false
-    killProcessTree({ pid: who.pid })
-    return true
+    const state = identify(who)
+    if (state === 'same') {
+        killProcessTree({ pid: who.pid })
+        return 'killed'
+    }
+    return state === 'unknown' ? 'unknown' : 'none'
+}
+
+const RUN_LIMITED = path.join(path.dirname(fileURLToPath(import.meta.url)), 'run-limited.mjs')
+
+/**
+ * Runs a command line to its end for a synchronous caller, with a limit: at `timeoutMs` its whole
+ * tree is ended. `shell` runs it through the shell, otherwise it is split by `splitCommand`.
+ * Returns `{code, timedOut}`; `code` is null when there is none.
+ */
+export function runLimitedSync(commandLine, { timeoutMs, cwd, shell = false, stdio = 'inherit' }) {
+    const resultFile = path.join(os.tmpdir(), `run-limited-${process.pid}-${Date.now()}.json`)
+    const args = [RUN_LIMITED, '--timeout-ms', String(timeoutMs), '--result', resultFile]
+    if (shell) args.push('--shell')
+    if (cwd) args.push('--cwd', cwd)
+    args.push('--', commandLine)
+    // The outer limit is only the backstop for the runner itself.
+    const outer = spawnSync(process.execPath, args, { stdio, windowsHide: true, timeout: timeoutMs + 60000 })
+    let result = null
+    try {
+        result = JSON.parse(fs.readFileSync(resultFile, 'utf8'))
+    } catch {
+        /* the runner died before it wrote its result */
+    }
+    fs.rmSync(resultFile, { force: true })
+    if (!result) return { code: null, timedOut: outer.error?.code === 'ETIMEDOUT' || outer.signal !== null }
+    return { code: result.code, timedOut: result.timedOut === true }
 }
 
 // ---------------------------------------------------------------- job directory
@@ -198,7 +250,7 @@ function readOwner(lockDir) {
  */
 export function acquireLock(lockDir, owner, isHolderAlive) {
     fs.mkdirSync(path.dirname(lockDir), { recursive: true })
-    for (let attempt = 0; attempt < 3; attempt += 1) {
+    for (let attempt = 0; attempt < 60; attempt += 1) {
         try {
             fs.mkdirSync(lockDir)
             writeAtomic(path.join(lockDir, 'owner.json'), JSON.stringify(owner))
@@ -206,19 +258,58 @@ export function acquireLock(lockDir, owner, isHolderAlive) {
         } catch (error) {
             if (error.code !== 'EEXIST') throw error
         }
-        const holder = readOwner(lockDir)
-        // A lock directory with no owner yet is a holder in the middle of taking it; it is stale
-        // only once it has stayed that way for a while.
-        let ownerless = false
-        if (!holder) {
-            const age = Date.now() - fs.statSync(lockDir).mtimeMs
-            if (age < 10000) return { ok: false, holder: null }
-            ownerless = true
+        const stale = staleHolder(lockDir, isHolderAlive)
+        if (stale.vanished) continue
+        if (!stale.stale) return { ok: false, holder: stale.holder }
+        // Two contenders can both have read the same dead holder. Whichever removes the lock must
+        // not remove one the other has since taken, so removing is done under a claim that only one
+        // contender holds, and the holder is judged again once the claim is held.
+        const claim = `${lockDir}.reclaim`
+        try {
+            fs.mkdirSync(claim)
+        } catch (error) {
+            if (error.code !== 'EEXIST') throw error
+            // A claim left by a contender that died is not waited on for ever.
+            try {
+                if (Date.now() - fs.statSync(claim).mtimeMs > 30000) fs.rmSync(claim, { recursive: true, force: true })
+            } catch {
+                /* gone already */
+            }
+            pause(50)
+            continue
         }
-        if (!ownerless && isHolderAlive(holder)) return { ok: false, holder }
-        fs.rmSync(lockDir, { recursive: true, force: true })
+        try {
+            if (staleHolder(lockDir, isHolderAlive).stale) {
+                const aside = `${lockDir}.stale-${process.pid}-${Date.now()}`
+                try {
+                    fs.renameSync(lockDir, aside)
+                    fs.rmSync(aside, { recursive: true, force: true })
+                } catch (error) {
+                    if (error.code !== 'ENOENT') throw error
+                }
+            }
+        } finally {
+            fs.rmSync(claim, { recursive: true, force: true })
+        }
     }
     return { ok: false, holder: readOwner(lockDir) }
+}
+
+/** `{stale: true}` for a lock whose holder is gone, otherwise `{stale: false, holder}`. */
+function staleHolder(lockDir, isHolderAlive) {
+    const holder = readOwner(lockDir)
+    // A lock directory with no owner yet is a holder in the middle of taking it; it is stale only
+    // once it has stayed that way for a while.
+    if (!holder) {
+        let age
+        try {
+            age = Date.now() - fs.statSync(lockDir).mtimeMs
+        } catch {
+            return { stale: false, holder: null, vanished: true } // removed while looking
+        }
+        return age < 10000 ? { stale: false, holder: null } : { stale: true }
+    }
+    return isHolderAlive(holder) ? { stale: false, holder } : { stale: true }
 }
 
 export function lockOwner(lockDir) {
@@ -298,9 +389,14 @@ export class Children {
         })
     }
 
-    /** Runs a command line (see `splitCommand`) to its end; resolves `{code, signal}`. */
-    run(commandLine, { label, cwd, env }) {
-        return new Promise((resolve) => {
+    /**
+     * Runs a command line (see `splitCommand`) to its end; resolves `{code, signal}`. A command still
+     * running after `limitSeconds` is ended with its whole tree and the call rejects, naming the
+     * label and the limit: the worker's heartbeat says nothing about a child, so only this limit
+     * stops one that hangs.
+     */
+    run(commandLine, { label, cwd, env, limitSeconds }) {
+        return new Promise((resolve, reject) => {
             const fd = fs.openSync(path.join(this.dir, 'worker.log'), 'a')
             fs.writeSync(fd, `${new Date().toISOString()} [${label}] ${commandLine}\n`)
             const [program, ...args] = splitCommand(commandLine)
@@ -314,17 +410,30 @@ export class Children {
             fs.closeSync(fd)
             const entry = { pid: child.pid, start: null, label, child }
             this.live.set(child.pid, entry)
-            // Recorded before its start time is read, so that a worker killed in between still
-            // leaves a pid for whoever cleans up; the start time is added when it is known.
+            // Nothing kills by this pid before its start time is on the record: a record without
+            // one cannot tell the child from a process that later has the same pid. (The worker
+            // itself ends its children through the handle it holds, not through the record.)
+            for (let attempt = 0; attempt < 3 && entry.start === null && pidExists(child.pid); attempt += 1) {
+                entry.start = startTimeOf(child.pid)
+            }
             this.#record()
-            entry.start = startTimeOf(child.pid)
-            this.#record()
+            let timer = null
+            if (limitSeconds) {
+                timer = setTimeout(() => {
+                    killProcessTree(child)
+                    this.live.delete(child.pid)
+                    this.#record()
+                    reject(new Error(`the ${label} step ran past its limit of ${limitSeconds} s and its process tree was ended`))
+                }, limitSeconds * 1000)
+            }
             child.on('error', (error) => {
+                clearTimeout(timer)
                 this.live.delete(child.pid)
                 this.#record()
                 resolve({ code: null, signal: null, error })
             })
             child.on('close', (code, signal) => {
+                clearTimeout(timer)
                 this.live.delete(child.pid)
                 this.#record()
                 resolve({ code, signal })
@@ -340,16 +449,22 @@ export class Children {
 }
 
 /**
- * Ends what a job left running: the worker's tree (when it is still the worker) and every recorded
- * child's tree. Used when the worker could not do it itself. Returns the pids that were ended.
+ * Ends what a job left running: the worker's tree (when it is provably still the worker) and every
+ * recorded child's tree. Used when the worker could not do it itself. Returns `{ended, unknown}`:
+ * the pids that were ended, and the pids that still run but cannot be told from the recorded process
+ * (no start time was recorded, or none can be read now), which are left alone.
  */
 export function killJobProcesses(job) {
     const ended = []
+    const unknown = []
     const targets = [job.worker, ...(Array.isArray(job.children) ? job.children : [])]
     for (const who of targets) {
-        if (who && killRecorded(who)) ended.push(who.pid)
+        if (!who) continue
+        const outcome = killRecorded(who)
+        if (outcome === 'killed') ended.push(who.pid)
+        else if (outcome === 'unknown') unknown.push(who.pid)
     }
-    return ended
+    return { ended, unknown }
 }
 
 /**
@@ -364,7 +479,7 @@ export function liveness(job, limitSeconds) {
         const age = (Date.now() - Date.parse(job.startedAt)) / 1000
         return age > 30 ? { alive: false, reason: 'the worker never started' } : { alive: true }
     }
-    if (!isSameProcess(job.worker)) {
+    if (!mayStillRun(job.worker)) {
         return { alive: false, reason: `the worker (pid ${job.worker.pid}) is gone` }
     }
     const silent = (Date.now() - Date.parse(job.updatedAt)) / 1000
