@@ -131,6 +131,11 @@ pwsh -NoProfile -File <你的工作树>\internal\tools\camel-remote.ps1 `
     `git -C <树> hook run pre-push` 不许回 `cannot find a hook named pre-push`
     `new-worktree.ps1 -VerifyOnly -Path <树>` 拿空输入试跑，读不到检查器的行就是没守卫
   补装只跑 `npx husky`（或 `prepare` 里那条），**不许手写 `.husky/_` 里的文件**。
+· **提交前的格式化只碰你这一笔改到的行**：钩子读暂存差异的区段，把它们当 `--lines` 传给 `clang-format`，
+  没改的行一个字节不动；版本钉在 `.clang-format-version`（现在是 22）。机器上的 `clang-format` 主版本与钉子
+  不同、或根本没装时，钩子**不改文件、只打一行**说明，提交照常走 —— 遇到这一行就读它、照常提交，
+  **不要用 `--no-verify`**：绕过它等于同时绕过记录校验、`check-process-traces` 与文档引用检查。
+  树里的旧排版看着「不合格式」是正常的（它由多个版本排过），**不要为了整齐去整份格式化一个文件**。
 ```
 
 ## 7½. 交回
