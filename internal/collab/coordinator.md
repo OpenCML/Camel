@@ -267,7 +267,7 @@ pwsh -NoProfile -File ... -Path <wt> -Clean                        # 收尾：�
    `cd <树>;` 只改 PowerShell 的 location，**不改进程 CWD**。`[System.IO.File]::ReadAllText/WriteAllText`
    这类 .NET 调用按**进程 CWD**（= 会话工作目录 = 主检出）解析相对路径；`edit` 工具的路径由 FS 后端按会话工作目录解析，**坑一样**。
    后果不只是「写错地方」：**读也是读错的**——它读到的是主检出的旧内容，于是出现「改了却没变化」。
-   **所以：路径一律绝对，.NET 调用也一样。**
+   **所以：路径一律绝对，.NET 调用也一样。** 2026-11-26 再确认一次机制：`cd` 只改 **provider 位置**，不改 `[Environment]::CurrentDirectory` —— 于是**同一个脚本里的两种相对路径指向两个地方**（`Get-Content "src\..."` 跟着 `cd`，`[IO.File]::ReadAllText("src\...")` 留在会话 workspace 即主检出）。判据不是「我 cd 过」，是 `[Environment]::CurrentDirectory` 与 `git rev-parse --show-toplevel` **两行都打出来对齐**；更省事：读写文件只用 `edit`/`write` 工具 + 绝对路径。
 2. **每次改文件前 `git rev-parse --show-toplevel`**，应是自己的 `Camel-wt/<lane>`。
 3. **主检出只许合并车道写**。合并车道在每次门禁前先 `git rev-parse --show-toplevel` 与 `git status --porcelain`；除 `internal/tools/camel-remote.ps1` 之外只要有任何一条脏文件，**先停下报协调者，不要开始构建**。
 
