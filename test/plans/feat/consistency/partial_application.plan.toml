@@ -20,8 +20,6 @@ desc = "f<w> used as a value is a partial application: a function that already h
 
 [defaults]
 kind = "snapshot"
-snapshot_stream = "stdout"
-snapshot_compare = "text_exact"
 args = ["${case}", "${backend}"]
 backends = ["nvm", "fvm", "jit", "prl"]
 backends_agree = ["exit_code", "stdout_normalized"]

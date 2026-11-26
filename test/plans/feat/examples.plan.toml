@@ -23,8 +23,6 @@ desc = "Every program under examples/ that can run on its own runs as its header
 
 [defaults]
 kind = "snapshot"
-snapshot_stream = "stdout"
-snapshot_compare = "text_exact"
 args = ["${case}", "${backend}"]
 backends = ["nvm", "fvm", "jit", "prl"]
 backends_agree = ["exit_code", "stdout_normalized"]

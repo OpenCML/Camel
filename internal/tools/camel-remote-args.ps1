@@ -37,6 +37,14 @@ function Get-AstOnlyArgs {
     (@($AstOnly | ForEach-Object { " --only '$_'" }) -join '')
 }
 
+# `--entry '<word>'` per element, for the runner's `--update-golden`: the words select the entries the
+# run starts, and an entry that is not started keeps its golden. Empty when no word was given, which
+# is the whole-plan meaning of `--update-golden`.
+function Get-EntryArgs {
+    param([string[]]$Entry = @())
+    (@($Entry | ForEach-Object { " --entry '$_'" }) -join '')
+}
+
 # The same for `--drop`, the rows a recording is allowed to lose.
 function Get-AstDropArgs {
     param([string[]]$AstDrop = @())
