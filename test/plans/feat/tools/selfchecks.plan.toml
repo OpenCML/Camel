@@ -509,6 +509,19 @@ expect_stdout_contains = ["entry-without-case: ", " checks, 0 failed"]
 normalizers = ["normalize_newlines"]
 timeout_ms = 180000
 
+[[tests]]
+name = "selfchecks.golden_scope"
+desc = "Re-recording goldens with `--entry` rewrites only the selected entries' goldens and leaves the others' bytes alone; a plan-qualified name and a wildcard select the same way; with no selection every entry of the plan is rewritten; an entry that names nothing refuses the run and changes nothing."
+kind = "behavior"
+tier = "slow"
+tool = "node"
+case = "../../../../test/tools/golden-scope.test.mjs"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_contains = ["golden-scope: ", " checks, 0 failed"]
+normalizers = ["normalize_newlines"]
+timeout_ms = 180000
+
 # The host's token pool is a bash script over flock, so its self-test runs where flock exists (the
 # build host) and is skipped elsewhere. The case file runs it through node so the plan needs no shell
 # tool of its own.
