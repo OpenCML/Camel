@@ -2,8 +2,8 @@
  * The empty array literal `[]` takes its type from the position it is written in (design
  * principles 5.1, 5.2): a cast, a declaration, the type of a loop's value. Nothing is written
  * in it, so the position is the only thing that decides its element type. A loop of one state
- * has the state's type, so the loop's own position types `loop acc = []`; when that position is
- * open too, the value the body appends provides the element type.
+ * has the state's type, so the loop's own position types `loop acc = []`; where that position is
+ * open, the binding names the type, because an empty array has no type of its own (5.1).
  */
 
 type Box = { xs: int[] }
@@ -23,8 +23,8 @@ func halves() => float[] sync {
 }
 
 func inferred(n: int) => int[] sync {
-    // No expected type here: the value the body appends gives the state its element type.
-    let squares = loop acc = [] for i in 0 .. n do acc->append<i * i>
+    // No expected type here: the binding names it, and the loop's state takes it.
+    let squares: int[] = loop acc = [] for i in 0 .. n do acc->append<i * i>
     return squares
 }
 
