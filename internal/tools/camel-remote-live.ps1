@@ -34,7 +34,11 @@ function Get-CamelLiveWorktrees {
         # Stands in for `git -C <Path> worktree list --porcelain` in the tests. It must set
         # $global:LASTEXITCODE the way a native command does, because that exit code is half of
         # the reading -- and the half the old code could not see.
-        [scriptblock]$GitProbe = $null
+        [scriptblock]$GitProbe = $null,
+        # Siblings per root this reading will walk before it gives up on (b) for that root; see the
+        # note at the scan itself. A parameter so a caller can state its own ceiling, and so a test
+        # can drive the branch without a 23 000-entry directory.
+        [int]$ScanCeiling = 4096
     )
 
     # Git prints a worktree path with forward slashes on Windows and `Split-Path` accepts both, but
@@ -50,6 +54,9 @@ function Get-CamelLiveWorktrees {
         Paths   = @()
         Trusted = $false
         Why     = ''
+        # Roots this run did not scan for (b), with their entry counts. Printed by the caller, never
+        # folded into `Names`: "I did not look" and "nothing is there" must not read the same.
+        Skipped = @()
     }
 
     # (a) Did the reading happen at all?
@@ -96,7 +103,19 @@ function Get-CamelLiveWorktrees {
         Where-Object { $_ } | Sort-Object -Unique)
     foreach ($root in $roots) {
         try {
-            $dirs = @([System.IO.Directory]::GetDirectories($root))
+            # One stat per sibling, so the cost of this reading is the size of the directory beside
+            # the worktrees, not the number of worktrees. A root that is a shared scratch area
+            # rather than a row of checkouts (this machine has a worktree sitting directly in a
+            # 23 000-entry temp directory) would cost seconds per run to answer a question about
+            # hand-made copies. Above the ceiling below it is not scanned, and the run says so; every
+            # *registered* worktree is covered by (a) regardless, and the sweep's other readings --
+            # its lock, the host's processes, recent writes, the creation record -- are untouched.
+            $entries = @([System.IO.Directory]::GetDirectories($root))
+            if ($entries.Count -gt $ScanCeiling) {
+                $result.Skipped += [pscustomobject]@{ Root = $root; Entries = $entries.Count; Ceiling = $ScanCeiling }
+                continue
+            }
+            $dirs = $entries
         } catch {
             # No second reading means no proof that a name is absent, so nothing may be removed.
             $result.Why = "cannot read the directories under $root ($($_.Exception.Message))"

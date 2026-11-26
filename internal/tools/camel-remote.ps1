@@ -1855,6 +1855,14 @@ try {
     if ($live.Trusted) {
         # Printed every run: when a checkout does go, this is the line that says what the run knew.
         Write-Host ("[camel-remote] live worktrees: {0}" -f ($liveNames -join ' '))
+        # A root too large to walk is named here rather than passed over: what the run did not look
+        # at belongs in the same line as what it found, and a name that is only absent because
+        # nobody looked must not read as a name that is gone.
+        foreach ($skipped in @($live.Skipped)) {
+            if ($null -eq $skipped) { continue }
+            Write-Host ("[camel-remote] not scanning {0} for hand-made checkouts: {1} entries, over the {2} this reading walks; its registered worktrees are still in the list above" -f `
+                $skipped.Root, $skipped.Entries, $skipped.Ceiling)
+        }
     } else {
         Write-Host ("[camel-remote] not cleaning up host checkouts this run: {0}; 'could not read which worktrees exist' is not 'there are no other worktrees'" -f $live.Why)
     }
