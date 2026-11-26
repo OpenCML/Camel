@@ -720,9 +720,10 @@ def main() -> int:
     parser.add_argument("--no-sensitivity", action="store_true")
     # A smaller input keeps the network and every weight as benchmarked but shortens the run:
     # the slice is taken from the benchmark input (or from the seed's draw), and Camel reads it
-    # through the same artifacts file PyTorch reads. Used by the slow kink tests of
-    # test/plans/feat/modules/autodiff.plan.toml to fit the full-suite budget; the gradient
-    # rules and the relu-kink criterion are the same.
+    # through the same artifacts file PyTorch reads. The gradient rules and the relu-kink
+    # criterion are the same. No plan passes either option today: the four ResNet entries of
+    # test/plans/feat/modules/autodiff.plan.toml run the whole benchmarked input and state the
+    # block space that costs instead (`--block-limit`).
     parser.add_argument("--batch", type=int, help="use the first N samples of the input (default: all)")
     parser.add_argument("--size", type=int, help="crop the input's spatial extent to S x S (default: as benchmarked)")
     parser.add_argument("--json", type=Path, help="write the per-tensor numbers there")
