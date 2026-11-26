@@ -16,8 +16,8 @@ tags = ["feat", "modules", "autodiff", "remat"]
 # once with and once without).
 #
 # What a *pass* stores is still a reading of the graph and not of the output; the count `split`
-# reports for a cut, and whether it is `split`'s to report, is
-# `who-owns-the-count-of-a-splits-residuals` in internal/questions/.
+# reports for a cut is the type's to state, and an item the signature has no slot for is
+# recomputed in the second half.
 #
 # The name's arrival is also the tripwire of `modules.jax_alignment`: `remat` was pinned there as
 # a refused import, and that case flips to the value it prints when this module exports the name.
