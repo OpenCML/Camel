@@ -7,7 +7,7 @@
 # `edit` block will carry are written against today's interface (`open` / `commit`) first, so that
 # the day the block syntax is decided the operators do not move. The two operators that step cannot
 # write -- `inline`, whose `at` names a region and not a place, and `outline`, which would need a
-# graph that was not there -- are the questions of 2026-11-18 under internal/questions/.
+# graph that was not there -- are the two refusals these cases pin.
 #
 # Each case asserts the shape of the graph, not that the pass did not crash: the order edge is read
 # back off the committed program (`order_inputs` of the node it reaches), and the exit is compared
