@@ -43,6 +43,15 @@ The core's kinds (`core_facts.h`):
 | `core.permissions` | Node | i | the permissions granted to the node |
 | `core.resources` | Node | ii | what the node does to resources (`resourcesOf`, `docs/technical/41_resources_and_definitions.md`), at the nodes that touch any |
 
+The seven above are `camel/runtime/core_facts.h`'s. The framework this page describes
+(`src/kernel/facts/include/camel/facts/facts.h`) has registered one kind of its own:
+`core.arrangeable` — scope Node, class ii — the four terms of design principles 3.4 on the node
+(pure, no external effect, cannot fault, terminates) and their conjunction, which is the reading a
+pass that may move nodes anywhere asks
+(`src/kernel/facts/include/camel/facts/arrangeable.h`). The store answers it per node and keeps it
+under a stamp; the seven kinds above stay the baseline the remaining moves are measured against
+(`test/plans/feat/tools/facts.plan.toml`, `facts.inspect_both_libraries`).
+
 ## 3. The store and stamps
 
 `Context::facts()` is the program's store. `put`, `get`, `obtain` (get or compute and store),

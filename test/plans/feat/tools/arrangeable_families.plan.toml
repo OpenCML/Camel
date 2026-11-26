@@ -9,6 +9,11 @@
 # The batch is seven programs. `arm_loops.cml` carries every family at once; the other six carry one
 # each in a plainer setting, so a row that moves in the batch can be narrowed down to a row that moves
 # in a program built for it.
+#
+# The rows are the store's answers and not a derivation of them: `core.arrangeable` is a class (ii)
+# kind of scope Node in the fact layer (`docs/design/op-semantics/README.cn.md`, 10.1: a derivable
+# answer's place is the store, under a stamp; `docs/technical/40_graph_facts.md`, 2: the kind roster).
+# What this file reads is therefore the answer a pass gets, cut by the family of the node that gave it.
 
 [[tests]]
 name = "arrangeable_families.loops_and_branches"
