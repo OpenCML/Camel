@@ -11,7 +11,7 @@
 >export resource fs
 #^^^^^^ keyword.control.import.camel
 #       ^^^^^^^^ storage.type.contextual-declaration.camel
->export resource tracer = [stdout, fs]
+>export resource tracer = [console, fs]
 #^^^^^^ keyword.control.import.camel
 #       ^^^^^^^^ storage.type.contextual-declaration.camel
 #                       ^ keyword.operator.assignment.camel
