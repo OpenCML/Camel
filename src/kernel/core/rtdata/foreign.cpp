@@ -107,7 +107,12 @@ void ForeignResourceControlBlock::retainHolder() noexcept {
 void ForeignResourceControlBlock::releaseReference() noexcept { (void)release(); }
 
 void ForeignResourceControlBlock::releaseFromWrapperFinalizer() noexcept {
-    counters().finalizedWrappers.fetch_add(1, std::memory_order_acq_rel);
+    // The exit sweep may have counted this lifetime already (finishReleasedLifetimesAtExit): it
+    // counted it once for the block, so this finalizer consumes the mark instead of counting it
+    // again, and frees the memory as usual.
+    if (!takeFinishedAtExit()) {
+        counters().finalizedWrappers.fetch_add(1, std::memory_order_acq_rel);
+    }
     (void)release();
 }
 
@@ -125,12 +130,11 @@ bool ForeignResourceControlBlock::releaseCountNow() noexcept {
         return false;
     }
     countedOut_.store(true, std::memory_order_release);
-    {
-        auto &live = liveControlBlocks();
-        std::lock_guard<std::mutex> lock(live.mutex);
-        // Nothing holds the resource any more, so the exit sweep must not take it a second time.
-        live.blocks.erase(this);
-    }
+    // The block stays in the registry: the resource is gone, but the wrappers that name it are the
+    // collector's to release, and the end of a run finishes the lifetime from this registry
+    // (finishReleasedLifetimesAtExit) rather than waiting for a collection that may never follow
+    // the last death. The exit sweep skips it because it is disposed; the wrapper's finalizer
+    // removes it when it frees the memory.
     dispose();
     counters().releasedControlBlocks.fetch_add(1, std::memory_order_acq_rel);
     counters().liveControlBlocks.fetch_sub(1, std::memory_order_acq_rel);
@@ -478,6 +482,29 @@ size_t disposeAllForeignResources() noexcept {
         block->releaseReference();
     }
     return held.size();
+}
+
+size_t finishReleasedLifetimesAtExit() noexcept {
+    // The registry holds the blocks the program made and that no finalizer has freed. The ones the
+    // count released are finished lifetimes: their resource is already gone, and all a collection
+    // would still do is notify the wrapper, which the program's end makes certain anyway. Counting
+    // them here is what makes the reading a fact of the run: the same program answers the same
+    // number whatever its schedule collected (design principles 3.3 -- the lifetime is a count).
+    //
+    // A collection at the end was the alternative, and it is wrong for this reading: it would also
+    // finalize the wrappers that are still live, so the resources the exit sweep releases would be
+    // released by a collection instead and `disposed` would always be zero.
+    size_t finished = 0;
+    auto &live      = liveControlBlocks();
+    std::lock_guard<std::mutex> lock(live.mutex);
+    for (ForeignResourceControlBlock *block : live.blocks) {
+        if (!block->countedOut() || !block->markFinishedAtExit()) {
+            continue;
+        }
+        ++finished;
+    }
+    counters().finalizedWrappers.fetch_add(finished, std::memory_order_acq_rel);
+    return finished;
 }
 
 ForeignResourceStats foreignResourceStats() {
