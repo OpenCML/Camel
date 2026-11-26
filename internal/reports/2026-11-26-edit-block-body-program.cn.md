@@ -514,3 +514,17 @@ BLOCK_COST silent         stated=0 value=1.000000   什么都没声明的算子�
 是**运行时的资源极限**，而"会不会故障是从图推出的事实……资源极限不计入"。所以一个可能不结束的算子，
 仍然是一个不会失败的算子——**它不会失败，只是不会停**。这条写进了 `termsOfOperator` 的注释里，没有写成
 "暂时没算"，因为那不是欠账。
+
+### 17 输出也要能分开：数字跟着它的来源一起印
+
+记录里分得清、读者分得清，还差一格：**印出来的人分不清**。`camel inspect --ops` 现在每一行都带着代价和
+它的来源（`src/kernel/core/module/introspect.cpp`）：
+
+```
+"cost_stated":true,"cost":8        ← 算子说的就是 8
+"cost_stated":false,"cost":1       ← 没人说，这是读者的缺省
+```
+
+同一行、字面不同，不用回头查记录。`cost_stated` 不是新字段：它就是 `relativeCostStated()` 有没有值，
+即"写了没有"与"没写"的区别被搬到了看得见的地方。判据：`feat/modules/op_record.plan.toml` 2/2 绿，
+用例断言同时存在 `cost_stated` 真与假两类——少了任一类，说明这个字段什么都没说。

@@ -125,6 +125,22 @@ def main(argv):
         print("No operator states `uses` in its record: the copy from the declaration is gone.")
         print("oprecord uses: FAIL")
         return 1
+
+    # What a cost function is told, and where the number comes from. A record that states a cost and
+    # one that states none both print a number, and a person reading one line must not have to
+    # consult the record to know which is which: `cost_stated` travels with `cost`, so the same
+    # number reads differently when it is the reader's default rather than the operator's statement.
+    costs = [r for r in rows if "cost" in r and "cost_stated" in r]
+    if not costs:
+        print("No operator prints its cost with its source: the field is gone.")
+        print("oprecord uses: FAIL")
+        return 1
+    declared = [r for r in costs if r["cost_stated"]]
+    silent_cost = [r for r in costs if not r["cost_stated"]]
+    if not declared or not silent_cost:
+        print("Every operator prints the same cost source: the field says nothing.")
+        print("oprecord uses: FAIL")
+        return 1
     print("oprecord uses: PASS")
     return 0
 
