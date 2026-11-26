@@ -7478,6 +7478,49 @@ spatial axes, shaped like `bias`.
 - Pure.
 - Example: `conv2d_bias_grad(bias, dy)` gives `like b`
 
+### The stated twins of the three gradients
+
+#### `conv2d_input_grad_shaped`
+
+```camel
+conv2d_input_grad_shaped: (kernel: f32[...], dy: f32[...], stride?: int, padding?: int) => f32[...]
+```
+
+`conv2d_input_grad` with the input's extents **derived** from the kernel and `dy`: the answer is
+the tensor those two imply, because `OH = (H + 2*padding - KH) / stride + 1` read backwards gives
+`H`. The input's values are never read -- the kernel writes every element of the answer from the
+geometry -- so a caller that holds the shape and not the tensor can still ask this. It exists for
+the reverse rule of `conv2d` (`src/stdlib/rulesets/transpose.cml#conv2d_t`), which is handed the
+cotangent of one operand and no value of it.
+
+- Pure.
+- Example: `conv2d_input_grad_shaped(kernel, dy, 1, 0)` gives `the shape dy and the kernel imply`
+
+#### `conv2d_kernel_grad_shaped`
+
+```camel
+conv2d_kernel_grad_shaped: (input: f32[...], dy: f32[...], stride?: int, padding?: int) => f32[...]
+```
+
+`conv2d_kernel_grad` with the kernel's extents **derived** from the input and `dy`, the same
+inversion the input's twin makes. The kernel's values are never read -- `dw` is accumulated over
+every element and starts at zero -- so the shape is all this needs of it.
+
+- Pure.
+- Example: `conv2d_kernel_grad_shaped(input, dy, 1, 0)` gives `the shape input and dy imply`
+
+#### `conv2d_bias_grad_shaped`
+
+```camel
+conv2d_bias_grad_shaped: (dy: f32[...]) => f32[...]
+```
+
+`conv2d_bias_grad`'s answer is the channels of `dy` alone -- the bias's values are never read --
+so this is the same operator under the name a rule answers its third cotangent with.
+
+- Pure.
+- Example: `conv2d_bias_grad_shaped(dy)` gives `like [O]`
+
 ### Pooling
 
 #### `max_pool2d`
