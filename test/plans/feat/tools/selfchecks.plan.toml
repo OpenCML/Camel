@@ -408,7 +408,7 @@ timeout_ms = 60000
 # from the repository, not from the tool's own output.
 [[tests]]
 name = "selfchecks.merge_batch"
-desc = "`test/tools/merge-batch.test.mjs`: `scripts/merge-batch.mjs` merges the clean and fast-forwardable lanes as merge commits on the integration tip, skips the conflicting lane with its file named, tells the build-breaking lane from the clean ones by building prefixes of the batch after building the base (5 builds), writes the Lane-Reading trailer and the lane commit titles into every merge, pushes only with --push, and does not read a build that never ran as a verdict on a lane, and stops with its own exit code, dropping and pushing nothing, when the integration tip itself does not build (17 checks)."
+desc = "`test/tools/merge-batch.test.mjs`: `scripts/merge-batch.mjs` merges the clean and fast-forwardable lanes as merge commits on the integration tip, skips the conflicting lane with its file named, tells the build-breaking lane from the clean ones by building prefixes of the batch after building the base, writes the Lane-Reading trailer and the lane commit titles into every merge, pushes only with --push, and does not read a build that never ran as a verdict on a lane, and stops with its own exit code, dropping and pushing nothing, when the integration tip itself does not build, and ends a build that hangs past its limit with its whole process tree and reads it as no verdict (exit 2, nothing dropped or pushed)."
 kind = "behavior"
 tool = "node"
 case = "../../../../test/tools/merge-batch.test.mjs"
@@ -423,7 +423,7 @@ timeout_ms = 120000
 # read back, so what is checked is the processes and the files the job leaves, not its own report of them.
 [[tests]]
 name = "selfchecks.promote"
-desc = "`test/tools/promote.test.mjs`: `scripts/promote.mjs` `start` returns at once and leaves a running worker, `status` follows the phases to the verdict (a timeout that passes on re-run is not a new red, one that fails again is), the records name the immediately previous promotion's table and a previous promotion with a record and no table is refused, `cancel` and a worker killed without warning leave no process of the job alive and free the lock, a silent worker is reported dead, and `--publish` hands the publish command exactly the measured sha."
+desc = "`test/tools/promote.test.mjs`: `scripts/promote.mjs` `start` returns at once and leaves a running worker, `status` follows the phases to the verdict (a case the runner re-ran after a timeout is not red when the re-run passed and is when it timed out again, every status but pass, skip and known is red), a layer that was cut short or whose reading lacks a case of the previous reading fails without records or publish and names the cases, a child past its time limit ends the job in its phase with no process left, a process whose start time was never recorded is not killed, two contenders for a dead holder's lock leave exactly one holder, the records name the immediately previous promotion's table and a previous promotion with a record and no table is refused, `cancel` and a worker killed without warning leave no process of the job alive and free the lock, a silent worker is reported dead, and `--publish` hands the publish command exactly the measured sha."
 kind = "behavior"
 tier = "slow"
 tool = "node"

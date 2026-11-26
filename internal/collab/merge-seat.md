@@ -22,8 +22,8 @@ node scripts/promote.mjs cancel [<id>]                     # 取消
 - 工作进程**有心跳**：进程死了，下一次 `status` 就判死、清理并放锁 —— 所以“卡住”的判据是 `status` 说它死了，不是“我等了很久”。
 - `--publish` **只推量过的那一笔**；没有 `--publish` 就只量不推。
 - 默认整层命令用 `camel-remote`；`summary.json` 里有每个计划的 `plan_path` 与每行 `test_timings`（含 `timed_out`）。
-- **比红表时把“红”和“超时”分开**：`timed_out` 为真的先重跑一次，仍是超时才按红处理。
-- 第一次真跑要在构建机上核五件：`-FetchFile summary.json -Latest` 能否取到工作树、`CAMEL_TEST_TIMEOUT_SCALE=2` 能否经 ssh 传到主机、远端清理 `-Clean` 是否合适、`plan_path` 能否直接喂 `-Plan`、`--publish` 时钩子是否放行。
+- **超时只由运行器重跑一次**（单独、两倍时限）；晋级只读它写在 `test_timings` 行上的最终状态，不再自己重跑。层命令不是以 0 或 1 退出、或读数缺了上次读数里的用例，整个任务判失败、不发布。
+- 第一次真跑要在构建机上核五件：`-FetchFile summary.json -Latest` 能否取到工作树、远端清理 `-Clean` 是否合适、`plan_path` 能否直接喂 `-Plan`、`--publish` 时钩子是否放行。
 
 ## 怎么合：一条命令
 
@@ -61,7 +61,7 @@ node scripts/promote.mjs status [<任务号>]                  # 阶段、已用
 node scripts/promote.mjs cancel [<任务号>]                  # 结束工作进程整棵树、清远端运行、放锁
 ```
 
-- 阶段依次是 `measure`（整层）、`rerun-timeouts`、`compare`、`records`，带 `--publish` 且无新红再加 `publish`；
+- 阶段依次是 `measure`（整层）、`compare`、`records`，带 `--publish` 且无新红再加 `publish`；
   终态是 `done` / `failed` / `cancelled` / `dead`。轮询间隔随意，起一个后台提醒或每几分钟看一眼，**不要**用前台命令等。
 - 同一时刻只有一个晋级（一把锁）。锁的持有者已死就当场回收，不会一直等；持有者活着时 `start` 退出码 3 并给出它的任务号。
 - 工作进程每 20 秒心跳；`status` 发现工作进程不在了（或 pid 已被别的进程占用）、或心跳超过 180 秒没动，就记为 `dead`，
@@ -74,7 +74,7 @@ node scripts/promote.mjs cancel [<任务号>]                  # 结束工作进
 - `--publish` 的步骤：在发布工作树（`--publish-worktree`，缺省取本机设置的 `mergeWorktree`）里把三份产物提交在被测提交之上
   （钩子读的是推送所在树的 HEAD，记录写不进它自己所记的提交），再推**被测提交本身**，不是记录提交；推完读回远端核对。
   记录提交留在分支 `record/promotion-<n>`。
-- 命令都可换：`--layer`、`--rerun`、`--cleanup`、`--publish-command`（`{worktree}` `{plan}` `{sha}` `{jobs}` 会被替换；
+- 命令都可换：`--layer`、`--cleanup`、`--publish-command`（`{worktree}` `{sha}` `{jobs}` 会被替换；
   命令行按空格分词、双引号成组，**直接起程序、不经 shell**）。整层命令必须在 `{worktree}/summary.json` 留下运行器的汇总文件。
 
 ## 批号（队列页给的号，这里对上靶子）

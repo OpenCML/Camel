@@ -5440,6 +5440,14 @@ async function executePlans(plans, options, sharedVars, logDir) {
             first_pass: { wall_ms: first.wallMs, timeout_ms: first.timeoutMs, timed_out: true },
         }
         const outcome = { status: result.status, result, metric: formatMetric(result), failures: result.failures }
+        // The row of this case in `test_timings[]` is written when its first attempt settles; the
+        // verdict that decides the case is the second one, so the row is brought up to it. A reader of
+        // the summary (the promotion) then finds one final status per case and does not re-run it.
+        if (entry.timing) {
+            entry.timing.status = outcome.status
+            entry.timing.timed_out = result.timedOut === true
+            entry.timing.rerun = { first_timed_out: true, status: outcome.status }
+        }
         // One case, one verdict, one line: the summary counts the case once (`total` does not move
         // with an attempt), `rerun` counts the attempt, and `pass` counts the verdict it reached.
         summary.rerun += 1
