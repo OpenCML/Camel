@@ -1,0 +1,79 @@
+{
+  "kind": "promotion",
+  "promotion": 20,
+  "tip": "6d7d0e422c0ab27d26bae1813196c0fb5e80c7ce",
+  "measured_tip": "28f74cab059fb18c66577f6a1ae627b165a5d67d",
+  "pushed_as": "not pushed",
+  "develop_before": "6d7d0e422c0ab27d26bae1813196c0fb5e80c7ce",
+  "develop_after": "6d7d0e422c0ab27d26bae1813196c0fb5e80c7ce",
+  "tier": "fast",
+  "scope": "test/plans (the whole plan tree): 451 plan file(s), 9747 declared test entries",
+  "jobs": 8,
+  "host": "88 (the build host), tree /home/zjwei/camel-work/tree21, detached at 28f74cab059f",
+  "binary_built": "2026-11-27T03:14:34+08:00",
+  "run_id": "20261127_031412_72348_udjm",
+  "readings": {
+    "total": 9747,
+    "pass": 9137,
+    "fail": 549,
+    "skip": 28,
+    "known": 33,
+    "timed_out_raw_layer": 0,
+    "re_run": 0,
+    "re_run_passed": 0,
+    "load_before": "85.02 81.28 80.74 (1m/5m/15m) before the run",
+    "token_pool": "peaked at 24 tokens; 7353 queue waits, tokenWaitSeconds 1450.0, so the test wall clock below includes waiting for a token",
+    "wall": "build 15.7 s, test 705.0 s, total 720.7 s"
+  },
+  "comparison": {
+    "against": "the nineteenth run's red table, measured on 3c95ed9ef8 (551 reds); this tip's table is 549",
+    "method": "the two red sets compared name by name: the previous table is internal/reports/2026-11-27-promotion-19-reds.tsv, this run's reds are its own [FAIL] lines",
+    "turned_green": 5,
+    "turned_green_names": [
+      "parse.frontend/frontend.ast_record",
+      "opt.camel_passes/cse_written_variable.by_cpp",
+      "opt.camel_passes/cse_written_variable.by_camel",
+      "modules.graph_facts/draft_effects_refused",
+      "docs.links/questions_index"
+    ],
+    "still_red": 546,
+    "vanished_reds": 0,
+    "new_reds": 3,
+    "new_reds_file": "internal/reports/2026-11-27-promotion-20-new-reds.tsv",
+    "arithmetic": "551 reds before; 5 of them went green and 3 went red that were not red before, so this table is 549. The entries grew by 7 (9740 -> 9747), all of them new cases rather than renamed ones: no case name left the table.",
+    "notes": [
+      "entries 9740 -> 9747: seven new declared cases, none of the old names disappeared (vanished 0)",
+      "opt.camel_passes: the cse_written_variable pair went green together (17 reds in that plan -> 1), so the pass-level comparison is not per case here",
+      "docs.ai_reference/current is a generated region: 587 entries no longer match their source; it is a regeneration, not a code change"
+    ]
+  },
+  "new_reds_disposition": [
+    {
+      "case": "modules.nn.laws/max_pool2d_window_transpose.nvm",
+      "kind": "case",
+      "disposition": "fixed on lane/conv-constas f5feba3ef0 (the law's right side reads the input the transposed function is handed); waiting in the merge queue, not yet in integration",
+      "owner": "lane/conv-constas",
+      "task": "task-103"
+    },
+    {
+      "case": "tools.retention/retention.name",
+      "kind": "load flake, accepted",
+      "disposition": "in-layer it failed after 31.1 s on a host at 1m load 85; run alone it is exit 0 PASS. Recorded as a known flake rather than a red; the promotion that follows must show it green again without a code change.",
+      "note_file": "D:/Temp/promo20-known-flake.md"
+    },
+    {
+      "case": "docs.ai_reference/docs.ai_reference.current",
+      "kind": "generated document",
+      "disposition": "the stdlib-signatures region (587 entries) is not what its source produces; regenerating it is `node scripts/camel-for-ai.mjs --write`, which touches no declaration",
+      "owner": "lane-misc",
+      "task": "task-104"
+    }
+  ],
+  "why_not_pushed": "three case-level differences against the previous run: one is a fix waiting in the merge queue, one is a load flake, one is a generated region. develop moves when the first two are settled in integration and the third regenerated, so that the promotion that follows is measured on a tip that carries all three.",
+  "timeouts_rerun": {
+    "why": "the host ran at 1m load 85 and every case went through the token pool; a timeout on the first occurrence is not red until it is run alone",
+    "count": 0,
+    "run_alone": false,
+    "note": "no case timed out in this run"
+  }
+}

@@ -1,0 +1,3 @@
+modules.nn.laws	max_pool2d_window_transpose.nvm	case	fixed on lane/conv-constas f5feba3ef0, waiting in the merge queue	task-103
+tools.retention	retention.name	load flake	31.1 s in-layer at 1m load 85, exit 0 PASS alone	known-flake
+docs.ai_reference	docs.ai_reference.current	generated document	587 entries in the stdlib-signatures region, regenerate with camel-for-ai.mjs --write	task-104
