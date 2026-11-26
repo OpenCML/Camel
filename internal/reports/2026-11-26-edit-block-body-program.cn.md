@@ -441,3 +441,24 @@ macro / foldable / withAfterNorm。"可能不终止"只体现在 `foldable = fal
 **已知缺口（写在头文件里，没有藏）**：区域内部（分支的臂、循环体）的节点没有走。区域里的节点表是按创建
 顺序寻址的，那是拼写；这里没有它的结构入口。因此差别只在区域内、且外部节点与循环种类相同的两个块体会
 同哈希。补上它需要设计 9.5 真正的规范顺序（含跨程序的编号与并列消解），不是本轮能诚实完成的。
+
+### 13 族层的读数：`oper_not_free` 的那一项
+
+记录层（`BLOCK_TRAITS`）证明不了"事实层读的是它"，所以另取一族读数：**事实层自己的函数**
+（`camel::facts::operatorArrangeable` + 它自己的 `toString`），不是本遍写下的记录。
+
+```
+BLOCK_ARRANGE body  family=may fault all=0 terminates=1 foldable_field=1
+BLOCK_ARRANGE spin  family=may fault, may not terminate all=0 terminates=0 foldable_field=1
+BLOCK_ARRANGE stops family=may fault all=0 terminates=1 foldable_field=1
+```
+
+- `spin`（`return spin(x)`）⇒ 不可自由安排，族名里**点名了终止那一项**；`terminates=0`。
+- `stops` 是 `spin` **把调用拿掉**的同一份体（`return x`）⇒ 同一族读数**翻了过来**（`terminates=1`，
+  族名里没有终止那一项）。**"拿掉就变"** 说明这一项是从块体自己的图（`graphEffects`）读出来的，
+  不是夹具声明的一个常量。
+- 三条都打印 `foldable_field=1`：终止性是它自己的字段，`foldable` 没有替它说话。
+
+`family=may fault` 是另一件事：块的记录声明了 `mayFault=false`，但算子的**缺省故障表**没被写成
+"永不故障"（`set(uri, traits)` 只在显式声明时才写），所以族层照保守读法说"可能故障"。这条不影响
+终止那一项，也不把两者混在一起——族名是**逐项**报的，这正是它比一个布尔值有用的地方。

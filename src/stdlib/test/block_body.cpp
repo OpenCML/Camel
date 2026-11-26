@@ -10,6 +10,7 @@
 #include "camel/core/operator_table.h"
 #include "camel/execute/executor.h"
 #include "camel/execute/pass/registration.h"
+#include "camel/facts/arrangeable.h"
 #include "camel/parse/parse.h"
 #include "camel/runtime/block_form.h"
 #include "camel/runtime/block_programs.h"
@@ -54,6 +55,12 @@ constexpr const char *kLoudText = R"cml(export func loud(x: int) => int {
 }
 )cml";
 
+/// `spin` with the call taken out: the same body otherwise. The family reading must follow this, or
+/// the termination term is not being read from the body's graph at all.
+constexpr const char *kStopsText = R"cml(export func stops(x: int) => int {
+    return x
+}
+)cml";
 /// The same body as `body`, spelled differently: another function name, another parameter name. Its
 /// canonical form is the same, so the two are one block -- a name nobody sees cannot name a block.
 constexpr const char *kRenamedText = R"cml(export func renamed(value: int) => int {
@@ -269,6 +276,7 @@ BlockBodyTestPass::apply(const camel::runtime::Program *program, std::ostream &o
         // The same body again: one body, one name, one program in the store.
         {.what = "twin", .function = "body", .text = kBodyText},
         {.what = "spin", .function = "spin", .text = kSpinText},
+        {.what = "stops", .function = "stops", .text = kStopsText},
         {.what = "renamed", .function = "renamed", .text = kRenamedText},
         {.what = "diff", .function = "diff", .text = kDiffText},
         {.what = "mirror", .function = "mirror", .text = kMirrorText},
@@ -350,6 +358,29 @@ BlockBodyTestPass::apply(const camel::runtime::Program *program, std::ostream &o
             registered);
     }
     os << std::format("BLOCK_BODY store blocks={}\n", context_->blockPrograms().size());
+    // The family layer's own answer for two blocks that differ only in whether running them ends:
+    // `core.arrangeable` read through the fact layer (`operatorArrangeable`, rendered by its own
+    // `toString`), not the record this pass wrote. A block whose body ends is freely arrangeable;
+    // one whose body calls itself is not, and the term that fails is the termination one -- which
+    // holds only if the fact layer reads `mayNotTerminate` and not a constant.
+    for (const Compiled &block : blocks) {
+        if (block.what != "body" && block.what != "spin" && block.what != "stops") {
+            continue;
+        }
+        const std::optional<camel::core::OperId> found =
+            camel::core::OperatorTable::instance().lookup(block.uri);
+        if (!found) {
+            continue;
+        }
+        const camel::facts::Arrangeable terms = camel::facts::operatorArrangeable(*found);
+        os << std::format(
+            "BLOCK_ARRANGE {} family={} all={} terminates={} foldable_field={}\n",
+            block.what,
+            camel::facts::toString(terms),
+            terms.all() ? 1 : 0,
+            terms.terminates ? 1 : 0,
+            camel::core::OperatorTable::instance().find(*found)->foldable ? 1 : 0);
+    }
     const camel::core::context::context_ptr_t handle = context_->handle();
     context_->registerExecutorFactory("block", [handle]() -> executor_ptr_t {
         return std::make_shared<BlockExecutor>(handle);

@@ -64,13 +64,14 @@ call_lines = [line for line in lines if line.startswith("BLOCK_CALL ")]
 trait_lines = [line for line in lines if line.startswith("BLOCK_TRAITS ")]
 # What the pass said, on this case's own stdout: the plan pins these lines, so the reading is
 # checked as text and not only as the numbers the assertions below derive from it.
-for line in body_lines + trait_lines + call_lines:
+arrange_lines = [line for line in lines if line.startswith("BLOCK_ARRANGE ")]
+for line in body_lines + trait_lines + arrange_lines + call_lines:
     print(line)
 
 # Five bodies, each a program of its own: a root graph and the function's graph, in a program that
 # is not the one they were compiled for.
 built = [line for line in body_lines if line.startswith("BLOCK_BODY built ")]
-assert len(built) == 9, f"expected nine bodies to compile, got: {body_lines}"
+assert len(built) == 10, f"expected ten bodies to compile, got: {body_lines}"
 bodies = {}
 for line in built:
     what = line[len("BLOCK_BODY built ") :].split(" ")[0]
@@ -127,6 +128,28 @@ assert traits["fallible"]["pure"] and traits["fallible"]["mayFault"], traits["fa
 # A body that calls itself never returns, and that is a fact of the record now, beside the fault:
 # it is not hidden in `foldable`, which goes on saying only that the result may be kept.
 assert traits["spin"]["mayNotTerminate"] and traits["spin"]["foldable"], traits["spin"]
+# The family layer, asked through its own functions: the block whose body ends is freely arrangeable,
+# the block whose body calls itself is not, and the term that fails is the termination one. This is
+# the fact store's answer, not the record this case checked above -- and it only says "may not end"
+# because the body's graph says so: take the call out of the body and the same line turns over.
+arrange = {}
+for line in arrange_lines:
+    match = re.fullmatch(r"BLOCK_ARRANGE (\S+) family=(.+) all=(\d) terminates=(\d) foldable_field=(\d)", line)
+    assert match, line
+    arrange[match.group(1)] = {
+        "family": match.group(2),
+        "all": match.group(3) == "1",
+        "terminates": match.group(4) == "1",
+        "foldable": match.group(5) == "1",
+    }
+assert arrange["body"]["terminates"] and "may not terminate" not in arrange["body"]["family"], arrange
+assert not arrange["spin"]["all"] and not arrange["spin"]["terminates"], arrange
+assert "may not terminate" in arrange["spin"]["family"], arrange
+# The same body with the call taken out: the reading turns over, so the term is the body's and not
+# something this fixture wrote. That is the evidence, harder than any assertion about a constant.
+assert arrange["stops"]["terminates"] and not arrange["spin"]["terminates"], arrange
+assert "may not terminate" not in arrange["stops"]["family"], arrange
+assert arrange["body"]["foldable"] and arrange["spin"]["foldable"], arrange
 assert not any(traits[what]["mayNotTerminate"] for what in ("body", "second", "effectful", "fallible")), traits
 store = int(re.search(r"BLOCK_BODY store blocks=(\d+)", with_body.stdout).group(1))
 by_uri = {}
