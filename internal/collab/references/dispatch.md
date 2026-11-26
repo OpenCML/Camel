@@ -54,15 +54,31 @@
 ## 4. 主机命令（只这一种写法）
 
 ```powershell
-# 起点（新车道）
-git -C D:\Projects\Camel worktree add D:\Projects\Camel-wt\<lane> -b lane-<lane> origin/develop
-Copy-Item D:\Projects\Camel\internal\tools\camel-gate.local.json D:\Projects\Camel-wt\<lane>\internal\tools\camel-gate.local.json
+# 起点（新车道）—— 必须用这个入口，不要手抄 `git worktree add`
+pwsh -NoProfile -File internal/tools/new-worktree.ps1 `
+  -Path D:\Projects\Camel-wt\<lane> -Branch <branch> -Base origin/develop
 
 # 六计划：**必须分六次跑**，`[SUMMARY]` 只给总数
 pwsh -NoProfile -File D:\Projects\Camel-wt\<lane>\internal\tools\camel-remote.ps1 `
   -Path D:\Projects\Camel-wt\<lane> -Plan compile -Jobs 8
 # 其余五次把 -Plan 换成 linear / opt / parse / para / tools
 ```
+
+**建树只有这一个入口，理由是它把两件 git-ignored 的事做成了一步**：`camel-gate.local.json`
+（少了它，跑起来 exit 2 而且看起来像「还没开始」）与 `.husky/_`（少了它，**git 不报错**，
+`core.hooksPath` 指向一个不存在的目录，于是这个树推出去的每次 push 都不跑任何钩子 ——
+记录校验、develop 锁、`check-process-traces` 全部静默跳过）。脚本建完会拿空输入试跑一次钩子，
+**读到检查器自己的输出才算建好**；读不到就 exit 1 并说明缺什么，不许当成功。
+
+树是别的方式建出来的，两条补救命令仍是这两条（`npx husky` 不许手写 `.husky/_` 里的文件）：
+
+```powershell
+Copy-Item D:\Projects\Camel\internal\tools\camel-gate.local.json D:\Projects\Camel-wt\<lane>\internal\tools\camel-gate.local.json
+cd D:\Projects\Camel-wt\<lane> ; npx husky
+git -C D:\Projects\Camel-wt\<lane> hook run pre-push    # 不许回 "cannot find a hook named pre-push"
+```
+
+对一棵已经存在的树要复核，不要重建：`pwsh -NoProfile -File internal/tools/new-worktree.ps1 -VerifyOnly -Path <tree>`。
 
 **`-Plan` 与 `-AstOnly` 用正斜杠。** 一个计划的结果是它那一行 `[SUMMARY]`。
 **`-Clean` 没有 `-Name` 参数。**

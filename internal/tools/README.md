@@ -29,6 +29,9 @@ work that is not a full gate run and hold a machine-wide lock so two of them can
 | `merge-batch-sets.ps1` | The two readings a batch is composed by: the pairwise intersection of the lanes' changed-file sets, and the plan-set union with the name `scripts/plan-set.mjs` gives it; plus `Resolve-BatchTarget`, which spells every ref from the target and refuses a target it does not know, and `Resolve-BatchScratchRoot`, which takes the seat's `scratchRoot` and refuses a seat that names none. Separated out because all of it fails quietly, and so it can be checked without a host. |
 | `merge-batch-sets.test.ps1` | Their test: `pwsh -NoProfile -File internal/tools/merge-batch-sets.test.ps1` prints `29 checks, 0 failed` and exits 1 on a failure. The plan-set hash check runs `scripts/plan-set.mjs#planSetHash` through node and requires the same string; the target checks include the tool's own refusal of an unknown `-Target`, which needs no host because parameter binding stops before the body runs; the scratch-root checks run the tool against a throwaway git repository to require the exit 2 a seat with no `scratchRoot` gets. |
 | `merge-push-shape.ps1` | The shape a commit must have to be pushed to a target: `Test-PushFirstParent` fetches `origin`, resolves the target's tip, and refuses a single-parent commit (a lane commit that would go straight in) or a merge whose first parent is not that tip. One implementation, dot-sourced by `merge-lane.ps1` (before both of its pushes) and `merge-batch.ps1`; the refusal is D-1124-78 and names the commands that redo the merge on the tip. |
+| `push-hooks-guard.ps1` | The other precondition of the same push: whether a push from this tree would be checked **at all**. `Test-PushHookGuard` resolves the hooks directory git would use and, when `core.hooksPath` is configured, requires its `pre-push` to answer -- the hook is run the way git runs it (same `sh`, same working directory, same PATH) with an empty stdin and one ref no rule is about, so the develop lock and the arrival shape return early and the reading that comes back must be the checker's own: `scanned N files, M comment lines, no trace`, or `process traces in comments: ...`. **An empty reading with exit 0 is a push with no guard and is refused**, because a hooks directory that exists and delegates to nothing is the quiet half of the same defect. `core.hooksPath` unset is not refused: a repository that configures no hooks directory is never promised one, and a fixture's empty `.git/hooks` is its normal state. One implementation, dot-sourced by `merge-lane.ps1` (before both of its pushes), `merge-batch.ps1` (before its push) and `new-worktree.ps1`. |
+| `push-hooks-guard.test.ps1` | Its test, against a throwaway repository and a checker the test writes itself: no configured hooks path passes and says it has nothing to hold anyone to; a configured one with no `pre-push` is refused, naming the file and the command that installs it; a hook that exits 0 and prints nothing is refused (the case the check exists for); a shim whose tracked hook is absent is refused the same way; a hook whose chain reaches the checker passes and reports the checker's own line and not the hook's; a reading that lists traces passes with the refusal-to-come said out loud, because whether a tree passes the checker is the checker's business on the real push. `pwsh -NoProfile -File internal/tools/push-hooks-guard.test.ps1` prints `16 checks, 0 failed` and exits 1 on a failure. |
+| `new-worktree.ps1` | The one place a worktree is made, so that "made" and "guarded" are one step: `git fetch origin`, `git worktree add`, copy the settings file, run husky, and refuse to report the tree ready until the guard answers. `-VerifyOnly -Path <tree>` asks that last question about a tree that already exists and creates nothing -- it is what to run when a push from an unfamiliar tree is refused and the reason is not obvious. Exit 0 ready, 2 refused before anything was made, 1 the tree exists and is **not** guarded; in the last case the tree is left in place, because deleting it would delete whatever the caller has already put in it. Only the repository's own installer is run (`node_modules/.bin/husky` when the tree has one, `npx --yes husky` otherwise), so husky owns the files in that directory. |
 | `merge-lane-firstparent.test.ps1` | Its test, and the regression beside it: `pwsh -NoProfile -File internal/tools/merge-lane-firstparent.test.ps1` prints `30 checks, 0 failed`. Four cases -- a merge of the tip arrives, a merge of an older tip is refused with the sentence and the redo command, a single-parent commit is refused, and `Invoke-PushWithRecovery` still pushes when the shape is right -- plus the wiring: each tool calls the reading and neither carries a copy of it. |
 | `merge-lane-baseline.test.ps1` | The key a baseline is stored under: `pwsh -NoProfile -File internal/tools/merge-lane-baseline.test.ps1` prints `28 checks, 0 failed`. Same sha twice is a reuse and not a rebuild; a different sha is a different tree; a fixed-name tree holding another commit is called stale (`stale baseline beside the tip: rebuilding`) and moved; two seats that name different trees still resolve one tip to one tree and one branch, which spells the sha. |
 | `hook-integration.test.ps1` | The same rule at the push itself: `scripts/hooks/pre-push` refuses a push to `refs/heads/integration` whose commit is not a merge of the remote tip. `pwsh -NoProfile -File internal/tools/hook-integration.test.ps1` runs the real hook (found by its `sh`, taken from git's own install) against a throwaway repository: `13 checks, 0 failed`. |
@@ -458,19 +461,54 @@ readers naming different directories is indistinguishable from an idle machine.
 `run-registry.jsonl` is the one that carries concurrent runs, one line per snapshot keyed by
 `runId`. The two state files are a single slot each, so a coordinator reading only those sees one
 run where there are three.
-## A new worktree needs its own settings file
+## A new worktree needs its own settings file and its own hooks
 
-`camel-gate.local.json` is git-ignored, so `git worktree add` does not copy it, and a run in the new
-tree stops with exit 2 **before** it transfers anything -- it never reaches the host, so nothing is
-queued and no slot is taken. That failure looks like a lane that has not started, which is what three
-lanes looked like on 2026-11-23 until one of them said so.
+Two git-ignored things `git worktree add` copies neither of, and the second one fails in silence.
 
-After `git worktree add`, copy the file:
+**The settings file.** `camel-gate.local.json` is git-ignored, so a run in the new tree stops with
+exit 2 **before** it transfers anything -- it never reaches the host, so nothing is queued and no
+slot is taken. That failure looks like a lane that has not started, which is what three lanes looked
+like on 2026-11-23 until one of them said so.
+
+**The hooks directory.** `core.hooksPath` is `.husky/_`, a path **relative to the worktree that is
+pushing**, so every worktree needs its own `.husky/_` and only the tree husky last ran in has one.
+Git treats a hooks directory it cannot find as "there are no hooks", not as an error: the push
+succeeds and the develop lock, the arrival shape, the merge record and the process-trace check all
+run against nothing. Nothing is printed, which is how a whole evening of pushes went out unguarded
+without anyone noticing.
+
+Both are one step with the script, which is why it exists:
 
 ```powershell
-Copy-Item D:\Projects\Camel\internal\tools\camel-gate.local.json `
-          <new worktree>\internal\tools\camel-gate.local.json
+pwsh -NoProfile -File internal/tools/new-worktree.ps1 `
+  -Path D:\Projects\Camel-wt\<name> -Branch <branch> [-Base origin/develop]
 ```
+
+It fetches first (a cached `origin/develop` is a tree behind the tip before it exists), adds the
+worktree, copies the settings file, runs husky, and then refuses to call the tree ready until the
+guard answers with the checker's own reading. `-VerifyOnly -Path <tree>` asks that last question
+about an existing tree and creates nothing.
+
+If a tree was made some other way, the steps are still just these:
+
+```powershell
+git -C D:\Projects\Camel fetch origin --prune
+git -C D:\Projects\Camel worktree add D:\Projects\Camel-wt\<name> -b <branch> origin/develop
+Copy-Item D:\Projects\Camel\internal\tools\camel-gate.local.json `
+          D:\Projects\Camel-wt\<name>\internal\tools\camel-gate.local.json
+cd D:\Projects\Camel-wt\<name> ; npx husky
+```
+
+and the reading that says the last step worked is not "the directory is there":
+
+```powershell
+git -C D:\Projects\Camel-wt\<name> hook run pre-push     # must not say "cannot find a hook named pre-push"
+```
+
+`push-hooks-guard.ps1` is what turns that into a refusal at the push itself, and
+`new-worktree.ps1 -VerifyOnly` is the same question asked by hand. The push cannot be guarded
+where the hooks were never installed, and a `.husky/_` sitting in a tree proves nothing on its own:
+what it delegates to is read by position, so the reading is the hook's output and not the path.
 
 ## `patches/`：装/更新被补丁的第三方包后要重打
 

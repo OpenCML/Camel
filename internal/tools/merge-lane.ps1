@@ -200,6 +200,12 @@ $ErrorActionPreference = 'Stop'
 # implementation: `merge-batch.ps1` dot-sources it too. Read here, called before every push.
 . (Join-Path $PSScriptRoot 'merge-push-shape.ps1')
 
+# The other precondition of a push is that a push has a guard: `.husky/_` is a path relative to the
+# tree that pushes, so a merge made in a worktree husky never ran in would publish with every rule
+# skipped. Dot-sourced for the same reason as the shape above -- one implementation, read by both
+# merge tools and by the worktree entry that installs the hooks.
+. (Join-Path $PSScriptRoot 'push-hooks-guard.ps1')
+
 # --- which checkout a merge lands in -----------------------------------------
 #
 # --- the paths a merge is made in and measured in ------------------------------
@@ -1782,6 +1788,17 @@ try {
             Write-Host "tried $Branch at $head; nothing was pushed (-NoPush)"
             exit 0
         }
+        # Before the push and not after the refusal: a hooks directory that git would use and that
+        # holds no `pre-push` is not an error to git, so the push below would succeed with the develop
+        # lock, the arrival shape, the merge record and the process-trace check all skipped -- and the
+        # record written above would be a claim nothing read.
+        $hooksGuard = Test-PushHookGuard -Tree $MainCheckout -Target $Target
+        if (-not $hooksGuard.Ok) {
+            Remove-Item -LiteralPath $recordFile -Force -ErrorAction SilentlyContinue
+            Stop-With "this push would have no guard: $($hooksGuard.Kind)" `
+                (((@($hooksGuard.Message) + 'The pass record was removed along with the push it was written for.') -join "`n")) $mergeCommit
+        }
+        foreach ($line in @($hooksGuard.Message)) { Write-Host $line }
         for ($i = 1; $i -le 3; $i++) {
             & git push origin "HEAD:$Target" 2>&1 | Select-Object -Last 1
             if ($LASTEXITCODE -eq 0) { break }
@@ -2334,6 +2351,19 @@ $transcript = Join-Path ([System.IO.Path]::GetTempPath()) ("camel-merge-rows-$PI
 
     Write-Host ''
     Write-Host "pushing HEAD:$Target ..."
+
+    # The precondition the push shares with its shape: a push only has a guard where `.husky/_`
+    # exists inside the tree it leaves from. It is read here, before the push, because a hooks
+    # directory git cannot find is not an error to git -- the push succeeds with the develop lock,
+    # the arrival shape, the merge record and the process-trace check all skipped, and the reading
+    # above then describes a push nothing guarded.
+    $hooksGuard = Test-PushHookGuard -Tree $MainCheckout -Target $Target
+    if (-not $hooksGuard.Ok) {
+        Remove-Item -LiteralPath $recordFile -Force -ErrorAction SilentlyContinue
+        Stop-With "this push would have no guard: $($hooksGuard.Kind)" `
+            (((@($hooksGuard.Message) + 'The pass record was removed along with the push it was written for.') -join "`n")) $mergeCommit
+    }
+    foreach ($line in @($hooksGuard.Message)) { Write-Host $line }
 
     $push = Invoke-PushWithRecovery -Tree $MainCheckout -Target $Target -ReRun $rerunPlans
     $push.Lines | Where-Object { $_ } | ForEach-Object { Write-Host $_ }

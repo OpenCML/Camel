@@ -90,6 +90,17 @@ pwsh -NoProfile -File <你的工作树>\internal\tools\camel-remote.ps1 `
     `git -C <你的工作树> status --porcelain` 里能看到你的改动；
     `git -C D:\Projects\Camel status --porcelain` **为空**。
 · 主检出 `D:\Projects\Camel` 归负责人：不提交、不快进、不动它的 `out/latest`。
+· **建树只走一个入口**，不要手抄 `git worktree add`：
+    pwsh -NoProfile -File internal/tools/new-worktree.ps1 `
+      -Path D:\Projects\Camel-wt\<lane> -Branch <branch> -Base origin/develop
+  它把两件 git-ignored 的事做成一步 —— `camel-gate.local.json` 与 `.husky/_` —— 建完拿空输入试跑一次钩子，
+  **读到检查器自己的输出才算建好**。少了 `.husky/_` 时 git **不报错**：`core.hooksPath` 指向一个不存在的
+  目录，这棵树推出去的每一次 push 都不跑任何钩子（记录校验、develop 锁、`check-process-traces` 全静默跳过）。
+· **一棵树有没有守卫，读钩子的输出，不是看目录在不在**（`.husky/_/h` 按自己所在位置找 `.husky/pre-push`，
+  目录在而链子断掉同样是「没有守卫」）：
+    `git -C <树> hook run pre-push` 不许回 `cannot find a hook named pre-push`
+    `new-worktree.ps1 -VerifyOnly -Path <树>` 拿空输入试跑，读不到检查器的行就是没守卫
+  补装只跑 `npx husky`（或 `prepare` 里那条），**不许手写 `.husky/_` 里的文件**。
 ```
 
 ## 8. 报告格式（≤12 行，跑完报、等点名）
