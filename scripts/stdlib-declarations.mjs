@@ -479,7 +479,8 @@ function coverageProblems(reference) {
     const operators = operatorModules()
     const operatorNames = new Set(operators.map((module) => module.name))
     const excluded = new Map(UNCHECKED_MODULES.map((entry) => [entry.name, entry]))
-    const inReference = (name) => reference.find((module) => module.name === name && module.kind === 'cpp')
+    // A module --verify-ops reads: a C++ module, or a Camel module with native operators.
+    const inReference = (name) => reference.find((module) => module.name === name && (module.kind === 'cpp' || module.native))
     const where = (module) => `src/stdlib/${path.basename(module.dir)}`
 
     for (const module of operators) {
