@@ -215,6 +215,46 @@ check(
     `${infra.stdout}${infra.stderr}`,
 );
 
+// --- a build that hangs is ended at its limit and is no verdict on a lane --------
+// The stub records its own pid and then sleeps for ten minutes; the tool has to end it (the whole
+// tree, the shell that started it included) and report that the build gave no verdict.
+const hangStub = path.join(root, 'stub-hang.mjs');
+const hangPid = path.join(root, 'hang.pid');
+fs.writeFileSync(
+    hangStub,
+    `import fs from 'node:fs';\n` +
+        `fs.writeFileSync(${JSON.stringify(hangPid)}, String(process.pid));\n` +
+        `setTimeout(() => {}, 600000);\n`,
+);
+const remoteAtHang = git(remote, ['rev-parse', 'integration']);
+const hung = spawnSync(
+    process.execPath,
+    [tool, '--seat', seat, '--lanes', lanesFile, '--build', `node "${hangStub}"`, '--build-timeout', '3', '--push', '--base', 'origin/integration'],
+    { encoding: 'utf8', timeout: 60000 },
+);
+const hungOut = `${hung.stdout}${hung.stderr}`;
+check(
+    'a build that hangs past --build-timeout stops the tool with exit 2 and says it gave no verdict',
+    hung.status === 2 && hungOut.includes('did not run to a verdict') && hungOut.includes('ran past its limit'),
+    hungOut,
+);
+check(
+    'a hung build drops no lane and pushes nothing',
+    !hungOut.includes('dropping') && git(remote, ['rev-parse', 'integration']) === remoteAtHang && !hungOut.includes('MERGE_BATCH_RESULT'),
+    hungOut,
+);
+const hangingPid = fs.existsSync(hangPid) ? Number(fs.readFileSync(hangPid, 'utf8')) : 0;
+const stillThere = (() => {
+    if (!hangingPid) return true;
+    try {
+        process.kill(hangingPid, 0);
+        return true;
+    } catch {
+        return false;
+    }
+})();
+check('the hung build\'s process is gone when the tool returns', hangingPid > 0 && !stillThere, `pid ${hangingPid}`);
+
 // --- an integration tip that does not build is no lane's fault ----------------
 // A base that already carries BROKEN makes every prefix of the batch red; the search must not
 // blame the first lane, it must say the tip itself is red and stop.

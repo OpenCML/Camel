@@ -2,13 +2,15 @@
 // SPDX-License-Identifier: MIT
 
 /**
- * `scripts/promote.mjs` over a throwaway repository, with the layer, the re-run, the cleanup and the
- * publish replaced by stubs. The repository carries a previous promotion's red table (promotion 4)
+ * `scripts/promote.mjs` over a throwaway repository, with the layer, the cleanup and the publish
+ * replaced by stubs. The repository carries a previous promotion's red table (promotion 4)
  * and its record, and a merge after the commit that record names.
  *
  * Read from the result: `start` returns at once while the worker goes on; `status` moves through
- * the phases to the verdict; a timeout that passes on re-run is not a new red and one that fails
- * again is; the records name promotion 4's table; `cancel` and a worker killed without a chance to
+ * the phases to the verdict; a case the runner re-ran after a timeout is not red when the re-run
+ * passed and is when it timed out again; a layer that was cut short, or whose reading lacks a case
+ * of the previous reading, publishes nothing and names the cases; a child past its limit ends the
+ * job in its phase; the records name promotion 4's table; `cancel` and a worker killed without a chance to
  * clean up both leave no process of the job alive (the stub starts a grandchild whose pid is read
  * back) and free the lock; the publish command is handed exactly the measured sha.
  *
@@ -24,7 +26,7 @@ import path from 'node:path'
 import { execFileSync, spawn, spawnSync } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
 
-import { killJobProcesses, startTimeOf } from '../../scripts/lib/job.mjs'
+import { acquireLock, killJobProcesses, startTimeOf } from '../../scripts/lib/job.mjs'
 import { killProcessTree } from './kill-tree.mjs'
 
 const here = path.dirname(fileURLToPath(import.meta.url))
@@ -64,6 +66,7 @@ write(path.join(repo, 'a.txt'), 'a\n')
 write(path.join(repo, '.gitignore'), 'internal/tools/camel-gate.local.json\n')
 const first = commitAll(repo, 'first')
 write(path.join(repo, 'internal/reports/2026-11-24-promotion-4-reds.tsv'), 'p\told_red\nq\tother_old_red\n')
+write(path.join(repo, 'internal/reports/2026-11-24-promotion-4-durations.tsv'), "# plan_id\tcase\tstatus\tchild_ms\tslot_ms\np\tok\tpass\t1\t1\np\told_red\tfail\t1\t1\np\tknown\txfail\t1\t1\nq\tskipped\tskip\t1\t1\nq\tslow\tpass\t1\t1\n")
 write(path.join(repo, 'internal/reports/2026-11-24-promotion-4.record.json'), JSON.stringify({ kind: 'promotion', promotion: 4, tip: first }))
 commitAll(repo, 'reports of promotion 4')
 git(repo, ['checkout', '--quiet', '-b', 'feature'])
@@ -73,7 +76,7 @@ git(repo, ['checkout', '--quiet', 'main'])
 git(repo, ['-c', 'user.name=t', '-c', 'user.email=t@example.invalid', '-c', 'commit.gpgsign=false', 'merge', '--quiet', '--no-ff', '-m', 'merge feature', 'feature'])
 const tip = git(repo, ['rev-parse', 'HEAD'])
 
-// ---- the stubs: one for the layer, one for the re-run, one for the publish
+// ---- the stubs: one for the layer, one for the publish
 write(
     path.join(stubs, 'treemaker.mjs'),
     `import fs from 'node:fs'
@@ -81,6 +84,7 @@ import { execFileSync } from 'node:child_process'
 const [repo, tree, sha, scenarioFile, ...hooks] = process.argv.slice(2)
 const scenario = JSON.parse(fs.readFileSync(scenarioFile, 'utf8'))
 fs.appendFileSync(scenario.trees, JSON.stringify({ tree, sha, hooks }) + '\\n')
+if (scenario.treeHangs) await new Promise((resolve) => setTimeout(resolve, 600000))
 if (scenario.treeFails) {
     console.log(scenario.treeFails)
     process.exit(3)
@@ -105,17 +109,7 @@ fs.appendFileSync(scenario.pids, JSON.stringify({ stub: process.pid, grandchild:
 await new Promise((resolve) => setTimeout(resolve, scenario.layerMs))
 grand.kill()
 fs.writeFileSync(worktree + '/summary.json', JSON.stringify({ test_timings: scenario.rows }))
-process.exit(scenario.rows.some((row) => row.status === 'fail') ? 1 : 0)
-`,
-)
-write(
-    path.join(stubs, 'rerun.mjs'),
-    `import fs from 'node:fs'
-const [worktree, scenarioFile, plan] = process.argv.slice(2)
-const scenario = JSON.parse(fs.readFileSync(scenarioFile, 'utf8'))
-fs.appendFileSync(scenario.reruns, JSON.stringify({ plan, scale: process.env.CAMEL_TEST_TIMEOUT_SCALE }) + '\\n')
-const rows = scenario.rows.filter((row) => row.timed_out).map((row) => ({ ...row, status: scenario.rerunStatus, timed_out: scenario.rerunStatus === 'timeout' }))
-fs.writeFileSync(worktree + '/summary.json', JSON.stringify({ test_timings: rows.map((row) => ({ ...row, status: row.status === 'timeout' ? 'fail' : row.status })) }))
+process.exit(scenario.layerExit ?? (scenario.rows.some((row) => row.status === 'fail') ? 1 : 0))
 `,
 )
 write(
@@ -138,15 +132,17 @@ const BASE_ROWS = [
     row('p', 'old_red', 'fail'),
     row('p', 'known', 'xfail'),
     row('q', 'skipped', 'skip'),
-    row('q', 'slow', 'fail', { timed_out: true }),
+    // timed out in the layer, passed on the runner's own re-run: the row carries the final verdict
+    row('q', 'slow', 'pass', { rerun: { first_timed_out: true, status: 'pass' } }),
 ]
+const TWICE = [...BASE_ROWS.slice(0, 4), row('q', 'slow', 'fail', { timed_out: true, rerun: { first_timed_out: true, status: 'fail' } })]
 
 let counter = 0
 function scenario(overrides) {
     counter += 1
     const dir = path.join(root, `scenario-${counter}`)
     fs.mkdirSync(dir, { recursive: true })
-    const doc = { layerMs: 1500, rerunStatus: 'pass', rows: BASE_ROWS, pids: slash(path.join(dir, 'pids.jsonl')), reruns: slash(path.join(dir, 'reruns.jsonl')), trees: slash(path.join(dir, 'trees.jsonl')), ...overrides }
+    const doc = { layerMs: 1500, rows: BASE_ROWS, pids: slash(path.join(dir, 'pids.jsonl')), trees: slash(path.join(dir, 'trees.jsonl')), ...overrides }
     write(path.join(dir, 'scenario.json'), JSON.stringify(doc))
     const q = (p) => `"${slash(p)}"`
     const args = [
@@ -154,7 +150,6 @@ function scenario(overrides) {
         '--state-dir', path.join(dir, 'state'),
         '--tip', tip,
         '--layer', `node ${q(path.join(stubs, 'layer.mjs'))} "{worktree}" ${q(path.join(dir, 'scenario.json'))}`,
-        '--rerun', `node ${q(path.join(stubs, 'rerun.mjs'))} "{worktree}" ${q(path.join(dir, 'scenario.json'))} "{plan}"`,
         '--tree-maker', `node ${q(path.join(stubs, 'treemaker.mjs'))} "{repo}" "{tree}" {sha} ${q(path.join(dir, 'scenario.json'))} {hooks}`,
         '--cleanup', `node ${q(path.join(stubs, 'cleanup.mjs'))} ${q(path.join(dir, 'cleanup.log'))}`,
         '--publish-command', `node ${q(path.join(stubs, 'publish.mjs'))} {sha} "{worktree}" ${q(path.join(dir, 'published.json'))}`,
@@ -245,15 +240,15 @@ const reportsOf = (job) => Object.fromEntries((job.files || []).map((file) => [p
     check('a second start while one runs is refused with exit 3', second.code === 3, `${second.code}: ${second.err}`)
     const { job, seen } = await until(s, ended)
     const walked = Object.keys(job.phases || {})
-    check('status shows the job in flight and ends at done, and job.json lists the phases in order', seen.includes('measure') && seen[seen.length - 1] === 'done' && walked.join() === 'tree,measure,rerun-timeouts,compare,records', `${seen.join(' > ')} | ${walked.join()}`)
+    check('status shows the job in flight and ends at done, and job.json lists the phases in order', seen.includes('measure') && seen[seen.length - 1] === 'done' && walked.join() === 'tree,measure,compare,records', `${seen.join(' > ')} | ${walked.join()}`)
     check('the verdict is "no new red" when the only new red timed out and passes on re-run', job.phase === 'done' && job.verdict === 'no new red' && job.newReds.length === 0, `${job.phase} ${job.verdict} ${JSON.stringify(job.newReds)} ${job.error ?? ''}`)
-    check('the re-run was given the doubled limit and the plan of the timed-out case', fs.existsSync(s.file('reruns.jsonl')) && /"scale":"2"/.test(fs.readFileSync(s.file('reruns.jsonl'), 'utf8')) && /q\.plan\.toml/.test(fs.readFileSync(s.file('reruns.jsonl'), 'utf8')))
+    check('the promotion re-runs nothing: the layer stub ran once', pidsOf(s).length === 2, JSON.stringify(pidsOf(s)))
     const files = reportsOf(job)
     check('the three records are written under promotion 5', ['promotion-5-reds.tsv', 'promotion-5-durations.tsv', 'promotion-5.record.json'].every((n) => files[n] && fs.existsSync(files[n])), Object.keys(files).join(', '))
     const record = files['promotion-5.record.json'] ? JSON.parse(fs.readFileSync(files['promotion-5.record.json'], 'utf8')) : {}
     check('the record names promotion 4\'s table, the measured tip and the vanished red', record.comparison?.against === '2026-11-24-promotion-4-reds.tsv' && record.tip === tip && record.comparison.new_reds === 0 && record.comparison.vanished_reds === 1, JSON.stringify(record.comparison))
-    check('the record accounts for the timeout: one green, none still red, counts add up', record.timeouts_rerun?.count === 1 && record.timeouts_rerun.green.join() === 'q/slow' && record.timeouts_rerun.still_red_not_timeout.length === 0 && record.timeouts_rerun.run_alone === true, JSON.stringify(record.timeouts_rerun))
-    check('the readings count the layer after the re-run', record.readings?.total === 5 && record.readings.pass === 2 && record.readings.fail === 1 && record.readings.skip === 1 && record.readings.known === 1 && record.readings.timed_out_raw_layer === 1, JSON.stringify(record.readings))
+    check('the record accounts for the timeout: one green, none still red, counts add up', record.timeouts_rerun?.count === 1 && record.timeouts_rerun.green.join() === 'q/slow' && record.timeouts_rerun.still_red_not_timeout.length === 0 && record.timeouts_rerun.run_alone === true && record.timeouts_rerun.promotion_reran_plans === false && /plan runner/.test(record.timeouts_rerun.rerun_by), JSON.stringify(record.timeouts_rerun))
+    check('the readings count the final verdicts of the layer', record.readings?.total === 5 && record.readings.pass === 2 && record.readings.fail === 1 && record.readings.skip === 1 && record.readings.known === 1, JSON.stringify(record.readings))
     const reds = files['promotion-5-reds.tsv'] ? fs.readFileSync(files['promotion-5-reds.tsv'], 'utf8') : ''
     const durations = files['promotion-5-durations.tsv'] ? fs.readFileSync(files['promotion-5-durations.tsv'], 'utf8') : ''
     check('the red table holds plan id and case, and the durations hold every case', reds === 'p\told_red\n' && durations.split('\n').filter((l) => l && !l.startsWith('#')).length === 5, `${JSON.stringify(reds)} / ${durations.split('\n').length} lines`)
@@ -279,19 +274,19 @@ const reportsOf = (job) => Object.fromEntries((job.files || []).map((file) => [p
 
 // ---- 2. new reds: a timeout that fails again, and a plain new red
 {
-    const s = scenario({ rerunStatus: 'timeout', rows: [...BASE_ROWS, row('p', 'brand_new', 'fail')] })
+    const s = scenario({ rows: [...TWICE, row('p', 'brand_new', 'fail')] })
     promote('start', s.args)
     const { job } = await until(s, ended)
-    check('a timeout that fails again and a plain new red are both new reds', job.verdict === 'new red' && job.newReds.includes('p brand_new') && job.newReds.includes('q slow'), `${job.verdict} ${JSON.stringify(job.newReds)} ${job.error ?? ''}`)
+    check('a case that timed out twice (the runner re-ran it) and a plain new red are both new reds', job.verdict === 'new red' && job.newReds.includes('p brand_new') && job.newReds.includes('q slow'), `${job.verdict} ${JSON.stringify(job.newReds)} ${job.error ?? ''}`)
     check('new reds list the merges in range for bisecting', (job.mergesInRange || []).some((line) => line.includes('merge feature')), JSON.stringify(job.mergesInRange))
     const files = reportsOf(job)
     const record = files['promotion-5.record.json'] ? JSON.parse(fs.readFileSync(files['promotion-5.record.json'], 'utf8')) : { comparison: {}, timeouts_rerun: { still_red_not_timeout: [] } }
-    check('the record of a promotion with new reds says so and its timeout is still red', record.comparison.new_reds === 2 && record.timeouts_rerun.still_red_not_timeout[0]?.case === 'q/slow', JSON.stringify(record.comparison))
+    check('the record of a promotion with new reds says so and its timeout is still red', record.comparison.new_reds === 2 && record.timeouts_rerun.still_red_not_timeout[0]?.case === 'q/slow' && /timed out again/.test(record.timeouts_rerun.still_red_not_timeout[0].reason), JSON.stringify(record.comparison))
 }
 
 // ---- 3. a --publish with a new red publishes nothing; with none, exactly the measured sha
 {
-    const s = scenario({ rerunStatus: 'timeout' })
+    const s = scenario({ rows: TWICE })
     promote('start', [...s.args, '--publish'])
     const { job } = await until(s, ended)
     check('--publish with a new red publishes nothing', job.verdict === 'new red' && !fs.existsSync(s.file('published.json')), `${job.verdict} ${job.error ?? ''}`)
@@ -379,13 +374,94 @@ const reportsOf = (job) => Object.fromEntries((job.files || []).map((file) => [p
     lonely.unref()
     await sleep(500)
     const left = { worker: null, children: [{ pid: lonely.pid, start: startTimeOf(lonely.pid), label: 'layer' }] }
-    check('the recorded pid of an orphan is ended with its tree', alive(lonely.pid) && killJobProcesses(left).includes(lonely.pid) && (await gone([lonely.pid])))
+    check('the recorded pid of an orphan is ended with its tree', alive(lonely.pid) && killJobProcesses(left).ended.includes(lonely.pid) && (await gone([lonely.pid])))
     const reused = spawn(process.execPath, ['-e', 'setTimeout(() => {}, 600000)'], { detached: true, stdio: 'ignore' })
     reused.unref()
     await sleep(500)
     const stale = { worker: null, children: [{ pid: reused.pid, start: '1999-01-01T00:00:00.0000000Z', label: 'layer' }] }
-    check('a pid whose start time is not the recorded one is a different process and is left alone', killJobProcesses(stale).length === 0 && alive(reused.pid))
+    check('a pid whose start time is not the recorded one is a different process and is left alone', killJobProcesses(stale).ended.length === 0 && alive(reused.pid))
     killProcessTree(reused)
+}
+
+// ---- 2b. every status but pass, skip and known is red
+{
+    const s = scenario({ rows: [...BASE_ROWS, row('p', 'odd', 'error'), row('p', 'crashed', 'crash')] })
+    promote('start', s.args)
+    const { job } = await until(s, ended)
+    check('a status other than pass, skip and known counts as red', job.verdict === 'new red' && job.newReds.includes('p odd') && job.newReds.includes('p crashed'), `${job.verdict} ${JSON.stringify(job.newReds)} ${job.error ?? ''}`)
+}
+
+// ---- 2c. a reading that is not complete publishes nothing and names what is missing
+{
+    // The layer is cut short (exit 2: nothing started or the transcript is short) after two rows.
+    const s = scenario({ rows: BASE_ROWS.slice(0, 2), layerExit: 2 })
+    promote('start', [...s.args, '--publish'])
+    const { job } = await until(s, ended)
+    check('a layer that exits as cut short fails the job in the measure phase, with its exit code', job.phase === 'failed' && job.failedPhase === 'measure' && /exited 2/.test(job.error || ''), `${job.phase} ${job.failedPhase} ${job.error}`)
+    check('and names every case of the previous reading that the partial summary lacks', ['p/known', 'q/skipped', 'q/slow'].every((name) => (job.error || '').includes(name)) && !(job.error || '').includes('p/ok,'), job.error)
+    check('and records and publishes nothing, frees the lock and cleans the remote run', !job.files && !job.verdict && !fs.existsSync(s.file('published.json')) && !fs.existsSync(path.join(s.state, 'promotion', 'lock')) && fs.existsSync(s.file('cleanup.log')))
+}
+{
+    // The layer exits 0 or 1 like a finished run, but a case of the previous reading is not in it.
+    const s = scenario({ rows: BASE_ROWS.filter((r) => r.test !== 'skipped') })
+    promote('start', [...s.args, '--publish'])
+    const { job } = await until(s, ended)
+    check('a finished layer whose reading lacks a case of the previous reading fails and names it', job.phase === 'failed' && /q\/skipped/.test(job.error || '') && !fs.existsSync(s.file('published.json')), `${job.phase} ${job.error}`)
+    const t = scenario({ rows: BASE_ROWS.filter((r) => r.test !== 'skipped') })
+    promote('start', [...t.args, '--accept-missing', 'q/skipped'])
+    const accepted = await until(t, ended)
+    const files = reportsOf(accepted.job)
+    const record = files['promotion-5.record.json'] ? JSON.parse(fs.readFileSync(files['promotion-5.record.json'], 'utf8')) : {}
+    check('a case deleted on purpose is let through when it is named, and the record lists it', accepted.job.phase === 'done' && (record.accepted_missing_cases || []).join() === 'q/skipped', `${accepted.job.phase} ${accepted.job.error}`)
+}
+
+// ---- 2d. a child that hangs past its limit ends the job in that phase, with no process left
+{
+    const s = scenario({ layerMs: 120000 })
+    promote('start', [...s.args, '--layer-timeout', '3'])
+    const pids = await waitForPids(s)
+    const { job } = await until(s, ended)
+    check('a layer past its limit fails the job in the measure phase, naming the limit', job.phase === 'failed' && job.failedPhase === 'measure' && /layer step ran past its limit of 3 s/.test(job.error || ''), `${job.phase} ${job.failedPhase} ${job.error}`)
+    check('and the layer, its grandchild and the worker are gone, the lock is free', pids.length === 2 && (await gone([...pids, job.worker.pid])) && !fs.existsSync(path.join(s.state, 'promotion', 'lock')), `${JSON.stringify(pids)}`)
+}
+{
+    const s = scenario({ treeHangs: true })
+    promote('start', [...s.args, '--short-timeout', '3'])
+    const { job } = await until(s, ended)
+    check('a tree-maker past its limit fails the job in the tree phase, naming the limit', job.phase === 'failed' && job.failedPhase === 'tree' && /tree step ran past its limit of 3 s/.test(job.error || ''), `${job.phase} ${job.failedPhase} ${job.error}`)
+    check('and nothing ran after it and the lock is free', !job.phases?.measure && !fs.existsSync(path.join(s.state, 'promotion', 'lock')))
+}
+
+// ---- 2e. a process whose start time was never recorded is not killed
+{
+    const lonely = spawn(process.execPath, ['-e', 'setTimeout(() => {}, 600000)'], { detached: true, stdio: 'ignore' })
+    lonely.unref()
+    await sleep(500)
+    const unrecorded = { worker: null, children: [{ pid: lonely.pid, start: null, label: 'layer' }] }
+    const outcome = killJobProcesses(unrecorded)
+    check('a recorded pid with no start time is reported and left running', outcome.ended.length === 0 && outcome.unknown.includes(lonely.pid) && alive(lonely.pid), JSON.stringify(outcome))
+    killProcessTree(lonely)
+}
+
+// ---- 2f. two contenders that both saw the same dead holder: exactly one takes the lock
+{
+    const lockDir = path.join(root, 'race-lock')
+    fs.mkdirSync(lockDir, { recursive: true })
+    fs.writeFileSync(path.join(lockDir, 'owner.json'), JSON.stringify({ jobId: 'dead', pid: 1 }))
+    const holds = (holder) => holder.jobId !== 'dead'
+    let second = null
+    let nested = false
+    // The first contender has read the dead holder; before it removes anything, the second
+    // contender runs through its whole acquisition.
+    const first = acquireLock(lockDir, { jobId: 'a', pid: 2 }, (holder) => {
+        if (!nested) {
+            nested = true
+            second = acquireLock(lockDir, { jobId: 'b', pid: 3 }, holds)
+        }
+        return holds(holder)
+    })
+    const holder = JSON.parse(fs.readFileSync(path.join(lockDir, 'owner.json'), 'utf8'))
+    check("of two contenders for a dead holder's lock only the one that removed it first holds it", second?.ok === true && first.ok === false && holder.jobId === 'b', `${JSON.stringify(first)} ${JSON.stringify(second)} ${JSON.stringify(holder)}`)
 }
 
 // ---- 8. the comparison is against the immediately previous promotion

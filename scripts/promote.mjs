@@ -6,11 +6,15 @@
  * A promotion as one job that is started, polled and never waited on.
  *
  * `integration` takes lane branches optimistically and only builds them. A promotion is the safety
- * net behind that: the whole fast layer measured on the integration tip, every timeout re-run on
- * its own with a doubled limit, the reds compared by plan id and case name with the immediately
- * previous promotion's red table, the three records written (red table, per-case durations, the
- * promotion record the push hook asks for), and, when asked and no red is new, `develop`
- * fast-forwarded to exactly the commit that was measured.
+ * net behind that: the whole fast layer measured on the integration tip, the reds compared by plan
+ * id and case name with the immediately previous promotion's red table, the three records written
+ * (red table, per-case durations, the promotion record the push hook asks for), and, when asked and
+ * no red is new, `develop` fast-forwarded to exactly the commit that was measured.
+ *
+ * A reading counts only when it is complete: the layer command has to exit the way a finished run
+ * exits, and every case of the previous promotion's reading has to be in this one. Anything else
+ * fails the job without records or publish. Timeouts are the plan runner's business: it re-runs
+ * each timed-out case once, alone, at twice its limit, and the promotion reads that result.
  *
  * The caller never holds a foreground wait. `start` takes the one promotion lock, writes a job
  * directory, launches a detached worker and returns; `status` reads the directory (and finds a
@@ -29,8 +33,10 @@
  *   --repo <path>           the repository (default: the one this script is in)
  *   --state-dir <dir>       where jobs live; default `stateDir` of internal/tools/camel-gate.local.json
  *   --layer <command>       runs the whole fast layer in {worktree}; must leave {worktree}/summary.json
- *   --rerun <command>       runs one plan ({plan}) in {worktree} with the timeouts doubled (the
- *                           environment has CAMEL_TEST_TIMEOUT_SCALE=2); leaves the same summary.json
+ *   --layer-timeout <s>     the layer command is ended with its whole tree after this long (default 7200)
+ *   --short-timeout <s>     the same for the tree-maker, the cleanup and the publish command (default 600)
+ *   --accept-missing <names>  comma-separated `plan/case` names that the previous reading had and
+ *                           this one may lack because they were deleted on purpose; the record lists them
  *   --cleanup <command>     drops the remote run of {worktree}; used when a job ends abnormally
  *   --publish-command <c>   publishes {sha} to develop from {worktree}
  *   --publish-worktree <p>  the tree the publish runs in (default: mergeWorktree of the local settings)
@@ -48,7 +54,8 @@
  *   --no-verify-publish     do not read the remote's develop back after the publish command
  *
  * `summary.json` is the plan runner's own file: `test_timings[]` rows with `plan`, `plan_path`,
- * `test`, `status`, `timed_out`, `child_ms` and `slot_ms`.
+ * `test`, `status` (the case's final verdict), `timed_out`, `rerun` (present on a case that timed out
+ * and was re-run: `{first_timed_out, status}`), `child_ms` and `slot_ms`.
  *
  * Exit codes: `start` 0 started, 2 could not start, 3 a live promotion holds the lock; `status` 0, 2
  * no such job; the worker 0 no new red, 1 new reds, 2 an error.
@@ -69,13 +76,13 @@ import {
     liveness,
     listJobs,
     lockOwner,
-    isSameProcess,
+    mayStillRun,
     markEnded,
     readJob,
     reassignLock,
     releaseLock,
+    runLimitedSync,
     startDetached,
-    splitCommand,
     startTimeOf,
     tailLog,
     updateJob,
@@ -84,10 +91,10 @@ import {
 const SCRIPT = fileURLToPath(import.meta.url)
 const SCRIPT_REPO = path.resolve(path.dirname(SCRIPT), '..')
 
+// `-NoGpuWatch`: the gpu observation never decides green or red, and with it the layer can wait up to
+// half an hour for a second slot after the plan itself has finished.
 const DEFAULT_LAYER =
-    'pwsh -NoProfile -File "{worktree}/internal/tools/camel-remote.ps1" -Path "{worktree}" -Plan test/plans -Tier fast -Jobs {jobs} -FetchFile summary.json -Latest'
-const DEFAULT_RERUN =
-    'pwsh -NoProfile -File "{worktree}/internal/tools/camel-remote.ps1" -Path "{worktree}" -Plan "{plan}" -Tier fast -Jobs 4 -FetchFile summary.json -Latest'
+    'pwsh -NoProfile -File "{worktree}/internal/tools/camel-remote.ps1" -Path "{worktree}" -Plan test/plans -Tier fast -Jobs {jobs} -NoGpuWatch -FetchFile summary.json -Latest'
 const DEFAULT_CLEANUP = 'pwsh -NoProfile -File "{worktree}/internal/tools/camel-remote.ps1" -Path "{worktree}" -Clean'
 const DEFAULT_TREE_MAKER =
     'pwsh -NoProfile -File "{repo}/internal/tools/new-worktree.ps1" -Path "{tree}" -Detach {sha} -FromCheckout "{repo}" -NoFetch {hooks}'
@@ -107,8 +114,9 @@ function fail(code, why) {
 function parseArgs(argv) {
     const out = { positional: [], flags: {} }
     const valued = new Set([
-        'tip', 'repo', 'state-dir', 'layer', 'rerun', 'cleanup', 'publish-command', 'publish-worktree', 'tree-maker', 'remote',
+        'tip', 'repo', 'state-dir', 'layer', 'cleanup', 'publish-command', 'publish-worktree', 'tree-maker', 'remote',
         'develop', 'reports', 'reports-ref', 'jobs', 'heartbeat-limit', 'heartbeat-interval', 'lines', 'job',
+        'layer-timeout', 'short-timeout', 'accept-missing',
     ])
     const bare = new Set(['publish', 'no-fetch', 'no-verify-publish', 'json'])
     for (let i = 0; i < argv.length; i += 1) {
@@ -166,7 +174,11 @@ function fill(template, values) {
  */
 async function makeTree({ config, children, dir, repo, tree, sha, hooks, what }) {
     fs.mkdirSync(path.dirname(tree), { recursive: true })
-    const run = await children.run(fill(config.treeMaker, { repo, tree, sha, hooks: hooks ? '' : '-NoHusky' }), { label: 'tree', cwd: repo })
+    const run = await children.run(fill(config.treeMaker, { repo, tree, sha, hooks: hooks ? '' : '-NoHusky' }), {
+        label: 'tree',
+        cwd: repo,
+        limitSeconds: config.shortTimeout,
+    })
     if (run.error || run.code !== 0 || !fs.existsSync(path.join(tree, '.git'))) {
         const why = run.error ? `could not run: ${run.error.message}` : run.code !== 0 ? `exited ${run.code}` : 'exited 0 but left no tree'
         const said = tailLog(dir, 8).filter((line) => !/\[tree\] /.test(line)).join(' | ')
@@ -182,9 +194,8 @@ function cleanupRemote(dir, job) {
     if (!command) return
     const line = fill(command, { worktree: job.paths.tree })
     appendLog(dir, `[cleanup] ${line}`)
-    const [program, ...args] = splitCommand(line)
-    const run = spawnSync(program, args, { encoding: 'utf8', timeout: 180000, windowsHide: true })
-    appendLog(dir, `[cleanup] exit ${run.status}${run.error ? ` (${run.error.message})` : ''}`)
+    const run = runLimitedSync(line, { timeoutMs: (job.config?.shortTimeout ?? 600) * 1000, stdio: 'ignore' })
+    appendLog(dir, `[cleanup] ${run.timedOut ? `ended after its limit of ${job.config?.shortTimeout ?? 600} s` : `exit ${run.code}`}`)
 }
 
 /**
@@ -192,8 +203,11 @@ function cleanupRemote(dir, job) {
  * phase is set by the caller.
  */
 function cleanLeftovers(root, dir, job) {
-    const ended = killJobProcesses(job)
+    const { ended, unknown } = killJobProcesses(job)
     if (ended.length) appendLog(dir, `[cleanup] ended process trees of pid ${ended.join(', ')}`)
+    if (unknown.length) {
+        appendLog(dir, `[cleanup] NOT ended: pid ${unknown.join(', ')} still run and cannot be told from the recorded process (no usable start time); look at them by hand`)
+    }
     cleanupRemote(dir, job)
     releaseLock(path.join(root, 'lock'), job.id)
 }
@@ -224,7 +238,7 @@ function holderAlive(root) {
         const job = reap(root, holder.jobId)
         if (job) return !TERMINAL.has(job.phase)
         // No job directory yet: the holder is the `start` that is still setting the job up.
-        return isSameProcess(holder)
+        return mayStillRun(holder)
     }
 }
 
@@ -262,7 +276,9 @@ function doStart(flags) {
             develop,
             publish: flags.publish === true,
             layer: flags.layer || DEFAULT_LAYER,
-            rerun: flags.rerun || DEFAULT_RERUN,
+            layerTimeout: Number(flags['layer-timeout'] || 7200),
+            shortTimeout: Number(flags['short-timeout'] || 600),
+            acceptMissing: String(flags['accept-missing'] || '').split(',').map((name) => name.trim()).filter(Boolean),
             cleanup: flags.cleanup === undefined ? DEFAULT_CLEANUP : flags.cleanup,
             publishCommand: flags['publish-command'] || DEFAULT_PUBLISH,
             publishWorktree: flags['publish-worktree'] || null,
@@ -289,7 +305,9 @@ function doStart(flags) {
             logFile: path.join(dir, 'worker.log'),
             cwd: repo,
         })
-        const worker = { pid, start: startTimeOf(pid) }
+        // Written at once and without a start time: the worker records its own, and anything the
+        // starter wrote after the worker began its phases would overwrite them.
+        const worker = { pid, start: null }
         updateJob(dir, { worker })
         reassignLock(lockDir, { jobId: id, ...worker })
     } catch (error) {
@@ -385,8 +403,11 @@ function previousPromotion(repo, ref, reports) {
     if (listing === null) throw new Error(`the tree ${ref} could not be listed`)
     const tables = new Map()
     const records = new Map()
+    const durationFiles = new Map()
     for (const file of listing.split('\n').map((l) => l.trim()).filter(Boolean)) {
         const base = path.posix.basename(file)
+        const d = /^\d{4}-\d{2}-\d{2}-promotion-(\d+)-durations\.tsv$/.exec(base)
+        if (d) durationFiles.set(Number(d[1]), file)
         let m = /^\d{4}-\d{2}-\d{2}-promotion-(\d+)-reds\.tsv$/.exec(base)
         if (m) tables.set(Number(m[1]), { file, base })
         m = /^\d{4}-\d{2}-\d{2}-promotion-(\d+)\.record\.json$/.exec(base)
@@ -403,9 +424,11 @@ function previousPromotion(repo, ref, reports) {
                 `write its table first (the newest table is promotion ${n})`,
         )
     }
-    if (n === 0) return { n: 0, names: new Set(), table: null, tip: null }
+    if (n === 0) return { n: 0, names: new Set(), table: null, tip: null, cases: null }
     const table = tables.get(n)
     const names = parseRedTable(git(repo, ['show', `${ref}:${table.file}`]))
+    // Every case that promotion measured, with its plan id: what this reading has to still hold.
+    const cases = durationFiles.has(n) ? parseRedTable(git(repo, ['show', `${ref}:${durationFiles.get(n)}`])) : null
     let tip = null
     if (records.has(n)) {
         try {
@@ -414,8 +437,12 @@ function previousPromotion(repo, ref, reports) {
             tip = null
         }
     }
-    return { n, names, table: table.base, tip }
+    return { n, names, table: table.base, tip, cases }
 }
+
+// A case that is not one of these is red: a failure, a timeout that survived its re-run, a crash,
+// and any status the runner may add later.
+const NOT_RED = new Set(['pass', 'skip', 'xfail'])
 
 function readSummary(file) {
     let doc
@@ -499,62 +526,76 @@ async function runWorker(flags) {
         const at = () => git(tree, ['rev-parse', 'HEAD'])
         if (at() !== tip) throw new Error(`the measuring tree is at ${at()}, not at the tip ${tip}`)
         fs.rmSync(summaryFile, { force: true })
-        const layer = await children.run(fill(config.layer, values), { label: 'layer', cwd: tree })
+        const layer = await children.run(fill(config.layer, values), { label: 'layer', cwd: tree, limitSeconds: config.layerTimeout })
         if (layer.error) throw new Error(`the layer command could not run: ${layer.error.message}`)
         appendLog(dir, `[layer] exit ${layer.code}`)
         if (at() !== tip) throw new Error('the measuring tree moved while the layer ran, so the reading is not about the tip')
-        const rows = readSummary(summaryFile)
-        fs.copyFileSync(summaryFile, path.join(dir, 'layer-summary.json'))
 
-        // ---- rerun-timeouts
-        setPhase('rerun-timeouts')
-        const timedOut = rows.filter((row) => row.timed_out === true)
-        const reran = new Map()
-        const byPlan = new Map()
-        for (const row of timedOut) {
-            if (!byPlan.has(row.plan_path)) byPlan.set(row.plan_path, [])
-            byPlan.get(row.plan_path).push(row)
+        // ---- the reading has to be complete
+        // A run that finished exits 0 (every case green or known) or 1 (some case red, or the
+        // checkout left a path behind): that is the plan runner's own exit code, and
+        // `camel-remote.ps1` passes it through. Every other code means no complete reading:
+        // 2 nothing started, or the transcript is short of the count, or the transfer failed;
+        // 3 the host is short of disk; 4 the guard refused before anything ran; 5 the gpu watch
+        // read a news red; 6 the tree changed under the run; 7 the readings are there but the exit
+        // code was never obtained; a signal or a kill leaves no code at all.
+        const finished = layer.code === 0 || layer.code === 1
+        const problems = []
+        if (!finished) {
+            problems.push(`the layer command exited ${layer.code ?? `by signal ${layer.signal}`}; a finished run exits 0 or 1, so this run was cut short or never ran`)
         }
-        for (const [planPath, cases] of byPlan) {
-            const relative = path.isAbsolute(planPath) && planPath.startsWith(tree) ? path.relative(tree, planPath) : planPath
-            fs.rmSync(summaryFile, { force: true })
-            const again = await children.run(fill(config.rerun, { ...values, plan: relative.replace(/\\/g, '/') }), {
-                label: `rerun ${relative}`,
-                cwd: tree,
-                env: { ...process.env, CAMEL_TEST_TIMEOUT_SCALE: '2' },
-            })
-            if (again.error) throw new Error(`the re-run of ${relative} could not run: ${again.error.message}`)
-            const second = readSummary(summaryFile)
-            for (const row of cases) {
-                const found = second.find((other) => other.plan === row.plan && other.test === row.test)
-                reran.set(KEY(row.plan, row.test), found || null)
+        let rows = null
+        try {
+            rows = readSummary(summaryFile)
+        } catch (error) {
+            problems.push(error.message)
+        }
+        const reportsRef = config.reportsRef || tip
+        let previous = null
+        let previousError = null
+        try {
+            previous = previousPromotion(repo, reportsRef, config.reports)
+        } catch (error) {
+            previousError = error
+        }
+        const accepted = new Set(config.acceptMissing || [])
+        if (rows && previous?.cases) {
+            const present = new Set(rows.map((row) => KEY(row.plan, row.test)))
+            const absent = [...previous.cases]
+                .filter((key) => !present.has(key))
+                .map((key) => key.replace('\t', '/'))
+                .filter((name) => !accepted.has(name))
+                .sort()
+            if (absent.length) {
+                const shown = absent.slice(0, 40).join(', ')
+                problems.push(
+                    `${absent.length} case(s) of promotion ${previous.n}'s reading are absent from this one: ${shown}${absent.length > 40 ? `, and ${absent.length - 40} more` : ''}` +
+                        ' (deleted on purpose? name them with --accept-missing)',
+                )
             }
         }
+        if (problems.length) throw new Error(`no complete reading, nothing was recorded or published: ${problems.join('; ')}`)
+        if (previousError) throw previousError
+        const acceptedAbsent = previous.cases
+            ? [...accepted].filter((name) => !rows.some((row) => `${row.plan}/${row.test}` === name) && previous.cases.has(name.replace('/', '\t')))
+            : []
+        fs.copyFileSync(summaryFile, path.join(dir, 'layer-summary.json'))
 
         // ---- compare
         setPhase('compare')
-        const reportsRef = config.reportsRef || tip
-        const previous = previousPromotion(repo, reportsRef, config.reports)
-        const red = new Set()
-        for (const row of rows) if (row.status === 'fail') red.add(KEY(row.plan, row.test))
+        // The runner has already re-run every case that timed out (once, alone, at twice its
+        // limit) and its row carries the final verdict; a case that timed out twice is a fail row.
+                const red = new Set()
+        for (const row of rows) if (!NOT_RED.has(row.status)) red.add(KEY(row.plan, row.test))
         const green = []
         const stillRed = []
-        for (const row of timedOut) {
-            const key = KEY(row.plan, row.test)
-            const second = reran.get(key)
+        for (const row of rows.filter((one) => one.rerun)) {
             const name = `${row.plan}/${row.test}`
-            if (second && second.status === 'pass') {
-                red.delete(key)
-                green.push(name)
-            } else {
-                red.add(key)
+            if (NOT_RED.has(row.status)) green.push(name)
+            else {
                 stillRed.push({
                     case: name,
-                    reason: !second
-                        ? 'the case was not in the re-run of its plan'
-                        : second.timed_out === true
-                          ? 'timed out again at the doubled limit'
-                          : `the re-run ended ${second.status}`,
+                    reason: row.timed_out === true ? 'timed out again at the doubled limit' : `the re-run ended ${row.status}`,
                 })
             }
         }
@@ -563,11 +604,10 @@ async function runWorker(flags) {
         const count = (status) => rows.filter((row) => row.status === status).length
         const readings = {
             total: rows.length,
-            pass: count('pass') + green.length,
+            pass: count('pass'),
             fail: red.size,
             skip: count('skip'),
             known: count('xfail'),
-            timed_out_raw_layer: timedOut.length,
         }
         const merges = previous.tip
             ? (git(repo, ['log', '--merges', '--first-parent', '--format=%h %s', `${previous.tip}..${tip}`], { allowFailure: true }) || '')
@@ -623,13 +663,17 @@ async function runWorker(flags) {
                 vanished_reds: vanished.length,
                 red_names_file: `${config.reports}/${redsName}`,
             },
+            // Read from the plan runner's rows. The promotion itself re-ran nothing.
             timeouts_rerun: {
-                count: timedOut.length,
+                rerun_by: 'the plan runner: each timed-out case once, alone, at twice its limit',
+                promotion_reran_plans: false,
+                count: green.length + stillRed.length,
                 run_alone: true,
-                timeout_scale: 2,
+                limit_factor: 2,
                 green,
                 still_red_not_timeout: stillRed,
             },
+            ...(acceptedAbsent.length ? { accepted_missing_cases: acceptedAbsent } : {}),
             red_table: `${config.reports}/${redsName}`,
             red_table_rows: red.size,
             durations_file: `${config.reports}/${durationsName}`,
@@ -639,7 +683,7 @@ async function runWorker(flags) {
         }
         fs.writeFileSync(path.join(out, recordName), JSON.stringify(record, null, 2) + '\n')
         updateJob(dir, { files: [redsName, durationsName, recordName].map((name) => path.join(out, name)) })
-        appendLog(dir, `[records] ${prefix}: ${readings.total} cases, ${red.size} red, ${newReds.length} new, ${green.length}/${timedOut.length} timeouts green on re-run`)
+        appendLog(dir, `[records] ${prefix}: ${readings.total} cases, ${red.size} red, ${newReds.length} new, ${green.length}/${green.length + stillRed.length} re-run timeouts green`)
 
         // ---- publish
         if (willPublish) {
@@ -693,7 +737,7 @@ async function publish({ config, repo, tip, dir, out, names, promotion, children
     const recordCommit = git(tree, ['rev-parse', 'HEAD'])
     git(repo, ['branch', '-f', `record/promotion-${promotion}`, recordCommit])
     appendLog(dir, `[publish] records committed as ${recordCommit.slice(0, 12)} on record/promotion-${promotion}; publishing ${tip}`)
-    const run = await children.run(fill(config.publishCommand, { ...values, worktree: tree, sha: tip }), { label: 'publish', cwd: tree })
+    const run = await children.run(fill(config.publishCommand, { ...values, worktree: tree, sha: tip }), { label: 'publish', cwd: tree, limitSeconds: config.shortTimeout })
     if (run.error || run.code !== 0) throw new Error(`the publish command ${run.error ? `could not run: ${run.error.message}` : `exited ${run.code}`}`)
     if (config.verifyPublish) {
         const listed = git(repo, ['ls-remote', config.remote, `refs/heads/${config.develop}`], { allowFailure: true }) || ''

@@ -2178,7 +2178,7 @@ async function checkPrecondition(test, sharedVars, scratch, scratchRelative) {
     if (!test.skip_unless || test.skip_unless.length === 0) {
         return null
     }
-    const casePath = path.resolve(path.dirname(test.__planPath), test.case)
+    const casePath = entryCasePath(test)
     const scope = { ...sharedVars, case: casePath, test_tmp: scratchRelative }
     const [cmd, ...args] = expandArgs(test.skip_unless, scope)
     // The precondition is a Python child of the runner too, and it gets the same visibility as
@@ -2227,7 +2227,7 @@ async function checkPrecondition(test, sharedVars, scratch, scratchRelative) {
  */
 function missingArtifacts(test, sharedVars, scratchRelative, options) {
     if (!Array.isArray(test.require_artifacts) || test.require_artifacts.length === 0) return []
-    const casePath = path.resolve(path.dirname(test.__planPath), test.case)
+    const casePath = entryCasePath(test)
     const scope = { ...sharedVars, case: casePath, test_tmp: scratchRelative }
     const install = camelInstall(options)
     const missing = []
@@ -2259,6 +2259,15 @@ function artifactIsThere(target) {
 }
 
 /** The failure a test whose artifact is missing reports: the paths first, then what it means. */
+// The file an entry is reported against: its case, or the plan file when the entry names none (an
+// entry that runs a tool with inline arguments has no case, and `path.resolve(dir, undefined)` throws).
+function entryCasePath(test) {
+    if (typeof test.case === 'string' && test.case.length > 0) {
+        return path.resolve(path.dirname(test.__planPath), test.case)
+    }
+    return test.__planPath
+}
+
 function missingArtifactResult(casePath, missing) {
     return runnerErrorResult(
         casePath,
@@ -2709,7 +2718,7 @@ function assertionProblems(test) {
 function namedDiagnosticFile(test, scope) {
     const text = expandTextTokens(test.expect_diagnostic_file, scope)
     const anchor = typeof test.case === 'string' && test.case.length > 0
-        ? path.dirname(path.resolve(path.dirname(test.__planPath), test.case))
+        ? path.dirname(entryCasePath(test))
         : REPO_ROOT
     return path.resolve(anchor, text)
 }
@@ -3018,7 +3027,7 @@ async function validateTest(test, result, context) {
 }
 
 async function runOneTest(test, sharedVars, logContext, scratch, scratchRelative, marks) {
-    const casePath = path.resolve(path.dirname(test.__planPath), test.case)
+    const casePath = entryCasePath(test)
     if (test.__planError) {
         return runnerErrorResult(casePath, test.__planError)
     }
@@ -4936,7 +4945,7 @@ function enterInFlight(test) {
     // The case as the plan writes it is relative to the plan file (`../../../cases/...`), which is
     // not a path a reader can open: the absolute one, made relative to the checkout, is.
     const fromRoot = test.case && test.__planPath
-        ? path.relative(REPO_ROOT, path.resolve(path.dirname(test.__planPath), test.case)).split(path.sep).join('/')
+        ? path.relative(REPO_ROOT, entryCasePath(test)).split(path.sep).join('/')
         : test.case || ''
     inFlight.set(id, { plan: test.__planId || '', name: test.name, case: fromRoot })
     return id
@@ -5189,7 +5198,7 @@ async function executePlans(plans, options, sharedVars, logDir) {
                     // about this build and not about the host, and its answer fails the test.
                     const absent = missingArtifacts(entry.test, sharedVars, scratchRelative, options)
                     if (absent.length > 0) {
-                        const casePath = path.resolve(path.dirname(entry.test.__planPath), entry.test.case)
+                        const casePath = entryCasePath(entry.test)
                         const result = missingArtifactResult(casePath, absent)
                         entry.outcome = { status: 'fail', result, metric: '', failures: result.failures }
                         return
@@ -5231,7 +5240,7 @@ async function executePlans(plans, options, sharedVars, logDir) {
                     // product this test reads is this build's, not the host's, and its absence fails.
                     const absent = missingArtifacts(entry.test, sharedVars, scratchRelative, options)
                     if (absent.length > 0) {
-                        const casePath = path.resolve(path.dirname(entry.test.__planPath), entry.test.case)
+                        const casePath = entryCasePath(entry.test)
                         const result = missingArtifactResult(casePath, absent)
                         entry.outcome = { status: 'fail', result, metric: '', failures: result.failures }
                         return
@@ -5269,7 +5278,7 @@ async function executePlans(plans, options, sharedVars, logDir) {
                         marks
                     )
                 } catch (error) {
-                    const casePath = path.resolve(path.dirname(entry.test.__planPath), entry.test.case)
+                    const casePath = entryCasePath(entry.test)
                     result = runnerErrorResult(casePath, error && error.message ? error.message : String(error))
                 }
                 clock.validatedAt = performance.now()
@@ -5357,7 +5366,7 @@ async function executePlans(plans, options, sharedVars, logDir) {
                 // A failure of the runner itself (a precondition helper, a verification script the
                 // scheduler lost) must not lose the output of the tests around it: it becomes the
                 // result of this test and the run continues to its summary.
-                const casePath = path.resolve(path.dirname(entry.test.__planPath), entry.test.case)
+                const casePath = entryCasePath(entry.test)
                 const result = runnerErrorResult(casePath, error && error.message ? error.message : String(error))
                 entry.outcome = { status: 'fail', result, metric: '', failures: result.failures }
             })
@@ -5425,7 +5434,7 @@ async function executePlans(plans, options, sharedVars, logDir) {
             )
         } catch (error) {
             result = runnerErrorResult(
-                path.resolve(path.dirname(test.__planPath), test.case),
+                entryCasePath(test),
                 error && error.message ? error.message : String(error)
             )
         } finally {
@@ -5440,6 +5449,14 @@ async function executePlans(plans, options, sharedVars, logDir) {
             first_pass: { wall_ms: first.wallMs, timeout_ms: first.timeoutMs, timed_out: true },
         }
         const outcome = { status: result.status, result, metric: formatMetric(result), failures: result.failures }
+        // The row of this case in `test_timings[]` is written when its first attempt settles; the
+        // verdict that decides the case is the second one, so the row is brought up to it. A reader of
+        // the summary (the promotion) then finds one final status per case and does not re-run it.
+        if (entry.timing) {
+            entry.timing.status = outcome.status
+            entry.timing.timed_out = result.timedOut === true
+            entry.timing.rerun = { first_timed_out: true, status: outcome.status }
+        }
         // One case, one verdict, one line: the summary counts the case once (`total` does not move
         // with an attempt), `rerun` counts the attempt, and `pass` counts the verdict it reached.
         summary.rerun += 1
