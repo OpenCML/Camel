@@ -1,0 +1,48 @@
+{
+  "kind": "promotion",
+  "promotion": 19,
+  "tip": "6d7d0e422c0ab27d26bae1813196c0fb5e80c7ce",
+  "measured_tip": "3c95ed9ef8ae29671d47948c6657ab3c7e2cb78e",
+  "pushed_as": "develop",
+  "develop_before": "1a7cf9ff32f9282a3155dafda5028099b39638ce",
+  "tier": "fast",
+  "scope": "test/plans (the whole plan tree): 399 plan file(s), 9740 declared test entries",
+  "jobs": 8,
+  "host": "88 (the build host), tree /home/zjwei/camel-work/tree20",
+  "binary_built": "2026-11-27T01:05:05+08:00",
+  "readings": {
+    "total": 9740,
+    "pass": 9128,
+    "fail": 551,
+    "skip": 28,
+    "known": 33,
+    "timed_out_raw_layer": 1,
+    "re_run": 1,
+    "re_run_passed": 0,
+    "load_before": "106.11 100.73 100.08 (1m/5m/15m) before the run",
+    "token_pool": "peaked at 24 tokens; 8297 queue waits, tokenWaitSeconds 1729.8, so the test wall clock below includes waiting for a token",
+    "wall": "build 15.7 s, test 768.1 s, total 783.8 s"
+  },
+  "comparison": {
+    "against": "the nineteenth run's red table, measured on 7a7e52e62c (554 reds); this tip's table is 551",
+    "against_also": "the previous promotion (promotion 8: 9739 / 9055 / 627 / 26 / 31) is compared by counts: fail 627 -> 551",
+    "new_reds": 0,
+    "vanished_reds": 4,
+    "arithmetic": "against the nineteenth run, 4 cases went red -> green (linear.loop_collect x4, from the loop-collect-state batch) and exactly 1 went green -> red (docs.links.questions_index: internal/questions/README.md said 13 pages while the directory held 15). That one is fixed in the tree this push publishes: the pending table was regenerated and 'node scripts/check-doc-links.mjs --questions-index' exits 0. The two reds that are records rather than code are owed by task-92 and were already red in the nineteenth run's table: parse.frontend/frontend.ast_record (the two new draft_* case files are not in test/plans/feat/parse/golden/ast_hashes.txt) and modules.graph_facts/draft_effects_refused (its plan still asserts the refusal on stdout while the diagnostic now goes to stderr, per the 2026-11-26 ruling). Two commits sit above the measured tree and neither changes a case: the regenerated questions index, and one comment line in internal/tools/host-tokens.sh whose dated trace the pre-push comment rule refuses.",
+    "red_names_file": "internal/reports/2026-11-27-promotion-19-reds.tsv"
+  },
+  "timeouts_rerun": {
+    "why": "the host ran at 1m load 106 and every case went through the token pool; a timeout on the first occurrence is not red until it is run alone",
+    "count": 1,
+    "run_alone": true,
+    "timeout_scale": 1.0,
+    "note": "run at the original timeout, not doubled",
+    "green": [],
+    "still_red_not_timeout": [
+      {
+        "case": "transforms/transpose_loop_escape.names_the_value_one_read.nvm",
+        "reason": "child 20004.6 ms against the 20000 ms budget, after a 588232 ms wait in the token queue; the runner's own single re-run failed again, so it is red"
+      }
+    ]
+  }
+}
