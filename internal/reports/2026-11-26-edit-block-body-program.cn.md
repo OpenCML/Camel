@@ -118,7 +118,7 @@
 |---|---|---|
 | 执行器按**协议**（URI 冒号前那一段）找实现 | `src/stdlib/std/exec/executor.cpp:58-60`；工厂 `ExecutorManager::registerExecutorFactory`（`.../exec/include/camel/execute/executor.h:59`） | 块的 URI 用一个协议，注册一个工厂；一个执行器把该协议下每个块的 URI 映到同一个核 |
 | 模块自己注册自己的执行器 | `src/stdlib/graph/module.cpp:171`（`graph` 模块注册 `GraphExecutor`）、`src/kernel/include/camel/core/context/context.h:440` | 同一个写法，不需要新机制 |
-| **节点属性**就是「哪个实现跑这个节点」的通道 | `src/kernel/include/camel/core/operator.h:43-47`（「what a pass recorded about the node, e.g. which implementation runs it」）、`node_attrs.h`（键由库自己注册，核心不认识） | 块的 OPER 节点上记它那份程序的编号；核读自己的属性 |
+| **节点属性**就是「哪个实现跑这个节点」的通道 | `src/kernel/include/camel/core/operator.h:43-47`（「what a pass recorded about the node, e.g. which implementation runs it」）、`node_attrs.h`（键由库自己注册，核心不认识） | ~~块的 OPER 节点上记它那份程序的编号；核读自己的属性~~ ——**这一格已由第 18 节取代**：身份随调用送到（`ArgsView::oper`），属性里不再存编号 |
 | 每个调度器都把属性交给算子 | `src/stdlib/std/nvm/nodevm.cpp:1190-1191`、`src/stdlib/std/fvm/native_call.cpp:24-25`、`src/stdlib/std/macro/eval.cpp:693-694`、`src/stdlib/std/prl/taskflow.cpp:2226-2227` | 块体在任何调度器下都读得到编号，与「同一个虚拟机执行」不冲突 |
 | 跑一份程序里的图 | `src/kernel/execute/graph_caller.h` | 核拿到那份程序后就在同一个虚拟机里跑它 |
 
@@ -199,8 +199,9 @@ BLOCK_BODY entry graphs 2 -> 2 nodes 76 -> 76
 把它钉住（模块随这次调用结束，图会跟着走）。计划：`feat.runtime.block_body`，用例
 `the_body_is_a_program_of_its_own`。
 
-**这不是块。** 块还缺：算子记录与名字（按块体规范形式哈希）、外层那一个 OPER 节点、节点属性里
-记程序编号、`block` 协议的执行器（第二步），以及前端、β、块尾提交（第三、四步）。
+**这不是块。** 块还缺：算子记录与名字（按块体规范形式哈希）、外层那一个 OPER 节点、
+~~节点属性里记程序编号~~（这一项随第 18 节改成"节点的算子身份随调用送到"）、`block` 协议的执行器
+（第二步），以及前端、β、块尾提交（第三、四步）。
 
 ### 7.1 算子的那一半：一个内核，两个块
 
@@ -531,3 +532,71 @@ BLOCK_COST silent         stated=0 value=1.000000   什么都没声明的算子�
 同一行、字面不同，不用回头查记录。`cost_stated` 不是新字段：它就是 `relativeCostStated()` 有没有值，
 即"写了没有"与"没写"的区别被搬到了看得见的地方。判据：`feat/modules/op_record.plan.toml` 2/2 绿，
 用例断言同时存在 `cost_stated` 真与假两类——少了任一类，说明这个字段什么都没说。
+
+### 18 一个身份，不是两个：身份从属性搬到调用上（2026-11-26，决策者裁 (A)）
+
+第 4 节那张表里"节点属性就是哪个实现跑这个节点的通道"这一行、以及第 7.1 节记下的"序数记在
+节点属性里"，都被这一笔取代了；两处都留在这里当历史，读的时候按本节为准。
+
+裁决的话是：一份实现登记给许多算子时（块执行器，以后的 Python 桥、按名字分派的模块算子都一样），
+它得知道自己这次是作为哪个算子被调的；身份本来就在节点上，随调用送到，就不需要在属性里再存一份序号。
+
+**落点（一个身份的两个写法，只剩一个）**
+
+| 位置 | 改了什么 |
+|---|---|
+| `src/kernel/include/camel/core/operator.h` | `ArgsView` 多一个 `oper()`/`setOper()`，成员 `oper_` 默认 `kNoOper`；同一个头里一个 `setCallOperator(with, norm, oper)` 把身份交给一次调用的**两个**视图——一处函数而不是五处各写一行，任何后端都不可能给两个视图不同的身份 |
+| `src/stdlib/std/nvm/nodevm.cpp` | `evalNativeOperator` 把节点的 `oper` 连同属性一起交给两个视图 |
+| `src/stdlib/std/fvm/native_call.cpp` | 同上（`std::jit` 走同一处） |
+| `src/stdlib/std/macro/eval.cpp` | 同上（宏后端） |
+| `src/stdlib/std/prl/taskflow.cpp` | 两处建视图的地方各一次 |
+| `src/stdlib/tensor/ops/support.h` | `JoinedArgs` 转发视图时把身份一起转发 |
+| `src/kernel/include/camel/runtime/block_programs.h`、`src/kernel/runtime/block_programs.cpp` | `BlockProgram` 不再有 `ordinal`；存储以 `OperId` 为键（`byOper`），`byUri` 只是经算子表查到同一个 id 再看一次；`blockProgramKey`/`blockProgramAttrs`/`blockProgramOf` 三个自由函数删掉 |
+| `src/kernel/core/node_attrs.cpp` | `block.program` 那一行从去留表里撤掉 |
+| `src/stdlib/test/block_body.cpp` | 内核按 `norm.oper()` 取程序；插入节点时不再写属性；`Compiled` 的循环变量改名，`block.program` 那种读法在文件里消失 |
+
+`git grep 'block\.program'`：改前 **13 行**（2 行在本页、`node_attrs.cpp` 1、头文件 1、`.cpp` 1、
+`block_body.cpp` 里 9 处 `Compiled::program` 的成员读），改后 **0**。`BlockPrograms` 本身留下——
+被撤的是"第二个身份"，不是存储。
+
+**哨兵：块经过调度器跑**
+
+新计划 `test/plans/feat/runtime/block_scheduler.plan.toml`，用例
+`test/cases/runtime/block_scheduler.py`：`test::block_body` 把块插进出口之后，**程序是要接着跑的**，
+而此前没有任何计划跑过这一半。读数是进程退出码——不带遍是 41，经过块是 42——
+
+| | `std::nvm` | `std::fvm` |
+|---|---|---|
+| 不带遍 | 41 | 41 |
+| 经过块 | **42** | **42** |
+
+两次 `[SUMMARY]`（逐字）：
+
+```
+[FAIL] runtime.block_scheduler.the_block_answers_through_a_scheduler 547.42 ms      ← 改前
+[SUMMARY] total: 1, pass: 0, fail: 1
+[PASS] runtime.block_scheduler.the_block_answers_through_a_scheduler 250.45 ms      ← 改后
+[SUMMARY] total: 1, pass: 1, fail: 0
+```
+
+**"改前红"这件事要说清**：改前的红不是属性那条通道的错，而是内核自己的两条假设——新的哨兵第一次
+让块真的经过调度器，就把它们照出来了。所以这一条不是"身份改动修好了一条红"，而是"哨兵在改动前后
+各照出一次、两次都修掉了"。
+
+1. **slot 0 是第一个形参**，没有结果槽。内核从视图的 slot 1 开始取实参，而它自己的手造调用又在
+   slot 0 放了一个占位的 `0` 把这条路盖住了；真实调用里视图只有节点的入参，`x` 于是读到了空。
+   改：从 0 取全部入参（`:op/add_i` 读的就是 0 和 1），手造调用改成单槽视图。
+2. **插入的节点拿走了出口的整串入参**，而体只有一个形参。一个 `sync` 体的出口除了值还读它前面的
+   语句留下的顺序，于是块拿到两个。改：块取出口入参里**体的端口数**那么多个，其余留在出口；供不上
+   体的形参时按名字拒绝（`callGraph` 本来就会拒绝，只是拒绝得太晚、太远）。
+
+`runtime.block_body` 的 `[SUMMARY]`：改前 `total: 1, pass: 1, fail: 0`，改后逐字相同
+（`[PASS] runtime.block_body.the_body_is_a_program_of_its_own`）。去留表的唯一读者是
+`camel inspect --attrs`（`feat/modules/onnx.plan.toml` 的 `inspect_attribute_fates`），撤掉一行不影响
+它断言的"至少二十六行"与"`test.mark` 没有被分类"。
+
+**一处有意没动**：七个值折叠器自己的 `ArgsView` 子类（`rules.cpp` 的 `StaticArgs`、
+`graph/txn.cpp` 的 `StaticArgsView`、`cxx` 的泛型折叠、`onnx` 的 `FoldArgsView`、
+`tensor` 的 `ArgList`、`struct.cpp` 的 `SlotArgs`、`debugger` 的 `SlotArgs`）仍然不交身份。
+它们折叠的是编译期的值，今天没有任何折叠器会遇到一个块；给它们补身份要另说"折叠一个块的节点"
+是什么意思。记在这里，不假装做了。
