@@ -362,3 +362,5 @@ git checkout HEAD -- <那一个文件>          # 恢复，git status --porcelai
   录后 `git status --porcelain` 只许出现你点名的那几份；多出来的 `git checkout HEAD -- <file>` 还原。
 ```
 **读数里出现密钥先隐去**：任何 `sk-` 开头的值、`-e KEY=…`、`--token`、`api_key`、密码，贴 `ps`/命令行/环境变量原文时一律先遮成 `sk-[已隐去]` / `KEY=[已隐去]` 再报。**一次没遮，等于把密钥写进通道日志与仓库历史**；进程参数在同机任何用户 `ps` 都看得到，它本来就已经泄露过一遍。
+· **判一条“新红要不要修”之前，先看它在 `origin/integration` 尖端还在不在。**一条 `git grep` 就够：表里的红对应 `065bfb1690`，活可能早已由别的车道做完并合进 integration。**表没错、活已有人干完** ≠ 看旧表；**“它在自己基上还红、在尖端已绿”= 已被别人做掉**，两者不一致就别开工。
+· **`camel-remote` 打了 `0 changed file(s)` / `measuring: the commit alone (no tracked change)` ⇒ 它测的是已提交的树，不是工作树。**改完立刻起跑（实测 3 秒内）测到的是旧内容。规程：**在拷贝上改完 → 提交 → 再跑**；看 `[provenance] tip` 是不是刚提交的 sha，不是就作废重跑。
