@@ -1,0 +1,8 @@
+import { is_function } from types
+
+// The counter-proof of the case beside it: if the body's last expression decided the value, this
+// would be an `int` and the type would be right. It is a function, so the block is refused here --
+// which is what says the last expression is not what the block hands over.
+func value_is_not_the_body::<F>(f: F) => int when is_function::<F>() {
+    return edit d = f { 42 }
+}

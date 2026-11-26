@@ -1623,6 +1623,18 @@ Value Builder::visitBlockHeaded(syn::Node context, DataType type) {
         for (const auto &stmt : *bodyNode->atAs<RepeatedLoad>(0)) {
             *stmts << stmt;
         }
+        // An edit block's value is the function its commit gives, not the last expression its
+        // body writes (graph-editing design 6, 15.1), so the block ends by naming what the commit
+        // hands over: the name the head bound. A view block ends with the body's own last
+        // statement, which is its value.
+        if (type == DataType::EditExpr) {
+            node_ptr_t handOver = createNodeAs<RefDataLoad>(root);
+            setNodeTokenRangeByContext(handOver, context);
+            node_ptr_t last = createNodeAs<ExprStmtLoad>();
+            setNodeTokenRangeByContext(last, context);
+            *last << handOver;
+            *stmts << last;
+        }
         node_ptr_t block = createNodeAs<StmtBlockLoad>();
         setNodeTokenRangeByContext(block, context);
         *block << stmts;

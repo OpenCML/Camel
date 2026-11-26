@@ -1,0 +1,8 @@
+import { is_function } from types
+
+// An edit block's value is the function its commit gives back, not the last expression its body
+// writes (graph-editing design 6 and 15.1): this body ends with an int, and the block is still
+// the function, so it type-checks where a function is expected.
+func value_is_the_function::<F>(f: F) => F when is_function::<F>() {
+    return edit d = f { 42 }
+}
