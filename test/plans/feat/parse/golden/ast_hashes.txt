@@ -523,7 +523,7 @@ f915d61cc7f06dc8 ok src/stdlib/io.cml
 d07e8f7a68b8a5c8 ok src/stdlib/math.cml
 4bd3189fe34a101a ok src/stdlib/nn.cml
 109cb1c3af0c4f8a ok src/stdlib/onnx.cml
-393be28832edcdcf ok src/stdlib/opt.cml
+06bf4b3a0524afc2 ok src/stdlib/opt.cml
 49015cbc4407a506 ok src/stdlib/optim.cml
 acdef1f5a6e980e3 ok src/stdlib/para.cml
 a82098797df46210 ok src/stdlib/perf.cml
