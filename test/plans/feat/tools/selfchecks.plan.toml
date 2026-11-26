@@ -150,6 +150,24 @@ expect_stdout_contains = [" pass 8", " fail 0"]
 normalizers = ["normalize_newlines"]
 timeout_ms = 120000
 
+# The pairing between the hook and the checker, which neither file shows on its own: the checker
+# reads a tree only when the caller names one, and the push hook is the caller that has to name it.
+# A check that greps either file finds the line and the required word and reports green, so this one
+# runs the hook over a throwaway repository and reads the arguments the checker was actually started
+# with. It reads the real `.husky/pre-push`, so it is red until that file names the tree -- the
+# refusal every push met while the call site was behind the checker's contract.
+[[tests]]
+name = "selfchecks.hook_checker_contract"
+desc = "`.husky/pre-push` started over a throwaway repository: the checker is reached, it is told `--root` and the word is that repository's tree root, it accepts the invocation, and the push is not refused. The subject is the arguments the hook passes and not the text of either file; a copy with the tree name removed turns this red."
+kind = "behavior"
+tool = "node"
+case = "../../../../test/tools/hook-checker-contract.test.mjs"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_contains = ["hook-checker-contract: 7 checks, 0 failed"]
+normalizers = ["normalize_newlines"]
+timeout_ms = 120000
+
 # Not a file of its own name: the switch is how this tool answers about itself, and it printed
 # 11 checks with nothing startable by a gate before this entry existed.
 [[tests]]
