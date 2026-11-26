@@ -3,7 +3,7 @@
 // measured it saw `println` and the second saw nothing new; `pure` is a promise the body breaks
 // (design effects plan, step 5), and a recursion is no excuse for not checking it.
 
-/// The clause promises the empty set; the body writes `stdout` and calls itself.
+/// The clause promises no write; the body writes `console` and calls itself.
 func count_down(n: int) => int pure sync {
     println(n)
     return if n <= 0 then 0 else count_down(n - 1)

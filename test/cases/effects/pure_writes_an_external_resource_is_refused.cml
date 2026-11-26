@@ -1,6 +1,6 @@
 /**
  * The counter-example: the promise is about writes, so writing an external resource is still
- * refused. `shout` writes `stdout`, which is state outside the program, and the diagnostic names
+ * refused. `shout` writes `console`, which is state outside the program, and the diagnostic names
  * the resource rather than the reach.
  *
  * This file is expected to fail to compile; nothing here runs.

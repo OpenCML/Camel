@@ -175,7 +175,7 @@ expect_output_contains = ["0 1 2 3"]
 
 [[tests]]
 name = "effect.parameter_promises_pure"
-desc = "The other side of the same rule: a parameter written `pure` promises the empty set, so a call through it is not an effect and a result nothing depends on is dropped without a warning. A function whose type says `pure` stands at the parameter."
+desc = "The other side of the same rule: a parameter written `pure` promises no write, so a call through it is not an effect and a result nothing depends on is dropped without a warning. A function whose type says `pure` stands at the parameter."
 kind = "behavior"
 case = "../../../cases/effects/pure_parameter_takes_pure.cml"
 args = ["${case}"]
@@ -232,7 +232,7 @@ expect_output_contains = ["err_inferred_not_pure.cml:18:", "uses var console", "
 
 [[tests]]
 name = "err.pure_parameter_write"
-desc = "A parameter written `pure` takes only a value that promises the empty set: `add` writes the module's `total` and its type says so, so the call is refused where the two meet. The type the value is known by is where the argument meets the parameter, and the signature the parameter asked for is the one the error names. Classified as borrowing the retired shape: the state is a module `var` now instead of a `var` context parameter, because a value that carries a cell cannot assign it (0x03000213); the refusal and the signature it names are unchanged."
+desc = "A parameter written `pure` takes only a value that promises no write: `add` writes the module's `total` and its type says so, so the call is refused where the two meet. The type the value is known by is where the argument meets the parameter, and the signature the parameter asked for is the one the error names. Classified as borrowing the retired shape: the state is a module `var` now instead of a `var` context parameter, because a value that carries a cell cannot assign it (0x03000213); the refusal and the signature it names are unchanged."
 kind = "negative"
 case = "../../../cases/effects/err_pure_parameter_write.cml"
 args = ["${case}"]
@@ -297,7 +297,7 @@ expect_output_contains = ["err_pure_var.cml:", "'var' parameter 'c'"]
 
 [[tests]]
 name = "err.pure_body"
-desc = "`pure` on a body that writes the console: the signature promises the empty set and the body reaches past it, so the declaration is refused at its own clause and the resource it did not name is reported."
+desc = "`pure` on a body that writes the console: the signature promises no write and the body writes past it, so the declaration is refused at its own clause and the resource it did not name is reported."
 kind = "negative"
 case = "../../../cases/effects/err_pure_body.cml"
 args = ["${case}"]
@@ -914,11 +914,11 @@ expect_stdout_exact = "true\n"
 
 [[tests]]
 name = "pure.write_of_an_external_resource_is_refused"
-desc = "The counter-example: writing an external resource is still refused, and the report names the resource that was written -- `stdout` -- rather than the reach outside the program."
+desc = "The counter-example: writing an external resource is still refused, and the report names the resource that was written -- `console` -- rather than the reach outside the program."
 kind = "negative"
 case = "../../../cases/effects/pure_writes_an_external_resource_is_refused.cml"
 args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::UsesPromiseViolated"
 expect_diagnostic_code = "0x030001F1"
-expect_output_contains = ["stdout"]
+expect_output_contains = ["console"]

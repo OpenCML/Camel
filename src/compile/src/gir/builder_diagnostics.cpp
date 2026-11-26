@@ -269,7 +269,7 @@ bool Builder::isEffectNode(DraftGraphBuilder *graph, node_handle_t node) const {
         // A call through a function value: the value's type is all there is to read at this call,
         // and one that writes no clause promises nothing -- what it reaches is fixed by the
         // instantiation, which may write a cell or print -- so it is read conservatively. Only a
-        // type that promises the empty set says the call is not an effect. The clause comes from
+        // type that promises no write says the call is not an effect. The clause comes from
         // the builder's one lookup (`functionValueAt`), the same reading the ordering and the
         // runtime's footprint make of the same value.
         const auto at = functionValueAt(

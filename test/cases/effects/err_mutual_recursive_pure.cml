@@ -1,7 +1,7 @@
 // Two functions that call each other settle against each other: `ping` only calls `pong`, and
-// `pong` prints, so `ping` reaches `stdout` through the cycle and its `pure` is broken.
+// `pong` prints, so `ping` reaches `console` through the cycle and its `pure` is broken.
 
-/// The clause promises the empty set; the body reaches `stdout` through `pong`.
+/// The clause promises no write; the body reaches `console` through `pong`.
 func ping(n: int) => int pure sync {
     return if n <= 0 then 0 else pong(n - 1)
 }
