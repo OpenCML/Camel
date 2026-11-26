@@ -79,5 +79,16 @@ try {
 } finally {
     fs.rmSync(work, { recursive: true, force: true })
 }
+// The process-trace gate asks one question of a range and none of the whole tree: with `--range` it
+// carries the range to the checker, without it the checker only lists.
+{
+    const listed = (...extra) =>
+        spawnSync(process.execPath, [GATES, '--list', ...extra], { encoding: 'utf8', timeout: 20000 }).stdout || ''
+    const traceLine = (text) => text.split(/\r?\n/).find((line) => line.includes('check-process-traces')) || ''
+    const plain = traceLine(listed())
+    const ranged = traceLine(listed('--range', 'aaa..bbb'))
+    check('the process-trace gate only lists the tree without a range', plain.includes('--list') && !plain.includes('--range'), plain)
+    check('and judges the lines of a range when given one', ranged.includes('--range aaa..bbb') && !ranged.includes('--list'), ranged)
+}
 console.log(`gates: ${checks} checks, ${failed} failed`)
 process.exit(failed === 0 ? 0 : 1)
