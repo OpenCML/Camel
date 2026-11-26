@@ -34,6 +34,18 @@ const run = (command, args, options = {}) =>
         )
     })
 
+// Whether a process with this pid exists. A pid that is not a number cannot be checked and is kept;
+// EPERM means it exists but belongs to someone else.
+const processExists = (pid) => {
+    if (!Number.isInteger(pid) || pid <= 0) return true
+    try {
+        process.kill(pid, 0)
+        return true
+    } catch (error) {
+        return error.code === 'EPERM'
+    }
+}
+
 const firstLine = (error) => String(error && error.message ? error.message : error).split('\n')[0]
 
 async function attempt(read) {
@@ -189,6 +201,9 @@ async function buildPanelOf(repo, stateDir) {
             const waiters = Array.isArray(doc.waiters)
                 ? doc.waiters
                       .filter((item) => item && typeof item.worktree === 'string' && item.worktree.trim())
+                      // The writers prune a waiter whose process died, but only when they next touch the
+                      // file; a waiter whose pid is gone is not shown in the meantime.
+                      .filter((item) => processExists(item.pid))
                       .map((item) => ({
                           worktree: item.worktree.trim(),
                           waitedSeconds: item.since ? Math.round((Date.now() - Date.parse(item.since)) / 1000) : null,
