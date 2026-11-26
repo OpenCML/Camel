@@ -774,6 +774,13 @@ class Formatter {
 
     std::any visitCtrlExpr(syn::Node context);
 
+    /// `edit d = f { … }` and `view d = f { … }`: one block over a function, two words for what it
+    /// does with it. They print as they were written, because the word is the only difference the
+    /// front end keeps.
+    std::any visitEditExpr(cst::EditExpr context);
+    std::any visitViewExpr(cst::ViewExpr context);
+    std::string formatBlockHeaded(syn::Node context, const char *word);
+
     std::any visitAssignExpr(cst::AssignExpr context);
 
     std::any visitLogicalOrExpr(cst::LogicalOrExpr context);
