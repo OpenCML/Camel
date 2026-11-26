@@ -32,6 +32,7 @@
 #include "camel/execute/entry_args.h"
 #include "camel/runtime/control.h"
 #include "camel/runtime/graph.h"
+#include "camel/runtime/oper_shape.h"
 #include "camel/utils/log.h"
 #include "camel/utils/scope.h"
 #include "camel/utils/str.h"
@@ -85,8 +86,9 @@ inline runtime::GCFillKind fillKindForType(Type *type) {
     }
 }
 
-/// The URI of the operator an OPER node stands for (defined below, beside `isCopyNode`).
-inline std::string_view operUriOf(node_handle_t node);
+/// The id of the operator an OPER node stands for, `kNoOper` for a node that names none (defined
+/// below, beside `isCopyNode`).
+inline camel::core::OperId operIdOf(node_handle_t node);
 
 /// Which construction a node states, if it states one: a FILL says it in its payload, and
 /// `:op/fill` says it by being that operator -- the type it makes then gives the kind
@@ -101,7 +103,7 @@ constructionKindOf(node_handle_t node, const Type *type) {
         if (type == nullptr) {
             return std::nullopt;
         }
-        if (operUriOf(node) != ":op/fill") {
+        if (operIdOf(node) != camel::core::constructedOperators().fill) {
             return std::nullopt;
         }
         return fillKindForType(const_cast<Type *>(type));
@@ -136,7 +138,7 @@ inline std::vector<std::pair<size_t, node_handle_t>> constructionValuesOf(node_h
         }
         return values;
     }
-    if (operUriOf(node) != ":op/fill") {
+    if (operIdOf(node) != camel::core::constructedOperators().fill) {
         return values;
     }
     const auto norm = normInputsOf(node);
@@ -163,8 +165,11 @@ inline bool isMemberRead(node_handle_t node) {
     if (!nodeIsKind(node, runtime::GCNodeKind::Oper)) {
         return false;
     }
-    const std::string_view uri = operUriOf(node);
-    return uri == ":op/access" || uri == ":op/access_key";
+    // Which operation the node performs is the operator's record's answer, so a member read is
+    // recognised by the shape its operator states and not by the letters of its URI
+    // (`OperShape::Access`; camel/runtime/oper_shape.h). Both spellings of the read -- by place
+    // (`:op/access`) and by name (`:op/access_key`) -- state that one shape.
+    return camel::runtime::shapeOfOperator(operIdOf(node)) == camel::ops::OperShape::Access;
 }
 
 /// The part of `type` a member read reads, when it reads one: `s.x` of a struct, `t.0` of a tuple.
@@ -296,17 +301,21 @@ inline bool walksBeforeGraph(const DraftGraphBuilder *left, const DraftGraphBuil
     return leftEpoch < rightEpoch;
 }
 
-/// The URI of the operator an OPER node stands for, whether the node was built from a resolved
-/// declaration (`addOperNode(op, ...)`, whose target the graph holds) or by URI alone (a call the
-/// builder writes for an operation no declaration in scope answers -- `addOperNode(type, uri)`),
-/// whose payload is the only place the name is kept until the graph is encoded.
+/// The id of the operator an OPER node stands for, `kNoOper` for a node that names none: a node of
+/// another kind, or an OPER node whose payload carries no body. It answers on any node.
 ///
-/// **This is the reader for "which operator does this name", and it answers on any node.** The
-/// empty answer is a whole answer: a node that names no operator (a port, a constant, a
-/// construction, an operation whose payload carries no body) names none, and every caller --
-/// `isCopyNode`, `constructionKindOf`, `constructionValuesOf`, `isMemberRead`, `nodeTakesAnOrder`,
-/// `isFailCall`, and `projectPart` in `builder_control.cpp`, which looks a `:op/cast` through it --
-/// is asking that question about a value it did not build and cannot have classified first.
+/// **This is the reader for "which operator does this name".** Both forms of an OPER node answer
+/// it: the one built from a resolved declaration (whose id the declaration recorded when its rule
+/// was registered -- `OperatorIndex::oper`, so the graph's operator-target table answers without
+/// asking the table anything) and the one a pass wrote by URI alone, whose payload is the only
+/// place the identity is kept. Neither asks a URI's letters, and neither looks an entry up per
+/// node: the id is the identity the table gave the operator, copied into the payload when the node
+/// was made.
+///
+/// The empty answer is a whole answer: a node that names no operator names none, and every caller
+/// -- `isCopyNode`, `constructionKindOf`, `constructionValuesOf`, `isMemberRead`,
+/// `nodeTakesAnOrder`, `isFailCall`, and `projectPart` in `builder_control.cpp` -- is asking that
+/// question about a value it did not build and cannot have classified first.
 ///
 /// So the kind and the target are asked in that order: the builder's operator-target table is keyed
 /// by OPER node only, and asking it of, say, a value node is asking the wrong table. The kind is
@@ -315,20 +324,19 @@ inline bool walksBeforeGraph(const DraftGraphBuilder *left, const DraftGraphBuil
 /// does not exist. Asking is not a precondition either: `operTarget` answers the *resolved*
 /// declaration and answers `nullptr` for a node this builder recorded no target for -- a call a
 /// pass wrote by naming its operator's URI is never resolved by the builder of the graph it hands
-/// on (`DraftGraphBuilder`), and that shape is named by its payload. Asking the kind first is also
-/// what stopped the front end aborting once, on the first operand that was a port or a constant.
-inline std::string_view operUriOf(node_handle_t node) {
+/// on (`DraftGraphBuilder`), and that shape is named by its payload.
+inline camel::core::OperId operIdOf(node_handle_t node) {
     if (node == nullptr || !nodeIsKind(node, runtime::GCNodeKind::Oper)) {
-        return {};
+        return camel::core::kNoOper;
     }
     if (const oper_idx_ptr_t *op = nodeGraphOf(node)->operTarget(node); op != nullptr) {
-        return (*op)->uri();
+        return (*op)->oper();
     }
     const auto payload = nodeDraftOf(node)->payloadOf(nodeIdOf(node));
     if (payload.size() < sizeof(runtime::GCOperBody)) {
-        return {};
+        return camel::core::kNoOper;
     }
-    return reinterpret_cast<const runtime::GCOperBody *>(payload.data())->uri();
+    return reinterpret_cast<const runtime::GCOperBody *>(payload.data())->oper;
 }
 
 /// A node that copies its one operand: the `:op/copy` call (`lib/std/prelude.cml`), the operator
@@ -339,7 +347,7 @@ inline std::string_view operUriOf(node_handle_t node) {
 /// so the readers below look *through* a copy to answer two questions of their own -- whether the
 /// value is a constant, and what value a cell was made with.
 inline bool isCopyNode(node_handle_t node) {
-    return node != nullptr && operUriOf(node) == ":op/copy";
+    return node != nullptr && operIdOf(node) == camel::core::constructedOperators().copy;
 }
 
 /// Compile-time value of a node that is static data (possibly behind a COPY), else nullopt.
@@ -749,11 +757,11 @@ inline bool nodeTakesAnOrder(node_handle_t node) {
     const runtime::GCNodeKind kind = nodeKindOf(node);
     if (kind == runtime::GCNodeKind::Oper) {
         // The operator is the target this builder recorded, or, for a call a pass wrote by URI
-        // alone, the one its payload names (`operUriOf`) -- and neither kind of operator is known
-        // until the table answers for that URI (the comment above says what an unknown operator
-        // leaves out).
-        const auto id = camel::core::OperatorTable::instance().lookup(operUriOf(node));
-        return id.has_value() && !camel::runtime::nodeIsFreelySchedulable(kind, *id);
+        // alone, the one its payload names (`operIdOf`): the id is the identity the table gave
+        // the operator, and a node that names none (`kNoOper`) is left out rather than ordered --
+        // a missing order only leaves the two writes in the order they were written.
+        const auto id = operIdOf(node);
+        return id != camel::core::kNoOper && !camel::runtime::nodeIsFreelySchedulable(kind, id);
     }
     return !camel::runtime::nodeIsFreelySchedulable(*nodeDraftOf(node), nodeIdOf(node));
 }
@@ -827,7 +835,7 @@ inline bool isFailCall(node_handle_t node) {
     if (node == nullptr || !nodeIsKind(node, runtime::GCNodeKind::Oper)) {
         return false;
     }
-    return operUriOf(node) == camel::core::kFailOperatorUri;
+    return operIdOf(node) == camel::core::constructedOperators().fail;
 }
 
 /// The chain link itself. No control edge: this is the pair as the model wants it, for a caller

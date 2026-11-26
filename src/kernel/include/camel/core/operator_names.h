@@ -108,6 +108,18 @@ inline constexpr std::string_view kRefineExtentOperatorUri = ":op/refine_extent"
 /// statements it leaves unreachable.
 inline constexpr std::string_view kFailOperatorUri = ":op/fail";
 
+/// The four operators the compiler writes itself when it lowers a construct, besides `fail` and
+/// the shape check above: the copy a value is handed on as, the fill an aggregate is made by, the
+/// entering that makes two types meet, and the conversion a program writes with `as`. A program
+/// writes all four by name as well (`copy`, `fill`, `cast`, `enter`), which is why their
+/// declarations live in the prelude -- but the compiler does not look them up by name: it turns
+/// these four URIs into ids once (`camel::core::constructedOperators`, operator_table.h) and
+/// names the operator by id from then on.
+inline constexpr std::string_view kCopyOperatorUri  = ":op/copy";
+inline constexpr std::string_view kFillOperatorUri  = ":op/fill";
+inline constexpr std::string_view kEnterOperatorUri = ":op/enter";
+inline constexpr std::string_view kCastOperatorUri  = ":op/cast";
+
 /// The plain operator a compound assignment follows: `__add__` for `__assn_add__`; nullopt
 /// for any other group.
 std::optional<std::string_view> plainGroupOfCompoundAssignment(std::string_view group);

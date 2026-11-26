@@ -782,6 +782,30 @@ void Registry::stateShape(OperId id, OperShape shape) {
     record->shape = shape;
 }
 
+void Registry::stateSubscriptForm(OperId id, SubscriptForm form) {
+    Store &s = store();
+    std::lock_guard lock(s.mutex);
+    Record *record = mutableRecord(s, id);
+    if (record == nullptr) {
+        throw std::invalid_argument(
+            std::format("operator {}: the registry has no such record", id));
+    }
+    if (record->subscript == form) {
+        return; // a statement of the answer the record already holds is a repetition
+    }
+    if (s.completed[id - 1]) {
+        // The same rule as the shape's: a completed record is never changed again, and readers
+        // ask the form while graphs are already being analysed.
+        throw std::invalid_argument(
+            std::format(
+                "{}: \"subscript\" is completed as \"{}\" and this statement says \"{}\"",
+                record->uri(),
+                camel::ops::subscriptFormName(record->subscript),
+                camel::ops::subscriptFormName(form)));
+    }
+    record->subscript = form;
+}
+
 OperId Registry::registerOperator(CppRegistration &registration) {
     const Record &statement = registration.stated();
     if (statement.key.name == 0) {

@@ -65,13 +65,23 @@ class OperatorIndex {
     std::string name_;
     type::FunctionType *type_;
     std::string uri_;
+    camel::core::OperId oper_;
 
   public:
-    OperatorIndex(const std::string &name, type::FunctionType *type, const std::string &uri)
-        : name_(name), type_(std::move(type)), uri_(uri) {}
+    OperatorIndex(
+        const std::string &name, type::FunctionType *type, const std::string &uri,
+        camel::core::OperId oper)
+        : name_(name), type_(std::move(type)), uri_(uri), oper_(oper) {}
 
     const std::string &name() const { return name_; }
     const std::string &uri() const { return uri_; }
+
+    /// The operator's identity in the operator table: the id of the entry `uri` names, recorded
+    /// when the rule that resolved to this declaration was registered (`OperatorGroup`). It is
+    /// not a lookup: a reader of a declaration compares this, and the URI text is left to the
+    /// places that show a program what it wrote.
+    camel::core::OperId oper() const { return oper_; }
+
     type::FunctionType *funcType() const { return type_; }
 };
 
@@ -81,6 +91,11 @@ class OperatorGroup {
   private:
     std::string name_;
     std::vector<std::pair<std::string, type::resolver_ptr_t>> resolvers_;
+    /// The id the operator table gave each rule's URI, published with the rules: `resolvers_[i]`
+    /// names `opers_[i]`. Built by `publishResolvers` from that one list every time it is
+    /// published, so the two cannot say different things, and `resolve` hands the id on without
+    /// asking the table anything.
+    std::vector<camel::core::OperId> opers_;
 
   public:
     OperatorGroup(
@@ -124,6 +139,10 @@ class OperatorGroup {
 
     const auto &resolvers() const { return resolvers_; }
 
+    /// The id the table gave the rule at `index`, an index of `resolvers()`. `kNoOper` for a rule
+    /// that names no operator: an empty URI is never interned, and such a rule resolves nothing.
+    camel::core::OperId operAt(size_t index) const { return opers_[index]; }
+
     /// Adds a rule to a group that is already shared: the prelude's declaration of a built-in
     /// operator is the rule, and the modules that hold the group see it at once.
     void addRule(const std::string &uri, type::resolver_ptr_t resolver) {
@@ -134,10 +153,11 @@ class OperatorGroup {
 
     std::optional<oper_idx_ptr_t> resolve(
         const type::type_vec_t &with, const type::type_vec_t &norm) const {
-        for (const auto &[uri, resolver] : resolvers_) {
-            auto optType = resolver->resolve(with, norm);
+        for (size_t i = 0; i < resolvers_.size(); ++i) {
+            auto optType = resolvers_[i].second->resolve(with, norm);
             if (optType) {
-                return std::make_shared<OperatorIndex>(name_, std::move(*optType), uri);
+                return std::make_shared<OperatorIndex>(
+                    name_, std::move(*optType), resolvers_[i].first, opers_[i]);
             }
         }
         return std::nullopt;
@@ -146,10 +166,11 @@ class OperatorGroup {
     /// Like resolve(), also passing the compile-time values of constant norm arguments.
     std::optional<oper_idx_ptr_t> resolve(
         const type::type_vec_t &with, const type::type_vec_t &norm, type::static_args_t normStatics) const {
-        for (const auto &[uri, resolver] : resolvers_) {
-            auto optType = resolver->resolveWith(with, norm, normStatics);
+        for (size_t i = 0; i < resolvers_.size(); ++i) {
+            auto optType = resolvers_[i].second->resolveWith(with, norm, normStatics);
             if (optType) {
-                return std::make_shared<OperatorIndex>(name_, std::move(*optType), uri);
+                return std::make_shared<OperatorIndex>(
+                    name_, std::move(*optType), resolvers_[i].first, opers_[i]);
             }
         }
         return std::nullopt;
@@ -159,11 +180,12 @@ class OperatorGroup {
     std::optional<oper_idx_ptr_t> resolveForCall(
         const type::type_vec_t &types, type::Type *expectedResult, const type::type_vec_t &with,
         const type::type_vec_t &norm, type::static_args_t normStatics) const {
-        for (const auto &[uri, resolver] : resolvers_) {
-            auto result =
-                resolver->resolveForCall(types, expectedResult, with, norm, normStatics);
+        for (size_t i = 0; i < resolvers_.size(); ++i) {
+            auto result = resolvers_[i].second->resolveForCall(
+                types, expectedResult, with, norm, normStatics);
             if (result) {
-                return std::make_shared<OperatorIndex>(name_, *result, uri);
+                return std::make_shared<OperatorIndex>(
+                    name_, *result, resolvers_[i].first, opers_[i]);
             }
         }
         return std::nullopt;
@@ -200,17 +222,23 @@ class OperatorGroup {
         }
     }
 
-    /// Makes each overload's resolver findable by its URI (see OperatorTable::setResolver), and
-    /// tells the table which overloads this group has, so that the types it was registered for can
-    /// be listed (OperatorTable::registeredTypes).
-    void publishResolvers() const {
+    /// Makes each overload's resolver findable by its URI (see OperatorTable::setResolver), tells
+    /// the table which overloads this group has, so that the types it was registered for can be
+    /// listed (OperatorTable::registeredTypes), and records the id the table gave each URI -- the
+    /// one moment a rule's identity is resolved, which is why `resolve` never looks one up.
+    void publishResolvers() {
+        opers_.clear();
+        opers_.reserve(resolvers_.size());
         std::vector<std::string> uris;
         uris.reserve(resolvers_.size());
         for (const auto &[uri, resolver] : resolvers_) {
-            if (!uri.empty() && resolver) {
-                camel::core::OperatorTable::instance().setResolver(uri, resolver);
-                uris.push_back(uri);
+            if (uri.empty() || !resolver) {
+                opers_.push_back(camel::core::kNoOper);
+                continue;
             }
+            opers_.push_back(
+                camel::core::OperatorTable::instance().setResolver(uri, resolver));
+            uris.push_back(uri);
         }
         if (!uris.empty()) {
             camel::core::OperatorTable::instance().declareGroup(name_, uris);

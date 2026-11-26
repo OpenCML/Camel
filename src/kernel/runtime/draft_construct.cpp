@@ -44,6 +44,13 @@ std::vector<std::byte> bytesForOperPayload(operator_t op, std::string_view uri) 
     return bytesForStruct(body);
 }
 
+std::vector<std::byte> bytesForOperPayload(operator_t op, camel::core::OperId oper) {
+    GCOperBody body;
+    body.op   = op;
+    body.oper = oper;
+    return bytesForStruct(body);
+}
+
 std::vector<std::byte> bytesForBranchPayload(gc_node_ref_t joinRef, gc_cnt_t armCount) {
     DraftBrchPayload body;
     body.join     = joinRef;
@@ -377,6 +384,21 @@ gc_node_ref_t GraphDraft::addOperNode(
     ++mutations_;
     dataIndex          = ensureValueSlot(*this, type, dataIndex);
     const auto payload = bytesForOperPayload(op, uri);
+    return addNode(
+        DraftNodeInit{
+            .dataIndex = dataIndex,
+            .dataType  = type,
+            .kind      = GCNodeKind::Oper,
+            .payload   = payload,
+        });
+}
+
+gc_node_ref_t GraphDraft::addOperNode(
+    camel::core::type::Type *type, operator_t op, camel::core::OperId oper,
+    gc_slot_idx_t dataIndex) {
+    ++mutations_;
+    dataIndex          = ensureValueSlot(*this, type, dataIndex);
+    const auto payload = bytesForOperPayload(op, oper);
     return addNode(
         DraftNodeInit{
             .dataIndex = dataIndex,

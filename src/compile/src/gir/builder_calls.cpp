@@ -179,9 +179,10 @@ node_handle_t Builder::functionValueOf(node_handle_t node, const GCT::node_ptr_t
         // (`trim: (s: string) => string`) is one function, like a user function of that
         // name: its value is a function that calls it.
         if (ops->resolvers().size() == 1) {
-            const auto &[uri, resolver] = ops->resolvers().front();
+            const auto resolver = ops->resolvers().front().second;
             if (FunctionType *fixed = resolver->fixedSignature()) {
-                auto op = std::make_shared<OperatorIndex>(ops->name(), fixed, uri);
+                auto op = std::make_shared<OperatorIndex>(
+                    ops->name(), fixed, ops->resolvers().front().first, ops->operAt(0));
                 if (compile_graph_ptr_t graph = operatorValueGraphOf(op, origin)) {
                     return createFuncDataNode(graph, true, false);
                 }

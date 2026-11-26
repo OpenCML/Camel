@@ -96,12 +96,13 @@ node_handle_t Builder::enterNodeOf(
     if (sourceType != nullptr && target != nullptr) {
         // A cell is not a value, and a declaration's type arguments are values: a cell does not
         // stand in one, so the call is not resolved against the declaration -- it is written by the
-        // operator's URI instead, with no written type arguments and the target type as the result,
+        // operator's id instead, with no written type arguments and the target type as the result,
         // the way `refineExtentNodeOf` writes the shape check. The kernel reads the pair off the
         // node (its result type and its operand's type), so nothing is missing; and two cell types
         // whose contents accept each other are one box, which the kernel hands on unchanged
         // (type/composite/tuple: "the conversion of a cell into another cell type moves nothing").
-        const node_handle_t node = currGraph_->addOperNode(target, ":op/enter");
+        const node_handle_t node =
+            currGraph_->addOperNode(target, camel::core::constructedOperators().enter);
         stampPermissions(node);
         linkNodes(LinkType::Norm, value, node);
         registerNodeOrigin(context_, node, origin, "gir.enter");
@@ -241,11 +242,12 @@ node_handle_t Builder::refineExtentNodeOf(
     // conversion of a pair whose types are `Safe` states the same thing only after asking the two
     // types; this one states it outright, because it exists only where they are not `Safe`.
     //
-    // The node is written by its URI, which is the operator's identity: no declaration answers
-    // the call (`kRefineExtentOperatorUri` says why nothing declares it), so there is no rule to
-    // resolve and no written type arguments. Its result type is the refined one, and the kernel is
-    // the conversion's own -- the check is one statement of what a shape is, shared with `as` --
-    // so a type layer that changes what a shape check does changes both.
+    // The node is named by the operator's id: no declaration answers the call
+    // (`kRefineExtentOperatorUri` says why nothing declares it), so there is no rule to resolve and
+    // no written type arguments, and the id is the whole of its identity. Its result type is the
+    // refined one, and the kernel is the conversion's own -- the check is one statement of what a
+    // shape is, shared with `as` -- so a type layer that changes what a shape check does changes
+    // both.
     if (value == nullptr || target == nullptr) {
         diags_->of(InternalDiag::UnknownInternalError)
             .atOrigin(origin != nullptr ? origin->origin() : camel::source::kInvalidOriginId)
@@ -255,7 +257,7 @@ node_handle_t Builder::refineExtentNodeOf(
         throw BuildAbortException();
     }
     const node_handle_t node =
-        currGraph_->addOperNode(target, camel::core::kRefineExtentOperatorUri);
+        currGraph_->addOperNode(target, camel::core::constructedOperators().refineExtent);
     stampPermissions(node);
     linkNodes(LinkType::Norm, value, node);
     registerNodeOrigin(context_, node, origin, "gir.refine_extent");
@@ -660,7 +662,9 @@ node_handle_t projectPart(node_handle_t value, const Type *type, size_t step) {
             source = nodeDraftOf(source)->ref(inputs.front());
             continue;
         }
-        if (operUriOf(source) == ":op/cast" || operUriOf(source) == ":op/enter") {
+        const camel::core::OperId oper = operIdOf(source);
+        if (oper == camel::core::constructedOperators().cast ||
+            oper == camel::core::constructedOperators().enter) {
             const auto inputs = normInputsOf(source);
             Type *from = inputs.empty()
                              ? nullptr

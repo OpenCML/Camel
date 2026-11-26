@@ -2905,7 +2905,7 @@ class CmlPrinter {
                 }
                 return;
             }
-            if (uri == camel::core::kFailOperatorUri) {
+            if (oper == camel::core::constructedOperators().fail) {
                 // `fail<'Kind'>(message)` is a statement of the language (design principles 3.9),
                 // and the fault it raises *is* its behaviour: a program printed without it goes on
                 // past the point where the source stops. That was the first case of the A7 defect
@@ -4153,7 +4153,11 @@ class CmlPrinter {
         default:
             break;
         }
-        if (uri == ":op/idx_arr" || uri == ":op/idx_str" || uri == ":op/idx") {
+        // A subscript: which form the node is (`Record::subscript`) -- a position read out of an
+        // operand -- is the operator's record's answer, so this printer asks the form and never the
+        // letters of a URI (design principles 3.8, 5.4).
+        if (camel::core::OperatorTable::instance().subscriptFormOf(oper) ==
+            camel::ops::SubscriptForm::Index) {
             if (inputs.size() != 2 && inputs.size() != 3) {
                 fail(ref, "an index without a value and an index");
             }
@@ -4214,7 +4218,9 @@ class CmlPrinter {
             }
             fail(ref, "a range without its bounds");
         }
-        if (uri == ":struct/range") {
+        // The form that writes a step (`Record::subscript`): printed as the call it is.
+        if (camel::core::OperatorTable::instance().subscriptFormOf(oper) ==
+            camel::ops::SubscriptForm::Range) {
             // The array of the integers of a step: `a..b` is the range value now and not this
             // array (design principles 4.2, 5.4), so the array is written as the call it is --
             // printing it `a..b` would print a program of another type. A step of one is no

@@ -830,6 +830,30 @@ void registerBuiltinOperatorTraits() {
     registry.declareShape(":op/fill", camel::ops::OperShape::Construction);
     registry.declareShape(":op/access", camel::ops::OperShape::Access);
     registry.declareShape(":op/access_key", camel::ops::OperShape::Access);
+    // Which subscript form of the language each of these is: the fact a reader asks instead of the
+    // letters of a URI when what it needs is not *which* operator the node names but *what kind of
+    // form* it is -- how many ordinary operands it carries, and which one of them is the step
+    // (camel/ops/subscript_form.h). Written here, where the operators are registered with the
+    // kernels that run them, and at no second place.
+    //
+    // These three forms deliberately have **no** id anywhere: an id says which operator it is, and
+    // a list of ids for the forms would be the special case by name that
+    // `camel::core::constructedOperators` leaves out -- kept in a second table, which is worse.
+    // What the reader wants here is the form, which is a fact about what the operator does and
+    // therefore lives on the operator's record beside its shape.
+    //
+    // `:op/idx` is the subscript's read of a position, and `:op/idx_arr` / `:op/idx_str` are the
+    // two typed forms the prelude's declaration resolves it to; `:op/slice_sub`, `:op/slice_str`
+    // and `:op/slice_bytes` are one form over three element kinds -- a view of one axis; and
+    // `:struct/range` is the form that writes a step, in the same family even though no bracket
+    // spells it.
+    for (const char *uri : {":op/idx", ":op/idx_arr", ":op/idx_str"}) {
+        registry.declareSubscriptForm(uri, camel::ops::SubscriptForm::Index);
+    }
+    for (const char *uri : {":op/slice_sub", ":op/slice_str", ":op/slice_bytes"}) {
+        registry.declareSubscriptForm(uri, camel::ops::SubscriptForm::Slice);
+    }
+    registry.declareSubscriptForm(":struct/range", camel::ops::SubscriptForm::Range);
     // Which types each conversion reads and writes: the fact a reader asks for instead of
     // decoding the letters of the URI (`src/core/forward.cpp#conversionKeyOf`). Written here,
     // where the operator is registered, and at no second place.

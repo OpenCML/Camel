@@ -854,6 +854,12 @@ class GraphDraft : public camel::graph::Graph {
     gc_node_ref_t addOperNode(
         camel::core::type::Type *type, operator_t op, std::string_view uri,
         gc_slot_idx_t dataIndex = 0);
+    /// The same node for a caller that already holds the operator's id -- a declaration it
+    /// resolved (`OperatorIndex::oper`) or an id the compiler resolved once. Nothing is looked up:
+    /// the identity is copied into the node.
+    gc_node_ref_t addOperNode(
+        camel::core::type::Type *type, operator_t op, camel::core::OperId oper,
+        gc_slot_idx_t dataIndex = 0);
     gc_node_ref_t addGateNode(camel::core::type::Type *type, gc_slot_idx_t dataIndex = 0);
     gc_node_ref_t addDrefNode(camel::core::type::Type *type = nullptr, gc_slot_idx_t dataIndex = 0);
 

@@ -214,6 +214,11 @@ DraftGraphBuilder::addOperNode(camel::core::type::Type *type, std::string_view u
 }
 
 runtime::DraftNodeRef
+DraftGraphBuilder::addOperNode(camel::core::type::Type *type, camel::core::OperId oper) {
+    return ref(draft().addOperNode(type, nullptr, oper));
+}
+
+runtime::DraftNodeRef
 DraftGraphBuilder::addFillNode(camel::core::type::Type *type, const runtime::GCFillBody &body) {
     return ref(draft().addFillNode(type, body));
 }
@@ -286,9 +291,9 @@ runtime::DraftNodeRef
 DraftGraphBuilder::addOperNode(const oper_idx_ptr_t &op, runtime::gc_slot_idx_t dataIndex) {
     GUARD(op != nullptr, "DraftGraphBuilder operator target cannot be null.");
     const runtime::gc_node_ref_t id =
-        draft().addOperNode(op->funcType()->exitType(), nullptr, op->uri(), dataIndex);
+        draft().addOperNode(op->funcType()->exitType(), nullptr, op->oper(), dataIndex);
     const auto node = ref(id);
-    if (camel::core::OperatorTable::instance().isMacro(op->uri())) {
+    if (camel::core::OperatorTable::instance().isMacro(op->oper())) {
         draft().setNodeRuntimeFlags(id, runtime::kGCNodeFlagMacro);
     }
     registerOperTarget(node, op);
@@ -302,7 +307,7 @@ void DraftGraphBuilder::retargetOperNode(runtime::DraftNodeRef node, const oper_
     GUARD(payload.size() >= sizeof(runtime::GCOperBody), "OPER payload is too small.");
     auto *body = reinterpret_cast<runtime::GCOperBody *>(payload.data());
     body->op   = nullptr;
-    body->oper = camel::core::OperatorTable::instance().intern(op->uri());
+    body->oper = op->oper();
     registerOperTarget(node, op);
 }
 

@@ -51,11 +51,10 @@ using namespace camel::core::data;
 using namespace camel::core::type;
 
 namespace camel::compile::gir {
-/// The URI of the entering operator (`prelude.cml`, `#op(':op/enter')`). It is compared here
-/// because the question is about a **call the program wrote** against the one
-/// `Builder::castNodeTo` writes itself: the record's answer is asked where a graph is read
-/// (`camel/runtime/oper_shape.h`), and this is the builder deciding what a call means.
-static constexpr std::string_view kEnterUri = ":op/enter";
+// The entering operator (`prelude.cml`, `#op(':op/enter')`), whose id the compiler resolved once
+// (`camel::core::constructedOperators`). It is asked by id rather than by URI because the question
+// is about a **call the program wrote** against the one `Builder::castNodeTo` writes itself: both
+// are the same operator, and the builder decides what the call means by comparing that identity.
 
 node_handle_t
 Builder::visitLinkNode(const GCT::node_ptr_t &gct, std::optional<GCT::AssignmentForm> store) {
@@ -1172,14 +1171,19 @@ refinedArg                = refineExtentNodeOf(
                 targetOperator = *resolved;
                 if (inPlaceCalls_.contains(gct)) {
                     // Written by inPlaceRebindingOf, which checked that this kernel has an
-                    // in-place form: the call works on the array var/take hands it.
+                    // in-place form: the call works on the array var/take hands it. The form is
+                    // an operator of its own and the table named it here (`setInPlaceForm`
+                    // interned it when the module declared the pair), so the id is the same
+                    // answer it gave then -- the declaration records it, and the node is built
+                    // from the id.
                     const auto form =
                         camel::core::OperatorTable::instance().inPlaceForm(targetOperator->uri());
                     GUARD(form.has_value(), "An in-place rebinding lost its in-place form.");
                     targetOperator = std::make_shared<OperatorIndex>(
                         targetOperator->name(),
                         targetOperator->funcType(),
-                        *form);
+                        *form,
+                        camel::core::OperatorTable::instance().intern(*form));
                 }
                 targetNode = currGraph_->addOperNode(targetOperator, 0);
                 stampPermissions(targetNode);
@@ -1894,11 +1898,14 @@ refinedArg                = refineExtentNodeOf(
             // run, and the refusal here when it is a constant, where the step is written. A
             // constant step that is not 0 is left to the call: the array it builds is the value
             // of the program, and building a constant one here would be folding, not checking.
-            // The operator is known by its URI, not by the name the call reached it by: an
+            // The operator is known by its id, not by the name the call reached it by: an
             // imported name and an alias reach the same one, and a step of 0 is the same fault
-            // however it was spelled.
-            if (targetOperator->uri() == ":struct/range" && normInputs.size() == 3 &&
-                withInputs.empty()) {
+            // however it was spelled. Which form the operator is -- and so that its third ordinary
+            // argument is the step -- is its record's answer (`Record::subscript`), not a URI this
+            // file would have to spell.
+            if (camel::core::OperatorTable::instance().subscriptFormOf(targetOperator->oper()) ==
+                    camel::ops::SubscriptForm::Range &&
+                normInputs.size() == 3 && withInputs.empty()) {
                 const auto stepIsZero = [](const data_ptr_t &data) {
                     if (const auto integer = std::dynamic_pointer_cast<LongData>(data);
                         integer != nullptr) {
@@ -1925,15 +1932,17 @@ refinedArg                = refineExtentNodeOf(
             // `__slice__` and the function form's `slice(t, axis, start, end, step, written)`, both
             // the core's `:op/slice_sub`, or `:op/slice_str` on a string -- so the check reads the
             // node and not the spelling: one fault has one answer, the catalog's `SliceStepZero`,
-            // with the caret under the step. The step is the node's fifth ordinary argument (the
+            // with the caret under the step. "This is a slice" is the operator record's answer
+            // (`Record::subscript`), which the three operators state where they are registered: no
+            // file spells one of their URIs, and none of them has an id. The step is the node's
+            // fifth ordinary argument (the
             // value, the axis, the two bounds, the step; the sixth is the mask that says which of
             // the two bounds were written, and a call that stops at five words wrote no mask, so it
             // is read as "both bounds", 3). A step that is not constant is a fault of the run
             // instead (RuntimeDiag::InvalidArgument, and a tensor's own slice checks its step with
             // the shape facts it holds).
-            if ((targetOperator->uri() == ":op/slice_sub" ||
-                 targetOperator->uri() == ":op/slice_str" ||
-                 targetOperator->uri() == ":op/slice_bytes") &&
+            if (camel::core::OperatorTable::instance().subscriptFormOf(targetOperator->oper()) ==
+                    camel::ops::SubscriptForm::Slice &&
                 normInputs.size() >= 5 && normInputs.size() <= 6 && withInputs.empty() &&
                 gct->size() >= 1 && gct->at(0)->type() == GCT::NodeKind::DREF) {
                 const auto stepIsZero = [](const data_ptr_t &data) {
@@ -1964,7 +1973,8 @@ refinedArg                = refineExtentNodeOf(
                 targetOperator = std::make_shared<OperatorIndex>(
                     targetOperator->name(),
                     targetOperator->funcType(),
-                    *form);
+                    *form,
+                    camel::core::OperatorTable::instance().intern(*form));
             }
             rejectLiteralConversion(ops->name(), targetOperator->funcType(), normInputs, gct);
             // The empty literal `[]` stated no element type where it was written, and the type
@@ -2172,7 +2182,8 @@ refinedArg                = refineExtentNodeOf(
             // is the program's to write, so the call is a type error here and no node is built.
             // This is the program-written half of the boundary `Builder::castNodeTo` states for
             // the compiler-written one, and the two answer with one diagnostic.
-            if (targetOperator->uri() == kEnterUri && !normInputTypes.empty() &&
+            if (targetOperator->oper() == camel::core::constructedOperators().enter &&
+                !normInputTypes.empty() &&
                 normInputTypes[0] != nullptr &&
                 (targetOperator->funcType() == nullptr ||
                  targetOperator->funcType()->exitType() == nullptr ||
