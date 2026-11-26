@@ -33,6 +33,7 @@
 #include "camel/runtime/graph_ref_check.h"
 #include "camel/runtime/oper_shape.h"
 #include "camel/runtime/program.h"
+#include "camel/runtime/type_agreement.h"
 #include "camel/utils/assert.h"
 
 #include <algorithm>
