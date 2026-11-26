@@ -32,8 +32,8 @@
  * unread self-check is not a green one.
  *
  * The interpreter is `$CAMEL_PWSH` when that is set (a host whose PowerShell is not on `PATH`), and
- * `pwsh` from `PATH` otherwise. One resolution for both modes, so the probe and the run cannot
- * disagree about which binary they mean.
+ * otherwise `pwsh` from `PATH`, then on Windows `powershell` (Windows PowerShell 5.1). One resolution
+ * for both modes, so the probe and the run cannot disagree about which binary they mean.
  */
 import { spawnSync } from 'node:child_process'
 import fs from 'node:fs'
@@ -45,29 +45,46 @@ const REPO_ROOT = path.resolve(HERE, '..', '..')
 const USAGE = `usage: node test/tools/pwsh-selfcheck.mjs --probe
        node test/tools/pwsh-selfcheck.mjs <self-check.ps1> [args...]`
 
-function interpreter() {
+// The interpreters tried, in order. On Windows, Windows PowerShell 5.1 is the fallback: the tools
+// these self-checks test are run on Windows workstations, which often have no pwsh, and a self-check
+// that only runs where pwsh happens to be installed is one that never runs.
+function interpreters() {
     const named = process.env.CAMEL_PWSH
-    return named && named.trim() ? named.trim() : 'pwsh'
+    if (named && named.trim()) return [named.trim()]
+    return process.platform === 'win32' ? ['pwsh', 'powershell'] : ['pwsh']
 }
 
-/** Where pwsh is, or why there is none. Never returns "no answer" as "fine". */
+// Windows PowerShell refuses to run a script file under the default execution policy of many
+// machines; the policy is not what these self-checks are about.
+function scriptArgs(script) {
+    const policy = process.platform === 'win32' ? ['-ExecutionPolicy', 'Bypass'] : []
+    return ['-NoProfile', ...policy, '-File', script]
+}
+
+/** Which interpreter answers, or why none does. Never returns "no answer" as "fine". */
 function probe() {
-    const exe = interpreter()
     const env = `${process.platform}${process.env.CAMEL_PWSH ? ', CAMEL_PWSH' : ''}`
-    const run = spawnSync(exe, ['-NoProfile', '-Command', '$PSVersionTable.PSVersion.ToString()'], {
-        encoding: 'utf8',
-    })
-    if (run.error?.code === 'ENOENT') {
-        return { ok: false, reason: `no '${exe}' on this host (${env})` }
+    const reasons = []
+    for (const exe of interpreters()) {
+        const run = spawnSync(exe, ['-NoProfile', '-Command', '$PSVersionTable.PSVersion.ToString()'], {
+            encoding: 'utf8',
+        })
+        if (run.error?.code === 'ENOENT') {
+            reasons.push(`no '${exe}' on this host (${env})`)
+            continue
+        }
+        if (run.error) {
+            reasons.push(`'${exe}' could not be started (${env}): ${run.error.message}`)
+            continue
+        }
+        const text = `${run.stdout || ''}${run.stderr || ''}`.trim()
+        if (run.status !== 0) {
+            reasons.push(`'${exe}' exited ${run.status} when asked its version (${env}): ${text || 'no output'}`)
+            continue
+        }
+        return { ok: true, exe, version: text.split(/\r?\n/)[0] || 'unknown version' }
     }
-    if (run.error) {
-        return { ok: false, reason: `'${exe}' could not be started (${env}): ${run.error.message}` }
-    }
-    const text = `${run.stdout || ''}${run.stderr || ''}`.trim()
-    if (run.status !== 0) {
-        return { ok: false, reason: `'${exe}' exited ${run.status} when asked its version (${env}): ${text || 'no output'}` }
-    }
-    return { ok: true, exe, version: text.split(/\r?\n/)[0] || 'unknown version' }
+    return { ok: false, reason: reasons.join('; ') }
 }
 
 const argv = process.argv.slice(2)
@@ -96,7 +113,7 @@ if (!found.ok) {
     console.error(`the run reached a host its own probe said has a pwsh, and it does not: ${found.reason}`)
     process.exit(127)
 }
-const child = spawnSync(found.exe, ['-NoProfile', '-File', script, ...argv.slice(1)], { stdio: 'inherit' })
+const child = spawnSync(found.exe, [...scriptArgs(script), ...argv.slice(1)], { stdio: 'inherit' })
 if (child.error) {
     console.error(`'${found.exe} -File ${script}' could not be started: ${child.error.message}`)
     process.exit(127)
