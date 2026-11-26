@@ -35,24 +35,26 @@ if [ "$1" = "origin" ]; then
     #
     # This is the one place the checker is called from. A second caller in `scripts/hooks/pre-push`
     # would be the same question asked twice, and the two answers would drift.
-    while IFS=' ' read -r pair_local pair_remote pair_ref; do
-        [ -n "$pair_ref" ] || continue
-        # A delete sends no content.
-        case "$pair_local" in
+    # git sends `<local ref> <local sha> <remote ref> <remote sha>`, one line per ref. The sha on the
+    # left is all zeros for a delete, which sends no content and has nothing to judge; the sha on the
+    # right is all zeros for a ref the remote does not have yet, which has no range to diff.
+    while IFS=' ' read -r local_ref local_sha remote_ref remote_sha; do
+        [ -n "$remote_ref" ] || continue
+        case "$local_sha" in
             *[!0]*) : ;;
             *) continue ;;
         esac
-        case "$pair_remote" in
+        case "$remote_sha" in
             *[!0]*) : ;;
             *)
-                echo "pre-push: $pair_ref is new on origin: no tip to compare, so no line to judge." >&2
+                echo "pre-push: $remote_ref is new on origin: no tip to compare, so no line to judge." >&2
                 continue
                 ;;
         esac
-        node "$top/scripts/check-process-traces.mjs" --root "$top" --added-from "$pair_remote" --head "$pair_local"
+        node "$top/scripts/check-process-traces.mjs" --root "$top" --added-from "$remote_sha" --head "$local_sha"
         state=$?
         if [ "$state" -ne 0 ]; then
-            echo "pre-push: refusing to push $pair_ref: the lines this push adds are named above (node exit $state)." >&2
+            echo "pre-push: refusing to push $remote_ref: the lines this push adds are named above (node exit $state)." >&2
             echo 'pre-push: the traces a tree inherits are not this push'"'"'s; the ones it writes are.' >&2
             exit 1
         fi

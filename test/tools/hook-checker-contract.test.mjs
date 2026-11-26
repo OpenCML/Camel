@@ -196,7 +196,7 @@ function asKey(one, base) {
     return resolved.replace(/\\/g, '/').replace(/\/+$/, '').toLowerCase();
 }
 
-function measure(hookSource, shell) {
+function measure(hookSource, shell, line = 'push') {
     const { dir, recordPath, base, tip } = buildFixture(hookSource);
     const readings = { dir, recordPath, entries: [] };
     let removed = false;
@@ -209,7 +209,10 @@ function measure(hookSource, shell) {
         // husky's dispatcher starts the hook as `sh -e`, and the line it prints when the hook fails
         // is that dispatcher's; the same flag is used here, or a hook whose first command fails
         // would run on and this file would measure a state a real push never reaches.
-        const refLine = `${branch} ${tip} ${branch} ${base}\n`;
+        const refLine =
+            line === 'delete'
+                ? `(delete) ${'0'.repeat(40)} ${branch} ${base}\n`
+                : `${branch} ${tip} ${branch} ${base}\n`;
         try {
             readings.hookOutput = execFileSync(
                 shell.sh,
@@ -302,6 +305,24 @@ check(
     calls.length > 0,
     `no call to ${checkerName} was recorded (${readings.entries.length} node script(s) started)`,
 );
+// A push that only deletes a branch sends no content. There is no range to diff and nothing to
+// judge, so the checker must not be started at all: a run of it over a range that does not exist
+// would answer "nothing added" and read exactly like a pass.
+let deletion = null;
+try {
+    deletion = measure(fs.readFileSync(hookPath, 'utf8'), shell, 'delete');
+} catch (error) {
+    deletion = { error: error.message, entries: [] };
+}
+const deletionCalls = (deletion.entries ?? []).filter((entry) =>
+    String(entry.argv?.[0] ?? '').endsWith(checkerName),
+);
+check(
+    'a push that only deletes a branch starts no checker',
+    deletionCalls.length === 0 && deletion.hookStatus === 0,
+    `${deletionCalls.length} call(s) recorded, hook exit ${deletion.hookStatus ?? deletion.error}`,
+);
+
 check(
     'the checker is called from one place, and not the other',
     calls.length === 1 && !fs.readFileSync(seatHook, 'utf8').includes(checkerName),
