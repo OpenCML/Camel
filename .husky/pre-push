@@ -9,10 +9,54 @@
 # `origin`, so it is left out: a measurement stays possible on a tree whose comments still have
 # to be cleaned, which is the order the work happens in.
 #
-# One script, and the order inside it is the order the rules need: the develop and integration
-# rules read the refs git passes on stdin, and a reader that runs after another one may find the
-# stream already drained. An empty stream reads as "no push to develop", which is how a lock that
-# is installed would let through the thing it exists to stop. The trace check is a rule of its own
-# and reads the same stream, for the same reason. See scripts/hooks/pre-push.
+# The refs git sends arrive on stdin once, and both halves of this hook read them: the develop and
+# integration rules in `scripts/hooks/pre-push`, and the trace check below. A reader that runs
+# second may find the stream already drained, and an empty stream reads as "no push to develop" --
+# the lock passing the thing it exists to stop. So the stream is read here, once, and handed to the
+# other half, which then reads the same lines it would have read from git.
 top=$(git rev-parse --show-toplevel 2>/dev/null) || top='.'
-sh "$top/scripts/hooks/pre-push" "$@" || exit $?
+refs=$(cat)
+printf '%s\n' "$refs" | sh "$top/scripts/hooks/pre-push" "$@" || exit $?
+
+if [ "$1" = "origin" ]; then
+    # The tree is named, not inherited. The checker has no default root, because the directory a
+    # process runs in is not the tree a reader meant -- and a hook's directory is whatever git gave
+    # it, so `.` here would be that directory and not the tree the push leaves from. `top` is the
+    # worktree this hook already resolved for the develop lock, and both the script and the tree are
+    # read from it, so the reading names the same tree the push publishes. When git can name no
+    # worktree, `top` is `.` and the checker reads nothing, which it reports and refuses: a tree it
+    # could not read is not a tree it passed.
+    #
+    # What a push is answerable for is the lines it adds: the diff from the tip it is sent to, to the
+    # commit it sends. Judging the whole tree refused a push over files its author had never opened,
+    # which is how a check teaches the one bypass it cannot see. A ref with no tip on the remote has
+    # no range, so it says so and passes; the push that later publishes those commits to `develop`
+    # or `integration` diffs them against those tips, which is where they are judged.
+    #
+    # This is the one place the checker is called from. A second caller in `scripts/hooks/pre-push`
+    # would be the same question asked twice, and the two answers would drift.
+    while IFS=' ' read -r pair_local pair_remote pair_ref; do
+        [ -n "$pair_ref" ] || continue
+        # A delete sends no content.
+        case "$pair_local" in
+            *[!0]*) : ;;
+            *) continue ;;
+        esac
+        case "$pair_remote" in
+            *[!0]*) : ;;
+            *)
+                echo "pre-push: $pair_ref is new on origin: no tip to compare, so no line to judge." >&2
+                continue
+                ;;
+        esac
+        node "$top/scripts/check-process-traces.mjs" --root "$top" --added-from "$pair_remote" --head "$pair_local"
+        state=$?
+        if [ "$state" -ne 0 ]; then
+            echo "pre-push: refusing to push $pair_ref: the lines this push adds are named above (node exit $state)." >&2
+            echo 'pre-push: the traces a tree inherits are not this push'"'"'s; the ones it writes are.' >&2
+            exit 1
+        fi
+    done <<EOF
+$refs
+EOF
+fi

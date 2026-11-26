@@ -24,9 +24,14 @@
  * another file's subject, and its own text carries a work item number and a date, which the checker
  * this fixture runs would refuse and turn into a red this file does not mean.
  *
- * The file read here is `scripts/hooks/pre-push`, which is where the push rules live; `.husky/pre-push`
- * hands every push to it and holds no rule of its own. A test that read the dispatcher would be
- * reading a file that cannot fail the way this one does.
+ * Two files hold the push rules and the split is the contract: `scripts/hooks/pre-push` carries the
+ * develop lock and the arrival shape, `.husky/pre-push` hands the refs to it and then judges the
+ * lines the push adds. The checker is called from `.husky/pre-push` and from nowhere else -- two
+ * call sites would be one question asked twice, and the two answers would drift -- so the file read
+ * here is that one, and the other half is copied into the fixture as it stands.
+ *
+ * The stream is read once in `.husky/pre-push` and handed to the other half, because the first reader
+ * drains it: a hook that reads it second sees nothing, and nothing reads as "no push to develop".
  *
  * The push it sends is two real commits against each other, not a pair of zeros: a ref with no tip on
  * the remote has no range, so the hook says it has nothing to compare and passes without starting the
@@ -48,7 +53,8 @@ import { fileURLToPath } from 'node:url';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const treeRoot = path.resolve(here, '..', '..');
-const defaultHook = path.join(treeRoot, 'scripts', 'hooks', 'pre-push');
+const defaultHook = path.join(treeRoot, '.husky', 'pre-push');
+const seatHook = path.join(treeRoot, 'scripts', 'hooks', 'pre-push');
 const checkerFile = path.join(treeRoot, 'scripts', 'check-process-traces.mjs');
 const checkerName = 'check-process-traces.mjs';
 const branch = 'refs/heads/a-branch-this-fixture-never-sends';
@@ -152,7 +158,10 @@ function buildFixture(hookSource) {
     const recordPath = path.join(dir, 'record.jsonl');
     // The hook under test, as it stands: a stand-in for it would measure the stand-in, which is how
     // this fixture spent a while passing over a hook that never started the checker.
-    write(dir, 'scripts/hooks/pre-push', hookSource);
+    write(dir, '.husky/pre-push', hookSource);
+    // The other half, as it stands: the develop lock and the arrival shape, and no call to the
+    // checker. A stand-in for it would measure the stand-in.
+    write(dir, 'scripts/hooks/pre-push', fs.readFileSync(seatHook, 'utf8'));
     write(dir, 'src/clean.c', '// The program reads nothing and answers zero.\nint main(void) { return 0; }\n');
     write(dir, 'checker-real/check-process-traces.mjs', fs.readFileSync(checkerFile, 'utf8'));
     write(
@@ -204,7 +213,7 @@ function measure(hookSource, shell) {
         try {
             readings.hookOutput = execFileSync(
                 shell.sh,
-                ['-e', 'scripts/hooks/pre-push', 'origin', url, branch, tip, branch, base],
+                ['-e', '.husky/pre-push', 'origin', url, branch, tip, branch, base],
                 { cwd: dir, env: hookEnv(shell.root), input: refLine, encoding: 'utf8' },
             );
             readings.hookStatus = 0;
@@ -292,6 +301,11 @@ check(
     'the hook reaches the checker',
     calls.length > 0,
     `no call to ${checkerName} was recorded (${readings.entries.length} node script(s) started)`,
+);
+check(
+    'the checker is called from one place, and not the other',
+    calls.length === 1 && !fs.readFileSync(seatHook, 'utf8').includes(checkerName),
+    `${calls.length} call(s) recorded; ${seatHook} ${fs.readFileSync(seatHook, 'utf8').includes(checkerName) ? 'also calls it' : 'does not'}`,
 );
 check(
     'the checker is told which tree to read',
