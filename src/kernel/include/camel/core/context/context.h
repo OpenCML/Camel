@@ -3,12 +3,13 @@
 
 #pragma once
 
+#include "camel/core/context/module_resolver.h"
 #include "camel/core/error/diagnostics.h"
 #include "camel/core/error/runtime.h"
-#include "camel/core/context/module_resolver.h"
-#include "camel/runtime/graph_id.h"
 #include "camel/core/slot.h"
 #include "camel/core/source/manager.h"
+#include "camel/runtime/block_programs.h"
+#include "camel/runtime/graph_id.h"
 
 #include <fstream>
 #include <functional>
@@ -45,7 +46,7 @@ class Store;
 namespace camel::core::module {
 class Module;
 class ProgramExports;
-}
+} // namespace camel::core::module
 
 namespace camel::compile {
 class SemanticRecorder;
@@ -146,6 +147,8 @@ class Context : public std::enable_shared_from_this<Context> {
     std::unique_ptr<camel::runtime::fact::FactStore> facts_;
     /// See definitions(). Created on first use.
     std::unique_ptr<camel::runtime::DefinitionStore> definitions_;
+    /// See blockPrograms(). Created on first use.
+    std::unique_ptr<camel::runtime::BlockPrograms> blockPrograms_;
     error::diagnostic_sink_ptr_t runtimeDiagSink_;
     error::runtime_error_reporter_ptr_t runtimeErrorReporter_;
     camel::source::source_context_ptr_t sourceContext_;
@@ -187,9 +190,7 @@ class Context : public std::enable_shared_from_this<Context> {
     /// is set instead when the prefix drops more components than the name has; no candidate and
     /// no directory lookup exists then.
     std::vector<std::string> getModuleNameCandidates(
-        const std::string &currentModule,
-        const std::string &rawImportName,
-        std::string &problem);
+        const std::string &currentModule, const std::string &rawImportName, std::string &problem);
     /// The resolved name a relative spelling stands for (`..lib` in `a.b` is `lib`), or empty and
     /// `problem` set when it drops more components than `currentModule` has.
     std::string resolveRelativeModuleName(
@@ -315,8 +316,8 @@ class Context : public std::enable_shared_from_this<Context> {
     const camel::runtime::Program *installRuntimeProgram(const camel::runtime::Program *program);
     /// installRuntimeProgram, but only while `expected` is still the installed program (see
     /// GCGraphManager::replaceRootIfCurrent): answers whether it installed it.
-    bool installRuntimeProgramIfCurrent(const camel::runtime::Program *expected,
-                                        const camel::runtime::Program *program);
+    bool installRuntimeProgramIfCurrent(
+        const camel::runtime::Program *expected, const camel::runtime::Program *program);
     const camel::runtime::Program *currentRuntimeProgram() const;
     void clearRuntimeGraphs();
     /// A new, empty Program owned by the context, for whoever builds one.
@@ -340,8 +341,7 @@ class Context : public std::enable_shared_from_this<Context> {
     /// nullptr when none does. The graph is named by its identity, not by a representation: a
     /// reader holding a `const graph::Graph *` -- a callee, a fact's anchor, a pass's root -- asks
     /// here without knowing which representation it has, and a draft answers nullptr.
-    const camel::runtime::Program *
-    programOfRuntimeGraph(const camel::graph::Graph &graph) const;
+    const camel::runtime::Program *programOfRuntimeGraph(const camel::graph::Graph &graph) const;
     /// See GCGraphManager::pin: programs the core keeps for the context's lifetime (the
     /// definition graphs of operators) and programs a holder keeps outside the heap for as long
     /// as it holds them (a draft group's, see camel/runtime/draft_session.h#GraphDraftGroup).
@@ -358,9 +358,7 @@ class Context : public std::enable_shared_from_this<Context> {
     /// The same store, through a context a caller holds only for reading: a fact store is a cache,
     /// and asking it changes nothing the context is. A reader that has the program and nothing else
     /// (a printer, a query) asks it this way.
-    camel::runtime::fact::FactStore &facts() const {
-        return const_cast<Context *>(this)->facts();
-    }
+    camel::runtime::fact::FactStore &facts() const { return const_cast<Context *>(this)->facts(); }
     /// The facts of this context's frozen graphs (camel/facts/facts.h): one store for the whole
     /// context, keyed by the graph as a value, made here rather than by whoever asks first so that
     /// the graph manager can tell it about every graph the context makes. A graph's facts end with
@@ -371,6 +369,10 @@ class Context : public std::enable_shared_from_this<Context> {
     /// their libraries are compiled the first time a definition is asked for, and their
     /// graphs kept (pinned) for as long as the context.
     camel::runtime::DefinitionStore &definitions();
+    /// The programs the bodies of blocks compiled to, in this context (camel/runtime/
+    /// block_programs.h): registered when a block is compiled, pinned here so they outlive the
+    /// module, and read by the block's operator when it runs.
+    camel::runtime::BlockPrograms &blockPrograms();
     const ExecutorManager &execMgr() const { return *exeMgr_; }
 
     void setMainModule(module_ptr_t module) { mainModule_ = module; }
@@ -500,17 +502,17 @@ class Context : public std::enable_shared_from_this<Context> {
     /**
      * The templates of the generic rules this context has compiled, and the instances made from
      * them: one table per context, indexed by the id a rule value keeps (`ruleId - 1`), so that a
-     * rule value holds an id rather than a pointer and an instance is made once. Opaque here: the table's type belongs to
-     * camel/compile/gir/rule_templates.h, which creates it on first use.
+     * rule value holds an id rather than a pointer and an instance is made once. Opaque here: the
+     * table's type belongs to camel/compile/gir/rule_templates.h, which creates it on first use.
      */
     std::shared_ptr<void> &genericRuleTemplates() { return genericRuleTemplates_; }
 
     /**
      * The rule values this context has already compiled for a rewrite engine, keyed by the values
      * and the types of the program they were compiled for: a pass that runs an engine twice reads
-     * the rules it compiled the first time instead of compiling them again. Opaque here: the table's
-     * type belongs to the engine (modules/rewrite), which creates it on first use and keeps the
-     * constant slots of the compiled patterns relocatable for the context's life.
+     * the rules it compiled the first time instead of compiling them again. Opaque here: the
+     * table's type belongs to the engine (modules/rewrite), which creates it on first use and keeps
+     * the constant slots of the compiled patterns relocatable for the context's life.
      */
     std::shared_ptr<void> &compiledRuleSets() { return compiledRuleSets_; }
 
@@ -529,8 +531,8 @@ class Context : public std::enable_shared_from_this<Context> {
     /** Called by loadCmoModule to retain a loaded .cmo handle and prevent unloading. */
     void addLoadedDll(const std::string &path, void *handle) { loadedDllHandles_[path] = handle; }
 
-    module_ptr_t importModule(
-        const std::string &rawModuleName, const module::Module *importer = nullptr);
+    module_ptr_t
+    importModule(const std::string &rawModuleName, const module::Module *importer = nullptr);
     /// Whether a file for the module is found on the search paths, whether or not it can be
     /// loaded: what tells a name with no module behind it from a module that is there and cannot
     /// be used.

@@ -50,11 +50,12 @@ OperatorTraits OperatorTable::traitsOf(const sem::OperatorSemantics &facts) {
         .mayFault = facts.mayFault(),
         // Calling the function values it receives (declared, or by calling elements) is what
         // makes the call depend on those functions.
-        .callsGraphs   = facts.callsGraphs || facts.elementCalls.has_value(),
-        .readsGraphs   = facts.readsGraphs,
-        .macro         = facts.macro,
-        .foldable      = facts.foldable,
-        .withAfterNorm = facts.withAfterNorm,
+        .callsGraphs     = facts.callsGraphs || facts.elementCalls.has_value(),
+        .readsGraphs     = facts.readsGraphs,
+        .macro           = facts.macro,
+        .foldable        = facts.foldable,
+        .mayNotTerminate = facts.mayNotTerminate,
+        .withAfterNorm   = facts.withAfterNorm,
     };
 }
 
@@ -138,6 +139,32 @@ void stateUsesInRecord(
     statement.uses.byCpp = true;
     registry.declare(recordId, statement);
 }
+
+/// The fault fact of the record `recordId` names, stated as "no call of it fails" -- the other
+/// entrance to the same record, called by `set` when the traits say `mayFault = false`.
+///
+/// The two absences are not one: a record whose `panic` nobody stated says **not known**, and a
+/// record that states `panic = false` says **there are none**. The reader (`Record::mayFault`)
+/// answers "may fail" for the first and "cannot fail" for the second, which is right -- but only if
+/// a stated false is written where a declaration made one. Writing both as "no statement" would
+/// read a declared certainty as ignorance, and writing both as "may fail" would read ignorance as a
+/// fact.
+void stateFaultsInRecord(std::uint32_t recordId, std::string_view uri) {
+    if (recordId == 0) {
+        return;
+    }
+    auto &registry = camel::ops::Registry::instance();
+    if (const camel::ops::Record *record = registry.find(recordId);
+        record != nullptr && record->panic.stated()) {
+        return; // already stated by whoever owns the record: one writer of one fact
+    }
+    camel::ops::Record statement;
+    statement.key         = sem::OperatorKey::of(uri);
+    statement.panic.value = false;
+    statement.panic.byCpp = true;
+    registry.declare(recordId, statement);
+}
+
 } // namespace
 
 void OperatorTable::set(std::string_view uri, OperatorTraits traits) {
@@ -168,12 +195,13 @@ void OperatorTable::set(std::string_view uri, OperatorTraits traits) {
         // list would leave the record saying it touches nothing.
         facts.resources.reset();
     }
-    facts.elementwise   = traits.elementwise;
-    facts.callsGraphs   = traits.callsGraphs;
-    facts.readsGraphs   = traits.readsGraphs;
-    facts.macro         = traits.macro;
-    facts.foldable      = traits.foldable;
-    facts.withAfterNorm = traits.withAfterNorm;
+    facts.elementwise     = traits.elementwise;
+    facts.callsGraphs     = traits.callsGraphs;
+    facts.readsGraphs     = traits.readsGraphs;
+    facts.macro           = traits.macro;
+    facts.foldable        = traits.foldable;
+    facts.mayNotTerminate = traits.mayNotTerminate;
+    facts.withAfterNorm   = traits.withAfterNorm;
     // "Never faults" is the empty fault table. Saying it may fault (the default) does not take
     // back a declared empty table; a declaration that does contradict it is refused when the
     // semantics are declared (checkSemantics).
@@ -196,6 +224,12 @@ void OperatorTable::set(std::string_view uri, OperatorTraits traits) {
     // states one.
     if (declarations_.back()->resources) {
         stateUsesInRecord(entry.record, uri, *declarations_.back()->resources);
+    }
+    // And the fault fact, the same way: a trait that says "never faults" is a statement, so it is
+    // written into the record as one. A trait that says it may fault writes nothing -- the record
+    // then says "not known", and inventing a statement for it would turn an absence into a value.
+    if (!traits.mayFault) {
+        stateFaultsInRecord(entry.record, uri);
     }
 }
 
@@ -267,7 +301,12 @@ bool OperatorTable::mayBeRecomputed(OperId id) const {
     // for it, for the reason the table already states on `isMacro` (a call of it is what
     // `std::macro` evaluates, operator_table.h).
     return facts != nullptr && facts->declaredEffect != sem::Effect::Undeclared &&
-           facts->effect() == sem::Effect::Pure && facts->foldable && !facts->macro;
+           facts->effect() == sem::Effect::Pure && facts->foldable && !facts->macro &&
+           // A call that may not end is not one a pass may run again: moving or copying it changes
+           // when the program ends, and evaluating it early could end nothing at all. The fact has
+           // a field of its own (`OperatorTraits::mayNotTerminate`), so `foldable` stays what it
+           // says.
+           !facts->mayNotTerminate;
 }
 
 bool OperatorTable::mayBeRecomputed(std::string_view uri) const {

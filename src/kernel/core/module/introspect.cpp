@@ -4,8 +4,8 @@
 #include "camel/core/module/introspect.h"
 
 #include "camel/core/operator_traits.h"
-#include "camel/ops/operator_record.h"
 #include "camel/core/type/resolver.h"
+#include "camel/ops/operator_record.h"
 #include "camel/utils/log.h"
 
 #include <algorithm>
@@ -58,7 +58,7 @@ std::string jsonList(std::string_view commaSeparated) {
 std::string semanticsJson(const sem::OperatorSemantics &s) {
     const sem::NumericSemantics &n = s.numeric;
     std::string out                = "{\"key\":" + jsonString(s.key.toString()) +
-                      ",\"numeric\":" + jsonString(sem::numericClassName(n.cls));
+                                     ",\"numeric\":" + jsonString(sem::numericClassName(n.cls));
     if (n.compute == type::TypeCode::Float32) {
         out += ",\"compute\":\"f32\"";
     } else if (n.compute == type::TypeCode::Float64) {
@@ -69,10 +69,11 @@ std::string semanticsJson(const sem::OperatorSemantics &s) {
     }
     out += ",\"sensitive_to\":" + jsonList(sem::permissionsText(n.sensitiveTo));
     std::string departures;
-    for (const auto &[ieee, name] : {std::pair{n.specials.nans, "nans"},
-                                     std::pair{n.specials.infinities, "infinities"},
-                                     std::pair{n.specials.signedZeros, "signed_zeros"},
-                                     std::pair{n.specials.subnormals, "subnormals"}}) {
+    for (const auto &[ieee, name] :
+         {std::pair{n.specials.nans, "nans"},
+          std::pair{n.specials.infinities, "infinities"},
+          std::pair{n.specials.signedZeros, "signed_zeros"},
+          std::pair{n.specials.subnormals, "subnormals"}}) {
         if (!ieee) {
             departures += (departures.empty() ? "" : ", ") + std::string(name);
         }
@@ -110,19 +111,21 @@ std::string semanticsJson(const sem::OperatorSemantics &s) {
                 p.kind == sem::DefinitionParam::Kind::Norm ? "norm" : "with",
                 p.operand);
             if (p.fallback) {
-                params += " = " + std::visit(
-                                      [](const auto &v) {
-                                          if constexpr (std::is_same_v<std::decay_t<decltype(v)>, bool>) {
-                                              return std::string(v ? "true" : "false");
-                                          } else {
-                                              return std::format("{}", v);
-                                          }
-                                      },
-                                      *p.fallback);
+                params +=
+                    " = " + std::visit(
+                                [](const auto &v) {
+                                    if constexpr (std::is_same_v<std::decay_t<decltype(v)>, bool>) {
+                                        return std::string(v ? "true" : "false");
+                                    } else {
+                                        return std::format("{}", v);
+                                    }
+                                },
+                                *p.fallback);
             }
         }
         out += ",\"definition\":" +
-               jsonString(std::format("{}::{}({})", s.definition->module, s.definition->function, params));
+               jsonString(
+                   std::format("{}::{}({})", s.definition->module, s.definition->function, params));
     }
     return out + ",\"algorithm\":" + jsonString(n.algorithm) + "}";
 }
@@ -152,12 +155,12 @@ void collectOperators(
                 d.withCount = dynamic->withCount();
                 d.normCount = dynamic->normCount();
             } else if (
-                auto *declared =
-                    dynamic_cast<type::DeclaredFuncTypeResolver *>(resolver.get())) {
+                auto *declared = dynamic_cast<type::DeclaredFuncTypeResolver *>(resolver.get())) {
                 // A body-less declaration: the written signature says the parameter counts.
                 // A list that ends in a pack follows its arguments: -1, as a computed rule's does.
-                d.withCount =
-                    declared->funcType()->hasWithRest() ? -1 : static_cast<int>(declared->withCount());
+                d.withCount = declared->funcType()->hasWithRest()
+                                  ? -1
+                                  : static_cast<int>(declared->withCount());
                 d.normCount =
                     declared->funcType()->hasRest() ? -1 : static_cast<int>(declared->normCount());
             }
@@ -259,8 +262,9 @@ void dumpOperators(const std::vector<module_ptr_t> &modules, std::ostream &os) {
                << ",\"signature\":" << jsonString(d.signature);
             // The access list and the two facts derived from it and from the fault table: what the
             // operator touches (each item with its read or write mode) and whether that reaches
-            // outside the program (design principles 3.3, docs/design/op-semantics/README.cn.md 4.2).
-            const auto id = traits.lookup(d.uri);
+            // outside the program (design principles 3.3,
+            // docs/design/op-semantics/README.cn.md 4.2).
+            const auto id       = traits.lookup(d.uri);
             const auto declared = traits.find(d.uri);
             const std::vector<sem::ResourceAccess> accesses =
                 id ? traits.accessList(*id) : std::vector<sem::ResourceAccess>{};
@@ -268,20 +272,26 @@ void dumpOperators(const std::vector<module_ptr_t> &modules, std::ostream &os) {
             // states the `uses` clause. A reader that asks the record reads this, and an operator
             // whose two entrances both said nothing is the one to fill in -- the check
             // `test/cases/feat/modules/oprecord_uses.py` lists them by these two fields.
-            const camel::ops::Record *record =
-                id ? traits.recordOf(*id) : nullptr;
-            os << ",\"accesses\":" << accessListJson(accesses)
-               << ",\"accesses_declared\":"
+            const camel::ops::Record *record = id ? traits.recordOf(*id) : nullptr;
+            os << ",\"accesses\":" << accessListJson(accesses) << ",\"accesses_declared\":"
                << ((id && traits.declaresAccesses(*id)) ? "true" : "false")
-               << ",\"record\":" << (record != nullptr ? "true" : "false")
-               << ",\"uses_stated\":"
+               << ",\"record\":" << (record != nullptr ? "true" : "false") << ",\"uses_stated\":"
                << ((record != nullptr && record->uses.stated()) ? "true" : "false")
                // The record's own reading of the clause, beside the `purity` the declaration
                // states: a reader that asks the record and one that asks the table are reading
                // the same answer exactly while these two agree.
                << ",\"clause_pure\":" << ((record != nullptr && record->pure()) ? "true" : "false")
-               << ",\"external\":" << (reachOf(*id, traits) ? "true" : "false")
-               << ",\"may_fault\":" << ((!declared || declared->mayFault) ? "true" : "false");
+               << ",\"external\":" << (reachOf(*id, traits) ? "true" : "false") << ",\"may_fault\":"
+               << ((!declared || declared->mayFault) ? "true" : "false")
+               // What a cost function is told about this operator, and where that number comes
+               // from: the record's statement, or the reader's default for a record that states
+               // none. The two print differently, so a person reading this line does not have to
+               // consult the record to know whether the operator said `1` or nobody did.
+               << ",\"cost_stated\":"
+               << ((record != nullptr && record->relativeCostStated().has_value()) ? "true"
+                                                                                   : "false")
+               << ",\"cost\":"
+               << (record != nullptr ? record->relativeCostStated().value_or(1.0) : 1.0);
             if (d.isPrivate) {
                 os << ",\"private\":true";
             }

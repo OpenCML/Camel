@@ -197,10 +197,7 @@ versionsOf(std::span<const Anchor> anchors, const GraphAccess &graphs) {
 /// have a slot -- a Graph fact's value, a Node fact's array entry -- so a CrossNode or CrossGraph
 /// fact, which has several facts on one graph, is answered by the store alone.
 void publishSlot(
-    const GraphAccess &graphs,
-    KindId kind,
-    Scope scope,
-    std::span<const Anchor> anchors,
+    const GraphAccess &graphs, KindId kind, Scope scope, std::span<const Anchor> anchors,
     const void *value) {
     if (anchors.empty() || anchors[0].graph == nullptr) {
         return;
@@ -267,11 +264,8 @@ std::string_view className(Class cls) {
 
 /// One `FACT {json}` line (dump). `stamp` is null for a Content kind: its value is the graph's.
 std::string factJson(
-    const KindInfo &kind,
-    std::span<const Anchor> anchors,
-    const void *value,
-    const StoredFact *stored,
-    const std::function<std::string(const graph::Graph *)> &labelOf) {
+    const KindInfo &kind, std::span<const Anchor> anchors, const void *value,
+    const StoredFact *stored, const std::function<std::string(const graph::Graph *)> &labelOf) {
     std::string out = std::format(
         "{{\"library\":\"facts\",\"kind\":{},\"version\":{},\"class\":{},\"anchors\":[",
         jsonString(kind.key),
@@ -320,8 +314,8 @@ std::string factJson(
     }
     // The epoch and the target are fields of the stamp, not of the fact, and the fact's own
     // closing brace follows the stamp's: a reader parses a FACT line as one object.
-    out += "]},\"epoch\":" + std::to_string(stored->epoch) + ",\"target\":" +
-           std::to_string(stored->target) + "}}";
+    out += "]},\"epoch\":" + std::to_string(stored->epoch) +
+           ",\"target\":" + std::to_string(stored->target) + "}}";
     return out;
 }
 
@@ -366,7 +360,7 @@ const KindInfo &kindInfo(KindId kind) {
 }
 
 std::vector<KindId> registeredKinds() {
-    Registry &r    = registry();
+    Registry &r = registry();
     std::shared_lock lock(r.mutex);
     std::vector<KindId> ids(r.kinds.size());
     for (KindId id = 0; id < ids.size(); ++id) {
@@ -398,13 +392,14 @@ Reads ReadLog::take() {
     taken.nodes.erase(std::unique(taken.nodes.begin(), taken.nodes.end()), taken.nodes.end());
     std::sort(taken.regions.begin(), taken.regions.end());
     taken.regions.erase(
-        std::unique(taken.regions.begin(), taken.regions.end()), taken.regions.end());
-    std::sort(
-        taken.records.begin(), taken.records.end(), [](ops::OperId left, ops::OperId right) {
-            return left < right;
-        });
+        std::unique(taken.regions.begin(), taken.regions.end()),
+        taken.regions.end());
+    std::sort(taken.records.begin(), taken.records.end(), [](ops::OperId left, ops::OperId right) {
+        return left < right;
+    });
     taken.records.erase(
-        std::unique(taken.records.begin(), taken.records.end()), taken.records.end());
+        std::unique(taken.records.begin(), taken.records.end()),
+        taken.records.end());
     std::sort(
         taken.names.begin(),
         taken.names.end(),
@@ -455,37 +450,39 @@ GraphHolds &graphHolds() {
 
 GraphAccess frozenGraphs(std::function<const graph::Graph *(const graph::Graph &, NodeId)> callee) {
     return GraphAccess{
-        .view        = [](const graph::Graph &graph) { return &graph.view(); },
-        .version     = [](const graph::Graph &) { return std::uint64_t(0); },
+        .view    = [](const graph::Graph &graph) { return &graph.view(); },
+        .version = [](const graph::Graph &) { return std::uint64_t(0); },
         // The owner's answer, when it gave one: a graph does not know its program, so the walk
         // across a call asks whoever holds the graphs (facts.h, GraphAccess::callee).
-        .callee      = std::move(callee),
+        .callee = std::move(callee),
         // The graph's own slots: written and cleared by the store, read by whoever has the graph
         // (camel/runtime/fact_slots.h). A draft keeps none, and these writes land nowhere.
-        .setSlot     = [](const graph::Graph &graph, KindId kind, const void *value) {
-            runtime::setFactSlotOf(graph, kind, value);
-        },
-        .setNodeSlot = [](const graph::Graph &graph, KindId kind, NodeId node, const void *value) {
-            runtime::setNodeFactSlotOf(graph, kind, node, value);
-        },
+        .setSlot = [](const graph::Graph &graph,
+                      KindId kind,
+                      const void *value) { runtime::setFactSlotOf(graph, kind, value); },
+        .setNodeSlot =
+            [](const graph::Graph &graph, KindId kind, NodeId node, const void *value) {
+                runtime::setNodeFactSlotOf(graph, kind, node, value);
+            },
     };
 }
 
 GraphAccess draftGraphs() {
     return GraphAccess{
-        .view    = [](const graph::Graph &graph) { return &graph.view(); },
+        .view = [](const graph::Graph &graph) { return &graph.view(); },
         // The draft's revision: a fact about a draft must be dropped when an edit makes what it
         // read different, and a frozen graph's constant 0 would keep it forever (facts.h).
         .version = [](const graph::Graph &graph) { return runtime::graphContentVersion(graph); },
         // Empty, and not for want of a resolver: a draft's callee is a `GraphId` whose graph is
         // held by a `Program`, and no program holds a draft (`Program::calleeOf`).
         .callee  = {},
-        .setSlot = [](const graph::Graph &graph, KindId kind, const void *value) {
-            runtime::setFactSlotOf(graph, kind, value);
-        },
-        .setNodeSlot = [](const graph::Graph &graph, KindId kind, NodeId node, const void *value) {
-            runtime::setNodeFactSlotOf(graph, kind, node, value);
-        },
+        .setSlot = [](const graph::Graph &graph,
+                      KindId kind,
+                      const void *value) { runtime::setFactSlotOf(graph, kind, value); },
+        .setNodeSlot =
+            [](const graph::Graph &graph, KindId kind, NodeId node, const void *value) {
+                runtime::setNodeFactSlotOf(graph, kind, node, value);
+            },
     };
 }
 
@@ -510,7 +507,7 @@ Store *storeHolding(const graph::Graph &graph) {
         // (`program.cpp`, `holdGraph`) and its answers belong to the session it is being built in
         // (core abstractions section 2), so the framework keeps them itself and drops them with
         // the draft (`forgetGraph`, told from `~GraphDraft`).
-        Store *made        = new Store(draftGraphs(), /*persistent=*/false);
+        Store *made          = new Store(draftGraphs(), /*persistent=*/false);
         holds.stores[&graph] = made;
         holds.made.insert(made);
         return made;
@@ -551,7 +548,8 @@ void forgetGraph(const graph::Graph *graph) {
 
 size_t Store::KeyHash::operator()(const Key &key) const {
     size_t seed = std::hash<const graph::Graph *>{}(key.graph);
-    seed ^= std::hash<std::uint32_t>{}(key.kind) + 0x9e3779b97f4a7c15ULL + (seed << 6) + (seed >> 2);
+    seed ^=
+        std::hash<std::uint32_t>{}(key.kind) + 0x9e3779b97f4a7c15ULL + (seed << 6) + (seed >> 2);
     seed ^= std::hash<NodeId>{}(key.node) + 0x9e3779b97f4a7c15ULL + (seed << 6) + (seed >> 2);
     return seed;
 }
@@ -579,7 +577,9 @@ Store::~Store() {
 void Store::checkType(KindId kind, const std::type_info &type) {
     const KindInfo &info = kindInfo(kind);
     if (info.payload != std::type_index(type)) {
-        reject(info.key, std::format("its values are {}, not {}", info.payload.name(), type.name()));
+        reject(
+            info.key,
+            std::format("its values are {}, not {}", info.payload.name(), type.name()));
     }
 }
 
@@ -624,14 +624,14 @@ Store::find(KindId kind, std::span<const Anchor> anchors, std::uint64_t target, 
 }
 
 void Store::putValue(
-    KindId kind,
-    std::span<const Anchor> anchors,
-    std::shared_ptr<const void> value,
+    KindId kind, std::span<const Anchor> anchors, std::shared_ptr<const void> value,
     std::uint64_t target) {
     const KindInfo &info = kindInfo(kind);
     checkAnchors(info, anchors, graphs_);
     if (info.cls == Class::Content) {
-        reject(info.key, "a fact of class (i) is the graph's content; it is written with the graph");
+        reject(
+            info.key,
+            "a fact of class (i) is the graph's content; it is written with the graph");
     }
     if (info.cls == Class::Target && target == 0) {
         reject(info.key, "a fact of class (iii) is stored with the hash of its target");
@@ -816,15 +816,16 @@ void Store::forEach(const std::function<void(const StoredFact &)> &visitor) cons
         std::lock_guard lock(mutex_);
         for (const auto &[key, list] : entries_) {
             for (const Entry &entry : list) {
-                facts.push_back(StoredFact{
-                    .kind     = key.kind,
-                    .anchors  = entry.anchors,
-                    .value    = entry.value,
-                    .versions = entry.versions,
-                    .reads    = entry.reads,
-                    .epoch    = entry.epoch,
-                    .target   = entry.target,
-                });
+                facts.push_back(
+                    StoredFact{
+                        .kind     = key.kind,
+                        .anchors  = entry.anchors,
+                        .value    = entry.value,
+                        .versions = entry.versions,
+                        .reads    = entry.reads,
+                        .epoch    = entry.epoch,
+                        .target   = entry.target,
+                    });
             }
         }
     }
@@ -978,7 +979,18 @@ Arrangeable termsOfOperator(camel::ops::OperId oper) {
         // them is the pair this kind exists to remove.
         terms = Arrangeable{};
     }
-    terms.terminates = true;
+    // The termination term was a constant here: every operator ended, because the table had no
+    // field to say otherwise and this kind had nothing to read. The field exists now
+    // (`OperatorTraits::mayNotTerminate`), and the term is the record's like the other three --
+    // read from the same entry, so a reader of this kind and a reader of the table agree.
+    const std::optional<camel::core::OperatorTraits> traits = table.find(oper);
+    // Termination and fault are two questions, and a call that runs into the machine's limits
+    // answers only the first: running out of stack or of memory is a resource limit, and design
+    // principles' chapter on faults -- faults arise only from a fault source -- leaves resource
+    // limits out of the fault fact. So an operator that may not end is still an operator that does
+    // not fail: it does not fail, it does not stop. Not a gap in this walk.
+    terms.terminates = !(traits.has_value() && traits->mayNotTerminate);
+    terms.terminates = !(traits.has_value() && traits->mayNotTerminate);
     return terms;
 }
 
@@ -1076,12 +1088,13 @@ class ArrangeWalk {
             // carries is written in one of the three forms the seal reads (`runtime/graph.cpp`,
             // "GATE node without a wait"): a control input, a sync predecessor, or the values it
             // hands on beside the value itself -- a region's exit gate reads what the region wrote
-            // after the value it hands out (`Builder::layRegionWriteEdges`, and `test::facts_compare`
-            // prints that count as `reads`). Only the first two are an `EdgeKind::Wait`, so a reader
-            // that asked that edge kind alone answered "carries nothing" for a region's gate and
-            // called it freely arrangeable; a gate that carries none of the three is the seal's
-            // internal error and is not a node a program can run, so refusing it costs nothing,
-            // while answering it "yes" would be a second answer beside the predicate a pass asks
+            // after the value it hands out (`Builder::layRegionWriteEdges`, and
+            // `test::facts_compare` prints that count as `reads`). Only the first two are an
+            // `EdgeKind::Wait`, so a reader that asked that edge kind alone answered "carries
+            // nothing" for a region's gate and called it freely arrangeable; a gate that carries
+            // none of the three is the seal's internal error and is not a node a program can run,
+            // so refusing it costs nothing, while answering it "yes" would be a second answer
+            // beside the predicate a pass asks
             // (`nodeIsFreelySchedulable` refuses every gate: a gate is the anchor an order sits on,
             // and a pass that moved it would move the order with it -- edges.cn.md 4.6, 5.3).
             return Arrangeable{};
@@ -1098,7 +1111,10 @@ class ArrangeWalk {
             // a `for ... while` take a finite sequence, and a `while` has no bound to read, so it
             // is not known to end.
             Arrangeable terms{
-                true, true, true, view.loopFormOf(ref).kind != camel::core::LoopKind::While};
+                true,
+                true,
+                true,
+                view.loopFormOf(ref).kind != camel::core::LoopKind::While};
             for (const RegionId region : view.regionsOwnedBy(ref)) {
                 terms = andRegions(view, region, terms);
             }
@@ -1131,8 +1147,7 @@ class ArrangeWalk {
 
 Arrangeable operatorArrangeable(camel::ops::OperId oper) { return termsOfOperator(oper); }
 
-Arrangeable
-nodeArrangeable(const graph::GraphView &view, NodeId node, ReadLog &log) {
+Arrangeable nodeArrangeable(const graph::GraphView &view, NodeId node, ReadLog &log) {
     ArrangeWalk walk{log};
     return walk.at(view, node);
 }
@@ -1167,8 +1182,7 @@ KindId arrangeableKind() {
         .scope      = Scope::Node,
         .dependence = Dependence::Reported,
         .monotone   = false,
-        .compute =
-            [](std::span<const Anchor> anchors, const GraphAccess &graphs, ReadLog &log)
+        .compute    = [](std::span<const Anchor> anchors, const GraphAccess &graphs, ReadLog &log)
             -> std::optional<Arrangeable> {
             if (anchors.size() != 1 || anchors[0].graph == nullptr ||
                 anchors[0].node == kWholeGraph || !graphs.view) {
@@ -1183,11 +1197,9 @@ KindId arrangeableKind() {
         // The answer for a union of places is the conjunction of the answers for the parts: a
         // place is freely arrangeable when every place it is made of is. Adding nodes can turn
         // the answer false (an effect written into an arm), so the kind is not monotone.
-        .merge =
-            [](const Arrangeable &left, const Arrangeable &right) -> std::optional<Arrangeable> {
-            return andTerms(left, right);
-        },
-        .print = [](const Arrangeable &arrangeable) { return toString(arrangeable); },
+        .merge = [](const Arrangeable &left, const Arrangeable &right)
+            -> std::optional<Arrangeable> { return andTerms(left, right); },
+        .print     = [](const Arrangeable &arrangeable) { return toString(arrangeable); },
         .anchorsIn = {},
     });
     return id;

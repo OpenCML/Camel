@@ -192,8 +192,7 @@ struct NumericSemantics {
 struct NumericPolicy {
     /// Permissions every node has under this policy, with or without a tag: the defaults of
     /// 7.3, `reassociate` and `contract`.
-    PermissionMask defaultGrants =
-        static_cast<PermissionMask>(kReassociate | kContract);
+    PermissionMask defaultGrants = static_cast<PermissionMask>(kReassociate | kContract);
     /// Whether the permissions a node carries count. A strict policy ignores them: even a node
     /// with wider permissions keeps its canonical rounding path (7.4, safe mode).
     bool nodeGrants = true;
@@ -239,7 +238,7 @@ struct NumericPolicy {
  *                      relative per step;
  *   finite_math        the check excludes the NaN, infinity, signed zero and subnormal samples
  *                      the assumptions rule out; the finite values keep the rounding bound;
- *   nondeterministic   no numeric bound exists, so the check cannot certify 
+ *   nondeterministic   no numeric bound exists, so the check cannot certify
  *   refine_accuracy    the two sides are compared by their error against a higher-precision
  *                      reference, not by bits: the rewrite holds when its error is not larger
  *                      on every sample (rewrite 8.10).
@@ -285,8 +284,7 @@ double stepUlps(const NumericSemantics &numeric);
 
 /// The bound of a rule that needs `needs`, has `steps` rounding steps and whose operators
 /// declare `declaredUlps` between them (see RewriteErrorBound).
-RewriteErrorBound
-rewriteErrorBound(PermissionMask needs, size_t steps, double declaredUlps);
+RewriteErrorBound rewriteErrorBound(PermissionMask needs, size_t steps, double declaredUlps);
 
 // ---- Binary algebra (design section 7b) -----------------------------------------------------
 
@@ -508,6 +506,10 @@ struct OperatorSemantics {
     /// separate fact from the effect, because the two questions are different: whether running
     /// the call changes anything outside the program, and whether a pass may answer it instead.
     bool foldable = true;
+    /// Running a call of it may not end (operator_table.h, OperatorTraits::mayNotTerminate):
+    /// a plain operator says nothing and ends; a block over a body with a loop or a recursive call
+    /// states it, and the fact layer's termination term reads it instead of a constant.
+    bool mayNotTerminate = false;
 
     // ---- The effect, derived (docs/design/op-semantics/README.cn.md 4.2) ----------------------
 
@@ -524,12 +526,12 @@ struct OperatorSemantics {
     /// (a `Ref` the program owns -- its reader may stand in a graph this one cannot see, so "no
     /// reader here" proves nothing), or the conservative reading of an operator that declares no
     /// effect at all and of one that says an effect exists without itemizing an access -- 3.3's
-    /// "写全局资源", which is a write. `Variable` is not one of them: assigning to a `var` is not an
-    /// effect. This is the narrower half of `external()`, and the two are
-    /// asked by different readers: "does anything outside see it" (the effect summary) and "does the
-    /// region that runs it owe its running" (the region's roots, camel/runtime/region_roots.h).
-    /// Reading `console` or `env` is the first without being the second; writing a `Ref` is the
-    /// second without being the first.
+    /// "写全局资源", which is a write. `Variable` is not one of them: assigning to a `var` is not
+    /// an effect. This is the narrower half of `external()`, and the two are asked by different
+    /// readers: "does anything outside see it" (the effect summary) and "does the region that runs
+    /// it owe its running" (the region's roots, camel/runtime/region_roots.h). Reading `console` or
+    /// `env` is the first without being the second; writing a `Ref` is the second without being the
+    /// first.
     ///
     /// The test itself is `sem::writesForTheRegion` (resource_semantics.h): a declaration is
     /// stated as the signature a measured body also gives (`signatureOf`), so a declaration and a

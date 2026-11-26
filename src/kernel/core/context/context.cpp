@@ -54,9 +54,7 @@ std::atomic<size_t> gLiveContexts{0};
 
 } // namespace
 
-size_t liveContextCount() noexcept {
-    return gLiveContexts.load(std::memory_order_acquire);
-}
+size_t liveContextCount() noexcept { return gLiveContexts.load(std::memory_order_acquire); }
 
 context_ptr_t Context::handle() const {
     // A control block of this object's own with a deleter that does nothing: the handle never
@@ -134,9 +132,7 @@ void ModuleResolver::setModuleRoots(std::vector<std::string> roots) {
     invalidateListings();
 }
 
-void ModuleResolver::invalidateListings() {
-    listings_.clear();
-}
+void ModuleResolver::invalidateListings() { listings_.clear(); }
 
 void ModuleResolver::splitLookup(
     const std::string &moduleName, std::string &dirPart, std::string &stem) {
@@ -171,8 +167,7 @@ std::vector<std::string> ModuleResolver::searchRoots(const std::string &importer
     return out;
 }
 
-const ModuleResolver::DirectoryListing &
-ModuleResolver::listingFor(const std::string &directory) {
+const ModuleResolver::DirectoryListing &ModuleResolver::listingFor(const std::string &directory) {
     auto listing = listings_.find(directory);
     if (listing != listings_.end())
         return listing->second;
@@ -232,8 +227,7 @@ ModuleFile ModuleResolver::findUnder(const std::string &baseDir, const std::stri
     return findIn(dir / camel::utils::pathFromUtf8(stem));
 }
 
-ModuleFile
-ModuleResolver::resolve(const std::string &moduleName, const std::string &importerDir) {
+ModuleFile ModuleResolver::resolve(const std::string &moduleName, const std::string &importerDir) {
     camel::utils::phase::Scope phaseScope("resolve", moduleName);
     for (const std::string &root : searchRoots(importerDir)) {
         ModuleFile found = findUnder(root, moduleName);
@@ -243,8 +237,7 @@ ModuleResolver::resolve(const std::string &moduleName, const std::string &import
     return {};
 }
 
-std::string
-ModuleResolver::directoryReason(const std::string &directory, const std::string &stem) {
+std::string ModuleResolver::directoryReason(const std::string &directory, const std::string &stem) {
     const fs::path dir = camel::utils::pathFromUtf8(directory);
     std::error_code ec;
     if (!fs::exists(dir, ec))
@@ -257,8 +250,8 @@ ModuleResolver::directoryReason(const std::string &directory, const std::string 
     return "no file '" + stem + ".cml' or '" + stem + ".cmo' in directory";
 }
 
-std::vector<std::string> ModuleResolver::searchReport(
-    const std::string &moduleName, const std::string &importerDir) {
+std::vector<std::string>
+ModuleResolver::searchReport(const std::string &moduleName, const std::string &importerDir) {
     // Only a resolved module name can name the files to report on; a relative spelling names
     // nothing and is never turned into a path.
     if (!isModuleName(moduleName))
@@ -273,7 +266,8 @@ std::vector<std::string> ModuleResolver::searchReport(
         const fs::path base = camel::utils::pathFromUtf8(root);
         const fs::path dir  = dirPart.empty() ? base : base / camel::utils::pathFromUtf8(dirPart);
         for (const fs::path &directory :
-             {dir.lexically_normal(), (dir / camel::utils::pathFromUtf8(stem)).lexically_normal()}) {
+             {dir.lexically_normal(),
+              (dir / camel::utils::pathFromUtf8(stem)).lexically_normal()}) {
             const std::string key = camel::utils::pathToUtf8(fs::absolute(directory));
             if (!seen.insert(key).second)
                 continue;
@@ -323,7 +317,7 @@ Context::~Context() {
         camel::core::mm::autoSpace().unregisterGraphSweeper(this);
     }
     runtimeGraphMgr_.reset();
-// The deferred-release queue is drained here, as the last step. The queue is one per process,
+    // The deferred-release queue is drained here, as the last step. The queue is one per process,
     // and the blocks the last collection found dead carry release callbacks (a DLPack producer's
     // deleter, a Python buffer's release) that no later collection will run when this is the end of
     // the runtime; the destruction above has just queued everything the modules' and the graph
@@ -350,6 +344,17 @@ camel::runtime::DefinitionStore &Context::definitions() {
         definitions_ = std::make_unique<camel::runtime::DefinitionStore>(*this);
     }
     return *definitions_;
+}
+
+camel::runtime::BlockPrograms &Context::blockPrograms() {
+    // A pass registers a block while it builds the program, and the operator reads the store while
+    // the program runs: the two do not overlap, and the store itself carries no lock.
+    static std::mutex creation;
+    std::lock_guard lock(creation);
+    if (!blockPrograms_) {
+        blockPrograms_ = std::make_unique<camel::runtime::BlockPrograms>();
+    }
+    return *blockPrograms_;
 }
 
 camel::runtime::fact::FactStore &Context::facts() {
@@ -457,11 +462,13 @@ context_ptr_t Context::create(const EntryConfig &entryConf, const DiagsConfig &d
     // server, a tool's second context, the Python binding) adds its roots instead of replacing
     // them, and destroying either one gives back only its own.
     camel::core::mm::autoSpace().registerObjectRootSet(
-        ctx.get(), "runtimeGraphRoots", &ctx->runtimeGraphMgr_->gcRoots());
+        ctx.get(),
+        "runtimeGraphRoots",
+        &ctx->runtimeGraphMgr_->gcRoots());
     camel::core::mm::autoSpace().registerGraphSweeper(
-        ctx.get(), "runtimeGraphSweeper", [manager = ctx->runtimeGraphMgr_.get()] {
-            manager->sweepMarked();
-        });
+        ctx.get(),
+        "runtimeGraphSweeper",
+        [manager = ctx->runtimeGraphMgr_.get()] { manager->sweepMarked(); });
     ctx->sourceContext_   = std::make_shared<camel::source::SourceContext>();
     ctx->runtimeDiagSink_ = std::make_shared<DiagnosticSink>("", "", ctx->sourceContext_);
     ctx->runtimeDiagSink_->setConfig(diagConf);
@@ -543,8 +550,7 @@ void Context::dumpAllModuleDiagnostics(std::ostream &os, bool json, bool wrapInA
 }
 
 void Context::dumpModuleDiagnostics(
-    std::ostream &os, bool json, bool wrapInArray,
-    const std::vector<module_ptr_t> &modules) const {
+    std::ostream &os, bool json, bool wrapInArray, const std::vector<module_ptr_t> &modules) const {
     auto allMods = allUserModules();
     std::vector<module_ptr_t> modsErr;
     for (const auto &mod : modules) {
@@ -599,7 +605,8 @@ void Context::dumpModuleDiagnostics(
                 }
             }
             ud->diagnostics()->dump(os, false);
-            if (camel::core::error::diagnosticFormat() == DiagFormat::Rich && mod != modsErr.back()) {
+            if (camel::core::error::diagnosticFormat() == DiagFormat::Rich &&
+                mod != modsErr.back()) {
                 os << "\n";
             }
         }
@@ -683,8 +690,8 @@ Context::importModule(const std::string &rawModuleName, const module::Module *im
         auto [path, isCmo] = resolveModulePath(name, importerDir);
         if (!path.empty()) {
             if (auto cached = moduleAtPath(path)) {
-                EXEC_WHEN_DEBUG(CAMEL_LOG_DEBUG_S(
-                    "Context", "Module '{}' found in cache ({}).", name, path));
+                EXEC_WHEN_DEBUG(
+                    CAMEL_LOG_DEBUG_S("Context", "Module '{}' found in cache ({}).", name, path));
                 // Also a module being compiled right now: modules may import each other (design
                 // principles 10.1). Its declarations are complete before any function body of the
                 // program is built.
@@ -772,7 +779,7 @@ std::string Context::checkPreludeDeclarations() {
             continue;
         }
         const std::string path = camel::utils::pathToUtf8(file);
-        auto prelude = std::static_pointer_cast<UserDefinedModule>(
+        auto prelude           = std::static_pointer_cast<UserDefinedModule>(
             UserDefinedModule::fromFile("prelude", path, shared_from_this()));
         preludeModule_ = prelude;
         // A module read with every program is registered under its path before this function
@@ -806,8 +813,7 @@ std::string Context::checkPreludeDeclarations() {
 
 std::string Context::importerDirectory(const module::Module *importer) const {
     if (importer != nullptr && !importer->path().empty()) {
-        return camel::utils::pathToUtf8(
-            camel::utils::pathFromUtf8(importer->path()).parent_path());
+        return camel::utils::pathToUtf8(camel::utils::pathFromUtf8(importer->path()).parent_path());
     }
     // The entry program (and a program-level import, which stands where the program does): its
     // own directory is the entry file's directory. The entry file is the word the command line
@@ -818,8 +824,8 @@ std::string Context::importerDirectory(const module::Module *importer) const {
     // is spelled, and that directory is the context's entry directory: the working directory for a
     // bare name, and for `-` (a program read from stdin) too, where there is no file to ask.
     if (mainModule_ && !mainModule_->path().empty()) {
-        const std::string dir = camel::utils::pathToUtf8(
-            camel::utils::pathFromUtf8(mainModule_->path()).parent_path());
+        const std::string dir =
+            camel::utils::pathToUtf8(camel::utils::pathFromUtf8(mainModule_->path()).parent_path());
         if (!dir.empty()) {
             return dir;
         }
@@ -958,8 +964,8 @@ void Context::setModuleSearchPaths(std::vector<std::string> roots) {
     resolver_.setModuleRoots(entryConfig_.searchPaths);
 }
 
-std::pair<std::string, bool> Context::resolveModulePath(
-    const std::string &moduleName, const std::string &importerDir) {
+std::pair<std::string, bool>
+Context::resolveModulePath(const std::string &moduleName, const std::string &importerDir) {
     // The one lookup: the importing module's own directory, then the module roots, in the order
     // `ModuleResolver::searchRoots` gives (design principles 10.2). A hit is what the name stands
     // for, and only `.cml` and `.cmo` name a module file.
@@ -1002,9 +1008,10 @@ Context::loadModuleFrom(const std::string &moduleName, const std::string &path, 
                 return mod;
             }
             camel::core::module::warnUndeclaredOperatorTraits(*mod);
-            auto declared = std::static_pointer_cast<UserDefinedModule>(
-                UserDefinedModule::fromFile(
-                    moduleName, camel::utils::pathToUtf8(declarations), shared_from_this()));
+            auto declared = std::static_pointer_cast<UserDefinedModule>(UserDefinedModule::fromFile(
+                moduleName,
+                camel::utils::pathToUtf8(declarations),
+                shared_from_this()));
             declared->setDeclarationModule(true);
             declared->setImplementation(mod);
             // One module, not two (design principles 6.4): what the
@@ -1048,8 +1055,7 @@ const camel::runtime::Program *Context::materializeRuntimeProgram() {
     const auto graph =
         camel::core::module::detail::UserDefinedModuleAccess::programGraph(*rootModule);
     GUARD(graph != nullptr, "The entry module has no program graph to encode.");
-    camel::core::module::SourceModuleLoader *loader =
-        camel::core::module::sourceModuleLoader();
+    camel::core::module::SourceModuleLoader *loader = camel::core::module::sourceModuleLoader();
     GUARD(loader != nullptr, "No source module loader is registered to encode the program.");
     loader->encodeProgram(graph, *rootModule, *program, false);
     runtimeGraphMgr_->adoptRoot(program);
