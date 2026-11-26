@@ -368,3 +368,5 @@ git worktree add --detach <旧提交>
 - **不确定「缺省会不会被补上」时，选能验的那一条。** 原生算子的 `with` 参数省略后会不会被 builder 补成操作数，没有读数可依；那就把参数全部改成必填 —— 必填能验，缺省只能等红。同理：`sum` 的 `keepdims: bool = false` 说明「原生 `with` 不能有默认值」这句话是错的，判断要落在「这次能不能验」上，不落在「有没有先例」上。
 
 整理前的全文：`git show 5a0b93049^:internal/collab/rules.md` 之后各版（`git log -- internal/collab/rules.md`）。
+
+**回执与 backlog 里贴原文前先遮密钥**：`ps` 命令行里的 `-e KEY=…`、`--token`、`api_key`、口令，一律先写成 `sk-[已隐去]`。2026-11-26 实例：构建机上一个挂了三天的一次性探针，其 `argv` 里带着明文 `KG_EXTRACT_LLM_API_KEY=sk-ws-…`，我在回执里贴了截断形式（未泄漏全文），随后把它作为**固定规矩**写进两条 skill 页。
