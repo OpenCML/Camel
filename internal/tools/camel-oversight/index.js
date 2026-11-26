@@ -89,8 +89,14 @@ async function reloadHot(repo, onChange) {
             continue
         }
         if (slot.blob === null) {
-            slot.blob = blob // the version imported at start stands until the pushed one changes
-            continue
+            // The version imported at start is the file this process loaded. It stands until the pushed
+            // one changes only if it is the pushed one: a start from an older copy (a live directory
+            // synced from a line behind) would otherwise be taken for current and never replaced.
+            const loaded = await gitIn(repo, ['hash-object', path.join(LOADED_FROM, file)]).then((out) => out.trim(), () => null)
+            if (loaded === blob) {
+                slot.blob = blob
+                continue
+            }
         }
         if (blob === slot.blob) continue
         slot.blob = blob // a broken version is not retried every beat

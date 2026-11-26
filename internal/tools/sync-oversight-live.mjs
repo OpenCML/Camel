@@ -46,7 +46,7 @@
  *
  *   --repo <dir>      the checkout whose object database is read (default: $CAMEL_OVERSIGHT_REPO,
  *                     then D:\Projects\Camel). Never written to.
- *   --ref <ref>       the commit to publish (default: origin/develop)
+ *   --ref <ref>       the commit to publish (default: origin/integration, where merges land)
  *   --dir <path>      the plugin directory inside the repository
  *                     (default: internal/tools/camel-oversight)
  *   --target <dir>    where the plugin is loaded from (default: $CAMEL_OVERSIGHT_LIVE, then
@@ -73,7 +73,7 @@ const EXIT_CHECK = 2
 const EXIT_GIT = 3
 
 const DEFAULT_REPO = process.env.CAMEL_OVERSIGHT_REPO || 'D:\\Projects\\Camel'
-const DEFAULT_REF = 'origin/develop'
+const DEFAULT_REF = 'origin/integration'
 const DEFAULT_DIR = 'internal/tools/camel-oversight'
 const DEFAULT_TARGET = process.env.CAMEL_OVERSIGHT_LIVE || 'D:\\Projects\\camel-oversight-live'
 
