@@ -1,0 +1,28 @@
+id = "probe.header_weight"
+order = 910
+tier = "fast"
+tags = ["probe", "header"]
+
+# The reading `internal/reports/2026-11-26-header-weight.cn.md` takes, run as a plan so the number has
+# a command, a database and a source file behind it.
+#
+# The runner dispatches on `tool`, not on the extension and not on `kind`. Three spellings that do
+# not work, recorded so the next reader does not spend a round on each: no `kind` (the case is
+# compiled as a Camel program), a `.mjs` case with no `tool` (same), and `kind = "behavior"` with no
+# `tool` (same). With `tool = "node"` the args are the script's own.
+#
+# `--total` asks the compiler (`-H`) for every source file in the database, so this is the slow one:
+# it is here to be measured twice -- before and after a declaration is added to a header -- with both
+# readings taken the same way.
+
+[[tests]]
+name = "headerweight.draft_graph_builder"
+desc = "draft_graph_builder.h: the source files whose own #include names it, and the TUs whose include tree reaches it."
+kind = "behavior"
+tool = "node"
+case = "../../tools/header-weight.mjs"
+args = ["${case}", "src/compile/include/camel/compile/gir/draft_graph_builder.h"]
+expect_exit = 0
+expect_stdout_contains = ["direct:", "total:"]
+normalizers = ["normalize_newlines"]
+timeout_ms = 120000
