@@ -213,6 +213,23 @@ test('a push that adds a trace of its own is refused, over the same inherited on
     fs.rmSync(tree.root, { recursive: true, force: true });
 });
 
+test('a commit number and a run number in an added comment are refused', () => {
+    // The rule this replaced judged a whole tree against a stored list of what was already there, and
+    // the list was the only thing standing between a new trace and the branch. Judging the added
+    // lines needs no list, so the list is gone; what keeps its place is this: an added comment that
+    // says when it was measured, which commit fixed it, or which run showed it is refused, and the
+    // refusal prints the line it refused so the author can read the words back.
+    const tree = repo({
+        files: [['src', 'kernel/ops/fixed.h', '// The ordering was wrong until a1b2c3d; run 20261126_001510_1889227 showed it.\n']],
+    });
+    const { status, stdout } = judged(tree);
+    assert.equal(status, 1, `a commit number and a run number must be refused: ${stdout}`);
+    assert.ok(
+        stdout.includes('The ordering was wrong until a1b2c3d; run 20261126_001510_1889227 showed it.'),
+        `the refused line should be printed back: ${stdout}`,
+    );
+    fs.rmSync(tree.root, { recursive: true, force: true });
+});
 test('a commit that adds no line is passed', () => {
     // Nothing between the tip and the head: there is no line for this push to be answerable for.
     const tree = repo({ inherited: [['src', 'kernel/ops/older.h', '// The record is the operator\'s own (D-1123-78).\n']] });
