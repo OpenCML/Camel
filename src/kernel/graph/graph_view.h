@@ -42,8 +42,9 @@
  *    does declare -- would also invite reading the kind's body as that operator's record, which
  *    `runtime/oper_shape.h` records as a real misread. So the two-step reading is the one a caller
  *    writes: `NodeKind::Oper` with a `kNoOper` is one of the two. What a node *does* is
- *    `runtime::shapeOfOperation`, which answers for both forms; this face has no counterpart yet,
- *    so a reader on it takes the two steps itself. A CAST and a COPY were the other two of the
+ *    `runtime::shapeOfOperation`, which answers for both forms; this face answers the same question
+ *    as `shapeOf` below, so a reader on it asks once instead of taking the two steps itself. A CAST
+ *    and a COPY were the other two of the
  *    four; they are stored OPER records now (`operatorOf` answers), so nothing asks twice for them.
  *  - JOIN does not appear: a BRCH owns one region per arm and its value is the selected arm's
  *    result, so the two paired payloads (`GCBrchBody::join`, `GCJoinBody::brch`) and the arm count

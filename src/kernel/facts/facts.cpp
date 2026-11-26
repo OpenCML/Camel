@@ -990,7 +990,6 @@ Arrangeable termsOfOperator(camel::ops::OperId oper) {
     // limits out of the fault fact. So an operator that may not end is still an operator that does
     // not fail: it does not fail, it does not stop. Not a gap in this walk.
     terms.terminates = !(traits.has_value() && traits->mayNotTerminate);
-    terms.terminates = !(traits.has_value() && traits->mayNotTerminate);
     return terms;
 }
 
@@ -1002,15 +1001,16 @@ Arrangeable termsOfOperator(camel::ops::OperId oper) {
 /// which is true of every cast and of none in particular. The pair is the node's own content -- the
 /// type of its result and the type of its one input -- and the kernel already has **one** reader of
 /// it, `runtime::nodeMayFault` (`castMayFault` inside it), which is what the predicate a pass asks
-/// (`runtime::may_be_rearranged`) is built on. So the kind asks there instead of stating a second
+/// (`graph.may_be_rearranged`) is built on. So the kind asks there instead of stating a second
 /// answer from the types, and for a conversion the two cannot disagree: one function, one pair.
 ///
 /// Nothing else moves. Every other operator is answered from the same record by `nodeMayFault` (its
 /// elementwise refinement needs the shape argument this kind does not pass, and the predicate does
-/// not pass it either), and a node whose operator is `kNoOper` -- a FILL or an ACCS the view still
-/// folds into `Oper` -- stays the four false terms it was: the view has no query for "which
-/// operation this node performs", so this reader has nothing to ask (`graph_view.h`, the file
-/// comment; `internal/questions/2026-11-23-is-this-node-a-real-oper-record.cn.md`).
+/// not pass it either). A node whose operator is `kNoOper` -- a FILL or an ACCS the view still folds
+/// into `Oper` -- never reaches this function: `ArrangeWalk::at` answers it from the operation the
+/// view reports (`GraphView::shapeOf`), because a construction and an access are operations the four
+/// terms state in full and an operator record is not what decides them (`graph_view.h`;
+/// `internal/questions/2026-11-23-is-this-node-a-real-oper-record.cn.md`).
 Arrangeable termsOfOperNode(
     const graph::GraphView &view, graph::NodeRef ref, camel::ops::OperId oper, ReadLog &log) {
     Arrangeable terms = termsOfOperator(oper);
