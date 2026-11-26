@@ -1,0 +1,18 @@
+/**
+ * The write side of the same rule: `pure` forbids writing a top-level `var`, and the report names
+ * the variable that was written.
+ *
+ * This file is expected to fail to compile; nothing here runs.
+ */
+
+var cnt: int = 0
+
+func bump() => int pure {
+    cnt += 1
+    return cnt
+}
+
+func main() => int sync {
+    println(bump())
+    return 0
+}

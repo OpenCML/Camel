@@ -8107,7 +8107,7 @@ None: choice: the repair is a decision only the writer can make
 **Help**
 
 ```text
-A signature is a promise the compiler checks against the resources the function uses. 'uses' is an upper bound, so every resource the body uses must be named there, and 'pure' promises the empty set; a 'var' parameter is a resource by itself, and so is a capture. Change the body so that it no longer reaches for it, or change the signature to name it. When the use is a call through a parameter of function type, what the call reaches is the instantiation's: write 'pure' on the parameter to promise the empty set, or write there the resources the values it takes reach.
+A signature is a promise the compiler checks against the resources the function uses. 'uses' is an upper bound, so every resource the body writes must be named there; 'pure' promises no write, and what the body reads keeps that promise. A 'var' parameter is written by the call, and so is a capture. Change the body so that it no longer writes it, or change the signature to name it. When the use is a call through a parameter of function type, what the call reaches is the instantiation's: write 'pure' on the parameter to promise no write, or write there the resources the values it takes write.
 ```
 
 **Example** (`test/cases/effects/err_promise_through_parameter.cml`, run as `camel test/cases/effects/err_promise_through_parameter.cml`)

@@ -1,0 +1,20 @@
+/**
+ * A `pure` promise is a promise of no write (design principles 3.3: an effect is a write, and a
+ * read is a dependency). `first` reads the box the handle names through `state::get`, which is a
+ * read of the `Ref` parameter, and writes nothing: the promise is kept, and the reads stay the
+ * function's own business -- a pure function's reads are its hidden inputs.
+ *
+ *   41
+ */
+
+import state
+
+func first(r: state::Ref<int>) => int pure {
+    return state::get(r)
+}
+
+func main() => int sync {
+    let r = state::ref(41)
+    println(first(r))
+    return 0
+}

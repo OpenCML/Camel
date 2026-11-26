@@ -188,7 +188,8 @@ void Builder::reportIgnoredCapturedWrites() {
 bool Builder::isEffectNode(DraftGraphBuilder *graph, node_handle_t node) const {
     // What a call touches is in the resources of the value's type, not in a flag on it: `sync` is
     // a property of a body block, not of a type (design principles 3.3, effects plan 5). A clause
-    // that names a resource means the call touches it, `pure` means it touches nothing.
+    // that names a resource means the call touches it, `pure` means it writes nothing (what it
+    // reads is a dependency, so a `pure` value still answers "not an effect" here).
     // A `var` parameter is not an effect of the call (design principles 3.1 and 3.5):
     // what it writes is a value passed in and handed back, written into the caller's
     // cell where the call stands, so the shape of a signature says nothing about anything outside
@@ -1066,6 +1067,12 @@ void Builder::reportResourceViolation(
     // What the clause does not promise, said in the terms the clause is written in: the caller of
     // this function can see only the clause, so the report names the resources the body reaches
     // that the clause leaves out.
+    //
+    // A `pure` clause promises no write (design principles 3.3), so what broke it is a write and
+    // only a write: a body that reads a handle's box or an external resource keeps the promise and
+    // is not reported at all (`covers`), and where a write is reported beside those reads the
+    // reads are not named -- the writer has nothing to fix in them.
+    const bool purePromise = promised.pure();
     std::vector<std::string> unnamed;
     // A promise that names `any` at its target has already said it may reach anything: nothing the
     // body reaches is left out of it.
@@ -1074,6 +1081,9 @@ void Builder::reportResourceViolation(
             return cls == sem::ResourceClass::Unknown;
         });
     for (const auto &use : measured.ambient) {
+        if (purePromise && !sem::writes(use.mode)) {
+            continue;
+        }
         const bool promisedUse =
             std::any_of(promised.ambient.begin(), promised.ambient.end(), [&](const auto &other) {
                 return other.name == use.name;
@@ -1097,6 +1107,9 @@ void Builder::reportResourceViolation(
         }
     }
     for (const auto &use : measured.params) {
+        if (purePromise && !sem::writes(use.mode)) {
+            continue;
+        }
         const bool promisedUse =
             std::any_of(promised.params.begin(), promised.params.end(), [&](const auto &other) {
                 return other.index == use.index;
@@ -1106,7 +1119,12 @@ void Builder::reportResourceViolation(
         }
     }
     if (measured.external && !promised.external) {
-        unnamed.push_back("an effect outside the program");
+        // A `pure` promise is broken by a write, and a read of an ambient resource carries
+        // `external` with it: where the write is one of the named ambient resources, blaming the
+        // reach outside would name the read instead of the write.
+        if (!purePromise || measured.ambient.empty()) {
+            unnamed.push_back("an effect outside the program");
+        }
     }
     // One builder, mutated in place and committed once: `of` hands out a value, and assigning a
     // builder from the chain of another would copy state that is not meant to be copied.

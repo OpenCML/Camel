@@ -270,9 +270,11 @@ struct ResourceSignature {
     /// promise it) and in the text a type prints.
     bool spelling = false;
 
-    /// Concrete and touching nothing: `pure`. Reading the spelling is not a touch, so a signature
-    /// that writes `spelling` with no resource is still pure: `effects` of a graph that names a
-    /// node is the empty summary.
+    /// Concrete and touching nothing: the signature a `pure` declaration publishes. What such a
+    /// promise allows is read by `covers` as "no write" (design principles 3.3), so a body that
+    /// reads is measured with the reads it makes and still keeps the promise. Reading the spelling
+    /// is not a touch either, so a signature that writes `spelling` with no resource is still pure:
+    /// `effects` of a graph that names a node is the empty summary.
     bool pure() const {
         return mode == Mode::Concrete && params.empty() && captures.empty() && ambient.empty() &&
                anyOf.empty() && !allocates && !external;
@@ -303,8 +305,20 @@ inline void ambientCarriesExternal(ResourceSignature &signature) {
 /// design principles 3.3), and it is what "the resources the argument infers are within the
 /// resources the parameter asks for" means at a call. A `Generic` target promises nothing and
 /// covers anything; a `Generic` source cannot be proved to fit a `Concrete` target, so it does
-/// not cover it; a `pure` target covers only a source that touches nothing.
+/// not cover it; a `pure` target covers a source that writes nothing (`writesSomething`), because
+/// a read is a dependency and not an effect.
 bool covers(const ResourceSignature &target, const ResourceSignature &source);
+
+/// Whether what a signature describes writes anything at all (design principles 3.3, "效应就是写"):
+/// an access whose mode writes, a capture (recorded where it is written), a cell the call lets
+/// escape, a resource it allocates, and an effect that reaches outside the program without naming a
+/// resource -- the write an undeclared operator is read as.
+///
+/// This is the question a `pure` promise asks, and it is `writesForTheRegion` narrowed from "the
+/// writes a region owes" to "any write": a read of an ambient resource carries `external` with it
+/// (`ambientCarriesExternal`) and still writes nothing, while a signature that is external with no
+/// ambient resource names has nothing that could explain it but a write.
+bool writesSomething(const ResourceSignature &signature);
 
 /// Whether a resource of this class is state outside the program (design principles 3.3, 10.5):
 /// the console, the file system, a module's own state, a resource nobody itemized. A variable or

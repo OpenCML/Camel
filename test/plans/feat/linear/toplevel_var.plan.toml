@@ -439,14 +439,23 @@ expect_diagnostic_name = "SemanticDiag::UsesPromiseViolated"
 expect_output_contains = ["err_uses_other::cnt"]
 
 [[tests]]
-name = "err_pure_read"
-desc = "A function that reads a top-level var is not pure: pure promises the empty set."
+name = "pure_reads_toplevel_var"
+desc = "A top-level var is a resource, and what a `pure` promise forbids is writing one: a body that only reads `cnt` keeps the promise, and the call prints the value."
+kind = "behavior"
+case = "../../../cases/linear/toplevel_var/pure_reads_toplevel_var.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_exact = "0\n"
+
+[[tests]]
+name = "err_pure_writes_toplevel_var"
+desc = "The write side of the same rule: a body that writes a top-level var while the clause says `pure` is refused, and the report names the variable."
 kind = "negative"
-case = "../../../cases/linear/toplevel_var/err_pure_read.cml"
+case = "../../../cases/linear/toplevel_var/err_pure_writes_toplevel_var.cml"
 args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::UsesPromiseViolated"
-expect_output_contains = ["err_pure_read::cnt"]
+expect_output_contains = ["err_pure_writes_toplevel_var::cnt"]
 
 [[tests]]
 name = "err_pure_parameter"
