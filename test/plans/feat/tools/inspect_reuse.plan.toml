@@ -81,6 +81,13 @@ verify_script = '''
   assert(plans > 0, 'the compile built at least one plan, so the marks were recorded: ' + line)
   // `inspect` compiles and does not run: the arrays were asked nothing.
   assert(at('counts') !== undefined, 'the observed line names the run-time half: ' + line)
+  // The line names the plan's own mark and not `--copies`' word: `by-array-count` is the count of
+  // nodes the plan actually marked `StorageReuse::ByArrayCount`, while a `--copies` row says
+  // `by-count` for every update whose storage was left to the array -- a wider set, the in-place
+  // forms the plan decided nothing about included. A checker reading both outputs must be able to
+  // tell the two apart by the key alone.
+  assert(at('by-array-count') !== undefined, 'the plan mark is named by-array-count: ' + line)
+  assert(!fields.includes('by-count'), 'the line does not borrow the --copies word by-count: ' + line)
   const inPlace = Number(at('in-place'))
   const copied = Number(at('copied'))
   assert(inPlace === 0 && copied === 0,
