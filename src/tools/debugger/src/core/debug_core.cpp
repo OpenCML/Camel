@@ -1058,7 +1058,7 @@ int DebugCore::newHandle(Handle handle) {
 }
 
 std::optional<DebugCore::Variable>
-DebugCore::nodeVariable(ShadowFrame &f, const NodeInfo &n, std::string name) {
+DebugCore::nodeVariable(ShadowFrame &f, const NodeInfo &n, std::string name, bool variable) {
     if (n.slot == 0) {
         return std::nullopt;
     }
@@ -1069,6 +1069,7 @@ DebugCore::nodeVariable(ShadowFrame &f, const NodeInfo &n, std::string name) {
     Variable v;
     v.name             = std::move(name);
     v.view.type        = node->dataType();
+    v.variable         = variable;
     const size_t index = static_cast<size_t>(&n - f.info->nodes.data());
     // Constants and ports have their values from the start; everything else once it ran.
     const bool available = n.slot < 0 || n.kind == GCNodeKind::Port || n.kind == GCNodeKind::Data ||
@@ -1227,7 +1228,7 @@ std::vector<DebugCore::Variable> DebugCore::localsOf(const Chain &chain) {
             }
             continue;
         }
-        auto v = nodeVariable(*home, *found, b->name);
+        auto v = nodeVariable(*home, *found, b->name, b->variable);
         if (!v) {
             continue;
         }
@@ -1357,16 +1358,26 @@ std::vector<DebugCore::Variable> DebugCore::nodesOf(const Chain &chain) {
 }
 
 json DebugCore::variableJson(const Variable &v, uint64_t frame) {
+    // A `var` is shown as its declaration wrote it (`var T`), even when the graph holds the name
+    // as a value: the shape is the declaration's, the value is the node's, and the two differ
+    // exactly when the builder gave a `var` no cell. `var ` is not added twice -- a cell the
+    // value really carries (a captured `var`) already prints it.
+    const auto declared = [&v](std::string type) {
+        if (v.variable && type.rfind("var ", 0) != 0) {
+            return std::string("var ") + type;
+        }
+        return type;
+    };
     json j{{"name", v.name}, {"evaluated", v.evaluated}};
     if (!v.evaluated) {
         j["value"]     = v.note;
-        j["type"]      = typeText(v.view.type);
+        j["type"]      = declared(typeText(v.view.type));
         j["reference"] = 0;
         return j;
     }
     Rendered r     = render(v.view);
     j["value"]     = r.value;
-    j["type"]      = r.type;
+    j["type"]      = declared(r.type);
     j["reference"] = r.expandable ? newHandle({Handle::Kind::Value, frame, v.view}) : 0;
     return j;
 }

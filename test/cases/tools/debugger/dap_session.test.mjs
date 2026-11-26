@@ -134,7 +134,11 @@ await runTest(async (t) => {
         checkEq(shown('ratio'), 'float = 2.5', 'a float')
         checkEq(shown('ok'), 'bool = true', 'a bool')
         checkEq(shown('name'), "string = 'camel'", 'a string')
-        checkEq(shown('counter'), 'var int = 15', 'a var shows the current content of its cell, after the assignment')
+        // A `var` is a name that a write rebinds, not a cell (design principles 3.5), and a write
+        // nothing has read yet is not computed (design principles 3.1): the write at :18 is read
+        // only at :28, below this stop, so the shape is the declaration's and the value is not
+        // there yet -- the same answer `table` and `later` get below.
+        checkEq(shown('counter'), 'var int = <not evaluated>', 'a var: the shape its declaration wrote, and no value below the stop')
         checkEq(shown('some'), 'int? = 9', 'a nullable with a value')
         checkEq(shown('none'), 'int? = null', 'a nullable without one')
         checkEq(shown('good'), 'int! = 25', 'a fallible with a value')

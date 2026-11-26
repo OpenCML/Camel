@@ -345,8 +345,12 @@ semantic query layer (`SemanticRecorder::valueBound`, added for this): the name,
 declaration, whether it is a `var`, and where its value is: the origin of the node the name is
 bound to, or the index of the port for a parameter or a captured name. At a stop the debugger
 finds, in the graph of the frame, the node with that origin (or the port), and reads its slot.
-The node that creates the cell of a `var` carries the origin of the declaration for this (the
-builder gave it none before).
+A `var` has no cell: it is a name bound to a value, and a write rebinds the name, which the
+builder writes as a link between values (design principles 3.5: "`var` 是会被重新绑定的名字……
+编译器把它化成值之间的连线（SSA）；语言里没有可变单元"). The node the name is bound to carries the
+value and its type; the declaration is what keeps the name a `var`, so the name is shown with the
+shape the declaration wrote (`var T`) -- and a value nothing has read yet has not been computed
+(design principles 3.1: "没人读的赋值就是没人用的值，不计算").
 
 Scopes of a frame (with frames of functions, of every graph of the frame, 5.4):
 
@@ -368,8 +372,8 @@ of the node or slot, and values are printed with it, by the program's own printi
 | Value | Shown as |
 |---|---|
 | a name whose node has not run in this activation | `<not evaluated>`: evaluation is dependency-driven, a `let` written earlier may run later or never (an arm not taken). Its slot is not read |
-| `var` | the current content of the cell, type `var T` |
-| captured name | the value in the closure; a captured `var` is the shared cell |
+| `var` | the type the declaration wrote (`var T`) and the value of the node the name is bound to now; a write rebinds the name instead of storing into a cell (design principles 3.5), so a value no one has read yet is `<not evaluated>` like any other (design principles 3.1) |
+| captured name | the value in the closure; a captured `var` is the value it held (the capture port is the value's type, not `var T`) |
 | array, tuple, struct | summary and children (elements, fields), the first 100 |
 | `T?` | `null` or the value; `T!`: the value or `error <kind>: <message>` |
 | `Map`, `Set` | the printed form |
