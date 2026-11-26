@@ -376,6 +376,8 @@ kind = "behavior"
 case = "../../../cases/modules/graph_facts/draft_effects_refused.cml"
 args = ["${case}"]
 expect_exit = 1
-# The fault is printed where the run prints: this CLI writes a runtime fault to stdout, so the
-# reason the refusal gives is asserted there, and the exit code carries the refusal itself.
-expect_stdout_contains = ["published effects external", "true", "draft effects external", "the effects of a draft are not computed: a draft has no published graph to walk"]
+# The three answers the program prints are its own output and stay on standard output; the fault
+# that ends it is a diagnostic, so the reason the refusal gives is asserted on standard error, and
+# the exit code carries the refusal itself.
+expect_stdout_contains = ["published effects external", "true", "draft effects external"]
+expect_stderr_contains = ["the effects of a draft are not computed: a draft has no published graph to walk"]
