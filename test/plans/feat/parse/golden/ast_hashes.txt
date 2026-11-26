@@ -4307,6 +4307,7 @@ d9c9c90db93e9ff5 ok test/cases/runtime/edit_record/a_program.cml
 8a27474dec5afbb8 ok test/cases/runtime/exit_type/int_declared_float_returned.cml
 7f57c5961ed60928 ok test/cases/runtime/exit_type/legal_exits.cml
 545f40cbee5c14b5 ok test/cases/runtime/graph_draft_ledger/probe_handle.cml
+51b8c3c912e51248 ok test/cases/runtime/oper_shape/cast_pair_conversion.cml
 a5fee9d295247e69 ok test/cases/runtime/oper_shape/two_forms_one_shape.cml
 b7fe2345bab84529 ok test/cases/showcase_s2/train_curve.cml
 d6ba16a66d67b7f4 ok test/cases/smoke/core/fib10_pipeline.cml
