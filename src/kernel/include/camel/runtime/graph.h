@@ -45,6 +45,7 @@
 #include "camel/core/type/intern.h"
 #include "camel/graph/graph.h"
 #include "camel/runtime/fact_slots.h"
+#include "camel/runtime/frame_layout.h"
 #include "camel/runtime/graph_id.h"
 #include "camel/utils/assert.h"
 
@@ -832,6 +833,11 @@ class GCGraph : public camel::core::rtdata::Object, public camel::graph::Graph {
     const camel::core::type::TupleType *closureType() const;
     bool hasFrameLayout() const;
     size_t frameSize() const;
+    /// The frame's view of this graph, the record a frame holds instead of the graph
+    /// (camel/runtime/frame_layout.h): the same two tuple types, the frame size, the static area
+    /// and the graph's name, in one plain object the collector never moves. The record is made with
+    /// the graph and freed with it.
+    const FrameLayout *frameLayout() const { return frameLayout_; }
     bool isMacro() const;
     /// The semantic body of an `#impl` function (kGraphFlagImplBody): an ordinary call of the
     /// function is a call of its kernel operator, and this graph is what an expansion reads
@@ -1224,7 +1230,16 @@ class GCGraph : public camel::core::rtdata::Object, public camel::graph::Graph {
         camel::core::mm::IAllocator &allocator, const camel::core::type::Type *type,
         bool deep = false) const override;
     void print(std::ostream &os, const camel::core::type::Type *type) const override;
-    void onMoved() override {}
+    /// A collection may move a graph between generations. The frame's view of it
+    /// (camel/runtime/frame_layout.h) is a plain object the collector does not move, so the graph
+    /// itself is the one thing in that record that has to follow: it is written here, once per
+    /// move, and no frame has to remember to refresh it. Nothing else in the record changes after
+    /// the graph is made.
+    void onMoved() override {
+        if (frameLayout_ != nullptr) {
+            frameLayout_->graph = this;
+        }
+    }
     ~GCGraph() override;
     /// The face this graph is read through (`camel/graph/graph.h`): the frozen adapter, made on the
     /// first call and kept here, so a reader holding a `const Graph *` can walk back to the view.
@@ -1295,6 +1310,10 @@ class GCGraph : public camel::core::rtdata::Object, public camel::graph::Graph {
 
     GCGraphNativePayload nativePayload_{};
     ::Tuple *staticArea_ = nullptr;
+    /// The frame's view of this graph, made by the constructor and freed by the destructor. It is
+    /// not a value of this object: `frameLayout()` stays where it was made when a collection moves
+    /// the graph, which is what lets a frame hold a pointer to it across collections.
+    FrameLayout *frameLayout_ = nullptr;
     // Built by uses() on first demand, owned by the graph.
     mutable std::atomic<GCUseIndex *> uses_{nullptr};
 

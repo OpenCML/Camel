@@ -612,7 +612,7 @@ FastVMSchedPass::apply(const camel::runtime::Program *program, std::ostream &os)
     JitEntryFn entryJitFn = jitFnOf(runtimeRoot);
     if (jitBackend_ && entryJitFn) {
         CAMEL_LOG_INFO_S("JIT", "Executing entry graph '{}' via JIT", runtimeRoot->name());
-        Frame *frame = framePool_.acquire(runtimeRoot);
+        Frame *frame = framePool_.acquire(runtimeRoot->frameLayout());
         opperf::start();
         slot_t result = invokeOwnedJitFrame(entryJitFn, frame, &jitCtx);
         opperf::stop();
@@ -630,7 +630,7 @@ FastVMSchedPass::apply(const camel::runtime::Program *program, std::ostream &os)
 
     opperf::start();
     size_t pc    = graphEntryPc(runtimeRoot);
-    Frame *frame = framePool_.acquire(runtimeRoot);
+    Frame *frame = framePool_.acquire(runtimeRoot->frameLayout());
     try {
         slot_t result = call(pc, frame);
         context_->captureProcessExitCode(runtimeRoot, result);
@@ -699,7 +699,7 @@ void FastVMSchedPass::evalMarkedOperator_map_arr(
             const HigherOrderCallSite site = higherOrderCallSite(func);
             slot_t element                 = arr->readElement<kRead>(i, viewLayout);
             requireNestedCallRoom(&currFrame);
-            Frame *frame = framePool_.acquire(site.runtimeGraph);
+            Frame *frame = framePool_.acquire(site.runtimeGraph->frameLayout());
             populateMarkedCallFrame(frame, func, std::span<const slot_t>(&element, 1));
 
             slot_t result = callElement(site, frame);
@@ -734,7 +734,7 @@ void FastVMSchedPass::evalMarkedOperator_filter_arr(
             const HigherOrderCallSite site = higherOrderCallSite(func);
             slot_t element                 = arr->readElement<kRead>(i, viewLayout);
             requireNestedCallRoom(&currFrame);
-            Frame *frame = framePool_.acquire(site.runtimeGraph);
+            Frame *frame = framePool_.acquire(site.runtimeGraph->frameLayout());
             populateMarkedCallFrame(frame, func, std::span<const slot_t>(&element, 1));
 
             slot_t result = callElement(site, frame);
@@ -790,7 +790,7 @@ void FastVMSchedPass::evalMarkedOperator_reduce_arr(
                 currFrame.get<slot_t>(self),
                 arr->readElement<kRead>(i, viewLayout)};
             requireNestedCallRoom(&currFrame);
-            Frame *frame = framePool_.acquire(site.runtimeGraph);
+            Frame *frame = framePool_.acquire(site.runtimeGraph->frameLayout());
             populateMarkedCallFrame(frame, func, std::span<const slot_t>(args, 2));
 
             // The accumulator is the value the next round reads, so it is a value, not a view of
@@ -824,7 +824,7 @@ void FastVMSchedPass::evalMarkedOperator_foreach_arr(
             const HigherOrderCallSite site = higherOrderCallSite(func);
             slot_t element                 = arr->readElement<kRead>(i, viewLayout);
             requireNestedCallRoom(&currFrame);
-            Frame *frame = framePool_.acquire(site.runtimeGraph);
+            Frame *frame = framePool_.acquire(site.runtimeGraph->frameLayout());
             populateMarkedCallFrame(frame, func, std::span<const slot_t>(&element, 1));
 
             callElement(site, frame);
@@ -867,7 +867,7 @@ void FastVMSchedPass::evalMarkedOperator_isolate(
     requireNestedCallRoom(&currFrame);
     const size_t stackDepthBefore  = stackDepth_;
     const size_t nestedCallsBefore = nestedCalls_;
-    Frame *frame                   = framePool_.acquire(site.runtimeGraph);
+    Frame *frame                   = framePool_.acquire(site.runtimeGraph->frameLayout());
     populateMarkedCallFrame(frame, func, std::span<const slot_t>(args, argCount));
 
     slot_t value = NullSlot;
@@ -1102,7 +1102,7 @@ slot_t FastVMSchedPass::runFramedJit(JitEntryFn fn, Frame *frame, void *jitCtx) 
                     resumeStack_[depth] = resume;
                     saveCallerEntry(depth, curFn);
                     Frame *caller = cur;
-                    Frame *callee = framePool_.acquire(target);
+                    Frame *callee = framePool_.acquire(target->frameLayout());
                     cur           = callee;
                     populateDirectCallFrame(
                         caller,
@@ -1125,7 +1125,7 @@ slot_t FastVMSchedPass::runFramedJit(JitEntryFn fn, Frame *frame, void *jitCtx) 
                     const bool framedEntry = entry != nullptr && getFuncExtraFramed(bc);
                     captureCallArgValues(cur, bc->directCallSrcArgs(), tailArgValuesScratch_);
                     framePool_.release(cur);
-                    Frame *callee = framePool_.acquire(target);
+                    Frame *callee = framePool_.acquire(target->frameLayout());
                     cur           = callee;
                     populateDirectCallFrameFromValues(
                         callee,
@@ -1166,7 +1166,7 @@ slot_t FastVMSchedPass::runFramedJit(JitEntryFn fn, Frame *frame, void *jitCtx) 
                         GUARD(target != nullptr, "JIT CALL target has no runtime graph.");
                         const uint32_t callCount = noteIndirectCall(target);
                         requireNestedCallRoom(cur);
-                        Frame *callee = framePool_.acquire(target);
+                        Frame *callee = framePool_.acquire(target->frameLayout());
                         populateIndirectCallFrame(cur, callee, function, nargs, wargs);
                         ++nestedCalls_;
                         const slot_t value = invokeCallOrJit(
