@@ -64,3 +64,38 @@ function Publish-CamelGateState {
     }
     return $false
 }
+# The waiters a queue file may still show: those whose process exists.
+#
+# A waiter is written by the process that waits and is removed by it on every way out of the wait,
+# but a process that is killed skips every `finally`, and the entry would then be shown for as long
+# as the file lives. The lock itself has a liveness signal (an abandoned mutex); the list of waiters
+# is a copy of it and had none. So whoever touches the file -- always under the file's mutex --
+# passes the list through here, and an entry is kept only while its process is the one that wrote it:
+#
+#   * the pid is gone: dropped;
+#   * the pid belongs to a process that started after the entry's `since`: the pid was reused by an
+#     unrelated process, dropped. (A waiter's own process started before it wrote `since`; the
+#     tolerance covers clock rounding, not a real later start.)
+#
+# A process whose start time cannot be read (access denied) is kept: "cannot tell" is not "gone".
+function Select-LiveCamelWaiters {
+    param($Waiters, [int]$ToleranceSeconds = 5)
+
+    $live = @()
+    foreach ($waiter in @($Waiters)) {
+        if (-not $waiter) { continue }
+        $waiterPid = 0
+        if (-not [int]::TryParse("$($waiter.pid)", [ref]$waiterPid)) { continue }
+        $process = Get-Process -Id $waiterPid -ErrorAction SilentlyContinue
+        if (-not $process) { continue }
+        $since = [datetimeoffset]::MinValue
+        $hasSince = [datetimeoffset]::TryParse("$($waiter.since)", [ref]$since)
+        if ($hasSince) {
+            $startedAt = $null
+            try { $startedAt = [datetimeoffset]$process.StartTime } catch { }
+            if ($startedAt -and $startedAt -gt $since.AddSeconds($ToleranceSeconds)) { continue }
+        }
+        $live += $waiter
+    }
+    return , $live
+}

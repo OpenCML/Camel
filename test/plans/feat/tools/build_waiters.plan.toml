@@ -1,0 +1,22 @@
+id = "feat.tools.build_waiters"
+tier = "fast"
+tags = ["feat", "tools", "gate"]
+desc = "The waiters list of the local build queue file shows only processes that exist: every touch of the file drops a waiter whose pid is gone or was reused, so a waiter killed without running its cleanup does not stay for ever"
+
+# The queue files are written by the Windows build and test scripts, so the case needs Windows
+# PowerShell and is skipped where there is none. It pins the one pruning function and the end-to-end
+# case of a killed waiter; it takes its own lock name and state directory, so it never makes a real
+# build wait.
+
+[[tests]]
+name = "build_waiters.prune_dead"
+desc = "`Select-LiveCamelWaiters` keeps this process's own entry and drops an entry whose pid does not exist and one whose pid started after its `since`; a real `camel-build.ps1` killed while waiting leaves its entry (premise) and the next build to touch the file removes it."
+kind = "behavior"
+tool = "node"
+skip_unless = ["powershell.exe", "-NoProfile", "-Command", "exit 0"]
+case = "../../../cases/tools/build_waiters/waiters_prune.mjs"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_contains = ["PASS"]
+normalizers = ["strip_ansi", "normalize_newlines"]
+timeout_ms = 180000
