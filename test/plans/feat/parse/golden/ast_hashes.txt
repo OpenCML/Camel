@@ -3371,7 +3371,9 @@ a65670b279b62d81 ok test/cases/modules/onnx/entry/forward.cml
 97ab767e10d83a8b ok test/cases/modules/onnx/loop_collect/collect_outside.cml
 9ff1f6d3acba7db2 ok test/cases/modules/onnx/loop_collect/for_collect.cml
 fd769b1a2b6f9912 ok test/cases/modules/onnx/loop_collect/for_collect_static.cml
+0a35246ec3c41c74 ok test/cases/modules/onnx/loop_collect/for_while_collect.cml
 225e1d7c12268392 ok test/cases/modules/onnx/loop_collect/ort_collect.cml
+3a0242e5221a8a0c ok test/cases/modules/onnx/loop_collect/ort_while_collect.cml
 842eb0dcddf0e8b0 ok test/cases/modules/onnx/loop_collect/while_collect.cml
 2a4eb9a95506b512 ok test/cases/modules/onnx/refusals/as_always_fails.cml
 de83b3de99a9fd4d ok test/cases/modules/onnx/refusals/as_constant_fails.cml
