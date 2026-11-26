@@ -1,0 +1,18 @@
+id = "probe.fill_slots"
+order = 900
+tier = "fast"
+tags = ["probe", "fill"]
+
+# The witness for the shape `prelude.cml` states for a construction: the component each field fills
+# is a `with` argument, one `int` per field, in the order the fields are given (plan 2.3, step 3).
+# No `with` argument means component order, which every other case in the tree already covers; this
+# one states an order the aggregate cannot spell, and the value it makes is that order.
+
+[[tests]]
+name = "fillslots.permuted_order_runs"
+desc = "fill::<(int, int), int, int><1, 0>((0, 0), 1, 2) makes (2, 1): the first value fills component 1 and the second fills component 0."
+case = "../../cases/probe/fill_slots.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_contains = ["(2, 1)"]
+timeout_ms = 120000
