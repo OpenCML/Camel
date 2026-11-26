@@ -198,7 +198,7 @@ verify_script = """
 // the fold pass adds ConstantExpressionFaults warnings; only the run-time fault is counted
 const faults = input.diagnostics.filter((d) => d.name.startsWith('RuntimeDiag::') && d.name !== 'RuntimeDiag::ConstantExpressionFaults')
 assert(faults.length === 1, `one fault expected, got ${faults.length}`)
-assert([9, 10].includes(faults[0].line), `line ${faults[0].line}`)
+assert([8].includes(faults[0].line), `line ${faults[0].line}`)
 """
 
 # --- indexing -----------------------------------------------------------------------------

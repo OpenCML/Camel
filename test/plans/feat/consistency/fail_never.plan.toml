@@ -130,7 +130,7 @@ verify_script = """
 assert(input.diagnostics.length === 1, JSON.stringify(input.diagnostics))
 assert(input.diagnostics[0].name === 'SemanticDiag::NeverArgumentCall', input.diagnostics[0].name)
 assert(input.diagnostics[0].code === '0x031001C0', input.diagnostics[0].code)
-assert(input.diagnostics[0].line === 16, input.diagnostics[0].line)
+assert(input.diagnostics[0].line === 18, input.diagnostics[0].line)
 assert(input.diagnostics[0].column === 23, input.diagnostics[0].column)
 """
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
