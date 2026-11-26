@@ -35,9 +35,25 @@ export function formatterMajor(bin) {
     return majorOf(`${proc.stdout}`)
 }
 
-// Formats `files` in place with `bin` when it is the pinned major version. Otherwise no file is
-// touched: one line says what was found and what is pinned. Returns true when files were formatted.
-export function formatWithPin(files, { bin, pin, log = console.log, logError = console.error }) {
+// The new-side line ranges of the hunks in a `git diff -U0` text. Pure deletions have no new-side
+// lines and give no range.
+export function changedRanges(diffText) {
+    const ranges = []
+    for (const m of diffText.matchAll(/^@@ -\d+(?:,\d+)? \+(\d+)(?:,(\d+))? @@/gm)) {
+        const first = parseInt(m[1], 10)
+        const count = m[2] === undefined ? 1 : parseInt(m[2], 10)
+        if (count > 0) {
+            ranges.push([first, first + count - 1])
+        }
+    }
+    return ranges
+}
+
+// Formats only the changed lines of `files` in place with `bin` when it is the pinned major version.
+// `rangesOf(file)` gives the [first, last] line ranges to format; a file without ranges is not touched.
+// With another formatter no file is touched: one line says what was found and what is pinned.
+// Returns true when the formatter was run.
+export function formatWithPin(files, { bin, pin, rangesOf, log = console.log, logError = console.error }) {
     const found = formatterMajor(bin)
     if (found !== pin) {
         const what = found === null ? 'no usable clang-format' : `clang-format ${found}`
@@ -48,7 +64,12 @@ export function formatWithPin(files, { bin, pin, log = console.log, logError = c
         return false
     }
     for (const file of files) {
-        const proc = spawnTool(bin, ['-i', file])
+        const ranges = rangesOf(file)
+        if (ranges.length === 0) {
+            continue
+        }
+        const lineArgs = ranges.map(([first, last]) => `--lines=${first}:${last}`)
+        const proc = spawnTool(bin, ['-i', ...lineArgs, file])
         if (proc.error || proc.status !== 0) {
             logError(`Failed to format: ${file}`)
         } else {
