@@ -5,7 +5,7 @@
 > 这一页由 `node scripts/check-doc-links.mjs --questions-index --write` 从目录生成，不要手改：
 > 规矩在 `internal/reviews/` 的裁定里，落没落地看代码和提交，不看这张表。
 
-## 现在在等作者：26 页
+## 现在在等作者：27 页
 
 | 页 | 问什么 |
 | --- | --- |
@@ -22,6 +22,7 @@
 | [`2026-11-25-what-a-compiler-written-conversion-does-when-the-pair-is-not-safe`](2026-11-25-what-a-compiler-written-conversion-does-when-the-pair-is-not-safe.cn.md) | 编译器自动插的转换遇到非 Safe 配对，应该是什么：编译期拒绝、运行时 fault、不插这个转换，还是别的 |
 | [`2026-11-26-a-block-name-need-not-sort-its-statements`](2026-11-26-a-block-name-need-not-sort-its-statements.cn.md) | 块的名字不必先给语句定序 |
 | [`2026-11-26-oper-uri-readings`](2026-11-26-oper-uri-readings.cn.md) | 算子「按编号认」还差两件事，缺哪一件由你定 |
+| [`2026-11-27-does-a-call-on-a-copy-count-as-the-same-instance`](2026-11-27-does-a-call-on-a-copy-count-as-the-same-instance.cn.md) | 一个值的副本上的调用，再被特化一次，算不算“同一个实例”？ |
 | [`2026-11-27-does-a-pure-function-see-its-reads`](2026-11-27-does-a-pure-function-see-its-reads.cn.md) | 一个 `pure` 函数读资源，算不算“没有写”？两处口径需要作者裁 |
 | [`2026-11-27-does-a-type-table-belong-to-a-context`](2026-11-27-does-a-type-table-belong-to-a-context.cn.md) | 类型表归谁：一个程序一份，还是进程一份？ |
 | [`2026-11-27-does-an-edit-blocks-root-need-a-module`](2026-11-27-does-an-edit-blocks-root-need-a-module.cn.md) | 一个 `edit`/`view` 块的根，要不要一个模块（它的组与模板从哪来） |
