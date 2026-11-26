@@ -75,6 +75,7 @@
 #include "camel/core/resource_semantics.h"
 #include "camel/core/rtdata/func.h"
 #include "camel/core/type/composite/func.h"
+#include "camel/core/type/composite/stream.h"
 #include "camel/core/type/enum.h"
 #include "camel/core/type/other.h"
 #include "camel/core/type/text.h"
@@ -90,7 +91,6 @@
 
 #include <algorithm>
 #include <cctype>
-#include <cstdio>
 #include <format>
 #include <map>
 #include <set>
@@ -861,6 +861,27 @@ DefunctionalizeRewritePass::apply(const camel::runtime::Program *program, std::o
                     continue;
                 }
                 ty::Type *calleeType = typeOf(withs.front());
+                if (calleeType != nullptr && calleeType->code() == TypeCode::Stream) {
+                    // A stream's value is its step function and its state, and it has no other
+                    // runtime representation (design principles 5.4): the call through a stream is
+                    // the pull of the value the step function returns. It is a call through a
+                    // value, but not one whose callee the graph holds as a signature of its own --
+                    // the callee is the stream -- so this pass cannot rewrite it the way it
+                    // rewrites a call through a function value, and the family that names the step
+                    // signature is left as written: the value keeps the form the pull reads,
+                    // instead of being handed to it as an enum.
+                    if (auto *stream = static_cast<ty::StreamType *>(calleeType)) {
+                        for (auto &entry : plans) {
+                            if (sameFamily(entry.second.type, stream->stepType())) {
+                                refuseIfUnsaid(
+                                    entry.second,
+                                    "a stream of this signature is pulled, and a pull is not a "
+                                    "call through a value this pass rewrites");
+                            }
+                        }
+                    }
+                    continue;
+                }
                 if (calleeType == nullptr || calleeType->code() != TypeCode::Function) {
                     continue;
                 }
