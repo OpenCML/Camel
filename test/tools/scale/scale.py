@@ -58,26 +58,26 @@ def function(shape: str, i: int) -> Tuple[str, int]:
     """One function `f<i>(x: int): int` of the shape and its result for the argument 1."""
     k = i % 7 + 1
     if shape == "arith":
-        return f"func f{i}(x: int): int {{\n    return x * {k} + {i}\n}}\n", k + i
+        return f"func f{i}(x: int) => int {{\n    return x * {k} + {i}\n}}\n", k + i
     if shape == "if":
         return (
-            f"func f{i}(x: int): int {{\n    return if x > {k} then x - {k} else x + {i}\n}}\n",
+            f"func f{i}(x: int) => int {{\n    return if x > {k} then x - {k} else x + {i}\n}}\n",
             1 - k if 1 > k else 1 + i,
         )
     if shape == "string":
         text = f"s{i}"
         return (
-            f"func f{i}(x: int): int {{\n    return len('{text}') + x\n}}\n",
+            f"func f{i}(x: int) => int {{\n    return len('{text}') + x\n}}\n",
             len(text) + 1,
         )
     if shape == "array":
         return (
-            f"func f{i}(x: int): int {{\n    return len([x, {k}, {i}]) + {k}\n}}\n",
+            f"func f{i}(x: int) => int {{\n    return len([x, {k}, {i}]) + {k}\n}}\n",
             3 + k,
         )
     if shape == "lambda":
         return (
-            f"func f{i}(x: int): int {{\n"
+            f"func f{i}(x: int) => int {{\n"
             f"    return len([x, {k}]->map<func (p: int) => int p + {i}>) + {k}\n}}\n",
             2 + k,
         )
@@ -99,7 +99,7 @@ def program(shape: str, n: int) -> Tuple[str, int]:
     helpers = []
     for c in range(0, n, chunk):
         calls = " + ".join(f"f{i}(1)" for i in range(c, min(n, c + chunk)))
-        helpers.append(f"func sum{c // chunk}(): int {{\n    return {calls}\n}}\n")
+        helpers.append(f"func sum{c // chunk}() => int {{\n    return {calls}\n}}\n")
     parts.extend(helpers)
     body = ["func main() => int sync {", "    var total = 0"]
     for h in range(len(helpers)):
