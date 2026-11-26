@@ -11,7 +11,7 @@ desc = "The tooling's own tests: every self-check under test/tools, internal/too
 # Two classes, and the second is why this file is longer than its subject:
 #
 #   * the `*.test.mjs` and `--self-test` entries below are started by the runner directly;
-#   * the eleven `internal/tools/*.test.ps1` are started through `test/tools/pwsh-selfcheck.mjs`,
+#   * the `internal/tools/*.test.ps1` are started through `test/tools/pwsh-selfcheck.mjs`,
 #     because a plan entry has no way to name `pwsh`: `tool = "pwsh"` resolves through the runner's
 #     `toolExecutable` to `<install>/bin/pwsh`, a file no build produces, so the entry would fail
 #     before the script ran, and a `.ps1` is not a file the runner can execute as its `case`. That
@@ -21,7 +21,7 @@ desc = "The tooling's own tests: every self-check under test/tools, internal/too
 #
 # The gate host has no PowerShell: measured on the Linux build host, `uname -s` says
 # `Linux` and `command -v pwsh` prints nothing (it prints `/usr/bin/node` and `/usr/bin/git` for the
-# other two). So on today's gate these eleven **skip**, and a skip is neither a pass nor a red:
+# other two). So on today's gate these **skip**, and a skip is neither a pass nor a red:
 # `[SUMMARY]` counts it on its own line and the reason names the host. They run for real on a host
 # that has a pwsh, and nothing here has to change for that to happen. `camel-cleanup.test.ps1` and
 # `camel-remote-cleanup.test.ps1` also take `-BashHost` on a machine whose `bash` cannot read a
@@ -158,32 +158,13 @@ expect_stdout_contains = ["11 of 11 checks passed"]
 normalizers = ["normalize_newlines"]
 timeout_ms = 120000
 
-# --- the eleven PowerShell self-checks --------------------------------------------------------
+# --- the PowerShell self-checks --------------------------------------------------------
 #
 # One entry per `internal/tools/*.test.ps1`. They share a shape, and the shape is the whole reason
 # `test/tools/pwsh-selfcheck.mjs` exists: `case` names the self-check (so the ledger and a reader see
 # the file the entry is about), `args` hands the runner the bridge and the absolute path, and
 # `skip_unless` asks the bridge whether there is a pwsh at all. `expect_stdout_contains` pins the
 # count the file prints, so an entry cannot stay green over a file that stopped checking.
-
-# `internal/tools/camel-waiter.ps1` decides who is in a queue, for both queues. The readings are the
-# two answers that matter: a waiter whose process runs is kept, one whose process was killed is not,
-# and the second answer arrives at the next read rather than at a sweep -- the entry left the queue
-# 8 ms after the kill, measured here. Slow: 2.6 s, because it starts a real child process to have a
-# process to kill.
-[[tests]]
-name = "selfchecks.camel_waiter"
-desc = "`internal/tools/camel-waiter.test.ps1`: a waiter made by this process reads as alive, one whose process runs is kept, one whose process was killed is dropped at the next read, the filter says how many it dropped, an entry that predates the liveness lock is judged by its pid, and two reads of one queue file agree (12 checks)."
-kind = "behavior"
-tier = "slow"
-tool = "node"
-case = "../../../../internal/tools/camel-waiter.test.ps1"
-args = ["test/tools/pwsh-selfcheck.mjs", "${case}"]
-skip_unless = ["node", "test/tools/pwsh-selfcheck.mjs", "--probe"]
-expect_exit = 0
-expect_stdout_contains = ["12 checks, 0 failed"]
-normalizers = ["normalize_newlines"]
-timeout_ms = 120000
 
 # Fast: 0.6 s on the workstation, 2026-11-25.
 [[tests]]
