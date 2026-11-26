@@ -96,6 +96,18 @@ class ForeignResourceControlBlock final {
     /// The plan's count: how many holders the value has. Zero means the resource is gone.
     size_t holderCount() const noexcept { return holderCount_.load(std::memory_order_acquire); }
     bool countedOut() const noexcept { return countedOut_.load(std::memory_order_acquire); }
+    /// The count released this block's resource and the wrapper that names it has not been
+    /// finalized yet: the lifetime is over, only the collector's notification is missing. The
+    /// exit sweep marks it (see finishReleasedLifetimesAtExit) and the wrapper's finalizer
+    /// consumes the mark instead of counting the same lifetime a second time.
+    bool markFinishedAtExit() noexcept {
+        bool expected = false;
+        return finishedAtExit_.compare_exchange_strong(expected, true, std::memory_order_acq_rel);
+    }
+    bool takeFinishedAtExit() noexcept {
+        bool expected = true;
+        return finishedAtExit_.compare_exchange_strong(expected, false, std::memory_order_acq_rel);
+    }
     std::string_view kind() const noexcept { return descriptor_.kind; }
     const ForeignResourceDescriptor &descriptor() const noexcept { return descriptor_; }
 
@@ -117,6 +129,7 @@ class ForeignResourceControlBlock final {
     /// the value made a holder.
     std::atomic<size_t> holderCount_{1};
     std::atomic<bool> countedOut_{false};
+    std::atomic<bool> finishedAtExit_{false};
     std::atomic<bool> disposed_{false};
     mutable std::mutex mutex_;
 };
@@ -255,6 +268,12 @@ ForeignResourceStats foreignResourceStats();
 /// DESIGN-QUESTION(attempt-finalizers): a resource dropped inside a fault-isolation boundary is
 /// released by the next collection that finds its wrapper dead, at the latest by this call.
 size_t disposeAllForeignResources() noexcept;
+/// Counts the lifetimes whose resource the count already released and whose wrapper no collection
+/// has finalized, so that what was released and what was finalized agree when the program stops and
+/// do not depend on which collection happened to follow the last death. For the end of a run, after
+/// the program has stopped and before the counters are read; the blocks stay for the wrappers'
+/// finalizers, which free them and find the lifetime already counted.
+size_t finishReleasedLifetimesAtExit() noexcept;
 void resetForeignResourceStatsForTests();
 /// Releases the resources of the wrappers the collector found dead. The collector only
 /// queues them (ForeignResourceObject::finalize runs inside the collection, with the allocator

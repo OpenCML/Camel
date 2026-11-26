@@ -309,6 +309,11 @@ int runCommand(int argc, char *argv[]) {
     // and the modules that own their release code go away (design principles 3.9).
     struct ReleaseExternalResources {
         ~ReleaseExternalResources() {
+            // The program has stopped, so the lifetimes the count already released are finished
+            // now: a wrapper no collection reached leaves its block released and not yet finalized,
+            // and counting that as "pending" would make the same program answer two numbers
+            // depending on which collection followed the last death (design principles 3.3).
+            camel::core::rtdata::finishReleasedLifetimesAtExit();
             // `--gc-check foreign`: what the program had not released when it stopped, read before
             // anything is disposed, and the counters of a lifetime that is a count (design
             // principles 3.3: a `Ref<T>` box is freed by the last handle to go).

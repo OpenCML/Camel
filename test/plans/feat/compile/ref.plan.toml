@@ -369,6 +369,9 @@ verify_script = '''
     'each block is released or live, and counted once: ' + line)
   assert(counts.disposed === counts.live,
     'the process releases exactly the blocks still live when it stopped: ' + line)
+  assert(counts.finalized === counts.released,
+    'a block the count released is a lifetime the run finished, whatever the schedule collected: ' +
+      line)
 }
 '''
 
@@ -403,6 +406,9 @@ verify_script = '''
   assert(counts.live <= 10, 'the ones still counted are not the whole range: ' + line)
   assert(counts.released + counts.live === counts.created, 'each block is released or live: ' + line)
   assert(counts.disposed === counts.live, 'the exit releases what was still live: ' + line)
+  assert(counts.finalized === counts.released,
+    'a block the count released is a lifetime the run finished, whatever the schedule collected: ' +
+      line)
 }
 '''
 
@@ -439,6 +445,9 @@ verify_script = '''
     'the ones still counted are as many as the ten-element run made, not a hundred times more: ' + line)
   assert(counts.released + counts.live === counts.created, 'each block is released or live: ' + line)
   assert(counts.disposed === counts.live, 'the exit releases what was still live: ' + line)
+  assert(counts.finalized === counts.released,
+    'a block the count released is a lifetime the run finished, whatever the schedule collected: ' +
+      line)
 }
 '''
 
@@ -480,6 +489,9 @@ verify_script = '''
   assert(counts.live <= 3,
     'nothing accumulated: the live blocks do not follow the calls that are over: ' + line)
   assert(counts.disposed === counts.live, 'the exit releases what was still live: ' + line)
+  assert(counts.finalized === counts.released,
+    'a block the count released is a lifetime the run finished, whatever the schedule collected: ' +
+      line)
 }
 '''
 
@@ -515,6 +527,9 @@ verify_script = '''
   assert(counts.live <= 3,
     'a thousand calls leave behind what ten left behind: ' + line)
   assert(counts.disposed === counts.live, 'the exit releases what was still live: ' + line)
+  assert(counts.finalized === counts.released,
+    'a block the count released is a lifetime the run finished, whatever the schedule collected: ' +
+      line)
 }
 '''
 
