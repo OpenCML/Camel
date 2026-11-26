@@ -42,6 +42,7 @@
 
 #include "camel/core/index_semantics.h"
 #include "camel/core/resource_semantics.h"
+#include "camel/runtime/draft.h"
 #include "camel/runtime/graph.h"
 
 #include <cstdint>
@@ -410,10 +411,19 @@ enum class CommitCheck : uint8_t {
 
 std::string_view commitCheckName(CommitCheck check);
 
-/// One region one edit changed, with its kind and the position it was written at
-/// (`camel::runtime::EditNote`, draft.h). Declared here and defined there: this header needs only
-/// to name the record a commit reads its `editOrigin` out of, and the record is the draft's.
-struct EditNote;
+/// One region one edit changed, with its kind and the position it was written at: the draft's record
+/// (`camel::runtime::EditNote`), defined in `camel/runtime/draft.h` and named by this header rather
+/// than forward-declared.
+///
+/// The include is what puts the definition before `commitViolation`'s declaration, which takes a span
+/// of the record by value. A parameter of type `std::span<const EditNote>` instantiates the span at
+/// the declaration, and the standard library's span instantiates its iterator machinery there:
+/// `const_reverse_iterator` is `const_iterator<reverse_iterator>`, whose concept check calls
+/// `ranges::iter_move`, which reaches `_Span_iterator::operator--` -- pointer arithmetic, and that
+/// needs the complete element type. An implementation that does not instantiate at the declaration
+/// (the GCC standard library does not) accepts a forward declaration, so without this include whether
+/// the header parses at all depended on the order in which each unit reached it. The record is still
+/// defined once, in draft.h.
 
 /// A commit that must be refused: which of the two checks, the graph, the nodes the reading names,
 /// and the one line the diagnostic carries. `origin` is the source position to report against (0
