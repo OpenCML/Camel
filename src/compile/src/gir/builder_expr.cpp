@@ -1294,6 +1294,24 @@ std::any Builder::resolveDRefNode(const GCT::node_ptr_t &gct) {
     if (importedName) {
         // An import of this name does not imply that the imported module exported it.
         if (!opt.has_value()) {
+            // A name the compiler writes for an operator is not a name of the program: `a @= b`
+            // is the link `__assn_mat__(a, b)` (operator_names.h), and the built-in layer holds
+            // one group per overloadable form, empty when no built-in type has that operator --
+            // `@` is the tensor module's, so this module has none beside it (design principles
+            // 4.2: a compound assignment follows its plain operator, nothing else). Resolving the
+            // name to that group lets the operator answer for itself: no overload for these
+            // operand types, naming the symbol the program wrote. Reported as an import instead,
+            // it named a word no program can write and asked the reader to check an import it
+            // never made.
+            if (context_ != nullptr && camel::core::operatorSymbolOf(name) != nullptr) {
+                if (oper_group_ptr_t group = builtinOperatorGroupNamed(name); group != nullptr) {
+                    node_handle_t drefNode{graph->addDrefNode(
+                        std::variant<graph_vec_ptr_t, oper_group_ptr_t, graph_ptr_t>{group})};
+                    registerNodeOrigin(context_, drefNode, gct, "gir.dref.builtin");
+                    LEAVE("DREF");
+                    return drefNode;
+                }
+            }
             diags_->of(SemanticDiag::ImportNameNotExported).atOrigin(gct->origin()).commit(name);
             throw BuildAbortException();
         }
