@@ -17,6 +17,14 @@
 #   pwsh -NoProfile -File internal/tools/new-worktree.ps1 `
 #       -Path D:\Projects\Camel-wt\<name> -Branch <branch> [-Base origin/develop]
 #
+# `-Detach <ref>` makes the tree at that commit with no branch, for a caller that measures or publishes
+# a commit rather than works on a line (the promotion job's trees). Everything else is the same step:
+# the settings file, husky, the guard check. `-Branch` and `-Detach` exclude each other and one of them
+# is required.
+#
+#   pwsh -NoProfile -File internal/tools/new-worktree.ps1 `
+#       -Path <tree> -Detach <sha> [-FromCheckout <repo>] [-NoFetch]
+#
 # `-VerifyOnly` asks the same question about a tree that already exists, and creates nothing: it is
 # what to run when a push from an unfamiliar tree is refused and the reason is not obvious.
 #
@@ -31,8 +39,10 @@
 param(
     # The tree to make, or -- with -VerifyOnly -- the tree to read.
     [string] $Path,
-    # The branch the new tree checks out. Required when making one, ignored with -VerifyOnly.
+    # The branch the new tree checks out. Making a tree takes this or -Detach; ignored with -VerifyOnly.
     [string] $Branch,
+    # A commit-ish the new tree is checked out at with no branch. Excludes -Branch.
+    [string] $Detach,
     # What the branch starts from. `origin/develop` is the release line every tree is cut from.
     [string] $Base = 'origin/develop',
     # The repository to add the worktree to. Defaults to the one this script lives in, which is the
@@ -86,18 +96,25 @@ if (-not $Path) {
         'because a default path is a directory nobody chose, and the tree has to go somewhere a',
         'person can find it again.')
 }
-if (-not $Branch) {
-    Write-Stop "no -Branch" @(
-        'Give the branch the new tree checks out. This script names no default: a branch name is a',
-        'policy, and one invented here would be a second place that policy is written.')
+if ($Branch -and $Detach) {
+    Write-Stop "-Branch and -Detach together" @(
+        'A tree is either on a new branch or detached at a commit. Nothing was made.')
 }
+if (-not $Branch -and -not $Detach) {
+    Write-Stop "no -Branch and no -Detach" @(
+        'Give the branch the new tree checks out, or -Detach <ref> for a tree at a commit with no branch.',
+        'This script names no default: a branch name is a policy, and one invented here would be a',
+        'second place that policy is written.')
+}
+$detached = [bool] $Detach
+$checkoutName = if ($detached) { "detached $Detach" } else { $Branch }
 
 $pathFull = [System.IO.Path]::GetFullPath($Path)
 if (Test-Path -LiteralPath $pathFull) {
     Write-Stop "$pathFull already exists" @(
         'A worktree is added to a path that does not exist yet, or to an empty one. Nothing was made.')
 }
-if ("$(& git -C $repoRoot rev-parse --verify --quiet "refs/heads/$Branch" 2>$null)".Trim()) {
+if (-not $detached -and "$(& git -C $repoRoot rev-parse --verify --quiet "refs/heads/$Branch" 2>$null)".Trim()) {
     Write-Stop "the branch '$Branch' already exists" @(
         "git worktree add -b refuses a branch that exists, and reusing one would move whatever is on it.",
         'Pick the branch this tree is for, or check the tree that already holds it out with',
@@ -117,20 +134,31 @@ if (-not $NoFetch) {
             'cache this checkout happened to hold. Nothing was made.')
     }
 }
-$baseSha = "$(& git -C $repoRoot rev-parse --verify --quiet "$Base^{commit}" 2>$null)".Trim()
+$startRef = if ($detached) { $Detach } else { $Base }
+$baseSha = "$(& git -C $repoRoot rev-parse --verify --quiet "$startRef^{commit}" 2>$null)".Trim()
 if (-not $baseSha) {
-    Write-Stop "'$Base' does not resolve to a commit" @(
-        "The tree has to start from a commit, and '$Base' is not one in this repository. Nothing was made.")
+    Write-Stop "'$startRef' does not resolve to a commit" @(
+        "The tree has to start from a commit, and '$startRef' is not one in this repository. Nothing was made.")
 }
 
 # --- make it ----------------------------------------------------------------
-$add = @(& git -C $repoRoot worktree add $pathFull -b $Branch $baseSha 2>&1)
-if ($LASTEXITCODE -ne 0) {
+# git reports progress on stderr; under Windows PowerShell 5.1 a redirected stderr line is an error record,
+# which `Stop` turns into a failure of a command that succeeded.
+$previousPreference = $ErrorActionPreference
+$ErrorActionPreference = 'Continue'
+$add = if ($detached) {
+    @(& git -C $repoRoot worktree add --detach $pathFull $baseSha 2>&1)
+} else {
+    @(& git -C $repoRoot worktree add $pathFull -b $Branch $baseSha 2>&1)
+}
+$addExit = $LASTEXITCODE
+$ErrorActionPreference = $previousPreference
+if ($addExit -ne 0) {
     Write-Stop "git worktree add failed" @(
         ($add | ForEach-Object { "  $_" }),
         "Nothing was made at $pathFull.")
 }
-Write-Host "made $pathFull on $Branch at $($baseSha.Substring(0, 9))"
+Write-Host "made $pathFull on $checkoutName at $($baseSha.Substring(0, 9))"
 
 # The settings file is git-ignored and machine-local, so a new tree never has one. The pre-push hook
 # reads `mergeWorktree` from it and refuses a develop push from a tree without it, and the host tools
@@ -188,7 +216,7 @@ if ($hooksPathBefore -ne $hooksPathAfter) {
 
 # --- prove the guard speaks -------------------------------------------------
 # The claim "husky exited 0" is about a directory; this claim is about a push.
-$guard = Test-PushHookGuard -Tree $pathFull -Target $Branch
+$guard = Test-PushHookGuard -Tree $pathFull -Target $(if ($detached) { 'the commit it publishes' } else { $Branch })
 if (-not $guard.Ok) {
     Write-Host ''
     Write-Host "STOPPED: the tree at $pathFull was made but its push guard does not answer (exit 1)" -ForegroundColor Red
@@ -199,5 +227,5 @@ if (-not $guard.Ok) {
 foreach ($line in $guard.Message) { Write-Host $line }
 
 Write-Host ''
-Write-Host "ready: $pathFull on $Branch at $($baseSha.Substring(0, 9)), hooks at $($guard.HookFile)" -ForegroundColor Green
+Write-Host "ready: $pathFull on $checkoutName at $($baseSha.Substring(0, 9)), hooks at $($guard.HookFile)" -ForegroundColor Green
 exit 0
