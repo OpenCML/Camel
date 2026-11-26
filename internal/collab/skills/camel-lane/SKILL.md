@@ -100,6 +100,11 @@ pwsh -NoProfile -File <你的工作树>\internal\tools\camel-remote.ps1 `
   排队等令牌，等到上限才 `no token`（登记里仍是 `state=noslot`）：2026-11-26 一条车道两次各等 **1804 s**、换到 **0 个读数**。
   ⇒ 等不到就按 `state=noslot` 交回，写上「未取到 + 当时 `[load]`」，**不要重试第三次**。
   ⇒ 要长跑的全层计划（`-Tier fast`/`slow` 那种）才用它默认的 1800。
+· **`-SlotWaitSeconds` 管不到普通槽位**（2026-11-27 核的工具事实）：它只用在**时间敏感**计划那条分支
+  （`camel-remote.ps1:2892`）；普通槽位的等待是**硬编码** `flock -w 1800`（`:2578`），
+  所以你看到的那句 `no slot on this checkout within 1800 s` 和这个参数**无关** —— 传 300 还是 5400 都一样等 1800 秒再 `exit 4`。
+  ⇒ **不要靠“把等待放长”来抢槽**；排一次、等它出结果或 `exit 4`，别用短等待反复重试。
+  ⇒ 要把这个等待也变成可配的，属元层（`internal/tools`），由决策者那边改，我们不碰。
 · 读数要带 provenance（`tip`、binary 的构建时刻、`tree`、`tier`、`jobs`）与 `[TREE] clean`。
   没有 `[load]` 行的读数（本机跑的）**只能当名字集用**，不能当时间基线。
 · **不要用 `Select-String` / `Where-Object` 把判词行滤掉。** 判词行
@@ -118,7 +123,7 @@ pwsh -NoProfile -File <你的工作树>\internal\tools\camel-remote.ps1 `
   ```powershell
   $log = 'D:\Temp\<lane>-<plan>.log'
   $p = Start-Process pwsh -ArgumentList '-NoProfile','-Command',
-    "Set-Location '<你的工作树>'; pwsh -NoProfile -File .\internal\tools\camel-remote.ps1 -Path . -Plan <计划> -SlotWaitSeconds 5400 -Jobs 1 -NoGpuWatch *> '$log'" `
+    "Set-Location '<你的工作树>'; pwsh -NoProfile -File .\internal\tools\camel-remote.ps1 -Path . -Plan <计划> -SlotWaitSeconds 300 -Jobs 1 -NoGpuWatch *> '$log'" `
     -PassThru -WindowStyle Hidden
   $p.Id | Set-Content 'D:\Temp\<lane>-<plan>.pid'
   ```
