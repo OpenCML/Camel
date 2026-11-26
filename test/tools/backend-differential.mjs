@@ -71,12 +71,11 @@
  *
  *   - `agree`       the same exit code, stdout and stderr, and something was printed;
  *   - `agree-empty` the same, with nothing on stdout on either side: the exit code is the reading;
- *   - `differ`      a confirmed difference, in the field named beside it;
- *   - `pending`     a confirmed difference whose only text is the `finalized=` field of a
- *                   `FOREIGN_RESOURCES` line: whether that count is part of what the program says is
- *                   a question before the language author, so it is counted apart from `differ` and
- *                   printed with its values; every other field of that line, and every other line,
- *                   must be the same on the two sides, or it is a `differ`;
+ *   - `differ`      a confirmed difference, in the field named beside it -- a difference in the
+ *                   `finalized=` field of a `FOREIGN_RESOURCES` line included: that count is the
+ *                   lifetime of a resource the count released, and the run finishes those before it
+ *                   reads the counters, so which collection followed the last death cannot move it
+ *                   (design principles 3.3). A `finalized=` that moves is a defect like any other;
  *   - `no-answer`   one side did not run: it crashed, timed out, or printed nothing at all while the
  *                   other side ran;
  *   - `refused`     neither side ran: both exited non-zero with nothing printed, so only the refusal
@@ -483,34 +482,12 @@ function fieldsThatMoved(a, b) {
     return fields
 }
 
-/// The `finalized=` field of a `FOREIGN_RESOURCES` line, and nothing else: the count is the
-/// collector's own (it moves with the collection schedule, so one back end reports two values for
-/// one program when only the schedule changes -- see the report page named in the header), and
-/// whether it is part of what the program says is before the language author.
-const FOREIGN_FINALIZED_FIELD = /\bfinalized=\d+/
+/// A `FOREIGN_RESOURCES` line: a side's read of its own counts, the one line of a run's output whose
+/// fields are counters rather than what the program printed. The line as a whole is compared like any
+/// other text -- a count of blocks or of handles that moves is a difference (design principles 3.3, and
+/// the exit finishes a released lifetime before the counters are read, so `finalized=` cannot move with
+/// the collection schedule).
 const FOREIGN_RESOURCES_LINE = /^\s*FOREIGN_RESOURCES\b/
-
-function withoutForeignFinalized(text) {
-    return comparableText(text)
-        .split('\n')
-        .map((line) => (FOREIGN_RESOURCES_LINE.test(line) ? line.replace(FOREIGN_FINALIZED_FIELD, 'finalized=<n>') : line))
-        .join('\n')
-}
-
-/// A pair whose whole disagreement is that one field: both sides ran the same way, and the text of
-/// both streams is the same once `finalized=` is read as a placeholder. Named by what the reading
-/// shows, not by a list of programs, so a later difference in one of those programs still counts:
-/// any other moved line, or any other field of that line, takes the pair out of this class.
-function foreignFinalizedOnly(a, b) {
-    if (a.exit !== b.exit || a.timedOut !== b.timedOut) return false
-    let hidSomething = false
-    for (const stream of ['stdout', 'stderr']) {
-        if (comparableText(a[stream]) === comparableText(b[stream])) continue
-        if (withoutForeignFinalized(a[stream]) !== withoutForeignFinalized(b[stream])) return false
-        hidSomething = true
-    }
-    return hidSomething
-}
 
 /// A side that did not run: it crashed, timed out, or printed nothing at all while the other printed
 /// something.
@@ -534,7 +511,7 @@ function classifyPair(a, b) {
     const refusedFvm = sideDidNotRun(b, a)
     if (refusedFvm) return { verdict: 'no-answer', fields: [`fvm: ${refusedFvm}`] }
     const fields = fieldsThatMoved(a, b)
-    if (fields.length) return { verdict: foreignFinalizedOnly(a, b) ? 'pending' : 'differ', fields }
+    if (fields.length) return { verdict: 'differ', fields }
     if (a.stdout !== '') return { verdict: 'agree', fields: [] }
     // Nothing on standard output: the exit code (and the diagnostic, when both stopped with one) is
     // the whole answer. A run that faulted says so on standard error; one that refused never began.
@@ -632,12 +609,6 @@ function lineFor(result) {
     switch (verdict.verdict) {
         case 'differ':
             return `[differ] ${program.caseRel} :: ${verdict.fields.join(', ')}${hint(a, b, verdict.fields)}`
-        case 'pending':
-            return (
-                `[pending] ${program.caseRel} :: ${verdict.fields.join(', ')}` +
-                `${hint(a, b, verdict.fields)} (only the FOREIGN_RESOURCES finalized count moved, ` +
-                `a ruling on it is pending)`
-            )
         case 'no-answer':
             return `[no-answer] ${program.caseRel} :: ${verdict.fields.join(', ')}${hint(a, b, verdict.fields)}`
         case 'unstable':
@@ -654,10 +625,6 @@ function summaryLine(results, options, wallMs) {
     const fields = new Map()
     for (const result of results) {
         counts.set(result.verdict.verdict, (counts.get(result.verdict.verdict) || 0) + 1)
-        // A `pending` row's fields are the question before the language author, not a place where
-        // the back ends differ, so the field counters (which say where the differences are) leave
-        // them out; the row's own line and the report carry them.
-        if (result.verdict.verdict === 'pending') continue
         for (const field of result.verdict.fields) {
             const name = field.split(/[:(]/)[0]
             fields.set(name, (fields.get(name) || 0) + 1)
@@ -672,7 +639,7 @@ function summaryLine(results, options, wallMs) {
     return (
         `[DIFFERENTIAL] cases=${cases} programs=${results.length} agree=${count('agree')} ` +
         `agree-empty=${count('agree-empty')} differ=${count('differ')} no-answer=${count('no-answer')} ` +
-        `refused=${count('refused')} unstable=${count('unstable')} pending=${count('pending')} | ` +
+        `refused=${count('refused')} unstable=${count('unstable')} | ` +
         `fields ${fieldText || '(none)'} | ` +
         `jobs=${options.jobs} wall=${(wallMs / 1000).toFixed(1)}s`
     )
@@ -725,8 +692,8 @@ async function selfTest(programs, camel, env, options, out) {
     const printed = real.stdout
         .split('\n')
         .map((line) => line.trim())
-        // A line the tool reads as the collector's own count is not the program's answer, so it
-        // cannot carry this control: the difference planted there would land in `pending`.
+        // A `FOREIGN_RESOURCES` line is the side's read of its own counts, not a line the case prints,
+        // so it cannot carry this control: the source does not contain it.
         .find((line) => line.length >= 3 && !FOREIGN_RESOURCES_LINE.test(line) && text.includes(line))
     const literal = printed ? null : /'([^'\\\n]{3,})'/.exec(text)
     const from = printed || (literal && literal[0])

@@ -45,8 +45,11 @@ tool = "node"
 case = "../../../tools/backend-differential.mjs"
 args = ["${case}", "--camel", "${camel}", "--self-test", "--report", "test/results/backend-differential/report.json"]
 expect_exit = 0
-expect_stdout_contains = ["[differential] ", "[self-test] self-agreement (std::nvm against std::nvm)", "seen=yes", "[DIFFERENTIAL] ", "[report] test/results/backend-differential/report-", " pending="]
-expect_stdout_not_contains = ["seen=no", "[self-test] a program disagreed with itself", "[self-test] planted difference: no line"]
+expect_stdout_contains = ["[differential] ", "[self-test] self-agreement (std::nvm against std::nvm)", "seen=yes", "[DIFFERENTIAL] ", "[report] test/results/backend-differential/report-"]
+# No `pending` class: the run finishes the lifetimes its count released before the counters are read,
+# so a `finalized=` that moves between the back ends is a `differ` like any other moved field. The
+# summary line and the verdict lines must not name that class again.
+expect_stdout_not_contains = ["seen=no", "[self-test] a program disagreed with itself", "[self-test] planted difference: no line", " pending=", "[pending]"]
 # The differential is multi-threaded work: every program the tree declares is run on each side, and
 # the eight jobs it runs them on sum to much more CPU time than the wall clock. One run over this
 # tree: 3,558 programs, 1,901 s of CPU against 252 s of wall. So the timeout is the liveness bound
