@@ -1,0 +1,8 @@
+/// The prelude's `zip` over arrays: a program that imports nothing from `stream` still takes it,
+/// and its `when ...is_array::<A>()` holds for two arrays. It is the positive control of the pair
+/// beside it -- screening a candidate by its condition leaves the call that has a candidate alone,
+/// and it does not reach a name of another layer to find one.
+func main() => int sync {
+    println(zip([1, 2], ['a', 'b']))
+    return 0
+}

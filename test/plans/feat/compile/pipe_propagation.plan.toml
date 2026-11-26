@@ -69,3 +69,25 @@ expect_exit = 0
 expect_stdout_exact = "6 3 8 -1\n"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 8000
+
+[[tests]]
+name = "pipe.operator_payload"
+desc = "A built-in operator is an overload set like any other: no declaration takes the `Bytes!` as it is, so the pipe peels the failure and calls `len(x: Bytes)`, and the result carries the error (`int!`)."
+kind = "behavior"
+case = "../../../cases/compile/pipe_propagation/operator_payload.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm"]
+backends_agree = ["exit_code", "diagnostics", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_exact = "-1\n"
+
+[[tests]]
+name = "pipe.operator_array_payload"
+desc = "The value taken out of an `int[]!` selects the array declaration of `len` -- the one its `when` speaks of -- and the result is an `int!` that `!!` reads."
+kind = "behavior"
+case = "../../../cases/compile/pipe_propagation/operator_array_payload.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm"]
+backends_agree = ["exit_code", "diagnostics", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_exact = "3\n"
