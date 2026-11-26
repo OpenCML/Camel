@@ -2763,6 +2763,50 @@ finish_probe() {
 # Every exit path, including a failed build and a wait that runs out: the end reading is taken on
 # the way out, so a run that never reached the plan still says how the host looked when it stopped.
 trap finish_probe EXIT
+# --- who holds a host lock ------------------------------------------------
+# A waiting run that repeats only "still waiting" is indistinguishable from a hung one: the reader
+# cannot tell a queue from a deadlock, and a run that prints one line can then sit for
+# fifteen minutes while the answer -- its own parent held every slot it wanted -- was one `ps` away.
+# So every wait below prints the holder, and the reading is taken in two halves because neither half
+# answers alone:
+#
+#   * `/proc/locks` says *whether* the lock is held. The inode is the key, matched as `:<inode> `;
+#     a blocked waiter is a `->` entry and is skipped, because a waiter is not a holder. `fuser`
+#     cannot answer this: it lists the processes with the file *open*, which includes one that has
+#     already released the lock (internal/tools/README.md);
+#   * `fuser` says *who* has the descriptor, and that is the only half that names something a reader
+#     can ask. `flock(1)` acquires on an inherited descriptor and then exits, so the pid `/proc/locks`
+#     names is usually gone a millisecond later -- a report built from those pids printed
+#     "held by pid <dead>" and could not tell a holder from its own shadow. A pid whose
+#     `ps -o args=` is empty is dropped, because this script's own `$( )` substitutions inherit every
+#     descriptor and would otherwise be listed as blockers.
+#
+# A slot held by a lock in a container's namespace has no pid this namespace can resolve, and that is
+# said rather than printed as "free", which is what an empty listing would look like otherwise.
+lock_holders() {
+    local file="`$1" ino locks=' ' pid etime args shown=0
+    if [ -r /proc/locks ]; then
+        ino=`$(stat -c %i "`$file" 2>/dev/null) || ino=''
+        locks="`$(< /proc/locks)" 2>/dev/null || locks=' '
+        case "`$locks" in
+            *":`$ino "*) ;;
+            *) echo "  `$file: not held"; return ;;
+        esac
+        for pid in `$(fuser "`$file" 2>/dev/null | tr -s ' ' '\n' | grep -E '^[0-9]+$' | sort -u); do
+            args=`$(ps -o args= -p "`$pid" 2>/dev/null | cut -c1-90)
+            [ -n "`$args" ] || continue
+            etime=`$(ps -o etime= -p "`$pid" 2>/dev/null | tr -d ' ')
+            echo "  `$file: held by pid `$pid (`${etime:-?}) `$args"
+            shown=1
+        done
+        [ "`$shown" = 1 ] || echo "  `$file: held, and no process in this namespace has it open (a container, or a namespace of its own)"
+        return
+    fi
+    for pid in `$(fuser "`$file" 2>/dev/null | tr -s ' ' '\n' | grep -E '^[0-9]+$'); do
+        args=`$(ps -o args= -p "`$pid" 2>/dev/null | cut -c1-90)
+        echo "  `$file: opened by pid `$pid (fuser; /proc/locks unreadable) `$args"
+    done
+}
 run_note starting
 echo "HOST_LOAD_START=`$(cut -d' ' -f1 /proc/loadavg 2>/dev/null || echo unknown)"
 echo "HOST_OVERLAP_START=`$(others_now)"
@@ -2891,12 +2935,14 @@ if [ '$timeSensitive' = 'True' ]; then
             exec 21>&- 2>/dev/null; exec 22>&- 2>/dev/null; exec 23>&- 2>/dev/null
             if [ "`$ts_waited" -ge '$SlotWaitSeconds' ]; then
                 echo "[camel-remote] noslot: waited `${ts_waited}s and the host `$miss slot is still held by another run; this plan is time sensitive, so it does not start without build-1, build-2 and test together" >&2
+                lock_holders "/tmp/camel-host-`$miss.lock" >&2
                 echo "HOST_NOSLOT=`$miss"
                 echo 'HOST_STATE=noslot'
                 exit 4
             fi
             if [ "`$((ts_waited % 30))" -eq 0 ]; then
-                echo "[camel-remote] still waiting for the host `$miss slot (a time-sensitive plan holds build-1, build-2 and test together; `${ts_waited}s)"
+                echo "[camel-remote] still waiting for the host `$miss slot (a time-sensitive plan holds build-1, build-2 and test together; `${ts_waited}s of '$SlotWaitSeconds's, -SlotWaitSeconds); who holds it:"
+                lock_holders "/tmp/camel-host-`$miss.lock"
             fi
             sleep 3
             ts_waited=`$((ts_waited + 3))
@@ -2904,6 +2950,15 @@ if [ '$timeSensitive' = 'True' ]; then
     done
     echo 'HOST_BUILD_SLOT=1&2'
     echo 'HOST_TEST_SLOT=1&2&3'
+    # The plan step is `camel-run plan` in a *child* process (below), and a lock lives on a file
+    # descriptor: the child inherits the descriptor's number only if this shell hands it over, and it
+    # asked for the same files -- so without this line the run queues behind the very process that
+    # started it. Measured on `perf/fib`: hold taken here, then the plan
+    # step printed "1 and 2 are held, and slot 3 is the merge seat's alone, so this run queues
+    # rather than borrow it" and waited until the lane killed it at fifteen minutes. `camel-run`
+    # reads every name back against /proc/locks and the parent chain, so this is a reading the child
+    # checks, not a claim it believes.
+    export CAMEL_TEST_SLOT_HELD='1 2 3'
     # Holding the host means holding its whole process budget too: nothing else is running, so the
     # plan and the build both get all 32 (still no more than the caller asked for).
     export CAMEL_JOBS="`$(budget_jobs `$EXCLUSIVE_JOBS)"
@@ -2929,12 +2984,16 @@ if [ '$NoBuild' != 'True' ]; then
     slot=
     if flock -n 9; then slot=1; elif flock -n 8; then slot=2; fi
     if [ -z `$slot ]; then
-        echo '[camel-remote] waiting for a host build slot'
+        echo '[camel-remote] waiting for a host build slot (build-1, build-2; a build holds it for its compile and its checkers)'
         waited=0
         while [ -z `$slot ]; do
             if flock -n 9; then slot=1; elif flock -n 8; then slot=2; else
                 sleep 3; waited=`$((waited + 3))
-                if [ `$((waited % 30)) -eq 0 ]; then echo "[camel-remote] still waiting for a host build slot (`${waited}s)"; fi
+                if [ `$((waited % 30)) -eq 0 ]; then
+                    echo "[camel-remote] still waiting for a host build slot (`${waited}s); who holds them:"
+                    lock_holders /tmp/camel-host-build-1.lock
+                    lock_holders /tmp/camel-host-build-2.lock
+                fi
             fi
         done
     fi
@@ -3033,11 +3092,18 @@ fi
 $goldenStage
 $fetchStage
 # The plan slot is released here, before the checkers: they read a finished run and need no
-# exclusion. A time-sensitive run lets go of all three slots here, for the same reason -- and the
-# build half is taken back by the check stage itself when a checker compiles (clang-syntax does),
+# exclusion. A time-sensitive run lets go of all three test slots here, for the same reason -- and
+# the build half is taken back by the check stage itself when a checker compiles (clang-syntax does),
 # so "released" here does not mean the checkers run outside the box.
+#
+# The test slots are closed by number (`21`, `22`, `23`): the hold block above opens them on those
+# descriptors and nothing closed them, so the line that said "lets go of all three" closed the build
+# slots and kept the three test slots held until the whole run exited -- which also kept the host's
+# plan slots shut while the checkers and the gpu sweep ran, the length of the stage this release
+# exists to leave open.
 if [ "`$held_all" = 1 ]; then
-    exec 7>&- 2>/dev/null; exec 8>&- 2>/dev/null; exec 9>&- 2>/dev/null
+    exec 21>&- 2>/dev/null; exec 22>&- 2>/dev/null; exec 23>&- 2>/dev/null
+    exec 8>&- 2>/dev/null; exec 9>&- 2>/dev/null
 else
     exec 7>&- 2>/dev/null
 fi
