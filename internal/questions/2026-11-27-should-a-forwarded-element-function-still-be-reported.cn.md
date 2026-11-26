@@ -53,3 +53,6 @@
 - 一条红：`consistency.new_values` / `new_values.dropped_foreach_lambda`（在 `065bfb1690` 与尖端都红，不是新红）。
 - 同源但**不该一起改**的两条：`int_mat_assign`（`a @= 2` 报内部名 `__assn_mat__` 未导出，已单开修复格）；
   张量上的 `@=` 是否也不通（`src/stdlib/tensor/ops/linalg_ops.cpp:184` 只导出 `__mat__`/`matmul`）——只报不实现。
+## 答复（决策者）
+
+该报。规则管的是"把一个纯值丢掉"，与这个值经过几层包装无关。判定不靠看穿包装，而是看形参的类型：形参声明的函数类型交回 `void`（如包装的 `with <f: (item: int) => void>`），实参却是函数体以一个非 `void` 的纯值结尾的函数，就在实参处报 `UnusedPureResult`。被调用者的签名已经说了它会丢掉结果，这一条在每个调用点都看得见，包装多少层都一样。这样 `callSpec->discardsCallbackResult` 与 `lambdaGraphs_` 的登记就不再需要（原生 `foreach` 的形参也写成交回 `void` 的函数类型），判据只有一处。修法单开一格，用例 `new_values.dropped_foreach_lambda` 不改。
