@@ -1,7 +1,7 @@
 id = "tools.facts_readers_sweep"
 order = 919
 # Slow layer: the sweep starts one `camel` per case the tree has -- 4037 of them, 343530 ms of CPU
-# and 129 s of wall clock at six at a time (measured 2026-11-25, run 20261125_023228). A plan
+# and 129 s of wall clock at six at a time. A plan
 # selected by a case path under test/cases must stay cheap, so the entry is its own plan and the
 # case is the tool itself, a path under test/tools that no test/cases path owns.
 tier = "slow"

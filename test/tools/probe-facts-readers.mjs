@@ -47,8 +47,8 @@
 // The binary is `$CAMEL_HOME/bin/camel` when that exists, else `camel` on `PATH`. The reading is
 // only worth what the line 1 provenance says: the machine's binary and the tree it was built from.
 //
-// The readings this produced on 2026-11-25 (tree `d3e0bc39ae` + the gate commit, tip
-// `a70b8c645c`): `cases=4037 read=2747 skipped=1290 silent=0 nodes=211894 agree=201518 diff=10376
+// The readings this produced, with `test::facts_compare` answering in the shape the gate commit
+// introduced: `cases=4037 read=2747 skipped=1290 silent=0 nodes=211894 agree=201518 diff=10376
 // no_fact=0 kinds=8`, with `kind=gate … both_kept=3918 kind_free_pred_kept=0`; before that commit,
 // `diff=10471` and `kind_free_pred_kept=95`, the 95 gate nodes the four terms had called movable.
 
