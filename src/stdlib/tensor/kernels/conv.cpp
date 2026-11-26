@@ -168,7 +168,7 @@ template <typename T> void im2col(const ConvGeometry &g, const T *image, T *cols
                 T *row = cols + ((c * g.KH + kh) * g.KW + kw) * g.spatial();
                 for (int64_t oh = 0; oh < g.OH; ++oh) {
                     const int64_t ih = oh * g.stride - g.pad + kh;
-                    T *dst          = row + oh * g.OW;
+                    T *dst           = row + oh * g.OW;
                     if (ih < 0 || ih >= g.H) {
                         std::fill_n(dst, g.OW, T(0));
                         continue;
@@ -260,12 +260,17 @@ Array *conv2dIn(
     return out;
 }
 
+// The two gradient kernels read **one** thing of the operand they answer: the extents of the tensor
+// they hand back. `conv2dInputGradIn` never touches `input`'s values (`col2im` writes the whole
+// output and reads only `g`), and `conv2dKernelGradIn` never touches `kernel`'s values (`pdw`
+// accumulates over every element and starts at zero). So the operand arrives here as extents,
+// which is what lets the statement carry them (see `conv2dInputGradStated` below).
 template <typename T>
 Array *conv2dInputGradIn(
-    const ConvGeometry &g, const Array *input, const Array *kernel, const Array *dy,
-    mm::IAllocator &allocator) {
+    const ConvGeometry &g, std::span<const int64_t> inputExtents, const Array *kernel,
+    const Array *dy, mm::IAllocator &allocator) {
     const T *pw = kernel->dataAs<T>(), *pdy = dy->dataAs<T>();
-    Array *dx = createTensor(dtypeOf<T>(), input->shapeSpan(), allocator, true);
+    Array *dx = createTensor(dtypeOf<T>(), inputExtents, allocator, true);
     T *pdx    = dx->dataAs<T>();
     parallelFor(g.N, 1, [&](int64_t begin, int64_t end) {
         std::vector<T> cols(static_cast<size_t>(g.ckk() * g.spatial()));
@@ -293,10 +298,10 @@ Array *conv2dInputGradIn(
 
 template <typename T>
 Array *conv2dKernelGradIn(
-    const ConvGeometry &g, const Array *input, const Array *kernel, const Array *dy,
-    mm::IAllocator &allocator) {
+    const ConvGeometry &g, const Array *input, std::span<const int64_t> kernelExtents,
+    const Array *dy, mm::IAllocator &allocator) {
     const T *px = input->dataAs<T>(), *pdy = dy->dataAs<T>();
-    Array *dw = createTensor(dtypeOf<T>(), kernel->shapeSpan(), allocator, true);
+    Array *dw = createTensor(dtypeOf<T>(), kernelExtents, allocator, true);
     T *pdw    = dw->dataAs<T>();
     std::vector<T> cols(static_cast<size_t>(g.ckk() * g.spatial()));
     for (int64_t n = 0; n < g.N; ++n) {
@@ -346,8 +351,8 @@ template <typename T>
 Array *pool2dIn(
     PoolKind kind, const Array *input, const Window2d &window, const Shape &outShape,
     mm::IAllocator &allocator) {
-    Array *out    = createTensor(dtypeOf<T>(), outShape, allocator);
-    const T *psrc = input->dataAs<T>();
+    Array *out      = createTensor(dtypeOf<T>(), outShape, allocator);
+    const T *psrc   = input->dataAs<T>();
     const int64_t H = input->dim(2), W = input->dim(3), OH = outShape[2], OW = outShape[3];
     const int64_t planes = outShape[0] * outShape[1];
     T *pdst              = out->dataAs<T>();
@@ -390,13 +395,13 @@ template <typename T>
 Array *pool2dGradIn(
     PoolKind kind, const Array *input, const Array *dy, const Window2d &window,
     const Shape &outShape, mm::IAllocator &allocator) {
-    Array *dx     = createTensor(dtypeOf<T>(), input->shapeSpan(), allocator, true);
-    const T *psrc = input->dataAs<T>();
-    const T *pdy  = dy->dataAs<T>();
-    T *pdx         = dx->dataAs<T>();
+    Array *dx       = createTensor(dtypeOf<T>(), input->shapeSpan(), allocator, true);
+    const T *psrc   = input->dataAs<T>();
+    const T *pdy    = dy->dataAs<T>();
+    T *pdx          = dx->dataAs<T>();
     const int64_t H = input->dim(2), W = input->dim(3), OH = outShape[2], OW = outShape[3];
     const int64_t planes = outShape[0] * outShape[1];
-    const T scale = T(1) / static_cast<T>(window.kernelH * window.kernelW);
+    const T scale        = T(1) / static_cast<T>(window.kernelH * window.kernelW);
     parallelFor(planes, 4, [&](int64_t begin, int64_t end) {
         for (int64_t p = begin; p < end; ++p) {
             const T *src = psrc + p * H * W;
@@ -434,9 +439,9 @@ Array *pool2dGradIn(
 
 template <typename T>
 Array *batchNormIn(
-    const Array *input, const Array *mean, const Array *var, const Array *gamma,
-    const Array *beta, double eps, mm::IAllocator &allocator) {
-    Array *out = createTensor(dtypeOf<T>(), input->shapeSpan(), allocator);
+    const Array *input, const Array *mean, const Array *var, const Array *gamma, const Array *beta,
+    double eps, mm::IAllocator &allocator) {
+    Array *out    = createTensor(dtypeOf<T>(), input->shapeSpan(), allocator);
     int64_t inner = 1;
     for (size_t d = 2; d < input->rank(); ++d) {
         inner *= input->dim(d);
@@ -445,17 +450,17 @@ Array *batchNormIn(
     const T *px     = input->dataAs<T>();
     const T *pgamma = gamma->dataAs<T>(), *pbeta = beta->dataAs<T>();
     const T *pmean = mean->dataAs<T>(), *pvar = var->dataAs<T>();
-    T *pdst        = out->dataAs<T>();
+    T *pdst = out->dataAs<T>();
     parallelFor(
         N * C,
         std::max<int64_t>(1, 16384 / std::max<int64_t>(inner, 1)),
         [&](int64_t begin, int64_t end) {
             for (int64_t plane = begin; plane < end; ++plane) {
-                const int64_t c   = plane % C;
-                const T scale     = pgamma[c] / std::sqrt(pvar[c] + static_cast<T>(eps));
-                const T shift     = pbeta[c] - pmean[c] * scale;
-                const T *src      = px + plane * inner;
-                T *dst            = pdst + plane * inner;
+                const int64_t c = plane % C;
+                const T scale   = pgamma[c] / std::sqrt(pvar[c] + static_cast<T>(eps));
+                const T shift   = pbeta[c] - pmean[c] * scale;
+                const T *src    = px + plane * inner;
+                T *dst          = pdst + plane * inner;
                 for (int64_t i = 0; i < inner; ++i) {
                     dst[i] = src[i] * scale + shift;
                 }
@@ -474,8 +479,8 @@ Shape conv2dShape(
 }
 
 Array *conv2d(
-    const Array *input, const Array *kernel, const Array *bias, int64_t stride,
-    int64_t padding, mm::IAllocator &allocator) {
+    const Array *input, const Array *kernel, const Array *bias, int64_t stride, int64_t padding,
+    mm::IAllocator &allocator) {
     const ConvGeometry g = geometry(input->shapeSpan(), kernel->shapeSpan(), stride, padding);
     if (bias && !(bias->rank() == 1 && bias->dim(0) == g.O)) {
         throw ShapeError(
@@ -489,25 +494,72 @@ Array *conv2d(
 }
 
 Array *conv2dInputGrad(
-    const Array *input, const Array *kernel, const Array *dy, int64_t stride,
-    int64_t padding, mm::IAllocator &allocator) {
+    const Array *input, const Array *kernel, const Array *dy, int64_t stride, int64_t padding,
+    mm::IAllocator &allocator) {
     const ConvGeometry g = geometry(input->shapeSpan(), kernel->shapeSpan(), stride, padding);
     requireDy(g, dy);
     const TypeCode code = computableElementType("conv2d_input_grad", {kernel, dy});
     return forElementType(code, [&]<typename T>() {
-        return conv2dInputGradIn<T>(g, input, kernel, dy, allocator);
+        return conv2dInputGradIn<T>(g, input->shapeSpan(), kernel, dy, allocator);
     });
 }
 
 Array *conv2dKernelGrad(
-    const Array *input, const Array *kernel, const Array *dy, int64_t stride,
-    int64_t padding, mm::IAllocator &allocator) {
+    const Array *input, const Array *kernel, const Array *dy, int64_t stride, int64_t padding,
+    mm::IAllocator &allocator) {
     const ConvGeometry g = geometry(input->shapeSpan(), kernel->shapeSpan(), stride, padding);
     requireDy(g, dy);
     const TypeCode code = computableElementType("conv2d_kernel_grad", {input, dy});
     return forElementType(code, [&]<typename T>() {
-        return conv2dKernelGradIn<T>(g, input, kernel, dy, allocator);
+        return conv2dKernelGradIn<T>(g, input, kernel->shapeSpan(), dy, allocator);
     });
+}
+
+// The stated twins of the two gradients: the operand they answer is named by its extents instead of
+// by a tensor, and every other operand is read exactly as the unstested entry point reads it. This
+// is the same arithmetic, not a second reading of it -- the geometry, `requireDy`, the element type
+// and the kernels are the ones above -- so a stated call and an unstated call of the same operands
+// answer the same bits. The only thing the extents change is where the answer's shape comes from,
+// which is the point: a reverse rule of `conv2d` is handed a cotangent for one operand and no value
+// of it
+// (`stdlib/rulesets/transpose.cml#conv2d_t`), and `shape` of that operand is a value the transposed
+// half holds while the operand's own tensors are not.
+Array *conv2dInputGradStated(
+    std::span<const int64_t> inputExtents, const Array *kernel, const Array *dy, int64_t stride,
+    int64_t padding, mm::IAllocator &allocator) {
+    const ConvGeometry g = geometry(inputExtents, kernel->shapeSpan(), stride, padding);
+    requireDy(g, dy);
+    const TypeCode code = computableElementType("conv2d_input_grad_stated", {kernel, dy});
+    return forElementType(code, [&]<typename T>() {
+        return conv2dInputGradIn<T>(g, inputExtents, kernel, dy, allocator);
+    });
+}
+
+Array *conv2dKernelGradStated(
+    const Array *input, std::span<const int64_t> kernelExtents, const Array *dy, int64_t stride,
+    int64_t padding, mm::IAllocator &allocator) {
+    const ConvGeometry g = geometry(input->shapeSpan(), kernelExtents, stride, padding);
+    requireDy(g, dy);
+    const TypeCode code = computableElementType("conv2d_kernel_grad_stated", {input, dy});
+    return forElementType(code, [&]<typename T>() {
+        return conv2dKernelGradIn<T>(g, input, kernelExtents, dy, allocator);
+    });
+}
+
+Array *conv2dBiasGradStated(
+    std::span<const int64_t> biasExtents, const Array *dy, mm::IAllocator &allocator) {
+    if (biasExtents.size() != 1) {
+        throw ShapeError(
+            "conv2d bias gradient expects a one-dimension bias, got " + dims(biasExtents));
+    }
+    // `conv2dBiasGrad` reads `dy` alone and answers `[O]`: the extents are checked against that
+    // answer before any work is done, and then it is the unstested reading that answers.
+    if (dy->rank() != 4 || dy->dim(1) != biasExtents[0]) {
+        throw ShapeError(
+            "conv2d bias gradient: the stated bias " + dims(biasExtents) +
+            " disagrees with the channels of dy, " + dims(dy->shapeSpan()));
+    }
+    return conv2dBiasGrad(dy, allocator);
 }
 
 Array *conv2dBiasGrad(const Array *dy, mm::IAllocator &allocator) {
@@ -534,8 +586,8 @@ Shape pool2dShape(std::span<const int64_t> input, const Window2d &window) {
     return {input[0], input[1], window.outH(input[2]), window.outW(input[3])};
 }
 
-Array *pool2d(
-    PoolKind kind, const Array *input, const Window2d &window, mm::IAllocator &allocator) {
+Array *
+pool2d(PoolKind kind, const Array *input, const Window2d &window, mm::IAllocator &allocator) {
     const Shape outShape = pool2dShape(input->shapeSpan(), window);
     const char *op       = kind == PoolKind::Max ? "max_pool2d" : "avg_pool2d";
     const TypeCode code  = computableElementType(op, {input});
@@ -561,8 +613,8 @@ Array *pool2dGrad(
 }
 
 Array *batchNorm(
-    const Array *input, const Array *mean, const Array *var,
-    const Array *gamma, const Array *beta, double eps, mm::IAllocator &allocator) {
+    const Array *input, const Array *mean, const Array *var, const Array *gamma, const Array *beta,
+    double eps, mm::IAllocator &allocator) {
     if (input->rank() < 2) {
         throw ShapeError(
             "batch_norm expects input of rank >= 2 with channels on axis 1, got " +
@@ -592,8 +644,8 @@ struct BnTrainGeometry {
     int64_t perChannel() const { return N * inner; }
 };
 
-BnTrainGeometry bnTrainGeometry(
-    const Array *input, std::initializer_list<const Array *> params, const char *op) {
+BnTrainGeometry
+bnTrainGeometry(const Array *input, std::initializer_list<const Array *> params, const char *op) {
     if (input->rank() < 2) {
         throw ShapeError(
             std::string(op) + " expects input of rank >= 2 with channels on axis 1, got " +
@@ -660,8 +712,8 @@ template <typename T> BnTrainStats bnTrainStats(const T *x, const BnTrainGeometr
 template <typename T>
 void batchNormTrainIn(
     const BnTrainGeometry &g, const Array *input, const Array *gamma, const Array *beta,
-    const Array *runningMean, const Array *runningVar, double momentum, double eps,
-    Array **outY, Array **outRunningMean, Array **outRunningVar, mm::IAllocator &allocator) {
+    const Array *runningMean, const Array *runningVar, double momentum, double eps, Array **outY,
+    Array **outRunningMean, Array **outRunningVar, mm::IAllocator &allocator) {
     const Shape statShape{g.C};
     Array *y   = createTensor(dtypeOf<T>(), input->shapeSpan(), allocator);
     Array *nrm = createTensor(dtypeOf<T>(), statShape, allocator);
@@ -677,8 +729,8 @@ void batchNormTrainIn(
     T *prm = nrm->dataAs<T>(), *prv = nrv->dataAs<T>();
     for (int64_t c = 0; c < g.C; ++c) {
         const size_t u = static_cast<size_t>(c);
-        prm[c] = keep * prmean[c] + mix * static_cast<T>(stats.mean[u]);
-        prv[c] = keep * prvar[c] + mix * static_cast<T>(stats.var[u] * unbiased);
+        prm[c]         = keep * prmean[c] + mix * static_cast<T>(stats.mean[u]);
+        prv[c]         = keep * prvar[c] + mix * static_cast<T>(stats.var[u] * unbiased);
     }
     const T *psrc = input->dataAs<T>();
     T *py         = y->dataAs<T>();
@@ -746,12 +798,12 @@ void batchNormTrainGradIn(
                 const int64_t c = plane % g.C;
                 const size_t u  = static_cast<size_t>(c);
                 const double mu = stats.mean[u], inv = stats.invStd[u];
-                const T ginv                        = pgamma[c] * static_cast<T>(inv);
-                const T meanDy                      = pdb[c] / static_cast<T>(M);
-                const T meanDxh                     = pdg[c] / static_cast<T>(M);
-                const T *xplane                     = psrc + plane * g.inner;
-                const T *dplane                     = pdy + plane * g.inner;
-                T *dst                              = pdx + plane * g.inner;
+                const T ginv    = pgamma[c] * static_cast<T>(inv);
+                const T meanDy  = pdb[c] / static_cast<T>(M);
+                const T meanDxh = pdg[c] / static_cast<T>(M);
+                const T *xplane = psrc + plane * g.inner;
+                const T *dplane = pdy + plane * g.inner;
+                T *dst          = pdx + plane * g.inner;
                 for (int64_t i = 0; i < g.inner; ++i) {
                     const T xhat = (xplane[i] - static_cast<T>(mu)) * static_cast<T>(inv);
                     dst[i]       = ginv * (dplane[i] - meanDy - xhat * meanDxh);
@@ -766,25 +818,33 @@ void batchNormTrainGradIn(
 } // namespace
 
 void batchNormTrain(
-    const Array *input, const Array *gamma, const Array *beta,
-    const Array *runningMean, const Array *runningVar, double momentum, double eps,
-    Array **outY, Array **outRunningMean, Array **outRunningVar,
-    mm::IAllocator &allocator) {
+    const Array *input, const Array *gamma, const Array *beta, const Array *runningMean,
+    const Array *runningVar, double momentum, double eps, Array **outY, Array **outRunningMean,
+    Array **outRunningVar, mm::IAllocator &allocator) {
     const BnTrainGeometry g =
         bnTrainGeometry(input, {gamma, beta, runningMean, runningVar}, "batch_norm_train");
     const TypeCode code =
         computableElementType("batch_norm_train", {input, gamma, beta, runningMean, runningVar});
     return forElementType(code, [&]<typename T>() {
         batchNormTrainIn<T>(
-            g, input, gamma, beta, runningMean, runningVar, momentum, eps, outY, outRunningMean,
-            outRunningVar, allocator);
+            g,
+            input,
+            gamma,
+            beta,
+            runningMean,
+            runningVar,
+            momentum,
+            eps,
+            outY,
+            outRunningMean,
+            outRunningVar,
+            allocator);
     });
 }
 
 void batchNormTrainGrad(
-    const Array *input, const Array *gamma, const Array *dy, double eps,
-    Array **outDx, Array **outDgamma, Array **outDbeta,
-    mm::IAllocator &allocator) {
+    const Array *input, const Array *gamma, const Array *dy, double eps, Array **outDx,
+    Array **outDgamma, Array **outDbeta, mm::IAllocator &allocator) {
     const BnTrainGeometry g = bnTrainGeometry(input, {gamma}, "batch_norm_train_grad");
     if (!dy->sameShape(input)) {
         throw ShapeError(
