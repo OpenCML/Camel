@@ -30,10 +30,10 @@
  * fails or does not fail by the pair of types it converts between (`runtime::castMayFault`), and the
  * operator's record can only say the half that is true of every cast -- that a cast may fault. So at
  * an OPER node whose operator is a conversion, `nodeArrangeable` asks the kernel's one reader of that
- * pair (`runtime::nodeMayFault`, the function the predicate a pass asks is built on) instead of the
- * record, and the two readers of one question cannot answer differently there. `operatorArrangeable`
- * takes no pair and therefore reports the operator's half: it is the answer for "a reader that has
- * only an operator", and a caller that has the node asks `nodeArrangeable`.
+ * pair (`runtime::nodeMayFault`) instead of the record, and this answer is the node's and not the
+ * operator's. `operatorArrangeable` takes no pair and therefore reports the operator's half: it is
+ * the answer for "a reader that has only an operator", and a caller that has the node asks
+ * `nodeArrangeable`.
  *
  * The record is the only statement of the first three, and every entrance writes into it: a built-in
  * operator's declaration is copied there when the module loads

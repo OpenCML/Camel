@@ -2336,9 +2336,9 @@ bool carriesOrdering(const GraphDraft &draft, gc_node_ref_t node) {
         // Every other node carries the order exactly when a pass may not move it, and that is the
         // fact's answer (`core.arrangeable`, four terms of design principles 3.4) rather than a
         // second reading of the node's kind and operator. A caller that used to be able to ask it
-        // with the shapes of the types (`byShape`) cannot any more: the fact has no shape term, and
-        // the measurement that removed it (`test::facts_compare`, `shape_diff=0` on every program
-        // of `arrangeable_families`) is why that refinement was not a second question.
+        // with the shapes of the types (`byShape`) cannot any more: the fact has no shape term. What
+        // a pair of types decides is a conversion's fault term, which the fact reads itself at the
+        // node (`termsOfOperNode`), so a caller holding a pair asks the fact and not the shape.
         return !camel::facts::nodeIsFreelyArrangeable(draft, node);
     }
 }

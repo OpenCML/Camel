@@ -13,14 +13,16 @@
 #include "camel/facts/control_regions.h"
 #include "camel/runtime/control_regions.h"
 #include "camel/runtime/graph.h"
-#include "camel/runtime/oper_shape.h"
 #include "camel/runtime/graph_txn.h"
+#include "camel/runtime/oper_shape.h"
 #include "camel/runtime/reachable.h"
 
 #include <array>
 #include <format>
+#include <map>
 #include <memory>
 #include <ostream>
+#include <span>
 #include <string>
 #include <vector>
 
@@ -37,96 +39,6 @@ using camel::runtime::kInvalidNodeRef;
 /// compares its regions and nodes one for one; it prints `within_pairs=0`, which is what a case
 /// that reads the count as a lower bound reports as a red rather than as a green over nothing.
 constexpr uint32_t kMaxPairRegions = 512;
-
-/// The algorithm that answered the arrangeable question before it became a fact, kept here as the
-/// baseline the comparison is made against. It is not a second implementation a pass may read: it is
-/// the *old* answer, frozen on purpose and named so that nothing can mistake it for the model's, and
-/// the tables this file prints are "the fact against this" -- a claim about two answers needs both of
-/// them to stay still. `OldRegionWalk` is the same shape of thing for `core.controlRegions`.
-///
-/// It is the pair the fact replaced: `nodeMayFault` (which survives, and is still the fault half)
-/// and `OperatorTable::mayBeRecomputed` (foldability and macro), with the two graph forms that read
-/// a node's types for a conversion and the shapes of its operands for an elementwise operator.
-struct OldArrangeable {
-    static bool of(
-        camel::runtime::GCNodeKind kind, camel::core::OperId oper,
-        const camel::core::type::Type *castTarget = nullptr,
-        const camel::core::type::Type *castSource = nullptr, bool fixedShapes = false) {
-        if (kind == camel::runtime::GCNodeKind::Oper &&
-            !camel::core::OperatorTable::instance().mayBeRecomputed(oper)) {
-            return false;
-        }
-        return !camel::runtime::nodeMayFault(kind, oper, castTarget, castSource, fixedShapes);
-    }
-
-    static bool of(const GCGraph &graph, gc_node_ref_t ref) {
-        const camel::runtime::GCNode *node = graph.node(ref);
-        if (node == nullptr) {
-            return false;
-        }
-        if (node->kind == camel::runtime::GCNodeKind::Oper) {
-            const auto *body = graph.nodeBodyAs<camel::runtime::GCOperBody>(ref);
-            const camel::core::OperId oper =
-                body == nullptr ? camel::core::kNoOper : body->oper;
-            if (camel::ops::takesItsOperandAsItsType(camel::runtime::shapeOfOperator(oper))) {
-                const auto inputs                       = graph.normInputsOf(ref);
-                const camel::runtime::GCNode *source    = inputs.size() == 1 ? graph.node(inputs[0]) : nullptr;
-                return of(
-                    node->kind,
-                    oper,
-                    node->dataType(),
-                    source != nullptr ? source->dataType() : nullptr);
-            }
-            return of(node->kind, oper);
-        }
-        if (camel::runtime::shapeOfKind(node->kind) == camel::ops::OperShape::Conversion) {
-            const auto inputs                    = graph.normInputsOf(ref);
-            const camel::runtime::GCNode *source = inputs.size() == 1 ? graph.node(inputs[0]) : nullptr;
-            return of(
-                node->kind,
-                camel::core::kNoOper,
-                node->dataType(),
-                source != nullptr ? source->dataType() : nullptr);
-        }
-        return of(node->kind, camel::core::kNoOper);
-    }
-
-    static bool of(const camel::runtime::GraphDraft &draft, gc_node_ref_t id, bool byShape) {
-        const camel::runtime::DraftNodeHeader *header = draft.header(id);
-        if (header == nullptr || !draft.alive(id)) {
-            return false;
-        }
-        const std::span<const std::byte> payload =
-            header->kind == camel::runtime::GCNodeKind::Oper ? draft.payloadOf(id)
-                                                             : std::span<const std::byte>{};
-        const camel::core::OperId oper =
-            payload.size() >= sizeof(camel::runtime::GCOperBody)
-                ? reinterpret_cast<const camel::runtime::GCOperBody *>(payload.data())->oper
-                : camel::core::kNoOper;
-        const camel::ops::OperShape shape =
-            camel::runtime::draftOperationShape(draft, id);
-        if (camel::ops::takesItsOperandAsItsType(shape)) {
-            const auto inputs     = draft.normInputsOf(id);
-            const auto *source    = inputs.size() == 1 ? draft.header(inputs[0]) : nullptr;
-            return of(
-                header->kind,
-                oper,
-                header->dataType,
-                source != nullptr ? source->dataType : nullptr);
-        }
-        if (header->kind == camel::runtime::GCNodeKind::Oper) {
-            bool fixed = byShape && camel::runtime::shapesAreFixed(header->dataType);
-            for (gc_node_ref_t input : draft.normInputsOf(id)) {
-                const auto *in = draft.header(input);
-                fixed          = fixed && in != nullptr &&
-                                 camel::runtime::shapesAreFixed(in->dataType);
-            }
-            return payload.size() >= sizeof(camel::runtime::GCOperBody) &&
-                   of(header->kind, oper, nullptr, nullptr, fixed);
-        }
-        return of(header->kind, camel::core::kNoOper);
-    }
-};
 
 bool isControlRegion(GCRegionKind kind) {
     return kind == GCRegionKind::Arm || kind == GCRegionKind::LoopCond ||
@@ -255,10 +167,8 @@ void compareControlRegions(
     }
 
     for (gc_node_ref_t ref = 0; ref < static_cast<gc_node_ref_t>(graph.nodeCount()); ++ref) {
-        // The view's notion of a node, not the graph's: the place a JOIN or a dropped node holds is
-        // a place of the numbering, and the fact layer refuses an anchor on one (`checkAnchors`:
-        // "node N is not a node of its graph"). Counting those places here made the whole
-        // comparison give up on any program that carries a branch.
+        // The view's notion of a node, for the reason `censusArrangeable` gives below: the place a
+        // JOIN holds is a place of the numbering, and the fact layer refuses an anchor on one.
         if (!view.contains(static_cast<camel::graph::NodeRef>(ref))) {
             continue;
         }
@@ -269,11 +179,12 @@ void compareControlRegions(
 }
 
 struct ArrangeCounts {
-    size_t graphs = 0;
-    size_t nodes  = 0;
-    size_t same   = 0;
-    size_t diff   = 0;
-    size_t noOld  = 0;
+    size_t graphs      = 0;
+    size_t nodes       = 0;
+    size_t same        = 0;
+    size_t diff        = 0;
+    size_t noOld       = 0;
+    size_t conversions = 0;
 };
 
 /// `core.arrangeable` against the algorithm it replaced, which answered OPER nodes only: the four
@@ -281,17 +192,28 @@ struct ArrangeCounts {
 /// algorithm never answered is counted as `no_old` -- the fact answers it, and that count is part
 /// of what putting the question into a fact added. An OPER node the fact has no answer for is a
 /// `diff`: the old algorithm answered it, so the new one must too.
+///
+/// A **conversion** is the one node the operator's four terms do not state on their own, and the
+/// algorithm that was replaced read the pair of types the node converts between for it
+/// (`castMayFault`, which the pass predicate and the compiler both ask). The older answer is
+/// therefore restated here at the node, for a conversion only, instead of being taken from
+/// `operatorArrangeable` -- which has an operator and no types, and could only report the operator's
+/// half ("a cast may fault"). That restatement is the baseline, so it lives here beside the
+/// comparison it is the baseline of, the way `OldRegionWalk` does above; and `conversions` counts
+/// the nodes it applied to, so a run that walked none of them says so instead of reading like a
+/// comparison that covered them.
 void compareArrangeable(
     const GCGraph &graph, camel::facts::Store &store, ArrangeCounts &counts) {
     const camel::graph::GraphView &view  = graph.view();
     const camel::facts::KindId kind      = camel::facts::arrangeableKind();
     ++counts.graphs;
     for (gc_node_ref_t ref = 0; ref < static_cast<gc_node_ref_t>(graph.nodeCount()); ++ref) {
-        if (!view.contains(static_cast<camel::graph::NodeRef>(ref))) {
+        const camel::graph::NodeRef node = static_cast<camel::graph::NodeRef>(ref);
+        // The view's notion of a node, for the reason `censusArrangeable` gives below.
+        if (!view.contains(node)) {
             continue;
         }
         ++counts.nodes;
-        const camel::graph::NodeRef node = static_cast<camel::graph::NodeRef>(ref);
         if (view.kindOf(node) != camel::graph::NodeKind::Oper) {
             ++counts.noOld;
             continue;
@@ -299,24 +221,48 @@ void compareArrangeable(
         const std::shared_ptr<const camel::facts::Arrangeable> fact =
             store.obtain<camel::facts::Arrangeable>(
                 kind, camel::facts::Anchor{&graph, static_cast<camel::facts::NodeId>(ref)});
-        const camel::facts::Arrangeable older =
-            camel::facts::operatorArrangeable(view.operatorOf(node));
+        camel::facts::Arrangeable older = camel::facts::operatorArrangeable(view.operatorOf(node));
+        if (camel::runtime::shapeOfOperator(view.operatorOf(node)) ==
+            camel::ops::OperShape::Conversion) {
+            const std::span<const camel::graph::NodeRef> norm =
+                view.inputs(node, camel::graph::PortGroup::Normal);
+            older.cannotFault = !camel::runtime::castMayFault(
+                view.typeOf(node), norm.size() == 1 ? view.typeOf(norm[0]) : nullptr);
+            ++counts.conversions;
+        }
         const bool equal = fact != nullptr && *fact == older;
         ++(equal ? counts.same : counts.diff);
     }
 }
 
-/// The two answers one node got, counted: the four combinations of "the kind says freely
-/// arrangeable" and "the predicate a pass asks says it may be moved", plus the nodes the kind had no
-/// answer for. The four are separate and not two, because "they agree" has two states a total would
-/// merge: a node both readers call free and a node both refuse are different answers that agree.
-struct KindCounts {
-    size_t nodes             = 0;
-    size_t bothFree          = 0;
-    size_t bothKept          = 0;
-    size_t kindFreePredKept  = 0;
-    size_t kindKeptPredFree  = 0;
-    size_t noFact            = 0;
+/// One cell of the answer table: how many nodes of one row -- a node kind, a family, or a kind and an
+/// operator together -- the fact answered "freely arrangeable", how many it answered "no", and how
+/// many it had no answer for at all. `free` and `kept` are kept apart rather than summed: "a pass may
+/// move it anywhere" and "a pass must leave it where the program wrote it" are different readings of
+/// one row, and one total would merge them. `keptExample` is the first node of the row the fact kept,
+/// as `<graph>:<node>`: a count says a row is split, an example says which node to look at.
+struct AnswerCell {
+    size_t nodes  = 0;
+    size_t free   = 0;
+    size_t kept   = 0;
+    size_t noFact = 0;
+    std::string keptExample;
+
+    void add(const camel::facts::Arrangeable *fact, const std::string &at) {
+        ++nodes;
+        if (fact == nullptr) {
+            ++noFact;
+            return;
+        }
+        if (fact->all()) {
+            ++free;
+            return;
+        }
+        ++kept;
+        if (keptExample.empty()) {
+            keptExample = at;
+        }
+    }
 };
 
 /// The nine node kinds, in the order the vocabulary lists them, with the name the reading prints,
@@ -325,8 +271,8 @@ struct KindCounts {
 /// would otherwise do.
 constexpr size_t kNodeKindCount = 9;
 
-/// Where one node kind sits in a `KindCounts` table. One function, so the table's order and the
-/// name a line prints cannot drift apart.
+/// Where one node kind sits in a kind table. One function, so the table's order and the name a line
+/// prints cannot drift apart.
 size_t nodeKindIndex(camel::graph::NodeKind kind) {
     using camel::graph::NodeKind;
     switch (kind) {
@@ -351,126 +297,6 @@ size_t nodeKindIndex(camel::graph::NodeKind kind) {
     }
     return kNodeKindCount;
 }
-
-/// The families the second table counts, in the order the judgement about them is written: the
-/// reasons a node may not be arranged freely, and the node kinds whose answer is not an operator's.
-///
-///   `value`               a value or a port: the three of the four terms that can fail are true and
-///                         it ends, so it is free -- both readers say so and the row is there so the
-///                         totals cover the nodes;
-///   `oper`                an operator the table can answer all four terms for;
-///   `oper_may_fault`      an operator whose fault term is false: it may fault where it is written,
-///                         so design principles 3.4 keeps it there;
-///   `oper_unrecomputable` an operator that cannot fault and that a pass may nonetheless not
-///                         recompute (`OperatorTable::mayBeRecomputed`: pure and foldable, and not
-///                         a macro). This is the family where the older predicate and the fact can
-///                         differ on principle: foldability is not one of the four terms of 3.4;
-///   `oper_no_record`      an OPER node whose operator the view cannot name -- a FILL or an ACCS
-///                         (`graph/gc_graph_view.h`: the two kinds answer `NodeKind::Oper` and
-///                         `kNoOper`, because neither carries an operator record), which is the one
-///                         place the fact has no record to read the four terms from;
-///   `call`                a CALL or a FUNC node: an anchor that may be an effect, and a body that
-///                         is another graph's content;
-///   `brch` / `loop`       a branch or a loop: it stands for what runs inside it;
-///   `gate`                the hand-on of an order.
-constexpr size_t kFamilyCount = 9;
-constexpr const char *kFamilyNames[kFamilyCount] = {
-    "value",
-    "oper",
-    "oper_may_fault",
-    "oper_unrecomputable",
-    "oper_no_record",
-    "call",
-    "brch",
-    "loop",
-    "gate"};
-
-/// One row of the family table: how many nodes of one family the two readers answered, and how.
-/// `example` is the first node of the family the two answered differently, as `<graph>:<node>`, so
-/// the table names a node to look at and not only a count.
-struct FamilyRow {
-    KindCounts counts{};
-    std::string example;
-};
-
-/// Where a node sits in the family table. The node kind decides for every kind but OPER, where the
-/// fact's own terms say which reason is being judged: a fault is the first term a reader would act
-/// on, and "may not be recomputed" the second. A node the fact had no answer for is placed by its
-/// operator alone, so that a family never loses a node because the fact declined.
-size_t familyIndex(
-    camel::graph::NodeKind kind, camel::core::OperId oper, const camel::facts::Arrangeable *fact) {
-    using camel::graph::NodeKind;
-    switch (kind) {
-    case NodeKind::Data:
-    case NodeKind::Port:
-    case NodeKind::Bind:
-        return 0;
-    case NodeKind::Oper: {
-        // An OPER node the view can name no operator for is a FILL or an ACCS: there is no record
-        // to read the four terms from, so it is its own family rather than a fault or a fold.
-        if (oper == camel::core::kNoOper) {
-            return 4;
-        }
-        const bool mayFault     = fact != nullptr ? !fact->cannotFault : true;
-        const bool recomputable = camel::core::OperatorTable::instance().mayBeRecomputed(oper);
-        if (mayFault) {
-            return 2;
-        }
-        return recomputable ? 1 : 3;
-    }
-    case NodeKind::Call:
-    case NodeKind::Func:
-        return 5;
-    case NodeKind::Brch:
-        return 6;
-    case NodeKind::Loop:
-        return 7;
-    case NodeKind::Gate:
-        return 8;
-    }
-    return kFamilyCount;
-}
-
-/// The fourth reading: the same kind asked of a **draft**. `core.arrangeable` is a fact about the
-/// graph an editing session is building as much as about the one a program holds (`facts.h`: "the
-/// graph itself -- the frozen graph a program holds, or the graph an editing session is building"),
-/// and until the framework could hold a draft only the frozen half could be asked. This comparison
-/// decodes each graph into a transaction, asks the kind at every node of the *draft*, and reads:
-///
-///   `no_store`  graphs the framework answered no store for -- a draft it cannot hold, which is the
-///               thing this comparison exists to catch, because a count of zero asked of a draft
-///               that was never held would pass silently;
-///   `same`/`diff`  the draft's answer at a node against the frozen graph's answer at the same node.
-///               A decoded draft keeps the graph's numbering (`GraphDraft::keepsNodeIds`), so the
-///               two are the same node and the count is per node, not per pair;
-///   `kept`      nodes whose second ask was answered from what the store kept (`Status::Valid`), so
-///               a store that recomputed every time would be visible here;
-///   `stale`     graphs where an edit to the draft dropped the stored answer (`Status::Stale`). The
-///               answer a draft gives must go away when the draft changes, and this is the only
-///               reading that says the stamp is the draft's revision and not the constant a frozen
-///               graph answers.
-struct DraftCounts {
-    size_t graphs = 0;
-    size_t nodes  = 0;
-    size_t same   = 0;
-    size_t diff   = 0;
-    size_t noFact = 0;
-    size_t noStore = 0;
-    size_t kept   = 0;
-    size_t stale  = 0;
-    /// The same family table as `ReaderCounts::byFamily`, asked of the **draft**: the answer the
-    /// kind gives at a node of the graph an editing session holds, against the answer the predicate
-    /// a pass asks of a draft gives (`OldArrangeable::of(const GraphDraft &, ...)`, the frozen
-    /// copy of it). The frozen table cannot stand for this one: the freeze and the editing session
-    /// ask the draft, they asked it with a different `byShape`, and a node's answer is a fact of
-    /// the representation it was asked of.
-    std::array<FamilyRow, kFamilyCount + 1> byFamily{};
-    /// Nodes where the predicate's `byShape` answer differs from its plain one. It is the one
-    /// argument the draft's readers pass two ways (`std::cxx::opt` and the `graph` module ask
-    /// `byShape=true`, the freeze and the transaction ask it plain), so a zero here is what lets
-    /// the family table above stand for both.
-    size_t shapeDiff = 0;
-};
 
 /// The name of a node kind, as the reading prints it.
 const char *nodeKindName(camel::graph::NodeKind kind) {
@@ -497,97 +323,167 @@ const char *nodeKindName(camel::graph::NodeKind kind) {
     return "?";
 }
 
-struct ReaderCounts {
+/// The families the table counts, in the order the terms of design principles 3.4 are stated: an
+/// operator fails the fault term first, then the purity and the reach it declares; a value, a branch,
+/// a loop, a call and a gate are one family each, because their answer does not come from an operator
+/// record at all.
+///
+///   `value`           a value, a port or a binding: computed from what it reads, with nothing to
+///                     write, nothing to fail and nothing to wait for, so it is free;
+///   `oper`            an operator that answers all four terms: pure, reaching nothing outside the
+///                     program, unable to fault where it is written, and known to end;
+///   `oper_may_fault`  an operator whose fault term is false: it may raise a fault where the program
+///                     wrote it, so 3.4 keeps it there;
+///   `oper_not_free`   an operator that cannot fault and is still not free: it writes a cell or
+///                     reaches outside the program -- the `pure` and `noExternalEffect` terms;
+///   `oper_no_record`  an OPER node whose operator the view cannot name -- a FILL or an ACCS
+///                     (`graph/gc_graph_view.h`: the two kinds answer `NodeKind::Oper` and
+///                     `kNoOper`), which the fact answers from the operation the node performs;
+///   `call`            a CALL or a FUNC node: an anchor that may be an effect, and a body that is
+///                     another graph's content, so the kind declines;
+///   `brch` / `loop`   a branch or a loop: it stands for what runs inside it;
+///   `gate`            the hand-on of an order, refused whatever its four terms are.
+constexpr size_t kFamilyCount = 9;
+constexpr const char *kFamilyNames[kFamilyCount] = {
+    "value",
+    "oper",
+    "oper_may_fault",
+    "oper_not_free",
+    "oper_no_record",
+    "call",
+    "brch",
+    "loop",
+    "gate"};
+
+/// Where a node sits in the family table. The node kind decides for every kind but OPER, where the
+/// fact's own terms say which one fails: a fault is the first term a placement decision acts on, and
+/// a write or a reach outside the program the second. A node the fact had no answer for is placed by
+/// its operator alone, so that a family never loses a node because the fact declined.
+size_t familyIndex(
+    camel::graph::NodeKind kind, camel::core::OperId oper, const camel::facts::Arrangeable *fact) {
+    using camel::graph::NodeKind;
+    switch (kind) {
+    case NodeKind::Data:
+    case NodeKind::Port:
+    case NodeKind::Bind:
+        return 0;
+    case NodeKind::Oper: {
+        // An OPER node the view can name no operator for is a FILL or an ACCS: it is its own family
+        // rather than a fault or a write, because the answer is not an operator record's.
+        if (oper == camel::core::kNoOper) {
+            return 4;
+        }
+        if (fact == nullptr) {
+            return 1;
+        }
+        if (!fact->cannotFault) {
+            return 2;
+        }
+        return fact->all() ? 1 : 3;
+    }
+    case NodeKind::Call:
+    case NodeKind::Func:
+        return 5;
+    case NodeKind::Brch:
+        return 6;
+    case NodeKind::Loop:
+        return 7;
+    case NodeKind::Gate:
+        return 8;
+    }
+    return kFamilyCount;
+}
+
+/// The table keyed by (node kind name, operator URI or "-"). A `std::map` and not a hash table: the
+/// reading is printed, and two runs that print the same rows in a different order are two readings
+/// nobody can diff.
+using AnswerTally = std::map<std::pair<std::string, std::string>, AnswerCell>;
+
+/// The fact's answers over one graph: the totals, and the same answers cut by node kind, by the family
+/// the answer comes from, and by (kind, operator). This is the reading the plans pin -- what the fact
+/// says about each node, in the terms the fact itself states. There is nothing here to compare it
+/// with: `core.arrangeable` is the one answer to "may a pass arrange this node anywhere", and a
+/// second copy of it kept for a test to agree with would be a second statement of the same answer.
+struct AnswerCounts {
+    size_t graphs = 0;
     size_t nodes  = 0;
-    size_t agree  = 0;
-    size_t diff   = 0;
+    size_t free   = 0;
+    size_t kept   = 0;
     size_t noFact = 0;
-    /// The same counts, by the kind of node they were read at: one row per node kind, indexed by
-    /// `nodeKindIndex`, plus the row past the nine for a place whose kind the vocabulary does not
-    /// name. This is the table that says which kinds the two readers agree about; a total alone
-    /// cannot say whether a kind was never read or was read and agreed.
-    std::array<KindCounts, kNodeKindCount + 1> byKind{};
-    /// The same counts once more, by the family the node's answer comes from (`kFamilyNames`): the
-    /// kinds a placement decision is made about -- a call, a branch, a loop, a gate -- and, for an
-    /// operator, which of its terms is the one being judged (may it fault, may it be recomputed).
-    /// A kind table says *what kind* differed; this one says *why*, and the two are different
-    /// questions: one family's row is what a judgement about that reason is made against.
-    std::array<FamilyRow, kFamilyCount + 1> byFamily{};
+    std::array<AnswerCell, kNodeKindCount + 1> byKind{};
+    std::array<AnswerCell, kFamilyCount + 1> byFamily{};
+    AnswerTally byRow{};
 };
 
-/// `core.arrangeable` against the predicate a pass asked before it drops, moves, merges or reorders
-/// a node (`OldArrangeable`, the copy of the predicate this file keeps). The two answer one question
-/// -- may a pass arrange this node anywhere -- so a node they answer differently is a node that has
-/// two answers, and this is the reading that counts them. A node the kind answers nothing for is a
-/// `no_fact`, separately from a disagreement: "the fact declined" and "the fact and the reader
-/// disagree" are different states and one total would hide which happened.
-void compareReaders(
-    const GCGraph &graph, camel::facts::Store &store, ReaderCounts &counts, std::ostream &os) {
+/// `core.arrangeable` asked, through the store, at every node the view calls a node: one node is one
+/// row of each table above. The three tables answer three questions a single total cannot: the kind
+/// rows say *what* the program carries, the family rows say *which term of design principles 3.4* the
+/// kept nodes failed, and the (kind, operator) rows say which operator a kept node was running.
+///
+/// The walk goes over the view's nodes and not over the graph's numbering: a JOIN holds a place of
+/// the numbering, and the fact layer refuses an anchor on one (`checkAnchors`: "node N is not a node
+/// of its graph"), so counting those places made the pass give up on any program that carries a
+/// branch -- and a program it gave up on is a program no reading covered.
+void censusArrangeable(const GCGraph &graph, camel::facts::Store &store, AnswerCounts &counts) {
     const camel::graph::GraphView &view = graph.view();
     const camel::facts::KindId kind     = camel::facts::arrangeableKind();
+    ++counts.graphs;
     for (gc_node_ref_t ref = 0; ref < static_cast<gc_node_ref_t>(graph.nodeCount()); ++ref) {
         const camel::graph::NodeRef node = static_cast<camel::graph::NodeRef>(ref);
         if (!view.contains(node)) {
             continue;
         }
-        ++counts.nodes;
         const camel::graph::NodeKind kindOfNode = view.kindOf(node);
         const camel::core::OperId operOfNode    = view.operatorOf(node);
-        KindCounts &row = counts.byKind[nodeKindIndex(kindOfNode)];
-        ++row.nodes;
         const std::shared_ptr<const camel::facts::Arrangeable> fact =
             store.obtain<camel::facts::Arrangeable>(
                 kind, camel::facts::Anchor{&graph, static_cast<camel::facts::NodeId>(ref)});
-        const size_t family = familyIndex(kindOfNode, operOfNode, fact.get());
-        FamilyRow &familyRow = counts.byFamily[family];
-        ++familyRow.counts.nodes;
+        ++counts.nodes;
         if (fact == nullptr) {
             ++counts.noFact;
-            ++row.noFact;
-            ++familyRow.counts.noFact;
-            continue;
+        } else if (fact->all()) {
+            ++counts.free;
+        } else {
+            ++counts.kept;
         }
-        // The answer the reader gives. Before the predicate was deleted this was the predicate's own
-        // answer; after it, the same answer read from the fact and the answer this comparison keeps
-        // is the one the readers replaced (`OldArrangeable`), so the tables below count the
-        // same thing on both sides of the deletion.
-        const bool moved = OldArrangeable::of(graph, ref);
-        for (KindCounts *cell : {&row, &familyRow.counts}) {
-            if (moved) {
-                ++(fact->all() ? cell->bothFree : cell->kindKeptPredFree);
-            } else {
-                ++(fact->all() ? cell->kindFreePredKept : cell->bothKept);
-            }
-        }
-        if (fact->all() == moved) {
-            ++counts.agree;
-            continue;
-        }
-        ++counts.diff;
-        if (familyRow.example.empty()) {
-            familyRow.example = std::format("{}:{}", graph.name(), ref);
-        }
-        os << std::format(
-            "FACTS_COMPARE reader_diff graph={} node={} node_kind={} oper={} kind={} moved={} "
-            "terms={}{}{}{} waits={} orders={} syncs={} reads={}\n",
-            graph.name(),
-            ref,
-            nodeKindName(kindOfNode),
+        const std::string at = std::format("{}:{}", graph.name(), ref);
+        counts.byKind[nodeKindIndex(kindOfNode)].add(fact.get(), at);
+        counts.byFamily[familyIndex(kindOfNode, operOfNode, fact.get())].add(fact.get(), at);
+        const std::string operName =
             operOfNode == camel::core::kNoOper
                 ? std::string("-")
-                : std::string(camel::core::OperatorTable::instance().uri(operOfNode)),
-            fact->all() ? 1 : 0,
-            moved ? 1 : 0,
-            fact->pure ? 1 : 0,
-            fact->noExternalEffect ? 1 : 0,
-            fact->cannotFault ? 1 : 0,
-            fact->terminates ? 1 : 0,
-            graph.waitInputsOf(ref).size(),
-            graph.orderPredsOf(ref).size(),
-            graph.syncPredsOf(ref).size(),
-            graph.normInputsOf(ref).size());
+                : std::string(camel::core::OperatorTable::instance().uri(operOfNode));
+        counts.byRow[{nodeKindName(kindOfNode), operName}].add(fact.get(), at);
     }
 }
+/// The fourth reading: the same kind asked of a **draft**. `core.arrangeable` is a fact about the
+/// graph an editing session is building as much as about the one a program holds (`facts.h`: "the
+/// graph itself -- the frozen graph a program holds, or the graph an editing session is building"),
+/// and until the framework could hold a draft only the frozen half could be asked. This reading
+/// decodes each graph into a transaction, asks the kind at every node of the *draft*, and reads:
+///
+///   `no_store`  graphs the framework answered no store for -- a draft it cannot hold, which is the
+///               thing this reading exists to catch, because a count of zero asked of a draft that
+///               was never held would pass silently;
+///   `same`/`diff`  the draft's answer at a node against the frozen graph's answer at the same node.
+///               A decoded draft keeps the graph's numbering (`GraphDraft::keepsNodeIds`), so the two
+///               are the same node and the count is per node, not per pair;
+///   `kept`      nodes whose second ask was answered from what the store kept (`Status::Valid`), so a
+///               store that recomputed every time would be visible here;
+///   `stale`     graphs where an edit to the draft dropped the stored answer (`Status::Stale`). The
+///               answer a draft gives must go away when the draft changes, and this is the only
+///               reading that says the stamp is the draft's revision and not the constant a frozen
+///               graph answers.
+struct DraftCounts {
+    size_t graphs  = 0;
+    size_t nodes   = 0;
+    size_t same    = 0;
+    size_t diff    = 0;
+    size_t noFact  = 0;
+    size_t noStore = 0;
+    size_t kept    = 0;
+    size_t stale   = 0;
+};
 
 /// The fourth reading (see `DraftCounts`): `core.arrangeable` asked of the draft this graph decodes
 /// into, at every node, against the answer the frozen graph gave at the same node. A decoded draft
@@ -656,26 +552,6 @@ void compareDraft(
         if (store->probe(kind, anchor) == camel::facts::Status::Valid) {
             ++counts.kept;
         }
-        // The draft's own family table: the fact at this node against the predicate the readers of
-        // a draft ask, in the plain form the freeze and the transaction ask it (see `shapeDiff` for
-        // the `byShape` form).
-        const bool plain = OldArrangeable::of(draft, ref, false);
-        const bool shape = OldArrangeable::of(draft, ref, true);
-        if (plain != shape) {
-            ++counts.shapeDiff;
-        }
-        const camel::graph::NodeKind kindHere = draftView.kindOf(node);
-        const size_t family = familyIndex(kindHere, draftView.operatorOf(node), here.get());
-        FamilyRow &familyRow = counts.byFamily[family];
-        ++familyRow.counts.nodes;
-        if (plain) {
-            ++(here->all() ? familyRow.counts.bothFree : familyRow.counts.kindKeptPredFree);
-        } else {
-            ++(here->all() ? familyRow.counts.kindFreePredKept : familyRow.counts.bothKept);
-        }
-        if (here->all() != plain && familyRow.example.empty()) {
-            familyRow.example = std::format("{}:{}", graph.name(), ref);
-        }
         const bool same = there != nullptr && *here == *there;
         ++(same ? counts.same : counts.diff);
         if (!same) {
@@ -718,7 +594,7 @@ FactsCompareTestPass::apply(const camel::runtime::Program *program, std::ostream
     using namespace camel::runtime;
     ControlCounts control;
     ArrangeCounts arrange;
-    ReaderCounts readers;
+    AnswerCounts answers;
     DraftCounts draft;
     for (auto *graph : collectReachableGraphs(*program)) {
         if (graph == nullptr) {
@@ -735,7 +611,7 @@ FactsCompareTestPass::apply(const camel::runtime::Program *program, std::ostream
         }
         compareControlRegions(*graph, *store, control);
         compareArrangeable(*graph, *store, arrange);
-        compareReaders(*graph, *store, readers, os);
+        censusArrangeable(*graph, *store, answers);
         compareDraft(*program, *graph, *store, draft, os);
     }
     os << std::format(
@@ -754,65 +630,77 @@ FactsCompareTestPass::apply(const camel::runtime::Program *program, std::ostream
         control.nodesSame,
         control.nodesDiff);
     os << std::format(
-        "FACTS_COMPARE kind=core.arrangeable graphs={} nodes={} same={} diff={} no_old={}\n",
+        "FACTS_COMPARE kind=core.arrangeable graphs={} nodes={} same={} diff={} no_old={} "
+        "conversions={}\n",
         arrange.graphs,
         arrange.nodes,
         arrange.same,
         arrange.diff,
-        arrange.noOld);
-    os << std::format(
-        "FACTS_COMPARE kind=core.arrangeable readers nodes={} agree={} diff={} no_fact={}\n",
-        readers.nodes,
-        readers.agree,
-        readers.diff,
-        readers.noFact);
-    // The table the total cannot give: which node kinds the two readers agreed about, and which
-    // combination of their two answers each kind got. Printed for every kind the program carries,
-    // and for the row past the nine only when something was counted there -- a kind that is absent
-    // from the program prints no line, so a case that reads this table names the kinds it expects
-    // instead of reading a missing line as agreement.
-    static const char *kNodeKindNames[kNodeKindCount] = {
+        arrange.noOld,
+        arrange.conversions);
+os << std::format(
+        "FACTS_COMPARE kind=core.arrangeable answers graphs={} nodes={} free={} kept={} no_fact={}\n",
+        answers.graphs,
+        answers.nodes,
+        answers.free,
+        answers.kept,
+        answers.noFact);
+    // The tables the total cannot give. One row per node kind and one per family the program carries:
+    // a kind or a family there is no line for is one the program does not carry, which is why a case
+    // that reads this table asks for the rows it expects by name rather than reading a missing line as
+    // agreement. `kept_example` names the first node of the row the fact kept, so a split row carries
+    // a node to look at and not only a count.
+    static const char *kKindNames[kNodeKindCount] = {
         "data", "port", "oper", "func", "call", "bind", "brch", "loop", "gate"};
-    for (size_t row = 0; row < readers.byKind.size(); ++row) {
-        const KindCounts &counts = readers.byKind[row];
-        if (counts.nodes == 0) {
+    for (size_t row = 0; row < answers.byKind.size(); ++row) {
+        const AnswerCell &cell = answers.byKind[row];
+        if (cell.nodes == 0) {
             continue;
         }
         os << std::format(
-            "FACTS_COMPARE readers_kind kind={} nodes={} both_free={} both_kept={} "
-            "kind_free_pred_kept={} kind_kept_pred_free={} no_fact={}\n",
-            row < kNodeKindCount ? kNodeKindNames[row] : "?",
-            counts.nodes,
-            counts.bothFree,
-            counts.bothKept,
-            counts.kindFreePredKept,
-            counts.kindKeptPredFree,
-            counts.noFact);
+            "FACTS_COMPARE answers_kind kind={} nodes={} free={} kept={} no_fact={} "
+            "kept_example={}\n",
+            row < kNodeKindCount ? kKindNames[row] : "?",
+            cell.nodes,
+            cell.free,
+            cell.kept,
+            cell.noFact,
+            cell.keptExample.empty() ? std::string("-") : cell.keptExample);
     }
-    // The table the kind rows cannot give: *why* the two answers differ. One line per family the
-    // program carries, with the first node the family disagreed on -- a count says a family is
-    // split, and the example says which node to look at. A family absent from the program prints no
-    // line, so a case that reads this table asks for the families it expects by name.
-    for (size_t row = 0; row < readers.byFamily.size(); ++row) {
-        const FamilyRow &family = readers.byFamily[row];
-        if (family.counts.nodes == 0) {
+    for (size_t row = 0; row < answers.byFamily.size(); ++row) {
+        const AnswerCell &cell = answers.byFamily[row];
+        if (cell.nodes == 0) {
             continue;
         }
         os << std::format(
-            "FACTS_COMPARE readers_family family={} nodes={} both_free={} both_kept={} "
-            "kind_free_pred_kept={} kind_kept_pred_free={} no_fact={} example={}\n",
+            "FACTS_COMPARE answers_family family={} nodes={} free={} kept={} no_fact={} "
+            "kept_example={}\n",
             row < kFamilyCount ? kFamilyNames[row] : "?",
-            family.counts.nodes,
-            family.counts.bothFree,
-            family.counts.bothKept,
-            family.counts.kindFreePredKept,
-            family.counts.kindKeptPredFree,
-            family.counts.noFact,
-            family.example.empty() ? std::string("-") : family.example);
+            cell.nodes,
+            cell.free,
+            cell.kept,
+            cell.noFact,
+            cell.keptExample.empty() ? std::string("-") : cell.keptExample);
     }
+    // The (kind, operator) table, sorted by the map. `rows` is printed beside `nodes` so a table that
+    // covered nothing cannot read like a table with no kept node in it.
+    size_t rowNodes = 0;
+    for (const auto &[key, cell] : answers.byRow) {
+        rowNodes += cell.nodes;
+        os << std::format(
+            "FACTS_COMPARE answers_row node_kind={} oper={} nodes={} free={} kept={} no_fact={}\n",
+            key.first,
+            key.second,
+            cell.nodes,
+            cell.free,
+            cell.kept,
+            cell.noFact);
+    }
+    os << std::format(
+        "FACTS_COMPARE answers_rows rows={} nodes={}\n", answers.byRow.size(), rowNodes);
     os << std::format(
         "FACTS_COMPARE kind=core.arrangeable draft graphs={} nodes={} same={} diff={} no_fact={} "
-        "no_store={} kept={} stale={} shape_diff={}\n",
+        "no_store={} kept={} stale={}\n",
         draft.graphs,
         draft.nodes,
         draft.same,
@@ -820,28 +708,7 @@ FactsCompareTestPass::apply(const camel::runtime::Program *program, std::ostream
         draft.noFact,
         draft.noStore,
         draft.kept,
-        draft.stale,
-        draft.shapeDiff);
-    // The draft's family table, for the reason the frozen one exists: a reader of a draft asks the
-    // draft, and "the two answers agree" is a claim about every node of the graph an editing
-    // session holds, not about the frozen one it will become.
-    for (size_t row = 0; row < draft.byFamily.size(); ++row) {
-        const FamilyRow &family = draft.byFamily[row];
-        if (family.counts.nodes == 0) {
-            continue;
-        }
-        os << std::format(
-            "FACTS_COMPARE draft_readers_family family={} nodes={} both_free={} both_kept={} "
-            "kind_free_pred_kept={} kind_kept_pred_free={} no_fact={} example={}\n",
-            row < kFamilyCount ? kFamilyNames[row] : "?",
-            family.counts.nodes,
-            family.counts.bothFree,
-            family.counts.bothKept,
-            family.counts.kindFreePredKept,
-            family.counts.kindKeptPredFree,
-            family.counts.noFact,
-            family.example.empty() ? std::string("-") : family.example);
-    }
+        draft.stale);
     return program;
 }
 
@@ -854,5 +721,3 @@ using camel::execute::PassKernel;
 const PassKernel factsCompareKernel(kFactsCompareTestPass, makePass<FactsCompareTestPass>());
 
 } // namespace
-
-

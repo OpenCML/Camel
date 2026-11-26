@@ -1110,15 +1110,14 @@ class ArrangeWalk {
             // carries is written in one of the three forms the seal reads (`runtime/graph.cpp`,
             // "GATE node without a wait"): a control input, a sync predecessor, or the values it
             // hands on beside the value itself -- a region's exit gate reads what the region wrote
-// after the value it hands out (`Builder::layRegionWriteEdges`, and
-            // `test::facts_compare` prints that count as `reads`). Only the first two are an
-            // `EdgeKind::Wait`, so a reader that asked that edge kind alone answered "carries
+            // after the value it hands out (`Builder::layRegionWriteEdges`). Only the first two are
+            // an `EdgeKind::Wait`, so a reader that asked that edge kind alone answered "carries
             // nothing" for a region's gate and called it freely arrangeable; a gate that carries
-            // none of the three is the seal's internal error and is not a node a program can run,
-            // so refusing it costs nothing, while answering it "yes" would be one answer in one
-            // place and a refusal in every other (every reader refuses a gate: a gate is the
-            // anchor an order sits on,
-            // and a pass that moved it would move the order with it -- edges.cn.md 4.6, 5.3).
+            // none of the three is the seal's internal error and is not a node a program can run, so
+            // refusing it costs nothing, while answering it "yes" would be one answer in one place
+            // and a refusal in every other (every reader refuses a gate: a gate is the anchor an
+            // order sits on, and a pass that moved it would move the order with it -- edges.cn.md
+            // 4.6, 5.3).
             return Arrangeable{};
         }
         case graph::NodeKind::Brch: {

@@ -1,20 +1,18 @@
 # The per-family reading of the arrangeable question (`test::facts_compare`, src/stdlib/test/
-# facts_compare.h, the `readers_family` and `draft_readers_family` lines).
+# facts_compare.h, the `answers_family` and `answers_kind` lines).
 #
-# Why a second plan and not one more entry in `facts.plan.toml`: that file pins answers the tree must
-# not move (`diff = 0`). The lanes that settled the gate and the call (`plain-gate-2`, `node-roles-
-# facts`, `facts-draft`) made the older predicate and the fact answer the same thing, so those cases
-# measure agreement. This file measures the families where they still disagree, and pins the counts
-# that a lane removing the second implementation has to move to zero: design principles 3.4 decides
-# which side is right, and the counts are what that judgement is made against. A movement here is a
-# behaviour change, not a refactor.
+# What this file measures is `core.arrangeable`'s own answer, cut by the family it comes from. The
+# total says how many nodes a pass may arrange anywhere; the rows say *which term* of design principles
+# 3.4 refused the rest, and that is the reading a change to the fact has to move deliberately and not
+# by accident: a row that moves here is a behaviour change, not a refactor.
 #
-# The batch is seven programs. `arm_loops.cml` carries every form of the two families that disagree on
-# principle; the other five carry one family each in a plainer setting, and they all agree today.
+# The batch is seven programs. `arm_loops.cml` carries every family at once; the other six carry one
+# each in a plainer setting, so a row that moves in the batch can be narrowed down to a row that moves
+# in a program built for it.
 
 [[tests]]
 name = "arrangeable_families.loops_and_branches"
-desc = "The one program in the batch whose answers still differ: 210 nodes, 12 of them answered one way by the older predicate and the other by the fact. The rows pin the disagreement per family -- `brch` 5 nodes the fact refuses and the predicate called free (the branch's arm carries an exit GATE, so the branch is a statement on the chain) and `loop` 7 nodes the fact calls free and the predicate refused (a bounded `for` over a pure body is known to end). `oper_no_record` is the third family this program found and the one the fact's own answer closed: its single node is a FILL, and the fact used to have no four terms to read for a node naming no operator, so it refused where the predicate answered free -- the one place 3.4's `core.arrangeable` was short of an answer rather than of a judgement. The fact reads the node's operation shape now (`GraphView::shapeOf`), a construction is pure, cannot fault and ends like the access beside it, and the row moved from `kind_kept_pred_free` to `both_free`: this is the case that turns from 1 to 0 in that column, and `diff` from 13 to 12, and nothing else in the table moved. Both readers agree on all 132 values, all 20 operators, all 17 operators that may fault, all 17 calls and the one gate. The draft measures the same 210 nodes with the same counts, so the disagreement is not a representation artefact."
+desc = "The whole table at once, on the program that carries every family: 210 nodes, and the eight family rows that cover them. `brch` 11 with 5 kept is the branch whose arm carries an exit GATE -- the branch is then a statement on the chain its arm runs on, and a pass that moved it would move the order it holds (3.4). `loop` 11 with 7 free is the other side of the same principle: a bounded `for` over a body that cannot fault and reaches nothing is known to end, so 3.4 tells nothing a pass may not move about, while the 4 kept ones carry their order inside them. `oper_may_fault` 17 kept and `oper_no_record` 1 free are the operator record read for what it states: a division may fault where it is written, and a FILL names no operator, so the fact answers it by the operation the node performs. `value` 132, `oper` 20, `call` 17 and `gate` 1 are the four other families, and the rows add up to the total. The draft answers the same 210 nodes the same way, so this is a reading of the model and not of one representation of it."
 kind = "behavior"
 case = "../../../cases/loops/arm_loops.cml"
 args = ["${case}", "test::facts_compare"]
@@ -24,24 +22,23 @@ verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout
 const rows = (prefix) => out.split('\n').filter(l => l.startsWith(prefix))
-const fam = rows('FACTS_COMPARE readers_family ')
-const draft = rows('FACTS_COMPARE draft_readers_family ')
-const line = out.split('\n').find(l => l.startsWith('FACTS_COMPARE kind=core.arrangeable readers '))
+const fam = rows('FACTS_COMPARE answers_family ')
+const line = out.split('\n').find(l => l.startsWith('FACTS_COMPARE kind=core.arrangeable answers '))
 const draftLine = out.split('\n').find(l => l.startsWith('FACTS_COMPARE kind=core.arrangeable draft '))
-assert(line && draftLine, 'no readers or draft line')
+assert(line && draftLine, 'no answers or draft line')
 const num = (t, n) => { const m = t.match(new RegExp(n + '=([0-9]+)')); assert(m, `${n} is missing from: ${t}`); return Number(m[1]) }
-// family: [nodes, both_free, both_kept, kind_free_pred_kept, kind_kept_pred_free]
+// family: [nodes, free, kept]
 const want = {
-    value: [132, 132, 0, 0, 0],
-    oper: [20, 20, 0, 0, 0],
-    oper_may_fault: [17, 0, 17, 0, 0],
-    oper_no_record: [1, 1, 0, 0, 0],
-    call: [17, 0, 17, 0, 0],
-    brch: [11, 6, 0, 0, 5],
-    loop: [11, 0, 4, 7, 0],
-    gate: [1, 0, 1, 0, 0],
+    value: [132, 132, 0],
+    oper: [20, 20, 0],
+    oper_may_fault: [17, 0, 17],
+    oper_no_record: [1, 1, 0],
+    call: [17, 0, 17],
+    brch: [11, 6, 5],
+    loop: [11, 7, 4],
+    gate: [1, 0, 1],
 }
-const cols = ['nodes', 'both_free', 'both_kept', 'kind_free_pred_kept', 'kind_kept_pred_free']
+const cols = ['nodes', 'free', 'kept']
 for (const [name, expected] of Object.entries(want)) {
     const row = fam.find(l => l.includes(` family=${name} `))
     assert(row, `no ${name} row: ${fam.join(' ; ')}`)
@@ -50,32 +47,36 @@ for (const [name, expected] of Object.entries(want)) {
             `${name}.${cols[i]} is ${num(row, cols[i])}, the measured reading is ${value}: ${row}`)
     })
 }
+// The rows are the whole program: an extra family row, or a node the table lost, is a red rather than
+// a row nobody reads.
+assert(fam.length === Object.keys(want).length, `the table carries a family this case does not pin: ${fam.join(' ; ')}`)
 assert(fam.reduce((acc, l) => acc + num(l, 'nodes'), 0) === num(line, 'nodes'),
     `the family rows do not cover the nodes: ${fam.join(' ; ')}`)
-// The draft answers the same families the same way: the graph an editing session holds is the one
-// the freeze and the passes ask, so a count that holds on the frozen side alone is a fact of one
-// representation and not of the model.
-for (const [name, expected] of Object.entries(want)) {
-    const row = draft.find(l => l.includes(` family=${name} `))
-    assert(row, `no draft ${name} row: ${draft.join(' ; ')}`)
-    expected.forEach((value, i) => {
-        assert(num(row, cols[i]) === value,
-            `draft ${name}.${cols[i]} is ${num(row, cols[i])}, the measured reading is ${value}: ${row}`)
-    })
-}
-assert(draft.reduce((acc, l) => acc + num(l, 'nodes'), 0) === num(draftLine, 'nodes'),
-    `the draft family rows do not cover the nodes: ${draft.join(' ; ')}`)
-assert(num(line, 'diff') === 12, `the frozen disagreement moved: ${line} || ${fam.join(' ; ')}`)
-assert(num(draftLine, 'shape_diff') === 0,
-    `asking a draft by shape answers differently from asking it plain: ${draftLine}`)
+assert(num(line, 'nodes') === 210, `the program's node count moved: ${line}`)
 assert(num(line, 'no_fact') === 0, `a node got no answer from the kind at all: ${line}`)
+assert(num(line, 'free') === 166 && num(line, 'kept') === 44,
+    `the two answers no longer split the program the way the rows do: ${line}`)
+// The two rows the batch exists for, by name: the branch whose arm holds an order, and the bounded
+// loop over a pure body.
+const brch = fam.find(l => l.includes(' family=brch '))
+assert(num(brch, 'kept') === 5, `the branch whose arm carries an exit GATE is not kept: ${brch}`)
+const loop = fam.find(l => l.includes(' family=loop '))
+assert(num(loop, 'free') === 7, `a bounded loop over a pure body is not free: ${loop}`)
+// The draft answers the same families the same way: the graph an editing session holds is the one the
+// freeze and the passes ask, so a count that holds on the frozen side alone is a fact of one
+// representation and not of the model.
+assert(num(draftLine, 'no_store') === 0, `a draft got no store from the framework: ${draftLine}`)
+assert(num(draftLine, 'no_fact') === 0, `a node of a draft got no answer: ${draftLine}`)
+assert(num(draftLine, 'diff') === 0, `the draft and the frozen graph answer a node differently: ${draftLine}`)
+assert(num(draftLine, 'same') === num(draftLine, 'nodes'), 'the draft was not answered node for node')
+assert(num(draftLine, 'nodes') === num(line, 'nodes'), 'the draft and the frozen graph hold different nodes')
 }
 """
 timeout_ms = 30000
 
 [[tests]]
 name = "arrangeable_families.calls"
-desc = "A `sync` block whose first statement is a call of a pure function that cannot fault (`pure_call_first.cml`, the counterexample the chain case is built on). The call family in its plainest form: 2 CALL nodes, both kept by both readers. A call is an anchor that may be an effect and the body it runs is another graph's content, so no reader calls it freely arrangeable -- and the fact says so by declining rather than by reading a body it does not have."
+desc = "A `sync` block whose first statement is a call of a pure function that cannot fault (`pure_call_first.cml`, the counterexample the chain case is built on). The call family in its plainest form: 2 CALL nodes, both kept. A call is an anchor that may be an effect and the body it runs is another graph's content, so the fact answers no rather than reading a body it does not have -- and the call row says it with nodes named, not only with a count."
 kind = "behavior"
 case = "../../../cases/compile/chain/pure_call_first.cml"
 args = ["${case}", "test::facts_compare"]
@@ -85,24 +86,24 @@ verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout
 const rows = (prefix) => out.split('\n').filter(l => l.startsWith(prefix))
-const fam = rows('FACTS_COMPARE readers_family ')
-const draft = rows('FACTS_COMPARE draft_readers_family ')
-const line = out.split('\n').find(l => l.startsWith('FACTS_COMPARE kind=core.arrangeable readers '))
-const draftLine = out.split('\n').find(l => l.startsWith('FACTS_COMPARE kind=core.arrangeable draft '))
-assert(line && draftLine, 'no readers or draft line')
+const fam = rows('FACTS_COMPARE answers_family ')
+const line = out.split('\n').find(l => l.startsWith('FACTS_COMPARE kind=core.arrangeable answers '))
+assert(line, 'no answers line')
 const num = (t, n) => { const m = t.match(new RegExp(n + '=([0-9]+)')); assert(m, `${n} is missing from: ${t}`); return Number(m[1]) }
 const call = fam.find(l => l.includes(' family=call '))
 assert(call, `the program calls a function twice and there is no call row: ${fam.join(' ; ')}`)
-assert(num(call, 'nodes') === 2 && num(call, 'both_kept') === 2, `a call was called arrangeable: ${call}`)
-assert(num(line, 'diff') === 0 && num(draftLine, 'diff') === 0,
-    `readers: ${line} || draft: ${draftLine} || frozen families: ${fam.join(' ; ')}`)
+assert(num(call, 'nodes') === 2 && num(call, 'free') === 0 && num(call, 'kept') === 2,
+    `a call was answered freely arrangeable: ${call}`)
+assert(num(line, 'no_fact') === 0, `a node got no answer from the kind: ${line}`)
+assert(fam.reduce((acc, l) => acc + num(l, 'nodes'), 0) === num(line, 'nodes'),
+    `the family rows do not cover the nodes: ${fam.join(' ; ')}`)
 }
 """
 timeout_ms = 30000
 
 [[tests]]
 name = "arrangeable_families.a_faulting_callee"
-desc = "The same shape with a callee that divides (`fault_call_first.cml`): the call family beside the `oper_may_fault` family, the division inside the callee's own body. A division may fault where it is written, so design principles 3.4 keeps it there; both readers keep it, and the call with it."
+desc = "The same shape with a callee that divides (`fault_call_first.cml`): the call family beside the `oper_may_fault` family, the division inside the callee's own body. A division may fault where it is written, so design principles 3.4 keeps it there -- the fault term is the one that decides, and it decides before the purity a pass could otherwise act on. Both operators are kept, the call with them, and the two rows together are the reading that says a callee that cannot fault is kept for the call and not for the fault."
 kind = "behavior"
 case = "../../../cases/compile/chain/fault_call_first.cml"
 args = ["${case}", "test::facts_compare"]
@@ -112,27 +113,26 @@ verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout
 const rows = (prefix) => out.split('\n').filter(l => l.startsWith(prefix))
-const fam = rows('FACTS_COMPARE readers_family ')
-const draft = rows('FACTS_COMPARE draft_readers_family ')
-const line = out.split('\n').find(l => l.startsWith('FACTS_COMPARE kind=core.arrangeable readers '))
-const draftLine = out.split('\n').find(l => l.startsWith('FACTS_COMPARE kind=core.arrangeable draft '))
-assert(line && draftLine, 'no readers or draft line')
+const fam = rows('FACTS_COMPARE answers_family ')
+const line = out.split('\n').find(l => l.startsWith('FACTS_COMPARE kind=core.arrangeable answers '))
+assert(line, 'no answers line')
 const num = (t, n) => { const m = t.match(new RegExp(n + '=([0-9]+)')); assert(m, `${n} is missing from: ${t}`); return Number(m[1]) }
 const fault = fam.find(l => l.includes(' family=oper_may_fault '))
 const call = fam.find(l => l.includes(' family=call '))
 assert(fault, `a division is in the program and there is no oper_may_fault row: ${fam.join(' ; ')}`)
-assert(num(fault, 'nodes') === 2 && num(fault, 'both_kept') === 2,
-    `an operator that may fault was called freely arrangeable: ${fault}`)
-assert(call && num(call, 'both_kept') === 2, `a call was called arrangeable: ${call}`)
-assert(num(line, 'diff') === 0 && num(draftLine, 'diff') === 0,
-    `readers: ${line} || draft: ${draftLine} || frozen families: ${fam.join(' ; ')}`)
+assert(num(fault, 'nodes') === 2 && num(fault, 'free') === 0 && num(fault, 'kept') === 2,
+    `an operator that may fault was answered freely arrangeable: ${fault}`)
+assert(call && num(call, 'kept') === 2 && num(call, 'free') === 0, `a call was answered freely arrangeable: ${call}`)
+assert(num(line, 'no_fact') === 0, `a node got no answer from the kind: ${line}`)
+assert(fam.reduce((acc, l) => acc + num(l, 'nodes'), 0) === num(line, 'nodes'),
+    `the family rows do not cover the nodes: ${fam.join(' ; ')}`)
 }
 """
 timeout_ms = 30000
 
 [[tests]]
 name = "arrangeable_families.gates"
-desc = "A function body whose exit GATE carries its order in the values it reads rather than in a wait edge (`a_body_exit_gate_reads_its_writes.cml`): the gate family, the one the kind was already bent to agree about (D-1124-65). Both readers refuse the gate, and it stays one node after the second implementation is gone."
+desc = "A function body whose exit GATE carries its order in the values it reads rather than in a wait edge (`a_body_exit_gate_reads_its_writes.cml`): the third of the three forms an order is written in, and the one a wait edge does not name. The gate family: one node, kept. Its four terms are all true and the fact still answers no, because the order a gate stands in is not a term a placement decision may ignore (3.4) -- and the value nodes beside it, computed from what they read, are free in the same run."
 kind = "behavior"
 case = "../../../cases/facts/a_body_exit_gate_reads_its_writes.cml"
 args = ["${case}", "test::facts_compare"]
@@ -142,24 +142,24 @@ verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout
 const rows = (prefix) => out.split('\n').filter(l => l.startsWith(prefix))
-const fam = rows('FACTS_COMPARE readers_family ')
-const draft = rows('FACTS_COMPARE draft_readers_family ')
-const line = out.split('\n').find(l => l.startsWith('FACTS_COMPARE kind=core.arrangeable readers '))
-const draftLine = out.split('\n').find(l => l.startsWith('FACTS_COMPARE kind=core.arrangeable draft '))
-assert(line && draftLine, 'no readers or draft line')
+const fam = rows('FACTS_COMPARE answers_family ')
+const line = out.split('\n').find(l => l.startsWith('FACTS_COMPARE kind=core.arrangeable answers '))
+assert(line, 'no answers line')
 const num = (t, n) => { const m = t.match(new RegExp(n + '=([0-9]+)')); assert(m, `${n} is missing from: ${t}`); return Number(m[1]) }
 const gate = fam.find(l => l.includes(' family=gate '))
 assert(gate, `the program carries a GATE and there is no gate row: ${fam.join(' ; ')}`)
-assert(num(gate, 'nodes') === 1 && num(gate, 'both_kept') === 1, `the gate is not refused by both readers: ${gate}`)
-assert(num(line, 'diff') === 0 && num(draftLine, 'diff') === 0,
-    `readers: ${line} || draft: ${draftLine} || frozen families: ${fam.join(' ; ')}`)
+assert(num(gate, 'nodes') === 1 && num(gate, 'kept') === 1 && num(gate, 'free') === 0,
+    `the gate is not refused: ${gate}`)
+assert(num(line, 'no_fact') === 0, `a node got no answer from the kind: ${line}`)
+assert(fam.reduce((acc, l) => acc + num(l, 'nodes'), 0) === num(line, 'nodes'),
+    `the family rows do not cover the nodes: ${fam.join(' ; ')}`)
 }
 """
 timeout_ms = 30000
 
 [[tests]]
 name = "arrangeable_families.branch_and_effect"
-desc = "A function that branches over a value of its own and then prints (`branch_and_print.cml`). Here the branch's arms carry no exit GATE, so the branch is a value neither reader keeps: 1 BRCH node, both readers free, and all 17 nodes of the program agree. The rows beside it are what makes the `brch` disagreement in `arm_loops` readable as a fact about the arm rather than about branches in general."
+desc = "A function that branches over a value of its own and then prints (`branch_and_print.cml`). Here the branch's arms carry no exit GATE, so the branch is a value neither side keeps: 1 BRCH node, free. That is what makes the `brch` row of `arm_loops` readable as a fact about the arm and not about branches in general: the same kind is free where the arms hold no order and kept where one of them does."
 kind = "behavior"
 case = "../../../cases/opt/commit_checks/branch_and_print.cml"
 args = ["${case}", "test::facts_compare"]
@@ -169,25 +169,24 @@ verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout
 const rows = (prefix) => out.split('\n').filter(l => l.startsWith(prefix))
-const fam = rows('FACTS_COMPARE readers_family ')
-const draft = rows('FACTS_COMPARE draft_readers_family ')
-const line = out.split('\n').find(l => l.startsWith('FACTS_COMPARE kind=core.arrangeable readers '))
-const draftLine = out.split('\n').find(l => l.startsWith('FACTS_COMPARE kind=core.arrangeable draft '))
-assert(line && draftLine, 'no readers or draft line')
+const fam = rows('FACTS_COMPARE answers_family ')
+const line = out.split('\n').find(l => l.startsWith('FACTS_COMPARE kind=core.arrangeable answers '))
+assert(line, 'no answers line')
 const num = (t, n) => { const m = t.match(new RegExp(n + '=([0-9]+)')); assert(m, `${n} is missing from: ${t}`); return Number(m[1]) }
 const brch = fam.find(l => l.includes(' family=brch '))
 assert(brch, `the program branches and there is no brch row: ${fam.join(' ; ')}`)
-assert(num(brch, 'nodes') === 1 && num(brch, 'both_free') === 1,
-    `a branch whose arms carry no order is not free in both readings: ${brch}`)
-assert(num(line, 'diff') === 0 && num(draftLine, 'diff') === 0,
-    `readers: ${line} || draft: ${draftLine} || frozen families: ${fam.join(' ; ')}`)
+assert(num(brch, 'nodes') === 1 && num(brch, 'free') === 1 && num(brch, 'kept') === 0,
+    `a branch whose arms hold no order was kept: ${brch}`)
+assert(num(line, 'no_fact') === 0, `a node got no answer from the kind: ${line}`)
+assert(fam.reduce((acc, l) => acc + num(l, 'nodes'), 0) === num(line, 'nodes'),
+    `the family rows do not cover the nodes: ${fam.join(' ; ')}`)
 }
 """
 timeout_ms = 30000
 
 [[tests]]
 name = "arrangeable_families.tensors_and_loops"
-desc = "The program `facts.plan.toml` reads: two loops (a `for` over a constant array, a `while`), a conversion, a reduction, an effect. It is the batch's control and the sharpest reading of the `loop` family: both loops carry an order inside (an effect in the body, a GATE at the exit), so both readers keep them and all 40 nodes agree. A `loop` row that turned free here would be a loop whose body stopped carrying its order."
+desc = "The program `facts.plan.toml` reads: two loops (a `for` over a constant array, a `while`), a conversion, a reduction, an effect. It is the batch's control for the loop family: both loops carry their order inside them -- the `while` reads its condition again on every pass -- so both are kept, where `arm_loops` has seven bounded loops the same fact calls free. The two programs are the two directions of one term, on two programs rather than on two rows of one."
 kind = "behavior"
 case = "../../../cases/facts/tensors_and_loops.cml"
 args = ["${case}", "test::facts_compare"]
@@ -197,24 +196,24 @@ verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout
 const rows = (prefix) => out.split('\n').filter(l => l.startsWith(prefix))
-const fam = rows('FACTS_COMPARE readers_family ')
-const draft = rows('FACTS_COMPARE draft_readers_family ')
-const line = out.split('\n').find(l => l.startsWith('FACTS_COMPARE kind=core.arrangeable readers '))
-const draftLine = out.split('\n').find(l => l.startsWith('FACTS_COMPARE kind=core.arrangeable draft '))
-assert(line && draftLine, 'no readers or draft line')
+const fam = rows('FACTS_COMPARE answers_family ')
+const line = out.split('\n').find(l => l.startsWith('FACTS_COMPARE kind=core.arrangeable answers '))
+assert(line, 'no answers line')
 const num = (t, n) => { const m = t.match(new RegExp(n + '=([0-9]+)')); assert(m, `${n} is missing from: ${t}`); return Number(m[1]) }
 const loop = fam.find(l => l.includes(' family=loop '))
-assert(loop, `the program holds two loops and there is no loop row: ${fam.join(' ; ')}`)
-assert(num(loop, 'nodes') === 2 && num(loop, 'both_kept') === 2, `a loop that carries an order went free: ${loop}`)
+assert(loop, `the program loops twice and there is no loop row: ${fam.join(' ; ')}`)
+assert(num(loop, 'nodes') === 2 && num(loop, 'free') === 0 && num(loop, 'kept') === 2,
+    `a loop that carries its order was answered freely arrangeable: ${loop}`)
 assert(num(line, 'no_fact') === 0, `a node got no answer from the kind: ${line}`)
-assert(num(line, 'diff') === 0 && num(draftLine, 'diff') === 0,
-    `readers: ${line} || draft: ${draftLine} || frozen families: ${fam.join(' ; ')}`)
+assert(fam.reduce((acc, l) => acc + num(l, 'nodes'), 0) === num(line, 'nodes'),
+    `the family rows do not cover the nodes: ${fam.join(' ; ')}`)
 }
 """
 timeout_ms = 30000
+
 [[tests]]
 name = "arrangeable_families.a_gradient_value"
-desc = "A program that makes a gradient value and keeps it (`a_gradient_value.cml`): `grad(square)` is not expanded, because this program names no `std::macro`. The family this case was written for is `oper_unrecomputable` -- an operator that is pure, cannot fault and ends, and that a pass may nonetheless not compute ahead of time -- and the reading is that the family is empty here and on every other program in the batch. `autodiff:grad` is registered from C++ with `pure`, `readsGraphs` and `macro`, and a registration that states no fault table is read as *may fault* (`operator_semantics.h`: `mayFault()` is `!faults || !faults->empty()`), so the node lands in `oper_may_fault` and both readers keep it; the four `rewrite:rule` makers, which are what `declareUnfoldable` was written for, are not declared at all and land there too. The rows assert exactly that: no `oper_unrecomputable` row, the two may-fault operators of the program kept by both readers, the one operator that may be recomputed free in both, and the four other families agreeing."
+desc = "A program that makes a gradient value and keeps it (`a_gradient_value.cml`): `grad(square)` is not expanded, because this program names no `std::macro`, so the gradient is one operator node rather than an expanded body. The rows this case pins are the two sides of the operator record: `autodiff:grad` is registered from C++ with `pure`, `readsGraphs` and `macro` and states no fault table, and a registration that states none is read as *may fault* (`operator_semantics.h`: `mayFault()` is `!faults || !faults->empty()`), so its node is `oper_may_fault` and is kept; the exit GATE of the body is kept as well. The count is the reading: a gradient a pass flattened would answer free here, and 3.4 says it may not be moved until its body has been expanded."
 kind = "behavior"
 case = "../../../cases/facts/a_gradient_value.cml"
 args = ["${case}", "test::facts_compare"]
@@ -224,26 +223,19 @@ verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout
 const rows = (prefix) => out.split('\n').filter(l => l.startsWith(prefix))
-const fam = rows('FACTS_COMPARE readers_family ')
-const draft = rows('FACTS_COMPARE draft_readers_family ')
-const line = out.split('\n').find(l => l.startsWith('FACTS_COMPARE kind=core.arrangeable readers '))
-const draftLine = out.split('\n').find(l => l.startsWith('FACTS_COMPARE kind=core.arrangeable draft '))
-assert(line && draftLine, 'no readers or draft line')
+const fam = rows('FACTS_COMPARE answers_family ')
+const line = out.split('\n').find(l => l.startsWith('FACTS_COMPARE kind=core.arrangeable answers '))
+assert(line, 'no answers line')
 const num = (t, n) => { const m = t.match(new RegExp(n + '=([0-9]+)')); assert(m, `${n} is missing from: ${t}`); return Number(m[1]) }
-const row = (name) => fam.find(l => l.includes(` family=${name} `))
-assert(!row('oper_unrecomputable'), `a node reached the unfoldable family: ${row('oper_unrecomputable')}`)
-const fault = row('oper_may_fault')
-assert(fault, `no oper_may_fault row: ${fam.join(' ; ')}`)
-assert(num(fault, 'nodes') === 2 && num(fault, 'both_kept') === 2,
-    `the gradient node and the multiplication are no longer both kept: ${fault}`)
-assert(num(row('oper'), 'nodes') === 1 && num(row('oper'), 'both_free') === 1, `oper: ${row('oper')}`)
-assert(num(row('gate'), 'nodes') === 1 && num(row('gate'), 'both_kept') === 1, `gate: ${row('gate')}`)
+const fault = fam.find(l => l.includes(' family=oper_may_fault '))
+assert(fault, `the gradient operator states no fault table and there is no oper_may_fault row: ${fam.join(' ; ')}`)
+assert(num(fault, 'nodes') === 2 && num(fault, 'free') === 0 && num(fault, 'kept') === 2,
+    `an operator that may fault was answered freely arrangeable: ${fault}`)
+const gate = fam.find(l => l.includes(' family=gate '))
+assert(gate && num(gate, 'nodes') === 1 && num(gate, 'kept') === 1, `the gate is not refused: ${gate}`)
+assert(num(line, 'no_fact') === 0, `a node got no answer from the kind: ${line}`)
 assert(fam.reduce((acc, l) => acc + num(l, 'nodes'), 0) === num(line, 'nodes'),
     `the family rows do not cover the nodes: ${fam.join(' ; ')}`)
-assert(num(line, 'diff') === 0 && num(draftLine, 'diff') === 0,
-    `readers: ${line} || draft: ${draftLine} || frozen families: ${fam.join(' ; ')} || draft families: ${draft.join(' ; ')}`)
 }
 """
 timeout_ms = 30000
-
-

@@ -2,92 +2,82 @@
 // SPDX-License-Identifier: MIT
 
 /*
- * TEST-ONLY: `test::facts_compare` reads a landed fact and the answer the older algorithm gave
- * for the same question, off the same program, one item at a time, and prints the two counts:
+ * TEST-ONLY: `test::facts_compare` reads two landed facts (`core.controlRegions`, `core.arrangeable`)
+ * off one program and prints what they answer, item by item:
  *
  *   FACTS_COMPARE kind=core.controlRegions graphs=<n> regions=<n> enclosing_same=<n>
  *       enclosing_diff=<n> chain_same=<n> chain_diff=<n> within_pairs=<n> within_same=<n>
  *       within_diff=<n> nodes_same=<n> nodes_diff=<n>
  *   FACTS_COMPARE kind=core.arrangeable graphs=<n> nodes=<n> same=<n> diff=<n> no_old=<n>
- *   FACTS_COMPARE kind=core.arrangeable readers nodes=<n> agree=<n> diff=<n> no_fact=<n>
- *   FACTS_COMPARE readers_kind kind=<name> nodes=<n> both_free=<n> both_kept=<n>
- *       kind_free_pred_kept=<n> kind_kept_pred_free=<n> no_fact=<n>
- *   FACTS_COMPARE readers_family family=<name> nodes=<n> both_free=<n> both_kept=<n>
- *       kind_free_pred_kept=<n> kind_kept_pred_free=<n> no_fact=<n> example=<graph>:<node>
+ *       conversions=<n>
+ *   FACTS_COMPARE kind=core.arrangeable answers graphs=<n> nodes=<n> free=<n> kept=<n> no_fact=<n>
+ *   FACTS_COMPARE answers_kind kind=<name> nodes=<n> free=<n> kept=<n> no_fact=<n>
+ *       kept_example=<graph>:<node>|-
+ *   FACTS_COMPARE answers_family family=<name> nodes=<n> free=<n> kept=<n> no_fact=<n>
+ *       kept_example=<graph>:<node>|-
+ *   FACTS_COMPARE answers_row node_kind=<kind> oper=<uri|-> nodes=<n> free=<n> kept=<n>
+ *       no_fact=<n>
+ *   FACTS_COMPARE answers_rows rows=<n> nodes=<n>
  *   FACTS_COMPARE kind=core.arrangeable draft graphs=<n> nodes=<n> same=<n> diff=<n>
- *       no_fact=<n> no_store=<n> kept=<n> stale=<n> shape_diff=<n>
- *   FACTS_COMPARE draft_readers_family family=<name> nodes=<n> both_free=<n> both_kept=<n>
- *       kind_free_pred_kept=<n> kind_kept_pred_free=<n> no_fact=<n> example=<graph>:<node>
+ *       no_fact=<n> no_store=<n> kept=<n> stale=<n>
  *
- * The `readers` line compares the fact with the predicate a pass asks
- * (`OldArrangeable`, the copy of that predicate the comparison keeps); the `draft` line asks the same kind of the graph the
- * program's version decodes into -- the graph an editing session is building -- and compares it
- * with the frozen answer at the same node. `no_store` counts drafts the framework answered no
- * store for (the kind is not askable where only a draft is at hand), `kept` the nodes whose second
- * ask was answered from what the store kept, and `stale` the graphs where an edit to the draft
- * dropped the stored answer. A zero `no_store` and a `kept` equal to `nodes` is what "the
- * framework holds a draft" reads as.
+ * The `answers` lines are `core.arrangeable`'s own answer, asked through the store at every node the
+ * view calls a node: `free` is "a pass may arrange it anywhere" -- the conjunction of the four terms
+ * of design principles 3.4 -- `kept` is "a pass must leave it where the program wrote it", and
+ * `no_fact` is a node the store answered nothing for. The three tables under the total cut the same
+ * answers by node kind, by the family the answer comes from (an operator that may fault, one that
+ * writes or reaches outside the program, a branch, a loop, a call, a gate -- that is, *which term*
+ * the kept nodes failed), and by node kind and operator together. `kept_example` is the first node of
+ * a row the fact kept, so a split row carries a node to look at and not only a count. A row that is
+ * absent is a row the program does not carry, which is why a case asks for the rows it expects by
+ * name instead of reading a missing line as agreement.
  *
- * The purpose is the one a move of a computation needs: a fact is a new place for an answer, and
- * "the answer did not change" is a claim about every item of every graph, not about one example.
- * So the run names the items it compared (`regions`, `within` pairs, `nodes`, `no_old`), and a
- * comparison over an empty set prints zeros instead of passing silently -- `agents/test.md`, a
- * check that reads nothing must be a red, and the counts are what the plan's case pins.
+ * There is nothing here to compare `core.arrangeable` with: one question has one answer, and a copy
+ * of an older answer kept in a test to agree with would be a second statement of the same answer.
+ * What a case pins is what the fact says.
  *
- * `core.controlRegions`. The older algorithm is the one the debugger computed for itself: the
- * region table read with `parent` and a kind test, the innermost arm or loop region worked out by
- * walking outward, and "is this region visible from there" answered by walking the same chain
- * (`program_index.cpp` kept it as `regionOuter` and `visibleAt`). It is written out again in
- * `OldRegionWalk` below and *kept* there: it is the baseline this comparison is made against, so
- * it has to outlive the debugger's copy, and a test-only pass is where a baseline belongs. The
- * program's answer is `ControlRegions` -- the reader the debugger asks now -- so the counts are
- * what the replacement kept: `enclosing` per region, the parent chain the debugger called
- * `regionOuter`, `within` for every pair of control regions, and the control region of every
+ * Every walk goes over the nodes the view calls nodes (`graph::GraphView::contains`), never over the
+ * places of the graph's own numbering: a JOIN holds a place there, and the fact layer refuses an
+ * anchor on one ("node N is not a node of its graph"), so counting those places made the pass give up
+ * with an internal error on every program that carries a branch -- and a program it gave up on is a
+ * program no reading covered.
+ *
+ * The `draft` line asks the same kind of the graph the program's version decodes into -- the graph an
+ * editing session is building -- and compares it with the frozen answer at the same node. `no_store`
+ * counts drafts the framework answered no store for (the kind is not askable where only a draft is at
+ * hand), `kept` the nodes whose second ask was answered from what the store kept, and `stale` the
+ * graphs where an edit to the draft dropped the stored answer. A zero `no_store` and a `kept` equal
+ * to `nodes` is what "the framework holds a draft" reads as.
+ *
+ * The purpose is the one a move of a computation needs: a fact is a new place for an answer, and "the
+ * answer is what the model says it is" is a claim about every item of every graph, not about one
+ * example. So the run names the items it read (`regions`, `within` pairs, `nodes`, `no_old`), and a
+ * reading over an empty set prints zeros instead of passing silently -- `agents/test.md`, a check that
+ * reads nothing must be a red, and the counts are what the plan's case pins.
+ *
+ * `core.controlRegions`. One of the two readings here *is* a comparison, and its baseline is the one
+ * the debugger computed for itself: the region table read with `parent` and a kind test, the
+ * innermost arm or loop region worked out by walking outward, and "is this region visible from there"
+ * answered by walking the same chain (`program_index.cpp` kept it as `regionOuter` and `visibleAt`).
+ * It is written out again in `OldRegionWalk` below and *kept* there: it is the baseline this
+ * comparison is made against, so it has to outlive the debugger's copy, and a test-only pass is where
+ * a baseline belongs. The program's answer is `ControlRegions` -- the reader the debugger asks now --
+ * so the counts are what the replacement kept: `enclosing` per region, the parent chain the debugger
+ * called `regionOuter`, `within` for every pair of control regions, and the control region of every
  * node.
  *
- * `core.arrangeable`. The older algorithm answered one node kind and only one: an OPER node's
- * four terms were read from its operator (`operatorArrangeable`). Every other node -- a value, a
- * port, a branch, a loop, a call -- had no answer to compare with, and those nodes are counted as
- * `no_old`: the fact answers them, and how many of them there are is part of what moving the
- * question into a fact added. `same` and `diff` compare the four terms, so a run whose terms
- * differ in one bit is a `diff` and names itself.
+ * `core.arrangeable`. The `graphs`/`nodes`/`same`/`diff` line asks a second, narrower question beside
+ * the census: the fact at every node against the form that answers an operator and nothing else
+ * (`operatorArrangeable`, which has no node, so it cannot read a conversion's pair of types or a
+ * branch's arms). Every other node -- a value, a port, a branch, a loop, a call -- has no answer to
+ * compare with, and those are counted as `no_old`: the fact answers them, and how many of them there
+ * are is part of what putting the question into a fact added. A conversion's fault term is a property
+ * of the pair of types the node converts between, so the operator's half is restated at the node
+ * (`castMayFault`) and `conversions` counts the nodes that took that restatement. `same`/`diff`
+ * compare the four terms, so a run whose terms differ in one bit is a `diff` and names itself.
  *
- * The two `readers` families compare `core.arrangeable` with the predicate a pass asks before it
- * drops, moves, merges or reorders a node (`OldArrangeable`). They ask one
- * question, so an answer they differ on is a node with two answers, and the second family is the
- * table that says *which* node kinds: one line per node kind the program carries, counting the four
- * combinations of the two answers -- both say freely arrangeable (`both_free`), both refuse
- * (`both_kept`), and the two disagreements (`kind_free_pred_kept`, `kind_kept_pred_free`) -- plus
- * the nodes the kind answered nothing for. A kind named here with `nodes=0` is absent; a kind whose
- * line is missing was not in the program at all, which is why a case that reads the table asks for
- * the kinds it expects by name rather than only for a zero on the disagreements.
- *
- * Every family walks the nodes the view calls nodes (`graph::GraphView::contains`), not the places of
- * the graph's own numbering: a JOIN holds a place there, and the fact layer refuses an anchor on one
- * ("node N is not a node of its graph"), so counting those places made the pass give up with an
- * internal error on every program that carries a branch -- and a program it gave up on is a program
- * no reading covered.
- *
- * The `*_family` lines split the same comparison by the family a node's answer *comes from*
- * (`familyIndex`), which is finer than the node kind: an OPER node is four families, because the
- * four terms of design principles 3.4 come from three different places. `oper` is an operator that
- * may be recomputed (pure and foldable); `oper_may_fault` one that cannot fault and yet may not be
- * recomputed -- the family where the predicate and the fact differ *on principle*, since foldability
- * is not one of 3.4's four terms; `oper_no_record` one whose operator the view cannot name at all -- a
- * FILL or an ACCS, which answer `NodeKind::Oper` with `kNoOper` (`graph/gc_graph_view.h`) and so
- * leave the fact with no record to read the four terms from. The split is what makes one number
- * sayable about a thousand nodes: a `diff` in `brch` is a fact about arms, a `diff` in
- * `oper_no_record` is a fact about a gap in the kind, and the two want different rulings. `example`
- * names the first node that differs in the family, so a count carries one case with it; the
- * `draft_readers_family` line asks the same of the draft, and `shape_diff` on the `draft` line counts
- * the nodes where asking the draft by shape (the way `isValueOnly` and the Camel-side
- * `may_be_rearranged` ask it) answers differently from asking it plain.
- *
- * A call is one of those `no_old` nodes and the one the `readers` comparison found an argument
- * about: the kind used to walk a callee's body and answer 1111 for a call to a pure function,
- * while the predicate answered 0 (a call is an anchor that may be an effect). The kind declines at
- * a call now (facts.cpp, ArrangeWalk), so the two readers answer the same and this line reads
- * `diff=0` on `test/cases/facts/two_functions.cml` as well.
+ * The `answers` tables are the reading the plans pin; the `graph`/`no_old` line is the one that says
+ * the node answer still refines the operator answer where it must and only where it must.
  */
 
 #pragma once
