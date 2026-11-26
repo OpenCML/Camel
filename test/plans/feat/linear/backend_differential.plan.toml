@@ -1,0 +1,41 @@
+id = "linear.backend_differential"
+order = 364
+tier = "slow"
+tags = ["feat", "linear", "fvm", "nvm", "differential"]
+
+# The differential of the two interpreters over the whole suite: `test/tools/backend-differential.mjs`
+# reads the plan tree, takes every program it declares over the cases under `test/cases/`, runs each
+# one on `std::nvm` and on `std::fvm`, and reports program by program whether the two gave the same
+# answer -- exit code, standard output and standard error, after the block's own normalizers -- with a
+# `[DIFFERENTIAL]` line of counts at the end. `test/plans/feat/linear/fvm_nvm_agree.plan.toml` pins
+# twelve cases by hand; `fvm_nvm_diff.plan.toml` pins a batch chosen by a rule inside the linear
+# family; this entry is the reading over the tree, and the one the size of the default's change is
+# judged on.
+#
+# **What it asserts, and what it deliberately does not.** A disagreement is a finding about a back
+# end: it is reported with the case, the words of its command line and the field that moved, and it
+# is the owner's to fix (design principles 9.2 -- there is one execution semantics and `std::nvm` is
+# the reference, so a difference is a defect of `std::fvm`, not a licence for two answers). This
+# entry therefore asserts what makes the reading a reading and nothing that would turn a finding
+# into a mark: the tool ran, it selected programs, it controlled itself both ways (a program must
+# agree with itself; a planted difference must be seen), and it closed with the summary line. A
+# count of differences written here would have to be edited every time one is fixed, and an entry
+# that is green because the number was updated is the entry that stops being a check.
+#
+# **Why it is slow and not a gate leg.** It runs one program twice for every program the tree
+# declares -- a few thousand processes -- which is the cost of a full-layer reading, not of a test a
+# developer runs after a change. It is named as a plan file when it is needed (`node
+# scripts/test.js test/plans/feat/linear/backend_differential.plan.toml`), the way the timing plans
+# are, and it is not one of the slow plans the release gate names.
+
+[[tests]]
+name = "backend_differential.tree"
+desc = "Every program the plan tree declares over the cases under test/cases/ is run on std::nvm and on std::fvm and the two answers are compared: the tool's selection is reported with its exclusion counts, each program gets a verdict line (`agree`, `agree-empty`, `differ`, `no-answer`, `refused`, `unstable`), a disagreement is measured twice so a program that cannot agree with itself is reported as `unstable` rather than as a back-end difference, and the run closes with the `[DIFFERENTIAL]` line of counts. The two controls are part of the entry: a program must agree with itself when both sides are `std::nvm`, and a scratch copy of one case with a single character of a printed literal changed must be seen as a difference -- a harness that cannot fail that way would report agreement for everything."
+kind = "behavior"
+tool = "node"
+case = "../../../tools/backend-differential.mjs"
+args = ["${case}", "--camel", "${camel}", "--self-test"]
+expect_exit = 0
+expect_stdout_contains = ["[differential] ", "[self-test] self-agreement (std::nvm against std::nvm)", "seen=yes", "[DIFFERENTIAL] "]
+expect_stdout_not_contains = ["seen=no", "[self-test] a program disagreed with itself", "no program was selected"]
+timeout_ms = 1800000

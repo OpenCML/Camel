@@ -270,6 +270,11 @@
             "plans": ["feat/opt/opt_second_pass.plan.toml"]
         },
         {
+            "comment": "The two-back-end differential (`test/tools/backend-differential.mjs`): its case is the tool itself, so a change there selects the plan that runs it -- a plan no case path would otherwise name, which the runner self-test reports as a plan `--changed` can never run. The plan is slow (one program is run twice for every program the tree declares), so an ordinary change filters it out under `--tier fast`; smoke and the runner plan are named beside it for the cost a broken tool would hide first, as the general test/tools rule below does. This rule comes before that one, which it replaces for this path.",
+            "paths": ["test/tools/backend-differential.mjs"],
+            "plans": ["feat/linear/backend_differential.plan.toml", "smoke", "feat/consistency/runner.plan.toml"]
+        },
+        {
             "comment": "The other test harnesses (cppexec, parsecheck, jitcov, gcbench, ...): no plan tests a harness directly, and naming the plan that invokes one would mean naming most of feat/. The smallest honest check is smoke plus the runner plan, which is what a harness change can break first. The specific debugger and LSP clients above are narrower because their plans own them.",
             "paths": ["test/tools/"],
             "plans": ["smoke", "feat/consistency/runner.plan.toml"]
