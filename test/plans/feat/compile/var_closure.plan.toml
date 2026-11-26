@@ -1,44 +1,33 @@
-# The rule of a captured value (design principles 3.5): what the
-# main line pins about it after .
+# The rule of a captured value (design principles 3.5): a closure captures a name by value wherever it
+# is written, so a capture port is a value and reads inside the body are the port.
 #
-# Where the rule stands today: the fourth step of "`var` becomes SSA" removed the three conservative
-# gates of `decideCaptureByValue`, so a closure of the program captures a NAME BY VALUE wherever it is
-# written. A capture port is a value, and reads inside the body are the port. The CELL is kept in four
-# shapes only, each for a reason of its own: a `var` parameter (the caller's cell), a module-level `var`
-# (until the module `var` work lands), the generator machine's own step function and a decorated block --
-# the last two because the write they make has to land in the cell
-# (`requireCapturedNameWritable` exempts both). A by-reference capture's write USED TO BE legal: it
-# landed in the cell the closure was handed, which is how `byref` was written and how the `stream`
-# packer was written. It is not legal any more. refuses that write (the three `err.*`
-# entries at the end), which is why the `byref` cases and the `stream` packer went red: the cases are
-# the migration this plan's third step owes, and the packer holds four `Ref`s since .
+# `decideCaptureByValue` keeps the CELL in four shapes only, each for a reason of its own: a `var`
+# parameter (the caller's cell), a module-level `var` (a value of the top level is captured by value
+# only where the function is used as a value, so a capture of a name the program writes keeps the
+# cell), the generator machine's own step function and a decorated block -- the last two because the
+# write they make has to land in the cell (`requireCapturedNameWritable` exempts both). A
+# by-reference capture's write would land in the cell the closure was handed, and a closure does not
+# get one: assigning an outer name from inside a closure is refused, and the `err.*` entries below pin
+# that refusal. The `byref` cases and the `stream` packer are written the way the rule allows -- the
+# packer holds four `Ref`s.
 #
-# The other half of the rule (a closure may not assign an outer name, and a captured `var` may not be
-# assigned between the making of the closure and its last use) was NOT REPORTED when this plan was
-# written. The author ruled that reporting it before `tee` was migrated to `Ref` would only turn a green
-# ruler into a red one, and that the migration is the next step of the same item rather than a later
-# round -- applying by-value capture everywhere made `tee`'s five cases fail with `Runtime graph
-# 'side0' breaks its edge invariants`. `tee` itself no longer keeps cells: it holds four `Ref`s
-# , so its five
-# outputs never depended on this choice, and is the step that reports the
-# rule. The three `err.*` entries at the end of this plan are the three ways that write is written. The
-# three `transitional.*` entries that stood between them are GONE: they were the same programs, accepted
-# while the capture port was a cell, and they were refused from the day the rule reports -- the step that
-# removed the by-reference capture port is the one that deleted them, exactly as they said it would be.
+# The other half of the rule: a closure may not assign an outer name, and a captured `var` may not be
+# assigned between the making of the closure and its last use. Both are reported, and the `err.*`
+# entries below are the ways that write is written. `tee` holds four `Ref`s and no cells, so its five
+# outputs do not depend on this choice.
 #
 # The entries are of two kinds, and each says which it is:
-#   - `ok.*` -- legal under the rule as it stands (the regression guards; six of them came from the
-#     retired `hold/varclo` branch and pass on the main line unchanged);
+#   - `ok.*` -- legal under the rule as it stands (the regression guards);
 #   - `err.*` -- refused. The first one is refused by a rule that does not depend on the capture's kind:
-#     an assignment to a `let` captured from the graph around it has no cell to write even in the
-#     by-reference world, which is the general assignment rule (`ImmutablePassedToVarParam`,
-#     `0x0300001D`). `ClosureAssignsCapturedName` was retired on the main line and came back with this
-#     branch under a new number (`0x03000213`), which is why the `0x03000214` the retired one carried now
-#     belongs to `CapturedVarWrittenAfterTheClosure`.
+#     an assignment to a `let` captured from the graph around it has no cell to write even where the
+#     capture is of a cell, which is the general assignment rule (`ImmutablePassedToVarParam`,
+#     `0x0300001D`). A closure assigning a captured name is `ClosureAssignsCapturedName`
+#     (`0x03000213`), and a write after the closure is `CapturedVarWrittenAfterTheClosure`
+#     (`0x03000214`).
 
 [[tests]]
 name = "ok.update_reads_a_captured_var"
-desc = "A closure reads a `var` of the function that made it and writes nothing (`update(x, () => x + 1)`); legal before and after the rule, so this entry is the regression guard the acceptance names by hand. The reading is 2."
+desc = "A closure reads a `var` of the function that made it and writes nothing (`update(x, () => x + 1)`); legal under the rule, so this entry is a regression guard. The reading is 2."
 kind = "behavior"
 case = "../../../cases/compile/var_closure/ok_update_reads_captured.cml"
 args = ["${case}"]
@@ -47,7 +36,7 @@ expect_stdout_exact = "2\n"
 
 [[tests]]
 name = "ok.a_closure_made_in_each_turn_of_a_loop"
-desc = "A closure made in the body of a loop, once per turn, reading the turn's own `var`; legal before and after the rule, and the acceptance names this shape too. The reading is 60."
+desc = "A closure made in the body of a loop, once per turn, reading the turn's own `var`; legal under the rule. The reading is 60."
 kind = "behavior"
 case = "../../../cases/compile/var_closure/ok_closure_in_loop_body.cml"
 args = ["${case}"]
@@ -73,27 +62,25 @@ expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::ImmutablePassedToVarParam"
 expect_diagnostic_code = "0x0300001D"
 expect_output_contains = ["'k' is immutable and cannot be passed to a var parameter"]
-# ---- The rule's other half, asked from 2026-11-16 --------------------------------------------
-# Design principles 3.5 (197, 198) is reported from here on: a closure may not write a name it
-# captured, and a `var` a closure mentions may not be assigned from the making of the closure to its
-# last use. The three entries below are the three ways that write is written. The `transitional.*`
-# entries above are two of the same programs accepted, and they go red with this change: the step that
-# removes the by-reference capture (the `tee` migration) deletes them, it does not change them.
+# ---- The rule's other half -------------------------------------------------------------------
+# Design principles 3.5 (197, 198): a closure may not write a name it captured, and a `var` a closure
+# mentions may not be assigned from the making of the closure to its last use. The three entries below
+# are the three ways that write is written.
 #
-# Which of the two ends 3.5 (198) names without a source offset are reported TODAY, and which is not:
+# Which of the two ends 3.5 (198) names without a source offset are reported, and which is not:
 #
 #   - a closure the program puts into another value IS reported: the value is used to the end of the
 #     scope, `scanClosureLastUses` records that end as `CapturedVar::stretchToEnd`, and every write
-#     after the making is inside it. The sentence was implemented; the
-#     tuple shape is read on `test/cases/opt/effects/dead_write_dropped_closure.cml` and the array
-#     shape on `err_captured_var_put_into_an_array` below. Before it the write was built and then
-#     erased for having no reader left: no node and no diagnostic, which is the class of defect this
-#     rule exists to remove.
+#     after the making is inside it. The tuple shape is read on
+#     `test/cases/opt/effects/dead_write_dropped_closure.cml` and the array
+#     shape on `err_captured_var_put_into_an_array` below. A write built and then erased for having no
+#     reader left is no node and no diagnostic, which is the class of defect this rule exists to
+#     remove.
 #   - a closure written at a call's argument position is NOT reported when the callee's result type
 #     can hold a function (3.5, 198 gives that shape the rest of the scope too). `scanClosureLastUses`
 #     reads the GCT before any body is built, so it cannot resolve a callee, and the shape falls to
-#     the "used by that call" end. Measured on this tree, and it is the shape the defect
-#     the tuple and array entries pin is still open in:
+#     the "used by that call" end. Measured on this tree, and it is the shape in which the defect
+#     the tuple and array entries pin is still open:
 #
 #         func take(f: () => int): () => int { return f }
 #         func probe(): int {
@@ -161,7 +148,7 @@ expect_diagnostic_code = "0x03000213"
 
 [[tests]]
 name = "err.an_in_place_operator_on_a_captured_array"
-desc = "builder_operators.cpp#Builder::inPlaceRebindingOf, the `xs` holds an array threshold: `xs = xs->sort` inside a closure has to be refused by the capture rule, not turned into NoMatchingFunction by a rewrite that declines to run."
+desc = "builder_operator_writes.cpp#Builder::inPlaceRebindingOf, the `xs` holds an array threshold: `xs = xs->sort` inside a closure has to be refused by the capture rule, not turned into NoMatchingFunction by a rewrite that declines to run."
 kind = "negative"
 case = "../../../cases/compile/var_closure/err_in_place_operator_on_a_captured_array.cml"
 args = ["${case}"]

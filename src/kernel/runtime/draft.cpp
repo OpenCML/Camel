@@ -1628,7 +1628,7 @@ void GraphDraft::closeChainOver(gc_node_ref_t id) {
     //
     // What the node waited on through neither kind -- a read of a `var` reads its writer through
     // the data port alone -- is not here to hand on: the fold that would remove such a read keeps
-    // it instead (src/compile/src/gir/builder_expr.cpp, `collapseNonEscapingVariableReads`).
+    // it instead (src/compile/src/gir/builder_variables.cpp, `collapseNonEscapingVariableReads`).
     const auto keepWaiting = [&](gc_node_ref_t user) {
         if (user == id || !alive(user)) {
             return;
