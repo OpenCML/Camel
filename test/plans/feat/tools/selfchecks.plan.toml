@@ -524,3 +524,40 @@ expect_exit = 0
 expect_stdout_contains = ["selftest: ", " checks, 0 failed"]
 normalizers = ["normalize_newlines"]
 timeout_ms = 180000
+
+[[tests]]
+name = "selfchecks.backend_arg"
+desc = "`test/tools/backend-arg.test.mjs`: an entry with `backends` whose own `args` leave out `${backend}` is refused at load, naming the plan and the entry, and an entry that keeps the default args or writes `${backend}` loads one test per back end."
+kind = "behavior"
+tool = "node"
+case = "../../../../test/tools/backend-arg.test.mjs"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_contains = [" checks, 0 failed"]
+normalizers = ["normalize_newlines"]
+timeout_ms = 120000
+
+[[tests]]
+name = "selfchecks.clang_format_pin"
+desc = "`scripts/clang-format-pin.test.mjs`: the commit hook formats only the lines a change touched, passes one `--lines` range per changed region and none for a pure deletion, and leaves the file alone when the installed `clang-format` major version differs from the pinned one."
+kind = "behavior"
+tool = "node"
+case = "../../../../scripts/clang-format-pin.test.mjs"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_contains = [" fail 0"]
+normalizers = ["normalize_newlines"]
+timeout_ms = 120000
+
+[[tests]]
+name = "selfchecks.git_bash"
+desc = "`internal/tools/git-bash.test.ps1`: `git-bash.ps1` picks Git for Windows' `bash.exe` and never the WSL launcher under the system directory, whatever order the candidates or `PATH` come in."
+kind = "behavior"
+tool = "node"
+case = "../../../../internal/tools/git-bash.test.ps1"
+args = ["test/tools/pwsh-selfcheck.mjs", "${case}"]
+skip_unless = ["node", "test/tools/pwsh-selfcheck.mjs", "--probe"]
+expect_exit = 0
+expect_stdout_contains = [" checks, 0 failed"]
+normalizers = ["normalize_newlines"]
+timeout_ms = 120000

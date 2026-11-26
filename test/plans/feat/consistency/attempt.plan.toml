@@ -14,8 +14,6 @@ desc = "Fault isolation (`attempt`) on the four back ends, and the clean-up of e
 
 [defaults]
 kind = "snapshot"
-snapshot_stream = "stdout"
-snapshot_compare = "text_exact"
 args = ["${case}", "${backend}"]
 backends = ["nvm", "fvm", "jit", "prl"]
 backends_agree = ["exit_code", "stdout_normalized"]

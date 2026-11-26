@@ -6,8 +6,6 @@ desc = "[e for x in xs if c] is filter then map: the same graph as the two calls
 
 [defaults]
 kind = "snapshot"
-snapshot_stream = "stdout"
-snapshot_compare = "text_exact"
 args = ["${case}", "${backend}"]
 backends = ["nvm", "fvm", "jit", "prl"]
 backends_agree = ["exit_code", "stdout_normalized"]
@@ -28,7 +26,6 @@ desc = "The same program through std::opt, std::nvm."
 case = "../../../cases/consistency/comprehension/values.cml"
 args = ["${case}", "std::opt", "std::nvm"]
 backends = ["nvm"]
-backends_agree = []
 golden = "golden/comprehension_values.txt"
 
 [[tests]]
@@ -37,7 +34,6 @@ desc = "The same program through std::cxx::inline, std::fvm."
 case = "../../../cases/consistency/comprehension/values.cml"
 args = ["${case}", "std::cxx::inline", "std::fvm"]
 backends = ["nvm"]
-backends_agree = []
 golden = "golden/comprehension_values.txt"
 
 [[tests]]
@@ -46,7 +42,6 @@ desc = "The same program through std::opt, std::nvm."
 case = "../../../cases/consistency/comprehension/values.cml"
 args = ["${case}", "std::opt", "std::nvm"]
 backends = ["nvm"]
-backends_agree = []
 golden = "golden/comprehension_values.txt"
 
 [[tests]]
@@ -55,7 +50,6 @@ desc = "The same program through std::cxx::inline, std::opt, std::jit."
 case = "../../../cases/consistency/comprehension/values.cml"
 args = ["${case}", "std::cxx::inline", "std::opt", "std::jit"]
 backends = ["nvm"]
-backends_agree = []
 golden = "golden/comprehension_values.txt"
 
 [[tests]]
@@ -64,7 +58,6 @@ desc = "The same program through std::macro, std::opt, std::prl."
 case = "../../../cases/consistency/comprehension/values.cml"
 args = ["${case}", "std::macro", "std::opt", "std::prl"]
 backends = ["nvm"]
-backends_agree = []
 golden = "golden/comprehension_values.txt"
 
 [[tests]]
@@ -73,7 +66,6 @@ desc = "The graph of `[x * x for x in xs if x % 2 == 0]`, against the golden gra
 case = "../../../cases/consistency/comprehension/graph_comprehension.cml"
 args = ["${case}", "std::gir", "std::nop"]
 backends = ["nvm"]
-backends_agree = []
 snapshot_compare = "gir_dot_isomorphic"
 golden = "golden/comprehension_graph.dot"
 
@@ -83,7 +75,6 @@ desc = "The graph of `xs->filter<(x: int) => x % 2 == 0>->map<(x: int) => x * x>
 case = "../../../cases/consistency/comprehension/graph_written_out.cml"
 args = ["${case}", "std::gir", "std::nop"]
 backends = ["nvm"]
-backends_agree = []
 snapshot_compare = "gir_dot_isomorphic"
 golden = "golden/comprehension_graph.dot"
 
@@ -94,7 +85,6 @@ kind = "negative"
 case = "../../../cases/consistency/comprehension/err_not_an_array.cml"
 args = ["-E", "short", "${case}"]
 backends = ["nvm"]
-backends_agree = []
 expect_exit = 1
 expect_output_not_contains = ["Segmentation fault", "dumped core", "internal error", "live DREF"]
 expect_output_contains = ["name=SemanticDiag::ComprehensionSourceRefused", "has type 'int'"]
@@ -106,7 +96,6 @@ kind = "negative"
 case = "../../../cases/consistency/comprehension/err_condition_type.cml"
 args = ["-E", "short", "${case}"]
 backends = ["nvm"]
-backends_agree = []
 expect_exit = 1
 expect_output_not_contains = ["Segmentation fault", "dumped core", "internal error", "live DREF"]
 expect_output_contains = ["name=SemanticDiag::GenericFunctionAsValue", "it returns 'int', and the function expected here is '(item: int) => bool'"]
@@ -118,7 +107,6 @@ kind = "negative"
 case = "../../../cases/consistency/comprehension/err_element_type.cml"
 args = ["-E", "short", "${case}"]
 backends = ["nvm"]
-backends_agree = []
 expect_exit = 1
 expect_output_not_contains = ["Segmentation fault", "dumped core", "internal error", "live DREF"]
 expect_output_contains = ["name=SemanticDiag::NoMatchingFunction", "err_element_type.cml:2:18", "in a list comprehension whose elements have type 'string'"]

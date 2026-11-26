@@ -36,6 +36,7 @@ timeout_ms = 10000
 
 [[tests]]
 name = "boundaries.tooltip_slots"
+kind = "behavior"
 desc = "The tooltip slot is the slot a node's value lives in, so it relates nodes: this case's GATE names the slot of the node it forwards, whatever numbering a build handed out."
 case = "../../../cases/trans/annotated/boundaries.cml"
 args = ["${case}", "std::argir", "std::nop"]

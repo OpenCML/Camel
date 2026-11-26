@@ -165,6 +165,7 @@ timeout_ms = 12000
 
 [[tests]]
 name = "value_with.same_as_grad"
+kind = "behavior"
 desc = "`with_grad(f)` gives the value of `f` and the gradient `grad(f)` gives, and the case prints both for `loss(x) = w*x + w*x` at `w = 2, x = 3`: the first component of `with_grad`'s pair must be the value of `f` (12) and the second must be the number `grad` returns (6). The assertion is the cross-check between the two transforms, not a copy of the two numbers: if either side changes its meaning, this goes red."
 case = "../../../cases/modules/autodiff/with_grad_matches_grad.cml"
 args = ["${case}"]

@@ -61,38 +61,39 @@ desc = "Every example beside the tutorial runs as the file it is: what a tutoria
 # one at a glance, and the same is said of chapter 18's files at their own section below.
 [defaults]
 kind = "snapshot"
-snapshot_stream = "stdout"
-snapshot_compare = "text_exact"
 args = ["${case}", "${backend}"]
 backends = ["nvm", "fvm", "jit", "prl"]
 backends_agree = ["exit_code", "stdout_normalized"]
 expect_exit = 0
 # `warning[` is deliberately not excluded here: several chapter examples of chapter 10 have a warning
 # as their lesson. A `[Error]` in any stream is a failure for every entry that does not say otherwise.
-expect_output_not_contains = ["[Error]", "Segmentation fault", "dumped core"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 30000
 
 [[tests]]
 name = "tutorial.examples.01_hello"
+expect_output_not_contains = ["[Error]", "Segmentation fault", "dumped core"]
 desc = "The first program: one println, no arguments."
 case = "../../../docs/tutorial/examples/01_hello.cml"
 golden = "golden/tutorial_examples/01_hello.txt"
 
 [[tests]]
 name = "tutorial.examples.02_values"
+expect_output_not_contains = ["[Error]", "Segmentation fault", "dumped core"]
 desc = "Every value form the chapter introduces, one line each: ints, floats, bools, strings, arrays, tuples, a struct, math, formatting, slices."
 case = "../../../docs/tutorial/examples/02_values.cml"
 golden = "golden/tutorial_examples/02_values.txt"
 
 [[tests]]
 name = "tutorial.examples.03_functions"
+expect_output_not_contains = ["[Error]", "Segmentation fault", "dumped core"]
 desc = "Functions and recursion: a plain call, a recursion, a loop, and two higher-order calls that take a function as an argument."
 case = "../../../docs/tutorial/examples/03_functions.cml"
 golden = "golden/tutorial_examples/03_functions.txt"
 
 [[tests]]
 name = "tutorial.examples.04_block_return"
+expect_output_not_contains = ["[Error]", "Segmentation fault", "dumped core"]
 desc = "The value of a block: the last expression is what the block and the function return, on both paths of the if. The file also warns twice on standard error (SemanticDiag::ExitInUnusedBranch: a `return` inside an if arm ends the arm and leaves the function only if the arm's value is used), which the chapter's page does not show."
 case = "../../../docs/tutorial/examples/04_block_return.cml"
 golden = "golden/tutorial_examples/04_block_return.txt"
@@ -100,12 +101,14 @@ expect_output_contains = ["SemanticDiag::ExitInUnusedBranch"]
 
 [[tests]]
 name = "tutorial.examples.04_branches"
+expect_output_not_contains = ["[Error]", "Segmentation fault", "dumped core"]
 desc = "Conditionals: if/else on one line, a match on a string with the default branch, and a match on an int."
 case = "../../../docs/tutorial/examples/04_branches.cml"
 golden = "golden/tutorial_examples/04_branches.txt"
 
 [[tests]]
 name = "tutorial.examples.05_arrays"
+expect_output_not_contains = ["[Error]", "Segmentation fault", "dumped core"]
 desc = "Arrays and the generic functions over them: map, filter, sum, an index assignment, and a loop over the elements."
 case = "../../../docs/tutorial/examples/05_arrays.cml"
 golden = "golden/tutorial_examples/05_arrays.txt"
@@ -114,6 +117,7 @@ golden = "golden/tutorial_examples/05_arrays.txt"
 # back ends the same numbers come out in the order they were drawn, which is what the golden holds.
 [[tests]]
 name = "tutorial.examples.05_map_order"
+expect_output_not_contains = ["[Error]", "Segmentation fault", "dumped core"]
 desc = "A seeded random map: the same seed draws the same numbers in the same order on the three back ends whose output has an order."
 case = "../../../docs/tutorial/examples/05_map_order.cml"
 backends = ["nvm", "fvm", "jit"]
@@ -121,18 +125,21 @@ golden = "golden/tutorial_examples/05_map_order.txt"
 
 [[tests]]
 name = "tutorial.examples.06_callee_decides"
+expect_output_not_contains = ["[Error]", "Segmentation fault", "dumped core"]
 desc = "Chapter 10: a callee that writes to its var parameter decides what runs and in what order; main only asks for the result. The print in the callee's body runs with the body (design principles 3.1), so what the page shows is what the file prints and there is no warning left to hide."
 case = "../../../docs/tutorial/examples/06_callee_decides.cml"
 golden = "golden/tutorial_examples/06_callee_decides.txt"
 
 [[tests]]
 name = "tutorial.examples.06_sync_block"
+expect_output_not_contains = ["[Error]", "Segmentation fault", "dumped core"]
 desc = "Chapter 10: the same program with the effects inside a sync block -- both printlns run, in the order they are written."
 case = "../../../docs/tutorial/examples/06_sync_block.cml"
 golden = "golden/tutorial_examples/06_sync_block.txt"
 
 [[tests]]
 name = "tutorial.examples.06_sync_body"
+expect_output_not_contains = ["[Error]", "Segmentation fault", "dumped core"]
 desc = "Chapter 10: a function body marked sync -- the call inside it is ordered, and only the value it returns is used outside. Its print runs whether or not the body is `sync`: `sync` orders it, it does not enable it, so the page shows the whole output."
 case = "../../../docs/tutorial/examples/06_sync_body.cml"
 golden = "golden/tutorial_examples/06_sync_body.txt"
@@ -142,12 +149,14 @@ golden = "golden/tutorial_examples/06_sync_body.txt"
 # it in the block after the command).
 [[tests]]
 name = "tutorial.examples.06_unused_effect"
+expect_output_not_contains = ["[Error]", "Segmentation fault", "dumped core"]
 desc = "Chapter 10: a write is not demanded by a reader -- the body is a region and the write to `stdout` is a root of it (design principles 3.1), so the print runs although nothing uses its result. The page used to show the call dropped and a warning."
 case = "../../../docs/tutorial/examples/06_unused_effect.cml"
 golden = "golden/tutorial_examples/06_unused_effect.txt"
 
 [[tests]]
 name = "tutorial.examples.06_var_order"
+expect_output_not_contains = ["[Error]", "Segmentation fault", "dumped core"]
 desc = "Chapter 10: order between writes to a var parameter follows the callee's sync block, not the order the caller reads its results."
 case = "../../../docs/tutorial/examples/06_var_order.cml"
 golden = "golden/tutorial_examples/06_var_order.txt"
@@ -171,18 +180,21 @@ expect_output_contains = ["'k' is immutable and cannot be passed to a var parame
 
 [[tests]]
 name = "tutorial.examples.07_closures"
+expect_output_not_contains = ["[Error]", "Segmentation fault", "dumped core"]
 desc = "Chapter 11: functions as values -- a closure keeps what it captured, a counter keeps its own state, and a function value is passed and called."
 case = "../../../docs/tutorial/examples/07_closures.cml"
 golden = "golden/tutorial_examples/07_closures.txt"
 
 [[tests]]
 name = "tutorial.examples.08_generics"
+expect_output_not_contains = ["[Error]", "Segmentation fault", "dumped core"]
 desc = "Chapter 12: generic functions and a generic struct, instantiated at int, string, a tuple and a user type."
 case = "../../../docs/tutorial/examples/08_generics.cml"
 golden = "golden/tutorial_examples/08_generics.txt"
 
 [[tests]]
 name = "tutorial.examples.09_errors"
+expect_output_not_contains = ["[Error]", "Segmentation fault", "dumped core"]
 desc = "Chapter 7: errors as values -- an error is returned, matched and carried on, while a fault inside the callee ends the program. The value dropped at the end of the file is reported as a warning on standard error, which the page does not show."
 case = "../../../docs/tutorial/examples/09_errors.cml"
 golden = "golden/tutorial_examples/09_errors.txt"
@@ -196,7 +208,6 @@ desc = "Chapter 7: a fault -- what was printed before it stays printed, the run 
 kind = "behavior"
 case = "../../../docs/tutorial/examples/09_fault.cml"
 expect_exit = 1
-expect_output_not_contains = []
 expect_stdout_starts_with = "before\n"
 expect_stdout_not_contains = ["after"]
 expect_diagnostic_name = "RuntimeDiag::IndexOutOfRange"
@@ -206,42 +217,49 @@ expect_output_contains = ["Index 5 is out of range for an array of length 3"]
 
 [[tests]]
 name = "tutorial.examples.10_nullable"
+expect_output_not_contains = ["[Error]", "Segmentation fault", "dumped core"]
 desc = "Chapter 7: a missing value is null -- an int? is compared, matched, and printed, and the caller sees null rather than a default."
 case = "../../../docs/tutorial/examples/10_nullable.cml"
 golden = "golden/tutorial_examples/10_nullable.txt"
 
 [[tests]]
 name = "tutorial.examples.11_collections"
+expect_output_not_contains = ["[Error]", "Segmentation fault", "dumped core"]
 desc = "Chapter 6: map, array and set operations on the same data: lookup with a default, insert, keys and values, and set union and difference."
 case = "../../../docs/tutorial/examples/11_collections.cml"
 golden = "golden/tutorial_examples/11_collections.txt"
 
 [[tests]]
 name = "tutorial.examples.12_modules"
+expect_output_not_contains = ["[Error]", "Segmentation fault", "dumped core"]
 desc = "Chapter 8: a program split over two files -- main imports the functions of shapes.cml and calls them."
 case = "../../../docs/tutorial/examples/12_modules.cml"
 golden = "golden/tutorial_examples/12_modules.txt"
 
 [[tests]]
 name = "tutorial.examples.12_stdlib"
+expect_output_not_contains = ["[Error]", "Segmentation fault", "dumped core"]
 desc = "Chapter 8: the standard library the chapter uses -- sort, unique, string formatting, min and max, array primitives, statistics, math."
 case = "../../../docs/tutorial/examples/12_stdlib.cml"
 golden = "golden/tutorial_examples/12_stdlib.txt"
 
 [[tests]]
 name = "tutorial.examples.13_graph"
+expect_output_not_contains = ["[Error]", "Segmentation fault", "dumped core"]
 desc = "Chapter 17: the program whose graph the chapter draws, run plainly -- the result of the call it shows."
 case = "../../../docs/tutorial/examples/13_graph.cml"
 golden = "golden/tutorial_examples/13_graph.txt"
 
 [[tests]]
 name = "tutorial.examples.14_passes"
+expect_output_not_contains = ["[Error]", "Segmentation fault", "dumped core"]
 desc = "Chapter 17: four passes over one program -- the same number whichever back end runs it."
 case = "../../../docs/tutorial/examples/14_passes.cml"
 golden = "golden/tutorial_examples/14_passes.txt"
 
 [[tests]]
 name = "tutorial.examples.15_model"
+expect_output_not_contains = ["[Error]", "Segmentation fault", "dumped core"]
 desc = "Chapter 16: a two-layer model run on the array the chapter loads from x.npy, with the argument the header and the page give."
 case = "../../../docs/tutorial/examples/15_model.cml"
 args = ["${case}", "--arg", "x=docs/tutorial/examples/x.npy", "${backend}"]
@@ -249,6 +267,7 @@ golden = "golden/tutorial_examples/15_model.txt"
 
 [[tests]]
 name = "tutorial.examples.15_tensor"
+expect_output_not_contains = ["[Error]", "Segmentation fault", "dumped core"]
 desc = "Chapter 14: tensors and shapes -- shape, a sum, a matrix product and a transposed shape, printed by the model."
 case = "../../../docs/tutorial/examples/15_tensor.cml"
 golden = "golden/tutorial_examples/15_tensor.txt"
@@ -257,6 +276,7 @@ golden = "golden/tutorial_examples/15_tensor.txt"
 # gradient of the chapter's function at the point it picks.
 [[tests]]
 name = "tutorial.examples.16_grad"
+expect_output_not_contains = ["[Error]", "Segmentation fault", "dumped core"]
 desc = "Chapter 15: the gradient of a function -- the derivative of the graph, evaluated, with `std::macro` expanded first as the header asks."
 case = "../../../docs/tutorial/examples/16_grad.cml"
 args = ["${case}", "std::macro", "${backend}"]
@@ -274,7 +294,6 @@ case = "../../../docs/tutorial/examples/shapes.cml"
 backends = false
 args = ["${case}"]
 expect_exit = 1
-expect_output_not_contains = []
 expect_diagnostic_name = "SemanticDiag::EntryModuleMissingMain"
 expect_output_contains = ["Entry module 'shapes' must define a resolvable 'main'"]
 
@@ -294,7 +313,6 @@ case = "../../../docs/tutorial/examples/05_map_order.cml"
 backends = false
 args = ["${case}", "std::prl"]
 expect_exit = 0
-expect_output_not_contains = []
 verify_script = """
 const numbers = (line) => line.replace(/[[\]]/g, '').split(',').map((part) => Number(part.trim()))
 const lines = input.normalized.stdout.trimEnd().split('\n')
@@ -314,6 +332,7 @@ assert(
 # compiler does not redden the plan while a changed graph still does.
 [[tests]]
 name = "tutorial.examples.13_graph_rgir"
+expect_output_not_contains = ["[Error]", "Segmentation fault", "dumped core"]
 desc = "The graph of 13_graph.cml as std::rgir dumps it: the chapter's figure is this graph, and its shape is what is pinned."
 case = "../../../docs/tutorial/examples/13_graph.cml"
 backends = false
@@ -326,6 +345,7 @@ golden = "golden/tutorial_examples/13_graph_rgir.dot"
 # VM, which must print the same number as the plain run.
 [[tests]]
 name = "tutorial.examples.14_passes_opt_fvm"
+expect_output_not_contains = ["[Error]", "Segmentation fault", "dumped core"]
 desc = "The same program with std::opt and std::fvm: optimizing the graph does not change the result."
 case = "../../../docs/tutorial/examples/14_passes.cml"
 backends = false
@@ -343,7 +363,6 @@ case = "../../../docs/tutorial/examples/15_model.cml"
 backends = false
 args = ["${case}", "std::macro", "std::opt", 'onnx::export out="${test_tmp}/model.onnx"', "std::nop"]
 expect_exit = 0
-expect_output_not_contains = []
 expect_stdout_contains = ["onnx::export: wrote ${test_tmp}/model.onnx"]
 
 # ---- The examples of the rewritten chapters ---------------------------------------------------
@@ -359,12 +378,14 @@ expect_stdout_contains = ["onnx::export: wrote ${test_tmp}/model.onnx"]
 
 [[tests]]
 name = "tutorial.examples.01_rewrite"
+expect_output_not_contains = ["[Error]", "Segmentation fault", "dumped core"]
 desc = "The first program again, with one expression that has more than one writing: the value it prints is unchanged by that."
 case = "../../../docs/tutorial/examples/01_rewrite.cml"
 golden = "golden/tutorial_examples/01_rewrite.txt"
 
 [[tests]]
 name = "tutorial.examples.01_exercise"
+expect_output_not_contains = ["[Error]", "Segmentation fault", "dumped core"]
 desc = "The answer to the exercise of chapter 1: a function of two parameters, and the value it returns."
 case = "../../../docs/tutorial/examples/01_exercise.cml"
 golden = "golden/tutorial_examples/01_exercise.txt"
@@ -373,12 +394,14 @@ golden = "golden/tutorial_examples/01_exercise.txt"
 
 [[tests]]
 name = "tutorial.examples.02_literals"
+expect_output_not_contains = ["[Error]", "Segmentation fault", "dumped core"]
 desc = "A literal takes the type its context asks for while a variable keeps its own type: the same numbers printed as reals and as ints."
 case = "../../../docs/tutorial/examples/02_literals.cml"
 golden = "golden/tutorial_examples/02_literals.txt"
 
 [[tests]]
 name = "tutorial.examples.02_exercise"
+expect_output_not_contains = ["[Error]", "Segmentation fault", "dumped core"]
 desc = "The answer to the exercise of chapter 2: a value of one type is not another type, and the conversion is written out."
 case = "../../../docs/tutorial/examples/02_exercise.cml"
 golden = "golden/tutorial_examples/02_exercise.txt"
@@ -387,12 +410,14 @@ golden = "golden/tutorial_examples/02_exercise.txt"
 
 [[tests]]
 name = "tutorial.examples.03_lambdas"
+expect_output_not_contains = ["[Error]", "Segmentation fault", "dumped core"]
 desc = "A function with no name, written `(x: int): int => ...`, called where it is written and kept in a name."
 case = "../../../docs/tutorial/examples/03_lambdas.cml"
 golden = "golden/tutorial_examples/03_lambdas.txt"
 
 [[tests]]
 name = "tutorial.examples.03_exercise"
+expect_output_not_contains = ["[Error]", "Segmentation fault", "dumped core"]
 desc = "The answer to the exercise of chapter 3: a function of two parameters, used from a pipe."
 case = "../../../docs/tutorial/examples/03_exercise.cml"
 golden = "golden/tutorial_examples/03_exercise.txt"
@@ -401,12 +426,14 @@ golden = "golden/tutorial_examples/03_exercise.txt"
 
 [[tests]]
 name = "tutorial.examples.04_guards"
+expect_output_not_contains = ["[Error]", "Segmentation fault", "dumped core"]
 desc = "A `when` guard adds a condition to a case: the first arm whose guard holds is the one taken."
 case = "../../../docs/tutorial/examples/04_guards.cml"
 golden = "golden/tutorial_examples/04_guards.txt"
 
 [[tests]]
 name = "tutorial.examples.04_exercise"
+expect_output_not_contains = ["[Error]", "Segmentation fault", "dumped core"]
 desc = "The answer to the exercise of chapter 4: an `if` is an expression, and a `match` on a string needs its default."
 case = "../../../docs/tutorial/examples/04_exercise.cml"
 golden = "golden/tutorial_examples/04_exercise.txt"
@@ -415,12 +442,14 @@ golden = "golden/tutorial_examples/04_exercise.txt"
 
 [[tests]]
 name = "tutorial.examples.05_loops"
+expect_output_not_contains = ["[Error]", "Segmentation fault", "dumped core"]
 desc = "`loop` carries its state from one round to the next, and the body's value is the next state."
 case = "../../../docs/tutorial/examples/05_loops.cml"
 golden = "golden/tutorial_examples/05_loops.txt"
 
 [[tests]]
 name = "tutorial.examples.05_exercise"
+expect_output_not_contains = ["[Error]", "Segmentation fault", "dumped core"]
 desc = "The answer to the exercise of chapter 5: a `loop` that adds the squares of the even numbers."
 case = "../../../docs/tutorial/examples/05_exercise.cml"
 golden = "golden/tutorial_examples/05_exercise.txt"
@@ -429,18 +458,21 @@ golden = "golden/tutorial_examples/05_exercise.txt"
 
 [[tests]]
 name = "tutorial.examples.06_collections"
+expect_output_not_contains = ["[Error]", "Segmentation fault", "dumped core"]
 desc = "Structs, tuples, Map and Set: the shapes a program's data takes, and what each of them gives back."
 case = "../../../docs/tutorial/examples/06_collections.cml"
 golden = "golden/tutorial_examples/06_collections.txt"
 
 [[tests]]
 name = "tutorial.examples.06_equality"
+expect_output_not_contains = ["[Error]", "Segmentation fault", "dumped core"]
 desc = "`==` compares two values by what they hold, not by where they are."
 case = "../../../docs/tutorial/examples/06_equality.cml"
 golden = "golden/tutorial_examples/06_equality.txt"
 
 [[tests]]
 name = "tutorial.examples.06_exercise"
+expect_output_not_contains = ["[Error]", "Segmentation fault", "dumped core"]
 desc = "The answer to the exercise of chapter 6: counting with a map is a fold over `put`."
 case = "../../../docs/tutorial/examples/06_exercise.cml"
 golden = "golden/tutorial_examples/06_exercise.txt"
@@ -449,6 +481,7 @@ golden = "golden/tutorial_examples/06_exercise.txt"
 
 [[tests]]
 name = "tutorial.examples.07_nullable"
+expect_output_not_contains = ["[Error]", "Segmentation fault", "dumped core"]
 desc = "`T?` may be null: a lookup that finds nothing, opened with `??` and with `match`."
 case = "../../../docs/tutorial/examples/07_nullable.cml"
 golden = "golden/tutorial_examples/07_nullable.txt"
@@ -456,6 +489,7 @@ golden = "golden/tutorial_examples/07_nullable.txt"
 # The dropped value at the end of the file warns on standard error, which the page does not show.
 [[tests]]
 name = "tutorial.examples.07_errors"
+expect_output_not_contains = ["[Error]", "Segmentation fault", "dumped core"]
 desc = "A function that may fail returns `T!`, and an error value is handed out by `return`. The value dropped at the end of the file is reported as a warning on standard error."
 case = "../../../docs/tutorial/examples/07_errors.cml"
 golden = "golden/tutorial_examples/07_errors.txt"
@@ -469,7 +503,6 @@ desc = "A fault: a read past the end of an array ends the program, with the inde
 kind = "behavior"
 case = "../../../docs/tutorial/examples/07_fault.cml"
 expect_exit = 1
-expect_output_not_contains = []
 expect_stdout_starts_with = "before\n"
 expect_stdout_not_contains = ["after"]
 expect_diagnostic_name = "RuntimeDiag::IndexOutOfRange"
@@ -479,6 +512,7 @@ expect_output_contains = ["Index 5 is out of range for an array of length 3"]
 
 [[tests]]
 name = "tutorial.examples.07_exercise"
+expect_output_not_contains = ["[Error]", "Segmentation fault", "dumped core"]
 desc = "The answer to the exercise of chapter 7: the values that are there, and 0 for the ones that are not."
 case = "../../../docs/tutorial/examples/07_exercise.cml"
 golden = "golden/tutorial_examples/07_exercise.txt"
@@ -487,6 +521,7 @@ golden = "golden/tutorial_examples/07_exercise.txt"
 
 [[tests]]
 name = "tutorial.examples.08_modules"
+expect_output_not_contains = ["[Error]", "Segmentation fault", "dumped core"]
 desc = "Importing from a standard module and from the file next to this one, which is the module `geometry`."
 case = "../../../docs/tutorial/examples/08_modules.cml"
 golden = "golden/tutorial_examples/08_modules.txt"
@@ -495,6 +530,7 @@ golden = "golden/tutorial_examples/08_modules.txt"
 # command: the argument is this chapter's own text file, from the repository root.
 [[tests]]
 name = "tutorial.examples.08_wordcount"
+expect_output_not_contains = ["[Error]", "Segmentation fault", "dumped core"]
 desc = "The wordcount tool: read the text the argument names, count the words, print the counts as JSON."
 case = "../../../docs/tutorial/examples/08_wordcount.cml"
 args = ["${case}", "--arg", "path=docs/tutorial/examples/08_words.txt", "${backend}"]
@@ -502,6 +538,7 @@ golden = "golden/tutorial_examples/08_wordcount.txt"
 
 [[tests]]
 name = "tutorial.examples.08_exercise"
+expect_output_not_contains = ["[Error]", "Segmentation fault", "dumped core"]
 desc = "The answer to the exercise of chapter 8: the same tool with the reading in one function."
 case = "../../../docs/tutorial/examples/08_exercise.cml"
 args = ["${case}", "--arg", "path=docs/tutorial/examples/08_words.txt", "${backend}"]
@@ -511,12 +548,14 @@ golden = "golden/tutorial_examples/08_exercise.txt"
 
 [[tests]]
 name = "tutorial.examples.09_dependency"
+expect_output_not_contains = ["[Error]", "Segmentation fault", "dumped core"]
 desc = "Who needs whose result decides what runs and what can run at the same time."
 case = "../../../docs/tutorial/examples/09_dependency.cml"
 golden = "golden/tutorial_examples/09_dependency.txt"
 
 [[tests]]
 name = "tutorial.examples.09_exercise"
+expect_output_not_contains = ["[Error]", "Segmentation fault", "dumped core"]
 desc = "The answer to the exercise of chapter 9: one call now needs the other's result, which is what changes the graph."
 case = "../../../docs/tutorial/examples/09_exercise.cml"
 golden = "golden/tutorial_examples/09_exercise.txt"
@@ -527,24 +566,28 @@ golden = "golden/tutorial_examples/09_exercise.txt"
 # it, so each of those entries asserts the diagnostic name rather than only the golden.
 [[tests]]
 name = "tutorial.examples.10_unused_effect"
+expect_output_not_contains = ["[Error]", "Segmentation fault", "dumped core"]
 desc = "A write whose result nothing needs still runs: `greet`'s body is a region, so its `println` runs although the body is not a sync block, and nothing is reported."
 case = "../../../docs/tutorial/examples/10_unused_effect.cml"
 golden = "golden/tutorial_examples/10_unused_effect.txt"
 
 [[tests]]
 name = "tutorial.examples.10_sync_body"
+expect_output_not_contains = ["[Error]", "Segmentation fault", "dumped core"]
 desc = "The same two statements in a sync body: now both run, in the order they are written."
 case = "../../../docs/tutorial/examples/10_sync_body.cml"
 golden = "golden/tutorial_examples/10_sync_body.txt"
 
 [[tests]]
 name = "tutorial.examples.10_sync_block"
+expect_output_not_contains = ["[Error]", "Segmentation fault", "dumped core"]
 desc = "A sync function body orders its own statements, and a `sync` block inside it orders what it contains; the print outside the block runs too, because its region runs. Nothing is reported."
 case = "../../../docs/tutorial/examples/10_sync_block.cml"
 golden = "golden/tutorial_examples/10_sync_block.txt"
 
 [[tests]]
 name = "tutorial.examples.10_var_order"
+expect_output_not_contains = ["[Error]", "Segmentation fault", "dumped core"]
 desc = "A `var` and the order of its writes inside a sync body: a read takes the most recent write, which is what the chapter's picture draws. The last write, `c = 3`, stores a value nothing reads -- `latest` returns `before` -- so it is reported at 21:7, and the chapter's next paragraph is about exactly that value."
 case = "../../../docs/tutorial/examples/10_var_order.cml"
 golden = "golden/tutorial_examples/10_var_order.txt"
@@ -559,18 +602,21 @@ expect_output_not_contains = ["SemanticDiag::IgnoredSideEffect", "is never execu
 
 [[tests]]
 name = "tutorial.examples.10_same_resource"
+expect_output_not_contains = ["[Error]", "Segmentation fault", "dumped core"]
 desc = "Two effects on the same resource (`stdout`) keep the written order without a sync block."
 case = "../../../docs/tutorial/examples/10_same_resource.cml"
 golden = "golden/tutorial_examples/10_same_resource.txt"
 
 [[tests]]
 name = "tutorial.examples.10_resources"
+expect_output_not_contains = ["[Error]", "Segmentation fault", "dumped core"]
 desc = "What a call touches: a resource of the module, a group of them, a handle type, and `uses` on a parameter."
 case = "../../../docs/tutorial/examples/10_resources.cml"
 golden = "golden/tutorial_examples/10_resources.txt"
 
 [[tests]]
 name = "tutorial.examples.10_pure_callback"
+expect_output_not_contains = ["[Error]", "Segmentation fault", "dumped core"]
 desc = "`pure` in a function type is part of the requirement: `apply` accepts only a function whose inferred resources fit the empty set the parameter asks for, and `twice` touches nothing."
 case = "../../../docs/tutorial/examples/10_pure_callback.cml"
 golden = "golden/tutorial_examples/10_pure_callback.txt"
@@ -591,7 +637,6 @@ case = "../../../docs/tutorial/examples/10_pure_callback_wrong.cml"
 backends = false
 args = ["${case}"]
 expect_exit = 1
-expect_output_not_contains = []
 expect_output_contains = ["10_pure_callback_wrong.cml:15:18: [Error]: No matching function found", "(name=SemanticDiag::NoMatchingFunction, code=0x0300000F)", "apply: (f: (x: int) => int pure, x: int) => int"]
 
 # The counter-example of the `uses` section: the clause is a promise the compiler holds the body
@@ -606,11 +651,11 @@ case = "../../../docs/tutorial/examples/10_uses_beyond.cml"
 backends = false
 args = ["${case}"]
 expect_exit = 1
-expect_output_not_contains = []
 expect_output_contains = ["10_uses_beyond.cml:8:1: [Error]: '() => int uses var db' does not keep its resource promise", "stdout", "(name=SemanticDiag::UsesPromiseViolated, code=0x030001F1)"]
 
 [[tests]]
 name = "tutorial.examples.10_exercise"
+expect_output_not_contains = ["[Error]", "Segmentation fault", "dumped core"]
 desc = "The answer to the exercise of chapter 10: a `var` written inside a sync block, and a callback whose body touches no resource, passed where the pure requirement asks for one."
 case = "../../../docs/tutorial/examples/10_exercise.cml"
 golden = "golden/tutorial_examples/10_exercise.txt"
@@ -621,18 +666,21 @@ golden = "golden/tutorial_examples/10_exercise.txt"
 # entries below are named after the files and the `desc` says which chapter they belong to.
 [[tests]]
 name = "tutorial.examples.17_rule"
+expect_output_not_contains = ["[Error]", "Segmentation fault", "dumped core"]
 desc = "The law of chapter 18's program written as a `rule`: the optimizer's verdict on it, and the values `main` prints."
 case = "../../../docs/tutorial/examples/17_rule.cml"
 golden = "golden/tutorial_examples/17_rule.txt"
 
 [[tests]]
 name = "tutorial.examples.17_fact"
+expect_output_not_contains = ["[Error]", "Segmentation fault", "dumped core"]
 desc = "The knowledge of the field that is not an equation, handed to the compiler as a `fact`: what the rule that needs it reports without it, including the operator that is not translated."
 case = "../../../docs/tutorial/examples/17_fact.cml"
 golden = "golden/tutorial_examples/17_fact.txt"
 
 [[tests]]
 name = "tutorial.examples.17_exercise"
+expect_output_not_contains = ["[Error]", "Segmentation fault", "dumped core"]
 desc = "The answer to the exercise of chapter 18: a law written as a `rule`, and the verdict its `check` prints."
 case = "../../../docs/tutorial/examples/17_exercise.cml"
 golden = "golden/tutorial_examples/17_exercise.txt"
@@ -647,6 +695,5 @@ case = "../../../docs/tutorial/examples/geometry.cml"
 backends = false
 args = ["${case}"]
 expect_exit = 1
-expect_output_not_contains = []
 expect_diagnostic_name = "SemanticDiag::EntryModuleMissingMain"
 expect_output_contains = ["Entry module 'geometry' must define a resolvable 'main'"]
