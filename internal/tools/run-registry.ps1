@@ -48,13 +48,21 @@ function Add-RunRegistryRow {
             # `camel-gate-state.ps1#Publish-CamelGateState`, spelled out here because the registry is
             # JSONL and this file is dot-sourced by `camel-remote.ps1`, which does not carry that
             # helper: one rename of a temp file beside the destination (the overwrite overload, i.e.
-            # MOVEFILE_REPLACE_EXISTING -- every caller is `pwsh`, so it exists), retried across the
+            # MOVEFILE_REPLACE_EXISTING, or `File.Replace` where that overload is missing), retried across the
             # milliseconds a reader holds the file. If it cannot land, the compaction is dropped and
             # the caller is told `$false`, never an exception.
             $published = $false
+            # `File.Move(source, destination, overwrite)` exists on pwsh (.NET Core 3+) only; Windows
+            # PowerShell 5.1 (.NET Framework) replaces the destination with `File.Replace` instead, which
+            # likewise fails while a reader holds the file open.
+            $overwriteMove = $null -ne [System.IO.File].GetMethod('Move', [type[]]@([string], [string], [bool]))
             for ($attempt = 0; $attempt -lt 25; $attempt++) {
                 try {
-                    [System.IO.File]::Move($tmp, $Path, $true)
+                    if ($overwriteMove) {
+                        [System.IO.File]::Move($tmp, $Path, $true)
+                    } else {
+                        [System.IO.File]::Replace($tmp, $Path, [NullString]::Value)
+                    }
                     $published = $true
                     break
                 } catch {
