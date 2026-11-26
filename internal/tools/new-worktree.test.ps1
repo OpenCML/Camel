@@ -166,7 +166,7 @@ try {
     Check 'the ignored build output survived the release' (Test-Path -LiteralPath (Join-Path $s1 'build/marker'))
 
     # --- 6. the listing ------------------------------------------------------
-    # slot-1 is released (free); slot-2 is on lane/two, clean and with nothing of its own (busy: it holds
+    # slot-1 is released (free); slot-2 is on the second branch, clean and with nothing of its own (busy: it holds
     # a branch); slot-3 gets a commit that is not in the integration line and a change (busy, dirty).
     Write-FixtureFile $s3 'src/c.txt' 'lane work'
     Invoke-Git $s3 add src/c.txt | Out-Null
