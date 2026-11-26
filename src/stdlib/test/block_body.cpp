@@ -357,6 +357,36 @@ BlockBodyTestPass::apply(const camel::runtime::Program *program, std::ostream &o
             block.uri,
             registered);
     }
+    // The cost fact, read where the difference is visible: an operator that states a cost, one that
+    // states nothing, and a block whose stated cost is exactly the number the silence would have
+    // produced. The number alone does not tell them apart; the stated bit does, and it is the
+    // record that answers it now (`Record::relativeCost`, `std::optional`).
+    {
+        camel::ops::Registry &registry = camel::ops::Registry::instance();
+        for (const Compiled &block : blocks) {
+            if (block.what == "body") {
+                camel::ops::CppRegistration registration(block.uri);
+                registration.relativeCost(1.0);
+                registry.registerOperator(registration);
+            }
+        }
+        const auto printCost = [&os](const char *what, std::string_view uri) {
+            const std::optional<camel::core::OperId> oper =
+                camel::core::OperatorTable::instance().lookup(uri);
+            const camel::ops::Record *record =
+                oper ? camel::core::OperatorTable::instance().recordOf(*oper) : nullptr;
+            const std::optional<double> stated =
+                record ? record->relativeCostStated() : std::nullopt;
+            os << std::format(
+                "BLOCK_COST {} stated={} value={:.6f}\n",
+                what,
+                stated ? 1 : 0,
+                stated.value_or(1.0));
+        };
+        printCost("declared_eight", ":op/div_i");
+        printCost("declared_one", blocks.front().uri);
+        printCost("silent", ":op/add_i");
+    }
     os << std::format("BLOCK_BODY store blocks={}\n", context_->blockPrograms().size());
     // The family layer's own answer for two blocks that differ only in whether running them ends:
     // `core.arrangeable` read through the fact layer (`operatorArrangeable`, rendered by its own

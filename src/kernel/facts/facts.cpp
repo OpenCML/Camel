@@ -984,6 +984,12 @@ Arrangeable termsOfOperator(camel::ops::OperId oper) {
     // (`OperatorTraits::mayNotTerminate`), and the term is the record's like the other three --
     // read from the same entry, so a reader of this kind and a reader of the table agree.
     const std::optional<camel::core::OperatorTraits> traits = table.find(oper);
+    // Termination and fault are two questions, and a call that runs into the machine's limits
+    // answers only the first: running out of stack or of memory is a resource limit, and design
+    // principles' chapter on faults -- faults arise only from a fault source -- leaves resource
+    // limits out of the fault fact. So an operator that may not end is still an operator that does
+    // not fail: it does not fail, it does not stop. Not a gap in this walk.
+    terms.terminates = !(traits.has_value() && traits->mayNotTerminate);
     terms.terminates = !(traits.has_value() && traits->mayNotTerminate);
     return terms;
 }

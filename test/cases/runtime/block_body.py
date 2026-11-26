@@ -65,7 +65,8 @@ trait_lines = [line for line in lines if line.startswith("BLOCK_TRAITS ")]
 # What the pass said, on this case's own stdout: the plan pins these lines, so the reading is
 # checked as text and not only as the numbers the assertions below derive from it.
 arrange_lines = [line for line in lines if line.startswith("BLOCK_ARRANGE ")]
-for line in body_lines + trait_lines + arrange_lines + call_lines:
+cost_lines = [line for line in lines if line.startswith("BLOCK_COST ")]
+for line in body_lines + trait_lines + arrange_lines + cost_lines + call_lines:
     print(line)
 
 # Five bodies, each a program of its own: a root graph and the function's graph, in a program that
@@ -150,6 +151,18 @@ assert "may not terminate" in arrange["spin"]["family"], arrange
 assert arrange["stops"]["terminates"] and not arrange["spin"]["terminates"], arrange
 assert "may not terminate" not in arrange["stops"]["family"], arrange
 assert arrange["body"]["foldable"] and arrange["spin"]["foldable"], arrange
+# The cost fact: an operator that states one, one that states nothing, and a stated one whose value
+# is the number the silence would have produced. Only the stated bit tells the last two apart, which
+# is why the reader returns an answer that can be "not stated".
+cost = {}
+for line in cost_lines:
+    match = re.fullmatch(r"BLOCK_COST (\S+) stated=(\d) value=([\d.]+)", line)
+    assert match, line
+    cost[match.group(1)] = {"stated": match.group(2) == "1", "value": float(match.group(3))}
+assert cost["declared_eight"] == {"stated": True, "value": 8.0}, cost
+assert cost["declared_one"] == {"stated": True, "value": 1.0}, cost
+assert cost["silent"] == {"stated": False, "value": 1.0}, cost
+assert cost["declared_one"]["stated"] != cost["silent"]["stated"], cost
 assert not any(traits[what]["mayNotTerminate"] for what in ("body", "second", "effectful", "fallible")), traits
 store = int(re.search(r"BLOCK_BODY store blocks=(\d+)", with_body.stdout).group(1))
 by_uri = {}

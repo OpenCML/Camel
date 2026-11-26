@@ -14,20 +14,20 @@
 #include "nodekind.h"
 #include "regionkind.h"
 
+#include "camel/core/context/context.h"
 #include "camel/core/error/runtime.h"
 #include "camel/core/node_attrs.h"
 #include "camel/core/operator_table.h"
-#include "camel/ops/operator_record.h"
-#include "camel/core/tags.h"
 #include "camel/core/rtdata/array.h"
 #include "camel/core/rtdata/func.h"
 #include "camel/core/rtdata/string.h"
 #include "camel/core/rtdata/tagged.h"
 #include "camel/core/rtdata/variant.h"
+#include "camel/core/tags.h"
 #include "camel/core/type/composite/array.h"
 #include "camel/core/type/composite/tuple.h"
 #include "camel/core/type/resolver.h"
-#include "camel/core/context/context.h"
+#include "camel/ops/operator_record.h"
 #include "camel/runtime/canonical.h"
 #include "camel/runtime/core_facts.h"
 #include "camel/runtime/draft.h"
@@ -117,18 +117,16 @@ const GCNode &nodeOfFrozen(const Handle *handle, const char *site) {
 
 /// Reads that belong to the frozen graphs only (a region, an operator, a transaction) go through
 /// this name, which is the frozen reader: there is nothing of them in a draft.
-const GCNode &nodeOf(const Handle *handle, const char *site) {
-    return nodeOfFrozen(handle, site);
-}
+const GCNode &nodeOf(const Handle *handle, const char *site) { return nodeOfFrozen(handle, site); }
 
 /// A node of a frozen graph or of the draft being rewritten (a rule condition reads the draft).
 /// Everything the read operators ask about a node is here; the rest of the file picks the
 /// source.
 struct NodeView {
-    const GCNode *frozen               = nullptr;
-    const DraftNodeHeader *draftHeader = nullptr;
+    const GCNode *frozen                                = nullptr;
+    const DraftNodeHeader *draftHeader                  = nullptr;
     const camel::runtime::GraphTransaction *transaction = nullptr;
-    gc_node_ref_t ref                  = kInvalidNodeRef;
+    gc_node_ref_t ref                                   = kInvalidNodeRef;
 
     bool isDraft() const { return transaction != nullptr; }
     const auto &draft() const { return transaction->graph(); }
@@ -256,7 +254,7 @@ class CanonicalSolve {
         if (byRoot_.size() > 16) {
             byRoot_.clear();
         }
-        auto solve = std::make_shared<const camel::runtime::CanonicalProgram>(*program, *root);
+        auto solve    = std::make_shared<const camel::runtime::CanonicalProgram>(*program, *root);
         byRoot_[root] = Entry{root->revision(), solve};
         return solve;
     }
@@ -431,12 +429,13 @@ slot_t isConstantKernel(ArgsView &, ArgsView &norm, Context &) {
     return toSlot<Bool>(node.kind() == GCNodeKind::Data && node.dataIndex() < 0);
 }
 
-/// The bytes a constant node's value occupies: the same measure `std::opt` and `std::cxx::fold` clamp with
-/// `constant_budget`, answered here so a Camel pass can ask the same question. A node that is no constant --
-/// or whose value is not in the graph's static values -- occupies nothing: 0.
+/// The bytes a constant node's value occupies: the same measure `std::opt` and `std::cxx::fold`
+/// clamp with `constant_budget`, answered here so a Camel pass can ask the same question. A node
+/// that is no constant -- or whose value is not in the graph's static values -- occupies nothing:
+/// 0.
 slot_t constantBytesKernel(ArgsView &, ArgsView &norm, Context &) {
-    const auto *handle  = norm.get<Handle *>(0);
-    const NodeView node = viewOf(handle, "graph.constant_bytes");
+    const auto *handle                  = norm.get<Handle *>(0);
+    const NodeView node                 = viewOf(handle, "graph.constant_bytes");
     const camel::core::type::Type *type = node.dataType();
     if (node.kind() != GCNodeKind::Data || type == nullptr || node.dataIndex() >= 0) {
         return toSlot<Int64>(static_cast<Int64>(0));
@@ -557,7 +556,11 @@ slot_t relativeCostKernel(ArgsView &, ArgsView &norm, Context &) {
         return toSlot<Float64>(1.0);
     }
     const camel::ops::Record *record = OperatorTable::instance().recordOf(oper);
-    return toSlot<Float64>(record == nullptr ? 1.0 : record->relativeCostOf());
+    // `1.0` here is *this* reading's policy for an operator that states no cost -- a cost function
+    // needs a number and picks one -- and not the record's answer, which is "not stated". The two
+    // are kept apart in the record (`Record::relativeCost`), so a caller that must know the
+    // difference can ask it.
+    return toSlot<Float64>(record == nullptr ? 1.0 : record->relativeCostStated().value_or(1.0));
 }
 
 /// Whether the node's operator is pure: it writes nothing, neither state of the program nor
@@ -573,17 +576,19 @@ slot_t isPureKernel(ArgsView &, ArgsView &norm, Context &ctx) {
     if (node.kind() == GCNodeKind::Oper && node.hasPayload()) {
         if (handle->transaction() == nullptr) {
             const camel::runtime::GCGraph &graph = graphOf(handle, "graph.is_pure");
-            pure = camel::runtime::fact::operatorEffectsOf(
-                       ctx.facts(), *handle->program(), graph, handle->index())
-                       .pure();
+            pure                                 = camel::runtime::fact::operatorEffectsOf(
+                                                       ctx.facts(),
+                                                       *handle->program(),
+                                                       graph,
+                                                       handle->index())
+                                                       .pure();
         } else {
             // A node of a draft: a draft is not a frozen graph, so there is no answer a fact can be
             // kept at, and no node to read a function operand's clause off either. The declaration
             // is what is asked (`declaredEffectsOfOperator`), which is the same reading the walk
             // starts a node from (effects.h) with the operand's half taken conservatively -- never
             // narrower than the answer a frozen graph gives.
-            pure = camel::runtime::declaredEffectsOfOperator(
-                       operOf(node, handle, "graph.is_pure"))
+            pure = camel::runtime::declaredEffectsOfOperator(operOf(node, handle, "graph.is_pure"))
                        .pure();
         }
     }
@@ -630,9 +635,9 @@ slot_t mayBeRearrangedKernel(ArgsView &, ArgsView &norm, Context &) {
     if (node.isDraft()) {
         return toSlot<Bool>(camel::runtime::nodeIsFreelySchedulable(node.draft(), node.ref, true));
     }
-    return toSlot<Bool>(
-        camel::runtime::graph::may_be_rearranged(
-            graphOf(handle, "graph.may_be_rearranged"), handle->index()));
+    return toSlot<Bool>(camel::runtime::graph::may_be_rearranged(
+        graphOf(handle, "graph.may_be_rearranged"),
+        handle->index()));
 }
 
 slot_t typeOfKernel(ArgsView &, ArgsView &norm, Context &) {
@@ -690,9 +695,8 @@ slot_t calleeKernel(ArgsView &, ArgsView &norm, Context &) {
     if (node.kind != GCNodeKind::Call && node.kind != GCNodeKind::Func) {
         return NullSlot;
     }
-    const GraphId callee = node.kind == GCNodeKind::Call
-                               ? calledGraphOf(graph, handle->index())
-                               : graph.calleeIdOf(handle->index());
+    const GraphId callee = node.kind == GCNodeKind::Call ? calledGraphOf(graph, handle->index())
+                                                         : graph.calleeIdOf(handle->index());
     if (!isValid(callee) || handle->program()->graph(callee) == nullptr) {
         return NullSlot;
     }
@@ -702,13 +706,13 @@ slot_t calleeKernel(ArgsView &, ArgsView &norm, Context &) {
 }
 
 slot_t tagsKernel(ArgsView &, ArgsView &norm, Context &) {
-    const auto *handle   = norm.get<Handle *>(0);
-    const NodeView node  = viewOf(handle, "graph.tags");
+    const auto *handle  = norm.get<Handle *>(0);
+    const NodeView node = viewOf(handle, "graph.tags");
     // The one query for the facts of a node (camel/core/tags.h): the attributes of a node are its
     // tags.
-    const auto facts = node.isDraft()
-                           ? camel::core::tag::factsOf(node.draft(), node.ref)
-                           : camel::core::tag::factsOf(graphOf(handle, "graph.tags"), handle->index());
+    const auto facts =
+        node.isDraft() ? camel::core::tag::factsOf(node.draft(), node.ref)
+                       : camel::core::tag::factsOf(graphOf(handle, "graph.tags"), handle->index());
     return stringSlot(camel::core::attr::text(facts.tags));
 }
 
@@ -799,17 +803,18 @@ std::optional<attr::Attr> factOf(const Handle *handle, const char *site) {
 }
 
 slot_t declarationTagsKernel(ArgsView &, ArgsView &norm, Context &) {
-    const auto *handle   = norm.get<Handle *>(0);
-    const auto facts     = ruleFactsOf(graphOf(handle, "graph.declaration_tags"));
+    const auto *handle = norm.get<Handle *>(0);
+    const auto facts   = ruleFactsOf(graphOf(handle, "graph.declaration_tags"));
     std::vector<Handle *> tags;
     for (size_t i = 0; i < facts.size(); ++i) {
-        tags.push_back(Handle::create(
-            HandleKind::Tag,
-            handle->program(),
-            handle->graph(),
-            static_cast<uint32_t>(i),
-            nullptr,
-            mm::autoSpace()));
+        tags.push_back(
+            Handle::create(
+                HandleKind::Tag,
+                handle->program(),
+                handle->graph(),
+                static_cast<uint32_t>(i),
+                nullptr,
+                mm::autoSpace()));
     }
     return handleArray(HandleKind::Tag, tags);
 }
@@ -913,8 +918,7 @@ slot_t isWrittenSlotKernel(ArgsView &, ArgsView &norm, Context &) {
             // The copy is opened by a transaction, which is the only owner a draft has; it is never
             // committed, because the answer is computed from the copy and nothing is handed back.
             const auto copy = camel::runtime::GraphTransaction::decode(*handle->program(), &graph);
-            found = cache.emplace(key, std::make_shared<camel::runtime::WrittenSlots>(*copy))
-                        .first;
+            found = cache.emplace(key, std::make_shared<camel::runtime::WrittenSlots>(*copy)).first;
         }
         written = found->second;
     }
@@ -933,13 +937,13 @@ slot_t originKernel(ArgsView &, ArgsView &norm, Context &) {
 /// The value of a node that holds a constant of the type `T` the call names (`constant::<int>(n)`),
 /// null for any other node. `T` is the payload of the result type `T?` the call was built with.
 slot_t constantKernel(ArgsView &, ArgsView &norm, Context &) {
-    const auto *handle  = norm.get<Handle *>(0);
-    const NodeView node = viewOf(handle, "graph.constant");
+    const auto *handle      = norm.get<Handle *>(0);
+    const NodeView node     = viewOf(handle, "graph.constant");
     const TupleType *answer = asNullable(norm.resultType());
     ASSERT(answer != nullptr, "constant answers a T?");
-    Type *wanted        = answer->payloadType();
-    const Type *type    = node.dataType();
-    const auto index    = static_cast<int64_t>(-node.dataIndex());
+    Type *wanted     = answer->payloadType();
+    const Type *type = node.dataType();
+    const auto index = static_cast<int64_t>(-node.dataIndex());
     if (node.kind() != GCNodeKind::Data || type == nullptr || type->code() != wanted->code() ||
         node.dataIndex() >= 0 ||
         !(node.isDraft()
@@ -975,7 +979,7 @@ slot_t regionOfKernel(ArgsView &, ArgsView &norm, Context &) {
     const auto *handle = norm.get<Handle *>(0);
     nodeOf(handle, "graph.region_of");
     const GCGraph &graph = graphOf(handle, "graph.region_of");
-    Handle *region      = Handle::create(
+    Handle *region       = Handle::create(
         HandleKind::Region,
         handle->program(),
         handle->graph(),

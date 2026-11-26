@@ -491,3 +491,26 @@ BLOCK_ARRANGE stops family=freely arrangeable all=1 terminates=1 foldable_field=
   自调用，效应走查给它的 `mayFault` 就是 `false`——它不会失败，只是不会停。**族名跟着体走，不跟着
   直觉走**；上一版把它读成"可能故障"才是错的。
 - 三条 `terminates` 读数与改前**一致**（1/0/1），`foldable_field` 三条都 1。
+
+### 15 `cost` 的 1.0，也是同一个病
+
+`Record::relativeCostOf()` 在"没人声明代价"时返回 1.0，于是**沉默读成了一个值**：声明 1.0 的算子和没声明的
+算子在读数上完全一样。改成 `relativeCostStated()` 返回 `std::optional<double>`——"没写"就是"没写"。
+
+需要数字的读者自己选，并且在选的地方说明是它在选：`graph::relative_cost` 用 `value_or(1.0)`，注释写明
+那是**这个读数**对"没声明"的处理，不是记录的答案。
+
+三条读数（只有 `stated` 位能把后两条分开，这就是这一笔的全部）：
+
+```
+BLOCK_COST declared_eight stated=1 value=8.000000   成本函数里声明了 8.0 的算子（div）
+BLOCK_COST declared_one   stated=1 value=1.000000   显式声明 1.0 的块算子：这个 1.0 是**读数**
+BLOCK_COST silent         stated=0 value=1.000000   什么都没声明的算子：这个 1.0 是**读数的策略**
+```
+
+### 16 不终止不等于会失败
+
+`spin` 的族名里没有 `may fault`，不是漏判：设计原则在"故障只从故障源产生"那一节讲明，递归过深与耗尽内存
+是**运行时的资源极限**，而"会不会故障是从图推出的事实……资源极限不计入"。所以一个可能不结束的算子，
+仍然是一个不会失败的算子——**它不会失败，只是不会停**。这条写进了 `termsOfOperator` 的注释里，没有写成
+"暂时没算"，因为那不是欠账。

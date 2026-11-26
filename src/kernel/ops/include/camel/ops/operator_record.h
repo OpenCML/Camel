@@ -475,9 +475,15 @@ struct Record {
     /// A call of it may fail: `panic` is stated true, or nobody stated it.
     bool mayFault() const { return !panic.stated() || panic.value; }
 
-    /// How dear one run of it is: what `cost` states, and 1.0 when nobody stated it. The one
-    /// reader of the property, so a target's silence reads the same everywhere.
-    double relativeCostOf() const { return relativeCost.stated() ? relativeCost.value : 1.0; }
+    /// How dear one run of it is, if the operator says: `std::nullopt` when nobody stated a cost,
+    /// which is a different answer from a stated 1.0 and is kept different here. A target that
+    /// needs a number for an unstating operator picks its own -- and says that it is picking one,
+    /// at the place that picks it (`graph.relative_cost`), rather than reading its policy as the
+    /// record's statement. Writing the default here read a silence as a value: `cost` stated 1.0
+    /// and `cost` never stated were the same double.
+    std::optional<double> relativeCostStated() const {
+        return relativeCost.stated() ? std::optional<double>(relativeCost.value) : std::nullopt;
+    }
 
     /// Whether running it is visible outside the program, which is what orders two effects of
     /// one resource and keeps them where the program wrote them.
