@@ -64,7 +64,7 @@ export func conv2d_bias_grad(bias: f32[...], dy: f32[...]) => f32[...]
 /// no value of it.
 /// @pure
 /// @example conv2d_input_grad_stated([1, 2, 4, 4], kernel, dy, 1, 0)    // like [1, 2, 4, 4]
-export func conv2d_input_grad_stated(input_extents: int[], kernel: f32[...], dy: f32[...], stride?: int, padding?: int) => f32[...]
+export func conv2d_input_grad_stated::<T, E>(input_extents: E, kernel: T[...], dy: T[...], stride?: int, padding?: int) => T[...]
 
 /// `conv2d_kernel_grad` with the kernel's extents stated instead of its tensor: same arithmetic, and
 /// the answer is the tensor `kernel_extents` names. The kernel's values are never read -- `dw` is
@@ -72,14 +72,14 @@ export func conv2d_input_grad_stated(input_extents: int[], kernel: f32[...], dy:
 /// tensor can still ask this.
 /// @pure
 /// @example conv2d_kernel_grad_stated(input, [3, 2, 2, 2], dy, 1, 0)    // like [3, 2, 2, 2]
-export func conv2d_kernel_grad_stated(input: f32[...], kernel_extents: int[], dy: f32[...], stride?: int, padding?: int) => f32[...]
+export func conv2d_kernel_grad_stated::<T, E>(input: T[...], kernel_extents: E, dy: T[...], stride?: int, padding?: int) => T[...]
 
 /// `conv2d_bias_grad` with the bias's extents stated instead of its tensor. The bias's values are
 /// never read -- the answer is the sum of `dy` -- so the extents are all this needs of it, and they
 /// are checked against the channels of `dy`.
 /// @pure
 /// @example conv2d_bias_grad_stated([3], dy)    // like [3]
-export func conv2d_bias_grad_stated(bias_extents: int[], dy: f32[...]) => f32[...]
+export func conv2d_bias_grad_stated::<T, E>(bias_extents: E, dy: T[...]) => T[...]
 
 // ---- pooling ----
 
