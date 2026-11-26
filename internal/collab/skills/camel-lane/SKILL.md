@@ -157,12 +157,13 @@ pwsh -NoProfile -File <你的工作树>\internal\tools\camel-remote.ps1 `
    跨 base 的差先当“base 的差”处理 —— 同一个用例可以在一格上红、在下一格绿，只因后者的祖先重钉了快照；
    既不要把跨 base 的差算成自己造成的，也不要把同一 base 上的新红说成既存，两句话都要有读数。
 · **优先领一个池位，不另建树**：工作树是按槽位命名的固定一组、车道间轮用，忽略的构建产物（`build/`、`out/`）
-  留着，下一条车道的构建是增量的。协调者派工时给你槽位路径，你自己领：
-    pwsh -NoProfile -File internal/tools/new-worktree.ps1 `
-      -Reuse <槽位路径> -Branch <branch> [-Base origin/develop]
-  槽位里有已跟踪的改动、或没被忽略的未跟踪文件就拒绝并原样不动；领成之后它会 `git clean -fd`（不带 `-x`）、
-  拷设置文件、读钩子应答。**收工（合入之后）还槽位**：`-Release <槽位路径>`，它只做 detach 到 `origin/integration`
-  尖端；分支由合并的那一方删，不在这里删。
+  留着，下一条车道的构建是增量的。**池子没有 `-Reuse`/`-Release`/`-Pool` 这些开关**（`new-worktree.ps1` 的参数只有
+  `Path/Branch/Base/FromCheckout/VerifyOnly/NoHusky/NoFetch`；2026-11-27 之前这里写着有，害得两条车道找了半天）：
+  领槽位 = **挑一棵 detached 且干净的树**，直接 `git -C <槽位> checkout -B <branch>`；还槽位 = `git -C <槽位> checkout --detach origin/integration`
+  （分支由合并的那一方删，不在这里删）。「空闲」只认两条：`rev-parse --abbrev-ref HEAD` 是 `HEAD`、`status --porcelain` 为空。
+· **要换一把 `flock` 锁就换路径**：宿主的 tree lock 按 checkout 路径的 `cksum` 建，同一棵树同时只许一条 run。
+  换锁的合法办法是另开一棵（`-Path D:\Projects\Camel-wt\<新名字> -Branch <branch> -Base <sha>`，或 `git worktree add --detach <路径>`），
+  跑完 `git worktree remove` + `git worktree prune`；**不要去动别人的树，也不要去动别人的锁。**
 · **建树只走一个入口**（槽位第一次建；池里没有空位时），不要手抄 `git worktree add`：
     pwsh -NoProfile -File internal/tools/new-worktree.ps1 `
       -Path D:\Projects\Camel-wt\<lane> -Branch <branch> -Base origin/develop
