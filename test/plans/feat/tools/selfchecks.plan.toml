@@ -492,15 +492,30 @@ expect_stdout_contains = ["tool-exit: 8 checks, 0 failed"]
 normalizers = ["normalize_newlines"]
 timeout_ms = 180000
 
+[[tests]]
+name = "selfchecks.entry_without_case"
+desc = "An entry that names no `case` and fails is reported as that entry failing: the run prints its `[SUMMARY]`, the other entries keep their verdicts, and the exit code is non-zero, instead of the runner crashing while it resolves the case path."
+kind = "behavior"
+tier = "slow"
+tool = "node"
+case = "../../../../test/tools/entry-without-case.test.mjs"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_contains = ["entry-without-case: 5 checks, 0 failed"]
+normalizers = ["normalize_newlines"]
+timeout_ms = 180000
+
 # The host's token pool is a bash script over flock, so its self-test runs where flock exists (the
-# build host) and is skipped elsewhere. Run through node so the plan needs no shell tool of its own.
+# build host) and is skipped elsewhere. The case file runs it through node so the plan needs no shell
+# tool of its own.
 [[tests]]
 name = "selfchecks.host_tokens"
 desc = "`internal/tools/host-tokens.sh self-test`: tokens are taken and given back per process, a crashed holder's tokens return to the pool, two takers that each want more than half the pool both finish one after the other, and the peak never exceeds the pool."
 kind = "behavior"
 tool = "node"
 skip_unless = ["bash", "-c", "command -v flock"]
-args = ["-e", "const r=require('child_process').spawnSync('bash',['internal/tools/host-tokens.sh','self-test'],{encoding:'utf8',timeout:120000});process.stdout.write(r.stdout||'');process.stderr.write(r.stderr||'');process.exit(r.status===null?1:r.status)"]
+case = "../../../../test/cases/tools/host_tokens/selftest.mjs"
+args = ["${case}"]
 expect_exit = 0
 expect_stdout_contains = ["selftest: ", " checks, 0 failed"]
 normalizers = ["normalize_newlines"]
