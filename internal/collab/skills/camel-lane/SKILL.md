@@ -129,7 +129,7 @@ pwsh -NoProfile -File <你的工作树>\internal\tools\camel-remote.ps1 `
 
 ```
 · **交回 = 本地提交在 `lane/<名字>` 上**，附 `git rev-parse HEAD` 与 `git log --oneline <base>..HEAD` 原文。
-  车道分支**不推远端**（钩子会拒）；远端只收 `integration`、`develop` 与归档命名空间。
+  车道分支**不推远端**（钩子会拒）；远端只收 `integration`、`develop`、`fsh-dev`，归档引用也只留本地。
 · 交回必须带**对上次晋级红表的逐名比读数**：`plan_id` + 用例名逐条比，给出「红数、与哪一份表比、新增几条」，
   并把那条**判词行原样**贴出。判词行是相位读数的唯一来源：调 `camel-remote` 时**不许用管道把它滤掉**，
   要少噪音就 `Tee-Object` 存一份再看。
