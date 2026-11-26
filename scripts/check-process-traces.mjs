@@ -6,7 +6,8 @@
 // This check refuses the traces that are unambiguous: a path into the handover pages, a dated
 // ruling, a role name, a host name or a local path, a calendar date of any year, the step a refactor
 // had reached (a stage or step number), a lane branch name or lane code, a work item number
-// (`D-<year>-<n>`, `C-<year>-<n>`), a commit hash (in backticks, after the word that names a commit,
+// (`D-<year>-<n>`, `C-<year>-<n>`) or the task board number the work was handed out under
+// (`task-<n>`), a commit hash (in backticks, after the word that names a commit,
 // or bare when it resolves as a commit in the repository), a phrase that stands in for who decided
 // what, and a narration of what the code used to be. It reads comment text only
 // (after `//`, `///`, `#` in CMake/TOML/shell/PowerShell, and inside `/* */`), so a date or a path
@@ -143,6 +144,10 @@ const pattern = new RegExp(
     // token: a name that ends in an underscore and then a work item number has no boundary between
     // the two, and a name is where such a number is most likely to be glued on.
     '(?<![A-Za-z0-9])[DC]-\\d{4}-\\d+(?!\\d)',
+    // The same number, on the board the work is handed out from, is spelled `task-<n>`. A comment
+    // that names one points at a dispatch, not at a fact about the code, and a run of digits after
+    // `task-` is never anything else the reader meant.
+    '\\btask-\\d+\\b',
     '待审',
     '\\bthis lane\\b',
     '\\biron rule \\d+\\b',

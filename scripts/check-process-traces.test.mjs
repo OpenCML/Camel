@@ -32,6 +32,10 @@ const cases = [
     ['src', 'kernel/ops/pending.h', '// 待审：this member is added, the declarations stand.\n'],
     ['src', 'compile/gir/builder.cpp', '// Both faces this lane reads carry such graphs.\n'],
     ['src', 'kernel/runtime/writings.h', '// The kernel only asks it for the choice (C-1123-17).\n'],
+    // The board the work is handed out from spells the same number `task-<n>`, and a case file's
+    // comment is where this tree carried one: a reader a month later cannot tell which dispatch it
+    // named or whether that dispatch closed.
+    ['test', 'cases/modules/graph_facts/waiting.cml', '// The CLI prints the fault on stdout, and task-79 moves diagnostics to stderr.\n'],
     ['scripts', 'some-tool.mjs', '// A lane code crept in here: lane-shapeext owned the measurement.\n'],
     ['scripts', 'other-tool.mjs', '// The tree is named by the caller (iron rule 17).\n'],
     ['internal/tools', 'merge-lane.ps1', '# The second seat came after `f26529338` broke the first.\n'],
