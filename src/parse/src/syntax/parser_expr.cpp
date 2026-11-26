@@ -72,7 +72,7 @@ bool ParserImpl::startsExpr(TK kind) const {
     }
 }
 
-/// dataExpr : ctrlExpr | loopExpr
+/// dataExpr : ctrlExpr | loopExpr | editExpr | viewExpr
 /// ctrlExpr : 'if' logicalOrExpr 'then' blockExpr ('else' blockExpr)?
 ///          | 'match' identRef '{' matchCase+ '}'
 ///          | 'match' 'type' typeExpr '{' typeCase* '}'
@@ -81,6 +81,16 @@ void ParserImpl::parseExpr() {
     if (depth.tooDeep()) {
         unexpected({});
         return;
+    }
+    // `edit` and `view` are contextual keywords (scripts/context-keywords.mjs): they open a block
+    // where a name followed by `=` and a read of a function stands, and are ordinary names
+    // everywhere else (`edit = 5` assigns to a variable of that name). The head is read at the
+    // level of `if`, `match` and `loop`, so it is an operand only in parentheses, as a loop is.
+    if (atWord(0, "edit") && peek(1) == TK::Identifier && peek(2) == TK::Assign) {
+        return parseEditExpr();
+    }
+    if (atWord(0, "view") && peek(1) == TK::Identifier && peek(2) == TK::Assign) {
+        return parseViewExpr();
     }
     switch (cur_) {
     case TK::KwIf:
@@ -1620,6 +1630,33 @@ void ParserImpl::parseLoop() {
         parseBlockExpr();
     }
     close(m, NK::LoopExpr);
+}
+
+/// editExpr : 'edit' identDef '=' logicalOrExpr stmtBlock
+/// viewExpr : 'view' identDef '=' logicalOrExpr stmtBlock
+/// A block over a function value (graph-editing design 15.1). The head is shaped as `loop`'s is:
+/// `edit d = f` reads as "a draft `d` over `f`", the way `loop s = init` reads as "a state `s`
+/// starting at `init`", so the `=` introduces a binding and is not an assignment, and the name is
+/// visible in the block and nowhere else.
+/// The braces are the body and are always a block: what follows `then` and `do` may be a struct
+/// literal, but here the block is the construct, so `{ name: ... }` is not a struct.
+/// Neither head writes the result type: an `edit` block's is the function it is over (or the type
+/// expected around it), a `view` block's is the body's (design 15.1).
+void ParserImpl::parseEditExpr() { parseBlockHeaded(NK::EditExpr); }
+void ParserImpl::parseViewExpr() { parseBlockHeaded(NK::ViewExpr); }
+
+void ParserImpl::parseBlockHeaded(NK kind) {
+    const size_t m = mark();
+    bump(); // 'edit' / 'view'
+    parseIdentDef();
+    if (panic_ || !expect(TK::Assign)) {
+        return close(m, kind);
+    }
+    parseLogicalOr();
+    if (!panic_) {
+        parseStmtBlock();
+    }
+    close(m, kind);
 }
 
 } // namespace camel::parse::syntax

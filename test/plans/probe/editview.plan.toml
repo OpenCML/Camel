@@ -1,0 +1,74 @@
+id = "probe.editview"
+tier = "fast"
+tags = ["probe"]
+desc = "Probe for the `edit`/`view` front end: the examples the graph-editing design writes are compiled as written, and the reading says what the compiler makes of each one."
+
+[[tests]]
+name = "editview.syntax_only"
+desc = "`return edit d = f { f }` — the smallest edit block, with a body that needs nothing resolved. Syntax only: what the parser makes of the head."
+kind = "behavior"
+case = "../../cases/probe/editview/syntax_only.cml"
+args = ["check", "-s", "${case}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "editview.syntax_only_semantic"
+desc = "The same file through the semantic check: what the names and types of an edit block make of it."
+kind = "behavior"
+case = "../../cases/probe/editview/syntax_only.cml"
+args = ["check", "${case}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "editview.sec2_fold"
+desc = "Design section 2, example 1 (`fold_zero_adds`): an edit block over `nodes`, `filter`, `foreach` and `replace`."
+kind = "behavior"
+case = "../../cases/probe/editview/sec2_fold.cml"
+args = ["check", "${case}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "editview.sec2_log"
+desc = "Design section 2, example 2 (`log_result`): the block head writes the new function type, and the body reads the exit, inlines a writing function and replaces the exit."
+kind = "behavior"
+case = "../../cases/probe/editview/sec2_log.cml"
+args = ["check", "${case}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "editview.sec2_count"
+desc = "Design section 2, example 3 (`count_muls`): a view block whose value is the body's value."
+kind = "behavior"
+case = "../../cases/probe/editview/sec2_count.cml"
+args = ["check", "${case}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "editview.sec12_step"
+desc = "Design section 12, first example: the two edit steps, the second of which the document says is refused at once."
+kind = "behavior"
+case = "../../cases/probe/editview/sec12_step.cml"
+args = ["check", "${case}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "editview.sec12_escape"
+desc = "Design section 12, second example: the handle leaving its view block and the `replace` written outside any edit block."
+kind = "behavior"
+case = "../../cases/probe/editview/sec12_escape.cml"
+args = ["check", "${case}"]
+expect_exit = 1
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000

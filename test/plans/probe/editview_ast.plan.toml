@@ -1,0 +1,47 @@
+id = "probe.editview.ast"
+tier = "fast"
+tags = ["probe"]
+desc = "Probe for the AST of an `edit` block head: what the parser makes of `return edit d = f { f }`."
+
+[[tests]]
+name = "editview.ast_edit_head"
+desc = "The AST of `return edit d = f { f }`, dumped: whether the head is a block at all."
+kind = "behavior"
+case = "../../cases/probe/editview/syntax_only.cml"
+args = ["inspect", "-a", "${case}"]
+expect_exit = 0
+expect_stdout_contains = ["EditExpr: d"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "editview.ast_view_head"
+desc = "The AST of a view block, dumped: the same reading for `view d = f { f }`."
+kind = "behavior"
+case = "../../cases/probe/editview/view_only.cml"
+args = ["inspect", "-a", "${case}"]
+expect_exit = 0
+expect_stdout_contains = ["ViewExpr: d"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "editview.ast_keywords_are_names"
+desc = "`edit` and `view` stay ordinary names where no block head is written: an assignment to a variable called `edit`, and a call of a function called `view`."
+kind = "behavior"
+case = "../../cases/probe/editview/names.cml"
+args = ["inspect", "-a", "${case}"]
+expect_exit = 0
+expect_stdout_contains = ["RefData: edit", "RefData: view"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "editview.check_view_head"
+desc = "What `check` says about a block today: the same file, read past the syntax."
+kind = "behavior"
+case = "../../cases/probe/editview/view_only.cml"
+args = ["check", "${case}"]
+expect_exit = 1
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000

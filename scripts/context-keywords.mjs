@@ -46,6 +46,20 @@ export const CONTEXT_KEYWORDS = [
         evidence: ['if (atWord(0, "range") && peek(1) == TK::LParen) {'],
     },
     {
+        word: 'edit',
+        group: 'expr',
+        zh: '编辑块的头：`edit` 后面跟名字、`=`，再跟被编辑的函数与块（`edit d = f { … }`，块的值是改好的函数）',
+        en: 'the head of an edit block: `edit` followed by a name, `=` and the function the block is over, then the block (`edit d = f { … }`, whose value is the changed function)',
+        evidence: ['if (atWord(0, "edit") && peek(1) == TK::Identifier && peek(2) == TK::Assign) {'],
+    },
+    {
+        word: 'view',
+        group: 'expr',
+        zh: '读图块的头：`view` 后面跟名字、`=`，再跟被读的函数与块（`view d = f { … }`，块的值是体的值）',
+        en: 'the head of a view block: `view` followed by a name, `=` and the function the block reads, then the block (`view d = f { … }`, whose value is the body\'s)',
+        evidence: ['if (atWord(0, "view") && peek(1) == TK::Identifier && peek(2) == TK::Assign) {'],
+    },
+    {
         word: 'tag',
         group: 'declaration',
         zh: '标签声明：`tag` 后面跟名字，再跟 `::`、`(`、`=` 或 `on`（`tag leaf on type`、`tag finite = [...]`）',

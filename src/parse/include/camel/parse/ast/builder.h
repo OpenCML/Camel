@@ -187,6 +187,10 @@ class Builder {
     /// IfExpr, MatchExpr, MatchTypeExpr, StaticForExpr.
     Value visitCtrlExpr(syntax::Node context);
     Value visitLoopExpr(syntax::cst::LoopExpr context);
+    Value visitEditExpr(syntax::cst::EditExpr context);
+    Value visitViewExpr(syntax::cst::ViewExpr context);
+    /// The two above, which differ only in the node kind the block is built as.
+    Value visitBlockHeaded(syntax::Node context, DataType type);
     Value visitAssignExpr(syntax::cst::AssignExpr context);
     Value visitLogicalOrExpr(syntax::cst::LogicalOrExpr context);
     Value visitLogicalAndExpr(syntax::cst::LogicalAndExpr context);

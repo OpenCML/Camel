@@ -381,6 +381,11 @@ class ParserImpl {
     /// `fieldPosition` reads a `fieldPattern` (`identRef | '_'`) instead of a whole `pattern`.
     void parsePattern(bool fieldPosition = false);
     void parseLoop();
+    void parseEditExpr();
+    void parseViewExpr();
+    /// The two productions above, which differ only in the word that opens them and the node kind
+    /// the block is closed as.
+    void parseBlockHeaded(NK kind);
     void parseOr();
     void parseAnd();
     void parseNeg(bool underMinus);

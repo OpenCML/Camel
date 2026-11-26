@@ -343,6 +343,9 @@ class Walker {
             return ifExpr(cst::IfExpr(node));
         case NK::LoopExpr:
             return loopExpr(cst::LoopExpr(node));
+        case NK::EditExpr:
+        case NK::ViewExpr:
+            return blockHeadedExpr(node);
         case NK::AnnoExpr:
             return annoExpr(cst::AnnoExpr(node));
         case NK::AccessExpr:
@@ -719,6 +722,27 @@ class Walker {
             walkBlockBody(cst::StmtBlock(body));
         } else {
             walk(body);
+        }
+        popScope();
+    }
+
+    /// edit d = f { body } and view d = f { body }: the function the block is over is outside the
+    /// scope of the block's root, the body is inside it with the root declared, and the root is
+    /// visible nowhere else.
+    void blockHeadedExpr(syn::Node ctx) {
+        walk(ctx.expr());
+        const Range whole = rangeOf(ctx);
+        pushScope(ScopeKind::Arm, whole);
+        if (auto ident = ctx.get<cst::IdentDef>(); ident && nameOf(ident)) {
+            declare(DeclKind::Binding, nameOf(ident), whole, rangeOf(ident));
+        }
+        const syn::Child body = ctx.lastChild();
+        if (body.isNode()) {
+            if (body.node().is(NK::StmtBlock)) {
+                walkBlockBody(cst::StmtBlock(body.node()));
+            } else {
+                walk(body.node());
+            }
         }
         popScope();
     }

@@ -32,6 +32,10 @@ std::string to_string(DataType type) {
         return "StaticAccess";
     case DataType::LoopExpr:
         return "LoopExpr";
+    case DataType::EditExpr:
+        return "EditExpr";
+    case DataType::ViewExpr:
+        return "ViewExpr";
     case DataType::Literal:
         return "Literal";
     case DataType::Array:
@@ -291,6 +295,14 @@ const std::string LoopExprLoad::toString() const {
         result += " for " + binder_.toString();
     }
     return result;
+}
+
+const std::string BlockHeadLoad::toString() const {
+    return (dataType() == DataType::EditExpr ? "EditExpr: " : "ViewExpr: ") + root_.toString();
+}
+
+const std::string BlockHeadLoad::geneCode() const {
+    return (dataType() == DataType::EditExpr ? "edit " : "view ") + root_.toString() + " =";
 }
 
 } // namespace camel::parse::ast
