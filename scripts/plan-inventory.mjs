@@ -92,6 +92,7 @@ export const SLOW_PLANS = [
     'test/plans/feat/gate/case_ledger.plan.toml',
     'test/plans/feat/gate/conformance.plan.toml',
     'test/plans/feat/gate/plan_inventory.plan.toml',
+    'test/plans/feat/linear/backend_differential.plan.toml',
     'test/plans/feat/linear/fvm_nvm_diff.plan.toml',
     'test/plans/feat/linear/var_reference.plan.toml',
     'test/plans/feat/mm/capacity.plan.toml',
