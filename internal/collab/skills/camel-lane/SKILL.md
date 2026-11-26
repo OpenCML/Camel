@@ -128,7 +128,14 @@ pwsh -NoProfile -File <你的工作树>\internal\tools\camel-remote.ps1 `
    uncommitted when this run started` 会列出这几个文件，属正常，照抄进交回；③ **改前与改后要挂在同一个 base 上**：
    跨 base 的差先当“base 的差”处理 —— 同一个用例可以在一格上红、在下一格绿，只因后者的祖先重钉了快照；
    既不要把跨 base 的差算成自己造成的，也不要把同一 base 上的新红说成既存，两句话都要有读数。
-· **建树只走一个入口**，不要手抄 `git worktree add`：
+· **优先领一个池位，不另建树**：工作树是按槽位命名的固定一组、车道间轮用，忽略的构建产物（`build/`、`out/`）
+  留着，下一条车道的构建是增量的。协调者派工时给你槽位路径，你自己领：
+    pwsh -NoProfile -File internal/tools/new-worktree.ps1 `
+      -Reuse <槽位路径> -Branch <branch> [-Base origin/develop]
+  槽位里有已跟踪的改动、或没被忽略的未跟踪文件就拒绝并原样不动；领成之后它会 `git clean -fd`（不带 `-x`）、
+  拷设置文件、读钩子应答。**收工（合入之后）还槽位**：`-Release <槽位路径>`，它只做 detach 到 `origin/integration`
+  尖端；分支由合并的那一方删，不在这里删。
+· **建树只走一个入口**（槽位第一次建；池里没有空位时），不要手抄 `git worktree add`：
     pwsh -NoProfile -File internal/tools/new-worktree.ps1 `
       -Path D:\Projects\Camel-wt\<lane> -Branch <branch> -Base origin/develop
   它把两件 git-ignored 的事做成一步 —— `camel-gate.local.json` 与 `.husky/_` —— 建完拿空输入试跑一次钩子，
