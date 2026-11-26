@@ -3,7 +3,7 @@ order = 910
 tier = "fast"
 tags = ["probe", "header"]
 
-# The reading `internal/reports/2026-11-26-header-weight.cn.md` takes, run as a plan so the number has
+# The header-weight reading takes this plan, so the number has a command, a database and a source
 # a command, a database and a source file behind it.
 #
 # The runner dispatches on `tool`, not on the extension and not on `kind`. Three spellings that do
