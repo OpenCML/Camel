@@ -72,6 +72,19 @@ namespace {
 namespace mm  = camel::core::mm;
 namespace err = camel::core::error;
 
+/// A refusal that belongs to one place of the program: the diagnostic is reported where that code
+/// stands, and not at the operator call that happened to ask for the edit. The shape is the one the
+/// pass-side failures use (`autodiff/pullback.cpp`), because the position a reader needs is the
+/// node's.
+[[noreturn]] void refuseAtOrigin(uint64_t origin, const std::string &message) {
+    throw err::RuntimeFault(
+        err::RuntimeDiag::RuntimeError,
+        {"graph.inline: " + message},
+        "",
+        nullptr,
+        err::ExecutionSiteHint{.cachedOrigin = static_cast<camel::source::origin_id_t>(origin)});
+}
+
 struct TxnState {
     TxnState(const context_ptr_t &context, const Program *base)
         : base(base), session(context, base), roots(session) {}
@@ -188,46 +201,6 @@ draftOf(const Handle *node, const char *site) {
         err::throwRuntimeFault(err::RuntimeDiag::InvalidArgument, site, "the node was removed");
     }
     return {*transaction, node->index()};
-}
-
-/// The transaction that owns the draft of the graph a Node handle names, and the node. A handle
-/// names its node one of two ways, and both are this transaction's: as a node of the Program the
-/// transaction was opened on, or as a node of a draft the transaction holds -- `inline`, `outline`
-/// and `eval` all answer `Handle::createInTransaction`, which names the transaction and no program
-/// (a node the transaction just made exists in no published program, so a program-backed handle
-/// would claim one that is not there). A handle of another program, or of a transaction another
-/// session holds, is refused. The transaction, not the draft: a caller that hands the draft on to a
-/// rewrite loses the only thing that says which graph it edits.
-std::pair<camel::runtime::GraphTransaction &, camel::runtime::gc_node_ref_t>
-draftOf(TxnState &state, const Handle *node, const char *site) {
-    const bool made = node->transaction() != nullptr;
-    if (!made && node->program() != state.base) {
-        err::throwRuntimeFault(
-            err::RuntimeDiag::InvalidArgument,
-            site,
-            "the node belongs to another program than the transaction");
-    }
-    // A node of the program is in a graph the program holds; a node of the draft is in a graph the
-    // session works on, which is the program's until an edit makes one of its own.
-    auto *graph =
-        made ? state.session.work().graph(node->graph()) : state.base->graph(node->graph());
-    if (graph == nullptr || (!made && !graph->containsNodeRef(node->index()))) {
-        err::throwRuntimeFault(
-            err::RuntimeDiag::InvalidArgument,
-            site,
-            "the node is not in its graph");
-    }
-    auto &transaction = state.session.edit(graph);
-    if (made && node->transaction() != &transaction) {
-        err::throwRuntimeFault(
-            err::RuntimeDiag::InvalidArgument,
-            site,
-            "the node belongs to another program than the transaction");
-    }
-    if (!transaction.edit().alive(node->index())) {
-        err::throwRuntimeFault(err::RuntimeDiag::InvalidArgument, site, "the node was removed");
-    }
-    return {transaction, node->index()};
 }
 
 /// The function a commit makes: the one the transaction was opened on, over the committed graphs.
@@ -855,6 +828,21 @@ slot_t inlineKernel(ArgsView &, ArgsView &norm, Context &) {
                 inlined.valueExit,
                 at->draft(),
                 mm::autoSpace()));
+    }
+    // A call takes up a place in the chain only by the rule's own words (design principles 3.1): it
+    // is not a node whose place a statement holds, so there is nothing for the body to take over.
+    // Guessing one would put the body beside the call and leave the call's value read, which is not
+    // what the writer asked for -- and a call of *this* function was spliced above. So the operator
+    // refuses, and says where the call stands.
+    if (atIsCall) {
+        refuseAtOrigin(
+            draft.nodeOrigin(atRef),
+            "the node is a call of a function, and a call has no place of its own for a body to "
+            "take "
+            "over: `inline` splices a function at a call of that same function, or at a node whose "
+            "place a statement holds. Pass the call this function is made at, or `replace` the "
+            "call "
+            "with the value it should leave");
     }
     // Every other `at`: the body is made as a call of its own. `fn` takes no argument, because the
     // operator carries no argument list yet: the declaration would need one.
