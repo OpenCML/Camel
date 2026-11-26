@@ -102,10 +102,10 @@ const isAux = (row) => row === 'grad_aux' || row === 'with_grad_aux'
 const isAutodiff = (row) => row === 'grad' || row === 'grad_aux' || row === 'with_grad' || row === 'with_grad_aux'
 
 function declared(row) {
-    if (row === 'split') return 'func dbl(v: float, d: float): (float, float) {\n    return (v * 2.0, d * 2.0)\n}'
-    if (isAux(row)) return 'with <w: float>\nfunc dbl(x: float): (float, float) {\n    return (x * w, 1.0)\n}'
-    if (isAutodiff(row)) return 'with <w: float>\nfunc dbl(x: float): float {\n    return x * w\n}'
-    return 'func dbl(y: float): float {\n    return y * 2.0\n}'
+    if (row === 'split') return 'func dbl(v: float, d: float) => (float, float) {\n    return (v * 2.0, d * 2.0)\n}'
+    if (isAux(row)) return 'with <w: float>\nfunc dbl(x: float) => (float, float) {\n    return (x * w, 1.0)\n}'
+    if (isAutodiff(row)) return 'with <w: float>\nfunc dbl(x: float) => float {\n    return x * w\n}'
+    return 'func dbl(y: float) => float {\n    return y * 2.0\n}'
 }
 
 function lambda(row, captured) {
@@ -124,18 +124,18 @@ function head(row) {
     return IMPORTS[row] + '\n\n'
 }
 function plain(row, arg, pre = []) {
-    return head(row) + (pre.length ? pre.join('\n') + '\n\n' : '') + 'func main(): int sync {\n' + ROW[row].mainCall(arg) + '\n    return 0\n}\n'
+    return head(row) + (pre.length ? pre.join('\n') + '\n\n' : '') + 'func main() => int sync {\n' + ROW[row].mainCall(arg) + '\n    return 0\n}\n'
 }
 
 for (const row of ROWS) {
     emit(`${row}-s1`, plain(row, 'dbl', [declared(row)]))
     emit(`${row}-s2`, plain(row, lambda(row, false)))
     emit(`${row}-s3`, plain(row, lambda(row, true), ['let x = 3.0']))
-    emit(`${row}-s5`, head(row) + 'func main(): int sync {\n    let x = 3.0\n    let h = ' + lambda(row, true) + '\n' + ROW[row].mainCall('h') + '\n    return 0\n}\n')
+    emit(`${row}-s5`, head(row) + 'func main() => int sync {\n    let x = 3.0\n    let h = ' + lambda(row, true) + '\n' + ROW[row].mainCall('h') + '\n    return 0\n}\n')
     // s4: the transform is applied inside a function that receives the callee as a parameter.
     emit(
         `${row}-s4`,
-        head(row) + declared(row) + '\n\nfunc via(f: ' + ROW[row].inSig + '): ' + ROW[row].type + ' {\n' + ROW[row].viaBody('f') + '\n}\n\nfunc main(): int sync {\n    ' + ROW[row].viaPrint + '\n    return 0\n}\n',
+        head(row) + declared(row) + '\n\nfunc via(f: ' + ROW[row].inSig + ') => ' + ROW[row].type + ' {\n' + ROW[row].viaBody('f') + '\n}\n\nfunc main() => int sync {\n    ' + ROW[row].viaPrint + '\n    return 0\n}\n',
     )
 }
 console.log(`wrote ${written.length} programs`)

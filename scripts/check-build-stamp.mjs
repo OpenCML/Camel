@@ -40,7 +40,7 @@ import { pinnedFootprint, sourceFingerprint } from './common.js'
 const READ = {
     'src/kernel/a.cpp': 'int a() { return 1; }\n',
     'include/camel/b.h': '#pragma once\n',
-    'modules/m/body.cml': 'func main(): int { return 0 }\n',
+    'modules/m/body.cml': 'func main() => int { return 0 }\n',
     'tools/t/main.cpp': 'int main() { return 0; }\n',
     'stdlib/std.cml': '// the standard library\n',
     'third_party/p/one.txt': 'third party\n',
@@ -53,7 +53,7 @@ const READ = {
 // on them would recompile the stamp units for a comment.
 const UNREAD = {
     'docs/notes.md': '# notes\n',
-    'test/cases/x.cml': 'func main(): int { return 0 }\n',
+    'test/cases/x.cml': 'func main() => int { return 0 }\n',
 }
 
 const problems = []

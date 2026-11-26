@@ -104,8 +104,8 @@ export const CONTEXT_KEYWORDS = [
     {
         word: 'when',
         group: 'clause',
-        zh: '适用条件：函数与规则的签名之后、体之前，以及标签声明的末尾（`func f(x: T): T when is_integer::<T>()`）',
-        en: "a condition: after the signature of a function or a rule and before its body, and at the end of a tag declaration (`func f(x: T): T when is_integer::<T>()`)",
+        zh: '适用条件：函数与规则的签名之后、体之前，以及标签声明的末尾（`func f(x: T) => T when is_integer::<T>()`）',
+        en: "a condition: after the signature of a function or a rule and before its body, and at the end of a tag declaration (`func f(x: T) => T when is_integer::<T>()`)",
         evidence: ['if (atWord(0, "when")) {'],
     },
     {
@@ -167,8 +167,8 @@ export const CONTEXT_KEYWORDS = [
     {
         word: 'operator',
         group: 'clause',
-        zh: '紧跟 `func` 之后、后面是一个运算符时（`func operator +(a: V, b: V): V`）',
-        en: "directly after `func` when an operator follows (`func operator +(a: V, b: V): V`)",
+        zh: '紧跟 `func` 之后、后面是一个运算符时（`func operator +(a: V, b: V) => V`）',
+        en: "directly after `func` when an operator follows (`func operator +(a: V, b: V) => V`)",
         // (`for` an overloadable operator) turned this reading from one
         // `return` into the guard below, so it could also take the word `for` as the operator. The
         // word is read in the same place by the same function (`atOperatorName`, parser.cpp); only

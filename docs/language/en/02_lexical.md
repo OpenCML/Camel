@@ -57,7 +57,7 @@ Names of the form `__x__` (two underscores on each side) are the compiler's own:
 
 ### 2.4.1 Contextual keywords
 
-These words **are keywords only in the positions listed below, and ordinary names everywhere else**: the `when` of `let when = 1` is a name, and the `when` of `func f(x: T): T when is_integer::<T>()` opens a condition. They are not reserved words and not tokens of `token_kinds.def`: what reads them is parser code that decides by position (`atWord` and its kin in `parse/src/syntax/parser*.cpp`). There is one table, `scripts/context-keywords.mjs`, and every entry carries the line of code that reads it; the table below is written from it by `scripts/check-grammar.mjs --write`, and the editor grammar names exactly these words (`contextual-keywords` in `editors/vscode/`, pinned by the snapshot case `test/cases/tools/grammar/context_keywords.cml`).
+These words **are keywords only in the positions listed below, and ordinary names everywhere else**: the `when` of `let when = 1` is a name, and the `when` of `func f(x: T) => T when is_integer::<T>()` opens a condition. They are not reserved words and not tokens of `token_kinds.def`: what reads them is parser code that decides by position (`atWord` and its kin in `parse/src/syntax/parser*.cpp`). There is one table, `scripts/context-keywords.mjs`, and every entry carries the line of code that reads it; the table below is written from it by `scripts/check-grammar.mjs --write`, and the editor grammar names exactly these words (`contextual-keywords` in `editors/vscode/`, pinned by the snapshot case `test/cases/tools/grammar/context_keywords.cml`).
 
 The other way round, `func` and `type` among the position names are reserved words, listed in the table of 2.4, read as position names only after `on`; and a `func` directly after `case` in a `match type` is read the same way, naming the shape of a function type.
 
@@ -71,7 +71,7 @@ The other way round, `func` and `type` among the position names are reserved wor
 | Declaration heads | `resource` | a resource declaration: `resource` followed by a name (`export resource fs`) |
 | Clauses of a declaration | `on` | the `on` of a tag declaration, before its list of positions (a position name follows) |
 | Clauses of a declaration | `read_by` | the `read_by` of a tag declaration, after its list of positions (the passes that read the tag follow) |
-| Clauses of a declaration | `when` | a condition: after the signature of a function or a rule and before its body, and at the end of a tag declaration (`func f(x: T): T when is_integer::<T>()`) |
+| Clauses of a declaration | `when` | a condition: after the signature of a function or a rule and before its body, and at the end of a tag declaration (`func f(x: T) => T when is_integer::<T>()`) |
 | Clauses of a declaration | `uses` | the `uses` of a resource clause: the effects a function's signature or a function type declares (`uses s` reads, `uses var fs` writes, written the way a `var` parameter is) |
 | Clauses of a declaration | `spelling` | the leading word of a resource clause: it declares that the body may read the spelling of the program (a graph's or a function's name, a node's source position, creation order and creation numbers, the text a node shows). It is the mechanism an effect uses, written before `pure`/`uses` in that clause (design principles 9.5) |
 | Clauses of a declaration | `pure` | the `pure` of a resource clause: a promise to touch no resource at all (the same position as `uses`) |
@@ -80,7 +80,7 @@ The other way round, `func` and `type` among the position names are reserved wor
 | Clauses of a declaration | `meet` | a trailing clause of a fact declaration: how equivalent writings meet |
 | Clauses of a declaration | `widen` | a trailing clause of a fact declaration: the widening of a loop |
 | Clauses of a declaration | `narrow` | a trailing clause of a fact declaration: the tightening that follows widening |
-| Clauses of a declaration | `operator` | directly after `func` when an operator follows (`func operator +(a: V, b: V): V`) |
+| Clauses of a declaration | `operator` | directly after `func` when an operator follows (`func operator +(a: V, b: V) => V`) |
 | Type and pattern positions | `struct` | in a `match type` case pattern: names the shape of a struct |
 | Type and pattern positions | `tuple` | in a `match type` case pattern: names the shape of a tuple |
 | Type and pattern positions | `array` | in a `match type` case pattern: names the shape of an array |

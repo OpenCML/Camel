@@ -276,7 +276,7 @@ function importOnlyProgram(dir, module) {
         file,
         `// probe: import ${module} and do nothing else.\n` +
             `import ${module}\n\n` +
-            `func main(): int {\n    return 0\n}\n`,
+            `func main() => int {\n    return 0\n}\n`,
     )
     return file
 }
