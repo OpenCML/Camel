@@ -307,3 +307,59 @@ camel --block-limit 8192 --reuse benchmarks/resnet/model.cml std::macro "std::pr
 `--copies` 的 `by-count`  = 存储留给数组的每个更新（**包含计划什么都没决定的原地形式** None），是后端的执行形态；
 `--reuse observed` 的 `by-array-count` = 计划**真打了** `StorageReuse::ByArrayCount` 标记的节点，是更窄的那个集合。
 ```
+
+## 10 峰值块空间的直接读数：`probe.resnet_block_space` 从 192/4096 走到 128/3840
+
+§1 的峰值是**从上面逼近**的（用 `--block-limit` 二分/阶梯），而 §8 的 `[camel] blocks: peak=…`
+是**从下面记账**的。这一节把量具本身的一次完整读数记下来：同一台机器、同一套权重/输入，
+`std::macro` + `std::nvm`，一次一条 run。
+
+### 10.1 读数原文（本次实测，全部十行）
+
+```
+BLOCKSPACE forward limit=64 refused: asked 4.0 MB, 54.8 MB in use
+BLOCKSPACE forward limit=96 refused: asked 4.0 MB, 74.8 MB in use
+BLOCKSPACE forward limit=128 completed  <-- peak is at most this
+BLOCKSPACE train limit=1024 refused: asked 9.0 MB, 985.9 MB in use
+BLOCKSPACE train limit=2048 refused: asked 577 KB, 2041.9 MB in use
+BLOCKSPACE train limit=3072 refused: asked 9.0 MB, 3050.7 MB in use
+BLOCKSPACE train limit=3584 refused: asked 9.0 MB, 3554.8 MB in use
+BLOCKSPACE train limit=3776 refused: asked 9.0 MB, 3758.1 MB in use
+BLOCKSPACE train limit=3808 refused: asked 9.0 MB, 3767.1 MB in use
+BLOCKSPACE train limit=3840 completed  <-- peak is at most this
+```
+
+```
+· 前向：≤ 128 MB（上次记录 192）—— 64/96 两次都以 54.8 / 74.8 MB in use 拒绝，128 过
+· 训练一步：≤ 3840 MB（上次记录 4096）—— 3776 拒（3758.1 MB in use）、3808 拒（3767.1 MB in use）、3840 过
+⇒ 两个数都是**变小**，不是变大；量与 §8 的记账对得上：
+   训练步 `[camel] blocks: peak=3959326656` 字节 = 3775.9 MB，落在 (3767.1, 3840] 里
+```
+
+### 10.2 为什么它读出来是"括号"不是"数"
+
+```
+阶梯的步长 = 块空间增长的段大小（末尾几 MB）；`--block-limit` 的判定还含段对齐的开销，
+所以"最小的能跑完的 limit"与"记账峰值"差一个段宽：这里 3840 − 3775.9 = 64.1 MB。
+⇒ 这个量具给的永远是区间；要一个数就用 §8 的 `[camel] blocks: peak=`，它是记账的、精确到字节。
+```
+
+### 10.3 读数变了，结论没变
+
+```
+· 峰值仍是 3775.9 MB，仍是"有块被留住"（§8：峰值时 49% 的块还活着，都是权重梯度张量，86 份/类）
+· 前向 128 : 训练 3840 ≈ 30×（上次记录 192 : 4096 ≈ 21×）—— 反向累加仍是峰值的主要来源
+· 这次变化（192→128、4096→3840）说明"阶梯最窄处"对这些实现变化敏感；
+  所以这个量具从快层移到 debug 层（只由 `--tier debug` 选中），不再作为晋级门槛：
+  量的是"随实现变化是正常产出"的数，放快层会把每次实现变化变成一次假红
+```
+
+### 10.4 本节的可复算命令
+
+```
+cd D:\Projects\Camel-wt\perf
+# 显式文件路径：即使计划声明的是 debug 层，也会整份跑（Release 二进制）
+pwsh -NoProfile -File internal\tools\camel-test.ps1 -Path D:\Projects\Camel-wt\perf `
+     -Plan test/plans/probe/resnet_block_space.plan.toml -Jobs 1
+# 计划自己的判据现在是 "limit=128 completed" / "limit=3840 completed"（读数，不是目标）
+```
