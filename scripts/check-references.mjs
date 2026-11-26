@@ -15,17 +15,17 @@
  * directories at all. This check reads the other half: a path of any extension, wherever it is
  * written, in the trees that are not records.
  *
- *   node scripts/check-references.mjs                 report, exit 0 (this is the mode CI runs)
+ *   node scripts/check-references.mjs                 report, exit 0 (the default mode; no gate runs it)
  *   node scripts/check-references.mjs --enforce        exit 1 when a reference does not resolve and
  *                                                     its line does not say when the path was true
  *   node scripts/check-references.mjs --path <p>       scan one file or one directory (a sample)
  *
  * Why report-only first: the list this check finds is a work item, not a wall, and a lane that
  * deletes a directory cannot also prove, in the same commit, that every page which ever named it
- * has a replacement. `--enforce` is the mode the gate runs once the list is empty; until then the
- * reading is published and nobody is blocked by it. The gate entry is
- * `internal/tools/camel-remote.ps1`'s `$checkers`, which another lane is editing: this file exists
- * to be wired in at the merge, and it changes nothing about that script.
+ * has a replacement. `--enforce` is the mode to run once the list is empty; until then this is a
+ * command a person runs, and it is not in the gate: no row of `internal/tools/camel-remote.ps1`'s
+ * `$checkers` names this script, so the count it prints is a reading and nothing is blocked by it,
+ * which is also why the default is exit 0 whatever the count says.
  *
  * What resolves, and what does not:
  *
