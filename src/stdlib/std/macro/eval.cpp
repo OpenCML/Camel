@@ -692,6 +692,8 @@ MacroEvaluator::tryExecuteStaticOper(GCGraph *ownerGraph, gc_node_ref_t nodeRef,
         const auto attrs = ownerGraph->nodeAttrs(nodeRef);
         withView.setAttrs(attrs);
         normView.setAttrs(attrs);
+        // And which node it is: the operator this one names (camel/core/operator.h).
+        setCallOperator(withView, normView, body->oper);
         (void)os;
         CAMEL_LOG_INFO_S("Macro", "Execute static operator '{}'.", std::string(body->uri()));
         mm::safepoint("macro static operator");

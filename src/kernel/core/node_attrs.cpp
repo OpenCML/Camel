@@ -574,21 +574,6 @@ const std::vector<FateRow> &fateTable() {
             "records the group, which the target may fuse; Tiles' region analysis forms the "
             "marked group into one region.");
 
-        // Which program of a block's body runs the node that carries it (camel/runtime/
-        // block_programs.h). A number, because the store it indexes is the context's and not the
-        // program's; a dump writes it, so a reader of a dump can tell two blocks apart.
-        add("block.program",
-            "*",
-            "the block's compiler",
-            carried,
-            carried,
-            refused,
-            refused,
-            "the interpreter resolves the operator's implementation through this number; a dump "
-            "records it, so the graph it writes says which program runs the node. A model cannot "
-            "carry it -- the program it names is a Camel program, not a graph ONNX or Tiles can "
-            "hold -- so both refuse the node rather than export it without the fact.");
-
         // Numeric permissions: the node's permission column, not its attribute set.
         const std::string_view permissions[] = {
             "reassociate",

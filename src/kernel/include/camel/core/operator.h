@@ -46,13 +46,32 @@ class ArgsView {
     camel::core::attr::AttrSetId attrs() const { return attrs_; }
     void setAttrs(camel::core::attr::AttrSetId attrs) { attrs_ = attrs; }
 
+    /// The operator this call runs, by the identity the node names it with (the id of the entry its
+    /// URI resolves to, `camel/core/operator_table.h`): `kNoOper` when the caller has none. The
+    /// attributes say what a pass decided about the node; this says *which node it is*. One
+    /// implementation can be registered for many operators -- a block's executor has one kernel
+    /// under every block's URI, a bridge has one per protocol -- and an operator that reads this
+    /// knows which of them it was called as without a pass having recorded it in the node.
+    camel::core::OperId oper() const { return oper_; }
+    void setOper(camel::core::OperId oper) { oper_ = oper; }
+
     template <typename T> T get(size_t index) const { return rtdata::fromSlot<T>(slot(index)); }
     template <typename T> void set(size_t index, T value) { setSlot(index, rtdata::toSlot(value)); }
 
   private:
-    type::Type *resultType_ = nullptr;
+    type::Type *resultType_             = nullptr;
     camel::core::attr::AttrSetId attrs_ = camel::core::attr::kNoAttrs;
+    camel::core::OperId oper_           = camel::core::kNoOper;
 };
+
+/// The operator a call runs, handed to both of its views: a call has two views of one node -- its
+/// `with` parameters and its ordinary ones -- and an operator that asks which node it is running as
+/// must get one answer from either. One function rather than a line per back end, so that no back
+/// end can hand the two views different identities.
+inline void setCallOperator(ArgsView &with, ArgsView &norm, camel::core::OperId oper) {
+    with.setOper(oper);
+    norm.setOper(oper);
+}
 
 using operator_t = slot_t (*)(ArgsView &with, ArgsView &norm, context::Context &ctx);
 

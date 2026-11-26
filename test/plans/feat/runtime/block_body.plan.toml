@@ -8,7 +8,8 @@ desc = "A body handed to the compiler as text is compiled by the same compiler i
 # programs of their own (`compileAsProgram`, encoded by the same loader a pass library goes through),
 # names each block by the hash of its body's canonical form, reads each record out of that graph's
 # effects, registers them in the context's store and prints all three; it then calls two blocks'
-# operators through the executor manager, with the ordinal in the node's attributes, prints the value
+# operators through the executor manager, with the operator the call stands for naming the program,
+# prints the value
 # the body computed, and calls the first block again after its first run is over; finally it puts one
 # node of the first block into the exit of `<main>`. `std::stats` then reads the entry program -- one
 # node, one operator and one edge more, and nothing else -- and `std::jgir` writes its graphs, none of

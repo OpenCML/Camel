@@ -2225,6 +2225,8 @@ slot_t TaskflowExecSchedPass::executePreparedOperator(
             const auto attrs = graph->nodeAttrs(nodeRef);
             withView.setAttrs(attrs);
             normView.setAttrs(attrs);
+            // And which node it is: the operator this one names (camel/core/operator.h).
+            setCallOperator(withView, normView, operatorBody->oper);
             if (camel::core::effect_trace::enabled()) [[unlikely]] {
                 camel::core::effect_trace::setSite(graph->nodeOrigin(nodeRef));
             }
@@ -2278,6 +2280,8 @@ slot_t TaskflowExecSchedPass::executePreparedOperator(
     const auto attrs = graph->nodeAttrs(nodeRef);
     withView.setAttrs(attrs);
     normView.setAttrs(attrs);
+    // And which node it is: the operator this one names (camel/core/operator.h).
+    setCallOperator(withView, normView, operatorBody->oper);
 
     if (camel::core::effect_trace::enabled()) [[unlikely]] {
         camel::core::effect_trace::setSite(graph->nodeOrigin(nodeRef));

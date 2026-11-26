@@ -1171,8 +1171,8 @@ slot_t NodeVMSchedPass::evalNativeOperator(
     for (gc_node_ref_t inputRef : en.withInputs())
         operIndices_.push_back(plan.dataIndexByRef[inputRef]);
 
-    const bool callsGraphs =
-        camel::core::OperatorTable::instance().callsGraphs(en.bodyAs<GCOperBody>()->oper);
+    const camel::core::OperId oper = en.bodyAs<GCOperBody>()->oper;
+    const bool callsGraphs         = camel::core::OperatorTable::instance().callsGraphs(oper);
     // Nested calls reuse operIndices_. Keep this operator's views alive independently.
     std::vector<runtime_data_idx_t> ownedIndices;
     if (callsGraphs)
@@ -1189,6 +1189,8 @@ slot_t NodeVMSchedPass::evalNativeOperator(
     const camel::core::attr::AttrSetId attrs = currRuntimeGraph->nodeAttrs(en.ref);
     withView.setAttrs(attrs);
     normView.setAttrs(attrs);
+    // And which node it is: the operator the node's URI names (camel/core/operator.h).
+    setCallOperator(withView, normView, oper);
 
     if (camel::core::effect_trace::enabled()) [[unlikely]] {
         camel::core::effect_trace::setSite(currRuntimeGraph->nodeOrigin(en.ref));

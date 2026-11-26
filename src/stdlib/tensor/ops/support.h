@@ -66,6 +66,7 @@ class JoinedArgs final : public ArgsView {
     JoinedArgs(ArgsView &norm, ArgsView &with) : norm_(norm), with_(with) {
         setResultType(norm.resultType());
         setAttrs(norm.attrs());
+        setOper(norm.oper());
     }
     size_t size() const override { return norm_.size() + with_.size(); }
     slot_t slot(size_t index) const override {

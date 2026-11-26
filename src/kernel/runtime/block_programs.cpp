@@ -3,68 +3,43 @@
 
 #include "camel/runtime/block_programs.h"
 
+#include <optional>
 #include <span>
 
 namespace camel::runtime {
 
-namespace attr = camel::core::attr;
-
-namespace {
-constexpr std::string_view kKeyName = "block.program";
-} // namespace
-
-uint64_t BlockPrograms::add(std::string uri, Program *program, GCGraph *root) {
-    const auto known = ordinals_.find(uri);
-    if (known != ordinals_.end()) {
-        return known->second;
+const BlockProgram *BlockPrograms::add(std::string uri, Program *program, GCGraph *root) {
+    // The entry's key is the operator's identity in the table, so a node and this store name the
+    // block the same way. It is interned rather than looked up: a caller may register a program
+    // before the operator's record is written, and the record is the caller's to write (a block's is
+    // the effects of its body).
+    const camel::core::OperId oper = camel::core::OperatorTable::instance().intern(uri);
+    const auto known               = index_.find(oper);
+    if (known != index_.end()) {
+        return &entries_[known->second];
     }
     BlockProgram entry;
+    entry.oper    = oper;
     entry.uri     = std::move(uri);
     entry.program = program;
     entry.root    = root;
-    entry.ordinal = entries_.size() + 1;
-    ordinals_.emplace(entry.uri, entry.ordinal);
+    index_.emplace(oper, entries_.size());
     entries_.push_back(std::move(entry));
-    return entries_.back().ordinal;
+    return &entries_.back();
 }
 
-const BlockProgram *BlockPrograms::byOrdinal(uint64_t ordinal) const {
-    // The ordinals are the positions, one-based; the store is small and an index would have to be
-    // kept in step with an erase that does not happen, so the count is the bound.
-    if (ordinal == 0 || ordinal > entries_.size()) {
+const BlockProgram *BlockPrograms::byOper(camel::core::OperId oper) const {
+    if (oper == camel::core::kNoOper) {
         return nullptr;
     }
-    return &entries_[static_cast<size_t>(ordinal - 1)];
+    const auto known = index_.find(oper);
+    return known == index_.end() ? nullptr : &entries_[known->second];
 }
 
 const BlockProgram *BlockPrograms::byUri(std::string_view uri) const {
-    const auto known = ordinals_.find(std::string(uri));
-    if (known == ordinals_.end()) {
-        return nullptr;
-    }
-    return byOrdinal(known->second);
-}
-
-attr::AttrKey blockProgramKey() {
-    static const attr::AttrKey key =
-        attr::registerKey(kKeyName, attr::KeySpec{.kind = attr::ValueKind::Int});
-    return key;
-}
-
-attr::AttrSetId blockProgramAttrs(uint64_t ordinal) {
-    return attr::single(blockProgramKey(), attr::integer(static_cast<int64_t>(ordinal)));
-}
-
-std::optional<uint64_t> blockProgramOf(attr::AttrSetId attrs) {
-    const attr::AttrValueId value = attr::valueOf(attrs, blockProgramKey());
-    if (value == attr::kNoValue) {
-        return std::nullopt;
-    }
-    const attr::Value decoded = attr::value(value);
-    if (decoded.kind != attr::ValueKind::Int || decoded.integer <= 0) {
-        return std::nullopt;
-    }
-    return static_cast<uint64_t>(decoded.integer);
+    const std::optional<camel::core::OperId> oper =
+        camel::core::OperatorTable::instance().lookup(uri);
+    return oper ? byOper(*oper) : nullptr;
 }
 
 } // namespace camel::runtime

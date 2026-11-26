@@ -12,8 +12,9 @@ This case measures the arrangement on one program, in four readings:
     the program had without the pass. The pass prints the counts it saw before and after
     (`BLOCK_BODY entry graphs a -> b nodes c -> d`), so the comparison is in one run;
   * the values two blocks answer through one kernel (`BLOCK_CALL <uri> argument=… value=…`): the
-    URI finds the operator through the executor manager (`block` protocol), the node's attribute
-    names which program of the context's store to run, and the value is the body's own arithmetic;
+    URI finds the operator through the executor manager (`block` protocol), the operator the call
+    stands for names which program of the context's store to run, and the value is the body's own
+    arithmetic;
   * the same block run a second time, after its first run is over, so "the program is pinned to the
     context" is a value and not the absence of a crash;
   * the `std::jgir` document of the same pipeline: the graphs it names are the entry program's, and
@@ -201,9 +202,9 @@ assert before_graphs == after_graphs, entry[0]
 assert before_nodes == plain["nodes"], (entry[0], plain["nodes"])
 assert (after_graphs, after_nodes) == (plain["graphs"], plain["nodes"] + 1), entry[0]
 
-# One kernel, two blocks, and the value each body computes: 41 -> 42, 5 -> 15. The ordinal in the
-# node's attributes is not in the call here, so the kernel could not have guessed the program from
-# the call's shape: the two calls have the same shape and different values.
+# One kernel, two blocks, and the value each body computes: 41 -> 42, 5 -> 15. The program is not in
+# the node's attributes and cannot be read off the call's shape: the two calls have the same shape,
+# and what tells the kernel which program to run is the operator the call stands for.
 values = {}
 for line in call_lines:
     match = re.fullmatch(

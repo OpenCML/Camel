@@ -23,6 +23,8 @@ slot_t FastVMSchedPass::invokeNativeOperator(const Bytecode &bc, ctx::Frame &fra
     // its own keys, the scheduler knows none.
     withView.setAttrs(*bc.operAttrs());
     normalView.setAttrs(*bc.operAttrs());
+    // And which node it is: the operator the bytecode was compiled for (camel/core/operator.h).
+    setCallOperator(withView, normalView, oper);
     camel::execute::FunctionInvoker invoker;
     if (camel::core::OperatorTable::instance().callsGraphs(oper)) {
         invoker =
