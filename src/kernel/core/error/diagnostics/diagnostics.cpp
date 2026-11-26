@@ -59,16 +59,6 @@ bool sameRangePlace(const Diagnostic &a, const Diagnostic &b, const RangeConvert
     if (sameRange(a.range, b.range)) {
         return true;
     }
-    // A diagnostic with no position is at no place, and `sameRange` answers the question of
-    // identity between two errors of the source: there, "no place on either side" says nothing
-    // about whether the two are one error, so it answers no. This asks the other question --
-    // whether a container already holds the diagnostic a limit stopped on, which is the last one it
-    // stored -- and the copy the limit carries is that diagnostic: what makes them one is being the
-    // same entry of the container, not a place. A positionless one was otherwise written twice.
-    if (std::holds_alternative<std::monostate>(a.range) &&
-        std::holds_alternative<std::monostate>(b.range)) {
-        return true;
-    }
     const auto resolve = [tokens](const SourceRange &range, const Diagnostic &d,
                                   const Diagnostic &other) -> std::optional<CharRange> {
         if (std::holds_alternative<TokenRange>(range) && tokens != nullptr) {

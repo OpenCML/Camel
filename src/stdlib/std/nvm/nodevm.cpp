@@ -856,26 +856,6 @@ slot_t NodeVMSchedPass::call(
         framePool_.release(rootFrame);
 
         return result;
-    } catch (const camel::core::mm::MemoryExhausted &exhausted) {
-        // A space reached its limit while this activation was running. The place the program asked
-        // for the memory is the node that was being executed, and a limit reported without it has
-        // no place at all -- the one thing about such a failure that is always known is where it
-        // happened. The loop driver and the bytecode engine carry their origin out of the same
-        // failure the same way (`MemoryExhausted::during`). The frames come back as on every other
-        // way out of an activation.
-        camel::execute::giveBackOpenLoopsOfEveryFrame(framePool_);
-        currRecursionDepth_--;
-        releaseTailFrames(tailLow, tailHigh);
-        if (rootFrame) {
-            framePool_.release(rootFrame);
-        }
-        uint64_t origin = camel::source::kInvalidOriginId;
-        if (currRuntimeGraph != nullptr && faultNodeRef != kInvalidNodeRef) {
-            origin = currRuntimeGraph->nodeOrigin(faultNodeRef);
-        }
-        // The activity stays empty: what the diagnostic says is the space's own sentence, and it
-        // does not change with the place the report is made at.
-        throw exhausted.during(std::string(), origin);
     } catch (const RuntimeFault &fault) {
         // The loops this activation is still inside give back what they held: the run is unwinding
         // past `loopEnd`, and the frames are released below, so the slots this can read are gone a

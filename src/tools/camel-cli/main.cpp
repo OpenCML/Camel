@@ -236,11 +236,6 @@ int runCommand(int argc, char *argv[]) {
     diagnostics->setConfig(compileDiagsConfig);
 
     bool useJsonFormat = (errorFormat == "json");
-    // Where a diagnostic is written: standard error, so that standard output holds what the program
-    // wrote and nothing else. Under `--output-format json` the array of diagnostics is what a tool
-    // reads, and it stays on standard output (docs/cli.md), so the two formats differ in their
-    // destination as well as in their shape.
-    std::ostream &diagOut = useJsonFormat ? os : std::cerr;
 
     if (selectedCommand == Command::Check && (Check::lexical || Check::syntaxOnly)) {
         return checkFrontend(*input, diagnostics, Check::lexical, useJsonFormat, os);
@@ -379,15 +374,15 @@ int runCommand(int argc, char *argv[]) {
         if (errors == 0) {
             return;
         }
-        diagOut << "\ncamel: " << errors << (errors == 1 ? " error" : " errors");
+        os << "\ncamel: " << errors << (errors == 1 ? " error" : " errors");
         if (warnings > 0) {
-            diagOut << ", " << warnings << (warnings == 1 ? " warning" : " warnings");
+            os << ", " << warnings << (warnings == 1 ? " warning" : " warnings");
         }
         if (limitReached) {
-            diagOut << "; stopped at the limit of " << Diag::maxErrors
-                    << " errors (--max-errors <n> raises it, 0 removes it)";
+            os << "; stopped at the limit of " << Diag::maxErrors
+               << " errors (--max-errors <n> raises it, 0 removes it)";
         }
-        diagOut << endl;
+        os << endl;
     };
 
     try {
@@ -412,7 +407,7 @@ int runCommand(int argc, char *argv[]) {
             camel_cli::reportModuleFailures(
                 ctx,
                 camel_cli::findModuleFailures(ctx, camel_cli::ModuleScope::ProgramDependencies),
-                diagOut,
+                os,
                 useJsonFormat);
             compileSummary(false);
             return 1;
@@ -687,7 +682,7 @@ int runCommand(int argc, char *argv[]) {
         if (camel_cli::failIfModuleErrors(
                 ctx,
                 camel_cli::ModuleScope::ProgramDependencies,
-                diagOut,
+                os,
                 useJsonFormat)) {
             compileSummary(false);
             return 1;
@@ -778,7 +773,7 @@ int runCommand(int argc, char *argv[]) {
                             // The sink stops at its first error; the diagnostic is stored and
                             // dumped below.
                         }
-                        ctx->runtimeDiagSink()->dump(diagOut, useJsonFormat);
+                        ctx->runtimeDiagSink()->dump(os, useJsonFormat);
                         return 1;
                     }
                     const auto *program = ctx->runtimeProgram();
@@ -793,7 +788,7 @@ int runCommand(int argc, char *argv[]) {
                     // entry graph before the first pass sees it.
                     program = camel::execute::bindEntryArgumentSpecs(ctx, program, Run::entryArgs);
                     if (program == nullptr) {
-                        ctx->runtimeDiagSink()->dump(diagOut, useJsonFormat);
+                        ctx->runtimeDiagSink()->dump(os, useJsonFormat);
                         return 1;
                     }
                     // What `main` returns goes to the output: the file given with -o, else
@@ -867,12 +862,11 @@ int runCommand(int argc, char *argv[]) {
                     if (result.failed()) {
                         const auto &diags = ctx->runtimeDiagSink();
                         if (diags->hasErrors()) {
-                            diags->dump(diagOut, useJsonFormat);
+                            diags->dump(os, useJsonFormat);
                             return 1;
                         }
-                        diagOut << "[camel] execution failed without diagnostics after resolved "
-                                   "passes."
-                                << endl;
+                        os << "[camel] execution failed without diagnostics after resolved passes."
+                           << endl;
                         return 1;
                     }
                     if (!result.consumed()) {
@@ -888,12 +882,12 @@ int runCommand(int argc, char *argv[]) {
                         if (fallbackResult.failed()) {
                             const auto &diags = ctx->runtimeDiagSink();
                             if (diags->hasErrors()) {
-                                diags->dump(diagOut, useJsonFormat);
+                                diags->dump(os, useJsonFormat);
                                 return 1;
                             }
-                            diagOut << "[camel] execution failed without diagnostics after "
-                                       "fallback passes."
-                                    << endl;
+                            os << "[camel] execution failed without diagnostics after fallback "
+                                  "passes."
+                               << endl;
                             return 1;
                         }
                     }
@@ -904,7 +898,7 @@ int runCommand(int argc, char *argv[]) {
                 }
             } catch (DiagnosticsLimitExceededBaseException &e) {
                 const auto &diags = ctx->runtimeDiagSink();
-                diags->dump(diagOut, useJsonFormat);
+                diags->dump(os, useJsonFormat);
                 // The run failed, so it has to say why. The dump above says it when it reached the
                 // diagnostic the limit stopped on; when it did not -- a limit reached while the
                 // program was being compiled, which the runtime sink holds no place for -- nothing
@@ -950,7 +944,7 @@ int runCommand(int argc, char *argv[]) {
         // `module_failures.h` names; a pass library is not one of them.
         const camel_cli::ModuleFailures failures =
             camel_cli::findModuleFailures(ctx, camel_cli::ModuleScope::ProgramDependencies);
-        camel_cli::reportModuleFailures(ctx, failures, diagOut, useJsonFormat);
+        camel_cli::reportModuleFailures(ctx, failures, os, useJsonFormat);
         // The report above holds the diagnostic the limit stopped on when the dump reached it.
         // The question is asked of every module and of the run-time sink, not only of the modules
         // that failed: a container the report left out holds nothing of what was shown, and the
@@ -965,8 +959,7 @@ int runCommand(int argc, char *argv[]) {
     } catch (Diagnostic &d) {
         RangeConverter conv(parser->tokenPositions());
         d.fetchRange(conv);
-        diagOut << "Uncaught diagnostic: " << (useJsonFormat ? d.toJson() : d.toText(diagOut))
-                << endl;
+        os << "Uncaught diagnostic: " << (useJsonFormat ? d.toJson() : d.toText(os)) << endl;
         return 1;
     } catch (const mm::MemoryExhausted &e) {
         // A memory space reached its limit outside any pass (while the program was compiled
@@ -984,7 +977,7 @@ int runCommand(int argc, char *argv[]) {
             // The sink stops at its first error; the diagnostic is recorded and dumped below.
         }
         setPipelineStage("");
-        ctx->runtimeDiagSink()->dump(diagOut, useJsonFormat);
+        ctx->runtimeDiagSink()->dump(os, useJsonFormat);
         return 1;
     } catch (exception &e) {
         // An exception that is not a diagnostic and was not raised inside a pass (the pass
@@ -999,16 +992,16 @@ int runCommand(int argc, char *argv[]) {
             // Not a diagnostic: a state this version does not build. The text of the exception is
             // printed with it (never bare, as in a line reading `bad any_cast`), and the
             // program is not blamed, and the text never asks the reader to send it.
-            diagOut << "camel: internal error: " << e.what()
-                    << "\nThis is a defect of the compiler, not an error of the program. No shape "
-                       "the program "
-                       "can write reaches it."
-                    << endl;
+            os << "camel: internal error: " << e.what()
+               << "\nThis is a defect of the compiler, not an error of the program. No shape the "
+                  "program "
+                  "can write reaches it."
+               << endl;
         }
         ASSERT(false, e.what());
         return 1;
     } catch (...) {
-        diagOut << "Unknown error occurred." << endl;
+        os << "Unknown error occurred." << endl;
         ASSERT(false, "Unknown error occurred.");
         return 1;
     }
