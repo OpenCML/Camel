@@ -657,7 +657,7 @@ function parseArguments(argv) {
     }
     const rest = []
     const valueOf = (argv, index) => {
-        const next = argv[index + 1]
+        const next = argv[index]
         if (next === undefined) {
             process.stderr.write(`${USAGE}\n`)
             process.exit(2)
