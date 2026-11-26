@@ -1134,12 +1134,12 @@ export function apply(ctx, rawConfig) {
             parameters: {
                 type: 'object',
                 properties: {
-                    agent: { type: 'string', description: "The child's id or name." },
+                    agent: { type: 'string', description: "The child's session id. Leave it out when a lane binds itself: the session that calls the tool is bound (the way a teammate registers its own slot, since only the calling session's id is certain)." },
                     slot: { type: 'string', enum: SLOTS },
                     lane: { type: 'string', description: 'The lane branch, e.g. lane/arrangeable. Required for dev and misc; optional for merge and buffer.' },
                     worktree: { type: 'string', description: "The lane's worktree path. Optional." },
                 },
-                required: ['agent', 'slot'],
+                required: ['slot'],
                 additionalProperties: false,
             },
             output: {
@@ -1148,7 +1148,13 @@ export function apply(ctx, rawConfig) {
             },
             async execute({ agent, slot, lane, worktree }) {
                 if (!SLOTS.includes(slot)) return { result: `slot must be one of ${SLOTS.join(', ')}` }
-                if (!agent || !String(agent).trim()) return { result: 'agent is required' }
+                if (!agent || !String(agent).trim()) {
+                    // The caller binds itself: the plugin sees its children by session id, which a name
+                    // given by the parent does not always match, while the calling session is known here.
+                    const caller = typeof ctx.agents.currentInitiator === 'function' ? ctx.agents.currentInitiator() : null
+                    if (!caller) return { result: 'no agent given and the calling session is not known: pass agent (the session id)' }
+                    agent = String(caller.id)
+                }
                 if ((slot === 'dev' || slot === 'misc') && !lane) return { result: `a ${slot} slot needs the lane (its branch)` }
                 const entry = { kind: 'bind', at: Date.now(), agent: String(agent).trim(), slot, lane: lane ? String(lane) : null, worktree: worktree ? String(worktree) : null }
                 applyEntry(binding, entry)
