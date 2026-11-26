@@ -32,7 +32,7 @@
  *   --publish               fast-forward develop to the measured commit when no red is new
  *   --repo <path>           the repository (default: the one this script is in)
  *   --state-dir <dir>       where jobs live; default `stateDir` of internal/tools/camel-gate.local.json
- *   --layer <command>       runs the whole fast layer in {worktree}; must leave {worktree}/summary.json
+ *   --layer <command>       runs the whole fast layer in {worktree}; must leave {worktree}/test/results/fetched/summary.json
  *   --layer-timeout <s>     the layer command is ended with its whole tree after this long (default 7200)
  *   --short-timeout <s>     the same for the tree-maker, the cleanup and the publish command (default 600)
  *   --accept-missing <names>  comma-separated `plan/case` names that the previous reading had and
@@ -94,7 +94,7 @@ const SCRIPT_REPO = path.resolve(path.dirname(SCRIPT), '..')
 // `-NoGpuWatch`: the gpu observation never decides green or red, and with it the layer can wait up to
 // half an hour for a second slot after the plan itself has finished.
 const DEFAULT_LAYER =
-    'pwsh -NoProfile -File "{worktree}/internal/tools/camel-remote.ps1" -Path "{worktree}" -Plan test/plans -Tier fast -Jobs {jobs} -NoGpuWatch -FetchFile summary.json'
+    'pwsh -NoProfile -File "{worktree}/internal/tools/camel-remote.ps1" -Path "{worktree}" -Plan test/plans -Tier fast -Jobs {jobs} -NoGpuWatch -FetchFile summary.json -Latest'
 const DEFAULT_CLEANUP = 'pwsh -NoProfile -File "{worktree}/internal/tools/camel-remote.ps1" -Path "{worktree}" -Clean'
 const DEFAULT_TREE_MAKER =
     'pwsh -NoProfile -File "{repo}/internal/tools/new-worktree.ps1" -Path "{tree}" -Detach {sha} -FromCheckout "{repo}" -NoFetch {hooks}'
@@ -507,7 +507,9 @@ async function runWorker(flags) {
         const job = readJob(dir)
         updateJob(dir, { phase, phases: { ...(job?.phases || {}), [phase]: { startedAt: new Date().toISOString() } } })
     }
-    const summaryFile = path.join(tree, 'summary.json')
+    // The runner writes its summary into its own run directory under test/results/log on the host;
+    // `-FetchFile summary.json -Latest` brings the newest run's copy back to test/results/fetched.
+    const summaryFile = path.join(tree, 'test', 'results', 'fetched', 'summary.json')
     const values = { worktree: tree, tip, jobs: config.jobs, repo, remote: config.remote, develop: config.develop, sha: tip }
 
     try {

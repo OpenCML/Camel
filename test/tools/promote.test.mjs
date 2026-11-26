@@ -108,7 +108,8 @@ const grand = spawn(process.execPath, ['-e', 'setTimeout(() => {}, 600000)'], { 
 fs.appendFileSync(scenario.pids, JSON.stringify({ stub: process.pid, grandchild: grand.pid }) + '\\n')
 await new Promise((resolve) => setTimeout(resolve, scenario.layerMs))
 grand.kill()
-fs.writeFileSync(worktree + '/summary.json', JSON.stringify({ test_timings: scenario.rows }))
+fs.mkdirSync(worktree + '/test/results/fetched', { recursive: true })
+fs.writeFileSync(worktree + '/test/results/fetched/summary.json', JSON.stringify({ test_timings: scenario.rows }))
 process.exit(scenario.layerExit ?? (scenario.rows.some((row) => row.status === 'fail') ? 1 : 0))
 `,
 )

@@ -75,7 +75,7 @@ node scripts/promote.mjs cancel [<任务号>]                  # 结束工作进
   （钩子读的是推送所在树的 HEAD，记录写不进它自己所记的提交），再推**被测提交本身**，不是记录提交；推完读回远端核对。
   记录提交留在分支 `record/promotion-<n>`。
 - 命令都可换：`--layer`、`--cleanup`、`--publish-command`（`{worktree}` `{sha}` `{jobs}` 会被替换；
-  命令行按空格分词、双引号成组，**直接起程序、不经 shell**）。整层命令必须在 `{worktree}/summary.json` 留下运行器的汇总文件。
+  命令行按空格分词、双引号成组，**直接起程序、不经 shell**）。整层命令必须在 `{worktree}/test/results/fetched/summary.json` 留下运行器的汇总文件（默认命令用 `-FetchFile summary.json -Latest` 把构建机上最新一次运行的那份取回到这里）。
 
 ## 批号（队列页给的号，这里对上靶子）
 
