@@ -91,6 +91,8 @@ pwsh -NoProfile -File <你的工作树>\internal\tools\camel-remote.ps1 `
   `-Check` 会「只构建、不跑检查、退出 0」—— 一个照它跑的车道会把「什么都没跑」读成绿。
   判据：输出里有没有 `CHECKS_START` 与 checks 阶段的读数。
 · `-Plan` 用**正斜杠**；`-Jobs 8` 是远端并行度。
+· **几份小计划合成一条命令**：`-Plan 'a.plan.toml,b.plan.toml'` 用逗号连起来，一次排队量完。
+  宿主拥挤时这条能省掉几次 1800 s 的排队（2026-11-27 一条车道要量的两格计划合成一条命令，省了一次排队）。
   `camel-build.ps1` 的参数是 `-Parallel`，不是 `-Jobs` —— 混用会被当成没写。
 · 免 GPU 观测、只要计划自己的退出码：加 `-NoGpuWatch`。
 · 退出码：0 绿／1 红／**4 没跑起来**／**7 读数齐了但没拿到退出码**。4 与 7 都不是绿。
