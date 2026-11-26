@@ -558,7 +558,7 @@ b9b23c3234979dee ok src/stdlib/rulesets/int8.cml
 7e659bbd72b4de0b ok src/stdlib/rulesets/jvp.cml
 8375a530eff268c4 ok src/stdlib/rulesets/probe_batch.cml
 7a11798394cc6e2c ok src/stdlib/rulesets/probe_missing.cml
-1378e05395fdd61a ok src/stdlib/rulesets/transpose.cml
+433b3b7c7d0a0813 ok src/stdlib/rulesets/transpose.cml
 a338d98395d2f704 ok src/stdlib/rulesets/vmap.cml
 0c368faaef090af5 no src/stdlib/tensor/signatures/tensor.cml
 aa2ab77afb6218d5 ok src/stdlib/tiles/signatures/tiles.cml
