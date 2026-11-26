@@ -945,10 +945,26 @@ std::any Builder::resolveDRefNode(const GCT::node_ptr_t &gct) {
         genericCalleeAllowed_        = false;
         refOrigin_                   = gct->origin();
         const oper_group_ptr_t group = operatorGroupOf(*oper);
-        GUARD(
-            group != nullptr,
-            "The module that declares the operator the compiler emits did not register it: " +
-                std::string(camel::core::OperatorTable::instance().uri(*oper)));
+        if (group == nullptr) {
+            // A body-less *generic* declaration makes no operator group: its declarations are
+            // templates, and a call of it resolves against those (the same node a call of a name
+            // that means a generic template builds, a DREF whose templates are in genericDrefs_
+            // and whose payload is an empty graph set). No group is made for it here: a group of
+            // no rules would be a second truth about an operator that has none.
+            const auto templates = context_->programExports().operatorTemplates(*oper);
+            GUARD(
+                templates.has_value(),
+                "The module that declares the operator the compiler emits did not register it: " +
+                    std::string(camel::core::OperatorTable::instance().uri(*oper)));
+            node_handle_t drefNode{currGraph_->addDrefNode(
+                std::variant<graph_vec_ptr_t, oper_group_ptr_t, graph_ptr_t>{
+                    std::make_shared<graph_set_t>()})};
+            genericDrefs_[drefNode] =
+                generic_ref_t(std::make_shared<GenericGroup>(genericTemplatesOfEntity(*templates)));
+            registerNodeOrigin(context_, drefNode, gct, "gir.dref.generic");
+            LEAVE("DREF");
+            return drefNode;
+        }
         node_handle_t drefNode{currGraph_->addDrefNode(
             std::variant<graph_vec_ptr_t, oper_group_ptr_t, graph_ptr_t>{group})};
         registerNodeOrigin(context_, drefNode, gct, "gir.dref");

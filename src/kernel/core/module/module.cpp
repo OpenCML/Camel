@@ -573,6 +573,32 @@ bool ProgramExports::exportEntity(const Module &module, const Reference &ref, co
             operatorGroups_[table.intern(uri)] = ent.operGroup();
         }
     }
+    // A body-less *generic* declaration makes no group: its declarations are templates, exported
+    // under the name it was declared with (or `<name>#<k>` when it is several), and a caller that
+    // holds the operator's id has no way to ask for them by that name. The id is the URI the
+    // declaration was interned as, `<module>:<name>` (`declareNativeOperator`'s algorithm), so the
+    // way from it to the templates is recorded here, once, at export -- the same place, and the
+    // same reason, as the group above.
+    if (camel::core::module::detail::EntityAccess::isGenericTemplate(ent)) {
+        auto &table                    = camel::core::OperatorTable::instance();
+        std::string ident              = ref.ident();
+        const auto hash                = ident.find('#');
+        const std::string plain        = hash == std::string::npos ? ident : ident.substr(0, hash);
+        const camel::core::OperId oper = table.intern(std::string(module.name()) + ":" + plain);
+        std::vector<std::shared_ptr<void>> templates;
+        if (const auto existing = operatorTemplates_.find(oper);
+            existing != operatorTemplates_.end()) {
+            templates =
+                camel::core::module::detail::EntityAccess::genericTemplates(existing->second);
+        }
+        for (const auto &tmpl : camel::core::module::detail::EntityAccess::genericTemplates(ent)) {
+            if (std::ranges::find(templates, tmpl) == templates.end()) {
+                templates.push_back(tmpl);
+            }
+        }
+        operatorTemplates_[oper] =
+            camel::core::module::detail::EntityAccess::makeGenericTemplates(templates);
+    }
     // A merged imported name may have been cached before this name existed (a module's exports
     // are written while the program is declared; a decorated form is added after its body is
     // built), so no cached merge survives a write.
@@ -583,6 +609,18 @@ bool ProgramExports::exportEntity(const Module &module, const Reference &ref, co
 oper_group_ptr_t ProgramExports::operatorGroup(camel::core::OperId oper) const {
     const auto it = operatorGroups_.find(oper);
     return it == operatorGroups_.end() ? nullptr : it->second;
+}
+
+void ProgramExports::recordOperatorTemplates(camel::core::OperId oper, const entity &templates) {
+    operatorTemplates_[oper] = templates;
+}
+
+std::optional<entity> ProgramExports::operatorTemplates(camel::core::OperId oper) const {
+    const auto it = operatorTemplates_.find(oper);
+    if (it == operatorTemplates_.end()) {
+        return std::nullopt;
+    }
+    return it->second;
 }
 
 std::optional<entity>

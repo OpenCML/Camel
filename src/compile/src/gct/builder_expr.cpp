@@ -247,7 +247,10 @@ node_ptr_t Builder::visitBlockRoot(const AST::node_ptr_t &ast) {
     context_->importModule("graph");
     const auto oper = camel::core::OperatorTable::instance().lookup(uri);
     GUARD(oper.has_value(), "The table has no entry for the operator a block head binds: " + uri);
-    node_ptr_t ref = tree_->makeDRef(*oper, uri);
+    // The id is the reference; the text is only the node's label (a GCT dump, a diagnostic). It is
+    // the internal spelling a compiler-made DREF has, not a name of the program's or an URI: the
+    // root has no source name, and a label a reader took for one would be resolved as one.
+    node_ptr_t ref = tree_->makeDRef(*oper, isEdit ? ":block/open" : ":block/graph_of");
     setOriginFromAst(context_, ref, ast, camel::source::OriginKind::GctNode, "gct.block.root");
     node_ptr_t call = tree_->makeLink(1);
     *call << ref;
