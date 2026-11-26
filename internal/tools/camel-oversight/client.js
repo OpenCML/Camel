@@ -161,6 +161,8 @@ window.__ModuleLoader__.load({
                 h('span', { style: { opacity: 0.7 } }, label + ' '),
                 h('b', { style: { color: tone ? color[tone] : undefined } }, value))
 
+        const SLOT_NAMES = { merge: '合并', dev: '开发', misc: '杂项', buffer: '缓冲' }
+
         function Band(props) {
             useStore()
             const [open, setOpen] = React.useState(false)
@@ -173,7 +175,10 @@ window.__ModuleLoader__.load({
             const develop = r.develop && r.develop.ageMinutes !== undefined ? `${r.develop.ageMinutes} 分钟前` : '—'
             const alerts = s.alerts || []
             const worst = alerts.some((a) => a.level === 'urgent') ? 'urgent' : alerts.some((a) => a.level === 'wake') ? 'wake' : alerts.length ? 'quiet' : 'ok'
-            const lanesTone = lanes.running === undefined ? undefined : lanes.running < 6 ? 'wake' : 'ok'
+            const slots = lanes.slots || null
+            const devSlots = lanes.devSlots || 8
+            const lanesTone = slots ? (slots.dev.running < devSlots ? 'wake' : 'ok') : undefined
+            const others = slots ? `合并 ${slots.merge.total} · 杂项 ${slots.misc.total} · 缓冲 ${slots.buffer.total}${lanes.stale && lanes.stale.length ? ` · 失效绑定 ${lanes.stale.length}` : ''}` : ''
             const unacked = (s.unacknowledged || []).length
             // How long since the dispatching client (`client=dm`) last reached the channel. It polls
             // every few seconds and checks in every twenty minutes, so an hour of silence means it is
@@ -210,7 +215,8 @@ window.__ModuleLoader__.load({
                     h('b', { style: { marginRight: 14 } }, 'Camel 协作'),
                     chip('协调者', s.target.status === 'running' ? '在跑' : '空闲', s.target.status === 'running' ? 'ok' : 'wake'),
                     chip('决策者', dmText, dmTone),
-                    chip('车道', lanes.running === undefined ? '—' : `${lanes.running}/${lanes.total}`, lanesTone),
+                    chip('开发', slots ? `${slots.dev.running}/${devSlots}` : '—', lanesTone),
+                    chip('其他', slots ? others : '—'),
                     chip('待合', branches ? `${branches.unmerged} 条${gateShut ? ' · 闸门关' : ''}` : '—', gateShut ? 'urgent' : 'ok'),
                     chip('develop', develop),
                     chip('未回执', String(unacked), unacked ? 'wake' : 'ok'),
@@ -278,7 +284,8 @@ window.__ModuleLoader__.load({
                         .join('、') || '无'),
                 h('div', { style: { fontWeight: 600, marginTop: 6 } }, '会话与车道'),
                 h('div', { style: { opacity: 0.85 } },
-                    ((s.lanes && s.lanes.lanes) || []).map((l) => `${l.name || l.path || l.id}（${l.activity === 'running' ? '在跑' : '闲'}）`).join('、') || '无活子代理'))
+                    ((s.lanes && s.lanes.lanes) || []).map((l) => `${l.name || l.path || l.id}（${SLOT_NAMES[l.slot] || l.slot}${l.lane ? ` ${l.lane}` : ''}，${l.activity === 'running' ? '在跑' : '闲'}）`).join('、') || '无活子代理',
+                    ((s.lanes && s.lanes.stale) || []).length ? `；失效绑定：${s.lanes.stale.map((row) => `${row.agent}（${row.slot}${row.lane ? ` ${row.lane}` : ''}）`).join('、')}` : ''))
         }
 
         function Toasts() {

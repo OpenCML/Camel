@@ -428,3 +428,17 @@ expect_exit = 0
 expect_stdout_contains = ["push-working-branches: ", " checks, 0 failed"]
 normalizers = ["normalize_newlines"]
 timeout_ms = 60000
+
+# Fast: under 1 s. The coordinator's children counted by slot: the binding table's pure parts and the
+# development-slot verdict of `lanes-below`, run without the host.
+[[tests]]
+name = "selfchecks.oversight_binding"
+desc = "`test/tools/oversight-binding.test.mjs`: children are classified by the binding table (by id or by name, no row is buffer), counted per slot, rebinding replaces a row, a row whose child is gone stays visible as stale, and `lanes-below` fires at 7 development slots running with buffer children present and stays quiet at 8."
+kind = "behavior"
+tool = "node"
+case = "../../../../test/tools/oversight-binding.test.mjs"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_contains = ["oversight-binding: ", " checks, 0 failed"]
+normalizers = ["normalize_newlines"]
+timeout_ms = 60000

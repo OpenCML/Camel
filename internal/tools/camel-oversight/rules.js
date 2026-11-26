@@ -17,6 +17,15 @@
 
 const readable = (value) => value && !value.unreadable && !value.unconfigured
 
+// Which development slots are not at work: the ones with no child bound at all, and the bound ones
+// whose child is idle.
+export const emptyAndIdle = (lanes, limits) => {
+    const devs = (lanes.lanes || []).filter((member) => member.slot === 'dev')
+    const empty = Math.max(0, limits.devSlots - devs.length)
+    const idle = devs.filter((member) => member.activity !== 'running').map((member) => member.lane || member.name || member.id)
+    return `空槽 ${empty} 个${idle.length ? `，闲着的：${idle.join('、')}` : ''}。`
+}
+
 export const RULES = [
     {
         id: 'branch-gate',
@@ -64,7 +73,9 @@ export const RULES = [
         hold: 2,
         cooldown: 10,
         check: ({ m, lanes, limits }) => {
-            if (!readable(lanes) || lanes.running >= limits.minLanes) return null
+            if (!readable(lanes) || !lanes.slots) return null
+            const dev = lanes.slots.dev
+            if (dev.running >= limits.devSlots) return null
             const b = readable(m.branches) && m.branches
             if (b && b.unmerged > limits.unmerged) return null
             // The host's load does not hold lanes back: every run reaches the host through a slot, so a
@@ -73,8 +84,8 @@ export const RULES = [
             const h = readable(m.host) && m.host
             const load = h ? `构建主机负载 ${h.load[0]}/${h.cores}（上主机都走槽排队，不挡开车道），` : ''
             return {
-                key: String(lanes.running),
-                text: `在跑车道 ${lanes.running} 条（目标 ${limits.minLanes}–${limits.maxLanes}）。${load}当轮从 backlog 补派到 ${limits.minLanes} 条以上。`,
+                key: String(dev.running),
+                text: `开发槽在跑 ${dev.running}/${limits.devSlots}（缓冲车道不计入）。${emptyAndIdle(lanes, limits)}${load}当轮从 backlog 补派，把开发槽补满，并用 oversight_bind 绑上。`,
             }
         },
     },
@@ -142,10 +153,10 @@ export const RULES = [
             const d = i || (readable(m.develop) && m.develop)
             const name = i ? 'integration' : 'develop'
             if (!d || d.ageMinutes <= limits.developStallMinutes) return null
-            if (!readable(lanes) || lanes.running === 0) return null
+            if (!readable(lanes) || !lanes.slots || lanes.slots.dev.running === 0) return null
             return {
                 key: d.head,
-                text: `${name} ${d.ageMinutes} 分钟没有前进（${d.head}），而有 ${lanes.running} 条车道在跑。问合并位在等什么；交回的车道排进合并队列，排着的多就多开合并位。`,
+                text: `${name} ${d.ageMinutes} 分钟没有前进（${d.head}），而有 ${lanes.slots.dev.running} 条开发车道在跑。问合并位在等什么；交回的车道排进合并队列，排着的多就多开合并位。`,
             }
         },
     },
@@ -304,16 +315,16 @@ export const RULES = [
         level: 'wake',
         hold: 3,
         cooldown: 10,
-        check: ({ m, target, backlogOpen, now, lanes }) => {
+        check: ({ m, target, backlogOpen, now, lanes, limits }) => {
             if (!target || target.status !== 'idle' || backlogOpen === 0) return null
-            if (readable(lanes) && lanes.running > 0) return null
+            if (readable(lanes) && lanes.slots && lanes.slots.dev.running > 0) return null
             const minutes = target.since ? Math.round((now - target.since) / 60_000) : null
             const rows = m.backlog instanceof Map ? [...m.backlog.entries()] : []
             const open = rows.filter(([, row]) => !row.done && !row.doing && !row.blocked).map(([id]) => id).slice(0, 8)
             const doing = rows.filter(([, row]) => row.doing).map(([id]) => id).slice(0, 8)
             return {
                 key: 'idle',
-                text: `协调者会话空闲${minutes !== null ? ` ${minutes} 分钟` : ''}，backlog 还有 ${backlogOpen} 条没做完。现在开工：先看在做的（${doing.join('、') || '无'}）有没有停着的车道，再从待做的（${open.join('、') || '无'}）补派，车道开到 6–8 条；催合并、跑闸门。不等人。`,
+                text: `协调者会话空闲${minutes !== null ? ` ${minutes} 分钟` : ''}，backlog 还有 ${backlogOpen} 条没做完。现在开工：先看在做的（${doing.join('、') || '无'}）有没有停着的车道，再从待做的（${open.join('、') || '无'}）补派，开发槽补满（${limits.devSlots} 条）；催合并、跑闸门。不等人。`,
             }
         },
     },
@@ -350,8 +361,7 @@ export const RULES = [
 ]
 
 export const DEFAULT_LIMITS = {
-    minLanes: 6,
-    maxLanes: 8,
+    devSlots: 8,
     unmerged: 20,
     maxBehind: 100,
     mergedLocal: 20,
