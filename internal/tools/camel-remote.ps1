@@ -78,10 +78,10 @@
 # same settings can be overridden for one run by the matching parameter.
 #
 # --- the staging push -------------------------------------------------------
-# The push is forced and the ref is dropped in the finally: that ref is this run's scratch. The host
-# fetches it just-in-time and keeps its own branch. Without the force, reusing a worktree name at
-# another commit is a non-fast-forward that stops the run before the host; without the delete, one
-# ref per worktree name outlives every run and goes stale the moment its name is reused.
+# The push is forced, and the ref is left in place afterwards: the host fetches it just-in-time and
+# keeps its own branch, and the ref is what makes the next push of the same branch incremental. The
+# force is what makes a reused name at another commit a push rather than a refusal; it is also why
+# keeping the ref is harmless, since a ref that no longer matches is overwritten rather than refused.
 #
 # --- -NoBuild is guarded ----------------------------------------------------
 # A build writes out/<tag>/build-info.json -- from scripts/collect-out.js, through
@@ -355,6 +355,14 @@ param(
     # Diagnostic build: assertion stack traces on (`npm run build -- --stack-trace`). Off by default;
     # **its readings do not decide green or red** -- use it to read a trace, then rebuild without it.
     [switch]$StackTrace,
+    # Print the transfer's own breakdown: one line naming every segment between the run's start and
+    # the host's `__CAMEL_REMOTE_SYNCED__`, and one naming what travelled. The verdict line splits a
+    # run into transfer / build / plan, and "the transfer took 18 s" is a number a reader cannot act
+    # on -- it is a push, one scp, and everything the host does before it says it has the tree.
+    # Off by default: a run whose output is a reading must not grow lines because a diagnostic
+    # exists. With the switch off no mark is taken locally and the host script carries no timing
+    # code at all (`PHASE_TRACE` below), so the default output and the host's work are unchanged.
+    [switch]$TracePhases,
     # Run the plans the change touches instead of a written list: `node scripts/test.js --changed`,
     # with `origin/develop` as the base unless -ChangedBase names another revision. This is the
     # per-merge gate; the full fast layer is for batch points, not for every merge.
@@ -1387,6 +1395,18 @@ function Update-TestProgress([string]$line) {
 
 # --- what has to travel -----------------------------------------------------
 $startedAt = Get-Date
+# The transfer's own clock (see -TracePhases). Two lists: the marks this script takes, and the marks
+# the host script prints (`PHASE_MARK <name> <ms>`, milliseconds since that script started). Nothing
+# is recorded when the switch is off, so a default run reads and behaves exactly as before.
+$script:phaseMarks = New-Object System.Collections.Generic.List[object]
+$script:remoteMarks = New-Object System.Collections.Generic.List[object]
+$script:firstRemoteMarkAt = $null
+function Add-PhaseMark {
+    param([string]$Name)
+    if (-not $TracePhases) { return }
+    $script:phaseMarks.Add([pscustomobject]@{ name = $Name; at = (Get-Date) })
+}
+Add-PhaseMark 'start'
 # The run's own start is neither the queue start nor the build start. queuedAt below stays the
 # submission time only until the host prints its first wait line; buildStartedAt is the first build
 # output line the host prints; buildFinishedAt is its BUILD_EXIT line. The panel draws the grey wait
@@ -1574,7 +1594,37 @@ try {
     # and the milestone stage's selection -- and both read a list that says "cannot read" rather
     # than a list that says nothing, so the widening to the whole layer has no branch left to take.
     # It is computed before the push: a base nobody can read must cost a push and a build nothing.
-    $untracked = @(git -C $Path ls-files --others --exclude-standard)
+    #
+    # One `git status` answers both questions this run has about the working tree -- what has to
+    # travel untracked, and what is dirty against HEAD -- because on this side a git process is an
+    # interpreter start plus a directory scan, and the second call was one of those. `-z` so a path
+    # with a space or a quote arrives as itself rather than in git's C-quoting, and `-uall` so an
+    # untracked *file* is listed instead of the directory holding it, which is what the tar names.
+    $statusOk = $true
+    $untracked = @()
+    $dirtyTracked = @()
+    try {
+        $statusRaw = @(git -C $Path status --porcelain -z -uall 2>$null) -join "`n"
+        $statusOk = ($LASTEXITCODE -eq 0)
+    } catch {
+        $statusRaw = ''
+        $statusOk = $false
+    }
+    if ($statusOk) {
+        $statusFields = $statusRaw -split "`0"
+        for ($i = 0; $i -lt $statusFields.Count; $i++) {
+            $entry = $statusFields[$i]
+            if ($entry.Length -lt 4) { continue }
+            $code = $entry.Substring(0, 2)
+            $rel = $entry.Substring(3)
+            if ($code[1] -eq '?') { $untracked += $rel; continue }
+            $dirtyTracked += $rel
+            # A rename or a copy is two fields: the destination, then the source. The source is
+            # stepped over -- both names are in the patch, and the guard's question is about the
+            # path that exists now.
+            if ($code[0] -eq 'R' -or $code[0] -eq 'C') { $i++ }
+        }
+    }
     # A file `-FetchFile` brought back last run is named here even when it is ignored, because the two
     # halves of the two-run check need it to travel: the fetch writes it under a path `.gitignore`
     # covers (so a record can never be committed by accident), and `--exclude-standard` then leaves
@@ -1629,16 +1679,31 @@ try {
             (New-Object System.Text.UTF8Encoding($false)))
         Write-Host ("[camel-remote] -Changed: {0} changed file(s) against {1}, listed here for the host" -f $lines.Count, $ChangedBase)
     }
-    # --force, and the ref is dropped in the finally block: the staging branch is scratch. Without
-    # the force, a worktree re-created at another commit (a rebuilt lane, an A/B run) is a
-    # non-fast-forward to the same ref name, and the run stopped before it reached the host;
-    # without the delete, one ref per worktree name outlived every run and went stale the moment
-    # that name was reused -- which is where the staging repository's pile of lane-* refs came from.
+    # --force: a worktree re-created at another commit (a rebuilt lane, an A/B run) is a
+    # non-fast-forward to the same ref name, and without the force the run stopped before it reached
+    # the host. The ref stays afterwards (see the finally block) so this push has a nearby "have".
     # A detached HEAD has no local branch to push, so the refspec names the commit and the ref it
     # becomes on the far side in one word: `HEAD:refs/heads/<the name derived from the commit>`. The
-    # rest of the run -- the host checkout, the delete in the finally -- then reads that one name.
+    # rest of the run -- the host checkout, the marker -- then reads that one name.
     $pushSource = if ($detached) { "HEAD:refs/heads/$branch" } else { $branch }
-    $pushOutput = @(git -C $Path push --quiet --force "$sshHost`:$bare" $pushSource 2>&1)
+    # -TracePhases asks git for its own pack statistics ("Writing objects: ... 1.20 MiB"), which is
+    # the only place the size of what this push sent is written down. `--progress` forces those lines
+    # without a terminal and `--quiet` still keeps everything else off, so the push itself is the
+    # same push. (Two call sites rather than a splatted argument list: PowerShell does not splat an
+    # array into a native command's arguments, it passes the array's *characters* -- measured here,
+    # and git answered with one `src refspec p does not match any` per letter.)
+    Add-PhaseMark 'push'
+    $pushOutput = if ($TracePhases) {
+        @(git -C $Path push --quiet --force --progress "$sshHost`:$bare" $pushSource 2>&1)
+    } else {
+        @(git -C $Path push --quiet --force "$sshHost`:$bare" $pushSource 2>&1)
+    }
+    $pushProgress = ''
+    if ($TracePhases) {
+        $pushProgressLine = @($pushOutput | Where-Object { "$_" -match 'Writing objects' } | Select-Object -Last 1)
+        if ($pushProgressLine.Count -gt 0) { $pushProgress = "$($pushProgressLine[0])".Trim() }
+        Add-PhaseMark 'pushed'
+    }
     if ($LASTEXITCODE -ne 0) {
         $pushExit = $LASTEXITCODE
         Write-Host "[camel-remote] could not push $branch to $sshHost`:$bare (git exit $pushExit)."
@@ -1667,8 +1732,8 @@ try {
         # not an ancestor of the one being pushed (a reset branch, a rebased scratch tree, an A/B
         # run). Name that ref and the two commits instead of sending the reader to the host.
         # This script is not in a repository, so the comment beside a change is the only record of
-        # it: the forced push above and the delete in the finally are what removed this cause. The
-        # block below now reports a push that fails for some other reason.
+        # it: the forced push above is what removed this cause. The block below now reports a push
+        # that fails for some other reason.
         $remoteRef = @(git -C $Path ls-remote "$sshHost`:$bare" "refs/heads/$branch" 2>$null)
         $localSha = if ($detached) { $commit } else { (git -C $Path rev-parse $branch).Trim() }
         if ($remoteRef.Count -gt 0 -and $remoteRef[0]) {
@@ -1688,12 +1753,12 @@ try {
             }
             Write-Host "[camel-remote] refs/heads/$branch there is the helper's scratch branch, not develop. Delete it and re-run:"
             Write-Host "[camel-remote]   ssh $sshHost `"git -C $bare branch -D $branch`""
+            Write-Host "[camel-remote] a branch this repository deletes goes with its staging ref: pwsh -NoProfile -File internal/tools/camel-remote-cleanup.ps1 -Branch $branch -Apply"
         } else {
             Write-Host "[camel-remote] the staging repository has no refs/heads/$branch; check that $sshHost is reachable and $bare is writable."
         }
         exit 2
     }
-    $stagingPushed = $true
 
     # --- what this run would measure, said before it travels --------------------
     # The patch below carries the WORKING TREE (`git diff HEAD`), not the commit, so every reading a
@@ -1705,19 +1770,24 @@ try {
     # --git-dir is the common directory, i.e. not a linked worktree -- refuses a dirty tree outside
     # $AllowDirty, and every run prints which files it is about to carry, so that "measured" can be
     # read off the output instead of assumed.
-    $dirtyTracked = @()
-    try {
-        $dirtyTracked = @(git -C $Path status --porcelain --untracked-files=no 2>$null |
-            ForEach-Object { $_.Substring(3).Trim() } |
-            Where-Object { $_ -ne '' })
-    } catch {
-        $dirtyTracked = @()
-    }
+    # The dirty list came from the `git status` taken before the push, beside the untracked one: one
+    # process answers both, and a second reading of the same tree would be a second chance to
+    # disagree with it. `$statusOk` is what keeps a status that could not be read from arriving as
+    # "a clean tree" -- the refusal below only ever sees a list, and a list nobody could read is
+    # empty in exactly the same way.
+    Add-PhaseMark 'status'
     $gitDir = ''
     $commonDir = ''
+    # One `rev-parse` for both, in the order the two flags were written: on Windows each git process
+    # costs an interpreter start and a directory scan, and these two readings are always taken
+    # together. A git too old to know `--path-format` refuses the whole call, and the two readings
+    # then stay empty -- which is what the separate calls reported for that case as well.
     try {
-        $gitDir = (git -C $Path rev-parse --absolute-git-dir 2>$null).Trim()
-        $commonDir = (git -C $Path rev-parse --path-format=absolute --git-common-dir 2>$null).Trim()
+        $gitDirs = @(git -C $Path rev-parse --absolute-git-dir --path-format=absolute --git-common-dir 2>$null)
+        if ($gitDirs.Count -ge 2) {
+            $gitDir = "$($gitDirs[0])".Trim()
+            $commonDir = "$($gitDirs[1])".Trim()
+        }
     } catch {
         $gitDir = ''
         $commonDir = ''
@@ -1752,7 +1822,18 @@ try {
     }
 
     # `git diff --output=` writes the patch as raw bytes; `>` in PowerShell would write UTF-16.
-    git -C $Path diff HEAD --binary --output=$patchFile 2>&1 | Out-Null
+    #
+    # A clean tree has nothing to diff, and the host's script tests the patch for size, so an empty
+    # file is the same instruction as no file -- but only the status above can say "clean", and a
+    # status nobody could read is not that answer. Both cases keep the file, because the copy that
+    # follows sends the scratch directory as it finds it.
+    Add-PhaseMark 'probe'
+    if ($statusOk -and $dirtyTracked.Count -eq 0) {
+        [System.IO.File]::WriteAllText($patchFile, '')
+    } else {
+        git -C $Path diff HEAD --binary --output=$patchFile 2>&1 | Out-Null
+    }
+    Add-PhaseMark 'diff'
 
     if ($untracked.Count -gt 0) {
         # Paths with spaces and non-ASCII names travel through a list file, one per line.
@@ -1800,14 +1881,46 @@ try {
     # told that exactly one checkout exists and removed all the others. On 2026-11-17 that killed
     # three measurements (25/500, 200/500, 300/500) on the host where they were running. The
     # reading now reports whether it answered, and an unanswered reading removes nothing.
+    Add-PhaseMark 'tar'
     $live = Get-CamelLiveWorktrees -Path $Path
+    Add-PhaseMark 'live'
     $liveNames = @($live.Names)
     $liveTrustedFlag = if ($live.Trusted) { '1' } else { '0' }
     if ($live.Trusted) {
         # Printed every run: when a checkout does go, this is the line that says what the run knew.
         Write-Host ("[camel-remote] live worktrees: {0}" -f ($liveNames -join ' '))
+        # A root too large to walk is named here rather than passed over: what the run did not look
+        # at belongs in the same line as what it found, and a name that is only absent because
+        # nobody looked must not read as a name that is gone.
+        foreach ($skipped in @($live.Skipped)) {
+            if ($null -eq $skipped) { continue }
+            Write-Host ("[camel-remote] not scanning {0} for hand-made checkouts: {1} entries, over the {2} this reading walks; its registered worktrees are still in the list above" -f `
+                $skipped.Root, $skipped.Entries, $skipped.Ceiling)
+        }
     } else {
         Write-Host ("[camel-remote] not cleaning up host checkouts this run: {0}; 'could not read which worktrees exist' is not 'there are no other worktrees'" -f $live.Why)
+    }
+
+    # The staging refs in the bare follow the branches that exist here (see the guard's
+    # cleanup_staging_refs): the ref a run leaves behind is what keeps the next push of that branch
+    # small, so a ref whose branch is gone is the one thing nobody ever removed. The keep list is
+    # this reading, and like the worktree reading it has to say whether it answered -- an unread
+    # list is not a list of no branches, and the host sweep deletes nothing when it cannot tell.
+    $stagingKeep = @()
+    $stagingKeepFlag = '0'
+    $stagingKeepWhy = ''
+    try {
+        $stagingKeep = @(git -C $Path for-each-ref --format='%(refname:lstrip=2)' refs/heads 2>$null |
+            ForEach-Object { "$_".Trim() } | Where-Object { $_ -ne '' })
+        $stagingKeepWhy = if ($LASTEXITCODE -ne 0) { "git exited $LASTEXITCODE" } else { 'it named no branch' }
+        if ($LASTEXITCODE -eq 0 -and $stagingKeep.Count -gt 0) { $stagingKeepFlag = '1' }
+    } catch {
+        $stagingKeep = @()
+        $stagingKeepFlag = '0'
+        $stagingKeepWhy = "$_"
+    }
+    if ($stagingKeepFlag -ne '1') {
+        Write-Host ("[camel-remote] not removing staging refs this run: {0}; 'could not read which branches exist' is not 'there are no branches'" -f $stagingKeepWhy)
     }
 
     Set-BuildPhase 'starting' "[camel-remote] syncing $name on $sshHost"
@@ -2476,10 +2589,83 @@ cleanup_host_checkouts() {
         proc_snapshot_age_ms=$(( ($(date +%s%N) - proc_snapshot_ms) / 1000000 ))
     fi
 }
+# --- staging refs follow the branches that exist here ---
+# A run pushes the branch it stages into the bare and leaves that ref behind, so the next run of
+# the same branch pushes eleven objects instead of four thousand (measured on one branch: 11 in
+# 0.9 s against 4438 in 2.0 s). Nothing else ever removed them, so every branch that ever ran keeps
+# one: the bare goes on advertising commits nobody can reach, one ref per branch, for good.
+#
+# The keep list is the workstation's own `refs/heads`, read once per run before the push, plus the
+# commit-named refs a run stages for a commit rather than for a branch (`camel-sha-*` for a detached
+# run, `camel-baseline-*` for a baseline checkout): those never had a branch, a seat that needs one
+# asks for it again, and dropping them would make the next baseline push its whole history to get
+# one back. They are counted in the line below, so what the sweep declined to look at is visible in
+# every run's output and not only in this comment.
+#
+# A ref written inside the grace period is left alone even when its name is unknown here: a seat's
+# merge pushes `seat/<...>` from a detached tree (so it has no local branch either) and then fetches
+# it back, and a full merge with its build and its suite can run for most of an hour. Six hours is
+# the wide side of that, and a dead ref waiting six hours to be reaped costs nothing it was not
+# already costing -- which is the same trade as (c3) on the checkouts above, only longer.
+#
+# `ok != 1` removes nothing at all: a branch list that could not be read is not a list of no
+# branches, and "delete every ref in the shared bare" is what acting on it would do.
+cleanup_staging_refs() {
+    local bare="$1"
+    local keep="$2"
+    local ok="$3"
+    local grace_minutes="${4:-360}"
+    staging_refs_total=0
+    staging_refs_removed=0
+    staging_refs_named=0
+    if [ "$ok" != 1 ]; then
+        echo '[camel-remote] not removing staging refs this run: the workstation could not say which branches exist, and a failed reading is not an empty one'
+        return 0
+    fi
+    if ! git -C "$bare" rev-parse --git-dir >/dev/null 2>&1; then
+        echo "[camel-remote] not removing staging refs this run: $bare is not a repository this run can read"
+        return 0
+    fi
+    local name loose age now cutoff
+    now=$(date +%s)
+    cutoff=$((now - grace_minutes * 60))
+    for name in $(git -C "$bare" for-each-ref --format='%(refname:lstrip=2)' refs/heads/ 2>/dev/null); do
+        staging_refs_total=$((staging_refs_total + 1))
+        case " $keep " in *" $name "*) continue;; esac
+        case "$name" in camel-sha-*|camel-baseline-*) staging_refs_named=$((staging_refs_named + 1)); continue;; esac
+        loose="$bare/refs/heads/$name"
+        if [ -f "$loose" ]; then
+            age=$(stat -c %Y "$loose" 2>/dev/null)
+            if [ -z "$age" ]; then
+                echo "[camel-remote] keeping staging ref refs/heads/$name: its age could not be read"
+                continue
+            fi
+            if [ "$age" -gt "$cutoff" ]; then continue; fi
+        fi
+        if git -C "$bare" update-ref -d "refs/heads/$name" 2>/dev/null; then
+            staging_refs_removed=$((staging_refs_removed + 1))
+            echo "[camel-remote] removed staging ref refs/heads/$name: no local branch of that name"
+        else
+            echo "[camel-remote] could not remove staging ref refs/heads/$name"
+        fi
+    done
+    echo "[camel-remote] staging refs: $staging_refs_total, removed $staging_refs_removed, kept $staging_refs_named commit-named"
+}
 # --- end host cleanup guard ---
 '@
     $remoteScript = @"
 set -u
+# The host's half of -TracePhases: one monotonic mark per segment of "get this checkout to the run's
+# commit". Nothing is printed unless the caller asked, and the mark is taken at the line *after* the
+# work it names -- so a segment's duration is the distance between two marks. `date +%s%N` is
+# wall-clock, not monotonic, so a clock step between two marks shows up as a negative segment; that
+# reads as "not measured" in the summary rather than as a fast segment.
+phase_start_ns=`$(date +%s%N)
+phase_mark() {
+    [ '$($TracePhases.IsPresent)' = 'True' ] || return 0
+    echo "PHASE_MARK `$1 `$(( (`$(date +%s%N) - phase_start_ns) / 1000000 ))"
+}
+phase_mark script-start
 R=`$HOME/camel-work/$name
 # One lock per checkout, taken before anything touches the tree and released only at the end: two
 # runs against the same checkout must not overlap at all, because the second one's build replaces
@@ -2497,20 +2683,25 @@ tree_wait_ms=`$(( (`$(date +%s%N) - tree_wait_started_ns) / 1000000 ))
 if [ `$tree_wait_ms -gt 5000 ]; then
     echo "[camel-remote] waited `$(awk "BEGIN{printf \"%.1f\", `$tree_wait_ms/1000}") s for this checkout"
 fi
+phase_mark lock
 C=`$HOME/$($cfg.hostClangEnv)
 V=`$HOME/$($cfg.hostBuildEnv)
 B=`$HOME/$($cfg.hostBenchEnv)
 $cleanupGuard
 cleanup_host_checkouts "`$HOME/$($cfg.hostWorkRoot)" '$($liveNames -join ' ')' '$liveTrustedFlag' '$bareLeaf'
+cleanup_staging_refs "`$HOME/$($cfg.hostBareRepo)" '$($stagingKeep -join ' ')' '$stagingKeepFlag' '360'
+phase_mark cleanup
 # Other runs' scratch directories in /tmp are not this run's to remove (rule 12): the run that left
 # one an hour ago may still be the tree a person is reading, and a directory older than a day is not
 # evidence that nobody is using it. Name what is old and leave it; the run's own scratch goes at the
 # end of the run (see the `rm -rf` beside `exit`), and its name carries its own run id.
-for old in /tmp/camel-remote-*; do
-    [ -d "`$old" ] || continue
-    [ -n "`$(find "`$old" -maxdepth 0 -mmin +1440 2>/dev/null)" ] || continue
+# One `find` for the whole sweep. The per-entry `find` this replaces forked once per old scratch
+# directory -- several hundred on this host, every run, for a list that is only printed -- and the
+# batch form reads the same field (`-mmin +1440` on the directory itself) in one process. `-print0`
+# and `read -d ''` keep a worktree name with a space in it one name, which the glob did not.
+while IFS= read -r -d '' old; do
     echo "[camel-remote] leaving old scratch `$old: not created by this run (remove it yourself when you know it is done)"
-done
+done < <(find /tmp -mindepth 1 -maxdepth 1 -name 'camel-remote-*' -type d -mmin +1440 -print0 2>/dev/null)
 freekb=`$(df -P -k "`$HOME" 2>/dev/null | awk 'NR==2{print `$4}')
 # The footprint of the checkouts is informational, but measuring it walks every file under
 # ~/camel-work (43 GB here, ~50 s on a loaded host, once per run). Keep the number in a small
@@ -2533,6 +2724,7 @@ case "`$freekb" in
         if [ "`$freekb" -lt 5242880 ]; then echo '[camel-remote] under 5 GB free on the host; run -Clean on the worktrees that are done'; exit 3; fi
         ;;
 esac
+phase_mark size
 mkdir -p "`$R"
 # The creation record this sweep and every later sweep judge by (rule 12), written before the
 # clone because this is the line that creates the checkout. A run that takes over a checkout
@@ -2540,6 +2732,7 @@ mkdir -p "`$R"
 # use, which is exactly the reading the sweep cannot take from the outside.
 mkdir -p "`$HOME/$($cfg.hostWorkRoot)/.records"
 printf '%s\t%s\t%s\n' '$($run.runId)' "`$(date -Is)" "`$R" > "`$HOME/$($cfg.hostWorkRoot)/.records/`$(basename "`$R")"
+phase_mark records
 # `git clone` refuses a non-empty destination, and a half-removed checkout (a leftover tmp/ or
 # test/results/) leaves exactly that: on 2026-10-24 a lane's run died with exit 2 because the
 # destination existed without a `.git`. Clear the path first; the branch's content comes from the
@@ -2550,6 +2743,7 @@ if [ -f "`$R/HEAD" ] && [ -d "`$R/objects" ]; then
     echo "[camel-remote] refusing to clear `$R: it is a bare repository (the shared staging remote is $bare)"; exit 2
 fi
 if [ ! -d "`$R/.git" ]; then rm -rf "`$R"; mkdir -p "`$R"; git clone -q "$bare" "`$R" || { echo '[camel-remote] clone failed'; exit 2; }; fi
+phase_mark clone
 cd "`$R" || exit 2
 cur=`$(git rev-parse HEAD 2>/dev/null || true)
 # The fast path also requires the HOST checkout to be clean. It used to compare only the commit,
@@ -2560,15 +2754,20 @@ cur=`$(git rev-parse HEAD 2>/dev/null || true)
 # patch. Tracked modifications are what matter, so `git status --porcelain` (which also sees the
 # untracked leftovers of a previous tar) decides.
 dirty=`$(git status --porcelain 2>/dev/null | head -c 1)
+phase_mark fastpath
 if [ "`$cur" = '$headSha' ] && [ -z "`$dirty" ] && [ ! -s '$remoteScratch/changes.patch' ] && [ ! -f '$remoteScratch/untracked.tar' ]; then
     echo '[camel-remote] checkout already at this commit, clean, with nothing to apply'
 else
     git fetch -q origin || exit 2
+    phase_mark fetch
     git checkout -q -f -B '$branch' 'origin/$branch' || exit 2
     git reset -q --hard || true
+    phase_mark checkout
     git clean -qfd -e build -e out || true
+    phase_mark clean
     if [ -s '$remoteScratch/changes.patch' ]; then git apply --whitespace=nowarn '$remoteScratch/changes.patch' || { echo '[camel-remote] patch did not apply'; exit 2; }; fi
     if [ -f '$remoteScratch/untracked.tar' ]; then tar -xf '$remoteScratch/untracked.tar' -C "`$R" || exit 2; fi
+    phase_mark apply
 fi
 # --- the tree under test, as it was handed over -----------------------------
 # The baseline for `tree_probe` below, taken once the tree is in the state this run asked for: the
@@ -2578,6 +2777,7 @@ fi
 tree_handover='$remoteScratch/tree-handover'
 git -C "`$R" status --porcelain --untracked-files=no > "`$tree_handover" 2>/dev/null ||
     echo '[camel-remote] the hand-over listing could not be read; the tree probe below will say so'
+phase_mark handover
 # `--untracked-files=no` is the discrimination the whole probe rests on: build outputs are ignored or
 # untracked by construction, so they never appear here, while the tracked generated files
 # (`registry.tsv`, `semantic.cpp`) are exactly what a generator that runs inside the build must not
@@ -2650,6 +2850,7 @@ if command -v ccache >/dev/null 2>&1; then
     export CCACHE_MAXSIZE=20G
     echo "[camel-remote] ccache: `$(ccache --version | head -1)"
 fi
+phase_mark ccache
 # The split the plan runner prints: unless a build runs below, this run built nothing.
 export CAMEL_GATE_BUILD_SECONDS=0
 cd "`$R" || exit 2
@@ -2763,6 +2964,7 @@ export CAMEL_BRANCH='$branch'
 # like a broken tree rather than a variable that did not travel (measured, 2026-11-24).
 export R
 echo "HOST_TOKEN_POOL=`$CAMEL_TOKEN_DIR size=`$CAMEL_TOKENS"
+phase_mark synced
 echo '__CAMEL_REMOTE_SYNCED__'
 # --- the token pool, read while the run goes --------------------------------
 # The registry used to be written only when a stage changed, so a run sitting in one long case -- or
@@ -3046,11 +3248,13 @@ exit `$code
     # One connection for the whole transfer: scp copies the scratch directory itself, so the remote
     # directory is created by scp and no separate mkdir round trip is needed. (Piping a tar through
     # the PowerShell pipeline would risk re-encoding it; scp keeps the bytes.)
+    Add-PhaseMark 'prep'
     $scpOutput = & $scpExe -q -r $scratch "${sshHost}:$remoteScratch" 2>&1
     if ($LASTEXITCODE -ne 0) {
         Write-Host "[camel-remote] scp failed: $scpOutput"
         exit 2
     }
+    Add-PhaseMark 'scp'
 
     # Each line is streamed to the console *and* folded into the holder. The marker lines switch the
     # phase (sync -> build -> plan); everything else goes to the build parser until the plan starts,
@@ -3063,6 +3267,14 @@ exit `$code
         param([string]$line)
         # NOT $clean: PowerShell is case-insensitive and the script has a [switch]$Clean.
         $cleanLine = ($line -replace $ansiPattern, '').Trim()
+        # The host's own marks (-TracePhases). Kept for the one segment line printed before the
+        # verdict rather than echoed: twelve timestamp lines in the middle of a build's output are
+        # noise to a reader and to every parser downstream.
+        if ($cleanLine -match '^PHASE_MARK (\S+) (\d+)$') {
+            if ($null -eq $script:firstRemoteMarkAt) { $script:firstRemoteMarkAt = Get-Date }
+            $script:remoteMarks.Add([pscustomobject]@{ name = $Matches[1]; ms = [int]$Matches[2] })
+            return
+        }
             # The registry's heartbeat and its token reading. The host reports the pool every 10 s
             # whether or not the work prints anything, and a row written here carries `stageSeconds`
             # -- a number that changes because the stage is still running -- so "alive and quiet"
@@ -3346,6 +3558,7 @@ exit `$code
             }
             if ($line -match '__CAMEL_REMOTE_SYNCED__') {
                 $syncedAt = Get-Date
+                Add-PhaseMark 'synced'
                 $what = if ($NoBuild) { "preparing the plan on $sshHost" } else { "building $Config on $sshHost" }
                 Set-BuildPhase 'starting' "[camel-remote] synced $name; $what"
                 $run.lastLine = "[camel-remote] synced $name; $what"
@@ -3526,6 +3739,7 @@ exit `$code
     foreach ($streamFile in @($streamOut, $streamErr)) {
         if (Test-Path -LiteralPath $streamFile) { Remove-Item -LiteralPath $streamFile -Force }
     }
+    Add-PhaseMark 'ssh'
     $streamProc = Start-HostProcess -Exe $sshExe `
         -Arguments @('-o', 'ConnectTimeout=20', $sshHost, "bash '$remoteScratch/run.sh'") `
         -OutFile $streamOut -ErrFile $streamErr
@@ -4099,6 +4313,77 @@ if ($Latest -and $FetchFile -ne '') {
         Write-Host ("[camel-remote] state=noslot: the host did not start this run -- it waited {0} s for the {1} and gave up (-SlotWaitSeconds). A lock it needs was held, so this is a run that was not started rather than one that failed: nothing above is a reading" -f `
             $SlotWaitSeconds, $run.noslotWaitedFor)
     }
+    # The transfer's own breakdown, under -TracePhases. Two lines: where the transfer's seconds went,
+    # and what travelled. Segments are the distance between consecutive marks, each named by the mark
+    # it ends at, so a run whose host took the fast path simply has no `fetch`/`checkout`/`clean`/
+    # `apply` segment -- "the segment is absent" and "the segment was zero" stay different readings.
+    # `connect` is the one segment spanning two clocks: it is measured here, from spawning ssh to the
+    # first mark the host printed, and it therefore includes ssh's handshake *and* the host's first
+    # line reaching this side (the stream is polled every 150 ms, so it is good to about that).
+    if ($TracePhases) {
+        # Inside a try: this is a diagnostic, so it must not be able to decide the run. It already
+        # did once -- a format expression that threw after a green run turned its exit into 1.
+        try {
+        $segments = New-Object System.Collections.Generic.List[string]
+        $prevMark = $null
+        foreach ($mark in $script:phaseMarks) {
+            if ($null -eq $prevMark) { $prevMark = $mark; continue }
+            # `synced` is this side's reading of the host's marker: it closes the timeline, and the
+            # host segments plus `poll` already account for the seconds it spans.
+            if ($mark.name -eq 'synced') { continue }
+            $label = switch ($mark.name) {
+                'push'   { 'local-before-push' }
+                'pushed' { 'push' }
+                'status' { 'local-status' }
+                'probe'  { 'local-revparse' }
+                'diff'   { 'local-diff' }
+                'tar'    { 'local-untracked' }
+                'live'   { 'local-worktrees' }
+                'prep'   { 'local-script' }
+                'scp'    { 'scp' }
+                'ssh'    { 'local-spawn' }
+                default  { "local-$($mark.name)" }
+            }
+            $segments.Add(("{0} {1:N1}" -f $label, ($mark.at - $prevMark.at).TotalSeconds))
+            $prevMark = $mark
+        }
+        if ($null -ne $script:firstRemoteMarkAt -and $null -ne $prevMark) {
+            $segments.Add(("connect {0:N1}" -f ($script:firstRemoteMarkAt - $prevMark.at).TotalSeconds))
+        }
+        $prevMs = $null
+        foreach ($mark in $script:remoteMarks) {
+            if ($null -eq $prevMs) { $prevMs = $mark.ms; continue }
+            # The division is parenthesised: `-f` binds tighter than `/`, so an unparenthesised
+            # `"{0} {1:N1}" -f $label, ($a - $b) / 1000.0` formats first and then divides the
+            # formatted *string* -- which threw, and a diagnostic that can end a green run is worse
+            # than no diagnostic (measured here on the first traced run: exit 1 with RUN_EXIT=0).
+            $segments.Add(("host-{0} {1:N1}" -f $mark.name, (($mark.ms - $prevMs) / 1000.0)))
+            $prevMs = $mark.ms
+        }
+        # The time the marker took to reach this side after the host's last mark: the reader's poll
+        # interval plus whatever the host's own tail cost. Stacked with the host segments it closes
+        # the transfer exactly.
+        if ($null -ne $syncedAt -and $null -ne $script:firstRemoteMarkAt -and $null -ne $prevMs) {
+            $pollLag = ($syncedAt - $script:firstRemoteMarkAt).TotalSeconds - ($prevMs / 1000.0)
+            $segments.Add(("poll {0:N1}" -f $pollLag))
+        }
+        $transferSeconds = if ($null -ne $syncedAt) { ($syncedAt - $startedAt).TotalSeconds } else { ($finishedAt - $startedAt).TotalSeconds }
+        Write-Host ("[phase] transfer {0:N1} s: {1}" -f $transferSeconds, ($segments -join ', '))
+        $scratchBytes = 0
+        try {
+            $scratchBytes = ((Get-ChildItem -LiteralPath $scratch -Recurse -File -ErrorAction SilentlyContinue |
+                Measure-Object -Property Length -Sum).Sum)
+        } catch { $scratchBytes = 0 }
+        $patchBytes = if (Test-Path -LiteralPath $patchFile) { (Get-Item -LiteralPath $patchFile).Length } else { 0 }
+        $tarText = if (Test-Path -LiteralPath $untrackedTar) { "{0} B of untracked files" -f (Get-Item -LiteralPath $untrackedTar).Length } else { 'no untracked files' }
+        $pushText = if ($pushProgress) { $pushProgress } else { 'no pack written (nothing to send)' }
+        Write-Host ("[phase] travelled: {0} changed file(s), patch {1} B; {2}; scp {3} file(s), {4} B; push: {5}" -f `
+            $changedCount, $patchBytes, $tarText, (@(Get-ChildItem -LiteralPath $scratch -Recurse -File -ErrorAction SilentlyContinue)).Count, `
+            $scratchBytes, $pushText)
+        } catch {
+            Write-Host ("[phase] the segment line could not be built: {0}" -f $_)
+        }
+    }
     if ($exitUnknown) {
         # The third state, stated once and in the place the reader looks for the verdict: the code
         # was not obtained, the readings above are the run's, and this is neither a pass nor a fail.
@@ -4125,36 +4410,15 @@ if ($Latest -and $FetchFile -ne '') {
     }
     exit $code
 } finally {
-    # The staging branch was this run's own scratch: the host checkout fetched it and keeps its
-    # own branch, so the ref is dropped here -- after a normal finish, an exception or Ctrl-C
-    # alike. Best-effort: a ref left behind means the next run force-pushes over it, never a
-    # failed run, and the pile of stale lane-* refs this replaces is exactly what happened when
-    # nothing ever deleted them.
-    #
-    # Bounded, because this runs on the way out of a run that has already produced its readings: git
-    # starts its own ssh for it, and a git (or an ssh under it) that does not return would hold the
-    # whole gate open *after* the exit code was decided -- the same shape as the stream hang above,
-    # one layer down. A ref left behind is harmless; the next run force-pushes over it.
-    if ($stagingPushed) {
-        try {
-            $deleteOut = Join-Path ([System.IO.Path]::GetTempPath()) "camel-delete-$PID.txt"
-            $deleteErr = "$deleteOut.err"
-            $gitExe = (Get-Command git -ErrorAction SilentlyContinue)
-            $gitExe = if ($null -ne $gitExe) { $gitExe.Source } else { 'git' }
-            $gitProc = Start-HostProcess -Exe $gitExe `
-                -Arguments @('-C', $Path, 'push', '--quiet', "$sshHost`:$bare", '--delete', "refs/heads/$branch") `
-                -OutFile $deleteOut -ErrFile $deleteErr
-            if (-not $gitProc.WaitForExit([math]::Max(1000, $FinishTimeoutSeconds * 1000))) {
-                Stop-HostProcess $gitProc
-                Write-Host ("[camel-remote] the staging ref refs/heads/{0} was not deleted within {1} s; the next run force-pushes over it" -f `
-                    $branch, $FinishTimeoutSeconds)
-            }
-            foreach ($deleteFile in @($deleteOut, $deleteErr)) {
-                try { if (Test-Path -LiteralPath $deleteFile) { Remove-Item -LiteralPath $deleteFile -Force } } catch { }
-            }
-        } catch {
-        }
-    }
+    # The staging ref is left in place. It used to be deleted here, on the argument that the ref was
+    # this run's own scratch and that never deleting them had produced a pile of stale lane-* refs.
+    # What that pile actually cost was a non-fast-forward push when a name was reused, and the push
+    # has been forced since; what the deletion costs is the one nearby "have" the bare would
+    # otherwise offer the next push of the same branch. Measured on one branch at one commit: with
+    # the ref present the push sends 11 objects in 0.9 s, with it gone 4 438 objects in 2.0 s --
+    # because the bare's nearest remaining ref sat on the far side of a merge. One ref per branch
+    # name, overwritten by a forced push, and it also removes the extra ssh this delete opened after
+    # every run's exit code had already been decided.
     # Whatever happened -- normal finish, exception, Ctrl-C -- no holder may keep claiming that this
     # run is still going. This is a no-op after the normal path already completed the run. The two
     # files are cleared independently: a failure on one must not skip the other.

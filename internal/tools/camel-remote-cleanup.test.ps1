@@ -55,7 +55,7 @@ $script:skipped = 0
 # first `Check` after the harness's output asserts), plus its exit code and that assertion itself.
 # A run without a bash counts all of them as skipped, so the total is the same number either way and
 # a skipped part B cannot pass for a smaller green one.
-$script:partBChecks = 25
+$script:partBChecks = 40
 $script:partBTotal = $script:partBChecks + 2
 
 function Check {
@@ -206,6 +206,14 @@ Check 'the remote script is the one that carries the guard' `
     ([regex]::IsMatch($srcText, '(?m)^\$cleanupGuard$')) 'no line reading "$cleanupGuard" in the remote script'
 Check 'the guard is defined once in the fragment' `
     (([regex]::Matches($guard, 'cleanup_host_checkouts\(\)')).Count -eq 1) 'the fragment defines it more than once'
+# The sweep of staging refs is the one whose grace period is a policy, not a mechanism: it must be
+# the six hours the fragment documents, and the call must pass exactly that, because a shorter one
+# reaps a merge seat's own `seat/<...>` ref while the seat is still fetching it.
+Check 'the staging-ref sweep is called with a six-hour grace' `
+    ([regex]::IsMatch($srcText, '(?m)^cleanup_staging_refs [^\r\n]*''360''$')) `
+    'the call does not pass 360'
+Check 'the sweep keeps a ref it cannot date rather than removing it' `
+    ([regex]::IsMatch($guard, '(?s)age could not be read.*?continue')) 'no such branch in the fragment'
 
 # --- Part B: the guard, in bash ----------------------------------------------
 Write-Host ''
@@ -237,7 +245,7 @@ if (-not $guard) {
         'mk() {',
         '    mkdir -p "$T/$1"',
         '    echo x > "$T/$1/file"',
-        '    touch -d "2 hours ago" "$T/$1/file" "$T/$1"',
+        '    touch -d "8 hours ago" "$T/$1/file" "$T/$1"',
         '}',
         '# the creation record a run writes when it creates a checkout (rule 12)',
         'mkrec() { mkdir -p "$T/.records"; printf "%s\t%s\t%s\n" "test-run" "2026-11-24T00:00:00+08:00" "$T/$1" > "$T/.records/$1"; }',
@@ -248,7 +256,7 @@ if (-not $guard) {
         'mkdir -p "$T/bin" "$T/x-test-tmp"',
         '# the cleanup root and its record are bookkeeping, not checkouts: both must survive the sweep',
         'mkdir -p "$T/tmp/lane-20260101-000000/checkout"',
-        'touch -d "2 hours ago" "$T/tmp/lane-20260101-000000/checkout"',
+        'touch -d "8 hours ago" "$T/tmp/lane-20260101-000000/checkout"',
         '# a live run holds its own checkout''s lock, and a process works inside probe-f. Both have to',
         '# outlive the sweep, and the sweep has no bound this file can know: it forks twice per process',
         '# per candidate checkout (one `$(readlink ...)` for the cwd, one for the exe), so its cost is',
@@ -327,6 +335,48 @@ if (-not $guard) {
         'case "$out" in *"keeping host checkout stray-g: no creation record"*) pass "an unrecorded checkout is kept and named";; *) bad "unrecorded checkout kept" "$out";; esac',
         '[ -d "$T/stray-g" ] && pass "the unrecorded checkout is still there" || bad "unrecorded checkout still there"',
         '[ -d "$T/tmp/lane-20260101-000000/checkout" ] && pass "the cleanup root is not swept" || bad "cleanup root swept"',
+        '',
+        '# --- staging refs follow the branches that exist here',
+        '# The bare keeps one ref per branch that ever ran (that is what makes the next push of the',
+        '# branch small), so the sweep is the only thing that ever removes one. What each fixture is for:',
+        '#   live-one        named in the keep list            -> kept, twice',
+        '#   camel-sha-*     a detached run''s commit entry      -> kept',
+        '#   camel-baseline-* a baseline checkout''s entry      -> kept',
+        '#   gone-one        not a branch here, old            -> removed and named',
+        '#   young-unknown   not a branch here, written now    -> kept by the grace period',
+        'S="$T/staging/Camel.git"',
+        'git init -q --bare "$S" && pass "the staging fixture is a bare repository" || bad "the staging fixture is a bare repository"',
+        'emptytree=$(git -C "$S" hash-object -t tree /dev/null)',
+        'c1=$(git -C "$S" -c user.name=t -c user.email=t@e commit-tree "$emptytree" -m one)',
+        'for r in live-one gone-one camel-sha-abc123 camel-baseline-abc123def456 young-unknown; do git -C "$S" update-ref "refs/heads/$r" "$c1"; done',
+        'touch -d "8 hours ago" "$S/refs/heads/live-one" "$S/refs/heads/gone-one" "$S/refs/heads/camel-sha-abc123" "$S/refs/heads/camel-baseline-abc123def456"',
+        'cleanup_staging_refs "$S" "live-one develop" "1" "360" > "$O/refs1.txt" 2>&1',
+        'removed1=$staging_refs_removed',
+        'out=$(cat "$O/refs1.txt")',
+        'git -C "$S" rev-parse --verify --quiet refs/heads/gone-one >/dev/null && bad "a ref with no local branch is removed" || pass "a ref with no local branch is removed"',
+        'case "$out" in *"removed staging ref refs/heads/gone-one: no local branch of that name"*) pass "the removed ref is named";; *) bad "the removed ref is named" "$out";; esac',
+        'git -C "$S" rev-parse --verify --quiet refs/heads/live-one >/dev/null && pass "a ref whose branch exists is kept" || bad "a ref whose branch exists is kept"',
+        'git -C "$S" rev-parse --verify --quiet refs/heads/camel-sha-abc123 >/dev/null && pass "a detached run''s commit ref is kept" || bad "a detached run''s commit ref is kept"',
+        'git -C "$S" rev-parse --verify --quiet refs/heads/camel-baseline-abc123def456 >/dev/null && pass "a baseline checkout''s commit ref is kept" || bad "a baseline checkout''s commit ref is kept"',
+        'git -C "$S" rev-parse --verify --quiet refs/heads/young-unknown >/dev/null && pass "a ref written inside the grace period is kept" || bad "a ref written inside the grace period is kept"',
+        'case "$out" in *"staging refs: 5, removed 1"*) pass "the sweep reports both counts";; *) bad "the sweep reports both counts" "$out";; esac',
+        '[ "$removed1" = 1 ] && pass "the reclaim is reported to the caller" || bad "the reclaim is reported to the caller" "removed=$removed1"',
+        'cleanup_staging_refs "$S" "live-one develop" "1" "360" > "$O/refs2.txt" 2>&1',
+        'removed2=$staging_refs_removed',
+        'git -C "$S" rev-parse --verify --quiet refs/heads/live-one >/dev/null && pass "a second sweep still keeps it" || bad "a second sweep still keeps it"',
+        '[ "$removed2" = 0 ] && pass "a second sweep removes nothing" || bad "a second sweep removes nothing" "removed=$removed2"',
+        '# A branch list that could not be read is not a list of no branches: nothing may go.',
+        'git -C "$S" update-ref refs/heads/gone-two "$c1"',
+        'touch -d "8 hours ago" "$S/refs/heads/gone-two"',
+        'cleanup_staging_refs "$S" "live-one" "0" "360" > "$O/refs3.txt" 2>&1',
+        'removed3=$staging_refs_removed',
+        'out=$(cat "$O/refs3.txt")',
+        'git -C "$S" rev-parse --verify --quiet refs/heads/gone-two >/dev/null && pass "a failed branch reading removes nothing" || bad "a failed branch reading removes nothing" "$out"',
+        'case "$out" in *"could not say which branches exist"*) pass "a failed branch reading says why";; *) bad "a failed branch reading says why" "$out";; esac',
+        '[ "$removed3" = 0 ] && pass "a failed branch reading reports no reclaim" || bad "a failed branch reading reports no reclaim" "removed=$removed3"',
+        'cleanup_staging_refs "$T/nope" "live-one" "1" "360" > "$O/refs4.txt" 2>&1',
+        'out=$(cat "$O/refs4.txt")',
+        'case "$out" in *"is not a repository this run can read"*) pass "a bare that cannot be read is named and left alone";; *) bad "a bare that cannot be read is named" "$out";; esac',
         '',
         '# Closing the gates is what ends the two fixtures: their readers see EOF and exit.',
         'exec 9>&- 10>&-',
