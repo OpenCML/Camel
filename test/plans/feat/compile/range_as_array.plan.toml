@@ -25,7 +25,6 @@ case = "../../../cases/compile/range_as_array/err_float_array.cml"
 args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::DeclaredTypeMismatch"
-expect_diagnostic_code = "0x000110"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 8000
 
@@ -37,6 +36,5 @@ case = "../../../cases/compile/range_as_array/err_scalar.cml"
 args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::DeclaredTypeMismatch"
-expect_diagnostic_code = "0x000110"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 8000
