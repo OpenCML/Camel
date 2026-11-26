@@ -141,6 +141,10 @@ pwsh -NoProfile -File <你的工作树>\internal\tools\camel-remote.ps1 `
   $p.Id | Set-Content 'D:\Temp\<lane>-<plan>.pid'
   ```
   开工先 `Get-Content $log -Tail 40`；**PID 还活着就不起第二条**；PID 死了且 log 里没有 `[SUMMARY]`，才按同一形状再起一次。
+· **批量改文本只用 `edit` 的 `replace_all`，不要用 `Set-Content` / `-NoNewline` 之类的整文件重写**
+  （2026-11-27 一条车道用它做批量替换，把一个 234 行的用例折成 1 行；靠 `git checkout --` 从提交恢复才没损失，
+  最终 diff 与预期一致，但这是一次量具事故）。整文件重写会把你没打算改的换行、BOM、编码一起改掉，
+  而 diff 只看内容，看不出来。
 · **判断一条 run 还在不在跑，只看日志，不看父进程。** 用 `Start-Process` 有意脱离父进程时，**父进程一定是死的**
   —— 「父进程已死」于是把每一条正常的落盘 run 都判成崩溃遗留。2026-11-27 协调者按这条错判，`taskkill /T /F`
   杀掉了别条车道一条正在排队的 run（已记为客户/协调者侧缺陷）；**同一晚稍后他又照同一条错判做了一次**
