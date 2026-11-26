@@ -147,6 +147,67 @@ Check 'the fetch asks the host about the run it named' ($tool -like '*New-CamelR
 Check 'a missing run directory is reported and nothing is fetched' ($tool -like '*the host has no run directory $runName*nothing was fetched*')
 Check 'the old flag is gone' (($tool -notmatch '\$Latest\b') -and ($tool -notmatch '-Latest\b'))
 
+# --- 7. -FetchFile without -FromThisRun: did this run write the file? ---------
+# The local copy of the file travels to the host on purpose (a two-run comparison needs the previous
+# reading there), so a run that does not write it leaves the pushed copy in place, and a plain fetch
+# would hand last run's reading back as this run's. The host's two fragments -- the stamp taken before
+# the plan and the stage after it -- are run for real over planted directories; a command between
+# them plays the plan.
+if ($null -eq $bash) {
+    Write-Host '  SKIP  the fetch stage against planted trees: no Git for Windows bash found'
+} else {
+    $rel = 'test/results/report.json'
+    $hostScript = {
+        param([string]$Tree, [string]$Plan)
+        $stamp = New-CamelFetchStampCommand -Rel $rel
+        $stage = New-CamelFetchStageCommand -Rel $rel
+        $treePosix = $Tree -replace '\\', '/'
+        $text = "R='$treePosix'`n$stamp`n$Plan`n$stage`n"
+        # Through a file: Windows PowerShell 5.1 strips the double quotes from a native argument.
+        $scriptFile = Join-Path $Tree 'host-stage.sh'
+        [System.IO.File]::WriteAllText($scriptFile, ($text -replace "`r`n", "`n"), (New-Object System.Text.UTF8Encoding($false)))
+        return ((& $bash $scriptFile.Replace('\', '/')) | Out-String)
+    }
+    $tree2 = Join-Path ([System.IO.Path]::GetTempPath()) ('camel-fetch-stage-' + [guid]::NewGuid().ToString('N'))
+    try {
+        New-Item -ItemType Directory -Path (Join-Path $tree2 'test/results') -Force | Out-Null
+        $file = Join-Path $tree2 'test/results/report.json'
+
+        # A pushed copy the run does not rewrite.
+        Set-Content -LiteralPath $file -Value 'LOCAL-MARKER-9f2c'
+        $out = & $hostScript $tree2 'sleep 1'
+        Check 'a pushed file the run does not rewrite is refused with the line saying so' `
+            ($out -like '*the run did not write test/results/report.json; the file on the host is the copy this run pushed in*') $out
+        Check 'a refused file is not sent' (($out -notlike '*__CAMEL_REMOTE_FETCH_BEGIN__*') -and ($out -notlike '*TE9DQUw*')) $out
+        Check 'a refusal leaves the marker the tool turns into its nothing-was-fetched code' ($out -like '*FETCH_UNCHANGED=test/results/report.json*') $out
+
+        # A file the run rewrites, in the same second as the push.
+        $out = & $hostScript $tree2 'echo FRESH-READING > "$R/test/results/report.json"'
+        Check 'a file the run rewrites is fetched' (($out -like '*__CAMEL_REMOTE_FETCH_BEGIN__*') -and ($out -like '*__CAMEL_REMOTE_FETCH_END__*')) $out
+        $b64 = (($out -split "\r?\n") | Where-Object { $_ -match '^[A-Za-z0-9+/=]{8,}$' }) -join ''
+        $decoded = ''
+        if ($b64 -ne '') { $decoded = [System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String($b64)).Trim() }
+        Check 'what is fetched is the run''s reading, not the pushed one' ($decoded -eq 'FRESH-READING') $decoded
+
+        # Absent before, written by the run.
+        Remove-Item -LiteralPath $file -Force
+        $out = & $hostScript $tree2 'echo NEW-READING > "$R/test/results/report.json"'
+        Check 'a file absent before and written by the run is fetched' ($out -like '*__CAMEL_REMOTE_FETCH_BEGIN__*') $out
+
+        # Absent before and after.
+        Remove-Item -LiteralPath $file -Force
+        $out = & $hostScript $tree2 'true'
+        Check 'a file absent before and after is refused, saying the host has none' `
+            (($out -like '*the run did not write test/results/report.json, and the host has none*') -and ($out -notlike '*__CAMEL_REMOTE_FETCH_BEGIN__*')) $out
+    } finally {
+        Remove-Item -LiteralPath $tree2 -Recurse -Force -ErrorAction SilentlyContinue
+    }
+}
+Check 'the tool takes the stamp once the tree is in place and before the plan' `
+    ($tool -match '(?s)phase_mark apply\s+fi\s+\$fetchStamp.*\$planRunStage')
+Check 'the tool turns a refused fetch into its nothing-was-fetched code' `
+    ($tool -match '\$fetchRefused -and \$FetchFile -ne .. -and \$code -eq 0\) \{ \$code = 2 \}')
+
 Write-Host ''
 if ($script:failed -eq 0) {
     Write-Host "PASS camel-remote-fetch: $($script:checked) check(s)"
