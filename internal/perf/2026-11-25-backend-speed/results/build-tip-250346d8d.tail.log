@@ -1,0 +1,60 @@
+  358 | #define _CRT_DEPRECATE_TEXT(_Text) __declspec(deprecated(_Text))
+
+      |                                               ^
+
+2 warnings generated.
+
+[707/796] Building CXX object src/tools/debugger/CMakeFiles/camel-debugger_objects.dir/Release/src/state.cpp.obj
+[708/796] Building CXX object test/tools/parsecheck/CMakeFiles/camel-parsecheck_objects.dir/Release/snapshot.cpp.obj
+[709/796] Building CXX object src/stdlib/python/CMakeFiles/py_bridge312.dir/Release/bridge_runtime.cpp.obj
+[710/796] Building CXX object src/tools/lang-server/CMakeFiles/camel-ls_objects.dir/Release/server.cpp.obj
+[711/796] Building CXX object src/tools/debugger/CMakeFiles/camel-debugger_objects.dir/Release/main.cpp.obj
+[712/796] Building CXX object src/tools/debugger/CMakeFiles/camel-debugger_objects.dir/Release/src/compile.cpp.obj
+[713/796] Building CXX object src/tools/format/CMakeFiles/camel-format_objects.dir/Release/fmt.cpp.obj
+[714/796] Building CXX object src/tools/camel-cli/CMakeFiles/camel_objects.dir/Release/main.cpp.obj
+[715/796] Building CXX object src/tools/camel-cli/CMakeFiles/camel_objects.dir/Release/timeit.cpp.obj
+[716/796] Building CXX object src/tools/debugger/CMakeFiles/camel-debugger_objects.dir/Release/src/core/values.cpp.obj
+[717/796] Building CXX object src/tools/profiler/CMakeFiles/camel-pr_objects.dir/Release/main.cpp.obj
+[718/796] Building CXX object test/tools/parsecheck/CMakeFiles/camel-parsecheck_objects.dir/Release/__/__/__/src/tools/format/fmt.cpp.obj
+[719/796] Building CXX object src/tools/debugger/CMakeFiles/camel-debugger_objects.dir/Release/src/core/pipeline.cpp.obj
+[720/796] Building CXX object src/stdlib/tiles/CMakeFiles/tiles-module-lease.dir/Release/__/__/__/test/cases/modules/tiles/module_lease.cpp.obj
+[721/796] Building CXX object src/tools/format/CMakeFiles/camel-format_objects.dir/Release/main.cpp.obj
+[722/796] Building CXX object test/tools/parsecheck/CMakeFiles/camel-parsecheck_objects.dir/Release/fuzz.cpp.obj
+[723/796] Building CXX object src/stdlib/tiles/CMakeFiles/tiles-module-lease.dir/Release/src/index_expr.cpp.obj
+[724/796] Building CXX object test/tools/oprecord/CMakeFiles/camel-oprecord_objects.dir/Release/main.cpp.obj
+[725/796] Building CXX object src/stdlib/tiles/CMakeFiles/tiles-module-lease.dir/Release/src/cuda_pool.cpp.obj
+[726/796] Building CXX object src/stdlib/tiles/CMakeFiles/tiles-module-lease.dir/Release/src/cuda_resources.cpp.obj
+[727/796] Building CXX object src/stdlib/tiles/CMakeFiles/tiles-module-lease.dir/Release/__/__/__/test/cases/modules/tiles/scalar_device.cpp.obj
+[728/796] Building CXX object src/tools/debugger/CMakeFiles/camel-debugger_objects.dir/Release/src/repl.cpp.obj
+[729/796] Building CXX object src/stdlib/tiles/CMakeFiles/tiles-module-lease.dir/Release/src/capability.cpp.obj
+[730/796] Linking CXX shared library src\stdlib\python\Release\py_bridge312.dll
+[731/796] Building CXX object src/stdlib/tiles/CMakeFiles/tiles-module-lease.dir/Release/src/scalar_expr.cpp.obj
+[732/796] Building CXX object src/stdlib/tiles/CMakeFiles/tiles-module-lease.dir/Release/__/std/exec/devices.cpp.obj
+[733/796] Building CXX object src/tools/debugger/CMakeFiles/camel-debugger_objects.dir/Release/src/run.cpp.obj
+[734/796] Building CXX object test/tools/facts/CMakeFiles/camel-facts_objects.dir/Release/main.cpp.obj
+[735/796] Building CXX object test/tools/parsecheck/CMakeFiles/camel-parsecheck_objects.dir/Release/main.cpp.obj
+[736/796] Building CXX object src/tools/debugger/CMakeFiles/camel-debugger_objects.dir/Release/src/core/memory.cpp.obj
+[737/796] Building CXX object src/tools/debugger/CMakeFiles/camel-debugger_objects.dir/Release/src/core/frames.cpp.obj
+[738/796] Building CXX object src/tools/debugger/CMakeFiles/camel-debugger_objects.dir/Release/src/core/explain.cpp.obj
+[739/796] Building CXX object src/tools/codegen/CMakeFiles/camel-codegen_objects.dir/Release/main.cpp.obj
+[740/796] Building CXX object src/stdlib/tiles/CMakeFiles/tiles-module-lease.dir/Release/src/cuda_backend.cpp.obj
+D:/Projects/Camel-wt/perf/src/stdlib/tiles/src/cuda_backend.cpp:82:35: warning: 'getenv' is deprecated: This function or variable may be unsafe. Consider using _dupenv_s instead. To disable deprecation, use _CRT_SECURE_NO_WARNINGS. See online help for details. [-Wdeprecated-declarations]
+   82 |     if (auto *overridePath = std::getenv("CAMEL_TILES_NVRTC"))
+      |                                   ^
+G:\Windows Kits\10\Include\10.0.26100.0\ucrt\stdlib.h:1183:20: note: 'getenv' has been explicitly marked deprecated here
+ 1183 |     _Check_return_ _CRT_INSECURE_DEPRECATE(_dupenv_s)
+      |                    ^
+G:\DevTools\VisualStudio\VC\Tools\MSVC\14.44.35207\include\vcruntime.h:368:55: note: expanded from macro '_CRT_INSECURE_DEPRECATE'
+  368 |         #define _CRT_INSECURE_DEPRECATE(_Replacement) _CRT_DEPRECATE_TEXT(    \
+      |                                                       ^
+G:\DevTools\VisualStudio\VC\Tools\MSVC\14.44.35207\include\vcruntime.h:358:47: note: expanded from macro '_CRT_DEPRECATE_TEXT'
+  358 | #define _CRT_DEPRECATE_TEXT(_Text) __declspec(deprecated(_Text))
+      |                                               ^
+D:/Projects/Camel-wt/perf/src/stdlib/tiles/src/cuda_backend.cpp:86:27: warning: 'getenv' is deprecated: This function or variable may be unsafe. Consider using _dupenv_s instead. To disable deprecation, use _CRT_SECURE_NO_WARNINGS. See online help for details. [-Wdeprecated-declarations]
+   86 |     if (auto *root = std::getenv("CUDA_PATH"))
+      |                           ^
+G:\Windows Kits\10\Include\10.0.26100.0\ucrt\stdlib.h:1183:20: note: 'getenv' has been explicitly marked deprecated here
+ 1183 |     _Check_return_ _CRT_INSECURE_DEPRECATE(_dupenv_s)
+      |                    ^
+G:\DevTools\VisualStudio\VC\Tools\MSVC\14.44.35207\include\vcruntime.h:368:55: note: expanded from macro '_CRT_INSECURE_DEPRECATE'
+  368 |         #define _CRT_INSECURE_DEPRECATE(_Replacement) _CRT_DEPRECATE_TEXT(    \

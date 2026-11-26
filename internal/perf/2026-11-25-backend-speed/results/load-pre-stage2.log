@@ -1,0 +1,71 @@
+[load] host=KOGLER-WORKSTAT cores=28 window=60s step=4s samples=15
+[load] busy_cores avg=9.46 max=10.95 samples=[10.95, 10.17, 9.89, 9.77, 9.89, 9.47, 9.59, 9.96, 10.14, 9.7, 9.36, 8.2, 8.06, 8.25, 8.55]
+[load] quiet_line=4.2 busy_cores (<15%) -> CONTENDED (readings at or above the line: 15 of 15)
+pre-stage2-1fa180c4f call/nvm exit=0 first=552.7071 steady=549.1443999999999
+pre-stage2-1fa180c4f call/fvm exit=0 first=150.5712 steady=152.33204999999998
+pre-stage2-1fa180c4f call/jit exit=0 first=4.6985 steady=4.44625
+pre-stage2-1fa180c4f call/prl-1 exit=0 first=154.1966 steady=149.44305
+pre-stage2-1fa180c4f call/prl-4 exit=0 first=154.0627 steady=147.084
+pre-stage2-1fa180c4f call/prl-16 exit=0 first=149.5225 steady=152.00099999999998
+pre-stage2-1fa180c4f loop/nvm exit=0 first=764.261 steady=854.5633
+pre-stage2-1fa180c4f loop/fvm exit=0 first=96.4431 steady=96.5616
+pre-stage2-1fa180c4f loop/jit exit=0 first=115.1025 steady=111.78720000000001
+pre-stage2-1fa180c4f loop/prl-1 exit=0 first=93.2929 steady=102.38935000000001
+pre-stage2-1fa180c4f loop/prl-4 exit=0 first=100.9085 steady=100.4554
+pre-stage2-1fa180c4f loop/prl-16 exit=0 first=97.2218 steady=96.10294999999999
+pre-stage2-1fa180c4f tensor/nvm exit=0 first=40.604 steady=38.98255
+pre-stage2-1fa180c4f tensor/fvm exit=0 first=41.8204 steady=40.36335
+pre-stage2-1fa180c4f tensor/jit exit=0 first=44.7771 steady=40.2543
+pre-stage2-1fa180c4f tensor/prl-1 exit=0 first=43.0702 steady=39.576800000000006
+pre-stage2-1fa180c4f tensor/prl-4 exit=0 first=26.9177 steady=25.3092
+pre-stage2-1fa180c4f tensor/prl-16 exit=0 first=37.5946 steady=33.7328
+pre-stage2-1fa180c4f closure/nvm exit=0 first=0.8933 steady=0.7980499999999999
+pre-stage2-1fa180c4f closure/fvm exit=0 first=1.0925 steady=0.8311999999999999
+pre-stage2-1fa180c4f closure/jit exit=0 first=1.4445 steady=1.23235
+pre-stage2-1fa180c4f closure/prl-1 exit=0 first=1.9801 steady=1.52515
+pre-stage2-1fa180c4f closure/prl-4 exit=0 first=2.2272 steady=1.8779
+pre-stage2-1fa180c4f closure/prl-16 exit=0 first=3.3019 steady=2.7459
+wrote D:\Projects\Camel-wt\perf\internal\perf\2026-11-25-backend-speed\results\pre-stage2-1fa180c4f.timeit.csv
+round load: busy_cores=10.82 of 28 (2026-11-25T10:36:58.379Z .. 2026-11-25T10:37:14.375Z)
+wrote D:\Projects\Camel-wt\perf\internal\perf\2026-11-25-backend-speed\results\pre-stage2-1fa180c4f.timeit.json
+pre-stage2-1fa180c4f branch/nvm exit=0 first=103 steady=98
+pre-stage2-1fa180c4f branch/fvm exit=0 first=115 steady=83
+pre-stage2-1fa180c4f branch/jit exit=0 first=90 steady=84
+pre-stage2-1fa180c4f branch/prl-1 exit=0 first=92 steady=87
+pre-stage2-1fa180c4f branch/prl-4 exit=0 first=91 steady=88
+pre-stage2-1fa180c4f branch/prl-16 exit=0 first=91 steady=90.5
+wrote D:\Projects\Camel-wt\perf\internal\perf\2026-11-25-backend-speed\results\pre-stage2-1fa180c4f.process.csv
+round load: busy_cores=10.14 of 28 (2026-11-25T10:37:14.467Z .. 2026-11-25T10:37:17.218Z)
+wrote D:\Projects\Camel-wt\perf\internal\perf\2026-11-25-backend-speed\results\pre-stage2-1fa180c4f.process.json
+pre-stage2-1fa180c4f call/nvm exit=0 1 lines
+pre-stage2-1fa180c4f call/fvm exit=0 1 lines
+pre-stage2-1fa180c4f call/jit exit=0 1 lines
+pre-stage2-1fa180c4f call/prl-1 exit=0 1 lines
+pre-stage2-1fa180c4f call/prl-4 exit=0 1 lines
+pre-stage2-1fa180c4f call/prl-16 exit=0 1 lines
+pre-stage2-1fa180c4f loop/nvm exit=0 1 lines
+pre-stage2-1fa180c4f loop/fvm exit=0 1 lines
+pre-stage2-1fa180c4f loop/jit exit=0 1 lines
+pre-stage2-1fa180c4f loop/prl-1 exit=0 1 lines
+pre-stage2-1fa180c4f loop/prl-4 exit=0 1 lines
+pre-stage2-1fa180c4f loop/prl-16 exit=0 1 lines
+pre-stage2-1fa180c4f tensor/nvm exit=0 1 lines
+pre-stage2-1fa180c4f tensor/fvm exit=0 1 lines
+pre-stage2-1fa180c4f tensor/jit exit=0 1 lines
+pre-stage2-1fa180c4f tensor/prl-1 exit=0 1 lines
+pre-stage2-1fa180c4f tensor/prl-4 exit=0 1 lines
+pre-stage2-1fa180c4f tensor/prl-16 exit=0 1 lines
+pre-stage2-1fa180c4f branch/nvm exit=0 7 lines
+pre-stage2-1fa180c4f branch/fvm exit=0 7 lines
+pre-stage2-1fa180c4f branch/jit exit=0 7 lines
+pre-stage2-1fa180c4f branch/prl-1 exit=0 7 lines
+pre-stage2-1fa180c4f branch/prl-4 exit=0 7 lines
+pre-stage2-1fa180c4f branch/prl-16 exit=0 7 lines
+pre-stage2-1fa180c4f closure/nvm exit=0 5 lines
+pre-stage2-1fa180c4f closure/fvm exit=0 5 lines
+pre-stage2-1fa180c4f closure/jit exit=0 5 lines
+pre-stage2-1fa180c4f closure/prl-1 exit=0 5 lines
+pre-stage2-1fa180c4f closure/prl-4 exit=0 5 lines
+pre-stage2-1fa180c4f closure/prl-16 exit=0 5 lines
+round load: busy_cores=10.69 of 28 (2026-11-25T10:37:17.289Z .. 2026-11-25T10:37:21.448Z)
+wrote D:\Projects\Camel-wt\perf\internal\perf\2026-11-25-backend-speed\results\pre-stage2-1fa180c4f.stdout.json

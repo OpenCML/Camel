@@ -1,0 +1,60 @@
+  358 | #define _CRT_DEPRECATE_TEXT(_Text) __declspec(deprecated(_Text))
+
+      |                                               ^
+
+D:/Projects/Camel-wt/perf/tools/debugger/src/core/debug_core.cpp:660:13: warning: enumeration value 'Pass' not handled in switch [-Wswitch]
+
+  660 |     switch (step_.kind) {
+
+      |             ^~~~~~~~~~
+
+2 warnings generated.
+
+[666/706] Building CXX object tools/debugger/CMakeFiles/camel-debugger_objects.dir/Release/src/dap/adapter.cpp.obj
+[667/706] Building CXX object tools/debugger/CMakeFiles/camel-debugger_objects.dir/Release/server.cpp.obj
+[668/706] Generating libcamel exports for Release from the dependent targets' objects
+[exports] Release: 696 exported symbols (694 derived from 318 objects, 2 manual)
+[669/706] Linking CXX shared library Release\libcamel.dll
+[670/706] Linking CXX shared library modules\para\Release\para.cmo
+[671/706] Linking CXX shared library modules\this\Release\this.cmo
+[672/706] Linking CXX executable modules\tiles\Release\tiles-async-check.exe
+[673/706] Linking CXX shared library modules\io\Release\io.cmo
+[674/706] Linking CXX executable tools\profiler\Release\camel-pr.exe
+[675/706] Linking CXX shared library modules\hash\Release\hash.cmo
+[676/706] Linking CXX shared library modules\time\Release\time.cmo
+[677/706] Linking CXX shared library modules\fs\Release\fs.cmo
+[678/706] Linking CXX shared library modules\test_support\Release\test_support.cmo
+[679/706] Linking CXX shared library modules\graph\Release\graph.cmo
+[680/706] Linking CXX shared library modules\python\Release\python.cmo
+[681/706] Linking CXX executable tools\codegen\Release\camel-codegen.exe
+[682/706] Linking CXX shared library modules\bytes\Release\bytes.cmo
+[683/706] Linking CXX shared library modules\str\Release\str.cmo
+[684/706] Linking CXX shared module python\Release\_camel.pyd
+[685/706] Linking CXX executable tools\lang-server\Release\camel-ls.exe
+[686/706] Linking CXX shared library modules\math\Release\math.cmo
+[687/706] Linking CXX shared library modules\env\Release\env.cmo
+[688/706] Linking CXX shared library modules\process\Release\process.cmo
+[689/706] Linking CXX shared library modules\sim\Release\sim.cmo
+[690/706] Linking CXX executable tools\format\Release\camel-format.exe
+[691/706] Linking CXX executable modules\tiles\Release\tiles-plan-check.exe
+[692/706] Linking CXX shared library modules\re\Release\re.cmo
+[693/706] Linking CXX executable tools\parsecheck\Release\camel-parsecheck.exe
+[694/706] Linking CXX shared library modules\transforms\Release\transforms.cmo
+[695/706] Linking CXX shared library modules\pyplot\Release\pyplot.cmo
+[696/706] Linking CXX shared library modules\json\Release\json.cmo
+[697/706] Linking CXX executable tools\camel-cli\Release\camel.exe
+[698/706] Linking CXX shared library modules\autodiff\Release\autodiff.cmo
+[699/706] Linking CXX shared library modules\rewrite\Release\rewrite.cmo
+[700/706] Linking CXX shared library modules\tensor\Release\tensor.cmo
+[701/706] Linking CXX executable tools\debugger\Release\camel-db.exe
+[702/706] Linking CXX shared library modules\random\Release\random.cmo
+[703/706] Linking CXX shared library modules\nn\Release\nn.cmo
+[704/706] Linking CXX shared library modules\ckpt\Release\ckpt.cmo
+[705/706] Linking CXX shared library modules\tiles\Release\tiles.cmo
+[706/706] Linking CXX shared library modules\onnx\Release\onnx.cmo
+source tree artifacts: 1302 files under src, include, modules, tools, stdlib, third_party, cmake, no build output in the source tree
+[32m[DONE][0m Copied all build artifacts
+[36m[STEP][0m Collecting Release build artifacts to out/latest/
+[32m[DONE][0m Artifacts collected to out/latest/
+[36m[STEP][0m Stamped out/latest/build-info.json: 15165a9333 (dirty: 1 file(s)), 1304 source files, fingerprint 5cdc918ebc90, options 97805b1e103e (defaults)
+[32m[DONE][0m Release build completed

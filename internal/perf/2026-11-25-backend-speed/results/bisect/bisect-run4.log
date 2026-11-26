@@ -1,0 +1,16 @@
+bisect loop/jit first threshold=400 b6c3aa3204..d492be1360
+step 1 19327493e2 candidates left 9
+   -> 1890.2969 ms (1890.3, 2360.7, 3059.4)
+step 2 b0caf544b7 candidates left 4
+file:///D:/Temp/perf-bisect/bisect.mjs:76
+    if (r.status !== 0) throw new Error(`build failed at ${step}; see ${log}`)
+                              ^
+
+Error: build failed at 2; see D:\Temp\perf-bisect\results\bisect-build-2.log
+    at build (file:///D:/Temp/perf-bisect/bisect.mjs:76:31)
+    at file:///D:/Temp/perf-bisect/bisect.mjs:161:5
+    at ModuleJob.run (node:internal/modules/esm/module_job:561:25)
+    at async node:internal/modules/esm/loader:647:26
+    at async asyncRunEntryPointWithESMLoader (node:internal/modules/run_main:101:5)
+
+Node.js v24.21.0

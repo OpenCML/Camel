@@ -1,0 +1,71 @@
+[load] host=KOGLER-WORKSTAT cores=28 window=60s step=4s samples=15
+[load] busy_cores avg=8.97 max=9.84 samples=[8.32, 9.84, 9.27, 8.85, 8.34, 9.64, 9.61, 9.56, 9.66, 9.09, 9.16, 8.52, 8.27, 8.24, 8.23]
+[load] quiet_line=4.2 busy_cores (<15%) -> CONTENDED (readings at or above the line: 15 of 15)
+audit-15165a9333 call/nvm exit=0 first=443.5915 steady=431.25175
+audit-15165a9333 call/fvm exit=0 first=114.3625 steady=115.59815
+audit-15165a9333 call/jit exit=0 first=4.4519 steady=4.28795
+audit-15165a9333 call/prl-1 exit=0 first=117.0852 steady=112.38645
+audit-15165a9333 call/prl-4 exit=0 first=113.9754 steady=115.6023
+audit-15165a9333 call/prl-16 exit=0 first=120.1093 steady=117.58085
+audit-15165a9333 loop/nvm exit=0 first=624.4856 steady=610.0803
+audit-15165a9333 loop/fvm exit=0 first=91.6514 steady=90.94964999999999
+audit-15165a9333 loop/jit exit=0 first=103.876 steady=108.8038
+audit-15165a9333 loop/prl-1 exit=0 first=94.9571 steady=93.14135
+audit-15165a9333 loop/prl-4 exit=0 first=91.4212 steady=93.6559
+audit-15165a9333 loop/prl-16 exit=0 first=96.0901 steady=94.57565
+audit-15165a9333 tensor/nvm exit=0 first=41.0685 steady=40.435950000000005
+audit-15165a9333 tensor/fvm exit=0 first=43.3277 steady=39.31285
+audit-15165a9333 tensor/jit exit=0 first=42.53 steady=39.1288
+audit-15165a9333 tensor/prl-1 exit=0 first=41.0123 steady=38.55825
+audit-15165a9333 tensor/prl-4 exit=0 first=26.079 steady=24.149549999999998
+audit-15165a9333 tensor/prl-16 exit=0 first=34.622 steady=32.944050000000004
+audit-15165a9333 closure/nvm exit=0 first=0.6808 steady=0.5811
+audit-15165a9333 closure/fvm exit=0 first=0.804 steady=0.6698500000000001
+audit-15165a9333 closure/jit exit=0 first=1.0487 steady=0.9273
+audit-15165a9333 closure/prl-1 exit=0 first=1.5309 steady=1.0527
+audit-15165a9333 closure/prl-4 exit=0 first=1.8386 steady=1.30135
+audit-15165a9333 closure/prl-16 exit=0 first=2.4925 steady=2.14045
+wrote D:\Projects\Camel-wt\perf\internal\perf\2026-11-25-backend-speed\results\audit-15165a9333.timeit.csv
+round load: busy_cores=10.88 of 28 (2026-11-25T10:41:56.639Z .. 2026-11-25T10:42:09.957Z)
+wrote D:\Projects\Camel-wt\perf\internal\perf\2026-11-25-backend-speed\results\audit-15165a9333.timeit.json
+audit-15165a9333 branch/nvm exit=0 first=97 steady=98
+audit-15165a9333 branch/fvm exit=0 first=80 steady=78.5
+audit-15165a9333 branch/jit exit=0 first=81 steady=79.5
+audit-15165a9333 branch/prl-1 exit=0 first=116 steady=82.5
+audit-15165a9333 branch/prl-4 exit=0 first=85 steady=82.5
+audit-15165a9333 branch/prl-16 exit=0 first=122 steady=86.5
+wrote D:\Projects\Camel-wt\perf\internal\perf\2026-11-25-backend-speed\results\audit-15165a9333.process.csv
+round load: busy_cores=10.14 of 28 (2026-11-25T10:42:10.054Z .. 2026-11-25T10:42:12.706Z)
+wrote D:\Projects\Camel-wt\perf\internal\perf\2026-11-25-backend-speed\results\audit-15165a9333.process.json
+audit-15165a9333 call/nvm exit=0 1 lines
+audit-15165a9333 call/fvm exit=0 1 lines
+audit-15165a9333 call/jit exit=0 1 lines
+audit-15165a9333 call/prl-1 exit=0 1 lines
+audit-15165a9333 call/prl-4 exit=0 1 lines
+audit-15165a9333 call/prl-16 exit=0 1 lines
+audit-15165a9333 loop/nvm exit=0 1 lines
+audit-15165a9333 loop/fvm exit=0 1 lines
+audit-15165a9333 loop/jit exit=0 1 lines
+audit-15165a9333 loop/prl-1 exit=0 1 lines
+audit-15165a9333 loop/prl-4 exit=0 1 lines
+audit-15165a9333 loop/prl-16 exit=0 1 lines
+audit-15165a9333 tensor/nvm exit=0 1 lines
+audit-15165a9333 tensor/fvm exit=0 1 lines
+audit-15165a9333 tensor/jit exit=0 1 lines
+audit-15165a9333 tensor/prl-1 exit=0 1 lines
+audit-15165a9333 tensor/prl-4 exit=0 1 lines
+audit-15165a9333 tensor/prl-16 exit=0 1 lines
+audit-15165a9333 branch/nvm exit=0 7 lines
+audit-15165a9333 branch/fvm exit=0 7 lines
+audit-15165a9333 branch/jit exit=0 7 lines
+audit-15165a9333 branch/prl-1 exit=0 7 lines
+audit-15165a9333 branch/prl-4 exit=0 7 lines
+audit-15165a9333 branch/prl-16 exit=0 7 lines
+audit-15165a9333 closure/nvm exit=0 5 lines
+audit-15165a9333 closure/fvm exit=0 5 lines
+audit-15165a9333 closure/jit exit=0 5 lines
+audit-15165a9333 closure/prl-1 exit=0 5 lines
+audit-15165a9333 closure/prl-4 exit=0 5 lines
+audit-15165a9333 closure/prl-16 exit=0 5 lines
+round load: busy_cores=10.63 of 28 (2026-11-25T10:42:12.846Z .. 2026-11-25T10:42:16.591Z)
+wrote D:\Projects\Camel-wt\perf\internal\perf\2026-11-25-backend-speed\results\audit-15165a9333.stdout.json

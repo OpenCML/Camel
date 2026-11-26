@@ -1,0 +1,82 @@
+{
+  "cell": "loop/jit",
+  "sample": "first",
+  "threshold": 400,
+  "good": "1efa9e4bb654a20b6cc4849fd2845554d4284c57",
+  "bad": "a14bf9ab38dfc1e14f0d40553b4c97309412484f",
+  "finalRange": [
+    "a14bf9ab38dfc1e14f0d40553b4c97309412484f"
+  ],
+  "steps": [
+    {
+      "step": 1,
+      "commit": "1c53d16bd4fa178025aa450a644f04b017e147ac",
+      "subject": "lanes: the reversal has a ladder of readings, and two debts that cannot be measured yet",
+      "date": "2026-11-23 15:11:24 +0800",
+      "value": 119.6961,
+      "samples": [
+        119.6961,
+        119.3472,
+        120.6458
+      ],
+      "candidates_left": 44,
+      "at": "2026-11-25T11:17:46.578Z"
+    },
+    {
+      "step": 2,
+      "commit": "7172ec564c93b1d954659cd04a5ae49b16154f5c",
+      "subject": "questions: a backward slice's end is the one place the two readings still disagree",
+      "date": "2026-11-23 15:56:35 +0800",
+      "value": 120.4687,
+      "samples": [
+        120.4687,
+        120.8871,
+        114.1458
+      ],
+      "candidates_left": 22,
+      "at": "2026-11-25T11:18:10.146Z"
+    },
+    {
+      "step": 3,
+      "commit": "78221e9f1c07c05b494f233eab6d268ca3fbc4e1",
+      "subject": "Merge develop into fsh-dev",
+      "date": "2026-11-23 08:09:22 +0000",
+      "value": 2018.841,
+      "samples": [
+        2018.841,
+        2768.228,
+        3395.8188
+      ],
+      "candidates_left": 9,
+      "at": "2026-11-25T11:21:15.522Z"
+    },
+    {
+      "step": 4,
+      "commit": "1efa9e4bb654a20b6cc4849fd2845554d4284c57",
+      "subject": "backlog: the three items of this lane, and what is left of C-1123-33",
+      "date": "2026-11-23 15:57:48 +0800",
+      "value": 119.7913,
+      "samples": [
+        119.7913,
+        118.7553,
+        115.9553
+      ],
+      "candidates_left": 5,
+      "at": "2026-11-25T11:24:13.013Z"
+    },
+    {
+      "step": 5,
+      "commit": "a14bf9ab38dfc1e14f0d40553b4c97309412484f",
+      "subject": "merge lane/cleanup",
+      "date": "2026-11-23 16:01:39 +0800",
+      "value": 2050.8164,
+      "samples": [
+        2050.8164,
+        2744.65,
+        3320.486
+      ],
+      "candidates_left": 2,
+      "at": "2026-11-25T11:27:15.813Z"
+    }
+  ]
+}

@@ -1,0 +1,2017 @@
+{
+  "points": [
+    {
+      "label": "audit-15165a9333",
+      "short": "11-13 审计",
+      "sha": "15165a9333"
+    },
+    {
+      "label": "pre-stage2-1fa180c4f",
+      "short": "阶段 2 之前",
+      "sha": "1fa180c4f"
+    },
+    {
+      "label": "integration-6fcee16d0c",
+      "short": "11-25 integration",
+      "sha": "6fcee16d0c"
+    }
+  ],
+  "regressions": [
+    {
+      "program": "loop",
+      "programName": "small_calls (2e6 循环)",
+      "backend": "jit",
+      "from": "阶段 2 之前",
+      "to": "11-25 integration",
+      "fromSha": "1fa180c4f",
+      "toSha": "6fcee16d0c",
+      "aFirst": 115.1025,
+      "aSteady": 111.78720000000001,
+      "bFirst": 1751.6906,
+      "bSteady": 2828.0884,
+      "rFirst": 15.218527833887185,
+      "rSteady": 25.298857114231325,
+      "drift": 1.351858037210722
+    },
+    {
+      "program": "tensor",
+      "programName": "tensor_train",
+      "backend": "prl-4",
+      "from": "阶段 2 之前",
+      "to": "11-25 integration",
+      "fromSha": "1fa180c4f",
+      "toSha": "6fcee16d0c",
+      "aFirst": 26.9177,
+      "aSteady": 25.3092,
+      "bFirst": 65.1065,
+      "bSteady": 64.10305,
+      "rFirst": 2.4187244824037712,
+      "rSteady": 2.5327963744409145,
+      "drift": 1.3248512386942344
+    },
+    {
+      "program": "tensor",
+      "programName": "tensor_train",
+      "backend": "jit",
+      "from": "阶段 2 之前",
+      "to": "11-25 integration",
+      "fromSha": "1fa180c4f",
+      "toSha": "6fcee16d0c",
+      "aFirst": 44.7771,
+      "aSteady": 40.2543,
+      "bFirst": 86.374,
+      "bSteady": 88.46520000000001,
+      "rFirst": 1.92897708873509,
+      "rSteady": 2.1976583868058817,
+      "drift": 1.2195206236361926
+    },
+    {
+      "program": "tensor",
+      "programName": "tensor_train",
+      "backend": "nvm",
+      "from": "阶段 2 之前",
+      "to": "11-25 integration",
+      "fromSha": "1fa180c4f",
+      "toSha": "6fcee16d0c",
+      "aFirst": 40.604,
+      "aSteady": 38.98255,
+      "bFirst": 83.5316,
+      "bSteady": 74.72165,
+      "rFirst": 2.057225889074968,
+      "rSteady": 1.916797387549044,
+      "drift": 1.101341971943701
+    },
+    {
+      "program": "tensor",
+      "programName": "tensor_train",
+      "backend": "prl-1",
+      "from": "阶段 2 之前",
+      "to": "11-25 integration",
+      "fromSha": "1fa180c4f",
+      "toSha": "6fcee16d0c",
+      "aFirst": 43.0702,
+      "aSteady": 39.576800000000006,
+      "bFirst": 88.195,
+      "bSteady": 79.33224999999999,
+      "rFirst": 2.0477035165845523,
+      "rSteady": 2.0045140082068276,
+      "drift": 1.0948453690144873
+    },
+    {
+      "program": "tensor",
+      "programName": "tensor_train",
+      "backend": "prl-16",
+      "from": "阶段 2 之前",
+      "to": "11-25 integration",
+      "fromSha": "1fa180c4f",
+      "toSha": "6fcee16d0c",
+      "aFirst": 37.5946,
+      "aSteady": 33.7328,
+      "bFirst": 61.6662,
+      "bSteady": 65.20125,
+      "rFirst": 1.640294084788773,
+      "rSteady": 1.9328739387183989,
+      "drift": 1.0669918751716228
+    },
+    {
+      "program": "call",
+      "programName": "fib(30)",
+      "backend": "nvm",
+      "from": "阶段 2 之前",
+      "to": "11-25 integration",
+      "fromSha": "1fa180c4f",
+      "toSha": "6fcee16d0c",
+      "aFirst": 552.7071,
+      "aSteady": 549.1443999999999,
+      "bFirst": 853.8609,
+      "bSteady": 948.29295,
+      "rFirst": 1.5448705109813137,
+      "rSteady": 1.7268553589911873,
+      "drift": 1.5010838328636664
+    },
+    {
+      "program": "tensor",
+      "programName": "tensor_train",
+      "backend": "fvm",
+      "from": "阶段 2 之前",
+      "to": "11-25 integration",
+      "fromSha": "1fa180c4f",
+      "toSha": "6fcee16d0c",
+      "aFirst": 41.8204,
+      "aSteady": 40.36335,
+      "bFirst": 64.9245,
+      "bSteady": 69.54429999999999,
+      "rFirst": 1.5524600434237834,
+      "rSteady": 1.7229565930479012,
+      "drift": 1.0214781572017695
+    },
+    {
+      "program": "closure",
+      "programName": "closures",
+      "backend": "prl-1",
+      "from": "11-13 审计",
+      "to": "阶段 2 之前",
+      "fromSha": "15165a9333",
+      "toSha": "1fa180c4f",
+      "aFirst": 1.5309,
+      "aSteady": 1.0527,
+      "bFirst": 1.9801,
+      "bSteady": 1.52515,
+      "rFirst": 1.2934221699653798,
+      "rSteady": 1.448798328108673,
+      "drift": 1.5554767309875144
+    },
+    {
+      "program": "closure",
+      "programName": "closures",
+      "backend": "prl-4",
+      "from": "11-13 审计",
+      "to": "阶段 2 之前",
+      "fromSha": "15165a9333",
+      "toSha": "1fa180c4f",
+      "aFirst": 1.8386,
+      "aSteady": 1.30135,
+      "bFirst": 2.2272,
+      "bSteady": 1.8779,
+      "rFirst": 1.2113564668769716,
+      "rSteady": 1.4430399200829906,
+      "drift": 1.4777701990450796
+    },
+    {
+      "program": "branch",
+      "programName": "MCTS",
+      "backend": "fvm",
+      "from": "11-13 审计",
+      "to": "阶段 2 之前",
+      "fromSha": "15165a9333",
+      "toSha": "1fa180c4f",
+      "aFirst": 80,
+      "aSteady": 78.5,
+      "bFirst": 115,
+      "bSteady": 83,
+      "rFirst": 1.4375,
+      "rSteady": 1.0573248407643312,
+      "drift": 1.139240506329114
+    },
+    {
+      "program": "branch",
+      "programName": "MCTS",
+      "backend": "jit",
+      "from": "阶段 2 之前",
+      "to": "11-25 integration",
+      "fromSha": "1fa180c4f",
+      "toSha": "6fcee16d0c",
+      "aFirst": 90,
+      "aSteady": 84,
+      "bFirst": 119,
+      "bSteady": 118.5,
+      "rFirst": 1.3222222222222222,
+      "rSteady": 1.4107142857142858,
+      "drift": 1.0256410256410255
+    },
+    {
+      "program": "loop",
+      "programName": "small_calls (2e6 循环)",
+      "backend": "nvm",
+      "from": "11-13 审计",
+      "to": "阶段 2 之前",
+      "fromSha": "15165a9333",
+      "toSha": "1fa180c4f",
+      "aFirst": 624.4856,
+      "aSteady": 610.0803,
+      "bFirst": 764.261,
+      "bSteady": 854.5633,
+      "rFirst": 1.223824856810149,
+      "rSteady": 1.4007390502528931,
+      "drift": 1.466673346967586
+    },
+    {
+      "program": "loop",
+      "programName": "small_calls (2e6 循环)",
+      "backend": "nvm",
+      "from": "阶段 2 之前",
+      "to": "11-25 integration",
+      "fromSha": "1fa180c4f",
+      "toSha": "6fcee16d0c",
+      "aFirst": 764.261,
+      "aSteady": 854.5633,
+      "bFirst": 954.122,
+      "bSteady": 1190.2166,
+      "rFirst": 1.2484242948416837,
+      "rSteady": 1.392777574230019,
+      "drift": 1.5357833904262896
+    },
+    {
+      "program": "closure",
+      "programName": "closures",
+      "backend": "jit",
+      "from": "11-13 审计",
+      "to": "阶段 2 之前",
+      "fromSha": "15165a9333",
+      "toSha": "1fa180c4f",
+      "aFirst": 1.0487,
+      "aSteady": 0.9273,
+      "bFirst": 1.4445,
+      "bSteady": 1.23235,
+      "rFirst": 1.3774196624392103,
+      "rSteady": 1.3289658147309393,
+      "drift": 1.1764253354987606
+    },
+    {
+      "program": "closure",
+      "programName": "closures",
+      "backend": "nvm",
+      "from": "11-13 审计",
+      "to": "阶段 2 之前",
+      "fromSha": "15165a9333",
+      "toSha": "1fa180c4f",
+      "aFirst": 0.6808,
+      "aSteady": 0.5811,
+      "bFirst": 0.8933,
+      "bSteady": 0.7980499999999999,
+      "rFirst": 1.312132784958872,
+      "rSteady": 1.373343658578558,
+      "drift": 1.126790450928382
+    },
+    {
+      "program": "closure",
+      "programName": "closures",
+      "backend": "fvm",
+      "from": "11-13 审计",
+      "to": "阶段 2 之前",
+      "fromSha": "15165a9333",
+      "toSha": "1fa180c4f",
+      "aFirst": 0.804,
+      "aSteady": 0.6698500000000001,
+      "bFirst": 1.0925,
+      "bSteady": 0.8311999999999999,
+      "rFirst": 1.3588308457711442,
+      "rSteady": 1.2408748227215045,
+      "drift": 1.0564221301486718
+    },
+    {
+      "program": "call",
+      "programName": "fib(30)",
+      "backend": "prl-4",
+      "from": "11-13 审计",
+      "to": "阶段 2 之前",
+      "fromSha": "15165a9333",
+      "toSha": "1fa180c4f",
+      "aFirst": 113.9754,
+      "aSteady": 115.6023,
+      "bFirst": 154.0627,
+      "bSteady": 147.084,
+      "rFirst": 1.3517188796880732,
+      "rSteady": 1.2723276266994688,
+      "drift": 1.032748165437045
+    },
+    {
+      "program": "call",
+      "programName": "fib(30)",
+      "backend": "prl-1",
+      "from": "11-13 审计",
+      "to": "阶段 2 之前",
+      "fromSha": "15165a9333",
+      "toSha": "1fa180c4f",
+      "aFirst": 117.0852,
+      "aSteady": 112.38645,
+      "bFirst": 154.1966,
+      "bSteady": 149.44305,
+      "rFirst": 1.3169606406275087,
+      "rSteady": 1.3297248022337214,
+      "drift": 1.0639673970861419
+    },
+    {
+      "program": "closure",
+      "programName": "closures",
+      "backend": "prl-16",
+      "from": "11-13 审计",
+      "to": "阶段 2 之前",
+      "fromSha": "15165a9333",
+      "toSha": "1fa180c4f",
+      "aFirst": 2.4925,
+      "aSteady": 2.14045,
+      "bFirst": 3.3019,
+      "bSteady": 2.7459,
+      "rFirst": 1.3247342026078233,
+      "rSteady": 1.2828610806138896,
+      "drift": 1.5579421042865094
+    },
+    {
+      "program": "call",
+      "programName": "fib(30)",
+      "backend": "fvm",
+      "from": "11-13 审计",
+      "to": "阶段 2 之前",
+      "fromSha": "15165a9333",
+      "toSha": "1fa180c4f",
+      "aFirst": 114.3625,
+      "aSteady": 115.59815,
+      "bFirst": 150.5712,
+      "bSteady": 152.33204999999998,
+      "rFirst": 1.3166134003716254,
+      "rSteady": 1.3177723864958044,
+      "drift": 1.0880690006873461
+    },
+    {
+      "program": "call",
+      "programName": "fib(30)",
+      "backend": "prl-16",
+      "from": "11-13 审计",
+      "to": "阶段 2 之前",
+      "fromSha": "15165a9333",
+      "toSha": "1fa180c4f",
+      "aFirst": 120.1093,
+      "aSteady": 117.58085,
+      "bFirst": 149.5225,
+      "bSteady": 152.00099999999998,
+      "rFirst": 1.244886948804131,
+      "rSteady": 1.2927360195133815,
+      "drift": 1.0246991177842417
+    },
+    {
+      "program": "closure",
+      "programName": "closures",
+      "backend": "nvm",
+      "from": "阶段 2 之前",
+      "to": "11-25 integration",
+      "fromSha": "1fa180c4f",
+      "toSha": "6fcee16d0c",
+      "aFirst": 0.8933,
+      "aSteady": 0.7980499999999999,
+      "bFirst": 1.1463,
+      "bSteady": 0.85025,
+      "rFirst": 1.2832195231165344,
+      "rSteady": 1.065409435499029,
+      "drift": 1.3510024718483933
+    },
+    {
+      "program": "call",
+      "programName": "fib(30)",
+      "backend": "nvm",
+      "from": "11-13 审计",
+      "to": "阶段 2 之前",
+      "fromSha": "15165a9333",
+      "toSha": "1fa180c4f",
+      "aFirst": 443.5915,
+      "aSteady": 431.25175,
+      "bFirst": 552.7071,
+      "bSteady": 549.1443999999999,
+      "rFirst": 1.245982170533024,
+      "rSteady": 1.27337315152924,
+      "drift": 1.0266848845741472
+    },
+    {
+      "program": "branch",
+      "programName": "MCTS",
+      "backend": "prl-1",
+      "from": "阶段 2 之前",
+      "to": "11-25 integration",
+      "fromSha": "1fa180c4f",
+      "toSha": "6fcee16d0c",
+      "aFirst": 92,
+      "aSteady": 87,
+      "bFirst": 111,
+      "bSteady": 108.5,
+      "rFirst": 1.2065217391304348,
+      "rSteady": 1.2471264367816093,
+      "drift": 1.3333333333333333
+    },
+    {
+      "program": "branch",
+      "programName": "MCTS",
+      "backend": "prl-16",
+      "from": "阶段 2 之前",
+      "to": "11-25 integration",
+      "fromSha": "1fa180c4f",
+      "toSha": "6fcee16d0c",
+      "aFirst": 91,
+      "aSteady": 90.5,
+      "bFirst": 109,
+      "bSteady": 111.5,
+      "rFirst": 1.1978021978021978,
+      "rSteady": 1.2320441988950277,
+      "drift": 1.0648148148148149
+    },
+    {
+      "program": "branch",
+      "programName": "MCTS",
+      "backend": "nvm",
+      "from": "阶段 2 之前",
+      "to": "11-25 integration",
+      "fromSha": "1fa180c4f",
+      "toSha": "6fcee16d0c",
+      "aFirst": 103,
+      "aSteady": 98,
+      "bFirst": 122,
+      "bSteady": 119,
+      "rFirst": 1.1844660194174756,
+      "rSteady": 1.2142857142857142,
+      "drift": 1.2735042735042734
+    },
+    {
+      "program": "branch",
+      "programName": "MCTS",
+      "backend": "prl-4",
+      "from": "阶段 2 之前",
+      "to": "11-25 integration",
+      "fromSha": "1fa180c4f",
+      "toSha": "6fcee16d0c",
+      "aFirst": 91,
+      "aSteady": 88,
+      "bFirst": 109,
+      "bSteady": 106,
+      "rFirst": 1.1978021978021978,
+      "rSteady": 1.2045454545454546,
+      "drift": 1.0384615384615385
+    }
+  ],
+  "improvements": [
+    {
+      "program": "branch",
+      "programName": "MCTS",
+      "backend": "prl-16",
+      "from": "11-13 审计",
+      "to": "阶段 2 之前",
+      "fromSha": "15165a9333",
+      "toSha": "1fa180c4f",
+      "aFirst": 122,
+      "aSteady": 86.5,
+      "bFirst": 91,
+      "bSteady": 90.5,
+      "rFirst": 0.7459016393442623,
+      "rSteady": 1.046242774566474,
+      "drift": 1.0561797752808988
+    },
+    {
+      "program": "branch",
+      "programName": "MCTS",
+      "backend": "prl-1",
+      "from": "11-13 审计",
+      "to": "阶段 2 之前",
+      "fromSha": "15165a9333",
+      "toSha": "1fa180c4f",
+      "aFirst": 116,
+      "aSteady": 82.5,
+      "bFirst": 92,
+      "bSteady": 87,
+      "rFirst": 0.7931034482758621,
+      "rSteady": 1.0545454545454545,
+      "drift": 1.035294117647059
+    }
+  ],
+  "cells": [
+    {
+      "program": "call",
+      "backend": "nvm",
+      "points": {
+        "audit-15165a9333": {
+          "first_ms": 443.5915,
+          "steady_ms": 431.25175,
+          "samples_ms": [
+            443.5915,
+            431.4967,
+            434.9594,
+            425.5281,
+            431.0068
+          ],
+          "iters": 5,
+          "exit": 0,
+          "measurement": "pass (timeit)"
+        },
+        "pre-stage2-1fa180c4f": {
+          "first_ms": 552.7071,
+          "steady_ms": 549.1443999999999,
+          "samples_ms": [
+            552.7071,
+            557.0208,
+            554.5341,
+            542.5431,
+            543.7547
+          ],
+          "iters": 5,
+          "exit": 0,
+          "measurement": "pass (timeit)"
+        },
+        "integration-6fcee16d0c": {
+          "first_ms": 853.8609,
+          "steady_ms": 948.29295,
+          "samples_ms": [
+            853.8609,
+            860.9532,
+            828.4949,
+            1035.6327,
+            1243.6403
+          ],
+          "iters": 5,
+          "exit": 0,
+          "measurement": "pass (timeit)"
+        }
+      }
+    },
+    {
+      "program": "call",
+      "backend": "fvm",
+      "points": {
+        "audit-15165a9333": {
+          "first_ms": 114.3625,
+          "steady_ms": 115.59815,
+          "samples_ms": [
+            114.3625,
+            115.3546,
+            117.128,
+            115.0922,
+            115.8417
+          ],
+          "iters": 5,
+          "exit": 0,
+          "measurement": "pass (timeit)"
+        },
+        "pre-stage2-1fa180c4f": {
+          "first_ms": 150.5712,
+          "steady_ms": 152.33204999999998,
+          "samples_ms": [
+            150.5712,
+            151.3699,
+            153.2942,
+            148.8333,
+            161.9409
+          ],
+          "iters": 5,
+          "exit": 0,
+          "measurement": "pass (timeit)"
+        },
+        "integration-6fcee16d0c": {
+          "first_ms": 161.251,
+          "steady_ms": 159.71185000000003,
+          "samples_ms": [
+            161.251,
+            158.8343,
+            165.7804,
+            160.5894,
+            158.7745
+          ],
+          "iters": 5,
+          "exit": 0,
+          "measurement": "pass (timeit)"
+        }
+      }
+    },
+    {
+      "program": "call",
+      "backend": "jit",
+      "points": {
+        "audit-15165a9333": {
+          "first_ms": 4.4519,
+          "steady_ms": 4.28795,
+          "samples_ms": [
+            4.4519,
+            4.2543,
+            4.4807,
+            4.3185,
+            4.2574
+          ],
+          "iters": 5,
+          "exit": 0,
+          "measurement": "pass (timeit)"
+        },
+        "pre-stage2-1fa180c4f": {
+          "first_ms": 4.6985,
+          "steady_ms": 4.44625,
+          "samples_ms": [
+            4.6985,
+            4.3506,
+            4.4179,
+            4.5146,
+            4.4746
+          ],
+          "iters": 5,
+          "exit": 0,
+          "measurement": "pass (timeit)"
+        },
+        "integration-6fcee16d0c": {
+          "first_ms": 4.502,
+          "steady_ms": 4.29715,
+          "samples_ms": [
+            4.502,
+            4.3271,
+            4.2041,
+            4.376,
+            4.2672
+          ],
+          "iters": 5,
+          "exit": 0,
+          "measurement": "pass (timeit)"
+        }
+      }
+    },
+    {
+      "program": "call",
+      "backend": "prl-1",
+      "points": {
+        "audit-15165a9333": {
+          "first_ms": 117.0852,
+          "steady_ms": 112.38645,
+          "samples_ms": [
+            117.0852,
+            116.6211,
+            111.1093,
+            112.4606,
+            112.3123
+          ],
+          "iters": 5,
+          "exit": 0,
+          "measurement": "pass (timeit)"
+        },
+        "pre-stage2-1fa180c4f": {
+          "first_ms": 154.1966,
+          "steady_ms": 149.44305,
+          "samples_ms": [
+            154.1966,
+            150.1079,
+            156.0172,
+            148.7782,
+            146.6372
+          ],
+          "iters": 5,
+          "exit": 0,
+          "measurement": "pass (timeit)"
+        },
+        "integration-6fcee16d0c": {
+          "first_ms": 160.3905,
+          "steady_ms": 159.88015000000001,
+          "samples_ms": [
+            160.3905,
+            164.091,
+            160.6236,
+            159.1367,
+            158.9275
+          ],
+          "iters": 5,
+          "exit": 0,
+          "measurement": "pass (timeit)"
+        }
+      }
+    },
+    {
+      "program": "call",
+      "backend": "prl-4",
+      "points": {
+        "audit-15165a9333": {
+          "first_ms": 113.9754,
+          "steady_ms": 115.6023,
+          "samples_ms": [
+            113.9754,
+            112.609,
+            119.6215,
+            116.4608,
+            114.7438
+          ],
+          "iters": 5,
+          "exit": 0,
+          "measurement": "pass (timeit)"
+        },
+        "pre-stage2-1fa180c4f": {
+          "first_ms": 154.0627,
+          "steady_ms": 147.084,
+          "samples_ms": [
+            154.0627,
+            146.9151,
+            146.977,
+            147.191,
+            151.7263
+          ],
+          "iters": 5,
+          "exit": 0,
+          "measurement": "pass (timeit)"
+        },
+        "integration-6fcee16d0c": {
+          "first_ms": 159.5119,
+          "steady_ms": 162.95955,
+          "samples_ms": [
+            159.5119,
+            162.4746,
+            163.4445,
+            163.7811,
+            159.377
+          ],
+          "iters": 5,
+          "exit": 0,
+          "measurement": "pass (timeit)"
+        }
+      }
+    },
+    {
+      "program": "call",
+      "backend": "prl-16",
+      "points": {
+        "audit-15165a9333": {
+          "first_ms": 120.1093,
+          "steady_ms": 117.58085,
+          "samples_ms": [
+            120.1093,
+            116.6049,
+            122.0302,
+            118.5568,
+            115.3989
+          ],
+          "iters": 5,
+          "exit": 0,
+          "measurement": "pass (timeit)"
+        },
+        "pre-stage2-1fa180c4f": {
+          "first_ms": 149.5225,
+          "steady_ms": 152.00099999999998,
+          "samples_ms": [
+            149.5225,
+            150.5074,
+            151.7385,
+            152.2635,
+            154.2248
+          ],
+          "iters": 5,
+          "exit": 0,
+          "measurement": "pass (timeit)"
+        },
+        "integration-6fcee16d0c": {
+          "first_ms": 163.3688,
+          "steady_ms": 168.58495,
+          "samples_ms": [
+            163.3688,
+            164.8743,
+            169.2508,
+            170.2877,
+            167.9191
+          ],
+          "iters": 5,
+          "exit": 0,
+          "measurement": "pass (timeit)"
+        }
+      }
+    },
+    {
+      "program": "loop",
+      "backend": "nvm",
+      "points": {
+        "audit-15165a9333": {
+          "first_ms": 624.4856,
+          "steady_ms": 610.0803,
+          "samples_ms": [
+            624.4856,
+            610.6459,
+            609.5147,
+            605.1014,
+            659.5686
+          ],
+          "iters": 5,
+          "exit": 0,
+          "measurement": "pass (timeit)"
+        },
+        "pre-stage2-1fa180c4f": {
+          "first_ms": 764.261,
+          "steady_ms": 854.5633,
+          "samples_ms": [
+            764.261,
+            745.4754,
+            851.0262,
+            858.1004,
+            1093.3689
+          ],
+          "iters": 5,
+          "exit": 0,
+          "measurement": "pass (timeit)"
+        },
+        "integration-6fcee16d0c": {
+          "first_ms": 954.122,
+          "steady_ms": 1190.2166,
+          "samples_ms": [
+            954.122,
+            949.3874,
+            949.9933,
+            1430.4399,
+            1458.0534
+          ],
+          "iters": 5,
+          "exit": 0,
+          "measurement": "pass (timeit)"
+        }
+      }
+    },
+    {
+      "program": "loop",
+      "backend": "fvm",
+      "points": {
+        "audit-15165a9333": {
+          "first_ms": 91.6514,
+          "steady_ms": 90.94964999999999,
+          "samples_ms": [
+            91.6514,
+            90.4455,
+            91.4538,
+            94.9835,
+            89.9278
+          ],
+          "iters": 5,
+          "exit": 0,
+          "measurement": "pass (timeit)"
+        },
+        "pre-stage2-1fa180c4f": {
+          "first_ms": 96.4431,
+          "steady_ms": 96.5616,
+          "samples_ms": [
+            96.4431,
+            107.3817,
+            96.2404,
+            96.8828,
+            95.7129
+          ],
+          "iters": 5,
+          "exit": 0,
+          "measurement": "pass (timeit)"
+        },
+        "integration-6fcee16d0c": {
+          "first_ms": 96.3091,
+          "steady_ms": 100.7843,
+          "samples_ms": [
+            96.3091,
+            101.7318,
+            95.9837,
+            103.265,
+            99.8368
+          ],
+          "iters": 5,
+          "exit": 0,
+          "measurement": "pass (timeit)"
+        }
+      }
+    },
+    {
+      "program": "loop",
+      "backend": "jit",
+      "points": {
+        "audit-15165a9333": {
+          "first_ms": 103.876,
+          "steady_ms": 108.8038,
+          "samples_ms": [
+            103.876,
+            110.3441,
+            107.8829,
+            102.6908,
+            109.7247
+          ],
+          "iters": 5,
+          "exit": 0,
+          "measurement": "pass (timeit)"
+        },
+        "pre-stage2-1fa180c4f": {
+          "first_ms": 115.1025,
+          "steady_ms": 111.78720000000001,
+          "samples_ms": [
+            115.1025,
+            114.3658,
+            112.1586,
+            111.4158,
+            111.1115
+          ],
+          "iters": 5,
+          "exit": 0,
+          "measurement": "pass (timeit)"
+        },
+        "integration-6fcee16d0c": {
+          "first_ms": 1751.6906,
+          "steady_ms": 2828.0884,
+          "samples_ms": [
+            1751.6906,
+            2146.9457,
+            2799.0488,
+            2857.128,
+            2902.3658
+          ],
+          "iters": 5,
+          "exit": 0,
+          "measurement": "pass (timeit)"
+        }
+      }
+    },
+    {
+      "program": "loop",
+      "backend": "prl-1",
+      "points": {
+        "audit-15165a9333": {
+          "first_ms": 94.9571,
+          "steady_ms": 93.14135,
+          "samples_ms": [
+            94.9571,
+            95.1666,
+            92.1944,
+            93.7628,
+            92.5199
+          ],
+          "iters": 5,
+          "exit": 0,
+          "measurement": "pass (timeit)"
+        },
+        "pre-stage2-1fa180c4f": {
+          "first_ms": 93.2929,
+          "steady_ms": 102.38935000000001,
+          "samples_ms": [
+            93.2929,
+            97.0905,
+            101.64,
+            104.8657,
+            103.1387
+          ],
+          "iters": 5,
+          "exit": 0,
+          "measurement": "pass (timeit)"
+        },
+        "integration-6fcee16d0c": {
+          "first_ms": 102.2197,
+          "steady_ms": 102.16964999999999,
+          "samples_ms": [
+            102.2197,
+            101.9751,
+            103.7685,
+            100.8846,
+            102.3642
+          ],
+          "iters": 5,
+          "exit": 0,
+          "measurement": "pass (timeit)"
+        }
+      }
+    },
+    {
+      "program": "loop",
+      "backend": "prl-4",
+      "points": {
+        "audit-15165a9333": {
+          "first_ms": 91.4212,
+          "steady_ms": 93.6559,
+          "samples_ms": [
+            91.4212,
+            93.6339,
+            90.3325,
+            93.6779,
+            96.3536
+          ],
+          "iters": 5,
+          "exit": 0,
+          "measurement": "pass (timeit)"
+        },
+        "pre-stage2-1fa180c4f": {
+          "first_ms": 100.9085,
+          "steady_ms": 100.4554,
+          "samples_ms": [
+            100.9085,
+            107.0681,
+            98.8206,
+            95.8497,
+            102.0902
+          ],
+          "iters": 5,
+          "exit": 0,
+          "measurement": "pass (timeit)"
+        },
+        "integration-6fcee16d0c": {
+          "first_ms": 104.4937,
+          "steady_ms": 101.89025000000001,
+          "samples_ms": [
+            104.4937,
+            103.6067,
+            104.6491,
+            99.4992,
+            100.1738
+          ],
+          "iters": 5,
+          "exit": 0,
+          "measurement": "pass (timeit)"
+        }
+      }
+    },
+    {
+      "program": "loop",
+      "backend": "prl-16",
+      "points": {
+        "audit-15165a9333": {
+          "first_ms": 96.0901,
+          "steady_ms": 94.57565,
+          "samples_ms": [
+            96.0901,
+            93.8382,
+            97.807,
+            95.3131,
+            91.4489
+          ],
+          "iters": 5,
+          "exit": 0,
+          "measurement": "pass (timeit)"
+        },
+        "pre-stage2-1fa180c4f": {
+          "first_ms": 97.2218,
+          "steady_ms": 96.10294999999999,
+          "samples_ms": [
+            97.2218,
+            97.1216,
+            96.577,
+            95.6289,
+            95.3645
+          ],
+          "iters": 5,
+          "exit": 0,
+          "measurement": "pass (timeit)"
+        },
+        "integration-6fcee16d0c": {
+          "first_ms": 107.6003,
+          "steady_ms": 104.63155,
+          "samples_ms": [
+            107.6003,
+            102.2556,
+            104.5585,
+            104.7046,
+            109.2923
+          ],
+          "iters": 5,
+          "exit": 0,
+          "measurement": "pass (timeit)"
+        }
+      }
+    },
+    {
+      "program": "tensor",
+      "backend": "nvm",
+      "points": {
+        "audit-15165a9333": {
+          "first_ms": 41.0685,
+          "steady_ms": 40.435950000000005,
+          "samples_ms": [
+            41.0685,
+            41.0405,
+            39.7027,
+            39.8571,
+            41.0148
+          ],
+          "iters": 5,
+          "exit": 0,
+          "measurement": "pass (timeit)"
+        },
+        "pre-stage2-1fa180c4f": {
+          "first_ms": 40.604,
+          "steady_ms": 38.98255,
+          "samples_ms": [
+            40.604,
+            39.1253,
+            37.9091,
+            40.0891,
+            38.8398
+          ],
+          "iters": 5,
+          "exit": 0,
+          "measurement": "pass (timeit)"
+        },
+        "integration-6fcee16d0c": {
+          "first_ms": 83.5316,
+          "steady_ms": 74.72165,
+          "samples_ms": [
+            83.5316,
+            75.4841,
+            72.9747,
+            80.3701,
+            73.9592
+          ],
+          "iters": 5,
+          "exit": 0,
+          "measurement": "pass (timeit)"
+        }
+      }
+    },
+    {
+      "program": "tensor",
+      "backend": "fvm",
+      "points": {
+        "audit-15165a9333": {
+          "first_ms": 43.3277,
+          "steady_ms": 39.31285,
+          "samples_ms": [
+            43.3277,
+            38.7695,
+            41.3152,
+            39.3134,
+            39.3123
+          ],
+          "iters": 5,
+          "exit": 0,
+          "measurement": "pass (timeit)"
+        },
+        "pre-stage2-1fa180c4f": {
+          "first_ms": 41.8204,
+          "steady_ms": 40.36335,
+          "samples_ms": [
+            41.8204,
+            40.9325,
+            42.1258,
+            39.4515,
+            39.7942
+          ],
+          "iters": 5,
+          "exit": 0,
+          "measurement": "pass (timeit)"
+        },
+        "integration-6fcee16d0c": {
+          "first_ms": 64.9245,
+          "steady_ms": 69.54429999999999,
+          "samples_ms": [
+            64.9245,
+            69.6285,
+            70.1732,
+            68.6977,
+            69.4601
+          ],
+          "iters": 5,
+          "exit": 0,
+          "measurement": "pass (timeit)"
+        }
+      }
+    },
+    {
+      "program": "tensor",
+      "backend": "jit",
+      "points": {
+        "audit-15165a9333": {
+          "first_ms": 42.53,
+          "steady_ms": 39.1288,
+          "samples_ms": [
+            42.53,
+            39.7199,
+            38.6431,
+            39.6145,
+            38.6169
+          ],
+          "iters": 5,
+          "exit": 0,
+          "measurement": "pass (timeit)"
+        },
+        "pre-stage2-1fa180c4f": {
+          "first_ms": 44.7771,
+          "steady_ms": 40.2543,
+          "samples_ms": [
+            44.7771,
+            40.1969,
+            40.3117,
+            39.9208,
+            40.3835
+          ],
+          "iters": 5,
+          "exit": 0,
+          "measurement": "pass (timeit)"
+        },
+        "integration-6fcee16d0c": {
+          "first_ms": 86.374,
+          "steady_ms": 88.46520000000001,
+          "samples_ms": [
+            86.374,
+            81.8939,
+            99.8713,
+            90.5888,
+            86.3416
+          ],
+          "iters": 5,
+          "exit": 0,
+          "measurement": "pass (timeit)"
+        }
+      }
+    },
+    {
+      "program": "tensor",
+      "backend": "prl-1",
+      "points": {
+        "audit-15165a9333": {
+          "first_ms": 41.0123,
+          "steady_ms": 38.55825,
+          "samples_ms": [
+            41.0123,
+            48.4838,
+            39.0934,
+            37.3338,
+            38.0231
+          ],
+          "iters": 5,
+          "exit": 0,
+          "measurement": "pass (timeit)"
+        },
+        "pre-stage2-1fa180c4f": {
+          "first_ms": 43.0702,
+          "steady_ms": 39.576800000000006,
+          "samples_ms": [
+            43.0702,
+            39.9504,
+            38.9592,
+            39.2032,
+            40.1896
+          ],
+          "iters": 5,
+          "exit": 0,
+          "measurement": "pass (timeit)"
+        },
+        "integration-6fcee16d0c": {
+          "first_ms": 88.195,
+          "steady_ms": 79.33224999999999,
+          "samples_ms": [
+            88.195,
+            75.5282,
+            82.6917,
+            76.5816,
+            82.0829
+          ],
+          "iters": 5,
+          "exit": 0,
+          "measurement": "pass (timeit)"
+        }
+      }
+    },
+    {
+      "program": "tensor",
+      "backend": "prl-4",
+      "points": {
+        "audit-15165a9333": {
+          "first_ms": 26.079,
+          "steady_ms": 24.149549999999998,
+          "samples_ms": [
+            26.079,
+            23.9347,
+            24.3644,
+            22.8274,
+            26.5716
+          ],
+          "iters": 5,
+          "exit": 0,
+          "measurement": "pass (timeit)"
+        },
+        "pre-stage2-1fa180c4f": {
+          "first_ms": 26.9177,
+          "steady_ms": 25.3092,
+          "samples_ms": [
+            26.9177,
+            24.9462,
+            25.7988,
+            25.6722,
+            24.4046
+          ],
+          "iters": 5,
+          "exit": 0,
+          "measurement": "pass (timeit)"
+        },
+        "integration-6fcee16d0c": {
+          "first_ms": 65.1065,
+          "steady_ms": 64.10305,
+          "samples_ms": [
+            65.1065,
+            70.735,
+            65.7382,
+            62.4679,
+            53.3909
+          ],
+          "iters": 5,
+          "exit": 0,
+          "measurement": "pass (timeit)"
+        }
+      }
+    },
+    {
+      "program": "tensor",
+      "backend": "prl-16",
+      "points": {
+        "audit-15165a9333": {
+          "first_ms": 34.622,
+          "steady_ms": 32.944050000000004,
+          "samples_ms": [
+            34.622,
+            33.6695,
+            33.2318,
+            31.7278,
+            32.6563
+          ],
+          "iters": 5,
+          "exit": 0,
+          "measurement": "pass (timeit)"
+        },
+        "pre-stage2-1fa180c4f": {
+          "first_ms": 37.5946,
+          "steady_ms": 33.7328,
+          "samples_ms": [
+            37.5946,
+            33.8606,
+            33.605,
+            34.8035,
+            32.2966
+          ],
+          "iters": 5,
+          "exit": 0,
+          "measurement": "pass (timeit)"
+        },
+        "integration-6fcee16d0c": {
+          "first_ms": 61.6662,
+          "steady_ms": 65.20125,
+          "samples_ms": [
+            61.6662,
+            65.0239,
+            66.0564,
+            65.3786,
+            61.909
+          ],
+          "iters": 5,
+          "exit": 0,
+          "measurement": "pass (timeit)"
+        }
+      }
+    },
+    {
+      "program": "branch",
+      "backend": "nvm",
+      "points": {
+        "audit-15165a9333": {
+          "first_ms": 97,
+          "steady_ms": 98,
+          "samples_ms": [
+            97,
+            98,
+            98,
+            103,
+            93
+          ],
+          "iters": 5,
+          "exit": 0,
+          "measurement": "whole process (start-up + parse + pass + teardown)"
+        },
+        "pre-stage2-1fa180c4f": {
+          "first_ms": 103,
+          "steady_ms": 98,
+          "samples_ms": [
+            103,
+            100,
+            98,
+            98,
+            98
+          ],
+          "iters": 5,
+          "exit": 0,
+          "measurement": "whole process (start-up + parse + pass + teardown)"
+        },
+        "integration-6fcee16d0c": {
+          "first_ms": 122,
+          "steady_ms": 119,
+          "samples_ms": [
+            122,
+            117,
+            119,
+            119,
+            149
+          ],
+          "iters": 5,
+          "exit": 0,
+          "measurement": "whole process (start-up + parse + pass + teardown)"
+        }
+      }
+    },
+    {
+      "program": "branch",
+      "backend": "fvm",
+      "points": {
+        "audit-15165a9333": {
+          "first_ms": 80,
+          "steady_ms": 78.5,
+          "samples_ms": [
+            80,
+            112,
+            78,
+            77,
+            79
+          ],
+          "iters": 5,
+          "exit": 0,
+          "measurement": "whole process (start-up + parse + pass + teardown)"
+        },
+        "pre-stage2-1fa180c4f": {
+          "first_ms": 115,
+          "steady_ms": 83,
+          "samples_ms": [
+            115,
+            82,
+            79,
+            84,
+            90
+          ],
+          "iters": 5,
+          "exit": 0,
+          "measurement": "whole process (start-up + parse + pass + teardown)"
+        },
+        "integration-6fcee16d0c": {
+          "first_ms": 97,
+          "steady_ms": 98.5,
+          "samples_ms": [
+            97,
+            99,
+            98,
+            98,
+            100
+          ],
+          "iters": 5,
+          "exit": 0,
+          "measurement": "whole process (start-up + parse + pass + teardown)"
+        }
+      }
+    },
+    {
+      "program": "branch",
+      "backend": "jit",
+      "points": {
+        "audit-15165a9333": {
+          "first_ms": 81,
+          "steady_ms": 79.5,
+          "samples_ms": [
+            81,
+            78,
+            83,
+            81,
+            78
+          ],
+          "iters": 5,
+          "exit": 0,
+          "measurement": "whole process (start-up + parse + pass + teardown)"
+        },
+        "pre-stage2-1fa180c4f": {
+          "first_ms": 90,
+          "steady_ms": 84,
+          "samples_ms": [
+            90,
+            87,
+            85,
+            83,
+            82
+          ],
+          "iters": 5,
+          "exit": 0,
+          "measurement": "whole process (start-up + parse + pass + teardown)"
+        },
+        "integration-6fcee16d0c": {
+          "first_ms": 119,
+          "steady_ms": 118.5,
+          "samples_ms": [
+            119,
+            120,
+            119,
+            117,
+            118
+          ],
+          "iters": 5,
+          "exit": 0,
+          "measurement": "whole process (start-up + parse + pass + teardown)"
+        }
+      }
+    },
+    {
+      "program": "branch",
+      "backend": "prl-1",
+      "points": {
+        "audit-15165a9333": {
+          "first_ms": 116,
+          "steady_ms": 82.5,
+          "samples_ms": [
+            116,
+            83,
+            84,
+            82,
+            81
+          ],
+          "iters": 5,
+          "exit": 0,
+          "measurement": "whole process (start-up + parse + pass + teardown)"
+        },
+        "pre-stage2-1fa180c4f": {
+          "first_ms": 92,
+          "steady_ms": 87,
+          "samples_ms": [
+            92,
+            87,
+            85,
+            87,
+            88
+          ],
+          "iters": 5,
+          "exit": 0,
+          "measurement": "whole process (start-up + parse + pass + teardown)"
+        },
+        "integration-6fcee16d0c": {
+          "first_ms": 111,
+          "steady_ms": 108.5,
+          "samples_ms": [
+            111,
+            107,
+            110,
+            105,
+            140
+          ],
+          "iters": 5,
+          "exit": 0,
+          "measurement": "whole process (start-up + parse + pass + teardown)"
+        }
+      }
+    },
+    {
+      "program": "branch",
+      "backend": "prl-4",
+      "points": {
+        "audit-15165a9333": {
+          "first_ms": 85,
+          "steady_ms": 82.5,
+          "samples_ms": [
+            85,
+            82,
+            81,
+            83,
+            84
+          ],
+          "iters": 5,
+          "exit": 0,
+          "measurement": "whole process (start-up + parse + pass + teardown)"
+        },
+        "pre-stage2-1fa180c4f": {
+          "first_ms": 91,
+          "steady_ms": 88,
+          "samples_ms": [
+            91,
+            122,
+            88,
+            88,
+            88
+          ],
+          "iters": 5,
+          "exit": 0,
+          "measurement": "whole process (start-up + parse + pass + teardown)"
+        },
+        "integration-6fcee16d0c": {
+          "first_ms": 109,
+          "steady_ms": 106,
+          "samples_ms": [
+            109,
+            104,
+            105,
+            107,
+            108
+          ],
+          "iters": 5,
+          "exit": 0,
+          "measurement": "whole process (start-up + parse + pass + teardown)"
+        }
+      }
+    },
+    {
+      "program": "branch",
+      "backend": "prl-16",
+      "points": {
+        "audit-15165a9333": {
+          "first_ms": 122,
+          "steady_ms": 86.5,
+          "samples_ms": [
+            122,
+            87,
+            86,
+            87,
+            86
+          ],
+          "iters": 5,
+          "exit": 0,
+          "measurement": "whole process (start-up + parse + pass + teardown)"
+        },
+        "pre-stage2-1fa180c4f": {
+          "first_ms": 91,
+          "steady_ms": 90.5,
+          "samples_ms": [
+            91,
+            89,
+            94,
+            89,
+            92
+          ],
+          "iters": 5,
+          "exit": 0,
+          "measurement": "whole process (start-up + parse + pass + teardown)"
+        },
+        "integration-6fcee16d0c": {
+          "first_ms": 109,
+          "steady_ms": 111.5,
+          "samples_ms": [
+            109,
+            113,
+            110,
+            115,
+            108
+          ],
+          "iters": 5,
+          "exit": 0,
+          "measurement": "whole process (start-up + parse + pass + teardown)"
+        }
+      }
+    },
+    {
+      "program": "closure",
+      "backend": "nvm",
+      "points": {
+        "audit-15165a9333": {
+          "first_ms": 0.6808,
+          "steady_ms": 0.5811,
+          "samples_ms": [
+            0.6808,
+            0.6531,
+            0.5831,
+            0.5791,
+            0.565,
+            0.7708,
+            0.5709,
+            0.5481,
+            0.5841
+          ],
+          "iters": 9,
+          "exit": 0,
+          "measurement": "pass (timeit)"
+        },
+        "pre-stage2-1fa180c4f": {
+          "first_ms": 0.8933,
+          "steady_ms": 0.7980499999999999,
+          "samples_ms": [
+            0.8933,
+            0.8236,
+            0.7974,
+            0.7987,
+            0.8032,
+            0.7682,
+            0.754,
+            0.8496,
+            0.7621
+          ],
+          "iters": 9,
+          "exit": 0,
+          "measurement": "pass (timeit)"
+        },
+        "integration-6fcee16d0c": {
+          "first_ms": 1.1463,
+          "steady_ms": 0.85025,
+          "samples_ms": [
+            1.1463,
+            0.9837,
+            0.9746,
+            0.7838,
+            0.7282,
+            0.8408,
+            0.9838,
+            0.7647,
+            0.8597
+          ],
+          "iters": 9,
+          "exit": 0,
+          "measurement": "pass (timeit)"
+        }
+      }
+    },
+    {
+      "program": "closure",
+      "backend": "fvm",
+      "points": {
+        "audit-15165a9333": {
+          "first_ms": 0.804,
+          "steady_ms": 0.6698500000000001,
+          "samples_ms": [
+            0.804,
+            0.6407,
+            0.6775,
+            0.6622,
+            0.6188,
+            1.1751,
+            0.7003,
+            0.7249,
+            0.6531
+          ],
+          "iters": 9,
+          "exit": 0,
+          "measurement": "pass (timeit)"
+        },
+        "pre-stage2-1fa180c4f": {
+          "first_ms": 1.0925,
+          "steady_ms": 0.8311999999999999,
+          "samples_ms": [
+            1.0925,
+            0.8669,
+            0.8604,
+            0.8339,
+            0.8206,
+            0.8659,
+            0.8259,
+            0.8285,
+            0.8253
+          ],
+          "iters": 9,
+          "exit": 0,
+          "measurement": "pass (timeit)"
+        },
+        "integration-6fcee16d0c": {
+          "first_ms": 0.9997,
+          "steady_ms": 0.8153999999999999,
+          "samples_ms": [
+            0.9997,
+            0.8412,
+            1.0898,
+            0.7856,
+            0.882,
+            0.7746,
+            0.7611,
+            1.1507,
+            0.7896
+          ],
+          "iters": 9,
+          "exit": 0,
+          "measurement": "pass (timeit)"
+        }
+      }
+    },
+    {
+      "program": "closure",
+      "backend": "jit",
+      "points": {
+        "audit-15165a9333": {
+          "first_ms": 1.0487,
+          "steady_ms": 0.9273,
+          "samples_ms": [
+            1.0487,
+            1.2205,
+            0.8881,
+            0.947,
+            0.8934,
+            0.9228,
+            0.9351,
+            0.9174,
+            0.9318
+          ],
+          "iters": 9,
+          "exit": 0,
+          "measurement": "pass (timeit)"
+        },
+        "pre-stage2-1fa180c4f": {
+          "first_ms": 1.4445,
+          "steady_ms": 1.23235,
+          "samples_ms": [
+            1.4445,
+            1.3763,
+            1.2275,
+            1.2424,
+            1.2372,
+            1.207,
+            1.2633,
+            1.2101,
+            1.1699
+          ],
+          "iters": 9,
+          "exit": 0,
+          "measurement": "pass (timeit)"
+        },
+        "integration-6fcee16d0c": {
+          "first_ms": 1.3687,
+          "steady_ms": 1.0483500000000001,
+          "samples_ms": [
+            1.3687,
+            1.7958,
+            1.0513,
+            1.0041,
+            0.998,
+            1.5205,
+            1.0436,
+            1.0454,
+            1.819
+          ],
+          "iters": 9,
+          "exit": 0,
+          "measurement": "pass (timeit)"
+        }
+      }
+    },
+    {
+      "program": "closure",
+      "backend": "prl-1",
+      "points": {
+        "audit-15165a9333": {
+          "first_ms": 1.5309,
+          "steady_ms": 1.0527,
+          "samples_ms": [
+            1.5309,
+            1.0057,
+            0.9616,
+            1.0481,
+            1.3296,
+            1.1443,
+            1.0573,
+            1.028,
+            1.3373
+          ],
+          "iters": 9,
+          "exit": 0,
+          "measurement": "pass (timeit)"
+        },
+        "pre-stage2-1fa180c4f": {
+          "first_ms": 1.9801,
+          "steady_ms": 1.52515,
+          "samples_ms": [
+            1.9801,
+            1.5679,
+            1.5576,
+            1.4907,
+            1.4096,
+            1.4927,
+            2.1926,
+            1.5842,
+            1.4587
+          ],
+          "iters": 9,
+          "exit": 0,
+          "measurement": "pass (timeit)"
+        },
+        "integration-6fcee16d0c": {
+          "first_ms": 2.1758,
+          "steady_ms": 1.6287,
+          "samples_ms": [
+            2.1758,
+            2.0717,
+            1.9888,
+            1.4742,
+            1.4199,
+            1.824,
+            1.6066,
+            1.4507,
+            1.6508
+          ],
+          "iters": 9,
+          "exit": 0,
+          "measurement": "pass (timeit)"
+        }
+      }
+    },
+    {
+      "program": "closure",
+      "backend": "prl-4",
+      "points": {
+        "audit-15165a9333": {
+          "first_ms": 1.8386,
+          "steady_ms": 1.30135,
+          "samples_ms": [
+            1.8386,
+            1.4074,
+            1.3234,
+            1.2449,
+            1.2782,
+            1.2405,
+            1.2793,
+            1.4996,
+            1.4056
+          ],
+          "iters": 9,
+          "exit": 0,
+          "measurement": "pass (timeit)"
+        },
+        "pre-stage2-1fa180c4f": {
+          "first_ms": 2.2272,
+          "steady_ms": 1.8779,
+          "samples_ms": [
+            2.2272,
+            2.3832,
+            1.9043,
+            1.694,
+            2.0648,
+            1.6127,
+            2.0784,
+            1.6523,
+            1.8515
+          ],
+          "iters": 9,
+          "exit": 0,
+          "measurement": "pass (timeit)"
+        },
+        "integration-6fcee16d0c": {
+          "first_ms": 2.3213,
+          "steady_ms": 1.7790499999999998,
+          "samples_ms": [
+            2.3213,
+            3.1527,
+            1.7528,
+            1.596,
+            1.8053,
+            1.5886,
+            1.9491,
+            1.98,
+            1.7214
+          ],
+          "iters": 9,
+          "exit": 0,
+          "measurement": "pass (timeit)"
+        }
+      }
+    },
+    {
+      "program": "closure",
+      "backend": "prl-16",
+      "points": {
+        "audit-15165a9333": {
+          "first_ms": 2.4925,
+          "steady_ms": 2.14045,
+          "samples_ms": [
+            2.4925,
+            1.9221,
+            2.5146,
+            2.2418,
+            2.0391,
+            2.0061,
+            2.5637,
+            2.2993,
+            1.9438
+          ],
+          "iters": 9,
+          "exit": 0,
+          "measurement": "pass (timeit)"
+        },
+        "pre-stage2-1fa180c4f": {
+          "first_ms": 3.3019,
+          "steady_ms": 2.7459,
+          "samples_ms": [
+            3.3019,
+            3.3583,
+            2.8463,
+            2.772,
+            2.7198,
+            2.43,
+            2.4536,
+            2.1556,
+            2.8614
+          ],
+          "iters": 9,
+          "exit": 0,
+          "measurement": "pass (timeit)"
+        },
+        "integration-6fcee16d0c": {
+          "first_ms": 3.174,
+          "steady_ms": 2.6489000000000003,
+          "samples_ms": [
+            3.174,
+            2.6187,
+            2.5169,
+            3.0713,
+            2.668,
+            2.4309,
+            2.7373,
+            2.9754,
+            2.6298
+          ],
+          "iters": 9,
+          "exit": 0,
+          "measurement": "pass (timeit)"
+        }
+      }
+    }
+  ]
+}

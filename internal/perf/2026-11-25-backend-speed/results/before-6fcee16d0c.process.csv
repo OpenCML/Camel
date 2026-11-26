@@ -1,0 +1,7 @@
+program,backend,threads,iters,first_ms,steady_ms,steady_min_ms,steady_max_ms,samples_ms
+branch,nvm,default,5,125,122.5,120,128,"125 120 123 128 122"
+branch,fvm,default,5,100,96.5,95,104,"100 97 104 96 95"
+branch,jit,default,5,112,111.5,111,114,"112 112 111 111 114"
+branch,prl-1,1,5,117,106.5,103,108,"117 108 105 108 103"
+branch,prl-4,4,5,107,106.5,104,109,"107 107 106 104 109"
+branch,prl-16,16,5,109,109,108,114,"109 109 108 114 109"
