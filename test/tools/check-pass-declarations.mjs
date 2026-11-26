@@ -442,8 +442,14 @@ for (const { relative, alias, target } of aliases) {
     }
 }
 // Test-only passes are registered by the module but declared nowhere: they exist to be named by
-// a test's pipeline and are not part of a module's language surface.
+// a test's pipeline and are not part of a module's language surface. A test pass's name need not
+// begin with `test_` -- `tensor::echo` is the parameter echo of the pipeline tests -- so the ones
+// whose name does not say so are named here once, where the guard asks.
+const TEST_ONLY_PASSES = new Set(['tensor::echo'])
 const isTestOnly = (path) => {
+    if (TEST_ONLY_PASSES.has(path)) {
+        return true
+    }
     const separator = path.indexOf('::')
     const funcName = path.slice(separator + 2)
     return path.slice(0, separator) === 'test' || funcName.startsWith('test_')
@@ -539,7 +545,7 @@ for (const path of moduleDeclarations) {
 // passes, and the Camel pass whose declaration is its own `with` list. A built-in pass's
 // parameters are its module's `.cml` declaration.
 const CPP_PARAMETERS = new Map([
-    ['src/stdlib/tensor/passes/fuse.cpp', 4], // tensor::test_echo, test-only
+    ['src/stdlib/tensor/passes/fuse.cpp', 4], // tensor::echo, test-only
     ['src/stdlib/test/params.cpp', 5], // test::params, test-only
     // Not a second declaration: built from the Camel function's `with` list, which is the
     // pass's declaration.
