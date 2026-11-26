@@ -247,7 +247,7 @@ A `sync` written before a block (including the postfix form on a function body, 
   - **A stream is isolated pull by pull**: when `f` returns a stream, every pull happens inside the boundary, the element type becomes `T!..`, and a pull that faults hands out an error;
   - **Effects are not rolled back**: effects that do not depend on the fault happen as usual, and effects that happened are not undone; the graph has no transactions.
 
-  Clean-up is guaranteed before termination: output is flushed and external resources are released.
+  Clean-up is guaranteed before termination: output is flushed and external resources are released; the finalization of an external resource that was released is also done before the program exits (the author, 2026-11-26), so when collection happens does not decide whether it was finalized at exit.
 
 - **`panic` declares that a native operator may fault** (the author, 2026-11-22): it is written on a declaration without a body, in the position of `pure` and `uses`, as in `export func div(a: int, b: int): int pure panic`, with no list of kinds (a fault, like an error, is told apart by its Kind). Without it the operator promises not to fault. When an operator is registered from C++, "may it panic" is a required field; it and the Camel declaration are two entries for one piece of information, and when both are written they must agree.
   - **A fault arises only at a fault source**: an operator declared `panic` (division by zero, an index out of bounds, and the built-in operator `fail`) and the run time's resource limits (recursion too deep, memory exhausted). A function has no panic mechanism of its own; a function's recoverable failure is only the error value `T!`.
@@ -263,6 +263,7 @@ A `sync` written before a block (including the postfix form on a function body, 
   ```
 
 - **An error value that is not handled and reaches the exit of `main`**: printed to standard error, with a non-zero exit code.
+- **Every diagnostic goes to standard error** (the author, 2026-11-26): a compile error, a run-time fault and a warning are all written to standard error, and standard output holds the program's own output only; each diagnostic is written once, with its location when the location is known.
 - **A `T!` value that is not used in a synchronous block is a compile-time warning**; in an `if` without `else`, a `T!` in the arm that is not used is likewise warned; a `let r = ...` that binds a `T!` while `r` is never used is likewise warned. To discard deliberately, write `let _ = ...`. A `main` without a declared return type that ends with an error value is a special case.
 - **A constant expression that is certain to fault** (such as `1 / 0`): the folding pass does not fold it, gives a warning with a location, and leaves it to run time. This is the folding pass's own choice, not a constraint on all passes (see 9.6).
 - **Out of bounds**: when the length is known at compile time (especially for types of fixed length), an out-of-bounds `slice` or subscript should be a compile-time error, not silent truncation or something left to run time. A run-time out-of-bounds `slice` is a fault, consistent with an out-of-bounds subscript; `take` and `drop` truncate by definition and are not affected; a `slice` whose start is after its end (`xs[2..1]`) gives an empty array and is not a fault.
