@@ -728,7 +728,7 @@ void GraphDraft::removeNormPort(gc_node_ref_t id) {
     // `walk$spec0` that declares `(n: int, xs: f32[n]) => f32 pure` over the one port node it kept,
     // whose type is `f32[n]` -- the port of the parameter declared `int` was gone and the one left
     // stood for it. `reinferDraftTypes` refuses to rebuild a signature whose two counts disagree
-    // (src/runtime/draft_types.cpp), so nothing else corrected it.
+    // (src/kernel/runtime/draft_types.cpp), so nothing else corrected it.
     //
     // The parameter is looked up among the fixed ones: a rest parameter is the last entry of the
     // signature and not a port a call binds a value to (a specialization walks the formal port

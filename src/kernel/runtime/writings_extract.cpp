@@ -311,7 +311,7 @@ DraftWritings::extract(const CostModel &model, camel::core::context::Context *co
             // instead of losing the edge with the node, and it is entered from where the folded
             // writing stood. The chain place and its neighboring dependencies are handed over by
             // `handChainPlaceTo`, the same call the branch dissolve makes
-            // (src/passes/opt/generic/generic.cpp); a node a chain does not hold is erased as it
+            // (src/stdlib/std/cxx/opt/generic/generic.cpp); a node a chain does not hold is erased as it
             // was.
             const gc_node_ref_t replacement = multi[node] ? chosen[classOf[node]] : node;
             if (replacement != node && replacement != kInvalidNodeRef &&

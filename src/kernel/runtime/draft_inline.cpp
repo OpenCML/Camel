@@ -2422,7 +2422,7 @@ DraftInlineResult inlineCallableInDraft(
     // block's statements are one chain (5.3). The builder writes that chain statement by statement,
     // and it leaves one link of it out where the statement reads, as a value, the node the link
     // would run from: the data edge already orders the two, so `chainLinkSaysSomething`
-    // (src/compile/gir/builder_helpers.h) writes no chain link there. A body compiled on its own is
+    // (src/compile/src/gir/builder_helpers.h) writes no chain link there. A body compiled on its own is
     // entered from the call's predecessors, so the missing link costs it nothing; spliced in, the
     // pieces of its chain are on nothing at all, and a statement on no chain is a statement that
     // never runs (3.1). So the pieces are joined here, where both ends are known: a statement that
@@ -2589,7 +2589,7 @@ DraftInlineResult inlineCallableInDraft(
     std::vector<gc_node_ref_t> placePreds = callSyncInputs;
     if (placePreds.empty()) {
         // A block's chain link is left out where the statement reads, as a value, the node the link
-        // would run from (docs/design/effects/edges.cn.md 5.7; src/compile/gir/builder_helpers.h,
+        // would run from (docs/design/effects/edges.cn.md 5.7; src/compile/src/gir/builder_helpers.h,
         // `chainLinkSaysSomething`): the data edge orders the two already. The statement the call
         // is written after is then the argument the call reads, not that argument's own
         // predecessor. Handing the body the control frontier instead writes the body's head

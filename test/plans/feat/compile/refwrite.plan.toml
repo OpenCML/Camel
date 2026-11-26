@@ -8,8 +8,8 @@
 # cover it. Until `writesForTheRegion` was widened, a `state::set` written as a statement (its value
 # nobody wants) was dropped: the write node never entered the execution, the box kept the value it
 # started with, and the `ORDER` edge joining the write to the read of the same box decided nothing,
-# because the liveness walk (`src/runtime/graph.cpp#liveNodesWith`) and the dead-write rule
-# (`src/runtime/draft_writes.cpp#deadWriteWith`) read data, control and sync edges and never order.
+# because the liveness walk (`src/kernel/runtime/graph.cpp#liveNodesWith`) and the dead-write rule
+# (`src/kernel/runtime/draft_writes.cpp#deadWriteWith`) read data, control and sync edges and never order.
 #
 # Why the root and not an edge from the reader: `region_roots.h` keeps "the region uses them" out of
 # the graph on purpose ("图上不加边"), and a real data edge would need a version operand on `get` and
