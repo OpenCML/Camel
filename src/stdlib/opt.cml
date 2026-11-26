@@ -116,13 +116,14 @@ func same_node(a: Node, b: Node) => bool {
 }
 
 // The node `n` is replaced by: the first node of its graph that has the same value, or `n`
-// itself when it is the first. That first node is never a node the same round merges away, which
-// is what makes one transaction enough for a round.
+// itself when it is the first. "First" is the order `nodes` answers in the draft: a node's `id`
+// exists only once the commit publishes the program. That first node is never a node the same
+// round merges away, which is what makes one transaction enough for a round.
 func keep_of(ns: Node[], n: Node) => Node {
-    let earlier = ns->filter<func (m: Node) => bool {
-        id(m) < id(n) && !is_anchor(m) && same_node(n, m)
+    let same = ns->filter<func (m: Node) => bool {
+        m == n || (!is_anchor(m) && same_node(n, m))
     }>
-    return if len(earlier) == 0 then n else earlier[0]
+    return same[0]
 }
 
 func is_hit(ns: Node[], n: Node) => bool {
