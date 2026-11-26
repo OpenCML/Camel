@@ -200,8 +200,9 @@ func dead_value(n: Node) => bool {
     return value_only(n) && len(value_users(n)) == 0 && !is_anchor(n) && !last_read_of_a_fault(n)
 }
 
-func erase_hits::<F>(f: F, hits: Node[]) => F! sync {
-    let d = open(f)
+// An edit acts on the draft its node belongs to, so the hits are erased in the draft they were
+// found in, and that draft is the one committed.
+func erased::<F>(d: Graph, hits: Node[]) => F! sync {
     hits->foreach<func (n: Node) => void {
         erase(n)
     }>
@@ -211,11 +212,7 @@ func erase_hits::<F>(f: F, hits: Node[]) => F! sync {
 func dead_values::<F>(f: F) => F! when is_function::<F>() sync {
     let d = open(f)
     let hits = all_nodes(graphs(d))->filter<dead_value>
-    if len(hits) == 0 then {
-        abort(d)
-        return f
-    }
-    return erase_hits(f, hits)->dead_values
+    return if len(hits) == 0 then abandoned(d, f) else erased::<F>(d, hits)->dead_values
 }
 
 /// Values nobody reads are erased, until none is left: the value half of `std::cxx::dce`.
