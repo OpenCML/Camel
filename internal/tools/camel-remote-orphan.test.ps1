@@ -59,7 +59,8 @@ Check 'the remote script carries the guard after setting the directory it writes
 Check 'the exit trap that replaces the guard''s still ends the watchdog' `
     ([regex]::IsMatch($srcText, '(?s)finish_probe\(\) \{.*?\n\s*orphan_end\r?\n\}')) 'finish_probe does not call orphan_end'
 
-$bash = (Get-Command bash -ErrorAction SilentlyContinue)
+. (Join-Path $PSScriptRoot 'git-bash.ps1')
+$bash = Get-GitBash
 $scratch = Join-Path ([IO.Path]::GetTempPath()) ('camel-orphan-' + [guid]::NewGuid().ToString('N').Substring(0, 8))
 New-Item -ItemType Directory -Path $scratch -Force | Out-Null
 function ToBash([string]$p) { $p -replace '\\', '/' }
@@ -70,11 +71,11 @@ function WriteLf([string]$path, [string]$text) {
 
 if ($guard -and $bash) {
     WriteLf (Join-Path $scratch 'syntax.sh') ("orphan_dir=x`n" + $guard + "`n")
-    & $bash.Source -n (ToBash (Join-Path $scratch 'syntax.sh')) 2>$null
+    & $bash -n (ToBash (Join-Path $scratch 'syntax.sh')) 2>$null
     Check 'the fragment passes bash -n' ($LASTEXITCODE -eq 0)
 } elseif (-not $bash) {
     $script:skipped++
-    Write-Host '  SKIP  the fragment passes bash -n -- no bash on PATH'
+    Write-Host '  SKIP  the fragment passes bash -n -- no Git for Windows bash found'
 } else {
     Check 'the fragment passes bash -n' $false 'no fragment'
 }
@@ -83,10 +84,10 @@ if ($guard -and $bash) {
 $canRun = $false
 $why = ''
 if (-not $guard) { $why = 'no fragment' }
-elseif (-not $bash) { $why = 'no bash on PATH' }
+elseif (-not $bash) { $why = 'no Git for Windows bash found' }
 else {
     WriteLf (Join-Path $scratch 'probe.sh') ('read -r s < /proc/$$/stat && set -- ${s##*) } && [ -n "$2" ] && bash -c ''read -r t < /proc/$PPID/stat && echo yes; :''')
-    $probe = & $bash.Source (ToBash (Join-Path $scratch 'probe.sh')) 2>$null
+    $probe = & $bash (ToBash (Join-Path $scratch 'probe.sh')) 2>$null
     if ("$probe".Trim() -eq 'yes') { $canRun = $true } else { $why = '/proc/<pid>/stat is not readable in this bash' }
 }
 
@@ -196,7 +197,7 @@ sleep 4
 res kept_after_reader "$(cat "$W"/runs/*.out 2>/dev/null | wc -l)"
 '@ -replace '__W__', $w)
 
-    $raw = & $bash.Source (ToBash (Join-Path $scratch 'drive.sh')) 2>&1
+    $raw = & $bash (ToBash (Join-Path $scratch 'drive.sh')) 2>&1
     $r = @{}
     foreach ($l in $raw) { if ("$l" -match '^RESULT (\S+) (\d+)') { $r[$Matches[1]] = [int]$Matches[2] } }
     $detail = (($raw | Out-String) -replace "`r", '').Trim()

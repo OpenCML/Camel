@@ -104,9 +104,10 @@ Check 'a run name that climbs is refused before any command is written' ($badRun
 
 # The command run for real against two run directories, the named one the older. Needs a POSIX shell;
 # the host's own is one, and Git's bash stands in for it here.
-$bash = Get-Command bash -ErrorAction SilentlyContinue
+. (Join-Path $PSScriptRoot 'git-bash.ps1')
+$bash = Get-GitBash
 if ($null -eq $bash) {
-    Write-Host '  SKIP  the command against a planted tree: no bash on this machine'
+    Write-Host '  SKIP  the command against a planted tree: no Git for Windows bash found'
 } else {
     $tree = Join-Path ([System.IO.Path]::GetTempPath()) ('camel-fetch-test-' + [guid]::NewGuid().ToString('N'))
     try {
@@ -121,9 +122,9 @@ if ($null -eq $bash) {
         # Git's bash reads `C:/x/y` as a path as it is, so forward slashes are enough.
         $posixRoot = $logRoot -replace '\\', '/'
 
-        $answer = (& bash -c (New-CamelRunDirCommand -LogRootOnHost $posixRoot -Run $older) | Out-String).Trim()
+        $answer = (& $bash -c (New-CamelRunDirCommand -LogRootOnHost $posixRoot -Run $older) | Out-String).Trim()
         Check 'the named run answers with its own directory, though a newer one exists' ($answer -like "*$older") $answer
-        $missing = (& bash -c (New-CamelRunDirCommand -LogRootOnHost $posixRoot -Run '20261124_120000_333_cccc') | Out-String).Trim()
+        $missing = (& $bash -c (New-CamelRunDirCommand -LogRootOnHost $posixRoot -Run '20261124_120000_333_cccc') | Out-String).Trim()
         Check 'a run directory that is not there answers nothing, not the newest one' ($missing -eq '') $missing
     } finally {
         Remove-Item -LiteralPath $tree -Recurse -Force -ErrorAction SilentlyContinue
