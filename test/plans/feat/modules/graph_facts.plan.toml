@@ -340,3 +340,42 @@ assert(/ wrong=0$/.test(summary), summary)
 assert(!/ (wrong)$/m.test(out), 'a check was wrong')
 }
 """
+
+[[tests]]
+name = "draft_facts"
+desc = "The facts of a draft before any edit are the facts of the graph it was opened from: permissions, tags, region and shape are asked of each node of the published graph and of the node the draft copied, and the plan pairs the two lines and refuses a pair that differs. A draft node is named by the transaction that owns it, and the fact store keys on a published graph (camel/runtime/facts.h, Anchor), so these four are answered from the draft itself -- the same reading the published node gets, because a draft copies the columns it reads (draft_view.h, permissionsOf; core_facts.h, shapeOfType)."
+kind = "behavior"
+case = "../../../cases/modules/graph_facts/draft_facts.cml"
+args = ["${case}"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+  const lines = input.normalized.stdout.split('\n')
+  const after = (label) => {
+    const i = lines.indexOf(label)
+    assert(i >= 0, `missing: ${label}`)
+    assert(i + 1 < lines.length, `nothing after: ${label}`)
+    return lines[i + 1]
+  }
+  const publishedNodes = after('published nodes')
+  const draftNodes = after('draft nodes')
+  assert(publishedNodes === draftNodes, `nodes differ: ${publishedNodes} vs ${draftNodes}`)
+  assert(publishedNodes !== '[]', 'the subject has no nodes')
+  for (const query of ['permissions', 'tags', 'region', 'shape']) {
+    const published = after(`published ${query}`)
+    const draft = after(`draft ${query}`)
+    assert(published === draft, `${query}: published ${published} vs draft ${draft}`)
+  }
+}
+"""
+
+[[tests]]
+name = "draft_effects_refused"
+desc = "`effects` on a draft is refused rather than answered about the graph the draft was opened from. effectwalk walks a published GCGraph and a draft is not one, so before the refusal existed the query resolved the draft's GraphId in the program and printed the effect summary of the graph *before* the edits -- exit 0, no diagnostic, a silently wrong answer. The published query in the same case still answers (`true` for a function that prints)."
+kind = "behavior"
+case = "../../../cases/modules/graph_facts/draft_effects_refused.cml"
+args = ["${case}"]
+expect_exit = 1
+# The fault is printed where the run prints: this CLI writes a runtime fault to stdout, so the
+# reason the refusal gives is asserted there, and the exit code carries the refusal itself.
+expect_stdout_contains = ["published effects external", "true", "draft effects external", "the effects of a draft are not computed: a draft has no published graph to walk"]
