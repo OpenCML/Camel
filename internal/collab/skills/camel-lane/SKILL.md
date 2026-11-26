@@ -136,6 +136,9 @@ pwsh -NoProfile -File <你的工作树>\internal\tools\camel-remote.ps1 `
   不同、或根本没装时，钩子**不改文件、只打一行**说明，提交照常走 —— 遇到这一行就读它、照常提交，
   **不要用 `--no-verify`**：绕过它等于同时绕过记录校验、`check-process-traces` 与文档引用检查。
   树里的旧排版看着「不合格式」是正常的（它由多个版本排过），**不要为了整齐去整份格式化一个文件**。
+· **清理只删自己那一个文件名，永不删目录**：`test/plans/probe/` 里可能躺着别的车道的 tracked 计划
+  （今天一次 `Remove-Item test/plans/probe -Recurse` 就删掉了 7 个别人的探针计划，靠 `git checkout -- <dir>` 才恢复）。
+  删之前 `git status --porcelain <dir>` 看一眼；tracked 的东西删了会静默变成“别人的活没了”，而 `git status` 在你自己树上还是干净的。
 ```
 
 ## 7½. 交回
