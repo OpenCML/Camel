@@ -413,19 +413,19 @@ enum class CommitCheck : uint8_t {
 std::string_view commitCheckName(CommitCheck check);
 
 /// One region one edit changed, with its kind and the position it was written at: the draft's
-/// record
-/// (`camel::runtime::EditNote`), defined in `camel/runtime/draft.h` and named by this header rather
-/// than forward-declared.
+/// record (`camel::runtime::EditNote`), defined once in `camel/runtime/draft.h` and included by
+/// this header. The include is what puts the definition before `commitViolation`'s declaration: a
+/// parameter of type `std::span<const EditNote>` instantiates the span where the declaration is
+/// written, and MSVC's `<span>` builds its iterator there -- `const_reverse_iterator` is
+/// `const_iterator<reverse_iterator>`, whose concept check reaches `_Span_iterator::operator--`,
+/// pointer arithmetic that needs the complete element type. libstdc++'s `<span>` does that
+/// construction later, if at all, so an implementation that does not needs only the name.
 ///
-/// The include is what puts the definition before `commitViolation`'s declaration, which takes a
-/// span of the record by value. A parameter of type `std::span<const EditNote>` instantiates the
-/// span at the declaration, and the standard library's span instantiates its iterator machinery
-/// there: `const_reverse_iterator` is `const_iterator<reverse_iterator>`, whose concept check calls
-/// `ranges::iter_move`, which reaches `_Span_iterator::operator--` -- pointer arithmetic, and that
-/// needs the complete element type. An implementation that does not instantiate at the declaration
-/// (the GCC standard library does not) accepts a forward declaration, so without this include
-/// whether the header parses at all depended on the order in which each unit reached it. The record
-/// is still defined once, in draft.h.
+/// The parameter that carries the record (`commitViolation` below) is a pointer and a count rather
+/// than a `std::span<const EditNote>`, so the declaration stands on the name alone: a pointer to an
+/// incomplete type carries no arithmetic, and `const EditNote *edits = nullptr` is a default
+/// argument this header can write without the record's definition.
+struct EditNote;
 
 /// A commit that must be refused: which of the two checks, the graph, the nodes the reading names,
 /// and the one line the diagnostic carries. `origin` is the source position to report against (0
@@ -517,7 +517,7 @@ std::optional<CommitViolation> commitViolation(
     const Program &program, const GCGraph &graph, std::span<const gc_node_ref_t> made = {},
     std::span<const gc_node_ref_t> changed = {}, const GCGraph *before = nullptr,
     const Program *beforeProgram = nullptr, bool asksEffects = true, bool asksOrder = true,
-    std::span<const EditNote> edits = {});
+    const EditNote *edits = nullptr, std::size_t editCount = 0);
 
 /// Whether a commit of `graph` added an access: some node `made` names carries an access (or an
 /// effect outside the program). This is the first half of the tier; the

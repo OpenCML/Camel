@@ -2093,7 +2093,8 @@ const Program *RuntimeGraphDraftSession::runCommit(bool staged, bool detached) {
                 program_,
                 tier.effects,
                 tier.order,
-                notes)) {
+                notes.data(),
+                notes.size())) {
             throw GraphCommitRefused(*violation);
         }
     }
