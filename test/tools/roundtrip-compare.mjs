@@ -8,8 +8,8 @@
  * here -- the printed source is regenerated and looks nothing like the origin -- so what this tool
  * compares is what a user would notice: the exit status and every byte of standard output.
  *
- * The eight cases of the author's defect list (A7) are the ones that behaved differently after a
- * print; a ninth (`compile/escapes/raw_roundtrip`) is the printer's raw form for a string with
+ * The seven cases of the author's defect list (A7) are the ones that behaved differently after a
+ * print; an eighth (`compile/escapes/raw_roundtrip`) is the printer's raw form for a string with
  * several backslashes, which is a literal rather than a graph shape. They are green today, and
  * this tool is the lock, not the fix. Its own discriminability is
  * checked by `--negative <case>`: the printed body has two of its `println` statements swapped and
@@ -82,13 +82,22 @@ for (let i = 2; i < process.argv.length; i += 1) {
 const CAMEL = camelBinary()
 const env = { ...process.env, CAMEL_HOME: process.env.CAMEL_HOME || path.join(ROOT, 'out', 'latest') }
 
-/// The eight cases of A7. Each is a `test/cases/**.cml` path; the printed program goes to a scratch
-/// directory of our own, so the tree the runner handed us is not written to. The path is the one the
-/// tree has: two entries named `src/...`, a directory the cases do not live under, so both answered
-/// `unmeasurable` for a reason that is not a defect (the plan's own expected line names
-/// `compile/escapes/raw_roundtrip`, which is where the file is).
+/// The seven cases of A7 that still have a printable subject. Each is a `test/cases/**.cml` path;
+/// the printed program goes to a scratch directory of our own, so the tree the runner handed us is
+/// not written to. The path is the one the tree has: two entries named `src/...`, a directory the
+/// cases do not live under, so both answered `unmeasurable` for a reason that is not a defect (the
+/// plan's own expected line names `compile/escapes/raw_roundtrip`, which is where the file is).
 ///
-/// Nine readings were recorded when this list was made. The ninth, `effects/writer_table_through_callee`,
+/// `linear/runtime/var_read_before_region` is out, and it is out because there is no program to
+/// print: its interval loop is a stream walk and its body no longer types, so the compiler refuses
+/// the case before the printer sees it (a loop-state type error at its first loop). Its own entries
+/// (`linear/runtime/var_read_before_region.plan.toml`) are red with it, so this tool must not become
+/// a second owner of that red; an entry whose program cannot compile could only ever answer
+/// `unmeasurable`, which is a `differs` of 1 for a reason that is not a defect -- the one thing this
+/// file exists to prevent.
+///
+/// Nine readings were recorded when this list was made, now eight. The ninth,
+/// `effects/writer_table_through_callee`,
 /// measured "a call writes state and the read after it takes that version", and the 2026-11-16
 /// closure-capture ruling (design principles 3.5) took its subject away: a closure may
 /// not assign a captured `var`, so that state is a `state::ref` handle -- and `std::cml` has no
@@ -101,7 +110,6 @@ const env = { ...process.env, CAMEL_HOME: process.env.CAMEL_HOME || path.join(RO
 /// `internal/reviews/2026-11-19-a-write-then-read-through-a-call-has-no-printable-subject.cn.md`.
 const CASES = [
     'consistency/fail_never/statement_after_fail',
-    'linear/runtime/var_read_before_region',
     'linear/runtime/var_read_before_write',
     'linear/runtime/order_edges_regions',
     'parse/rulings/power',
