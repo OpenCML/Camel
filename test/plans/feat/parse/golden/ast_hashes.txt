@@ -527,7 +527,7 @@ d07e8f7a68b8a5c8 ok src/stdlib/math.cml
 49015cbc4407a506 ok src/stdlib/optim.cml
 acdef1f5a6e980e3 ok src/stdlib/para.cml
 a82098797df46210 ok src/stdlib/perf.cml
-115dc9a75c88e1a0 ok src/stdlib/prelude.cml
+971ffea383febefc ok src/stdlib/prelude.cml
 0a2356410c7e5b3c ok src/stdlib/process.cml
 8f9a9b5b4701c251 ok src/stdlib/pyplot.cml
 692ab627c3592a87 ok src/stdlib/python.cml
