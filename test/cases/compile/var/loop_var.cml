@@ -3,12 +3,12 @@
  *
  * This is one side of the pair `loop_var.cml` / `loop_let.cml`; the two files are one program in
  * two writings, and `std::jgir canonical=true` must print the same bytes for both (design
- * principles 3.5: a `var` is a resource and a unit is a representation).
+ * principles 3.5: a `var` is a name for values, and a write to an outer `var` in a loop body becomes
+ * the loop's carried state).
  *
- * It is red today, and red for one reason: a write inside a loop body keeps its `:var/get` (the
- * read in `total = total + 1` cannot fold, because the value the previous turn carried is not a
- * node's input), so the `var` writing still builds a unit -- `:var/new`, `:var/get` and the LOOP's
- * carried state. The `let` writing has no unit at all.
+ * The accumulation is the loop's carried state: `total = total + 1` inside the body is the round's
+ * next value, which the loop head hands to the next round and to the read after the loop, so the
+ * `var` writing and the `let` writing that spells the same state out build one graph.
  *
  * Run: camel test/cases/compile/var/loop_var.cml
  */

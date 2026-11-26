@@ -10,8 +10,8 @@
  * does not carry the name at all.
  *
  * This shape is how `total(node: Node)` accumulates in
- * `test/cases/compile/semantic/recursive_struct_array.cml`, which stage S3 read as `450971566189`
- * before the head carried a compound write.
+ * `test/cases/compile/semantic/recursive_struct_array.cml`: a compound write the head does not see
+ * leaves the read after the loop answering from a round that last ran.
  *
  * Run: camel test/cases/compile/var/loop_compound_write.cml std::nvm
  */

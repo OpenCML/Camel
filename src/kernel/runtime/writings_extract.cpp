@@ -161,7 +161,7 @@ DraftWritings::extract(const CostModel &model, camel::core::context::Context *co
     for (gc_node_ref_t node = 0; node < slots; ++node) {
         if (draft_.alive(node) &&
             (writtenInPlace(node) ||
-             (carriesOrdering(draft_, node, true) && !isUnanchoredPure(draft_, node) &&
+             (carriesOrdering(draft_, node) && !isUnanchoredPure(draft_, node) &&
               draft_.header(node)->kind != GCNodeKind::Oper &&
               camel::runtime::shapeOfKind(draft_.header(node)->kind) !=
                   camel::ops::OperShape::Conversion))) {
@@ -311,8 +311,8 @@ DraftWritings::extract(const CostModel &model, camel::core::context::Context *co
             // instead of losing the edge with the node, and it is entered from where the folded
             // writing stood. The chain place and its neighboring dependencies are handed over by
             // `handChainPlaceTo`, the same call the branch dissolve makes
-            // (src/stdlib/std/cxx/opt/generic/generic.cpp); a node a chain does not hold is erased as it
-            // was.
+            // (src/stdlib/std/cxx/opt/generic/generic.cpp); a node a chain does not hold is erased
+            // as it was.
             const gc_node_ref_t replacement = multi[node] ? chosen[classOf[node]] : node;
             if (replacement != node && replacement != kInvalidNodeRef &&
                 draft_.alive(replacement) && !draft_.syncUsersOf(node).empty()) {

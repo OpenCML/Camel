@@ -2,29 +2,34 @@ id = "tools.arrangeable"
 order = 918
 tier = "slow"
 tags = ["feat", "tools", "facts", "kernel"]
-desc = "`core.arrangeable` against the predicate a pass asks, on the one node where the two had two answers (a conversion's pair of types) and over every case the tree has."
+desc = "`core.arrangeable`'s own answers on the one node kind whose answer cannot be read from the operator record alone (a conversion's pair of types), and over every case the tree has."
 
-# The fact and the predicate answer one question -- may a pass arrange this node anywhere -- and one
-# program cannot say whether they do. The fact's own plan pins the two readers on two cases
-# (`facts.compare_arrangeable_readers`), which is what a plan beside a case can afford; the tree is
-# 4,000 programs, and the disagreement this plan was written for was invisible on both of them:
-# `:op/cast` nodes were answered "kept" by the kind (the operator's record says a cast may fault)
-# and "may move" by the predicate a pass asks (which reads the pair of types the conversion converts
-# between), 7,897 of them across the tree.
+# The fact answers one question -- may a pass arrange this node anywhere -- and one program cannot say
+# how the tree answers it. The fact's own plan pins the census on four programs (`facts.arrangeable_
+# answers*`), which is what a plan beside a case can afford; the tree is 4,000 programs, and the rows
+# that matter are the ones no single case writes: which operators exist, and what a change to the four
+# terms of design principles 3.4 does to them.
+#
+# Whether the answer may live anywhere but the fact layer is the layer's own page, not this file: a
+# question a program can answer only by deriving it is class (ii) -- "可推导的事实" -- whose place is
+# the store, under a stamp, recomputed when the stamp says it went stale; what the program wrote is
+# class (i) and what depends on the target is the back end's (iii)
+# (`docs/design/op-semantics/README.cn.md`, 10.1). `core.arrangeable` is a class (ii) kind of
+# scope Node (`docs/technical/40_graph_facts.md`, 2), so the rows below are the store's answers: a
+# second derivation beside them would be exactly the second statement the layer exists to delete.
 #
 # The first entry is the pair of types made into a program, and it is `fast`: two conversions of one
 # operator, one that cannot fail and one that may, so the reading is the same operator answered two
-# ways and only the pair can tell them apart. It is red before the kind reads the pair and green
-# after, in both directions (the safe one moves, the checked one stays).
+# ways and only the pair can tell them apart.
 #
 # The second entry is the sweep, and it is `slow` because it starts one `camel` per tracked `.cml`
-# (4,376 of them, 2,700-odd readable without the arguments their own plans give them). A named plan
-# file runs in full whatever `--tier` says, which is why the selection rule that names this file is
-# layered (test/plan-selection.json).
+# (4,400 of them, 2,981 readable without the arguments their own plans give them). A named plan file
+# runs in full whatever `--tier` says, which is why the selection rule that names this file is layered
+# (test/plan-selection.json).
 [[tests]]
 name = "facts.arrangeable_conversion_pair"
 tier = "fast"
-desc = "`test::facts_compare` on a program whose two `:op/cast` nodes convert different pairs: `f32[...]` into `f32[2, 3]` checks the value's shape when it runs and may fault, `float[6]` into `f32[]` keeps every value it is given. The tally row for `:op/cast` has one node in `both_free` and one in `both_kept` with no disagreement in either direction: the kind and the predicate a pass asks let the safe conversion move and keep the checked one where the program wrote it, so an answer read from the operator alone (which says 'a cast may fault' about both) cannot be what produced the row. Before the kind read the node's pair, the row was `both_free=0 both_kept=2 kind_kept_pred_free=1`."
+desc = "`test::facts_compare` on a program whose two `:op/cast` nodes convert different pairs: `f32[...]` into `f32[2, 3]` checks the value's shape when it runs and may fault, `float[6]` into `f32[]` keeps every value it is given. The fact's row for the operator has one node answered freely arrangeable and one answered no, with no node unanswered: a conversion's fault term is a property of the pair of types it converts between, so a row read from the operator alone -- which says 'a cast may fault' about both -- cannot be what produced it. The two nodes are one row because they are one operator, and the row is split because they are two pairs."
 kind = "behavior"
 case = "../../../cases/facts/conversions.cml"
 args = ["${case}", "test::facts_compare"]
@@ -33,41 +38,38 @@ expect_exit = 0
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout
-const row = out.split('\n').find(l => l.startsWith('FACTS_COMPARE tally node_kind=oper oper=:op/cast '))
-assert(row, 'no tally row for :op/cast: the table did not print')
+const row = out.split('\n').find(l => l.startsWith('FACTS_COMPARE answers_row node_kind=oper oper=:op/cast '))
+assert(row, 'no answers row for :op/cast: the census did not print')
 const num = (name) => { const m = row.match(new RegExp(name + '=([0-9]+)')); assert(m, `${name} is missing from: ${row}`); return Number(m[1]) }
 assert(num('nodes') >= 2, `the program's two conversions were not both counted: ${row}`)
-assert(num('both_free') >= 1, `the conversion that cannot fail is not answered "freely arrangeable" by both readers: ${row}`)
-assert(num('both_kept') >= 1, `the conversion that checks its value is not kept by both readers: ${row}`)
-assert(num('kind_free_pred_kept') === 0, `the kind calls a node freely arrangeable that a pass keeps: ${row}`)
-assert(num('kind_kept_pred_free') === 0, `the predicate offers a placement the kind will not answer for: ${row}`)
-// The same two nodes against the answer the fact replaced: `operatorArrangeable` alone says "a cast
-// may fault" about both, so the older answer restated at the node is where the difference has to be
-// read as a number rather than inferred from the row above. Before the pair was read this line was
-// `diff=1 conversions=2`; the restatement and the fact are one answer now.
-const older = out.split('\n').find(l => l.startsWith('FACTS_COMPARE kind=core.arrangeable graphs='))
-assert(older, 'no FACTS_COMPARE arrangeable line: the older answer was not compared')
-const onum = (name) => { const m = older.match(new RegExp(name + '=([0-9]+)')); assert(m, `${name} is missing from: ${older}`); return Number(m[1]) }
-assert(onum('conversions') >= 2, `the older answer was not restated at either conversion: ${older}`)
-assert(onum('diff') === 0, `the fact and the answer it replaced differ at a node: ${older}`)
+assert(num('free') >= 1, `the conversion that cannot fail is not answered freely arrangeable: ${row}`)
+assert(num('kept') >= 1, `the conversion that checks its value is not kept: ${row}`)
+assert(num('no_fact') === 0, `the fact answered nothing for a conversion: ${row}`)
+const line = out.split('\n').find(l => l.startsWith('FACTS_COMPARE kind=core.arrangeable answers '))
+assert(line, 'no answers line: the census did not run on this program')
+const total = (name) => { const m = line.match(new RegExp(name + '=([0-9]+)')); assert(m, `${name} is missing from: ${line}`); return Number(m[1]) }
+assert(total('no_fact') === 0, `a node of this program got no answer: ${line}`)
+assert(total('free') + total('kept') === total('nodes'), 'the two answers do not cover the nodes')
 }
 """
 timeout_ms = 20000
 
-# The rows of the other node kinds are printed and not decided: they are the table
-# `internal/reports/2026-11-25-the-arrangeable-disagreements.cn.md` keeps, and a red this plan
-# invented about a kind nobody has moved yet is a wall somebody would switch off.
+# What the sweep decides is coverage and completeness, not agreement: there is no second answer to
+# agree with. The tables it prints are the reading -- a kind, an operator or a family that moves is a
+# row a reader can name -- and the row of every operator that matters to a change is printed whether
+# or not it is inside the window.
 [[tests]]
-name = "facts.arrangeable_every_operator_agrees"
-desc = "`scripts/check-arrangeable.mjs` runs `test::facts_compare std::gir` on every `.cml` the revision tracks, sums the `tally` rows it prints (one row per node kind and operator, split into both_free, both_kept, kind_free_pred_kept and kind_kept_pred_free) and reads two things: the sweep read at least 2000 cases, and no row of an OPER node has a disagreement in either direction -- which is one answer, not two, to 'may a pass arrange this node anywhere'."
+name = "facts.arrangeable_every_operator_answers"
+desc = "`scripts/check-arrangeable.mjs` runs `test::facts_compare std::gir` on every `.cml` the revision tracks and sums the census it prints: the totals, one line per node kind, one per family the tree answered in, and the (node kind, operator) rows. It then reads three things -- the sweep read at least 1700 cases, no node of any graph went unanswered (`no_fact=0`, because an absent answer is not a placement decision but a fact-layer defect), and no row was dropped in the reading -- and prints the tables either way."
 kind = "behavior"
 tool = "node"
 case = "../../../../scripts/check-arrangeable.mjs"
 args = ["${case}"]
 expect_exit = 0
-expect_stdout_contains = ["ARRANGEABLE_SWEEP files=", "ARRANGEABLE_KIND node_kind=oper", "ARRANGEABLE_ROW node_kind=oper oper=:op/cast", "every operator's answer agrees"]
+expect_stdout_contains = ["ARRANGEABLE_SWEEP files=", "ARRANGEABLE_KIND node_kind=oper", "ARRANGEABLE_ROW node_kind=oper oper=:op/cast", "every node the sweep read was answered by the fact"]
 # One `camel` per case, plus `std::gir` for each (the stopper that keeps a case from being executed:
-# the comparison pass hands the program on, and the next fallback would run it). The bound is the
-# runner's four-times margin over the slowest reading this tree has taken, and a host that runs it
-# slower spends wall clock: at eight at a time the sweep is single-digit minutes on the gate host.
-timeout_ms = 1800000
+# the comparison pass hands the program on, and the next fallback would run it). The reading is 2,981
+# cases at 238,135 nodes, 453 s of CPU over eight workers on the gate host; 2,400,000 ms is over five
+# times that, so the bound is a bound and not the work's own time. A host that runs it slower spends
+# wall clock and no CPU, and CPU is what the runner reads.
+timeout_ms = 2400000

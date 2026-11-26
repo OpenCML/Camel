@@ -8,7 +8,7 @@
  * A rule that says "this must hold" is only checkable where it can be asked of a node that is
  * finished. Tonight's order-edge work paid for that lesson twice: four writer guards and a choke
  * point were all written at the place an edge is appended, and all of them were ineffective,
- * because at that moment the node has no payload and `nodeIsFreelySchedulable` answers for a
+ * because at that moment the node has no payload and the arrangeable question answers about a
  * half-made node. The filter that worked had to sit in the payload plan, where the node is
  * finished. The rule is therefore about *where* an invariant lives, not only about what it says.
  *

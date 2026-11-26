@@ -27,6 +27,7 @@
 
 #include "camel/core/context/frame.h"
 #include "camel/core/resource_semantics.h"
+#include "camel/ops/oper_shape.h"
 #include "camel/runtime/graph.h"
 #include "camel/runtime/node_ref.h"
 #include "camel/runtime/program.h"
@@ -378,8 +379,8 @@ std::string_view editKindName(EditKind kind);
 ///
 /// `origin` is the source position of the statement the edit was written at (0 when the caller did
 /// not know one). The node a commit refuses usually came from an edit and not from the program's
-/// own text, so a diagnostic that carried only the node's origin pointed at the line the node stands
-/// on, never at the edit that put it there (docs/design/graph-editing/README.cn.md 8.3).
+/// own text, so a diagnostic that carried only the node's origin pointed at the line the node
+/// stands on, never at the edit that put it there (docs/design/graph-editing/README.cn.md 8.3).
 struct EditNote {
     EditKind kind   = EditKind::LowLevel;
     uint32_t region = 0;
@@ -401,7 +402,7 @@ struct EditTier {
 /// regions span is that edit's and is not kept by the draft for the listener to hold.
 class EditListener {
   public:
-    virtual ~EditListener() = default;
+    virtual ~EditListener()                                                       = default;
     virtual void onEditRecorded(EditKind kind, std::span<const uint32_t> regions) = 0;
 };
 
@@ -433,10 +434,10 @@ std::shared_ptr<const UndoSnapshot> takeUndoSnapshot(const GraphDraft &draft);
 std::optional<UndoClass> undoMismatch(const GraphDraft &draft, const UndoSnapshot &snapshot);
 
 // The draft representation of a graph. `camel::graph::Graph` is the graph as a value (the name a
-// callee and a fact anchor use, `kernel/graph/include/camel/graph/graph.h`); a draft has an identity
-// of its own (`id()`), it is the version the session is building, so it is the other of the two
-// representations that derive from it. The base adds no member and is not a way to read the draft --
-// that is `GraphView` and its adapter (`kernel/graph/draft_view.h`).
+// callee and a fact anchor use, `kernel/graph/include/camel/graph/graph.h`); a draft has an
+// identity of its own (`id()`), it is the version the session is building, so it is the other of
+// the two representations that derive from it. The base adds no member and is not a way to read the
+// draft -- that is `GraphView` and its adapter (`kernel/graph/draft_view.h`).
 class GraphDraft : public camel::graph::Graph {
   public:
     /// The face this draft is read through (`camel/graph/graph.h`): the draft adapter, made on the
@@ -573,17 +574,17 @@ class GraphDraft : public camel::graph::Graph {
     ///
     /// Only the edits of the table's last row land here. The named edits above it -- `replace`,
     /// `erase`, `eval`, `order` -- promise in their own right that the effect and the ordering they
-    /// leave are the ones they left, so a draft that used one opens a `NamedEdit` around it and what
-    /// it changes is that edit's rather than this list's. A change that writes down the list a node
-    /// already has is no change and is not recorded.
+    /// leave are the ones they left, so a draft that used one opens a `NamedEdit` around it and
+    /// what it changes is that edit's rather than this list's. A change that writes down the list a
+    /// node already has is no change and is not recorded.
     std::span<const gc_node_ref_t> lowLevelEdits() const { return lowLevelEdits_; }
-    /// The edit record: every edit this draft made, as `(kind, region)` pairs in the order they were
-    /// made, whichever of the two entries made it -- a named edit operator, or a kernel primitive.
-    /// `editCount` counts the edits themselves (an edit that changed no region is still one edit),
-    /// and `editedRegions` and `editTier` are what a publish reads off the record. `EditListener`s
-    /// are told once per edit, as it is made. Kept on the draft and not on a journal beside it
-    /// because both entries already write through this type: a record kept anywhere else would be
-    /// one an edit could go round.
+    /// The edit record: every edit this draft made, as `(kind, region)` pairs in the order they
+    /// were made, whichever of the two entries made it -- a named edit operator, or a kernel
+    /// primitive. `editCount` counts the edits themselves (an edit that changed no region is still
+    /// one edit), and `editedRegions` and `editTier` are what a publish reads off the record.
+    /// `EditListener`s are told once per edit, as it is made. Kept on the draft and not on a
+    /// journal beside it because both entries already write through this type: a record kept
+    /// anywhere else would be one an edit could go round.
     std::span<const EditNote> editNotes() const { return editNotes_; }
     /// The edits recorded, one count per edit whatever it changed (`editNotes` has one entry per
     /// region and so answers nothing for an edit that changed none).
@@ -598,11 +599,12 @@ class GraphDraft : public camel::graph::Graph {
     std::vector<uint32_t> editedRegions() const;
     /// The checks the record owes at publish, read off the table of
     /// `docs/design/graph-editing/README.cn.md` 8.1: the effect and order questions are asked when
-    /// the kinds used can have changed them, and a draft whose record names none of those kinds owes
-    /// neither in any build.
+    /// the kinds used can have changed them, and a draft whose record names none of those kinds
+    /// owes neither in any build.
     EditTier editTier() const;
-    /// Told about every edit as it is recorded, in the order the edits are made. The draft keeps the
-    /// pointer, not the listener: one that is removed before the draft dies is removed before it.
+    /// Told about every edit as it is recorded, in the order the edits are made. The draft keeps
+    /// the pointer, not the listener: one that is removed before the draft dies is removed before
+    /// it.
     void addEditListener(EditListener *listener);
     void removeEditListener(EditListener *listener);
     /// Says that what it covers is one named edit of that table, whose answer to the effect and the
@@ -613,8 +615,8 @@ class GraphDraft : public camel::graph::Graph {
     /// Closing it is the high-level entry's recording step: the regions the edit changed are the
     /// union of the ones its primitives touched, and the close records them with the kind and tells
     /// the listeners once (`recordEdit`).
-    /// `origin` is where the edit was written -- the source position of the statement that makes it,
-    /// 0 when the caller does not know one. It is carried into the notes the close records
+    /// `origin` is where the edit was written -- the source position of the statement that makes
+    /// it, 0 when the caller does not know one. It is carried into the notes the close records
     /// (`EditNote::origin`), which is what lets a refused commit point back at the edit that made
     /// the node it names instead of only at the node.
     class NamedEdit {
@@ -764,8 +766,8 @@ class GraphDraft : public camel::graph::Graph {
     /// has to put back is therefore the *content*: the record is taken first (`noteOriginalTypes`,
     /// once per segment), and `replayJournal` writes the recorded result type and resources back
     /// into that same object (a rollback restores content, not the pointer).
-    /// This is the one place the write is made, so that a caller cannot fill a signature without the
-    /// journal seeing it.
+    /// This is the one place the write is made, so that a caller cannot fill a signature without
+    /// the journal seeing it.
     void setOpenExitType(camel::core::type::Type *exitType);
     /// The same for the resources the signature publishes (`OpenFunctionType::setResources`).
     void setOpenResources(const camel::core::sem::ResourceSignature &resources);
@@ -897,9 +899,9 @@ class GraphDraft : public camel::graph::Graph {
     /// The undo rule this serves is the draft's own: one edit lands whole or leaves nothing, and
     /// what an edit changed in place is kept in an undo log while a segment is open (the
     /// graph-editing notes' 16.1 and 16.4). It is stated here in full rather than left to a
-    /// document, because it is what this type has to satisfy: a node the segment erased comes back at
-    /// the same id with the same body, since a node id is never handed out twice and a rollback that
-    /// moved one would break every class and every edge that names it.
+    /// document, because it is what this type has to satisfy: a node the segment erased comes back
+    /// at the same id with the same body, since a node id is never handed out twice and a rollback
+    /// that moved one would break every class and every edge that names it.
     struct Savepoint {
         size_t nodes        = 0;
         size_t staticSlots  = 0;
@@ -911,12 +913,12 @@ class GraphDraft : public camel::graph::Graph {
         // `UndoScalars`, `UndoTypes`, `UndoPorts` and `UndoLowLevel` records below). The
         // equivalence log is not one of them: the store owns it (`writings.h`,
         // `DraftWritings::ApplicationMark`), and the draft's copy of it is a copy.
-        size_t undoNodes     = 0;
-        size_t undoRegions   = 0;
-        size_t undoScalars   = 0;
-        size_t undoTypes     = 0;
-        size_t undoPorts     = 0;
-        size_t undoLowLevel  = 0;
+        size_t undoNodes    = 0;
+        size_t undoRegions  = 0;
+        size_t undoScalars  = 0;
+        size_t undoTypes    = 0;
+        size_t undoPorts    = 0;
+        size_t undoLowLevel = 0;
         /// The draft as the mark found it, when the self-check was on: `rollbackTo` compares the
         /// draft it put back with this and reports the first class that differs.
         std::shared_ptr<const UndoSnapshot> check;
@@ -1444,8 +1446,8 @@ class GraphDraft : public camel::graph::Graph {
         /// recursive function names its own type before its result is known -- so it is filled
         /// where it stands (`OpenFunctionType::setExitType`, `setResources`) instead of being
         /// replaced by an interned copy. `exitType` is nullptr while the signature has no result
-        /// type yet; `resources` is the signature the declaration publishes. A rollback writes these
-        /// two back into the signature the record names, and the self-check compares them.
+        /// type yet; `resources` is the signature the declaration publishes. A rollback writes
+        /// these two back into the signature the record names, and the self-check compares them.
         camel::core::type::Type *exitType = nullptr;
         camel::core::sem::ResourceSignature resources;
         camel::core::type::TupleType *closureType = nullptr;
@@ -1458,8 +1460,8 @@ class GraphDraft : public camel::graph::Graph {
         /// The edit record as the segment found it (`editNotes_`, `editCount_`, `editKinds_`): the
         /// record of an edit a rollback took back goes with the edit, or a commit would read the
         /// kinds and regions of a change that is not in the graph it publishes.
-        size_t notes  = 0;
-        size_t count  = 0;
+        size_t notes   = 0;
+        size_t count   = 0;
         uint32_t kinds = 0;
     };
 
@@ -1494,7 +1496,7 @@ class GraphDraft : public camel::graph::Graph {
     unsigned journalDepth_      = 0;
     /// Set while the journal is putting itself back: a restore writes bodies, and a body write is
     /// not an edit of the segment that is being rolled back.
-    bool undoSuspended_         = false;
+    bool undoSuspended_ = false;
 #ifdef NDEBUG
     SelfCheckMode selfCheck_ = SelfCheckMode::Off;
 #else
@@ -1534,10 +1536,11 @@ class GraphDraft : public camel::graph::Graph {
     /// The regions the named edit open right now has changed so far, ascending and without
     /// repetition.
     std::vector<uint32_t> namedEditRegions_;
-    /// The kind of the outermost named edit open now, recorded when it closes: a named edit written in
-    /// terms of another is still one row of the table, and the row is the outer one's.
+    /// The kind of the outermost named edit open now, recorded when it closes: a named edit written
+    /// in terms of another is still one row of the table, and the row is the outer one's.
     EditKind namedEditKind_ = EditKind::LowLevel;
-    /// Where the outermost named edit open now was written (`NamedEdit`'s origin), recorded with it.
+    /// Where the outermost named edit open now was written (`NamedEdit`'s origin), recorded with
+    /// it.
     uint64_t namedEditOrigin_ = 0;
     /// Whether the outermost named edit open now said it made no change (NamedEdit::dismiss): the
     /// close then records nothing.
@@ -1568,17 +1571,17 @@ class GraphDraft : public camel::graph::Graph {
     std::vector<GraphId> liftedFromRefs_;
 };
 
-/// The port node a *new* parameter is: one node of `GCNodeKind::Port` typed by `type`, in the graph's
-/// own region, registered as the last ordinary parameter. It does not touch the signature, and that
-/// is the point: a parameter is two statements about one thing -- the node the body computes with,
-/// and the entry of the function type a caller is told about -- and an edit that adds the first owes
-/// the second (`add_param`, the block head that will write it). A commit of a graph whose port list
-/// is one entry longer than its signature refuses it and names the port
+/// The port node a *new* parameter is: one node of `GCNodeKind::Port` typed by `type`, in the
+/// graph's own region, registered as the last ordinary parameter. It does not touch the signature,
+/// and that is the point: a parameter is two statements about one thing -- the node the body
+/// computes with, and the entry of the function type a caller is told about -- and an edit that
+/// adds the first owes the second (`add_param`, the block head that will write it). A commit of a
+/// graph whose port list is one entry longer than its signature refuses it and names the port
 /// (`EdgeChecker::checkPortTypes`, src/runtime/graph_edges.cpp), which is the reading this helper
-/// makes possible; the caller that *does* declare the parameter calls `GraphDraft::setFuncType` with
-/// the widened type and publishes. `origin` is where the edit that makes the port was written.
-gc_node_ref_t addParameterPort(
-    GraphDraft &draft, camel::core::type::Type *type, uint64_t origin = 0);
+/// makes possible; the caller that *does* declare the parameter calls `GraphDraft::setFuncType`
+/// with the widened type and publishes. `origin` is where the edit that makes the port was written.
+gc_node_ref_t
+addParameterPort(GraphDraft &draft, camel::core::type::Type *type, uint64_t origin = 0);
 
 /// The control region a node's code lies in: the innermost region that is an arm of a branch or a
 /// part of a loop, 0 for the graph's own frame. The regions that only annotate where a node came
@@ -1600,11 +1603,12 @@ bool sameSyncBlock(const GraphDraft &draft, gc_node_ref_t a, gc_node_ref_t b);
 /// about a commitment, so it is asked of the transaction that would make it.
 std::vector<gc_node_ref_t> draftRuntimeNodeRefs(const GraphTransaction &transaction);
 
-/// `nodeIsFreelySchedulable` (camel/runtime/graph.h) asked of a node of a draft. `byShape` lets
-/// the shapes of the types decide for an elementwise operator (it cannot fail when every shape is
-/// fixed); only a question about one decision of one pass may ask it, never the question of
-/// whether a node takes an order edge, which must not change as types are refined.
-bool nodeIsFreelySchedulable(const GraphDraft &draft, gc_node_ref_t id, bool byShape = false);
+/// Which of the four operations a node of a draft performs, whichever way it is spelled
+/// (`camel/runtime/oper_shape.h`): the operator its payload names, and for a node of one of the
+/// four kinds the kind's own answer -- `Construction` and `Access` are the two a kind still states,
+/// because a conversion and a copy are calls of `:op/cast` and `:op/copy` and their shape is the
+/// operator's record. `None` for a node that performs none of them.
+camel::ops::OperShape draftOperationShape(const GraphDraft &draft, gc_node_ref_t id);
 
 /// `isChainStatement` (camel/runtime/graph.h) asked of a node of a draft: the operator from the
 /// node's payload, a cast's types from its input, and whether it owns a region from the draft's
@@ -1622,8 +1626,8 @@ bool occupiesChainPlace(const GraphDraft &draft, gc_node_ref_t id);
 bool isBlockValue(const GraphDraft &draft, gc_node_ref_t id);
 
 /// `nodeMayFault` (camel/runtime/graph.h) asked of a node of a draft, with the same `byShape`
-/// reading of an elementwise operator. It is the fault half of `nodeIsFreelySchedulable` above,
-/// so a caller that has already asked whether the operator may be recomputed asks this alone.
+/// reading of an elementwise operator: the fault half of the arrangeable question, which the fact
+/// `core.arrangeable` answers as one of its four terms.
 bool nodeMayFault(const GraphDraft &draft, gc_node_ref_t id, bool byShape = false);
 
 /// Whether a node carries the program's order instead of being a value a pass may compute for
@@ -1633,7 +1637,7 @@ bool nodeMayFault(const GraphDraft &draft, gc_node_ref_t id, bool byShape = fals
 /// operator with an effect, one that may fault, one that must run where the program writes it, a
 /// conversion that can fail). The rewrite engine and the generic passes refuse to reorder, drop or
 /// recompute such a node.
-bool carriesOrdering(const GraphDraft &draft, gc_node_ref_t node, bool byShape = false);
+bool carriesOrdering(const GraphDraft &draft, gc_node_ref_t node);
 
 /// Whether a node is a pure computation that no statement waits for and that waits for none: an
 /// operator that may be recomputed, or a conversion, with no control, order or sync edge on either
@@ -1660,7 +1664,6 @@ std::vector<gc_node_ref_t> liveNodesOf(const GraphDraft &draft);
 /// The JOIN that closes the branch `brch`, read from the draft (`kInvalidNodeRef` for a node that
 /// is not a branch). The frozen graph's answer is `branchJoinOf(const GCGraph &, gc_node_ref_t)`.
 gc_node_ref_t branchJoinOf(const GraphDraft &draft, gc_node_ref_t brch);
-
 
 /// How many members an aggregate has (0 for a node that is not one): the `slotCount` of its
 /// payload. The members themselves are the frame slots the payload names, not the aggregate's
@@ -1772,4 +1775,3 @@ inline gc_node_ref_t forwardedInputOf(const GraphDraft &draft, gc_node_ref_t ref
 }
 
 } // namespace camel::runtime
-

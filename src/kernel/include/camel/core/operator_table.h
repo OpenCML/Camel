@@ -258,7 +258,7 @@ struct OperatorTraits {
     /// The operator can raise a fault (design principles 3.9: division by zero, an index out
     /// of range, a conversion whose value does not fit). True unless the module declares
     /// otherwise. Passes read it: `src/runtime/graph.cpp#nodeMayFault` answers with it (beside
-    /// `elementwise`, for shapes the type states in full), and `nodeIsFreelySchedulable` hands
+    /// `elementwise`, for shapes the type states in full), and `core.arrangeable` hands
     /// that answer to whoever may drop, move or recompute a node -- a node the program observes
     /// is kept alive by a `GATE` when a removal takes its last read
     /// (`src/passes/opt/generic/rewrite.cpp#isObservedRun`, `#keepThroughValue`).
@@ -452,7 +452,7 @@ class OperatorTable {
     /// foldable fact). False for every operator that has an effect, and for a pure one that must
     /// run where the program writes it (declareUnfoldable). A pass that folds a call or merges it
     /// with an identical one asks this. Whether a pass may also drop, move or reorder the call
-    /// depends on whether it can fault as well: that is `nodeIsFreelySchedulable`
+    /// depends on whether it can fault as well: that is `core.arrangeable`
     /// (camel/runtime/graph.h), the one question every pass asks.
     bool mayBeRecomputed(OperId id) const;
     bool mayBeRecomputed(std::string_view uri) const;

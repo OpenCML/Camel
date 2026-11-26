@@ -26,6 +26,7 @@
  */
 
 #include "graph/gc_graph_view.h"
+#include "camel/runtime/oper_shape.h"
 
 #include "camel/core/tags.h"
 #include "camel/utils/assert.h"
@@ -555,6 +556,18 @@ camel::core::OperId FrozenGraphAdapter::operatorOf(NodeRef ref) const {
         return camel::core::kNoOper;
     }
     return body.oper;
+}
+
+camel::ops::OperShape FrozenGraphAdapter::shapeOf(NodeRef ref) const {
+    // The shape of the operation, read through the one function that answers it for a frozen graph
+    // (`camel/runtime/oper_shape.h`), so the view and a reader holding the graph itself cannot give
+    // two answers. A FILL and an ACCS answer `Construction` and `Access` here -- they are the two
+    // kinds whose operation the kind states in full -- and a node whose operation is not written
+    // down yet (an OPER whose payload is not there, a kind that is none of the four) answers
+    // `None`.
+    return camel::runtime::shapeOfOperation(
+        graph_,
+        static_cast<camel::runtime::gc_node_ref_t>(ref));
 }
 
 LoopForm FrozenGraphAdapter::loopFormOf(NodeRef ref) const {

@@ -27,16 +27,16 @@
  * would answer a different question.
  *
  * The fault term has one exception, and it is the node's and not the operator's: a **conversion**
- * fails or does not fail by the pair of types it converts between (`runtime::castMayFault`), and the
- * operator's record can only say the half that is true of every cast -- that a cast may fault. So at
- * an OPER node whose operator is a conversion, `nodeArrangeable` asks the kernel's one reader of that
- * pair (`runtime::nodeMayFault`, the function the predicate a pass asks is built on) instead of the
- * record, and the two readers of one question cannot answer differently there. `operatorArrangeable`
- * takes no pair and therefore reports the operator's half: it is the answer for "a reader that has
- * only an operator", and a caller that has the node asks `nodeArrangeable`.
+ * fails or does not fail by the pair of types it converts between (`runtime::castMayFault`), and
+ * the operator's record can only say the half that is true of every cast -- that a cast may fault.
+ * So at an OPER node whose operator is a conversion, `nodeArrangeable` asks the kernel's one reader
+ * of that pair (`runtime::nodeMayFault`) instead of the record, and this answer is the node's and
+ * not the operator's. `operatorArrangeable` takes no pair and therefore reports the operator's
+ * half: it is the answer for "a reader that has only an operator", and a caller that has the node
+ * asks `nodeArrangeable`.
  *
- * The record is the only statement of the first three, and every entrance writes into it: a built-in
- * operator's declaration is copied there when the module loads
+ * The record is the only statement of the first three, and every entrance writes into it: a
+ * built-in operator's declaration is copied there when the module loads
  * (`operator_table.h#declareSemantics`), and a Camel declaration states it directly.
  * A clause nobody stated reads as design principles 3.3 says it does -- writing the global resource
  * -- rather than as a second answer derived from the table.
@@ -44,7 +44,7 @@
  * A GATE is the one node the four terms are not the answer for, and it is answered `not freely
  * arrangeable` whatever its terms are: a gate exists to carry an order, whether it carries one is
  * not one of the four terms, and the reader that decides a placement asks
- * `runtime::nodeIsFreelySchedulable`, which refuses every gate for that reason. A
+ * `nodeIsFreelyArrangeable` below, which refuses every gate for that reason. A
  * caller that reads a gate's four terms as "it may be moved" is reading the one node this fact
  * declines to speak for.
  */
@@ -85,13 +85,29 @@ Arrangeable operatorArrangeable(camel::ops::OperId oper);
 
 /// `core.arrangeable` at any node of `graph`'s view. A branch and a loop stand for what runs inside
 /// them: their terms are the conjunction over the nodes of their arms and of their regions. A
-/// `Call` and a `Func` node do **not**: what a call runs is another graph's content, and walking the
-/// callee's body answers about that body rather than about this node, so the kind declines there
-/// (all four terms false, "it does not answer for this node"). That is the answer
-/// `runtime::nodeIsFreelySchedulable` gives -- a call is an anchor that may be an effect, and
+/// `Call` and a `Func` node do **not**: what a call runs is another graph's content, and walking
+/// the callee's body answers about that body rather than about this node, so the kind declines
+/// there (all four terms false, "it does not answer for this node"). That is the answer
+/// `nodeIsFreelyArrangeable` gives -- a call is an anchor that may be an effect, and
 /// naming the callee directly changes neither its effects nor its faults -- and the two readers of
 /// one question answer it the same way.
 Arrangeable nodeArrangeable(const graph::GraphView &view, NodeId node, ReadLog &log);
+
+/// The question a placement decision asks: may a pass drop, move, merge or reorder this node, and
+/// is it one that needs no order edge after an inline? The answer is `core.arrangeable`'s
+/// conjunction at `node`, read out of the store that holds `graph` -- so every pass on either side
+/// of the boundary asks one implementation, in the fact layer, and the answer is kept as the fact
+/// about this version of the graph rather than recomputed per caller.
+///
+/// It is deliberately not a second predicate over a kind and an operator: an OPER node's four terms
+/// are the operator's record's, a construction's and an access's are what the node does, a loop's
+/// termination is its form's, and a branch's are the conjunction over its arms -- a caller holding
+/// only a kind and an operator cannot answer three of those, which is why a caller holding a graph
+/// asks this and a caller holding only an operator asks `operatorArrangeable`.
+///
+/// False for a graph no store holds: an answer nobody kept is not one a pass may act on, and a node
+/// this kind declines for (a call, a gate) is not freely arrangeable either.
+bool nodeIsFreelyArrangeable(const graph::Graph &graph, NodeId node);
 
 /// The four terms as one line: "freely arrangeable", or what fails.
 std::string toString(const Arrangeable &arrangeable);

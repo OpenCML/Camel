@@ -12,13 +12,14 @@
 #include "camel/core/source/manager.h"
 #include "camel/core/type/composite/struct.h"
 #include "camel/core/type/composite/tuple.h"
+#include "camel/facts/arrangeable.h"
 #include "camel/runtime/control_regions.h"
 #include "camel/runtime/draft_session.h"
 #include "camel/runtime/loop.h"
 #include "camel/runtime/resources.h"
 #include "graph/graph_view.h"
-#include "tiles/device.h"
 #include "src/stdlib/transforms/node_operator.h"
+#include "tiles/device.h"
 #include "tiles/internal/capability.h"
 #include "tiles/internal/graph_values.h"
 #include "tiles/internal/placement.h"
@@ -121,11 +122,11 @@ class EffectOrder {
                     order(draft, written[i].second, written[j].second);
             // And the block keeps its order across the insert: a statement the program wrote before
             // an effect this rewrite wrote runs before it, and one written after it runs after it.
-            // The commit asks for a path between any two accesses to one resource in one region, and
-            // a statement of the block is the other side of such a pair whenever one of these effects
-            // is one side of it -- an effect it inserted is a write of the driver, and a `println`
-            // written beside it is a write of `stdout` the block never had to order before. Neither
-            // reads the other, so nothing but this edge relates them.
+            // The commit asks for a path between any two accesses to one resource in one region,
+            // and a statement of the block is the other side of such a pair whenever one of these
+            // effects is one side of it -- an effect it inserted is a write of the driver, and a
+            // `println` written beside it is a write of `stdout` the block never had to order
+            // before. Neither reads the other, so nothing but this edge relates them.
             for (const auto &one : written) {
                 const auto effect = one.second;
                 if (!draft.alive(effect))
@@ -149,7 +150,7 @@ class EffectOrder {
 
   private:
     /// Whether the encoder keeps an order edge that orders `id` after something: a node that may be
-    /// arranged anywhere drops it (`graph.cpp`, the payload plan: `nodeIsFreelySchedulable`), so an
+    /// arranged anywhere drops it (`graph.cpp`, the payload plan: `core.arrangeable`), so an
     /// ordering through such a node is not one the commit reads.
     static bool keepsOrder(const runtime::GraphDraft &draft, runtime::gc_node_ref_t id) {
         const auto *header = draft.header(id);
@@ -162,7 +163,7 @@ class EffectOrder {
         // took its place (`:op/cast`).
         if (camel::transforms::nodeOperatorOf(draft, id) == camel::transforms::NodeOperator::Cast)
             return true;
-        if (!runtime::nodeIsFreelySchedulable(draft, id))
+        if (!camel::facts::nodeIsFreelyArrangeable(draft, id))
             return true;
         // A branch or a loop that owns a region stands for what runs inside it, so its order is
         // the region's order and the encoder keeps it.
@@ -536,8 +537,7 @@ const runtime::Program *outlineRegions(
                 if (!nodeInScope(*graph, id))
                     continue;
                 const auto oper = graph->nodeBodyAs<rt::GCOperBody>(id)->oper;
-                const std::string name(
-                    core::OperatorTable::instance().uri(oper));
+                const std::string name(core::OperatorTable::instance().uri(oper));
                 const auto origin = graph->nodeOrigin(id);
                 // A macro operator (`grad`, `with_grad`) is not an operator the device cannot
                 // run: it should not be in the graph at all. The derived graph has to exist while
@@ -552,7 +552,9 @@ const runtime::Program *outlineRegions(
                     // scope's own defect, not a missing pass.
                     const auto operandIsKnown = [&](const auto &operands) {
                         return std::any_of(
-                            operands.begin(), operands.end(), [&](rt::gc_node_ref_t operand) {
+                            operands.begin(),
+                            operands.end(),
+                            [&](rt::gc_node_ref_t operand) {
                                 return holdsStaticFunction(graph->view(), operand);
                             });
                     };
@@ -561,11 +563,11 @@ const runtime::Program *outlineRegions(
                     if (!expandable)
                         expandable = operandIsKnown(graph->withInputsOf(id));
                     (expandable ? group.notExpanded : group.unsupported)
-                        .push_back({name,
-                                    expandable
-                                        ? "a prerequisite pass is missing"
+                        .push_back(
+                            {name,
+                             expandable ? "a prerequisite pass is missing"
                                         : "needs a function known at compile time",
-                                    origin});
+                             origin});
                     continue;
                 }
                 // A host effect (`print`, `save_npy`, a file write) is the boundary of a device
@@ -588,9 +590,10 @@ const runtime::Program *outlineRegions(
                     const bool own = placementOf(graph->view(), id).onDevice();
                     auto &group    = groupOf(*graph);
                     (own ? group.unsupported : group.noProgram)
-                        .push_back({name,
-                                    own ? "no device implementation" : "the module provides none",
-                                    origin});
+                        .push_back(
+                            {name,
+                             own ? "no device implementation" : "the module provides none",
+                             origin});
                     continue;
                 }
                 // A lowering exists; the use may still have no program (a shape or element type
@@ -603,9 +606,10 @@ const runtime::Program *outlineRegions(
         }
         const auto list = [](const std::vector<Refusal> &entries, bool predicateInName) {
             // The first group is written "operator 'x' cannot run on the device ({reason})", as the
-            // refusal has always read, and takes the operator as its subject; the second carries the
-            // whole predicate in its name ("operator 'x' has no device program") because that is what
-            // the reason says, so the one-operator wording is the one it has always had too.
+            // refusal has always read, and takes the operator as its subject; the second carries
+            // the whole predicate in its name ("operator 'x' has no device program") because that
+            // is what the reason says, so the one-operator wording is the one it has always had
+            // too.
             std::string names;
             if (entries.size() == 1) {
                 names = "operator '" + entries[0].name + "'";
@@ -618,8 +622,7 @@ const runtime::Program *outlineRegions(
                 }
             }
             if (predicateInName)
-                names +=
-                    entries.size() == 1 ? " has no device program" : " have no device program";
+                names += entries.size() == 1 ? " has no device program" : " have no device program";
             std::set<std::string> distinct;
             for (const auto &entry : entries)
                 distinct.insert(entry.reason);
@@ -640,14 +643,17 @@ const runtime::Program *outlineRegions(
                 // The repair is a pass, so the message names it (design principles 9.2: a library
                 // checks its own preconditions and diagnoses the pass that is missing). This is the
                 // one refusal that stays a diagnostic: the promise is not kept because the pipeline
-                // is incomplete, and the compiler can say so before anything is asked of the device.
-                auto diag = context.rtmDiags()->of(
-                    core::error::RuntimeDiag::GpuScopeMacroNotExpanded);
+                // is incomplete, and the compiler can say so before anything is asked of the
+                // device.
+                auto diag =
+                    context.rtmDiags()->of(core::error::RuntimeDiag::GpuScopeMacroNotExpanded);
                 const auto origin = scope.notExpanded.front().origin;
                 if (origin != camel::source::kInvalidOriginId)
                     diag.atOrigin(origin);
                 diag.commit(
-                    scopeNameOf(*graph), list(scope.notExpanded, false).first, "std::macro");
+                    scopeNameOf(*graph),
+                    list(scope.notExpanded, false).first,
+                    "std::macro");
             }
         }
         // Everything else a scope cannot run is one error value, not a diagnostic (design
@@ -659,31 +665,34 @@ const runtime::Program *outlineRegions(
         camel::source::origin_id_t refusalsOrigin = camel::source::kInvalidOriginId;
         for (auto &[graph, scope] : refusals) {
             const std::string scopeName = scopeNameOf(*graph);
-            const auto add = [&](const std::vector<Refusal> &entries, bool predicateInName,
-                                 const char *tail) {
-                if (entries.empty())
-                    return;
-                if (!refusalsText.empty())
-                    refusalsText += "; ";
-                const auto text = list(entries, predicateInName);
-                refusalsText +=
-                    "`#gpu` scope '" + scopeName + "': " + text.first + tail + " (" + text.second + ")";
-                if (refusalsOrigin == camel::source::kInvalidOriginId)
-                    refusalsOrigin = entries.front().origin;
-            };
+            const auto add =
+                [&](const std::vector<Refusal> &entries, bool predicateInName, const char *tail) {
+                    if (entries.empty())
+                        return;
+                    if (!refusalsText.empty())
+                        refusalsText += "; ";
+                    const auto text = list(entries, predicateInName);
+                    refusalsText += "`#gpu` scope '" + scopeName + "': " + text.first + tail +
+                                    " (" + text.second + ")";
+                    if (refusalsOrigin == camel::source::kInvalidOriginId)
+                        refusalsOrigin = entries.front().origin;
+                };
             add(scope.unsupported, false, " cannot run on the device");
             add(scope.noProgram, true, "");
         }
         if (!refusalsText.empty() && error != nullptr) {
             *error = core::rtdata::makeError(
-                "GpuScopeUnsupported", refusalsText, sourceLocationOf(context, refusalsOrigin));
+                "GpuScopeUnsupported",
+                refusalsText,
+                sourceLocationOf(context, refusalsOrigin));
         }
         if (!refusals.empty())
             return program;
     }
     bool regionRefused = false;
     // What each rewritten graph's effects are, kept until the rewrite of every graph is over: the
-    // order is written once, and after the declarations stop growing (see the end of this function).
+    // order is written once, and after the declarations stop growing (see the end of this
+    // function).
     std::vector<std::pair<rt::GCGraph *, EffectOrder>> orders;
     orders.reserve(graphs.size());
     for (auto *graph : graphs) {
@@ -697,9 +706,10 @@ const runtime::Program *outlineRegions(
         // the declarations over those bodies have stopped growing.
         EffectOrder &effects = orders.emplace_back(graph, EffectOrder{}).second;
         const rt::ControlRegions control(*graph);
-        // Where a segment runs: the control region of its members (docs/design/gpu/plan.cn.md 2.5). An operator
-        // written in an arm runs only when that arm is taken, so its call, its uploads and its
-        // downloads are written there too; writing them in the body would run the untaken arm.
+        // Where a segment runs: the control region of its members (docs/design/gpu/plan.cn.md 2.5).
+        // An operator written in an arm runs only when that arm is taken, so its call, its uploads
+        // and its downloads are written there too; writing them in the body would run the untaken
+        // arm.
         const auto whereOf = [&](const Segment &region) {
             return region.members.empty()
                        ? 0u
@@ -730,8 +740,8 @@ const runtime::Program *outlineRegions(
         }
         if (device) {
             for (auto value : analysis.residency.uploads) {
-                const auto input  = static_cast<rt::gc_node_ref_t>(value);
-                const auto found  = uploadControl.find(value);
+                const auto input     = static_cast<rt::gc_node_ref_t>(value);
+                const auto found     = uploadControl.find(value);
                 const uint32_t where = found == uploadControl.end() ? 0 : found->second;
                 draft.setInsertRegion(where);
                 const auto upload = transferAggregate(
@@ -760,8 +770,8 @@ const runtime::Program *outlineRegions(
         for (const auto &region : analysis.regions) {
             auto extracted  = extractRegion(*graph, region, context.graphIds().allocate());
             const auto name = graph->name() + "/tiles.region/" + std::to_string(count++);
-            auto *callee = extracted.graph->edit().encode(name, name);
-            auto *fn     = ::Function::create(
+            auto *callee    = extracted.graph->edit().encode(name, name);
+            auto *fn        = ::Function::create(
                 rt::makeProgram(context, program, std::span(&callee, 1)),
                 callee->id(),
                 core::type::TupleType::create(std::vector<core::type::Type *>{}),
@@ -850,8 +860,8 @@ const runtime::Program *outlineRegions(
                 draft.setNormInputs(call, args);
             }
             draft.setWithInputs(call, std::span(&fnNode, 1));
-            // The exec call is the second effect of this region: it reads what the uploads wrote and
-            // writes the driver the downloads read, so it takes its place in the chain here and
+            // The exec call is the second effect of this region: it reads what the uploads wrote
+            // and writes the driver the downloads read, so it takes its place in the chain here and
             // reads no value of the block beside it.
             effects.wrote(whereOf(region), rt::kInvalidNodeRef, call);
             // That context argument is the segment's own function constant, so this call is the
@@ -863,15 +873,16 @@ const runtime::Program *outlineRegions(
             // written around the segment keep their order against it; erasing the members then
             // closes the chains over the call. What a replaced statement was ordered by, and what
             // it ordered, goes to the call in every kind that carries that order: the sync kind and
-            // the order kind (takeStatementPlace), and the control kind, which closeChainOver writes
-            // beside the sync one and which this outline moves itself below
+            // the order kind (takeStatementPlace), and the control kind, which closeChainOver
+            // writes beside the sync one and which this outline moves itself below
             // (docs/design/effects/edges.cn.md 4). An effect written around the segment is
             // ordered by this edge alone, so a kind left behind takes the effect with it: with no
             // edge to the graph it is not executed, and the statement it observed is not
             // transferred either.
             const auto isMember = [&](rt::gc_node_ref_t ref) {
                 return std::find(
-                           region.members.begin(), region.members.end(),
+                           region.members.begin(),
+                           region.members.end(),
                            static_cast<size_t>(ref)) != region.members.end();
             };
             std::vector<rt::gc_node_ref_t> controls;
@@ -892,7 +903,8 @@ const runtime::Program *outlineRegions(
                     if (isMember(user) || !draft.alive(user))
                         continue;
                     std::vector<rt::gc_node_ref_t> ordered(
-                        draft.ctrlInputsOf(user).begin(), draft.ctrlInputsOf(user).end());
+                        draft.ctrlInputsOf(user).begin(),
+                        draft.ctrlInputsOf(user).end());
                     bool moved = false;
                     for (auto &input : ordered) {
                         if (input != ref)
@@ -1001,8 +1013,8 @@ const runtime::Program *outlineRegions(
     return session.commit();
 }
 
-const runtime::Program *settleDeclarations(
-    core::context::Context &context, const runtime::Program *program) {
+const runtime::Program *
+settleDeclarations(core::context::Context &context, const runtime::Program *program) {
     // What the rewrite did to a graph is in its body; what a caller reads is the graph's type
     // (`runtime::Resolver::accessesOf` takes a call's footprint from the callee's declared
     // clause, not from its body). A device submission is an effect -- `tiles:upload`, the segment
@@ -1017,7 +1029,9 @@ const runtime::Program *settleDeclarations(
     // reports it rather than this step hiding it.
     for (;;) {
         runtime::RuntimeGraphDraftSession session(
-            context.shared_from_this(), program, program->root());
+            context.shared_from_this(),
+            program,
+            program->root());
         const std::vector<runtime::GCGraph *> graphs = session.collectReachableRuntimeGraphs();
         std::vector<std::pair<runtime::GCGraph *, core::type::FunctionType *>> wider;
         for (auto *graph : graphs) {

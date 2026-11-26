@@ -9,9 +9,8 @@
  *
  * The same program written without `var` is `closure_read_let.cml`: the closure captures a value
  * instead of a cell. The two writings must have one canonical graph (`std::jgir canonical=true`),
- * which is what `test/plans/feat/compile/var.plan.toml` measures: the `var` writing keeps a unit,
- * its closure reads that unit through `:var/get`, and the `let` writing hands the value to the
- * closure.
+ * which is what `test/plans/feat/compile/var.plan.toml` measures: the value the assignment wrote is
+ * handed to the closure as a capture port in both writings.
  *
  * Run: camel test/cases/compile/var/closure_read.cml std::nvm
  */

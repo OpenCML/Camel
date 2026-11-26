@@ -7,6 +7,7 @@
  */
 
 #include "read.h"
+#include "camel/facts/arrangeable.h"
 
 #include "camel/passes/opt/constant_bytes.h"
 
@@ -625,17 +626,17 @@ slot_t mayFaultKernel(ArgsView &, ArgsView &norm, Context &) {
 }
 
 /// Whether a pass may arrange the node anywhere -- drop it, move it, merge it with an identical
-/// call, or leave it with no order edge after an inline: pure *and* unable to fault. It is
-/// `graph::may_be_rearranged` (camel/runtime/graph.h), the one predicate the C++ passes read and
-/// that the passes written in Camel read under this name. A draft is asked with the shapes its
-/// types state (`isValueOnly` asks the same), so the two sides cannot answer differently.
+/// call, or leave it with no order edge after an inline: the four terms of design principles 3.4,
+/// which is `core.arrangeable` (`camel/facts/arrangeable.h`) and not a predicate of its own. A pass
+/// on either side of the boundary reads this name and the C++ passes read the fact, so the two
+/// cannot answer differently.
 slot_t mayBeRearrangedKernel(ArgsView &, ArgsView &norm, Context &) {
     const auto *handle  = norm.get<Handle *>(0);
     const NodeView node = viewOf(handle, "graph.may_be_rearranged");
     if (node.isDraft()) {
-        return toSlot<Bool>(camel::runtime::nodeIsFreelySchedulable(node.draft(), node.ref, true));
+        return toSlot<Bool>(camel::facts::nodeIsFreelyArrangeable(node.draft(), node.ref));
     }
-    return toSlot<Bool>(camel::runtime::graph::may_be_rearranged(
+    return toSlot<Bool>(camel::facts::nodeIsFreelyArrangeable(
         graphOf(handle, "graph.may_be_rearranged"),
         handle->index()));
 }

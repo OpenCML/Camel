@@ -648,6 +648,12 @@ camel::core::OperId DraftGraphAdapter::operatorOf(NodeRef ref) const {
     return body.oper;
 }
 
+camel::ops::OperShape DraftGraphAdapter::shapeOf(NodeRef ref) const {
+    // The draft's own answer (`camel/runtime/draft.h`), the one the payload plan and the delivery
+    // check read, so a reader of the view and a reader of the draft cannot give two answers.
+    return camel::runtime::draftOperationShape(*graph_, sourceOf(ref));
+}
+
 LoopForm DraftGraphAdapter::loopFormOf(NodeRef ref) const {
     LoopForm form;
     const GraphDraft &draft     = *graph_;

@@ -960,7 +960,7 @@ class Builder {
     /// the name is
     /// bound to the value in `nodeScope_`, an assignment rebinds the declaration
     /// (`ssaAssignmentOf`), and no cell is made, so nothing reads or writes one. The environment is
-    /// the plan's one table -- a declaration is the unit, a region holds its declarations, and the
+    /// one table -- a declaration is the unit, a region holds its declarations, and the
     /// value each stands for now is that declaration's (`ssa_env.h`); a write, a branch's JOIN and
     /// a loop head's phi all go through it, and no other table of SSA values exists.
     SsaEnv ssa_;
@@ -1030,8 +1030,9 @@ class Builder {
 
     /// A `var` that does not escape becomes SSA: every read takes the value of the write that made
     /// it, and no read node is left reading the cell. A `var` that escapes -- captured by a
-    /// closure, handed out as a `var` argument, or a `var` parameter of this graph -- is a resource
-    /// and keeps its cell. `variableReadSource_` records, per read node, the writer it reads from
+    /// closure, handed out as a `var` argument, or a `var` parameter of this graph -- keeps its
+    /// cell: the value cannot carry a write back across that boundary, so there has to be a place
+    /// the write lands. `variableReadSource_` records, per read node, the writer it reads from
     /// (the cell itself when nothing has written yet) and the cell it belongs to; knownCellUsers_
     /// holds the users of a cell this builder recorded (its reads and its stores), so a cell with
     /// any other user
@@ -1052,9 +1053,10 @@ class Builder {
     // to `__assn__` as a `var` argument (requireMutableArgument records that, because the
     // operator's first parameter is two-way). A write is not an escape: the assignment does not
     // exist after the call, so it cannot hold the cell. They stay out of SSA only while something
-    // else keeps them a resource -- a closure capturing them, a `var` argument to a user function,
-    // or a write written inside a loop, which is carried state (schedule item 3). The fold reads
-    // this set, and the straight-line definition that decides the loop case is written there.
+    // else keeps them a cell -- a closure capturing them, a `var` argument to a user function,
+    // or a write written inside a loop, which is carried state (design principles 3.5: a write to
+    // an outer `var` in a loop body becomes the loop's carried state, so there is no straight-line
+    // write for the fold to stand in). The fold reads this set.
     std::unordered_set<node_handle_t> writeOnlyEscaping_;
     /// The value a branch carries for a `var` its arms wrote: the cell, and the JOIN the branch's
     /// value is. A write inside an arm is the branch's result (design principles 3.5),
@@ -1123,7 +1125,7 @@ class Builder {
     /// with. Each node goes only when it has no user left of any kind -- the stores are read by the
     /// JOIN that carried them and by each other through their order edges, the cell by its stores,
     /// and the value the cell was made with by the cell -- so the walk repeats until nothing more
-    /// loses its last user. A cell that is still a resource (captured, a `var` parameter, handed to
+    /// loses its last user. A cell that is still shared (captured, a `var` parameter, handed to
     /// a call, still read) keeps its unit.
     void dropCarriedVariableUnits();
     // What the compiler knows about a node's value beyond static data, for operators whose
@@ -3951,9 +3953,9 @@ class Builder {
     /// it is read as (`T[..]` -> `T`, where the rank is the value's), handed on when it has that
     /// shape and stopping the program where it does not. An OPER node of `:op/refine_extent`, an
     /// operator of the compiler's own -- no program declares or writes it -- and **not** a
-    /// conversion: `:op/cast` is the one the program wrote, and a graph that holds this URI says the
-    /// compiler put the check there. Its record states `panic`, so a reader of the graph sees that
-    /// it can fail.
+    /// conversion: `:op/cast` is the one the program wrote, and a graph that holds this URI says
+    /// the compiler put the check there. Its record states `panic`, so a reader of the graph sees
+    /// that it can fail.
     node_handle_t refineExtentNodeOf(
         node_handle_t value, camel::core::type::Type *target, const GCT::node_ptr_t &origin);
     /// A copy written as the operator it is (`copy::<T>` of the prelude): an OPER node whose one

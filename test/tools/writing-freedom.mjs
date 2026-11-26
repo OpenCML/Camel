@@ -10,28 +10,28 @@
  *   --group var       One gradient step written two ways -- `test/cases/compile/var/step_var.cml`
  *                     assigns to a `var`, `step_let.cml` is the same step as a chain of `let`
  *                     bindings -- and then the canonical output of the derivative of each
- *                     (`std::macro std::jgir canonical=true`). This is the queue's item 1,
- *                     "a unit is lowered to SSA" (design principles 3.5). Red today, and red only
- *                     because the `var` writing still builds a unit.
+ *                     (`std::macro std::jgir canonical=true`). On a straight line the whole `var`
+ *                     chain folds into values, so both documents are the same bytes and the group
+ *                     says nothing on its own about a `var` that has to travel (design principles
+ *                     3.5: a `var` is a name for values).
  *
  *   --group spelling  The case study's training program (`examples/case-study/train.cml`) and three
  *                     writings of it that change no meaning: a renamed value, two independent
  *                     declarations swapped, one independent computation moved past a print. None of
- *                     the three depends on the `var`-to-SSA work.
+ *                     the three depends on how a `var` is built.
  *
  *   --group loop      The same accumulation written two ways: a `var` written inside a loop body
- *                     (`loop_var.cml`) and the loop's own carried value (`loop_let.cml`). Red today
- *                     and red only because a write inside a loop body keeps its unit.
+ *                     (`loop_var.cml`) and the loop's own carried value (`loop_let.cml`). A write to
+ *                     an outer `var` in a loop body is the loop's carried state (design principles
+ *                     3.5), so the two writings build one graph.
  *
  *   --group arm       The same choice written two ways: a `var` written inside an arm of an `if`
- *                     (`arm_var.cml`) and the branch's own value (`arm_let.cml`). It was red only
- *                     because an arm's write kept its unit; it is green since the branch carries the
- *                     write as its own value and the unit nothing reads is dropped.
+ *                     (`arm_var.cml`) and the branch's own value (`arm_let.cml`). The branch carries
+ *                     the write as its own value, so the two writings build one graph.
  *
  * The `loop` and `arm` groups are the two halves the `var` group cannot see: on a straight line the
- * whole variable folds away, so that group is green whether or not a unit is lowered; a write inside
- * a loop or an arm kept its `:var/get`, so those two pairs still separate the two writings. The arm
- * pair is now one writing, and the loop pair is the half still to be lowered.
+ * whole variable folds away, so that group is green whether or not a `var` that travels is built as
+ * a value; a write inside a loop or an arm is where the value has to move between regions.
  *
  *   --group chainpure        `sync` blocks and what the chain carries (design principles 3.4). One
  *                            program shape, two writings of it (a call of a pure function that
@@ -155,7 +155,8 @@ const CAMEL = argv.has('--camel')
 /// the same bytes) or `differs` (the counterexample: this group's two writings order something
 /// observable, so the documents must part).
 const GROUPS = {
-    // One gradient step, two writings: this is the acceptance for "a unit is lowered to SSA".
+    // One gradient step, two writings: the two spellings of the same straight-line program, so the
+    // graph and the derivative graph must each be one document.
     var: {
         phases: [
             ['graph', ['std::jgir', 'canonical=true']],
@@ -167,8 +168,8 @@ const GROUPS = {
         ],
     },
     // The same accumulation written two ways: a `var` written inside a loop body, and the loop's
-    // own carried value. The second writing has no unit at all, so this pair says whether a loop
-    // assignment became the loop's state (the third of the three places a unit is lowered).
+    // own carried value. The pair says whether a write inside the loop body is the state the head
+    // hands to the next round (design principles 3.5).
     loop: {
         phases: [['graph', ['std::jgir', 'canonical=true']]],
         cases: [

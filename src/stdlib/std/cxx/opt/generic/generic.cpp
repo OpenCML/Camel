@@ -683,7 +683,7 @@ bool pruneBranch(camel::runtime::GraphTransaction &transaction, gc_node_ref_t br
     // shortcut.
     if (armTail == kInvalidNodeRef) {
         for (gc_node_ref_t n : armNodes) {
-            if (!inArmRegion(n) || !carriesOrdering(draft, n, true)) {
+            if (!inArmRegion(n) || !carriesOrdering(draft, n)) {
                 continue;
             }
             bool followed = false;
@@ -781,7 +781,7 @@ bool pruneBranch(camel::runtime::GraphTransaction &transaction, gc_node_ref_t br
     if (armChainHead != kInvalidNodeRef) {
         bool armCarriesOrder = false;
         for (gc_node_ref_t n : armNodes) {
-            if (inArmRegion(n) && carriesOrdering(draft, n, true)) {
+            if (inArmRegion(n) && carriesOrdering(draft, n)) {
                 armCarriesOrder = true;
                 break;
             }
@@ -815,11 +815,11 @@ bool pruneBranch(camel::runtime::GraphTransaction &transaction, gc_node_ref_t br
         armTail = armChainTail;
     }
     std::vector<gc_node_ref_t> armRoots;
-    if (armChainHead != kInvalidNodeRef && carriesOrdering(draft, armChainHead, true)) {
+    if (armChainHead != kInvalidNodeRef && carriesOrdering(draft, armChainHead)) {
         armRoots.push_back(armChainHead);
     } else {
         for (gc_node_ref_t n : armNodes) {
-            if (!inArmRegion(n) || !carriesOrdering(draft, n, true)) {
+            if (!inArmRegion(n) || !carriesOrdering(draft, n)) {
                 continue;
             }
             bool hasArmPredecessor = false;
@@ -1106,7 +1106,7 @@ bool pruneBranch(camel::runtime::GraphTransaction &transaction, gc_node_ref_t br
             if (!draft.alive(read)) {
                 continue;
             }
-            if (camel::runtime::carriesOrdering(draft, read, true)) {
+            if (camel::runtime::carriesOrdering(draft, read)) {
                 lost.push_back(read);
                 continue;
             }
@@ -1121,7 +1121,7 @@ bool pruneBranch(camel::runtime::GraphTransaction &transaction, gc_node_ref_t br
             if (!draft.alive(n) || std::ranges::find(lost, n) != lost.end()) {
                 return;
             }
-            if (camel::runtime::carriesOrdering(draft, n, true)) {
+            if (camel::runtime::carriesOrdering(draft, n)) {
                 if (std::ranges::find(targets, n) == targets.end()) {
                     targets.push_back(n);
                 }
@@ -1397,7 +1397,7 @@ size_t placeLostStatements(camel::runtime::GraphTransaction &transaction) {
         if (!view.syncInputsOf(id).empty() || !view.syncUsersOf(id).empty()) {
             continue; // it holds its place
         }
-        if (!camel::runtime::carriesOrdering(view, id, true)) {
+        if (!camel::runtime::carriesOrdering(view, id)) {
             continue; // a value, not a statement: it needs no place
         }
         const auto *idHeader = view.header(id);
@@ -1416,7 +1416,7 @@ size_t placeLostStatements(camel::runtime::GraphTransaction &transaction) {
             // invariant refuses.
             if (nextHeader->kind == GCNodeKind::Brch || nextHeader->kind == GCNodeKind::Loop ||
                 nextHeader->kind == GCNodeKind::Gate ||
-                !camel::runtime::carriesOrdering(view, next, true)) {
+                !camel::runtime::carriesOrdering(view, next)) {
                 continue;
             }
             // ... and both ends are statements whose running is the reason the place exists: a pure
@@ -1486,8 +1486,8 @@ size_t foldDraft(
             }
             // A tuple, struct or array built from constants is a constant.
             if (const auto *h = draft.header(id);
-                h && camel::execute::shapeOfKind(h->kind) ==
-                         camel::execute::OperShape::Construction &&
+                h &&
+                camel::execute::shapeOfKind(h->kind) == camel::execute::OperShape::Construction &&
                 isFoldable(transaction, id)) {
                 if (foldStaticFill(transaction, id, roots, constantBudget)) {
                     ++folded;
@@ -1497,8 +1497,8 @@ size_t foldDraft(
             }
             // A conversion of a constant is a constant, when the conversion succeeds.
             if (const auto *h = draft.header(id);
-                h && camel::execute::shapeOfKind(h->kind) ==
-                         camel::execute::OperShape::Conversion &&
+                h &&
+                camel::execute::shapeOfKind(h->kind) == camel::execute::OperShape::Conversion &&
                 isFoldable(transaction, id)) {
                 if (foldStaticCast(transaction, id, roots, constantBudget)) {
                     ++folded;
@@ -2047,8 +2047,8 @@ const camel::runtime::Program *simplifyGraph(
         // call it would otherwise have inlined (the owner cap and the strategy are asked first,
         // engine.cpp), so a round that changed nothing while one of these was left did not reach a
         // fixed point -- it reached the budget. The two do not print the same sentence (`std::opt:
-        // fixpoint after N round(s)` is for a settled optimizer only), so a spent budget is not read
-        // as one.
+        // fixpoint after N round(s)` is for a settled optimizer only), so a spent budget is not
+        // read as one.
         std::shared_ptr<const InlineReport> inlineReport;
         program = applyOptimizeRewritePass(context, program, config, &optChanged, &inlineReport);
         const InlineDeclined *leftForBudget =
@@ -2188,16 +2188,14 @@ using camel::execute::makePass;
 using camel::execute::PassKernel;
 
 const PassKernel constantFoldKernel(
-    "std::cxx::fold",
-    [](const camel::core::context::context_ptr_t &ctx, const PassArgs &args) {
+    "std::cxx::fold", [](const camel::core::context::context_ptr_t &ctx, const PassArgs &args) {
         return std::make_unique<ConstantFoldPass>(ctx, constantBudgetOf(args));
     });
 
 const PassKernel commonSubexpressionKernel("std::cxx::cse", makePass<CommonSubexpressionPass>());
 
 const PassKernel deadCodeKernel(
-    "std::cxx::dce",
-    [](const camel::core::context::context_ptr_t &ctx, const PassArgs &args) {
+    "std::cxx::dce", [](const camel::core::context::context_ptr_t &ctx, const PassArgs &args) {
         return std::make_unique<DeadCodePass>(ctx, args.getBool("values_only"));
     });
 

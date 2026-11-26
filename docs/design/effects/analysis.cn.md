@@ -11,7 +11,7 @@
 | `compile/src/gir/builder_resources.cpp`（`reachOfOper`、`settleEffectfulGraphs`） | 建图时在草稿上测每个函数体的资源 | 注释自称与 `runtime/resources.cpp` 做同样的事，只共用 `conservativeResources`，遍历另写一遍 |
 | `kernel/runtime/resources.cpp`（`Resolver`、`FootprintWalk`） | 冻结图上每个节点、每个函数的资源足迹，最小不动点 | 有自己的缓存（按闭包版本） |
 | `kernel/runtime/effects.cpp`（`effectSummaryOf`） | 图级效应摘要：对外、写程序状态、可能出故障、可能不终止 | 节点的"可能出故障"直接读算子特征，不用 `nodeMayFault` |
-| `kernel/runtime/graph.cpp`（`nodeMayFault`、`nodeIsFreelySchedulable`，以及"是不是语句"） | 节点级判定 | 与 `effects.cpp` 的规则不同，同一个节点可能得出不同答案 |
+| `kernel/runtime/graph.cpp`（`nodeMayFault`、"是不是语句"；能不能自由安排已归 `core.arrangeable` 事实） | 节点级判定 | 与 `effects.cpp` 的规则不同，同一个节点可能得出不同答案 |
 | `kernel/execute/pass.cpp`（`nodeHasEffect`） | 遍的边界检查用 | 注释写明抄自 tiles |
 | `lib/std/cml/cml.cpp`（`isEffectful`、`isPureOper`） | 打印器判断语句能不能省 | 自己的不动点，外加按 URI 前缀的特例 |
 | `lib/tiles/src/{graph_regions,census,region_outline}.cpp` | 能不能放上设备 | 同一个表达式抄了三处 |
@@ -113,7 +113,7 @@ Footprint  footprintOf(const GraphView&);          // 调用图上的最小不�
 | 地方 | 改成 |
 |---|---|
 | `kernel/runtime/effects.cpp`、`resources.cpp` | 由新分析取代；对外接口（`effectSummaryOf`、`resourcesOf`）若有调用者，改调新分析后删除 |
-| `graph.cpp` 的 `nodeMayFault`、`nodeIsFreelySchedulable`、"是不是语句" | 改为读 `NodeEffect` 的字段，三处合一 |
+| `graph.cpp` 的 `nodeMayFault`、"是不是语句" | 改为读 `NodeEffect` 的字段，三处合一（"能不能自由安排"已是 `core.arrangeable` 事实） |
 | `pass.cpp` 的 `nodeHasEffect` 与边界检查 | 读分析；比较前后足迹时比访问列表 |
 | `cml.cpp` 的 `isEffectful`、`isPureOper` | 读分析；URI 前缀特例删掉 |
 | tiles 三处、`builder_diagnostics.cpp`、`lib/transforms/jvp.cpp` 的 `hasExternalEffect` | 读分析 |

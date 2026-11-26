@@ -8,6 +8,7 @@
  */
 
 #include "camel/passes/test/edges.h"
+#include "camel/facts/arrangeable.h"
 
 #include "camel/core/rtdata/base.h"
 #include "camel/core/type/composite/func.h"
@@ -56,7 +57,8 @@ const Program *commitEdit(
         const gc_node_ref_t value = draft.materializeStaticValue(
             camel::core::rtdata::toSlot<float>(1.0f),
             camel::core::type::Type::Float32());
-        const gc_node_ref_t copy = draft.addOperNode(camel::core::type::Type::Int32(), nullptr, ":op/copy");
+        const gc_node_ref_t copy =
+            draft.addOperNode(camel::core::type::Type::Int32(), nullptr, ":op/copy");
         draft.setNormInputs(copy, std::span<const gc_node_ref_t>(&value, 1));
         break;
     }
@@ -333,7 +335,7 @@ gc_node_ref_t chainAnchorNode(camel::runtime::GraphTransaction &transaction) {
         // The block's last statement, not a value it computes: an order edge's two ends are
         // effects or nodes that may fault (edges.cn.md 4.6), which is the same question the
         // front end's walk asks of the nodes it orders.
-        if (!camel::runtime::nodeIsFreelySchedulable(draft, id)) {
+        if (!camel::facts::nodeIsFreelyArrangeable(draft, id)) {
             previousBlock = id;
         }
     }
@@ -365,7 +367,7 @@ const Program *writeOrderChain(
 
 /// Prints the order edges of a committed graph as `pred>user`, in the order the graph holds them.
 void printOrderEdges(const Program *program, GraphId rootId, std::ostream &os) {
-    const auto *root    = program->graph(rootId);
+    const auto *root = program->graph(rootId);
     os << "ORDER edges=" << (root != nullptr ? root->orderEdges().size() : 0);
     if (root != nullptr) {
         for (const GCGraphOrderEdge &edge : root->orderEdges()) {
@@ -455,9 +457,9 @@ CommitMergeTestPass::apply(const camel::runtime::Program *program, std::ostream 
         os << "MERGE skip=1\n";
         return program;
     }
-    const GraphId rootId       = program->root()->id();
-    const auto *rootBefore     = program->graph(rootId);
-    const auto *otherBefore    = program->graph(other->id());
+    const GraphId rootId    = program->root()->id();
+    const auto *rootBefore  = program->graph(rootId);
+    const auto *otherBefore = program->graph(other->id());
     RuntimeGraphDraftSession first(context_, program);
     RuntimeGraphDraftSession second(context_, program);
     blankNode(first.edit(program->root()));
@@ -470,12 +472,12 @@ CommitMergeTestPass::apply(const camel::runtime::Program *program, std::ostream 
     const bool installed = context_->currentRuntimeProgram() == two;
     // The root the first commit made has one more node than the program it started from; the
     // merge keeps that version (or a version of the same content) and adds the second's graph.
-    const auto *mergedRoot     = two->graph(rootId);
-    const auto *mergedOther    = two->graph(other->id());
-    const bool keptFirst       = mergedRoot != nullptr && one->graph(rootId) != nullptr &&
-                                 mergedRoot->nodeCount() == one->graph(rootId)->nodeCount() &&
-                                 mergedRoot->nodeCount() > rootBefore->nodeCount();
-    const bool keptSecond      = mergedOther != nullptr && mergedOther != otherBefore;
+    const auto *mergedRoot  = two->graph(rootId);
+    const auto *mergedOther = two->graph(other->id());
+    const bool keptFirst    = mergedRoot != nullptr && one->graph(rootId) != nullptr &&
+                              mergedRoot->nodeCount() == one->graph(rootId)->nodeCount() &&
+                              mergedRoot->nodeCount() > rootBefore->nodeCount();
+    const bool keptSecond   = mergedOther != nullptr && mergedOther != otherBefore;
     os << "MERGE installed=" << (installed ? 1 : 0) << " first_kept=" << (keptFirst ? 1 : 0)
        << " second_kept=" << (keptSecond ? 1 : 0)
        << " root_edited=" << (mergedRoot != rootBefore ? 1 : 0) << "\n";
@@ -650,7 +652,8 @@ EdgesSyncGateTestPass::apply(const camel::runtime::Program *program, std::ostrea
         const gc_node_ref_t shared = chain.materializeStaticValue(
             camel::core::rtdata::toSlot<float>(7.0f),
             camel::core::type::Type::Float32());
-        const gc_node_ref_t plainReader = chain.addOperNode(camel::core::type::Type::Float32(), nullptr, ":op/copy");
+        const gc_node_ref_t plainReader =
+            chain.addOperNode(camel::core::type::Type::Float32(), nullptr, ":op/copy");
         chain.setNormInputs(plainReader, std::span<const gc_node_ref_t>(&shared, 1));
         chain.takeStatementPlace(middle, shared);
         chain.eraseNode(middle);
@@ -770,9 +773,9 @@ EdgePair findEdgePair(const Program *program) {
     // A graph that is not the program's root, edited the way a pass over a function value edits it
     // (`graph.open` in modules/graph/txn.cpp roots the session at the function's graph and commits
     // detached): the shape the commit's delivery sits on.
-    auto *target    = program->root();
+    auto *target = program->root();
     for (const GraphId ref : program->root()->refs()) {
-        auto *called    = const_cast<Program *>(program)->graph(ref);
+        auto *called = const_cast<Program *>(program)->graph(ref);
         if (called != nullptr && called != program->root()) {
             target = called;
             break;
@@ -926,7 +929,7 @@ EdgesEditOnlyTestPass::apply(const camel::runtime::Program *program, std::ostrea
     const gc_node_ref_t pred = pair.pred;
     os << "EDITONLY pair user=" << user << " pred=" << pred << "\n";
 
-    const auto *base    = target;
+    const auto *base = target;
     {
         RuntimeGraphDraftSession session(context_, program, target);
         auto &transaction   = session.edit(target);
@@ -934,9 +937,9 @@ EdgesEditOnlyTestPass::apply(const camel::runtime::Program *program, std::ostrea
         const bool wrote    = draft.setSyncPredecessor(user, pred);
         const size_t before = base->syncEdges().size();
         try {
-            const Program *next  = session.commit(true);
-            const auto *after    = next->graph(targetId);
-            const auto preds     = after->syncPredsOf(user);
+            const Program *next = session.commit(true);
+            const auto *after   = next->graph(targetId);
+            const auto preds    = after->syncPredsOf(user);
             os << "EDITONLY sync wrote=" << (wrote ? 1 : 0) << " before=" << before
                << " after=" << after->syncEdges().size() << " sync_in=" << preds.size()
                << " mine=" << ((preds.size() == 1 && preds[0].pred == pred) ? 1 : 0)
@@ -1006,8 +1009,8 @@ EdgesCommitDifferentialTestPass::apply(const camel::runtime::Program *program, s
             blankNode(transaction);
         }
         try {
-            const Program *next  = session.commit(true);
-            const auto *after    = next->graph(targetId);
+            const Program *next = session.commit(true);
+            const auto *after   = next->graph(targetId);
             if (after == nullptr) {
                 error = "the program the commit made does not hold the graph";
                 return {};
@@ -1121,7 +1124,8 @@ EdgeUsersTestPass::apply(const camel::runtime::Program *program, std::ostream &o
     // edge that goes out of it.
     const gc_node_ref_t source = chainAnchorNode(transaction);
     for (size_t i = 0; i < 2; ++i) {
-        const gc_node_ref_t reader = draft.addOperNode(camel::core::type::Type::Float32(), nullptr, ":op/copy");
+        const gc_node_ref_t reader =
+            draft.addOperNode(camel::core::type::Type::Float32(), nullptr, ":op/copy");
         draft.setNormInputs(reader, std::span<const gc_node_ref_t>(&source, 1));
     }
     // A GATE reads a value of its own and a context port of `source`; its wait is a control input,
@@ -1234,16 +1238,22 @@ const PassKernel commitConflictKernel(kCommitConflictTestPass, makePass<CommitCo
 const PassKernel commitMergeKernel(kCommitMergeTestPass, makePass<CommitMergeTestPass>());
 const PassKernel edgesOrderOkKernel(kEdgesOrderOkTestPass, makePass<EdgesOrderOkTestPass>());
 const PassKernel edgesOrderPureKernel(kEdgesOrderPureTestPass, makePass<EdgesOrderPureTestPass>());
-const PassKernel edgesOrderScheduleKernel(kEdgesOrderScheduleTestPass, makePass<EdgesOrderScheduleTestPass>());
-const PassKernel edgesOrderSpliceKernel(kEdgesOrderSpliceTestPass, makePass<EdgesOrderSpliceTestPass>());
-const PassKernel edgesOrderReplaceKernel(kEdgesOrderReplaceTestPass, makePass<EdgesOrderReplaceTestPass>());
+const PassKernel
+    edgesOrderScheduleKernel(kEdgesOrderScheduleTestPass, makePass<EdgesOrderScheduleTestPass>());
+const PassKernel
+    edgesOrderSpliceKernel(kEdgesOrderSpliceTestPass, makePass<EdgesOrderSpliceTestPass>());
+const PassKernel
+    edgesOrderReplaceKernel(kEdgesOrderReplaceTestPass, makePass<EdgesOrderReplaceTestPass>());
 const PassKernel edgesSyncGateKernel(kEdgesSyncGateTestPass, makePass<EdgesSyncGateTestPass>());
 const PassKernel edgesSyncForkKernel(kEdgesSyncForkTestPass, makePass<EdgesSyncForkTestPass>());
-const PassKernel edgesSyncForkGateKernel(kEdgesSyncForkGateTestPass, makePass<EdgesSyncForkGateTestPass>());
+const PassKernel
+    edgesSyncForkGateKernel(kEdgesSyncForkGateTestPass, makePass<EdgesSyncForkGateTestPass>());
 const PassKernel edgesSyncCycleKernel(kEdgesSyncCycleTestPass, makePass<EdgesSyncCycleTestPass>());
 const PassKernel edgesEditOnlyKernel(kEdgesEditOnlyTestPass, makePass<EdgesEditOnlyTestPass>());
-const PassKernel edgesCommitDifferentialKernel(kEdgesCommitDiffTestPass, makePass<EdgesCommitDifferentialTestPass>());
-const PassKernel edgesDeliveryCheckKernel(kEdgesDeliveryCheckTestPass, makePass<EdgesDeliveryCheckTestPass>());
+const PassKernel edgesCommitDifferentialKernel(
+    kEdgesCommitDiffTestPass, makePass<EdgesCommitDifferentialTestPass>());
+const PassKernel
+    edgesDeliveryCheckKernel(kEdgesDeliveryCheckTestPass, makePass<EdgesDeliveryCheckTestPass>());
 const PassKernel edgeUsersKernel(kEdgeUsersTestPass, makePass<EdgeUsersTestPass>());
 
 } // namespace

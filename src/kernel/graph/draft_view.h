@@ -64,8 +64,8 @@
 
 #pragma once
 
-#include "camel/runtime/graph_txn.h"
 #include "callee_graph_of.h"
+#include "camel/runtime/graph_txn.h"
 #include "graph/graph_view.h"
 
 #include <optional>
@@ -102,9 +102,7 @@ class DraftGraphAdapter final : public GraphView {
     DraftGraphAdapter(
         const camel::runtime::GraphTransaction &transaction, std::span<const NodeRef> kept,
         CalleeGraphOf calleeGraphOf = {})
-        : graph_(&transaction.graph()),
-          kept_(kept),
-          calleeGraphOf_(std::move(calleeGraphOf)) {}
+        : graph_(&transaction.graph()), kept_(kept), calleeGraphOf_(std::move(calleeGraphOf)) {}
 
     camel::core::type::FunctionType *funcType() const override;
     std::vector<NodeRef> ports(PortGroup group) const override;
@@ -140,16 +138,18 @@ class DraftGraphAdapter final : public GraphView {
 
     CalleeRef calleeOf(NodeRef ref) const override;
     camel::core::OperId operatorOf(NodeRef ref) const override;
+    camel::ops::OperShape shapeOf(NodeRef ref) const override;
     LoopForm loopFormOf(NodeRef ref) const override;
 
   private:
     /// The whole table of one edge kind, built once per kind (`edges`): a draft stores its edges on
-    /// the node, so a table is a walk of the nodes. Kept for the same reason `translated_` is -- the
-    /// projection cannot be handed out where it lies -- and it decides nothing.
+    /// the node, so a table is a walk of the nodes. Kept for the same reason `translated_` is --
+    /// the projection cannot be handed out where it lies -- and it decides nothing.
     const std::vector<Edge> &tableOf(EdgeKind kind) const;
     /// True when the draft holds a live node at the view's `ref`, whether or not the view has a
     /// *node* there: a JOIN is a place of the draft and not a node of the view (`viewKind`), and
-    /// `regionOf` / `exit` answer for places rather than for nodes. `contains` is this and the kind.
+    /// `regionOf` / `exit` answer for places rather than for nodes. `contains` is this and the
+    /// kind.
     bool holdsPlace(NodeRef ref) const;
     /// The draft's node the view's node `ref` is: `ref` itself when no table was given, else
     /// `kept_[ref]`, and `kNoNode` when the table says the runtime graph has no such node (a
