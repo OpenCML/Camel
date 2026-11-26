@@ -168,9 +168,9 @@ class Formatter {
             return;
         }
         const std::string &commentText = tokens[index].text();
-        const bool sameLine            = index + 1 < tokens.size() &&
-                              tokens[index + 1].line() ==
-                                  tokens[index].line() + countLines(commentText);
+        const bool sameLine =
+            index + 1 < tokens.size() &&
+            tokens[index + 1].line() == tokens[index].line() + countLines(commentText);
         writeCommentText(result, index);
         if (tokens[index].channel != 4) {
             result += lineEnd();
@@ -224,8 +224,7 @@ class Formatter {
             // A comment on the element's own line is separated by a space; one below it keeps the
             // line the reader gave it, a blank line below included (two at most, as a list keeps
             // the blank lines between its items).
-            const long skips =
-                static_cast<long>(tokens[i].line()) - static_cast<long>(lastStop);
+            const long skips = static_cast<long>(tokens[i].line()) - static_cast<long>(lastStop);
             if (skips <= 0) {
                 result += " ";
             } else {
@@ -575,11 +574,15 @@ class Formatter {
                     closing++;
                 }
                 const bool closingBracket =
-                    closing < tokens.size() && (tokens[closing].text() == "]" ||
-                                                tokens[closing].text() == ")" ||
-                                                tokens[closing].text() == ">");
+                    closing < tokens.size() &&
+                    (tokens[closing].text() == "]" || tokens[closing].text() == ")" ||
+                     tokens[closing].text() == ">");
                 if (closingBracket &&
-                    writeInlineComments(result, itemEnd, closing, list[i]->lastToken()->endLine()) &&
+                    writeInlineComments(
+                        result,
+                        itemEnd,
+                        closing,
+                        list[i]->lastToken()->endLine()) &&
                     !(paddingNL && multiLine)) {
                     result += lineEnd();
                 }
@@ -634,7 +637,6 @@ class Formatter {
     std::any dispatch(syn::Node context);
 
   public:
-
     // Auto-generated visitor methods
 
     std::any visitProgram(cst::Program context);
@@ -673,13 +675,11 @@ class Formatter {
     /// caller decides beforehand whether the parameters go one per line too, and sets
     /// `paramsOnePerLine` for that. The body follows on the same line as the last clause, so the
     /// opening brace of a `when` head stays at the end of its line.
-    std::string joinDeclClauses(
-        const std::string &signature, const std::vector<std::string> &clauses);
+    std::string
+    joinDeclClauses(const std::string &signature, const std::vector<std::string> &clauses);
 
     /// Whether a head of `length` columns at the current indentation is past the wrap width.
-    bool headExceedsWidth(size_t length) const {
-        return currentIndent.size() + length > wrapWidth;
-    }
+    bool headExceedsWidth(size_t length) const { return currentIndent.size() + length > wrapWidth; }
     std::any visitRuleDecl(cst::RuleDecl context);
     std::any visitFactDecl(cst::FactDecl context);
     std::any visitFactBody(cst::FactBody context);
@@ -773,6 +773,13 @@ class Formatter {
     std::any visitTypeCasePattern(cst::TypeCasePattern context);
 
     std::any visitCtrlExpr(syn::Node context);
+
+    /// `edit d = f { … }` and `view d = f { … }`: one block over a function, two words for what it
+    /// does with it. They print as they were written, because the word is the only difference the
+    /// front end keeps.
+    std::any visitEditExpr(cst::EditExpr context);
+    std::any visitViewExpr(cst::ViewExpr context);
+    std::string formatBlockHeaded(syn::Node context, const char *word);
 
     std::any visitAssignExpr(cst::AssignExpr context);
 

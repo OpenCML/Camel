@@ -1551,6 +1551,37 @@ any Formatter::visitStaticLoopExpr(cst::StaticLoopExpr context) {
 }
 
 /*
+editExpr   : 'edit' identDef '=' logicalOrExpr stmtBlock ;
+viewExpr   : 'view' identDef '=' logicalOrExpr stmtBlock ;
+A block over a function: the head binds the name the body reads the graph by, and the block after
+`=` is what the head stands for. The two kinds are one shape (`BlockHeadLoad`) and the word is the
+only difference, so both are printed the same way: the word, the binding, `=` and the function, then
+the block. A comment written between the binding and `=` stands in no gap a list reaches, so it is
+written here; the ones before the function and before the block are written by the visits that start
+them.
+*/
+any Formatter::visitEditExpr(cst::EditExpr context) { return formatBlockHeaded(context, "edit"); }
+
+any Formatter::visitViewExpr(cst::ViewExpr context) { return formatBlockHeaded(context, "view"); }
+
+string Formatter::formatBlockHeaded(syn::Node context, const char *word) {
+    string result    = string(word) + " ";
+    const auto &name = context.get<cst::IdentDef>();
+    result += any_cast<string>(visitIdentDef(name));
+    if (const auto assign = context.tok(TK::Assign)) {
+        const bool nameLineEnds = writeInlineComments(
+            result,
+            name->lastToken()->index(),
+            assign.index(),
+            name->lastToken()->endLine());
+        result += nameLineEnds ? lineEnd() : " ";
+    }
+    result += "= " + any_cast<string>(visitExpr(context.expr())) + " " +
+              any_cast<string>(visitBlockExpr(context.lastChild().node()));
+    return result;
+}
+
+/*
 ctrlExpr
     : IF logicalOrExpr THEN blockExpr (ELSE blockExpr)?
     | MATCH logicalOrExpr '{' matchCase+ '}'
@@ -2282,6 +2313,8 @@ any Formatter::dispatch(syn::Node context) {
         CAMEL_FORMAT(MatchTypeExpr)
         CAMEL_FORMAT(StaticForExpr)
         CAMEL_FORMAT(StaticLoopExpr)
+        CAMEL_FORMAT(EditExpr)
+        CAMEL_FORMAT(ViewExpr)
         CAMEL_FORMAT(TypeCase)
         CAMEL_FORMAT(TypeCasePattern)
         CAMEL_FORMAT(MemberAccess)
