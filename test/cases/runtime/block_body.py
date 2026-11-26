@@ -70,7 +70,7 @@ for line in body_lines + trait_lines + call_lines:
 # Five bodies, each a program of its own: a root graph and the function's graph, in a program that
 # is not the one they were compiled for.
 built = [line for line in body_lines if line.startswith("BLOCK_BODY built ")]
-assert len(built) == 5, f"expected five bodies to compile, got: {body_lines}"
+assert len(built) == 6, f"expected six bodies to compile, got: {body_lines}"
 bodies = {}
 for line in built:
     what = line[len("BLOCK_BODY built ") :].split(" ")[0]
@@ -113,11 +113,9 @@ assert set(traits) == set(bodies), (set(traits), set(bodies))
 uris = {what: entry["uri"] for what, entry in traits.items()}
 # Four bodies that compute different things are four blocks.
 assert len({uris["body"], uris["second"], uris["effectful"], uris["fallible"]}) == 4, uris
-# And the same body, compiled under another module's name, hashes differently: the tree's portable
-# hash includes the graph's own name. So it names the body's graph and not yet the body -- a block's
-# identity must not depend on what a module called its graph, and that is the one input of the
-# canonical form still missing.
-assert uris["twin"] != uris["body"], uris
+# The same body, compiled twice, is one block under one name: a body is compiled as the block's own
+# module, so the name of the module that handed it over is not an input of its identity.
+assert uris["twin"] == uris["body"], (uris["body"], uris["twin"])
 # The record, read from the body's graphs: arithmetic is pure and cannot fault, printing is not
 # pure, and a division can divide by zero.
 assert traits["body"] == {
@@ -130,8 +128,12 @@ assert traits["body"] == {
 assert traits["second"]["pure"] and not traits["second"]["mayFault"], traits["second"]
 assert not traits["effectful"]["pure"], traits["effectful"]
 assert traits["fallible"]["pure"] and traits["fallible"]["mayFault"], traits["fallible"]
+# A body that calls itself never returns, and that is a fact of the record now, beside the fault:
+# it is not hidden in `foldable`, which goes on saying only that the result may be kept.
+assert traits["spin"]["mayNotTerminate"] and traits["spin"]["foldable"], traits["spin"]
+assert not any(traits[what]["mayNotTerminate"] for what in ("body", "second", "effectful", "fallible")), traits
 store = int(re.search(r"BLOCK_BODY store blocks=(\d+)", with_body.stdout).group(1))
-assert store == 5, f"five distinct names, {store} registered"
+assert store == 5, f"six bodies, two of them the same, {store} registered"
 
 # The entry program, read in the same run: the numbers it had before the bodies were built are the
 # numbers it has after, and they are the numbers of a run without the pass at all.

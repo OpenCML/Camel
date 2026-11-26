@@ -35,9 +35,8 @@ class BlockBodyTestPass : public RuntimeGraphRewritePass {
     apply(const camel::runtime::Program *program, std::ostream &os) override;
 
   private:
-    /// Compiles `text` as a module named `name` and answers the program of its `function`, pinned
+    /// Compiles `text` as the block's own module and answers the program of its `function`, pinned
     /// to the context; nullptr when it does not parse or does not compile.
-    camel::runtime::Program *compileBody(
-        const std::string &name, const char *text, const char *function, const std::string &what,
-        std::ostream &os);
+    camel::runtime::Program *
+    compileBody(const char *text, const char *function, const std::string &what, std::ostream &os);
 };

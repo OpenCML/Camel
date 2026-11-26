@@ -351,3 +351,56 @@ traits.foldable  = !e.mayNotTerminate;                              // 可能不
 macro / foldable / withAfterNorm。"可能不终止"只体现在 `foldable = false` 这一处；作为记录的一项它
 在 traits 里没有直接位置（`EffectSummary` 里有 `mayNotTerminate`）。这是表本身的空白，本车不擅自
 加字段，先记在这里。
+
+### 10 终止性：记录里有了自己的字段
+
+上一节末尾那处空白已经补上。`OperatorTraits`（`src/kernel/include/camel/core/operator_table.h`）新增
+`bool mayNotTerminate = false;`，与 `mayFault` **并列**、默认 `false`。理由写在字段注释里：
+
+- 原则 3.4 的"可自由安排"是**纯、不出故障、会终止**三件，前两件在算子记录上都有位置，
+  第三件原来没有，事实层就只能从 `foldable` 里猜；
+- **让一个字段藏两个意思，才是要避免的形状**：`foldable` 从今天起只说"它的结果可以当值留下"，
+  "可不可能不终止"由它自己的字段说；
+- 这也不是新概念：效应层的 `EffectSummary` 早就有 `mayNotTerminate`，本步只是让算子层也有一个位置。
+
+一个字段要活起来，得把**读它的每一处**都改过来，否则它只是记录里的一句话：
+
+| 位置 | 改了什么 |
+|---|---|
+| `operator_semantics.h` / `operator_record.h` | 声明它的地方：模块与内置算子都能写；不写就是会终止 |
+| `operator_table.cpp`（`traitsOf` 与反向写回） | 记录 ↔ traits 两个方向都带上它 |
+| `fact_persist.cpp`（算子 traits 的打包） | 进哈希的第 7 位，声明了它的算子不再与没声明时同名 |
+| `facts.cpp`（`termsOfOperator`） | `arrangeable` 的**终止项**改读它——这一项以前是常量 `true` |
+| `operator_table.cpp`（`mayBeRecomputed`） | 可能不终止的算子，遍既不能搬、不能复制，也不能提前算 |
+| `src/stdlib/test/block_body.cpp` | 块的记录由块体自己的 `EffectSummary` 填，不再兼用 `foldable` |
+
+读数（打印为 `BLOCK_TRAITS`，case 断言、plan 钉住）：
+
+| 块体 | 体 | pure | mayFault | **mayNotTerminate** | foldable |
+|---|---|---|---|---|---|
+| `body` | `x + 1` | true | false | false | true |
+| `second` | `x * 3` | true | false | false | true |
+| `effectful` | `println(x); x * 2` | false | false | false | true |
+| `fallible` | `10 / x` | true | **true** | false | true |
+| `spin` | `return spin(x)` | true | false | **true** | **true** |
+
+最后一行是这次的关键：`spin` **会终止这件事为假**，而同一条记录里 `foldable` 仍然是 true ——
+两个字段各说一件事，谁也不再替另一个人说。`mayBeRecomputed` 因此对它是 false（遍不能提前算一个
+不会停的调用），而 `foldable` 那句话本身没有被偷偷改写。
+
+`feat/tools/facts` 整目录 11/11 不变：已声明的算子都没写这个字段，所以 `arrangeable` 的四项对它们
+一个也没变——这次改动对既有算子是**惰性**的，这正是"默认会终止"该有的样子。
+
+### 11 名字里的"谁给它起名"
+
+块体改由**块自己的模块名**编译（`kBlockModule`，一个常量），`compileBody` 不再接受调用方的模块名。
+于是 `portableGraphHash` 里那个"图自己的名字"这一项不再能带进**调用方**的名字：同一个块体被两个
+不同的外层模块交出，编译出来仍叫 `block::body`，哈希相同。
+
+- 同一个块体两次 ⇒ 同一个名字（case 反过来写：`uris["twin"] == uris["body"]`）；
+- 六个块体、两个是同一个 ⇒ `store blocks=5`（去重落到数上）。
+
+**还没做到的**：哈希里剩下的那部分拼写是**块体自己**的函数名（`block::<function>`）。要让块名只由
+"块体算什么"决定，需要设计 9.5 意义上的**规范形式**——结构顺序、不看名字与创建顺序——而
+`portableGraphHash` 恰恰按名字和节点编号算（`ownContentHash` 第一句就是 `h.str(graph.name())`）。
+这不是一次替换能完成的：需要一个按规范顺序走图、不带拼写的哈希，本步没有做，也不假装做了。

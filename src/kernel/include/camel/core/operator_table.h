@@ -227,6 +227,15 @@ struct OperatorTraits {
     /// is kept alive by a `GATE` when a removal takes its last read
     /// (`src/passes/opt/generic/rewrite.cpp#isObservedRun`, `#keepThroughValue`).
     bool mayFault = true;
+    /// Running it may not end (design principles 3.4: a node a pass may arrange is pure, cannot
+    /// fault and ends; a loop, or a call that may recurse, is the other case). Beside `mayFault`
+    /// because it is the same kind of fact -- something about running it that a pass must know
+    /// before it moves, copies, drops or evaluates it -- and **not** a second meaning for
+    /// `foldable`: the fact layer's termination term and the fold predicate read this field, and
+    /// `foldable` goes on saying only "its result may be kept as a value". A field that carries two
+    /// meanings cannot be read correctly by a reader that knows only one of them.
+    /// Default false: an operator that does not say it may not end, ends.
+    bool mayNotTerminate = false;
     /// While it runs, the operator calls function values it received as arguments (the
     /// higher-order operators and `attempt`), so what it does depends on those functions.
     bool callsGraphs = false;

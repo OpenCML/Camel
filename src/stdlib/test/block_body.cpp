@@ -53,6 +53,13 @@ constexpr const char *kLoudText = R"cml(export func loud(x: int) => int {
 }
 )cml";
 
+/// A body that does not end: it calls itself with the same argument, so running it never returns
+/// (the effect walk reads a call that may recurse as `mayNotTerminate`).
+constexpr const char *kSpinText = R"cml(export func spin(x: int) => int {
+    return spin(x)
+}
+)cml";
+
 /// A body that may fault: dividing by a parameter can divide by zero (design principles 3.9).
 constexpr const char *kRiskyText  = R"cml(export func risky(x: int) => int {
     return 10 / x
@@ -160,11 +167,18 @@ class BlockExecutor final : public Executor {
 
 } // namespace
 
-/// Compiles `text` as a module named `name` and answers the program of its `function`, pinned to
+/// The module name a block's body is compiled under: the block's own, the same for every block.
+/// What a body is belongs to the body, and the name of the module that happened to hand it over is
+/// not part of it. That name reaches the hash the block is named by through the graph's name
+/// (`<module>::<function>`), so a caller's name here would make the block's identity depend on who
+/// named it -- which is what a name must not do.
+constexpr const char *kBlockModule = "block";
+
+/// Compiles `text` as the block's own module and answers the program of its `function`, pinned to
 /// the context; nullptr when it does not parse or does not compile.
 camel::runtime::Program *BlockBodyTestPass::compileBody(
-    const std::string &name, const char *text, const char *function, const std::string &what,
-    std::ostream &os) {
+    const char *text, const char *function, const std::string &what, std::ostream &os) {
+    const std::string name(kBlockModule);
     auto diagnostics =
         std::make_shared<Diagnostics>(name, std::string("<in-memory>"), context_->sourceContext());
     diagnostics->setConfig(context_->diagConfig());
@@ -220,7 +234,6 @@ BlockBodyTestPass::apply(const camel::runtime::Program *program, std::ostream &o
 
     struct Compiled {
         std::string what;
-        std::string name;
         const char *function;
         const char *text;
         camel::runtime::Program *program = nullptr;
@@ -230,21 +243,16 @@ BlockBodyTestPass::apply(const camel::runtime::Program *program, std::ostream &o
         bool insert = false;
     };
     std::vector<Compiled> blocks{
-        {.what     = "body",
-         .name     = "block_body",
-         .function = "body",
-         .text     = kBodyText,
-         .insert   = true},
-        {.what = "second", .name = "block_scaled", .function = "scaled", .text = kScaledText},
-        {.what = "effectful", .name = "block_loud", .function = "loud", .text = kLoudText},
-        {.what = "fallible", .name = "block_risky", .function = "risky", .text = kRiskyText},
-        // The same body again, under another module's name: a block is named by what its body
-        // computes, so the name a module gave the graph must not be part of it. If the two URIs
-        // differ, they do -- and that is what this line is here to say.
-        {.what = "twin", .name = "block_twin", .function = "body", .text = kBodyText},
+        {.what = "body", .function = "body", .text = kBodyText, .insert = true},
+        {.what = "second", .function = "scaled", .text = kScaledText},
+        {.what = "effectful", .function = "loud", .text = kLoudText},
+        {.what = "fallible", .function = "risky", .text = kRiskyText},
+        // The same body again: one body, one name, one program in the store.
+        {.what = "twin", .function = "body", .text = kBodyText},
+        {.what = "spin", .function = "spin", .text = kSpinText},
     };
     for (Compiled &block : blocks) {
-        block.program = compileBody(block.name, block.text, block.function, block.what, os);
+        block.program = compileBody(block.text, block.function, block.what, os);
         if (block.program == nullptr) {
             return program;
         }
@@ -259,7 +267,7 @@ BlockBodyTestPass::apply(const camel::runtime::Program *program, std::ostream &o
                 block.what,
                 graph->name(),
                 graph->storedNodeCount());
-            if (graph->name() == block.name + "::" + block.function) {
+            if (graph->name() == std::string(kBlockModule) + "::" + block.function) {
                 block.graph = const_cast<camel::runtime::GCGraph *>(graph);
             }
         }
@@ -287,9 +295,10 @@ BlockBodyTestPass::apply(const camel::runtime::Program *program, std::ostream &o
         traits.pure      = block.effects.pure();
         traits.stateOnly = !block.effects.external && block.effects.writesVariables;
         traits.mayFault  = block.effects.mayFault;
-        // A call that may not end is never computed ahead of time: folding it would run it while
-        // the program is being built.
-        traits.foldable = !block.effects.mayNotTerminate;
+        // Termination is a fact of its own and keeps a field of its own: a call that may not end is
+        // one a pass may neither move, copy nor evaluate early, and the fact layer reads that from
+        // `mayNotTerminate` rather than from `foldable`, which says only what its name says.
+        traits.mayNotTerminate = block.effects.mayNotTerminate;
         camel::core::OperatorTable::instance().set(block.uri, traits);
         os << std::format(
             "BLOCK_TRAITS {} uri={} pure={} mayFault={} mayNotTerminate={} foldable={}\n",
