@@ -93,7 +93,7 @@ case = "../../../cases/opt/commit_checks/fold_function_type.cml"
 args = ["${case}", "test::commit_order", "std::nvm"]
 expect_exit = 1
 expect_diagnostic_name = "RuntimeDiag::PassEffectOrder"
-expect_output_contains = ["commit_order: the draft splices two writes to stdout", "it adds an access, so the commit asks the effect and order checks in every build", "already writes stdout at node", "and now writes it again at", "with no edge ordering either before the other", "commit_order: refused, check=order", "committed a graph whose conflicting effects are not ordered", "has no order against", "write stdout"]
+expect_output_contains = ["commit_order: the draft splices two writes to stdout", "it adds an access, so the commit asks the effect and order checks in every build", "already writes stdout at node", "and now writes it again at", "with no edge ordering either before the other", "commit_order: refused, check=order", "committed a graph whose conflicting effects are not ordered", "has no order against", "write console"]
 
 # 甲, refused, on the draft the check can still see: the write is spliced into a graph whose type
 # declares nothing, so the draft added an access and the commit is asked in this build. The defect is
@@ -106,7 +106,7 @@ case = "../../../cases/opt/commit_checks/fold_function_type.cml"
 args = ["${case}", "test::commit_effect", "std::nvm"]
 expect_exit = 1
 expect_diagnostic_name = "RuntimeDiag::PassEffectBeyondType"
-expect_output_contains = ["commit_effect: the draft splices a write to stdout into a graph whose type declares nothing", "so the commit asks the effect and order checks in every build", "declares nothing and its body now writes stdout at node", "commit_effect: refused, check=effect", "committed a graph that reaches past the effect its own type declares", "makes an access the type does not cover", "write stdout"]
+expect_output_contains = ["commit_effect: the draft splices a write to stdout into a graph whose type declares nothing", "so the commit asks the effect and order checks in every build", "declares nothing and its body now writes stdout at node", "commit_effect: refused, check=effect", "committed a graph that reaches past the effect its own type declares", "makes an access the type does not cover", "write console"]
 
 # The same splice as the first case, ordered after the write that was already there, in the same graph
 # whose type declares the write: both checks are asked, both pass, and the commit publishes. This is
@@ -163,7 +163,7 @@ kind = "behavior"
 case = "../../../cases/opt/commit_checks/fold_function_type.cml"
 args = ["${case}", "test::commit_tier", "std::nvm"]
 expect_exit = 54
-expect_stdout_contains = ["commit_tier: cell=0, draft adds an access", "commit_tier: cell=0, refused, check=order", "the tier is the draft's, not the build's", "commit_tier: cell=1, draft adds no access", "commit_tier: cell=1, refused, check=effect", "the signature moved and the body was read against the new one", "makes an access the type does not cover", "write stdout", "the graph's signature changed at this commit", "and now declares nothing", "cell=0 add-an-access -> refused=1, cell=1 narrows-the-signature -> refused=1", "the tier is the draft's, and the signature is the other side of the same comparison"]
+expect_stdout_contains = ["commit_tier: cell=0, draft adds an access", "commit_tier: cell=0, refused, check=order", "the tier is the draft's, not the build's", "commit_tier: cell=1, draft adds no access", "commit_tier: cell=1, refused, check=effect", "the signature moved and the body was read against the new one", "makes an access the type does not cover", "write console", "the graph's signature changed at this commit", "and now declares nothing", "cell=0 add-an-access -> refused=1, cell=1 narrows-the-signature -> refused=1", "the tier is the draft's, and the signature is the other side of the same comparison"]
 
 # ①, refused, in the seal and in every build. The exit is moved onto a node of one arm -- the shape
 # the calculus's counter-example lands in (`f(b) = let y = if b then {not(b)} else {false}; not(y)`,
@@ -207,7 +207,7 @@ case = "../../../cases/opt/commit_checks/branch_and_print.cml"
 args = ["${case}", "test::commit_ancestor", "std::nvm"]
 expect_exit = 1
 expect_diagnostic_name = "RuntimeDiag::PassEffectOrder"
-expect_output_contains = ["commit_ancestor: the regions a commit answers for are the ones it touched and every region around them", "and now waits for nothing", "now writes stdout at node", "neither the branch node nor the write left in the body is a node this commit made", "commit_ancestor: refused, check=order", "committed a graph whose conflicting effects are not ordered", "has no order against", "write stdout"]
+expect_output_contains = ["commit_ancestor: the regions a commit answers for are the ones it touched and every region around them", "and now waits for nothing", "now writes stdout at node", "neither the branch node nor the write left in the body is a node this commit made", "commit_ancestor: refused, check=order", "committed a graph whose conflicting effects are not ordered", "has no order against", "write console"]
 # The read across two arms. The port rule of the seal (`checkGraphCrossReferences`,
 # src/runtime/graph_edges.cpp) asks it of a region's *ports* only, and this value is not a port; the
 # question is asked anyway, by the branch-arm invariant of the seal (`validateRuntimeBranchArms`,
@@ -323,7 +323,7 @@ kind = "behavior"
 case = "../../../cases/opt/commit_checks/port_type.cml"
 args = ["${case}", "test::commit_made_order", "std::nvm"]
 expect_exit = 42
-expect_stdout_contains = ["commit_made_order: a made graph has no version the program held", "made graph 'made$unordered' writes stdout twice and nothing orders the two", "commit_made_order: refused, check=order", "has no order against", "write stdout", "made graph 'made$ordered' writes stdout twice with the second waiting for the first", "the same graph with the two ordered -- published", "made graph, two writes unordered -> refused=1, the same two ordered -> published=1"]
+expect_stdout_contains = ["commit_made_order: a made graph has no version the program held", "made graph 'made$unordered' writes stdout twice and nothing orders the two", "commit_made_order: refused, check=order", "has no order against", "write console", "made graph 'made$ordered' writes stdout twice with the second waiting for the first", "the same graph with the two ordered -- published", "made graph, two writes unordered -> refused=1, the same two ordered -> published=1"]
 
 [[tests]]
 name = "commit_refusal.made_graph_port_type"

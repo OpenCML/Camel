@@ -153,7 +153,7 @@ expect_output_contains = ["native_clause_wrong.cml:", "exists", "fs:exists", "pu
 # that writes no resources stays Generic, because it is determined per instantiation). A value of
 # the function is therefore judged by the same set the declaration is, and the two cases below
 # pin both halves: a resource-generic parameter takes whatever instantiates it, and a clause-less
-# function that reaches `stdout` does not fit a `pure` parameter.
+# function that reaches `console` does not fit a `pure` parameter.
 
 [[tests]]
 name = "inferred.parameter_is_resource_generic"
@@ -193,7 +193,7 @@ expect_stdout_exact = "0\n"
 
 [[tests]]
 name = "effect.ambient_clause_covers_body"
-desc = "A clause that names the resource its body reaches keeps its promise, the effect outside the program included: `stdout` is state the program does not own, so a clause that writes it promises the effect that comes with it, and the resource and the effect are not two things the writer has to say."
+desc = "A clause that names the resource its body reaches keeps its promise, the effect outside the program included: `console` is state the program does not own, so a clause that writes it promises the effect that comes with it, and the resource and the effect are not two things the writer has to say."
 kind = "behavior"
 case = "../../../cases/effects/uses_ambient_covers_body.cml"
 args = ["${case}"]
@@ -297,36 +297,36 @@ expect_output_contains = ["err_pure_var.cml:", "'var' parameter 'c'"]
 
 [[tests]]
 name = "err.pure_body"
-desc = "`pure` on a body that writes stdout: the signature promises the empty set and the body reaches past it, so the declaration is refused at its own clause and the resource it did not name is reported."
+desc = "`pure` on a body that writes the console: the signature promises the empty set and the body reaches past it, so the declaration is refused at its own clause and the resource it did not name is reported."
 kind = "negative"
 case = "../../../cases/effects/err_pure_body.cml"
 args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::UsesPromiseViolated"
 expect_diagnostic_code = "0x030001F1"
-expect_output_contains = ["err_pure_body.cml:6:", "pure", "stdout"]
+expect_output_contains = ["err_pure_body.cml:6:", "pure", "console"]
 
 [[tests]]
 name = "err.pure_body2"
-desc = "The same refusal where the function is only passed as a value: the error is at the declaration whose body reaches past `pure`, not at the call site that reads the declaration, and the note names the first use the signature does not name -- the print, at 13:5. The print is not also reported as an effect nobody runs: a write to `stdout` is a root of the region it is written in (design principles 3.1), so the refusal is the only report."
+desc = "The same refusal where the function is only passed as a value: the error is at the declaration whose body reaches past `pure`, not at the call site that reads the declaration, and the note names the first use the signature does not name -- the print, at 13:5. The print is not also reported as an effect nobody runs: a write to `console` is a root of the region it is written in (design principles 3.1), so the refusal is the only report."
 kind = "negative"
 case = "../../../cases/effects/err_pure_body2.cml"
 args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::UsesPromiseViolated"
 expect_diagnostic_code = "0x030001F1"
-expect_output_contains = ["err_pure_body2.cml:12:", "(x: int) => int pure", "stdout", "at 13:5"]
+expect_output_contains = ["err_pure_body2.cml:12:", "(x: int) => int pure", "console", "at 13:5"]
 
 [[tests]]
 name = "err.uses_live"
-desc = "`uses fs` with a body that writes stdout: `uses` is an upper bound, so the declaration is refused and the resource the clause left out is named."
+desc = "`uses fs` with a body that writes the console: `uses` is an upper bound, so the declaration is refused and the resource the clause left out is named."
 kind = "negative"
 case = "../../../cases/effects/err_uses_live.cml"
 args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::UsesPromiseViolated"
 expect_diagnostic_code = "0x030001F1"
-expect_output_contains = ["err_uses_live.cml:7:", "uses var fs", "stdout"]
+expect_output_contains = ["err_uses_live.cml:7:", "uses var fs", "console"]
 
 [[tests]]
 name = "err.group_cycle"
@@ -363,25 +363,25 @@ expect_output_contains = ["err_callee_clause_reaches.cml:15:", "uses var db", "c
 
 [[tests]]
 name = "err.promise_note"
-desc = "The note of a violation points at the first use the clause does not name, skipping the uses it does name: `bump` promises a write of `fs`, and its write of the cell `c` is named by the parameter list that declares it rather than by the clause, so the report names `stdout` and the note lands on the print rather than on the write of `c` above it."
+desc = "The note of a violation points at the first use the clause does not name, skipping the uses it does name: `bump` promises a write of `fs`, and its write of the cell `c` is named by the parameter list that declares it rather than by the clause, so the report names `console` and the note lands on the print rather than on the write of `c` above it."
 kind = "negative"
 case = "../../../cases/effects/err_promise_note.cml"
 args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::UsesPromiseViolated"
 expect_diagnostic_code = "0x030001F1"
-expect_output_contains = ["err_promise_note.cml:7:", "stdout", "at 9:5]"]
+expect_output_contains = ["err_promise_note.cml:7:", "console", "at 9:5]"]
 
 [[tests]]
 name = "err.pure_recursive"
-desc = "A recursive `pure` function is held to its clause like any other: the body prints, and the call to itself is a use like any other call, so the declaration is refused and the note names the first use the signature does not name -- the print, at 9:5. The print is not also reported as an effect nobody runs: a write to `stdout` is a root of the region it is written in (design principles 3.1), so the refusal is the only report."
+desc = "A recursive `pure` function is held to its clause like any other: the body prints, and the call to itself is a use like any other call, so the declaration is refused and the note names the first use the signature does not name -- the print, at 9:5. The print is not also reported as an effect nobody runs: a write to `console` is a root of the region it is written in (design principles 3.1), so the refusal is the only report."
 kind = "negative"
 case = "../../../cases/effects/err_pure_recursive.cml"
 args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::UsesPromiseViolated"
 expect_diagnostic_code = "0x030001F1"
-expect_output_contains = ["err_pure_recursive.cml:8:", "(n: int) => int pure", "stdout", "at 9:5"]
+expect_output_contains = ["err_pure_recursive.cml:8:", "(n: int) => int pure", "console", "at 9:5"]
 
 [[tests]]
 name = "err.wide_parameters"
@@ -405,18 +405,18 @@ args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::UsesPromiseViolated"
 expect_diagnostic_code = "0x030001F1"
-expect_output_contains = ["err_recursive_pure.cml:7:", "pure", "stdout"]
+expect_output_contains = ["err_recursive_pure.cml:7:", "pure", "console"]
 
 [[tests]]
 name = "err.mutual_recursive_pure"
-desc = "Two functions that call each other settle against each other: `ping` calls only `pong`, `pong` prints, and the cycle carries `stdout` back to `ping`, whose `pure` is refused."
+desc = "Two functions that call each other settle against each other: `ping` calls only `pong`, `pong` prints, and the cycle carries `console` back to `ping`, whose `pure` is refused."
 kind = "negative"
 case = "../../../cases/effects/err_mutual_recursive_pure.cml"
 args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::UsesPromiseViolated"
 expect_diagnostic_code = "0x030001F1"
-expect_output_contains = ["err_mutual_recursive_pure.cml:5:", "pure", "stdout"]
+expect_output_contains = ["err_mutual_recursive_pure.cml:5:", "pure", "console"]
 
 [[tests]]
 name = "err.closure_capture_pure"
@@ -730,7 +730,7 @@ expect_stdout_exact = "3\n5\n1\nshout\n1\n"
 
 [[tests]]
 name = "entries.read_external"
-desc = "A bare entry on an external resource is a read and compiles: `probe` promises a read of `clock`, `stamp` promises a write of `stdout` and prints so it keeps it. Nothing required the word `var` in front of a resource the program does not own, and the two spellings say different things about the call."
+desc = "A bare entry on an external resource is a read and compiles: `probe` promises a read of `clock`, `stamp` promises a write of `console` and prints so it keeps it. Nothing required the word `var` in front of a resource the program does not own, and the two spellings say different things about the call."
 kind = "behavior"
 case = "../../../cases/effects/entries_read_external.cml"
 args = ["${case}"]
@@ -771,13 +771,13 @@ expect_output_contains = ["err_read_entry_writes.cml:6:", "() => int uses env"]
 
 [[tests]]
 name = "entries.write_entry_quoted"
-desc = "The other spelling in the same report: a write entry is quoted with `var`, `() => int uses var console`, so two clauses that differ only in how they touch a resource do not read alike."
+desc = "The other spelling in the same report: a write entry is quoted with `var`, `() => int uses var fs`, so two clauses that differ only in how they touch a resource do not read alike."
 kind = "negative"
 case = "../../../cases/effects/err_write_entry_reaches.cml"
 args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::UsesPromiseViolated"
-expect_output_contains = ["err_write_entry_reaches.cml:5:", "() => int uses var console"]
+expect_output_contains = ["err_write_entry_reaches.cml:5:", "() => int uses var fs"]
 
 # ---- A resource declared `readonly` is only ever read ----
 #

@@ -66,7 +66,7 @@ for (const l of [
   'RESOURCES overlap a-b 0 a-c 1 a-empty 0 a-unknown 1',
   'RESOURCES footprint bump rmw variable norm 0 whole',
   'RESOURCES footprint countdown rmw variable norm 0 whole',
-  'RESOURCES footprint main rmw ambient rng; write ambient stdout; read ambient fs; external',
+  'RESOURCES footprint main rmw ambient rng; write ambient console; read ambient fs; external',
   'RESOURCES node main 2 :var/new: allocates variable',
   'RESOURCES node main 9 :op/assn_l: write variable (node 2); result same 0',
   'RESOURCES node main 10 FUNC bump: rmw variable (node 9); result unknown',
@@ -216,7 +216,7 @@ expect_output_not_contains = ["RESOURCES "]
 
 [[tests]]
 name = "conflict_per_resource"
-desc = "F9 (design principles 3.3): a conflict is judged by resource alone. Three effects that name three different resources — `seed` writes the random generator, `exists` reads the file system, `println` writes the console — are no pair at all, and the two `println`s, one resource (`stdout`), are a pair that keeps the order the `sync` body gives them. The pair set is what a plan and its edges are written from (F1-F3); the parallel scheduler's own evidence cannot be observed while the plan generator consults no resource query, so the query's answer is the witness."
+desc = "F9 (design principles 3.3): a conflict is judged by resource alone. Three effects that name three different resources — `seed` writes the random generator, `exists` reads the file system, `println` writes the console — are no pair at all, and the two `println`s, one resource (`console`), are a pair that keeps the order the `sync` body gives them. The pair set is what a plan and its edges are written from (F1-F3); the parallel scheduler's own evidence cannot be observed while the plan generator consults no resource query, so the query's answer is the witness."
 kind = "behavior"
 case = "../../../cases/resources/conflict_per_resource.cml"
 args = ["${case}", "test::resources"]
@@ -268,9 +268,9 @@ const expect = {
   ':op/assn_l': 'write variable norm 0 whole; result same 0',
   ':op/assn_add_l': 'rmw variable norm 0 whole; result same 0',
   ':op/assn_owned': 'write variable norm 0 whole; result same 0',
-  ':io/println': 'write ambient stdout; external',
-  ':io/eprintln': 'write ambient stderr; external',
-  'io:input': 'rmw ambient stdin; write ambient stdout; external',
+  ':io/println': 'write ambient console; external',
+  ':io/eprintln': 'write ambient console; external',
+  'io:input': 'rmw ambient console; write ambient console; external',
   'fs:read_bytes': 'read ambient fs; external',
   'fs:write_bytes': 'rmw ambient fs; external',
   'rand:seed': 'write ambient rng; external',
@@ -287,7 +287,7 @@ for (const [uri, text] of Object.entries(expect)) {
 
 [[tests]]
 name = "resource_names"
-desc = "The resource set of the standard library is pinned: `camel inspect --ops` on a program that imports every module declaring a resource prints exactly these ambient and foreign names, so a later task cannot quietly rename one back. The names are the ones design principles 3.3 gives (`stdout`, `stderr`, `stdin`, `clock`, `env`, `fs`, plus the module's own `rng`, `tensor:threads`, `tiles:driver`, `tiles:device`, `process`, and `rendezvous_point`, the meeting point of `test_support`), and the two the itemization added: `mm`, the allocator's counters `:op/mem_blocks` reads, and `profiler`, the profile session `:profiler/*` and `:stream/tee_note` write; raw mode writes `stdin`, the one resource the terminal mode was merged into ."
+desc = "The resource set of the standard library is pinned: `camel inspect --ops` on a program that imports every module declaring a resource prints exactly these ambient and foreign names, so a later task cannot quietly rename one back. The names are the ones design principles 3.3 gives (`console`, `clock`, `env`, `fs`, plus the module's own `rng`, `tensor:threads`, `tiles:driver`, `tiles:device`, `process`, and `rendezvous_point`, the meeting point of `test_support`), and the two the itemization added: `mm`, the allocator's counters `:op/mem_blocks` reads, and `profiler`, the profile session `:profiler/*` and `:stream/tee_note` write; raw mode writes `console`, the one resource the terminal mode was merged into ."
 kind = "behavior"
 case = "../../../cases/resources/names.cml"
 args = ["inspect", "--ops", "${case}"]
@@ -307,8 +307,8 @@ for (const op of ops) {
   for (const m of text.matchAll(/(?:ambient|foreign) ([^\s;]+)/g)) names.add(m[1])
 }
 const expected = [
-  'clock', 'env', 'fs', 'mm', 'process:process', 'profiler', 'rendezvous_point', 'rng',
-  'stderr', 'stdin', 'stdout', 'tensor:threads', 'tiles:device', 'tiles:driver',
+  'clock', 'console', 'env', 'fs', 'mm', 'process:process', 'profiler', 'rendezvous_point', 'rng',
+  'tensor:threads', 'tiles:device', 'tiles:driver',
 ]
 const got = [...names].sort()
 assert(got.length === expected.length, `expected ${expected.length} resources, got ${got.length}: ${got.join(', ')}`)
@@ -317,12 +317,12 @@ for (const old of ['io:stdout', 'io:stdin', 'io:stderr', 'time:clock', 'process:
   assert(!names.has(old), `old resource name ${old} is back`)
 // One operator of each kind, so a name cannot move between operators unnoticed.
 const expect = {
-  ':io/print': 'write ambient stdout; external',
-  ':io/println': 'write ambient stdout; external',
-  ':io/eprintln': 'write ambient stderr; external',
-  'io:input': 'rmw ambient stdin; write ambient stdout; external',
-  'io:has_input': 'read ambient stdin; external',
-  'io:set_terminal_raw_mode': 'write ambient stdin; external',
+  ':io/print': 'write ambient console; external',
+  ':io/println': 'write ambient console; external',
+  ':io/eprintln': 'write ambient console; external',
+  'io:input': 'rmw ambient console; write ambient console; external',
+  'io:has_input': 'read ambient console; external',
+  'io:set_terminal_raw_mode': 'write ambient console; external',
   'fs:read_bytes': 'read ambient fs; external',
   'fs:write_bytes': 'rmw ambient fs; external',
   'rand:seed': 'write ambient rng; external',
@@ -334,9 +334,9 @@ const expect = {
   'process:exit': 'rmw ambient process:process; external',
   'test_support:rendezvous': 'rmw ambient rendezvous_point; external',
   'test_support:thread_count': 'read ambient process:process; external',
-  'ckpt:load_tree': 'read ambient fs; write ambient stderr; external',
+  'ckpt:load_tree': 'read ambient fs; write ambient console; external',
   'ckpt:save_tree': 'rmw ambient fs; external',
-  'tensor:show': 'write ambient stdout; external',
+  'tensor:show': 'write ambient console; external',
   'nn:save_params': 'rmw ambient fs; external',
   'tiles:upload': 'rmw ambient tiles:driver; allocates foreign tiles:device; external',
 }

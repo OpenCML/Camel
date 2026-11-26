@@ -67,7 +67,7 @@ args = ["${case}", "std::nvm"]
 expect_exit = 1
 timeout_ms = 20000
 expect_diagnostic_name = "RuntimeDiag::PassEffectBeyondType"
-expect_output_contains = ["[type] the value the call runs: <float> (float) => float pure", "write stdout", "reaches past the effect its own type declares"]
+expect_output_contains = ["[type] the value the call runs: <float> (float) => float pure", "write console", "reaches past the effect its own type declares"]
 # The other side of the same rule: `inline` takes over the place of a statement. A call is a statement
 # only by the rule's own words (design principles 3.1) and has no place of its own, so asking `inline`
 # to take a call's place is asking it to guess one. It refuses, and the diagnostic stands where the

@@ -64,11 +64,11 @@ verify_script = """
     const nodes = out.split('\n').filter((l) => l.includes(':mark/map_arr:'))
     assert(nodes.length === 1,
         `expected one map node to touch something, got ${nodes.length}: ${nodes.join(' | ')}`)
-    assert(/^RESOURCES node main \d+ :mark\/map_arr: rmw ambient stdout; external$/.test(nodes[0]),
+    assert(/^RESOURCES node main \d+ :mark\/map_arr: rmw ambient console; external$/.test(nodes[0]),
         `the map over a printing callback does not carry its write: ${nodes[0]}`)
     const footprint = out.split('\n').filter((l) => l.startsWith('RESOURCES footprint main '))
     assert(footprint.length === 1, `expected one footprint line for main, got: ${footprint.join(' | ')}`)
-    assert(/rmw ambient stdout/.test(footprint[0]) && /result fresh/.test(footprint[0]),
+    assert(/rmw ambient console/.test(footprint[0]) && /result fresh/.test(footprint[0]),
         `main's footprint does not carry the callback's write, or claims the callback's result: ${footprint[0]}`)
 }
 """

@@ -45,9 +45,9 @@ verify_script = """
   const out = input.normalized.stdout
   const kept = out.split('\n').filter((l) => l.startsWith('RESOURCES footprint') && !l.startsWith('RESOURCES footprint bump '))
   const expected = [
-    'RESOURCES footprint __root__ read ambient reading:counter; write ambient stdout; external',
+    'RESOURCES footprint __root__ write ambient console; read ambient reading:counter; external',
     'RESOURCES footprint apply read variable capture 0 whole; result fresh',
-    'RESOURCES footprint main read ambient reading:counter; write ambient stdout; external',
+    'RESOURCES footprint main read ambient reading:counter; write ambient console; external',
   ].join('\n')
   assert(kept.join('\n') === expected, 'the readings are not the recorded ones:\n' + kept.join('\n'))
 }
@@ -65,9 +65,9 @@ verify_script = """
   const out = input.normalized.stdout
   const kept = out.split('\n').filter((l) => l.startsWith('RESOURCES footprint'))
   const expected = [
-    'RESOURCES footprint __root__ read ambient reading:counter; write ambient stdout; external',
+    'RESOURCES footprint __root__ write ambient console; read ambient reading:counter; external',
     'RESOURCES footprint apply read variable capture 0 whole; result fresh',
-    'RESOURCES footprint main read ambient reading:counter; write ambient stdout; external',
+    'RESOURCES footprint main read ambient reading:counter; write ambient console; external',
   ].join('\n')
   assert(kept.join('\n') === expected, 'the readings are not the recorded ones:\n' + kept.join('\n'))
 }

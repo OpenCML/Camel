@@ -73,7 +73,7 @@ timeout_ms = 20000
 
 [[tests]]
 name = "capture_local_var"
-desc = "A closure reads a `var` the body that made it owns, and the two walks agree that nothing is reached: `total` is `none` on both sides, and the closure's own body is `none` on both as well -- a closure captures the value the name had when it was made, not the name, so a captured value is not a cell and neither walk carries an access through it (design principles 3.5, 197; the rule). The reading this entry pinned before the rule -- one captured cell, `rmw variable capture 0 whole` on both sides -- is the withdrawn by-reference capture; the closure cannot be written as a write of that cell either, since `ClosureAssignsCapturedName` (0x03000213) refuses it before any walk runs. The program's `main` prints, and both read it as `external; write ambient stdout`."
+desc = "A closure reads a `var` the body that made it owns, and the two walks agree that nothing is reached: `total` is `none` on both sides, and the closure's own body is `none` on both as well -- a closure captures the value the name had when it was made, not the name, so a captured value is not a cell and neither walk carries an access through it (design principles 3.5, 197; the rule). The reading this entry pinned before the rule -- one captured cell, `rmw variable capture 0 whole` on both sides -- is the withdrawn by-reference capture; the closure cannot be written as a write of that cell either, since `ClosureAssignsCapturedName` (0x03000213) refuses it before any walk runs. The program's `main` prints, and both read it as `external; write ambient console`."
 kind = "behavior"
 case = "../../../cases/effects/ok_capture_local_var.cml"
 args = ["${case}", "test::resource_transition"]
@@ -86,7 +86,7 @@ const disagree = lines.filter((l) => !l.endsWith(' agree=yes'))
 assert(disagree.length === 0, 'the two sides answer differently: ' + disagree.join(' | '))
 const pinned = (want) => assert(lines.includes(want), 'missing: ' + want + '\n' + lines.join('\n'))
 pinned('MASK total builder=none runtime=none agree=yes')
-pinned('MASK main builder=external; write ambient stdout runtime=external; write ambient stdout agree=yes')
+pinned('MASK main builder=external; write ambient console runtime=external; write ambient console agree=yes')
 // The closure is an anonymous graph named after the number of graphs the compilation had reached
 // (`modules/resources` says the same of `__g_5__` and `__g_125__`), so it is named by what it says:
 // it reaches nothing, on both sides -- a captured value is not a cell, so there is no captured
@@ -113,7 +113,7 @@ const disagree = lines.filter((l) => !l.endsWith(' agree=yes'))
 assert(disagree.length === 0, 'the two sides answer differently: ' + disagree.join(' | '))
 const pinned = (want) => assert(lines.includes(want), 'missing: ' + want + '\n' + lines.join('\n'))
 pinned('MASK total builder=none runtime=none agree=yes')
-pinned('MASK main builder=external; write ambient stdout runtime=external; write ambient stdout agree=yes')
+pinned('MASK main builder=external; write ambient console runtime=external; write ambient console agree=yes')
 // The closure reaches nothing: a captured value is not a cell, so neither side reports a capture.
 const silent = lines.filter((l) => /^MASK \S+ builder=none runtime=none agree=yes$/.test(l))
 assert(silent.length >= 1, 'the closure reaches nothing on both sides: ' + lines.join('\n'))
@@ -180,7 +180,7 @@ const pinned = (want) => assert(lines.includes(want), 'missing: ' + want + '\n' 
 // names the module's cell, the runtime the port it comes in on (the plan header explains why).
 pinned('MASK peek builder=read ambient module_var_read:counter runtime=rmw variable capture 0 whole agree=no')
 // `main` is the same program one level up, and there both sides name the cell the same way.
-pinned('MASK main builder=external; read ambient module_var_read:counter; write ambient stdout runtime=external; read ambient module_var_read:counter; write ambient stdout agree=yes')
+pinned('MASK main builder=external; read ambient module_var_read:counter; write ambient console runtime=external; read ambient module_var_read:counter; write ambient console agree=yes')
 const disagree = lines.filter((l) => !l.endsWith(' agree=yes'))
 assert(disagree.length === 1, 'only `peek` differs here: ' + disagree.join(' | '))
 }
@@ -199,7 +199,7 @@ const lines = input.normalized.stdout.split('\n').filter((l) => l.startsWith('MA
 assert(lines.length > 0, 'the pass printed no reading: ' + input.normalized.stdout)
 const pinned = (want) => assert(lines.includes(want), 'missing: ' + want + '\n' + lines.join('\n'))
 pinned('MASK bump builder=rmw ambient module_var_write:counter runtime=rmw variable capture 0 whole agree=no')
-pinned('MASK main builder=external; rmw ambient module_var_write:counter; write ambient stdout runtime=external; rmw ambient module_var_write:counter; write ambient stdout agree=yes')
+pinned('MASK main builder=external; rmw ambient module_var_write:counter; write ambient console runtime=external; rmw ambient module_var_write:counter; write ambient console agree=yes')
 const disagree = lines.filter((l) => !l.endsWith(' agree=yes'))
 assert(disagree.length === 1, 'only `bump` differs here: ' + disagree.join(' | '))
 }

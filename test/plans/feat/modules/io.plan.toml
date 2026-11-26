@@ -78,10 +78,10 @@ verify_script = """
 const ops = input.normalized.stdout.split('\n').filter((l) => l.startsWith('OPERATOR ')).map((l) => JSON.parse(l.slice(9)))
 const byUri = Object.fromEntries(ops.map((o) => [o.uri, o]))
 const resources = (uri) => byUri[uri] && byUri[uri].semantics && byUri[uri].semantics.resources
-assert(resources('io:set_terminal_raw_mode') === 'write ambient stdin; external', resources('io:set_terminal_raw_mode'))
-assert(resources('io:has_input') === 'read ambient stdin; external', resources('io:has_input'))
-assert(resources('io:get_chars') === 'rmw ambient stdin; external', resources('io:get_chars'))
-assert(resources('io:clear_input_buffer') === 'rmw ambient stdin; external', resources('io:clear_input_buffer'))
+assert(resources('io:set_terminal_raw_mode') === 'write ambient console; external', resources('io:set_terminal_raw_mode'))
+assert(resources('io:has_input') === 'read ambient console; external', resources('io:has_input'))
+assert(resources('io:get_chars') === 'rmw ambient console; external', resources('io:get_chars'))
+assert(resources('io:clear_input_buffer') === 'rmw ambient console; external', resources('io:clear_input_buffer'))
 }
 """
 
@@ -103,8 +103,8 @@ const raw = node('io:set_terminal_raw_mode')
 const read = node('io:get_chars')
 assert(raw, 'no node for io:set_terminal_raw_mode')
 assert(read, 'no node for io:get_chars')
-assert(raw.includes('write ambient stdin; external'), raw)
-assert(read.includes('rmw ambient stdin; external'), read)
+assert(raw.includes('write ambient console; external'), raw)
+assert(read.includes('rmw ambient console; external'), read)
 const id = (line) => Number(line.split(' ')[3])
 const pair = out.split('\n').filter((l) => l.startsWith('RESOURCES order ')).find((l) => {
   const ids = l.split(' ').slice(3, 5).map(Number)
