@@ -1,0 +1,62 @@
+{
+  "kind": "promotion",
+  "promotion": 8,
+  "tip": "1a7cf9ff32f9282a3155dafda5028099b39638ce",
+  "pushed_as": "develop",
+  "develop_before": "72fa2f3c6d67dcf03ebe5617cdbc13f75548efe4",
+  "tier": "fast",
+  "scope": "test/plans (the whole plan tree)",
+  "jobs": 8,
+  "host": "88 (the build host), tree /home/zjwei/camel-work/gate1",
+  "binary_built": "2026-11-25T22:55:44-05:00",
+  "readings": {
+    "total": 9739,
+    "pass": 9055,
+    "fail": 627,
+    "skip": 26,
+    "known": 31,
+    "timed_out_raw_layer": 9
+  },
+  "comparison": {
+    "against": "2026-11-24-promotion-4-reds.tsv",
+    "against_also": "promotion-7 counts (9736 / 9052 / 627 / 26 / 31); that promotion left no red-name list, so it can be compared by counts only",
+    "new_reds": 0,
+    "vanished_reds": 0,
+    "arithmetic": "the case set grew by 3 (4 added, 1 removed; all four added were green), so pass 9051 -> 9044 and fail 627 -> 634 among the 9735 existing cases: exactly 7 existing cases went green -> red, and 0 went red -> green",
+    "red_names_file": "internal/reports/2026-11-26-promotion-8-reds.tsv"
+  },
+  "timeouts_rerun": {
+    "why": "a timeout on the first occurrence is not red: the host was at 1m load 28.19 and the gate itself printed that its readings were not comparable to a quiet host",
+    "count": 9,
+    "run_alone": true,
+    "timeout_scale": 1.0,
+    "note": "run at the original timeout, not doubled: passing at 1x is a stronger statement than passing at 2x",
+    "green": [
+      "linear.var_reference/var_tensor.specialize_jit",
+      "linear.var_reference/var_tensor.simplify_jit",
+      "compile.expected_type_through_calls/expected.parameter_holes.jit",
+      "linear.sync_order/sync_block_order.tf",
+      "linear.operators/mod_assign_by_zero.prl",
+      "linear.same_resource_order/same_resource_order_call.jit",
+      "para.core/arm_reads_outer_value.opt_prl"
+    ],
+    "still_red_not_timeout": [
+      {
+        "case": "consistency.faults_optimized/fault.int_text_blank.prl",
+        "reason": "expected diagnostic RuntimeDiag::InvalidNumberText, line 5"
+      },
+      {
+        "case": "consistency.faults/fault.parse_int.prl",
+        "reason": "expected diagnostic line 5, column 36"
+      }
+    ],
+    "note_on_those_two": "both were red in promotion-4's list as well, so they are inherited reds and not this round's; the whole-layer run shows them as timeouts, and a timeout covers the real reason -- only running them alone showed it"
+  },
+  "later_reading_not_the_basis": {
+    "tip": "73aebe80b3ad26b2a4d225dfae1c5adbf83a9bb6",
+    "counts": "9739 / 9055 / 627 / 26 / 31, timed out: none",
+    "red_names_file": "internal/reports/2026-11-26-promotion-8-reds-73aebe80b3.tsv",
+    "why_not_the_basis": "D-1126-30: develop is pushed to the commit the whole layer measured for this promotion; this later reading is evidence for the next one"
+  },
+  "ruling": "D-1126-30: a develop push is checked against the promotion record of the pushed tip, not against one pass record per merge; the tip's whole-layer reading already covers every merge in range"
+}
