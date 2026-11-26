@@ -91,6 +91,7 @@ LINT_FILES = [
     "test/cases/trans",
     "test/cases/measured",
     "test/cases/tools",
+    "test/cases/modules",
     "benchmarks",
 ]
 
