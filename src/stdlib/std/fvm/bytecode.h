@@ -319,7 +319,8 @@ struct BytecodeHeader {                  // 16 bytes
     inline BytecodeExtra *extra() {
         const size_t extraWords = extraWordCount();
         GUARD(extraWords != 0, "Bytecode has no extra payload.");
-        return reinterpret_cast<BytecodeExtra *>(reinterpret_cast<uint64_t *>(this + opsize) - extraWords);
+        return reinterpret_cast<BytecodeExtra *>(
+            reinterpret_cast<uint64_t *>(this + opsize) - extraWords);
     }
 
     inline const BytecodeExtra *extra() const {
@@ -421,7 +422,7 @@ union BytecodeExtra {                           // 8 bytes
     const camel::runtime::ExecLoop *loop;       // LBEG, LTST, LEND
     operator_t func;                            // for OPER
     MarkOpCode mark;                            // for SCHD
-    uint64_t raw; // generic
+    uint64_t raw;                               // generic
 
     std::string toString(OpCode opcode) const;
 };
@@ -430,7 +431,8 @@ inline const camel::runtime::ExecLoop *BytecodeHeader::loopPayload() const {
     GUARD(
         opcode == OpCode::LBEG || opcode == OpCode::LTST || opcode == OpCode::LEND,
         "Bytecode is not a loop event.");
-    return reinterpret_cast<const BytecodeExtra *>(reinterpret_cast<const uint64_t *>(this + opsize) - 1)
+    return reinterpret_cast<const BytecodeExtra *>(
+               reinterpret_cast<const uint64_t *>(this + opsize) - 1)
         ->loop;
 }
 
@@ -451,12 +453,37 @@ inline void setFuncExtraRuntimeGraph(BytecodeHeader *bc, camel::runtime::GCGraph
 // order. The call's value is a tuple of its return value and the new version of each of them, so
 // the mask says both which with-inputs are handed the versions and how many items the call's
 // value has. A callee that writes none has 0 and its call's value is the return value alone.
+//
+// The word above the mask's 32 bits holds the shape of the callee's compiled code (the bit below):
+// a capture mask is a port bitmask, so the two never meet.
 inline uint32_t getFuncExtraWriteMask(const BytecodeHeader *bc) {
-    return static_cast<uint32_t>(*bc->directCallExtraWriteMask());
+    return static_cast<uint32_t>(*bc->directCallExtraWriteMask() & 0xFFFFFFFFull);
 }
 inline void setFuncExtraWriteMask(BytecodeHeader *bc, uint32_t writeMask) {
-    *bc->directCallExtraWriteMask() = writeMask;
+    // The word's 32 bits above the mask hold the shape of the compiled code (below): a write here
+    // is the link writing the capture mask, and it must not clear them.
+    *bc->directCallExtraWriteMask() =
+        (*bc->directCallExtraWriteMask() & ~0xFFFFFFFFull) | static_cast<uint64_t>(writeMask);
 }
+
+#if defined(ENABLE_FASTVM_JIT) && ENABLE_FASTVM_JIT
+// Whether the callee's compiled code is framed (`CompiledCode::framed`): the code returns to its
+// driver with an exit kind at every call it makes, where frameless code calls inside itself and
+// never leaves. The patch that installs the entry pointer (`extra3`) writes this bit in the same
+// pass, so the driver of framed code reads a callee's entry and its shape with two loads of the
+// bytecode it already holds. What it must not do is ask the graph's version state, which is a read
+// of the plan from the fact store and a locked table, on every call: a workload that calls once
+// per iteration paid that three times per call.
+inline constexpr uint64_t kFuncExtraFramedBit = 1ull << 63;
+
+inline bool getFuncExtraFramed(const BytecodeHeader *bc) {
+    return (*bc->directCallExtraWriteMask() & kFuncExtraFramedBit) != 0;
+}
+inline void setFuncExtraFramed(BytecodeHeader *bc, bool framed) {
+    uint64_t &word = *bc->directCallExtraWriteMask();
+    word           = framed ? (word | kFuncExtraFramedBit) : (word & ~kFuncExtraFramedBit);
+}
+#endif
 
 // JUMP: the target pc. Inside one graph, before linking, it is graph-relative and fits fastop[0]
 // (fastop[1] is 0). The linker makes it absolute, and a linked program can exceed 32 bits of

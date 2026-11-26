@@ -179,7 +179,7 @@ struct CodeLease {
 class FastVMSchedPass : public RuntimeGraphSchedulePass {
   public:
     struct CallResult {
-        slot_t result = {};
+        slot_t result         = {};
         ctx::Frame *rootFrame = nullptr;
         // Not null when the activation ended in a tail call of compiled code instead of
         // returning: `rootFrame` is then the frame prepared for that code (this entry point of
@@ -308,6 +308,9 @@ class FastVMSchedPass : public RuntimeGraphSchedulePass {
     // For an entry of pcStack_ pushed by the driver of framed code: where the caller's code
     // continues (JitContext::resumeAddr). Grown with pcStack_ by the driver.
     std::vector<uint64_t> resumeStack_;
+    // For the same entry: the entry function of the calling activation, so that the return behind
+    // the call resumes it without a read of the graph's version state.
+    std::vector<jit::JitEntryFn> callerEntryStack_;
 #endif
     // Calls that do nest on the native stack: a call through a function value (CALL) and each
     // element call of a higher-order operator run in a nested call(). They are open calls like
