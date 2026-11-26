@@ -974,7 +974,7 @@ export func copy::<T>(x: T) => T
 /// language's own conversion rules; the call form is the name a graph holds the conversion under.
 /// The two type parameters are the pair a conversion is about, so a call names them.
 /// @pure
-/// @example cast::<int, float>(1)    // 1.0
+/// @example cast::<f32[6], f32[]>([1.0, 2.0, 3.0, 4.0, 5.0, 6.0])    // six values, read as f32[]
 #op(':op/cast')
 export func cast::<T, U>(x: T) => U panic
 
@@ -990,6 +990,7 @@ export func cast::<T, U>(x: T) => U panic
 /// two types meet would need a conversion that can fail, the program is a type error and no call
 /// is built at all, so what the compiler inserted never fails at run time.
 /// @pure
+/// @example let x: int? = 1    // the literal enters the optional that position asks for
 #op(':op/enter')
 export func enter::<T, U>(x: T) => U
 
