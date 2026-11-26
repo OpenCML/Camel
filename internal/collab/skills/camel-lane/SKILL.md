@@ -94,6 +94,10 @@ pwsh -NoProfile -File <你的工作树>\internal\tools\camel-remote.ps1 `
   `camel-build.ps1` 的参数是 `-Parallel`，不是 `-Jobs` —— 混用会被当成没写。
 · 免 GPU 观测、只要计划自己的退出码：加 `-NoGpuWatch`。
 · 退出码：0 绿／1 红／**4 没跑起来**／**7 读数齐了但没拿到退出码**。4 与 7 都不是绿。
+· **只跑一两份小计划的车道，传 `-SlotWaitSeconds 300`**（默认 1800）。宿主忙碌时构造桶会一直
+  排队等测试槽，等到上限才 `no slot`：2026-11-26 一条车道两次各等 **1804 s**、换到 **0 个读数**。
+  ⇒ 等不到就按 `state=noslot` 交回，写上「未取到 + 当时 `[load]`」，**不要重试第三次**。
+  ⇒ 要长跑的全层计划（`-Tier fast`/`slow` 那种）才用它默认的 1800。
 · 读数要带 provenance（`tip`、binary 的构建时刻、`tree`、`tier`、`jobs`）与 `[TREE] clean`。
   没有 `[load]` 行的读数（本机跑的）**只能当名字集用**，不能当时间基线。
 · **不要用 `Select-String` / `Where-Object` 把判词行滤掉。** 判词行
