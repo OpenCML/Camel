@@ -63,7 +63,7 @@ desc = "Maps and sets under collection stress: a table keeps its keys and values
 # with none capped; 45 against 55 for the small constant, which collects at every first allocation
 # anyway).
 # The twelve `gc.collection_trees_*_prl` entries declare a bound and a timeout of their own, taken
-# from the three windows measured for them on 2026-10-24 (1.63x the busiest of the three, rounded
+# from the three windows measured for them (1.63x the busiest of the three, rounded
 # up to the next 1000 ms; each arm records its three readings beside the number). Their timeouts are
 # the ones their case already carried -- 120 s is 4.0x the busiest tree wall these windows read and
 # 300 s 5.7x the busiest tiny one, where the nvm tiny arm read 72.57 s under the same 300 s -- and
@@ -339,7 +339,7 @@ desc = "Maps and sets of 150 to 260 entries with string and tuple keys and array
 case = "../../../cases/feat/mm/gc/gc_collection_trees.cml"
 args = ["--gc-stress", "alloc=3,safepoint=1,kind=major", "--gc-check", "verify=both", "--coll", "validate=on", "${case}", "std::gc::verify", "std::prl gc_stress=true"]
 expect_stdout_contains = ["\"ok\":true", "m=150/1124950 grown=160/2015440 cut=66/1239480", "[1, 1] [189, 35721] [0] false true", "s=260 k=160 both=148 either=272 only=12 subset=true", "grid=170 hit=key-24 miss=? items=170", "true false true 150 1124950"]
-# CPU 9.27 s, 9.09 s and 9.12 s in the three windows taken for this arm on 2026-10-24:
+# CPU 9.27 s, 9.09 s and 9.12 s in the three windows taken for this arm:
 # 1.63x the busiest, rounded up to the next 1000 ms, is 16 s. The head says what
 # std::prl gc_stress=true does here, and the tree case keeps its 120 s timeout.
 cpu_budget_ms = 16000
@@ -379,7 +379,7 @@ desc = "Maps and sets of 150 to 260 entries with string and tuple keys and array
 case = "../../../cases/feat/mm/gc/gc_collection_trees.cml"
 args = ["--gc-stress", "alloc=3,safepoint=1,kind=major", "--gc-check", "verify=both", "--coll", "validate=on", "--gc", "generational", "${case}", "std::gc::verify", "std::prl gc_stress=true"]
 expect_stdout_contains = ["\"ok\":true", "m=150/1124950 grown=160/2015440 cut=66/1239480", "[1, 1] [189, 35721] [0] false true", "s=260 k=160 both=148 either=272 only=12 subset=true", "grid=170 hit=key-24 miss=? items=170", "true false true 150 1124950"]
-# CPU 9.22 s, 9.1 s and 9.18 s in the three windows taken for this arm on 2026-10-24:
+# CPU 9.22 s, 9.1 s and 9.18 s in the three windows taken for this arm:
 # 1.63x the busiest, rounded up to the next 1000 ms, is 16 s. The head says what
 # std::prl gc_stress=true does here, and the tree case keeps its 120 s timeout.
 cpu_budget_ms = 16000
@@ -419,7 +419,7 @@ desc = "Maps and sets of 150 to 260 entries with string and tuple keys and array
 case = "../../../cases/feat/mm/gc/gc_collection_trees.cml"
 args = ["--gc-stress", "alloc=3,safepoint=1,kind=minor", "--gc-check", "verify=both", "--coll", "validate=on", "${case}", "std::gc::verify", "std::prl gc_stress=true"]
 expect_stdout_contains = ["\"ok\":true", "m=150/1124950 grown=160/2015440 cut=66/1239480", "[1, 1] [189, 35721] [0] false true", "s=260 k=160 both=148 either=272 only=12 subset=true", "grid=170 hit=key-24 miss=? items=170", "true false true 150 1124950"]
-# CPU 9.32 s, 9.36 s and 9.4 s in the three windows taken for this arm on 2026-10-24:
+# CPU 9.32 s, 9.36 s and 9.4 s in the three windows taken for this arm:
 # 1.63x the busiest, rounded up to the next 1000 ms, is 16 s. The head says what
 # std::prl gc_stress=true does here, and the tree case keeps its 120 s timeout.
 cpu_budget_ms = 16000
@@ -459,7 +459,7 @@ desc = "Maps and sets of 150 to 260 entries with string and tuple keys and array
 case = "../../../cases/feat/mm/gc/gc_collection_trees.cml"
 args = ["--gc-stress", "alloc=3,safepoint=1,kind=minor", "--gc-check", "verify=both", "--coll", "validate=on", "--gc", "generational", "${case}", "std::gc::verify", "std::prl gc_stress=true"]
 expect_stdout_contains = ["\"ok\":true", "m=150/1124950 grown=160/2015440 cut=66/1239480", "[1, 1] [189, 35721] [0] false true", "s=260 k=160 both=148 either=272 only=12 subset=true", "grid=170 hit=key-24 miss=? items=170", "true false true 150 1124950"]
-# CPU 9.35 s, 9.47 s and 9.33 s in the three windows taken for this arm on 2026-10-24:
+# CPU 9.35 s, 9.47 s and 9.33 s in the three windows taken for this arm:
 # 1.63x the busiest, rounded up to the next 1000 ms, is 16 s. The head says what
 # std::prl gc_stress=true does here, and the tree case keeps its 120 s timeout.
 cpu_budget_ms = 16000
@@ -499,7 +499,7 @@ desc = "Maps and sets of 150 to 260 entries with string and tuple keys and array
 case = "../../../cases/feat/mm/gc/gc_collection_trees.cml"
 args = ["--gc-stress", "alloc=3,safepoint=1,kind=both", "--gc-check", "verify=both", "--coll", "validate=on", "${case}", "std::gc::verify", "std::prl gc_stress=true"]
 expect_stdout_contains = ["\"ok\":true", "m=150/1124950 grown=160/2015440 cut=66/1239480", "[1, 1] [189, 35721] [0] false true", "s=260 k=160 both=148 either=272 only=12 subset=true", "grid=170 hit=key-24 miss=? items=170", "true false true 150 1124950"]
-# CPU 9.02 s, 9.09 s and 9.15 s in the three windows taken for this arm on 2026-10-24:
+# CPU 9.02 s, 9.09 s and 9.15 s in the three windows taken for this arm:
 # 1.63x the busiest, rounded up to the next 1000 ms, is 15 s. The head says what
 # std::prl gc_stress=true does here, and the tree case keeps its 120 s timeout.
 cpu_budget_ms = 15000
@@ -539,7 +539,7 @@ desc = "Maps and sets of 150 to 260 entries with string and tuple keys and array
 case = "../../../cases/feat/mm/gc/gc_collection_trees.cml"
 args = ["--gc-stress", "alloc=3,safepoint=1,kind=both", "--gc-check", "verify=both", "--coll", "validate=on", "--gc", "generational", "${case}", "std::gc::verify", "std::prl gc_stress=true"]
 expect_stdout_contains = ["\"ok\":true", "m=150/1124950 grown=160/2015440 cut=66/1239480", "[1, 1] [189, 35721] [0] false true", "s=260 k=160 both=148 either=272 only=12 subset=true", "grid=170 hit=key-24 miss=? items=170", "true false true 150 1124950"]
-# CPU 9.25 s, 9.26 s and 9.28 s in the three windows taken for this arm on 2026-10-24:
+# CPU 9.25 s, 9.26 s and 9.28 s in the three windows taken for this arm:
 # 1.63x the busiest, rounded up to the next 1000 ms, is 16 s. The head says what
 # std::prl gc_stress=true does here, and the tree case keeps its 120 s timeout.
 cpu_budget_ms = 16000
@@ -579,7 +579,7 @@ desc = "Maps and sets of 150 to 260 entries with string and tuple keys and array
 case = "../../../cases/feat/mm/gc/gc_collection_trees.cml"
 args = ["--gc-stress", "alloc=3,safepoint=1,kind=major", "--gc-check", "verify=both", "--coll", "validate=on,leaf=2,fanout=4", "${case}", "std::gc::verify", "std::prl gc_stress=true"]
 expect_stdout_contains = ["\"ok\":true", "m=150/1124950 grown=160/2015440 cut=66/1239480", "[1, 1] [189, 35721] [0] false true", "s=260 k=160 both=148 either=272 only=12 subset=true", "grid=170 hit=key-24 miss=? items=170", "true false true 150 1124950"]
-# CPU 15.17 s, 15.49 s and 15.11 s in the three windows taken for this arm on 2026-10-24:
+# CPU 15.17 s, 15.49 s and 15.11 s in the three windows taken for this arm:
 # 1.63x the busiest, rounded up to the next 1000 ms, is 26 s. The head says what
 # std::prl gc_stress=true does here, and the tiny case keeps its 300 s timeout.
 cpu_budget_ms = 26000
@@ -619,7 +619,7 @@ desc = "Maps and sets of 150 to 260 entries with string and tuple keys and array
 case = "../../../cases/feat/mm/gc/gc_collection_trees.cml"
 args = ["--gc-stress", "alloc=3,safepoint=1,kind=major", "--gc-check", "verify=both", "--coll", "validate=on,leaf=2,fanout=4", "--gc", "generational", "${case}", "std::gc::verify", "std::prl gc_stress=true"]
 expect_stdout_contains = ["\"ok\":true", "m=150/1124950 grown=160/2015440 cut=66/1239480", "[1, 1] [189, 35721] [0] false true", "s=260 k=160 both=148 either=272 only=12 subset=true", "grid=170 hit=key-24 miss=? items=170", "true false true 150 1124950"]
-# CPU 15.05 s, 15.18 s and 15.3 s in the three windows taken for this arm on 2026-10-24:
+# CPU 15.05 s, 15.18 s and 15.3 s in the three windows taken for this arm:
 # 1.63x the busiest, rounded up to the next 1000 ms, is 25 s. The head says what
 # std::prl gc_stress=true does here, and the tiny case keeps its 300 s timeout.
 cpu_budget_ms = 25000
@@ -659,7 +659,7 @@ desc = "Maps and sets of 150 to 260 entries with string and tuple keys and array
 case = "../../../cases/feat/mm/gc/gc_collection_trees.cml"
 args = ["--gc-stress", "alloc=3,safepoint=1,kind=minor", "--gc-check", "verify=both", "--coll", "validate=on,leaf=2,fanout=4", "${case}", "std::gc::verify", "std::prl gc_stress=true"]
 expect_stdout_contains = ["\"ok\":true", "m=150/1124950 grown=160/2015440 cut=66/1239480", "[1, 1] [189, 35721] [0] false true", "s=260 k=160 both=148 either=272 only=12 subset=true", "grid=170 hit=key-24 miss=? items=170", "true false true 150 1124950"]
-# CPU 15.33 s, 15.12 s and 15.54 s in the three windows taken for this arm on 2026-10-24:
+# CPU 15.33 s, 15.12 s and 15.54 s in the three windows taken for this arm:
 # 1.63x the busiest, rounded up to the next 1000 ms, is 26 s. The head says what
 # std::prl gc_stress=true does here, and the tiny case keeps its 300 s timeout.
 cpu_budget_ms = 26000
@@ -699,7 +699,7 @@ desc = "Maps and sets of 150 to 260 entries with string and tuple keys and array
 case = "../../../cases/feat/mm/gc/gc_collection_trees.cml"
 args = ["--gc-stress", "alloc=3,safepoint=1,kind=minor", "--gc-check", "verify=both", "--coll", "validate=on,leaf=2,fanout=4", "--gc", "generational", "${case}", "std::gc::verify", "std::prl gc_stress=true"]
 expect_stdout_contains = ["\"ok\":true", "m=150/1124950 grown=160/2015440 cut=66/1239480", "[1, 1] [189, 35721] [0] false true", "s=260 k=160 both=148 either=272 only=12 subset=true", "grid=170 hit=key-24 miss=? items=170", "true false true 150 1124950"]
-# CPU 15.3 s, 15.44 s and 15.3 s in the three windows taken for this arm on 2026-10-24:
+# CPU 15.3 s, 15.44 s and 15.3 s in the three windows taken for this arm:
 # 1.63x the busiest, rounded up to the next 1000 ms, is 26 s. The head says what
 # std::prl gc_stress=true does here, and the tiny case keeps its 300 s timeout.
 cpu_budget_ms = 26000
@@ -739,7 +739,7 @@ desc = "Maps and sets of 150 to 260 entries with string and tuple keys and array
 case = "../../../cases/feat/mm/gc/gc_collection_trees.cml"
 args = ["--gc-stress", "alloc=3,safepoint=1,kind=both", "--gc-check", "verify=both", "--coll", "validate=on,leaf=2,fanout=4", "${case}", "std::gc::verify", "std::prl gc_stress=true"]
 expect_stdout_contains = ["\"ok\":true", "m=150/1124950 grown=160/2015440 cut=66/1239480", "[1, 1] [189, 35721] [0] false true", "s=260 k=160 both=148 either=272 only=12 subset=true", "grid=170 hit=key-24 miss=? items=170", "true false true 150 1124950"]
-# CPU 15.06 s, 15.1 s and 15.56 s in the three windows taken for this arm on 2026-10-24:
+# CPU 15.06 s, 15.1 s and 15.56 s in the three windows taken for this arm:
 # 1.63x the busiest, rounded up to the next 1000 ms, is 26 s. The head says what
 # std::prl gc_stress=true does here, and the tiny case keeps its 300 s timeout.
 cpu_budget_ms = 26000
@@ -779,7 +779,7 @@ desc = "Maps and sets of 150 to 260 entries with string and tuple keys and array
 case = "../../../cases/feat/mm/gc/gc_collection_trees.cml"
 args = ["--gc-stress", "alloc=3,safepoint=1,kind=both", "--gc-check", "verify=both", "--coll", "validate=on,leaf=2,fanout=4", "--gc", "generational", "${case}", "std::gc::verify", "std::prl gc_stress=true"]
 expect_stdout_contains = ["\"ok\":true", "m=150/1124950 grown=160/2015440 cut=66/1239480", "[1, 1] [189, 35721] [0] false true", "s=260 k=160 both=148 either=272 only=12 subset=true", "grid=170 hit=key-24 miss=? items=170", "true false true 150 1124950"]
-# CPU 15.32 s, 15 s and 15.49 s in the three windows taken for this arm on 2026-10-24:
+# CPU 15.32 s, 15 s and 15.49 s in the three windows taken for this arm:
 # 1.63x the busiest, rounded up to the next 1000 ms, is 26 s. The head says what
 # std::prl gc_stress=true does here, and the tiny case keeps its 300 s timeout.
 cpu_budget_ms = 26000

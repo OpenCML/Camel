@@ -1787,8 +1787,8 @@ timeout_ms = 15000
 # `TRANSPOSE function=... skip=call-value-missing ... arg=N`. That value is what the member
 # must carry in its closure; the closure is `b2f`'s lane, and these
 # flip when it lands.
-# (Until 2026-11-03 this block said "the wall is the law `idx_arr_t`, not the shape"; the reading that
-# replaced it is the one above.)
+# (While `idx_arr_t` had no transposed member this block said "the wall is the law `idx_arr_t`, not the
+# shape"; the member's construction replaced that reading with the one above.)
 [[tests]]
 name = "grad_of_an_array_parameter"
 desc = "The handed-over program: `xs[1] * xs[0]` over `[3.0, 2.0]`, read through `vjp` -- `6.0` and the array cotangent `[2.0, 3.0]`, each operator's value landing in the other's place. Same wall as the rest of the block: the element read's member is built, and the call site still needs the array's **value** (`param=0`, then `skip=call-value-missing ... arg=5`)."
@@ -1816,8 +1816,8 @@ timeout_ms = 30000
 # `TRANSPOSE function=... skip=call-value-missing ... arg=N`. That value is what the member
 # must carry in its closure; the closure is `b2f`'s lane, and these
 # flip when it lands.
-# (Until 2026-11-03 this block said "the wall is the law `idx_arr_t`, not the shape"; the reading that
-# replaced it is the one above.)
+# (While `idx_arr_t` had no transposed member this block said "the wall is the law `idx_arr_t`, not the
+# shape"; the member's construction replaced that reading with the one above.)
 [[tests]]
 name = "grad_array_one_element"
 desc = "One element read: `xs[0]` over `[3.0]` -- `3.0` and the cotangent `[1.0]`, the smallest array a function of an array can have. Same wall: the element read's member is built, and the call site needs the array's **value** (`param=0`, then `skip=call-value-missing ... arg=2`)."
@@ -1839,8 +1839,8 @@ timeout_ms = 30000
 # `TRANSPOSE function=... skip=call-value-missing ... arg=N`. That value is what the member
 # must carry in its closure; the closure is `b2f`'s lane, and these
 # flip when it lands.
-# (Until 2026-11-03 this block said "the wall is the law `idx_arr_t`, not the shape"; the reading that
-# replaced it is the one above.)
+# (While `idx_arr_t` had no transposed member this block said "the wall is the law `idx_arr_t`, not the
+# shape"; the member's construction replaced that reading with the one above.)
 [[tests]]
 name = "grad_array_two_elements_first"
 desc = "Two elements, only the first read: `xs[0]` over `[3.0, 2.0]` -- `3.0` and `[1.0, 0.0]`, where the second element's cotangent is a zero the law puts there rather than a number the read produces. Same wall (`param=0`, `skip=call-value-missing ... arg=2`)."
@@ -1862,8 +1862,8 @@ timeout_ms = 30000
 # `TRANSPOSE function=... skip=call-value-missing ... arg=N`. That value is what the member
 # must carry in its closure; the closure is `b2f`'s lane, and these
 # flip when it lands.
-# (Until 2026-11-03 this block said "the wall is the law `idx_arr_t`, not the shape"; the reading that
-# replaced it is the one above.)
+# (While `idx_arr_t` had no transposed member this block said "the wall is the law `idx_arr_t`, not the
+# shape"; the member's construction replaced that reading with the one above.)
 [[tests]]
 name = "grad_array_sum"
 desc = "The sum: `xs[0] + xs[1]` over `[3.0, 2.0]` -- `5.0` and `[1.0, 1.0]`, each element contributing once. Same wall (`param=0`, `skip=call-value-missing ... arg=5`)."
@@ -1885,8 +1885,8 @@ timeout_ms = 30000
 # `TRANSPOSE function=... skip=call-value-missing ... arg=N`. That value is what the member
 # must carry in its closure; the closure is `b2f`'s lane, and these
 # flip when it lands.
-# (Until 2026-11-03 this block said "the wall is the law `idx_arr_t`, not the shape"; the reading that
-# replaced it is the one above.)
+# (While `idx_arr_t` had no transposed member this block said "the wall is the law `idx_arr_t`, not the
+# shape"; the member's construction replaced that reading with the one above.)
 [[tests]]
 name = "grad_array_product"
 desc = "The product: `xs[0] * xs[1]` over `[3.0, 2.0]` -- `6.0` and `[2.0, 3.0]`, the other element's value in each place. Same wall (`param=0`, `skip=call-value-missing ... arg=5`)."
