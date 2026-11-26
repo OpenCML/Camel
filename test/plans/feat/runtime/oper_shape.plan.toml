@@ -62,3 +62,20 @@ expect_stdout_contains = ["[SHAPE_REGISTRY] unstated_is_none ok", "[SHAPE_REGIST
 expect_stdout_not_contains = ["not ok"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 30000
+# A conversion written as the operator it is: `cast::<f32[6], f32[]>` names `:op/cast` and a pair
+# of types the language allows *and* runs (the extent and the rank fit), so the reading has the line
+# the rest of this plan has been missing -- `oper=:op/cast shape=conversion`. Nothing in the four
+# node kinds reaches it: the CAST kind is gone, and `float(x)`, the writing a program would reach
+# for, is a CALL of the prelude's own `float` function. This entry is what makes the conversion shape
+# readable at all, and it is the pair, not a second name table, that the line rests on.
+[[tests]]
+name = "runtime.oper_shape.a_conversion_written_as_the_operator"
+desc = "`cast::<f32[6], f32[]>(a)` builds an OPER node naming `:op/cast` and runs: six elements of a fixed rank into the open rank of the same element type. `test::oper_shape` reads the shape off the operator's record, so the reading carries `oper=:op/cast shape=conversion` -- the line the four node kinds cannot produce any more, since CAST is gone and `float(x)` is a CALL -- beside the `[SHAPE_REGISTRY]` half that answers the same registry for a URI no program can call."
+kind = "behavior"
+case = "../../../cases/runtime/oper_shape/cast_pair_conversion.cml"
+args = ["${case}", "test::oper_shape"]
+expect_exit = 0
+expect_stdout_contains = ["[OPER_SHAPE] oper=:op/cast shape=conversion", "[SHAPE_REGISTRY] unstated_is_none ok"]
+expect_stdout_not_contains = ["shape=none", "not ok", "[Error]"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 30000

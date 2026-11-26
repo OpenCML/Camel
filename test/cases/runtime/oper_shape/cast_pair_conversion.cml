@@ -1,0 +1,22 @@
+// One conversion, written by the operator it is, so the reading has a `:op/cast` line: the operator
+// takes a pair of types and this program names both (`cast::<f32[6], f32[]>`), which is the writing
+// `:op/cast` has. `float(x)` is not one: it is a call of the prelude's `float` function, so the node
+// it builds is a CALL and `test::oper_shape` prints no `oper=:op/cast` line for it.
+//
+// The pair is a shape conversion -- the six elements of a fixed rank into the open rank of the same
+// element type, which the language allows (`Type::castSafetyFrom` answers Safe) and which runs: the
+// value keeps its six elements and only its static shape widens. The extent and the rank have to
+// fit, which is why the reading is a program and not a type: `f32[2, 3]` into `f32[]` compiles and
+// then fails when it runs, saying the array has shape [2, 3].
+//
+// The value is a parameter of its own function so that nothing folds: a conversion of a constant the
+// builder just made could be computed before the graph is handed to the pass, and then the form
+// would be missing from the reading.
+func flatten(a: f32[6]) => f32[] {
+    return cast::<f32[6], f32[]>(a)
+}
+
+func main() => int sync {
+    println(len(flatten([1.0, 2.0, 3.0, 4.0, 5.0, 6.0])))
+    return 0
+}
