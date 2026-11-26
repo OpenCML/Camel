@@ -50,7 +50,8 @@
  * defines) or, when it declares none, the four a plan's `[defaults]` usually carries
  * (`strip_ansi`, `normalize_newlines`, `trim_trailing_space`, `normalize_paths`). Nothing else is
  * normalized away: no number is compared at a tolerance, and the comparison drops only the lines a
- * side prints about its own machinery (the bytecode VM's counters, the collector's accounting), which
+ * side prints about its own machinery (the bytecode VM's counters, the collector's accounting, the
+ * parallel scheduler's counters, the plan trace a case asks for), which
  * are not the program's output. A difference whose only
  * text is a hexadecimal address -- which the compiler writes and the run chooses -- is named as such
  * in the field it moved (`stdout(address)`, `stderr(address)`) and stays a difference, so a reader
@@ -435,10 +436,16 @@ const APPENDED_PASS = /\bstd::(?:nvm|fvm)\b/g
 /// compared.
 const MEASURED_DURATION = /\b\d+\.\d+(?=\s*(?:seconds?|milliseconds?|microseconds?|nanoseconds?|ms|us|µs|ns)\b)/g
 
-/// Lines a side prints about its own machinery: the bytecode VM's counters and the collector's
-/// accounting. Neither is the program's output -- a count of what one back end did cannot be the same
-/// number on another -- so they are dropped from the comparison rather than compared and normalized.
-const ITS_OWN_MACHINERY = [/^\s*fvm_[a-z0-9_]+=/, /^\s*\[camel\] (?:gc|spaces):/]
+/// Lines a side prints about its own machinery: the bytecode VM's counters, the collector's
+/// accounting, the parallel scheduler's counters, and the plan trace a case asks for. None is the
+/// program's output -- a count or a plan of what one back end did cannot be the same on another --
+/// so they are dropped from the comparison rather than compared and normalized.
+const ITS_OWN_MACHINERY = [
+    /^\s*fvm_[a-z0-9_]+=/,
+    /^\s*\[camel\] (?:gc|spaces):/,
+    /^\s*\[taskflow\] bytecode:/,
+    /^PLAN_REF_SITES\b/
+]
 
 /// What the two sides are read against each other on: the text each one printed, after the words the
 /// harness itself put on its command line and the number the run's own clock put into it are taken out
