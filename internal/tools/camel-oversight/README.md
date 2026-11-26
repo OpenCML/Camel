@@ -69,8 +69,9 @@ merges in flight and lane half-work, and DSH's replacement does not fall back to
    live one, and gates every `.js` with `node --check`, then imports the staged `index.js` and `client.js` in
    a child process. A file that fails stops everything: the temporary directory is removed, the live
    directory is not touched, and the answer carries `file` and `line`;
-2. reloads this one plugin through DSH's profile reconciliation (`ctx.hmr.reconcileProfile`, which is what
-   the Plugin Manager's own private `reload` calls -- it has no public method for this);
+2. does not restart the plugin: reconciling it in place (`ctx.hmr.reconcileProfile`) took the whole DSH process
+   down, every session and subagent with it. The answer says the files are published and asks for a restart
+   in the plugin manager (or of DSH), made on purpose;
 3. answers with the commit sha the directory came from, which the band shows.
 
 Content decides, not timestamps: when the live directory already holds that commit's bytes, the route

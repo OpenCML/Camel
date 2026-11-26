@@ -921,10 +921,9 @@ export function apply(ctx, rawConfig) {
     //      live directory, refuses a tree whose `.js` fails `node --check` or whose `index.js` or
     //      `client.js` fails to import, and leaves the live directory untouched when it refuses. The
     //      refusal is returned with the file and the line; nothing here decides what "broken" means.
-    //   2. reload -- DSH's own profile reconciliation (`ctx.hmr.reconcileProfile`), which replaces the
-    //      running plugins whose loaded files changed on disk and restarts their Loader entries. It is
-    //      the only interface that means "re-read this plugin's modules" (see README: the Plugin
-    //      Manager has no such method; its `reload` is private and does exactly this call).
+    //   2. restart -- not done here. Reconciling the running plugin in place (`ctx.hmr.reconcileProfile`)
+    //      took the whole DSH process down, so the answer says the files are published and the restart
+    //      is made on purpose, in the plugin manager or by restarting DSH.
     //   3. report -- the commit the plugin directory came from, so the band writes down which version
     //      is live instead of which version somebody believed.
     //
@@ -1043,24 +1042,13 @@ export function apply(ctx, rawConfig) {
                 'the live directory and restart DSH once; from then on the button works.'
             return answer(res, 409, payload)
         }
-        const hmr = ctx.get('hmr')
-        if (!hmr || typeof hmr.reconcileProfile !== 'function') {
-            payload.ok = false
-            payload.reload = 'unavailable'
-            payload.reason = 'this process has no hmr service (started without a profile), so the new files wait for the next DSH start'
-            return answer(res, 409, payload)
-        }
-        payload.reload = 'scheduled'
-        record({ kind: 'reload', sha: outcome.sha, at: Date.now(), from: LOADED_FROM })
-        answer(res, 200, payload)
-        // The answer first, the restart second: reconciliation stops this plugin's own Loader entry,
-        // and a response written after that would come from a module the process has let go of.
-        setTimeout(() => {
-            hmr.runExclusive(() => hmr.reconcileProfile(['camel-oversight'])).then(
-                (result) => record({ kind: 'reloaded', sha: outcome.sha, at: Date.now(), warnings: result.warnings.length, pending: result.pending.length }),
-                (error) => record({ kind: 'reload-failed', sha: outcome.sha, at: Date.now(), message: clip((error && error.message) || error, 300) }),
-            )
-        }, 250)
+        // The button publishes the files and stops there. Reconciling the running plugin in place took the
+        // whole DSH process down with it (every session and subagent ended), so the restart is the plugin
+        // manager's or DSH's own, done on purpose, and the answer says so.
+        payload.reload = 'restart-needed'
+        payload.reason = 'the files are published; restart camel-oversight in the plugin manager (or restart DSH) to run them'
+        record({ kind: 'reload', sha: outcome.sha, at: Date.now(), from: LOADED_FROM, reload: payload.reload })
+        return answer(res, 200, payload)
     })
 
     // ---- the model's side ------------------------------------------------------------------------

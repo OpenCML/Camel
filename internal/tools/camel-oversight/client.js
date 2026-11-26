@@ -145,10 +145,10 @@ window.__ModuleLoader__.load({
                     }
                     return {
                         title: '重载插件',
-                        body: event.changed
-                            ? `已从 ${event.ref || 'origin/develop'} 同步并重载，版本 ${event.sha ? event.sha.slice(0, 9) : '?'}`
-                            : `内容未变（${event.sha ? event.sha.slice(0, 9) : ''}），没有重载`,
-                        level: 'ok',
+                        body: event.reload === 'restart-needed'
+                            ? `文件已更新到 ${event.sha ? event.sha.slice(0, 9) : '?'}；在插件管理器里重启 camel-oversight（或重启 DSH）后生效`
+                            : `内容未变（${event.sha ? event.sha.slice(0, 9) : ''}），不用重启`,
+                        level: event.reload === 'restart-needed' ? 'wake' : 'ok',
                     }
                 }
                 default:
