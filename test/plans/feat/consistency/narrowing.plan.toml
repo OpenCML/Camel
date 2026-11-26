@@ -166,7 +166,7 @@ kind = "negative"
 case = "../../../cases/consistency/narrowing/shadowed_not_narrowed.cml"
 args = ["-E", "short", "${case}"]
 expect_exit = 1
-expect_output_contains = ["SemanticDiag::MatchCaseTypeMismatch", ".cml:4:"]
+expect_output_contains = ["SemanticDiag::MatchCaseTypeMismatch", "shadowed_not_narrowed.cml:4:"]
 expect_output_not_contains = ["KnownNotNull"]
 
 [[tests]]
@@ -176,4 +176,4 @@ kind = "negative"
 case = "../../../cases/consistency/narrowing/compare_functions.cml"
 args = ["-E", "short", "${case}"]
 expect_exit = 1
-expect_output_contains = ["SemanticDiag::NoMatchingFunction", ".cml:8:"]
+expect_output_contains = ["SemanticDiag::NoMatchingFunction", "compare_functions.cml:8:"]
