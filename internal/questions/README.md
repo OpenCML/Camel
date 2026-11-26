@@ -5,7 +5,7 @@
 > 这一页由 `node scripts/check-doc-links.mjs --questions-index --write` 从目录生成，不要手改：
 > 规矩在 `internal/reviews/` 的裁定里，落没落地看代码和提交，不看这张表。
 
-## 现在在等作者：23 页
+## 现在在等作者：24 页
 
 | 页 | 问什么 |
 | --- | --- |
@@ -27,6 +27,7 @@
 | [`2026-11-27-how-does-a-handle-type-name-become-visible-in-a-block`](2026-11-27-how-does-a-handle-type-name-become-visible-in-a-block.cn.md) | 块体里写 `Node` 这样的句柄类型名，要谁把它带进作用域 |
 | [`2026-11-27-is-a-rewrite-transaction-per-graph-or-per-program`](2026-11-27-is-a-rewrite-transaction-per-graph-or-per-program.cn.md) | 重写事务的作用域：一张图，还是整个程序 |
 | [`2026-11-27-is-a-top-level-var-a-compile-error`](2026-11-27-is-a-top-level-var-a-compile-error.cn.md) | 模块顶层的 `var` 是编译错误，还是模块的资源？ |
+| [`2026-11-27-may-a-value-specialization-specialize-a-copy`](2026-11-27-may-a-value-specialization-specialize-a-copy.cn.md) | 值特化能不能专门化一张副本（“副本的副本”） |
 | [`2026-11-27-should-a-forwarded-element-function-still-be-reported`](2026-11-27-should-a-forwarded-element-function-still-be-reported.cn.md) | 库里的包装转发元素函数之后，原地写的那个函数体还该不该报“丢弃了值” |
 | [`2026-11-27-should-a-module-renames-graph-identity-be-one-digest`](2026-11-27-should-a-module-renames-graph-identity-be-one-digest.cn.md) | 模块改名的“图身份”，该不该钉成整张图的摘要 |
 | [`2026-11-27-should-opt-say-that-it-skipped-an-optimization`](2026-11-27-should-opt-say-that-it-skipped-an-optimization.cn.md) | 经 `std::opt` 跑的程序“少优化了一次”，要不要告诉它 |
