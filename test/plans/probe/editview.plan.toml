@@ -5,7 +5,7 @@ desc = "Probe for the `edit`/`view` front end: the examples the graph-editing de
 
 [[tests]]
 name = "editview.syntax_only"
-desc = "`return edit d = f { f }` — the smallest edit block, with a body that needs nothing resolved. Syntax only: what the parser makes of the head."
+desc = "`return edit d = f { f }` — the smallest edit block, with a body that needs nothing resolved. Syntax only: what the parser makes of the head. The block's value is the function the commit produces (`G!`), not the last expression of the body, so the enclosing return type is what pins it."
 kind = "behavior"
 case = "../../cases/probe/editview/syntax_only.cml"
 args = ["check", "-s", "${case}"]
@@ -65,7 +65,7 @@ timeout_ms = 20000
 
 [[tests]]
 name = "editview.sec12_escape"
-desc = "Design section 12, second example: the handle leaving its view block and the `replace` written outside any edit block."
+desc = "Design section 12, second example: the handle leaving its view block and the `replace` written outside any edit block. **Unverified so far**: while no `edit`/`view` block is accepted by `check`, every case here exits 1, so an expectation of exit 1 is met whatever the reason — it says nothing about the escape rule until the blocks compile."
 kind = "behavior"
 case = "../../cases/probe/editview/sec12_escape.cml"
 args = ["check", "${case}"]
