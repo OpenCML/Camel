@@ -515,7 +515,7 @@ ff143e01e0e4dbb0 ok src/stdlib/bytes.cml
 7962d89c131ca828 ok src/stdlib/ckpt.cml
 091e49283aec1438 ok src/stdlib/env.cml
 0797036114bc4a4c ok src/stdlib/fs.cml
-3fbfab05c72cef5e ok src/stdlib/graph.cml
+2ebe0f263c180a4f ok src/stdlib/graph.cml
 c653d7d211aed8b2 ok src/stdlib/hash.cml
 f915d61cc7f06dc8 ok src/stdlib/io.cml
 70530f2be80f49bf ok src/stdlib/json.cml
@@ -2667,6 +2667,7 @@ f962b5091be05977 ok test/cases/effects/var_parameter_write_outside_sync.cml
 9211698a2d4dc4e8 ok test/cases/effects/unreachable_pair/with/reading.cml
 6b2e1a764bb0a3e5 ok test/cases/effects/unreachable_pair/without/reading.cml
 64682756bdcf7e2e ok test/cases/facts/a_body_exit_gate_reads_its_writes.cml
+b8a31f67e7f14d2a ok test/cases/facts/a_gradient_value.cml
 65dc8fca38021082 ok test/cases/facts/conversions.cml
 dda16fde3dcff7ec ok test/cases/facts/tensors_and_loops.cml
 5746ac4f2a7487d0 ok test/cases/facts/two_functions.cml
