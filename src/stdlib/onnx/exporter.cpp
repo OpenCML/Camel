@@ -519,6 +519,15 @@ gc_node_ref_t declaringCellOf(const graph::GraphView &g, graph::NodeRef version)
 /// never leaves the function, so reads and assignments of it are not effects of the model. A
 /// read names the version its writer gave rather than the cell, so the version chain is walked
 /// back to the declaration.
+/// `:struct/append_arr_in_place` has no well-known id, so the module that recognises it interns the
+/// URI once and compares ids from then on (`camel/core/operator_table.h`): the text is how the
+/// operator is written down in the table, not how a node is recognised.
+camel::core::OperId appendInPlaceOper() {
+    static const camel::core::OperId id =
+        camel::core::OperatorTable::instance().intern(":struct/append_arr_in_place");
+    return id;
+}
+
 bool isLocalVariable(const graph::GraphView &g, graph::NodeRef cell) {
     return declaringCellOf(g, cell) != camel::runtime::kInvalidNodeRef;
 }
@@ -664,14 +673,14 @@ void refuseEffectsOf(
                     beforeSimplification &&
                     (n->isMacro() || core::OperatorTable::instance().reusesOperand(uri) ||
                      readsOrAssignsVariable(body->oper) ||
-                     uri == ":struct/append_arr_in_place");
+                     body->oper == appendInPlaceOper());
                 if (!onLocalVariable && !inPlaceOnLocalVariable && !lowerableBySimplification &&
                     core::OperatorTable::instance().effectOf(body->oper) != core::sem::Effect::Pure) {
                     const uint64_t origin = g->nodeOrigin(ref);
                     const std::string what =
                         readsOrAssignsVariable(body->oper)
                             ? std::string(kOuterVariable)
-                        : uri == ":struct/append_arr_in_place" ? std::string(kGrowingArray)
+                        : body->oper == appendInPlaceOper() ? std::string(kGrowingArray)
                             : std::format("impure operator '{}' cannot be exported", uri);
                     throw ExportError(
                         isSourceName(g->name()) ? std::format("in '{}': {}", g->name(), what)
@@ -4051,7 +4060,7 @@ Value Evaluator::variableValueAt(Activation &act, gc_node_ref_t cell, gc_node_re
         if (assigned.size() == 2) {
             const gc_node_ref_t stored = forwards(assigned[1]);
             if (g->node(stored)->kind == GCNodeKind::Oper &&
-                operUriOf(g->view(), stored) == ":struct/append_arr_in_place") {
+                operIdOf(g->view(), stored) == appendInPlaceOper()) {
                 // `acc = acc->append<v>` (design principles 11.3): an array grown in a
                 // variable, which a model has no form for. The compiler writes the in-place
                 // form of `append` over what :var/take handed it.
