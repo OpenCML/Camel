@@ -1534,7 +1534,7 @@ export rule linear_t::<T, A, B>(x: A, w: B) when is_float::<T>() { linear(x, w) 
 /// calls, with the same operands in the same order (`src/stdlib/nn/tensor_ops.cpp`, and
 /// `src/stdlib/tensor/kernels/conv.cpp`: `conv2dInputGradStated` and `conv2dKernelGradStated` differ
 /// from their siblings only in where the answer's shape comes from).
-export rule conv2d_t::<T>(x: T[...], w: T[...], b: T[...]) when is_float::<T>() { conv2d(x, w, b) => func (ct: T[...]) {
+export rule conv2d_t::<T, X, Y, Z>(x: X, w: Y, b: Z) when is_float::<T>() { conv2d(x, w, b) => func (ct: T[...]) {
     (
         conv2d_input_grad_stated(shape(x), w, ct),
         conv2d_kernel_grad_stated(x, shape(w), ct),
