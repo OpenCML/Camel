@@ -55,7 +55,7 @@ using IntervalBound = ExecLoop::IntervalBound;
 /// writes; one nothing computes -- the constant the front end wrote, or the constant a pass folded
 /// a computation into -- is the value itself, which the plan reads without a frame slot.
 IntervalBound boundOf(const GCGraph &graph, gc_node_ref_t ref) {
-    const View &view                   = graph.view();
+    const View &view                    = graph.view();
     const camel::core::type::Type *type = view.typeOf(ref);
     if (view.kindOf(ref) == ViewKind::Data && type != nullptr &&
         type->code() == camel::core::type::TypeCode::Int64) {
@@ -211,8 +211,7 @@ bool planStateComponents(
     // written into the ports every round) and not a constant of the static area.
     std::vector<gc_data_idx_t> stateSlots(loop.stateCount, 0);
     size_t seen = 0;
-    for (gc_node_ref_t input :
-         graph.view().inputs(bodyValue, camel::graph::PortGroup::Context)) {
+    for (gc_node_ref_t input : graph.view().inputs(bodyValue, camel::graph::PortGroup::Context)) {
         const GCNode *node = graph.node(input);
         if (node == nullptr || node->kind == GCNodeKind::Port || node->dataIndex == 0 ||
             !regions.within(regions.controlOf(input), bodyRegion)) {
@@ -629,8 +628,8 @@ bool cellDeclaredHere(const View &graph, gc_node_ref_t cell) {
 /// made when the graph runs), a construction (a value built here), or a value slot of the graph. A
 /// static value (a `Data` node that indexes the static area) is the program's constant: it stays as
 /// it is and its variable's update copies. A value from elsewhere -- a call's result, a read of
-/// another variable, a parameter -- has an owner the plan cannot see, so the variable's first update
-/// copies as well.
+/// another variable, a parameter -- has an owner the plan cannot see, so the variable's first
+/// update copies as well.
 ///
 /// The two that make their value here are asked about by the operation, not by node kind (plan
 /// 2.3): what makes the answer true is that the operator clones or constructs, which is what the
@@ -669,8 +668,8 @@ bool cellValueMayBeKept(
         if (graph.kindOf(user) != ViewKind::Oper) {
             return true;
         }
-        // A node the view folds into `Oper` and that names no record is a CAST, a COPY, a FILL or an
-        // ACCS (`isOperRecord`): not an operator of the graph's, so what it keeps is not this
+        // A node the view folds into `Oper` and that names no record is a CAST, a COPY, a FILL or
+        // an ACCS (`isOperRecord`): not an operator of the graph's, so what it keeps is not this
         // proof's to see -- the same answer the missing payload gave.
         if (!graph.isOperRecord(user)) {
             return true;
@@ -697,6 +696,7 @@ struct ValueUses {
 };
 void planValueUses(const GCGraph &graph, ExecPlan &plan, ValueUses &uses);
 void planRefRows(const GCGraph &graph, ExecPlan &plan, const ValueUses &uses);
+bool rowsOfValueAreExecuted(const ExecPlan &plan, gc_node_ref_t value) noexcept;
 
 /// Whether the value `value` is one this graph **made**, so that handing it to an update can be a
 /// hand-over rather than a read out of something that already names it.
@@ -716,17 +716,18 @@ void planRefRows(const GCGraph &graph, ExecPlan &plan, const ValueUses &uses);
 ///     `[[0], [1]]`).
 ///
 /// The answer accepted here is the narrow one that is true today: a copy (a value made for one
-/// holder), a construction (an aggregate made from its inputs), a call's return (the callee's own value),
-/// and another *update* -- an operator that names an in-place form makes a new value out of the one
-/// it was given (`:struct/append_arr` clones when it is not handed storage, `array:sort_l` sorts
-/// into a clone, `:op/set_index` writes into one), so a chain of rebindings stays in place. Every
-/// other producer -- a constant, a `var` read, a port, a field read, an element read, a cast --
-/// answers false and the update copies.
+/// holder), a construction (an aggregate made from its inputs), a call's return (the callee's own
+/// value), and another *update* -- an operator that names an in-place form makes a new value out of
+/// the one it was given (`:struct/append_arr` clones when it is not handed storage, `array:sort_l`
+/// sorts into a clone, `:op/set_index` writes into one), so a chain of rebindings stays in place.
+/// Every other producer -- a constant, a `var` read, a port, a field read, an element read, a cast
+/// -- answers false and the update copies.
 ///
 /// This is deliberately narrower than "the graph says nothing else reads it": the day a value read
 /// out of a container is counted for the second name, the clause comes off and the two cases above
 /// keep their readings because the *count* then says so at run time.
-bool valueMadeHere(const GCGraph &graph, const camel::core::OperatorTable &table, gc_node_ref_t value) {
+bool valueMadeHere(
+    const GCGraph &graph, const camel::core::OperatorTable &table, gc_node_ref_t value) {
     const GCNode *node = graph.node(value);
     if (node == nullptr) {
         return false;
@@ -951,8 +952,7 @@ void planStorageReuse(const GCGraph &graph, ExecPlan &plan) {
                 const GCNode *takenNode = taken == kInvalidNodeRef ? nullptr : graph.node(taken);
                 if (takenNode != nullptr && takenNode->kind == GCNodeKind::Oper) {
                     const auto *takeBody = graph.nodeBodyAs<GCOperBody>(taken);
-                    if (takeBody != nullptr &&
-                        takeBody->oper == camel::core::oper::VarTake) {
+                    if (takeBody != nullptr && takeBody->oper == camel::core::oper::VarTake) {
                         const gc_node_ref_t cell = cellOfNode(graph, taken);
                         StorageReuse decision    = StorageReuse::Copy;
                         if (cell != kInvalidNodeRef) {
@@ -1031,8 +1031,7 @@ void planStorageReuse(const GCGraph &graph, ExecPlan &plan) {
                 const auto norm = graph.normInputsOf(at);
                 const gc_node_ref_t given =
                     norm.empty() ? kInvalidNodeRef : valueBehindGates(graph, norm.front());
-                if (given != kInvalidNodeRef &&
-                    valueMadeHere(graph, table, given) &&
+                if (given != kInvalidNodeRef && valueMadeHere(graph, table, given) &&
                     nothingElseReadsIt(valueUses, carriersOf, users, given, at) && final) {
                     plan.storageReuseAt[idx] = StorageReuse::Input;
                 }
@@ -1466,12 +1465,11 @@ void planValueUses(const GCGraph &graph, ExecPlan &plan, ValueUses &uses) {
 /// LOOP's own read of the state, whose row runs when the loop leaves, and the read after), each of
 /// which runs once, while the run makes a box per round: `test/probe/refleak/box_of_a_round.cml`
 /// reads `created=4 released=2 live=2` on all four back ends, and the read after the loop is
-/// `state::get` on a box the count had already released. Keeping the value is not the fix either: it
-/// trades the double release for a leak of every round's box. Both are the same missing fact -- a
-/// row naming "the value this node made last round" -- and a row is a node reference, so answering
-/// it is a per-round version of the value in the representation, not a change to this function.
-/// The probe asserts the right
-/// numbers and stays red until it is answered there.
+/// `state::get` on a box the count had already released. Keeping the value is not the fix either:
+/// it trades the double release for a leak of every round's box. Both are the same missing fact --
+/// a row naming "the value this node made last round" -- and a row is a node reference, so
+/// answering it is a per-round version of the value in the representation, not a change to this
+/// function. The probe asserts the right numbers and stays red until it is answered there.
 std::optional<uint32_t> loopRepeatingOver(const ExecPlan &plan, size_t produced, size_t at) {
     std::optional<uint32_t> exit;
     for (const ExecLoop &loop : plan.loops) {
@@ -1503,10 +1501,10 @@ bool isCountedHandle(camel::core::type::TypeCode code) noexcept;
 /// the plan is where it is taken -- the operator does not take it.
 ///
 /// An element read of
-/// a counted value is a further holder, so the plan retains there and the run-time skip is gone. Read
-/// out of an array, a counted element is one holder (the array holds it) plus one (the value the
-/// read hands on), so the plan takes a hold at the read and gives it back where that value is last
-/// read.
+/// a counted value is a further holder, so the plan retains there and the run-time skip is gone.
+/// Read out of an array, a counted element is one holder (the array holds it) plus one (the value
+/// the read hands on), so the plan takes a hold at the read and gives it back where that value is
+/// last read.
 ///
 /// Two facts answer it, and they are declarations the tree already has:
 ///
@@ -1727,7 +1725,8 @@ void planRefRows(const GCGraph &graph, ExecPlan &plan, const ValueUses &uses) {
         // `uses - 1` again, and a loop's exits are counted one each because each of them gives one
         // back. A further holder adds one: the hold the operator did not take is the plan's, and it
         // is what makes the read safe: with no hold at the read, the release the array's own
-        // hold is made of would take the box to zero while the value the read handed on still named it.
+        // hold is made of would take the box to zero while the value the read handed on still named
+        // it.
         copies = static_cast<uint32_t>(held + (kept ? 1u : 0u) + (takesIt ? 1u : 0u)) - 1u;
         for (uint32_t take = 0; take < copies; ++take) {
             holds[idx].push_back(value);
@@ -1768,6 +1767,37 @@ void planRefRows(const GCGraph &graph, ExecPlan &plan, const ValueUses &uses) {
                     .packed = row.packed});
         }
         plan.refEntryOffsets[idx + 1] = static_cast<uint32_t>(plan.refEntries.size());
+    }
+
+    // The same rows with the plan-side questions already answered: which slot a row reads, whether
+    // that read is the value the position just made, and how many holds it takes or gives back. The
+    // run then asks only about the frame -- the slot's code, the slot's value, the object --
+    // because those are the frame's answers and not the graph's. A row whose value no position
+    // produces, or whose value has no slot, is dropped here: it could never have fired at run time.
+    plan.refActionOffsets.assign(count + 1, 0);
+    plan.refActions.clear();
+    for (size_t idx = 0; idx < count; ++idx) {
+        for (const ExecPlan::RefEntry &entry : plan.refEntriesAt(idx)) {
+            if (!rowsOfValueAreExecuted(plan, entry.value)) {
+                continue;
+            }
+            if (entry.value >= plan.dataIndexByRef.size()) {
+                continue;
+            }
+            const gc_data_idx_t slot = plan.dataIndexByRef[entry.value];
+            if (slot == 0) {
+                continue; // the value has no slot: a node whose type is void counted nothing
+            }
+            const bool usesProduced =
+                entry.value < plan.topoIndexByRef.size() && plan.topoIndexByRef[entry.value] == idx;
+            plan.refActions.push_back(
+                ExecPlan::RefAction{
+                    .slot         = slot,
+                    .count        = entry.count,
+                    .kind         = entry.kind,
+                    .usesProduced = usesProduced});
+        }
+        plan.refActionOffsets[idx + 1] = static_cast<uint32_t>(plan.refActions.size());
     }
 
     // The slot-to-node half of the same table, for the back ends that run bytecode: an instruction
@@ -1830,6 +1860,15 @@ std::span<const ExecPlan::RefEntry> ExecPlan::refEntriesAt(size_t topoIndex) con
     return {
         refEntries.data() + refEntryOffsets[topoIndex],
         refEntryOffsets[topoIndex + 1] - refEntryOffsets[topoIndex]};
+}
+
+std::span<const ExecPlan::RefAction> ExecPlan::refActionsAt(size_t topoIndex) const {
+    if (topoIndex + 1 >= refActionOffsets.size()) {
+        return {};
+    }
+    return {
+        refActions.data() + refActionOffsets[topoIndex],
+        refActionOffsets[topoIndex + 1] - refActionOffsets[topoIndex]};
 }
 
 size_t ExecPlan::refEntriesOfKind(RefEntryKind kind) const {
@@ -1909,43 +1948,35 @@ bool rowsOfValueAreExecuted(const ExecPlan &plan, gc_node_ref_t value) noexcept 
 /// that come back there. `applyRefEntriesForNode` is the published entry point; this is the work,
 /// and it is one function so that a back end holding a slot and a back end holding a node cannot
 /// drift apart in what they apply.
+///
+/// The rows it walks are the plan's action table: which slot, whether that slot or the position's
+/// own value, how many holds and which kind. Every question the plan alone could answer was
+/// answered when the table was built, so what is left here is about the frame -- its code at that
+/// slot, its value there, the object behind it. The code question in particular stays: a frame's
+/// code at a slot comes from the frame's layout, and the plan holds no authoritative copy of that
+/// layout, so moving the question into the build would mean reading a code the frame may not use.
 void applyRefEntriesAtPosition(
     const ExecPlan &plan, camel::core::context::Frame *frame, size_t position,
     slot_t produced) noexcept {
     if (frame == nullptr || plan.graph == nullptr) {
         return;
     }
-    const std::span<const ExecPlan::RefEntry> entries = plan.refEntriesAt(position);
-    if (entries.empty()) {
+    const std::span<const ExecPlan::RefAction> actions = plan.refActionsAt(position);
+    if (actions.empty()) {
         return;
     }
-    for (const ExecPlan::RefEntry &entry : entries) {
-        if (!rowsOfValueAreExecuted(plan, entry.value)) {
+    for (const ExecPlan::RefAction &action : actions) {
+        if (!isCountedHandle(frame->codeAt(action.slot))) {
             continue;
         }
-        if (entry.value >= plan.dataIndexByRef.size()) {
-            continue;
-        }
-        const gc_data_idx_t slot = plan.dataIndexByRef[entry.value];
-        if (slot == 0) {
-            continue; // the value has no slot: a node whose type is void counted nothing
-        }
-        if (!isCountedHandle(frame->codeAt(slot))) {
-            continue;
-        }
-        // The node's own value is the one the operator just made: a back end that runs bytecode
-        // has not published it into its slot yet (it does so after this returns), so the caller
-        // passes it in.
-        const bool ownValue = entry.value < plan.topoIndexByRef.size() &&
-                              plan.topoIndexByRef[entry.value] == position;
-        const slot_t value  = ownValue ? produced : frame->get<slot_t>(slot);
+        const slot_t value = action.usesProduced ? produced : frame->get<slot_t>(action.slot);
         camel::core::rtdata::Object *object =
             camel::core::rtdata::fromSlot<camel::core::rtdata::Object *>(value);
         if (object == nullptr) {
             continue;
         }
-        for (uint32_t taken = 0; taken < entry.count; ++taken) {
-            if (entry.kind == ExecPlan::RefEntryKind::Retain) {
+        for (uint32_t taken = 0; taken < action.count; ++taken) {
+            if (action.kind == ExecPlan::RefEntryKind::Retain) {
                 camel::core::rtdata::retainCountNow(object);
             } else {
                 camel::core::rtdata::giveBackCountNow(object);
@@ -2222,54 +2253,51 @@ constexpr std::string_view kExecPlanKey = "std.execPlan";
 /// `execPlanKind` below looks the kind up and never registers it, so a tree in which this object is
 /// gone is a tree with no such kind, and a reader there says so instead of computing a plan.
 /// Nothing names the id: it is kept for what registering it does.
-[[maybe_unused]] const facts::KindId kExecPlanKind = facts::registerKind(facts::KindInfo{
-    .key        = std::string(kExecPlanKey),
-    .owner      = "std",
-    .version    = 1,
-    .payload    = typeid(ExecPlan),
-    .cls        = facts::Class::Derived,
-    .scope      = facts::Scope::Graph,
-    .dependence = facts::Dependence::Anchors,
-    .merges     = false,
-    .monotone   = false,
-    .compute =
-        [](std::span<const facts::Anchor> anchors, const facts::GraphAccess &, facts::ReadLog &)
-        -> std::shared_ptr<const void> {
-        if (anchors.size() != 1 || anchors[0].graph == nullptr ||
-            anchors[0].node != facts::kWholeGraph) {
-            return nullptr;
-        }
-        // A plan is about a frozen graph version. An editing session's draft has none, and the
-        // answer there is that there is no fact -- not a plan built from something else.
-        const auto *frozen = dynamic_cast<const GCGraph *>(anchors[0].graph);
-        if (frozen == nullptr) {
-            return nullptr;
-        }
-        if (!frozen->executable()) [[unlikely]] {
-            throw std::logic_error(
-                "Graph '" + frozen->name() +
-                "' has values with several writings: it has no execution plan "
-                "until they are extracted.");
-        }
-        std::unique_ptr<ExecPlan> built = buildExecPlan(*frozen);
-        return std::shared_ptr<const void>(std::move(built));
-    },
-    .merge = {},
-    .equal =
-        [](const void *left, const void *right) {
-            return samePlanAs(
-                *static_cast<const ExecPlan *>(left),
-                *static_cast<const ExecPlan *>(right));
+[[maybe_unused]] const facts::KindId kExecPlanKind = facts::registerKind(
+    facts::KindInfo{
+        .key        = std::string(kExecPlanKey),
+        .owner      = "std",
+        .version    = 1,
+        .payload    = typeid(ExecPlan),
+        .cls        = facts::Class::Derived,
+        .scope      = facts::Scope::Graph,
+        .dependence = facts::Dependence::Anchors,
+        .merges     = false,
+        .monotone   = false,
+        .compute    = [](std::span<const facts::Anchor> anchors, const facts::GraphAccess &,
+                         facts::ReadLog &) -> std::shared_ptr<const void> {
+            if (anchors.size() != 1 || anchors[0].graph == nullptr ||
+                anchors[0].node != facts::kWholeGraph) {
+                return nullptr;
+            }
+            // A plan is about a frozen graph version. An editing session's draft has none, and the
+            // answer there is that there is no fact -- not a plan built from something else.
+            const auto *frozen = dynamic_cast<const GCGraph *>(anchors[0].graph);
+            if (frozen == nullptr) {
+                return nullptr;
+            }
+            if (!frozen->executable()) [[unlikely]] {
+                throw std::logic_error(
+                    "Graph '" + frozen->name() +
+                    "' has values with several writings: it has no execution plan "
+                    "until they are extracted.");
+            }
+            std::unique_ptr<ExecPlan> built = buildExecPlan(*frozen);
+            return std::shared_ptr<const void>(std::move(built));
         },
-    .print =
-        [](const void *value) {
-            const auto &plan = *static_cast<const ExecPlan *>(value);
-            return std::format(
-                "{} step(s), {} loop(s)",
-                plan.topo.size(),
-                plan.loops.size());
-        },
-});
+        .merge = {},
+        .equal =
+            [](const void *left, const void *right) {
+                return samePlanAs(
+                    *static_cast<const ExecPlan *>(left),
+                    *static_cast<const ExecPlan *>(right));
+            },
+        .print =
+            [](const void *value) {
+                const auto &plan = *static_cast<const ExecPlan *>(value);
+                return std::format("{} step(s), {} loop(s)", plan.topo.size(), plan.loops.size());
+            },
+    });
 
 } // namespace
 
@@ -2337,7 +2365,8 @@ void noteCountedCreationForNode(const void *graph, gc_node_ref_t node, uint64_t 
 }
 
 // `noteCountedCreationAt` -- the same question for a back end that holds a pc rather than a node --
-// is defined by the bytecode engine that keeps the pc table beside the plan (fvm/version_state.cpp):
-// the table is the engine's own state, so the reader that finds a node through it is there too.
+// is defined by the bytecode engine that keeps the pc table beside the plan
+// (fvm/version_state.cpp): the table is the engine's own state, so the reader that finds a node
+// through it is there too.
 
 } // namespace camel::runtime

@@ -486,7 +486,12 @@ FastVMSchedPass::CallResult FastVMSchedPass::callBorrowed(size_t pc, Frame *root
             // BytecodeHeader::extra() here because its generic opcode switch is on the recursive
             // if/else join path.
             auto *joinType = (reinterpret_cast<const BytecodeExtra *>(bc + bc->opsize) - 1)->pType;
-            if (joinType == Type::Void()) {
+            // The code says the same thing the object does, and reading it keeps the executor out
+            // of the type table: a void join is asked about once per JOIN, and asking for the void
+            // object means an interned lookup where a field read will do. The two forms agree for
+            // every type the table holds one object per code of; where they could disagree -- two
+            // objects of one code -- the code is the one that answers "is this void".
+            if (joinType != nullptr && joinType->code() == TypeCode::Void) {
                 fastFrameSetSlot(currFrame, bc->result, NullSlot);
                 NEXT();
             }

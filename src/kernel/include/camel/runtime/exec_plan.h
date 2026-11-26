@@ -4,8 +4,8 @@
 /*
  * The execution plan of a graph version (docs/design/graph-store 4.6).
  *
- * What every back end needs to run a graph and would otherwise compute for itself: the order its live
- * nodes run in, where each arm of a branch starts, the callee and the argument slots of each
+ * What every back end needs to run a graph and would otherwise compute for itself: the order its
+ * live nodes run in, where each arm of a branch starts, the callee and the argument slots of each
  * direct call, which calls are in tail position. It is computed once, the first time a back end
  * asks, from the frozen graph alone, and kept with the graph version: a rewrite makes a new
  * version, which gets a new plan. Only the nodes the exit depends on are in it. The order is
@@ -244,11 +244,11 @@ class ExecPlan {
     // names the in-place form of an operator and takes its array from `:var/take` of a variable's
     // cell (Builder::pathAssignmentOf, Builder::inPlaceRebindingOf), or it names the *copying*
     // form of an operator that has one (`v = v->append(x)`, `xs = xs->sort`, `xs[i] = v` on a
-    // value -- where a same-region local `var` is a value and not a cell). The plan decides, once, whether the update reuses the
-    // storage of the value it is given (StorageReuse), and every back end follows: a node the plan
-    // marks Copy runs the plain form of the operator (operatorUriFor), which copies; the two
-    // forms that reuse the storage run the in-place form, which asks the array itself where the
-    // plan could not prove it (StorageReuse::ByArrayCount).
+    // value -- where a same-region local `var` is a value and not a cell). The plan decides, once,
+    // whether the update reuses the storage of the value it is given (StorageReuse), and every back
+    // end follows: a node the plan marks Copy runs the plain form of the operator (operatorUriFor),
+    // which copies; the two forms that reuse the storage run the in-place form, which asks the
+    // array itself where the plan could not prove it (StorageReuse::ByArrayCount).
     std::vector<StorageReuse> storageReuseAt; // by topo index; None for every other node
     StorageReuse storageReuseOf(gc_node_ref_t ref) const {
         const size_t index = ref < topoIndexByRef.size() ? topoIndexByRef[ref] : kNotInPlan;
@@ -288,8 +288,9 @@ class ExecPlan {
     // (design principles 10.5), so the reference is the plan's to take: one hold at the node's
     // position, given back where that value is last read, with every other producer's rows
     // (`refTakesAt`). An element read of a counted value is such a shape: it is a further
-    // holder, so the plan retains there and no run-time skip is needed. `reduce` is the other one -- it returns its
-    // accumulator, so a `state::Ref` as its `initial` makes the node's value the initial's box.
+    // holder, so the plan retains there and no run-time skip is needed. `reduce` is the other one
+    // -- it returns its accumulator, so a `state::Ref` as its `initial` makes the node's value the
+    // initial's box.
     //
     // Whether a node's value is a further holder is the plan's answer and not a run-time object
     // comparison, so `applyRefEntriesAtPosition` skips nothing.
@@ -340,10 +341,10 @@ class ExecPlan {
     /// By topo index: the node makes a value that is a *further holder* of an object an operand
     /// already holds, and its operator took no reference for it -- so the plan takes that reference
     /// at this node's position (`takesTheReferenceForItsValue`, src/execute/exec_plan.cpp). The
-    /// An element read of a counted value is a further holder, so the plan retains there. It is a column of its own and
-    /// not `refProducedAt` because the two say different things about the count: a value made this
-    /// way is not born with a reference of its own, so it is not one of the `1 + copies` the balance
-    /// is read from, while it does have rows a back end runs.
+    /// An element read of a counted value is a further holder, so the plan retains there. It is a
+    /// column of its own and not `refProducedAt` because the two say different things about the
+    /// count: a value made this way is not born with a reference of its own, so it is not one of
+    /// the `1 + copies` the balance is read from, while it does have rows a back end runs.
     std::vector<uint8_t> refTakesAt;
     /// By topo index: how many holds a back end takes when this node has run -- keyed the way an
     /// instruction is, as `refGiveBackAt` is for the references that come back, so that these two
@@ -392,9 +393,10 @@ class ExecPlan {
     /// ---- The position of the last use: route 4's column -------------------------------------
     //
     // The last use is computed on the walk that already decides storage reuse -- it carries the
-    // execution order and who reads what -- and not written a second time. So `planStorageReuse` fills this column, and the references
-    // that come back are placed from it: a value is never read again after `lastUseAt`, which is
-    // the moment its producing reference is handed over (unless the program keeps it).
+    // execution order and who reads what -- and not written a second time. So `planStorageReuse`
+    // fills this column, and the references that come back are placed from it: a value is never
+    // read again after `lastUseAt`, which is the moment its producing reference is handed over
+    // (unless the program keeps it).
     //
     // What it answers, for one value: after which position in the plan is this value never read
     // again. `kNoLastUse` is the honest answer for a value nothing reads -- such a value's
@@ -423,9 +425,22 @@ class ExecPlan {
         uint32_t count      = 0;
         bool packed         = false; // a give-back that comes due when the packing value dies
     };
+    /// A row of the plan with everything the plan can decide decided: which slot it reads, whether
+    /// that read is the position's own value, how many holds it takes or gives back, and which of
+    /// the two. What the run still has to ask -- the slot's code, the slot's value, the object
+    /// behind it -- is about the frame, so it stays out of here.
+    struct RefAction {
+        gc_data_idx_t slot = 0; // never read when `usesProduced` is set
+        uint32_t count     = 0; // holds taken, or given back
+        RefEntryKind kind  = RefEntryKind::GiveBack;
+        bool usesProduced  = false; // a bytecode back end has not stored this value yet
+    };
     std::vector<uint32_t> refEntryOffsets;
     std::vector<RefEntry> refEntries;
     std::span<const RefEntry> refEntriesAt(size_t topoIndex) const;
+    std::vector<uint32_t> refActionOffsets;
+    std::vector<RefAction> refActions;
+    std::span<const RefAction> refActionsAt(size_t topoIndex) const;
     /// By data slot: the node whose rows run where the instruction that writes the slot runs, and
     /// `kInvalidNodeRef` for a slot no such node writes. A back end that runs bytecode has the
     /// instruction's destination slot where the node-form back ends have the node, and the rows are
@@ -458,8 +473,8 @@ class ExecPlan {
     ///   * the node names the *copying* form of an operator that has an in-place one and the plan
     ///     marked it Input or ByArrayCount: it runs the in-place form, which is the one that writes
     ///     where the plan handed the storage (the
-    ///     value an update is given at its last use is handed over, so `v = v->append(x)` on a value
-    ///     runs the form that appends in the storage instead of making a new array).
+    ///     value an update is given at its last use is handed over, so `v = v->append(x)` on a
+    ///     value runs the form that appends in the storage instead of making a new array).
     ///
     /// Everything else runs the URI it names, and a node the plan decided nothing about runs it
     /// too (StorageReuse::None): the reading that needs a word for that
@@ -553,9 +568,9 @@ void noteCountedCreationAt(const void *graph, size_t pc, uint64_t boxes) noexcep
 // filter decides which rows run: a row is skipped whole when the value it names is not a slot of
 // that reference type. A value's rows do not depend on the node that made it being an OPERATOR: a
 // CALL and a FILL make values too, and rows that were laid out and never run would leave the box a
-// call made with its count for ever while the plan read balanced. `rowsOfValueAreExecuted` asks only whether the
-// plan counts the value at all, so the rows of every value the plan counts run wherever they were
-// laid.
+// call made with its count for ever while the plan read balanced. `rowsOfValueAreExecuted` asks
+// only whether the plan counts the value at all, so the rows of every value the plan counts run
+// wherever they were laid.
 //
 // `produced` is the value the node just made -- the slot the operator wrote, or wrote through the
 // scheduler (bytecode stores `bc->result` after this returns, so a back end that runs bytecode
@@ -591,17 +606,18 @@ void applyRefEntriesForLoopExit(
     const ExecPlan &plan, camel::core::context::Frame *frame, size_t position) noexcept;
 
 /// The same rows of every loop of `frame`'s graph that the run is still inside, given back because
-/// the run is not going to leave them: a fault -- or any other exception -- unwinds past `loopEnd`'s
-/// leaving branch, so the moment those rows were waiting for never comes, and the last round's hold
-/// is never given back. The count is the number of holders (design principles 10.5), and a frame that
-/// is going back holds nothing, so the rows a loop was still holding a value for run here instead.
+/// the run is not going to leave them: a fault -- or any other exception -- unwinds past
+/// `loopEnd`'s leaving branch, so the moment those rows were waiting for never comes, and the last
+/// round's hold is never given back. The count is the number of holders (design principles 10.5),
+/// and a frame that is going back holds nothing, so the rows a loop was still holding a value for
+/// run here instead.
 ///
-/// Called by each scheduler on the way out of a fault, before the frame is released: the slots still
-/// name the values at that point, and after `FramePool::release` they do not. A loop that has already
-/// left is not one of these -- `loopEnd` sets the round to a negative value on the way out and ran
-/// its rows there -- so a run that ends normally gives back nothing here, and no frame gives a row
-/// twice. A frame whose graph is not the one the plan was built for reads nothing: the round slots
-/// are the plan's, and another graph means something else by them.
+/// Called by each scheduler on the way out of a fault, before the frame is released: the slots
+/// still name the values at that point, and after `FramePool::release` they do not. A loop that has
+/// already left is not one of these -- `loopEnd` sets the round to a negative value on the way out
+/// and ran its rows there -- so a run that ends normally gives back nothing here, and no frame
+/// gives a row twice. A frame whose graph is not the one the plan was built for reads nothing: the
+/// round slots are the plan's, and another graph means something else by them.
 void applyRefEntriesOfOpenLoops(camel::core::context::Frame *frame) noexcept;
 
 /// How many boxes the node being run made: the sites bracket the operator call with it, and hand

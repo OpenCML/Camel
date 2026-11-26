@@ -97,4 +97,6 @@
 | `table.expanded.json` | 同一张表，一格一行（含每格全部采样） |
 | `bisect.cn.md` | 二分：`small_calls` × `std::jit` 的 16 倍落在哪一组提交上 |
 | `reading-2026-11-26.cn.md` | 重定基后的一轮读数：`6fcee16d0c` 与 `250346d8d` 两点、同机同选项、安静窗口 |
+| `cause-fib-2026-11-26.cn.md` | 查因：`fib(30)` 的 nvm/fvm 从 ~50 ms 到 ~155 ms 落在哪几笔——16 个点今天重建重量、第一台阶定位到 `06bb6a2e53`，同图不同时 |
+| `fix-2026-11-26.cn.md` | 修因：`small_calls × std::jit` 的 ~15 倍（读自己的字节码那一路），前后读数 |
 | `results/` | 各点的原始 JSON/CSV、负载日志、构建日志尾巴与 `build-info.json`、二分日志 |
