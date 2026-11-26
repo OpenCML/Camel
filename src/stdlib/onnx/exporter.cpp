@@ -519,13 +519,11 @@ gc_node_ref_t declaringCellOf(const graph::GraphView &g, graph::NodeRef version)
 /// never leaves the function, so reads and assignments of it are not effects of the model. A
 /// read names the version its writer gave rather than the cell, so the version chain is walked
 /// back to the declaration.
-/// `:struct/append_arr_in_place` has no well-known id, so the module that recognises it interns the
-/// URI once and compares ids from then on (`camel/core/operator_table.h`): the text is how the
-/// operator is written down in the table, not how a node is recognised.
+/// The in-place append a compound assignment to a local array writes: the table gives it a
+/// well-known id (`oper::AppendInPlace`), so a node is recognised by that id and the URI is left to
+/// the places that show a program what it wrote.
 camel::core::OperId appendInPlaceOper() {
-    static const camel::core::OperId id =
-        camel::core::OperatorTable::instance().intern(":struct/append_arr_in_place");
-    return id;
+    return camel::core::oper::AppendInPlace;
 }
 
 bool isLocalVariable(const graph::GraphView &g, graph::NodeRef cell) {

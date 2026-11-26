@@ -4390,13 +4390,11 @@ node_handle_t Builder::visitBodyNode(const GCT::node_ptr_t &gct) {
     return result;
 }
 
-/// `:struct/append_arr` has no well-known id, so the layer that recognises it interns the URI once
-/// and compares the id a declaration holds (`OperatorIndex::oper`, camel/core/operator_table.h);
-/// the owned form has a well-known id of its own (`oper::AppendOwned`).
+/// The append `append` writes: the table gives it a well-known id (`oper::Append`), so a
+/// declaration is recognised by the id it holds (`OperatorIndex::oper`); the owned form has its own
+/// (`oper::AppendOwned`).
 camel::core::OperId appendArrayOper() {
-    static const camel::core::OperId id =
-        camel::core::OperatorTable::instance().intern(":struct/append_arr");
-    return id;
+    return camel::core::oper::Append;
 }
 
 bool Builder::inferLoopStateFromAppend(
