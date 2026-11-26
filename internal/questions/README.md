@@ -5,7 +5,7 @@
 > 这一页由 `node scripts/check-doc-links.mjs --questions-index --write` 从目录生成，不要手改：
 > 规矩在 `internal/reviews/` 的裁定里，落没落地看代码和提交，不看这张表。
 
-## 现在在等作者：13 页
+## 现在在等作者：15 页
 
 | 页 | 问什么 |
 | --- | --- |
@@ -22,6 +22,8 @@
 | [`2026-11-25-what-a-compiler-written-conversion-does-when-the-pair-is-not-safe`](2026-11-25-what-a-compiler-written-conversion-does-when-the-pair-is-not-safe.cn.md) | 编译器自动插的转换遇到非 Safe 配对，应该是什么：编译期拒绝、运行时 fault、不插这个转换，还是别的 |
 | [`2026-11-26-a-block-name-need-not-sort-its-statements`](2026-11-26-a-block-name-need-not-sort-its-statements.cn.md) | 块的名字不必先给语句定序 |
 | [`2026-11-26-oper-uri-readings`](2026-11-26-oper-uri-readings.cn.md) | 算子「按编号认」还差两件事，缺哪一件由你定 |
+| [`2026-11-27-fsh-dev-remote-script-line`](2026-11-27-fsh-dev-remote-script-line.cn.md) | 元层一行：`fsh-dev` 的 `camel-remote.ps1:2999` 让整批无法合入 |
+| [`2026-11-27-where-a-blocks-root-gets-the-module-that-declares-its-operator`](2026-11-27-where-a-blocks-root-gets-the-module-that-declares-its-operator.cn.md) | 块的根从哪里拿到「声明它那个算子的模块」 |
 
 ## 生成器不会删的行：260 行（页已不在 `questions/` 里）
 
