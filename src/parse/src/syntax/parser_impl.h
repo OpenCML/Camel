@@ -64,7 +64,7 @@ class ParserImpl {
     // The expression being parsed is one dimension of a subscript, where `..` is the slice's
     // separator and not the range operator: `t[a..b]` is a slice, not an index by a range value
     // (design principles 4.2).
-    bool noRange_      = false;
+    bool noRange_ = false;
 
     bool panic_     = false; // an error was reported and the parser has not resynchronized
     uint32_t depth_ = 0;     // nesting of expressions, types and blocks
@@ -381,6 +381,11 @@ class ParserImpl {
     /// `fieldPosition` reads a `fieldPattern` (`identRef | '_'`) instead of a whole `pattern`.
     void parsePattern(bool fieldPosition = false);
     void parseLoop();
+    void parseEditExpr();
+    void parseViewExpr();
+    /// The two productions above, which differ only in the word that opens them and the node kind
+    /// the block is closed as.
+    void parseBlockHeaded(NK kind);
     void parseOr();
     void parseAnd();
     void parseNeg(bool underMinus);

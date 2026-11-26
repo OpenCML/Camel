@@ -1,0 +1,9 @@
+// Design `docs/design/graph-editing/README.cn.md` section 12, second example, verbatim.
+// The two statements are what the document writes; `f`, `a` and `b` are the names it uses.
+func leaks::<F>(f: F) => int when is_function::<F>() {
+    let n = view d = f { nodes(d)[0] }
+    //      ^ error: a graph handle cannot leave the view block it belongs to
+    replace(a, b)
+    // ^ error: replace takes a node of an edit block; there is none here
+    return n
+}

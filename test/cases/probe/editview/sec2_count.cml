@@ -1,0 +1,5 @@
+// Design `docs/design/graph-editing/README.cn.md` section 2, example 3, verbatim.
+// 读图：块的值是体的值，类型由体推出
+func count_muls::<F>(f: F) => int when is_function::<F>() {
+    return view d = f { len(nodes(d)->filter<is_mul>) }
+}

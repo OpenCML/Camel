@@ -38,7 +38,10 @@ enum class DataType {
     EnumPattern,
     // `..e` in an argument list: the operand is a compile-time tuple whose elements are the
     // arguments (design principles 5.5).
-    SpreadArg
+    SpreadArg,
+    // `edit d = f { … }` and `view d = f { … }`: the same shape, two blocks; see BlockHeadLoad.
+    EditExpr,
+    ViewExpr
 };
 
 /// What a `match type` case selects (design principles 5.5, R3): the shape of a type
@@ -390,6 +393,30 @@ class LoopExprLoad : public DataLoad {
   private:
     std::vector<Reference> state_;
     Reference binder_;
+};
+
+/// `edit d = f { 语句 }` and `view d = f { 表达式 }` (graph-editing design 15.1): a block over a
+/// function value. The head binds the name the body reads the block's root by, and the root is what
+/// the body's graph operators query or change; the braces are the body, always a block, whose last
+/// expression is the block's value and whose `return` ends the block itself.
+///   [0] the function the block is over (the `f` of `edit d = f`);
+///   [1] StmtBlock the body, one block whether the source wrote statements or one expression.
+/// `edit`'s value is the function the block was over once the body's changes are in it (design
+/// 6.3), `view`'s is the body's value; the kind of the node says which of the two was written, and
+/// neither head writes a type (design 15.1: an `edit` block's result type is the expected one, a
+/// `view` block's is the body's).
+class BlockHeadLoad : public DataLoad {
+  public:
+    BlockHeadLoad(DataType type, Reference root) : DataLoad(type), root_(std::move(root)) {}
+
+    /// The name the block's root is read by in the body: `d` in `edit d = f { … }`.
+    const Reference &root() const { return root_; }
+
+    const std::string toString() const override;
+    const std::string geneCode() const override;
+
+  private:
+    Reference root_;
 };
 
 class LiteralLoad : public DataLoad {

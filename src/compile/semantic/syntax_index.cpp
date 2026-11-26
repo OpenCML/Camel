@@ -90,13 +90,8 @@ class Walker {
 
     /// A walk of the expression of a `${...}`: it joins the index of the file, in the scope and
     /// the function it is written in, but its tree is the one parsed from the interpolation.
-    Walker(
-        SyntaxIndex &index, const syn::Tree &tree, uint32_t scope, int32_t container)
-        : index_(index),
-          tree_(tree),
-          buffer_(tree.tokens()),
-          text_(tree.source()),
-          scope_(scope),
+    Walker(SyntaxIndex &index, const syn::Tree &tree, uint32_t scope, int32_t container)
+        : index_(index), tree_(tree), buffer_(tree.tokens()), text_(tree.source()), scope_(scope),
           container_(container) {}
 
     void run() {
@@ -304,8 +299,8 @@ class Walker {
         case NK::FuncData:
             return funcData(cst::FuncData(node));
         case NK::FuncAnno:
-            // `@name(args)` is the removed spelling of the numeric-permission annotation; it names no
-            // value, and only a decorator (`@name`, `@name<args>`) refers to a function.
+            // `@name(args)` is the removed spelling of the numeric-permission annotation; it names
+            // no value, and only a decorator (`@name`, `@name<args>`) refers to a function.
             if (node.get<cst::ParentIdents>()) {
                 return;
             }
@@ -343,6 +338,9 @@ class Walker {
             return ifExpr(cst::IfExpr(node));
         case NK::LoopExpr:
             return loopExpr(cst::LoopExpr(node));
+        case NK::EditExpr:
+        case NK::ViewExpr:
+            return blockHeadedExpr(node);
         case NK::AnnoExpr:
             return annoExpr(cst::AnnoExpr(node));
         case NK::AccessExpr:
@@ -373,8 +371,7 @@ class Walker {
             return;
         }
         for (const auto &part : buffer_.interpolationsOf(token.index())) {
-            index_.fstringExpressions.push_back(
-                Range{part.exprBegin, part.exprEnd});
+            index_.fstringExpressions.push_back(Range{part.exprBegin, part.exprEnd});
             const std::string source(text_);
             syn::TokenBuffer tokens =
                 syn::Lexer::tokenizeRange(source, part.exprBegin, part.exprEnd);
@@ -719,6 +716,27 @@ class Walker {
             walkBlockBody(cst::StmtBlock(body));
         } else {
             walk(body);
+        }
+        popScope();
+    }
+
+    /// edit d = f { body } and view d = f { body }: the function the block is over is outside the
+    /// scope of the block's root, the body is inside it with the root declared, and the root is
+    /// visible nowhere else.
+    void blockHeadedExpr(syn::Node ctx) {
+        walk(ctx.expr());
+        const Range whole = rangeOf(ctx);
+        pushScope(ScopeKind::Arm, whole);
+        if (auto ident = ctx.get<cst::IdentDef>(); ident && nameOf(ident)) {
+            declare(DeclKind::Binding, nameOf(ident), whole, rangeOf(ident));
+        }
+        const syn::Child body = ctx.lastChild();
+        if (body.isNode()) {
+            if (body.node().is(NK::StmtBlock)) {
+                walkBlockBody(cst::StmtBlock(body.node()));
+            } else {
+                walk(body.node());
+            }
         }
         popScope();
     }
