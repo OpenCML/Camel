@@ -93,6 +93,10 @@ pwsh -NoProfile -File <你的工作树>\internal\tools\camel-remote.ps1 `
 · 退出码：0 绿／1 红／**4 没跑起来**／**7 读数齐了但没拿到退出码**。4 与 7 都不是绿。
 · 读数要带 provenance（`tip`、binary 的构建时刻、`tree`、`tier`、`jobs`）与 `[TREE] clean`。
   没有 `[load]` 行的读数（本机跑的）**只能当名字集用**，不能当时间基线。
+· **不要用 `Select-String` / `Where-Object` 把判词行滤掉。** 判词行
+  （`[camel-remote] <plan> exit N (transfer …, build …, plan …, load …; total …)`）
+  是相位读数的唯一来源：24 小时 1679 次调用里只有 82 次保留到它，**其中 911 次是调用方自己滤掉的**。
+  要少噪音就 `Tee-Object` 存一份再看，**不许让管道决定这条读数存在与否**（2026-11-26 决策者定）。
 ```
 
 ## 7. 路径与工作树
