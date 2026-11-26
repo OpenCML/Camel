@@ -428,7 +428,7 @@ The production of each level, as `src/parse/src/syntax/parser_expr.cpp` writes i
 function that parses it:
 
 ```text
-dataExpr           : ctrlExpr | loopExpr
+dataExpr           : ctrlExpr | loopExpr | editExpr | viewExpr
 ctrlExpr           : 'if' logicalOrExpr 'then' blockExpr ('else' blockExpr)?
 assignExpr         : logicalOrExpr (('=' | '+=' | '-=' | '*=' | '/=' | '%=' | '^=' | '@=' | '&=' | '|=') logicalOrExpr)?
 logicalOrExpr      : logicalAndExpr ('||' logicalAndExpr)*
