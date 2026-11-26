@@ -310,6 +310,11 @@ class Builder {
     /// ANNO...]], the block as a function of no parameters called where it is written. The
     /// EXEC is the block lowered as without decorators (its scope, its exits, its value).
     node_ptr_t visitDecoratedBlock(const AST::node_ptr_t &ast);
+    /// `view d = f { ... }` and `edit d = f { ... }`: LINK(0)[FUNC[TYPE, EXEC]], the block over
+    /// the function applied where it is written. The AST has already put the head's binding in
+    /// front of the body's statements, so both kinds are one lowering; the block's value is the
+    /// last statement's, and the binding is the value the head names.
+    node_ptr_t visitBlockHeaded(const AST::node_ptr_t &ast);
     /// The body of a function that writes `yield` of its own (design principles 5.4, language
     /// reference 7.3.1): the machine that hands out a stream. Its `var`s are cells of the
     /// function's own body, so every pull reads the same cells; `step` runs the body from the

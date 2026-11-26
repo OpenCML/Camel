@@ -1,0 +1,25 @@
+// A `return` written in an edit block's body ends the body, not the function the block stands in,
+// and the block still commits (graph-editing design 15.1: the body's value is not the block's). The
+// `return` here is the body's last statement, and what says it ended the body rather than the
+// function is the statement after the block: it runs. What says the returned value is not the
+// block's is the answer: it is the function's, not `100`.
+func inc(x: int) => int {
+    return x + 1
+}
+
+func body_returns(f: (x: int) => int) => int sync {
+    let g = edit d = f {
+        let _ = d(1)
+        return 100
+    }
+    println('after the block')
+    return match g {
+        case error e => -1
+        case h => h(5)
+    }
+}
+
+func main() => int sync {
+    println('answer=', body_returns(inc))
+    return 0
+}

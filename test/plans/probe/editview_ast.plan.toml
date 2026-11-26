@@ -38,10 +38,10 @@ timeout_ms = 20000
 
 [[tests]]
 name = "editview.check_view_head"
-desc = "What `check` says about a block today: the same file, read past the syntax."
+desc = "What `check` says about a view block: the head binds the graph, the block's value is the body's, and the block reads past the syntax."
 kind = "behavior"
 case = "../../cases/probe/editview/view_only.cml"
 args = ["check", "${case}"]
-expect_exit = 1
+expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000

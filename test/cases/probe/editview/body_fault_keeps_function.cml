@@ -1,0 +1,30 @@
+// What a body that faults leaves behind (graph-editing design 6, 15.1: the changes of an edit block
+// are all in or not at all). The step divides by a zero that only a call can give, so it faults
+// where the program runs and not where the compiler reads it; nothing in the body catches it, so the
+// block's value is the error that fault became. The function the head was given is untouched: it
+// answers as it did before, and the block's error says nothing about it.
+func zero() => int {
+    return 0
+}
+
+func inc(x: int) => int {
+    return x + 1
+}
+
+func edited(f: (x: int) => int) => int sync {
+    let g = edit d = f {
+        let z = zero()
+        let q = 10 / z
+        let _ = d(q)
+    }
+    return match g {
+        case error e => -1
+        case h => h(5)
+    }
+}
+
+func main() => int sync {
+    println('block=', edited(inc))
+    println('old=', inc(5))
+    return 0
+}

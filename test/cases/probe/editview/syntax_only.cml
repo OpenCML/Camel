@@ -1,3 +1,5 @@
+import { is_function } from types
+
 // The smallest edit block there is: the head, the assignment and the block, and nothing the
 // block body would have to resolve. What the parser makes of it is the reading.
 func identity_edit::<F>(f: F) => F! when is_function::<F>() {

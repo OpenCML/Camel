@@ -23,6 +23,7 @@
 #include "camel/core/type/text.h"
 #include "camel/core/type/typecall.h"
 #include "camel/core/type/typevar.h"
+#include "camel/execute/fault_isolation.h"
 #include "camel/parse/ast/type.h"
 #include "camel/utils/escape.h"
 #include "camel/utils/number_text.h"
@@ -148,6 +149,60 @@ void Builder::reportExitInUnusedArm(const AST::node_ptr_t &exit) {
 /// An EXEC of the statement block.
 node_ptr_t Builder::makeExec(bool synced, bool operands) {
     return tree_->makeExec(synced, operands);
+}
+
+/*
+EditExpr(Function) : Data over, StmtBlock body, StmtBlock block ;
+ViewExpr(Function) : Data over, StmtBlock body, StmtBlock block ;
+A block over a function value (graph-editing design 15.1): the head binds the name the body reads
+the graph by, and the body is what runs. It is read as a block applied at once -- a function with
+no parameters whose body is that block, called where the block stands -- which is how the value of
+a block is already read elsewhere (a decorated block, an arm whose value is used): the block's own
+value is the last statement's, and the closure is made where the block is written, so a name the
+body uses from outside is captured as any block's is.
+Both kinds have the same lowering here. What differs -- `view` has no draft, `edit` commits one --
+is what the body does with the binding and what the block hands on.
+*/
+node_ptr_t Builder::visitBlockHeaded(const AST::node_ptr_t &ast) {
+    ENTER("BlockHeaded");
+    node_ptr_t execNode = visitStmtBlock(ast->atAs<AST::StmtBlockLoad>(2), false);
+    FunctionTypeFactory factory; // no parameters; the result is the block's value
+    FunctionType *type  = factory.buildOpen();
+    node_ptr_t typeNode = tree_->makeType(type);
+    node_ptr_t funcNode = tree_->makeFunc("");
+    *funcNode << typeNode << execNode;
+    setOriginFromAst(context_, typeNode, ast, camel::source::OriginKind::GctNode, "gct.block.type");
+    setOriginFromAst(context_, funcNode, ast, camel::source::OriginKind::GctNode, "gct.block.func");
+    // An edit block's changes are all in or not at all (design 6, 15.1): the block's value is the
+    // function those changes make of the one the head named, or the error that stopped them, and
+    // never the fault itself. The steps therefore run inside a fault boundary, and what the block
+    // hands on is the value of that boundary -- `attempt`'s transform of the closure, called at
+    // the place the block stands, which is `T!` of the closure's result. A `view` block reads and
+    // changes nothing, so it keeps the plain call: a fault in a view is the program's, not a value.
+    node_ptr_t valueNode = nullptr;
+    if (ast->loadAs<AST::BlockHeadLoad>()->dataType() == AST::DataType::EditExpr) {
+        node_ptr_t transform = tree_->makeLink(1);
+        *transform << tree_->makeDRef(camel::execute::kFaultIsolationName) << funcNode;
+        setOriginFromAst(
+            context_,
+            transform,
+            ast,
+            camel::source::OriginKind::GctNode,
+            "gct.block.isolate");
+        valueNode = tree_->makeLink(0);
+        *valueNode << transform;
+    } else {
+        valueNode = tree_->makeLink(0);
+        *valueNode << funcNode;
+    }
+    setOriginFromAst(
+        context_,
+        valueNode,
+        ast,
+        camel::source::OriginKind::GctNode,
+        "gct.block.call");
+    LEAVE("BlockHeaded");
+    return valueNode;
 }
 
 /*
@@ -308,6 +363,10 @@ node_ptr_t Builder::visitData(const AST::node_ptr_t &ast) {
         break;
     case AST::DataType::LoopExpr:
         dataNode = visitLoopExpr(ast);
+        break;
+    case AST::DataType::EditExpr:
+    case AST::DataType::ViewExpr:
+        dataNode = visitBlockHeaded(ast);
         break;
     case AST::DataType::Literal:
         dataNode = visitLiteral(ast);

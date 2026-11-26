@@ -1570,7 +1570,12 @@ Value Builder::visitLoopExpr(cst::LoopExpr context) {
 /*
 editExpr : 'edit' identDef '=' logicalOrExpr stmtBlock ;
 viewExpr : 'view' identDef '=' logicalOrExpr stmtBlock ;
-The children of the node are described at BlockHeadLoad.
+The children of the node are described at BlockHeadLoad. The third child is the block the head
+stands for: the same body with one statement in front of it, `let d = f`, which is what "a draft
+`d` over `f`" is once the head is read -- a binding of the name the body reads the graph by, to
+the value the head names. Every later stage therefore reads one shape (a block) and writes one
+lowering, for both kinds of block; the kind stays in the node so that what was written is still
+what the tree says.
 */
 Value Builder::visitEditExpr(cst::EditExpr context) {
     return visitBlockHeaded(context, DataType::EditExpr);
@@ -1583,18 +1588,76 @@ Value Builder::visitViewExpr(cst::ViewExpr context) {
 Value Builder::visitBlockHeaded(syn::Node context, DataType type) {
     const char *kindName = type == DataType::EditExpr ? "EditExpr" : "ViewExpr";
     ENTER(kindName);
-    node_ptr_t node =
-        createNodeAs<BlockHeadLoad>(type, Reference(context.get<cst::IdentDef>().text()));
+    const Reference root(context.get<cst::IdentDef>().text());
+    node_ptr_t node = createNodeAs<BlockHeadLoad>(type, root);
     setNodeTokenRangeByContext(node, context);
     // [0] the function the block is over. [1] the body: a StmtBlock whether the source wrote
-    // statements or a single expression, as the arm of an `if` is (design 15.1, "块里最后一个
-    // 表达式是块的值"). A head that lost a piece to a syntax error is built with the pieces it
-    // kept.
+    // statements or a single expression, as the arm of an `if` is. A head that lost a piece to a
+    // syntax error is built with the pieces it kept.
+    node_ptr_t overNode = nullptr;
     if (const syn::Node over = context.expr(); over) {
-        *node << any2node(visitExpr(over));
+        overNode = any2node(visitExpr(over));
+        *node << overNode;
     }
+    node_ptr_t bodyNode = nullptr;
     if (const syn::Child body = context.lastChild(); body.isNode()) {
-        *node << any2node(visitBlockExpr(body.node()));
+        bodyNode = any2node(visitBlockExpr(body.node()));
+        *node << bodyNode;
+    }
+    // [2] the block the head stands for: the binding, then the body's statements.
+    if (bodyNode) {
+        node_ptr_t binding = createNodeAs<DataDeclLoad>(true, std::vector<Reference>{root});
+        setNodeTokenRangeByContext(binding, context);
+        *binding << createNodeAs<RepeatedLoad>("Type");
+        node_ptr_t initial = createNodeAs<RepeatedLoad>("Data");
+        setNodeTokenRangeByContext(initial, context);
+        if (overNode) {
+            *initial << overNode;
+        }
+        *binding << initial;
+        node_ptr_t stmts = createNodeAs<RepeatedLoad>("Stmt");
+        setNodeTokenRangeByContext(stmts, context);
+        *stmts << binding;
+        // The body's own statements follow the binding, in the order they were written; a body
+        // written as one expression is one expression statement, as visitBlockExpr made it.
+        //
+        // An edit block's body is a block of its own inside this one, not a range of statements
+        // spliced into it. A `return` written in the body ends the block it is written in, and
+        // design 15.1 says it ends the body and the block still commits: spliced in, that `return`
+        // would give the value of the block the head stands for and the hand-over written after it
+        // would be a statement after a `return` -- refused, and the block would give the returned
+        // expression instead of its function.
+        if (type == DataType::EditExpr) {
+            node_ptr_t bodyBlock = createNodeAs<StmtBlockLoad>();
+            setNodeTokenRangeByContext(bodyBlock, context);
+            node_ptr_t bodyStmts = createNodeAs<RepeatedLoad>("Stmt");
+            setNodeTokenRangeByContext(bodyStmts, context);
+            for (const auto &stmt : *bodyNode->atAs<RepeatedLoad>(0)) {
+                *bodyStmts << stmt;
+            }
+            *bodyBlock << bodyStmts;
+            *stmts << bodyBlock;
+        } else {
+            for (const auto &stmt : *bodyNode->atAs<RepeatedLoad>(0)) {
+                *stmts << stmt;
+            }
+        }
+        // An edit block's value is the function its commit gives, not the last expression its
+        // body writes (graph-editing design 6, 15.1), so the block ends by naming what the commit
+        // hands over: the name the head bound. A view block ends with the body's own last
+        // statement, which is its value.
+        if (type == DataType::EditExpr) {
+            node_ptr_t handOver = createNodeAs<RefDataLoad>(root);
+            setNodeTokenRangeByContext(handOver, context);
+            node_ptr_t last = createNodeAs<ExprStmtLoad>();
+            setNodeTokenRangeByContext(last, context);
+            *last << handOver;
+            *stmts << last;
+        }
+        node_ptr_t block = createNodeAs<StmtBlockLoad>();
+        setNodeTokenRangeByContext(block, context);
+        *block << stmts;
+        *node << block;
     }
     LEAVE(kindName);
     return node;
