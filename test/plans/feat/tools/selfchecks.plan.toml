@@ -545,3 +545,18 @@ expect_exit = 0
 expect_stdout_contains = ["promotion-record: 10 checks, 0 failed"]
 normalizers = ["normalize_newlines"]
 timeout_ms = 120000
+
+# Fast: 3 s. A gate that never returns is ended at its limit together with the process it started:
+# the fake gate sleeps 30 s and starts a child that does too, the run gets a 2 s limit, and what is
+# read is the red line for that gate, the non-zero exit, and that neither process is left running.
+[[tests]]
+name = "selfchecks.gates_timeout"
+desc = "`scripts/gates.test.mjs`: `scripts/gates.mjs` kills a gate that outlives its limit with the whole process tree it started, reports it on the gate's line as a failed gate that did not finish, and exits non-zero (6 checks)."
+kind = "behavior"
+tool = "node"
+case = "../../../../scripts/gates.test.mjs"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_contains = ["gates: 6 checks, 0 failed"]
+normalizers = ["normalize_newlines"]
+timeout_ms = 60000
