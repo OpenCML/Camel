@@ -126,6 +126,15 @@ class Handle final : public rtdata::Object {
         const camel::runtime::Program *program, camel::runtime::GraphId graph,
         mm::IAllocator &allocator);
 
+    /// A Region handle for a region of the graph a transaction is editing. The draft keeps the
+    /// region table the published graph had and the records its edits add, and `region_of` on a
+    /// node of the draft names one of them -- so the handle names the transaction the same way a
+    /// node handle does, and `region_kind` reads the draft's record rather than the published
+    /// graph's (a region `inline` made has no record there at all).
+    static Handle *createRegionInTransaction(
+        const camel::runtime::GraphTransaction &transaction, rtdata::Object *draft, uint32_t region,
+        mm::IAllocator &allocator);
+
     HandleKind kind() const { return kind_; }
     const camel::runtime::Program *program() const { return program_; }
     /// The transaction this handle names a node of, or null for a handle of a published Program.

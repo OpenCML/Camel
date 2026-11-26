@@ -655,14 +655,15 @@ arity_probe: <tag: int, extra: int[] = []> (f: F, example: E) => int when is_fun
 zen: () => string
 ```
 
-**`graph`** — import { ... } from graph — 55 name(s)
+**`graph`** — import { ... } from graph — 57 name(s)
 
 ```text
 graph_of: (f: F) => Graph when is_function::<F>()
 graphs_of: (f: F) => Graph[] when is_function::<F>()
-name: (g: Graph) => string spelling
-nodes: (g: Graph) => Node[]
-exit_of: (g: Graph) => Node?
+nodes: (d: Graph) => Node[]
+graphs: (d: Graph) => Graph[]
+params: (d: Graph) => Node[]
+exit: (d: Graph) => Node?
 inputs: (n: Node) => Node[]
 with_inputs: (n: Node) => Node[]
 sync_inputs: (n: Node) => Node[]
@@ -688,6 +689,7 @@ declaration_tags: (g: Graph) => Tag[]
 tag_name: (t: Tag) => string
 tag_graphs: (t: Tag) => Graph[]
 rule_of: (g: Graph, name: string) => Graph?
+name: (g: Graph) => string spelling
 origin: (n: Node) => int spelling
 constant: (n: Node) => T? when is_ordered::<T>()
 region_of: (n: Node) => Region
@@ -702,17 +704,17 @@ effects: (g: Graph) => Effects
 shape_text: (n: Node) => string?
 permissions: (n: Node) => int
 relative_cost: (n: Node) => float
-open: (f: F) => Txn<F> when is_function::<F>()
-replace: (t: Txn<F>, old: Node, new: Node) => void uses var t
-erase: (t: Txn<F>, n: Node) => void uses var t
-eval: (t: Txn<F>, n: Node) => Node? uses var t
-order: (t: Txn<F>, before: Node, after: Node) => void uses var t
-inline: (t: Txn<F>, at: Node, fn: G) => Node
-outline: (t: Txn<F>, ns: Node[]) => Node uses var t
-add_param: (t: Txn<F>, like: Node) => Node uses var t
-add_constant: (t: Txn<F>, g: Graph, value: T) => Node
-commit: (t: Txn<F>) => F! uses var t
-abort: (t: Txn<F>) => void uses var t
+open: (f: F) => Graph when is_function::<F>()
+replace: (old: Node, new: Node) => void
+erase: (n: Node) => void
+eval: (n: Node) => Node?
+order: (before: Node, after: Node) => void
+inline: (at: Node, fn: G) => Node when is_function::<G>()
+outline: (ns: Node[]) => Node
+add_param: (like: Node) => Node
+add_constant: (g: Graph, value: T) => Node when is_ordered::<T>()
+commit: (d: Graph) => F!
+abort: (d: Graph) => void
 probe_handle: (f: F) => F! when is_function::<F>()
 check_pass_boundary: (before: F, after: F) => F! when is_function::<F>()
 ```

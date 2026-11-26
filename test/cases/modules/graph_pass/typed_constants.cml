@@ -1,9 +1,9 @@
-// Creates a value of each type `add_constant` accepts (int, f64, bool, string), lets the
-// transaction live across a safepoint (`churn` makes the collector run), commits, and counts
-// each value in the committed program. The draft's static slots are the roots that keep these
-// values alive while the transaction is open (item 3).
+// Creates a value of each type `add_constant` accepts (int, f64, bool, string), lets the draft live
+// across a safepoint (`churn` makes the collector run), commits, and counts each value in the
+// committed program. The draft's static slots are the roots that keep these values alive while the
+// draft is open (item 3).
 import { flat_map } from array
-import { Graph, Node, Txn, nodes, constant, add_constant, open, commit, graphs_of } from graph
+import { Graph, Node, nodes, constant, add_constant, open, commit, graphs, graphs_of } from graph
 
 func allNodes::<F>(p: F) => Node[] {
     return graphs_of(p)->flat_map<func (g: Graph) => Node[] {
@@ -41,14 +41,14 @@ func countString(ns: Node[], v: string) => int {
 }
 
 export func make::<F>(p: F) => F! sync {
-    let t = open(p)
-    let g = graphs_of(p)[0]
-    let i = add_constant(t, g, 12345)
-    let f = add_constant(t, g, 2.5)
-    let b = add_constant(t, g, true)
-    let s = add_constant(t, g, 'h36b-typed')
+    let d = open(p)
+    let g = graphs(d)[0]
+    let i = add_constant(g, 12345)
+    let f = add_constant(g, 2.5)
+    let b = add_constant(g, true)
+    let s = add_constant(g, 'h36b-typed')
     let junk = churn(100)
-    let next = commit(t) !! p
+    let next = commit::<F>(d) !! p
     let ns = allNodes(next)
     println(countInt(ns, 12345))
     println(countFloat(ns, 2.5))

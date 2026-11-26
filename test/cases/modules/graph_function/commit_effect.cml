@@ -74,7 +74,7 @@ func main() => int spelling sync {
     let at = firstWhere(nodes(d)->filter<isConstant>)
     
     inline(at, announce)
-    let edited = commit(d) !! step
+    let edited = commit::<(w: float, x: float) => float>(d) !! step
     let h = graph_of(edited)
     println(`[commit] accepted, prints=${len(nodes(h)->filter<isPrint>)}`)
     return 0

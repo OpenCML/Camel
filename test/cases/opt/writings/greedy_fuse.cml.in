@@ -25,7 +25,7 @@
 // quantity the criterion is about.
 
 import { starts_with } from str
-import { Node, Graph, Txn, nodes, op, op_name, open, replace, commit, graphs_of } from graph
+import { Node, Graph, nodes, graphs, op, op_name, open, replace, commit } from graph
 
 func isMul(n: Node) => bool {
     return match op(n) {
@@ -35,23 +35,23 @@ func isMul(n: Node) => bool {
 }
 
 /// Fuses the pairs of `ms` from index `i` on, two at a time, and answers how many it fused.
-func fuseFrom::<F>(t: Txn<F>, ms: Node[], i: int): int sync {
+func fuseFrom(ms: Node[], i: int): int sync {
     if i + 1 >= len(ms) then 0 else sync {
-        replace(t, ms[i + 1], ms[i])
-        1 + fuseFrom(t, ms, i + 2)
+        replace(ms[i + 1], ms[i])
+        1 + fuseFrom(ms, i + 2)
     }
 }
 
-func fuseAll::<F>(t: Txn<F>, gs: Graph[], i: int): int sync {
+func fuseAll(gs: Graph[], i: int): int sync {
     if i >= len(gs) then 0 else sync {
-        fuseFrom(t, nodes(gs[i])->filter<isMul>, 0) + fuseAll(t, gs, i + 1)
+        fuseFrom(nodes(gs[i])->filter<isMul>, 0) + fuseAll(gs, i + 1)
     }
 }
 
 /// The greedy fusion of one program: every graph's multiplications paired in `nodes` order.
 export func fuse::<F>(p: F): F! sync {
-    let t = open(p)
-    let gs = graphs_of(p)
-    let _ = fuseAll(t, gs, 0)
-    return commit(t)
+    let d = open(p)
+    let gs = graphs(d)
+    let _ = fuseAll(gs, 0)
+    return commit(d)
 }

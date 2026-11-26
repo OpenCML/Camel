@@ -15,7 +15,7 @@
 // graph it becomes is `(int, int) => int` with the addition as its body, and the call that stands in
 // its place reads those same two values.
 
-import { Graph, Node, NodeKind, graph_of, graphs_of, name, nodes, inputs, kind, op, op_name, creation_id, callee, exit_of, id, is_anchor, open, outline, commit } from graph
+import { Graph, Node, NodeKind, graph_of, graphs_of, name, nodes, inputs, kind, op, op_name, creation_id, callee, exit, id, is_anchor, open, outline, commit } from graph
 
 func subject(n: int) => int sync {
     println('first')
@@ -91,16 +91,15 @@ func outlined() => int spelling sync {
     let g = graph_of(subject)
     let before = graphs_of(subject)
     println(`[shape] ${shape(g, 0, '')}`)
-    let group = onlyAdd(g)
-    let groupText = `${id(group)}:${opText(group)}`
-    let t = open(subject)
-    let made = outline(t, [group])
-    // What the operator answered belongs to the transaction: read it before the commit. It is the
-    // call the group's value is read from now (`callee` is null on a node of a draft: the graph it
-    // names is in this transaction's program, which the handle does not name).
+    let groupText = `${id(onlyAdd(g))}:${opText(onlyAdd(g))}`
+    let d = open(subject)
+    let made = outline([onlyAdd(d)])
+    // What the operator answered belongs to the draft: read it before the commit. It is the call the
+    // group's value is read from now (`callee` is null on a node of a draft: the graph it names is
+    // in this draft's program, which the handle does not name).
     let callReads = len(inputs(made))
     let callIsCall = isCall(made)
-    let edited = commit(t) !! subject
+    let edited = commit::<(x: int) => int>(d) !! subject
     let after = graphs_of(edited)
     let newId = idNotIn(after, before, 0)
     println(`[outline] graphs=${len(before)}->${len(after)} new_id=${newId} in_committed=${holdsId(after, newId, 0)} group=${groupText}`)
@@ -109,7 +108,7 @@ func outlined() => int spelling sync {
     let h = graph_of(edited)
     let call = theCall(h)
     let madeGraph = callee(call) ?? h
-    let madeExit = exit_of(madeGraph) ?? call
+    let madeExit = exit(madeGraph) ?? call
     println(`[outline] made_graph=${name(madeGraph)} nodes=${len(nodes(madeGraph))} exit_reads=${len(inputs(madeExit))}`)
     println(`[outline] made kinds:${kinds(madeGraph, 0, '')}`)
     println(`[outline] subject after:${shape(h, 0, '')}`)
@@ -121,8 +120,8 @@ func outlined() => int spelling sync {
 /// The same commit, no `outline`: the delivery set is empty and the program holds no new graph.
 func control() => int spelling sync {
     let before = graphs_of(subject)
-    let t = open(subject)
-    let edited = commit(t) !! subject
+    let d = open(subject)
+    let edited = commit::<(x: int) => int>(d) !! subject
     let after = graphs_of(edited)
     let newId = idNotIn(after, before, 0)
     println(`[control] graphs=${len(before)}->${len(after)} new_id=${newId}`)

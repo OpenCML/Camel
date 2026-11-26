@@ -36,10 +36,10 @@ func typeText(n: Node) => string {
 func main() => int spelling sync {
     let g = graph_of(subject)
     let before = len(portsOf(g))
-    let t = open(subject)
-    let made = add_param(t, portsOf(g)[0])
+    let d = open(subject)
+    let made = add_param(portsOf(d)[0])
     let madeText = typeText(made)
-    let edited = commit(t) !! subject
+    let edited = commit::<(x: int) => int>(d) !! subject
     let h = graph_of(edited)
     let after = len(portsOf(h))
     println(`[add_param] ports=${before}->${after} made=${madeText}`)

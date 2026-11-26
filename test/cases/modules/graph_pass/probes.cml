@@ -61,8 +61,8 @@ export func count_adds::<F>(p: F) => F! spelling sync {
 
 export func commit_twice::<F>(p: F) => F! sync {
     let d = open(p)
-    let first = commit(d)
-    let second = commit(d)
+    let first = commit::<F>(d)
+    let second = commit::<F>(d)
     println(match second {
         case error e => e.kind
         case v => 'ok'
@@ -102,8 +102,8 @@ export func conflict::<F>(p: F) => F! spelling sync {
     let secondAdds = mainNodes(second)->filter<isAddZero>
     replace(firstAdds[0], inputs(firstAdds[0])[0])
     replace(secondAdds[0], inputs(secondAdds[0])[0])
-    let kept = commit(first)
-    println(match commit(second) {
+    let kept = commit::<F>(first)
+    println(match commit::<F>(second) {
         case error e => e.kind
         case v => 'ok'
     })

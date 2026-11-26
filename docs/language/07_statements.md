@@ -690,10 +690,10 @@ id
 
 ```text
 export type Graph
-export type Txn<F>
+export type Node<T>
 ```
 
-类型是模块按这个名字登记的那一个；它的身份是模块加名字，所以别的模块里同名的类型是另一个类型，模块没有登记的名字是 `SemanticDiag::NativeTypeNotProvided`。尖括号里列出这个类型接受的实参，实参是任何类型表达式，泛型声明里的类型变量也可以：`func same::<F>(t: Txn<F>): Txn<F>`。类型不用字符串来命名：`type X = 'text'` 是语法错误。
+类型是模块按这个名字登记的那一个；它的身份是模块加名字，所以别的模块里同名的类型是另一个类型，模块没有登记的名字是 `SemanticDiag::NativeTypeNotProvided`。尖括号里列出这个类型接受的实参，实参是任何类型表达式，泛型声明里的类型变量也可以：`func same::<T>(n: Node<T>): Node<T>`。类型不用字符串来命名：`type X = 'text'` 是语法错误。
 
 类型表达式里没有类型运算：`A & B`、`A \ B`、`A + B`、`A ^ B` 这样的写法是普通的语法错误（`&`、`\`、`+`、`-`、`^` 在类型位置没有含义；它们是表达式里的运算符，所以 `x as T + U` 是 `(x as T) + U`）。`keyof` 与 `of` 不是关键字：`keyof T`、`名字 of T` 里的它们是普通的名字，写出来是语法错误。`typeof e` 是一个完整的类型，取表达式 `e` 的值的类型，在使用这个类型的位置由编译器展开；`typeof` 不能嵌在更大的类型里（`typeof(1)[]` 报 `SemanticDiag::TypeOfNotWholeType`），操作数没有值（`void`）时报 `SemanticDiag::TypeOfNotAValue`。
 

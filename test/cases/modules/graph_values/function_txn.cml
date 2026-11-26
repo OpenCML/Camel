@@ -56,7 +56,7 @@ func main() => int sync {
     nodes(d)->filter<isAddOne>->foreach<func (n: Node) {
         replace(n, inputs(n)[0])
     }>
-    let g = commit(d) !! target
+    let g = commit::<(x: int) => int>(d) !! target
     println(`new: ${g(5)} ${addOnes(graph_of(g))}`)
     println(`old: ${target(5)} ${addOnes(graph_of(target))} ${size(graph_of(target)) == before}`)
     println(`holders: ${held(5)} ${viaA(5)} ${viaB(5)}`)

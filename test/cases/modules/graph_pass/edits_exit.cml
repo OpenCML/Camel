@@ -1,7 +1,7 @@
 // Copyright (c) the OpenCML Organization
 // SPDX-License-Identifier: MIT
 
-// The graph `exit_of` is read on: a pure body, so the node the function hands its value out of is
+// The graph `exit` is read on: a pure body, so the node the function hands its value out of is
 // the computation itself and not the `GATE` a `sync` block ends at. The front end folds arithmetic
 // on literals, so the operands come from a call: `a` is an addition, `b` is a multiplication, and
 // `c` is the addition of the two, which is what `main` returns. The CLI prints that value, which is

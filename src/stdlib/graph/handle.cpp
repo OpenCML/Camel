@@ -260,6 +260,21 @@ Handle *Handle::createDraft(
     return new (mem) Handle(HandleKind::Graph, program, &transaction, draft, graph, 0, nullptr);
 }
 
+Handle *Handle::createRegionInTransaction(
+    const camel::runtime::GraphTransaction &transaction, rtdata::Object *draft, uint32_t region,
+    mm::IAllocator &allocator) {
+    void *mem = allocator.alloc(sizeof(Handle), alignof(Handle));
+    if (mem == nullptr) {
+        throw std::bad_alloc();
+    }
+    // A region of the draft is read through the draft: the record belongs to the transaction, and
+    // the published graph has no row for a region an edit added. The draft is named for the same
+    // reason a node handle names it -- it keeps the session alive while the handle is alive.
+    const auto &drafted = transaction.graph();
+    return new (mem)
+        Handle(HandleKind::Region, nullptr, &transaction, draft, drafted.id(), region, nullptr);
+}
+
 bool Handle::equals(const rtdata::Object *other, const Type *type, bool deep) const {
     (void)type;
     (void)deep;

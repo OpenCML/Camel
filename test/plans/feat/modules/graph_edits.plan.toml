@@ -1,8 +1,8 @@
 # Copyright (c) the OpenCML Organization
 # SPDX-License-Identifier: MIT
 
-# The edit operators that were missing from the graph module's transaction: `order` (add an order
-# edge) and the exit anchor query `exit_of`. They are the first step of the transform-engine plan
+# The edit operators that were missing from the graph module's draft: `order` (add an order
+# edge) and the exit anchor query `exit`. They are the first step of the transform-engine plan
 # the language author holds on `fsh-dev` ("Camel 实现变换引擎"): the operators the
 # `edit` block will carry are written against today's interface (`open` / `commit`) first, so that
 # the day the block syntax is decided the operators do not move. The two operators that step cannot
@@ -18,13 +18,23 @@ tier = "fast"
 tags = ["feat", "modules", "graph", "edit"]
 
 [[tests]]
-name = "exit_of_is_the_node_the_function_hands_out"
-desc = "`exit_of` of the graph of `main` answers the addition the function returns: an operator node, of type `int`, an anchor, read by nothing -- and the same node an independent search for 'the addition that reads an addition' finds, which is what the query claims to be. Before this query existed a pass had to scan `nodes` and test `is_anchor` to name the node an edit that changes what the function gives has to put a value in the place of. The program exits 55, so the graph the pass read is the program that ran."
+name = "exit_is_the_node_the_function_hands_out"
+desc = "`exit` of the graph of `main` answers the addition the function returns: an operator node, of type `int`, an anchor, read by nothing -- and the same node an independent search for 'the addition that reads an addition' finds, which is what the query claims to be. Before this query existed a pass had to scan `nodes` and test `is_anchor` to name the node an edit that changes what the function gives has to put a value in the place of. The program exits 55, so the graph the pass read is the program that ran."
 kind = "behavior"
 case = "../../../cases/modules/graph_pass/edits_exit.cml"
 args = ["${case}", "orderprobe::exit_shape", "std::nvm"]
 expect_exit = 55
 expect_stdout_exact = "NodeKind::Oper int true 0 2 1\ntrue\n"
+timeout_ms = 20000
+
+[[tests]]
+name = "params_are_the_ports_the_declaration_states"
+desc = "`params` of the graph of `inc` answers the one port node its declaration `(x: int)` makes: one node, of type `int`, and the same node `nodes` lists -- a port is a node of the graph like any other, which is what lets `add_param` add one and `erase` take an unused one away. Before this query existed a pass that had to know the parameters of a function counted the ports itself."
+kind = "behavior"
+case = "../../../cases/modules/graph_pass/edits.cml"
+args = ["${case}", "orderprobe::params_of", "std::nvm"]
+expect_exit = 0
+expect_stdout_exact = "ports: 1 int\nin nodes: 1\n126\ntext\n"
 timeout_ms = 20000
 
 [[tests]]

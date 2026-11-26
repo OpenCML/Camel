@@ -72,7 +72,7 @@ export func graph_of::<F>(f: F) => Graph when is_function::<F>()
 /// The graph of a function value and every graph it calls, directly or not, in the order of
 /// their ids; each graph once.
 /// @example len(graphs_of((x: int): int => x + 1))
-export func graphs_of::<F>(f: F) => Graph[] when is_function::<F>();
+export func graphs_of::<F>(f: F) => Graph[] when is_function::<F>()
 
 // ---- the draft and the root queries ----
 // The first argument of each query is the draft `d` a block binds, and is the same `Graph` a
@@ -278,6 +278,19 @@ export func tag_graphs(t: Tag) => Graph[]
 /// names is not a function. The name is the one the program writes, or its qualified spelling.
 /// @example rule_of(graph_of((x: int): int => x + 1), 'vjp')
 export func rule_of(g: Graph, name: string) => Graph?
+
+// ---- reading spelling ----
+// The reads of 15.2 whose answer is *spelling*: the name the source wrote for a graph, where a node
+// was written, the number a handle was created with. Each needs its declaration to write
+// `spelling` (design principles 9.5); a transform that would pick a function by its name takes the
+// function value instead.
+
+/// The name of the graph. This is *spelling*: it is the identifier the source wrote, so reading it
+/// needs a declaration that writes `spelling` in its clause (design principles 9.5). A transform
+/// that would pick a function by its name takes the function value instead.
+/// @example-fragment the reading needs a declaration that writes spelling in its clause, and a doc example is a body with nowhere to write one (design principles 9.5)
+/// @example name(graph_of((x: int): int => x + 1))
+export func name(g: Graph) => string spelling
 
 /// The source origin id of the node, 0 when unknown. This is *spelling*: it is where the node was
 /// written, so reading it needs a declaration that writes `spelling` in its clause (design

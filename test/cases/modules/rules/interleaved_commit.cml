@@ -1,10 +1,10 @@
 /**
- * A program that interleaves a graph transaction with a rewrite without going through a rule
- * condition: the transaction commits (which replaces the program) and the rewrite of the program
- * the transaction started from runs after it.
+ * A program that interleaves a graph draft with a rewrite without going through a rule condition:
+ * the draft commits (which replaces the program) and the rewrite of the program the draft started
+ * from runs after it.
  */
 
-import { open, commit, add_constant, graph_of } from graph
+import { open, commit, add_constant } from graph
 import { rewrite } from rewrite
 
 rule drop_one(x: int) when true { x * 1 => x }
@@ -14,9 +14,9 @@ func redex(x: int) => int {
 }
 
 export func interfere::<F>(p: F) => F! sync {
-    let t = open(p)
-    let n = add_constant(t, graph_of(p), 1)
-    let published = commit(t)
+    let d = open(p)
+    add_constant(d, 1)
+    let published = commit::<F>(d)
     return match published {
         case error e => sync {
             println('commit error value: ', e.kind)

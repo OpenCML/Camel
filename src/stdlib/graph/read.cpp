@@ -1043,10 +1043,27 @@ slot_t constantKernel(ArgsView &, ArgsView &norm, Context &) {
 // ---- regions ----
 
 /// The region a node is in (the innermost). Every node is in one: region 0 is the body, also in
-/// a graph whose region table is empty.
+/// a graph whose region table is empty. A node of the draft answers with a region of the draft:
+/// the draft holds the table the published graph had and the regions its edits add, so the answer
+/// comes from the draft's own record (a region `inline` made has none in the published graph).
 slot_t regionOfKernel(ArgsView &, ArgsView &norm, Context &) {
-    const auto *handle = norm.get<Handle *>(0);
-    nodeOf(handle, "graph.region_of");
+    const auto *handle  = norm.get<Handle *>(0);
+    const NodeView node = viewOf(handle, "graph.region_of");
+    if (node.isDraft()) {
+        const uint32_t id = node.draftHeader->region;
+        if (id >= node.draft().regionCount()) {
+            err::throwRuntimeFault(
+                err::RuntimeDiag::InvalidArgument,
+                "graph.region_of",
+                "the draft has no such region");
+        }
+        Handle *region = Handle::createRegionInTransaction(
+            *node.transaction,
+            handle->draft(),
+            id,
+            mm::autoSpace());
+        return toSlot(region);
+    }
     const GCGraph &graph = graphOf(handle, "graph.region_of");
     Handle *region       = Handle::create(
         HandleKind::Region,
@@ -1075,6 +1092,16 @@ GCRegion bodyRegion() { return GCRegion{}; }
 /// The region `handle` names. By value: the body of a graph with no region table is not in that
 /// table, so there is nothing to return a reference to.
 GCRegion regionOf(const Handle *handle, const char *site) {
+    if (const auto *transaction = handle->transaction()) {
+        const auto &draft = transaction->graph();
+        if (handle->index() >= draft.regionCount()) {
+            err::throwRuntimeFault(
+                err::RuntimeDiag::InvalidArgument,
+                site,
+                "the draft has no such region");
+        }
+        return draft.region(handle->index());
+    }
     const GCGraph &graph = graphOf(handle, site);
     if (handle->index() == 0) {
         return graph.region(0) != nullptr ? *graph.region(0) : bodyRegion();
@@ -1108,7 +1135,18 @@ slot_t regionParentKernel(ArgsView &, ArgsView &norm, Context &) {
         return NullSlot;
     }
     const GCRegion &region = regionOf(handle, "graph.region_parent");
-    const GCGraph &graph   = graphOf(handle, "graph.region_parent");
+    if (const auto *transaction = handle->transaction()) {
+        if (region.parent >= transaction->graph().regionCount()) {
+            return NullSlot;
+        }
+        Handle *parent = Handle::createRegionInTransaction(
+            *transaction,
+            handle->draft(),
+            region.parent,
+            mm::autoSpace());
+        return makeSome(toSlot(parent), nullableOf(HandleType::get(HandleKind::Region)));
+    }
+    const GCGraph &graph = graphOf(handle, "graph.region_parent");
     if (graph.region(region.parent) == nullptr) {
         return NullSlot;
     }

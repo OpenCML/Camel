@@ -30,12 +30,11 @@ func adds(f: (x: int) => int) => int {
 func main() => int spelling sync {
     println(name(graph_of(target)))
     println(adds(target))
-    let t = open(target)
-    nodes(graph_of(target))->filter<isAddZero>->foreach<func (n: Node) {
-        replace(t, n, inputs(n)[0])
+    let d = open(target)
+    nodes(d)->filter<isAddZero>->foreach<func (n: Node) {
+        replace(n, inputs(n)[0])
     }>
-    let result = commit(t)
-    let g = result !! target
+    let g = commit::<(x: int) => int>(d) !! target
     println(adds(g))
     println(g(5))
     println(target(5))

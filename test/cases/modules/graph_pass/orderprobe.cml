@@ -1,10 +1,10 @@
 // Copyright (c) the OpenCML Organization
 // SPDX-License-Identifier: MIT
 
-// The probes `order` and `exit_of` are read by. A probe is a pass written in Camel: it reads the
+// The probes `order` and `exit` are read by. A probe is a pass written in Camel: it reads the
 // graph `main` of the program it is given and, for `order`, hands back the program the commit made.
 
-import { Node, Graph, NodeKind, name, nodes, inputs, kind, op, op_name, value_users, type_of, type_name, is_anchor, exit_of, order_inputs, graphs_of, open, order, commit } from graph
+import { Node, Graph, NodeKind, name, nodes, graphs, graphs_of, graph_of, inputs, kind, op, op_name, value_users, type_of, type_name, is_anchor, exit, order_inputs, open, order, params, commit } from graph
 
 func opText(n: Node) => string {
     return match op(n) {
@@ -52,8 +52,8 @@ func firstIsPrint(pres: Node[]) => bool {
     return if len(pres) == 1 then isPrint(pres[0]) else false
 }
 
-func mainGraph::<F>(p: F) => Graph spelling {
-    let found = graphs_of(p)->filter<func (g: Graph) => bool {
+func mainGraph(d: Graph) => Graph spelling {
+    let found = graphs(d)->filter<func (g: Graph) => bool {
         name(g) == 'main'
     }>
     return found[0]
@@ -84,18 +84,32 @@ func exitText(n: Node) => string {
     return `${kind(n)} ${typeText(n)} ${is_anchor(n)} ${len(reads)} ${len(ins)} ${len(adds)}`
 }
 
-/// What `exit_of` answers on a pure body: the addition the function returns -- the one that reads
+/// What `exit` answers on a pure body: the addition the function returns -- the one that reads
 /// another addition, which is the node an independent search for that shape finds.
 export func exit_shape::<F>(p: F) => F! spelling sync {
-    let g = mainGraph(p)
-    println(match exit_of(g) {
+    let g = mainGraph(graph_of(p))
+    println(match exit(g) {
         case null => 'no exit'
         case n => exitText(n)
     })
-    println(match exit_of(g) {
+    println(match exit(g) {
         case null => false
         case n => n == outerAddOf(g)
     })
+    return p
+}
+
+/// The parameter ports of a graph: `params` answers the nodes a function takes its arguments as, in
+/// the order the declaration states them -- and they are nodes like any other, so `nodes` lists
+/// them and `add_param` adds one beside them.
+export func params_of::<F>(p: F) => F! spelling sync {
+    let found = graphs_of(p)->filter<func (g: Graph) => bool {
+        name(g) == 'inc'
+    }>
+    let g = found[0]
+    let ports = params(g)
+    println(`ports: ${len(ports)} ${typeText(ports[0])}`)
+    println(`in nodes: ${len(nodes(g)->filter<func (n: Node) => bool n == ports[0]>)}`)
     return p
 }
 
@@ -104,7 +118,7 @@ export func exit_shape::<F>(p: F) => F! spelling sync {
 /// not the node to read: the front end already writes an order edge from the first one to it, so
 /// the count there is one before the edit and the operator would have nothing to add.)
 export func order_read::<F>(p: F) => F! spelling sync {
-    let g = mainGraph(p)
+    let g = mainGraph(graph_of(p))
     let gate = gateOf(g)
     let pres = order_inputs(gate)
     println(len(pres))
@@ -116,23 +130,23 @@ export func order_read::<F>(p: F) => F! spelling sync {
 /// block's value, so the edge is one the encoder keeps (a node that arranges itself freely drops
 /// it), and the value the program prints is the same.
 export func order_add::<F>(p: F) => F! spelling sync {
-    let t = open(p)
-    let g = mainGraph(p)
+    let d = open(p)
+    let g = mainGraph(d)
     let print = printOf(g)
     let gate = gateOf(g)
-    order(t, print, gate)
-    return commit(t)
+    order(print, gate)
+    return commit(d)
 }
 
 /// Orders an addition that reads another addition *before* the one it reads: the graph would have
 /// to run `c` before `a` while `c` is computed from `a`, so the operator refuses, and it refuses
 /// before the commit has anything to say about the graph.
 export func order_cycle::<F>(p: F) => F! spelling sync {
-    let t = open(p)
-    let g = mainGraph(p)
+    let d = open(p)
+    let g = mainGraph(d)
     let outer = outerAddOf(g)
     let ins = inputs(outer)
     let adds = ins->filter<isAdd>
-    order(t, outer, adds[0])
-    return commit(t)
+    order(outer, adds[0])
+    return commit(d)
 }
