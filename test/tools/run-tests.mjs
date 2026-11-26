@@ -4326,6 +4326,47 @@ function refuseRecordThatNarrowsLayer(options, selection, selected) {
 }
 
 /**
+ * `--print-time-sensitive`: one row per plan file named as a target, `<path>` TAB `<token>`, where
+ * the token is what *this* reader made of the plan's top-level `time_sensitive`:
+ *
+ *   true        the field is the boolean true: this plan asks for the host to itself
+ *   false       the field is the boolean false
+ *   absent      there is no top-level `time_sensitive`
+ *   invalid     the field is there and is not a boolean; `validatePlanSchema` refuses such a plan
+ *   unreadable  the file could not be read or parsed (exit 2, with the reason on stderr)
+ *
+ * The gate that takes the host reads this and nothing else. Before the flag existed it answered the
+ * question with two regular expressions of its own over the plan's lines, so the field had two
+ * readers -- and a field that decides whether a run owns the machine cannot be read two ways: the
+ * reading that matters is the one the runner will act on, so the gate asks instead of deciding.
+ *
+ * `invalid` and `unreadable` are readings, not failures of this command: the plan they describe is
+ * one the runner will refuse. Only `unreadable` sets the exit code, because a file this program
+ * cannot open is a caller that asked about the wrong tree.
+ */
+function printTimeSensitive(options) {
+    let status = 0
+    for (const target of options.targets) {
+        const shown = relPath(target)
+        let doc
+        try {
+            doc = parseTomlFile(target)
+        } catch (error) {
+            console.log(`${shown}\tunreadable`)
+            console.error(
+                `${COLORS.red}[PLAN ERROR]${COLORS.reset} ${shown}: ${String(error && error.message).split('\n')[0]}`
+            )
+            status = 2
+            continue
+        }
+        const value = doc.time_sensitive
+        const token = value === undefined ? 'absent' : typeof value === 'boolean' ? String(value) : 'invalid'
+        console.log(`${shown}\t${token}`)
+    }
+    return status
+}
+
+/**
  * `--list-cases`: the cases this selection would run, printed as JSON rows, nothing started and no
  * install consulted. It reads the plan tree through `loadPlans`, so the `[[sweeps]]` copies, the
  * layer filter and the companion closure are the run's own; a listing that agreed with the run only
