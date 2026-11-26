@@ -6,6 +6,7 @@
 
 #include "graph/graph_view.h"
 
+#include "law_readings.h"
 #include "node_order.h"
 #include "refusal_readings.h"
 #include "rule_expand.h"
@@ -395,10 +396,9 @@ VmapGraph buildVmapGraph(
         // primitive's element type -- the type a rule of this family is generic in, whatever rank
         // the value itself has.
         std::vector<gc_node_ref_t> copyOf(function->nodeCount(), rt::kInvalidNodeRef);
-        const auto batchThroughRule =
-            [&](gc_node_ref_t ref,
-                const std::string &uri,
-                const camel::core::RuleMatch &match) -> gc_node_ref_t {
+        const auto batchThroughRule = [&](gc_node_ref_t ref,
+                                          const std::string &uri,
+                                          const camel::core::RuleMatch &match) -> gc_node_ref_t {
             // The instance is made at the element type the primitive works on, because that is the
             // type the rule is generic in -- read from an operand, not from the node, whose type is
             // what the primitive answers.
@@ -441,10 +441,8 @@ VmapGraph buildVmapGraph(
                 return rt::kInvalidNodeRef;
             }
             std::string calleeWhy;
-            const auto *callee        = calleeGraphOf(
-                entry->instances[at],
-                match.rule.rhsCallee,
-                calleeWhy);
+            const auto *callee =
+                calleeGraphOf(entry->instances[at], match.rule.rhsCallee, calleeWhy);
             if (callee == nullptr || entry->instances[at].program == nullptr) {
                 refused.refusedOrigin =
                     static_cast<camel::source::origin_id_t>(function->nodeOrigin(ref));
@@ -625,17 +623,17 @@ VmapGraph buildVmapGraph(
                         static_cast<camel::source::origin_id_t>(function->nodeOrigin(ref));
                     refused.refusedUri = uri;
                     refused.refusedWhy =
-                        !match.has_value()
-                            ? why
-                            : (match->status == camel::core::RuleLookup::NoSuchFamily
-                                   ? "no ruleset module of that name is loaded"
-                                   : "the ruleset holds no rule for this "
-                                     "operator and operand count");
+                        !match.has_value() ? why
+                                           : (match->status == camel::core::RuleLookup::NoSuchFamily
+                                                  ? "no ruleset module of that name is loaded"
+                                                  : "the ruleset holds no rule for this "
+                                                    "operator and operand count");
                     complete = false;
                     break;
                 }
                 ++refused.found;
                 usedRules.push_back(match->rule.name);
+                noteLawApplied(LawReading{"vmap", function->name(), match->rule.name, uri});
                 copyOf[ref] = batchThroughRule(ref, uri, *match);
                 if (copyOf[ref] == rt::kInvalidNodeRef) {
                     complete = false;
@@ -668,7 +666,7 @@ VmapGraph buildVmapGraph(
                 // `camel/core/forward.h#vmapRuleByHead`, which is this family's question and names
                 // the family itself. The answer is the rule object, whose `rhsCallee` is the name
                 // the batched body calls: nothing here looks a rule set up by name.
-                const auto *callee        = program->calleeOf(*function, ref);
+                const auto *callee = program->calleeOf(*function, ref);
                 const std::string name =
                     callee != nullptr ? leafNameOf(callee->name()) : std::string();
                 const size_t operands = function->normInputsOf(ref).size();
@@ -699,6 +697,9 @@ VmapGraph buildVmapGraph(
                 }
                 ++refused.found;
                 usedRules.push_back(match.rule.name);
+                // A call's rule is asked by a head, which is the name the reading states in the
+                // place a URI takes: the family has no operator URI to read a key off.
+                noteLawApplied(LawReading{"vmap", function->name(), match.rule.name, name});
                 copyOf[ref] = batchThroughRule(ref, name, match);
                 if (copyOf[ref] == rt::kInvalidNodeRef) {
                     refused.refusedConstruct = "a call";
@@ -772,8 +773,8 @@ VmapGraph buildVmapGraph(
         // The value the lifted chain produces: the node the exit names, followed through the gates
         // that only forward it.
         // The walk is camel/runtime/graph.h#valueBehindGates: a gate's first input is the value and
-        // the rest are the statements it waits on, so taking the last input would read a write as the
-        // value in a body that printed.
+        // the rest are the statements it waits on, so taking the last input would read a write as
+        // the value in a body that printed.
         gc_node_ref_t out = valueBehindGates(*function, function->exitNodeRef());
         if (out >= function->nodeCount() || copyOf[out] == rt::kInvalidNodeRef) {
             refused.refusedOrigin =
@@ -828,8 +829,8 @@ VmapGraph buildVmapGraph(
         draft.setReturnNode(liftedValue, rt::GCReturnKind::Self);
     }
     group.encode();
-    const auto *made        = group.encoded(member);
-    const auto *madeType    = made != nullptr ? made->funcType() : nullptr;
+    const auto *made     = group.encoded(member);
+    const auto *madeType = made != nullptr ? made->funcType() : nullptr;
     std::string rules;
     for (const std::string &rule : usedRules) {
         rules += (rules.empty() ? "" : ",") + rule;

@@ -9,6 +9,7 @@
 #include "lift.h"
 #include "node_operator.h"
 
+#include "law_readings.h"
 #include "refusal_readings.h"
 #include "rule_expand.h"
 #include "rule_types.h"
@@ -156,8 +157,8 @@ bool isStructuralZeroTangent(
     if (draft.kindOf(ref) != camel::graph::NodeKind::Data || type == nullptr) {
         return false;
     }
-    const std::optional<slot_t> zero = camel::core::zeroTangentConstantOf(
-        const_cast<camel::core::type::Type *>(type));
+    const std::optional<slot_t> zero =
+        camel::core::zeroTangentConstantOf(const_cast<camel::core::type::Type *>(type));
     if (!zero.has_value()) {
         return false;
     }
@@ -496,8 +497,8 @@ bool liftGraph(
 /// the lifted graphs are written.
 JvpGraph buildJvpGraphInGroup(
     const camel::core::context::context_ptr_t &context, const camel::runtime::Program *program,
-    camel::runtime::GraphDraftGroup &group, const camel::runtime::GCGraph &function, std::string_view name,
-    camel::runtime::GraphId self, std::ostream &os) {
+    camel::runtime::GraphDraftGroup &group, const camel::runtime::GCGraph &function,
+    std::string_view name, camel::runtime::GraphId self, std::ostream &os) {
     const GraphId member =
         group.reserve("jvp_of_" + std::string(name), "jvp_of_" + std::string(name));
     LiftState state{context, program, group};
@@ -509,7 +510,7 @@ JvpGraph buildJvpGraphInGroup(
     // the order they were first called. A function called twice is one entry.
     os << "REINTERP jvp callees=" << state.callees.size() << '\n';
     group.encode();
-    const auto *made                    = group.encoded(member);
+    const auto *made = group.encoded(member);
     return JvpGraph{
         camel::runtime::ProgramHold(*context, group.program()),
         const_cast<camel::runtime::GCGraph *>(made)};
@@ -523,7 +524,7 @@ JvpGraph buildJvpGraph(
         return JvpGraph{};
     }
     const std::string_view name = function->name();
-    FunctionType *signature = jvpSignature(function->funcType());
+    FunctionType *signature     = jvpSignature(function->funcType());
     if (signature == nullptr) {
         os << "REINTERP jvp function=" << name
            << " skip=" << refusalCauseName(RefusalCause::Signature) << '\n';
@@ -1231,7 +1232,7 @@ bool liftGraph(
             if (!rt::isValid(calleeId)) {
                 return false;
             }
-            auto *callee                    = program->graph(calleeId);
+            auto *callee = program->graph(calleeId);
             if (callee == nullptr) {
                 return false;
             }
@@ -1564,8 +1565,10 @@ bool liftGraph(
                     // `split.cpp#exitHalvesOf` makes of `typeOf`, and `dataType()` answered a
                     // non-const pointer for the same object.
                     Type *const constantType = const_cast<Type *>(function.view().typeOf(ref));
-                    copyOf[ref] = draft.materializeStaticValue(
-                        *constant, constantType, rt::kGCNodeFlagConstant);
+                    copyOf[ref]              = draft.materializeStaticValue(
+                        *constant,
+                        constantType,
+                        rt::kGCNodeFlagConstant);
                     // A constant does not move: its tangent is the one zero every rule shares --
                     // the zero of the constant's own type, since a tangent is a value of the
                     // value's space. A constant of a discrete type (a `bool` condition) has no
@@ -1648,7 +1651,7 @@ bool liftGraph(
                     }
                     if (liftsByComponent) {
                         const rt::GCNode *memberFace = nodeOf(function, member);
-                        const gc_node_ref_t lifted = liftedValueOf(
+                        const gc_node_ref_t lifted   = liftedValueOf(
                             member,
                             memberFace != nullptr ? const_cast<Type *>(memberFace->dataType())
                                                   : nullptr);
@@ -1794,7 +1797,7 @@ bool liftGraph(
                 // projecting its j-th member is projecting each half at j. An aggregate that lifts
                 // by component *is* its lifted value, and its j-th member is `Lift<Tj>` already, so
                 // the projection is that member and the node has no tangent half of its own.
-                const rt::GCNode *tupleFace   = nodeOf(function, tuple);
+                const rt::GCNode *tupleFace = nodeOf(function, tuple);
                 const LiftedShape aggregate = liftedShapeOf(
                     tupleFace != nullptr ? const_cast<Type *>(tupleFace->dataType()) : nullptr);
                 if (aggregate.type == nullptr) {
@@ -1927,8 +1930,8 @@ bool liftGraph(
                     // The waits are the node's `sync` predecessors, one query of the view
                     // (`predecessors(ref, Sync)` answers the same `edge.pred` list this read out
                     // of the frozen edge records, in the same order).
-                    for (const camel::graph::NodeRef edge : function.view().predecessors(
-                             ref, camel::graph::EdgeKind::Sync)) {
+                    for (const camel::graph::NodeRef edge :
+                         function.view().predecessors(ref, camel::graph::EdgeKind::Sync)) {
                         if (edge < function.nodeCount() && copied[edge]) {
                             waits.push_back(copyOf[edge]);
                         }
@@ -1951,7 +1954,7 @@ bool liftGraph(
                 if (at == liftedCalleeOf.end()) {
                     return fail(refusal);
                 }
-                auto *callee                    = program->graph(function.calleeIdOf(ref));
+                auto *callee = program->graph(function.calleeIdOf(ref));
                 if (callee == nullptr) {
                     return fail(refusal);
                 }
@@ -2022,7 +2025,8 @@ bool liftGraph(
                         }
                         tangents.push_back(tangent);
                     }
-                    const std::vector<gc_node_ref_t> withArgs = idListOf(function.withInputsOf(ref));
+                    const std::vector<gc_node_ref_t> withArgs =
+                        idListOf(function.withInputsOf(ref));
                     for (size_t i = 0; i < withArgs.size(); ++i) {
                         const gc_node_ref_t input = withArgs[i];
                         if (input >= function.nodeCount() || !copied[input]) {
@@ -2430,8 +2434,8 @@ bool liftGraph(
                 // time without it.
                 {
                     std::vector<gc_node_ref_t> waits;
-                    for (const camel::graph::NodeRef edge : function.view().predecessors(
-                             ref, camel::graph::EdgeKind::Sync)) {
+                    for (const camel::graph::NodeRef edge :
+                         function.view().predecessors(ref, camel::graph::EdgeKind::Sync)) {
                         if (edge < function.nodeCount() && copied[edge]) {
                             waits.push_back(copyOf[edge]);
                         }
@@ -2593,6 +2597,9 @@ bool liftGraph(
                 }
                 if (std::find(usedRules.begin(), usedRules.end(), ruleName) == usedRules.end()) {
                     usedRules.push_back(ruleName);
+                    // The forward half's answer to the same question the reverse walk records:
+                    // which law computed this step, at which operator.
+                    noteLawApplied(LawReading{"jvp", name, ruleName, uri});
                 }
                 break;
             }
@@ -2616,7 +2623,7 @@ bool liftGraph(
             if (node == nullptr || node->kind != rt::GCNodeKind::Brch) {
                 continue;
             }
-            const auto *body = nodeBodyOrNull<rt::GCBrchBody>(function, ref);
+            const auto *body         = nodeBodyOrNull<rt::GCBrchBody>(function, ref);
             const gc_node_ref_t brch = copyOf[ref];
             if (body == nullptr || brch == rt::kInvalidNodeRef) {
                 complete = false;
@@ -2793,7 +2800,7 @@ bool liftGraph(
                     complete = false;
                     break;
                 }
-                const rt::GCNode *in       = nodeOf(function, input);
+                const rt::GCNode *in     = nodeOf(function, input);
                 const gc_node_ref_t copy = copyOf[input];
                 if (inputIndex++ < stateStart) {
                     // The array a `for` loop walks (`LoopView::iterable`). It is copied as it

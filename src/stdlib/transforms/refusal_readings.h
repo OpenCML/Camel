@@ -8,9 +8,10 @@
  * `REINTERP jvp function=f skip=body`. The line is for a reader, and it was also the only thing a
  * plan could assert, so the wording of a refusal became the criterion -- a word renamed in
  * `split.cpp` turned a green case red without anything about the transform changing. The same
- * defect is avoided on the other side: `transpose` names its refusals with `TransposeRefusalCause` and spells them from one table
- * (`transpose/walk.cpp#transposeRefusalWord`), so a rename is one edit and the caller reads the cause
- * instead of the text (`test/tools/transpose_refusal/check.py`).
+ * defect is avoided on the other side: `transpose` names its refusals with `TransposeRefusalCause`
+ * and spells them from one table
+ * (`transpose/walk.cpp#transposeRefusalWord`), so a rename is one edit and the caller reads the
+ * cause instead of the text (`test/tools/transpose_refusal/check.py`).
  *
  * This is the same fact for the readings, and it adds the other half:
  *
@@ -152,53 +153,15 @@ struct RefusalReading {
     }
 };
 
-namespace detail {
-
-inline void appendJsonString(std::string &out, std::string_view text) {
-    out.push_back('"');
-    for (const char ch : text) {
-        switch (ch) {
-        case '"':
-            out += "\\\"";
-            break;
-        case '\\':
-            out += "\\\\";
-            break;
-        case '\n':
-            out += "\\n";
-            break;
-        case '\r':
-            out += "\\r";
-            break;
-        case '\t':
-            out += "\\t";
-            break;
-        default:
-            out.push_back(ch);
-            break;
-        }
-    }
-    out.push_back('"');
-}
-
-inline void appendJsonMember(std::string &out, const char *name, std::string_view value) {
-    out.push_back(',');
-    appendJsonString(out, name);
-    out.push_back(':');
-    appendJsonString(out, value);
-}
-
-} // namespace detail
-
 /// The machine-readable half of a refusal, on the diagnostic side and beside the line that says it
 /// in words. One line per refusal, `READING_REFUSAL {json}`: a plan reads the cause and the place
 /// it names out of this and never the sentence (`test/tools/reading-refusal.mjs`, the
 /// `expect_refusal` assertions in the plans).
 ///
 /// It always writes to `verdicts()` and not to the stream the caller handed the transform -- and
-/// `verdicts()` is the one channel `readings=true` does not reach (`readings.h`): a refusal has to be
-/// readable without a parameter, and this record is one line per refusal. A
-/// transform's readings are the diagnostic channel even when a caller collects the line elsewhere
+/// `verdicts()` is the one channel `readings=true` does not reach (`readings.h`): a refusal has to
+/// be readable without a parameter, and this record is one line per refusal. A transform's readings
+/// are the diagnostic channel even when a caller collects the line elsewhere
 /// (`modules/transforms/module.cpp`'s `reinterp` pass hands `apply`'s stream down), so the record
 /// has to be readable in one place; a plan reads stderr, and a record that followed the line to
 /// whatever stream that caller had would be a record no plan can find.

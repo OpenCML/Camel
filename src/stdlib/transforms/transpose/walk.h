@@ -25,11 +25,12 @@
 #include <cstddef>
 #include <cstdint>
 #include <functional>
-#include <optional>
 #include <iosfwd>
+#include <optional>
 #include <ostream>
 #include <span>
 #include <string>
+#include <string_view>
 #include <unordered_map>
 #include <utility>
 #include <vector>
@@ -99,10 +100,10 @@ struct PairCall {
     gc_node_ref_t cotangent = rt::kInvalidNodeRef;
 };
 
-/// One escaped cotangent: the product it is (`from`, the node whose rule handed it out) and the value
-/// it landed on. Both are named because the refusal has to say which node escaped -- a value the
-/// round only read is the only thing that may stand for it, and a reader that has the count alone
-/// cannot tell that from a port that merely stands nearby.
+/// One escaped cotangent: the product it is (`from`, the node whose rule handed it out) and the
+/// value it landed on. Both are named because the refusal has to say which node escaped -- a value
+/// the round only read is the only thing that may stand for it, and a reader that has the count
+/// alone cannot tell that from a port that merely stands nearby.
 struct Escape {
     gc_node_ref_t cotangent = rt::kInvalidNodeRef;
     gc_node_ref_t from      = rt::kInvalidNodeRef;
@@ -114,11 +115,11 @@ struct Escape {
 /// The containers live in the arm's walk (`runSeeded`), because their length is a fact about the
 /// region being read.
 struct ArmWalk {
-    uint32_t oldRegion                     = 0;
-    const std::vector<gc_node_ref_t> *stops = nullptr;
-    std::vector<gc_node_ref_t> *local       = nullptr;
-    std::vector<bool> *hasLocal             = nullptr;
-    std::vector<gc_node_ref_t> *portCotangents = nullptr;
+    uint32_t oldRegion                                        = 0;
+    const std::vector<gc_node_ref_t> *stops                   = nullptr;
+    std::vector<gc_node_ref_t> *local                         = nullptr;
+    std::vector<bool> *hasLocal                               = nullptr;
+    std::vector<gc_node_ref_t> *portCotangents                = nullptr;
     std::unordered_map<uint32_t, gc_node_ref_t> *residualBack = nullptr;
     std::unordered_map<gc_node_ref_t, Escape> *escapes        = nullptr;
     bool *armsOk                                              = nullptr;
@@ -168,7 +169,7 @@ struct WalkBookkeeping {
     /// The capture port each closure member of the source graph became, and the `with` port each
     /// `with` parameter became. A cotangent that lands on either is not the answer's.
     const std::unordered_map<gc_node_ref_t, gc_node_ref_t> *closurePortOf = nullptr;
-    const std::unordered_map<gc_node_ref_t, gc_node_ref_t> *withPortOf = nullptr;
+    const std::unordered_map<gc_node_ref_t, gc_node_ref_t> *withPortOf    = nullptr;
     /// The rules this member's answer used, in the order it first used them.
     std::vector<std::string> *usedRules = nullptr;
     /// The `int[]` of extents the step under way hands its law, when the law asks for one. Set by
@@ -215,11 +216,11 @@ struct WalkContext {
     WalkBookkeeping book;
 };
 
-/// Records the cause and writes the line for it, in the one place both are written: the cause on the
-/// state (so the caller reads a value, not a sentence) and the sentence on the log. A site adds the
-/// *where* -- the node, the uri, the callee -- because that is not the cause.
-void refuseMember(WalkContext &ctx, TransposeRefusalCause cause,
-                  std::optional<size_t> param = std::nullopt);
+/// Records the cause and writes the line for it, in the one place both are written: the cause on
+/// the state (so the caller reads a value, not a sentence) and the sentence on the log. A site adds
+/// the *where* -- the node, the uri, the callee -- because that is not the cause.
+void refuseMember(
+    WalkContext &ctx, TransposeRefusalCause cause, std::optional<size_t> param = std::nullopt);
 
 /// Records the parameter whose shape the walk had to ask for, and the name and type its declaration
 /// writes: the parameter's place, its declared name, and the type whose extents are missing.
@@ -234,8 +235,8 @@ Type *cotangentSpaceOfType(WalkContext &ctx, const Type *type);
 /// The cotangent space of the value at `ref`, read from the value's type in the source graph: the
 /// same question `jvp` asks of a parameter (`camel/core/tangent_space.h`), asked of a loop's state
 /// and of a value that escaped it. A `float[]` state pulls back an array; a number pulls back a
-/// number. Nothing decides that by hand -- the port, the tuple member and the component read all ask
-/// here. A ref the source graph does not have has no type, and therefore no cotangent.
+/// number. Nothing decides that by hand -- the port, the tuple member and the component read all
+/// ask here. A ref the source graph does not have has no type, and therefore no cotangent.
 Type *cotangentTypeOfValue(WalkContext &ctx, gc_node_ref_t ref);
 
 /// The zero of a cotangent space that the **type itself** states: an array of a floating scalar,
@@ -243,18 +244,18 @@ Type *cotangentTypeOfValue(WalkContext &ctx, gc_node_ref_t ref);
 /// `jvp`'s `zeroConstantFor` (`modules/transforms/jvp.cpp`).
 ///
 /// An extent the type leaves open has no size to write, so the answer there is `kInvalidNodeRef`:
-/// the zero this member needs is the forward argument's, and its witness arrives as one of the cut's
-/// residuals. An unwitnessed zero is wrong at every length but one, so a missing witness is a loud
-/// refusal, never a quiet wrong width. `kInvalidNodeRef` also answers an array whose element is not
-/// a numeric scalar, whose elements' zeros are the space's business and not one value's; the caller
-/// refuses by name rather than answer a value the slot does not promise.
+/// the zero this member needs is the forward argument's, and its witness arrives as one of the
+/// cut's residuals. An unwitnessed zero is wrong at every length but one, so a missing witness is a
+/// loud refusal, never a quiet wrong width. `kInvalidNodeRef` also answers an array whose element
+/// is not a numeric scalar, whose elements' zeros are the space's business and not one value's; the
+/// caller refuses by name rather than answer a value the slot does not promise.
 gc_node_ref_t zeroOfCotangentType(WalkContext &ctx, const Type *primal, Type *tangentType);
 
 /// The zero of the cotangent space of the value at `ref`, asked of the space (`zeroOfSpaceOf`): a
 /// floating scalar's is the constant the registry holds in that scalar's own width -- an `f32` zero
 /// is four bytes, not a `float` zero read as four -- and a space whose zero is built from a value's
-/// shape uses the space's own `zerosLikeUri`. Nothing here writes a `float` zero on behalf of a type
-/// that is not a `float`.
+/// shape uses the space's own `zerosLikeUri`. Nothing here writes a `float` zero on behalf of a
+/// type that is not a `float`.
 ///
 /// The shape a zero array is built at is a node of **this** graph: the value the walk forwarded for
 /// `valueRef` when it forwarded one, and the type's own stated zero (`zeroOfCotangentType`)
@@ -265,54 +266,58 @@ gc_node_ref_t zeroOfValue(WalkContext &ctx, gc_node_ref_t valueRef);
 /// when it holds nothing yet) and what arrives, answered as the value that place holds afterwards.
 ///
 /// The sum is the space's **own** (`addUriOfSpace`, the registry's `addUri`), so an `f32` sums with
-/// `:op/add_f`, an array with `:tangent/add_arr` and a tensor with `tensor:add`; nothing here spells
-/// an addition of its own, and no width is written down as a placeholder. The space is the *value's*,
-/// handed in by the caller that knows the value -- not `into`'s space: `into` is a node of the new
-/// graph, and asking the source graph about it reads whatever source node sits at that index, a type
-/// that has nothing to do with the cotangent being summed.
+/// `:op/add_f`, an array with `:tangent/add_arr` and a tensor with `tensor:add`; nothing here
+/// spells an addition of its own, and no width is written down as a placeholder. The space is the
+/// *value's*, handed in by the caller that knows the value -- not `into`'s space: `into` is a node
+/// of the new graph, and asking the source graph about it reads whatever source node sits at that
+/// index, a type that has nothing to do with the cotangent being summed.
 ///
-/// **The sum of an aggregate is its members' sum** (design principles 9.9: an aggregate's tangent is
-/// its members' tangents, so its addition is the members' additions, one place at a time). It is
+/// **The sum of an aggregate is its members' sum** (design principles 9.9: an aggregate's tangent
+/// is its members' tangents, so its addition is the members' additions, one place at a time). It is
 /// therefore derived from the type and not registered -- no tangent space has to spell an `addUri`
-/// for a tuple or a struct, and `addUriOfSpace` answering nothing for one is not "an aggregate has no
-/// addition", it is "a single operator cannot answer for it". A place whose member has no tangent
-/// space (`int`, `bool`) carries the unit: the walk hands that place through untouched rather than
-/// stopping the whole sum, and a member that has a space but no addition is a refusal about *that
-/// member*, because the walk cannot sum what nothing can sum.
+/// for a tuple or a struct, and `addUriOfSpace` answering nothing for one is not "an aggregate has
+/// no addition", it is "a single operator cannot answer for it". A place whose member has no
+/// tangent space (`int`, `bool`) carries the unit: the walk hands that place through untouched
+/// rather than stopping the whole sum, and a member that has a space but no addition is a refusal
+/// about *that member*, because the walk cannot sum what nothing can sum.
 ///
-/// A space with no addition at all is a cotangent that cannot be summed: `cotangentArithmeticMissing`
-/// records it and the member is refused by name (`NoCotangentArithmetic`) at the end of the walk,
-/// rather than the slot being handed a `float` sum. This is a free function and not a `std::function`
-/// because it recurses: an aggregate's members are summed by this same function, and a `const auto`
-/// lambda cannot name itself while a free function needs no one to tell it its own type.
-gc_node_ref_t sumOfCotangents(
-    WalkContext &ctx, Type *space, gc_node_ref_t into, gc_node_ref_t node);
+/// A space with no addition at all is a cotangent that cannot be summed:
+/// `cotangentArithmeticMissing` records it and the member is refused by name
+/// (`NoCotangentArithmetic`) at the end of the walk, rather than the slot being handed a `float`
+/// sum. This is a free function and not a `std::function` because it recurses: an aggregate's
+/// members are summed by this same function, and a `const auto` lambda cannot name itself while a
+/// free function needs no one to tell it its own type.
+gc_node_ref_t
+sumOfCotangents(WalkContext &ctx, Type *space, gc_node_ref_t into, gc_node_ref_t node);
 
 /// An aggregate of these values, as a node of the new graph, at the type the aggregate's tangent
 /// space names: the Fill the builder writes for a tuple literal and for a struct literal
-/// (`builder_static.cpp`, `{ a: .., b: .. }`), which is the shape every reader of an aggregate already
-/// reads. The members are in the type's own order -- a struct's declaration order and a tuple's place
-/// order, never the order the body happened to read them in -- and the slots are the identity, one
-/// member per place, which is how `addAggregate` writes one (`modules/autodiff/pullback.cpp`).
+/// (`builder_static.cpp`, `{ a: .., b: .. }`), which is the shape every reader of an aggregate
+/// already reads. The members are in the type's own order -- a struct's declaration order and a
+/// tuple's place order, never the order the body happened to read them in -- and the slots are the
+/// identity, one member per place, which is how `addAggregate` writes one
+/// (`modules/autodiff/pullback.cpp`).
 ///
-/// The type is handed in rather than built here because the caller is the one that asked the tangent
-/// space (`tangentSpaceOf`): a tuple of numbers is its own tangent, and so is a struct of them, while
-/// a tuple of `f32` members is a tuple of `f32` and not one of `float`.
-gc_node_ref_t aggregateOfMembers(
-    WalkContext &ctx, Type *aggregateType, const std::vector<gc_node_ref_t> &parts);
+/// The type is handed in rather than built here because the caller is the one that asked the
+/// tangent space (`tangentSpaceOf`): a tuple of numbers is its own tangent, and so is a struct of
+/// them, while a tuple of `f32` members is a tuple of `f32` and not one of `float`.
+gc_node_ref_t
+aggregateOfMembers(WalkContext &ctx, Type *aggregateType, const std::vector<gc_node_ref_t> &parts);
 
 /// What the cotangent bookkeeping answers, one question at a time. These are the walk's own
 /// readings of a source graph -- which place the answer is about, which node is a constant, which
-/// value can hold a cotangent, where a zero goes -- and they are asked by more than one node family,
-/// which is why they are here and not a family's:
+/// value can hold a cotangent, where a zero goes -- and they are asked by more than one node
+/// family, which is why they are here and not a family's:
 ///
 /// - `participatesInTheAnswer`: whether a cotangent landing on parameter `at` is one the answer
 ///   holds. The call site's set is read as written when it has one; without it the lift law's
 ///   reading decides (`places`), and a parameter outside the set is a value the graph reads.
-/// - `isConstantNode` / `constantValueOf`: a `Data` node is a constant, and its value is what a rule
+/// - `isConstantNode` / `constantValueOf`: a `Data` node is a constant, and its value is what a
+/// rule
 ///   needs (`ct * c`). The node is forwarded once -- `book.constantOf` holds it -- so two reads of
 ///   one constant are one node of the new graph.
-/// - `tupleOfValues`: a tuple of these values as a node of the new graph, at the type that names it.
+/// - `tupleOfValues`: a tuple of these values as a node of the new graph, at the type that names
+/// it.
 ///   The types travel with the values, because a state's cotangent can be an array and a tuple that
 ///   names it `float` is a tuple whose members are not the things it holds.
 /// - `aggregateSlotCount`: how many places a value of aggregate type has. A `Fill` knows its
@@ -329,13 +334,17 @@ gc_node_ref_t aggregateOfMembers(
 /// - `addCotangentTo`: file one cotangent on a value, summing it with what the place already holds
 ///   through the space's own addition (`sumOfCotangents`). A cotangent no parameter asks for is not
 ///   collected at all, and a value with no tangent space records the zero it contributes instead.
-/// - `noteRuleUsed`: the rules this member's answer used, once each, in first-use order.
+/// - `noteRuleUsed`: the rules this member's answer used, once each, in first-use order. Each one
+/// is
+///   also written as a `LAW_APPLIED` record (`transforms/law_readings.h`), which is the same fact
+///   in the shape a caller keeps across members.
 /// - `ruleCotangentOf`: one position's cotangent -- the rule the index filed for this operator, its
 ///   right side expanded where the operator stood, checked against the operand it answers for.
 /// - `joinMemberReadOf`: the adjoint of reading a value member by member -- that value's own
 ///   cotangent, assembled member by member in the declaration's order (design principles 9.9), with
 ///   the zero of the member's own space where nobody read a member.
-/// - `armCotangentOf`: a branch arm's answer, which is the walk seeded once and stopped at the arm's
+/// - `armCotangentOf`: a branch arm's answer, which is the walk seeded once and stopped at the
+/// arm's
 ///   own region.
 bool participatesInTheAnswer(const WalkContext &ctx, size_t at);
 
@@ -357,12 +366,12 @@ bool wantsCotangentAt(WalkContext &ctx, gc_node_ref_t target);
 
 void addCotangentTo(WalkContext &ctx, gc_node_ref_t ref, gc_node_ref_t node);
 
-void noteRuleUsed(WalkContext &ctx, const std::string &name);
+void noteRuleUsed(WalkContext &ctx, const std::string &name, std::string_view uri);
 
 /// The rule `ruleName`'s answer at `position`, expanded at the types the step really has, for the
-/// cotangent `ct` of the value at that position. `knownValue` hands over the value of an operand the
-/// walk holds (the slot past the operands is the extents, `book.extentsValue`); `why` says what the
-/// expansion could not build, `unboundSlot` names the operand it could not bind, and
+/// cotangent `ct` of the value at that position. `knownValue` hands over the value of an operand
+/// the walk holds (the slot past the operands is the extents, `book.extentsValue`); `why` says what
+/// the expansion could not build, `unboundSlot` names the operand it could not bind, and
 /// `refusedAtTheLaw` records that this function itself refused (the port and answer checks) rather
 /// than the expansion.
 gc_node_ref_t ruleCotangentOf(
@@ -371,14 +380,12 @@ gc_node_ref_t ruleCotangentOf(
     gc_node_ref_t ct, Type *ctType, std::string &why, bool &noInstance, bool &refusedAtTheLaw,
     std::optional<size_t> &unboundSlot);
 
-bool joinMemberReadOf(
-    WalkContext &ctx, gc_node_ref_t ref, const std::vector<gc_node_ref_t> &slots);
+bool joinMemberReadOf(WalkContext &ctx, gc_node_ref_t ref, const std::vector<gc_node_ref_t> &slots);
 
 gc_node_ref_t armCotangentOf(
     WalkContext &ctx,
-    const std::function<
-        std::vector<gc_node_ref_t>(uint32_t, const std::vector<ArmSeed> &,
-                                   const std::vector<gc_node_ref_t> &)> &runSeeded,
+    const std::function<std::vector<gc_node_ref_t>(
+        uint32_t, const std::vector<ArmSeed> &, const std::vector<gc_node_ref_t> &)> &runSeeded,
     uint32_t oldRegion, gc_node_ref_t armResult, gc_node_ref_t armCotangent,
     const std::vector<gc_node_ref_t> &stops);
 
@@ -406,9 +413,9 @@ gc_node_ref_t intConstantNode(WalkContext &ctx, int64_t value);
 bool isStateInitialValue(const std::vector<gc_node_ref_t> &stateInitials, gc_node_ref_t what);
 
 /// One component of a loop's answer, read at the type the region states for it: a component read is
-/// typed like the member it reads (a sum over an array is an array), and an index this region has no
-/// type for is a count that disagrees with the parts the region returns -- the walk's own defect --
-/// so it answers no node rather than a `float` read.
+/// typed like the member it reads (a sum over an array is an array), and an index this region has
+/// no type for is a count that disagrees with the parts the region returns -- the walk's own defect
+/// -- so it answers no node rather than a `float` read.
 gc_node_ref_t componentReadOf(
     WalkContext &ctx, const std::vector<Type *> &componentTypes, gc_node_ref_t loopNode,
     uint32_t index);
@@ -419,25 +426,27 @@ gc_node_ref_t componentReadOf(
 std::string describeNodeValue(const WalkContext &ctx, gc_node_ref_t value);
 
 /// Why the value a call needs was not forwarded. The walk's last attempt is repeated with its
-/// "stopped at a region" flag cleared, so the answer is this attempt's -- a failure is not memoised,
-/// so the walk repeats the same path and stops at the same node. A value that comes out of a region
-/// is one the walk would have to transpose the region for (`CallValueComputedByTheBody`); one that
-/// does not is a value the call or its closure owes (`CallValueMissing`).
+/// "stopped at a region" flag cleared, so the answer is this attempt's -- a failure is not
+/// memoised, so the walk repeats the same path and stops at the same node. A value that comes out
+/// of a region is one the walk would have to transpose the region for
+/// (`CallValueComputedByTheBody`); one that does not is a value the call or its closure owes
+/// (`CallValueMissing`).
 void noteUnforwardedCause(
     WalkContext &ctx, bool &stoppedAtARegion,
     const std::function<gc_node_ref_t(gc_node_ref_t)> &forward, gc_node_ref_t ref, size_t param);
 
 /// The empty member `()` of an answer, at the type `unitType`: a parameter with no tangent space
 /// answers it, and the signature has one place per parameter -- this is that place with nothing in
-/// it -- which is what keeps the tuple the signature promised and the tuple the walk builds the same
-/// length and the same order.
+/// it -- which is what keeps the tuple the signature promised and the tuple the walk builds the
+/// same length and the same order.
 gc_node_ref_t unitMemberOf(WalkContext &ctx, Type *unitType);
 
 /// Which declaration leaves one of the step's operands' shapes open, asked of every operand in the
 /// order the step has them: the one walk-back `unstatedParameterBehind` (`transpose/signature.h`),
-/// which the rule-expansion path asks too, so the two entrances to the cause name the same parameter
-/// and cannot spell the same declaration two ways. Answering nothing means every operand's type
-/// states its shape, which is what a step whose law answered does not need to ask at all.
+/// which the rule-expansion path asks too, so the two entrances to the cause name the same
+/// parameter and cannot spell the same declaration two ways. Answering nothing means every
+/// operand's type states its shape, which is what a step whose law answered does not need to ask at
+/// all.
 std::optional<size_t> unstatedParameterOfAnyInput(
     const WalkContext &ctx, std::span<const gc_node_ref_t> inputs,
     const std::vector<size_t> &portParameter);

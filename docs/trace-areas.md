@@ -21,6 +21,7 @@ through, so a row can be checked again after any change.
 | `effect containment: checked` | `effects` | `kernel/execute/pass.cpp#passBoundaryViolation` | `trace(TraceArea::Effects)` |
 | `[DBG-FOLD] `, `[DBG-W] ` | `fold` | `compile/src/gir/builder_variables.cpp#FoldCountsReport` and the fold's own `[DBG-W]` sites | `trace(TraceArea::Fold)` |
 | `READING_REFUSAL ` | none needed | `lib/transforms/refusal_readings.h#noteRefusal` | `verdicts()` -- **always printed** |
+| `LAW_APPLIED ` | `transforms` | `src/stdlib/transforms/law_readings.h#noteLawApplied`, called from the three walks (`transpose/transpose/walkmachinery.cpp#noteRuleUsed`, `jvp.cpp`, `vmap.cpp`) | `readings()` |
 
 ## Two rules that follow from the table
 
