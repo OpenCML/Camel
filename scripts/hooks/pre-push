@@ -117,6 +117,56 @@ if [ -n "$integration_pushes" ]; then
     check_integration_shape
 fi
 
+# --- the per-merge record, on the branch merges arrive on ----------------------
+#
+# A gate refuses a push and not a commit. A merge made in a checkout that had `integration` checked
+# out survived a refusal on the local branch, and the next push of anything -- one backlog row --
+# carried it, so the merge became public having passed nothing. That is not a mistake a person makes
+# once; it is what the mechanism does whenever somebody pushes after a refusal.
+#
+# The record (`scripts/merge-record.mjs`) is written by the merge tool after its gates and before its
+# push, so a merge that went through the gate is in this hook's set and a merge that was refused is
+# not. The range is the one the push sends, walked by first parent: a commit reachable only through a
+# side branch is part of a merge that already had its reading, and a single-parent commit such as a
+# documentation page is not asked for a record at all.
+#
+# This is what a push to `integration` is checked against, one merge at a time. A push to `develop`
+# publishes a tip instead of a merge, and its reading is the promotion record -- see the end of this
+# file; the two are different questions and neither answers the other.
+check_integration_records() {
+    tree=$(git rev-parse --show-toplevel 2>/dev/null) || {
+        echo "pre-push: refusing to push to $integration_ref: this is not inside a worktree, so the pass" >&2
+        echo "pre-push: records of the merges in this push cannot be found." >&2
+        exit 1
+    }
+    while IFS=' ' read -r local_ref local_sha remote_sha; do
+        [ "$local_ref" != '(delete)' ] || continue
+        [ -n "$local_sha" ] || continue
+        case "$local_sha" in
+            *[!0]*) : ;;
+            *) continue ;;
+        esac
+        node "$tree/scripts/merge-record.mjs" verify "$remote_sha" "$local_sha" >&2
+        state=$?
+        if [ "$state" -eq 1 ]; then
+            echo "pre-push: refusing to push $local_ref to $integration_ref: the merge commits named above have no reading that holds." >&2
+            echo "pre-push: a gate refuses a push, not a commit -- so a merge it refused is still on this branch" >&2
+            echo "pre-push: and this push would publish it. Merge those lanes again through the merge tool." >&2
+            exit 1
+        elif [ "$state" -ne 0 ]; then
+            echo "pre-push: refusing to push $local_ref to $integration_ref: the merge records could not be read (node exit $state)." >&2
+            echo "pre-push: an unreadable record set is not an empty one." >&2
+            exit 1
+        fi
+    done <<EOF
+$integration_pushes
+EOF
+}
+
+if [ -n "$integration_pushes" ]; then
+    check_integration_records
+fi
+
 # Nothing here is about another branch: a hook that speaks on every push is read as noise.
 [ -n "$develop_push" ] || exit 0
 
@@ -189,29 +239,29 @@ if [ -z "$match" ]; then
     exit 1
 fi
 
-# The tree rule above says *who* may write develop. This says *what* may be written: every merge
-# commit this push would publish has to carry a record that a gate read it and passed it.
+# The tree rule above says *who* may write develop. This says *what* may be written: the tip this
+# push publishes has to carry a promotion record -- the whole layer measured on that tip, the
+# comparison with the previous promotion case by case, and what its timeouts said once they were run
+# alone. One pass record per merge is the per-merge reading and does not stand in for it: a tip is
+# read against the layer, not against the tree it lands on.
 #
-# It exists because a gate refuses a push and not a commit. A merge made in the checkout that had
-# develop checked out survived a refusal on the local branch, and the next push of anything --
-# one backlog row -- carried it, so the merge became public having passed nothing. That is not a
-# mistake a person makes once; it is what the mechanism does whenever somebody pushes after a
-# refusal. The record (`scripts/merge-record.mjs`) is written by the merge tool before it pushes,
-# so a merge that went through the gate is in this hook's set and a merge that was refused is not.
-#
-# The range is the one the push sends, walked by first parent: a commit reachable only through a
-# side branch is part of a merge that already had its reading.
+# It exists for the same reason the per-merge record does. The per-merge record is still what the
+# merge tool writes before every push to `integration`, and that is where a merge is read, one at a
+# time. A develop push is the one step that publishes a tip rather than a merge, so it is checked
+# against the reading of a tip; and the refusal names which of the two is missing, because the
+# repair differs (write the promotion record, or merge the lane again through the tool).
 if [ -n "$develop_local" ]; then
-    node "$top/scripts/merge-record.mjs" verify "$develop_remote" "$develop_local" >&2
+    node "$top/scripts/merge-record.mjs" verify-promotion "$develop_local" >&2
     state=$?
     if [ "$state" -eq 1 ]; then
-        echo "pre-push: refusing to push $develop_push: the merge commits named above have no reading that holds." >&2
-        echo "pre-push: a gate refuses a push, not a commit -- so a merge it refused is still on this branch" >&2
-        echo "pre-push: and this push would publish it. Merge those lanes again through the merge tool." >&2
+        echo "pre-push: refusing to push $develop_push: 缺的是晋级记录，不是合并记录" >&2
+        echo "pre-push: (the tip $develop_local has no promotion record -- the reading that covers a tip is the" >&2
+        echo "pre-push: layer measured on it, the comparison with the previous promotion, and its timeouts run" >&2
+        echo "pre-push: alone; one pass record per merge is a different reading and does not replace this one)." >&2
         exit 1
     elif [ "$state" -ne 0 ]; then
-        echo "pre-push: refusing to push $develop_push: the merge records could not be read (node exit $state)." >&2
-        echo "pre-push: an unreadable record set is not an empty one." >&2
+        echo "pre-push: refusing to push $develop_push: the promotion record could not be read (node exit $state)." >&2
+        echo "pre-push: an unreadable record is not an absent one." >&2
         exit 1
     fi
 fi

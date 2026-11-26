@@ -1,17 +1,21 @@
 # The two ends of the hole this pair closes: a gate that refuses a push and not a commit.
 #
-# A merge made in the checkout that had `develop` checked out is a commit on the local branch. When a
-# gate refused the push, the commit stayed, and the next push of anything -- one backlog row -- carried
-# it, so the merge became public having passed nothing. The repair is in two parts and this test locks
-# both of them down, on a scratch repository and a scratch remote, with no host, no build and no plan
-# run:
+# A merge made in a checkout that had `integration` checked out is a commit on the local branch. When
+# a gate refused the push, the commit stayed, and the next push of anything -- one backlog row --
+# carried it, so the merge became public having passed nothing. The repair is in two parts and this
+# test locks both of them down, on a scratch repository and a scratch remote, with no host, no build
+# and no plan run:
 #
 #   1. the merge is made in a throwaway checkout detached at the commit it lands on, the push sends
-#      the merge commit itself (`<sha>:refs/heads/develop`), and `develop` moves only after the push
-#      returned 0. A refusal therefore leaves the branch where it was: there is nothing to clean up.
+#      the merge commit itself (`<sha>:refs/heads/integration`), and `integration` moves only after
+#      the push returned 0. A refusal therefore leaves the branch where it was: nothing to clean up.
 #   2. the pre-push hook refuses a push whose first-parent range carries a merge commit with no pass
 #      record, and names that commit. The record is written by the merge tool after the gates, before
 #      the push -- a record (`scripts/merge-record.mjs`) whose parents it checks against git.
+#
+# The pushes here go to `integration`, which is where merges arrive and therefore where the per-merge
+# reading is asked for. A push to `develop` publishes a *tip* and is checked against the promotion
+# record instead; that is `test/tools/promotion-record.test.mjs`.
 #
 #   pwsh -NoProfile -File internal/tools/merge-record.test.ps1 [-Keep]
 #
@@ -59,11 +63,11 @@ Write-Host "scratch: $scratch"
 # --- the scratch repository --------------------------------------------------
 # The hook, the record writer and the settings it reads are copied from this checkout, so the test
 # reads the files that ship and not a stand-in for them.
-$null = & git init --quiet --bare --initial-branch=develop $origin 2>&1
+$null = & git init --quiet --bare --initial-branch=integration $origin 2>&1
 Check 'a scratch remote exists' (Test-Path (Join-Path $origin 'HEAD'))
 
 $null = & git clone --quiet $origin $work 2>&1
-& git -C $work checkout --quiet -B develop 2>&1 | Out-Null
+& git -C $work checkout --quiet -B integration 2>&1 | Out-Null
 & git -C $work config user.email 'test@example.invalid'
 & git -C $work config user.name 'merge record test'
 & git -C $work config commit.gpgsign false
@@ -73,8 +77,9 @@ foreach ($rel in @('scripts/hooks/pre-push', 'scripts/merge-record.mjs', 'script
     New-Item -ItemType Directory -Force -Path (Split-Path -Parent $to) | Out-Null
     Copy-Item -LiteralPath (Join-Path $repoRoot $rel) -Destination $to -Force
 }
-# `mergeWorktree` names the tree that may push develop: here, the scratch clone. Written rather than
-# copied, because the value is this machine's scratch path.
+# `mergeWorktree` names the tree that may push develop: the rule is not what this file measures, and
+# it is written so that a develop push from here would be answerable; the pushes below all go to
+# `integration`, which carries no tree rule.
 New-Item -ItemType Directory -Force -Path (Join-Path $work 'internal/tools') | Out-Null
 [System.IO.File]::WriteAllText((Join-Path $work 'internal/tools/camel-gate.local.json'),
     ((@{ sshHost = 'none'; mergeWorktree = $work } | ConvertTo-Json) + "`n"),
@@ -83,7 +88,7 @@ Set-Content -LiteralPath (Join-Path $work 'README.md') -Value 'scratch'
 & git -C $work add -A 2>&1 | Out-Null
 & git -C $work commit --quiet -m 'scratch tree' 2>&1 | Out-Null
 $base = (& git -C $work rev-parse HEAD).Trim()
-& git -C $work push --quiet origin develop 2>&1 | Out-Null
+& git -C $work push --quiet origin integration 2>&1 | Out-Null
 Check 'the scratch remote starts at the first commit' ($LASTEXITCODE -eq 0)
 
 # husky installs the hook by pointing `core.hooksPath` at a directory; the file it puts there calls
@@ -101,27 +106,29 @@ Set-Content -LiteralPath (Join-Path $work 'lane.txt') -Value 'from the lane'
 & git -C $work add -A 2>&1 | Out-Null
 & git -C $work commit --quiet -m 'lane: a change' 2>&1 | Out-Null
 $laneHead = (& git -C $work rev-parse HEAD).Trim()
-& git -C $work checkout --quiet develop 2>&1 | Out-Null
+& git -C $work checkout --quiet integration 2>&1 | Out-Null
 
-# --- 1. the hole: a refused merge survives on develop and the next push carries it --------------
-# This is the shape that shipped merges nobody read: merge on develop, gate says no, then push
-# something else.
+# --- 1. the hole: a merge with no record is refused by name -------------------------------------
+# This is the shape that shipped merges nobody read: merge, the gate says no, the merge stays on the
+# local branch and something pushes it later. Here the merge itself is the commit being pushed, which
+# is what the merge tool does, so a refusal has to name it and leave the remote where it was.
 & git -C $work merge --quiet --no-ff 'lane/scratch' -m 'merge scratch lane' 2>&1 | Out-Null
 $mergeOld = (& git -C $work rev-parse HEAD).Trim()
 Set-Content -LiteralPath (Join-Path $work 'backlog.md') -Value 'one row'
 & git -C $work add -A 2>&1 | Out-Null
 & git -C $work commit --quiet -m 'backlog: one row' 2>&1 | Out-Null
 
-$push = Invoke-Git $work @('push', 'origin', 'develop')
+$push = Invoke-Git $work @('push', 'origin', "$($mergeOld):refs/heads/integration")
 $shortMerge = $mergeOld.Substring(0, 9)
 Check 'a push carrying an unrecorded merge is refused' ($push.Exit -ne 0) $push.Text
 Check 'the refusal names the merge commit' ($push.Text -match [regex]::Escape($shortMerge)) $push.Text
-Check 'the remote did not move' (((& git -C $origin rev-parse develop)).Trim() -eq $base)
+Check 'and the refusal is the record rule, not the arrival shape' ($push.Text -match 'no reading that holds') $push.Text
+Check 'the remote did not move' (((& git -C $origin rev-parse integration)).Trim() -eq $base)
 
 # --- 2. the order that removes the need to clean up ---------------------------------------------
 # Merge in a throwaway checkout detached at the commit it lands on, push the commit itself, and move
-# develop only after the push returned 0 -- the merge tool's order, step for step, without the gates
-# (which need the build host). The property under test is what is left when the push is refused.
+# `integration` only after the push returned 0 -- the merge tool's order, step for step, without the
+# gates (which need the build host). The property under test is what is left when the push is refused.
 & git -C $work reset --quiet --hard $base 2>&1 | Out-Null
 $null = & git -C $work worktree add --quiet --detach $tree $base 2>&1
 Check 'the throwaway checkout is detached' (((& git -C $tree rev-parse --abbrev-ref HEAD)).Trim() -eq 'HEAD')
@@ -132,11 +139,11 @@ $parents = @(((& git -C $tree rev-list --parents -n 1 HEAD).Trim() -split ' ') |
 Check 'the merge has two parents' ($parents.Count -eq 3) ($parents -join ' ')
 Check 'its first parent is the commit it lands on' ($parents[1] -eq $base) ($parents[1])
 
-$push = Invoke-Git $work @('push', 'origin', "$($mergeNew):refs/heads/develop")
+$push = Invoke-Git $work @('push', 'origin', "$($mergeNew):refs/heads/integration")
 Check 'the refused push names the merge it would have published' ($push.Text -match [regex]::Escape($mergeNew.Substring(0, 9))) $push.Text
-$after = (& git -C $work rev-parse 'refs/heads/develop').Trim()
-Check 'local develop is where it was: nothing to clean up' ($after -eq $base) "develop is $($after.Substring(0, 9)), expected $($base.Substring(0, 9))"
-Check 'and the remote is where it was' (((& git -C $origin rev-parse develop)).Trim() -eq $base)
+$after = (& git -C $work rev-parse 'refs/heads/integration').Trim()
+Check 'local integration is where it was: nothing to clean up' ($after -eq $base) "integration is $($after.Substring(0, 9)), expected $($base.Substring(0, 9))"
+Check 'and the remote is where it was' (((& git -C $origin rev-parse integration)).Trim() -eq $base)
 
 # --- 3. a record cannot disagree with git -------------------------------------------------------
 $passedDir = Join-Path $work '.git/camel-passed'
@@ -227,17 +234,27 @@ Check 'it carries the plan set and its hash' ($saved.planSet.count -eq 1 -and $s
 Check 'it carries the baseline and its source' ($saved.baseline.sha -eq $base -and $saved.baseline.source)
 Check 'it carries the three counts' ($saved.readings.fixed -eq 1 -and $saved.readings.new -eq 0 -and $saved.readings.changed -eq 0)
 
-$push = Invoke-Git $work @('push', 'origin', "$($mergeNew):refs/heads/develop")
+$push = Invoke-Git $work @('push', 'origin', "$($mergeNew):refs/heads/integration")
 Check 'the same push is allowed once the record exists' ($push.Exit -eq 0) $push.Text
-Check 'the remote is the merge commit' (((& git -C $origin rev-parse develop)).Trim() -eq $mergeNew)
+Check 'the remote is the merge commit' (((& git -C $origin rev-parse integration)).Trim() -eq $mergeNew)
 
 # --- 5. a plain commit after a recorded merge needs no record ------------------------------------
+# Read by the checker itself and not through a push: the arrival shape refuses a push whose tip is a
+# plain commit, so a range that carries one can only be read where the rule is asked, which is here.
 & git -C $work reset --quiet --hard $mergeNew 2>&1 | Out-Null
 Set-Content -LiteralPath (Join-Path $work 'backlog.md') -Value 'another row'
 & git -C $work add -A 2>&1 | Out-Null
 & git -C $work commit --quiet -m 'backlog: another row' 2>&1 | Out-Null
-$push = Invoke-Git $work @('push', 'origin', 'develop')
-Check 'a backlog row on top of a recorded merge is allowed' ($push.Exit -eq 0) $push.Text
+$row = (& git -C $work rev-parse HEAD).Trim()
+# The checker reads the repository it is run in, so it is run in the fixture and not in this checkout.
+Push-Location -LiteralPath $work
+try {
+    $check = @(& node @((Join-Path $work 'scripts/merge-record.mjs'), 'verify', $mergeNew, $row) 2>&1)
+    $checkExit = $LASTEXITCODE
+} finally {
+    Pop-Location
+}
+Check 'a backlog row on top of a recorded merge needs no record' ($checkExit -eq 0 -and ($check -join ' ') -match '0 merge commit') (($check | ForEach-Object { "$_" }) -join ' / ')
 
 # --- 6. a record that is not a pass is not a pass -----------------------------------------------
 # The hook reads the record too, not only its existence: a hand-written one with a red case in it
@@ -246,7 +263,7 @@ Check 'a backlog row on top of a recorded merge is allowed' ($push.Exit -eq 0) $
 Set-Content -LiteralPath (Join-Path $work 'second.txt') -Value 'second'
 & git -C $work add -A 2>&1 | Out-Null
 & git -C $work commit --quiet -m 'lane: second change' 2>&1 | Out-Null
-& git -C $work checkout --quiet develop 2>&1 | Out-Null
+& git -C $work checkout --quiet -B 'merge/second' $mergeNew 2>&1 | Out-Null
 & git -C $work merge --quiet --no-ff 'lane/second' -m 'merge second lane' 2>&1 | Out-Null
 $second = (& git -C $work rev-parse HEAD).Trim()
 $forged = @{
@@ -257,7 +274,7 @@ $forged = @{
 }
 New-Item -ItemType Directory -Force -Path $passedDir | Out-Null
 [System.IO.File]::WriteAllText((Join-Path $passedDir "$second.json"), (($forged | ConvertTo-Json -Depth 6) + "`n"), (New-Object System.Text.UTF8Encoding($false)))
-$push = Invoke-Git $work @('push', 'origin', 'develop')
+$push = Invoke-Git $work @('push', 'origin', "$($second):refs/heads/integration")
 Check 'a record with a red case in it does not open the door' ($push.Exit -ne 0) $push.Text
 Check 'and the refusal says the record is not a pass' ($push.Text -match 'not a pass') $push.Text
 
@@ -269,13 +286,13 @@ Check 'and the refusal says the record is not a pass' ($push.Text -match 'not a 
 # set of plans -- nothing local can prove it was measured -- but it can no longer state an incoherent
 # one and be waved through, and those are different amounts of trust, not the same one.
 #
-# The range of this push also carries the earlier refused merge, so the assertions name this commit:
-# a refusal with the right sentence about the wrong commit would otherwise pass as a reading.
-& git -C $work checkout --quiet -B 'lane/third' 2>&1 | Out-Null
+# The assertion names this commit: a refusal with the right sentence about the wrong commit would
+# otherwise pass as a reading.
+& git -C $work checkout --quiet -B 'lane/third' $base 2>&1 | Out-Null
 Set-Content -LiteralPath (Join-Path $work 'third.txt') -Value 'third'
 & git -C $work add -A 2>&1 | Out-Null
 & git -C $work commit --quiet -m 'lane: a third change' 2>&1 | Out-Null
-& git -C $work checkout --quiet develop 2>&1 | Out-Null
+& git -C $work checkout --quiet -B 'merge/third' $mergeNew 2>&1 | Out-Null
 & git -C $work merge --quiet --no-ff 'lane/third' -m 'merge third lane' 2>&1 | Out-Null
 $third = (& git -C $work rev-parse HEAD).Trim()
 $incoherent = @{
@@ -285,7 +302,7 @@ $incoherent = @{
     readings = @{ cases = 12; fixed = 1; new = 0; changed = 0 }
 }
 [System.IO.File]::WriteAllText((Join-Path $passedDir "$third.json"), (($incoherent | ConvertTo-Json -Depth 6) + "`n"), (New-Object System.Text.UTF8Encoding($false)))
-$push = Invoke-Git $work @('push', 'origin', 'develop')
+$push = Invoke-Git $work @('push', 'origin', "$($third):refs/heads/integration")
 Check 'a record whose plan-set hash does not describe its names does not open the door' ($push.Exit -ne 0) $push.Text
 Check 'and the refusal is this commit, saying the two hashes differ' `
     ($push.Text -match [regex]::Escape($third.Substring(0, 9)) -and $push.Text -match [regex]::Escape('the set and its hash are not the same set')) $push.Text
@@ -296,14 +313,15 @@ Check 'and the refusal is this commit, saying the two hashes differ' `
 # is not "measured and green" (a comparison with zeros in it): it is a third claim, and a push has to
 # be able to tell it apart from the other two. The writer refuses `--measured none` unless it says why
 # and names the gate that decided it, and `verify` refuses a hand-written one that carries rows.
-& git -C $work reset --quiet --hard origin/develop 2>&1 | Out-Null
 & git -C $work checkout --quiet -B 'lane/docs' $base 2>&1 | Out-Null
 New-Item -ItemType Directory -Force -Path (Join-Path $work 'internal/questions') | Out-Null
 Set-Content -LiteralPath (Join-Path $work 'internal/questions/scratch.md') -Value 'a question'
 & git -C $work add -A 2>&1 | Out-Null
 & git -C $work commit --quiet -m 'lane: a question page' 2>&1 | Out-Null
 $docsLane = (& git -C $work rev-parse HEAD).Trim()
-& git -C $work checkout --quiet develop 2>&1 | Out-Null
+# On top of the remote's tip: `integration` is where a docs-only merge lands too, and the arrival
+# shape asks its first parent to be that tip.
+& git -C $work checkout --quiet -B 'merge/docs' $mergeNew 2>&1 | Out-Null
 $docsBase = (& git -C $work rev-parse HEAD).Trim()
 & git -C $work merge --quiet --no-ff 'lane/docs' -m 'merge a question page' 2>&1 | Out-Null
 $docsMerge = (& git -C $work rev-parse HEAD).Trim()
@@ -326,9 +344,9 @@ Check 'it says why' ($savedDocs.why -match 'documentation') "$($savedDocs.why)"
 Check 'it names no plans and no rows' ($savedDocs.planSet.count -eq 0 -and $savedDocs.readings.cases -eq 0) "count=$($savedDocs.planSet.count) cases=$($savedDocs.readings.cases)"
 Check 'it names the gate that decided it' ($savedDocs.gates -contains 'docs-only') ($savedDocs.gates -join ',')
 
-$push = Invoke-Git $work @('push', 'origin', "$($docsMerge):refs/heads/develop")
+$push = Invoke-Git $work @('push', 'origin', "$($docsMerge):refs/heads/integration")
 Check 'a docs-only merge is pushed' ($push.Exit -eq 0) $push.Text
-Check 'and the remote is that merge' (((& git -C $origin rev-parse develop)).Trim() -eq $docsMerge)
+Check 'and the remote is that merge' (((& git -C $origin rev-parse integration)).Trim() -eq $docsMerge)
 
 # --- 9. a hand-written docs-only record cannot claim rows ---------------------------------------
 # The hook reads the file, not the writer. A record that says `measured: none` and carries rows is a
@@ -338,7 +356,7 @@ Check 'and the remote is that merge' (((& git -C $origin rev-parse develop)).Tri
 Set-Content -LiteralPath (Join-Path $work 'internal/questions/second.md') -Value 'another question'
 & git -C $work add -A 2>&1 | Out-Null
 & git -C $work commit --quiet -m 'lane: another question page' 2>&1 | Out-Null
-& git -C $work checkout --quiet develop 2>&1 | Out-Null
+& git -C $work checkout --quiet -B 'merge/docs2' $docsMerge 2>&1 | Out-Null
 & git -C $work merge --quiet --no-ff 'lane/docs2' -m 'merge another question page' 2>&1 | Out-Null
 $docsAfter = (& git -C $work rev-parse HEAD).Trim()
 $forgedDocs = @{
@@ -349,7 +367,7 @@ $forgedDocs = @{
     gates = @('headers', 'docs-only'); measured = 'none'; why = 'documentation only'
 }
 [System.IO.File]::WriteAllText((Join-Path $passedDir "$docsAfter.json"), (($forgedDocs | ConvertTo-Json -Depth 6) + "`n"), (New-Object System.Text.UTF8Encoding($false)))
-$push = Invoke-Git $work @('push', 'origin', 'develop')
+$push = Invoke-Git $work @('push', 'origin', "$($docsAfter):refs/heads/integration")
 Check 'a docs-only record carrying rows does not open the door' ($push.Exit -ne 0) $push.Text
 Check 'and the refusal says the two readings disagree' ($push.Text -match 'nothing was measured and reports') $push.Text
 
