@@ -42,47 +42,54 @@ Shape conv2dShape(
 
 /// y = conv2d(x, w) + b. `bias` may be null.
 Array *conv2d(
-    const Array *input, const Array *kernel, const Array *bias, int64_t stride, int64_t padding,
-    mm::IAllocator &allocator);
+    const Array *input, const Array *kernel, const Array *bias, int64_t stride,
+    int64_t padding, mm::IAllocator &allocator);
 
 /// dL/dx given dL/dy.
 Array *conv2dInputGrad(
-    const Array *input, const Array *kernel, const Array *dy, int64_t stride, int64_t padding,
-    mm::IAllocator &allocator);
+    const Array *input, const Array *kernel, const Array *dy, int64_t stride,
+    int64_t padding, mm::IAllocator &allocator);
 
 /// dL/dw given dL/dy.
 Array *conv2dKernelGrad(
-    const Array *input, const Array *kernel, const Array *dy, int64_t stride, int64_t padding,
-    mm::IAllocator &allocator);
+    const Array *input, const Array *kernel, const Array *dy, int64_t stride,
+    int64_t padding, mm::IAllocator &allocator);
 
 /// dL/db given dL/dy: sum over N, OH, OW.
 Array *conv2dBiasGrad(const Array *dy, mm::IAllocator &allocator);
 
-/// The **stated** twins of the three gradients above: the operand the answer is the gradient *of*
-/// is named by its extents instead of by a tensor, and every other operand is read as its unstated
-/// sibling reads it. `conv2dInputGradIn` and `conv2dKernelGradIn` never read that operand's values,
-/// only the shape of the tensor they hand back, so the stated call and the unstated call are the
-/// same arithmetic on the same inputs. They exist for a reverse rule of `conv2d`, which is handed
-/// the cotangent of one operand and no value of it (`src/stdlib/rulesets/transpose.cml#conv2d_t`).
-Array *conv2dInputGradStated(
-    std::span<const int64_t> inputExtents, const Array *kernel, const Array *dy, int64_t stride,
-    int64_t padding, mm::IAllocator &allocator);
+/// The three gradients with the missing operand's extents **derived** from the operands the gradient
+/// reads. `conv2dInputGradIn` and `conv2dKernelGradIn` never read the values of the operand they are
+/// the gradient of -- only the shape of the tensor they hand back -- so the shape is the whole of
+/// what is wanted, and the two tensors that are read state it:
+///
+///   * the kernel gives the channels and the window, `dy` the batch and the output size, and
+///     `H = (OH - 1) * stride + KH - 2 * padding`, which is `conv2dShape` inverted;
+///   * the input and `dy` give the kernel's window the same way.
+///
+/// They exist for a reverse rule of `conv2d`, which is handed the cotangent of one operand and no
+/// value of it (`src/stdlib/rulesets/transpose.cml#conv2d_t`), and the derived extents are checked
+/// against `dy` by the same `geometry` + `requireDy` the unstated entry points run, so a derivation
+/// that disagrees with the tensors throws instead of answering a wrong-shaped gradient.
+Array *conv2dInputGradShaped(
+    const Array *kernel, const Array *dy, int64_t stride, int64_t padding,
+    mm::IAllocator &allocator);
 
-Array *conv2dKernelGradStated(
-    const Array *input, std::span<const int64_t> kernelExtents, const Array *dy, int64_t stride,
-    int64_t padding, mm::IAllocator &allocator);
+Array *conv2dKernelGradShaped(
+    const Array *input, const Array *dy, int64_t stride, int64_t padding,
+    mm::IAllocator &allocator);
 
-/// `conv2dBiasGrad` with the bias's extents stated; they are checked against the `[O]` the dy it is
-/// handed answers.
-Array *conv2dBiasGradStated(
-    std::span<const int64_t> biasExtents, const Array *dy, mm::IAllocator &allocator);
+/// `conv2dBiasGrad`, whose answer `[O]` is the channels of `dy` alone: named beside the two above so
+/// that a rule answers its three cotangents in one spelling.
+Array *conv2dBiasGradShaped(const Array *dy, mm::IAllocator &allocator);
 
 enum class PoolKind { Max, Average };
 
 /// Output shape [N, C, OH, OW] of pooling.
 Shape pool2dShape(std::span<const int64_t> input, const Window2d &window);
 
-Array *pool2d(PoolKind kind, const Array *input, const Window2d &window, mm::IAllocator &allocator);
+Array *
+pool2d(PoolKind kind, const Array *input, const Window2d &window, mm::IAllocator &allocator);
 
 /// dL/dx for pooling. Max routes each gradient to the first maximal element of its window.
 Array *pool2dGrad(
@@ -91,8 +98,8 @@ Array *pool2dGrad(
 
 /// y = gamma * (x - mean) / sqrt(var + eps) + beta per channel (axis 1).
 Array *batchNorm(
-    const Array *input, const Array *mean, const Array *var, const Array *gamma, const Array *beta,
-    double eps, mm::IAllocator &allocator);
+    const Array *input, const Array *mean, const Array *var,
+    const Array *gamma, const Array *beta, double eps, mm::IAllocator &allocator);
 
 /// Training-mode batch normalization: the batch statistics are computed per channel over the
 /// batch and the trailing (spatial) axes. The normalize uses the BIASED batch variance; the
@@ -100,16 +107,18 @@ Array *batchNorm(
 /// UNBIASED batch variance (M/(M-1) correction) — PyTorch's training-mode semantics. Writes y,
 /// the new running mean and the new running variance (all freshly allocated).
 void batchNormTrain(
-    const Array *input, const Array *gamma, const Array *beta, const Array *runningMean,
-    const Array *runningVar, double momentum, double eps, Array **outY, Array **outRunningMean,
-    Array **outRunningVar, mm::IAllocator &allocator);
+    const Array *input, const Array *gamma, const Array *beta,
+    const Array *runningMean, const Array *runningVar, double momentum, double eps,
+    Array **outY, Array **outRunningMean, Array **outRunningVar,
+    mm::IAllocator &allocator);
 
 /// Gradients of batchNormTrain wrt the input and the affine parameters:
 /// dbeta = sum(dy), dgamma = sum(dy*xhat), dx = gamma*inv*(dy - mean(dy) - xhat*mean(dy*xhat))
 /// per channel over the batch and spatial axes (xhat the normalized input, inv = 1/sqrt(var+eps)
 /// with the biased batch variance). Writes dx, dgamma, dbeta (freshly allocated).
 void batchNormTrainGrad(
-    const Array *input, const Array *gamma, const Array *dy, double eps, Array **outDx,
-    Array **outDgamma, Array **outDbeta, mm::IAllocator &allocator);
+    const Array *input, const Array *gamma, const Array *dy, double eps,
+    Array **outDx, Array **outDgamma, Array **outDbeta,
+    mm::IAllocator &allocator);
 
 } // namespace camel::tensor::kernels

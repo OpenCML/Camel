@@ -13,15 +13,15 @@
 
 #include "layers.h"
 
-#include "../tensor/interop.h"
 #include "../tensor/kernels/conv.h"
+#include "../tensor/interop.h"
 #include "../tensor/ops/indexing.h"
 #include "../tensor/ops/registry.h"
 #include "../tensor/ops/support.h"
 
-#include "camel/core/error/runtime.h"
 #include "camel/core/rtdata/tuple.h"
 #include "camel/core/type/composite/tuple.h"
+#include "camel/core/error/runtime.h"
 
 #include <mutex>
 #include <span>
@@ -35,11 +35,11 @@ using namespace camel::core::type;
 using namespace camel::tensor::ops;
 using camel::core::error::RuntimeDiag;
 using camel::core::error::throwRuntimeFault;
-namespace k = camel::tensor::kernels;
-using camel::tensor::Array;
+namespace k      = camel::tensor::kernels;
 using camel::tensor::kernelExtents;
 using camel::tensor::knownShape;
 using camel::tensor::StaticShape;
+using camel::tensor::Array;
 
 int64_t optInt(ArgsView &norm, size_t index, int64_t fallback) {
     return hasArg(norm, index) ? intArg(norm, index) : fallback;
@@ -68,7 +68,9 @@ bool isIntegerCode(const std::optional<TypeCode> &code) {
 /// The element type an nn operator's answer follows its operand's: the operand's own when its
 /// facts state one, and f32 when they do not (a bare `Tensor`). The answer is not the registry's
 /// to fix; a model in f64 stays in f64 across a convolution, a pooling window or a batch norm.
-TypeCode elementTypeOf(const TensorFacts &facts) { return facts.dtype.value_or(TypeCode::Float32); }
+TypeCode elementTypeOf(const TensorFacts &facts) {
+    return facts.dtype.value_or(TypeCode::Float32);
+}
 
 /// Class labels: an int array or a rank-1 integer tensor, read as int64.
 std::vector<int64_t> labelArg(ArgsView &args, size_t index, std::string_view op) {
@@ -99,8 +101,7 @@ std::vector<int64_t> labelArg(ArgsView &args, size_t index, std::string_view op)
 
 slot_t conv2dKernel(ArgsView &, ArgsView &norm, context::Context &) {
     return runKernel("conv2d", [&] {
-        return wrap(
-            norm.resultType(),
+        return wrap(norm.resultType(),
             k::conv2d(
                 tensorArg(norm, 0),
                 tensorArg(norm, 1),
@@ -121,8 +122,7 @@ std::optional<Type *> conv2dInfer(const InferContext &ctx) {
     if (known(x.shape) && known(w.shape) && stride && pad) {
         return tensorOf(
             elem,
-            knownShape(
-                k::conv2dShape(kernelExtents(*x.shape), kernelExtents(*w.shape), *stride, *pad)));
+            knownShape(k::conv2dShape(kernelExtents(*x.shape), kernelExtents(*w.shape), *stride, *pad)));
     }
     StaticShape out(4, std::nullopt);
     if (x.shape) {
@@ -136,8 +136,7 @@ std::optional<Type *> conv2dInfer(const InferContext &ctx) {
 
 slot_t conv2dInputGradKernel(ArgsView &, ArgsView &norm, context::Context &) {
     return runKernel("conv2d_input_grad", [&] {
-        return wrap(
-            norm.resultType(),
+        return wrap(norm.resultType(),
             k::conv2dInputGrad(
                 tensorArg(norm, 0),
                 tensorArg(norm, 1),
@@ -150,8 +149,7 @@ slot_t conv2dInputGradKernel(ArgsView &, ArgsView &norm, context::Context &) {
 
 slot_t conv2dKernelGradKernel(ArgsView &, ArgsView &norm, context::Context &) {
     return runKernel("conv2d_kernel_grad", [&] {
-        return wrap(
-            norm.resultType(),
+        return wrap(norm.resultType(),
             k::conv2dKernelGrad(
                 tensorArg(norm, 0),
                 tensorArg(norm, 1),
@@ -177,89 +175,98 @@ InferFn shapedLike(size_t index) {
     };
 }
 
-// --------------------------------------------- the stated twins of the conv2d gradients
+// --------------------------------------- the gradients whose shape is derived from what they read
 
-/// The extents operand of a `*_stated` gradient, read as int64: an `int[]` and nothing else. It is
-/// the same operand the tensor module's stated operators carry (`tensor/ops/elementwise_ops.cpp
-/// #mul_stated`) and it is read the same way, because it is the same kind of thing -- the shape of
-/// a tensor a reverse rule holds no value of. A `*_stated` twin answers a tensor of exactly that
-/// shape, so a list that disagrees with the tensors it reads is a fault and not a silently reshaped
-/// answer
-/// (`kernels/conv.cpp#conv2dInputGradStated` throws on it).
-std::vector<int64_t> extentsArg(ArgsView &norm, size_t index, std::string_view op) {
-    Type *type = norm.type(index);
-    if (type == nullptr || type->code() != TypeCode::Array) {
-        reportShapeError(op, "expects an operand's extents as an int[]");
+/// The answer's extents of a gradient whose operand is not read, derived from the two tensors the
+/// gradient does read: the definition of the convolution's output shape, inverted. `nullopt` when
+/// either tensor states no extents -- the answer is then a rank-4 tensor with nothing known, which is
+/// still the right rank.
+std::optional<std::vector<int64_t>> derivedInputExtents(
+    const TensorFacts &kernel, const TensorFacts &dy, int64_t stride, int64_t padding) {
+    if (!known(kernel.shape) || !known(dy.shape)) {
+        return std::nullopt;
     }
-    const Type *elem = static_cast<const ArrayType *>(type)->elemType();
-    if (elem == nullptr || (elem->code() != TypeCode::Int32 && elem->code() != TypeCode::Int64)) {
-        reportShapeError(op, "expects an operand's extents as an int[]");
+    const StaticShape &k = *kernel.shape, &d = *dy.shape;
+    if (k.size() != 4 || d.size() != 4) {
+        return std::nullopt;
     }
-    return tensor::parseIntArray(norm.get<::Array *>(index), type);
+    return std::vector<int64_t>{
+        *d[0],
+        *k[1],
+        (*d[2] - 1) * stride + *k[2] - 2 * padding,
+        (*d[3] - 1) * stride + *k[3] - 2 * padding};
 }
 
-/// The answer of a `*_stated` gradient: the tensor its extents operand names, with the element type
-/// of the operand the gradient is of. The list reaches inference as a constant -- `shape(x)` of a
-/// stated type folds to one before the graph is built, which is the whole reason the reverse law
-/// can write it (`stdlib/rulesets/transpose.cml#conv2d_t`) -- and a list that is not a constant
-/// states no extents, the same answer a bare `Tensor` gets.
-InferFn shapedLikeExtents(size_t extentsIndex, size_t elementIndex) {
-    return [extentsIndex, elementIndex](const InferContext &ctx) -> std::optional<Type *> {
-        const auto extents = ctx.constInts(extentsIndex);
-        if (!extents) {
-            return std::nullopt;
+std::optional<std::vector<int64_t>> derivedKernelExtents(
+    const TensorFacts &input, const TensorFacts &dy, int64_t stride, int64_t padding) {
+    if (!known(input.shape) || !known(dy.shape)) {
+        return std::nullopt;
+    }
+    const StaticShape &x = *input.shape, &d = *dy.shape;
+    if (x.size() != 4 || d.size() != 4) {
+        return std::nullopt;
+    }
+    return std::vector<int64_t>{
+        *d[1],
+        *x[1],
+        *x[2] + 2 * padding - (*d[2] - 1) * stride,
+        *x[3] + 2 * padding - (*d[3] - 1) * stride};
+}
+
+InferFn shapedLikeDerivedExtents(size_t first, size_t second, bool inputIsDerived) {
+    return [first, second, inputIsDerived](const InferContext &ctx) -> std::optional<Type *> {
+        const TensorFacts a = ctx.facts(first), b = ctx.facts(second);
+        const auto stride = optConstInt(ctx, 2, 1), pad = optConstInt(ctx, 3, 0);
+        const TypeCode elem = elementTypeOf(b);
+        if (stride && pad) {
+            const auto extents = inputIsDerived ? derivedInputExtents(a, b, *stride, *pad)
+                                                : derivedKernelExtents(a, b, *stride, *pad);
+            if (extents) {
+                return tensorOf(elem, knownShape(*extents));
+            }
         }
-        return tensorOf(elementTypeOf(ctx.facts(elementIndex)), knownShape(*extents));
+        return tensorOf(elem, StaticShape(4, std::nullopt));
     };
 }
 
-/// `conv2d_input_grad_stated(input_extents, kernel, dy, stride?, padding?)`: `conv2dInputGrad` with
-/// the input's extents stated instead of its tensor. The input's values are never read by that
-/// kernel
-/// -- only the shape of the tensor it answers -- so this is the same arithmetic, and the extents
-/// are checked against the geometry it computes (`kernels/conv.cpp#conv2dInputGradStated`).
-slot_t conv2dInputGradStatedKernel(ArgsView &, ArgsView &norm, context::Context &) {
-    return runKernel("conv2d_input_grad_stated", [&] {
-        const std::vector<int64_t> extents = extentsArg(norm, 0, "conv2d_input_grad_stated");
-        return wrap(
-            norm.resultType(),
-            k::conv2dInputGradStated(
-                extents,
-                tensorArg(norm, 1),
-                tensorArg(norm, 2),
-                optInt(norm, 3, 1),
-                optInt(norm, 4, 0),
-                resultAllocator()));
-    });
-}
-
-/// `conv2d_kernel_grad_stated(input, kernel_extents, dy, stride?, padding?)`: `conv2dKernelGrad`
-/// with the kernel's extents stated. The kernel's values are never read by that kernel either --
-/// the whole of `dw` is accumulated and starts at zero -- so the same arithmetic answers it.
-slot_t conv2dKernelGradStatedKernel(ArgsView &, ArgsView &norm, context::Context &) {
-    return runKernel("conv2d_kernel_grad_stated", [&] {
-        const std::vector<int64_t> extents = extentsArg(norm, 1, "conv2d_kernel_grad_stated");
-        return wrap(
-            norm.resultType(),
-            k::conv2dKernelGradStated(
+/// `conv2d_input_grad_shaped(kernel, dy, stride?, padding?)`: the input's gradient with the input's
+/// extents derived from the kernel and `dy` (`kernels/conv.cpp#conv2dInputGradShaped`). The input's
+/// values are never read by that kernel, only the shape of the tensor it answers, so this is the
+/// same arithmetic -- and it is the spelling a reverse rule can use, where the input is a tangent
+/// that states no extents (design principles 5.4).
+slot_t conv2dInputGradShapedKernel(ArgsView &, ArgsView &norm, context::Context &) {
+    return runKernel("conv2d_input_grad_shaped", [&] {
+        return wrap(norm.resultType(),
+            k::conv2dInputGradShaped(
                 tensorArg(norm, 0),
-                extents,
-                tensorArg(norm, 2),
-                optInt(norm, 3, 1),
-                optInt(norm, 4, 0),
+                tensorArg(norm, 1),
+                optInt(norm, 2, 1),
+                optInt(norm, 3, 0),
                 resultAllocator()));
     });
 }
 
-/// `conv2d_bias_grad_stated(bias_extents, dy)`: `conv2dBiasGrad`, which reads `dy` alone and
-/// answers
-/// `[O]`, with the bias's extents stated and checked against that answer.
-slot_t conv2dBiasGradStatedKernel(ArgsView &, ArgsView &norm, context::Context &) {
-    return runKernel("conv2d_bias_grad_stated", [&] {
-        const std::vector<int64_t> extents = extentsArg(norm, 0, "conv2d_bias_grad_stated");
-        return wrap(
-            norm.resultType(),
-            k::conv2dBiasGradStated(extents, tensorArg(norm, 1), resultAllocator()));
+/// `conv2d_kernel_grad_shaped(input, dy, stride?, padding?)`: the kernel's gradient with the kernel's
+/// extents derived from the input and `dy`. The kernel's values are never read by that kernel: `dw`
+/// is accumulated over every element and starts at zero.
+slot_t conv2dKernelGradShapedKernel(ArgsView &, ArgsView &norm, context::Context &) {
+    return runKernel("conv2d_kernel_grad_shaped", [&] {
+        return wrap(norm.resultType(),
+            k::conv2dKernelGradShaped(
+                tensorArg(norm, 0),
+                tensorArg(norm, 1),
+                optInt(norm, 2, 1),
+                optInt(norm, 3, 0),
+                resultAllocator()));
+    });
+}
+
+/// `conv2d_bias_grad_shaped(dy)`: the bias's gradient, whose answer `[O]` is the channels of `dy`
+/// alone -- `conv2dBiasGrad` reads nothing else. Named beside the two above so a rule answers its
+/// three cotangents in one spelling.
+slot_t conv2dBiasGradShapedKernel(ArgsView &, ArgsView &norm, context::Context &) {
+    return runKernel("conv2d_bias_grad_shaped", [&] {
+        return wrap(norm.resultType(), k::conv2dBiasGradShaped(tensorArg(norm, 0), resultAllocator()));
     });
 }
 
@@ -282,8 +289,7 @@ template <k::PoolKind Kind> slot_t poolKernel(ArgsView &, ArgsView &norm, contex
 
 template <k::PoolKind Kind> slot_t poolGradKernel(ArgsView &, ArgsView &norm, context::Context &) {
     return runKernel(Kind == k::PoolKind::Max ? "max_pool2d_grad" : "avg_pool2d_grad", [&] {
-        return wrap(
-            norm.resultType(),
+        return wrap(norm.resultType(),
             k::pool2dGrad(
                 Kind,
                 tensorArg(norm, 0),
@@ -298,9 +304,9 @@ std::optional<Type *> poolInfer(const InferContext &ctx) {
     if (x.shape && x.shape->size() != 4) {
         return std::nullopt;
     }
-    const auto kernel   = ctx.constInt(1);
-    const auto stride   = ctx.has(2) ? ctx.constInt(2) : kernel;
-    const auto pad      = optConstInt(ctx, 3, 0);
+    const auto kernel = ctx.constInt(1);
+    const auto stride = ctx.has(2) ? ctx.constInt(2) : kernel;
+    const auto pad    = optConstInt(ctx, 3, 0);
     const TypeCode elem = elementTypeOf(x);
     if (known(x.shape) && kernel && stride && pad) {
         const k::Window2d window{*kernel, *kernel, *stride, *stride, *pad, *pad};
@@ -347,12 +353,12 @@ IndexFn poolIndexing(bool max) {
             }
         }
         IndexBuilder b;
-        auto &e        = b.x();
-        const ExprId K = b.constant("kernel", 1, *kernel);
-        const ExprId S = ctx.has(2) ? b.constant("stride", 2, *stride) : K;
-        const ExprId P = ctx.has(3) ? b.constant("pad", 3, *pad) : e.constant(0);
-        const ExprId N = b.extent(0, 0, s[0]), C = b.extent(0, 1, s[1]);
-        const ExprId H = b.extent(0, 2, s[2]), W = b.extent(0, 3, s[3]);
+        auto &e             = b.x();
+        const ExprId K      = b.constant("kernel", 1, *kernel);
+        const ExprId S      = ctx.has(2) ? b.constant("stride", 2, *stride) : K;
+        const ExprId P      = ctx.has(3) ? b.constant("pad", 3, *pad) : e.constant(0);
+        const ExprId N      = b.extent(0, 0, s[0]), C = b.extent(0, 1, s[1]);
+        const ExprId H      = b.extent(0, 2, s[2]), W = b.extent(0, 3, s[3]);
         b.require(e.constant(1), Rel::Le, S);
         auto outExtent = [&](ExprId in, const std::optional<int64_t> &known, const char *name) {
             const ExprId def =
@@ -365,14 +371,11 @@ IndexFn poolIndexing(bool max) {
         const ExprId OH = outExtent(H, s[2], "oh"), OW = outExtent(W, s[3], "ow");
         const ExprId n = b.dim(N), c = b.dim(C), oh = b.dim(OH), ow = b.dim(OW);
         const ExprId kh = b.dim(K, sem::DimRole::Reduction), kw = b.dim(K, sem::DimRole::Reduction);
-        const ExprId ih  = e.sub(e.add(e.mul(S, oh), kh), P);
-        const ExprId iw  = e.sub(e.add(e.mul(S, ow), kw), P);
+        const ExprId ih = e.sub(e.add(e.mul(S, oh), kh), P);
+        const ExprId iw = e.sub(e.add(e.mul(S, ow), kw), P);
         sem::Access read = IndexBuilder::affine({n, c, ih, iw});
         read.valid       = {
-            {e.constant(0), Rel::Le, ih},
-            {ih, Rel::Lt, H},
-            {e.constant(0), Rel::Le, iw},
-            {iw, Rel::Lt, W}};
+            {e.constant(0), Rel::Le, ih}, {ih, Rel::Lt, H}, {e.constant(0), Rel::Le, iw}, {iw, Rel::Lt, W}};
         read.onInvalid = max ? sem::OnInvalid::Excluded : sem::OnInvalid::Padding;
         read.padding   = 0; // +0.0f
         b.instance.norm.push_back(std::move(read));
@@ -436,8 +439,7 @@ camel::core::sem::OperatorSemantics poolSemantics(bool max) {
 slot_t batchNormKernel(ArgsView &, ArgsView &norm, context::Context &) {
     return runKernel("batch_norm", [&] {
         const double eps = hasArg(norm, 5) ? numberArg(norm, 5) : 1e-5;
-        return wrap(
-            norm.resultType(),
+        return wrap(norm.resultType(),
             k::batchNorm(
                 tensorArg(norm, 0),
                 tensorArg(norm, 1),
@@ -550,13 +552,11 @@ std::optional<Type *> embeddingInfer(const InferContext &ctx) {
 
 slot_t embeddingTableGradKernel(ArgsView &, ArgsView &norm, context::Context &) {
     return runKernel("embedding_table_grad", [&] {
-        return wrap(
-            norm.resultType(),
-            embeddingTableGrad(
-                tensorArg(norm, 0),
-                tensorArg(norm, 1),
-                tensorArg(norm, 2),
-                resultAllocator()));
+        return wrap(norm.resultType(), embeddingTableGrad(
+            tensorArg(norm, 0),
+            tensorArg(norm, 1),
+            tensorArg(norm, 2),
+            resultAllocator()));
     });
 }
 
@@ -569,13 +569,11 @@ slot_t softmaxCrossEntropyKernel(ArgsView &, ArgsView &norm, context::Context &)
 
 slot_t softmaxCrossEntropyGradKernel(ArgsView &, ArgsView &norm, context::Context &) {
     return runKernel("softmax_cross_entropy_grad", [&] {
-        return wrap(
-            norm.resultType(),
-            softmaxCrossEntropyGradLogits(
-                tensorArg(norm, 0),
-                tensorArg(norm, 1),
-                numberArg(norm, 2),
-                resultAllocator()));
+        return wrap(norm.resultType(), softmaxCrossEntropyGradLogits(
+            tensorArg(norm, 0),
+            tensorArg(norm, 1),
+            numberArg(norm, 2),
+            resultAllocator()));
     });
 }
 
@@ -604,7 +602,7 @@ void checkClassLabels(
 slot_t softmaxCrossEntropyLabelsKernel(ArgsView &, ArgsView &norm, context::Context &) {
     // The label checks are located faults of their own, not kernel failures (design principles
     // 3.9): they run outside runKernel, which maps exceptions to TensorDimensionMismatch.
-    const Array *logits               = tensorArg(norm, 0);
+    const Array *logits        = tensorArg(norm, 0);
     const std::vector<int64_t> labels = labelArg(norm, 1, "softmax_cross_entropy");
     checkClassLabels(logits, labels, "softmax_cross_entropy");
     return runKernel("softmax_cross_entropy_labels", [&] {
@@ -613,17 +611,12 @@ slot_t softmaxCrossEntropyLabelsKernel(ArgsView &, ArgsView &norm, context::Cont
 }
 
 slot_t softmaxCrossEntropyLabelsGradKernel(ArgsView &, ArgsView &norm, context::Context &) {
-    const Array *logits               = tensorArg(norm, 0);
+    const Array *logits        = tensorArg(norm, 0);
     const std::vector<int64_t> labels = labelArg(norm, 1, "softmax_cross_entropy_grad");
     checkClassLabels(logits, labels, "softmax_cross_entropy_grad");
     return runKernel("softmax_cross_entropy_labels_grad", [&] {
-        return wrap(
-            norm.resultType(),
-            softmaxCrossEntropyLabelsGradLogits(
-                logits,
-                labels,
-                numberArg(norm, 2),
-                resultAllocator()));
+        return wrap(norm.resultType(), softmaxCrossEntropyLabelsGradLogits(
+            logits, labels, numberArg(norm, 2), resultAllocator()));
     });
 }
 
@@ -754,7 +747,9 @@ template <const char *GradUri> void pool2dVjp(VjpBuilder &b, const VjpCall &call
     }
     std::vector<vjp_node_t> gradInputs{call.inputs[0], *dy};
     gradInputs.insert(gradInputs.end(), call.inputs.begin() + 1, call.inputs.end());
-    b.accumulateGradient(call.inputs[0], addTensorOperFor(b, call.inputs[0], GradUri, gradInputs));
+    b.accumulateGradient(
+        call.inputs[0],
+        addTensorOperFor(b, call.inputs[0], GradUri, gradInputs));
 }
 
 std::vector<OpDef> nnTensorOps() {
@@ -797,40 +792,30 @@ std::vector<OpDef> nnTensorOps() {
             .traits    = kPure});
     defs.push_back(
         OpDef{
-            .name    = "conv2d_input_grad_stated",
-            .exports = {"conv2d_input_grad_stated"},
-            .params =
-                {{"input_extents", ParamKind::IntArray},
-                 {"kernel", ParamKind::Tensor},
-                 {"dy", ParamKind::Tensor},
-                 {"stride", ParamKind::Int, true},
-                 {"padding", ParamKind::Int, true}},
+            .name      = "conv2d_input_grad_shaped",
+            .exports   = {"conv2d_input_grad_shaped"},
+            .params    = convParams("dy"),
             .resultDoc = "Tensor",
-            .infer     = shapedLikeExtents(0, 1),
-            .kernel    = &conv2dInputGradStatedKernel,
+            .infer     = shapedLikeDerivedExtents(0, 1, true),
+            .kernel    = &conv2dInputGradShapedKernel,
             .traits    = kPure});
     defs.push_back(
         OpDef{
-            .name    = "conv2d_kernel_grad_stated",
-            .exports = {"conv2d_kernel_grad_stated"},
-            .params =
-                {{"input", ParamKind::Tensor},
-                 {"kernel_extents", ParamKind::IntArray},
-                 {"dy", ParamKind::Tensor},
-                 {"stride", ParamKind::Int, true},
-                 {"padding", ParamKind::Int, true}},
+            .name      = "conv2d_kernel_grad_shaped",
+            .exports   = {"conv2d_kernel_grad_shaped"},
+            .params    = convParams("dy"),
             .resultDoc = "Tensor",
-            .infer     = shapedLikeExtents(1, 0),
-            .kernel    = &conv2dKernelGradStatedKernel,
+            .infer     = shapedLikeDerivedExtents(0, 1, false),
+            .kernel    = &conv2dKernelGradShapedKernel,
             .traits    = kPure});
     defs.push_back(
         OpDef{
-            .name      = "conv2d_bias_grad_stated",
-            .exports   = {"conv2d_bias_grad_stated"},
-            .params    = {{"bias_extents", ParamKind::IntArray}, {"dy", ParamKind::Tensor}},
+            .name      = "conv2d_bias_grad_shaped",
+            .exports   = {"conv2d_bias_grad_shaped"},
+            .params    = {{"dy", ParamKind::Tensor}},
             .resultDoc = "Tensor",
-            .infer     = shapedLikeExtents(0, 1),
-            .kernel    = &conv2dBiasGradStatedKernel,
+            .infer     = shapedLike(0),
+            .kernel    = &conv2dBiasGradShapedKernel,
             .traits    = kPure});
     defs.push_back(
         OpDef{
@@ -943,7 +928,7 @@ std::vector<OpDef> nnTensorOps() {
             .exports   = {"softmax_cross_entropy"},
             .params    = {{"logits", ParamKind::Tensor}, {"target", ParamKind::Tensor}},
             .resultDoc = "float",
-            .infer     = [](const InferContext &ctx) -> std::optional<Type *> {
+            .infer  = [](const InferContext &ctx) -> std::optional<Type *> {
                 const TensorFacts target = ctx.facts(1);
                 if (target.dtype && isIntegerCode(target.dtype)) {
                     return std::nullopt; // integer targets select the labels overload
@@ -954,12 +939,11 @@ std::vector<OpDef> nnTensorOps() {
             .traits = kPure});
     defs.push_back(
         OpDef{
-            .name    = "softmax_cross_entropy_grad",
-            .exports = {"softmax_cross_entropy_grad"},
-            .params =
-                {{"logits", ParamKind::Tensor},
-                 {"target", ParamKind::Tensor},
-                 {"dy", ParamKind::Number}},
+            .name      = "softmax_cross_entropy_grad",
+            .exports   = {"softmax_cross_entropy_grad"},
+            .params    = {{"logits", ParamKind::Tensor},
+                          {"target", ParamKind::Tensor},
+                          {"dy", ParamKind::Number}},
             .resultDoc = "Tensor",
             .infer     = [](const InferContext &ctx) -> std::optional<Type *> {
                 const TensorFacts target = ctx.facts(1);
@@ -982,12 +966,11 @@ std::vector<OpDef> nnTensorOps() {
             .traits    = kPure});
     defs.push_back(
         OpDef{
-            .name    = "softmax_cross_entropy_labels_grad",
-            .exports = {"softmax_cross_entropy_grad"},
-            .params =
-                {{"logits", ParamKind::Tensor},
-                 {"target", ParamKind::TensorLike},
-                 {"dy", ParamKind::Number}},
+            .name      = "softmax_cross_entropy_labels_grad",
+            .exports   = {"softmax_cross_entropy_grad"},
+            .params    = {{"logits", ParamKind::Tensor},
+                          {"target", ParamKind::TensorLike},
+                          {"dy", ParamKind::Number}},
             .resultDoc = "Tensor",
             .infer     = [](const InferContext &ctx) -> std::optional<Type *> {
                 const TensorFacts target = ctx.facts(1);
