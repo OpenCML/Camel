@@ -117,56 +117,17 @@ if [ -n "$integration_pushes" ]; then
     check_integration_shape
 fi
 
-# --- the per-merge record, on the branch merges arrive on ----------------------
+# --- the record a merge carries, and where it is asked ------------------------
 #
-# A gate refuses a push and not a commit. A merge made in a checkout that had `integration` checked
-# out survived a refusal on the local branch, and the next push of anything -- one backlog row --
-# carried it, so the merge became public having passed nothing. That is not a mistake a person makes
-# once; it is what the mechanism does whenever somebody pushes after a refusal.
+# A push is not where a merge is judged. Under D-1126-47 the merge seats land a batch of lanes on one
+# reading each -- the line the lane reports from its own tree -- and they do not gate every merge
+# again: a gate refuses a push and not a commit, so asking this hook for one record per merge refused
+# the merges that were made exactly as the protocol asks, which is a check that teaches its own bypass.
 #
-# The record (`scripts/merge-record.mjs`) is written by the merge tool after its gates and before its
-# push, so a merge that went through the gate is in this hook's set and a merge that was refused is
-# not. The range is the one the push sends, walked by first parent: a commit reachable only through a
-# side branch is part of a merge that already had its reading, and a single-parent commit such as a
-# documentation page is not asked for a record at all.
-#
-# This is what a push to `integration` is checked against, one merge at a time. A push to `develop`
-# publishes a tip instead of a merge, and its reading is the promotion record -- see the end of this
-# file; the two are different questions and neither answers the other.
-check_integration_records() {
-    tree=$(git rev-parse --show-toplevel 2>/dev/null) || {
-        echo "pre-push: refusing to push to $integration_ref: this is not inside a worktree, so the pass" >&2
-        echo "pre-push: records of the merges in this push cannot be found." >&2
-        exit 1
-    }
-    while IFS=' ' read -r local_ref local_sha remote_sha; do
-        [ "$local_ref" != '(delete)' ] || continue
-        [ -n "$local_sha" ] || continue
-        case "$local_sha" in
-            *[!0]*) : ;;
-            *) continue ;;
-        esac
-        node "$tree/scripts/merge-record.mjs" verify "$remote_sha" "$local_sha" >&2
-        state=$?
-        if [ "$state" -eq 1 ]; then
-            echo "pre-push: refusing to push $local_ref to $integration_ref: the merge commits named above have no reading that holds." >&2
-            echo "pre-push: a gate refuses a push, not a commit -- so a merge it refused is still on this branch" >&2
-            echo "pre-push: and this push would publish it. Merge those lanes again through the merge tool." >&2
-            exit 1
-        elif [ "$state" -ne 0 ]; then
-            echo "pre-push: refusing to push $local_ref to $integration_ref: the merge records could not be read (node exit $state)." >&2
-            echo "pre-push: an unreadable record set is not an empty one." >&2
-            exit 1
-        fi
-    done <<EOF
-$integration_pushes
-EOF
-}
-
-if [ -n "$integration_pushes" ]; then
-    check_integration_records
-fi
-
+# The record itself has not gone away: `merge-lane.ps1` still writes one per merge it gates, and
+# `scripts/merge-record.mjs verify` still reads them where a merge is made. What changed is the
+# question this hook asks: every ref it sends is judged by the lines it adds (above), and a push to
+# `develop` is judged by the promotion record of the tip it publishes (below).
 # Nothing here is about another branch: a hook that speaks on every push is read as noise.
 [ -n "$develop_push" ] || exit 0
 
