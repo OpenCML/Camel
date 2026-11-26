@@ -19,7 +19,6 @@ kind = "behavior"
 case = "../../../cases/consistency/limits/depth_direct.cml"
 args = ["--max-recursion-depth", "100", "${case}", "${backend}"]
 backends = ["nvm", "fvm", "jit", "prl"]
-backends_agree = ["exit_code", "stdout_normalized", "diagnostics"]
 expect_output_not_contains = ["Segmentation fault", "dumped core"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 30000
@@ -28,6 +27,7 @@ timeout_ms = 30000
 
 [[tests]]
 name = "limit.direct.fits"
+backends_agree = ["exit_code", "stdout_normalized", "diagnostics"]
 desc = "Limit 100: depth(99) runs."
 envs = ["N=99"]
 expect_exit = 0
@@ -35,6 +35,7 @@ expect_stdout_starts_with = "start\n99\ndone\n"
 
 [[tests]]
 name = "limit.direct.exceeds"
+backends_agree = ["exit_code", "stdout_normalized", "diagnostics"]
 desc = "Limit 100: depth(100) stops with MaxRecursionDepthExceeded at the recursive call, naming the limit and how to raise it."
 envs = ["N=100"]
 expect_exit = 1
@@ -47,6 +48,7 @@ expect_output_not_contains = ["done", "Segmentation fault", "dumped core"]
 
 [[tests]]
 name = "limit.value.fits"
+backends_agree = ["exit_code", "stdout_normalized", "diagnostics"]
 desc = "Limit 100, recursion through a function value (two calls a level): step(49) runs."
 case = "../../../cases/consistency/limits/depth_value.cml"
 envs = ["N=49"]
@@ -55,6 +57,7 @@ expect_stdout_starts_with = "start\n49\ndone\n"
 
 [[tests]]
 name = "limit.value.exceeds"
+backends_agree = ["exit_code", "stdout_normalized", "diagnostics"]
 desc = "Limit 100, recursion through a function value: step(50) stops with the same diagnostic, at the call through the value. (std::fvm did not count these calls and ran into a segmentation fault.)"
 case = "../../../cases/consistency/limits/depth_value.cml"
 envs = ["N=50"]
@@ -83,6 +86,7 @@ expect_output_not_contains = ["done", "Segmentation fault", "dumped core"]
 
 [[tests]]
 name = "limit.direct.after_devirtualize.fits"
+backends_agree = ["exit_code", "stdout_normalized", "diagnostics"]
 desc = "Limit 100 after std::cxx::devirtualize: depth(99) still runs, on all four back ends."
 args = ["--max-recursion-depth", "100", "${case}", "std::cxx::devirtualize", "${backend}"]
 envs = ["N=99"]
@@ -91,6 +95,7 @@ expect_stdout_starts_with = "start\n99\ndone\n"
 
 [[tests]]
 name = "limit.direct.after_devirtualize.exceeds"
+backends_agree = ["exit_code", "stdout_normalized", "diagnostics"]
 desc = "Limit 100 after std::cxx::devirtualize: depth(100) still stops with MaxRecursionDepthExceeded at the recursive call -- the pass does not buy a frame. Red before the fix: exit 0 and `start\n100\ndone\n`."
 args = ["--max-recursion-depth", "100", "${case}", "std::cxx::devirtualize", "${backend}"]
 envs = ["N=100"]
@@ -139,6 +144,7 @@ expect_output_not_contains = ["done", "Segmentation fault", "dumped core"]
 
 [[tests]]
 name = "limit.moved.direct.without_passes.exceeds"
+backends_agree = ["exit_code", "stdout_normalized", "diagnostics"]
 desc = "Limit 10, nothing added: depth(10) stops, so the boundary the cells below move away from is the one pinned here."
 args = ["--max-recursion-depth", "10", "${case}", "${backend}"]
 backends = ["nvm", "fvm", "jit"]
@@ -153,6 +159,7 @@ expect_output_not_contains = ["done", "Segmentation fault", "dumped core"]
 
 [[tests]]
 name = "limit.moved.value.without_passes.exceeds"
+backends_agree = ["exit_code", "stdout_normalized", "diagnostics"]
 desc = "Limit 100, nothing added: step(50) stops, the other boundary the cells below move away from."
 case = "../../../cases/consistency/limits/depth_value.cml"
 args = ["--max-recursion-depth", "100", "${case}", "${backend}"]
@@ -168,6 +175,7 @@ expect_output_not_contains = ["done", "Segmentation fault", "dumped core"]
 
 [[tests]]
 name = "limit.moved.direct.after_std_opt.runs"
+backends_agree = ["exit_code", "stdout_normalized", "diagnostics"]
 desc = "Limit 10, the whole std::opt: depth(10) runs -- the pipeline buys one level (allowed, 9.6), and this is where it shows."
 args = ["--max-recursion-depth", "10", "${case}", "std::opt", "${backend}"]
 backends = ["nvm", "fvm", "jit"]
@@ -177,6 +185,7 @@ expect_stdout_starts_with = "start\n10\ndone\n"
 
 [[tests]]
 name = "limit.moved.direct.after_std_opt.still_stops"
+backends_agree = ["exit_code", "stdout_normalized", "diagnostics"]
 desc = "Limit 10, the whole std::opt, one deeper: depth(11) stops. The level it bought is one, not all of them."
 args = ["--max-recursion-depth", "10", "${case}", "std::opt", "${backend}"]
 backends = ["nvm", "fvm", "jit"]
@@ -188,6 +197,7 @@ expect_output_not_contains = ["done", "Segmentation fault", "dumped core"]
 
 [[tests]]
 name = "limit.moved.value.after_inline.runs"
+backends_agree = ["exit_code", "stdout_normalized", "diagnostics"]
 desc = "Limit 100 after std::cxx::inline: step(50) runs -- the inliner compacts the mutual recursion to one call per level."
 case = "../../../cases/consistency/limits/depth_value.cml"
 args = ["--max-recursion-depth", "100", "${case}", "std::cxx::inline", "${backend}"]
@@ -198,6 +208,7 @@ expect_stdout_starts_with = "start\n50\ndone\n"
 
 [[tests]]
 name = "limit.moved.value.after_inline.at_the_doubled_boundary"
+backends_agree = ["exit_code", "stdout_normalized", "diagnostics"]
 desc = "Limit 100 after std::cxx::inline: step(100) runs, the boundary having moved from 50 levels to 100."
 case = "../../../cases/consistency/limits/depth_value.cml"
 args = ["--max-recursion-depth", "100", "${case}", "std::cxx::inline", "${backend}"]
@@ -208,6 +219,7 @@ expect_stdout_starts_with = "start\n100\ndone\n"
 
 [[tests]]
 name = "limit.moved.value.after_inline.past_it.still_stops"
+backends_agree = ["exit_code", "stdout_normalized", "diagnostics"]
 desc = "Limit 100 after std::cxx::inline, one level past the doubled boundary: step(101) stops."
 case = "../../../cases/consistency/limits/depth_value.cml"
 args = ["--max-recursion-depth", "100", "${case}", "std::cxx::inline", "${backend}"]
@@ -220,6 +232,7 @@ expect_output_not_contains = ["done", "Segmentation fault", "dumped core"]
 
 [[tests]]
 name = "limit.moved.value.after_saturate.runs"
+backends_agree = ["exit_code", "stdout_normalized", "diagnostics"]
 desc = "Limit 100 after std::cxx::saturate and a named extraction: step(50) runs; this pass moves the boundary too."
 case = "../../../cases/consistency/limits/depth_value.cml"
 args = ["--max-recursion-depth", "100", "${case}", "std::cxx::saturate", "rewrite::extract cost=rules::nodes", "${backend}"]
@@ -230,6 +243,7 @@ expect_stdout_starts_with = "start\n50\ndone\n"
 
 [[tests]]
 name = "limit.moved.value.after_saturate.still_stops"
+backends_agree = ["exit_code", "stdout_normalized", "diagnostics"]
 desc = "Limit 100 after std::cxx::saturate and a named extraction: step(100) stops -- this pass moves the boundary to 99 levels, not past them."
 case = "../../../cases/consistency/limits/depth_value.cml"
 args = ["--max-recursion-depth", "100", "${case}", "std::cxx::saturate", "rewrite::extract cost=rules::nodes", "${backend}"]
@@ -242,6 +256,7 @@ expect_output_not_contains = ["done", "Segmentation fault", "dumped core"]
 
 [[tests]]
 name = "limit.moved.value.after_std_opt.runs"
+backends_agree = ["exit_code", "stdout_normalized", "diagnostics"]
 desc = "Limit 100 after the whole std::opt: step(50) runs."
 case = "../../../cases/consistency/limits/depth_value.cml"
 args = ["--max-recursion-depth", "100", "${case}", "std::opt", "${backend}"]
@@ -252,6 +267,7 @@ expect_stdout_starts_with = "start\n50\ndone\n"
 
 [[tests]]
 name = "limit.moved.value.after_std_opt.at_the_doubled_boundary"
+backends_agree = ["exit_code", "stdout_normalized", "diagnostics"]
 desc = "Limit 100 after the whole std::opt: step(100) runs."
 case = "../../../cases/consistency/limits/depth_value.cml"
 args = ["--max-recursion-depth", "100", "${case}", "std::opt", "${backend}"]
@@ -262,6 +278,7 @@ expect_stdout_starts_with = "start\n100\ndone\n"
 
 [[tests]]
 name = "limit.moved.value.after_std_opt.past_it.still_stops"
+backends_agree = ["exit_code", "stdout_normalized", "diagnostics"]
 desc = "Limit 100 after the whole std::opt, one level past the doubled boundary: step(101) stops."
 case = "../../../cases/consistency/limits/depth_value.cml"
 args = ["--max-recursion-depth", "100", "${case}", "std::opt", "${backend}"]
@@ -274,6 +291,7 @@ expect_output_not_contains = ["done", "Segmentation fault", "dumped core"]
 
 [[tests]]
 name = "limit.map.fits"
+backends_agree = ["exit_code", "stdout_normalized", "diagnostics"]
 desc = "Limit 100, recursion inside a map element (one more call open): depth(98) runs."
 case = "../../../cases/consistency/limits/depth_map.cml"
 envs = ["N=98"]
@@ -282,6 +300,7 @@ expect_stdout_starts_with = "start\n[98, 3, 1]\ndone\n"
 
 [[tests]]
 name = "limit.map.exceeds"
+backends_agree = ["exit_code", "stdout_normalized", "diagnostics"]
 desc = "Limit 100, recursion inside a map element: depth(130) stops with the same diagnostic. The count follows the element onto the thread that runs it under std::prl."
 case = "../../../cases/consistency/limits/depth_map.cml"
 envs = ["N=130"]
@@ -300,6 +319,7 @@ expect_output_not_contains = ["done", "Segmentation fault", "dumped core"]
 
 [[tests]]
 name = "limit.raised.option"
+backends_agree = ["exit_code", "stdout_normalized", "diagnostics"]
 desc = "depth(4000) does not run with the default limit (1000) and runs on all four with --max-recursion-depth 5000."
 args = ["--native-stack-guard", "off", "--max-recursion-depth", "5000", "${case}", "${backend}"]
 envs = ["N=4000"]
@@ -308,6 +328,7 @@ expect_stdout_starts_with = "start\n4000\ndone\n"
 
 [[tests]]
 name = "limit.default"
+backends_agree = ["exit_code", "stdout_normalized", "diagnostics"]
 desc = "Without option and variable every scheduler stops at 1000 open calls (design principles 3.9): depth(999) runs and depth(1000) does not, on all four alike. std::prl counts like the others (it had no count by default)."
 args = ["${case}", "${backend}"]
 envs = ["N=999"]
@@ -316,6 +337,7 @@ expect_stdout_starts_with = "start\n999\ndone\n"
 
 [[tests]]
 name = "limit.default_exceeded"
+backends_agree = ["exit_code", "stdout_normalized", "diagnostics"]
 args = ["${case}", "${backend}"]
 envs = ["N=1000"]
 expect_exit = 1
@@ -326,6 +348,7 @@ expect_output_contains = ["Maximum recursion depth (1000) exceeded"]
 
 [[tests]]
 name = "limit.default.value"
+backends_agree = ["exit_code", "stdout_normalized", "diagnostics"]
 desc = "The default limit through a function value (two calls a level, each nesting on the native stack on std::fvm): step(499) runs on all four, within the default thread stacks."
 case = "../../../cases/consistency/limits/depth_value.cml"
 args = ["${case}", "${backend}"]
@@ -335,6 +358,7 @@ expect_stdout_starts_with = "start\n499\ndone\n"
 
 [[tests]]
 name = "limit.default.value_exceeded"
+backends_agree = ["exit_code", "stdout_normalized", "diagnostics"]
 desc = "step(500) is one call too many under the default limit: the same diagnostic on all four."
 case = "../../../cases/consistency/limits/depth_value.cml"
 args = ["${case}", "${backend}"]
@@ -345,6 +369,7 @@ expect_output_contains = ["Maximum recursion depth (1000) exceeded"]
 
 [[tests]]
 name = "limit.default.map"
+backends_agree = ["exit_code", "stdout_normalized", "diagnostics"]
 desc = "The default limit inside a map element (one more call open; on std::prl the count follows the element onto the worker thread that runs it): depth(998) runs."
 case = "../../../cases/consistency/limits/depth_map.cml"
 args = ["${case}", "${backend}"]
@@ -353,6 +378,7 @@ expect_exit = 0
 
 [[tests]]
 name = "limit.default.map_exceeded"
+backends_agree = ["exit_code", "stdout_normalized", "diagnostics"]
 desc = "depth(1300) inside a map element stops with the diagnostic on all four, std::prl included."
 case = "../../../cases/consistency/limits/depth_map.cml"
 args = ["${case}", "${backend}"]
@@ -363,6 +389,7 @@ expect_output_contains = ["Maximum recursion depth (1000) exceeded"]
 
 [[tests]]
 name = "limit.tail_calls_not_counted"
+backends_agree = ["exit_code", "stdout_normalized", "diagnostics"]
 desc = "A limit of 8 does not bound tail recursion: a million rounds of a self tail call and 100000 of a mutual one run."
 kind = "snapshot"
 snapshot_stream = "stdout"
@@ -379,7 +406,6 @@ name = "limit.largest.no_crash"
 desc = "The largest limit the option accepts (1000000) with a recursion of 900000: a back end that nests on the native stack (std::nvm, std::tf) stops with MaxRecursionDepthExceeded when the stack is nearly full, std::fvm keeps its calls off the native stack and may finish. Either way the process ends by itself with exit code 0 or 1, never by a signal."
 args = ["--max-recursion-depth", "1000000", "${case}", "${backend}"]
 backends = ["nvm", "fvm", "prl"]
-backends_agree = []
 envs = ["N=900000"]
 timeout_ms = 120000
 expect_exit = "script"
@@ -396,7 +422,6 @@ name = "limit.largest.value.no_crash"
 desc = "The same through a function value, where std::fvm nests on the native stack too."
 args = ["--max-recursion-depth", "1000000", "${case}", "${backend}"]
 backends = ["nvm", "fvm", "prl"]
-backends_agree = []
 case = "../../../cases/consistency/limits/depth_value.cml"
 envs = ["N=400000"]
 timeout_ms = 120000
@@ -452,6 +477,7 @@ expect_output_contains = ["more than 64 nested calls", "--max-macro-depth"]
 
 [[tests]]
 name = "limit.macro.option"
+backends_agree = ["exit_code", "stdout_normalized", "diagnostics"]
 desc = "With --max-macro-depth 200 the call is evaluated ahead of time; the program then runs on each back end without recursing at all."
 case = "../../../cases/consistency/limits/macro_depth.cml"
 args = ["--max-macro-depth", "200", "--max-recursion-depth", "4", "${case}", "std::macro", "${backend}"]
@@ -492,7 +518,6 @@ name = "limit.10000.fits"
 desc = "Limit 10000: depth(9999) is under the count on every back end and under std::cxx::inline std::jit. It finishes wherever the native stack holds 9999 levels; where it does not (the back ends that nest on the native stack, on Windows, which keeps 15/16 of the stack as the reserve for SEH unwinding: stackReserve in src/execute/limits.cpp), it stops at the recursive call with the diagnostic of a full native stack, never with the count's."
 args = ["--max-recursion-depth", "10000", "${case}", "${backend}"]
 backends = ["nvm", "fvm", "jit", "prl", "inline_jit"]
-backends_agree = []
 envs = ["N=9999"]
 timeout_ms = 60000
 expect_exit = "script"
@@ -509,7 +534,6 @@ assert(finished || stackFull, `exit ${input.exit_code}: ${text.slice(0, 300)}`)
 name = "limit.10000.exceeds"
 desc = "Limit 10000: depth(10000) stops at the recursive call on every back end: at the count, or first at a full native stack where that holds fewer levels (see limit.10000.fits)."
 args = ["--max-recursion-depth", "10000", "${case}", "${backend}"]
-backends_agree = []
 envs = ["N=10000"]
 timeout_ms = 60000
 expect_exit = 1
@@ -538,7 +562,6 @@ expect_output_contains = ["Maximum recursion depth (10000) exceeded"]
 name = "limit.raised.native.no_crash.100000.50000"
 desc = "Limits of 100000 and 1000000 with recursions of 50000, 100000 and 900000 levels in native code and under std::jit: each ends with the result or with MaxRecursionDepthExceeded at the recursive call, never by a signal. (A native recursion of 100000 levels under a limit of 1000000 was a segmentation fault.)"
 backends = ["jit", "inline_jit"]
-backends_agree = []
 timeout_ms = 120000
 args = ["--max-recursion-depth", "100000", "${case}", "${backend}"]
 envs = ["N=50000"]
@@ -555,7 +578,6 @@ assert(stopped || finished, `exit ${input.exit_code}: ${input.normalized.stdout.
 name = "limit.raised.native.no_crash.100000.100000"
 desc = "Limit 100000, 100000 levels."
 backends = ["jit", "inline_jit"]
-backends_agree = []
 timeout_ms = 120000
 args = ["--max-recursion-depth", "100000", "${case}", "${backend}"]
 envs = ["N=100000"]
@@ -572,7 +594,6 @@ assert(stopped || finished, `exit ${input.exit_code}: ${input.normalized.stdout.
 name = "limit.raised.native.no_crash.100000.900000"
 desc = "Limit 100000, 900000 levels."
 backends = ["jit", "inline_jit"]
-backends_agree = []
 timeout_ms = 120000
 args = ["--max-recursion-depth", "100000", "${case}", "${backend}"]
 envs = ["N=900000"]
@@ -589,7 +610,6 @@ assert(stopped || finished, `exit ${input.exit_code}: ${input.normalized.stdout.
 name = "limit.raised.native.no_crash.1000000.50000"
 desc = "Limit 1000000, 50000 levels."
 backends = ["jit", "inline_jit"]
-backends_agree = []
 timeout_ms = 120000
 args = ["--max-recursion-depth", "1000000", "${case}", "${backend}"]
 envs = ["N=50000"]
@@ -606,7 +626,6 @@ assert(stopped || finished, `exit ${input.exit_code}: ${input.normalized.stdout.
 name = "limit.raised.native.no_crash.1000000.100000"
 desc = "Limit 1000000, 100000 levels."
 backends = ["jit", "inline_jit"]
-backends_agree = []
 timeout_ms = 120000
 args = ["--max-recursion-depth", "1000000", "${case}", "${backend}"]
 envs = ["N=100000"]
@@ -623,7 +642,6 @@ assert(stopped || finished, `exit ${input.exit_code}: ${input.normalized.stdout.
 name = "limit.raised.native.no_crash.1000000.900000"
 desc = "Limit 1000000, 900000 levels."
 backends = ["jit", "inline_jit"]
-backends_agree = []
 timeout_ms = 120000
 args = ["--max-recursion-depth", "1000000", "${case}", "${backend}"]
 envs = ["N=900000"]
@@ -659,7 +677,6 @@ desc = "The deep recursion inside `attempt`, twice, under a limit of 1000000: wh
 case = "../../../cases/consistency/limits/depth_isolated.cml"
 args = ["--max-recursion-depth", "1000000", "${case}", "${backend}"]
 backends = ["nvm", "fvm", "jit", "prl", "inline_jit"]
-backends_agree = []
 envs = ["N=900000"]
 timeout_ms = 120000
 expect_exit = "script"

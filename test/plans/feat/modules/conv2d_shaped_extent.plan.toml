@@ -17,7 +17,6 @@ kind = "behavior"
 case = "../../../cases/modules/nn/conv2d_shaped_derived_extent.cml"
 args = ["${case}", "${backend}"]
 backends = ["nvm", "fvm", "jit", "prl"]
-backends_agree = []
 expect_exit = 0
 expect_stdout_contains = ["plain  dx=[1, 1, 6, 6] dw=[1, 1, 3, 3]", "bias   plain=[1] shaped=[1]", "divides dx=[1, 1, 7, 7] dw=[1, 1, 3, 3]"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
@@ -30,7 +29,6 @@ kind = "behavior"
 case = "../../../cases/modules/nn/conv2d_shaped_derived_extent.cml"
 args = ["${case}"]
 backends = ["nvm"]
-backends_agree = []
 expect_exit = 0
 expect_stdout_contains = ["derived dx=[1, 1, 6, 6] dw=[1, 1, 3, 3]"]
 known_fail = ["nvm"]
@@ -48,7 +46,6 @@ kind = "behavior"
 case = "../../../cases/modules/nn/conv2d_shaped_derived_extent.cml"
 args = ["${case}"]
 backends = ["nvm"]
-backends_agree = []
 expect_exit = 0
 expect_stdout_contains = ["value  dx=6x6 dw=3x3 numel=36,9"]
 known_fail = ["nvm"]
