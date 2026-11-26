@@ -5,7 +5,7 @@
 > 这一页由 `node scripts/check-doc-links.mjs --questions-index --write` 从目录生成，不要手改：
 > 规矩在 `internal/reviews/` 的裁定里，落没落地看代码和提交，不看这张表。
 
-## 现在在等作者：18 页
+## 现在在等作者：19 页
 
 | 页 | 问什么 |
 | --- | --- |
@@ -24,6 +24,7 @@
 | [`2026-11-26-oper-uri-readings`](2026-11-26-oper-uri-readings.cn.md) | 算子「按编号认」还差两件事，缺哪一件由你定 |
 | [`2026-11-27-does-a-pure-function-see-its-reads`](2026-11-27-does-a-pure-function-see-its-reads.cn.md) | 一个 `pure` 函数读资源，算不算“没有写”？两处口径需要作者裁 |
 | [`2026-11-27-fsh-dev-remote-script-line`](2026-11-27-fsh-dev-remote-script-line.cn.md) | 元层一行：`fsh-dev` 的 `camel-remote.ps1:2999` 让整批无法合入 |
+| [`2026-11-27-how-does-a-handle-type-name-become-visible-in-a-block`](2026-11-27-how-does-a-handle-type-name-become-visible-in-a-block.cn.md) | 块体里写 `Node` 这样的句柄类型名，要谁把它带进作用域 |
 | [`2026-11-27-is-a-top-level-var-a-compile-error`](2026-11-27-is-a-top-level-var-a-compile-error.cn.md) | 模块顶层的 `var` 是编译错误，还是模块的资源？ |
 | [`2026-11-27-where-a-block-root-handle-comes-from`](2026-11-27-where-a-block-root-handle-comes-from.cn.md) | 块根那个句柄，编译器从哪拿它的类型与算子 |
 | [`2026-11-27-where-a-blocks-root-gets-the-module-that-declares-its-operator`](2026-11-27-where-a-blocks-root-gets-the-module-that-declares-its-operator.cn.md) | 块的根从哪里拿到「声明它那个算子的模块」 |
