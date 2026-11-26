@@ -87,6 +87,7 @@
 #include "camel/core/type/base.h"
 #include "camel/core/type/resolver.h"
 #include "camel/ops/oper_shape.h"
+#include "camel/ops/subscript_form.h"
 
 #include <cstdint>
 #include <functional>
@@ -387,6 +388,18 @@ struct Record {
      */
     OperShape shape = OperShape::None;
 
+    /**
+     * Which subscript form of the language it is the node of -- an element read at a position, a
+     * view of one axis, the integers of a step -- or None (camel/ops/subscript_form.h). Stated
+     * where the operator is registered, and the only place a reader asks: a reader that must know
+     * how many ordinary operands the form carries, and which one of them is the step, reads this
+     * instead of the letters of a URI, and none of the three has an id of its own anywhere.
+     *
+     * None is the answer for an operator nobody stated a form for, so a reader does not have to
+     * tell "not one of the three" from "nobody said".
+     */
+    SubscriptForm subscript = SubscriptForm::None;
+
     /// What the operator grants when it is used as a decorator.
     std::shared_ptr<const AttrGrant> grant;
 
@@ -547,6 +560,13 @@ class Registry {
      * with the one it holds, naming the operator and both shapes.
      */
     void stateShape(OperId id, OperShape shape);
+
+    /**
+     * States which subscript form the operator is (camel/ops/subscript_form.h), from the module
+     * that registers it with its implementation. The same rule as `stateShape`: a later statement
+     * stands before the record is completed, and a completed record refuses one that disagrees.
+     */
+    void stateSubscriptForm(OperId id, SubscriptForm form);
 
     // ---- Entrance 2: the C++ registration API ----------------------------------------------
 

@@ -130,8 +130,13 @@ class DraftGraphBuilder {
     /// (`:op/copy`) -- are written this way, so a program that shadows the operator's **name**
     /// still gets the call the language means. The call a call site makes on an extent is the third
     /// (`:op/refine_extent`, `Builder::refineExtentNodeOf`): the language means it too, no
-    /// declaration answers it at all, and the URI is the whole of its identity.
+    /// declaration answers it at all, and the id is the whole of its identity.
     runtime::DraftNodeRef addOperNode(camel::core::type::Type *type, std::string_view uri);
+    /// The same node for the caller that holds the identity already -- the id a declaration
+    /// carries (`OperatorIndex::oper`), or one the compiler resolved once for an operator it
+    /// writes itself (`camel::core::constructedOperators`, operator_table.h). Nothing is looked
+    /// up: the id the table gave the operator is copied into the node.
+    runtime::DraftNodeRef addOperNode(camel::core::type::Type *type, camel::core::OperId oper);
     runtime::DraftNodeRef addFillNode(camel::core::type::Type *type, const runtime::GCFillBody &body);
     runtime::DraftNodeRef
     addFillNode(camel::core::type::Type *type, std::span<const std::byte> payload);

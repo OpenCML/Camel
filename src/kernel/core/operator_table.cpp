@@ -26,6 +26,24 @@ OperatorTable &OperatorTable::instance() {
     return table;
 }
 
+const ConstructedOperators &constructedOperators() {
+    // The one resolve. `intern` seats an entry when the URI is new, so these are ids whatever the
+    // built-in group has declared so far, and the six are asked of the table once for the life of
+    // the process: a reader compares an id and never spells one of these URIs.
+    static const ConstructedOperators ids = [] {
+        OperatorTable &table = OperatorTable::instance();
+        return ConstructedOperators{
+            .copy         = table.intern(kCopyOperatorUri),
+            .fill         = table.intern(kFillOperatorUri),
+            .enter        = table.intern(kEnterOperatorUri),
+            .cast         = table.intern(kCastOperatorUri),
+            .fail         = table.intern(kFailOperatorUri),
+            .refineExtent = table.intern(kRefineExtentOperatorUri),
+        };
+    }();
+    return ids;
+}
+
 OperatorTable::OperatorTable() {
     // Index 0 is kNoOper: the empty URI, never declared.
     const OperId id = entries_.append([](Entry &entry) { entry.uri = kEmptySym; });
@@ -349,9 +367,10 @@ std::string checkVarAgainstResources(
 
 } // namespace
 
-void OperatorTable::setResolver(std::string_view uri, type::resolver_ptr_t resolver) {
+OperId OperatorTable::setResolver(std::string_view uri, type::resolver_ptr_t resolver) {
     std::unique_lock lock(mutex_);
-    Entry &entry = entries_[internLocked(uri)];
+    const OperId id = internLocked(uri);
+    Entry &entry   = entries_[id];
     if (const sem::OperatorSemantics *declared = entry.declared.load(std::memory_order_relaxed);
         declared != nullptr && declared->resources) {
         const std::string problem =
@@ -361,6 +380,7 @@ void OperatorTable::setResolver(std::string_view uri, type::resolver_ptr_t resol
         }
     }
     entry.resolver = std::move(resolver);
+    return id;
 }
 
 bool OperatorTable::writesOperand(OperId id, bool isWith, size_t index) const {
@@ -704,6 +724,26 @@ void OperatorTable::declareShape(std::string_view uri, camel::ops::OperShape sha
             std::format("{}: no operator record was seated for it at intern", uri));
     }
     camel::ops::Registry::instance().stateShape(recordId, shape);
+}
+
+void OperatorTable::declareSubscriptForm(
+    std::string_view uri, camel::ops::SubscriptForm form) {
+    // A record item for the reason `declareShape` is one: a reader asks it of the operator a node
+    // names while it analyses a graph, and the record is where a fact that a graph reader and a
+    // back end both need lives. The statement goes through the join `recordOf` reads, and nowhere
+    // else.
+    const OperId id              = intern(uri);
+    const std::uint32_t recordId = entries_[id].record;
+    if (recordId == 0) {
+        throw std::logic_error(
+            std::format("{}: no operator record was seated for it at intern", uri));
+    }
+    camel::ops::Registry::instance().stateSubscriptForm(recordId, form);
+}
+
+camel::ops::SubscriptForm OperatorTable::subscriptFormOf(OperId id) const {
+    const camel::ops::Record *facts = recordOf(id);
+    return facts == nullptr ? camel::ops::SubscriptForm::None : facts->subscript;
 }
 
 void OperatorTable::declareGrant(std::string_view uri, AttrGrant grant) {

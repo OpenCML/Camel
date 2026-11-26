@@ -1064,7 +1064,12 @@ void FunctionEmitter::lowerOperator(Frame &frame, gc_node_ref_t ref, Block &out)
     // reads a field through). A record is a C++ aggregate -- there is no field table at run time --
     // so the name has to be one the writer reads here: a field the struct has is that member, and a
     // name it does not have is the interpreter's own report, FieldNotFound, with the name in it.
-    if (uri == ":op/idx_str" && norm.size() == 2 && firstNormType != nullptr &&
+    // Which form the operator is (`Record::subscript`) and what it is applied to say this: an index
+    // of a struct is the by-name read, since the array form takes an array and the plain form
+    // resolves to it. No URI is spelled here.
+    if (camel::core::OperatorTable::instance().subscriptFormOf(operatorId(g, ref)) ==
+            camel::ops::SubscriptForm::Index &&
+        norm.size() == 2 && firstNormType != nullptr &&
         firstNormType->code() == camel::core::type::TypeCode::Struct &&
         firstNormType != camel::core::type::errorType()) {
         const auto *record = static_cast<const camel::core::type::StructType *>(firstNormType);
@@ -2440,7 +2445,7 @@ bool FunctionEmitter::lowerSetIndexInPlace(Frame &frame, gc_node_ref_t ref, Bloc
 
 bool FunctionEmitter::lowerFail(
     Frame &frame, gc_node_ref_t ref, const std::string &uri, Block &out) {
-    if (uri != ":op/fail") {
+    if (operatorId(frame.graph, ref) != camel::core::constructedOperators().fail) {
         return false;
     }
     const auto *g = frame.graph;

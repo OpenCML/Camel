@@ -2188,31 +2188,34 @@ void Builder::settleGenericOperatorArguments(
             }
         } else {
             const auto &group = std::get<oper_group_ptr_t>(target);
-            const auto add    = [&](const std::string &uri, FunctionType *candidate) {
+            const auto add = [&](const std::string &uri, camel::core::OperId oper,
+                                 FunctionType *candidate) {
                 for (const auto &known : operators) {
-                    if (known->uri() == uri && known->funcType()->equals(candidate)) {
+                    if (known->oper() == oper && known->funcType()->equals(candidate)) {
                         return;
                     }
                 }
                 if (accepts(candidate)) {
                     operators.push_back(
-                        std::make_shared<OperatorIndex>(group->name(), candidate, uri));
+                        std::make_shared<OperatorIndex>(group->name(), candidate, uri, oper));
                 }
             };
-            for (const auto &[uri, resolver] : group->resolvers()) {
+            for (size_t i = 0; i < group->resolvers().size(); ++i) {
+                const std::string &uri = group->resolvers()[i].first;
+                const type::resolver_ptr_t &resolver = group->resolvers()[i].second;
                 if (FunctionType *fixed = resolver->fixedSignature()) {
-                    add(uri, fixed);
+                    add(uri, group->operAt(i), fixed);
                     continue;
                 }
                 // A signature computed from the argument types: asked for the candidate
                 // types, one and two parameters.
                 for (Type *first : candidates) {
                     if (auto one = resolver->resolve({}, {first})) {
-                        add(uri, *one);
+                        add(uri, group->operAt(i), *one);
                     }
                     for (Type *second : candidates) {
                         if (auto two = resolver->resolve({}, {first, second})) {
-                            add(uri, *two);
+                            add(uri, group->operAt(i), *two);
                         }
                     }
                 }

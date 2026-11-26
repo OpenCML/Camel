@@ -56,6 +56,7 @@
 #include "camel/core/symbol.h"
 #include "camel/core/type/resolver.h"
 #include "camel/ops/oper_shape.h"
+#include "camel/ops/subscript_form.h"
 #include "camel/utils/append_only_table.h"
 
 #include <atomic>
@@ -162,6 +163,47 @@ inline constexpr bool isVariableOperator(OperId id) {
            id == VarAfter;
 }
 } // namespace oper
+
+/**
+ * The operators the compiler itself writes when it lowers a construct, with the ids the table
+ * gave them: a copy, a fill, an entering, a conversion, a failure, and the check of an extent
+ * that a call site makes (`:op/copy`, `:op/fill`, `:op/enter`, `:op/cast`, `:op/fail`,
+ * `:op/refine_extent`).
+ *
+ * **Why these and not the subscript forms.** The builder has to *make* these nodes, and making
+ * one means naming the operator it runs: there is no declaration in scope to resolve when the
+ * compiler writes the step itself, so it needs the identity, and an id resolved once is that
+ * identity. A subscript -- `t[i]`, `t[a..b]`, `range(a, b, s)` -- is the opposite case: the
+ * program's own call resolves to a declaration, and what the reader wants to know is not which
+ * operator it is but *what kind of form* it is, which its record states
+ * (`Record::subscript`). Giving those three ids would turn this table into the same special
+ * case by name that it exists to replace.
+ *
+ * **Where the resolve happens.** On the first call, from `OperatorTable`: each URI is interned,
+ * which is the one operation that seats an operator's entry, so the six are the entries the
+ * built-in group's URIs name whether or not the module has declared them yet -- an id is a
+ * position in the table, not a claim that the operator exists. The answer is kept in a function
+ * -local static for the life of the process, and every reader takes it from here: nothing is
+ * looked up per node, and no reader spells one of these URIs.
+ *
+ * **What it cannot answer.** Never `kNoOper`. `intern` cannot fail, so there is no fallback to
+ * report and no `kNoOper` to guard against: a reader that compared `kNoOper` would match every
+ * node that names no operator at all, which is the one answer that would look right and be
+ * wrong.
+ */
+struct ConstructedOperators {
+    OperId copy;
+    OperId fill;
+    OperId enter;
+    OperId cast;
+    OperId fail;
+    /// `:op/refine_extent`: the call site's check that a value's extents meet the position it
+    /// enters (`OperShape::Refining`).
+    OperId refineExtent;
+};
+
+/// The ids above, resolved on the first call and kept (see the struct's comment).
+const ConstructedOperators &constructedOperators();
 
 /// The URIs of the ids in namespace `oper`, indexed by id (index 0, kNoOper, is empty).
 inline constexpr std::string_view kWellKnownOperatorUris[oper::kWellKnownCount] = {
@@ -540,6 +582,24 @@ class OperatorTable {
     /// None.
     void declareShape(std::string_view uri, camel::ops::OperShape shape);
 
+    // ---- The subscript forms of the language ----------------------------------------------
+    //
+    // `t[i]`, `t[a..b:s]` and the `range(a, b, s)` that writes a step are three forms a reader has
+    // to tell apart to know how many ordinary operands the node carries and which of them is the
+    // step (design principles 5.4). The answer is a fact of the operator
+    // (`Record::subscript`, camel/ops/subscript_form.h), stated here where the operator is
+    // registered, so a reader asks what kind of form it is instead of comparing URI text. These
+    // three deliberately have **no** compile-time id: an id would say which operator it is, and
+    // what a reader wants here is which form it is -- a list of ids for them would be the same
+    // special case by name, kept in another table.
+
+    /// Declares which subscript form `uri` is (module load time).
+    void declareSubscriptForm(std::string_view uri, camel::ops::SubscriptForm form);
+
+    /// Which subscript form the operator `id` is, or None -- an operator that is not one of the
+    /// three, and one nobody stated anything about. Lock-free, like `shapeOfOperator`.
+    camel::ops::SubscriptForm subscriptFormOf(OperId id) const;
+
     // ---- Decorators that grant attributes (language reference 7.6) -------------------------
 
     /// Declares that the operator `uri`, used as a decorator, grants an attribute (AttrGrant).
@@ -565,8 +625,9 @@ class OperatorTable {
     /// Registers (or replaces) the type resolver of an operator overload. An OPER node records
     /// only the operator its call resolved to; passes that change what is known about the
     /// arguments (binding input shapes, folding a shape to a constant) re-run the overload's
-    /// resolver through the table. Operator groups register their overloads when created.
-    void setResolver(std::string_view uri, type::resolver_ptr_t resolver);
+    /// resolver through the table. Operator groups register their overloads when created, and the
+    /// id this answers is the one each rule records as its identity (`OperatorGroup::operAt`).
+    OperId setResolver(std::string_view uri, type::resolver_ptr_t resolver);
 
     /// The resolver of the operator, or nullptr.
     type::resolver_ptr_t resolver(OperId id) const;

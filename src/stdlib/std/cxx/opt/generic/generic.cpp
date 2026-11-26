@@ -1548,7 +1548,7 @@ size_t foldDraft(
                 // where the expression is written (design principles 3.9).
                 // `fail` is the exception: it states a fault on purpose, and the warning is for
                 // the accident.
-                if (body->uri() != ":op/fail") {
+                if (body->oper != camel::core::constructedOperators().fail) {
                     raisePassWarning(
                         ctx,
                         camel::core::error::RuntimeDiag::ConstantExpressionFaults,

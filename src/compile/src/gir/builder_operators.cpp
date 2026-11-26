@@ -1292,7 +1292,9 @@ node_handle_t Builder::overloadValueFor(
         const type_vec_t explicitTypes =
             typed == explicitOperatorTypes_.end() ? type_vec_t{} : typed->second;
         const std::vector<StaticArg> statics(normTypes.size());
-        for (const auto &[uri, resolver] : ops->resolvers()) {
+        for (size_t i = 0; i < ops->resolvers().size(); ++i) {
+            const std::string &uri = ops->resolvers()[i].first;
+            const type::resolver_ptr_t &resolver = ops->resolvers()[i].second;
             auto type = resolver->resolveForCall(
                 explicitTypes,
                 expected->exitType(),
@@ -1320,7 +1322,7 @@ node_handle_t Builder::overloadValueFor(
             if (chosen) {
                 return nullptr;
             }
-            chosen = std::make_shared<OperatorIndex>(ops->name(), *type, uri);
+            chosen = std::make_shared<OperatorIndex>(ops->name(), *type, uri, ops->operAt(i));
         }
         if (chosen) {
             explicitOperatorTypes_.erase(node);
@@ -1358,7 +1360,9 @@ std::optional<oper_idx_ptr_t> Builder::resolveGroupedCall(
     // is a call that has an answer; two or more are a call that has none, and the writing order
     // of the declarations is not what settles it (see the declaration of this function).
     std::vector<std::string> holding;
-    for (const auto &[uri, resolver] : ops->resolvers()) {
+    for (size_t i = 0; i < ops->resolvers().size(); ++i) {
+        const std::string &uri                  = ops->resolvers()[i].first;
+        const type::resolver_ptr_t &resolver    = ops->resolvers()[i].second;
         // A rule that is declared takes every count of `with` arguments from its required ones to
         // its full arity: the types of the defaults it registers stand for what the call left out.
         type_vec_t ruleWith = withTypes;
@@ -1413,7 +1417,7 @@ std::optional<oper_idx_ptr_t> Builder::resolveGroupedCall(
             continue;
         }
         if (!chosen) {
-            chosen = std::make_shared<OperatorIndex>(ops->name(), *result, uri);
+            chosen = std::make_shared<OperatorIndex>(ops->name(), *result, uri, ops->operAt(i));
         }
         if (ambiguous != nullptr && nativeRuleConditions_.contains(resolver.get())) {
             // Named by its signature and its condition together: the two arms of one name share
