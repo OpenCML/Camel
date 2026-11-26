@@ -107,6 +107,10 @@ pwsh -NoProfile -File <你的工作树>\internal\tools\camel-remote.ps1 `
 ## 7. 路径与工作树
 
 ```
+· **开工第一步（或每次被唤起的第一步）自己绑格子**：调 `oversight_bind({slot, lane, worktree})`，
+  **不要传 `agent`** —— 它绑的是调用它的那个会话自己。`slot` 取 `dev`（瘦身/论文/提速）、`misc`（常驻杂项）、
+  `buffer`（加急、探针、临时活），合并位自己的那条车道用 `merge`。条带上的「开发 x/8」就是这么数出来的；
+  不绑的话你在条带上不存在，提醒会把开发位读成 0/8（假警报）。收工时 `oversight_unbind()` 解掉自己那一行。
 · 路径一律**绝对**：`D:\Projects\Camel-wt\<lane>\…`，`edit` / `write` 也一样。
 · 判据不是「我确认过」，是两行输出：
     `git -C <你的工作树> status --porcelain` 里能看到你的改动；
