@@ -1532,7 +1532,7 @@ void GraphDraft::closeChainOver(gc_node_ref_t id) {
     // block's chain instead (docs/design/effects/edges.cn.md 4.6).
     //
     // "Another block" is read through `sameSyncBlock`, which is the block test the rest of this file
-    // and `placeLostStatements` (src/passes/opt/generic/generic.cpp) already use, and which looks
+    // and `placeLostStatements` (src/stdlib/std/cxx/opt/generic/generic.cpp) already use, and which looks
     // through the `Inline` region a splice gives the code it moved (docs/design/effects/edges.cn.md
     // 5.7): that code is the code of the block it was moved into, so a predecessor still carrying
     // the annotation of the region it came from is a predecessor of the same block. Comparing the
@@ -1549,7 +1549,7 @@ void GraphDraft::closeChainOver(gc_node_ref_t id) {
         return pred != user && pred != id && alive(pred) && sameSyncBlock(*this, pred, user);
     };
     // While the control kind still exists it names the same pair beside the sync edge: the two
-    // orderings have to agree until the control edges go (src/runtime/graph_edges.cpp,
+    // orderings have to agree until the control edges go (src/kernel/runtime/graph_edges.cpp,
     // `checkSyncEdges` is what reads the sync edge back). The edge is written rather than
     // inferred, because the path through the node this chain closes over is the one about to
     // disappear.
@@ -1613,7 +1613,7 @@ void GraphDraft::closeChainOver(gc_node_ref_t id) {
     // The wait goes to a successor in one of two cases and to no other: the successor waited on
     // this node -- the wait it had here is the one about to evaporate, and `A -> C` is what
     // replaces it -- or the successor waited on nothing at all. A GATE is what the second case was
-    // first needed for: the commit refuses one that waits for nothing (src/runtime/graph.cpp, the
+    // first needed for: the commit refuses one that waits for nothing (src/kernel/runtime/graph.cpp, the
     // GATE check). A successor that waits on something else and never waited on this node is left
     // alone: its wait is the block's chain, and this node was not part of it.
     //
@@ -1627,7 +1627,7 @@ void GraphDraft::closeChainOver(gc_node_ref_t id) {
     //
     // What the node waited on through neither kind -- a read of a `var` reads its writer through
     // the data port alone -- is not here to hand on: the fold that would remove such a read keeps
-    // it instead (src/compile/gir/builder_expr.cpp, `collapseNonEscapingVariableReads`).
+    // it instead (src/compile/src/gir/builder_expr.cpp, `collapseNonEscapingVariableReads`).
     const auto keepWaiting = [&](gc_node_ref_t user) {
         if (user == id || !alive(user)) {
             return;
@@ -2619,7 +2619,7 @@ size_t GraphDraft::dissolveUnorderedGates() {
             }
             const gc_node_ref_t value = normInputsOf(id).front();
             // Plain forwarding is a gate **with a data user**: dissolving it hands that user the
-            // value the gate carried, so nothing stops running (src/compile/gir/graph_encode.cpp
+            // value the gate carried, so nothing stops running (src/compile/src/gir/graph_encode.cpp
             // quotes the answer that settled it). A gate with no data user and no wait forwards
             // nothing -- the value is read by this node alone -- so dissolving it takes the last
             // **read** of whatever computed that value, and an effect that stands on a read (a
@@ -2631,7 +2631,7 @@ size_t GraphDraft::dissolveUnorderedGates() {
             // What such a gate holds is not a value but a **place**: it is where the code after it
             // waits. That place is what the erase would take with it, so it is handed to what the
             // gate read rather than kept on the gate -- a gate without a wait is a violation of its
-            // own (src/runtime/graph.cpp, the GATE check), and keeping one to hold a place would
+            // own (src/kernel/runtime/graph.cpp, the GATE check), and keeping one to hold a place would
             // trade a dropped effect for an unbuildable graph. The successors follow the effect
             // through the control kind, which is the kind this wait is carried in while the
             // migration runs (docs/design/effects/edges.cn.md 5.3), and the gate still goes.

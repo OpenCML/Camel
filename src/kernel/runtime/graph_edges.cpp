@@ -215,7 +215,7 @@ class EdgeChecker {
      *
      * The port of a `var` parameter holds the variable and the parameter is typed by
      * its value -- the relation `reinferDraftTypes` holds the signature to when it re-infers one
-     * (src/runtime/draft_types.cpp) -- so both sides are read by value, and the declaration and the
+     * (src/kernel/runtime/draft_types.cpp) -- so both sides are read by value, and the declaration and the
      * port node are judged the same way whichever of the two a rewrite moved.
      */
     void checkPortTypes() {
@@ -527,7 +527,7 @@ class EdgeChecker {
     /// The block a statement is written in: the innermost region that holds code of its own, with
     /// the region an inline splice gave the code it moved looked through -- that code is the code
     /// of the block it was moved into (docs/design/effects/edges.cn.md 5.7), which is exactly what
-    /// `statementRegionOf` reads back on the draft (src/runtime/draft.cpp, beside
+    /// `statementRegionOf` reads back on the draft (src/kernel/runtime/draft.cpp, beside
     /// `sameSyncBlock`). Nothing else is looked through: a region that holds code of its own -- an
     /// arm, a part of a loop, a block written as a statement -- separates blocks, and its chain is
     /// its own.
@@ -559,7 +559,7 @@ class EdgeChecker {
     /// GATE each.
     ///
     /// The splice resolves a statement's place again once the body's code is in
-    /// (`resolvePlaceForks`, src/runtime/draft_inline.cpp) and moves a statement that finds itself
+    /// (`resolvePlaceForks`, src/kernel/runtime/draft_inline.cpp) and moves a statement that finds itself
     /// following one a second statement follows to the end of the chain growing from it. The move
     /// is refused when that end waits on the statement being moved -- moving it would put the graph
     /// on a cycle of inputs -- and the fork then stands: the splice has no other place to put the

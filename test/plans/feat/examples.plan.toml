@@ -269,7 +269,7 @@ timeout_ms = 60000
 #
 #   edits::drop_print  Erases every printing call. ACCEPTED: the commit takes the graph (exit 0) and
 #                      the program then prints nothing at all -- the effect is gone and no clause of
-#                      src/runtime/graph.cpp's validator says so. Section 4 of
+#                      src/kernel/runtime/graph.cpp's validator says so. Section 4 of
 #                      docs/technical/17_graph_rewrite_api_contracts.md has no "the effects of the
 #                      program are contained" clause yet: that is R3 (docs/design/effects/
 #                      analysis.cn.md 4.1), which is queued, not landed.

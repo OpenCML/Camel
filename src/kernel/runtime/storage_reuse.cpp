@@ -250,7 +250,7 @@ void dumpStorageReuse(
             }
             // Every shape answers its own name from the table: the loop-state form has a call shape
             // of its own now (`declareCallForm(":struct/append_arr_owned", ...)` beside the two
-            // forms in src/builtin/executors/builtin.cpp), so there is no shape left whose name has
+            // forms in src/stdlib/std/builtin/executors/builtin.cpp), so there is no shape left whose name has
             // to be spelled out, and no URI constant in this reading.
             const std::string name = updateName(table, uri);
             os << "COPIES " << placeOf(*graph, ref, sources) << " " << name << " "

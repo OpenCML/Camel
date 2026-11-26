@@ -290,7 +290,7 @@ size_t reduceControlDependencies(camel::runtime::GraphTransaction &transaction, 
                 // (docs/design/effects/edges.cn.md 5.3, Builder::writeSyncLink), a place this reduction
                 // cannot see -- so no graph that can be built reaches that case; one that did would be
                 // refused at
-                // commit by the runtime's own "GATE node without a wait" rule (src/runtime/graph.cpp).
+                // commit by the runtime's own "GATE node without a wait" rule (src/kernel/runtime/graph.cpp).
                 if (keep.size() < draft.ctrlInputsOf(target).size()) {
                     removed += draft.ctrlInputsOf(target).size() - keep.size();
                     draft.setCtrlInputs(target, keep);

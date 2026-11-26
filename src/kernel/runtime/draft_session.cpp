@@ -1965,7 +1965,7 @@ const Program *RuntimeGraphDraftSession::runCommit(bool staged, bool detached) {
         }
     }
     // The promise a graph makes twice: its ports are the parameters its own signature declares
-    // (`validateRuntimeGraphPortTypes`, src/runtime/graph_edges.cpp). Asked of every graph this
+    // (`validateRuntimeGraphPortTypes`, src/kernel/runtime/graph_edges.cpp). Asked of every graph this
     // commit encoded, as the two checks above are, and not only of a graph it edited: a graph that
     // is wrong from the moment it is made is exactly what a check placed on republished graphs
     // misses -- which is how the compiler's own specializations carried a shifted port list unseen
@@ -1978,7 +1978,7 @@ const Program *RuntimeGraphDraftSession::runCommit(bool staged, bool detached) {
     committed->setRoot(committed->graph(oldRuntimeRoot->id()));
 
     // What the commit delivered, read back against the draft it encoded (`verifyDraftDelivery`,
-    // src/runtime/graph_build.h): the graph the program is about to hold, edge by edge, both ways.
+    // src/kernel/runtime/graph_build.h): the graph the program is about to hold, edge by edge, both ways.
     // A commit is the last place that knows both sides, and a graph that does not hold an edge its
     // draft holds is an edit the caller wrote and will never see -- the shape this replaces, where
     // a comparison of encodings decided what was delivered and answered "the same graph" for an

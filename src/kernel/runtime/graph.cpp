@@ -94,7 +94,7 @@ bool nodeMayFault(
     // Design principles 3.9 makes "may fault" one item of the operator record, stated by `panic`,
     // and the answer below is that item for every node that names an operator. A conversion, a
     // construction and an access are not operators at all yet: each takes a compile-time parameter
-    // a record keyed by URI cannot carry (`src/stdlib/std/builtin/globals.cpp`),
+    // a record keyed by URI cannot carry (`src/stdlib/std/builtin/modules/globals.cpp`),
     // so they carry `kNoOper` and have no record to ask; this shape answer is theirs until the
     // front end builds them as ordinary OPER nodes.
     // A conversion, an entering and a refinement are asked by their **shape**: the compiler builds
@@ -902,7 +902,7 @@ void validateRuntimeGraphPayloadImpl(const GCGraph *graph) {
             // This is an assertion, not a rule programs reach. Measured: payload validation does
             // run on the execution path (three graphs validated for a small program, five with a
             // fault-injection pass in the pipeline), but a gate whose waits are all taken away
-            // never gets here -- `dceDraft` removes it first (src/passes/opt/generic/generic.cpp,
+            // never gets here -- `dceDraft` removes it first (src/stdlib/std/cxx/opt/generic/generic.cpp,
             // the dead-gate branch: no reader, and it waited on something). A fault-injection pass
             // that stripped both the control input and the sync predecessor of the first gate
             // committed and ran with no error, and that gate was gone afterwards (2 gates before

@@ -296,7 +296,7 @@ DraftOutlineResult outlineDraftNodes(
     // The three answers the graph gives about the value it hands back, and they are three: the exit
     // is where a run of it ends, the output is what it hands on, and the return is how -- `Self`,
     // the node that holds the value is the value returned, which is what a function's body does
-    // (`src/passes/test/resources.cpp` builds a synthesized function the same way). A graph with an
+    // (`src/stdlib/test/resources.cpp` builds a synthesized function the same way). A graph with an
     // exit and no return node is a graph a call cannot take a value out of: std::fvm refuses to
     // compile it ("requires a value return node") and the node VM answers nothing through it, which
     // is a call whose value reads as 0.
