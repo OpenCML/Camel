@@ -80,6 +80,7 @@ const toUrl = (file) => {
 /** One plugin instance, with a context that records what it would have registered. */
 async function instance({ loadFrom, liveDir, repoPath = repo, ref: syncRef = ref, hmr = null }) {
     const routes = new Map()
+    const beats = []
     const ctx = {
         logger: { warn() {}, info() {}, error() {}, debug() {} },
         effect: (fn) => {
@@ -94,7 +95,16 @@ async function instance({ loadFrom, liveDir, repoPath = repo, ref: syncRef = ref
         on: () => () => {},
         inject: () => () => {},
         systemPrompt: { context: () => () => {} },
-        timer: { interval: () => () => {}, timeout: () => () => {} },
+        timer: {
+            interval: (fn) => {
+                beats.push(fn)
+                return () => {}
+            },
+            timeout: (fn) => {
+                beats.push(fn)
+                return () => {}
+            },
+        },
         webServer: {
             register: ({ path: routePath, handler }) => {
                 routes.set(routePath, handler)
@@ -104,6 +114,7 @@ async function instance({ loadFrom, liveDir, repoPath = repo, ref: syncRef = ref
     }
     const module = await import(toUrl(path.join(loadFrom, 'index.js')))
     module.apply(ctx, { repo: repoPath, syncScript, syncRef, liveDir, logFile })
+    routes.beats = beats
     return routes
 }
 
@@ -157,11 +168,16 @@ function fixture() {
     write('rules.js', 'export const RULES = []\n')
     write('client.js', "window.__ModuleLoader__.load({ id: '@local/camel-oversight', factory() { return {} } })\n")
     const first = commit('fixture: good')
+    // The pushed line has moved on: the hot-reload reading is "the file this process imported is
+    // not the file the ref holds", and that pair has to exist in the fixture.
+    write('rules.js', 'export const RULES = ["moved on"]\n')
+    const movedOn = commit('fixture: rules moved on')
+    git('update-ref', 'refs/remotes/origin/integration', movedOn)
     write('index.js', 'export const name = "camel-oversight"\nexport function apply( {\n')
     const unparsable = commit('fixture: does not parse')
     write('index.js', 'throw new Error("parses, then dies")\n')
     const throwing = commit('fixture: parses and throws')
-    return { root, first, unparsable, throwing }
+    return { root, first, unparsable, throwing, movedOn }
 }
 
 async function run() {
@@ -246,6 +262,41 @@ async function run() {
     const routesF = await instance({ loadFrom: liveD, liveDir: liveD, repoPath: fix.root, ref: fix.first, hmr: null })
     const current = await call(routesF, '/oversee/reload')
     check('a process that loaded the commit the live directory holds is asked for nothing', current.status === 200 && current.body.changed === false && current.body.reload === 'not-needed', JSON.stringify(current.body))
+
+    // ---- 8. the hot reload seeds from the file it imported, not from the pushed version -----------
+    // The live directory holds the version an earlier sync published; the ref has moved on. A seed
+    // taken from the pushed blob made the two agree for ever without one import, which is how the
+    // rules stayed on the old version with every beat reporting nothing to do.
+    const hotLive = path.join(sandbox, 'live-hot')
+    fs.mkdirSync(hotLive, { recursive: true })
+    for (const name of ['index.js', 'measure.js', 'client.js', 'package.json']) {
+        fs.copyFileSync(path.join(pluginDir, name), path.join(hotLive, name))
+    }
+    const oldRules = execFileSync('git', ['-C', fix.root, 'show', `${fix.first}:internal/tools/camel-oversight/rules.js`], {
+        encoding: 'utf8',
+    })
+    fs.writeFileSync(path.join(hotLive, 'rules.js'), oldRules)
+    const routesF = await instance({ loadFrom: hotLive, liveDir: hotLive, repoPath: fix.root, ref: fix.first })
+    const hotBeats = (routesF.beats || []).filter((fn) => fn.length === 0)
+    const logText = () => (fs.existsSync(logFile) ? fs.readFileSync(logFile, 'utf8') : '')
+    const hotCount = () => logText().split('\n').filter((line) => line.includes('"hot-reload"')).length
+    const beforeHot = hotCount()
+    if (hotBeats.length > 0) await hotBeats[hotBeats.length - 1]()
+    // `beat` is started with `void`: the timer callback returns before the watch has finished, so a
+    // reading taken on the next line would be taken before the import it is about.
+    await new Promise((resolve) => setTimeout(resolve, 3000))
+    const afterFirst = hotCount()
+    check(
+        'the first beat imports every file the ref moved on',
+        afterFirst > beforeHot,
+        `${beforeHot} -> ${afterFirst} hot-reload line(s), ${hotBeats.length} beat(s) registered`,
+    )
+    if (hotBeats.length > 0) await hotBeats[hotBeats.length - 1]()
+    // `beat` is started with `void`: the timer callback returns before the watch has finished, so a
+    // reading taken on the next line would be taken before the import it is about.
+    await new Promise((resolve) => setTimeout(resolve, 3000))
+    const afterSecond = hotCount()
+    check('the second beat imports nothing', afterSecond === afterFirst, `${afterFirst} -> ${afterSecond} hot-reload line(s)`)
 
     // ---- 7. nothing above wrote to the machine's own home or log ----------------------------------
     check('the test used its own log', fs.readFileSync(logFile, 'utf8').length > 0)
