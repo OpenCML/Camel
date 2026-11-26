@@ -79,3 +79,15 @@ args = ["${case}", "std::nvm"]
 expect_exit = 1
 expect_output_contains = ["graph.erase", "the node anchors its graph"]
 timeout_ms = 20000
+# `eval(n)` takes the node as a value the program got at run time, not as a spelling the compiler can
+# see: the test folds two different nodes of the same function and pins both numbers, so a wrong
+# answer cannot hide behind a type check.
+[[tests]]
+name = "eval_folds_a_node_the_program_picked_at_run_time"
+desc = "`eval(n)` folds the constant operator of whichever arithmetic node the program selected at run time, and the two selections give two different values back from the edited function"
+kind = "behavior"
+case = "../../../cases/modules/graph_function/eval_node.cml"
+args = ["${case}", "std::nvm"]
+expect_exit = 0
+expect_stdout_exact = "[eval] which=0 op=:op/add_l operands=2\nsubject runs\n[run] the edited function: 45\n"
+timeout_ms = 20000

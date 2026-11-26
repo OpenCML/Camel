@@ -128,7 +128,7 @@ export type WithOf<F>
 /// @example is_same::<FirstOf<WithOf<<w: float, k: int> (a: int) => bool>>, float>()    // true
 /// @example is_same::<FirstOf<ParamsOf<(a: int, b: string) => bool>>, int>()    // true
 export type FirstOf<P> = match type P {
-    case (W,...Rest) => W
+    case (W, ...Rest) => W
 }
 
 /// The first member of a pack, as a primitive: the same answer `FirstOf<P>` gives, and a different

@@ -43,7 +43,7 @@ func dotted(a: string, b: string) => string {
 /// Applies f to the leaves in the same place of the trees (one tree, or several of the same
 /// shape: the callback then takes one leaf of each), and gives a tree of the results. The shape
 /// is that of the first tree.
-/// @example tree_map<(x: int): int => x + 1>({ a: 1, b: (2, 3) })    // { a: 2, b: (3, 4) }
+/// @example tree_map<func (x: int) => int { x + 1 }>({ a: 1, b: (2, 3) })    // { a: 2, b: (3, 4) }
 with <f: F>
 export func tree_map::<T, F>(t: T, ...ts) {
     return match type T {
@@ -53,7 +53,7 @@ export func tree_map::<T, F>(t: T, ...ts) {
 }
 
 /// Folds the leaves from the first to the last with f, starting from init.
-/// @example tree_reduce<(acc: int, x: int): int => acc + x>({ a: 1, b: (2, 3) }, 0)    // 6
+/// @example tree_reduce<func (acc: int, x: int) => int { acc + x }>({ a: 1, b: (2, 3) }, 0)    // 6
 with <f: (acc: R, leaf: A) => R>
 export func tree_reduce::<T, R, A>(t: T, init: R) => R {
     return match type T {

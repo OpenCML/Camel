@@ -66,12 +66,12 @@ export resource spelling readonly
 // ---- the graphs of a function ----
 
 /// The graph of a function value: its body.
-/// @example graph_of((x: int): int => x + 1)
+/// @example graph_of(func (x: int) => int { x + 1 })
 export func graph_of::<F>(f: F) => Graph when is_function::<F>()
 
 /// The graph of a function value and every graph it calls, directly or not, in the order of
 /// their ids; each graph once.
-/// @example len(graphs_of((x: int): int => x + 1))
+/// @example len(graphs_of(func (x: int) => int { x + 1 }))
 export func graphs_of::<F>(f: F) => Graph[] when is_function::<F>()
 
 // ---- the draft and the root queries ----
@@ -89,19 +89,19 @@ export func graphs_of::<F>(f: F) => Graph[] when is_function::<F>()
 /// A draft has no canonical order -- its places are the order its nodes were made in, and the
 /// commit replaces them -- so a draft answers its own order, and `id` of one of its nodes is
 /// refused rather than answered with a number that says nothing.
-/// @example nodes(graph_of((x: int): int => x + 1))
+/// @example nodes(graph_of(func (x: int) => int { x + 1 }))
 export func nodes(d: Graph) => Node[]
 
 /// The graphs of the draft, `d` included: every graph the function of `d` calls, directly or not,
 /// each once, in the order of their ids. Each is the draft of that graph, so a node read through
 /// one of them is a node an edit changes.
-/// @example len(graphs(graph_of((x: int): int => x + 1)))
+/// @example len(graphs(graph_of(func (x: int) => int { x + 1 })))
 export func graphs(d: Graph) => Graph[]
 
 /// The parameter ports of the graph, in the order the declaration states them: the nodes the body
 /// takes its parameters as. A port is where an edit adds a parameter (`add_param`), and it is the
 /// node a caller's argument is read into.
-/// @example len(params(graph_of((x: int): int => x + 1)))
+/// @example len(params(graph_of(func (x: int) => int { x + 1 })))
 export func params(d: Graph) => Node[]
 
 /// The node the graph hands its value out of: the node a graph returns, the port of a function that
@@ -110,7 +110,7 @@ export func params(d: Graph) => Node[]
 /// build the value that takes its place, and `replace` this node by that value. Null for a graph
 /// that hands no value out (a function of `void`), which has no node to put anything in the place
 /// of.
-/// @example exit(graph_of((x: int): int => x + 1))
+/// @example exit(graph_of(func (x: int) => int { x + 1 }))
 export func exit(d: Graph) => Node?
 
 // ---- reading nodes ----
@@ -258,7 +258,7 @@ export func tags(n: Node) => string
 /// function, in the order of their names; empty for a graph that is no declaration (a lambda) and
 /// for a declaration that writes none. The declaration's facts travel with the graph, so a pass
 /// reads them without the module that declares the function.
-/// @example declaration_tags(graph_of((x: int): int => x + 1))
+/// @example declaration_tags(graph_of(func (x: int) => int { x + 1 }))
 export func declaration_tags(g: Graph) => Tag[]
 
 /// The name of the tag as the program writes it (`jvp`, `vjp`); the qualified name when the tag is
@@ -276,7 +276,7 @@ export func tag_graphs(t: Tag) => Graph[]
 /// `transpose` the rule of a linear function, and `vjp` the rule that gives the pullback directly.
 /// Null when the declaration writes none, when it writes that tag twice, and when what the tag
 /// names is not a function. The name is the one the program writes, or its qualified spelling.
-/// @example rule_of(graph_of((x: int): int => x + 1), 'vjp')
+/// @example rule_of(graph_of(func (x: int) => int { x + 1 }), 'vjp')
 export func rule_of(g: Graph, name: string) => Graph?
 
 // ---- reading spelling ----
@@ -289,7 +289,7 @@ export func rule_of(g: Graph, name: string) => Graph?
 /// needs a declaration that writes `spelling` in its clause (design principles 9.5). A transform
 /// that would pick a function by its name takes the function value instead.
 /// @example-fragment the reading needs a declaration that writes spelling in its clause, and a doc example is a body with nowhere to write one (design principles 9.5)
-/// @example name(graph_of((x: int): int => x + 1))
+/// @example name(graph_of(func (x: int) => int { x + 1 }))
 export func name(g: Graph) => string spelling
 
 /// The source origin id of the node, 0 when unknown. This is *spelling*: it is where the node was
@@ -364,7 +364,7 @@ export func creation_id(h: Op) => int spelling
 
 /// What running the graph once does besides computing its value: `external`, `writes_variables`,
 /// `may_fault`, `may_not_terminate`.
-/// @example effects(graph_of((x: int): int => x + 1)).external
+/// @example effects(graph_of(func (x: int) => int { x + 1 })).external
 export func effects(g: Graph) => Effects
 
 /// The shape of the node's value as text, null when its value is no array of known element type.
@@ -398,7 +398,7 @@ export func relative_cost(n: Node) => float
 /// Opens a function's graphs as a draft and gives the graph of the function itself: what an edit
 /// changes and what the root queries read. Nothing changes until `commit`, which gives the changed
 /// function; the draft is reached through the handles read from it, so it is passed to no edit.
-/// @example let d = open((x: int): int => x + 1)
+/// @example let d = open(func (x: int) => int { x + 1 })
 export func open::<F>(f: F) => Graph when is_function::<F>()
 
 /// Puts the node `new` of the same graph in the place of `old`, which is removed; what `old`
@@ -445,7 +445,7 @@ export func order(before: Node, after: Node) => void
 /// function value that captures no variable can be expanded.
 /// @fails fault `InvalidArgument` when the function value captures variables, when the node anchors its graph (`at` standing in a chain), when the body cannot be spliced, when `at` is of a published graph, or when the draft is over
 /// @example-fragment n is a node of the surrounding draft
-/// @example inline(n, () => 0)
+/// @example inline(n, func () { 0 })
 export func inline::<G>(at: Node, fn: G) => Node when is_function::<G>()
 
 /// Collects a group of the graph's nodes into a function of its own and puts a call of it where the
@@ -486,17 +486,17 @@ export func add_param(like: Node) => Node
 /// Adds a value to the graph's static values and gives the node that holds it. The value is a
 /// number, a bool or a string; a string is copied into the permanent space because a value a draft
 /// creates may be live at a safepoint where its draft is not traced.
-/// @example add_constant(graph_of((x: int): int => x + 1), 7)
+/// @example add_constant(graph_of(func (x: int) => int { x + 1 }), 7)
 export func add_constant::<T>(g: Graph, value: T) => Node when is_ordered::<T>()
 
 /// Checks the edits and makes the changed function: the same type as the one that was opened, with
 /// the values it captured, sharing every graph nothing changed. The draft is over.
 /// @fails error value `GraphConflict` when a graph the draft touched changed since it was opened; error value `GraphInvalid` when an edit broke an invariant (the message names the graph, the node and the edge); error value `TxnUsed` when the draft was over already
-/// @example commit(open((x: int): int => x + 1))
+/// @example commit::<(x: int) => int>(open(func (x: int) => int { x + 1 }))
 export func commit::<F>(d: Graph) => F!
 
 /// Drops the draft.
-/// @example abort(open((x: int): int => x + 1))
+/// @example abort(open(func (x: int) => int { x + 1 }))
 export func abort(d: Graph) => void
 
 // ---- comparison ----

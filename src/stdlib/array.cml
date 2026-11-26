@@ -95,7 +95,7 @@ export func unique::<T>(xs: T[]) => T[] {
 
 /// The index of the first element for which pred is true, or null. pred is not called on the
 /// elements after it.
-/// @example [3, 9, 2]->find_index<(x) => x > 4> ?? -1    // 1
+/// @example [3, 9, 2]->find_index<func (x) { x > 4 }> ?? -1    // 1
 with <pred: (x: T) => bool>
 export func find_index::<T>(xs: T[]) => int? {
     let i = loop i = 0 while i < len(xs) && !pred(xs[i]) do i + 1
@@ -103,7 +103,7 @@ export func find_index::<T>(xs: T[]) => int? {
 }
 
 /// The first element for which pred is true, or null.
-/// @example [3, 9, 2]->find<(x) => x > 4> ?? -1    // 9
+/// @example [3, 9, 2]->find<func (x) { x > 4 }> ?? -1    // 9
 with <pred: (x: T) => bool>
 export func find::<T>(xs: T[]) => T? {
     let i = xs->find_index<pred>
@@ -120,14 +120,14 @@ export func index_of::<T>(xs: T[]) => int? {
 }
 
 /// True when pred is true for at least one element; false for an empty array.
-/// @example [3, 9, 2]->any<(x) => x > 4>    // true
+/// @example [3, 9, 2]->any<func (x) { x > 4 }>    // true
 with <pred: (x: T) => bool>
 export func any::<T>(xs: T[]) => bool {
     return xs->find_index<pred> != null
 }
 
 /// True when pred is true for every element; true for an empty array.
-/// @example [3, 9, 2]->all<(x) => x > 4>    // false
+/// @example [3, 9, 2]->all<func (x) { x > 4 }>    // false
 with <pred: (x: T) => bool>
 export func all::<T>(xs: T[]) => bool {
     return xs->find_index<func (x) {
@@ -136,7 +136,7 @@ export func all::<T>(xs: T[]) => bool {
 }
 
 /// The number of elements for which pred is true.
-/// @example [3, 9, 2]->count<(x) => x > 2>    // 2
+/// @example [3, 9, 2]->count<func (x) { x > 2 }>    // 2
 with <pred: (x: T) => bool>
 export func count::<T>(xs: T[]) => int {
     return loop n = 0 for x in xs do if pred(x) then n + 1 else n
@@ -368,7 +368,7 @@ export func merge_sorted::<T>(xs: T[], ys: T[]) => T[] when is_ordered::<T>() {
 /// The elements in ascending order of key(x); elements with equal keys keep their order, so
 /// sorting by one key and then by another works. key is called once for every element. Keys
 /// are ordered as `argsort` orders them; for a descending order of numbers use the negated key.
-/// @example ['pear', 'fig', 'apple']->sort_by<(w) => len(w)>    // ['fig', 'pear', 'apple']
+/// @example ['pear', 'fig', 'apple']->sort_by<func (w) { len(w) }>    // ['fig', 'pear', 'apple']
 with <key: (x: T) => K>
 export func sort_by::<T, K>(xs: T[]) => T[] when is_ordered::<K>() {
     return xs[argsort(xs->map<key>)]
@@ -377,7 +377,7 @@ export func sort_by::<T, K>(xs: T[]) => T[] when is_ordered::<K>() {
 // ---- transforming ----
 
 /// f applied to every element, the resulting arrays joined in order.
-/// @example [1, 2]->flat_map<(x) => [x, x * 10]>    // [1, 10, 2, 20]
+/// @example [1, 2]->flat_map<func (x) { [x, x * 10] }>    // [1, 10, 2, 20]
 with <f: (x: T) => U[]>
 export func flat_map::<T, U>(xs: T[]) => U[] {
     return flatten(xs->map<f>)
@@ -385,7 +385,7 @@ export func flat_map::<T, U>(xs: T[]) => U[] {
 
 /// f(xs[i], ys[i]) for every i.
 /// @fails fault `InvalidArgument` (of zip) when the two arrays differ in length
-/// @example zip_with<(a, b) => a + b>([1, 2], [10, 20])    // [11, 22]
+/// @example zip_with<func (a, b) { a + b }>([1, 2], [10, 20])    // [11, 22]
 with <f: (a: T, b: U) => V>
 export func zip_with::<T, U, V>(xs: T[], ys: U[]) => V[] {
     return zip(xs, ys)->map<func ((a, b)) {
@@ -412,8 +412,8 @@ export func zip_with::<T, U, V>(xs: T[], ys: U[]) => V[] {
 /// multiple batched parameters wait for the sixth answer). Being a value, it is stored once and
 /// applied to several arrays (`let batched = vmap(square)`), which is what makes it a transform
 /// rather than a call form of `map`.
-/// @example vmap((x: float) => x * x)([0.0, 1.0, 2.0])    // [0.0, 1.0, 4.0]
-/// @example vmap((r: f32[3]) => r[2] * r[2])([[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]] as f32[2, 3])    // [9.0, 36.0]
+/// @example vmap(func (x: float) { x * x })([0.0, 1.0, 2.0])    // [0.0, 1.0, 4.0]
+/// @example vmap(func (r: f32[3]) { r[2] * r[2] })([[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]] as f32[2, 3])    // [9.0, 36.0]
 export func vmap::<T, U>(f: (row: T) => U) => (xs: RowsOf<T>) => U[] {
     return func (xs: RowsOf<T>) => U[] {
         range(0, len(xs), 1)->map<func (i: int) => U {

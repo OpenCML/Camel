@@ -20,6 +20,9 @@ import graph
 import hash
 import io
 import json
+// `laws` is a declaration module too (`stdlib/laws.cml`): its declarations are the mathematics a
+// derivative rule is written from, and `stop_gradient`'s kernel is the module's own.
+import laws
 import math
 // `process` is a declaration module too (`stdlib/process.cml`); it keeps the `clock`/`env`
 // resources and its effects in C++, and `exit` stays the built-in operator.

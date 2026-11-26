@@ -53,7 +53,7 @@ export func has_match(text: string) => bool {
 /// Every match of pattern in text, left to right, without overlap. After an empty match the
 /// search goes on one code point further.
 /// @fails fault `RegexInvalid` when pattern is not a regular expression
-/// @example 'a1b22'->find_all<'[0-9]+'>->map<(m: Match): string => m.text>    // ['1', '22']
+/// @example 'a1b22'->find_all<'[0-9]+'>->map<func (m: Match) => string { m.text }>    // ['1', '22']
 with <pattern: string>
 export func find_all(text: string) => Match[] {
     let (found, next) = loop found = [] as Match[], next = 0 while next <= len(text) do match text->find<pattern, next> {
@@ -67,7 +67,7 @@ export func find_all(text: string) => Match[] {
 
 /// text with every match of pattern replaced by what by makes of it.
 /// @fails fault `RegexInvalid` when pattern is not a regular expression
-/// @example 'a1b22'->replace_with<'[0-9]+', (m: Match): string => '<' + m.text + '>'>    // 'a<1>b<22>'
+/// @example 'a1b22'->replace_with<'[0-9]+', func (m: Match) => string { '<' + m.text + '>' }>    // 'a<1>b<22>'
 with <pattern: string, by: (m: Match) => string>
 export func replace_with(text: string) => string {
     let (out, at) = loop out = '', at = 0 for m in text->find_all<pattern> do (out + text[at..m.start] + by(m), m.end)

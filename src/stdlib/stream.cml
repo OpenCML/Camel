@@ -27,7 +27,7 @@ import state
 
 /// The stream of what `step` answers from `state` on: one element with the state after it, or
 /// `null` when there is nothing more. The states are threaded, not repeated.
-/// @example loop acc = 0 for x in unfold(3, (n: int) => if n > 0 then (n, n - 1) else null) do acc + x    // 6
+/// @example loop acc = 0 for x in unfold(3, func (n: int) { if n > 0 then (n, n - 1) else null }) do acc + x    // 6
 export func unfold::<S, T>(state: S, step: (state: S) => (T, S)?) => T.. {
     return func () {
         match step(state) {
@@ -54,7 +54,7 @@ export func from_array::<T>(xs: T[]) => T.. {
 }
 
 /// x, f(x), f(f(x)), ... without end.
-/// @example 1->iterate<(x: int) => x * 2>->take<4>->collect    // [1, 2, 4, 8]
+/// @example 1->iterate<func (x: int) { x * 2 }>->take<4>->collect    // [1, 2, 4, 8]
 with <f: (x: T) => T>
 export func iterate::<T>(x: T) => T.. {
     return unfold(x, func (s: T) => (T, T)? {
@@ -78,7 +78,7 @@ func advance::<T, U>(s: T.., step: (rest: T..) => (U, T..)?) => U.. {
 }
 
 /// f of every element.
-/// @example from_array([1, 2, 3])->map<(x: int) => x * 2>->collect    // [2, 4, 6]
+/// @example from_array([1, 2, 3])->map<func (x: int) { x * 2 }>->collect    // [2, 4, 6]
 with <f: (x: T) => U>
 export func map::<T, U>(s: T..) => U.. {
     return advance(s, func (rest: T..) => (U, T..)? {
@@ -98,7 +98,7 @@ func next_where::<T>(s: T.., pred: (x: T) => bool) => (T, T..)? {
 }
 
 /// The elements for which pred is true, in order.
-/// @example from_array([1, 2, 3, 4])->filter<(x: int) => x % 2 == 0>->collect    // [2, 4]
+/// @example from_array([1, 2, 3, 4])->filter<func (x: int) { x % 2 == 0 }>->collect    // [2, 4]
 with <pred: (x: T) => bool>
 export func filter::<T>(s: T..) => T.. {
     return advance(s, func (rest: T..) => (T, T..)? {
@@ -108,7 +108,7 @@ export func filter::<T>(s: T..) => T.. {
 
 /// The first n elements; fewer when the stream ends first, none when n is not positive. The
 /// element after the n-th is never pulled.
-/// @example 1->iterate<(x: int) => x + 1>->take<3>->collect    // [1, 2, 3]
+/// @example 1->iterate<func (x: int) { x + 1 }>->take<3>->collect    // [1, 2, 3]
 with <n: int>
 export func take::<T>(s: T..) => T.. {
     return unfold((s, n), func (st: (T.., int)) => (T, (T.., int))? {
@@ -121,7 +121,7 @@ export func take::<T>(s: T..) => T.. {
 
 /// The running results of folding the elements with f from init: one per element, the first
 /// being f(init, first element).
-/// @example from_array([1, 2, 3])->scan<(acc: int, x: int) => acc + x, 0>->collect    // [1, 3, 6]
+/// @example from_array([1, 2, 3])->scan<func (acc: int, x: int) { acc + x }, 0>->collect    // [1, 3, 6]
 with <f: (acc: A, x: T) => A, init: A>
 export func scan::<T, A>(s: T..) => A.. {
     return unfold((s, init), func (st: (T.., A)) => (A, (T.., A))? {
@@ -198,7 +198,7 @@ let tee_hint_cap = 64
 /// buffer is expected to have -- and is clamped to the implementation's cap.
 /// The result is a tuple, and taking it apart is what consumes the two streams; the streams
 /// themselves are values like any other, so a `tee` of one of them is another `tee`.
-/// @example let (left, right) = unfold(3, (n: int) => if n > 0 then (n, n - 1) else null)->tee<2>
+/// @example let (left, right) = unfold(3, func (n: int) { if n > 0 then (n, n - 1) else null })->tee<2>
 with <n: int = 8>
 export func tee::<T>(s: T..) => (T.., T..) sync {
     // What the executor is told to expect.

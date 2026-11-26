@@ -275,10 +275,22 @@ slot_t replaceKernel(ArgsView &, ArgsView &norm, Context &) {
     // away, and a value that was the result before is still a node of the graph. Deleting an anchor
     // is a different question and stays refused; `erase` asks it (`isReplaceable`).
     if (!camel::passes::generic::isReplaceable(transaction, fromRef)) {
-        const std::vector<gc_node_ref_t> handed(
-            draft.normInputsOf(fromRef).begin(),
-            draft.normInputsOf(fromRef).end());
-        if (handed.size() != 1) {
+        // Which node the graph hands out is not on the anchor's own edges: a function designates it
+        // on the return (what the frame reads), the exit gate of a `sync` body waits on it, and a
+        // plain body names it on the output. Whichever of the three names a node is the node whose
+        // readers are re-pointed -- the designation is a reader, not a different kind of edge.
+        gc_node_ref_t handed               = kInvalidNodeRef;
+        const gc_node_ref_t named_place[3] = {draft.returnNode(), draft.outputNode(), fromRef};
+        for (const gc_node_ref_t place : named_place) {
+            if (handed != kInvalidNodeRef || place == kInvalidNodeRef) {
+                continue;
+            }
+            const std::span<const gc_node_ref_t> once = draft.normInputsOf(place);
+            if (once.size() == 1) {
+                handed = once[0];
+            }
+        }
+        if (handed == kInvalidNodeRef) {
             err::throwRuntimeFault(
                 err::RuntimeDiag::InvalidArgument,
                 "graph.replace",
@@ -288,11 +300,9 @@ slot_t replaceKernel(ArgsView &, ArgsView &norm, Context &) {
             draft,
             camel::runtime::EditKind::Replace,
             draft.nodeOrigin(fromRef));
-        // Which node the graph hands out is a read of that node -- the return the frame takes is
-        // one, and the exit gate waiting on the value is another -- so re-pointing them is what
-        // changes the answer. The node that was handed out before stays a node of the graph:
-        // nothing is erased here, and `from` (the anchor) keeps the place it had.
-        draft.replaceAllValueUses(handed[0], toRef);
+        // The node that was handed out before stays a node of the graph: nothing is erased here,
+        // and `from` (the anchor) keeps the place it had.
+        draft.replaceAllValueUses(handed, toRef);
         return NullSlot;
     }
     // A named edit of the table (docs/design/graph-editing/README.cn.md 8.1), whose answer to the
