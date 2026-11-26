@@ -392,7 +392,7 @@ promotion-3 记的是晋级 3 那次（基线在 develop 的 `d6503a197c` 一带
 
 | # | 模块 | 键 | 引擎侧登记（文件 · 形式） | 行 | 库侧今天 | 要补什么 |
 |---:|---|---|---|---:|---|---|
-| 1 | `nn` | `conv2d` | `src/stdlib/nn/tensor_ops.cpp` · setVjp | 863 | 规则集不提这个名字 | 一条 `jvp_conv2d`（左式 `conv2d<stride, padding>(...)`）+ 一条 `conv2d_t`；规则集得先 `import nn`（今天零依赖） |
+| 1 | `nn` | `conv2d` | `src/stdlib/nn/tensor_ops.cpp` · setVjp | 863 | 规则集不提这个名字 | 一条 `jvp_conv2d`（左式 `conv2d<1, 0>(...)`：律只钉一个窗口，见下）+ 一条 `conv2d_t`；规则集得先 `import nn`（今天零依赖） |
 | 2 | `nn` | `batch_norm_train` | 同上 · setVjp | 864 | 同上 | 同上 |
 | 3 | `nn` | `max_pool2d` | 同上 · setVjp | 865 | 同上 | 同上 |
 | 4 | `nn` | `avg_pool2d` | 同上 · setVjp | 866 | 同上 | 同上 |
@@ -407,6 +407,19 @@ promotion-3 记的是晋级 3 那次（基线在 develop 的 `d6503a197c` 一带
 | 13 | `math` | `sqrt_d` | `src/stdlib/math/module.cpp` · setRule | 114 | 有数组 `sqrt` 的律（`jvp_sqrt`），没有这个标量导数函数 | 一条 `jvp_sqrt_d` + 反向（斜率 `1/(2√x)` 的二阶导） |
 | 14 | 核心 | `:op/slice_sub` | `src/stdlib/std/builtin/operators/derivative.cpp` · setRule | 752 | 规则集不提 `slice_sub`（`t[a:b:s]` 的语言算子） | 一条前向 + 一条反向（切片是线性算子，反向是零填充回原形状） |
 | 15 | `tensor` | `idx_take` | `derivative.cpp` · setRule（`:op/idx_take`）+ `src/stdlib/tensor/ops/layout_ops.cpp` · setVjp（`tensor:idx_take`） | 749 / 910 | 规则集不提 | 一条前向 + 一条反向（同 5 的"累加到被取的行走"） |
+
+**窗口：一条律只钉一个窗口。** 卷积和池化的步长、填充、核大小都是调用的编译期参数（`conv2d<2, 1>(...)`、
+`max_pool2d<2, 2, 0>(...)`），可规则右式搬不动匹配节点自己的 `with` 实参：`src/stdlib/transforms/rule_expand.cpp`
+拒绝右式把匹配节点的上下文实参写下去，原话是 `the rule's right side passes a context argument it does not
+carry`。所以上表第 1、3、4 条的律各自只覆盖一个窗口——`jvp_conv2d`、`conv2d_t` 是 `conv2d<1, 0>`，池化律是
+`max_pool2d<2, 2, 0>` / `avg_pool2d<2, 2, 0>`——别的窗口**没有律**，程序按名字拒绝（`the law `conv2d_t` has no
+cotangent for `nn:conv2d``），用例 `test/cases/modules/nn/conv2d_stride2_transpose.cml` 与
+`max_pool2d_window_transpose.cml` 把这条拒法钉住。这是**有意的窄**：律悄悄按错的窗口答复才是缺陷。
+要把覆盖扩到任意窗口，得两笔欠账一起落地：shaped 梯度接过窗口
+（`conv2d_input_grad_shaped<stride, padding>(kernel, dy)`，律的 angle brackets 才能是律自己的），以及变换能把
+匹配节点的 `with` 实参带进规则右式。台账行在 `internal/backlog.md`，读者向的说明在
+`docs/technical/25_tensor_stack_and_onnx_export.md` 的 "A law names one window" 一段。**不写"每个窗口一条律"**：
+那是把欠账变成债务表。
 
 **结论（回答"一条车道还是四条"）：开三条，不互相阻塞；第 12 行先查账、不排产。**
 

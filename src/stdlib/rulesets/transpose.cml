@@ -1534,8 +1534,9 @@ export rule linear_t::<T, A, B>(x: A, w: B) when is_float::<T>() { linear(x, w) 
 /// therefore **has no transposed law**: the walk reports the operator it could not answer and this
 /// law answers nothing for it -- a refusal, not a cotangent computed with the wrong geometry.
 ///
-/// Two changes are owed before this law can speak for another window, and neither is this lane's:
-/// the shaped twins must take the window (`conv2d_input_grad_shaped<stride, padding>(kernel, dy)`),
+/// Two changes are owed before this law can speak for another window, and neither is a change this
+/// law can make alone: the shaped twins must take the window
+/// (`conv2d_input_grad_shaped<stride, padding>(kernel, dy)`),
 /// and the transform must be able to carry a matched node's `with` argument into a rule's right
 /// side. `transforms/rule_expand.cpp` refuses that today -- what a right side passes in angle
 /// brackets has to be a constant of the rule's own graph, and the matched node's own context

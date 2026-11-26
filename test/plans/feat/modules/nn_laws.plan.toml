@@ -84,3 +84,16 @@ expect_output_contains = ["the law `conv2d_t` has no cotangent for `nn:conv2d`"]
 expect_output_not_contains = ["transpose should have been refused, and it answered"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
+[[tests]]
+name = "max_pool2d_window_transpose"
+desc = "The same refusal for a pooling: `max_pool2d_t`'s pattern says `max_pool2d<2, 2, 0>`, because a law's right side cannot hand on a window it bound (`transforms/rule_expand.cpp` refuses a right side that passes a context argument the rule does not carry). A pooling called `max_pool2d<3, 1, 0>` therefore has no transposed law, and the program says so instead of answering a cotangent computed with the wrong window. The window is the library's default for every law that names a pooling -- `jvp_max_pool2d` and `jvp_avg_pool2d` are in the same position -- and the two changes that would widen it are the two owed changes `docs/technical/25_tensor_stack_and_onnx_export.md` states."
+kind = "negative"
+case = "../../../cases/modules/nn/max_pool2d_window_transpose.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm"]
+expect_exit = 1
+expect_diagnostic_name = "RuntimeDiag::RuntimeError"
+expect_output_contains = ["the law `max_pool2d_t` has no cotangent for `nn:max_pool2d`"]
+expect_output_not_contains = ["pooling transpose should have been refused, and it answered"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000

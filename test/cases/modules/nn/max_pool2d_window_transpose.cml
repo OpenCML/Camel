@@ -1,0 +1,30 @@
+/**
+ * The same refusal as `conv2d_stride2_transpose`, for a pooling, and for the reason the library's
+ * own wording gives: a law's right side cannot hand on a window it bound
+ * (`transforms/rule_expand.cpp` refuses a rule that writes the matched node's own `with` argument),
+ * so `max_pool2d_t`'s pattern says `max_pool2d<2, 2, 0>` -- the library's window -- and a pooling
+ * called with a 3x3 window has **no transposed law**. What this file pins is that the program says
+ * so, instead of answering a cotangent computed with the wrong window, which is what a law that
+ * quietly matched only its own window would have shipped.
+ *
+ * The case matters beyond this one call: a pooling called with any window but `<2, 2, 0>` has no
+ * forward law either (`jvp_max_pool2d`, `jvp_avg_pool2d`), and `conv2d_t` is in the same position
+ * for a convolution that is not `conv2d<1, 0>`. The library states the coverage and refuses the
+ * rest by name; the two debts that would widen it are the two owed changes
+ * `docs/technical/25_tensor_stack_and_onnx_export.md` states ("A law names one window").
+ */
+
+import { max_pool2d } from nn
+import rulesets.transpose
+import { sum } from tensor
+import { transpose } from transforms
+
+func loss_pool(x: float[1, 1, 6, 6]) => float {
+    return sum(max_pool2d<3, 1, 0>(x))
+}
+
+func main() => int sync {
+    let back = transpose(loss_pool)(1.0)
+    'pooling transpose should have been refused, and it answered {}'->format<back.0>->println
+    return 0
+}
