@@ -3,10 +3,9 @@
  *
  * This is one side of the pair `arm_var.cml` / `arm_let.cml`; the two files are one program in two
  * writings, and `std::jgir canonical=true` must print the same bytes for both (design principles
- * 3.5: a `var` is a resource and a unit is a representation).
+ * 3.5: a `var` is a name for values, and an assignment inside an arm is the branch's result).
  *
- * Nothing here is a unit: the choice is the value the branch computes, which is exactly what
- * `arm_var.cml`'s `var` must be lowered to.
+ * The choice is the value the branch computes, which is the value `arm_var.cml`'s `var` is built as.
  *
  * Run: camel test/cases/compile/var/arm_let.cml
  */

@@ -106,11 +106,11 @@ node_handle_t Builder::variableOperator(camel::core::OperId oper, node_handle_t 
 
 node_handle_t Builder::secondNameOf(node_handle_t value) {
     // A name bound to a value, where there is no cell to read it out of: a `var x = <the state>`
-    // hands the state to a new cell and `:var/new` counts what it is given, but a `let` has no cell,
-    // and the name it binds has to be a read of its own -- a node of the value at this statement,
-    // not the state it was read from (design principles 10.5). Otherwise every use of the name
-    // would take the state where the use stood, and `let kept = xs` followed by `xs[i] = i + 1`
-    // would read the write (`Builder::valueOf`, the round's value at the place of the read).
+    // hands the state to a new cell and `:var/new` counts what it is given, but a `let` has no
+    // cell, and the name it binds has to be a read of its own -- a node of the value at this
+    // statement, not the state it was read from (design principles 10.5). Otherwise every use of
+    // the name would take the state where the use stood, and `let kept = xs` followed by `xs[i] = i
+    // + 1` would read the write (`Builder::valueOf`, the round's value at the place of the read).
     Type *type = nodeTypeOf(value) != nullptr ? valueTypeOf(nodeTypeOf(value)) : nullptr;
     if (type == nullptr) {
         return value;
@@ -124,9 +124,10 @@ node_handle_t Builder::secondNameOf(node_handle_t value) {
     }
     // Every other value has no storage a write could reach, so the value itself is what the name
     // holds, and the keeper gives the value a place of its own to be read from: the GATE of
-    // docs/design/effects/edges.cn.md 5.3 and operator_table.h#kWellKnownCount, a region of one data
-    // port reading the value, passed through. No sync predecessor: what the name needs is a place
-    // for the value, not an order for it. It carries no count, as a value with no storage needs none.
+    // docs/design/effects/edges.cn.md 5.3 and operator_table.h#kWellKnownCount, a region of one
+    // data port reading the value, passed through. No sync predecessor: what the name needs is a
+    // place for the value, not an order for it. It carries no count, as a value with no storage
+    // needs none.
     node_handle_t keeper = currGraph_->addGateNode(nodeTypeOf(value));
     linkNodes(LinkType::Norm, value, keeper);
     return keeper;
@@ -143,7 +144,7 @@ Builder::secondNameOfCarriedName(const GCT::node_ptr_t &initializer, node_handle
     // A carried state reaches the body as one of two things: a port that stands for a cell
     // (`loopStatePorts_`, the cell form) or a name the body's scope declares as the port itself
     // (`SsaEnv::declarePort`, the value form).
-    const auto bound = nodeAt(moduleLevelName(initializer->name()));
+    const auto bound   = nodeAt(moduleLevelName(initializer->name()));
     const bool carried = (bound.has_value() && loopStatePorts_.contains(bound.value())) ||
                          ssa_.portOf(nodeScope_, initializer->name()) != nullptr;
     if (!carried) {
@@ -434,11 +435,11 @@ void Builder::collapseNonEscapingVariableReads() {
     std::sort(folded.begin(), folded.end(), walksBefore);
     for (const node_handle_t cell : folded) {
         std::vector<std::pair<node_handle_t, node_handle_t>> &reads = byCell.at(cell);
-        // A `var` parameter of this graph is a resource shared with the caller, and a captured cell
+        // A `var` parameter of this graph shares its cell with the caller, and a captured cell
         // is shared with a closure: both keep their cell. A `var` that only a write put in
         // `escapingVariables_` is not the same thing: the assignment is the write, it does not
         // exist after the call, so being written is not a way of leaving the body. It is given to
-        // the fold here, and what keeps it a resource then has to be a real escape (written into
+        // the fold here, and what keeps it a cell then has to be a real escape (written into
         // `escapingVariables_` by a capture or a user function's `var` parameter) or a write the
         // fold cannot stand for -- a read whose version is a carried state (the LOOP) is not
         // folded below, so one such read is enough to keep the cell:
@@ -457,7 +458,7 @@ void Builder::collapseNonEscapingVariableReads() {
         }
         // Every user of the cell must be one this builder recorded: one of its reads, or one of its
         // stores. Any other user -- a `:var/take`, a call the `var` was handed to, a capture port
-        // -- is a use this conversion does not model, so the cell keeps its cell.
+        // -- is a use the fold does not model, so the variable keeps its cell.
         bool known = true;
         for (auto users : {normUsersOf(cell), withUsersOf(cell), ctrlUsersOf(cell)}) {
             for (draft_node_ref_t user : users) {
@@ -611,7 +612,8 @@ void Builder::collapseNonEscapingVariableReads() {
                 }
             } else if (nodeKindOf(source) == camel::runtime::GCNodeKind::Loop) {
                 // A write inside a loop is carried state: the version a read after the loop takes
-                // is the loop, which is not a value the fold can stand in for (schedule item 3).
+                // is the loop, which is not a value the fold can stand in for (design principles
+                // 3.5: a write to an outer `var` in a loop body becomes the loop's carried state).
                 // Folding it would answer with the value from before the loop.
                 ++foldSawLoop_;
                 continue;
@@ -725,7 +727,7 @@ void Builder::dropCarriedVariableUnits() {
     // of such a cell took the value (the capture is the read, and the fold gave it the value the
     // write wrote), so what is left is the unit -- `:var/new`, its store and the GATEs that handed
     // the statement's value out -- and nobody uses it. Design principles 3.5 (197): the closure
-    // holds the value, so the cell is not a resource of the body and there is nothing left for it
+    // holds the value, so the body has no cell left to keep and there is nothing for it
     // to be. The `let` writing of the same program has none of those nodes, which is what the pair
     // of writings is compared on.
     std::vector<node_handle_t> cells;
@@ -737,7 +739,7 @@ void Builder::dropCarriedVariableUnits() {
     // Both tables below are hashed on the handle's ADDRESS -- `std::hash<DraftNodeRef>` is
     // `hash<const void*>(draft) * 31 + id` (`runtime/node_ref.h`) -- so walking them walks the
     // allocator's order, and the units dropped further down are created in that order. Two runs of
-// Both tables below are hashed on the handle's ADDRESS -- `std::hash<DraftNodeRef>` is
+    // Both tables below are hashed on the handle's ADDRESS -- `std::hash<DraftNodeRef>` is
     // `hash<const void*>(draft) * 31 + id` (`runtime/node_ref.h`) -- so walking them walks the
     // allocator's order, and the units dropped further down are created in that order. Two runs of
     // one program then number the nodes of this body differently. A graph numbers its nodes in
@@ -767,10 +769,10 @@ void Builder::dropCarriedVariableUnits() {
         if (draft.header(cellId) == nullptr || !draft.alive(cellId)) {
             continue;
         }
-        // The cell is a cell of this graph that is not a resource any more. A captured cell, a
-        // `var` parameter and one handed to a call as a `var` argument are `escapingVariables_`;
-        // a read still recorded for it is the fold's business and is not folded here, so such a
-        // cell keeps its unit.
+        // The cell is a cell of this graph that nothing outside it shares any more. A captured
+        // cell, a `var` parameter and one handed to a call as a `var` argument are
+        // `escapingVariables_`; a read still recorded for it is the fold's business and is not
+        // folded here, so such a cell keeps its unit.
         if (nodeKindOf(cell) != camel::runtime::GCNodeKind::Oper ||
             escapingVariables_.contains(cell) || captureOriginOf_.contains(cell)) {
             continue;

@@ -1,10 +1,10 @@
 /**
  * A `var` an arm inside a loop body writes: the write is inside a statement branch, which is not the
- * loop body's own block, so the two carried writes would have to compose -- S2's join inside S3's
- * head, one region inside the other.
+ * loop body's own block, so the two carried writes would have to compose -- a branch's join inside a
+ * loop head, one region inside the other.
  *
- * It does not compile today, and it did not before stage S3 either (measured on both sides, same
- * reading): the compiler stops with `Runtime graph 'main' breaks the branch-arm invariant: OPER
+ * It does not compile today: the compiler stops with `Runtime graph 'main' breaks the branch-arm
+ * invariant: OPER
  * (:io/println) reads JOIN ..., which lies in an arm of BRCH ... that may not be taken`, and says
  * itself that the shape is a defect of the compiler rather than an error of the program. The entry in
  * `test/plans/feat/compile/var.plan.toml` pins that message as a known failure, so a fix makes it

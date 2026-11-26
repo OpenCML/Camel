@@ -324,16 +324,14 @@ expect_output_not_contains = ["[Warn]"]
 # This entry used to read `std::rgir` and ask that the operator's in-place form appear in the graph
 # (`:var/take`, `array:sort_l_in_place`, `array:sort_d_in_place`, `:op/assn_owned`). That form is
 # produced by `Builder::inPlaceRebindingOf`, a rewrite of the statement shape from when a `var` was a
-# cell; since stage S1 of the direct-SSA plan a same-region local `var` is the value it was given, so
-# there is no cell to take the array out of and no such marker is written any more. The author's
-# answer of 2026-11-18
-# (`internal/reviews/2026-11-18-an-in-place-call-now-builds-as-ssa-rebinding.cn.md`) rules that
-# in-place is the execution plan's reuse decision: at `sort(v)`, when that is the old `v`'s last use,
-# the plan takes the in-place form (`StorageReuse::Input`, `ByArrayCount` when it can only count --
-# design principles 10.5), and the front-end rewrite and `inPlaceCalls_` are to be deleted with it.
-# So this entry asks that decision instead of the marker, with the ruler the plan page names for it
-# (`camel inspect --copies`, the same reading `array_sort_kernels.plan.toml#array_sort_kernels.paths`
-# takes), and the entry keeps its name for the same reason that one keeps its own.
+# cell; a same-region local `var` is the value it was given (design principles 3.5), so there is no
+# cell to take the array out of and no such marker is written any more. In-place is the execution
+# plan's reuse decision (design principles 10.5): at `sort(v)`, when that is the old `v`'s last use,
+# the plan takes the in-place form (`StorageReuse::Input`, `ByArrayCount` when it can only count),
+# and the front-end rewrite and `inPlaceCalls_` are to be deleted with it.
+# So this entry asks that decision instead of the marker, with `camel inspect --copies` (the same
+# reading `array_sort_kernels.plan.toml#array_sort_kernels.paths` takes), and the entry keeps its
+# name for the same reason that one keeps its own.
 #
 # The four rebindings that bind a name to a sorted array are the old value's last use, so their
 # update is in place -- `in-place` (proved) or `by-count` (the array's own count decides at run
@@ -343,15 +341,14 @@ expect_output_not_contains = ["[Warn]"]
 # so `fs` still holds the unsorted array and the sort may copy -- which the case prints beside the
 # sorted one, and `new_values.sort_rebinding` above pins.
 #
-# What it reads, and the red this entry is owned for (S3b): `COPIES main updates 9
+# What it reads, and the red this entry is owned for: `COPIES main updates 9
 # in-place 0 by-count 0 declared 0 copied 9`, with the four `sort_kernel` rows of `main` each
 # `copied`; the one rebinding the plan already places -- the `var` parameter's, in `sorted_param` --
-# reads `by-count`. This red is the S3b gap itself: it is not to be marked `known_fail` and the
-# assertion is not to be loosened, because nothing else in the tree says that a sort at the old
-# value's last use must reuse its storage.
+# reads `by-count`. This red is the gap between the plan's reuse table and this program: it is not to
+# be marked `known_fail` and the assertion is not to be loosened, because nothing else in the tree
+# says that a sort at the old value's last use must reuse its storage.
 
-# The same program read with the ruler stage S3b's criterion is stated in
-# (`internal/plans/2026-11-16-direct-ssa-construction.cn.md`, its 2026-11-19 amendment): every
+# The same program read against the reuse criterion (design principles 10.5): every
 # `v = v->append(x)` and `xs = sort(xs)` whose value nothing else reads is handed its storage and
 # runs the in-place form, and every one whose value another name still holds copies. The six
 # in-place rows below are the first readings of the mechanism; the three copied ones are the
@@ -370,7 +367,7 @@ verify_script = """
   const lines = input.normalized.stdout.split('\n').filter((l) => l.startsWith('COPIES '))
   assert(lines.length > 0, 'the ruler printed no reading: ' + input.normalized.output)
   // The plan chose the in-place form where the value has no other reader, and the copying form
-  // where it has one: both counts are non-zero, which is the point of the stage. The per-row list
+  // where it has one: both counts are non-zero, which is what this entry reads. The per-row list
   // belongs to a graph and a row line does not carry its graph's name, so the counts are read off
   // the three summaries below rather than by walking the rows.
   const main = 'COPIES main updates 9 in-place 6 by-count 0 declared 0 copied 3'
