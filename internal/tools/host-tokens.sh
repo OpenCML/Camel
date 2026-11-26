@@ -9,9 +9,12 @@
 # queued behind it, three of them holding nothing but a hope. The budget this hands out is a
 # **token**: one worker process, one token, returned when that process exits.
 #
-#   take N        take N tokens (blocking; while waiting it prints who holds what)
-#   run N -- CMD  take N tokens, run CMD with them, give them back when CMD exits
-#   take-all      take every token (a time-sensitive measurement; the caller must say so)
+#   take N            take N tokens (blocking; while waiting it prints who holds what)
+#   take-up-to N -- CMD
+#                     take what is free now, up to N and never fewer than one, run CMD with that
+#                     many workers, and give them back when CMD exits: a build asks for a width and
+#                     takes what the host can carry instead of waiting for a full slot
+#   run N -- CMD      take N tokens, run CMD with them, give them back when CMD exits
 #   show          what the pool looks like now: free, held, and the peak so far
 #   self-test     check the properties this exists for, without a host
 #
@@ -311,12 +314,62 @@ take() {
     [ "${CAMEL_TOKEN_QUIET:-0}" = '1' ] || echo "host-tokens: took $want of $POOL_SIZE tokens (lane=$LANE, waited $((tms / 1000))s)"
 }
 
+# Take what the pool has, up to a wanted width, and run a command at that width.
+#
+#   take-up-to N -- CMD
+#
+# A build asks for a width and the pool decides what it gets: as many tokens as are free at this
+# moment, never more than N, and never fewer than one (a caller with no token at all waits, which is
+# the same wait any worker does). Waiting for a *full* width while four tokens sit free is the queue
+# this verb exists to remove -- the host was idle while a lane held nothing but its request.
+#
+# The count reaches CMD as `CAMEL_TOKENS_HELD` and `CMAKE_BUILD_PARALLEL_LEVEL`, because a number
+# written in the calling shell does not cross into the command: the width has to be decided where the
+# locks are. `HOST_BUILD_JOBS=<n>` is printed first, so a caller that reads the run's stream learns
+# the width the build actually got rather than the width it asked for.
+take_up_to() {
+    local want="$1" taken=0 n fd t0 tms
+    shift
+    [ "$want" -ge 1 ] || die "take-up-to needs at least one token"
+    prepare
+    now_ms; t0=$NOW_MS
+    n=1
+    while [ "$n" -le "$POOL_SIZE" ] && [ "$taken" -lt "$want" ]; do
+        fd=$((20 + n))
+        eval "exec $fd>\"$(token_path "$n")\""
+        if flock -n "$fd"; then
+            printf '%s %s %s %s\n' "$$" "$LANE" "$WHO" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > "$(record_path "$n")"
+            taken=$((taken + 1))
+            report_take 0 1
+        else
+            eval "exec $fd>&-"
+        fi
+        n=$((n + 1))
+    done
+    if [ "$taken" -eq 0 ]; then
+        take 1 >/dev/null
+        taken=1
+    fi
+    record_peak
+    now_ms; tms=$(( NOW_MS - t0 ))
+    echo "host-tokens: running at $taken of $want worker(s) (lane=$LANE, $((tms / 1000))s to take them)"
+    echo "HOST_BUILD_JOBS=$taken"
+    export CAMEL_TOKENS_HELD="$taken"
+    export CMAKE_BUILD_PARALLEL_LEVEL="$taken"
+    "$@"
+}
+
 self_test() {
+
     local root bad=0 out
     root=$(mktemp -d)
     # The size is resolved once, at start, so the test sets the variable it was resolved into rather
     # than hoping an environment prefix on a function call changes it.
     export CAMEL_TOKEN_DIR="$root/pool"
+    # And the same value for this process: `TOKEN_DIR` was resolved from the environment when the
+    # script started, so exporting it for children is not enough -- the checks below run in this
+    # process, and they were reading the live pool beside every other lane.
+    TOKEN_DIR="$root/pool"
     export CAMEL_LANE=selftest
     POOL_SIZE=3
     export CAMEL_TOKENS=3
@@ -438,8 +491,23 @@ self_test() {
     esac
     rm -f "$report"
 
+    # 12. a build gets what is free, not what it asked for: with two of three held, asking for three
+    # takes one, and the width the command sees is the one it got. A build that waits for its full
+    # width while a token sits free is the queue this verb exists to remove.
+    ( take 2 >/dev/null; exec sleep 30 ) &
+    holder4=$!
+    sleep 0.5
+    width=$("$0" take-up-to 3 -- true 2>/dev/null | sed -n 's/^HOST_BUILD_JOBS=//p' | tail -1)
+    seen=$("$0" take-up-to 3 -- sh -c 'printf "width-in-cmd=%s\n" "$CAMEL_TOKENS_HELD"' 2>/dev/null | sed -n 's/^width-in-cmd=//p' | tail -1)
+    case "$width:$seen" in
+        1:1) echo 'ok    take-up-to takes the one token that is free rather than waiting for three' ;;
+        *) echo "FAIL  take-up-to reported width '$width' and the command saw '$seen', not 1 and 1"; bad=$((bad + 1)) ;;
+    esac
+    kill -9 "$holder4" 2>/dev/null
+    wait "$holder4" 2>/dev/null
+
     rm -rf "$root"
-    if [ "$bad" -eq 0 ]; then echo 'selftest: 11 checks, 0 failed'; return 0; fi
+    if [ "$bad" -eq 0 ]; then echo 'selftest: 12 checks, 0 failed'; return 0; fi
     echo "selftest: $bad failed"; return 1
 }
 
@@ -448,7 +516,14 @@ shift || true
 case "$cmd" in
     show)     show ;;
     take)     take "${1:-1}" ;;
-    take-all) take "$POOL_SIZE" ;;
+
+    take-up-to)
+        n="${1:-1}"; shift 2>/dev/null || true
+        [ "${1:-}" = '--' ] && shift
+        [ "$#" -ge 1 ] || die 'take-up-to needs a command after --'
+        take_up_to "$n" "$@"
+        exit "$?"
+        ;;
     run)
         n="${1:-1}"; shift 2>/dev/null || true
         [ "${1:-}" = '--' ] && shift
@@ -464,5 +539,5 @@ case "$cmd" in
         CAMEL_TOKEN_QUIET=1 take 1 >/dev/null
         exec "$@"
         ;;    self-test) self_test ;;
-    *) die "unknown command '$cmd' (take, take-all, run, run-quiet, show, self-test)" ;;
+    *) die "unknown command '$cmd' (take, take-up-to, run, run-quiet, show, self-test)" ;;
 esac
