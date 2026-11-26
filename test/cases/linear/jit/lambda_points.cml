@@ -1,7 +1,7 @@
 /**
  * Verifies JIT execution of lambda predicates over structs and arrays, including captured bounds
  * checks. The filter is `filter`, not a `foreach` whose body appends to a captured `var`: a closure
- * may not assign an outer name (the ruling of 2026-11-15, design principles 3.5), and `filter`
+ * may not assign an outer name (the rule, design principles 3.5), and `filter`
  * calls the predicate once per element, in order, so the kept points are the same ones.
  */
 

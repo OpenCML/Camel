@@ -10,7 +10,7 @@
  * same kind are allowed only in the semantic layer's files. This script is that check, in
  * report-only mode.
  *
- * That page is not in this tree as of 2026-11-14: it is the design branch's (`origin/fsh-dev`), so
+ * That page is not in this tree: it is the design branch's (`origin/fsh-dev`), so
  * section 7 is quoted here rather than linked -- a link to a page this tree does not hold is a
  * broken link, and `scripts/check-doc-links.mjs --citations` says so.
  *
@@ -72,7 +72,7 @@ const NAME = 'check-edge-kind-layer'
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 
 /** The directories the scan covers by default, the same set the other source checks read. */
-// `src` holds the five blocks and the standard library since the 2026-11-22 move, and the seven
+// `src` holds the five blocks and the standard library since the move, and the seven
 // tools are `src/tools`; a directory a checkout does not have is skipped rather than stat'ed, so a
 // tree of either layout is scanned instead of crashing on the way in.
 const SCANNED = ['src', 'src/tools', 'include', 'modules', 'tools']

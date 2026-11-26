@@ -1,6 +1,6 @@
 /**
  * A write to a reference is a root of the region it is written in (design principles 3.1 and 3.3,
- * as the author ruled them on 2026-11-16): it runs although nothing in its own graph reads the
+ * as the author ruled them): it runs although nothing in its own graph reads the
  * value it answers, because the reader of a handle may be somewhere this graph cannot see -- in the
  * caller of a box that escaped, in a closure called later, behind another name of the same type.
  *
@@ -23,14 +23,14 @@
  *       now works -- and (b) the value of an `if` statement nobody takes is never run at all, arms
  *       included: a `println` written in exactly that position does not print either. The two
  *       reproductions are `r1_branch_println.cml` and `r1_branch_state_set.cml` under the author's
- *       scratch directory for this lane. Leg (b) is a defect of region semantics against 3.1 (the
+ *       scratch directory for this change. Leg (b) is a defect of region semantics against 3.1 (the
  *       owner of that region runs, so the region should), and it belongs to another lane.
  *
  *   R3  a write in a loop body, read after the loop, faults at run time: `RuntimeDiag::InvalidArgument`,
- *       "the value is not a reference", from `state.set`. Blocked on `lane-portbind`: on the tree
- *       this lane started from, a live `state::get` of a handle made OUTSIDE a loop and read inside
+ *       "the value is not a reference", from `state.set`. Blocked on : on the tree
+ *       this change started from, a live `state::get` of a handle made OUTSIDE a loop and read inside
  *       the body already faults the same way after two rounds, so the hole is the region port of a
- *       loop body, not the rule about roots. Measured 2026-11-16; see the report of `lane-refwrite`.
+ *       loop body, not the rule about roots. Measured; see the report.
  */
 
 import state

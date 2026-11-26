@@ -25,7 +25,7 @@
 // Every number is exact in binary floating point at a = 1, b = 2, so the readings are compared for
 // equality and not against a tolerance.
 //
-// Read on 2026-11-21 (`b74edf66c`, `std::nvm`): the case stops at its first nested call, one step past
+// Read on `std::nvm`: the case stops at its first nested call, one step past
 // both lifts, with
 //
 //   [Error]: An error has occurred: transforms: transpose has no transpose for this function: the
@@ -33,7 +33,7 @@
 //   carry.
 //
 // -- the wall `nested_grad_min.cml` records, after `split`'s `the value half reads the tangent of
-// parameter 0` (`2a2cf31a8`) and `jvp`'s `no forward transform for this function` (`2da9735da`). The
+// parameter 0` and `jvp`'s `no forward transform for this function`. The
 // writing is the restored one, and the one-step readings this case builds on are the header's
 // arithmetic (8.0 for df/da and 11.0 for df/db at a = 1, b = 2); what the case cannot reach yet is the
 // second step over any of them. That sentence is not pinned: the plan entry is a `known_fail` on the

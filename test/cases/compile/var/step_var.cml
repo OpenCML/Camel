@@ -7,7 +7,7 @@
  * principles 3.5: a `var` is a resource, and whether it carries a unit is a matter of
  * representation, not of meaning).
  *
- * Measured 2026-11-15 on 96a27e435 -- it is not the same bytes yet, and both halves are red for one
+ * Measured on 96a27e435 -- it is not the same bytes yet, and both halves are red for one
  * reason: the `var` writing still builds a unit. Its graph carries `:var/new`, three `:var/get` and
  * one `:var/assn_d` that the `let` writing has none of (18 nodes against 13), and `grad` refuses the
  * `var` writing before it builds anything ("Gradients do not flow through variables: bind the value

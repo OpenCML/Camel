@@ -14,7 +14,7 @@ desc = "An option this tree does not know, a missing install and an empty select
 # argv it does know and the commit it is, and the consumer passes that through. These three cases
 # pin the three sentences against each other: each case asserts its own words and the absence of the
 # other two, so the check fails both when one goes missing and when two causes share one sentence
-# again. Exit codes are asserted as they already are (`1`, `2`, `2`): this lane moves no code the
+# again. Exit codes are asserted as they already are (`1`, `2`, `2`): this change moves no code the
 # gate reads.
 
 [[tests]]

@@ -85,7 +85,7 @@ expect_stdout_starts_with = "1\n2\n"
 
 # ---- the same three programs through the Camel passes ----
 
-# `opt::dce` is the standard library's own dead-value sweep (`stdlib/opt.cml`), and the ruling on
+# `opt::dce` is the standard library's own dead-value sweep (`stdlib/opt.cml`), and the rule on
 # the A10 defect is that it decides what it may drop with the fact the C++ sweep decides with:
 # `may_fault` (`stdlib/graph.cml`), which reads the operator table's fault feature and
 # `castMayFault` the way `isValueOnly` does. An unread statement that can fault therefore stays,

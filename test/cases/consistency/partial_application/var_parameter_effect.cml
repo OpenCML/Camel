@@ -1,6 +1,6 @@
 /**
  * Both helpers bind a `var` context parameter with `add<t>`, and a partial application cannot bind
- * one (design principles 3.5, the author's ruling of 2026-11-15) -- the function value has no call
+ * one (design principles 3.5) -- the function value has no call
  * of its own to write the value back to. Refused at each binding, `guarded`'s and `ignored`'s; the
  * cell is the `var t` of the body that binds it, which is the shape a local cell takes.
  *

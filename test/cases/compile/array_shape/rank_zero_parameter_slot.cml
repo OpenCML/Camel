@@ -3,7 +3,7 @@
 // array the slot holds) and once out of it (the element the rank-zero array is, design principles
 // 5.4). Both directions are the compiler's conversion, not the program's `as`.
 //
-// Before that conversion (`619eedb6c`) this crashed as `show` did; after it (`cae413dbf`) the same
+// Before that conversion this crashed as `show` did; after it the same
 // program prints the value it was given, and the four slots print the same two lines.
 
 func elem(v: f32[...]) => f32 {

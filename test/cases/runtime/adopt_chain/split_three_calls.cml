@@ -12,8 +12,8 @@
 // What this case is *for* is the value pair: before `Program::adoptMissing` carried what the program
 // it adopted had itself adopted, this program stopped in the node VM before printing anything, on the
 // direct call the outermost forward half writes to the forward half of the cut below it. The three
-// `d` lines are printed as the map's own reading and are not the numbers above yet: measured
-// 2026-11-04 they are 128.0 and 648.0, the same at every dx, because the cut takes a parameter's
+// `d` lines are printed as the map's own reading and are not the numbers above yet: they are
+// 128.0 and 648.0, the same at every dx, because the cut takes a parameter's
 // tangent port for its value port (modules/transforms/split.cpp#residualsOf, pinned at two cuts by
 // `feat.transforms.split`'s `split_linear_across_a_call`). The comment states the hand's numbers so
 // that the day that one lands, this case's remaining readings are already written down.

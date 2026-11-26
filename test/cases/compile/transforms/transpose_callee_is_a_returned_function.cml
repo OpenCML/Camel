@@ -3,7 +3,7 @@
 //
 // On paper `f(x) = 2x`, so `f(3) = 6` and the derivative at 3 is `2`.
 //
-// **What this pins, and why it is a refusal** (author, 2026-11-04 07:15). A bare `transpose(f)` reads
+// **What this pins, and why it is a refusal**. A bare `transpose(f)` reads
 // every parameter of `f` as a linear input. The call here applies a function the body **built out of
 // `x`**, so `f` is not linear in `x` -- that is the language's rule, and the refusal says it:
 // `skip=callee-built-from-a-parameter`, `built-from=0` naming `x` by position, `callee=none` because no

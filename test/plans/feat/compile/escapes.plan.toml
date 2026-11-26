@@ -3,7 +3,7 @@ order = 923
 tier = "fast"
 tags = ["feat", "compile", "literals", "escapes", "raw"]
 
-desc = "The one escape table of the three quoted string forms, and the two ways to write a backslash without it. `\\0`, `\\xHH`, `\\u{...}` and the named escapes decode; an octal-looking form (`\\101`, `\\01`, `\\012`, `\\033`) and any other unknown pair (`\\q`, `\\8`) are LexicalDiag::InvalidEscapeSequence at error severity, so the program does not build (the author's ruling of 2026-11-02). A raw string (`r\"...\"`, `r#\"...\"#`) is not decoded at all, and a raw string without its closing delimiter is UnclosedStringLiteral at the opening quote. `std::cml` prints a value with several backslashes back as a raw string, and the print round trip is compared as behaviour in trans.cml."
+desc = "The one escape table of the three quoted string forms, and the two ways to write a backslash without it. `\\0`, `\\xHH`, `\\u{...}` and the named escapes decode; an octal-looking form (`\\101`, `\\01`, `\\012`, `\\033`) and any other unknown pair (`\\q`, `\\8`) are LexicalDiag::InvalidEscapeSequence at error severity, so the program does not build. A raw string (`r\"...\"`, `r#\"...\"#`) is not decoded at all, and a raw string without its closing delimiter is UnclosedStringLiteral at the opening quote. `std::cml` prints a value with several backslashes back as a raw string, and the print round trip is compared as behaviour in trans.cml."
 
 [defaults]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
@@ -76,7 +76,7 @@ assert(input.normalized.stderr.trim() === '', 'no diagnostic: ' + input.normaliz
 
 [[tests]]
 name = "escapes.unknown_is_an_error"
-desc = "`\"\\q\"` does not compile: LexicalDiag::InvalidEscapeSequence is an error since the author's ruling of 2026-11-02, so a program that writes an unknown escape is refused instead of running with the pair kept. The message names the pair that was written, and nothing is printed."
+desc = "`\"\\q\"` does not compile: LexicalDiag::InvalidEscapeSequence is an error since the rule, so a program that writes an unknown escape is refused instead of running with the pair kept. The message names the pair that was written, and nothing is printed."
 kind = "negative"
 case = "../../../cases/compile/escapes/unknown.cml"
 args = ["${case}"]

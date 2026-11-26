@@ -3,7 +3,7 @@
 
 //
 // One migration of the pack spelling: `..` in a pack position becomes `...` (design principles §5,
-// the author's ruling of 2026-11-04 05:45 -- a pack is written `...`, and `..` keeps intervals,
+// the rule -- a pack is written `...`, and `..` keeps intervals,
 // composition and stream types). Written down as rules rather than as a one-off replacement, so that
 // this migration can be read, checked and run again.
 //
@@ -35,7 +35,7 @@
 // as well, because a production can put the dots right after a `(`.
 //
 // Files: the standard library, the cases, the language and design documents. `internal/reviews/`
-// is a record of what was written at the time and is never rewritten (author, 18:35); the pages under
+// is a record of what was written at the time and is never rewritten; the pages under
 // `internal/questions/` are proposals, and only the one about taking a type pack apart names the
 // spelling, so that page is edited by hand rather than by this script.
 

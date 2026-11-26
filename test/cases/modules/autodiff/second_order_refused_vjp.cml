@@ -16,7 +16,7 @@
 //   a tagged transform's call   "the function is the result of a call of '<name>', and what that
 //   returned it                 returns is not a function that is named or built in it"
 //
-// `lib/vjp/vjp.cml#vjp` carries `#macro` (author's ruling of 2026-11-15, `4ae2c0179`: the library's
+// `lib/vjp/vjp.cml#vjp` carries `#macro` (the rule: the library's
 // transforms are evaluated at the `std::macro` stage), so the call site is handed the call's answer
 // as a graph and reads the second line. Measured both ways on one build: the same case with that
 // tag removed answers the first line, and putting it back answers the second -- nothing else about

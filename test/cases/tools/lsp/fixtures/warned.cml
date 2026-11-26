@@ -1,4 +1,4 @@
-// The one warning the ruling of 2026-11-15 leaves for a write nobody reads: `UnusedAssignedValue`
+// The one warning the rule leaves for a write nobody reads: `UnusedAssignedValue`
 // at `x = 1`. `x` is read before the write, so the variable is used; the value this write stores is
 // not, and assigning to a `var` is not an effect (design principles 3.1, 3.5).
 func warn() => int {

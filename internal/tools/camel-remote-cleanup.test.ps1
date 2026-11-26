@@ -3,8 +3,8 @@
 # `camel-remote.ps1` removes host checkouts whose worktree is gone. On 2026-11-17 that removed trees
 # whose worktree very much existed, three times, in the same minutes as a gate:
 #
-#   lane-e9full  died at 200/500 and at 25/500, the whole checkout gone
-#   lane-e9gate  died at 300/500 with FileNotFoundError: .../out/latest/bin/camel, and even `uv_cwd`
+#   died at 200/500 and at 25/500, the whole checkout gone
+#   died at 300/500 with FileNotFoundError: .../out/latest/bin/camel, and even `uv_cwd`
 #                failed -- the reading of a working directory that no longer existed
 #
 # and `e9gate`'s own note says what makes it a defect rather than bad luck: "e9full was in every
@@ -26,13 +26,13 @@
 # ~/camel-work through a real bash, and checks that it removes only what all three conditions allow.
 #
 #   pwsh -NoProfile -File internal/tools/camel-remote-cleanup.test.ps1
-#   pwsh -NoProfile -File internal/tools/camel-remote-cleanup.test.ps1 -BashHost 88zjwei
+#   pwsh -NoProfile -File internal/tools/camel-remote-cleanup.test.ps1 -BashHost <host>
 #
 # Part B needs a bash that can hold a flock and read /proc: the build host always has one, and a
 # local `bash` is used when the one on PATH can read a Windows path. When neither is available part
 # B does not vanish from the count -- its checks are counted as skipped and the summary says how
 # many -- because a part that silently does not run is green by being unread, which is how the one
-# real defect in it hid for two days (2026-11-25).
+# real defect in it hid for two days.
 
 [CmdletBinding()]
 param(

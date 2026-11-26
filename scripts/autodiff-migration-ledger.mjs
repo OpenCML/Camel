@@ -41,7 +41,7 @@
 // **It does not classify the cases, and it counts no classes.** The three columns -- an array or
 // tensor type in the source, a function type carrying a `with` parameter, everything else -- were
 // counted by spelling, and a comment is not a spelling: a case that explained itself in a doc comment
-// moved class with nothing rewritten and reded the old record (`05e1145a9`), and the sentence then had
+// moved class with nothing rewritten and reded the old record, and the sentence then had
 // to be reworded to get the reading back. That is the ruler bending the thing it measured, so the
 // classifier is deleted rather than tuned. What it was asked is not a run of anything either: the
 // array step is judged by `grad(f)([3.0, 2.0])` printing `[2.0, 3.0]` and `skip=body` gone.

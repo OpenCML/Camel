@@ -62,7 +62,7 @@ function run(args) {
 
 // ---- the table: one row per key, in key order ----
 // A key may hold more than one law: a reduction over an axis is written with the whole reduction's
-// name and the axis in `<>` (author's ruling, 2026-11-05), so `sum/1` holds the law of `sum(xs)` and
+// name and the axis in `<>`, so `sum/1` holds the law of `sum(xs)` and
 // the law of `sum<axis, keepdims>(xs)` and the ports say which is which
 // (`modules/transforms/rule_expand.cpp#chooseRuleAmong`).
 const table = new Map()

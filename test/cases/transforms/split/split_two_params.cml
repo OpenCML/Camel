@@ -1,14 +1,14 @@
-// The reading program the author named for the straight-line tier (2026-11-01): f(x, y) = x*x*y at
+// The reading program the author named for the straight-line tier: f(x, y) = x*x*y at
 // x = 3, y = 2. The transform lifts every `float` parameter into the pair (value, tangent), so
 // `jvp(f)` takes four numbers -- (x, dx, y, dy) -- and answers the value and the derivative in the
 // direction the caller seeded. One run reads one direction, which is why the derivative is read
 // twice: with (1, 0) it is df/dx = 2xy = 12, with (0, 1) it is df/dy = x^2 = 9.
 //
-// The same lifted function then goes through `split` (author, 2026-10-31 15:25): the cut is the
+// The same lifted function then goes through `split`: the cut is the
 // pair, not a parameter number. What crosses it is read off the graph, so `fwd(3.0, 2.0)` answers
 // 18 with **five** residuals -- x, y, x*x, the product the backward half's rule for the second `mul`
 // reads, and the two parameters' value ports -- and hands them on inside `lin`, the linear function
-// it builds. `lin` is closed over those values (author, 2026-11-02 08:30), so it takes the tangent
+// it builds. `lin` is closed over those values, so it takes the tangent
 // direction alone: `lin(1, 0)` is 12 and `lin(0, 1)` is 9, the same two numbers the lift gives,
 // computed without recomputing the product on the far side of the cut.
 import rulesets.jvp
@@ -21,7 +21,7 @@ func f(x: float, y: float) => float {
 func main() => int sync {
     let lifted = jvp(f)
     // The lift's parameters are `jvpSignature`'s: the value of every parameter and then the tangent of
-    // every one (`50ecaf5e3`), so the four numbers are (x, y, dx, dy) -- not the (x, dx, y, dy) this
+    // every one, so the four numbers are (x, y, dx, dy) -- not the (x, dx, y, dy) this
     // case was written with, which was the layout before that landing.
     let (vx, tx) = lifted(3.0, 2.0, 1.0, 0.0)
     let (vy, ty) = lifted(3.0, 2.0, 0.0, 1.0)

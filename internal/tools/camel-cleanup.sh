@@ -37,7 +37,7 @@
 #   runDir	<absolute run dir>
 #   manifest	<absolute path of this file>
 #   #createdAt	kind	path	purpose
-#   2026-11-24T02:40:00+08:00	checkout	/home/u/camel-work/tmp/lane-1/src	built once, removed by prune
+#   2026-11-24T02:40:00+08:00	checkout	<home>/camel-work/tmp/<lane>/src	built once, removed by prune
 #
 # TSV rather than JSON because the deleting side is a POSIX shell on the build host, where no JSON
 # tool is installed; awk reads this and a person reads this, and one line per artifact diffs.
@@ -99,7 +99,7 @@ cc_manifests() {
 
 # --- resolving a path to what it really is -----------------------------------
 # Every refusal below happens on the resolved path, never on the spelling: `tmp/x/../../Camel.git`
-# and `/home/u/camel-work/tmp/x/../../../Camel.git` are one path, and a prefix comparison on the
+# and `<home>/camel-work/tmp/x/../../../Camel.git` are one path, and a prefix comparison on the
 # spelling is exactly the implementation that a `..` walks around.
 cc_real() {
     local p="$1"

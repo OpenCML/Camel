@@ -48,7 +48,7 @@ tags = ["feat", "compile", "var", "gir", "autodiff"]
 
 [[tests]]
 name = "var.assignment_and_let_chain_are_one_graph"
-desc = "An assignment to a `var` and the equivalent `let` chain have one canonical graph: `std::jgir canonical=true` prints the same bytes for the two writings of one gradient step, and so does the canonical output of the derivative (`std::macro std::jgir canonical=true`). Red on 96a27e435 because the `var` writing still builds a unit (:var/new, three :var/get and :var/assn_d in its graph) and `grad` refuses it outright; green when a unit is lowered to SSA. **It is green on f4bb08f241 for the opposite of that reason**: the whole `var` chain folds, `:var/new` is pruned, and a document with no unit in it proves nothing about lowering one. Read the six entries below for the discriminating half."
+desc = "An assignment to a `var` and the equivalent `let` chain have one canonical graph: `std::jgir canonical=true` prints the same bytes for the two writings of one gradient step, and so does the canonical output of the derivative (`std::macro std::jgir canonical=true`). Red on 96a27e435 because the `var` writing still builds a unit (var/new, three :var/get and :var/assn_d in its graph) and `grad` refuses it outright; green when a unit is lowered to SSA. **It is green on f4bb08f241 for the opposite of that reason**: the whole `var` chain folds, `:var/new` is pruned, and a document with no unit in it proves nothing about lowering one. Read the six entries below for the discriminating half."
 kind = "behavior"
 tool = "node"
 case = "../../../../test/tools/writing-freedom.mjs"
@@ -273,7 +273,7 @@ expect_exit = 0
 expect_stdout_exact = "0 41\n0 42\n0 9\n0\n0 5\n"
 # The write a body leaves in a `var` parameter is handed back where the call stands, so not one of
 # these three writes is reported for being outside a `sync` block, and not one of them is an effect
-# that has to run (design principles 3.1 and 3.5, the ruling of 2026-11-15). Measured before it, this
+# that has to run (design principles 3.1 and 3.5). Measured before it, this
 # same program's stderr held three `SemanticDiag::IgnoredSideEffect` (at 19:5, 40:5 and 57:36 --
 # `set`'s, `clear`'s and the lambda's write), each one saying the call of `<__assn__>` "is not in a
 # sync block, and it takes a var argument".
@@ -283,10 +283,10 @@ timeout_ms = 30000
 
 # --- A write to a `var` whose value nobody reads -----------------------------------------------
 #
-# Assigning to a `var` is not an effect (design principles 3.1 and 3.5, the ruling of 2026-11-15), so
+# Assigning to a `var` is not an effect (design principles 3.1 and 3.5), so
 # what such a write drops when nothing reads it is a value, and the one thing to report is that the
 # value nobody uses: `SemanticDiag::UnusedAssignedValue`, the same family as `UnusedPureResult` and
-# `UnusedFallibleValue`. Measured before the ruling, the case below reported two things about one
+# `UnusedFallibleValue`. Measured before the rule, the case below reported two things about one
 # write -- `IgnoredSideEffect` (the call takes a var argument) and a report that the statement ("The
 # assignment has side effects but is never executed"); both of those sentences are gone, and exactly
 # one is left.

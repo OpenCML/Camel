@@ -1,10 +1,10 @@
 // Copyright (c) the OpenCML Organization
 // SPDX-License-Identifier: MIT
 
-// camel-oversight: the collaboration engine between the decision-maker (another machine) and the
+// camel-oversight: the collaboration engine between another machine and the
 // coordinator (a session in this DSH process). Three parts:
 //
-//   the channel  -- the decision-maker reads the coordinator's state and sends it dispatches; the
+//   the channel -- the other side reads the coordinator's state and sends it dispatches; the
 //                   coordinator acknowledges and speaks back, pushed as it happens;
 //   the watch    -- every few minutes the plugin measures the repository, the backlog, the lanes and
 //                   the build host itself (rules.js), and reminds the coordinator only of what is
@@ -200,9 +200,9 @@ export function apply(ctx, rawConfig) {
     const acks = new Map() // id -> {id, at, status, note}
     const superseded = new Map() // id -> the id of the dispatch that replaced it before it was read
     let claimed = null // the session that called oversight_claim last
-    let dmLastSeen = null // the last request the decision-maker's client made
+    let dmLastSeen = null // the last request the oversight client made
     const promptReach = { target: 0, other: 0, none: 0 } // whom the prompt context was assembled for
-    const tells = [] // what the model sent the decision-maker with oversight_tell
+    const tells = [] // what the model sent with oversight_tell
     const record = (entry) => {
         try {
             mkdirSync(path.dirname(config.logFile), { recursive: true })
@@ -360,8 +360,8 @@ export function apply(ctx, rawConfig) {
                 handler: async (req, res) => {
                     if (req.method !== method) return answer(res, 405, { error: `use ${method}` })
                     const url = new URL(req.url, 'http://local')
-                    // The decision-maker's client names itself, so its absence can be read: the GUI
-                    // polls the same routes and must not count as the decision-maker being there.
+                    // The oversight client names itself, so its absence can be read: the GUI
+                    // polls the same routes and must not count as the other side being there.
                     if (url.searchParams.get('client') === 'dm') dmLastSeen = Date.now()
                     try {
                         await handler(req, res, url)
@@ -907,7 +907,7 @@ export function apply(ctx, rawConfig) {
 
     // ---- reloading the plugin itself ---------------------------------------------------------------
     //
-    // The owner's rule (2026-11-24): restarting DSH to change this plugin stops every agent at work, so
+    // The owner's rule: restarting DSH to change this plugin stops every agent at work, so
     // the change is a button, and what it buys is this plugin reloading alone. Three steps, in this
     // order, and the third one is what makes the first two safe to ship:
     //

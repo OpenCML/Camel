@@ -75,7 +75,7 @@ for (const l of [
   // footprint used to carry: `var xs = [3, 1, 2]` is a same-region local `var`, so since stage S1 of
   // the direct-SSA plan it is built as the value it was given and not as a cell, and
   // `Builder::inPlaceRebindingOf` (`src/compile/gir/builder_operators.cpp`) declines for want of one
-  // to take the array out of. In-place is not the front end's rewrite any more; the author's answer
+  // to take the array out of. In-place is not the front end's rewrite any more;
   // of 2026-11-18
   // (`internal/reviews/2026-11-18-an-in-place-call-now-builds-as-ssa-rebinding.cn.md`) rules
   // that it is the execution plan's reuse decision (design principles 10.5), which is why the same
@@ -290,7 +290,7 @@ for (const [uri, text] of Object.entries(expect)) {
 
 [[tests]]
 name = "resource_names"
-desc = "The resource set of the standard library is pinned: `camel inspect --ops` on a program that imports every module declaring a resource prints exactly these ambient and foreign names, so a later task cannot quietly rename one back. The names are the ones design principles 3.3 gives (`stdout`, `stderr`, `stdin`, `clock`, `env`, `fs`, plus the module's own `rng`, `tensor:threads`, `tiles:driver`, `tiles:device`, `process`, and `rendezvous_point`, the meeting point of `test_support`), and the two the itemization of `fca7f686c` added: `mm`, the allocator's counters `:op/mem_blocks` reads, and `profiler`, the profile session `:profiler/*` and `:stream/tee_note` write; raw mode writes `stdin`, the one resource the terminal mode was merged into ."
+desc = "The resource set of the standard library is pinned: `camel inspect --ops` on a program that imports every module declaring a resource prints exactly these ambient and foreign names, so a later task cannot quietly rename one back. The names are the ones design principles 3.3 gives (`stdout`, `stderr`, `stdin`, `clock`, `env`, `fs`, plus the module's own `rng`, `tensor:threads`, `tiles:driver`, `tiles:device`, `process`, and `rendezvous_point`, the meeting point of `test_support`), and the two the itemization added: `mm`, the allocator's counters `:op/mem_blocks` reads, and `profiler`, the profile session `:profiler/*` and `:stream/tee_note` write; raw mode writes `stdin`, the one resource the terminal mode was merged into ."
 kind = "behavior"
 case = "../../../cases/resources/names.cml"
 args = ["inspect", "--ops", "${case}"]

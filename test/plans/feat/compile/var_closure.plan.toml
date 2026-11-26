@@ -1,5 +1,5 @@
-# The rule of a captured value (design principles 3.5, the author's ruling of 2026-11-15): what the
-# main line pins about it after `lane-varclos` (`218f3b3f7`).
+# The rule of a captured value (design principles 3.5): what the
+# main line pins about it after .
 #
 # Where the rule stands today: the fourth step of "`var` becomes SSA" removed the three conservative
 # gates of `decideCaptureByValue`, so a closure of the program captures a NAME BY VALUE wherever it is
@@ -9,18 +9,18 @@
 # the last two because the write they make has to land in the cell
 # (`requireCapturedNameWritable` exempts both). A by-reference capture's write USED TO BE legal: it
 # landed in the cell the closure was handed, which is how `byref` was written and how the `stream`
-# packer was written. It is not legal any more. `lane-closurediag` refuses that write (the three `err.*`
+# packer was written. It is not legal any more. refuses that write (the three `err.*`
 # entries at the end), which is why the `byref` cases and the `stream` packer went red: the cases are
-# the migration this plan's third step owes, and the packer holds four `Ref`s since `lane-teeref`.
+# the migration this plan's third step owes, and the packer holds four `Ref`s since .
 #
-# The other half of the ruling (a closure may not assign an outer name, and a captured `var` may not be
+# The other half of the rule (a closure may not assign an outer name, and a captured `var` may not be
 # assigned between the making of the closure and its last use) was NOT REPORTED when this plan was
 # written. The author ruled that reporting it before `tee` was migrated to `Ref` would only turn a green
 # ruler into a red one, and that the migration is the next step of the same item rather than a later
 # round -- applying by-value capture everywhere made `tee`'s five cases fail with `Runtime graph
 # 'side0' breaks its edge invariants`. `tee` itself no longer keeps cells: it holds four `Ref`s
-# (`lane-teeref`), so its five
-# outputs never depended on this choice, and `lane-closurediag` (2026-11-16) is the step that reports the
+# , so its five
+# outputs never depended on this choice, and is the step that reports the
 # rule. The three `err.*` entries at the end of this plan are the three ways that write is written. The
 # three `transitional.*` entries that stood between them are GONE: they were the same programs, accepted
 # while the capture port was a cell, and they were refused from the day the rule reports -- the step that
@@ -38,7 +38,7 @@
 
 [[tests]]
 name = "ok.update_reads_a_captured_var"
-desc = "A closure reads a `var` of the function that made it and writes nothing (`update(x, () => x + 1)`); legal before and after the ruling, so this entry is the regression guard the acceptance names by hand. The reading is 2."
+desc = "A closure reads a `var` of the function that made it and writes nothing (`update(x, () => x + 1)`); legal before and after the rule, so this entry is the regression guard the acceptance names by hand. The reading is 2."
 kind = "behavior"
 case = "../../../cases/compile/var_closure/ok_update_reads_captured.cml"
 args = ["${case}"]
@@ -47,7 +47,7 @@ expect_stdout_exact = "2\n"
 
 [[tests]]
 name = "ok.a_closure_made_in_each_turn_of_a_loop"
-desc = "A closure made in the body of a loop, once per turn, reading the turn's own `var`; legal before and after the ruling, and the acceptance names this shape too. The reading is 60."
+desc = "A closure made in the body of a loop, once per turn, reading the turn's own `var`; legal before and after the rule, and the acceptance names this shape too. The reading is 60."
 kind = "behavior"
 case = "../../../cases/compile/var_closure/ok_closure_in_loop_body.cml"
 args = ["${case}"]
@@ -84,7 +84,7 @@ expect_output_contains = ["'k' is immutable and cannot be passed to a var parame
 #
 #   - a closure the program puts into another value IS reported: the value is used to the end of the
 #     scope, `scanClosureLastUses` records that end as `CapturedVar::stretchToEnd`, and every write
-#     after the making is inside it. `f92e5246f` is the commit that implemented the sentence; the
+#     after the making is inside it. The sentence was implemented; the
 #     tuple shape is read on `test/cases/opt/effects/dead_write_dropped_closure.cml` and the array
 #     shape on `err_captured_var_put_into_an_array` below. Before it the write was built and then
 #     erased for having no reader left: no node and no diagnostic, which is the class of defect this
@@ -92,7 +92,7 @@ expect_output_contains = ["'k' is immutable and cannot be passed to a var parame
 #   - a closure written at a call's argument position is NOT reported when the callee's result type
 #     can hold a function (3.5, 198 gives that shape the rest of the scope too). `scanClosureLastUses`
 #     reads the GCT before any body is built, so it cannot resolve a callee, and the shape falls to
-#     the "used by that call" end. Measured 2026-11-16 on this tree, and it is the shape the defect
+#     the "used by that call" end. Measured on this tree, and it is the shape the defect
 #     the tuple and array entries pin is still open in:
 #
 #         func take(f: () => int): () => int { return f }
@@ -139,11 +139,11 @@ expect_diagnostic_name = "SemanticDiag::CapturedVarHandedToVarParameter"
 expect_diagnostic_code = "0x03000215"
 
 # ---- The four call sites a capture PORT turns into a value -------------------------------
-# The step that removed the by-reference capture port (`8b6f57c18`) left four places where a
+# The step that removed the by-reference capture port left four places where a
 # captured name stops being a variable, so the general rule that answers "not a variable" fired
 # before the capture rule was asked. Three of them had no case at all: they do not turn red, they
 # only stop saying what they used to say. The four entries below are those places, one each, and
-# the author's ruling of 2026-11-16 makes fixing them the step before `gate5` goes.
+# the rule makes fixing them the step before `gate5` goes.
 #
 # The fourth is the BENIGN direction (`mutableName`, builder_control.cpp): it answers the same
 # before and after the gate goes, so its entry pins the refusal that stands, and names the stale

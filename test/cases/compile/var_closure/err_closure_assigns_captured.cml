@@ -1,6 +1,6 @@
 /**
  * A closure writes a name of the body around it: a compile error (design principles 3.5, the author's
- * ruling of 2026-11-15; the decision of 2026-11-16 makes it the first step of the work that removes
+ * the rule; the decision of 2026-11-16 makes it the first step of the work that removes
  * the by-reference capture). `total` is a `var` of `make`, and `add` -- a function written inside
  * that body -- assigns it. The closure holds the value `total` had when `add` was made, so there is
  * nothing for the assignment to write.

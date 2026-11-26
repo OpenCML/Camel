@@ -47,9 +47,9 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 # Measured on the Linux host (32 threads, shared with other worktrees and engines; the 1-minute load
 # read 76.41/76.92/80.97 in the first window and 85.69/91.25/84.56 in the second).
 #
-#   7.17 s of CPU / 11.73 s wall   (2026-10-24, the eleven slow plans of this sweep, 186 tests)
-#   7.24 s of CPU /  8.90 s wall   (2026-10-24, the same entry beside the collection fuzz runs)
-#   7.88 s of CPU / 12.07 s wall   (2026-10-24, the gate run of this sweep, 109 tests)
+#   7.17 s of CPU / 11.73 s wall   (the eleven slow plans of this sweep, 186 tests)
+#   7.24 s of CPU /  8.90 s wall   (the same entry beside the collection fuzz runs)
+#   7.88 s of CPU / 12.07 s wall   (the gate run of this sweep, 109 tests)
 #
 # The CPU figure spreads 1.0-9.9 % across the three windows where the wall clock spreads more. The
 # budget is 13 s: 1.63x the highest reading rounded up to the next 1000 ms -- the headroom the four
@@ -185,7 +185,7 @@ timeout_ms = 300000
 # Both halves run: the with_grad pipeline and the library's own gradient are two implementations of
 # the same training program, and the tolerance above is what says they agree.
 #
-# Read it on the gate host, not on a workstation. Measured 2026-11-15: on `88zjwei` this entry takes
+# Read it on the gate host, not on a workstation. On the gate host this entry takes
 # 2.07 s and fails with the pinned sentence (`std::vjp` is still not a registered pass), while on a
 # Windows host the same program does not reach that sentence at all -- it hits `timeout_ms` and the
 # runner reports `expected exit 0, got timeout after 600000 ms`, so a reader there sees the mark

@@ -6,7 +6,7 @@
 # cost 4005 ms of CPU, of which the *second* pass was 3607 ms against 89 ms for the first
 # (`internal/reports/2026-11-20-where-the-opt-twice-cpu-goes.cn.md`). The helper's own shape was
 # what made the program expensive -- it returned one array built by `concat` at every level of a
-# recursion -- so rewriting the helper (2026-11-22) takes the workload away with it. This entry keeps
+# recursion -- so rewriting the helper takes the workload away with it. This entry keeps
 # the reading: it names the case, runs the same pipeline, and pins how many times the first pass the
 # second one costs, so the cost cannot drop out of the tests just because the tool that used to
 # produce it was rewritten.
@@ -25,7 +25,7 @@
 # criterion, and a regression then hides behind whichever machine has the generous bound.
 #
 # What the numbers are, and what each one is a reading of (reference host, Release, `--jobs 1`,
-# measured 2026-11-22 with the tool's own line, `cpu_ms` against `baseline_cpu_ms`):
+# measured with the tool's own line, `cpu_ms` against `baseline_cpu_ms`):
 #
 #   `perf_fib_smoke` -- the program whose whole run is the entry's cost. The first pass over it costs
 #   207.9 ms and the second 1669.8-1673.8 ms, a ratio of 8.03-8.05 (7.85 in one run taken at load 24).

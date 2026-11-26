@@ -121,7 +121,7 @@ golden = "golden/tutorial_examples/05_map_order.txt"
 
 [[tests]]
 name = "tutorial.examples.06_callee_decides"
-desc = "Chapter 10: a callee that writes to its var parameter decides what runs and in what order; main only asks for the result. The print in the callee's body runs with the body (design principles 3.1, the author's ruling of 2026-11-15), so what the page shows is what the file prints and there is no warning left to hide."
+desc = "Chapter 10: a callee that writes to its var parameter decides what runs and in what order; main only asks for the result. The print in the callee's body runs with the body (design principles 3.1), so what the page shows is what the file prints and there is no warning left to hide."
 case = "../../../docs/tutorial/examples/06_callee_decides.cml"
 golden = "golden/tutorial_examples/06_callee_decides.txt"
 
@@ -142,7 +142,7 @@ golden = "golden/tutorial_examples/06_sync_body.txt"
 # it in the block after the command).
 [[tests]]
 name = "tutorial.examples.06_unused_effect"
-desc = "Chapter 10: a write is not demanded by a reader -- the body is a region and the write to `stdout` is a root of it (design principles 3.1, the author's ruling of 2026-11-15), so the print runs although nothing uses its result. The page used to show the call dropped and a warning."
+desc = "Chapter 10: a write is not demanded by a reader -- the body is a region and the write to `stdout` is a root of it (design principles 3.1), so the print runs although nothing uses its result. The page used to show the call dropped and a warning."
 case = "../../../docs/tutorial/examples/06_unused_effect.cml"
 golden = "golden/tutorial_examples/06_unused_effect.txt"
 
@@ -157,7 +157,7 @@ golden = "golden/tutorial_examples/06_var_order.txt"
 # is exactly the claim this plan exists to keep true.
 [[tests]]
 name = "tutorial.examples.06_let_to_var"
-desc = "Chapter 10: a program the compiler rejects -- an immutable value passed to a var parameter is an error at 10:10, and the whole report is what the chapter prints. `bump`'s own `counter += 1` in a body that is not a `sync` block draws no `SemanticDiag::IgnoredSideEffect`: a write to a `var` is a value and not an effect (design principles 3.1 and 3.5, the ruling of 2026-11-15), the same reason the entry next door (`10_write_nobody_reads`) pins that report's absence."
+desc = "Chapter 10: a program the compiler rejects -- an immutable value passed to a var parameter is an error at 10:10, and the whole report is what the chapter prints. `bump`'s own `counter += 1` in a body that is not a `sync` block draws no `SemanticDiag::IgnoredSideEffect`: a write to a `var` is a value and not an effect (design principles 3.1 and 3.5), the same reason the entry next door (`10_write_nobody_reads`) pins that report's absence."
 kind = "behavior"
 case = "../../../docs/tutorial/examples/06_let_to_var.cml"
 backends = false
@@ -283,7 +283,7 @@ expect_output_contains = ["Entry module 'shapes' must define a resolvable 'main'
 # The first line of `05_map_order.cml` has no order on `std::prl`, and no fixed contents either:
 # `randint` advances a hidden state, so which draw an element gets depends on which ran first, and
 # under load the interleaving has produced a line whose multiset differs from the sequential one
-# (`[2, 2, 2, 36, 58, 88, 36, 8]`, seen on 2026-10-26 in a run with -Jobs 8), which is why the
+# (`[2, 2, 2, 36, 58, 88, 36, 8]`, seen in a run with -Jobs 8), which is why the
 # chapter's page shows one run rather than a pinned line. What is asserted about the first line is
 # its shape; the second line, which the reduce writes in element order, is exact.
 [[tests]]
@@ -551,7 +551,7 @@ golden = "golden/tutorial_examples/10_var_order.txt"
 
 [[tests]]
 name = "tutorial.examples.10_write_nobody_reads"
-desc = "A write nobody reads stores a value nobody uses, and the chapter's two function bodies say the same thing about it: `c = 5` is reported in `unordered` (9:7, a body that is not a `sync` block, where the write does not even run) and in `ordered` (16:7, a `sync` body, where it runs because it is a statement of the chain) -- the value it stores is read by nobody in either. Both functions still print `1`; neither report is `SemanticDiag::IgnoredSideEffect`, because a write to a `var` is a value and not an effect (design principles 3.1 and 3.5, the ruling of 2026-11-15), and a statement that does not run is not reported at all (the ruling of 2026-11-17)."
+desc = "A write nobody reads stores a value nobody uses, and the chapter's two function bodies say the same thing about it: `c = 5` is reported in `unordered` (9:7, a body that is not a `sync` block, where the write does not even run) and in `ordered` (16:7, a `sync` body, where it runs because it is a statement of the chain) -- the value it stores is read by nobody in either. Both functions still print `1`; neither report is `SemanticDiag::IgnoredSideEffect`, because a write to a `var` is a value and not an effect (design principles 3.1 and 3.5), and a statement that does not run is not reported at all (the rule)."
 case = "../../../docs/tutorial/examples/10_write_nobody_reads.cml"
 golden = "golden/tutorial_examples/10_write_nobody_reads.txt"
 expect_output_contains = ["10_write_nobody_reads.cml:9:7", "10_write_nobody_reads.cml:16:7"]

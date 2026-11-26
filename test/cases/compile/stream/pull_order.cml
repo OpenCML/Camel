@@ -7,7 +7,7 @@
  *
  * The plain `for` asks nothing, so it reads one element per round plus the call that answers "the
  * stream is over"; a `while` head reads once per round it accepts and nothing for the round it
- * refuses, which is the reading the language author asked for (2026-10-26).
+ * refuses, which is the reading the language author asked for.
  */
 
 func lines(n: int) => int.. {

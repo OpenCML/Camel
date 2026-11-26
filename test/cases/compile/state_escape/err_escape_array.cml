@@ -2,7 +2,7 @@
  * Escape route two again, as an element of the caller's array (design principles 3.5, 197): `fill`
  * makes a closure over `acc`, a `var` of its own call, and writes it into `out[0]`, an array that
  * belongs to the caller. The array outliving the call is not a fault of its own any more -- a
- * closure holds the value (the author's ruling of 2026-11-16, which withdrew the state rule of
+ * closure holds the value (the rule, which withdrew the state rule of
  * 2026-11-14).
  *
  * The assignment inside the closure is the fault: `acc = acc + x` writes nothing the closure can

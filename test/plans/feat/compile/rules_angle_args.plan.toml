@@ -1,4 +1,4 @@
-# The angle-bracket arguments of a rule's two sides (lane-rulesargs)
+# The angle-bracket arguments of a rule's two sides 
 #
 # `reshape<shape>(x)` and `softmax<axis>(x)` state the parameter that decides which function they
 # are in `<>` (design principles 4.4), and `mean<axis, keepdims>(xs)` -- the operator's other
@@ -14,7 +14,7 @@
 #     own"); it is copied now, with its angle argument carried like an operand (4fb738332);
 #   * the transposed walk used to refuse an operator with more than two operands before it looked at
 #     what each position was (`skip=arity uri=tensor:mean_axis operands=3`). That count is gone
-#     (2026-11-03): a law names its operator's ports and says which of them answer a cotangent, and
+#: a law names its operator's ports and says which of them answer a cotangent, and
 #     `mean_axis_t`'s second and third names are positions no cotangent is asked of because `int` and
 #     `bool` have no tangent space.
 #
@@ -34,7 +34,7 @@
 #
 # Every number below is derived by hand in its case's own header, not read off any run.
 #
-# The mean reading is now two files, and the pair is the rule (author, 2026-11-03 16:15): the
+# The mean reading is now two files, and the pair is the rule: the
 # parameter's shape is either in the type -- `x: float[2, 3]`, and the pullback is built and answers
 # its cotangent -- or it is not -- `x: float[...]`, and the program is refused with the sentence that
 # says to write it, which is what `transpose_needs_parameter_shape` pins. The adjoint of a linear map
@@ -60,13 +60,13 @@ kind = "behavior"
 # added, the autodiff migration ledger recorded `total`, `library` and `array` as numbers
 # (`scripts/autodiff-migration-ledger.mjs`), and a case added under `test/cases/modules/autodiff/`
 # moved them -- recording a new value is a change to an expectation outside `test/plans/`, which the
-# lane that added this reading may not make. **That reason is gone (2026-11-21):** the ledger now
+# lane that added this reading may not make. **That reason is gone:** the ledger now
 # records the paths of the cases that pass, so a new case is a name `--record` adds rather than a
 # denominator somebody has to re-decide, and a case that does not pass is simply not part of that
 # floor. The reading stays where its plan is; the directory says nothing about the ledger either way.
 # Reading the same number is the point; the directory is not.
 #
-# What that costs is `--changed`, and only in the harmless direction (author's ruling, 2026-11-20
+# What that costs is `--changed`, and only in the harmless direction (2026-11-20
 # 04:2x): a change to this case selects `feat/compile/transforms.plan.toml` by the directory rule,
 # not this plan -- and the explicit `case` below is what guarantees the reading is reached whenever
 # `feat/compile` runs at all. A selection that is too wide runs a few extra cases; only one that is
@@ -93,7 +93,7 @@ timeout_ms = 30000
 
 [[tests]]
 name = "rules_angle_args.softmax_without_its_axis"
-desc = "`softmax(t, axis?: int)` defaults the axis to `-1`, so `softmax(x)` carries one port where `softmax<2>(x)` carries two, and a law's parameters are the operator's ports. This program writes the spelling with the axis omitted and is refused before the first number: the reading is WHICH refusal, because a law that answered the default would be answering a configuration the graph does not state (design principles 9.9). Measured on both sides of the change that named the axis (2026-11-20): the law that wrote `softmax<1>` refused this program at the value it had written (`writes 1 `<>` value(s) of its own`), and the law that names the axis refuses it at the port count. Neither answered it, so naming the axis cost this spelling nothing; the negative on the first sentence is what says so."
+desc = "`softmax(t, axis?: int)` defaults the axis to `-1`, so `softmax(x)` carries one port where `softmax<2>(x)` carries two, and a law's parameters are the operator's ports. This program writes the spelling with the axis omitted and is refused before the first number: the reading is WHICH refusal, because a law that answered the default would be answering a configuration the graph does not state (design principles 9.9). Measured on both sides of the change that named the axis: the law that wrote `softmax<1>` refused this program at the value it had written (`writes 1 `<>` value(s) of its own`), and the law that names the axis refuses it at the port count. Neither answered it, so naming the axis cost this spelling nothing; the negative on the first sentence is what says so."
 kind = "negative"
 case = "../../../cases/compile/transforms/softmax_without_its_axis.cml"
 args = ["${case}", "${backend}"]
@@ -156,7 +156,7 @@ timeout_ms = 30000
 
 [[tests]]
 name = "rules_angle_args.mean_axis_transpose"
-desc = "`transpose` of `f(x) = sum(mean<0, false>(x) * [1, 2, 3])` at ct = 1.0, with `x: float[2, 3]`: every position of `xs` that fed lane k gets w[k] / 2, so the answer is read element by element as `[[0.5, 1.0, 1.5], [0.5, 1.0, 1.5]]` -- not as its sum, which is 6.0 and which the wrong law `(ct) => ct` also reaches with `[1.0, 2.0, 3.0]` (author, 2026-11-03 15:15). The parameter's shape is in the type because the transposed function is handed the cotangent and nothing else, and the lane length the law reads comes from there: 6 positions over 3 lanes is 2 (author, 2026-11-03 16:15)."
+desc = "`transpose` of `f(x) = sum(mean<0, false>(x) * [1, 2, 3])` at ct = 1.0, with `x: float[2, 3]`: every position of `xs` that fed lane k gets w[k] / 2, so the answer is read element by element as `[[0.5, 1.0, 1.5], [0.5, 1.0, 1.5]]` -- not as its sum, which is 6.0 and which the wrong law `(ct) => ct` also reaches with `[1.0, 2.0, 3.0]`. The parameter's shape is in the type because the transposed function is handed the cotangent and nothing else, and the lane length the law reads comes from there: 6 positions over 3 lanes is 2 ."
 kind = "behavior"
 case = "../../../cases/modules/autodiff/rules_angle_args_mean_transpose.cml"
 args = ["${case}", "${backend}"]
@@ -168,7 +168,7 @@ timeout_ms = 30000
 
 [[tests]]
 name = "transpose_needs_parameter_shape"
-desc = "The negative of the reading above: the same function declared `x: float[...]`. The type states no shape, the transposed function is handed the cotangent alone, and no value in the program carries the shape the law reads `xs` for -- so `transpose(loss_mean)` is refused with `RuntimeDiag::TransposeNeedsParameterShape`, whose sentence names the parameter and says to write the shape in the type (author, 2026-11-03 16:15). A transposition is the adjoint of a linear map, and the adjoint needs the shape of its domain; the program must not run, and the repair is the declaration."
+desc = "The negative of the reading above: the same function declared `x: float[...]`. The type states no shape, the transposed function is handed the cotangent alone, and no value in the program carries the shape the law reads `xs` for -- so `transpose(loss_mean)` is refused with `RuntimeDiag::TransposeNeedsParameterShape`, whose sentence names the parameter and says to write the shape in the type. A transposition is the adjoint of a linear map, and the adjoint needs the shape of its domain; the program must not run, and the repair is the declaration."
 kind = "behavior"
 case = "../../../cases/modules/autodiff/transpose_needs_parameter_shape.cml"
 args = ["${case}", "${backend}"]

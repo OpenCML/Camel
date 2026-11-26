@@ -343,7 +343,7 @@ expect_output_not_contains = ["[Warn]"]
 # so `fs` still holds the unsorted array and the sort may copy -- which the case prints beside the
 # sorted one, and `new_values.sort_rebinding` above pins.
 #
-# What it reads on `91f708389`, and the red this entry is owned for (S3b): `COPIES main updates 9
+# What it reads, and the red this entry is owned for (S3b): `COPIES main updates 9
 # in-place 0 by-count 0 declared 0 copied 9`, with the four `sort_kernel` rows of `main` each
 # `copied`; the one rebinding the plan already places -- the `var` parameter's, in `sorted_param` --
 # reads `by-count`. This red is the S3b gap itself: it is not to be marked `known_fail` and the
@@ -493,7 +493,7 @@ for (const line of ops) {
 
 [[tests]]
 name = "new_values.two_names_for_a_struct"
-desc = "Two names for one struct do not see each other's writes, including a write inside an array the struct holds: `var b = a` then `b.xs[0] = 9` leaves `a.xs` as it was; a read `let kept = inner` is not changed by a later write into `inner`; a struct in a struct written through a path. The invariant the memory accounting has to keep when the plan starts deciding writes in place: two names are two holders, and reuse in place happens only at count one (the author's answer, `9699824aa`). Alike on the four back ends."
+desc = "Two names for one struct do not see each other's writes, including a write inside an array the struct holds: `var b = a` then `b.xs[0] = 9` leaves `a.xs` as it was; a read `let kept = inner` is not changed by a later write into `inner`; a struct in a struct written through a path. The invariant the memory accounting has to keep when the plan starts deciding writes in place: two names are two holders, and reuse in place happens only at count one . Alike on the four back ends."
 kind = "behavior"
 case = "../../../cases/consistency/new_values/two_names_for_a_struct.cml"
 args = ["${case}", "${backend}"]

@@ -6,7 +6,7 @@
 // This check refuses the traces that are unambiguous: a path into the handover pages, a dated
 // ruling, a role name, a host name or a local path, a calendar date, the step a refactor had
 // reached ("refactor stage 2.3", "stage 3.1", "step 2"), a lane branch name or lane code, a work
-// item number (`D-1123-78`, `C-1123-17`), a commit hash, "this lane" / "待审" standing in for who
+// item number (`D-<year>-<n>`, `C-<year>-<n>`), a commit hash, "this lane" / "待审" standing in for who
 // decided what, and a narration of what the code used to be. It reads comment text only (after
 // `//`, `///`, `#` in CMake/TOML/shell/PowerShell, and inside `/* */`), so a date or a path that is
 // data in a string literal is not its business. A test plan's `name`, `desc` and `known_fail_*`
@@ -21,7 +21,7 @@
 //
 // The trees read are `src/`, `scripts/`, `internal/tools/` and `test/`. The first version read
 // `src/` only, and while it reported green the same day's merges left work item numbers in plans,
-// lane codes in `known_fail_owner`, and "the author's ruling of 2026-11-23" in sixty `desc` fields:
+// lane codes in `known_fail_owner`, and a dated ruling in sixty `desc` fields:
 // a check that reads one tree cannot say anything about the others, and a green light from it was
 // read as "the tree is clean".
 //

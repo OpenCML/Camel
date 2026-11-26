@@ -1,6 +1,6 @@
 /**
  * A partial application may not bind a `var` context parameter (design principles 3.5, the
- * author's ruling of 2026-11-15): a `with <var t: T>` parameter is passed in and written back by
+ * the rule): a `with <var t: T>` parameter is passed in and written back by
  * the call, and the function value `f<w>` makes has no call of its own to write it back to.
  *
  * The cell bound here is a module `var`, which is the shape whose name in the report used to be

@@ -18,7 +18,7 @@ expect_exit = 0
 expect_stdout_contains = ["runner self-test ok", "negative-sweeps declared="]
 # The reading that decides is this self-test's own CPU time, not the wall clock: the runner's
 # timeout rule reads the CPU of every test's process tree. Six runs of this case inside the fast
-# layer at -Jobs 8 on 2026-10-24 read 12.41-12.69 s of CPU -- a 0.28 s spread, 2.3% -- against
+# layer at -Jobs 8 read 12.41-12.69 s of CPU -- a 0.28 s spread, 2.3% -- against
 # 22.0-23.5 s of wall, 6.5% in the same six runs. The same fixture read 7.22-7.39 s of CPU when its
 # nested tests ran unwrapped; the wrapper that makes the reading is now under every test, its own
 # nested runs included, and that cost is this test's own work.

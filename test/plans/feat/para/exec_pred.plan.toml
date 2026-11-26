@@ -54,7 +54,7 @@ desc = "The nodes one node waits for have one implementation, and the differenti
 # a program print the wrong thing and cannot catch an answer that is merely larger than it should
 # be: an extra predecessor that orders two nodes which were already in that order changes no line.
 # What a `sync` block's chain carries is not every statement, either: design principles 3.4 read
-# with 3.1 keeps a pure, infallible call off the chain (`c7cb7f32f`, "keep a pure, infallible call
+# with 3.1 keeps a pure, infallible call off the chain ("keep a pure, infallible call
 # out of a `sync` block's chain"), so in `linear.cml` the link is written between the statements
 # that print and `step`'s calls are what those statements read rather than what they wait on. The
 # text below is the reading on this side of that change; on the other side the same dump listed

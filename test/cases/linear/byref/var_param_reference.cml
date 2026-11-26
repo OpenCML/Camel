@@ -23,7 +23,7 @@
  *            sees 0 (design principles 3.5: "a closure captures the value it was made with";
  *            "a `var` parameter is passed in by value and passed back by value"). The closure's
  *            last use is that very call, so 3.5 (198) has no stretch to report and the call is
- *            legal -- the author's ruling of 2026-11-16, which also settles
+ *            legal -- the rule, which also settles
  *            `update(x, () => x + 1)` reading the old value by the same rule. Before the
  *            by-reference capture was withdrawn, this line read 7.
  *   0 1      one variable passed to a parameter without `var` and to a `var` parameter: the

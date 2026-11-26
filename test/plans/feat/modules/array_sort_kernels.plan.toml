@@ -28,7 +28,7 @@ timeout_ms = 20000
 # each -- that is, that the compiler rewrote `v = v->sort` into the in-place operator. That rewrite
 # is `Builder::inPlaceRebindingOf`, a mechanism of the statement shape from when a `var` was a cell.
 # Since stage S1 of the direct-SSA plan a same-region local `var` is a value, so there is no cell to
-# take the array out of and the rewrite cannot run at all; the author's answer of 2026-11-18
+# take the array out of and the rewrite cannot run at all; the rule
 # (`internal/reviews/2026-11-18-an-in-place-call-now-builds-as-ssa-rebinding.cn.md`) rules
 # that in-place is the execution plan's reuse decision and not the front end's: at `sort(v)`, when
 # that is the old `v`'s last use, the plan takes the in-place form (`StorageReuse::Input`, and
@@ -46,11 +46,11 @@ timeout_ms = 20000
 # stdout, the `in_place` line among them), so changing this entry's assertion did not drop the "the
 # sort is still correct" half of what the two entries prove together.
 #
-# What it read on `6e4b48362`, where the red this entry was owned for (lane H) comes from: `COPIES
+# What it read, where the red this entry was owned for (lane H) comes from: `COPIES
 # main updates 10 in-place 0 by-count 0 declared 0 copied 10`, one `... sort_kernel copied` per site
 # -- the plan placed none of them on the input's storage then.
 #
-# It holds as written since `02939ffb7` (stage S3b), and that is the reading moving and not this
+# It holds as written (stage S3b), and that is the reading moving and not this
 # entry: the same ruler reads this program `COPIES main updates 10 in-place 4 by-count 0 declared 0
 # copied 6` -- the four `v = v->sort` rebindings handed the storage they were given, the six sorts
 # whose argument is printed afterwards still copying -- so all three assertions are met (`updates
@@ -59,7 +59,7 @@ timeout_ms = 20000
 
 [[tests]]
 name = "array_sort_kernels.paths"
-desc = "`camel inspect --copies` on that program: the plan's verdict on each `sort` is a reuse decision, and the four `v = v->sort` rebindings are the old value's last use, so they are `in-place` or `by-count` (design principles 10.5) while the six `sort(...)` calls whose argument is printed afterwards may copy. This is where in-place lives after stage S1 of the direct-SSA plan: `Builder::inPlaceRebindingOf` no longer runs (`v` is a value and not a cell), and the author's answer of 2026-11-18 moved the decision to the execution plan. The values the same program prints are `array_sort_kernels`'s, four back ends and exact stdout."
+desc = "`camel inspect --copies` on that program: the plan's verdict on each `sort` is a reuse decision, and the four `v = v->sort` rebindings are the old value's last use, so they are `in-place` or `by-count` (design principles 10.5) while the six `sort(...)` calls whose argument is printed afterwards may copy. This is where in-place lives after stage S1 of the direct-SSA plan: `Builder::inPlaceRebindingOf` no longer runs (`v` is a value and not a cell), and the rule moved the decision to the execution plan. The values the same program prints are `array_sort_kernels`'s, four back ends and exact stdout."
 kind = "behavior"
 case = "../../../cases/modules/stdlib/array_sort_kernels.cml"
 args = ["inspect", "--copies", "${case}"]

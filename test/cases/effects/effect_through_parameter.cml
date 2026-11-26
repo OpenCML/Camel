@@ -4,14 +4,14 @@
  * function-typed parameter that writes no clause is resource-generic and takes the resources of
  * the value it is instantiated with (design principles 3.3, effects plan 5). A call through the
  * parameter is therefore an effectful call, and an effectful call written as a statement **runs**
- * wherever it is written (design principles 3.1, the author's ruling of 2026-11-17: a call is one of
+ * wherever it is written (design principles 3.1: a call is one of
  * the nodes a region's `GATE` reads): outside a sync block it runs because the body's GATE reads it,
  * and inside one it runs because the chain carries it. The two readings agree, so all four numbers
  * count the write.
  *
  * The state is a module `var` and not a `var` context parameter any more. A `var` `with`
  * parameter handed to a value is a cell that value carries, and a closure cannot assign the name
- * it captured (design principles 3.5, 197; the author's ruling of 2026-11-16), so `add<t>` was
+ * it captured (design principles 3.5, 197; the rule), so `add<t>` was
  * refused at its own write. A module `var` is a name of the module, and a function that writes it
  * reaches a resource the same way. What this case pins -- that the call's footprint comes from the
  * value it was given and not from the parameter's clause -- is unchanged.

@@ -47,7 +47,7 @@ const HERE = path.dirname(url.fileURLToPath(import.meta.url))
 const REPO_ROOT = path.resolve(HERE, '..', '..')
 
 // The roots whose code a run links: the four block directories the layout map files the engine
-// under -- `src/kernel/`, `src/parse/`, `src/compile/`, `src/stdlib/` since the 2026-11-22 move, and
+// under -- `src/kernel/`, `src/parse/`, `src/compile/`, `src/stdlib/` since the move, and
 // `kernel/`, `parse/`, `compile/`, `lib/` before it -- because a header is compiled into the program
 // as much as a source file is, and the environment does not care which of them a read sits in. The
 // tool and the scripts are not: a tool's own switches are its command line. The spellings of both

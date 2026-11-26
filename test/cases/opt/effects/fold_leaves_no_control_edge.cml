@@ -7,7 +7,7 @@
  *
  * They should go with the arm, and they do not: the nodes the dropped branch had waited on inherit
  * its control edge, that edge counts as a use, and the inner three stay alive and appear in the run.
- * Removing the edge is not this lane's to do yet -- the division case next door shows what breaking
+ * Removing the edge is not this change's to do yet -- the division case next door shows what breaking
  * the edge costs, `std::cxx::fold` over `fold_keeps_inner_fault.cml` losing a fault that must happen
  * -- so what this case pins is the folding itself: the two prints run, in order, and the value is
  * the taken arm's.

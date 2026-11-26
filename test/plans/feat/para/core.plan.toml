@@ -26,7 +26,7 @@ args = ["${case}", "${run_prl}"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 # 60 s: what this entry is measured by is the process's own CPU time, and nearly all of that CPU is
-# the PRL thread pool starting and stopping, not the hash. Measured on this host (2026-11-04, load
+# the PRL thread pool starting and stopping, not the hash. Measured on this host (load
 # 9.5-14, the same binary the gate uses): the run is 0.17-0.26 s of wall clock and hashes 11117
 # bytes in 32 chunks in 0.09-0.22 s by the case's own clock, while its CPU reads 1.7-3.9 s -- and
 # the same program on `std::nvm`, with no pool, is 0.11 s of wall and 0.11 s of CPU. So that figure
@@ -684,7 +684,7 @@ assert(counts.disposed === 0, 'so the exit had nothing left to dispose: ' + line
 timeout_ms = 60000
 [[tests]]
 name = "closure_capture_gives_its_box_back"
-desc = "A box a closure carries, in a program that keeps nothing: `test/cases/para/core/closure_capture_gives_its_box_back.cml` makes the box, captures it, reads it twice through the closure, and drops the closure when `main` returns. So the count has to come home while the program runs (`created=1 counted=1 released=1 live=0 disposed=0`) and not be left for the exit to dispose. This is the reading of `test/probe/refleak/fill_carries.cml` put where a gate reads it: the probe tier is named by no plan a lane reports, so a back end that keeps the box was a red that could live on the trunk and report green at every merge. It read `released=0 live=1 disposed=1` on `std::prl` and `released=1 live=0 disposed=0` on the other three when it was written (2026-11-18)."
+desc = "A box a closure carries, in a program that keeps nothing: `test/cases/para/core/closure_capture_gives_its_box_back.cml` makes the box, captures it, reads it twice through the closure, and drops the closure when `main` returns. So the count has to come home while the program runs (`created=1 counted=1 released=1 live=0 disposed=0`) and not be left for the exit to dispose. This is the reading of `test/probe/refleak/fill_carries.cml` put where a gate reads it: the probe tier is named by no plan a lane reports, so a back end that keeps the box was a red that could live on the trunk and report green at every merge. It read `released=0 live=1 disposed=1` on `std::prl` and `released=1 live=0 disposed=0` on the other three when it was written."
 kind = "behavior"
 case = "../../../cases/para/core/closure_capture_gives_its_box_back.cml"
 backends = ["nvm", "fvm", "jit", "prl"]

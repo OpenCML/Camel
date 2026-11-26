@@ -1,5 +1,5 @@
 // A lambda writes a pack among its `with` parameters (`<...ws> (...xs) => ...`) and forwards it, and
-// the two readings that must not move are beside it (author's ruling of 2026-11-03 13:50, on the
+// the two readings that must not move are beside it (the rule, on the
 // pack rule of design principles 5.6).
 //
 //   named     apply((x) => x * w)              the body reads the position's name -- 2.0 * 3.0 = 6.0

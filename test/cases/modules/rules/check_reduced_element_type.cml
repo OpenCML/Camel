@@ -3,12 +3,12 @@
  *
  * `is_float::<T>()` covers the two reduced-precision floating types (stdlib/types.cml; design
  * principles 7.3), so the maker builds one instance of every floating law per element type,
- * `bf16` and `f16` included. Until this lane, the check could make no *value* of either type:
+ * `bf16` and `f16` included. Until this change, the check could make no *value* of either type:
  * every such instance was `sampled` with `evidence none` and the reason
  *
  *   the check cannot make a value of type 'bf16'
  *
- * (the rule on `check-generic-instance-space`, 3, opened this lane for exactly
+ * (the rule on `check-generic-instance-space`, 3, opened this change for exactly
  * that: "bf16/f16 单开一条车道：它们的元素类型 epsilon 是 2^-8 / 2^-10 ... 把这两个元素类型做出
  * 来，让相关法则能在它们上面被检验"). The sampler now draws a `bf16` and an `f16` as it draws an
  * f32 -- the drawn value is rounded once into the element type, the slot holds the element's own

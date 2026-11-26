@@ -62,7 +62,7 @@
 //
 // Why this measurement is CPU too, and not the wall time the report had carried since the wall
 // clock of those same phases read 21 us per declaration on the quiet host and 75-104 us in the
-// windows of 2026-10-23 at load 106-112 -- three to five times the number for the same declarations,
+// windows at load 106-112 -- three to five times the number for the same declarations,
 // because a wall clock follows whatever else the host is doing. A ceiling on it is red on a busy day
 // and green on a quiet one for the same binary, which is the wall-clock reading that was retired; the CPU time
 // of the same rounds read 27-29 us in every window measured at load 68-112. So the compiler writes
@@ -229,7 +229,7 @@ function measureCpu(argv, warmups, samples, runsPerSample) {
 
 // The declarations the standard library writes: one body-less `export func` per operator of a
 // declared module. Counting them keeps the unit of `declaration.cost` in the sources. A
-// declaration is `src/stdlib/<module>.cml` since the 2026-11-22 move, the same spelling the core's
+// declaration is `src/stdlib/<module>.cml` since the move, the same spelling the core's
 // own files keep and the flat library used before the layout move; the layout move put it inside the
 // module's directory (`src/stdlib/<module>/<module>.cml`). Every spelling is asked, so the file the
 // tree has is read and no layout is spelled twice.
@@ -396,7 +396,7 @@ function declarationCost(rounds) {
 // reading is the median of the samples and the spread is min..max; a ceiling nobody can reproduce is
 // worse than none, so a crossed one has to be a regression a reader could reproduce on a quiet host.
 //
-// Re-measured on tangshan88 (32 threads) on 2026-10-31: the entry run alone (`--jobs 1`) five times in
+// Re-measured on tangshan88 (32 threads): the entry run alone (`--jobs 1`) five times in
 // a row, twelve fresh processes per sample, five samples per command. The medians per run, and the
 // load average beside them:
 //
@@ -414,7 +414,7 @@ function declarationCost(rounds) {
 // A reading that moves more than 1.5 between runs must not become a ceiling: at that point the
 // measurement is of the host, not of the compiler, and the honest result is that it cannot be judged.
 //
-// The earlier calibration, kept as the record of the unit it belonged to: measured on the Linux host (AMD EPYC 7343, 32 threads) on 2026-10-23, five samples of twelve fresh
+// The earlier calibration, kept as the record of the unit it belonged to: measured on the Linux host (AMD EPYC 7343, 32 threads) five samples of twelve fresh
 // processes each (sixty per command) in each of four windows (load 92.9, 75.2, 72.6 and 68.7); the
 // quiet column is the window at load 21.4, which read the same CPU time:
 //
@@ -457,9 +457,9 @@ const CASES = [
 
 // A single-run reading with half again of headroom: 132.7 us per declaration measured with the
 // entry run alone (`--jobs 1`) on tangshan88 (32 threads, load average 27.6/40.6/43.7 when it was
-// taken, 2026-10-31, `declarations=302`), times 1.5, rounded to 200. It is written in the CPU
+// taken, `declarations=302`), times 1.5, rounded to 200. It is written in the CPU
 // seconds of one run because that is the unit this assertion measures; the 60 it replaces was
-// calibrated against 27.5-28.5 us readings from 2026-10-23 and this host reads more than four
+// calibrated against 27.5-28.5 us readings and this host reads more than four
 // times that at the same tree, so the old number priced a machine rather than the compiler.
 // A reader on another host must measure again before trusting it.
 const DECLARATION_CEILING_US = 200
@@ -473,7 +473,7 @@ const DECLARATION_CEILING_US = 200
 // the quiet total plus the regression the line was chosen to name, 1.2 times the busiest median
 // measured there.
 //
-// Re-baselined on 2026-10-27 to twenty, for this tree's declaration count, which is what the number
+// Re-baselined to twenty, for this tree's declaration count, which is what the number
 // prices and what the printed `declarations=` says by how much. Three readings of this tree on the
 // Linux host, twenty-one rounds each:
 //
@@ -590,7 +590,7 @@ function main() {
         return 0
     }
     // The host's load, in the same log as the medians, as provenance: CPU time barely moves with it,
-    // so it no longer has to separate a regression from a busy machine (the 2026-10-23 rule).
+    // so it no longer has to separate a regression from a busy machine (the rule).
     console.log(
         `startup.cost metric=cpu_user_plus_system samples=${samples} runs_per_sample=${runsPerSample} ` +
             `host load=${os.loadavg().map((value) => value.toFixed(1)).join('/')}`

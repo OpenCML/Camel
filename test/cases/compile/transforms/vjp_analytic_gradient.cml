@@ -1,4 +1,4 @@
-// The comparison the author named (ruling of 2026-11-01 06:30 and 06:50): `f(x, y) = x*x*y` at
+// The comparison the author named (the rule and 06:50): `f(x, y) = x*x*y` at
 // `x = 3`, `y = 2`. The derivative written by hand is `df/dx = 2*x*y = 12` and `df/dy = x*x = 9`,
 // and the library's own gradient -- `transpose(split(reinterp<jvp>(f)))`, the composition
 // `stdlib/vjp.cml` writes -- has to answer the same two numbers from the same `f`. The two readings

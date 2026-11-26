@@ -30,7 +30,7 @@
  * with an open extent (`f64[...]`) the cut answers but the capture's shape is written nowhere the
  * transposed half could read it, and `transpose` refuses it by name
  * (`skip=parameter-shape uri=tensor:multiply position=0 param=0 param-type=float[...]`, the sentence
- * being `RuntimeDiag::TransposeNeedsParameterShape`). Measured 2026-11-04, `withport`.
+ * being `RuntimeDiag::TransposeNeedsParameterShape`). Measured on this tree, `withport`.
  */
 import { reshape, sum } from tensor
 import { vjp } from vjp

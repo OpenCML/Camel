@@ -5,7 +5,7 @@
  * for it with `pure`.
  *
  * The write used to be made from a closure, and that shape is refused now: a closure captures a
- * value, so it cannot assign the name it captured (design principles 3.5, 197; the author's ruling
+ * value, so it cannot assign the name it captured (design principles 3.5, 197;
  * of 2026-11-16). The closure below only reads `acc`, which a closure may do, and the write is
  * written where the name lives.
  *

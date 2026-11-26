@@ -97,7 +97,7 @@ const CORPUS_DIRS = ['effects', 'defun']
 const REFUSED = {
     effects: {
         // `h` is put into the tuple `(1, h)` and `c` is written after it:
-        // `CapturedVarWrittenAfterTheClosure` (design principles 3.5, 198, the author's ruling of
+        // `CapturedVarWrittenAfterTheClosure` (design principles 3.5, 198). The shape it used to hold is read on `dead_write_held_by_program.cml`.
         // 2026-11-16). The shape it used to hold is read on `dead_write_held_by_program.cml`.
         'dead_write_dropped_closure.cml':
             'refused: a captured name is written after the closure that holds it is put into a tuple'
@@ -109,7 +109,7 @@ const histogram = (file) => {
     // Why the pipeline ends in `std::nop`: what this function counts is the JSON `std::jgir` writes,
     // and that pass hands the graph on, so the fallback ran the program behind the document. The
     // corpus is chosen so its programs have observable exits -- `dce_effect_under_pure_arithmetic.cml`
-    // exits 7 by design -- so the run was what `run.status` saw: measured on `lane/std-nop`, every
+    // exits 7 by design -- so the run was what `run.status` saw: measured against one scheduler, every
     // corpus file threw here with `... std::opt std::jgir exited 7`, while `develop` reads the same
     // documents and passes. The document is the subject; the programs are counted, not executed.
     const run = spawnSync(CAMEL, [file, 'std::opt', 'std::jgir', 'std::nop'], { env, encoding: 'utf8' })
@@ -117,7 +117,7 @@ const histogram = (file) => {
         throw new Error(`camel ${file} std::opt std::jgir std::nop exited ${run.status}: ${run.stderr}`)
     }
     const counts = {}
-    for (const match of run.stdout.matchAll(/"label": "(:[^"]+)"/g)) {
+    for (const match of run.stdout.matchAll(/"label": "([^"]+)"/g)) {
         counts[match[1]] = (counts[match[1]] || 0) + 1
     }
     return counts

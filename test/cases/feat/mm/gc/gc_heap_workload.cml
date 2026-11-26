@@ -2,7 +2,7 @@
  * Heap-heavy GC diagnostic workload covering arrays, structs, strings, closures, and mutation.
  *
  * The two arrays are built with `map` rather than with a `foreach` whose body appends to a captured
- * `var`: a closure may not assign an outer name (the ruling of 2026-11-15, design principles 3.5).
+ * `var`: a closure may not assign an outer name (the rule, design principles 3.5).
  * `map` calls the element function once per element, in order, so the arrays are the same ones.
  */
 

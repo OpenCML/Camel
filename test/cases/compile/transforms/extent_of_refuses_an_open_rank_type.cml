@@ -2,7 +2,7 @@
 // `[]`. An empty list is a rank-zero shape, which `sum_to` reads as "this is one element": an
 // answer of `[]` would be a wrong number that no diagnostic names.
 //
-// Measured 2026-11-04 (`ca464bca2` before the sentence named a position, and the tree after it):
+// Measured (before the sentence named a position, and the tree after it):
 //
 //   error[SemanticDiag::ExtentOfNeedsStatedShape]: `extent_of::<A>()` answers the extents the type
 //   `A` writes down, and this call's type writes none: the type it is instantiated at is

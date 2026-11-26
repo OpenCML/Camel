@@ -6,7 +6,7 @@
  * This case used to pin a refusal. `transpose` took only a result whose cotangent was one of the two
  * scalar float widths, so `vjp(loss)` for a pair-returning `loss` stopped inside the library with
  * "takes a function whose result has a cotangent" -- and that sentence was wrong: a pair has a
- * cotangent, the pair of the members' cotangents (design principles 9.9, author `f6ee4f5d0`). With the
+ * cotangent, the pair of the members' cotangents (design principles 9.9). With the
  * law asking the result's tangent space instead of listing two type codes, the same call answers
  * numbers.
  *

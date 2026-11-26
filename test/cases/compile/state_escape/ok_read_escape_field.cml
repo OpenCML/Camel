@@ -2,7 +2,7 @@
  * Route two, a field of the caller's own variable, with a closure that only reads (design
  * principles 3.5, 197): `fill` binds `acc` to `base * 3` and stores a closure that reads it into
  * `b.f`. The store outlives the call, and that is legal now -- a closure captures the value the
- * name had where it was made (the author's ruling of 2026-11-16), so the closure holds a value and
+ * name had where it was made, so the closure holds a value and
  * what is left behind holds that value. Nothing is reported, and the program prints 21 + 1 = 22.
  *
  * As in `ok_read_escape_return`, the single binding means the reading cannot separate a value port

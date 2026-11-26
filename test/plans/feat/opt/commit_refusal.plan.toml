@@ -3,8 +3,8 @@ order = 483
 tier = "fast"
 tags = ["feat", "opt", "effects", "commit-checks"]
 
-# The checks a commit answers, as the author's rework of 2026-11-18 has them (the rework commit
-# `18ae6f296`, answering
+# The checks a commit answers, as the author's rework of 2026-11-18 has them, answering
+#
 # `internal/reviews/2026-11-18-commit-checks-which-pairs-a-commit-owns.cn.md`
 # and `.../reviews/questions-2026-10-29.md`'s "the six checks of a commit"):
 #
@@ -17,7 +17,7 @@ tags = ["feat", "opt", "effects", "commit-checks"]
 #   build, before the two checks below.
 #   ③ the tier is what the draft added, not what the build is -- a draft that added an access is asked
 #   the effect and order checks in every build, and a draft that added none owes no answer about them
-#   in any build. This replaces the ruling of 2026-11-16, which read the tier as a build's answer.
+#   in any build. This replaces the rule, which read the tier as a build's answer.
 #   ④ the regions a commit answers for are the ones it touched and every region around them, and a
 #   pair is judged when one of its two *sides* answers for a node this commit made -- a branch node
 #   standing for an arm that gained a write answers for it, although the branch node is not a node
@@ -126,7 +126,7 @@ expect_stdout_contains = ["commit_legal_splice: the draft splices a write to std
 # read do not conflict, and the commit publishes. It is the twin of `commit_refusal.order` above:
 # that one is a second write to the console, this one is not a conflict at all.
 #
-# What it pins is the declaration reaching the operator: until 2026-11-19 `tensor:load_npy` named the
+# What it pins is the declaration reaching the operator: `tensor:load_npy` named the
 # *group's head*, which is no operator, so each `load_npy_<dtype>` fell back to "writes the global
 # resource" and this same program was refused with `RuntimeDiag::PassEffectOrder` -- node 8 against
 # node 9, two loads of two files read as two writes of one resource. That was read on the build
@@ -198,7 +198,7 @@ expect_stdout_contains = ["commit_cycle: the draft's input setters do not look f
 # orders the two). The pair the commit must refuse is the branch node (standing, in the body, for the
 # write under it) against the body's own write -- and *neither* of those two nodes is one this commit
 # made: the branch node and the write were the program's before the commit. A commit that judged a
-# pair only when one of its nodes was made publishes this one, which is what the ruling of 2026-11-18
+# pair only when one of its nodes was made publishes this one, which is what the rule
 # changed.
 [[tests]]
 name = "commit_refusal.ancestor_region"
@@ -283,7 +283,7 @@ expect_stdout_contains = ["commit_port_type: a graph publishes one statement abo
 #
 # Two narrower placements missed this graph, and neither was the case they were written for (that case
 # was the compiler's own outputs -- `*$spec*`, `main$lift0` -- whose ports sat one place over from the
-# signature, a defect fixed at its source on 2026-11-18). Measured 2026-11-18: the commit's closing
+# signature, a defect fixed at its source). Measured 2026-11-18: the commit's closing
 # loop decodes a made graph, finds no write recorded, drops it from `edited_`, so a commit that asked
 # only the graphs it edited never asked it (probe: `graph 'made$mismatch' not asked the port question
 # (edited=0, made=1)`); and the signature tier `sameSignature(before, after)` would have waived it too,

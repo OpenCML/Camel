@@ -97,7 +97,7 @@ function canonicalLines(ext) {
 // under the library source, and the 52 declarations would stop being checked while the run stayed
 // green (the count said 1640 member files instead of 1692).
 const BLOCK_DIRECTORIES = ['src', 'kernel', 'parse', 'compile', 'lib', 'tools', 'bindings', 'include', 'modules']
-// `src/stdlib/` after the 2026-11-22 move, `lib/<module>/` after the layout move, the flat `stdlib/`
+// `src/stdlib/` after the move, `lib/<module>/` after the layout move, the flat `stdlib/`
 // before it. A C/C++ module's native half was `stdlib/<module>/native/` and is `src/stdlib/<module>/`
 // now, so the same roots cover it.
 const LIBRARY_DIRECTORIES = ['src/stdlib', 'lib', 'stdlib']

@@ -19,7 +19,7 @@ desc = "The tooling's own tests: every self-check under test/tools, internal/too
 #     entry's `skip_unless`, and it is also why these entries carry `case` = the self-check and the
 #     bridge in `args` -- the name the ledger has to see is the file the entry is about.
 #
-# The gate host has no PowerShell: measured 2026-11-25 on the Linux build host, `uname -s` says
+# The gate host has no PowerShell: measured on the Linux build host, `uname -s` says
 # `Linux` and `command -v pwsh` prints nothing (it prints `/usr/bin/node` and `/usr/bin/git` for the
 # other two). So on today's gate these nineteen **skip**, and a skip is neither a pass nor a red:
 # `[SUMMARY]` counts it on its own line and the reason names the host. They run for real on a host
@@ -29,7 +29,7 @@ desc = "The tooling's own tests: every self-check under test/tools, internal/too
 #
 # The layer each one is in is its measured wall clock, by the rule `docs/test-plans.md` uses for the
 # 261 cases that moved out of the fast layer: over 2 s is `tier = "slow"`. The times in the comments
-# below were read on the workstation -- the only machine with a pwsh -- on 2026-11-25, one run each,
+# below were read on the workstation -- the only machine with a pwsh -- one run each,
 # warm, and they are that machine's numbers and not the host's.
 #
 # Nothing here needs a compiler or an install: these are the checks a tool of the tree runs on
@@ -242,7 +242,7 @@ expect_stdout_contains = ["14 checks, 0 failed"]
 normalizers = ["normalize_newlines"]
 timeout_ms = 120000
 
-# Slow: 3.0 s, and it is the one file in this plan that is red today. Run over `-BashHost 88zjwei`
+# Slow: 3.0 s, and it is the one file in this plan that is red today. Run over `-BashHost <host>`
 # (the invocation `internal/tools/README.md` documents, because this machine's `bash` is WSL and
 # cannot read a Windows path) it prints `44 checks, 2 failed`: `a process inside it is named` and
 # `the bash guard exited 0`. The sweep keeps the fixture's `probe-f` and never prints
@@ -267,7 +267,7 @@ expect_stdout_contains = ["44 checks, 0 failed"]
 normalizers = ["normalize_newlines"]
 timeout_ms = 300000
 
-# Slow: 3.0 s over `-BashHost 88zjwei` (three sweeps of a seven-candidate fixture). The number that
+# Slow: 3.0 s over `-BashHost <host>` (three sweeps of a seven-candidate fixture). The number that
 # matters here is the one its first part-B check prints: `readlink` calls for one sweep over seven
 # candidates, **0** with the snapshot and **17 231** on the guard this replaces, which resolved two
 # links per host process per candidate -- measured 2026-11-25 at ~1780 processes: 7.0 s per candidate,
@@ -290,7 +290,7 @@ expect_stdout_contains = ["21 checks, 0 failed"]
 normalizers = ["normalize_newlines"]
 timeout_ms = 300000
 
-# Slow: 3.0 s (41 checks over `-BashHost 88zjwei`). Without a usable bash the file prints
+# Slow: 3.0 s (41 checks over `-BashHost <host>`). Without a usable bash the file prints
 # `0 checks, 0 failed` and exits 0, which is the shape the count in this entry is here to refuse.
 [[tests]]
 name = "selfchecks.camel_cleanup"

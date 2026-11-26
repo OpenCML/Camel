@@ -13,7 +13,7 @@
  *
  * A check inside the program cannot answer it. The versions a binary requires from
  * `libstdc++.so.6` are ELF version requirements, and the loader resolves them before `main`:
- * measured 2026-11-04 on the Linux host, with `libs/libstdc++.so.6` replaced by the distribution's
+ * measured on the Linux host, with `libs/libstdc++.so.6` replaced by the distribution's
  * 3.4.30, `bin/camel --version` printed seven `version `GLIBCXX_3.4.3x' not found` lines and exited
  * 1 -- and not one line of them came from Camel (`docs/technical/58_install_cxx_runtime.md` has the
  * transcript). Nothing that runs as part of that process can precede it, so the sentence has to come

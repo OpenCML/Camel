@@ -5,10 +5,10 @@ tags = ["feat", "modules", "autodiff", "remat"]
 
 # `remat` names the memory-for-recomputation transform: JAX spells it `jax.checkpoint`, whose other
 # name is `jax.remat`; in this tree "checkpoint" is the persistence module `ckpt` (stdlib/ckpt.cml),
-# so the transform takes the other word (author's ruling of 2026-10-30,
+# so the transform takes the other word (the rule,
 # internal/reviews/questions-2026-10-30-jax.md J8).
 #
-# Since the author's ruling of 2026-11-01 the name is a *transform of the `transforms` module*
+# Since the rule the name is a *transform of the `transforms` module*
 # (stdlib/signatures/transforms.cml), not a library identity: `remat(f)` builds a new graph whose body
 # is `f`'s graph plus the graph property `kGraphFlagRecomputeBackward`, and a call through it is a
 # call of the same code, so no number moves. The two readings below are the two halves of that: what

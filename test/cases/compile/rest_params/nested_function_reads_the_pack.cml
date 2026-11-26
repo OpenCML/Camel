@@ -4,7 +4,7 @@
 // caller's graph, and `xs` is bound to the nodes the call's arguments left over (`builder_rest.cpp`).
 // A lambda written in that body is a graph of its own, and those nodes belong to the caller's graph.
 //
-// Until 2026-11-05 this program **aborted the compiler**: the name resolved to the expansion's tuple,
+// This program **aborted the compiler**: the name resolved to the expansion's tuple,
 // the lambda's graph linked nodes of another graph, and the encoder reached a live node with no header
 // of its own --
 //

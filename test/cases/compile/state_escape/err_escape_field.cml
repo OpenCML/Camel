@@ -3,7 +3,7 @@
  * 3.5, 197): the closure made in `fill` captures `acc`, a `var` of `fill`'s call, and stores it
  * into `b.f`, a field of the caller's own variable. Storing it there is not a fault -- a closure
  * holds the value, and a value that outlives the scope that made it is a value nobody has to own
- * (the author's ruling of 2026-11-16, which withdrew the state rule of 2026-11-14).
+ * (the rule, which withdrew the state rule of 2026-11-14).
  *
  * The assignment inside the closure is the fault: `acc = acc + x` writes nothing the closure can
  * see. Refused by `ClosureAssignsCapturedName` (0x03000213).

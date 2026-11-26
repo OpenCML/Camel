@@ -58,7 +58,7 @@ tags = ["feat", "effects", "resources", "runtime", "compile"]
 #                      capture position, as the closure's own cell is in `capture_local_var`; the `rmw`
 #                      is this printer's word for a capture, since a capture states a position and no
 #                      mode, not `peek`'s reading. It named the `with` port carrying that capture,
-#                      `variable with 0`, until 2026-11-16). Both agree it is not masked; only the
+#                      `variable with 0`, while the port was the name). Both agree it is not masked; only the
 #                      vocabulary differs, because the runtime's walk has no notion of a module-level
 #                      cell.
 #   module_var_write   the same for `bump`'s write of that cell.
@@ -73,7 +73,7 @@ timeout_ms = 20000
 
 [[tests]]
 name = "capture_local_var"
-desc = "A closure reads a `var` the body that made it owns, and the two walks agree that nothing is reached: `total` is `none` on both sides, and the closure's own body is `none` on both as well -- a closure captures the value the name had when it was made, not the name, so a captured value is not a cell and neither walk carries an access through it (design principles 3.5, 197; the author's ruling of 2026-11-16). The reading this entry pinned before the ruling -- one captured cell, `rmw variable capture 0 whole` on both sides -- is the withdrawn by-reference capture; the closure cannot be written as a write of that cell either, since `ClosureAssignsCapturedName` (0x03000213) refuses it before any walk runs. The program's `main` prints, and both read it as `external; write ambient stdout`."
+desc = "A closure reads a `var` the body that made it owns, and the two walks agree that nothing is reached: `total` is `none` on both sides, and the closure's own body is `none` on both as well -- a closure captures the value the name had when it was made, not the name, so a captured value is not a cell and neither walk carries an access through it (design principles 3.5, 197; the rule). The reading this entry pinned before the rule -- one captured cell, `rmw variable capture 0 whole` on both sides -- is the withdrawn by-reference capture; the closure cannot be written as a write of that cell either, since `ClosureAssignsCapturedName` (0x03000213) refuses it before any walk runs. The program's `main` prints, and both read it as `external; write ambient stdout`."
 kind = "behavior"
 case = "../../../cases/effects/ok_capture_local_var.cml"
 args = ["${case}", "test::resource_transition"]
@@ -100,7 +100,7 @@ assert(capture.length === 0, "a captured value is not a cell: " + JSON.stringify
 
 [[tests]]
 name = "capture_local_var_as_value"
-desc = "The same body read from its type: it fits a `pure` parameter, and the two walks still agree that nothing is reached -- `total` is `none` on both sides and the closure is `none` on both, because a captured value is not a cell (design principles 3.5, 197). The expectation moved with the ruling of 2026-11-16 and not with the program: the case reads one written cell on both sides while a closure could share the cell it captured, and the closure now only reads the value."
+desc = "The same body read from its type: it fits a `pure` parameter, and the two walks still agree that nothing is reached -- `total` is `none` on both sides and the closure is `none` on both, because a captured value is not a cell (design principles 3.5, 197). The expectation moved with the rule and not with the program: the case reads one written cell on both sides while a closure could share the cell it captured, and the closure now only reads the value."
 kind = "behavior"
 case = "../../../cases/effects/ok_capture_local_var_as_value.cml"
 args = ["${case}", "test::resource_transition"]
@@ -166,7 +166,7 @@ assert(main.length === 1 && main[0].endsWith(' agree=yes'), 'main agrees: ' + JS
 
 [[tests]]
 name = "module_var_read"
-desc = "Reading a module's top-level `var` is not masked: both sides record a read of that cell. They name it differently -- the builder as the ambient resource `module_var_read:counter`, the runtime as the port it arrives on -- and the line is pinned with that difference, which the plan header explains. The port is the capture the top-level `var` is to a function that did not make it, so the runtime names it by its capture position (`capture 0`), as it already does for a closure's capture in the test above; it named the `with` port carrying it until 2026-11-16. The `rmw` on the runtime half is not `peek`'s mode -- it reads -- but the transition printer's word for a capture, which states a position and no mode on either side (`src/passes/test/resource_transition.cpp#runtimeAnswer`)."
+desc = "Reading a module's top-level `var` is not masked: both sides record a read of that cell. They name it differently -- the builder as the ambient resource `module_var_read:counter`, the runtime as the port it arrives on -- and the line is pinned with that difference, which the plan header explains. The port is the capture the top-level `var` is to a function that did not make it, so the runtime names it by its capture position (`capture 0`), as it already does for a closure's capture in the test above; it named the `with` port carrying it. The `rmw` on the runtime half is not `peek`'s mode -- it reads -- but the transition printer's word for a capture, which states a position and no mode on either side (`src/passes/test/resource_transition.cpp#runtimeAnswer`)."
 kind = "behavior"
 case = "../../../cases/effects/module_var_read.cml"
 args = ["${case}", "test::resource_transition"]
@@ -207,7 +207,7 @@ assert(disagree.length === 1, 'only `bump` differs here: ' + disagree.join(' | '
 
 [[tests]]
 name = "capture_escapes"
-desc = "The counter-example of the write rule, where the entry used to pin the withdrawn escape rule: `make` returns the closure, so the closure leaves the call and the cell it captured lived longer than the call, and that was the fault (`SemanticDiag::UsesPromiseViolated`, `0x030001F1`) until the author's ruling of 2026-11-16. Leaving with a value is legal now (design principles 3.5, items 197 and 198); the closure assigns `acc`, a name of the body around it, and that is what refuses the program: `ClosureAssignsCapturedName` (`0x03000213`), at the write. The program and its name stay -- it is still the smallest shape that reads \"a closure is made here and leaves here\" -- and nothing is printed by the pass, because a refused program is never walked."
+desc = "The counter-example of the write rule, where the entry used to pin the withdrawn escape rule: `make` returns the closure, so the closure leaves the call and the cell it captured lived longer than the call, and that was the fault (`SemanticDiag::UsesPromiseViolated`, `0x030001F1`) until the rule. Leaving with a value is legal now (design principles 3.5, items 197 and 198); the closure assigns `acc`, a name of the body around it, and that is what refuses the program: `ClosureAssignsCapturedName` (`0x03000213`), at the write. The program and its name stay -- it is still the smallest shape that reads \"a closure is made here and leaves here\" -- and nothing is printed by the pass, because a refused program is never walked."
 kind = "negative"
 case = "../../../cases/effects/err_capture_escapes.cml"
 args = ["${case}", "test::resource_transition"]

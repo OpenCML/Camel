@@ -109,7 +109,7 @@ timeout_ms = 20000
 
 [[tests]]
 name = "regions.owner_refused"
-desc = "The owner's exception is written on the port, not on the reader: the node that owns a region may read that region's exit (`region.result`, whatever kind of node the exit is) and nothing else in it. `test::regions` builds the two shapes the rule refuses -- a node of one arm reading a port the graph gives to the other arm (`regions.sibling_refused`), and here the owner read with the exit taken away: on this program the loop inside the arm reads its body's exit port, and the draft makes the body end in nothing, so the loop's read is of a port the region does not end in. Under the wider exception (the owner reads any port of its region) this draft commits; the rule as the author narrowed it (2026-11-03 08:10) refuses it, naming node 10 in region 1 reading port 9 of region 2."
+desc = "The owner's exception is written on the port, not on the reader: the node that owns a region may read that region's exit (`region.result`, whatever kind of node the exit is) and nothing else in it. `test::regions` builds the two shapes the rule refuses -- a node of one arm reading a port the graph gives to the other arm (`regions.sibling_refused`), and here the owner read with the exit taken away: on this program the loop inside the arm reads its body's exit port, and the draft makes the body end in nothing, so the loop's read is of a port the region does not end in. Under the wider exception (the owner reads any port of its region) this draft commits; the rule as the author narrowed it refuses it, naming node 10 in region 1 reading port 9 of region 2."
 kind = "behavior"
 case = "../../../cases/compile/expected_type_loop/loop_parts.cml"
 args = ["${case}", "test::regions", "std::nvm"]

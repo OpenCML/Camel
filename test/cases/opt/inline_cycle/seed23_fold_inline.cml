@@ -2,7 +2,7 @@
  * progen seed 23 of `test/tools/progen`, drawn with `python test/tools/progen/progen.py show --seed 23`
  * (generator version 7, the default feature set, size 1) and copied unedited below this header.
  *
- * It is the second program `a1723fbb9` fixed, and the instance of that defect no plan guarded. Under
+ * It is the second program the fix covered, and the instance of that defect no plan guarded. Under
  * `std::cxx::fold std::cxx::inline` the splice wrote the body's head beside the argument the call
  * reads instead of after it, `resolvePlaceForks` then moved the argument onto the body's tail, and the
  * pass refused the cycle (docs/technical/17_graph_rewrite_api_contracts.md, 4.2 rule 1):

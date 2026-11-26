@@ -3,7 +3,7 @@
  *
  * The body writes `c` and then prints it, so the program prints `1` and then the `0` of `main`:
  * an outside write is used by the region it runs in, so a call, loop or block that writes runs
- * even when its value is unread (the author's ruling of 2026-11-17, on principles 3.1 and 3.4).
+ * even when its value is unread (the rule, on principles 3.1 and 3.4).
  * A `Ref` box counts as outside (3.1, 2026-11-16), so the call runs, prints, and the compiler
  * reports nothing for it. Plan linear.captured_writes, tests lambda_capture_ignored.*.
  *

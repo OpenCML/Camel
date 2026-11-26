@@ -13,7 +13,7 @@
 # Why it exists. `opt.splice_place / perf_fib_smoke.opt_twice.{nvm,fvm,jit,prl}` (and, with it,
 # `modules.nn / gru_lite_large_bytecode`) crossed the runner's cost line -- `timeout_ms / 4`,
 # `TIMEOUT_MARGIN` in test/tools/run-tests.mjs -- on all four back ends at once: 6480 / 6410 / 6550
-# / 6440 ms of CPU against 5000. The author's ruling of 2026-11-19 (internal/reviews/
+# / 6440 ms of CPU against 5000. the rule (internal/reviews/
 # questions-2026-10-29.md, the dispatch of the 0.2.45 blocker list to lanes, S3-2) is: do not raise
 # the line, measure where the slow-down is, report each check's share, and only then make the check
 # cheap (`只查波及区域、同一遍内不重复问`) rather than make it unasked.

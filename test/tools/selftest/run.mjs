@@ -66,7 +66,7 @@ const stripAnsi = (text) => text.replace(/\x1b\[[0-9;]*m/g, '')
 // fixture, run at 32 on a quieter host the same day, was 13/13 (`internal/reviews/
 // 2026-11-03-the-self-test-is-red-on-develop-and-has-no-name.cn.md`). All thirteen failing, none
 // passing, is the shape of "squeezed out", not the shape of "one assertion chose wrongly"; and a
-// judgement that moves with the load is neither a red nor a green (author ruling 2026-11-02 16:50).
+// judgement that moves with the load is neither a red nor a green.
 // The checks below compare against fixed strings, so the width they are taken at has to be fixed
 // too. Four is a width this fixture's work is small enough to fill and small enough not to swamp;
 // one would make the wall time unacceptable, and it is not what the plan layer runs at either.
@@ -367,7 +367,7 @@ for (const text of [
 }
 
 // --- the `known_fail` gate: a marked case carries an owner, a wall and a sentence --------------
-// The author's ruling of 2026-11-03 00:30: a case that cannot pass today stays in the plan with the
+// the rule: a case that cannot pass today stays in the plan with the
 // mark, who is responsible for making it green, and why it cannot pass. Two of the three used to be
 // prose inside `known_fail_note`, which nothing checked and a review had to remember to read; they
 // are fields now, and a plan that omits either is refused where it is loaded. A fourth field, the
@@ -485,7 +485,7 @@ if (!endsPasses) {
 // contains it verbatim (`output does not contain 'ARRIVED fixture=knownfail quoted-only ...'`). A
 // condition read against the runner's message would be satisfied by the sentence explaining that it
 // is unmet, and a legitimate mark would be reported as ended; that is the shape the merge rehearsal
-// of 2026-11-25 measured as three reds (`modules.onnx/ort_loop_values_dynamic` and the two
+// measured as three reds (`modules.onnx/ort_loop_values_dynamic` and the two
 // `stated_mean_axis_*` gradients). The entry stays `[XFAIL]`, the ending block is not printed for it,
 // and its end condition still reaches the roster. Read off the output, and off this fixture's own
 // line rather than the run's, so a neighbour that prints the same words cannot answer for it.
@@ -1478,7 +1478,7 @@ const matchedSelection = runTestCli(['--changed', '--changed-files', matchedChan
 // 2026-11-14 the `test/cases/` rule carries `{ "plan": "feat/parse/frontend.plan.toml", "layer":
 // true }` (test/plan-selection.json; the reason is in that rule's own comment: the frontend plan
 // hashes every `.cml` of the repository, so a case that lands without its record is a file that
-// changed with nothing reading it). `select 1 plan(s)` was written on 2026-11-05, when the rule had
+// changed with nothing reading it). `select 1 plan(s)` was written when the rule had
 // one plan; it was the count of that day, and it is now the count of a tree without `also`. A count
 // alone is a thin reading, so both plan files are asserted by name beside it and so is the layer
 // mark: a rule that dropped `also` reads 1 and goes red here, and an `also` written without

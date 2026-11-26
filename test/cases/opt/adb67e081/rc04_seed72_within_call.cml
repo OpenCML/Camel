@@ -1,6 +1,6 @@
 /**
  * The legal half of `rc04_seed72`: `k14` declares `var v16`, a closure captures it and reads it,
- * and the closure is called inside `k14`. The rest of the reduced program of result `adb67e081`
+ * and the closure is called inside `k14`. The rest of the reduced program
  * is unchanged.
  *
  * The closure used to WRITE `v16` (`v16 /= -2` inside it), and that was legal because the state
@@ -13,11 +13,11 @@
  * `v16` is 0 either way (`0 / -2` is 0), so the program's answer is unchanged and the reading
  * these entries guard -- `direct_calls` -- is the same reading.
  *
- * What this entry guards, and what it does not (measured 2026-11-15 on 6c64f2042):
+ * What this entry guards, and what it does not (measured on 6c64f2042):
  *
  *   - it guards that `std::cxx::inline` still inlines: `direct_calls` reads 2 with no pass and 0
  *     under the pass (`std::stats`), so a pass that stops inlining turns this entry red;
- *   - it does NOT guard the place decision `a1723fbb9` added. With that decision switched off,
+ *   - it does NOT guard the place decision that was added. With that decision switched off,
  *     this program runs at exit 0 with no cycle and no `PassInternalError`, exactly as with it
  *     on: the ring is unobservable in this shape today, not gone. The byte-for-byte drawing
  *     comparison is on the sibling shape, test/cases/opt/inline_cycle/seed23_fold_inline_within_call.cml.

@@ -20,7 +20,7 @@
  * wrote, they are not part of the checkout, and walking them would cost this guard the tree's size
  * rather than its own work (`isRunnerOutput` in `runner-output.mjs` is where that is decided).
  *
- * Three classes of path, and telling them apart is the point of this file (2026-11-22). It used to
+ * Three classes of path, and telling them apart is the point of this file. It used to
  * probe its `algo` paths with `existsSync` and walk whichever roots it happened to find, so a PASS
  * rested on a scope it never named: every probed path was absent -- which for those paths is the
  * expected reading, see GONE_PATHS -- while the code roots it actually read were only assumed to be
@@ -30,7 +30,7 @@
  *     scope that quietly lost a root is the failure this guard was fixed for.
  *   * LEGACY_ROOTS are the names the layout had before the move to `src/`: the five block directories
  *     and the library sat at the top of the tree (`kernel/`, `parse/`, `compile/`, `lib/`,
- *     `tools/`) until 2026-11-22, and `include/`, `modules/`, `stdlib/` before the layout move.
+ *     `tools/`) until the move into `src/`, and `include/`, `modules/`, `stdlib/` before the layout move.
  *     They are walked when present, so a checkout of any layout is scanned, but their absence is
  *     today's layout and is reported, not failed.
  *   * GONE_PATHS must NOT be there, and their absence is *half of this guard's PASS*: the deleted

@@ -1,4 +1,4 @@
-/// A tag argument that names a tag. A tag is a declaration, not a value (the author's ruling of
+/// A tag argument that names a tag. A tag is a declaration, not a value (a tag keeps the name it is written with and does not enter the value namespace), so
 /// 2026-10-30: a tag keeps the name it is written with and does not enter the value namespace), so
 /// the refusal at the tag says what the name is. Reporting the parameter's declared type against it
 /// would read as a kind mismatch and hide the point.

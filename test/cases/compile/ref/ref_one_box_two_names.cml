@@ -2,7 +2,7 @@
  * One box, two names: `main` hands one reference to one call twice, so inside the callee the two
  * handle parameters may name one box, and the compiler cannot prove they do not.
  *
- * Design principles 3.3, handle types (负责人 2026-11-15): a handle is a run-time value and two
+ * Design principles 3.3, handle types: a handle is a run-time value and two
  * names may be one handle -- two same-typed handle names in one function (`Ref<T>` with the same
  * `T`, or one `#resource` type) are one resource, and accesses through them keep the order they
  * are written in, unless the values are provably different.

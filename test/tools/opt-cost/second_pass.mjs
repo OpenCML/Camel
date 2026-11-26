@@ -9,7 +9,7 @@
 //
 // Why a ratio, and not a ceiling in milliseconds. The reading this entry takes is `std::opt` run
 // twice: the first run optimizes the program, and the second runs over the graph the first one left
-// behind. Over `perf_fib_smoke`'s timed helper on 2026-11-22 that was 207.9 ms of CPU for the first
+// behind. Over `perf_fib_smoke`'s timed helper that was 207.9 ms of CPU for the first
 // and 1673.8 ms for the second. An absolute ceiling on the second number was this tool's first
 // shape, and it was not portable: CPU milliseconds are a host's speed as much as the pass's work,
 // and the same commit was red on win-x64 and on macos-arm64 while green here -- CI 44938160097 read

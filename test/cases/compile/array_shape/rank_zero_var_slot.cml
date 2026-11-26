@@ -3,7 +3,7 @@
 // element. The write is the same entrance a call argument is -- `=` is an operator whose argument
 // enters a parameter of `f32[...]`.
 //
-// Before the conversion (`619eedb6c`) the crash was in the reading; after it (`cae413dbf`) the four
+// Before the conversion the crash was in the reading; after it the four
 // slots print the same two lines.
 
 func main() => int sync {

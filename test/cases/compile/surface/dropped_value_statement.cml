@@ -1,4 +1,4 @@
-// A position that discards a value does not use a name: the rows of the author's ruling of
+// A position that discards a value does not use a name: the rows of the rule that compile. `void` a body's last statement is dropped (`acceptsAsResult`), and a
 // 2026-11-03 that compile. `void` a body's last statement is dropped (`acceptsAsResult`), and a
 // statement whose value the block drops is dropped the same way -- so a name written there is no
 // value use, whether it is written as the whole statement (`{ len };`) or bound first

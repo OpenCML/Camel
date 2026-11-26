@@ -1111,7 +1111,7 @@ tier = "slow"
 
 [[tests]]
 name = "gpu_scope.write_outside_a_sync_block_runs_and_is_not_warned"
-desc = "A write to a resource outside the program is used by the region it is written in (design principles 3.1, the author's ruling of 2026-11-15): a `println` written in a `#gpu` function body that is not a sync block runs, and nothing is reported for it -- the warning that named a statement which does not run went with the region roots. What stays demand-driven is a read. The reading belongs to the program and not to the device, so it holds whether the scope is cut into segments or not -- this entry is the run without `tiles::compile`, and it is red when the print stops running or when a warning is reported for it. The one diagnostic the program does report is the tag's, which the run without the pass carries."
+desc = "A write to a resource outside the program is used by the region it is written in (design principles 3.1): a `println` written in a `#gpu` function body that is not a sync block runs, and nothing is reported for it -- the warning that named a statement which does not run went with the region roots. What stays demand-driven is a read. The reading belongs to the program and not to the device, so it holds whether the scope is cut into segments or not -- this entry is the run without `tiles::compile`, and it is red when the print stops running or when a warning is reported for it. The one diagnostic the program does report is the tag's, which the run without the pass carries."
 kind = "behavior"
 case = "../../../cases/modules/tiles/gpu_scope_unused_effect.cml"
 args = ["--output-format", "json", "${case}", "std::nvm"]

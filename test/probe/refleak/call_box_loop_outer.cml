@@ -1,6 +1,6 @@
 import state
 
-// The shape the note left in `ad44fca33` named as the one still leaking: a value a CALL makes
+// The shape the note left named as the one still leaking: a value a CALL makes
 // *before* a loop, read on every round of it, and read by nothing after it.
 //
 // In that commit a counted value's rows could only be written where a back end runs them -- the

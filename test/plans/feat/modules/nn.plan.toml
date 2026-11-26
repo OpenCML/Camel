@@ -1316,7 +1316,7 @@ timeout_ms = 16000
 
 [[tests]]
 name = "gru_lite_large_bytecode.gc_stress"
-desc = "The ruler the author's ruling of 2026-11-13 asked for (internal/reviews/2026-11-06-who-roots-a-program-a-pass-holds-while-a-call-runs.cn.md, section 1): the gru_lite_large_bytecode pipeline under --gc-stress safepoint=1,kind=minor, with no poison. Every safepoint collects the young generation and moves what it holds, so a Program a transform keeps in C++ without a root leaves the old addresses of its static values in the slots: this run segfaulted (rc=139) until a C++ holder rooted its program through `camel::runtime::ProgramHold` (include/camel/runtime/graph.h#ProgramHold). It is the same defect the two poison entries above report, without needing the poison mode."
+desc = "The ruler the rule asked for (internal/reviews/2026-11-06-who-roots-a-program-a-pass-holds-while-a-call-runs.cn.md, section 1): the gru_lite_large_bytecode pipeline under --gc-stress safepoint=1,kind=minor, with no poison. Every safepoint collects the young generation and moves what it holds, so a Program a transform keeps in C++ without a root leaves the old addresses of its static values in the slots: this run segfaulted (rc=139) until a C++ holder rooted its program through `camel::runtime::ProgramHold` (include/camel/runtime/graph.h#ProgramHold). It is the same defect the two poison entries above report, without needing the poison mode."
 kind = "behavior"
 case = "../../../cases/modules/nn/gru_lite.cml"
 args = ["--gc-stress", "safepoint=1,kind=minor", "${case}", "std::cxx::specialize", "std::opt", "tensor::fuse", "std::cxx::dce", "std::cxx::fold", "std::macro", "std::cxx::devirtualize", "std::fvm"]
@@ -1411,7 +1411,7 @@ timeout_ms = 20000
 
 [[tests]]
 name = "sgd_leaves_its_argument"
-desc = "`sgd(params, g, rate)` answers a new tree and leaves the tree it was handed as it was (design principles 11.3): the leaf here is a compact array with no view and no block, the one shape for which `Array::writableInPlace()` answers true, so a kernel that writes over the leaf instead of allocating one prints the updated value for `p.weight` as well. The case study's own program reads `w0` after training (`loss<w0, y>(X)`), which is the same requirement in the shape the direct-SSA plan's S3b is about: `OperatorTable::declareReusesOperand` is a claim about an operand, and the call site does not make the count at its last use yet -- the answer is that the argument binding is a holder, handed on at the caller's last use and added otherwise, so reuse in place happens only at count one (`9699824aa`). Alike on the four back ends."
+desc = "`sgd(params, g, rate)` answers a new tree and leaves the tree it was handed as it was (design principles 11.3): the leaf here is a compact array with no view and no block, the one shape for which `Array::writableInPlace` answers true, so a kernel that writes over the leaf instead of allocating one prints the updated value for `p.weight` as well. The case study's own program reads `w0` after training (`loss<w0, y>(X)`), which is the same requirement in the shape the direct-SSA plan's S3b is about: `OperatorTable::declareReusesOperand` is a claim about an operand, and the call site does not make the count at its last use yet -- the answer is that the argument binding is a holder, handed on at the caller's last use and added otherwise, so reuse in place happens only at count one. Alike on the four back ends."
 kind = "behavior"
 case = "../../../cases/modules/nn/sgd_leaves_its_argument.cml"
 args = ["${case}", "${backend}"]

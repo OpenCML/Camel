@@ -4,7 +4,7 @@ tier = "fast"
 tags = ["feat", "opt", "rules", "rewrite", "draft"]
 
 # One application of a rule is all or nothing (docs/design/graph-editing/README.cn.md 16.1, 16.3,
-# the ruling of 2026-11-18): an application the engine abandons leaves nothing of what it had
+# the rule): an application the engine abandons leaves nothing of what it had
 # already built in the draft, and the draft the commit publishes is the graph the pass started from.
 #
 # The case reads one number -- the node count of a function -- three times: before the pass, after a

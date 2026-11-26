@@ -8,7 +8,7 @@
  * directional derivative is `2*v*dx`; with `v = 1` that is `2*dx`, i.e. 1, 2, 3.
  *
  * The cotangent is the pullback's argument, not the forward call's: `lib/vjp/vjp.cml#vjp` answers
- * `(value, pullback)` -- JAX's order, the author's ruling of 2026-11-01 -- so the reading is
+ * `(value, pullback)` -- JAX's order -- so the reading is
  * `vjp(sq)(x).1(v)` and the one member a one-parameter pullback answers is read out by position
  * (`.0`), the same shape `grad` is built on.
  *

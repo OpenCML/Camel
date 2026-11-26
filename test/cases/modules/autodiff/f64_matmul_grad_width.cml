@@ -1,14 +1,14 @@
 /**
  * The width the matmul gradient accumulates in. `loss = sum(x @ w)` with `x: f64[2, 3]` and
  * `w: f64[3, 1]` makes `d/dw = x^T @ dy` (`tensor:matmul_grad_rhs`) and `d/dx = dy @ w^T`
- * (`tensor:matmul_grad_lhs`), and those two are the only gradient operators of this lane's list
+ * (`tensor:matmul_grad_lhs`), and those two are the only gradient operators of this change's list
  * that *add several products together*: `sum_to` adds over the like-operand's axes, while
  * `expand_axis`, `gelu_grad` and `erf_grad` are elementwise or a spread. The
  * arithmetic below is written from the forward expression, so the expectations are not read back
  * from a kernel.
  *
  * The two gradient operators used to declare f32 whatever the value's own width was (the
- * `gradientLike` inference this lane replaced with `gradientLikeTyped`, gradient_ops.cpp), and an
+ * `gradientLike` inference this change replaced with `gradientLikeTyped`, gradient_ops.cpp), and an
  * f64 training step then reached `sum_to` with an f32 gradient and an f64 like-operand, which the
  * signature refuses -- the ONNX train-step cases lost the rank facts of the node that fed them.
  * The declaration now follows the value's width, and this case is the numerical pair that pins

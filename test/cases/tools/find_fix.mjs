@@ -4,7 +4,7 @@
  * defect, and getting an answer that cannot be a stale yes.
  *
  * Twice in one night the branch was one `git log` away: `grad_array_sum` was about to get a probe
- * written for it while the fix sat on `origin/lane-lit2`, and a `GUARD` question was answered the
+ * written for it while the fix sat on that branch, and a `GUARD` question was answered the
  * same way. The rule was prose in `agents/test.md`; this pins the tool that carries it.
  *
  * The readings this case takes are on a **throwaway repository**, so they do not depend on which

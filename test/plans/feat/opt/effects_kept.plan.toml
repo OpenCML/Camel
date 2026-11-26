@@ -194,7 +194,7 @@ expect_diagnostic_name = "RuntimeDiag::DivisionByZero"
 
 # The fold's own drawing and run of the branch it prunes: `fold_leaves_no_control_edge` is the
 # program of R1's second half, and it pins what the fold still does to it -- the two prints run, the
-# arm that is not taken never does, and the value is the taken arm's. The residue that this lane sets
+# arm that is not taken never does, and the value is the taken arm's. The residue that this change sets
 # out to remove is not removed: taking the control edge away from the pruned branch's structure takes
 # the division's last read with it (measured: the program prints `4` and exits 4 instead of faulting),
 # because the keeper that should stand in its place cannot be built. The two readings of the removed
@@ -276,7 +276,7 @@ args = ["${case}", "std::jgir", "std::nop"]
 backends = ["nvm"]
 expect_exit = 0
 expect_stdout_contains = ["\"exit\": null"]
-# An effect whose place in the chain was the GATE inlined in front of it (2026-11-01, lane-fold2).
+# An effect whose place in the chain was the GATE inlined in front of it.
 #
 # `std::cxx::inline` splices an inlined body's tail as a GATE, and `std::cxx::fold` prunes the branch
 # whose chain entered that arm. The gate was left with no wait, and the commit dissolved it as "plain
@@ -321,7 +321,7 @@ expect_stdout_exact = ""
 #
 #   dead_write_dropped_closure  the closure that captured the cell reaches nothing the program keeps
 #                               (`p.0` reads the tuple's first member alone), and `x * 0 => 0` folds
-#                               away the write's only reader. Refused since 2026-11-16: the closure is
+#                               away the write's only reader. Refused: the closure is
 #                               bound to a name and put into a tuple, and design principles 3.5 (198)
 #                               runs the stretch of a value put into another value to the rest of the
 #                               scope, so the write after it is inside the stretch. The entries that
@@ -332,10 +332,10 @@ expect_stdout_exact = ""
 #
 # The write of `dead_write_rooted_closure` is written **before** the closure is made. It used to be
 # written after it, and that program is refused now: a closure holds the value the name had when it
-# was made (design principles 3.5, the author's ruling of 2026-11-16, item 198), so a write written
+# was made (design principles 3.5, item 198), so a write written
 # after the closure is `SemanticDiag::CapturedVarWrittenAfterTheClosure` (0x03000214). The dropped
-# sibling keeps its write after the closure and was read as legal until 2026-11-16, because the rule
-# was read as running to the closure's last use and that closure is never called; the ruling's third
+# sibling keeps its write after the closure and was read as legal, because the rule
+# was read as running to the closure's last use and that closure is never called; the rule's third
 # item reads the same shape as the design's third case instead -- the closure's value is put into
 # another value, so the stretch is the scope's rest -- and the case is refused.
 #
@@ -346,7 +346,7 @@ expect_stdout_exact = ""
 # each write without a pipeline around it.
 [[tests]]
 name = "dead_write_dropped_closure.reference"
-desc = "No pass: the write stands after the closure `h` was made, and `h` is put into the tuple `(1, h)`, which design principles 3.5 (198) runs to the end of the scope, so the program is refused (the author's ruling of 2026-11-16, item 3). It printed the 1 that `p.0` gives while the rule stopped at the closure's last use."
+desc = "No pass: the write stands after the closure `h` was made, and `h` is put into the tuple `(1, h)`, which design principles 3.5 (198) runs to the end of the scope, so the program is refused (the rule, item 3). It printed the 1 that `p.0` gives while the rule stopped at the closure's last use."
 kind = "negative"
 case = "../../../cases/opt/effects/dead_write_dropped_closure.cml"
 args = ["${case}"]
@@ -366,7 +366,7 @@ expect_diagnostic_code = "0x03000214"
 
 [[tests]]
 name = "dead_write_rooted_closure.reference"
-desc = "No pass: the closure is called in the same `sync` block and reads the 41 the write left. The write is written before the closure since 2026-11-16: written after it, it would be `CapturedVarWrittenAfterTheClosure` (0x03000214), because a closure holds the value the name had when it was made (design principles 3.5, item 198). The reading is the one this entry had."
+desc = "No pass: the closure is called in the same `sync` block and reads the 41 the write left. The write is written before the closure: written after it, it would be `CapturedVarWrittenAfterTheClosure` (0x03000214), because a closure holds the value the name had when it was made (design principles 3.5, item 198). The reading is the one this entry had."
 case = "../../../cases/opt/effects/dead_write_rooted_closure.cml"
 args = ["${case}", "${backend}"]
 expect_exit = 0
@@ -382,7 +382,7 @@ expect_stdout_exact = "41\n41\n"
 
 [[tests]]
 name = "dead_write.judgement_dropped"
-desc = "`test::deadwrite` prints what `camel::runtime::deadWrite` answers for each write, so the judgement is read on its own. The program it reads is refused since 2026-11-16: `h` is bound to a name and put into the tuple `(1, h)`, and the write `c = 41` stands after it, which design principles 3.5 (198) runs to the rest of the scope (the author's ruling of 2026-11-16, item 3). The judgement's own readings are the two entries that follow and `dead_write.opt.still_there`."
+desc = "`test::deadwrite` prints what `camel::runtime::deadWrite` answers for each write, so the judgement is read on its own. The program it reads is refused since 2026-11-16: `h` is bound to a name and put into the tuple `(1, h)`, and the write `c = 41` stands after it, which design principles 3.5 (198) runs to the rest of the scope (the rule, item 3). The judgement's own readings are the two entries that follow and `dead_write.opt.still_there`."
 kind = "negative"
 case = "../../../cases/opt/effects/dead_write_dropped_closure.cml"
 args = ["${case}"]

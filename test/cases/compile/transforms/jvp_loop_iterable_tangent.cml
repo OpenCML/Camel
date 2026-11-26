@@ -7,7 +7,7 @@
 // place to put it: the loop iterates the values it was given, and pairing the iterable would hand
 // the loop a pair where it asks for an array.
 //
-// What that used to answer, measured 2026-11-04 on `std::nvm`, tree at `origin/develop`:
+// What that used to answer, measured on `std::nvm`, tree at `origin/develop`:
 //
 //   f(xs) = loop s = 0.0 for e in xs do s + e
 //   jvp(f)([1.0, 2.0], [1.0, 1.0])   ->   value= 3.0   tangent= 0.0

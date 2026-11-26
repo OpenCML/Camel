@@ -1,4 +1,4 @@
-# The key a baseline is stored under, and what that key may contain (D-1124-78's neighbour, the
+# The key a baseline is stored under, and what that key may contain (the arrival's neighbour, the
 # baseline note: "baseline keyed by tip sha").
 #
 # A baseline is "what the plans read on THIS commit". So its key is the commit -- and the plan set it

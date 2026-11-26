@@ -166,7 +166,7 @@ expect_stdout_exact = "4\n8\n"
 
 [[tests]]
 name = "effect.through_parameter"
-desc = "The effect of a call through a function-typed parameter is the resource set of the value it is instantiated with: `add` writes the module's `total`, so a call through the parameter is an effectful call -- and an effectful call written as a statement runs wherever it is written (design principles 3.1, the author's ruling of 2026-11-17: a call is one of the nodes a region's `GATE` reads). Outside a sync block the body's GATE reads it, inside one the chain carries it, so both writes land and all four numbers count them. Nothing is reported: a statement a GATE reads is a statement that runs. Classified as borrowing the retired shape: the state moved from a `var` context parameter, which a value cannot assign, to a module `var`."
+desc = "The effect of a call through a function-typed parameter is the resource set of the value it is instantiated with: `add` writes the module's `total`, so a call through the parameter is an effectful call -- and an effectful call written as a statement runs wherever it is written (design principles 3.1: a call is one of the nodes a region's `GATE` reads). Outside a sync block the body's GATE reads it, inside one the chain carries it, so both writes land and all four numbers count them. Nothing is reported: a statement a GATE reads is a statement that runs. Classified as borrowing the retired shape: the state moved from a `var` context parameter, which a value cannot assign, to a module `var`."
 kind = "behavior"
 case = "../../../cases/effects/effect_through_parameter.cml"
 args = ["${case}"]
@@ -385,7 +385,7 @@ expect_output_contains = ["err_pure_recursive.cml:8:", "(n: int) => int pure", "
 
 [[tests]]
 name = "err.wide_parameters"
-desc = "A use through a parameter the signature cannot number (the 257th) is not dropped: the measurement gives up on the body and records it as reaching something unknown, so a declaration whose clause cannot be shown to cover it is refused rather than passing on a use nobody recorded. The refusal stands at the declaration (9:1), because the use it cannot place is the unknown one; the `q += 1` in the body is no longer a second reason for it -- writing a `var` parameter is not a use of anything outside the program (design principles 3.1 and 3.5, the ruling of 2026-11-15), so that write used to be the position this refusal was reported at."
+desc = "A use through a parameter the signature cannot number (the 257th) is not dropped: the measurement gives up on the body and records it as reaching something unknown, so a declaration whose clause cannot be shown to cover it is refused rather than passing on a use nobody recorded. The refusal stands at the declaration (9:1), because the use it cannot place is the unknown one; the `q += 1` in the body is no longer a second reason for it -- writing a `var` parameter is not a use of anything outside the program (design principles 3.1 and 3.5), so that write used to be the position this refusal was reported at."
 kind = "negative"
 case = "../../../cases/effects/err_wide_parameters.cml"
 args = ["${case}"]
@@ -456,7 +456,7 @@ expect_stdout_contains = ["120 true true"]
 # writes of it are not this function's effects (design principles 3.3, effect masking). A closure
 # over such a variable is not an exception, because a closure captures a VALUE: it holds what the
 # name had when it was made, and nothing it does reaches a resource (design principles 3.5, the
-# author's ruling of 2026-11-16).
+# the rule).
 #
 # What a closure may no longer do is write that name: `ClosureAssignsCapturedName` (0x03000213)
 # refuses the assignment, so the two cases below write the name where it lives and let the closure
@@ -474,7 +474,7 @@ expect_stdout_exact = "3\n"
 
 [[tests]]
 name = "ok.capture_local_var_as_pure_value"
-desc = "The same function measured from its type: a function that writes only its own variables has the empty resource set, so the value it stands for fits a parameter written `pure`. A closure over one of those variables does not change the measurement -- it holds a value, not a place (design principles 3.5, the ruling of 2026-11-16) -- and the shape was migrated to a closure that reads, because one that writes is now refused."
+desc = "The same function measured from its type: a function that writes only its own variables has the empty resource set, so the value it stands for fits a parameter written `pure`. A closure over one of those variables does not change the measurement -- it holds a value, not a place (design principles 3.5) -- and the shape was migrated to a closure that reads, because one that writes is now refused."
 kind = "behavior"
 case = "../../../cases/effects/ok_capture_local_var_as_value.cml"
 args = ["${case}"]
@@ -483,7 +483,7 @@ expect_stdout_exact = "3\n"
 
 [[tests]]
 name = "err.capture_escapes"
-desc = "The program that used to pin the other side of effect masking: the closure leaves the call, so the cell it captured outlived the call and writing it was a resource of the function that handed it out, which broke the `pure` `make` promises. That reading went with rule two (design principles 3.5, the author's ruling of 2026-11-16): leaving with a value is not a resource, and the program is refused at the assignment instead -- `ClosureAssignsCapturedName` (0x03000213). Classified as testing the withdrawn semantics, so the expectation was changed and not the carrier: the `pure` half of this case has no legal program left to stand on."
+desc = "The program that used to pin the other side of effect masking: the closure leaves the call, so the cell it captured outlived the call and writing it was a resource of the function that handed it out, which broke the `pure` `make` promises. That reading went with rule two (design principles 3.5): leaving with a value is not a resource, and the program is refused at the assignment instead -- `ClosureAssignsCapturedName` (0x03000213). Classified as testing the withdrawn semantics, so the expectation was changed and not the carrier: the `pure` half of this case has no legal program left to stand on."
 kind = "negative"
 case = "../../../cases/effects/err_capture_escapes.cml"
 args = ["${case}"]
@@ -502,7 +502,7 @@ expect_output_contains = ["err_capture_escapes.cml:", "is assigned inside a clos
 # not in a sync block.
 #
 # What a callback may write is a handle or a module `var`: a closure captures a value, so it cannot
-# assign a `var` of the call that made it (design principles 3.5, 197, the ruling of 2026-11-16),
+# assign a `var` of the call that made it (design principles 3.5, 197),
 # which is the shape these cases were written with.
 
 [[tests]]
@@ -809,7 +809,7 @@ expect_output_contains = ["err_write_readonly_resource.cml:8:", "'graph'", "'rea
 # ---- The write a body leaves in a `var` parameter is a result of the function ----
 #
 # Came from the retired `hold/varexit-cases` branch, where the same property was built as a source
-# change; the main line has it (`lane-varparam`, `2427c2bf5`), so only the measurement is kept.
+# change; the main line has it , so only the measurement is kept.
 
 [[tests]]
 name = "var_parameter.write_outside_sync"

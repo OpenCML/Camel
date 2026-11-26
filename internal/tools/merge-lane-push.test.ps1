@@ -157,7 +157,7 @@ function Get-OriginTip {
 $repoRoot = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
 $laneScript = Join-Path $repoRoot 'internal\tools\merge-lane.ps1'
 
-# The shape a push must have lives in its own file, beside both merge tools (D-1124-78), and the
+# The shape a push must have lives in its own file, beside both merge tools, and the
 # script under test dot-sources it. Loading it here is what lets `Invoke-PushWithRecovery` run at
 # all: a function that calls a name nothing defined would fail in every scenario below for a reason
 # that is not the recovery's.
@@ -302,7 +302,7 @@ $parentsA = @((Get-GitText $a.Work rev-list --parents -n 1 HEAD) -split ' ' | Wh
 # The shape, not only the content: the re-landed commit is the prepared merge (what this run read)
 # merged INTO the tip that landed, so its first parent is that tip. The other order -- the new tip
 # merged into the merge commit -- is the shape that made a seat's merge read as an arrival on
-# `integration` (D-1124-78), and it is what this check used to accept.
+# `integration`, and it is what this check used to accept.
 Check 'the re-land is the prepared merge merged into the new tip' `
     ($parentsA.Count -eq 3 -and $parentsA[1] -eq $landedOne -and $parentsA[2] -eq $a.Merge) ($parentsA -join ' ')
 Check 'the lane is still in what went to origin' (Test-Path (Join-Path $a.Work 'probe.txt')) 'probe.txt is not in the tree'

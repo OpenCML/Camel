@@ -138,7 +138,7 @@ const WRITTEN_OPERATIONS = [
 // The six axis reductions are one shape of the question: their URI keeps an identity of the
 // implementation (`tensor:sum_axis`), and the one spelling a program writes is the whole
 // reduction's name with the axis and the flag in `<>` (`sum<axis, keepdims>(xs)`), so their laws
-// are filed under `sum` at the one operand the parentheses carry (author's ruling, 2026-11-05).
+// are filed under `sum` at the one operand the parentheses carry.
 const RULE_KEY_EXCEPTIONS = [
     { uri: ':op/idx_arr', head: 'index_into', arity: 2 },
     { uri: 'tensor:argmax_axis', head: 'argmax', arity: 1 },
@@ -486,7 +486,7 @@ function readLibrary() {
 // it, so the two float widths are read as the four registers they are instead of as one.
 //
 // The roots are the block directories the layout map files the sources under, not `src/` and
-// `modules/`: after the 2026-11-22 move the engine is `src/kernel/`, `src/compile/` and `src/parse/`,
+// `modules/`: after the move the engine is `src/kernel/`, `src/compile/` and `src/parse/`,
 // and a module is `src/stdlib/<name>`. They are spelled out because a bare `'src'` is a word as much
 // as a path -- the rewrite that carries the move will not touch it -- and a root list that no longer
 // exists makes every law look unanswered, which is how this comparison reported a whole table as
@@ -526,7 +526,7 @@ function* cppFiles(dir) {
 /// returns its list to the module's catalog (`src/stdlib/tensor/ops/catalog.cpp`), which is the
 /// only file there that calls `add`. Reading the tensor catalog's protocol for the whole tree filed
 /// the `nn` rows under `tensor:` -- the right key, the wrong namespace printed beside it
-/// (C-1124-203). Read, not assumed; a module that publishes two protocols is refused rather than
+/// Read, not assumed; a module that publishes two protocols is refused rather than
 /// guessed, because one of the two would be attributed to the wrong namespace.
 function moduleProtocols() {
     const byFile = new Map()

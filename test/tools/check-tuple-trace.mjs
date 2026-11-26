@@ -10,7 +10,7 @@
 // does not was skipped in silence and its reference was never relocated -- the stale pointer the
 // poison check reports somewhere else, in a frame that never saw the tuple.
 //
-// So the walk compares the two counts first (author, 2026-11-02 05:30: the collector trusts a
+// So the walk compares the two counts first (the collector trusts a
 // value's static type, so a disagreement is a memory-safety bug and not a diagnostic question), and
 // it stops rather than reading on (06:30). This case reads both halves of that:
 //

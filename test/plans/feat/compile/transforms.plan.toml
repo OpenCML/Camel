@@ -5,7 +5,7 @@
 # is positional: it comes from a counter that the ruleset's own rule graphs consume first, so adding
 # a rule to `stdlib/rulesets/jvp.cml` shifts every id after it while the program stays exactly as
 # correct. It was re-pinned twice in one day that way (107 -> 286 and 56 -> 236 when `jvp_pow` joined
-# the family, then again by the two rules this lane added). Both readings now pass through
+# the family, then again by the two rules this change added). Both readings now pass through
 # `normalize_graph_ids` (`test/tools/normalizers.mjs`), the normalizer this repository already keeps
 # for exactly this: it replaces `graph=<n>` with `graph=<GRAPH>` on a `REINTERP ` line, so the whole
 # line is still asserted -- that a graph was reserved and named here, what it is laid out as, the
@@ -31,7 +31,7 @@ timeout_ms = 20000
 
 [[tests]]
 name = "jvp_is_a_function_value"
-desc = "`reinterp<jvp>(f)` is the operator `jvp(f)`, and it produces a new function (the author's ruling a824031aa), not a rewritten graph: the call builds a graph of the transform's own and answers with a function value naming it. The lifted signature is `(float, float) => (float, float)` -- the ordinary parameter becomes a value and its tangent, and the result is the pair -- so `jvp(f)(2.0, 1.0)` passes two numbers and reads back `(value, tangent)`. Both halves are computed by the new graph: for `f(x) = x*x + 3/x` at 2 the chain gives `f(2) = 5.5`, and the forward rules along it give `f'(2) = 3.25` (2x - 3/x^2, seeded with the 1.0 the caller passed). The rules are the ruleset's: the reading says `source=ruleset` and names what it applied (`jvp_mul`, `jvp_div`, `jvp_add`), because the transform reads `stdlib/rulesets/jvp.cml`'s index at the moment it builds -- there is no second table of laws in C++. A primitive with no rule there is refused by name (`skip=rule uri=...`), never answered with 0 or 1. The operator's own line, `REINTERP jvp op ...`, prints the spelling a declaration writes, the type the call resolved to, the lifted half, and the type of the graph the call answered with: the two have to be one string, and they are. The build also says what it made -- `REINTERP jvp built graph=… nodes=12 exit=11 regions=1 function=f` -- the member the lift reserved, the nodes and regions the draft holds before it is encoded, and the node the graph exits at. The one region is the draft's body: a draft is made with its body region (`GraphDraft`), so a graph with no control region still holds that one region and `region(0)` never has to answer with a record the draft does not have. The lift is the run-time kernel's, on every shape: there is one implementation of the transform and the call reaches it as a call."
+desc = "`reinterp<jvp>(f)` is the operator `jvp(f)`, and it produces a new function, not a rewritten graph: the call builds a graph of the transform's own and answers with a function value naming it. The lifted signature is `(float, float) => (float, float)` -- the ordinary parameter becomes a value and its tangent, and the result is the pair -- so `jvp(f)(2.0, 1.0)` passes two numbers and reads back `(value, tangent)`. Both halves are computed by the new graph: for `f(x) = x*x + 3/x` at 2 the chain gives `f(2) = 5.5`, and the forward rules along it give `f'(2) = 3.25` (2x - 3/x^2, seeded with the 1.0 the caller passed). The rules are the ruleset's: the reading says `source=ruleset` and names what it applied (`jvp_mul`, `jvp_div`, `jvp_add`), because the transform reads `stdlib/rulesets/jvp.cml`'s index at the moment it builds -- there is no second table of laws in C++. A primitive with no rule there is refused by name (`skip=rule uri=...`), never answered with 0 or 1. The operator's own line, `REINTERP jvp op ...`, prints the spelling a declaration writes, the type the call resolved to, the lifted half, and the type of the graph the call answered with: the two have to be one string, and they are. The build also says what it made -- `REINTERP jvp built graph=… nodes=12 exit=11 regions=1 function=f` -- the member the lift reserved, the nodes and regions the draft holds before it is encoded, and the node the graph exits at. The one region is the draft's body: a draft is made with its body region (`GraphDraft`), so a graph with no control region still holds that one region and `region(0)` never has to answer with a record the draft does not have. The lift is the run-time kernel's, on every shape: there is one implementation of the transform and the call reaches it as a call."
 kind = "behavior"
 case = "../../../cases/compile/transforms/jvp_lifted.cml"
 args = ["--trace", "transforms", "${case}", "${backend}"]
@@ -117,18 +117,18 @@ timeout_ms = 20000
 # has the gradient `s0 + s1` (`(1.0, 1.0)`), and undone in the order they were written it has
 # `s0 + 10*s1` (`(1.0, 10.0)`). One cotangent, two numbers, no seed to argue about.
 #
-# This case was marked known_fail until 2026-11-04, against the author's ruling of 2026-11-03 00:30 (a
+# This case was marked known_fail, against the rule (a
 # case that cannot pass today belongs in the plan with a mark, an owner and a reason, not outside
 # it); the mark is gone because the answer is the two numbers now, on both backends. Four facts about
 # the graph had to land, and none of them is a patch at this program:
 #  - the reverse walk. `transpose`'s loop case iterates `range(n - 1, -1, -1)` and reads each round's
-#    element with `:op/idx_arr` instead of copying the sequence (author, 2026-11-03 18:50; path B of
+#    element with `:op/idx_arr` instead of copying the sequence (path B of
 #    `internal/reviews/2026-11-02-does-reversing-a-backward-need-a-new-operator.cn.md`), so no
 #    operator is added.
 #  - the residual taken *after* the loop. The tangent side of the exit states the length it reads
 #    (`pick_at(dxs, 0, len(xs))`), and that length is computed from the loop's
 #    **value**, so no invariant can be it: `split`'s `Residual::afterLoop` copies it once, after the
-#    loop and after the cell's projections are seeded (author, 2026-11-03 11:10: 凡是由前一半循环的
+#    loop and after the cell's projections are seeded (凡是由前一半循环的
 #    输出算出来的残差，在循环建好之后再取). Before it, `split` refused the whole cut
 #    (`skip=forward construct=a loop`), and the half now reads `invariants=0 after=1`.
 #  - the round's answer read as an array. An array state's body answers a FILL of its members, and the
@@ -140,7 +140,7 @@ timeout_ms = 20000
 #    cannot answer, and it read back as `float` and summed arrays with `:op/add_d`. This case is the
 #    program that TODO was waiting for.
 #
-# Measured 2026-11-04 on host 88zjwei (1 m load 20.8-21.0, a loaded host): `value= 3.0` and
+# Measured on a loaded host (1 m load 20.8-21.0): `value= 3.0` and
 # `grad= [1.0, 1.0]` on `std::nvm` and on `std::fvm`, and the reading
 # `REINTERP split function=jvp_of_g ... residuals=2 loop=1 tape=5 invariants=0 after=1`
 # Of the two `transpose_loop_escape` cases that were red beside it, `second_state_of_the_same_loop`
@@ -160,14 +160,14 @@ expect_output_contains = ["value= 3.0", "grad= [1.0, 1.0]"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 
-# Why the same door is *not* closed for the split cut, measured and not reasoned (2026-11-14): the
+# Why the same door is *not* closed for the split cut, measured and not reasoned: the
 # program above never reaches `split` after `std::opt`. The pass's `std::defunctionalize` step
 # rewrites the rule graph's signature result through a type substitution that names a type the table
 # does not hold by `kNoTypeId` -- the sentinel *every* such type answers -- so the closure graph is
 # re-encoded with an unrelated family's enum and the run stops at `RuntimeDiag::ExitTypeMismatch` on
 # `rulesets.jvp::jvp_pow_d__rhs` (its `FnValue___g_286___0` against the declared `FnValue___g_350___6`)
-# before any transform runs. That is a defect of the substitution, not of an order, and `lane-vjpopt`
-# fixes it (`02b686266`, an entry matched by object rather than by the sentinel).
+# before any transform runs. That is a defect of the substitution, not of an order, and 
+# fixes it (an entry matched by object rather than by the sentinel).
 #
 # Behind it the refusal this pair was written for is real and is a *second* door, not this one:
 # `REINTERP split function=jvp_of_g skip=forward construct=a node whose input was not copied
@@ -347,7 +347,7 @@ timeout_ms = 8000
 #
 # The round *order* is not what this pins, and cannot be: each round's map is `ds + 2x*dx*i`, a sum of
 # scalars, and a sum does not care in which order it is added. `vjp` over a loop does not walk the
-# rounds backwards yet (`docs/design/program-transforms` 4.2/4.3; the 2026-11-02 question page on
+# rounds backwards yet (`docs/design/program-transforms` 4.2/4.3; the question page on
 # reversing a backward), so the case pins the value the tree can produce and says so in its comment.
 [[tests]]
 name = "vjp_loop_gradient.nvm"
@@ -397,7 +397,7 @@ timeout_ms = 20000
 # i in [1, 2, 3] do s + 2.0` is `6.0` for every `x`, so `k'(x) = 0`. The loop is the whole answer and
 # the value its state starts from answers no parameter, so the cotangent of the loop's value is the
 # zero of its cotangent space -- the reading 48bfa6778 took for a straight line ("a parameter the body
-# never reads answers a zero cotangent, not a refusal"), read for a loop (author's ruling of 2026-11-03,
+# never reads answers a zero cotangent, not a refusal"), read for a loop (the rule,
 # `origin/fsh-dev = ad7e716b0`, fourth of four).
 #
 # Two things make the zero a pin and not a shrug: it is *linear* -- `pullback(2.0)` answers `0.0`, where
@@ -406,7 +406,7 @@ timeout_ms = 20000
 # zero only where nothing reaches the parameter and not on the way past the loop that does reach it.
 # The half that carries a closure answers the same zero: a member carries its closure whatever its
 # answer reads -- a zero answer is a constant and the closure is still filled -- so the shape that
-# used to be refused with `skip=state-unread` is answered by that half too (author, 2026-11-03,
+# used to be refused with `skip=state-unread` is answered by that half too (
 # `origin/fsh-dev = 3ab482ab2`), and the cause is gone from `TransposeRefusalCause`.
 [[tests]]
 name = "transpose_unread_state_answers_zero.nvm"
@@ -574,7 +574,7 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "norma
 timeout_ms = 20000
 
 # What the `[]` above **does** when it meets a real array -- the reading that decides whether the
-# answer with no stated extent is a loud refusal or a quiet wrong number. Measured 2026-11-04 on the
+# answer with no stated extent is a loud refusal or a quiet wrong number. Measured on the
 # same tree: it is 1 dimension of length 0 (`shape(dx)= [0]`, not a rank-zero array, which would act as
 # the scalar `0.0`), and both `dx * x` and `dx + x` are refused by name at the line that asked --
 # `Array shape mismatch in 'multiply': cannot broadcast [0] with [3].` The one place that answers a
@@ -626,7 +626,7 @@ timeout_ms = 20000
 
 [[tests]]
 name = "vjp_api.carries_its_own_ruleset"
-desc = "A program whose only import is `vjp` gets a derivative: the library imports the rulesets it composes, so its caller does not have to know that `vjp` is `transpose(split(reinterp<jvp>(f)))`. For `f(x) = x*x*x` at 2 the program prints the value `8.0`, the cotangent `(12.0)` and the gradient `12.0`. The point is chosen so the value and the gradient differ, and every printed line is pinned whole: the reading was `x = 3` before, where value, cotangent and gradient are all `27.0`, so an assertion that only asked whether `27.0` appears answered yes to a gradient computed as the value it differentiates (P2-22 of the 2026-11-01 review). `expect_output_not_contains` refuses the old point outright, so a case that drifts back to it cannot pass on the ambiguous number again. Take either ruleset import out of `stdlib/vjp.cml` and the run stops at that library's own line with `transpose has no transpose for this function` or `jvp has no forward rule for :op/mul_d` -- never here, and never in a sentence of the form `not implemented yet`."
+desc = "A program whose only import is `vjp` gets a derivative: the library imports the rulesets it composes, so its caller does not have to know that `vjp` is `transpose(split(reinterp<jvp>(f)))`. For `f(x) = x*x*x` at 2 the program prints the value `8.0`, the cotangent `(12.0)` and the gradient `12.0`. The point is chosen so the value and the gradient differ, and every printed line is pinned whole: the reading was `x = 3` before, where value, cotangent and gradient are all `27.0`, so an assertion that only asked whether `27.0` appears answered yes to a gradient computed as the value it differentiates (P2-22 of the review). `expect_output_not_contains` refuses the old point outright, so a case that drifts back to it cannot pass on the ambiguous number again. Take either ruleset import out of `stdlib/vjp.cml` and the run stops at that library's own line with `transpose has no transpose for this function` or `jvp has no forward rule for:op/mul_d` -- never here, and never in a sentence of the form `not implemented yet`."
 kind = "behavior"
 case = "../../../cases/compile/transforms/vjp_carries_its_ruleset.cml"
 args = ["${case}", "${backend}"]
@@ -729,7 +729,7 @@ timeout_ms = 120000
 # The comparison the author named: one `f` with two parameters, and the library's gradient beside
 # the derivative worked out on paper. `f(x, y) = x*x*y` at `(3, 2)` has `df/dx = 2*x*y = 12` and
 # `df/dy = x*x = 9`, and both numbers are printed -- `library` first, `analytic` under it -- so the
-# reading is a comparison. The surface is JAX's (the author's ruling of 2026-11-01): `vjp(f)(x)` is
+# reading is a comparison. The surface is JAX's: `vjp(f)(x)` is
 # the pair `(y, pullback)` and `pullback(ct)` is the cotangent of `f`'s parameters, so the call is
 # `vjp(f)(3.0, 2.0)` and then `pullback(1.0)`. The juxtaposed call `transpose` writes is the
 # internal assembly; it is not a standard-library signature and nothing here writes it.
@@ -737,7 +737,7 @@ timeout_ms = 120000
 # The main line: the case the library has to keep answering, on the program the author named, in
 # every backend. `f(x, y) = x*x*y` at `(3, 2)` has `df/dx = 2*x*y = 12` and `df/dy = x*x = 9`, and
 # both numbers are printed -- `library` first, `analytic` under it -- so the reading is a comparison.
-# The surface is JAX's (the author's ruling of 2026-11-01): `vjp(f)(x)` is the pair `(y, pullback)`
+# The surface is JAX's: `vjp(f)(x)` is the pair `(y, pullback)`
 # and `pullback(ct)` is the cotangent of `f`'s parameters, so the call is `vjp(f)(3.0, 2.0)` and then
 # `pullback(1.0)`. The juxtaposed call `transpose` writes is the internal assembly; it is not a
 # standard-library signature and nothing here writes it.
@@ -781,7 +781,7 @@ timeout_ms = 20000
 # this program imports `vjp` and nothing else. No skip: the composition runs.
 [[tests]]
 name = "vjp_api.gradient_when_the_steps_land"
-desc = "`vjp(f)(2.0)` on `f(x) = x*x*x` reads `(8.0, (12.0))` and `grad(f_at)<2.0>()` reads `12.0`: the library's three-step composition against the derivative written by hand, with the two rulesets imported by `stdlib/vjp.cml` rather than by this program. The 12.0 is `3*x^2` at 2, and the number the pullback answers is the same one the gradient wrapper reads. The point is 2 and not 3 because at 3 all three numbers are 27 and an assertion that only asked whether `27.0` appears answered yes to a gradient computed as the value it differentiates (P2-22 of the 2026-11-01 review); here the value (8.0) and the gradient (12.0) differ, and each printed line is pinned whole."
+desc = "`vjp(f)(2.0)` on `f(x) = x*x*x` reads `(8.0, (12.0))` and `grad(f_at)<2.0>` reads `12.0`: the library's three-step composition against the derivative written by hand, with the two rulesets imported by `stdlib/vjp.cml` rather than by this program. The 12.0 is `3*x^2` at 2, and the number the pullback answers is the same one the gradient wrapper reads. The point is 2 and not 3 because at 3 all three numbers are 27 and an assertion that only asked whether `27.0` appears answered yes to a gradient computed as the value it differentiates (P2-22 of the review); here the value (8.0) and the gradient (12.0) differ, and each printed line is pinned whole."
 kind = "behavior"
 case = "../../../cases/compile/transforms/vjp_gradient.cml"
 args = ["${case}", "${backend}"]
@@ -943,7 +943,7 @@ expect_exit = 0
 # The reading spans both streams: the two numbers are the program's output, and the
 # `REINTERP` lines that name the rule instance and the type it was asked for are the pass
 # talking, which goes to stderr. Asserting both against stdout made this case look broken on a
-# tree where the fix is present -- the run of 2026-11-02 18:45 printed exactly the expected
+# tree where the fix is present -- a run printed exactly the expected
 # stderr lines and failed on four needles that were never on that stream. `expect_output_*`
 # reads the two streams as one, which is what a case reports when its verdict is a sentence the
 # program and the pass together print.
@@ -954,7 +954,7 @@ timeout_ms = 20000
 
 [[tests]]
 name = "transpose_walks_each_arm_of_a_branch"
-desc = "`transpose` of a function with a branch: each arm is a linear chain of its own, the cotangent runs backwards inside the arm that produced the value, and the condition is read as it was -- the same predicate, at the values the caller passed -- choosing the other arm. The values each arm reads are the ones the cut carried, so the transposed half takes the cotangent alone (author, 2026-11-02 11:30) and the case is spelled the way a transposition is asked now: `let (_, lin) = split(jvp(pick))(1.0)` then `transpose(lin)(1.0)`. For `pick(x)` returning `2*x` when `x > 0` and `3*x` otherwise, the cotangent 1.0 pulls back to 2 at a positive x and 3 at a negative one. `merged(x)` uses its parameter twice on one side only (`2*x + 5*x`, else `4*x`), so the two sides answer 7 and 4: within an arm two cotangents add, while the two arms' cotangents are joined rather than added, because only the arm that ran contributed one -- and the two summands reach the arm's `add_tangent` as values the arm computes, which is a shape the arm's forward had to learn to answer (`forwardInArm`'s operator case) for this number to exist. The reading names the arms it built (`arms=2` on each half), the laws the rule kernel was transposed with (`rhs=add_t,mul_t` on the kernel's own line, since the half's own line applies no rule), and the type the resolver and the graph agree on."
+desc = "`transpose` of a function with a branch: each arm is a linear chain of its own, the cotangent runs backwards inside the arm that produced the value, and the condition is read as it was -- the same predicate, at the values the caller passed -- choosing the other arm. The values each arm reads are the ones the cut carried, so the transposed half takes the cotangent alone and the case is spelled the way a transposition is asked now: `let (_, lin) = split(jvp(pick))(1.0)` then `transpose(lin)(1.0)`. For `pick(x)` returning `2*x` when `x > 0` and `3*x` otherwise, the cotangent 1.0 pulls back to 2 at a positive x and 3 at a negative one. `merged(x)` uses its parameter twice on one side only (`2*x + 5*x`, else `4*x`), so the two sides answer 7 and 4: within an arm two cotangents add, while the two arms' cotangents are joined rather than added, because only the arm that ran contributed one -- and the two summands reach the arm's `add_tangent` as values the arm computes, which is a shape the arm's forward had to learn to answer (`forwardInArm`'s operator case) for this number to exist. The reading names the arms it built (`arms=2` on each half), the laws the rule kernel was transposed with (`rhs=add_t,mul_t` on the kernel's own line, since the half's own line applies no rule), and the type the resolver and the graph agree on."
 kind = "behavior"
 case = "../../../cases/compile/transforms/transpose_branch.cml"
 args = ["--trace", "transforms", "${case}", "${backend}"]
@@ -1009,7 +1009,7 @@ timeout_ms = 20000
 # reading already satisfies cannot tell a working transpose from a silent zero -- `nested` answered 0.0
 # for exactly that reason until the tuple-in-a-tuple rule was written, and its forward 2.0 had hidden
 # it.
-# A better pin for these two cases is derived and is not here on purpose: lane-norm-arity re-pins both
+# A better pin for these two cases is derived and is not here on purpose: re-pins both
 # to `split(jvp(...))` at `x = 2` (value 30, cotangent 15 -- at `x = 1` both are 15, so a run that
 # answered the value where the cotangent belongs would look right). Measured on this tree that pin fails
 # with "transpose has no transpose for this function: a loop carries...", because the reverse walk
@@ -1031,7 +1031,7 @@ expect_exit = 0
 #
 # The two reading lines name nodes by their position in the graph (`node=`, `target=`, `from=`,
 # `norm=[...]`, `with=[...]`), and a position moves when a declaration above it grows a node while
-# the reading still says the same thing (`lane-repin` added one node to `read_outer` and the whole
+# the reading still says the same thing (added one node to `read_outer` and the whole
 # family shifted while every word of the reading stayed true). So the position is written `<>` here -- a number, every other character of the line exact -- and what is asserted is
 # the relation the numbers stand in. `answer=summed` says the escaped value IS the value the state
 # starts from, so the escape's `target` has to be one of the loop's `norm` inputs; and the `from`,
@@ -1096,13 +1096,13 @@ assert(list(escape, 'with').includes(from), `the product ${from} that handed the
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 
-# Marked known_fail on 2026-11-04, against the author's ruling of 2026-11-03 00:30 (a case that cannot
+# Marked known_fail against the rule (a case that cannot
 # pass today belongs in the plan with a mark, an owner and a reason, not outside it). The number this
 # case asks for is 29 at x = 1, and 29 is `15 + 7 * 2x`: a function of `x`, not of the cotangent alone.
 # A transposition is handed the cotangent and no operand -- the member's type here is
 # `(float) => (float,)` -- so no member can read 29 off `back(1.0)` without inventing `x = 1`; this
 # case's own paper passes two arguments (`transpose(read_outer)(1, 1)`, case comment line 13) while its
-# `main` passes one. Both routes were measured on 2026-11-04 and both refuse by name, so this is not a
+# `main` passes one. Both routes were measured and both refuse by name, so this is not a
 # missing rule:
 #  - `transpose(read_outer)` stops at `TRANSPOSE function=read_outer skip=law-reads-a-value
 #    uri=:op/mul_d position=0 reason=the rule's right side reads a value the caller does not carry`:
@@ -1237,7 +1237,7 @@ expect_exit = 0
 expect_output_contains = ["TRANSPOSE function=both graph=", "3.0", "(3.0)", "(6.0)"]
 # The answer is a tuple, and the tuple is what the plan pins: `3.0` alone is printed by the forward
 # line as well, so it cannot tell the answer from the value the program computed on the way there --
-# a transposition whose answer collapsed to a zero still prints `3.0` (measured 2026-11-04, the
+# a transposition whose answer collapsed to a zero still prints `3.0` (the
 # reading the page on a closure member's cotangent reported). A zero answer is named as forbidden
 # rather than left to the reader of a substring.
 expect_output_not_contains = ["(0.0)"]
@@ -1471,7 +1471,7 @@ timeout_ms = 20000
 
 [[tests]]
 name = "transpose.callee_is_a_returned_function.is_a_linearity_refusal"
-desc = "`f(x) = mk(x)(2.0)` with `mk(x) = (y) => x*y`: the call applies a function the body **built out of `x`**, so `f` is not linear in that parameter, and the refusal says so (author, 2026-11-04 07:15: a callee built from a linear input is a **linearity** refusal -- the sentence names the parameter, and does not say \"the answer has no source\", which describes our walk and not the language). The criteria this pins: one line whose cause word is `callee-built-from-a-parameter` and whose `built-from=0` names `x` by position -- the parameter `mk` was applied to; the sentence `this function is not linear in the parameter at position 1: it builds the function this call applies out of that parameter`; `callee=none`, because no node of this graph names the graph the call applies; and no `skip=signature` line, since no signature of `mk` is read. The value is read by `GCGraph::staticFunctionGraphOf` (`what graph does this *value* name`) and not by `calleeIdOf` (`what does this node answer as a callee`, which answered `mk` -- the graph of the call that *produced* the value, not the graph this call applies). The reading that separated the two, and what the same program answers through the library's cut, are in `internal/reports/2026-11-04-what-the-transpose-batch-measured.cn.md`, section 1: the library's cut owes the 2 at cotangent 1 because it carries such a value as a residual, and a bare `transpose(f)` refuses this shape by the language's rule, not by our state."
+desc = "`f(x) = mk(x)(2.0)` with `mk(x) = (y) => x*y`: the call applies a function the body **built out of `x`**, so `f` is not linear in that parameter, and the refusal says so (a callee built from a linear input is a **linearity** refusal -- the sentence names the parameter, and does not say \"the answer has no source\", which describes our walk and not the language). The criteria this pins: one line whose cause word is `callee-built-from-a-parameter` and whose `built-from=0` names `x` by position -- the parameter `mk` was applied to; the sentence `this function is not linear in the parameter at position 1: it builds the function this call applies out of that parameter`; `callee=none`, because no node of this graph names the graph the call applies; and no `skip=signature` line, since no signature of `mk` is read. The value is read by `GCGraph::staticFunctionGraphOf` (`what graph does this *value* name`) and not by `calleeIdOf` (`what does this node answer as a callee`, which answered `mk` -- the graph of the call that *produced* the value, not the graph this call applies). The reading that separated the two, and what the same program answers through the library's cut, are in `internal/reports/2026-11-04-what-the-transpose-batch-measured.cn.md`, section 1: the library's cut owes the 2 at cotangent 1 because it carries such a value as a residual, and a bare `transpose(f)` refuses this shape by the language's rule, not by our state."
 kind = "negative"
 case = "../../../cases/compile/transforms/transpose_callee_is_a_returned_function.cml"
 args = ["${case}", "${backend}"]
@@ -1488,7 +1488,7 @@ expect_output_not_contains = ["callee=mk", "TRANSPOSE function=mk ", "skip=signa
 # what `rules=add_t,mul_t` on the callee's line says: nothing in C++ knows what `mul_tangent` is.
 [[tests]]
 name = "transpose_many_parameters"
-desc = "**A refusal, and the refusal is the answer**, because the pullback of `mul_tangent` with respect to its tangents is a shape no route supports. `mul_tangent(x, w, dx, dw) = dx*w + x*dw`, and `mul_t`'s right side reads the operands: the cotangent of `dx` is `mul_cotangent(w, ct)` and the cotangent of `w` is `mul_cotangent_c(dx, ct)`, so the member is computed from the value of `w` and the value of `dx`. Two of those values are operands, which a split half carries in its residual tuple; the other two are the **tangents**, and a transposition has no value for a tangent -- the tangent's cotangent is what it answers. Under the ruling (author, 2026-11-02 11:30) a transposed member takes the values it needs out of **the closure it was built with**, the closure of the function it is the transposition of, and is refused otherwise; the closure is how a value reaches a transposed function without the type naming it. For the shape here the closure is empty -- `3.0` and `2.0` are literals in the body, and `dx`/`dw` are `lin`'s own parameters, not captures -- so `dx`'s value has nowhere to come from. The reading is the refusal's own words, one level below the user-facing sentence (which says only that there is no transposition for the function): `skip=law-reads-a-value uri=:op/mul_d position=0`, `reason=the rule's right side reads a value the caller does not carry`, and the two calls that inherit it (`TRANSPOSE function=mt skip=call-no-transpose`, then the closure above it). The position moved on 2026-11-04, and only the position: with the value of a transposed parameter no longer read out of the closure by position, the first answer the walk cannot write is `dw`'s (position 0) instead of `dx`'s (position 1), and neither has a value here -- `dx`/`dw` are `lin`'s parameters, not captures. The verdict, the reason and the two inherited calls are the same. Both other shapes are read elsewhere and are green: a function of four parameters whose body reads no parameter value is transposed and answers four cotangents (`transpose_unread_parameters`), and the kernel's four-parameter member is built when the values come from the cut that carries them (`split_branch_author_vjp`, where the member takes the operands' two and answers the tangents' two)."
+desc = "**A refusal, and the refusal is the answer**, because the pullback of `mul_tangent` with respect to its tangents is a shape no route supports. `mul_tangent(x, w, dx, dw) = dx*w + x*dw`, and `mul_t`'s right side reads the operands: the cotangent of `dx` is `mul_cotangent(w, ct)` and the cotangent of `w` is `mul_cotangent_c(dx, ct)`, so the member is computed from the value of `w` and the value of `dx`. Two of those values are operands, which a split half carries in its residual tuple; the other two are the **tangents**, and a transposition has no value for a tangent -- the tangent's cotangent is what it answers. Under the rule a transposed member takes the values it needs out of **the closure it was built with**, the closure of the function it is the transposition of, and is refused otherwise; the closure is how a value reaches a transposed function without the type naming it. For the shape here the closure is empty -- `3.0` and `2.0` are literals in the body, and `dx`/`dw` are `lin`'s own parameters, not captures -- so `dx`'s value has nowhere to come from. The reading is the refusal's own words, one level below the user-facing sentence (which says only that there is no transposition for the function): `skip=law-reads-a-value uri=:op/mul_d position=0`, `reason=the rule's right side reads a value the caller does not carry`, and the two calls that inherit it (`TRANSPOSE function=mt skip=call-no-transpose`, then the closure above it). The position moved and only the position: with the value of a transposed parameter no longer read out of the closure by position, the first answer the walk cannot write is `dw`'s (position 0) instead of `dx`'s (position 1), and neither has a value here -- `dx`/`dw` are `lin`'s parameters, not captures. The verdict, the reason and the two inherited calls are the same. Both other shapes are read elsewhere and are green: a function of four parameters whose body reads no parameter value is transposed and answers four cotangents (`transpose_unread_parameters`), and the kernel's four-parameter member is built when the values come from the cut that carries them (`split_branch_author_vjp`, where the member takes the operands' two and answers the tangents' two)."
 kind = "behavior"
 case = "../../../cases/compile/transforms/transpose_many_parameters.cml"
 args = ["${case}", "${backend}"]
@@ -1518,7 +1518,7 @@ timeout_ms = 20000
 # a refusal: `add_tangent(x, w, dx, dw) = dx + dw` does not depend on `x` or `w` at all.
 [[tests]]
 name = "transpose_unread_parameters"
-desc = "`transpose(at)` where `at(x, w, dx, dw) = add_tangent(x, w, dx, dw) = dx + dw`: the operand parameters are in the signature and nowhere in the body, so the walk finds no cotangent for them, and the transposed graph answers a zero for each rather than refusing the whole function. The four answers at (3, 2, 1, 0) are `(0.0, 0.0, 1.0, 1.0)` at cotangent 1 and `(0.0, 0.0, 2.0, 2.0)` at cotangent 2 -- the two zeros that say the sum does not depend on its summands, and the two ones that double with the seed. **Two seeds, because one cannot tell a pullback from a table of derivatives**: at ct = 1 the two agree by construction, so a transposed graph that answered the derivatives themselves, or dropped the seed for one of the four branches, would read the same four numbers twice. The function transposed is `at` itself, because a transposed function answers one cotangent per parameter and is called with the cotangent alone (author, 2026-11-02 11:30): `transpose(at)(1.0)` is the old `transpose(at)(3.0, 2.0, 1.0, 0.0, ct)` with its values dropped -- the same four numbers, asked the way a transposition is asked now. Both graphs are five nodes and the law is `add_t`, read off the walk: nothing here knows what `add_tangent` computes, and no rule was written for it. The member's own type is `(float) => (float, float, float, float)`: `add_t`'s right side reads **no** operand value, so nothing has to be captured and the transposed function takes the cotangent alone -- which is what makes this shape answerable at all, beside `transpose_many_parameters`, whose law reads the tangents' own values and is refused."
+desc = "`transpose(at)` where `at(x, w, dx, dw) = add_tangent(x, w, dx, dw) = dx + dw`: the operand parameters are in the signature and nowhere in the body, so the walk finds no cotangent for them, and the transposed graph answers a zero for each rather than refusing the whole function. The four answers at (3, 2, 1, 0) are `(0.0, 0.0, 1.0, 1.0)` at cotangent 1 and `(0.0, 0.0, 2.0, 2.0)` at cotangent 2 -- the two zeros that say the sum does not depend on its summands, and the two ones that double with the seed. **Two seeds, because one cannot tell a pullback from a table of derivatives**: at ct = 1 the two agree by construction, so a transposed graph that answered the derivatives themselves, or dropped the seed for one of the four branches, would read the same four numbers twice. The function transposed is `at` itself, because a transposed function answers one cotangent per parameter and is called with the cotangent alone: `transpose(at)(1.0)` is the old `transpose(at)(3.0, 2.0, 1.0, 0.0, ct)` with its values dropped -- the same four numbers, asked the way a transposition is asked now. Both graphs are five nodes and the law is `add_t`, read off the walk: nothing here knows what `add_tangent` computes, and no rule was written for it. The member's own type is `(float) => (float, float, float, float)`: `add_t`'s right side reads **no** operand value, so nothing has to be captured and the transposed function takes the cotangent alone -- which is what makes this shape answerable at all, beside `transpose_many_parameters`, whose law reads the tangents' own values and is refused."
 kind = "behavior"
 case = "../../../cases/compile/transforms/transpose_unread_parameters.cml"
 args = ["--trace", "transforms", "${case}", "${backend}"]
@@ -1610,13 +1610,13 @@ timeout_ms = 20000
 # `transpose(split(reinterp(jvp(f))))`, so a tangent function that ignores its operands is on every
 # `grad` of a sum, and a refusal there is a refusal of the plainest derivative there is.
 # This entry is the refusal of a wish, and the wish has moved twice. The count is the body's answer
-# (`residuals=4` here), so a program never names, indexes or counts them (author's ruling, 2026-11-01;
+# (`residuals=4` here), so a program never names, indexes or counts them (2026-11-01;
 # the findings are in
 # internal/reviews/questions-2026-11-01-the-residual-slot-has-no-type-until-execution.md).
 #
 # Under the binary-tuple ABI the wish was spelled `let (r0, r1) = residuals` and refused with
 # `SemanticDiag::ResidualsAreNotVisible` at that `let`. That diagnostic and the `TupleType::isResiduals()`
-# guard that was its only emitter are deleted (`79c61958b`, 307 codes -> 306), because no transform
+# guard that was its only emitter are deleted (307 codes -> 306), because no transform
 # produces a residual tuple any more (`split` hands the values to a closure instead): the mechanism
 # and the sentence it said are both gone, see
 # internal/reports/2026-11-02-the-residual-chain-is-dead-and-four-spots-to-remove.cn.md.
@@ -1631,7 +1631,7 @@ timeout_ms = 20000
 # line, and the sentence the writer reads.
 [[tests]]
 name = "split_residuals_destructured"
-desc = "`split(jvp(f))` for `f(x, y) = x*x*y*y`: its halves are not a pair the program can take apart, and that is refused. Under the closure ABI `split(jvp(f))` is the forward function, `forward(3.0, 2.0)` answers `(value, linear)` and `linear` is a function closed over the residuals it carried, so `let (dx, dy) = linear` has nothing to index and stops with `SemanticDiag::TypeNotIndexable` at that `let`. The case used to pin `SemanticDiag::ResidualsAreNotVisible` -- the binary-tuple ABI handed the residuals back as a value of the transform's own tuple type -- and that diagnostic is deleted with its mechanism (`79c61958b`), so the assertion moved to the same wish spelled against the new shape: give me the carried values one by one."
+desc = "`split(jvp(f))` for `f(x, y) = x*x*y*y`: its halves are not a pair the program can take apart, and that is refused. Under the closure ABI `split(jvp(f))` is the forward function, `forward(3.0, 2.0)` answers `(value, linear)` and `linear` is a function closed over the residuals it carried, so `let (dx, dy) = linear` has nothing to index and stops with `SemanticDiag::TypeNotIndexable` at that `let`. The case used to pin `SemanticDiag::ResidualsAreNotVisible` -- the binary-tuple ABI handed the residuals back as a value of the transform's own tuple type -- and that diagnostic is deleted with its mechanism, so the assertion moved to the same wish spelled against the new shape: give me the carried values one by one."
 kind = "negative"
 case = "../../../cases/compile/transforms/split_residuals_destructured.cml"
 args = ["${case}"]
@@ -1673,10 +1673,10 @@ expect_stdout_contains = ["TANGENT type=float space=self", "TANGENT type=f32 spa
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 
-# Four cases of this block were marked known_fail until 2026-11-02, and their notes said the process
+# Four cases of this block were marked known_fail, and their notes said the process
 # was killed at the timeout with exit null. That reading was the runner's, not the case's: it printed
 # `got null` for every death by signal, and a bare run takes zero seconds and returns 139 (SIGSEGV) -
-# an array cotangent summed as one number rather than an array. lane-lit2 repaired it (19f0b05e8,
+# an array cotangent summed as one number rather than an array. repaired it (19f0b05e8,
 # 0aed45eb6) and removed the marks in the same commit; the four now pass in about 0.1-0.2 s each.
 # The two walls between here and the array arm of grad, pinned as refusals rather than known_fail: a wall
 # that falls must turn its assertion into a number, and known_fail would hide that.
@@ -1704,7 +1704,7 @@ timeout_ms = 15000
 # `internal/reviews/2026-11-04-does-a-shape-in-the-type-reach-the-law.cn.md`.
 [[tests]]
 name = "grad_array_fixed_shape"
-desc = "A `float[3]` parameter read at two positions: `xs[1] * xs[0]` over `[3.0, 2.0, 5.0]` answers `6.0`, and the cotangent is `2.0`, `3.0`, `0.0` position by position -- the third one the zero the body never reads. This is `grad_array_no_int` with the extent stated in the type, which is the shape the ruling asks a caller to write."
+desc = "A `float[3]` parameter read at two positions: `xs[1] * xs[0]` over `[3.0, 2.0, 5.0]` answers `6.0`, and the cotangent is `2.0`, `3.0`, `0.0` position by position -- the third one the zero the body never reads. This is `grad_array_no_int` with the extent stated in the type, which is the shape the rule asks a caller to write."
 kind = "behavior"
 case = "../../../cases/compile/transforms/grad_array_fixed_shape.cml"
 args = ["${case}", "${backend}"]
@@ -1776,7 +1776,7 @@ timeout_ms = 15000
 # arms=0 rhs=idx_arr_t` -- and it answers `(float[],)`. What stops the shapes below is one step above
 # it, at **the call site that needs the array's value**: `TRANSPOSE-NEEDS function=...param=0`, then
 # `TRANSPOSE function=... skip=call-value-missing ... arg=N`. That value is what the member
-# must carry in its closure (author, 2026-11-03 17:10); the closure is `b2f`'s lane, and these
+# must carry in its closure; the closure is `b2f`'s lane, and these
 # flip when it lands.
 # (Until 2026-11-03 this block said "the wall is the law `idx_arr_t`, not the shape"; the reading that
 # replaced it is the one above.)
@@ -1792,7 +1792,7 @@ expect_stdout_contains = ["6.0", "[2.0, 3.0]"]
 expect_output_not_contains = ["skip=", "breaks its edge invariants"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 30000
-# Marked known_fail on the author's ruling of 2026-11-03 00:30: a case that cannot pass today belongs
+# Marked known_fail on the rule: a case that cannot pass today belongs
 # in the plan with a mark, an owner and a reason, not outside it in CASE_EXCEPTIONS. The assertion is
 # the answer the transform owes -- `[2.0, 3.0]` -- and not today's refusal, so the mark is the only
 # thing standing between the plan and a red, and the runner reports a marked case that passes as a
@@ -1805,7 +1805,7 @@ timeout_ms = 30000
 # arms=0 rhs=idx_arr_t` -- and it answers `(float[],)`. What stops the shapes below is one step above
 # it, at **the call site that needs the array's value**: `TRANSPOSE-NEEDS function=...param=0`, then
 # `TRANSPOSE function=... skip=call-value-missing ... arg=N`. That value is what the member
-# must carry in its closure (author, 2026-11-03 17:10); the closure is `b2f`'s lane, and these
+# must carry in its closure; the closure is `b2f`'s lane, and these
 # flip when it lands.
 # (Until 2026-11-03 this block said "the wall is the law `idx_arr_t`, not the shape"; the reading that
 # replaced it is the one above.)
@@ -1828,7 +1828,7 @@ timeout_ms = 30000
 # arms=0 rhs=idx_arr_t` -- and it answers `(float[],)`. What stops the shapes below is one step above
 # it, at **the call site that needs the array's value**: `TRANSPOSE-NEEDS function=...param=0`, then
 # `TRANSPOSE function=... skip=call-value-missing ... arg=N`. That value is what the member
-# must carry in its closure (author, 2026-11-03 17:10); the closure is `b2f`'s lane, and these
+# must carry in its closure; the closure is `b2f`'s lane, and these
 # flip when it lands.
 # (Until 2026-11-03 this block said "the wall is the law `idx_arr_t`, not the shape"; the reading that
 # replaced it is the one above.)
@@ -1851,7 +1851,7 @@ timeout_ms = 30000
 # arms=0 rhs=idx_arr_t` -- and it answers `(float[],)`. What stops the shapes below is one step above
 # it, at **the call site that needs the array's value**: `TRANSPOSE-NEEDS function=...param=0`, then
 # `TRANSPOSE function=... skip=call-value-missing ... arg=N`. That value is what the member
-# must carry in its closure (author, 2026-11-03 17:10); the closure is `b2f`'s lane, and these
+# must carry in its closure; the closure is `b2f`'s lane, and these
 # flip when it lands.
 # (Until 2026-11-03 this block said "the wall is the law `idx_arr_t`, not the shape"; the reading that
 # replaced it is the one above.)
@@ -1874,7 +1874,7 @@ timeout_ms = 30000
 # arms=0 rhs=idx_arr_t` -- and it answers `(float[],)`. What stops the shapes below is one step above
 # it, at **the call site that needs the array's value**: `TRANSPOSE-NEEDS function=...param=0`, then
 # `TRANSPOSE function=... skip=call-value-missing ... arg=N`. That value is what the member
-# must carry in its closure (author, 2026-11-03 17:10); the closure is `b2f`'s lane, and these
+# must carry in its closure; the closure is `b2f`'s lane, and these
 # flip when it lands.
 # (Until 2026-11-03 this block said "the wall is the law `idx_arr_t`, not the shape"; the reading that
 # replaced it is the one above.)
@@ -1977,7 +1977,7 @@ timeout_ms = 20000
 
 [[tests]]
 name = "jvp_of_a_power"
-desc = "`x ^ 2.0` is a power of a float, and until 2026-11-04 the transform could not lift it: `^` had no key (`ruleKeyOf` derives a `:op/` key only from `add sub mul div neg`), so the walk stopped with `skip=rule uri=:op/pow_d reason=the operator has no forward rule bound at all`. `pow` is one of the written operations now, and `jvp_pow` is its rule, so `d(x^2)` answers `2x dx`: 9.0 and 6.0 at x = 3, and 9.0 and -6.0 at x = -3. The second pair is the one that keeps the rule honest: the constant exponent's tangent has a **structural** zero (a constant has no tangent), so the term that tangent multiplies -- `x^w * log(x) * dw`, whose `log(-3.0)` is NaN -- is not built at all, and `omit=structurally-zero-tangent` in the expansion's reading is the record of it (the 2026-11-04 ruling: the term is omitted where the rule is expanded, `modules/transforms/rule_expand.cpp`, and `pow_tangent`'s `if dw == T(0)` guard is gone; the rule no longer branches on a tangent's value). The third function writes the exponent as the integer literal `2`: the lift sees one operator (`rules=jvp_pow` alone, no `jvp_ltod`) and the exponent's tangent is a constant `0.0` written in the graph, which the expansion recognises by its own type and value -- `omit=structurally-zero-tangent` appears for it too, and the tangent is the same 6.0."
+desc = "`x ^ 2.0` is a power of a float, and the transform could not lift it: `^` had no key (`ruleKeyOf` derives a `:op/` key only from `add sub mul div neg`), so the walk stopped with `skip=rule uri=:op/pow_d reason=the operator has no forward rule bound at all`. `pow` is one of the written operations now, and `jvp_pow` is its rule, so `d(x^2)` answers `2x dx`: 9.0 and 6.0 at x = 3, and 9.0 and -6.0 at x = -3. The second pair is the one that keeps the rule honest: the constant exponent's tangent has a **structural** zero (a constant has no tangent), so the term that tangent multiplies -- `x^w * log(x) * dw`, whose `log(-3.0)` is NaN -- is not built at all, and `omit=structurally-zero-tangent` in the expansion's reading is the record of it (the rule: the term is omitted where the rule is expanded, `modules/transforms/rule_expand.cpp`, and `pow_tangent`'s `if dw == T(0)` guard is gone; the rule no longer branches on a tangent's value). The third function writes the exponent as the integer literal `2`: the lift sees one operator (`rules=jvp_pow` alone, no `jvp_ltod`) and the exponent's tangent is a constant `0.0` written in the graph, which the expansion recognises by its own type and value -- `omit=structurally-zero-tangent` appears for it too, and the tangent is the same 6.0."
 kind = "behavior"
 case = "../../../cases/compile/transforms/jvp_of_a_power.cml"
 args = ["--trace", "transforms", "${case}", "${backend}"]
@@ -2018,7 +2018,7 @@ timeout_ms = 20000
 
 [[tests]]
 name = "jvp_a_value_is_not_a_structural_zero"
-desc = "Zero is a value; *structurally zero* is a fact about where a tangent comes from. Only the second may be dropped from a rule's right side, and the difference is not academic: a dropped term is a term that is never computed, so judging a tangent zero when it is not answers a number that is silently wrong. This case is the guard on the other side of `jvp_structural_zero_at_the_half_widths` -- the one that has to stay green when the criterion is widened. Three readings. A product of two `float` parameters with a direction in each: both tangents are seeds, so both terms are computed, and a criterion that judged a seed structural zero would answer with one contribution instead of two (3.0 or 2.0 where the answer is 5.0). The same product at `bf16`, because the half-width arm is where a wrong width comparison would land: a `slot_t` compared in the wrong half is exactly how a non-zero tangent reads as zero. And a power whose exponent is **seeded with `0.0`**: the tangent is arithmetically nothing there, and the answer is still NaN because `log(-3.0)` is asked for -- a zero the program hands in is a value, not a zero the graph knows before it runs (the author's ruling of 2026-11-04). The `expect_output_not_contains` is the absence reading: no term was dropped anywhere in this case."
+desc = "Zero is a value; *structurally zero* is a fact about where a tangent comes from. Only the second may be dropped from a rule's right side, and the difference is not academic: a dropped term is a term that is never computed, so judging a tangent zero when it is not answers a number that is silently wrong. This case is the guard on the other side of `jvp_structural_zero_at_the_half_widths` -- the one that has to stay green when the criterion is widened. Three readings. A product of two `float` parameters with a direction in each: both tangents are seeds, so both terms are computed, and a criterion that judged a seed structural zero would answer with one contribution instead of two (3.0 or 2.0 where the answer is 5.0). The same product at `bf16`, because the half-width arm is where a wrong width comparison would land: a `slot_t` compared in the wrong half is exactly how a non-zero tangent reads as zero. And a power whose exponent is **seeded with `0.0`**: the tangent is arithmetically nothing there, and the answer is still NaN because `log(-3.0)` is asked for -- a zero the program hands in is a value, not a zero the graph knows before it runs. The `expect_output_not_contains` is the absence reading: no term was dropped anywhere in this case."
 kind = "behavior"
 case = "../../../cases/compile/transforms/jvp_a_value_is_not_a_structural_zero.cml"
 args = ["${case}", "${backend}"]
@@ -2045,7 +2045,7 @@ timeout_ms = 20000
 
 [[tests]]
 name = "transpose_hand_closed_lambda.same_answer_as_the_cut"
-desc = "The criterion of the 2026-11-03 rework as two readings of one number: a lambda a caller closes by hand and the second half `split` builds answer the same. `g(x) = x*x` at 3 lifts to `(x, dx) => (x*x, x*dx + x*dx)`, so the cut's second half is `lin(dx) = 6*dx`; a lambda written by hand over the same value, `(dx) => 2.0 * x * dx` with `x = 3`, is the same linear map spelled without a cut. Every transpose is asked at cotangent 1 and 3, so the four readings are 6, 18, 6, 18: the pair 6/6 is the criterion, and 18 is on no forward line, so an answer only proportional to the cotangent can produce it. Before the rework the cut's half answered and the hand-closed one refused -- `34788b554` gave every closure member the number of the parameter whose value it held, and a closure a caller wrote records nothing -- which made the result depend on where the graph came from."
+desc = "The criterion of the rework as two readings of one number: a lambda a caller closes by hand and the second half `split` builds answer the same. `g(x) = x*x` at 3 lifts to `(x, dx) => (x*x, x*dx + x*dx)`, so the cut's second half is `lin(dx) = 6*dx`; a lambda written by hand over the same value, `(dx) => 2.0 * x * dx` with `x = 3`, is the same linear map spelled without a cut. Every transpose is asked at cotangent 1 and 3, so the four readings are 6, 18, 6, 18: the pair 6/6 is the criterion, and 18 is on no forward line, so an answer only proportional to the cotangent can produce it. Before the rework the cut's half answered and the hand-closed one refused -- the cut gives every closure member the number of the parameter whose value it held, and a closure a caller wrote records nothing -- which made the result depend on where the graph came from."
 kind = "behavior"
 case = "../../../cases/compile/transforms/transpose_hand_closed_lambda.cml"
 args = ["${case}", "${backend}"]
@@ -2069,7 +2069,7 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 8000
 [[tests]]
 name = "transforms.vjp_of_a_with_function"
-desc = "`vjp` of a function that writes `with` parameters, which is what the ruling of 2026-11-03 13:50 unblocked: the lambda `vjp` answers names the `with` list it takes from its position (`<...ws> (...xs) => ...`) and hands it to `split(jvp(f))<...ws>(...xs)`, so a `with` value reaches the forward half and the transform differentiates the ordinary parameters only. Every line is hand-computed and pinned: `scale(x) = w * x` at w = 2.0, x = 3.0 answers value 6.0 and slope 2.0; `quadratic(x) = w * x + v * x * x` at w = 2.0, v = 3.0, x = 1.5 answers 9.75 and 11.0; the same function with the two `with` values exchanged at w = 3.0, v = 2.0, x = 1.0 answers 5.0 and 7.0. The last two rows answer different numbers only if each `with` value lands in its own slot. Before, the first line stopped with `ArgumentsMismatch` at `split(jvp(f))(...xs)`: `jvp(f)` takes `f`'s `with` list and the lambda had no name for it."
+desc = "`vjp` of a function that writes `with` parameters, which is what the rule unblocked: the lambda `vjp` answers names the `with` list it takes from its position (`<...ws> (...xs) => ...`) and hands it to `split(jvp(f))<...ws>(...xs)`, so a `with` value reaches the forward half and the transform differentiates the ordinary parameters only. Every line is hand-computed and pinned: `scale(x) = w * x` at w = 2.0, x = 3.0 answers value 6.0 and slope 2.0; `quadratic(x) = w * x + v * x * x` at w = 2.0, v = 3.0, x = 1.5 answers 9.75 and 11.0; the same function with the two `with` values exchanged at w = 3.0, v = 2.0, x = 1.0 answers 5.0 and 7.0. The last two rows answer different numbers only if each `with` value lands in its own slot. Before, the first line stopped with `ArgumentsMismatch` at `split(jvp(f))(...xs)`: `jvp(f)` takes `f`'s `with` list and the lambda had no name for it."
 kind = "behavior"
 case = "../../../cases/compile/transforms/vjp_of_a_with_function.cml"
 args = ["${case}", "std::nvm"]
@@ -2081,7 +2081,7 @@ timeout_ms = 8000
 
 [[tests]]
 name = "transforms.with_grad_composition_meets_the_split_wall"
-desc = "A library-level `with_grad` written as the composition design principles 9.9 asks for (author's ruling of 2026-11-03 09:50) -- the weight moved to an ordinary parameter by the signature reinterpretation `first_with_as_param`, `vjp` differentiating it there, the seed 1 read off the pullback -- carrying the number it was held to since it was written: `(0.125, -0.75)` for x = 1.5, t = 2.0, w = 0.5, b = 0.75 (err = 0.5*1.5 + 0.75 - 2 = -0.5, loss = 0.5*err*err = 0.125, d(loss)/dw = err * x = -0.75). The case was negative for three walls in a row and the case file keeps the two that still say what was missing where: the exit's shape (`skip=exit`, the lift answered with the call's pair instead of a fill of its own) and the cut's forward walk on a captured value (`skip=forward`, `the port is not a parameter of the graph, so neither half takes it`). The third wall -- the cut's backward walk on the same port together with a `with` argument carrying no tangent -- is **gone with the path that answered it**: `lane-withtan` promoted a callee's `with` parameters into its lifted ordinary list (`modules/transforms/jvp.cpp`), and that path was deleted on 2026-11-05, so a weight written as `(ww) => loss_with<ww, b>(x, t)` is a constant to the lifted chain and answers `w=0.0`. What answers the number now is `first_with_as_param`, which reclassifies the first `with` value as an ordinary parameter before any lift looks at it, and the second `with` parameter (`b`) stays one. What this entry pins is therefore a number on the library's leg, not a message."
+desc = "A library-level `with_grad` written as the composition design principles 9.9 asks for -- the weight moved to an ordinary parameter by the signature reinterpretation `first_with_as_param`, `vjp` differentiating it there, the seed 1 read off the pullback -- carrying the number it was held to since it was written: `(0.125, -0.75)` for x = 1.5, t = 2.0, w = 0.5, b = 0.75 (err = 0.5*1.5 + 0.75 - 2 = -0.5, loss = 0.5*err*err = 0.125, d(loss)/dw = err * x = -0.75). The case was negative for three walls in a row and the case file keeps the two that still say what was missing where: the exit's shape (`skip=exit`, the lift answered with the call's pair instead of a fill of its own) and the cut's forward walk on a captured value (`skip=forward`, `the port is not a parameter of the graph, so neither half takes it`). The third wall -- the cut's backward walk on the same port together with a `with` argument carrying no tangent -- is **gone with the path that answered it**: promoted a callee's `with` parameters into its lifted ordinary list (`modules/transforms/jvp.cpp`), and that path was deleted so a weight written as `(ww) => loss_with<ww, b>(x, t)` is a constant to the lifted chain and answers `w=0.0`. What answers the number now is `first_with_as_param`, which reclassifies the first `with` value as an ordinary parameter before any lift looks at it, and the second `with` parameter (`b`) stays one. What this entry pins is therefore a number on the library's leg, not a message."
 kind = "behavior"
 case = "../../../cases/compile/transforms/with_grad_composition_meets_the_split_wall.cml"
 args = ["${case}", "std::nvm"]
@@ -2093,7 +2093,7 @@ timeout_ms = 8000
 
 [[tests]]
 name = "transforms.with_grad_from_the_library"
-desc = "The criterion with an object: `stdlib/vjp.cml#with_grad` against the engine's `with_grad`, on the four groups of `grad_first_with_parameter.cml` (`gx/vg`, `pg/pvg`, `wg/wvg`, `sk/sx`), one line per group. The library's name is gone by the author's ruling of 2026-11-05 (`080778522`): a placeholder whose body has not been written is not a name a library keeps, so `stdlib/vjp.cml` exports `vjp` and the one-parameter `grad` and no `with_grad`, until it is written as the composition design principles 9.9 asks for. The case therefore does not compile -- it stops at `import { with_grad } from vjp` -- and this entry is marked `known_fail` for that removal, not for a wall of the composition. The four groups and the engine's four answers stay written because they are the numbers the composition owes, and the pin below is the state the composition replaces: the day the body and its declaration (`FirstOf<WithOf<F>>`, `stdlib/types.cml`) are written, the four `library=` fields carry tuples, this entry goes red on the pin, and the case and the mark turn over together. The four groups are not re-spelled on the engine's transform: `grad_first_with_parameter.macro.nvm` and `grad_first_with_parameter.runtime.nvm` already pin those same four answers as numbers, so an engine-only copy here would measure a second time what those two entries hold, and would hide the library's absence rather than record it. `with_grad_composition_meets_the_split_wall` stays as it is: it pins the cut's own wall through `vjp`, which is a different object and still stands."
+desc = "The criterion with an object: `stdlib/vjp.cml#with_grad` against the engine's `with_grad`, on the four groups of `grad_first_with_parameter.cml` (`gx/vg`, `pg/pvg`, `wg/wvg`, `sk/sx`), one line per group. The library's name is gone by the rule : a placeholder whose body has not been written is not a name a library keeps, so `stdlib/vjp.cml` exports `vjp` and the one-parameter `grad` and no `with_grad`, until it is written as the composition design principles 9.9 asks for. The case therefore does not compile -- it stops at `import { with_grad } from vjp` -- and this entry is marked `known_fail` for that removal, not for a wall of the composition. The four groups and the engine's four answers stay written because they are the numbers the composition owes, and the pin below is the state the composition replaces: the day the body and its declaration (`FirstOf<WithOf<F>>`, `stdlib/types.cml`) are written, the four `library=` fields carry tuples, this entry goes red on the pin, and the case and the mark turn over together. The four groups are not re-spelled on the engine's transform: `grad_first_with_parameter.macro.nvm` and `grad_first_with_parameter.runtime.nvm` already pin those same four answers as numbers, so an engine-only copy here would measure a second time what those two entries hold, and would hide the library's absence rather than record it. `with_grad_composition_meets_the_split_wall` stays as it is: it pins the cut's own wall through `vjp`, which is a different object and still stands."
 kind = "behavior"
 case = "../../../cases/compile/transforms/with_grad_from_the_library.cml"
 args = ["${case}", "std::nvm"]
@@ -2111,7 +2111,7 @@ known_fail_note = "The mark is the removal, not a wall: the placeholder was dele
 
 [[tests]]
 name = "transforms.jvp_lifts_a_call_through_a_value"
-desc = "A lifted body calls a function value by writing a call of `jvp(v)` and letting the run time answer which graph `v` stands for (author, 2026-11-05: 提升一个通过函数值 `v` 的调用，就生成一个对 `jvp(v)` 的调用，在运行时求值). `use(f, z) = f(z)` lifted takes `(f, (), z, dz)` and answers `(f(z), f'(z))`; `plain(y) = y*y` at 2 answers 4.0 with 4.0, `thrice(y) = 3*y` at 2 answers 6.0 with 3.0. The pair of numbers is the criterion, and the **second line is what tells this rule from a lift that reads the value at lift time**: one lifted function, two values, each answering its own graph's derivative -- a lift that read the `Data`'s static function or the closure's `Fill` where the call is written answers the first value's numbers twice. `f` arrives as a parameter of the differentiated function, which is the shape a static reader used to refuse by name (\"from a parameter\"); the rule does not take that question."
+desc = "A lifted body calls a function value by writing a call of `jvp(v)` and letting the run time answer which graph `v` stands for (提升一个通过函数值 `v` 的调用，就生成一个对 `jvp(v)` 的调用，在运行时求值). `use(f, z) = f(z)` lifted takes `(f, z, dz)` and answers `(f(z), f'(z))`; `plain(y) = y*y` at 2 answers 4.0 with 4.0, `thrice(y) = 3*y` at 2 answers 6.0 with 3.0. The pair of numbers is the criterion, and the **second line is what tells this rule from a lift that reads the value at lift time**: one lifted function, two values, each answering its own graph's derivative -- a lift that read the `Data`'s static function or the closure's `Fill` where the call is written answers the first value's numbers twice. `f` arrives as a parameter of the differentiated function, which is the shape a static reader used to refuse by name (\"from a parameter\"); the rule does not take that question."
 kind = "behavior"
 case = "../../../cases/compile/transforms/jvp_lifts_a_call_through_a_value.cml"
 args = ["${case}", "std::nvm"]
@@ -2123,7 +2123,7 @@ timeout_ms = 8000
 
 [[tests]]
 name = "transforms.split_of_a_call_through_a_value"
-desc = "`split` cutting a lifted body that calls a **function value**: the forward half calls `split(v)` -- the forward half of whatever cut that value turns out to have -- and the cotangent goes to the `lin` it hands back (author, 2026-11-05). `use(f, z) = f(z)` cut once and called with `plain` answers `4.0` and a `lin` whose transposed half answers `((), 4.0)`; the same cut called with `thrice` answers `6.0` and `((), 3.0)`. One cut, two values, each answering its own graph: the cut read the value's signature and nothing else, because at cut time it is not known which graph the value is (author: 提升时还不知道这个值是哪张图，只有运行时才知道). The `()` slot is `Tangent<f>`: `f` has no direction, and the pullback answers one slot per parameter."
+desc = "`split` cutting a lifted body that calls a **function value**: the forward half calls `split(v)` -- the forward half of whatever cut that value turns out to have -- and the cotangent goes to the `lin` it hands back. `use(f, z) = f(z)` cut once and called with `plain` answers `4.0` and a `lin` whose transposed half answers `(4.0)`; the same cut called with `thrice` answers `6.0` and `(3.0)`. One cut, two values, each answering its own graph: the cut read the value's signature and nothing else, because at cut time it is not known which graph the value is (author: 提升时还不知道这个值是哪张图，只有运行时才知道). The `()` slot is `Tangent<f>`: `f` has no direction, and the pullback answers one slot per parameter."
 kind = "behavior"
 case = "../../../cases/compile/transforms/split_of_a_call_through_a_value.cml"
 args = ["${case}", "std::nvm"]
@@ -2205,7 +2205,7 @@ timeout_ms = 20000
 
 [[tests]]
 name = "pow_gradient_of_a_caret_through_the_library"
-desc = "The gradient of a power through the library's `vjp`, for the spelling that used to stop: this entry was `pow_gradient_refused_by_the_library` until 2026-11-04, when it pinned `skip=condition` and then `skip=call-no-transpose` on `rulesets.jvp::pow_tangent` -- the guard on the exponent's tangent, which the backward walk cannot turn around. The ruling of 2026-11-04 removed the guard and put the omission in the rule expansion (a tangent whose zero is structural does not get its term built at all), and `jvp_pow` writes its law out instead of calling the two-port helper, so the linear half is products of the operand's own tangents and the walk has laws for both. The criterion is four sentences: `(-3.0) ^ 2` answers 9.0 with tangent -6.0 (the pair the guard used to protect, `log(-3.0)` never asked for); the expansion says which places it did **not** copy, by name, which is absence and not a value of zero; the two spellings of one power answer the same numbers at 3.0 **and** the same numbers at -3.0, which is the ruling's second criterion; and the three strings of the wall that fell are in `expect_output_not_contains`, so reinstating either the guard or the helper call is red here. The readings behind all four are in `internal/reports/2026-11-04-a-zero-tangent-term-that-was-never-built.cn.md`, section 1; the neighbouring `pow_gradient_through_the_library` is the same criterion for `pow(x, 3.0)` and is unchanged."
+desc = "The gradient of a power through the library's `vjp`, for the spelling that used to stop: this entry was `pow_gradient_refused_by_the_library` until 2026-11-04, when it pinned `skip=condition` and then `skip=call-no-transpose` on `rulesets.jvp::pow_tangent` -- the guard on the exponent's tangent, which the backward walk cannot turn around. the rule removed the guard and put the omission in the rule expansion (a tangent whose zero is structural does not get its term built at all), and `jvp_pow` writes its law out instead of calling the two-port helper, so the linear half is products of the operand's own tangents and the walk has laws for both. The criterion is four sentences: `(-3.0) ^ 2` answers 9.0 with tangent -6.0 (the pair the guard used to protect, `log(-3.0)` never asked for); the expansion says which places it did **not** copy, by name, which is absence and not a value of zero; the two spellings of one power answer the same numbers at 3.0 **and** the same numbers at -3.0, which is the rule's second criterion; and the three strings of the wall that fell are in `expect_output_not_contains`, so reinstating either the guard or the helper call is red here. The readings behind all four are in `internal/reports/2026-11-04-a-zero-tangent-term-that-was-never-built.cn.md`, section 1; the neighbouring `pow_gradient_through_the_library` is the same criterion for `pow(x, 3.0)` and is unchanged."
 kind = "behavior"
 case = "../../../cases/compile/transforms/pow_gradient_of_a_caret_through_the_library.cml"
 args = ["--trace", "transforms", "${case}", "${backend}"]
@@ -2217,11 +2217,11 @@ expect_output_not_contains = ["skip=condition", "skip=call-no-transpose", "calle
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 
-# ---- the four laws of the 2026-11-03 tranche, and why they are not here ----
+# ---- the four laws of the tranche, and why they are not here ----
 #
 # `abs`, `log`, `maximum` and `minimum` are not linear, and `transpose` is defined for linear
 # functions: the four `_t` laws that stood here were their pullbacks written a second time, beside
-# the forward rules -- a second truth (author, 2026-11-04 06:55, `d79408e45`). They are gone, and a
+# the forward rules -- a second truth. They are gone, and a
 # bare `transpose` of any of the four is refused at the build with a sentence that says only what the
 # index can prove: the family holds no rule for the operator, `transpose` is for linear functions,
 # take the gradient with `vjp`. The three entries below are the pair that keeps this honest -- two
@@ -2383,7 +2383,7 @@ timeout_ms = 60000
 # output's tangent is the reduced one. The two shapes broadcast only when the reduced axis is the
 # last one, or when `keepdims` keeps a 1 in its place. This entry pins the reading that is correct
 # TODAY -- `axis = 1` (not the last axis) with `keepdims = true` -- element by element. It is not a
-# wish: the numbers it names were answered on 2026-11-04, and they are the hand-derived ones.
+# wish: the numbers it names were answered and they are the hand-derived ones.
 # What it guards is the day the `arity` wall falls and `mean_axis_stated_t`
 # (`stdlib/rulesets/transpose.cml#mean_axis_stated_t`) starts running: the same numbers must come out of
 # the law rather than out of the kernel's broadcast.
@@ -2512,7 +2512,7 @@ timeout_ms = 20000
 # and it needs no stated twin, because the list that carries the position (`at[0]`) already carries
 # the length (`at[1]`). The engine's own `grad` refused the same read for a second and separate
 # reason -- no `setVjp` under that name in the reverse pass's table -- and that row landed with
-# `lane-pickatvjp` (2026-11-04). The two entries below are therefore the two legs of one read, and
+# . The two entries below are therefore the two legs of one read, and
 # they answer the same number: the library's `jvp`/`vjp` and the engine's `grad`.
 [[tests]]
 name = "pick_at_forward_rule_answers_both_directions"
@@ -2531,7 +2531,7 @@ timeout_ms = 20000
 
 [[tests]]
 name = "pick_at_gradient_answered_by_the_engine"
-desc = "The same read through the engine's `grad`, and the number it answers: `engine dL/dw=[0.0, 1.0, 0.0]`, the array the library's `vjp` answers for the same program (`pick_at_forward_rule_answers_both_directions`). The read is `w[1]` of the three-element `w`, so the gradient is the unit vector at position 1 and zero elsewhere. Until 2026-11-04 this entry was the negative reading of the same program: the engine refused the node with `no derivative rule for operator 'tensor:pick_at' of type 'float'`, because the reverse pass reads `DerivativeRegistry` (`modules/autodiff/pullback.cpp`) and the second spelling of the read (`modules/tensor/ops/layout_ops.cpp`, the OpDef named `pick_at`) had no `setVjp` in that file's list. That row landed with `lane-pickatvjp` -- `setVjp(defs, 'pick_at', &pickAtVjp)` at the end of `layoutOps` -- and the rule it names is the read's own adjoint: zeros in the tensor's shape with the cotangent added at `at[0]`, the construction the core files for `:op/idx_arr`, so the two halves of the account are one number. Pinned as the positive reading, so a registration that changed its mind fails here and names itself."
+desc = "The same read through the engine's `grad`, and the number it answers: `engine dL/dw=[0.0, 1.0, 0.0]`, the array the library's `vjp` answers for the same program (`pick_at_forward_rule_answers_both_directions`). The read is `w[1]` of the three-element `w`, so the gradient is the unit vector at position 1 and zero elsewhere. Until 2026-11-04 this entry was the negative reading of the same program: the engine refused the node with `no derivative rule for operator 'tensor:pick_at' of type 'float'`, because the reverse pass reads `DerivativeRegistry` (`modules/autodiff/pullback.cpp`) and the second spelling of the read (`modules/tensor/ops/layout_ops.cpp`, the OpDef named `pick_at`) had no `setVjp` in that file's list. That row landed with -- `setVjp(defs, 'pick_at', &pickAtVjp)` at the end of `layoutOps` -- and the rule it names is the read's own adjoint: zeros in the tensor's shape with the cotangent added at `at[0]`, the construction the core files for `:op/idx_arr`, so the two halves of the account are one number. Pinned as the positive reading, so a registration that changed its mind fails here and names itself."
 kind = "behavior"
 case = "../../../cases/compile/transforms/pick_at_gradient_answered_by_the_engine.cml"
 args = ["${case}", "${backend}"]
@@ -2543,7 +2543,7 @@ timeout_ms = 20000
 
 [[tests]]
 name = "log_softmax_gradient_stops_at_split"
-desc = "The same function through the library's `vjp`, on the smallest graph that can show it (one `log_softmax<0>` and one `sum`): the forward half is built with the laws named (`rules=jvp_log_softmax,jvp_sum`), the cut builds the function (`REINTERP split function=jvp_of_total forward=395 backward=396 residuals=3`), and the transposed walk then refuses at the tangent the law writes -- `TRANSPOSE function=rulesets.jvp::log_softmax_jvp<float> skip=parameter-shape uri=tensor:sum_axis` and `skip=call-no-transpose callee=rulesets.jvp::log_softmax_jvp<float>`, with stdout `transpose has no transpose for this function`. Pinned as readings and not as an exit code, so the day the walk is answered this entry goes red and names what replaced it. **The refusal moved one layer down on 2026-11-20 and the pinned sentences moved with it**: this entry used to pin the cut refusing (`skip=backward construct=a node whose input was not copied`, `split does not build this function`), and it recorded the wall's third boundary -- a refusal on a call that recomputed nothing, since `exp(y)` was a recomputation the cut already passes and only the inlined `sum<0, true>`'s axis was out of reach (`internal/reviews/2026-11-04-when-a-recomputed-call-carries-an-unreachable-context-argument-should-the-cut-inline-it.cn.md`). That boundary is gone because the law stopped writing the call inline: `stdlib/rulesets/jvp.cml#jvp_log_softmax` reads its axis from the node and hands it to `log_softmax_jvp` as an ordinary value, whose inputs the cut does carry. Nothing was relaxed to get here -- the program still exits 1, and the new sentence is the later wall: `stdlib/rulesets/transpose.cml#mul_tensor_t` needs the shape of the operand it answers for, the callee would need a transpose of its own, and `stdlib/rulesets/transpose.cml#log_softmax_t` still states `<0>` only. **The stop moved out one node on 2026-11-20 and the pinned `uri` moved with it**: `1a0ac4144` moved the product inside the sum (`dx - sum<axis, true>(exp(y) * dx)`), so the walk meets the enclosing `sum<axis, true>` before the `multiply` and the refusal is `uri=tensor:sum_axis` -- one node further out, the same graph, the same exit code and the same wall. This is a change of *which node* refuses and not a relaxation of the reading: the old `uri=tensor:multiply` is pinned as a negative assertion beside the positive one, so a walk that steps back onto the multiply turns this entry red instead of passing quietly. **The stop moved in one more node the same day and the pinned `uri` moved with it again**: the difference this law writes, `dx - sum<axis, true>(p * dx)`, used to be answered by a law that read no extents at all, so the walk reached the reduction behind it. The transpose family now has one entry per operator and that entry reduces each cotangent to the shape its operator states -- `stdlib/rulesets/transpose.cml#subtract_t`, whose right side is `(sum_to(ct, shape(x)), sum_to(-ct, shape(w)))` -- so the walk stops at `uri=tensor:subtract` instead, with the same cause and in the same function: `dx` is a parameter a cotangent is answered for, and a parameter carries no value for `shape(..)` to read. Nothing was relaxed: the program still exits 1, the cause word is still `parameter-shape`, and the entry goes red the day the walk is answered rather than the day a law changes spelling."
+desc = "The same function through the library's `vjp`, on the smallest graph that can show it (one `log_softmax<0>` and one `sum`): the forward half is built with the laws named (`rules=jvp_log_softmax,jvp_sum`), the cut builds the function (`REINTERP split function=jvp_of_total forward=395 backward=396 residuals=3`), and the transposed walk then refuses at the tangent the law writes -- `TRANSPOSE function=rulesets.jvp::log_softmax_jvp<float> skip=parameter-shape uri=tensor:sum_axis` and `skip=call-no-transpose callee=rulesets.jvp::log_softmax_jvp<float>`, with stdout `transpose has no transpose for this function`. Pinned as readings and not as an exit code, so the day the walk is answered this entry goes red and names what replaced it. **The refusal moved one layer down on 2026-11-20 and the pinned sentences moved with it**: this entry used to pin the cut refusing (`skip=backward construct=a node whose input was not copied`, `split does not build this function`), and it recorded the wall's third boundary -- a refusal on a call that recomputed nothing, since `exp(y)` was a recomputation the cut already passes and only the inlined `sum<0, true>`'s axis was out of reach (`internal/reviews/2026-11-04-when-a-recomputed-call-carries-an-unreachable-context-argument-should-the-cut-inline-it.cn.md`). That boundary is gone because the law stopped writing the call inline: `stdlib/rulesets/jvp.cml#jvp_log_softmax` reads its axis from the node and hands it to `log_softmax_jvp` as an ordinary value, whose inputs the cut does carry. Nothing was relaxed to get here -- the program still exits 1, and the new sentence is the later wall: `stdlib/rulesets/transpose.cml#mul_tensor_t` needs the shape of the operand it answers for, the callee would need a transpose of its own, and `stdlib/rulesets/transpose.cml#log_softmax_t` still states `<0>` only. **The stop moved out one node on 2026-11-20 and the pinned `uri` moved with it**: The product was moved inside the sum (`dx - sum<axis, true>(exp(y) * dx)`), so the walk meets the enclosing `sum<axis, true>` before the `multiply` and the refusal is `uri=tensor:sum_axis` -- one node further out, the same graph, the same exit code and the same wall. This is a change of *which node* refuses and not a relaxation of the reading: the old `uri=tensor:multiply` is pinned as a negative assertion beside the positive one, so a walk that steps back onto the multiply turns this entry red instead of passing quietly. **The stop moved in one more node the same day and the pinned `uri` moved with it again**: the difference this law writes, `dx - sum<axis, true>(p * dx)`, used to be answered by a law that read no extents at all, so the walk reached the reduction behind it. The transpose family now has one entry per operator and that entry reduces each cotangent to the shape its operator states -- `stdlib/rulesets/transpose.cml#subtract_t`, whose right side is `(sum_to(ct, shape(x)), sum_to(-ct, shape(w)))` -- so the walk stops at `uri=tensor:subtract` instead, with the same cause and in the same function: `dx` is a parameter a cotangent is answered for, and a parameter carries no value for `shape(..)` to read. Nothing was relaxed: the program still exits 1, the cause word is still `parameter-shape`, and the entry goes red the day the walk is answered rather than the day a law changes spelling."
 kind = "negative"
 case = "../../../cases/compile/transforms/log_softmax_gradient_stops_at_split.cml"
 args = ["--trace", "transforms", "${case}", "${backend}"]
@@ -2568,7 +2568,7 @@ timeout_ms = 20000
 # reads that list's extents (`at[2:]`) and never `at[0]`, so a negative axis needs no normalization
 # written into the law -- the axis is normalized where the reduction's entry point already normalizes
 # it (`modules/tensor/kernels/reduce.cpp#normalizeAxis`, at `k::reduceAxis`), and the lane length is
-# the extent the list carries. The count half reads the operand (the ruling of 2026-11-03 16:15),
+# the extent the list carries. The count half reads the operand (the rule),
 # which is why the positive spelling of the lane already passed
 # (`mean_axis1_keepdims_gradient_reads_the_row_length`).
 [[tests]]
@@ -2847,7 +2847,7 @@ timeout_ms = 20000
 
 [[tests]]
 name = "transpose_of_a_sum_over_a_parameter"
-desc = "The transpose of `f(xs: float[3]) = sum(xs)`: the one number`''`s cotangent is that number at every position of the operand''s shape, and the shape is in the **type**, so the law is handed it -- `rulesets/transpose.cml#sum_from_type_t` names one port more than `tensor:sum` has, the walk offers the operands'' own types with the extents `extent_of`''s rule reads appended, and `back(1.0)` answers `([1.0, 1.0, 1.0])`. Measured 2026-11-04 on the base tree (`c4391db57`) this program stopped at `TRANSPOSE function=total skip=rule uri=tensor:sum reason=unbound`: the index had a law, and the law was written for a call the program did not make. The extents the law reads are not a value of the program -- no array stands in for the operand (author, 2026-11-03 17:55)."
+desc = "The transpose of `f(xs: float[3]) = sum(xs)`: the one number`''`s cotangent is that number at every position of the operand''s shape, and the shape is in the **type**, so the law is handed it -- `rulesets/transpose.cml#sum_from_type_t` names one port more than `tensor:sum` has, the walk offers the operands'' own types with the extents `extent_of`''s rule reads appended, and `back(1.0)` answers `([1.0, 1.0, 1.0])`. Measured on the base tree this program stopped at `TRANSPOSE function=total skip=rule uri=tensor:sum reason=unbound`: the index had a law, and the law was written for a call the program did not make. The extents the law reads are not a value of the program -- no array stands in for the operand ."
 kind = "behavior"
 case = "../../../cases/compile/transforms/transpose_of_a_sum_over_a_parameter.cml"
 args = ["--trace", "transforms", "${case}", "${backend}"]
@@ -2891,7 +2891,7 @@ timeout_ms = 20000
 
 # `exp` with its shape in the type: the fixed-shape half of the open-rank gap the four library cases
 # below still record. The walk answers a tangent's shape through `shapeCarrierOf`, which answers a
-# stated type and nothing else (author, 2026-11-03 16:15), so `float[2]` answers where `float[]` refuses.
+# stated type and nothing else, so `float[2]` answers where `float[]` refuses.
 [[tests]]
 name = "exp_gradient_of_a_stated_shape"
 desc = "`sum(exp(x))` with `x: float[2]` instead of `float[]`, through **both** legs in one program: the engine's own pullback (`grad`) and the library's rules (`vjp` -> `split(jvp)` -> `transpose`). Hand: `exp([1.0, 2.0]) = [2.718281828459045, 7.38905609893065]`, `value = 10.107337927389695`, and `sum`'s adjoint is one per lane. Both lines are pinned, so a change to either leg shows up as a difference between two lines of one program. This is the fixed-shape half of the pair: the open-rank `exp_gradient_through_the_library` answers too, and what the two separate is where the extents come from -- the open-rank law states them beside the product (`mul_stated`) because a tangent's type states none, and this one lets `shapeCarrierOf` read them off `float[2]`. Keeping both is what keeps each reading covered."
@@ -3044,7 +3044,7 @@ timeout_ms = 20000
 # The same wall read from the `vjp` side, and kept as the *positive* entry it was always meant to
 # become. `cross_call_gradient_is_not_zero` landed on 2026-11-04 07:34 as a `known_fail` that pinned
 # the wrong line this tree printed (`known_fail_msg = "g'(3) = 0.0"`, the zero a linear half that
-# ignores its own parameter answers), and the commit that fixed the cut (`ee5eebe07`) rewrote that
+# ignores its own parameter answers), and the commit that fixed the cut rewrote that
 # row into `grad_across_a_call` above. The number moved and the case file stayed on disk with nothing
 # reading it -- which is exactly what `gate.case_ledger` reports: a case no code reaches cannot fail,
 # so a change that broke it would be invisible. It is not deleted. The record is the point, and the
@@ -3058,7 +3058,7 @@ timeout_ms = 20000
 # pullback separately (`g(3) = 18.0  g'(3) = 12.0`). Neither can drift alone.
 [[tests]]
 name = "cross_call_gradient_is_not_zero"
-desc = "The gradient across a call, read through `vjp` and pinned as the number it must answer: `f(x) = 2.0 * x`, `g(x) = f(x) * x`, so `g(3) = 18` and `g'(3) = 4x = 12`, while the same arithmetic written flat (`flat`) answers 12.0 in the same run and must keep answering it. What is guarded is that the cross-call gradient is not zero: the case landed as a `known_fail` pinning `g'(3) = 0.0` (the cut listed the lifted graph's tangent parameter as a residual, `modules/transforms/split.cpp#residualsOf`), `grad_across_a_call` replaced its row when the fix landed, and it is kept here as the positive regression beside it -- the same defect through the `vjp` door. Measured 2026-11-04 on the cut tree: `g(3) = 18.0  g'(3) = 12.0` and `flat(3) = 18.0  flat'(3) = 12.0`, exit 0."
+desc = "The gradient across a call, read through `vjp` and pinned as the number it must answer: `f(x) = 2.0 * x`, `g(x) = f(x) * x`, so `g(3) = 18` and `g'(3) = 4x = 12`, while the same arithmetic written flat (`flat`) answers 12.0 in the same run and must keep answering it. What is guarded is that the cross-call gradient is not zero: the case landed as a `known_fail` pinning `g'(3) = 0.0` (the cut listed the lifted graph's tangent parameter as a residual, `modules/transforms/split.cpp#residualsOf`), `grad_across_a_call` replaced its row when the fix landed, and it is kept here as the positive regression beside it -- the same defect through the `vjp` door. Measured on the cut tree: `g(3) = 18.0  g'(3) = 12.0` and `flat(3) = 18.0  flat'(3) = 12.0`, exit 0."
 kind = "behavior"
 case = "../../../cases/compile/transforms/cross_call_gradient_is_not_zero.cml"
 args = ["${case}", "${backend}"]
@@ -3122,7 +3122,7 @@ timeout_ms = 20000
 
 [[tests]]
 name = "extent_of_answers_a_known_operand"
-desc = "A known operand does not change the question: `extent_of::<A>()` answers the type's extents whether a value of that type is in the function's hands or not, and it never reads the value. Four spellings answer `[2, 3]` -- a call with nothing of the type at hand (`from_type`), a call in a function whose parameter `xs` is a known operand (`shape_of`), the name handed on as a value to a function that has no type argument of its own (`takes_it(extent_of::<float[2, 3]>)`), and the same name where a position states a function type (`typed_binding`) -- and the fifth line is the control: `shape(xs)` reads the operand and answers the same list, so the two sources agree here and the entry would say so the day they stop. Two of those spellings were red: measured 2026-11-04 on `ca464bca2` the third and the fourth each stopped the run with `RuntimeDiag::PassInternalError` ('Pass ''calling `extent_of`'' failed with an internal error'), which is the compiler complaining about a program that is right, because the answer existed in the type argument written at that position and only the run had nothing left to read. They are settled where the name is used as a value now (`Builder::functionValueOf`, `Builder::overloadValueFor`), and the answer is a function of no parameters that gives the list."
+desc = "A known operand does not change the question: `extent_of::<A>` answers the type's extents whether a value of that type is in the function's hands or not, and it never reads the value. Four spellings answer `[2, 3]` -- a call with nothing of the type at hand (`from_type`), a call in a function whose parameter `xs` is a known operand (`shape_of`), the name handed on as a value to a function that has no type argument of its own (`takes_it(extent_of::<float[2, 3]>)`), and the same name where a position states a function type (`typed_binding`) -- and the fifth line is the control: `shape(xs)` reads the operand and answers the same list, so the two sources agree here and the entry would say so the day they stop. Two of those spellings were red: measured 2026-11-04 the third and the fourth each stopped the run with `RuntimeDiag::PassInternalError` ('Pass ''calling `extent_of`'' failed with an internal error'), which is the compiler complaining about a program that is right, because the answer existed in the type argument written at that position and only the run had nothing left to read. They are settled where the name is used as a value now (`Builder::functionValueOf`, `Builder::overloadValueFor`), and the answer is a function of no parameters that gives the list."
 kind = "behavior"
 case = "../../../cases/compile/transforms/extent_of_answers_a_known_operand.cml"
 args = ["${case}", "${backend}"]
@@ -3173,7 +3173,7 @@ timeout_ms = 20000
 
 [[tests]]
 name = "extent_of_names_the_open_position"
-desc = "A type whose shape is not written down is refused, and the sentence names the **position** that is open, because that position is where the repair is written: `float[...]` states no rank at all, so position 0 is the open one and `..` gives no position after it a length; `float[2, ?]` states two positions and leaves the second without a number; `float[]` (= `float[?]`) has one position and no length for it. Measured 2026-11-04 on `ca464bca2` the sentence was 'an extent it writes is not a number' -- a reader who wrote `float[2, ?]` had to find the second extent themselves -- and all three refusals are reported together, each at its own call. The refusal must stay a refusal: `[]` would be the rank-zero shape, which `sum_to` reads as one element, a wrong number no diagnostic would name."
+desc = "A type whose shape is not written down is refused, and the sentence names the **position** that is open, because that position is where the repair is written: `float[...]` states no rank at all, so position 0 is the open one and `..` gives no position after it a length; `float[2, ?]` states two positions and leaves the second without a number; `float[]` (= `float[?]`) has one position and no length for it. Measured 2026-11-04 the sentence was 'an extent it writes is not a number' -- a reader who wrote `float[2, ?]` had to find the second extent themselves -- and all three refusals are reported together, each at its own call. The refusal must stay a refusal: `[]` would be the rank-zero shape, which `sum_to` reads as one element, a wrong number no diagnostic would name."
 kind = "negative"
 case = "../../../cases/compile/transforms/extent_of_names_the_open_position.cml"
 args = ["${case}", "${backend}"]
@@ -3188,7 +3188,7 @@ timeout_ms = 20000
 
 [[tests]]
 name = "extent_of_filling_the_named_position_answers"
-desc = "The control `extent_of_names_the_open_position` needs, and the one its text pin cannot be: the sentence names a position, and this program fills exactly that position and the call answers -- `float[?]`'s open position 0 becomes `float[3]`, which answers `[3]`, and `float[...]`'s open position 0 becomes `float[2, 3]`, which answers `[2, 3]`. A sentence that named the wrong position would still pass the negative entry, because that entry pins the words; it could not make the number come back here. Measured 2026-11-05 on `f08951def` (host `88zjwei`): the two refusals exit 1 with 'position 0 is open' at each call, and these two calls exit 0 with these two lists. The answer must stay a refusal when a position is open -- `[]` would be the rank-zero shape, which `sum_to` reads as one element -- so this entry pairs with the refusal and does not replace it."
+desc = "The control `extent_of_names_the_open_position` needs, and the one its text pin cannot be: the sentence names a position, and this program fills exactly that position and the call answers -- `float[?]`'s open position 0 becomes `float[3]`, which answers `[3]`, and `float[...]`'s open position 0 becomes `float[2, 3]`, which answers `[2, 3]`. A sentence that named the wrong position would still pass the negative entry, because that entry pins the words; it could not make the number come back here. Measured 2026-11-05: the two refusals exit 1 with 'position 0 is open' at each call, and these two calls exit 0 with these two lists. The answer must stay a refusal when a position is open -- `[]` would be the rank-zero shape, which `sum_to` reads as one element -- so this entry pairs with the refusal and does not replace it."
 kind = "behavior"
 case = "../../../cases/compile/transforms/extent_of_filling_the_named_position_answers.cml"
 args = ["${case}", "${backend}"]
@@ -3306,7 +3306,7 @@ timeout_ms = 20000
 # reduced to the one operator, and its two readings are the numbers and their length.
 [[tests]]
 name = "broadcast_difference_through_vjp"
-desc = "`vjp` of `step(w: float[2]) = sum((m - w) * (m - w))` on `m = [[1, 2], [3, 4]]` at `w = [0.5, 1.0]`: the loss `16.5` and the cotangent `[-6.0, -8.0]`, `numel 2`. The difference broadcasts -- `float[2, 2]` with `float[2]` -- so `dL/dw` is the **sum of what `w` fed** and not the `[2, 2]` cotangent it arrived on, and every one of the four numbers below separates a wrong answer from the right one: the unreduced cotangent is `[-1, -2, -5, -6]` (`numel=4`), the reduction along the wrong axis is `[-6, -6]` or `[-8, -8]`, and the digit that would come from reading the cotangent as a scalar is neither. `numel` is printed beside the array because the failure this entry guards is a **shape**: the law that answered before `subtract_stated_t` existed answered the whole `[2, 2]` cotangent under a static type that said `float[2]`, which is a wrong number with exit 0 and no diagnostic (measured 2026-11-20). The engine's leg is the second reading and is taken through its own pullback, so the two halves of the transform are held against each other and not only against the arithmetic; the `rhs=` line is pinned because the claim is that the law which answered is the stated one, and a run that answered through another law would be a different program. What it does not claim is that any other broadcast reduction is right: this is one operator's."
+desc = "`vjp` of `step(w: float[2]) = sum((m - w) * (m - w))` on `m = [[1, 2], [3, 4]]` at `w = [0.5, 1.0]`: the loss `16.5` and the cotangent `[-6.0, -8.0]`, `numel 2`. The difference broadcasts -- `float[2, 2]` with `float[2]` -- so `dL/dw` is the **sum of what `w` fed** and not the `[2, 2]` cotangent it arrived on, and every one of the four numbers below separates a wrong answer from the right one: the unreduced cotangent is `[-1, -2, -5, -6]` (`numel=4`), the reduction along the wrong axis is `[-6, -6]` or `[-8, -8]`, and the digit that would come from reading the cotangent as a scalar is neither. `numel` is printed beside the array because the failure this entry guards is a **shape**: the law that answered before `subtract_stated_t` existed answered the whole `[2, 2]` cotangent under a static type that said `float[2]`, which is a wrong number with exit 0 and no diagnostic. The engine's leg is the second reading and is taken through its own pullback, so the two halves of the transform are held against each other and not only against the arithmetic; the `rhs=` line is pinned because the claim is that the law which answered is the stated one, and a run that answered through another law would be a different program. What it does not claim is that any other broadcast reduction is right: this is one operator's."
 kind = "behavior"
 case = "../../../cases/compile/transforms/broadcast_difference_through_vjp.cml"
 args = ["--trace", "transforms", "${case}", "${backend}"]

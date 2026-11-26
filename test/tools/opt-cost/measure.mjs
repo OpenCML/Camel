@@ -31,7 +31,7 @@
 //   * `--trace effects` and `-vv` count **how many times** the whole-program checks are asked in
 //     one `std::opt` run: one `effect containment: checked N call site(s)` line per pass-boundary
 //     question (`src/kernel/execute/pass.cpp#passBoundaryViolation`, asked per rewrite session by
-//     `src/passes/opt/inline/engine.cpp`, since 2026-11-18) and one `boundary asked after session`
+//     `src/passes/opt/inline/engine.cpp`) and one `boundary asked after session`
 //     line per session the engine completed. A count is not a duration, but it is what turns "the
 //     check is 30% of the pass" into "the check is asked N times per pass over the whole program",
 //     and it is independent of the host.
@@ -159,8 +159,8 @@ function countChecks(camel, backend) {
     const boundaryAsks = (logText.match(/boundary asked after session /g) || []).length
     // One line per sub-pass of the optimizer, with the rewrites it made: `std::cxx::fold: 16
     // rewrite(s)` (the name is the pass's own, so it is read as written and not by a fixed prefix --
-    // `std::opt::fold` before 2026-11-18, `std::cxx::fold` since). Each of those is a draft commit,
-    // which is what the commit checks are asked of.
+    // `std::opt::fold` while the C++ passes were `std::opt`'s, `std::cxx::fold` since they moved
+    // under `cxx::`). Each of those is a draft commit, which is what the commit checks are asked of.
     const rewrites = new Map()
     for (const match of logText.matchAll(/<Opt> (\S+): (\d+) rewrite\(s\)/g)) {
         rewrites.set(match[1], (rewrites.get(match[1]) || 0) + Number(match[2]))

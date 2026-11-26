@@ -5,7 +5,7 @@ tags = ["feat", "tools"]
 
 # The guard for the class of red that says nothing about the program: a Python child writes the
 # platform's line ending, so a plan that compares its text byte for byte is red on Windows before
-# the value it exists to pin is ever compared. `f8a2da8f4` fixed the one plan that did it (the
+# the value it exists to pin is ever compared. One plan did it and was fixed (the
 # CUDA-visibility self-test), and this plan keeps it from coming back: the guard reads every plan,
 # and its own two fixtures prove it still goes red.
 

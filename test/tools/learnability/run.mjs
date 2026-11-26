@@ -28,7 +28,7 @@
 // Usage
 // -----
 //   node test/tools/learnability/run.mjs --solver bl --model qwen3.8-max \
-//        --tasks L05,L12,L14 --rounds 3 --archive <dir> [--camel-host 88zjwei]
+//        --tasks L05,L12,L14 --rounds 3 --archive <dir> [--camel-host <host>]
 //   node test/tools/learnability/run.mjs --solver provided --provided <dir> --tasks L01,...
 //   node test/tools/learnability/run.mjs --solver replay --archive <dir>   (recompile, no tokens)
 //

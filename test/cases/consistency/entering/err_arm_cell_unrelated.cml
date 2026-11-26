@@ -1,5 +1,5 @@
 /**
- * A cell's type never reaches the join (the ruling of 2026-10-26 on the arm of a branch): two
+ * A cell's type never reaches the join (the rule on the arm of a branch): two
  * arms that are cells of unrelated content types are joined as the types their cells hold, and
  * the report names those. A join of the cell types themselves would name `var int` and
  * `var string` instead, which is the cell type reaching the join.

@@ -30,7 +30,7 @@ const here = path.dirname(fileURLToPath(import.meta.url))
 const checker = path.join(here, 'check_covers_every_rule.mjs')
 const repoRoot = path.resolve(here, '..', '..', '..', '..', '..')
 const casePath = path.join(repoRoot, 'test', 'cases', 'modules', 'rules', 'check_every_rule.cml')
-// The library files its rule list at the root of `src/stdlib/` since the 2026-11-22 move
+// The library files its rule list at the root of `src/stdlib/` since the move
 // (`lib/rules/rules.cml` after the layout move, `stdlib/rules/rules.cml` before it).
 const library = [
     path.join(repoRoot, 'src', 'stdlib', 'rules.cml'),

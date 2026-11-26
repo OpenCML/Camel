@@ -246,7 +246,7 @@ timeout_ms = 60000
 
 [[tests]]
 name = "attempt.partial_fault"
-desc = "One element of a parallel map faults at once while the elements below it are still queued (element 40 of 64, the others slow before they end): every element below it starts and runs to its end, whether or not it had started, the fault reported is element 40's, and the four back ends agree -- design principles 3.6 as ruled on 2026-10-31. What became of the elements above 40 is not asserted: one that had started ends, and which had started is the scheduler's."
+desc = "One element of a parallel map faults at once while the elements below it are still queued (element 40 of 64, the others slow before they end): every element below it starts and runs to its end, whether or not it had started, the fault reported is element 40's, and the four back ends agree -- design principles 3.6 as ruled. What became of the elements above 40 is not asserted: one that had started ends, and which had started is the scheduler's."
 kind = "behavior"
 case = "../../../cases/consistency/attempt/partial_fault.cml"
 # The property below is what the four back ends agree on; the text is not, because an element of a

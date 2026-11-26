@@ -7,7 +7,7 @@
 #
 # The reading that decides is not "the commit did not refuse": a graph the edit *made* was in no
 # program before it, so a commit that walked only what the drafts reach left it out in silence
-# (`2026-11-18-outline-needs-a-graph-that-was-not-there.cn.md` 5, and the reading of `7b0f407eb`:
+# (`2026-11-18-outline-needs-a-graph-that-was-not-there.cn.md` 5, and the reading:
 # `only_adopted_delivered=0 noted_delivered=1`). So the program prints the ids the committed function
 # reaches before and after the edit and names the id that is in the second list and not the first --
 # a graph the committed program holds because this edit made it -- and then calls the edited function

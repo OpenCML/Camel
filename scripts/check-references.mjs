@@ -16,7 +16,8 @@
  * written, in the trees that are not records.
  *
  *   node scripts/check-references.mjs                 report, exit 0 (this is the mode CI runs)
- *   node scripts/check-references.mjs --enforce        exit 1 when a reference does not resolve
+ *   node scripts/check-references.mjs --enforce        exit 1 when a reference does not resolve and
+ *                                                     its line does not say when the path was true
  *   node scripts/check-references.mjs --path <p>       scan one file or one directory (a sample)
  *
  * Why report-only first: the list this check finds is a work item, not a wall, and a lane that
@@ -59,6 +60,28 @@
  * locked by `test/plans/feat/docs_links.plan.toml`, which asserts the exact "no such file" reading
  * of the path it names. Skip and assertion are one decision -- if that assertion is ever removed,
  * the skip stops being a rule and starts being a cover-up, and the two come out together.
+ *
+ * The same record lives outside those directories, and the check must not ask for it to be
+ * rewritten either. A test case's header says which tree a defect was read in (`<block>/<file>.cpp`
+ * at `e82fa21e`); a plan's note says which commit a `lost` or `kept` reading came from; the layout
+ * move renamed the file and those lines are the evidence, not a stale link. So a reference that
+ * does not resolve is read a second time, and the second reading has two answers:
+ *
+ *  - **unresolved on purpose** -- the line carries the marker that says when the path was true. It
+ *    is counted apart, printed apart (`on-purpose <file>:<line>: '<path>': <marker>`) and is never
+ *    an exit 1. The markers are the ones the tree already writes: `before the layout move` and
+ *    `after the layout move` (the idiom of `lib/rules/rules.cml` after the layout move,
+ *    `stdlib/rules/rules.cml` before it), `as it stood at <sha>`, and a commit id -- `at <sha>`, or
+ *    the bare `e82fa21e` written beside the path it is about. A token has to carry a digit and a
+ *    letter to be read as a commit id: a measurement of that length (`1000000`) is not a date;
+ *  - **broken** -- no marker. This is the list the check exists for, and `--enforce` exits 1 on it.
+ *
+ * The marker is read on the path's own line and on the line above it, and no further. A sentence's
+ * "when" wraps onto the next line -- a `#` comment continues after a full stop, a markdown paragraph
+ * wraps at the column -- so the line above is the same sentence; a marker two lines away, or below,
+ * is about something else, and reading it would answer for lines nobody marked. A token two files
+ * answer (`ambiguous`) is a question the sentence still has to answer, not a record: a date does not
+ * make it one file, so it is never on purpose.
  *
  * A `.md` fence is an example, not a claim: the path inside it is a path a command will write. So
  * are a plan's strings (`expect_output_contains`); only a comment line in code is read, and in a
@@ -232,6 +255,29 @@ function inFence(text, index) {
     return fences % 2 === 1
 }
 
+/**
+ * The marker a line carries when it says its path is allowed to be gone (see the header), or null.
+ * Two shapes: the words the layout's own sentences use, and a commit id. A commit id has to carry a
+ * digit and a letter -- a bare number of that length is a measurement (`1000000`), not a date --
+ * and it is read wherever it stands on the line, because the tree writes it in a pair of backticks
+ * beside the path it is about, as a prefix of one (`e8c290554:` then the path that was there then),
+ * and after the word `at` (`measured on `2779ad600^1``) -- and all three are the same claim.
+ */
+function historyMarker(line) {
+    const words = line.match(/\b(?:before|after) the layout move\b|\bas it stood at\b/i)
+    if (words) return words[0]
+    for (const token of line.match(/\b[0-9a-fA-F]{7,40}\b/g) || []) {
+        if (/[0-9]/.test(token) && /[a-fA-F]/.test(token)) return token
+    }
+    return null
+}
+
+/** The line above the one that starts at `lineStart`, or '' when this is the first line. */
+function previousLine(text, lineStart) {
+    if (lineStart === 0) return ''
+    return text.slice(text.lastIndexOf('\n', lineStart - 2) + 1, lineStart - 1)
+}
+
 function insideUrl(text, index) {
     let start = index
     while (start > 0 && /[\w:/?=&%#+.-]/.test(text[start - 1])) start -= 1
@@ -320,6 +366,8 @@ if (files.length === 0) {
 const findings = []
 let read = 0
 let local = 0
+let onPurpose = 0
+const onPurposeRefs = []
 for (const file of files) {
     const text = fs.readFileSync(file, 'utf8')
     const markdown = path.extname(file).toLowerCase() === '.md'
@@ -356,7 +404,16 @@ for (const file of files) {
             local += 1
             continue
         }
+        const lineStart = text.lastIndexOf('\n', match.index - 1) + 1
+        const lineEnd = text.indexOf('\n', lineStart)
+        const lineText = text.slice(lineStart, lineEnd === -1 ? text.length : lineEnd)
         const line = text.slice(0, match.index).split('\n').length
+        const marker = ambiguous ? null : historyMarker(lineText) || historyMarker(previousLine(text, lineStart))
+        if (marker) {
+            onPurpose += 1
+            onPurposeRefs.push(`${relative}:${line}: '${cited}': ${marker}`)
+            continue
+        }
         findings.push(
             `${relative}:${line}: '${cited}': ${
                 ambiguous ? `${ambiguous} files end this way and the sentence names none of them` : 'no such file'
@@ -366,10 +423,11 @@ for (const file of files) {
 }
 
 for (const finding of findings) console.log(finding)
+for (const entry of onPurposeRefs) console.log(`on-purpose ${entry}`)
 const scanned = files.length
 console.log(
     `check-references: ${read} reference(s) resolved, ${findings.length} did not, ${local} name an ` +
-        `ignored (local) file, across ${scanned} file(s)${
+        `ignored (local) file, ${onPurpose} unresolved on purpose, across ${scanned} file(s)${
             named ? ` of ${readDirectories.join(', ')}` : ''
         }`,
 )
@@ -377,7 +435,9 @@ if (findings.length > 0) {
     console.error(
         'check-references: a comment or a page names a path of this tree that is not there. A ' +
             'sweep that deletes a file leaves these behind, and a reader who follows one finds ' +
-            'nothing: name the file that holds the content now, or say what replaced it.',
+            'nothing: name the file that holds the content now, say what replaced it, or write ' +
+            'when the path was true (a commit id, `as it stood at <sha>`, `before the layout ' +
+            'move`) -- a marked line is counted as on purpose and does not fail this check.',
     )
 }
 if (enforce && findings.length > 0) process.exit(1)

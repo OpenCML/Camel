@@ -5,7 +5,7 @@
  * principles 3.3, 3.5).
  *
  * The state a closure may write is a handle or a module `var`. A closure captures a value, so it
- * cannot assign a `var` of the call that made it (design principles 3.5, 197; the author's ruling
+ * cannot assign a `var` of the call that made it (design principles 3.5, 197;
  * of 2026-11-16), and that is the shape this case was written with. `local` is a `Ref` now -- a
  * handle is a value, so writing what it points at is legal -- and `counter` is a module `var`,
  * which another rule owns.

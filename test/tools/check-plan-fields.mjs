@@ -97,7 +97,7 @@
  * change runs, and a rule is a list of path prefixes; a prefix that is not in the tree matches no
  * file, so the rule selects nothing -- and nothing says so, because `--changed` widens a file no
  * rule matched to the whole fast layer and the run is green. `include/camel/parse/` sat in that
- * state from the layout move (2026-11-22) until this reading existed: its twin,
+ * state from the layout move until this reading existed: its twin,
  * `src/parse/include/camel/parse/`, was already there under the new layout, so one rule of the file
  * matched no file at all and every file under `include/` -- a directory the tree no longer has --
  * was read as "no plan needed". A counting ratchet is the wrong shape for it: a rule that names
@@ -458,7 +458,7 @@ function scanTree(rootDir) {
             }
             // A mark records a red; `known_fail_owner` says who ends it and `known_fail_reason` where
             // it is stuck, and neither says *what* would end it. `known_fail_ends_when` names the
-            // reading that removes the mark, and since the ruling of 2026-11-24 it may hold exactly
+            // reading that removes the mark, and since the rule it may hold exactly
             // two things, both of which a run evaluates:
             //
             //   { prints = "the line this entry prints when the wall moves" }

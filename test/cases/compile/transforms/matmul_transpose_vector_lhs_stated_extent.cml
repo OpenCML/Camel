@@ -26,7 +26,7 @@
 // the law builds the array from them. `float[]` states the rank and no length, so nothing can be
 // written down: the step stops as a value the caller does not carry, and the language's own
 // sentence for that declaration is `TransposeNeedsParameterShape` -- "state the shape in the type"
-// (author, 2026-11-03 16:15). The same rule reaches the call, where a `float[]` value is less exact
+// The same rule reaches the call, where a `float[]` value is less exact
 // than the `float[2]` the parameter fixes, so the conversion is written where the value is known to fit.
 //
 // **This entry is the second of two, and its green is evidence, not the road.** It proves two things

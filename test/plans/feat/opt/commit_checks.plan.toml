@@ -4,7 +4,7 @@ tier = "fast"
 tags = ["feat", "opt", "effects", "commit-checks"]
 
 # The first of the two checks the effect analysis makes when a C++ pass commits a program
-# (docs/design/effects/analysis.cn.md 4.1, the ruling of 2026-11-15): at every call site, the
+# (docs/design/effects/analysis.cn.md 4.1): at every call site, the
 # footprint of the function value called must not exceed what the type at that call site declares.
 #
 # The case runs a test-only pass that writes exactly that defect, on the smallest program that can
@@ -39,7 +39,7 @@ args = ["${case}", "test::fold_function_type", "std::nvm"]
 expect_exit = 0
 expect_stdout_contains = ["fold_function_type: no two functions of one shape to fold", "3"]
 
-# The exemption every pass written in Camel carries, read as the ruling of 2026-11-16 has it: the
+# The exemption every pass written in Camel carries, read as the rule has it: the
 # check is a theorem for such a pass, so a shipped build (`NDEBUG`) does not ask it -- and a build
 # that has the suite asks anyway, which is how anyone knows the theorem still holds. One run prints
 # both answers, at one program and one pass, the request being the only difference between them:
@@ -76,7 +76,7 @@ expect_output_contains = ["fold_function_type: the call site at node", "now decl
 # The reading is a run reading on the `effects` area of the tracing channel, not an environment switch
 # and no longer a log scope: a run's behaviour is decided by the program, the command line and the build
 # options (design principles 9.3), and one kind of reading has one way to ask for it -- `--trace effects`
-# (the ruling of 2026-11-16 moved it off the environment and off the `Pass` scope).
+# (the rule moved it off the environment and off the `Pass` scope).
 [[tests]]
 name = "commit_checks.counts_what_it_declines"
 desc = "With the Pass scope at info, the check says what it compared and what it declined, and the two counts are pinned so that silence has to show up as a number."

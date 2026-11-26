@@ -570,7 +570,7 @@ function buildBlocks (moves) {
     // block it compiles nowhere, and the failure is not a link error but a channel that quietly is
     // not there. `lib/test/` was that directory -- its objects register the `test::` passes, and a
     // tree that compiled it nowhere failed every plan that names one with `Unrecognized pass
-    // 'test::…'`, forty-eight cells of it. It is the example and not the case today: on 2026-11-25
+    // 'test::…'`, forty-eight cells of it. It is the example and not the case today: 
     // it got a `CMakeLists.txt` of its own, so the test-only passes are `test.cmo` and this filter
     // leaves the directory out of the block. What the rule still says is that the filter is the
     // directory's own build file and never a list of names kept here.

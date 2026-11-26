@@ -41,7 +41,7 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const PLAN_READING = new Map()
 
 // The fast layer: the whole plan tree at `--tier fast`, which is the command `npm run test` runs
-// on a subtree. The author's 01:30 ruling (2026-11-02) put it here: "what we call green" and "what
+// on a subtree. The author's 01:30 ruling put it here: "what we call green" and "what
 // runs before a release" get one definition, the tree and each plan's own tier lines. It used to
 // be a list (`smoke` + `feat` + two gpu files), and a list is a second definition -- a fast test
 // in a file the list did not name was neither run by the gate nor reported as missing, and the
@@ -54,7 +54,7 @@ export const FAST_TARGETS = ['test/plans']
 // The slow layer, by explicit plan file: every file that owns a test whose own line says
 // `tier = "slow"`, and the whole-plan slow files (the GPU tile plans, the two collection plans, the
 // corpus sweep and the perf plans the tree keeps gate-able -- `para_speedup` from the 2026-10-23
-// rule, and the two count guards the 2026-10-25 rule split out of `perf.step_budget` and
+// rule, and the two count guards the rule split out of `perf.step_budget` and
 // `perf.reduce_layout` because they assert counts and properties rather than durations).
 //
 // The list grew on 2026-11-24 with the 261 cases the first full fast-layer record measured over
@@ -158,7 +158,7 @@ export const SLOW_PLANS = [
 // and the gate prints its numbers on every run.
 
 // The plans the gate's own commands cannot start at all. Not "we chose not to run these": the
-// author's 01:30 ruling (2026-11-02) leaves this list for a plan the runner refuses to read, or
+// author's 01:30 ruling leaves this list for a plan the runner refuses to read, or
 // whose case needs something the command cannot have, and asks for a reason per entry.
 //
 // It is empty today, and that is the honest reading: every plan under `test/plans` starts and then
@@ -201,7 +201,7 @@ export function milestoneLayer() {
         for (const test of plan.tests) {
             try {
                 // Counted as the file declares it, one per entry. A run starts a few more (back ends
-                // expand, `compare_to` companions join): measured on 2026-11-02, the files declare
+                // expand, `compare_to` companions join): measured the files declare
                 // 3330 and `--tier milestone` reports `tests: 3404`. Two different subjects, and
                 // this line says "test entries" so that it cannot be read as the batch a run starts.
                 if (testTier(plan.doc, test) === 'milestone') here += 1
@@ -445,7 +445,7 @@ function readPlanUncached(abs) {
 // recorded too, or the check asks for it to move under `test/plans`.
 //
 // The list held the reduced programs of the E9 crash campaign whose shape was not fixed -- each
-// reproduces a crash the 2026-11-17 full run reported, and no plan entry can name one without
+// reproduces a crash the full run reported, and no plan entry can name one without
 // either stating the crash as the expected answer (`known_fail` over a process that ends in a
 // guarantee) or going red until its shape is fixed. Two of those shapes are fixed now and their
 // programs are plan entries (`rc12_seed165`, `rc13_seed202`, and `rc17_seed193` together with its
@@ -525,7 +525,7 @@ const LEGACY_NAMING_ROOTS = new Set(['lib/', 'tools/', 'include/', 'stdlib/', 'm
 // and the two the ledger reads by name. This list exists because of the shape `walkTreeFiles` used to
 // have -- `readdir` on a directory that is not there throws `ENOENT`, the catch turned that into an
 // empty list, and an empty list is exactly what a directory holding no matching file returns too.
-// Measured 2026-11-22 with `exemplars/` moved away: `412 plan files, every one of them has a
+// Measured with `exemplars/` moved away: `412 plan files, every one of them has a
 // destination` and `4216 case files, every one of them is read by code`, exit 0 -- the same two
 // lines, in the same order, about a tree the run had not read. The walk now separates the two
 // readings (see the catch below), and this list names a root that is not there before any of them.

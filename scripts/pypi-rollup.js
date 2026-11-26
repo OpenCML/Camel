@@ -33,7 +33,7 @@ function ensureDirSync(dir) {
 }
 
 /**
- * PyPI packaging: one native build per platform, two wheels out of it (the 2026-10-25 ruling,
+ * PyPI packaging: one native build per platform, two wheels out of it (the rule,
  * internal/archive/handover-README.cn.md item 7, carried out 2026-11-02):
  *
  *   camel_lang-<ver>-cp310-abi3-<platform>.whl  body + interop, every CPython 3.10 and later
@@ -266,7 +266,7 @@ const SABI_MAJOR = 3
 const SABI_MINOR = 10
 
 /**
- * PEP 425 tags for the two wheels one native build produces (the 2026-10-25 ruling:
+ * PEP 425 tags for the two wheels one native build produces (the rule:
  * internal/archive/handover-README.cn.md item 7, review index C28).
  *
  * The interop wheel is `cp310-abi3-<platform>`: the extension is built against the limited API, so

@@ -2,7 +2,7 @@
 // reads the direction *it* is handed. `g(x) = f(x) * x` with `f(x) = 2.0 * x` is `2x²`, so
 // `g'(x) = 4x` and the linear half is `dx -> 4x·dx`: 12, 6 and 24 at x = 3 for dx = 1, 0.5 and 2.
 //
-// Measured 2026-11-04, before the fix this case pins: all three answered **36.0**. The cut carried
+// Measured before the fix this case pins: all three answered **36.0**. The cut carried
 // the *tangent* port of g's parameter as a residual tagged "parameter 0's value", because the value
 // half also receives that port as an ordinary argument of the call to the lifted callee -- so every
 // read of the tangent port in the backward half resolved to the closure slot holding x, and `lin`

@@ -1,19 +1,19 @@
 /**
  * The library's `with_grad` against the engine's, on the four groups of
  * `test/cases/modules/autodiff/grad_first_with_parameter.cml`. This is the entry the criterion
- * "库层 `with_grad` 在 `grad_first_with_parameter` 上与引擎同答" (author's ruling of 2026-11-03
+ * "库层 `with_grad` 在 `grad_first_with_parameter` 上与引擎同答" (the rule
  * 17:55) is measured by, and it is written so that the criterion has an object either way: the
  * engine's answer and the library's answer stand on one line per group, so the day the two agree
  * the pin below changes and nothing else has to be re-derived.
  *
- * The library name is gone by the author's ruling of 2026-11-05 (`080778522`): a placeholder whose
+ * The library name is gone by the rule : a placeholder whose
  * body has not been written is not a name a library keeps, so `stdlib/vjp.cml` exports `vjp` and the
  * one-parameter `grad` and no `with_grad`, until that name is written as the composition design
  * principles 9.9 asks for. This case therefore does not compile -- `with_grad` is not a name of
  * `vjp` any more -- and the plan entry that runs it is marked `known_fail` for that reason.
  *
  * The four groups stay here with the engine's answers, because they are the numbers the composition
- * owes: `lane-withtan` (merged `713e1ff26`) carries a `with` argument's direction through a lifted
+ * owes: (merged) carries a `with` argument's direction through a lifted
  * call, and `library_grad_of_a_with_weight` pins `weighted` answering 3.0 through `vjp` -- the
  * composition works; what is missing is the pair body and the declaration beside it
  * (`FirstOf<WithOf<F>>`, `stdlib/types.cml`). The day it is written, this case turns over with it:

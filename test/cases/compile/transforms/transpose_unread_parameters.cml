@@ -10,7 +10,7 @@
 //
 // The function transposed is `at` itself, and it has to be a function of four, because a transposed
 // function answers **one cotangent per parameter** and is called with the cotangent and nothing else
-// (author, 2026-11-02 11:30): `transpose(at)(1.0)`. The old spelling `transpose(at)(3.0, 2.0, 1.0,
+//: `transpose(at)(1.0)`. The old spelling `transpose(at)(3.0, 2.0, 1.0,
 // 0.0, 1.0)` passed the values as parameters, which a transposition no longer takes.
 //
 // Nothing is captured, and that is the point of the case rather than an accident: `add_t`'s right side

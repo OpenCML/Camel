@@ -4,7 +4,7 @@
 //   let none: () => float = (...ys) => add3(1.0, 2.0, ...ys)
 //
 // The pack has no member here -- the lambda is called with no argument -- so the call is
-// `add3(1.0, 2.0)` and the third parameter takes its default: 3.0. Until 2026-11-20 the name was not
+// `add3(1.0, 2.0)` and the third parameter takes its default: 3.0. The name was not
 // bound at all and this line was `UnresolvedReference: 'ys'`, while the same forwarding written in a
 // declaration (`func pad(...ys) = add3(1.0, ...ys)`, called as `pad(1.0)`) answered: one construct
 // with two answers, and the lambda's was the refusal (`src/compile/gir/builder.cpp`, the rest

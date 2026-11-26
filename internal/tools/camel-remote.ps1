@@ -549,7 +549,7 @@ $AstDrop = @(Split-CamelArgList -Values $AstDrop)
 # `test\plans\feat\trans\cml.plan.toml` is one file name containing backslashes. The plan loader
 # refuses the selection and the gate answers exit 2, but the run before that point has already
 # reported a failure for every selected case in a second or two -- which reads like six broken tests
-# and is one broken argument. Measured on 2026-11-24: a lane's six-point run came back all-red at
+# and is one broken argument. A lane's six-point run came back all-red at
 # 1s each for this reason. The refusal belongs here, before the transfer, where the argument that did
 # it is still in sight, and it names the form that works instead of translating it: a silent
 # conversion would leave the next reader writing backslashes into a path a Linux host resolves.
@@ -623,7 +623,7 @@ $checkers = [ordered]@{
     # The whole static layer of the release gate, in the gate's own order and with the gate's own
     # criterion: this entry exists because the layer had never actually been run on the mainline.
     # The merges only ever ran plans, and the gate's static phase -- thirteen checks, four of which
-    # start the tree's binary -- was measured for the first time on 2026-11-03, where all four of
+    # start the tree's binary -- was measured for the first time where all four of
     # those four failed with `GLIBCXX_3.4.36 not found`. The cause was not four defects but one:
     # `release-gate.mjs` appends `--camel <install>` to the four checks that read the install and
     # says nothing about the library that install needs, so they loaded the host's system
@@ -640,14 +640,14 @@ $checkers = [ordered]@{
     # A wall rather than a report-only entry: it is pure static analysis, deterministic, a few
     # seconds, and its count is already ratcheted in test/tools/plan-fields-baseline.json -- findings
     # may not grow past that file, and a missing baseline is itself a red rather than a pass over
-    # nothing. 331 findings on 2026-11-14; the number coming down is the work item, and this entry
+    # nothing. 331 findings; the number coming down is the work item, and this entry
     # going red is what says it went up.
     'plan-fields'         = @{ script = 'test/tools/check-plan-fields.mjs'; args = @(); compiler = $false }
-    # CI's own compiler on this tree's own compile lines (D-1123-84). The local gate compiles with one
+    # CI's own compiler on this tree's own compile lines. The local gate compiles with one
     # toolchain on one platform, so a diagnostic only another one reports -- `-Wc++11-narrowing` at
     # `src/stdlib/onnx/lowering_grad.cpp:480` is the one that cost a day -- stayed invisible until a CI
     # run, and CI runs are the slowest reading in this project. The host's clang is a newer major and
-    # does not report what 19 does (measured on `5f68184983`: clang 23 exit 0, clang 19 red), so the
+    # does not report what 19 does (measured: clang 23 exit 0, clang 19 red), so the
     # script runs clang 19 from the image it names. It reads no install -- so `compiler` is false and
     # the entry is meaningful under `-NoBuild` -- and it reads the flags from
     # `build/compile_commands.json` rather than carrying a copy of `cmake/Warnings.cmake`, which is the
@@ -658,7 +658,7 @@ $checkers = [ordered]@{
     # `compiles`: this checker starts compilers on the host, so it is a build with another name and
     # takes a build slot like one (see the checker stage, and `-Jobs` from the slot it gets). Without
     # that it ran after the build slots were released: the panel showed no build holder while the box
-    # ran at load 192, and the reading was taken with nothing excluding anyone (2026-11-24).
+    # ran at load 192, and the reading was taken with nothing excluding anyone.
     'clang-syntax'        = @{ script = 'scripts/check-clang-syntax.mjs'; args = @('--changed'); compiler = $false; changed = $true; compiles = $true }
     # The front end's AST snapshot against the tree, before the plan that is red on it: every `.cml`
     # the tree holds, and the probes `probes.py` makes, hashed by `camel-parsecheck hashes` -- the
@@ -666,7 +666,7 @@ $checkers = [ordered]@{
     # `test/plans/feat/parse/golden/ast_hashes.txt` records for each compared with the reading the
     # file gives now. A `.cml` whose reading moved, or a `.cml` nobody registered, is a red on the
     # base branch that the merge position has to find and patch after the fact; that happened five
-    # times (`1dad3104f` is the fifth: `4363 lines, 3 added, 3 removed`), and each time the repair
+    # times (the fifth: `4363 lines, 3 added, 3 removed`), and each time the repair
     # was right and the reader was late. This is the reader: one process, one line per stale file,
     # from the lane's own worktree, before the push.
     #
@@ -706,7 +706,7 @@ $checkers = [ordered]@{
     # printed here is the number the checker printed -- the list is one work item, and the number
     # coming down is what this line exists to show. `--enforce` is deliberately absent: the checker
     # offers it as the mode this entry becomes once its list is empty, and a lane that switched it
-    # on now would gate the baseline each entry printed on 2026-11-14.
+    # on now would gate the baseline each entry printed.
     'program-holders'       = @{ script = 'scripts/check-program-holders.mjs'; args = @(); compiler = $false; reportOnly = $true; findings = 's/.*check-program-holders: ([0-9]+) C\+\+ Program holder.*/\1/p' }
     # The three layering rows of the target architecture's section 7 (守护), each read as its own
     # script: only the semantic layer enumerates a kind of edge; an effect is answered by the fact
@@ -849,11 +849,11 @@ $checkList = $checkNames -join ' '
 # `.cml` file this tree has, and no `-AstDrop` named them -- are `StillHere` and `Refused`. The tree
 # that question is asked about is an argument with no default: a default would have asked it about
 # the directory the tool was started in (iron rule 17). The bulk
-# condition is the one that does not depend on where a file is: on 2026-11-17 `eaa3ecb8c` recorded
+# condition is the one that does not depend on where a file is: on 2026-11-17 a re-record ran
 # with the bulk flag on a tree that was missing the seven `test/cases/compile/var/loop_*.cml` a
 # parallel lane had just added, and those rows went with the files (4400 lines to 4393). Those files
 # were in neither that tree nor its base branch, so no `Test-Path` could have seen the loss; a bulk
-# rewrite could have known it was rewriting the whole table. `27de8a3df` put the rows back by hand,
+# rewrite could have known it was rewriting the whole table. the rows were put back by hand,
 # and `agents/test.md` now carries the rule this function enforces.
 function Get-AstDropVerdict {
     param(
@@ -956,7 +956,7 @@ function Stop-HostProcess {
 # it -- is the seat's token reporter saying the host is still there, once per tick, for as long as
 # the host lives. It says nothing about what the run found, and it is printed by a process the run
 # owns: when the plan stage ends or the plan stage hangs, that reporter keeps ticking either way.
-# A deadline a heartbeat can postpone is not a deadline -- measured 2026-11-25, the pre-fix run sat
+# A deadline a heartbeat can postpone is not a deadline -- the pre-fix run sat
 # behind exactly this and its 600 s cutoff never fired, because every tick reset the clock.
 #
 # So the rule is one line wide: a keep-alive does not reset the clock, everything else does. Written
@@ -1514,7 +1514,7 @@ $run = @{
     # the hold; `jobsRequested` is what the caller wrote on the command line. They are two fields
     # because they are two facts: a registry whose only `jobs` is the request records an intention,
     # and an intention of 32 beside a run that started 8 processes is the number that misled every
-    # lane on 2026-11-23. `buildJobs` is the build half, taken from the build slot.
+    # lane. `buildJobs` is the build half, taken from the build slot.
     jobs            = $null
     jobsRequested   = $Jobs
     buildJobs       = $null
@@ -2658,7 +2658,7 @@ else
 fi
 # --- the tree under test, as it was handed over -----------------------------
 # The baseline for `tree_probe` below, taken once the tree is in the state this run asked for: the
-# commit, this lane's own uncommitted change (the patch above), and its untracked files. A porcelain
+# commit, this run's own uncommitted change (the patch above), and its untracked files. A porcelain
 # line that shows up in a later reading but not in this one was written *during* this run, which is
 # the question -- a lane's own dirty tree is its business, not the build's doing.
 tree_handover='$remoteScratch/tree-handover'
@@ -2706,7 +2706,7 @@ export PATH="`$HOME/$($cfg.hostLocalBin):`$B:`$V:`$C/bin:`$HOME/$($cfg.hostWorkR
 # a shape that reads exactly like "the width followed its neighbours". It was not the width; the
 # binary could not start. The root fix is in the install now -- a build from 26888783c on copies
 # the toolchain's libstdc++.so.6 into its `libs/` and names it with a `$ORIGIN` rpath -- and the
-# 15:35 ruling of 2026-11-03 deleted those two per-stage exports. This one global export stays for
+# 15:35 the rule deleted those two per-stage exports. This one global export stays for
 # the older installs still sitting in host checkouts; `$C/lib` stays after it, where it always was.
 export CC=clang CXX=clang++
 export LD_LIBRARY_PATH='$($cfg.hostLibStdCxxDir)'":`$C/lib:`${LD_LIBRARY_PATH:-}"
@@ -2715,12 +2715,12 @@ export LD_LIBRARY_PATH='$($cfg.hostLibStdCxxDir)'":`$C/lib:`${LD_LIBRARY_PATH:-}
 echo "[camel-remote] libstdc++: a current build carries libs/libstdc++.so.6 and finds it by its own rpath; this export is for older builds only"
 # CMAKE_BUILD_PARALLEL_LEVEL is not set here any more. It is a slot budget, and the slot number is
 # only known after the lock below is taken: a flat 24 for every run is how two lawful builds filled
-# 48 compile jobs on a 32-core host (2026-11-23, load 88).
+# 48 compile jobs on a 32-core host (load 88).
 export CAMEL_HOME="`$R/out/latest"
 export CAMEL_TEST_TMP="`$HOME/$($cfg.hostWorkRoot)/$name-test-tmp"
 # A failed test's own output is echoed to the console only under this variable
 # (test/tools/run-tests.mjs: printFailedOutput). Without it a red gate prints nothing but
-# "expected exit 0, got 1", so the gate hands back a red with no reason in it -- on 2026-10-23
+# "expected exit 0, got 1", so the gate hands back a red with no reason in it -- 
 # that hid "imports_all: median 92.8 ms exceeds ceiling 90 ms" behind a bare exit 1 for a day.
 export CAMEL_TEST_SHOW_OUTPUT=1
 # A gate run on a branch cut from a base that was already built compiles the same 600 translation
@@ -2772,7 +2772,7 @@ echo 'HOST_BUILD_SLOT=0'
 # --- the process budget of a slot -------------------------------------------
 # A slot says how many runs may be on this host at once; it says nothing about how many processes one
 # run starts. Three lawful occupancies -- two builds and one plan -- were measured at 153 processes
-# with load 88 on this 32-core host (2026-11-23), and every lane read that as "my change is slow".
+# with load 88 on this 32-core host, and every lane read that as "my change is slow".
 # So the budget belongs to the slot number and is decided here, where the slot number is known:
 # build slot 8 each, plan slot 16, the three together 32 -- the core count. The caller's -Jobs may
 # lower a budget and never raise it: a run that writes 32 gets its slot's 8, and one that writes 4
@@ -2818,7 +2818,7 @@ echo '__CAMEL_REMOTE_SYNCED__'
 # is no number to report, and "no number" must not be printed as zero).
 #
 # `show` is the pool's verifiable reading, and the lane in each holder record is how a token is
-# attributed to this run: `mine` counts the tokens whose holder record names this lane. The record
+# attributed to this run: `mine` counts the tokens whose holder record names this change. The record
 # is only believed for a token that is actually held (show prints only held tokens), so a stale
 # record cannot inflate the count. One printf per line: a short line reaches the stream whole, so a
 # concurrent line from the run cannot be spliced into the middle of it.
@@ -3764,7 +3764,7 @@ exit `$code
     # A fourth condition now precedes the write: the record may not lose a row while the file that row
     # records is still here (`$astStillHere` below). This is the tree the record belongs to, so it is
     # the only place the question "does that file exist" has the answer that matters -- the host
-    # records from its own checkout, which can be missing files this tree has (`eaa3ecb8c`,
+    # records from its own checkout, which can be missing files this tree has (
     # `agents/test.md`). A row that goes has to be named by -AstDrop, and a bulk re-record may not
     # lose one at all; the refusal prints the rows it would have dropped, with their recorded hash,
     # and writes nothing.

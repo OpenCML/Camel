@@ -175,7 +175,7 @@ if (process.argv.includes('--self-test')) {
     console.log(`self-test: on a miniature tree the walk reports ${branchProblems.length} line(s), `
         + `all in ${reported} and none under tmp/test/run-1/: ${scratchRead}`);
 
-    // A directory that is gone when the walk reaches it: the shape of the 2026-11-22 failure, which
+    // A directory that is gone when the walk reaches it: the shape of the failure, which
     // was a throw and an empty stdout rather than a finding. It must read as nothing found.
     let vanishedOk = true;
     const vanished = [];

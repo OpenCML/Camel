@@ -130,7 +130,7 @@ Check 'a merge commit that is not HEAD is refused' ($wrongHead.Exit -ne 0) "exit
 $plain = Run-MergeLane
 Check 'without -MergeCommit the start point is still asserted' (($plain.Exit -ne 0) -and ($plain.Text -match 'is not origin')) "exit $($plain.Exit): $($plain.Text)"
 
-# 6. The shape D-1124-78 is about: the seat merged integration into itself and made its merge on top,
+# 6. The shape the arrival check is about: the seat merged integration into itself and made its merge on top,
 #    so the first parent is an OLDER origin/<Target>. That is a different mistake from starting from a
 #    base origin never had, and the refusal has to say which one it is -- the repair differs.
 Invoke-RepoGit 'push -q origin elsewhere:integration' | Out-Null

@@ -1,6 +1,6 @@
 // The graph's edges are data, sync and order (docs/design/effects/edges.cn.md; design
 // principles 3.1). An order edge only orders: it does not make either end execute. What makes a
-// write of `println` run is the region it is written in (the author's ruling of 2026-11-15), not a
+// write of `println` run is the region it is written in, not a
 // later write on the same resource (formal F2, item 7).
 
 // `println(x)` returns `x`, so `b`'s effect is used by `return b`. `a`'s is needed by nobody, and it

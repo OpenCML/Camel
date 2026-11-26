@@ -3,7 +3,7 @@
  * compiler makes: `visitGeneratorBody` (src/compile/gct/builder.cpp) cuts the body at its `yield`s
  * and hands the rest to a step closure of its own, so the write of `i` between the two pulls is
  * that closure writing the body's cell -- not a name the program captured (design principles 3.5,
- * the ruling of 2026-11-15). The mark that says so is written where the body is synthesised and
+ * the rule). The mark that says so is written where the body is synthesised and
  * read by `visitFuncNode`; this case is what keeps that mark visible.
  *
  * The reading is the stream flattened the way `generators.cml` flattens it: `5` (0 then 5).

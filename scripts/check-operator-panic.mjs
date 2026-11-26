@@ -23,7 +23,7 @@
  *      statement no check can read, and the report below counts how many operators it can read so
  *      that such a gap is a number rather than a silence.
  *
- * The declarations state it now: `d39cd2464` wrote it on 42 operators, and the two scatters
+ * The declarations state it now: 42 operators declare it, and the two scatters
  * `src/stdlib/rulesets/transpose.cml` declares privately take the count to 44 of the 378 this run reads. So
  * what the red side measures is the size of the remaining debt, not a regression. The promise a
  * declaration without `panic` makes is the reason the debt matters: "no `panic`" means "this call

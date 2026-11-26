@@ -5,7 +5,7 @@
 // A class member that no constructor initializes and that carries no default member initializer is
 // read as whatever the allocator left in it. That is not a style question: `Builder`'s `synced_` /
 // `varied_` were read by `UnitContext`'s save before any statement had written them, and a garbage
-// `true` there built a closure under the wrong graph (the S1-6 capture refusal, `8c2d57ce9`).
+// `true` there built a closure under the wrong graph (the S1-6 capture refusal).
 //
 //   node scripts/check-member-init.mjs                 the files changed against the base
 //   node scripts/check-member-init.mjs --all           every .h / .cpp under the scanned roots
@@ -25,7 +25,7 @@
 // that reading is what the fast layer runs. It asks whether any constructor names the member, so it
 // answers a weaker question than the compiler's, and it reports the members whose value would be
 // indeterminate -- scalars, pointers, enums, bit-fields; a class-type member is constructed by its
-// own default constructor and is left to the compiler's reading. Measured 2026-11-20 on this tree:
+// own default constructor and is left to the compiler's reading. Measured on this tree:
 // before the sweep the compiler named 56 sites and the text read 12, the text read being a subset
 // of the compiler's rows apart from one member the compiler reaches through a constructor defined
 // in a .cpp; after the sweep both name none.
@@ -327,7 +327,7 @@ function scrub(input) {
     return out
 }
 
-const CLASS_HEAD = /\b(class|struct|union)\s+([A-Za-z_]\w*)?\s*(final\b)?\s*(:[^;{}()]*)?\{/g
+const CLASS_HEAD = /\b(class|struct|union)\s+([A-Za-z_]\w*)?\s*(final\b)?\s*([^;{}()]*)?\{/g
 
 function matchingBrace(text, open) {
     let depth = 0

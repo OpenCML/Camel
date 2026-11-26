@@ -1,4 +1,4 @@
-# The shape a commit must have before it is pushed to a target branch (D-1124-78), and the one
+# The shape a commit must have before it is pushed to a target branch, and the one
 # regression that matters beside it: a merge of the right shape still pushes.
 #
 # Why this exists: the three seats of 2026-11-24 merged `integration` into the seat and then
@@ -129,7 +129,7 @@ function Get-OriginTip {
     return "$out".Trim()
 }
 
-# A page landing on `integration` while the merge is being read: the shape the ruling is about.
+# A page landing on `integration` while the merge is being read: the shape the rule is about.
 function Add-LandingCommit {
     param([string] $Origin, [string] $Dir, [string] $Path, [string] $Text, [string] $Subject)
     if (-not (Test-Path -LiteralPath (Join-Path $Dir '.git'))) {

@@ -12,7 +12,7 @@
 #       prune, and a hand-made directory is still somebody's checkout).
 #   (c) On the host: that no process is inside the checkout. Read there, by the sweep itself.
 #
-# What went wrong on 2026-11-17, three times, in the same minute as a gate: the sweep removed a
+# What went wrong three times, in the same minute as a gate: the sweep removed a
 # checkout that was being measured, and the run died at 25/500, 200/500 and 300/500 with
 # `FileNotFoundError: .../out/latest/bin/camel` and a `uv_cwd` that could not read a working
 # directory which no longer existed. The reading that decided it came from the old inline code,

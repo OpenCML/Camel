@@ -6,7 +6,7 @@
  *
  * Twice in one night the answer was yes and the branch was one `git log` away: `grad_array_sum` died
  * of SIGSEGV and a lane was about to write a probe for it, when the fix had been sitting on
- * `origin/lane-lit2` (`19f0b05e8`, `0aed45eb6`) since before the report; and a `GUARD` question was
+ * that branch since before the report; and a `GUARD` question was
  * answered the same way. The rule is in `agents/test.md`; this is the rule as a tool, so it stops
  * depending on who remembers it.
  *

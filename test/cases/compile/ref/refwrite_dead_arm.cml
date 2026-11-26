@@ -6,10 +6,10 @@
  *
  * `in_the_untaken_arm` writes in the arm of `if false`, and `arm(false)` writes in the arm of a
  * condition only the run knows. Both answer 0, and nothing is reported for either arm: the diagnostic
- * that named a statement which does not run went with the region roots (the ruling of 2026-11-17).
+ * that named a statement which does not run went with the region roots (the rule).
  *
  * Not pinned here: `arm(true)`, the arm of a branch that IS taken, in a body that is not a `sync`
- * block. It answers 0 on the tree of 2026-11-16 too, because the value of an `if` statement nobody
+ * block. It answers 0 on this tree too, because the value of an `if` statement nobody
  * takes is not run at all -- a `println` in that position does not print either. That is the second
  * leg `R1` is blocked on (see `refwrite_shapes.cml`), and the shape belongs in that file, not in a
  * case that pins what the rule forbids.

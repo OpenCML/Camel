@@ -89,7 +89,7 @@ expect_output_contains = ["'step' is used as a value here, but it names an opera
 
 [[tests]]
 name = "surface.dropped_value_statement"
-desc = "The rows of the ruling of 2026-11-03 that compile, in one file: `func g(): void { 1 + 2 }`, `func g(): void { len }`, `{ len };` and `{ let s = len };` in a `sync` block, the same statement in a block that is not one, and the same name at the tail of a block that is a `void` body's own tail. A position that discards a value does not use a name, so none of them reports anything and the program runs; the name a dropped statement binds is still the name it was (the call through it prints 3). Before this the two `{ len }` shapes answered FunctionNameAsValue at the name, which was a report about a legal program."
+desc = "The rows of the rule that compile, in one file: `func g: void { 1 + 2 }`, `func g: void { len }`, `{ len };` and `{ let s = len };` in a `sync` block, the same statement in a block that is not one, and the same name at the tail of a block that is a `void` body's own tail. A position that discards a value does not use a name, so none of them reports anything and the program runs; the name a dropped statement binds is still the name it was (the call through it prints 3). Before this the two `{ len }` shapes answered FunctionNameAsValue at the name, which was a report about a legal program."
 kind = "behavior"
 case = "../../../cases/compile/surface/dropped_value_statement.cml"
 args = ["-E", "short", "${case}"]

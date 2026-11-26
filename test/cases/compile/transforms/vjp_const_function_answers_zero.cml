@@ -11,7 +11,7 @@
 //     graph (`zeroOfType`, modules/transforms/transpose.cpp) and answers `[0.0, 0.0, 0.0]`.
 //   * `float[...]` -- the type states no extent, so the zero is built from a **forward argument**:
 //     the cut carries every parameter whose type cannot state its own shape as one of its residuals
-//     (author, 2026-11-18 17:50), and the transposed half builds `zeros_like` of that value. At
+//, and the transposed half builds `zeros_like` of that value. At
 //     `[2.0, 3.0, 4.0]` the answer is `[0.0, 0.0, 0.0]` -- the width comes from the argument, not
 //     from an empty array whose extent the type would have stated.
 //   * `float` -- `0.0`.

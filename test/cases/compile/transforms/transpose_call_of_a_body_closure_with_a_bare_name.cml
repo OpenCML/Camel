@@ -17,7 +17,7 @@
 // That is the reading the sibling case now gets too -- it did not when this case was written, and the
 // pair is what made the defect visible: the same shape, refused correctly when the argument is a name
 // and misread when it is a call, because a call is the one argument that *does* name a graph, and the
-// walk read that graph as this call's callee. The fix was to stop asking the operands (2026-11-04), so
+// walk read that graph as this call's callee. The fix was to stop asking the operands, so
 // both programs read the same line, and the difference between them is now only the node the argument
 // stands for -- a DATA holding a function, or a FUNC holding a call.
 //

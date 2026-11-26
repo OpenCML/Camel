@@ -16,15 +16,15 @@ desc = "Two writings of one program that differ only in the order two `var` decl
 # refuses (exit 2) a program that does not translate, so a refusal cannot be read as two documents
 # that agree.
 #
-# --- what this case does NOT prove, measured rather than assumed (2026-11-20) --------------
+# --- what this case does NOT prove, measured rather than assumed --------------
 # It is a regression guard, not a proof that the walk's key is load-bearing. Three readings were
 # taken on this host and all three came back green, so this program does not separate an ordered walk
 # from an unordered one:
-#   1. the key left as `f26529338` wrote it, `(id, epoch)`             -> one document
+#   1. the key left as the walk wrote it,   `(id, epoch)`             -> one document
 #   2. the key cut to `left.epoch < right.epoch`, the node dropped     -> one document
-#   3. the sorts of `dropCarriedVariableUnits` deleted outright, i.e. the pre-`f26529338` walk
+#   3. the sorts of `dropCarriedVariableUnits` deleted outright, i.e. the earlier walk
 #                                                                      -> one document, three runs
-# The third is the one that matters: `f26529338` exists because that walk was measured to number one
+# The third is the one that matters: That walk exists because it was measured to number one
 # body differently from run to run ("node 1/2/3 differ between runs, close to uniform", wins1), and
 # on this host it does not -- a fresh process here lays the same nodes at the same addresses, so the
 # address order and the program order coincide for these tables and nothing of this shape can see

@@ -1,7 +1,7 @@
 // Copyright (c) the OpenCML Organization
 // SPDX-License-Identifier: MIT
 
-// Refused since 2026-11-16 (design principles 3.5, 198, the author's ruling of that day): `h` is put
+// Refused (design principles 3.5, 198): `h` is put
 // into the tuple `(1, h)` and `c` is written after it, so the stretch of the captured name runs to
 // the rest of the scope and the write is `CapturedVarWrittenAfterTheClosure`. The shape it used to
 // read is the dead write -- `p.0` reads the tuple's first member alone, `w * 0` is the write's only

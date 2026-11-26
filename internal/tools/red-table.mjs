@@ -45,7 +45,7 @@ const T0 = process.hrtime.bigint();
 // `--diff` is answered before any record is read: the comparison is about two files, and a reader who
 // asked for it must not pay 10 s of record loading, nor have a page written under them as a side
 // effect. The refusal (exit 2) is the point when the two tables were taken under different conditions
-// (C-1124-183/185): "these are not the same instrument" is not a diff with a hundred new rows.
+//: "these are not the same instrument" is not a diff with a hundred new rows.
 {
   const i = argv.indexOf('--diff');
   if (i >= 0) {

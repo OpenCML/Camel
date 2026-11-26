@@ -49,7 +49,7 @@ function run(root, mode) {
 }
 
 // The scratch tree mirrors the layout the generator reads. The kernel's diagnostics live under
-// `src/kernel/` since the 2026-11-22 move -- `src/kernel/diagnostics/registry.tsv`,
+// `src/kernel/` since the move -- `src/kernel/diagnostics/registry.tsv`,
 // `src/kernel/include/camel/core/error/diagnostics/` and
 // `src/kernel/core/error/diagnostics/` -- and under `kernel/` after the layout move, so the fixture
 // and the generator carry the same spelling; a fixture in another layout is a copy the generator

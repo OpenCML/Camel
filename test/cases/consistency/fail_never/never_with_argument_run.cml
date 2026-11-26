@@ -1,5 +1,5 @@
 /**
- * A `with` argument of type `never` stops the call (design principles 3.9; the author's ruling of
+ * A `with` argument of type `never` stops the call (design principles 3.9): a `with` argument is evaluated before the call it is
  * 2026-10-26 on `never-argument-scope`): a `with` argument is evaluated before the call it is
  * written in like an ordinary one, and this one never gives a value, so the fault it raises is
  * what ends the program. The call never runs -- it is typed `never` and no overload is chosen for

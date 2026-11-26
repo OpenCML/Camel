@@ -4,7 +4,7 @@
 // the one number is that number at every position of the operand's shape. A value graph has no cut
 // to carry the extents along, so the law is handed them -- `sum_from_type_t` names one port more
 // than the operator has, and the walk reads `extent_of`'s rule off the operand's type and hands the
-// `int[]` over. Measured 2026-11-04 on the base tree (`c4391db57`) this program stopped with
+// `int[]` over. Measured on the base tree this program stopped with
 // `TRANSPOSE function=total skip=rule uri=tensor:sum reason=unbound`, and it answers
 // `([1.0, 1.0, 1.0])` now.
 import rulesets.transpose

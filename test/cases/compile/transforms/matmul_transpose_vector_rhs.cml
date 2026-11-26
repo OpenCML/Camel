@@ -14,10 +14,10 @@
 // is the forward half that states it: `stdlib/rulesets/jvp.cml#jvp_matmul` writes
 // `matmul_stated(da, b, shape(a), shape(b))`, so `shape(x)` and `shape(u)` are computed where both
 // values are in hand and travel to the backward half as **known arguments of the linear call**
-// (author, 2026-11-04 12:40). `stdlib/rulesets/transpose.cml#matmul_stated_t` reduces with
+// `stdlib/rulesets/transpose.cml#matmul_stated_t` reduces with
 // `sum_to_stated(..., sa)` / `sum_to_stated(..., sb)`, and it builds the one thing the walk cannot
 // build from a type that states no extents: the zero carrier the helpers read for `u`'s rank, from
-// `sb` itself (`zeros::<T>(sb) as B`). Until 2026-11-04 it passed the operand instead, so the
+// `sb` itself (`zeros::<T>(sb) as B`). It passed the operand instead, so the
 // expansion asked the caller for a value behind it and the step stopped at
 // `skip=parameter-shape uri=tensor:matmul_stated node=8 position=1 param=1 param-type=float[]`.
 //

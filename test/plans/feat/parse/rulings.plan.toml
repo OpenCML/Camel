@@ -68,7 +68,7 @@ timeout_ms = 8000
 
 [[tests]]
 name = "rulings.doc_comment_attribution_is_syntax"
-desc = "A `///` line belongs to the declaration that follows it, and a blank line between the two changes nothing (the author's ruling of 2026-10-26): `with_gap`, `exported` and `gap_constant` each carry the documentation written one blank line above them. A blank line inside a block of `///` lines does not split it either, so `two_paragraphs` carries both paragraphs. An ordinary `//` comment belongs to no declaration and ends the documentation of what follows it, so `separated` carries none; the blank line after a declaration ends a block that reaches back over it, so `later` does not take the documentation of `separated`."
+desc = "A `///` line belongs to the declaration that follows it, and a blank line between the two changes nothing: `with_gap`, `exported` and `gap_constant` each carry the documentation written one blank line above them. A blank line inside a block of `///` lines does not split it either, so `two_paragraphs` carries both paragraphs. An ordinary `//` comment belongs to no declaration and ends the documentation of what follows it, so `separated` carries none; the blank line after a declaration ends a block that reaches back over it, so `later` does not take the documentation of `separated`."
 kind = "behavior"
 case = "../../../cases/parse/rulings/doc_comment_blank_line.cml"
 args = ["${inspect_ast}", "${case}"]
@@ -102,7 +102,7 @@ timeout_ms = 8000
 
 [[tests]]
 name = "rulings.loop_ast"
-desc = "The `do` form of a loop (design principles 3.10): `loop s = a, t = b (for x in xs)? (while c)? do e` parses to a LoopExpr node with the names of the state and of the element, and four children: the first values, the optional sequence, the optional condition, the body (an expression after `do`, a block on the AST as the arm of an `if` is). The four shapes of the ruling: one state over an array, two states under a condition, a struct literal as the state and as the body, `for ... while` with an `if` as the body."
+desc = "The `do` form of a loop (design principles 3.10): `loop s = a, t = b (for x in xs)? (while c)? do e` parses to a LoopExpr node with the names of the state and of the element, and four children: the first values, the optional sequence, the optional condition, the body (an expression after `do`, a block on the AST as the arm of an `if` is). The four shapes of the rule: one state over an array, two states under a condition, a struct literal as the state and as the body, `for ... while` with an `if` as the body."
 kind = "behavior"
 case = "../../../cases/parse/rulings/loop_forms.cml"
 args = ["${inspect_ast}", "${case}"]
@@ -261,7 +261,7 @@ timeout_ms = 8000
 
 [[tests]]
 name = "rulings.stream_type_as_interval"
-desc = "The right side of `as` is a type: `...` after a type there is the stream suffix. A number written directly after the `...` is the interval reading in a place where a type stands, and the refusal is named and says how to write it - the message the ruling asked for, at the `...`, with the operator of the `as` quoted. It used to be `Unexpected '...'; expected '}'.` at the `...`."
+desc = "The right side of `as` is a type: `...` after a type there is the stream suffix. A number written directly after the `...` is the interval reading in a place where a type stands, and the refusal is named and says how to write it - the message the rule asked for, at the `...`, with the operator of the `as` quoted. It used to be `Unexpected '...'; expected '}'.` at the `...`."
 kind = "negative"
 case = "../../../cases/parse/rulings/stream_type_as_interval.cml"
 args = ["${case}"]
@@ -349,7 +349,7 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "norma
 
 [[tests]]
 name = "rulings.open_range_not_in_language"
-desc = "There is no open interval `a..` (the author's ruling of 2026-11-16): a range has only a bounded form, its result is an array, and no syntax is added for counting until a condition holds -- that is the counting `while` loop. `1..` has no right-hand side, and it is refused by name - SyntaxDiag::IntervalHasNoOpenForm, at the `..` itself (18:17) - instead of the parser taking the `return` of the following line for the missing operand and reporting `Unexpected 'return'; expected an expression` at 8:5, which is a token that is not wrong. The help gives the author's replacement wording, and what does have a second operand is accepted in the same program above the refusal: `1..4` is the interval and `inc <> dbl` is the composition, so a change that made `..` unreadable everywhere would be red here."
+desc = "There is no open interval `a..`: a range has only a bounded form, its result is an array, and no syntax is added for counting until a condition holds -- that is the counting `while` loop. `1..` has no right-hand side, and it is refused by name - SyntaxDiag::IntervalHasNoOpenForm, at the `..` itself (18:17) - instead of the parser taking the `return` of the following line for the missing operand and reporting `Unexpected 'return'; expected an expression` at 8:5, which is a token that is not wrong. The help gives the author's replacement wording, and what does have a second operand is accepted in the same program above the refusal: `1..4` is the interval and `inc <> dbl` is the composition, so a change that made `..` unreadable everywhere would be red here."
 kind = "negative"
 case = "../../../cases/parse/rulings/open_range.cml"
 args = ["${case}"]
@@ -365,7 +365,7 @@ timeout_ms = 8000
 
 [[tests]]
 name = "rulings.count_until_by_while"
-desc = "Counting until a condition holds is the counting `while` loop, the writing the author's ruling of 2026-11-16 sends the open interval `a..` to: one counter stops at the first square that is not below 1000, and two counters stop when the running sum passes 100 (their value is the tuple of both). No range is asked for whose end is a condition, and every back end prints the same three numbers."
+desc = "Counting until a condition holds is the counting `while` loop, the writing the rule sends the open interval `a..` to: one counter stops at the first square that is not below 1000, and two counters stop when the running sum passes 100 (their value is the tuple of both). No range is asked for whose end is a condition, and every back end prints the same three numbers."
 kind = "behavior"
 case = "../../../cases/parse/rulings/count_until.cml"
 args = ["${case}", "${backend}"]

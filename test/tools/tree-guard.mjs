@@ -54,7 +54,7 @@
  * pair of readings. Judging it again is a second verdict on the same phenomenon, and the two
  * criteria differ: the nested window closes while a file a *sibling* test wrote is still there (a
  * leak, red), and that file is gone when the outer window closes (`appeared and were gone again`, an
- * annotation). Measured on 2026-11-16: `test/.provenance-probe-3367882.tmp`, written and removed by
+ * annotation). Measured: `test/.provenance-probe-3367882.tmp`, written and removed by
  * `runner.provenance_line_names_the_artifact`, failed the nested run started by
  * `runner.tier_declared_against_started` and was an annotation in the outer run -- one gate, one
  * file, two verdicts. So the role travels in `CAMEL_TREE_GUARD`, which every run sets to `nested` for
@@ -141,7 +141,7 @@ export function isIgnoredByWatch(relative) {
      * criterion this function implements is "which paths can carry a finding". The gate checkout
      * carries 1,579 directories of an installed `editors/vscode/node_modules`, and the first-segment
      * rule above walked and watched every one of them for a path the verdict could not name.
-     * Measured on 2026-11-16, nine samples per shape, on that checkout: 2,392 directories watched
+     * Measured nine samples per shape, on that checkout: 2,392 directories watched
      * and a walk of 88.0 ms before this line, 818 and 29.4 ms after it, which moved the pre-test
      * pair from 119.5 ms to 54.2 ms and one launch's fixed cost from 267.0 ms to 201.5 ms (twelve
      * paired rounds on one commit). **The criterion is unchanged**; the set of paths that can carry
@@ -223,7 +223,7 @@ export function readTreeState(root) {
  * Why the second shape exists: the run's pre-test window is two readings that do not depend on one
  * another -- this `git status` and the watcher's walk over the checkout (startTreeWatch) -- and the
  * runner used to take them one after the other, paying their sum before its first test could start.
- * Started together they cost the longer of the two instead. Measured 2026-11-16, nine samples of
+ * Started together they cost the longer of the two instead. Measured over nine samples of
  * each shape, on the two trees a run is made on:
  *
  *   the gate checkout (Linux, Node 20.20.2, 2,392 directories): `git status` 25.8 ms, the walk and

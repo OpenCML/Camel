@@ -1,6 +1,6 @@
 # The shape every commit that enters a target branch must have, read immediately before the push.
 #
-# The ruling (D-1124-78): each commit that lands on `integration` is a MERGE commit whose first
+# The ruling: each commit that lands on `integration` is a MERGE commit whose first
 # parent is the tip `origin/integration` held at that moment. The three seats of 2026-11-24 satisfied
 # the weaker rule -- the push was a fast-forward -- by merging `integration` into the seat and then
 # fast-forwarding the seat onto it. The history that produced has four lane commits and four
@@ -60,7 +60,7 @@ function Test-PushFirstParent {
     $tipShort = $tip.Substring(0, 9)
 
     # One read answers both questions: the first token is the commit itself and the rest are its
-    # parents in order, so `Parents[1]` IS `<sha>^1` -- the reading the ruling names -- and the count
+    # parents in order, so `Parents[1]` IS `<sha>^1` -- the reading the rule names -- and the count
     # is what tells a merge from a lane commit.
     $line = "$(& git -C $Tree rev-list --parents -n 1 $sha 2>$null)".Trim()
     $tokens = @($line -split '\s+' | Where-Object { $_ })

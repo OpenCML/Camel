@@ -8,20 +8,20 @@
 // forward half and already answers the same 48 as `t1` from `jvp(jvp(f))`, which is a second reading
 // of the same second derivative and not a copy of this one.
 //
-// This file used to be a negative, and the two walls it named are both gone. Read 2026-11-20 09:20:
+// This file used to be a negative, and the two walls it named are both gone. Read on this tree:
 //
 //     error[RuntimeDiag::RuntimeError]: An error has occurred: transforms: jvp has no forward
 //     transform for this function.
 //
 // with the explanation that the outer `jvp` had to lift a function whose answer is
 // `(float, (float) => float)` and that type has no tangent space. That explanation stopped being true
-// at `2da9735da`, which added the law that lifts that answer type -- so the property this file was
+// once a law lifted that answer type -- so the property this file was
 // written to pin ("a result type with no tangent space is refused") no longer holds, and the refusal
-// was not a property of the language but of how far the implementation had got. `2a2cf31a8` then
-// removed the next wall, `split does not build this function (the value half reads the tangent of
+// was not a property of the language but of how far the implementation had got. The next wall was then
+// removed, `split does not build this function (the value half reads the tangent of
 // parameter 0, which the forward half does not take)`.
 //
-// What the nest stops at today, measured 2026-11-21 on `b74edf66c` (`std::nvm`), is one step
+// What the nest stops at today, measured on `std::nvm`, is one step
 // further on, and it is neither of those:
 //
 //     [Error]: An error has occurred: transforms: transpose has no transpose for this function: the

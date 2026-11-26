@@ -1,5 +1,5 @@
 /**
- * The writing-freedom reading of the region rule (design principles 3.1, the author's ruling of
+ * The writing-freedom reading of the region rule (design principles 3.1): two statements of a body that is not `sync`, each a write to a **different** resource
  * 2026-11-17): two statements of a body that is not `sync`, each a write to a **different** resource
  * outside the program -- the console, and the generator `random` seeds -- and neither value read by
  * anything.

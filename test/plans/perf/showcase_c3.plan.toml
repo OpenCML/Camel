@@ -60,7 +60,7 @@ case = "../../../showcase/c3-char-transformer/train.cml"
 # default is not assumed at the entry (the runtime says so itself,
 # `RuntimeDiag::EntryArgumentMissing`: "No default is assumed").  `lr` and `seed` therefore have to
 # be given, or the run stops in the argument binder and never reaches the library at all -- which is
-# what this entry's old three-argument form measured on 2026-11-04.
+# what this entry's old three-argument form measured.
 args = ["${case}", "--arg", "corpus=showcase/c3-char-transformer/corpus.txt", "--arg", "mode=train", "--arg", "steps=2", "--arg", "lr=0.002", "--arg", "seed=7"]
 expect_exit = 1
 expect_stdout_contains = ["c3 config steps=2 mode=train lr=0.0020 seed=7", "c3 init loss=3.303745", "transforms: jvp has no forward transform for this function"]

@@ -13,7 +13,7 @@
  *
  * ## Why these are lists and not numbers
  *
- * Author's ruling of 2026-11-03 13:30 (`internal/reviews/questions-2026-10-29.md`): a count
+ * the rule (`internal/reviews/questions-2026-10-29.md`): a count
  * that can drift while the behaviour stays the same protects nothing.
  *
  *   * The `references` count is **gone**. It counted how many times the whole word `GraphDraft`
@@ -33,7 +33,7 @@
  * insertion is a check people learn to ignore.
  *
  * `files` is a list and not a count even though a machine can write the type into a comment and move
- * it: the ruling keeps this list, and the report below prints the line a new member stands on, so a
+ * it: the rule keeps this list, and the report below prints the line a new member stands on, so a
  * reader sees whether a file entered because of code or because of prose.
  *
  * **Membership is decided on code, not on text.** A match inside a comment, a character literal or a
@@ -99,7 +99,7 @@ const REPO_ROOT = path.resolve(HERE, '..', '..', '..', '..')
 const BASELINE_PATH = path.join(HERE, 'baseline.json')
 
 // The roots the ledger reads: the four source roots of the layout map
-// (`docs/design/architecture/layout-map.cn.md`), under `src/` since the 2026-11-22 move and under
+// (`docs/design/architecture/layout-map.cn.md`), under `src/` since the move and under
 // their own names before it (`src/`, `include/` and `modules/` before the layout move).
 // `test/`, `docs/` and the library's own `.cml` are deliberately absent: the ledger page and this
 // checker talk about `GraphDraft` by name all day, and the engine's sources must not.

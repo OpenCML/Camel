@@ -36,10 +36,10 @@ assert(out === 'pair 1.0', `unexpected output: ${out}`)
 """
 timeout_ms = 20000
 
-# `rc05_seed104` of the reduced programs of result `adb67e081` (CC2027 eval, `test/cases/opt/
+# `rc05_seed104` of the reduced programs of that result (CC2027 eval, `test/cases/opt/
 # adb67e081/`): the same arm-tail choice, reached without `inline` -- the loop is written in the arm
 # and its body is a lambda call, so `std::cxx::fold` alone refused the graph with `GATE 28 reads
-# OPER 21 (:mark/filter_arr), which lies in an arm of BRCH 24`. The program prints nothing, so the
+# OPER 21 (mark/filter_arr), which lies in an arm of BRCH 24`. The program prints nothing, so the
 # output of a run with the folding must be the output of a run without it: the three entries below
 # are that comparison, the first one being the reference the other two must equal.
 

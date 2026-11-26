@@ -1,8 +1,8 @@
-# The shape an arrival on `integration` must have (D-1124-78), checked where the push is made.
+# The shape an arrival on `integration` must have, checked where the push is made.
 #
 # `merge-lane.ps1` asserts the shape of the commit it is about to push, and that assertion cannot see
 # a push it did not make. On 2026-11-24 the three seats pushed merges whose first parent was not the
-# tip (they merged `integration` into the seat and fast-forwarded the seat onto it) and `50a77d7bf2`
+# tip (they merged `integration` into the seat and fast-forwarded the seat onto it) and one merge
 # went in with a single parent -- none of which went through the tool. So the assertion is also in
 # `scripts/hooks/pre-push`, which sees every ref that leaves this machine.
 #

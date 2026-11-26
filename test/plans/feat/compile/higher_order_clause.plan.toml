@@ -21,7 +21,7 @@ tags = ["feat", "compile", "effects", "hof", "higher_order"]
 # fourth time: it reads the footprint fact for the node (`core.resources`,
 # `fact::nodeResourcesOf`), so the role a dump prints is that one answer.
 #   * `map` over a function that writes no clause has no `effect` role; over one that writes
-#     `stdout` it keeps both, and the runtime footprint carries the write. Before `fd1c9838ca` the
+#     `stdout` it keeps both, and the runtime footprint carries the write. Before the fix the
 #     declaration said "external, itemizes nothing" and every `map` was an effect, whatever the
 #     callback.
 #   * `state:update` declares both halves: the box it writes (a handle) and the function it runs

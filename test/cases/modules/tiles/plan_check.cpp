@@ -433,7 +433,7 @@ int main() {
             minimum.evaluate({{"a",ScalarValue::f32(0)},{"b",ScalarValue::f32(-0.0f)}}).bits != 0x80000000U)
             throw std::runtime_error("scalar IR extrema bit contract mismatch");
         // A NaN is a NaN: its payload and signalling bit are not part of the value (design
-        // principles, floating point; the author's ruling of 2026-11-23), so the extrema's NaN
+        // principles, floating point; the rule), so the extrema's NaN
         // result is judged as a NaN and not against the canonical bit pattern it carries today.
         if (!std::isnan(maximum.evaluate({{"a",{DType::F32,0xffc01234U}},{"b",ScalarValue::f32(1)}}).asF32()))
             throw std::runtime_error("scalar IR extrema lost the NaN result");

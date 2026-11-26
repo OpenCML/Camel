@@ -1,7 +1,7 @@
 /**
  * A loop whose body faults at its fourth element: the three writes before it are visible in what
  * was printed. The body used to be a `foreach` closure that wrote a captured `var`; a closure may
- * not assign an outer name (the ruling of 2026-11-15, design principles 3.5), and the body of a
+ * not assign an outer name (the rule, design principles 3.5), and the body of a
  * `loop` belongs to its own function, so the write is a plain rebinding of `total`.
  */
 

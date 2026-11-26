@@ -53,7 +53,7 @@
 #             name bytes the commit does not contain.
 #
 # Usage from a generated run.sh:
-#   "${CAMEL_RUN:=/home/zjwei/camel-work/bin/camel-run}" lock --lane "$name" --branch "$branch" -- \
+#   "${CAMEL_RUN:=<home>/camel-work/bin/camel-run}" lock --lane "$name" --branch "$branch" -- \
 #       bash -c '<the plan run>'
 set -u
 
@@ -119,7 +119,7 @@ version_check() {
 check_version() {
     # The caller may name the version it expects (a run.sh records the one that generated it). A
     # disagreement is refused with both values, because "which tools took this reading" is the question
-    # that cost half a day on 2026-11-24.
+    # that cost half a day.
     local want="${CAMEL_RUN_EXPECT:-}"
     local have
     version_check
@@ -322,7 +322,7 @@ cmd_plan() {
 # A build takes tokens and no slot. The slot's meaning is "one test run being observed", and there is
 # nothing to observe while compiling; making the slot cover the build would turn three slots into three
 # build seats and leave the tests unbounded, which is the opposite of what they are for. Concurrency
-# between builds is the pool's business -- k tokens, then `ninja -j k` (D-1124-38).
+# between builds is the pool's business -- k tokens, then `ninja -j k`.
 cmd_build() {
     local want="${CAMEL_BUILD_TOKENS:-8}" peak=0
     check_tools

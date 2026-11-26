@@ -14,7 +14,7 @@ if (!/^\d+\.\d+\.\d+$/.test(ver)) {
 logStep('Setting version to ' + ver)
 
 // The tree was re-laid-out twice under this script and neither move touched it: `changes.log`
-// became `CHANGELOG.md` and `pypi/` became `packaging/pypi/` in `2de5b196f8`. The bump then wrote
+// became `CHANGELOG.md` and `pypi/` became `packaging/pypi/`. The bump then wrote
 // package.json and config.h and threw, leaving a tree that said 0.2.47 everywhere except the files
 // a reader opens first. Every path is looked up among the names it has had, so a branch cut before
 // the move still bumps, and a missing file is an error rather than half a bump.

@@ -2,7 +2,7 @@ id = "compile.unused_values"
 order = 413
 tier = "fast"
 tags = ["feat", "compile", "diagnostics", "negative", "unused"]
-desc = "A statement whose value nobody uses gives exactly one diagnostic, whatever the body it is written in: a statement whose value is a `T!` is UnusedFallibleValue, in a `sync` body and outside one alike (the error it may hold is lost either way, and it is the only warning such a statement gets); a statement that does not run is not reported at all -- the diagnostic that named it went with the region roots (the ruling of 2026-11-17); a pure statement is UnusedPureResult. The `T!` statement of a body that is not `sync` was silent, and the same statement in a `sync` body of an effect-shaped callee was reported as an effect that never runs -- that second warning no longer exists."
+desc = "A statement whose value nobody uses gives exactly one diagnostic, whatever the body it is written in: a statement whose value is a `T!` is UnusedFallibleValue, in a `sync` body and outside one alike (the error it may hold is lost either way, and it is the only warning such a statement gets); a statement that does not run is not reported at all -- the diagnostic that named it went with the region roots (the rule); a pure statement is UnusedPureResult. The `T!` statement of a body that is not `sync` was silent, and the same statement in a `sync` body of an effect-shaped callee was reported as an effect that never runs -- that second warning no longer exists."
 
 [defaults]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
@@ -50,7 +50,7 @@ assert(input.diagnostics.length === 0, JSON.stringify(input.diagnostics))
 
 [[tests]]
 name = "unused_values.a_call_that_writes_runs"
-desc = "A call written as a statement of a body that is not `sync` is one of that body's writes when its callee writes (design principles 3.1, the author's ruling of 2026-11-17: `算子、调用、分支、循环一样`), so the body's `GATE` reads it and the call runs: the print happens and no diagnostic is reported. It replaces `unused_values.effect_body`, which pinned the reading the ruling reversed -- a call to an effectful callee in the graph and in nothing else -- and it pins the other half of the same program: the call runs, the callee still hands its value on, and the two lines keep the order they are written in."
+desc = "A call written as a statement of a body that is not `sync` is one of that body's writes when its callee writes (design principles 3.1: `算子、调用、分支、循环一样`), so the body's `GATE` reads it and the call runs: the print happens and no diagnostic is reported. It replaces `unused_values.effect_body`, which pinned the reading the rule reversed -- a call to an effectful callee in the graph and in nothing else -- and it pins the other half of the same program: the call runs, the callee still hands its value on, and the two lines keep the order they are written in."
 kind = "behavior"
 case = "../../../cases/compile/unused_values/effect_body.cml"
 args = ["-E", "short", "${case}"]
@@ -142,7 +142,7 @@ assert(input.diagnostics[0].name === 'SemanticDiag::CalledFallibleValue', input.
 assert(input.diagnostics[0].line === 13 && input.diagnostics[0].column === 22, JSON.stringify(input.diagnostics[0]))
 """
 
-# ---- What a statement whose value nobody takes reports, per position (author's ruling of 2026-11-05, `080778522`) ----
+# ---- What a statement whose value nobody takes reports, per position (the rule) ----
 #
 # The help used to give two remedies that are not writings: a `sync { ... }` block put in a function
 # body (as a statement it is itself not needed, so it does not run) and a sync block bound to a name
@@ -161,7 +161,7 @@ tier = "slow"
 
 [[tests]]
 name = "unused_values.loop_body_runs_each_round"
-desc = "An effect written as a statement of a `loop` body that is not a sync block runs in every round: the loop's value is used, so the loop runs, so the write its body holds is a root of the loop body's region (design principles 3.1, \"循环每一轮都执行\"). The three `i=` lines and then `total=3` print, and nothing is reported. The author's ruling of 2026-11-15 overrides the 2026-11-05 reading this entry used to measure, under which only `total=3` printed and the call was reported as one that does not run."
+desc = "An effect written as a statement of a `loop` body that is not a sync block runs in every round: the loop's value is used, so the loop runs, so the write its body holds is a root of the loop body's region (design principles 3.1, \"循环每一轮都执行\"). The three `i=` lines and then `total=3` print, and nothing is reported. the rule overrides the reading this entry used to measure, under which only `total=3` printed and the call was reported as one that does not run."
 kind = "behavior"
 case = "../../../cases/compile/unused_values/effect_loop_body_dropped.cml"
 args = ["--error-format", "text", "${case}"]
@@ -191,7 +191,7 @@ assert(!input.normalized.stderr.includes('is never executed'), input.normalized.
 
 [[tests]]
 name = "unused_values.sync_statement_in_a_loop_body_runs"
-desc = "A `sync { ... }` block written as a statement of a loop body is a block, not a region the program chooses to run or not, so it runs with the region around it and the call inside it runs each round (design principles 3.1). `0`, `1`, `2` and `total=3` print and nothing is reported. This entry used to measure the opposite; the ruling of 2026-11-15 is the one that stands."
+desc = "A `sync { ... }` block written as a statement of a loop body is a block, not a region the program chooses to run or not, so it runs with the region around it and the call inside it runs each round (design principles 3.1). `0`, `1`, `2` and `total=3` print and nothing is reported. This entry used to measure the opposite; the rule is the one that stands."
 kind = "behavior"
 case = "../../../cases/compile/unused_values/effect_sync_statement_in_a_loop_body.cml"
 args = ["--error-format", "text", "${case}"]

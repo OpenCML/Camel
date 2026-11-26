@@ -3,7 +3,7 @@
  * caller sees every step and no closure captures anything.
  *
  * The shape this case used to pin -- two nested closures capturing one `var` and each writing it,
- * so that both saw every write -- is refused by the ruling of 2026-11-15 (design principles 3.5).
+ * so that both saw every write -- is refused by the rule (design principles 3.5).
  * The three lines printed are the same: 3, 24, 249.
  */
 

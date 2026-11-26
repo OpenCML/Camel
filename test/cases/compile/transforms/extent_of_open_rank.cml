@@ -9,7 +9,7 @@
 // the law would read them off is the operand the cotangent comes back through.
 //
 // An axis outside the rank is a fault and not a default: `dim<2>` on this value stops with
-// `RuntimeDiag::RuntimeError: dim: dim axis out of range` (measured 2026-11-04; the case that pins
+// `RuntimeDiag::RuntimeError: dim: dim axis out of range` (the case that pins
 // it is `extent_of.axis_outside_the_rank_faults`).
 import { dim, numel, shape, zeros } from tensor
 

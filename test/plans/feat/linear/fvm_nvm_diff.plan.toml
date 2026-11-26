@@ -44,7 +44,7 @@ tags = ["feat", "linear", "fvm", "nvm", "differential"]
 #      missed it) on `differs from linear.jit.perf_fib_smoke.nvm: stdout_normalized` with
 #      `2.3479 +/- 0.1754 ms`. That is not a back-end difference; it is the wall clock, and a case
 #      whose output carries one cannot agree with itself, let alone with its twin.
-#   4. the case comes up. Measured on `58ab2f7e68` with the rule above, three cases do not compile
+#   4. the case comes up. Measured with the rule above, three cases do not compile
 #      at that tip -- `linear/nvm/lambda.cml` (`NoMatchingFunction` for `(y: int) => string` over a
 #      `Range`), `linear/nvm/render.cml` (the same shape), `linear/runtime/var_read_before_region.cml`
 #      (a loop-state type error at its first loop) -- and they are out. Their own entries
@@ -75,8 +75,8 @@ tags = ["feat", "linear", "fvm", "nvm", "differential"]
 # about nothing. A twin whose reference never ran is reported as "reference back end did not run",
 # never as a match.
 #
-# **A red here is a defect, not a difference.** Design principle 9.2 and the ruling of 2026-11-24
-# (backlog D-1124-89): there is no class of legal fvm/nvm difference -- execution semantics are one,
+# **A red here is a defect, not a difference.** Design principle 9.2 and the rule
+# (backlog): there is no class of legal fvm/nvm difference -- execution semantics are one,
 # nvm is the reference, so a case whose halves disagree is fvm's defect (or a case that pins nvm-only
 # non-semantic output, which is then written with `std::nvm` explicitly, not absorbed here).
 # Nothing in this file is pinned to fvm, and nothing here normalises a difference away.
@@ -334,7 +334,7 @@ case = "../../../cases/linear/jit/tuple_pipeline.cml"
 
 [[tests]]
 name = "linear.runtime.effects_outside_sync"
-desc = "Effectful calls outside a 'sync' block (docs/design-principles.cn.md 3.1; the author's ruling of 2026-11-15)."
+desc = "Effectful calls outside a 'sync' block (docs/design-principles.cn.md 3.1; the rule)."
 case = "../../../cases/linear/runtime/effects_outside_sync.cml"
 
 [[tests]]

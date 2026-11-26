@@ -1,5 +1,5 @@
 /// A `match type` case may be written `case pattern when predicate`, as in a value match (design
-/// principles 5.5, ruling of 2026-11-14): the case is taken when its pattern selects the subject
+/// principles 5.5): the case is taken when its pattern selects the subject
 /// *and* the predicate holds, so a type function divides by structure and then by property.
 ///
 /// The predicates stay in Camel. `FamilyOf` reads the shape words for what they are -- `array`,

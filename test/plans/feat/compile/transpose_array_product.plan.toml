@@ -7,7 +7,7 @@
 # paired with that cotangent at one point -- the same number twice, if the law is the adjoint of the
 # product rule and not merely a plausible one.
 #
-# Both cases were `known_fail` until 2026-11-04, and the mark waited on exactly this: the law read the
+# Both cases were `known_fail`, and the mark waited on exactly this: the law read the
 # operand whose cotangent it was answering for `sum_to`'s shape, and that operand is a tangent, whose
 # type states no extents (`float[...]`). The debt is paid by the stated twin -- `rulesets.jvp`'s
 # `jvp_mul_tensor` now calls `mul_stated(dx, w, shape(x), shape(w)) + mul_stated(x, dw, shape(x),
@@ -18,7 +18,7 @@
 # answered at the wrong shape.
 [[tests]]
 name = "transpose_array_product.answers_both_operands"
-desc = "`x * w` on two arrays is `tensor:multiply`, which the scalar `mul_t` does not reach: `x * w` at `T` is `:op/mul_d`, a different operator under a different key. The family now files the array product under the key the core names for it (`mul_tensor`, `ruleKeyExceptions`), and the pullback answers both names of the left side in its order, each with the operand's own shape: `ct * w` for `xs`, `ct * xs` for `w`. `transpose` takes a function whose result is a number -- its signature says so -- so the reading sums the product: `f(xs, w) = sum(xs * w)`, and at xs = (1, 2, 3), w = (2, 3, 4) the value is 20, the cotangent of `xs` is (2, 3, 4) and the cotangent of `w` is (1, 2, 3). `numel` is read before each answer because a cotangent with the right digits in the wrong shape is still the wrong answer. Green since 2026-11-04 through `mul_stated_t`, with the numbers unchanged."
+desc = "`x * w` on two arrays is `tensor:multiply`, which the scalar `mul_t` does not reach: `x * w` at `T` is `:op/mul_d`, a different operator under a different key. The family now files the array product under the key the core names for it (`mul_tensor`, `ruleKeyExceptions`), and the pullback answers both names of the left side in its order, each with the operand's own shape: `ct * w` for `xs`, `ct * xs` for `w`. `transpose` takes a function whose result is a number -- its signature says so -- so the reading sums the product: `f(xs, w) = sum(xs * w)`, and at xs = (1, 2, 3), w = (2, 3, 4) the value is 20, the cotangent of `xs` is (2, 3, 4) and the cotangent of `w` is (1, 2, 3). `numel` is read before each answer because a cotangent with the right digits in the wrong shape is still the wrong answer. Green through `mul_stated_t`, with the numbers unchanged."
 kind = "behavior"
 case = "../../../cases/compile/transforms/transpose_array_product.cml"
 args = ["${case}", "${backend}"]

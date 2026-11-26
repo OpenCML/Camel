@@ -14,7 +14,7 @@
 //
 // The variable is the module's `v` and not a `var` of the function that makes the lambda: a
 // closure captures a value, so `bump(v)` -- a write-back through a `var` parameter of a name the
-// lambda captured -- is refused at the call (design principles 3.5, 197; the author's ruling of
+// lambda captured -- is refused at the call (design principles 3.5, 197). A module `var` is a name of the module, so the call writes it, and the arm the read
 // 2026-11-16). A module `var` is a name of the module, so the call writes it, and the arm the read
 // stands in is the same question. Each function resets it, so the numbers do not depend on the
 // order `main` calls them in.

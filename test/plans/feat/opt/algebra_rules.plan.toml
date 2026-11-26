@@ -22,7 +22,7 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "norma
 #     corpora, where the deleted table also performed them.
 #
 # There is no golden of the deleted law table left: the deleted table
-# (`e8c290554:src/passes/opt/generic/algebra.cpp`, deleted by `a510676bb`) was gone before those
+# (`e8c290554:src/passes/opt/generic/algebra.cpp`, since deleted) was gone before those
 # goldens could be checked against anything, and what they held on part of the corpus was not what
 # either side answers now. The `.deleted_table.` goldens and the shape records that read them are
 # deleted with it; what the library does to these corpora is asserted as a property, form by form,

@@ -317,7 +317,7 @@ const looks = nodes('look', 'FUNC')
 assert(looks.length === 3, `expected three calls of look, got ${looks.length}`)
 for (const x of looks) for (const y of looks)
     assert(!edge(x, y, 'CTRL'), `a read-only recursive function was ordered as a writer: ${x} -> ${y}`)
-// arms(): the JOIN of the branch in the graph that holds the variable (:var/new) precedes the
+// arms(): the JOIN of the branch in the graph that holds the variable (var/new) precedes the
 // read of c written after the branch.
 const section = text.slice(text.indexOf('label="arms"'))
 const join = section.match(/(N[0-9A-F]+) \[label="JOIN", type="JOIN"[^\n]*span="57:/)
@@ -632,7 +632,7 @@ timeout_ms = 10000
 
 [[tests]]
 name = "captured_write_graph.warnings"
-desc = "IgnoredSideEffect for captured writes: reported for the call of a function that writes a captured variable outside a sync block (39:20), and not for the arm at 58:13 that writes its local `c` directly -- a write to a `var` is a value and the branch hands it on (design principles 3.1, 3.5; the ruling of 2026-11-16), so that branch is no longer reported. Also not reported: a call written inside a sync body, and a recursive function that only reads the variable it captured (inside its open body its writes are an upper bound, the warning is decided once all bodies are built). The same function is not reported as an undeclared writer either."
+desc = "IgnoredSideEffect for captured writes: reported for the call of a function that writes a captured variable outside a sync block (39:20), and not for the arm at 58:13 that writes its local `c` directly -- a write to a `var` is a value and the branch hands it on (design principles 3.1, 3.5; the rule), so that branch is no longer reported. Also not reported: a call written inside a sync body, and a recursive function that only reads the variable it captured (inside its open body its writes are an upper bound, the warning is decided once all bodies are built). The same function is not reported as an undeclared writer either."
 kind = "behavior"
 case = "../../../cases/linear/byref/captured_write_graph.cml"
 args = ["--output-format", "json", "${case}"]
@@ -836,7 +836,7 @@ for (const r of reads)
 """
 timeout_ms = 10000
 
-# The two sides of the line the author's ruling of 2026-11-04 draws (language reference 4.4): a
+# The two sides of the line the rule draws (language reference 4.4): a
 # function value whose body the call site *can* see is tracked like a direct call, and only one
 # whose body it cannot see is read by type alone. A `let`-bound lambda in the same function is the
 # visible case. These two cases were measured before they were pinned: the positive prints 1 today
@@ -909,7 +909,7 @@ timeout_ms = 20000
 
 [[tests]]
 name = "lambda_capture_ignored.default"
-desc = "The same lambda with nothing reading the `Ref` after the call: the write runs anyway. An outside write is used by the region it runs in, so a call that writes runs even when nothing reads the value it gives (the author's ruling of 2026-11-17; design principles 3.1 and 3.4), and the body prints what it wrote: `1`, and then the `0` of `main`. Red when the body stops running or when the value it prints is wrong. Pipeline: default (no pass)."
+desc = "The same lambda with nothing reading the `Ref` after the call: the write runs anyway. An outside write is used by the region it runs in, so a call that writes runs even when nothing reads the value it gives (the rule; design principles 3.1 and 3.4), and the body prints what it wrote: `1`, and then the `0` of `main`. Red when the body stops running or when the value it prints is wrong. Pipeline: default (no pass)."
 kind = "behavior"
 case = "../../../cases/linear/byref/lambda_capture_ignored.cml"
 args = ["${case}"]
@@ -925,7 +925,7 @@ timeout_ms = 20000
 
 [[tests]]
 name = "lambda_capture_ignored.fvm"
-desc = "The same lambda with nothing reading the `Ref` after the call: the write runs anyway. An outside write is used by the region it runs in, so a call that writes runs even when nothing reads the value it gives (the author's ruling of 2026-11-17; design principles 3.1 and 3.4), and the body prints what it wrote: `1`, and then the `0` of `main`. Pipeline: std::fvm."
+desc = "The same lambda with nothing reading the `Ref` after the call: the write runs anyway. An outside write is used by the region it runs in, so a call that writes runs even when nothing reads the value it gives (the rule; design principles 3.1 and 3.4), and the body prints what it wrote: `1`, and then the `0` of `main`. Pipeline: std::fvm."
 kind = "behavior"
 case = "../../../cases/linear/byref/lambda_capture_ignored.cml"
 args = ["${case}", "std::fvm"]
@@ -941,7 +941,7 @@ timeout_ms = 20000
 
 [[tests]]
 name = "lambda_capture_ignored.reports_nothing"
-desc = "The same program with the JSON output format: the call through the `let`-bound lambda runs, so the body prints `1` and `main` its `0`, and nothing is reported for it -- the write is an outside write, the region it runs in uses it (the author's ruling of 2026-11-17; design principles 3.1 and 3.4), and a warning that describes no defect would be the same mistake in the other direction. The entry used to pin the never-executed warning at the call, which named the call as never executed; it is renamed because what it pins now is the absence of a report. The lambda writes a `Ref` it captured as a handle (design principles 3.5: a closure cannot assign a name of the body around it)."
+desc = "The same program with the JSON output format: the call through the `let`-bound lambda runs, so the body prints `1` and `main` its `0`, and nothing is reported for it -- the write is an outside write, the region it runs in uses it (the rule; design principles 3.1 and 3.4), and a warning that describes no defect would be the same mistake in the other direction. The entry used to pin the never-executed warning at the call, which named the call as never executed; it is renamed because what it pins now is the absence of a report. The lambda writes a `Ref` it captured as a handle (design principles 3.5: a closure cannot assign a name of the body around it)."
 kind = "behavior"
 case = "../../../cases/linear/byref/lambda_capture_ignored.cml"
 args = ["--output-format", "json", "${case}"]

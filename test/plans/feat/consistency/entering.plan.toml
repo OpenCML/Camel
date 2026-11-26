@@ -343,7 +343,7 @@ expect_diagnostic_column = 14
 
 [[tests]]
 name = "entering.err_error_arm_no_type"
-desc = "Without an expected type nothing joins an error value with the other arm: `let x = if c then error(...) else v` is refused (the ruling of 2026-10-26 keeps this refusal; the position of a declared T! is what makes the error arm the failing one)."
+desc = "Without an expected type nothing joins an error value with the other arm: `let x = if c then error(...) else v` is refused (the rule keeps this refusal; the position of a declared T! is what makes the error arm the failing one)."
 kind = "negative"
 case = "../../../cases/consistency/entering/err_error_arm_no_type.cml"
 args = ["-E", "short", "${case}"]
@@ -435,7 +435,7 @@ backends_agree = ["exit_code", "stdout_normalized"]
 expect_exit = 0
 expect_stdout = "2.0 2.0 2.0 3.0\n-1\n5\nok 7\n"
 
-# The ruling of 2026-10-26 on the arm of a branch. A position that takes a value reads a cell
+# the rule on the arm of a branch. A position that takes a value reads a cell
 # out before the arms are joined, so an arm of `var T` joins as its `T` (and the value of a
 # write, the cell it wrote into, is one of these arms); a position that takes no value joins
 # nothing and drops what its arms give, while the arms' effects happen as they do anywhere.

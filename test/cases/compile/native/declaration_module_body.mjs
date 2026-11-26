@@ -28,7 +28,7 @@ fs.mkdirSync(SCRATCH, { recursive: true })
 fs.copyFileSync(path.join(HOME, 'stdlib', 'bytes.cmo'), path.join(SCRATCH, 'bytes.cmo'))
 // The module's own declarations, with a Camel definition beside them: one module is the two
 // files, and what the module adds in Camel belongs in this one. The declaration is the module's
-// source file, which sits at the root of `src/stdlib/` since the 2026-11-22 move
+// source file, which sits at the root of `src/stdlib/` since the move
 // (`src/stdlib/bytes.cml`); the layout move put it in `lib/bytes/bytes.cml` and it was
 // `stdlib/bytes.cml` while every module kept its `.cml` under `stdlib/`, so any of them answers.
 const declarations = fs.readFileSync(

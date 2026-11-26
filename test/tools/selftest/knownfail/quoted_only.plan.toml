@@ -4,7 +4,7 @@
 #
 # A condition matched against the runner's message would therefore be satisfied by the sentence
 # saying it is unmet: the mark would read as `known failure has ended` and a legitimate known_fail
-# would come back as a red. That is what the merge rehearsal of 2026-11-25 measured on three plans
+# would come back as a red. That is what the merge rehearsal measured on three plans
 # (`modules.onnx/ort_loop_values_dynamic` and the two `stated_mean_axis_*` gradients), and it is why
 # a `prints` condition is read from the case's own output and from nothing else. This entry must stay
 # `[XFAIL]`; `ends_arrived.plan.toml` is the same mark whose line really is printed.

@@ -36,7 +36,7 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 // them for a directory. Which one the tree has decides; no rule below spells either.
 const firstOf = (candidates) =>
     candidates.find((candidate) => fs.existsSync(candidate)) ?? candidates[0]
-// The parser's sources and the token table, newest layout first: since the 2026-11-22 move they are
+// The parser's sources and the token table, newest layout first: since the move they are
 // `src/parse/src/` and `src/parse/include/camel/parse/` (the block moved under `src/` and kept its own
 // `src/` and `include/`), before it `parse/src/` and `parse/include/camel/parse/`, and before the
 // layout move `src/parse/` and `include/camel/parse/`. The plain block root is last: it exists in the

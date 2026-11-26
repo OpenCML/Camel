@@ -3,7 +3,7 @@
 # No `perf_budget_mean_ms` here: the means are recorded, not gated. The budgets this plan used to
 # carry (200/200/65/50/80/3 ms, 2026-05-04) were recorded on a developer machine and cannot be met
 # on another one. docs/performance/graph-store-baseline.md measured the same case with the same
-# `--timeit` on the 28-core i7-14700K (2026-10-20): nvm 219.0 ms -- 1 ms under its 220 ms ceiling
+# `--timeit` on the 28-core i7-14700K: nvm 219.0 ms -- 1 ms under its 220 ms ceiling
 # -- fvm 55.8 ms, jit 84.7 ms. The Linux host runs this workload about twice as slowly per core,
 # so nvm and fvm fail there on a quiet machine, and on the shared host the same command spreads
 # from 432 ms to 960 ms between runs (load average 26 to 54), which no percentage tolerance makes
@@ -43,8 +43,8 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 # entry at two run lengths, nine perf plans in one run at -Jobs 8 and then those plans
 # beside feat/mm/gc and two gpu plans:
 #
-#   5.17 s of CPU / 14.45 s wall   (2026-10-24, 32 tests in the run)
-#   5.10 s of CPU / 11.35 s wall   (2026-10-24, the same plans and more beside them)
+#   5.17 s of CPU / 14.45 s wall   (32 tests in the run)
+#   5.10 s of CPU / 11.35 s wall   (the same plans and more beside them)
 #
 # The ten timed iterations are one fixed amount of work, so the reading is this entry's own CPU
 # against its work. The CPU figure spreads 1.4 % between the two windows where the wall clock
@@ -69,7 +69,7 @@ case = "../../cases/perf/fib_recursive.cml"
 args = ["${timeit_inline_nvm_10}", "${case}", "${run_inline_nvm}"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-# CPU time, by the rule quoted on nvm_timeit above; measured with it on 2026-10-24 at the
+# CPU time, by the rule quoted on nvm_timeit above; measured with it at the
 # same two run lengths and the same 1-minute loads:
 #
 #   5.09 s of CPU / 13.90 s wall   (nine perf plans in one run at -Jobs 8, 32 tests)

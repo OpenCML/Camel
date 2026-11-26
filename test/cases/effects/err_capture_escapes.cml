@@ -4,7 +4,7 @@
  * could reach, which broke the `pure` that `make` promises (design principles 3.3).
  *
  * That reading is gone with rule two. A closure captures a value, so a value that outlives the
- * scope that made it is nobody's resource (the author's ruling of 2026-11-16), and the write the
+ * scope that made it is nobody's resource, and the write the
  * closure makes is refused at the write itself: `ClosureAssignsCapturedName` (0x03000213, design
  * principles 3.5, 197). The program is kept as it stands because it is still the smallest shape
  * that reads "a closure is made here and leaves here", and what refuses it is now the write.

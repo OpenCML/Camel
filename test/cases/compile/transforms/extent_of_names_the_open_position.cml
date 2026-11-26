@@ -11,7 +11,7 @@
 // that it says *which* position to write: "an extent it writes is not a number" named no position,
 // and a reader who wrote `float[2, ?]` had to find the second one themselves.
 //
-// Measured 2026-11-04 on `ca464bca2` (host `88zjwei`), before the sentence named a position:
+// Measured before the sentence named a position:
 //
 //   error[SemanticDiag::ExtentOfNeedsStatedShape]: `extent_of::<A>()` answers the extents the type
 //   `A` writes down, and this call's type writes none: the type it is instantiated at is

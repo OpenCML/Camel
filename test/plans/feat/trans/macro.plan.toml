@@ -422,7 +422,7 @@ args = ["${case}", "std::macro", "report=true"]
 # `ONNX_OUT` points at a file this entry owns, and that is a correction rather than plumbing. The entry
 # used to set no output path, so `get_env('ONNX_OUT') ?? ''` answered the empty string and the write
 # failed; the case answered that failure with `let _ =` and printed `exported` anyway, so this reading
-# was green over a program that never wrote a model. `lane-errwrite` made the case report its refusal
+# was green over a program that never wrote a model. made the case report its refusal
 # instead of discarding it, which turned this pin red for the first time -- the honest answer was not to
 # weaken the pin but to let the write succeed where the reading runs.
 envs = ["ONNX_OUT=${test_tmp}/export_loop.reading.onnx"]

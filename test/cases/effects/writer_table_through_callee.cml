@@ -6,7 +6,7 @@
  * because that read needs it (design principles 3.1, 3.3).
  *
  * The state is a `Ref` and not a `var` of `main`: a closure captures a value, so it cannot assign
- * a name of the call that made it (design principles 3.5, 197; the author's ruling of 2026-11-16).
+ * a name of the call that made it (design principles 3.5, 197; the rule).
  * A handle is a value, so the callback may write what it points at, and the reading this case pins
  * is unchanged.
  */

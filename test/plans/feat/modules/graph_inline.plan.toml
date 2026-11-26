@@ -1,8 +1,8 @@
 # Copyright (c) the OpenCML Organization
 # SPDX-License-Identifier: MIT
 
-# `inline` as an operator of a transaction: the two semantics the ruling of 2026-11-18 gave
-# (`e55cd6157`; internal/reviews/2026-11-18-the-at-of-inline-says-a-region-not-a-place.cn.md
+# `inline` as an operator of a transaction: the two semantics the rule gave
+# (internal/reviews/2026-11-18-the-at-of-inline-says-a-region-not-a-place.cn.md
 # section 5, docs/design/graph-editing/README.cn.md 7 and 15.3).
 #
 # The readings are printed by the program itself, because the two branches are not told apart by
@@ -17,7 +17,7 @@
 #   reads its two calls and the print still reads it, the body's node is in an Inline region whose
 #   parent is the addition's own region, and the edited function prints what it printed.
 #
-#   `at` the call of a function that writes nothing (here `inc(2)`): by the ruling's words a call is
+#   `at` the call of a function that writes nothing (here `inc(2)`): by the rule's words a call is
 #   a statement, and by the graph's structure it holds no place to take over. The reading says which
 #   one the operator followed: the call is still there, still reads `2`, the chain did not move.
 #
@@ -30,11 +30,11 @@
 #
 # It runs as well, and that is the other half of the same reading: design principles 3.1 makes the
 # body's write a write of the region it landed in, and that region's exit `GATE` waits for it. The
-# author's ruling of 2026-11-20 (`1ee2ce8b9`, item 1) is why this is the reading and not the one
+# the rule (item 1) is why this is the reading and not the one
 # this plan pinned before it: "体若带写，`inline` 自己把这些写挂进所选区域出口 `GATE` 的等待". The
 # line this reading pinned until then -- the body's print sitting in a region no chain of the block
 # reaches, so that the splice at a pure node changed nothing the program printed -- was that
-# behaviour, and that behaviour is the defect the ruling names.
+# behaviour, and that behaviour is the defect the rule names.
 id = "modules.graph_inline"
 order = 378
 tier = "fast"

@@ -1,5 +1,5 @@
 /**
- * There is no open interval `a..` (the author's ruling of 2026-11-16, design principles 4.2): a
+ * There is no open interval `a..` (the rule, design principles 4.2): a
  * range has only a bounded form, its result is an array, and no syntax is added for one; counting
  * until a condition holds is the counting `while` loop that `count_until.cml` beside this file
  * writes. The interval `1..4` and the composition `inc <> dbl` stand above it, so the construct

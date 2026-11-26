@@ -6,7 +6,7 @@
  * warning set, `-fsyntax-only`, and fail on anything the CI build would fail on.
  *
  * Why it exists: the local gate compiles with one toolchain on one platform. A diagnostic that only
- * another toolchain reports -- `-Wc++11-narrowing` is the one that cost a day (D-1123-83) -- stays
+ * another toolchain reports -- `-Wc++11-narrowing` is the one that cost a day -- stays
  * invisible until a CI run, and CI runs are the slowest reading in the project. This step takes that
  * reading locally, on the build host, in the time of a syntax pass.
  *
@@ -29,7 +29,7 @@
  *            header's dependents are read from the build's own dependency graph (`ninja -t deps`),
  *            because a header that breaks one unit breaks every unit that includes it. When the
  *            dependency graph cannot answer for a changed file, this widens to all instead of
- *            narrowing to "fast but leaky" (D-1123-84, prohibition 2).
+ *            narrowing to "fast but leaky".
  *
  * Exit codes: 0 no diagnostics that the CI build would fail on; 1 at least one unit failed;
  * 2 the gate could not take a reading (no database, no command for a named file, no image) -- a
@@ -338,7 +338,7 @@ function ninjaDeps() {
         // this runs against left nothing at all -- every line's only token was the path, so the graph
         // came out empty and every changed header answered "no dependency record", which widened every
         // change to the whole tree (654 units, 575 s) and still looked like a real reading
-        // (2026-11-24). Take the longest suffix that names a file that exists; a format that puts a
+        // Take the longest suffix that names a file that exists; a format that puts a
         // stamp or a flag first then still resolves, and a line that names no file is skipped.
         const tokens = line.trim().split(/\s+/)
         let abs = ''

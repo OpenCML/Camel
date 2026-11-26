@@ -1,6 +1,6 @@
 // `split` cuts a lifted body that calls a **function value** the same way it cuts one that calls a
 // named function: the forward half calls `split(v)` -- the forward half of whatever cut that value
-// turns out to have -- and the cotangent goes to the `lin` it hands back (author, 2026-11-05).
+// turns out to have -- and the cotangent goes to the `lin` it hands back.
 //
 // Which graph `v` stands for is answered at run time, so the cut reads only the value's signature;
 // the two calls below are the reading that says so: one cut, two values, each answering its own

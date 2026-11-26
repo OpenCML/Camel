@@ -3,7 +3,7 @@
 
 # The edit operators that were missing from the graph module's transaction: `order` (add an order
 # edge) and the exit anchor query `exit_of`. They are the first step of the transform-engine plan
-# the language author holds on `fsh-dev` (`5c1f0f0c8`, "Camel 实现变换引擎"): the operators the
+# the language author holds on `fsh-dev` ("Camel 实现变换引擎"): the operators the
 # `edit` block will carry are written against today's interface (`open` / `commit`) first, so that
 # the day the block syntax is decided the operators do not move. The two operators that step cannot
 # write -- `inline`, whose `at` names a region and not a place, and `outline`, which would need a

@@ -66,7 +66,7 @@ timeout_ms = 120000
 # its batch and its target -- `x = [[1, 2], [3, 4]]`, `t = [[0, 0], [1, 1]]` -- and moves one weight
 # `w = [[0.5, 0.25], [0.125, 1]]` through `pred = x @ w`, `loss = 0.5 * sum((pred - t)^2)`.
 #
-# Until 2026-11-03 a body that captured *anything* was refused whole
+# A body that captured *anything* was refused whole
 # (`transforms: jvp has no forward transform for this function`, `REINTERP jvp ... skip=body`), for a
 # captured `float` as much as for a captured `float[2, 2]`: the ports a capture arrives at were the
 # one kind `jvp` did not make, and the report of the tensor path blamed `pairTypeOf`, which hands an
@@ -76,7 +76,7 @@ timeout_ms = 120000
 #
 # Every element is exact in binary floating point, so this entry compares exactly and not to a
 # tolerance: the hand calculation, the library's forward transform and the engine's `with_grad`
-# answer the same four numbers and the same loss (PyTorch 2.5.1+cu121, float64, cpu, 2026-11-03,
+# answer the same four numbers and the same loss (PyTorch 2.5.1+cu121, float64, cpu,
 # `D:\Temp\s2-tensor-first-step-torch.py`).
 [[tests]]
 name = "first_step.tensor_forward_jvp"
@@ -97,9 +97,9 @@ timeout_ms = 60000
 # of halves: the port it used to stop on read
 # `construct=a port uri=- why=the port is not a parameter of the graph, so neither half takes it`,
 # and the cut reads the captured value's port now. The reverse of the product was the last piece
-# missing (`stdlib/rulesets/transpose.cml#matmul_t`, landed by `lane-withport`).
+# missing (`stdlib/rulesets/transpose.cml#matmul_t`, landed by).
 #
-# This entry was a *negative* one until 2026-11-04, and it was written that way on purpose: it
+# This entry was a *negative* one, and it was written that way on purpose: it
 # pinned the two readings `split` printed and demanded exit 1, because an entry that only demanded a
 # non-zero exit would go quietly green the day the wall fell -- the program would start printing its
 # numbers and "expect 1" would be the only thing anyone had written down. The day came, so the
@@ -108,16 +108,16 @@ timeout_ms = 60000
 #
 # The line is `loss=10.34375` and `dL/dw=([[3.75, 13.5], [5.5, 19.5]])`: the hand calculation of
 # this page, the forward transform's four seeds in `first_step.tensor_forward_jvp` above, and
-# PyTorch's reading of the same literals (float64, cpu, 2026-11-03). Note the parentheses -- the
+# PyTorch's reading of the same literals (float64, cpu). Note the parentheses -- the
 # pullback answers a one-tuple of cotangents, so `format` prints `((...))` and not `(...)`; the shape
 # is part of what is pinned, not formatting noise. Every element is exact in binary floating point,
 # so this is compared exactly and not to a tolerance.
 #
-# Measured 2026-11-04 on the cut tree (`integ3/exclude`, tree `/home/zjwei/camel-work/reds`, 1 m
+# Measured on the cut tree (`integ3/exclude`, tree `<home>/camel-work/reds`, 1 m
 # load 14-17), exit 0:
 [[tests]]
 name = "first_step.tensor_vjp_answers_the_step"
-desc = "The tensor step through the library's `vjp`: `x = [[1, 2], [3, 4]]`, `t = [[0, 0], [1, 1]]`, `w = [[0.5, 0.25], [0.125, 1.0]]`, `pred = x @ w`, `loss = 0.5 * sum((pred - t)^2)`. It answers `loss=10.34375` and `dL/dw=[[3.75, 13.5], [5.5, 19.5]]` -- the hand calculation and PyTorch's reading -- where until 2026-11-04 it stopped at `transforms: split does not build this function` (`the port is not a parameter of the graph, so neither half takes it`) with exit 1. The entry pins the number and the shape the `format` prints (a one-tuple of cotangents), and asserts that neither refusal sentence is printed any more, so the wall cannot come back unseen."
+desc = "The tensor step through the library's `vjp`: `x = [[1, 2], [3, 4]]`, `t = [[0, 0], [1, 1]]`, `w = [[0.5, 0.25], [0.125, 1.0]]`, `pred = x @ w`, `loss = 0.5 * sum((pred - t)^2)`. It answers `loss=10.34375` and `dL/dw=[[3.75, 13.5], [5.5, 19.5]]` -- the hand calculation and PyTorch's reading -- where it stopped at `transforms: split does not build this function` (`the port is not a parameter of the graph, so neither half takes it`) with exit 1. The entry pins the number and the shape the `format` prints (a one-tuple of cotangents), and asserts that neither refusal sentence is printed any more, so the wall cannot come back unseen."
 kind = "behavior"
 case = "../../cases/compile/transforms/first_step_tensor_vjp.cml"
 args = ["${case}", "${backend}"]
@@ -180,7 +180,7 @@ timeout_ms = 60000
 # `shape(a)` / `shape(b)` in the linear call (`stdlib/rulesets/jvp.cml#jvp_matmul`) and the cut carries
 # them to the backward half as known ports. `stdlib/rulesets/transpose.cml#matmul_stated_t` reduces with
 # `sum_to_stated(..., sa)` and builds the zero carrier its helper reads for rank from that same list
-# (`zeros::<T>(sa) as A`), so an operand whose type states rank and no extent is answered (author,
+# (`zeros::<T>(sa) as A`), so an operand whose type states rank and no extent is answered. Until 2026-11-04 it passed the operand itself, and the expansion asked the caller
 # 2026-11-04 12:40). Until 2026-11-04 it passed the operand itself, and the expansion asked the caller
 # for a value behind it: `skip=parameter-shape uri=tensor:matmul_stated ... param-type=float[]`. Nothing
 # here may be made green by writing `float[2]` in the declaration instead: a program that can write no
@@ -226,7 +226,7 @@ timeout_ms = 60000
 # above and `internal/reports/2026-11-04-the-two-vector-laws-ask-for-a-shape-the-declaration-does-not-write.cn.md`.
 [[tests]]
 name = "matmul_t.vector_lhs_law_stated_extent"
-desc = "The same row-times-matrix law as `matmul_t.vector_lhs_law`, with the vector declared `float[2]` instead of `float[]`: dL/dv [0.75, 1.125] and dL/dw [[1, 1], [2, 2]] at loss 3.0, every `max_abs_diff` 0.0 against the engine. It is evidence, not the fix: the shape is answered because the declaration states it, and a program that cannot state a length is served by `mul_stated`/`matmul_stated` instead (author, 2026-11-04 12:40)"
+desc = "The same row-times-matrix law as `matmul_t.vector_lhs_law`, with the vector declared `float[2]` instead of `float[]`: dL/dv [0.75, 1.125] and dL/dw [[1, 1], [2, 2]] at loss 3.0, every `max_abs_diff` 0.0 against the engine. It is evidence, not the fix: the shape is answered because the declaration states it, and a program that cannot state a length is served by `mul_stated`/`matmul_stated` instead "
 kind = "behavior"
 case = "../../cases/compile/transforms/matmul_transpose_vector_lhs_stated_extent.cml"
 args = ["${case}", "${backend}"]
@@ -260,7 +260,7 @@ timeout_ms = 60000
 #
 # `rule-ranks` is its own word, not `rule-shape`: that one means the law's *pattern* rejected the operand
 # types and nothing was built, which is where this reading stood while the law named its ranks in the
-# pattern (commit `5a2fed990`). A rule is instantiated with three type parameters -- the cotangent's element
+# pattern. A rule is instantiated with three type parameters -- the cotangent's element
 # type and the two operand types -- so a head that names one shape's ranks serves that shape alone, and a
 # ruleset files one rule per operator and arity (`SemanticDiag::DuplicateRuleForOperator`). Serving all three
 # shapes from one key is what moved the ranks into the helpers, and the classification moved with them: one

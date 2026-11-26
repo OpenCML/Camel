@@ -126,7 +126,7 @@ function Format-CamelPlanTargetLine {
 #
 # The tree is a layer question, and the runner answers it with `fast` when nothing names a layer
 # (`test/tools/run-tests.mjs#selectTier`), so `-Plan test/plans` read as "the whole tree" in the
-# command and as "the fast layer" in the output -- measured on 2026-11-24 as
+# command and as "the fast layer" in the output -- measured as
 # `[tier] fast: 387 plan file(s), 9919 declared test entries, 9919 started`, with nothing in the run
 # saying one layer had been chosen for it. A run that measured the wrong layer cannot be told from a
 # complete one afterwards, so the target is refused here instead: one word (`-Tier`) says what was

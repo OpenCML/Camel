@@ -67,7 +67,7 @@ import { spawnSync } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
-// The library files its rule list at the root of `src/stdlib/` since the 2026-11-22 move
+// The library files its rule list at the root of `src/stdlib/` since the move
 // (`lib/rules/rules.cml` after the layout move, `stdlib/rules/rules.cml` before it), and the licence
 // names in the engine's operator semantics under `src/kernel/core/` (also `kernel/core/` after the
 // layout move). The spelling the tree has decides, so the file is found in the layout it is in.
@@ -147,7 +147,7 @@ function splitTopLevel(text, separator) {
 
 // The text between the parentheses of one declaration's parameter list. The slice that follows the
 // name's `(` runs to the body's `{`, so it also holds the closing `)` and the return type; a return
-// type is always written `=> type` (design principles 4.4, the author's ruling of 2026-11-23), and
+// type is always written `=> type` (design principles 4.4), and
 // its type may hold a `)` of its own (`done: (q: F) => bool`), so the end of the list is found by
 // counting parentheses rather than by a pattern anchored at the end of the text.
 function parameterListText(text) {
@@ -180,7 +180,7 @@ function readLibrary() {
     const functions = new Map()
     const rules = []
 
-    const funcPattern = /(?:^|\n)\s*(export\s+)?func\s+([A-Za-z_]\w*)\s*(::\s*<\s*(\w+)\s*>)?\s*\(/g
+    const funcPattern = /(?:^|\n)\s*(export\s+)?func\s+([A-Za-z_]\w*)\s*(:\s*<\s*(\w+)\s*>)?\s*\(/g
     for (let match = funcPattern.exec(source); match; match = funcPattern.exec(source)) {
         const open = source.indexOf('{', match.index + match[0].length)
         const close = open < 0 ? -1 : matchingBrace(source, open)

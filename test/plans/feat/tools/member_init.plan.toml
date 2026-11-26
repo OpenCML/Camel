@@ -6,8 +6,7 @@ desc = "Every data member a constructor leaves out carries a default member init
 
 # `scripts/check-member-init.mjs` is the class of defect `Builder`'s `synced_` / `varied_` belonged
 # to: a member no constructor initializes is read as whatever the allocator left in it, and a
-# garbage `true` in `synced_` built a closure under the wrong graph (the S1-6 capture refusal,
-# `8c2d57ce9`). The compiler's reading is `clang-tidy -checks=cppcoreguidelines-pro-type-member-init`
+# garbage `true` in `synced_` built a closure under the wrong graph (the S1-6 capture refusal). The compiler's reading is `clang-tidy -checks=cppcoreguidelines-pro-type-member-init`
 # over a compilation database: a whole-tree run on 2026-11-20 named 56 sites, all of them fixed by
 # the sweep that added this check. The fast layer runs the text reading instead -- `--all
 # --static-only`, 1.2 s, no toolchain beyond node -- because a whole-tree clang-tidy run costs

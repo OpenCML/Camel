@@ -12,7 +12,7 @@
 //     '<__pack_0_0: float> () => float' cannot be called with argument types: <> (float)
 //
 // -- which is what stopped the second-order nest and every `grad` call in the tree. The language
-// author's ruling of 2026-11-20: an empty rest pack is a value in the body (an empty tuple) and
+// the rule: an empty rest pack is a value in the body (an empty tuple) and
 // enters neither the parameter list nor the function type; a pack whose members are known is those
 // members, as ordinary parameters.
 //

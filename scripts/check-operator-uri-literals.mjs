@@ -12,7 +12,7 @@
  * has to be edited when the operator moves: the URI is the operator's identity, and identity is
  * owned by the table (`OperatorTable`) and by the declarations that fill it.
  *
- * That page is not in this tree as of 2026-11-14: it is the design branch's (`origin/fsh-dev`), so
+ * That page is not in this tree: it is the design branch's (`origin/fsh-dev`), so
  * section 7 is quoted here rather than linked -- a link to a page this tree does not hold is a
  * broken link, and `scripts/check-doc-links.mjs --citations` says so.
  *
@@ -63,7 +63,7 @@ const NAME = 'check-operator-uri-literals'
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 
 /** The directories the scan covers by default, the same set the other source checks read. */
-// `src` holds the five blocks and the standard library since the 2026-11-22 move, and the seven
+// `src` holds the five blocks and the standard library since the move, and the seven
 // tools are `src/tools`; a directory a checkout does not have is skipped rather than stat'ed, so a
 // tree of either layout is scanned instead of crashing on the way in.
 const SCANNED = ['src', 'src/tools', 'include', 'modules', 'tools']
@@ -71,7 +71,7 @@ const SCANNED = ['src', 'src/tools', 'include', 'modules', 'tools']
 const SOURCE = /\.(?:h|hpp|hh|hxx|cpp|cc|cxx)$/
 
 /** A built-in operator URI literal: `":op/add_l"`, `":io/println"`, `":op/"` as a prefix. */
-const URI_LITERAL = /"(:[A-Za-z_][A-Za-z0-9_]*\/[^"\n]*)"/g
+const URI_LITERAL = /"([A-Za-z_][A-Za-z0-9_]*\/[^"\n]*)"/g
 
 /** The files the rule names outright, relative to the tree. */
 const HOME_FILES = new Set([

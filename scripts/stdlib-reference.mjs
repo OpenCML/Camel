@@ -73,7 +73,7 @@ import { refuseInstallNotOfThisTree } from './install-stamp.mjs'
 import { defaultCamel } from '../test/tools/camel-arg.mjs'
 
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
-// The library, in any of the three layouts the tree has had. After the 2026-11-22 move it is
+// The library, in any of the three layouts the tree has had. After the move it is
 // `src/stdlib/`: one declaration per module at its root (`<name>.cml`), the module's C++ in
 // `<name>/` beside it, the computed half in `<name>/signatures/`, and the one directory that is a
 // dotted prefix rather than a module in `rulesets/`. Before that move it was one declaration per
@@ -89,7 +89,7 @@ const firstThere = (candidates) => candidates.find((one) => fs.existsSync(one)) 
 // `out/latest`. Every install a run measures passes the build stamp of `scripts/install-stamp.mjs`,
 // named there or not.
 let camelPath = null
-/// The directory the library is walked from: `src/stdlib/` after the 2026-11-22 move, `lib/` after
+/// The directory the library is walked from: `src/stdlib/` after the move, `lib/` after
 /// the layout move, `stdlib/` before it. Walking any of them finds the same `.cml` files, which is
 /// what the match-type table reads.
 const STDLIB_DIR =
@@ -473,7 +473,7 @@ function announcePending() {
 }
 
 // `source` is the file's name inside the library: `rewrite.cml` (the module's own directory, flat at
-// the root of `src/stdlib/` since the 2026-11-22 move), `rulesets/jvp.cml` (a dotted prefix, the one
+// the root of `src/stdlib/` since the move), `rulesets/jvp.cml` (a dotted prefix, the one
 // directory that keeps its name), `prelude.cml` (one of the two declarations that have no module of
 // their own). Every candidate is tried in the newest layout first and the older ones after it, so one
 // reader serves all three layouts of the tree.
@@ -502,7 +502,7 @@ function sourceOf(module) {
 }
 
 /// The computed half of a module's declarations: `signatures/<name>.cml` beside the module after
-/// the layout move (under `src/stdlib/` since the 2026-11-22 move), in the one flat directory
+/// the layout move (under `src/stdlib/` since the move), in the one flat directory
 /// before both.
 /// A module with no computed half has no file, and `path.join` refuses `undefined`: the callers
 /// push the answer into a list they filter, so `null` is the shape they expect.
@@ -535,7 +535,7 @@ function signatureFiles() {
 
 /// The declaration files of the library, the way `scripts/collect-out.js` assembles the install:
 /// every `.cml` at the root of `src/stdlib/`, the declared dotted `rulesets/` and the signature files
-/// beside their modules -- or, in the two layouts before the 2026-11-22 move, `lib/<name>/<name>.cml`
+/// beside their modules -- or, in the two layouts before the move, `lib/<name>/<name>.cml`
 /// with the ones in `lib/std/`, and the same set flat in `stdlib/` before the layout move. The audit's
 /// "no module of the table reads this file" half is only worth reading if it walks the library the
 /// install is built from.
@@ -937,7 +937,7 @@ function readDeclarations(file, module, options = {}) {
                 // `#macro` is a tag the language defines on a function declaration, not a marker
                 // this page owns, so a signature file may carry it beside `#op(...)`: the standard
                 // library's transforms are macro functions, which is what lets `std::macro`
-                // evaluate a transform ahead of the run (the author's ruling of 2026-11-15 night,
+                // evaluate a transform ahead of the run (the rule night,
                 // 4ae2c0179). A C++ module's transforms -- `jvp`, `split`, `transpose`, `vmap`,
                 // `first_with_as_param` -- have no other declaration to carry it, because the
                 // file's declarations are the only place a program reads them (`stdlib/
@@ -2755,7 +2755,7 @@ const TYPE_VARIABLE = /^[A-Z]$/
 //
 // ## Why members and not counts
 //
-// Author's ruling of 2026-11-03 13:30 (`internal/reviews/questions-2026-10-29.md`): a count that
+// the rule (`internal/reviews/questions-2026-10-29.md`): a count that
 // can move while the behaviour stays the same protects nothing. The per-class counts this table used
 // to hold were exactly that: an overload that started writing a different spelling moved the class
 // while nothing about the library changed, and the failure said "records 6, and the run found 7" -- a
@@ -2784,7 +2784,7 @@ const EXCEPTIONS = {
                 'the rule registers no result text at all (`tree_leaves (type-directed)`); the declaration writes `L`',
         },
         'rule states a function type': {
-            'attempt (:mark/attempt)#result':
+            'attempt (mark/attempt)#result':
                 'the rule answers the function it was given, `((...args: A) => T!)`; the declaration states only the error `F!`',
             'first_with_as_param (transforms:first_with_as_param)#result':
                 'the rule answers a function type -- the reinterpreted function, `((the first `with` parameter, then the parameters) => any)` -- and the declaration writes it `FirstWithAsParam<F>`, a type function this checker does not expand',
@@ -2896,25 +2896,25 @@ const EXCEPTIONS = {
                 'the registered signature is `tree_leaves (type-directed)`, not a list of `name: type` positions',
         },
         'declared arity differs from rule arity': {
-            'slice (:op/slice_bytes)#parameter':
+            'slice (op/slice_bytes)#parameter':
                 'the declaration writes one parameter and the rule registers six positions, so there is no position-by-position pair',
-            'slice (:op/slice_str)#parameter':
+            'slice (op/slice_str)#parameter':
                 'the declaration writes one parameter and the rule registers six positions, so there is no position-by-position pair',
-            'slice (:op/slice_sub)#parameter':
+            'slice (op/slice_sub)#parameter':
                 'the declaration writes one parameter and the rule registers six positions, so there is no position-by-position pair',
             'upload (tiles:upload)#parameter':
                 'the declaration writes one parameter and the rule registers three, so there is no position-by-position pair',
         },
         'untyped pack ..rest': {
-            'eprintln (:io/eprintln)#parameter':
+            'eprintln (io/eprintln)#parameter':
                 'the rule writes `(x: T, ...rest)`, a pack with no type, so no position maps to the declaration',
-            'print (:io/print)#parameter':
+            'print (io/print)#parameter':
                 'the rule writes `(x: T, ...rest)`, a pack with no type, so no position maps to the declaration',
-            'println (:io/println)#parameter':
+            'println (io/println)#parameter':
                 'the rule writes `(x: T, ...rest)`, a pack with no type, so no position maps to the declaration',
         },
         'function-typed parameter': {
-            'attempt (:mark/attempt)#parameter':
+            'attempt (mark/attempt)#parameter':
                 'parameter 1 is `(...args: A) => T`, a function type whose arguments are a pack',
             'grad (autodiff:grad)#parameter':
                 'parameter 1 is `<W...>(N...) => float`, a function type with a `with` pack',
@@ -3057,7 +3057,7 @@ const EXAMPLE_STOPS = {
         'src/stdlib/transforms/signatures/transforms.cml#first_with_as_param#1':
             'the example reinterprets a function that has a `with` parameter, and a `with` list is written on a declaration: no lambda this page can write inline has one'
     },
-    // `an internal error` is gone (2026-11-03). The class held the examples that reached the
+    // `an internal error` is gone. The class held the examples that reached the
     // compiler with a function-typed parameter bound by name: `split`'s own example, which kept a
     // live dereference node, and then, while the split ABI moved, `src/stdlib/vjp.cml`'s example and the
     // two fragments beside it, which still destructured the pair `split(f)` no longer answers. The
@@ -3083,7 +3083,7 @@ const STALE_FRAGMENTS = 0
 // Every comparison here is a comparison of members, in both directions, and every message names the
 // member: "entered" says who joined a class and what the two sides say, "left" says who is no longer
 // in it. Nowhere does a message say "records 6, the run found 7" -- that was the failure the author's
-// ruling of 2026-11-03 13:30 retired, because the number left the reader to bisect for a name.
+// the rule retired, because the number left the reader to bisect for a name.
 function exampleProblems(coverage) {
     const problems = []
     const stopped = coverage.programs - coverage.compiled

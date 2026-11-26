@@ -1,6 +1,6 @@
 /**
  * A closure that reads a `var` of the caller and assigns nothing is legal (design principles 3.5,
- * the author's ruling of 2026-11-15: closures capture values). The closure is written in the
+ * the rule: closures capture values). The closure is written in the
  * argument position of a call whose result type cannot hold a function, so its last use is that
  * call; the write the call makes to `x` -- through the `var` parameter -- counts after the call
  * and is not a write between the closure's creation and its last use.

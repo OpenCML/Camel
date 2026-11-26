@@ -4,7 +4,7 @@
  * Conventions, fixed before the code (`docs/design/program-transforms/m6-combination-numbers.cn.md`
  * 2.1): `vmap(f)` maps elementwise and `grad` needs a scalar, so the composition reads
  * `grad(batch => sum(vmap(f)(batch)))`; and `grad` differentiates the function's first `with`
- * parameter (that is the ruling the `grad` operator already carries today), so the batch is that
+ * parameter (that is the rule the `grad` operator already carries today), so the batch is that
  * parameter here.
  *
  * The gradient of `sum_j batch_j^2` is `2*batch`: 2, 4, 6. Those numbers come from the derivative,

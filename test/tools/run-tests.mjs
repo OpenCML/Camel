@@ -245,7 +245,7 @@ function checkDiagnosticFileField(planPath, entry, where) {
     )
 }
 
-// The three things the author's ruling of 2026-11-03 00:30 asked a `known_fail` entry to carry: the
+// The three things the rule asked a `known_fail` entry to carry: the
 // mark, who is responsible for making the case green, and why it cannot pass today. The mark alone
 // says "we accept this red"; it says nothing about who ends it or where the case is stuck, and until
 // this check existed the other two lived in the prose of a note that a review had to remember to
@@ -289,7 +289,7 @@ function knownFailIsMarked(mark) {
  *
  * `prints` is the line this entry prints when the wall moves, and it is found in the entry's own
  * output. `passes` names another case: when that case passes in the same run, this mark has ended.
- * Both are readings of a run, which is the whole point of the ruling -- the field used to hold a
+ * Both are readings of a run, which is the whole point of the rule -- the field used to hold a
  * sentence, and a sentence is not something a run can disagree with.
  */
 function knownFailEndCondition(value) {
@@ -313,7 +313,7 @@ function describeEndCondition(condition) {
  * What a `prints` condition is read against: the bytes the case's own process wrote, normalized the
  * way the case's own assertions read them, and nothing the runner wrote *about* the case.
  *
- * It was read from `failures + stdout + stderr` until 2026-11-25, which made every condition that
+ * It was read from `failures + stdout + stderr`, which made every condition that
  * also appears in an `expect_output_contains` true by construction: a failure line quotes the line
  * it did not find (`output does not contain 'stated mean value=2.5 dL/dx=[0.25, 0.25, 0.25, 0.25]'`),
  * so the condition was satisfied by the sentence saying it was not, and three legitimate marks read
@@ -419,20 +419,20 @@ function checkKnownFailMark(planPath, entry, inherited, where) {
     }
     // The sentence the case is expected to print today, quoted from a run. Without it there is
     // nothing to compare a failure against, so `executePlans` takes every failure as the expected
-    // one: a different defect can wear the mark's name and no reader can tell (`ceee7b950`'s page
+    // one: a different defect can wear the mark's name and no reader can tell (a page
     // measured two entries printing `exported`, exiting 0 and writing nothing while their marks
     // reported a known failure). It is read off the entry itself -- `executePlans` compares against
     // `test.known_fail_msg` and never against a `[defaults]` value -- so a plan cannot supply it
     // once for the whole file.
     //
-    // The mark may instead state the reading that ends it, and the ruling of 2026-11-21 02:20 chose
+    // The mark may instead state the reading that ends it, and the rule chose
     // that shape for a case whose target is a number and whose wall is being built: a sentence
     // quoted from a refused run follows the implementation, so a pin on it has to be re-typed every
     // time the wall moves -- which records the wall's progress as the case's debt and reads, in the
     // plan, as "this case fails for this reason" long after that reason moved.
     //
     // What that field may hold is now exactly two things, because a promise nobody evaluates is a
-    // mark nobody re-reads -- the ruling of 2026-11-24 18:xx (see internal/questions/
+    // mark nobody re-reads -- the rule 18:xx (see internal/questions/
     // 2026-11-24-deleting-known-fail-ends-when-would-unmake-11-marks.cn.md):
     //
     //   known_fail_ends_when = { prints = "the line this entry prints when the wall moves" }
@@ -1263,7 +1263,7 @@ function parseArgs(argv) {
             // named an option this checkout does not have -- normally because the caller is newer
             // than the tree it was pointed at -- and pushing it as a target made `walkPlans` stat
             // `.../--list-cases` and throw ENOENT, which every consumer reads as "this selection
-            // could not be read". Measured 2026-11-24: a lane cut at 0beeecb9fb, before this tree
+            // could not be read". Measured: a lane cut at 0beeecb9fb, before this tree
             // had `--list-cases`, answered the host's `[RUNNER, ...targets, '--list-cases',
             // '--tier', fast]` with a stack trace and exit 1, and `scripts/selection-cases.mjs`
             // reported `the plan loader refused this selection (exit 1)` -- a version mismatch
@@ -1959,7 +1959,7 @@ function summaryTotal(summary) {
  *
  * `process.stdout` is a pipe on a host run, and there the write is asynchronous: `process.exit`
  * ends the process with whatever is still queued, and the tail of the run's own output goes with
- * it. Measured 2026-11-24, three runs of one base: every one of them printed `total: 9159` and
+ * it. Measured over three runs of one base: every one of them printed `total: 9159` and
  * every one of them printed its 9159 case lines over the minutes it ran, while the `--list-known`
  * block -- the only thing printed in one tight loop, immediately before the exit -- arrived with
  * 9159 rows, 5265 rows and 1239 rows, the fewest from the slowest run. One empty write whose
@@ -2425,7 +2425,7 @@ async function runVerification(test, result) {
 
     const payloadPath = path.join(tempDir, 'input.json')
     // The documented payload fields are listed in docs/test-plans.md; every one of them must be
-    // present, and a missing key is silently dropped by `JSON.stringify` (: `case_path` was
+    // present, and a missing key is silently dropped by `JSON.stringify` (`case_path` was
     // assembled from a result that did not carry it yet, so a script normalizing the absolute
     // source path out of its output could not, and its digest varied with the checkout).
     const payload = {
@@ -3069,7 +3069,7 @@ async function runOneTest(test, sharedVars, logContext, scratch, scratchRelative
         // The checkout root, and not the test's scratch directory, because `${test_tmp}` is a
         // *repository-relative* path (docs/test-plans.md, "Test Scratch"): a plan writes
         // `ONNX_OUT=${test_tmp}/m.onnx`, and a program started anywhere but here resolves that one
-        // level deeper, under its own cwd. Measured on 2026-11-16 with `cwd: scratch` here: 98
+        // level deeper, under its own cwd. Measured with `cwd: scratch` here: 98
         // failures in `feat/modules` against 3 on the base and every one of the 95 new ones
         // `ENOENT ... /tmp/test/run-<pid>/<plan>/<test>/<file>`, because the model had been written
         // to `<scratch>/tmp/test/...` while the verification script looked for the absolute path.
@@ -3262,7 +3262,7 @@ async function runOneTest(test, sharedVars, logContext, scratch, scratchRelative
     // nothing examined: a margin that cannot be read is not a margin. A test whose own CPU exceeds
     // its wall clock is multi-threaded work: the reading sums its threads, so this rule reads the
     // work, not the schedule, and such a test states its cost as a `cpu_budget_ms` if its total work
-    // is what it wants bounded. Measured over the whole fast layer on 2026-10-24: 21 of 5,873 tests
+    // is what it wants bounded. Measured over the whole fast layer: 21 of 5,873 tests
     // used more CPU than their wall clock (all ONNX-runtime, dlpack and fuzz cases), and every test
     // in the layer had at least four times its own CPU time of room under its timeout, so no bound
     // in the layer is read differently in a green run than it was before this rule.
@@ -3405,7 +3405,7 @@ function writeLogFiles(plan, test, result, status, logDir) {
  *
  * A test with no `backends` list is one run, and its mark is `known_fail = true`. The mark used to
  * be read *after* the early return for that shape, so `known_fail` on such a test did nothing at
- * all: the case failed, the run went red, and the mark was never mentioned. `20860eb01` found it
+ * all: the case failed, the run went red, and the mark was never mentioned. The defect was found
  * and fixed the one case where it showed -- by giving that case a `fvm` back end so the mark
  * applied -- which fixed the symptom; the author's 01:50 ruling asked for the mechanism. Now the
  * shape decides how the mark is written, and a mark written in the other shape's words is refused
@@ -5357,7 +5357,7 @@ async function main() {
     // directory when there is one, because that is the mistake this refusal exists for:
     // `test/plans/feat/docs_links` is the fixture directory beside `docs_links.plan.toml`.
     // Written to stdout on purpose: the helper that runs this on the host loses the run's stderr,
-    // so a refusal written there would be a red with no reason (measured 2026-11-03 -- the old
+    // so a refusal written there would be a red with no reason (the old
     // `[FAIL] this run selected no test at all` line never reached the operator from a host run).
     if (selected.reachedNothing.length > 0) {
         for (const target of selected.reachedNothing) {

@@ -7,7 +7,7 @@ tags = ["feat", "linear", "runtime", "effects", "gir"]
 # (`test/cases/linear/runtime/effects_model_edges.cml`) read with `std::gir`.
 #
 # Each entry below states one clause of the design. They are marked `known_fail` against the
-# integration of the edge model, which the decision-maker put ahead of new small
+# integration of the edge model, which put ahead of new small
 # tasks. The layer that holds all four is the graph's construction and its
 # consumers, not this plan, and the code is what disagrees with the design: its ordering between
 # effect statements is a `CTRL` edge (which carries "used" *and* orders, so no pass can treat it as

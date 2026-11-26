@@ -5,7 +5,7 @@
  * What the readings cache may answer with, and what it must never answer with.
  *
  * `scripts/merge-readings.mjs --read` stores one plan-set reading of one tree and replays it. The
- * rule is the one the backlog entry (C-1124-131) states: the key contains the identity of the thing
+ * rule is the one the backlog entry states: the key contains the identity of the thing
  * cached -- the tree OID -- plus everything else a reading depends on (the plan selection, the jobs
  * width, the tier, and the tool that produced it). So this file pins down:
  *
