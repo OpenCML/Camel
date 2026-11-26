@@ -137,6 +137,20 @@ void planUpdateMarks(size_t reuseInput, size_t byArrayCount, size_t copy) noexce
 /// every update an in-place form runs.
 void arrayCountAnswer(bool inPlace) noexcept;
 
+/// What `planUpdateMarks` and `arrayCountAnswer` have recorded so far, together: the marks are what
+/// the plans decided and the counts are what the arrays answered when an in-place update asked, so
+/// the two halves of storage reuse can be read side by side. A reading prints them
+/// (camel/runtime/operator_reuse.h, `inspect --reuse`); nothing else changes because they exist.
+struct UpdateReuseCounters {
+    uint64_t plans        = 0; ///< plans whose marks were recorded
+    uint64_t reuseInput   = 0; ///< update nodes a plan decided reuse their input's storage
+    uint64_t byArrayCount = 0; ///< update nodes a plan left to the array's own count
+    uint64_t copy         = 0; ///< update nodes a plan decided copy
+    uint64_t inPlace      = 0; ///< arrays that answered `write it where it is`
+    uint64_t copied       = 0; ///< arrays that answered `another holder has the bytes`
+};
+UpdateReuseCounters updateReuseCounters() noexcept;
+
 /// One device kernel ran: `label` names it (the module's own label, "launch"), `ns` is what the
 /// device spent on it when the caller measured that (0 otherwise).
 void kernelLaunch(std::string_view label, uint64_t ns = 0);

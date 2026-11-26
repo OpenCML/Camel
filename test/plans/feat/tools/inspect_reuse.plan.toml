@@ -1,0 +1,139 @@
+id = "tools.inspect_reuse"
+tier = "fast"
+tags = ["feat", "tools", "inspect", "reuse", "storage_reuse"]
+desc = "`camel inspect --reuse` answers, for every operator node, how many nodes read its value, after which position in the plan it is never read again, and what the run recorded about storage reuse; `--copies` keeps its own reading exactly as it was."
+# What is pinned here, and what is not.
+#
+# `--reuse` is a reading of a question `--copies` does not ask. `--copies` asks whether an *update*
+# node reuses the storage of the value it is given. `--reuse` asks what every operator node was told
+# about its result: how many places read it, after which plan position nothing does, and whether
+# anything else holds the bytes behind it. The third column is `unknown` on purpose -- whether
+# another live value shares those bytes is a run-time fact (Array::canWriteInPlace), so a
+# compile-time reading must not answer it. The run-time half is the `REUSE observed` line, which
+# prints counters the profile already kept (profile::planUpdateMarks, profile::arrayCountAnswer):
+# under `inspect` nothing executes, so the two count columns are 0 and the line says so by being
+# read as "plans, and no run".
+#
+# The second reason this plan exists: the new flag must not change `--copies`. The last test reads
+# `--copies` and asserts that no `REUSE` line is in it, and that its own rows and summary counts
+# are the ones `--copies` printed before this flag existed -- the shape is the one
+# feat/tools/inspect_copies.plan.toml pins, so a change to that reading breaks there first.
+
+[defaults]
+kind = "behavior"
+expect_exit = 0
+timeout_ms = 60000
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+
+[[tests]]
+name = "inspect.reuse.operator_rows"
+desc = "Every `REUSE` line of the reading is one of its three shapes -- an operator row `REUSE <file>:<line>:<column> <op> uses=<n> last-use=<position|-> alias=unknown`, a graph summary `REUSE <graph> operators <n>`, or the program's `REUSE observed ...` line -- the operator rows name their place in the source, `uses` is a count, `last-use` is a position or `-`, and the alias column is `unknown` and never a guess."
+case = "../../../cases/consistency/new_values/rebinding_loop.cml"
+args = ["inspect", "--reuse", "${case}"]
+expect_exit = "script"
+verify_script = '''
+({ input, assert }) => {
+  const said = input.normalized.output.replace(/\n/g, ' | ')
+  assert(input.exit_code === 0, 'inspect --reuse exited 0: ' + input.exit_code + ' ' + said)
+  const lines = input.normalized.stdout.split('\n').filter(l => l.startsWith('REUSE '))
+  assert(lines.length > 0, 'the tool printed a reading: ' + said)
+  const fields = lines.map(l => l.split(' '))
+  // The three shapes, told apart by their second field onward: `observed`, `<graph> operators <n>`,
+  // and the operator row, whose third field is the operator name and whose fourth starts `uses=`.
+  const observed = fields.filter(f => f[1] === 'observed')
+  const summaries = fields.filter(f => f.length === 4 && f[2] === 'operators')
+  const rows = fields.filter(f => f.length === 6 && /^uses=\d+$/.test(f[3]) && /^last-use=(\d+|-)$/.test(f[4]))
+  const other = fields.length - observed.length - summaries.length - rows.length
+  assert(other === 0, 'every line is an operator row, a graph summary or the observed line: ' + lines.join(' | '))
+  assert(observed.length === 1, 'one observed line for the program: ' + said)
+  assert(rows.length > 0, 'the case has operator nodes and the tool reports them: ' + said)
+  // A row names the place in the source, the way `--copies` does.
+  const placeless = rows.filter(f => !/^rebinding_loop\.cml:\d+:\d+$/.test(f[1]) && !/^[\w.-]+@\d+$/.test(f[1]))
+  assert(placeless.length === 0,
+    'every operator row names a place, the source position or <graph>@<node>: ' + placeless.map(f => f.join(' ')).join(' | '))
+  // The alias column is the reading's own limit and it says so: `unknown`, never yes or no.
+  const guessed = rows.filter(f => f[5] !== 'alias=unknown')
+  assert(guessed.length === 0,
+    'the alias column is unknown at compile time: ' + guessed.map(f => f.join(' ')).join(' | '))
+  // The graph summaries count the rows of their graph: the sum over the summaries is the row count.
+  const counted = summaries.reduce((n, f) => n + Number(f[3]), 0)
+  assert(counted === rows.length,
+    'the graph summaries count exactly the operator rows: ' + counted + ' vs ' + rows.length + ' ' + said)
+}
+'''
+
+[[tests]]
+name = "inspect.reuse.observed_is_the_runs_half"
+desc = "The `REUSE observed` line prints what the run recorded: `plans <n>` counts the plans whose marks the profile kept, and the two count columns are the arrays' own answers (in-place / copied). Under `inspect` nothing executes, so the counts are 0 while the plan count is not: the line is a reading of what happened, and a run that did not happen is not a run that answered nothing."
+case = "../../../cases/consistency/new_values/rebinding_loop.cml"
+args = ["inspect", "--reuse", "${case}"]
+expect_exit = "script"
+verify_script = '''
+({ input, assert }) => {
+  const said = input.normalized.output.replace(/\n/g, ' | ')
+  assert(input.exit_code === 0, 'inspect --reuse exited 0: ' + input.exit_code + ' ' + said)
+  const line = input.normalized.stdout.split('\n').find(l => l.startsWith('REUSE observed '))
+  assert(line !== undefined, 'the reading ends with its observed line: ' + said)
+  const fields = line.split(' ')
+  assert(fields.length === 15, 'the observed line is its seven pairs: ' + line)
+  const at = name => fields[fields.indexOf(name) + 1]
+  const plans = Number(at('plans'))
+  assert(plans > 0, 'the compile built at least one plan, so the marks were recorded: ' + line)
+  // `inspect` compiles and does not run: the arrays were asked nothing.
+  assert(at('counts') !== undefined, 'the observed line names the run-time half: ' + line)
+  const inPlace = Number(at('in-place'))
+  const copied = Number(at('copied'))
+  assert(inPlace === 0 && copied === 0,
+    'nothing ran, so no array answered a count question: ' + line)
+}
+'''
+
+[[tests]]
+name = "inspect.copies_does_not_carry_the_new_reading"
+desc = "`camel inspect --copies` is unchanged by the new flag: its output holds no `REUSE` line, every line is still a `COPIES` update row, a graph summary or a `no-plan`, and the summaries still count exactly the rows printed. The two readings share a subject and answer different questions; the new one must not leak into the old one's output."
+case = "../../../cases/consistency/new_values/rebinding_loop.cml"
+args = ["inspect", "--copies", "${case}"]
+expect_exit = "script"
+verify_script = '''
+({ input, assert }) => {
+  const said = input.normalized.output.replace(/\n/g, ' | ')
+  assert(input.exit_code === 0, 'inspect --copies exited 0: ' + input.exit_code + ' ' + said)
+  const leaked = input.normalized.stdout.split('\n').filter(l => l.startsWith('REUSE'))
+  assert(leaked.length === 0, 'no REUSE line in --copies output: ' + leaked.join(' | '))
+  const lines = input.normalized.stdout.split('\n').filter(l => l.startsWith('COPIES '))
+  assert(lines.length > 0, 'the tool printed a reading: ' + said)
+  const fields = lines.map(l => l.split(' '))
+  const updates = fields.filter(f => f.length === 4)
+  const summaries = fields.filter(f => f.length === 12 && f[2] === 'updates')
+  const noPlan = fields.filter(f => f.length === 3 && f[2] === 'no-plan')
+  assert(updates.length + summaries.length + noPlan.length === lines.length,
+    'every line is an update row, a graph summary or a no-plan: ' + lines.join(' | '))
+  // The counting rule the old reading is read with, unchanged: the summaries count the rows.
+  const updatesSum = summaries.reduce((n, f) => n + Number(f[3]), 0)
+  const rowsWithPlace = updates.filter(f => /:\d+:\d+$/.test(f[1]))
+  assert(updatesSum === rowsWithPlace.length,
+    'the graph summaries count exactly the update rows: ' + updatesSum + ' vs ' + rowsWithPlace.length + ' ' + said)
+}
+'''
+
+[[tests]]
+name = "inspect.reuse_and_copies_together"
+desc = "A command line that asks for both readings answers both: the `COPIES` lines are exactly what `--copies` alone prints (same rows, same summary counts) and the `REUSE` lines are the new reading, so the two can be read side by side in one run."
+case = "../../../cases/consistency/new_values/rebinding_loop.cml"
+args = ["inspect", "--copies", "--reuse", "${case}"]
+expect_exit = "script"
+verify_script = '''
+({ input, assert }) => {
+  const said = input.normalized.output.replace(/\n/g, ' | ')
+  assert(input.exit_code === 0, 'inspect --copies --reuse exited 0: ' + input.exit_code + ' ' + said)
+  const out = input.normalized.stdout
+  const copies = out.split('\n').filter(l => l.startsWith('COPIES '))
+  const reuse = out.split('\n').filter(l => l.startsWith('REUSE '))
+  assert(copies.length > 0, 'both readings are printed: ' + said)
+  assert(reuse.length > 0, 'both readings are printed: ' + said)
+  const observed = reuse.filter(l => l.startsWith('REUSE observed '))
+  assert(observed.length === 1, 'the observed line is printed once: ' + said)
+  const summaries = copies.map(l => l.split(' ')).filter(f => f.length === 12 && f[2] === 'updates')
+  assert(summaries.length > 0, 'the copies reading still summarises its graphs: ' + said)
+}
+'''

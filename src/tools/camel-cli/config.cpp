@@ -419,6 +419,8 @@ bool dumpTags      = false; // Whether to dump the tags the program declares
 bool dumpAttrs     = false; // Whether to dump the attribute-fate table and check its coverage
 bool dumpTies      = false; // Whether to dump the canonical numbering's tie groups
 bool dumpCopies    = false; // Whether to dump what the plan decided about every update node
+bool dumpReuse =
+    false; // Whether to dump each operator node's uses, last use and the run's reuse counts
 bool geneCode      = false; // Whether to generate code from GIR
 int passUntil      = -1;    // Pass until the given pass
 } // namespace Inspect
@@ -795,6 +797,10 @@ bool parseArgs(int argc, char *argv[]) {
          (option("-o", "--output") & value("output file", outputFile)) %
              "where the value main returns is written (default: stdout): a scalar as text, a "
              "tensor as .npy, a struct or tuple as a directory of those",
+         option("--reuse").set(dumpReuse) %
+             "print, at the end of the run, what its plans decided about storage reuse and what "
+             "the arrays answered (in-place or copied); with `inspect`, the same reading plus one "
+             "line per operator node",
          globalOps,
          opt_values("input", targetFiles) %
              "input file (optional if --input given; at least one required)");
@@ -875,6 +881,11 @@ bool parseArgs(int argc, char *argv[]) {
              "print what the execution plan decided about every update node (an append, a path "
              "assignment, a sort rebinding): one line per update saying whether it reuses the "
              "storage of the value it is given (in-place) or allocates new storage (copied)",
+         option("--reuse").set(dumpReuse) %
+             "print, for every operator node, how many nodes read its value, after which position "
+             "in the plan it is never read again, and what the run recorded about storage reuse "
+             "(the plans' marks and the arrays' answers); the alias column is `unknown` at compile "
+             "time, because whether another live value shares the bytes is a run-time fact",
          option("--gen", "--gene-code").set(geneCode) % "generate code from AST",
          (option("-p", "-P", "--pass-until") & integer("pass until", passUntil)) %
              "pass until the given pass",
