@@ -27,6 +27,8 @@
 #include "transpose/signature.h"
 
 #include "camel/core/mm.h"
+#include "camel/core/operator_names.h"
+#include "camel/core/operator_table.h"
 #include "camel/core/rtdata/array.h"
 #include "camel/core/rtdata/func.h"
 #include "camel/core/rtdata/struct.h"
@@ -582,17 +584,19 @@ gc_node_ref_t ruleCotangentOf(
             // graph is out of reach: the member this walk builds lives in a `TransposeMember` fact
             // and is made after the passes have run, so no `std::jgir` document ever holds the node
             // (measured: zero `:op/enter` nodes in this case's document, with and without
-            // `std::macro` in the pipeline). The uri is named once, below, and both the node and
-            // the line are made from it -- a walk that wrote a different operator could not report
-            // this one, which is what the positive control in
+            // `std::macro` in the pipeline). The node is made from the operator's id, resolved once
+            // (`camel/core/operator_table.h`): the compiler writes this step itself, so it knows
+            // the operator by id and never characterises it by text. The URI's text is named below
+            // only to report what was written -- a walk that wrote a different operator could not
+            // report this one, which is what the positive control in
             // `test/plans/feat/transforms/cotangent_enter.plan.toml` asks.
-            const char *const entrance = ":op/enter";
+            const camel::core::OperId entrance = camel::core::constructedOperators().enter;
 
             handed = ctx.draft->addOperNode(port, nullptr, entrance);
             ctx.draft->setNormInputs(handed, std::span<const gc_node_ref_t>(source));
-            ctx.os << "TRANSPOSE function=" << ctx.function->name() << " entrance=" << entrance
-                   << " law=" << ruleName << " port=" << port->toString()
-                   << " ct=" << ctType->toString() << '\n';
+            ctx.os << "TRANSPOSE function=" << ctx.function->name()
+                   << " entrance=" << camel::core::kEnterOperatorUri << " law=" << ruleName
+                   << " port=" << port->toString() << " ct=" << ctType->toString() << '\n';
         }
     }
     // **The port's declared type against the type of the value really handed.** A law is filed
