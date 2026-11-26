@@ -1,6 +1,0 @@
-// The console is one resource with three channels: the order of the writes is the written order.
-func main() {
-    println('out 1')
-    eprintln('err 1')
-    println('out 2')
-}
