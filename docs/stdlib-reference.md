@@ -839,6 +839,16 @@ The integers of r for which f is true, in order; the calls of f have no order am
 
 - Example: `(0 .. 5)->filter<func (x: int) => bool { x % 2 == 0 }>` gives `[0, 2, 4]`
 
+#### `foreach`
+
+```camel
+foreach: <f: (item: int) => void> (r: Range) => void
+```
+
+Calls f for every integer r names, in order, as `foreach` on the array the range names.
+
+- Example: `(0 .. 3)->foreach<func (x) { println(x) }>`
+
 #### `count`
 
 ```camel
