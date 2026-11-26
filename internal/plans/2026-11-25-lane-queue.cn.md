@@ -29,3 +29,4 @@
 9. **合并树路径读配置**（每日审查第 ⑦ 条）：`merge-lane.ps1` 与成批合并工具从 `camel-gate.local.json` 读合并位列表，删掉写死的默认值。
 10. **过程痕迹检查器扩范围**（每日审查第 ① 条剩下的部分）：扫 `scripts/`、`internal/tools/`、`test/`，补派工编号等模式，现有的一次清干净。
 11. **`std::nop` 的注释**（D-1124-84 挂起的那句）：写"扔掉这张图，不执行：返回空图，不产生任何效应"。
+12. **打印要记成写 `console`**：设计原则写明打印是 `uses var console`（负责人 11-13、11-14），而树里 `println`/`print` 只声明 `panic`，没有 `console` 资源。在标准库里声明 `resource console`，打印类函数写 `uses var console`；没写 `uses` 子句的函数由推导自动带上，写了子句又会打印的显式补上。判据：图编辑设计第 15.1 节 `log_result` 的块头类型能写出且被提交核对。
