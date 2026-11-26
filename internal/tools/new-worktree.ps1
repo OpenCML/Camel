@@ -30,6 +30,23 @@
 #
 #   pwsh -NoProfile -File internal/tools/new-worktree.ps1 -VerifyOnly -Path <tree>
 #
+# A pool: worktrees are made once, named by slot, and handed from lane to lane, so that the git-ignored
+# build outputs stay and the next lane's build is incremental instead of a full checkout and a build
+# from nothing. The add path above is how a slot is made the first time; after that:
+#
+#   -Reuse <slot> -Branch <branch> [-Base <ref>]   take a slot: refused unless it holds no tracked
+#                                                  change and no untracked file that is not ignored;
+#                                                  then fetch, `git switch -C`, `git clean -fd`
+#                                                  (never -x: ignored files are the build outputs),
+#                                                  the settings file, the push guard. `-Detach <ref>`
+#                                                  instead of -Branch for a slot at a commit.
+#   -Release <slot>                                give it back: same refusal, then detached at
+#                                                  -Integration (origin/integration). The branch is
+#                                                  deleted by whoever merged it, not here.
+#   -Pool <dir>                                    list the worktrees under <dir>: free (detached and
+#                                                  clean) or busy, the branch, clean or dirty, and
+#                                                  whether the branch is merged into -Integration.
+#
 # Exit codes: 0 the tree exists and its guard spoke; 2 refused before anything was made (the path or
 # the branch is taken, the base does not resolve); 1 the tree exists and is NOT guarded -- the
 # message says what is missing, and the tree is left in place because deleting it would delete
@@ -55,7 +72,16 @@ param(
     # tree has no hooks; every other tree gets both steps as one.
     [switch] $NoHusky,
     # Skip the fetch. For a caller that has just fetched.
-    [switch] $NoFetch
+    [switch] $NoFetch,
+    # Take an existing worktree (a pool slot) instead of adding one: with -Branch or -Detach, it is
+    # switched to that line and what the last lane left untracked is removed.
+    [string] $Reuse,
+    # Return a worktree to the pool: it is detached at the integration tip.
+    [string] $Release,
+    # List the worktrees under this directory: branch, clean or not, merged or not, free or busy.
+    [string] $Pool,
+    # The line a slot returns to and a branch counts as merged into.
+    [string] $Integration = 'origin/integration'
 )
 
 $ErrorActionPreference = 'Stop'
@@ -79,6 +105,121 @@ if (-not $repoRoot) {
 
 . (Join-Path $PSScriptRoot 'push-hooks-guard.ps1')
 
+# --- steps shared by making a tree and taking one ------------------------------
+function Invoke-FetchOrStop {
+    param([string] $Consequence)
+    $fetch = @(& git -C $repoRoot fetch origin --prune 2>&1)
+    if ($LASTEXITCODE -ne 0) {
+        Write-Stop "git fetch origin failed" @(
+            ($fetch | ForEach-Object { "  $_" }),
+            'A base that could not be refreshed is not a base: the tree would start from the last',
+            "cache this checkout happened to hold. $Consequence")
+    }
+}
+
+# The settings file is git-ignored and machine-local, so a new tree never has one. The pre-push hook
+# reads `mergeWorktree` from it and refuses a develop push from a tree without it, and the host tools
+# read the rest; a tree without it is a tree whose first refusal is about a missing file rather than
+# about the change.
+function Copy-GateSettings {
+    param([string] $Tree)
+    $settingsSource = Join-Path $repoRoot 'internal/tools/camel-gate.local.json'
+    $settingsTarget = Join-Path $Tree 'internal/tools/camel-gate.local.json'
+    if (Test-Path -LiteralPath $settingsSource) {
+        Copy-Item -LiteralPath $settingsSource -Destination $settingsTarget -Force
+        Write-Host "copied internal/tools/camel-gate.local.json from $repoRoot"
+    } else {
+        Write-Host "warning: $settingsSource does not exist, so the new tree has no settings file; a develop push from it will be refused until one is written" -ForegroundColor Yellow
+    }
+}
+
+# The claim "husky exited 0" is about a directory; this claim is about a push. Exits 1 when the guard
+# does not answer, and returns the answer when it does.
+function Confirm-PushGuard {
+    param([string] $Tree, [string] $Target, [string] $Made = 'made')
+    $guard = Test-PushHookGuard -Tree $Tree -Target $Target
+    if (-not $guard.Ok) {
+        Write-Host ''
+        Write-Host "STOPPED: the tree at $Tree was $Made but its push guard does not answer (exit 1)" -ForegroundColor Red
+        foreach ($line in $guard.Message) { Write-Host "  $line" }
+        Write-Host "  What fixes it: cd '$Tree' ; npx husky    -- and check again with -VerifyOnly."
+        exit 1
+    }
+    foreach ($line in $guard.Message) { Write-Host $line }
+    $guard
+}
+
+# What `git status` says is in a tree, ignored files left out: a tracked change or an untracked file
+# that is not ignored. Build outputs are ignored, so they are never in this list.
+function Get-TreeContent {
+    param([string] $Tree)
+    @(& git -C $Tree status --porcelain 2>$null | Where-Object { "$_".Trim() })
+}
+
+# The worktrees git lists for this repository other than the main checkout, each with its path, the
+# branch it is on (empty when detached) and the commit it is at.
+function Get-Worktrees {
+    $items = @()
+    $current = $null
+    foreach ($line in @(& git -C $repoRoot worktree list --porcelain 2>$null)) {
+        if ("$line" -match '^worktree (.+)$') {
+            if ($current) { $items += $current }
+            $current = [ordered] @{ Path = [System.IO.Path]::GetFullPath($Matches[1]); Branch = ''; Head = '' }
+        } elseif ($current -and "$line" -match '^HEAD (\S+)') {
+            $current.Head = $Matches[1]
+        } elseif ($current -and "$line" -match '^branch refs/heads/(.+)$') {
+            $current.Branch = $Matches[1]
+        }
+    }
+    if ($current) { $items += $current }
+    # The first record is the main checkout, which is never a slot.
+    @($items | Select-Object -Skip 1 | ForEach-Object { [pscustomobject] $_ })
+}
+
+function Resolve-SlotOrStop {
+    param([string] $Given)
+    $full = [System.IO.Path]::GetFullPath($Given)
+    $match = @(Get-Worktrees | Where-Object { $_.Path.TrimEnd('\', '/') -ieq $full.TrimEnd('\', '/') })
+    if ($match.Count -eq 0 -or -not (Test-Path -LiteralPath $full)) {
+        Write-Stop "$full is not a worktree of this repository" @(
+            "A slot is a linked worktree of $repoRoot (see 'git worktree list'). Nothing was changed.")
+    }
+    $full
+}
+
+function Stop-UnlessEmpty {
+    param([string] $Tree, [string] $Doing)
+    $content = Get-TreeContent $Tree
+    if ($content.Count -gt 0) {
+        Write-Stop "the tree at $Tree is not empty of work, so it was not $Doing" @(
+            ($content | Select-Object -First 20 | ForEach-Object { "  $_" }),
+            'Tracked changes and untracked files that are not ignored are work in progress. Commit or',
+            'remove them in that tree first. Nothing was changed.')
+    }
+}
+
+function Remove-Untracked {
+    param([string] $Tree)
+    # `-fd` and never `-x`: ignored files are the build outputs the next lane keeps.
+    $cleaned = @(& git -C $Tree clean -fd 2>&1)
+    if ($LASTEXITCODE -ne 0) {
+        Write-Stop "git clean failed in $Tree" @(($cleaned | ForEach-Object { "  $_" }), 'The switch has been made; the tree may hold leftovers.') 1
+    }
+    foreach ($line in $cleaned) { if ("$line".Trim()) { Write-Host "  $line" } }
+}
+
+function Switch-Slot {
+    param([string] $Tree, [string[]] $SwitchArgs)
+    $previous = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'
+    $out = @(& git -C $Tree switch --quiet @SwitchArgs 2>&1)
+    $exit = $LASTEXITCODE
+    $ErrorActionPreference = $previous
+    if ($exit -ne 0) {
+        Write-Stop "git switch failed in $Tree" @(($out | ForEach-Object { "  $_" }), 'Nothing was changed.')
+    }
+}
+
 # --- the read-only mode: does this tree's guard speak? ------------------------
 if ($VerifyOnly) {
     $treeToRead = if ($Path) { $Path } else { $repoRoot }
@@ -89,6 +230,87 @@ if ($VerifyOnly) {
     foreach ($line in $guard.Message) { Write-Host $line }
     if ($guard.Ok) { exit 0 }
     exit 2
+}
+
+# --- the pool: which slots are free ---------------------------------------------
+if ($Pool) {
+    if (-not $NoFetch) { Invoke-FetchOrStop 'Nothing was listed.' }
+    $integrationSha = "$(& git -C $repoRoot rev-parse --verify --quiet "$Integration^{commit}" 2>$null)".Trim()
+    if (-not $integrationSha) {
+        Write-Stop "'$Integration' does not resolve to a commit" @('The listing says whether a branch is merged into it. Nothing was listed.')
+    }
+    $poolFull = [System.IO.Path]::GetFullPath($Pool).TrimEnd('\', '/') + [System.IO.Path]::DirectorySeparatorChar
+    $slots = @(Get-Worktrees | Where-Object { $_.Path.StartsWith($poolFull, [System.StringComparison]::OrdinalIgnoreCase) })
+    Write-Host "pool $($poolFull.TrimEnd('\')): $($slots.Count) worktrees, merged into $Integration at $($integrationSha.Substring(0, 9))"
+    $free = 0
+    foreach ($slot in ($slots | Sort-Object Path)) {
+        $name = Split-Path -Leaf $slot.Path
+        if (-not (Test-Path -LiteralPath $slot.Path)) {
+            Write-Host ("{0,-16} missing    (the directory is gone; git worktree prune)" -f $name)
+            continue
+        }
+        $detachedSlot = -not $slot.Branch
+        $clean = (Get-TreeContent $slot.Path).Count -eq 0
+        $merged = '-'
+        if (-not $detachedSlot) {
+            & git -C $repoRoot merge-base --is-ancestor $slot.Branch $integrationSha 2>$null
+            $merged = if ($LASTEXITCODE -eq 0) { 'yes' } else { 'no' }
+        }
+        $isFree = $detachedSlot -and $clean
+        if ($isFree) { $free++ }
+        $where = if ($detachedSlot) { "detached @ $($slot.Head.Substring(0, [Math]::Min(9, $slot.Head.Length)))" } else { $slot.Branch }
+        Write-Host ("{0,-16} {1,-5} {2,-8} merged={3,-3} {4}" -f $name, $(if ($isFree) { 'free' } else { 'busy' }), $(if ($clean) { 'clean' } else { 'dirty' }), $merged, $where)
+    }
+    Write-Host "free: $free of $($slots.Count) (a slot is free when it is detached and clean; merged=yes on a branch with no commits of its own is a lane that has just started)"
+    exit 0
+}
+
+# --- the pool: give a slot back ---------------------------------------------------
+if ($Release) {
+    $slotPath = Resolve-SlotOrStop $Release
+    Stop-UnlessEmpty $slotPath 'released'
+    if (-not $NoFetch) { Invoke-FetchOrStop 'Nothing was changed.' }
+    $integrationSha = "$(& git -C $repoRoot rev-parse --verify --quiet "$Integration^{commit}" 2>$null)".Trim()
+    if (-not $integrationSha) {
+        Write-Stop "'$Integration' does not resolve to a commit" @('A slot returns to the integration tip. Nothing was changed.')
+    }
+    $wasOn = "$(& git -C $slotPath branch --show-current 2>$null)".Trim()
+    Switch-Slot $slotPath @('--detach', $integrationSha)
+    Remove-Untracked $slotPath
+    $left = if ($wasOn) { " (branch $wasOn is left for whoever merged it to delete)" } else { '' }
+    Write-Host "released ${slotPath}: detached at $Integration $($integrationSha.Substring(0, 9))$left" -ForegroundColor Green
+    exit 0
+}
+
+# --- the pool: take a slot ------------------------------------------------------------
+if ($Reuse) {
+    if ($Branch -and $Detach) {
+        Write-Stop "-Branch and -Detach together" @('A slot is either on a new branch or detached at a commit. Nothing was changed.')
+    }
+    if (-not $Branch -and -not $Detach) {
+        Write-Stop "no -Branch and no -Detach" @('Give the branch the slot switches to, or -Detach <ref>. Nothing was changed.')
+    }
+    $slotPath = Resolve-SlotOrStop $Reuse
+    Stop-UnlessEmpty $slotPath 'taken'
+    if ($Branch -and "$(& git -C $repoRoot rev-parse --verify --quiet "refs/heads/$Branch" 2>$null)".Trim()) {
+        Write-Stop "the branch '$Branch' already exists" @(
+            'Taking a slot starts a new branch; reusing a name would move whatever is on it. Nothing was changed.')
+    }
+    if (-not $NoFetch) { Invoke-FetchOrStop 'Nothing was changed.' }
+    $reuseRef = if ($Detach) { $Detach } else { $Base }
+    $reuseSha = "$(& git -C $repoRoot rev-parse --verify --quiet "$reuseRef^{commit}" 2>$null)".Trim()
+    if (-not $reuseSha) {
+        Write-Stop "'$reuseRef' does not resolve to a commit" @('The slot has to start from a commit. Nothing was changed.')
+    }
+    if ($Detach) { Switch-Slot $slotPath @('--detach', $reuseSha) } else { Switch-Slot $slotPath @('-C', $Branch, $reuseSha) }
+    Remove-Untracked $slotPath
+    $reuseName = if ($Detach) { "detached $Detach" } else { $Branch }
+    Write-Host "took ${slotPath} on $reuseName at $($reuseSha.Substring(0, 9))"
+    Copy-GateSettings $slotPath
+    $guard = Confirm-PushGuard -Tree $slotPath -Target $(if ($Detach) { 'the commit it publishes' } else { $Branch }) -Made 'taken'
+    Write-Host ''
+    Write-Host "ready: ${slotPath} on $reuseName at $($reuseSha.Substring(0, 9)), hooks at $($guard.HookFile)" -ForegroundColor Green
+    exit 0
 }
 
 if (-not $Path) {
@@ -126,15 +348,7 @@ if (-not $detached -and "$(& git -C $repoRoot rev-parse --verify --quiet "refs/h
 # The page's command took whatever `origin/develop` the local cache held, which is a tree behind the
 # tip by however long since the last fetch, and the first measurement inside it is then a reading
 # about a base nobody has.
-if (-not $NoFetch) {
-    $fetch = @(& git -C $repoRoot fetch origin --prune 2>&1)
-    if ($LASTEXITCODE -ne 0) {
-        Write-Stop "git fetch origin failed" @(
-            ($fetch | ForEach-Object { "  $_" }),
-            'A base that could not be refreshed is not a base: the tree would start from the last',
-            'cache this checkout happened to hold. Nothing was made.')
-    }
-}
+if (-not $NoFetch) { Invoke-FetchOrStop 'Nothing was made.' }
 $startRef = if ($detached) { $Detach } else { $Base }
 $baseSha = "$(& git -C $repoRoot rev-parse --verify --quiet "$startRef^{commit}" 2>$null)".Trim()
 if (-not $baseSha) {
@@ -161,18 +375,7 @@ if ($addExit -ne 0) {
 }
 Write-Host "made $pathFull on $checkoutName at $($baseSha.Substring(0, 9))"
 
-# The settings file is git-ignored and machine-local, so a new tree never has one. The pre-push hook
-# reads `mergeWorktree` from it and refuses a develop push from a tree without it, and the host tools
-# read the rest; a tree without it is a tree whose first refusal is about a missing file rather than
-# about the change.
-$settingsSource = Join-Path $repoRoot 'internal/tools/camel-gate.local.json'
-$settingsTarget = Join-Path $pathFull 'internal/tools/camel-gate.local.json'
-if (Test-Path -LiteralPath $settingsSource) {
-    Copy-Item -LiteralPath $settingsSource -Destination $settingsTarget -Force
-    Write-Host "copied internal/tools/camel-gate.local.json from $repoRoot"
-} else {
-    Write-Host "warning: $settingsSource does not exist, so the new tree has no settings file; a develop push from it will be refused until one is written" -ForegroundColor Yellow
-}
+Copy-GateSettings $pathFull
 
 # --- install the guard ------------------------------------------------------
 # Only the repository's own installer is run: husky owns the files in that directory, and a copy
@@ -221,16 +424,7 @@ if ($NoHusky) {
     Write-Host "ready: $pathFull on $checkoutName at $($baseSha.Substring(0, 9)), with no hooks (-NoHusky): a push from it runs no rule" -ForegroundColor Yellow
     exit 0
 }
-# The claim "husky exited 0" is about a directory; this claim is about a push.
-$guard = Test-PushHookGuard -Tree $pathFull -Target $(if ($detached) { 'the commit it publishes' } else { $Branch })
-if (-not $guard.Ok) {
-    Write-Host ''
-    Write-Host "STOPPED: the tree at $pathFull was made but its push guard does not answer (exit 1)" -ForegroundColor Red
-    foreach ($line in $guard.Message) { Write-Host "  $line" }
-    Write-Host "  What fixes it: cd '$pathFull' ; npx husky    -- and check again with -VerifyOnly."
-    exit 1
-}
-foreach ($line in $guard.Message) { Write-Host $line }
+$guard = Confirm-PushGuard -Tree $pathFull -Target $(if ($detached) { 'the commit it publishes' } else { $Branch })
 
 Write-Host ''
 Write-Host "ready: $pathFull on $checkoutName at $($baseSha.Substring(0, 9)), hooks at $($guard.HookFile)" -ForegroundColor Green

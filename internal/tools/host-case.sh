@@ -19,6 +19,9 @@
 #                 use. Taken only when a pool is configured (`CAMEL_TOKEN_DIR` set and the token
 #                 tool present), so a lane on a machine without one runs exactly as before.
 #
+#                 Under a plan run that already holds its width (`CAMEL_TOKENS_COVERED=1`) the token
+#                 tool takes nothing; that rule lives in `host-tokens.sh`, in one place.
+#
 # `exec` is deliberate: after this line the case *is* this process, so the token is held for exactly
 # the case's life and returned by the kernel when it exits -- including when it is killed.
 set -u

@@ -18,6 +18,13 @@
 #   show          what the pool looks like now: free, held, and the peak so far
 #   self-test     check the properties this exists for, without a host
 #
+# A run that already holds its width says so with CAMEL_TOKENS_COVERED=1 (`camel-run plan` sets it),
+# and that means every process under the run is inside the run's tokens. `take`, `take-up-to` and
+# `run` then take nothing and run the command: a descendant that waited for more tokens while its
+# ancestors held theirs would be hold-and-wait, and several plan runs on a nearly full pool would wait
+# on each other for good. `take-up-to` reports the covering run's own width (`CAMEL_JOBS`, at most
+# what was asked for), so a nested sweep runs no wider than the run that holds the tokens.
+#
 # Waiting is not failing, and running out of the wait is not a red reading:
 #
 #   a token arrives in time   -> the caller runs
@@ -294,6 +301,7 @@ acquire() {
 
 take() {
     local want="$1"
+    [ "${CAMEL_TOKENS_COVERED:-0}" = 1 ] && return 0
     [ "$want" -ge 1 ] || die "take needs at least one token"
     [ "$want" -le "$POOL_SIZE" ] || die "cannot take $want tokens from a pool of $POOL_SIZE"
     prepare
@@ -314,17 +322,27 @@ take() {
 #
 # The count reaches CMD as `CAMEL_TOKENS_HELD` and `CMAKE_BUILD_PARALLEL_LEVEL`, because a number
 # written in the calling shell does not cross into the command: the width has to be decided where the
-# locks are. `HOST_BUILD_JOBS=<n>` is printed first, so a caller that reads the run's stream learns
+# locks are. `HOST_BUILD_JOBS=<n>` (or the label in `CAMEL_TAKE_LABEL`, which a plan run sets to
+# `HOST_JOBS`) is printed first, so a caller that reads the run's stream learns
 # the width the build actually got rather than the width it asked for.
 take_up_to() {
     local want="$1"
     shift
     [ "$want" -ge 1 ] || die "take-up-to needs at least one token"
     [ "$want" -le "$POOL_SIZE" ] || want="$POOL_SIZE"
-    prepare
-    acquire "$want" upto
+    if [ "${CAMEL_TOKENS_COVERED:-0}" = 1 ]; then
+        # Inside a covering run: nothing is taken, the width is the run's own, capped by the request.
+        ACQ_N="${CAMEL_JOBS:-${CAMEL_TOKENS_HELD:-$want}}"
+        case "$ACQ_N" in ''|*[!0-9]*) ACQ_N="$want" ;; esac
+        [ "$ACQ_N" -le "$want" ] || ACQ_N="$want"
+        [ "$ACQ_N" -ge 1 ] || ACQ_N=1
+        ACQ_MS=0
+    else
+        prepare
+        acquire "$want" upto
+    fi
     echo "host-tokens: running at $ACQ_N of $want worker(s) (lane=$LANE, $((ACQ_MS / 1000))s to take them)"
-    echo "HOST_BUILD_JOBS=$ACQ_N"
+    echo "${CAMEL_TAKE_LABEL:-HOST_BUILD_JOBS}=$ACQ_N"
     export CAMEL_TOKENS_HELD="$ACQ_N"
     export CMAKE_BUILD_PARALLEL_LEVEL="$ACQ_N"
     "$@"
@@ -579,8 +597,29 @@ self_test() {
         1:1) echo 'ok    take-up-to takes the one token that is free rather than waiting for three' ;;
         *) echo "FAIL  take-up-to reported width '$width' and the command saw '$seen', not 1 and 1"; bad=$((bad + 1)) ;;
     esac
+    labelled=$(CAMEL_TAKE_LABEL=HOST_JOBS "$0" take-up-to 3 -- true 2>/dev/null | sed -n 's/^HOST_JOBS=//p' | tail -1)
+    case "$labelled" in
+        1) echo 'ok    take-up-to reports the width under the caller''s own label (a plan run reads it as HOST_JOBS)' ;;
+        *) echo "FAIL  take-up-to under CAMEL_TAKE_LABEL reported '$labelled', not 1"; bad=$((bad + 1)) ;;
+    esac
     kill -9 "$holder4" 2>/dev/null
     wait "$holder4" 2>/dev/null
+
+    # 12b. inside a covering run nothing is taken: with every token held, a nested take returns at
+    # once and a nested take-up-to runs at the covering run's width instead of waiting for the pool.
+    ( take 3 >/dev/null; exec sleep 30 ) &
+    holder5=$!
+    settle 'free=0 held=3'
+    CAMEL_TOKENS_COVERED=1 timeout 20 "$0" run 3 -- true >/dev/null 2>&1
+    rc=$?
+    nested=$(CAMEL_TOKENS_COVERED=1 CAMEL_JOBS=2 timeout 20 "$0" take-up-to 3 -- sh -c 'printf "w=%s\n" "$CAMEL_TOKENS_HELD"' 2>/dev/null | sed -n 's/^w=//p' | tail -1)
+    if [ "$rc" -eq 0 ] && [ "$nested" = 2 ]; then
+        echo 'ok    under a covering run a nested take finishes at once on a full pool, and take-up-to reports the run'"'"'s width'
+    else
+        echo "FAIL  nested takers under CAMEL_TOKENS_COVERED: run exit $rc, take-up-to width '$nested' (needs 0 and 2)"; bad=$((bad + 1))
+    fi
+    kill -9 "$holder5" 2>/dev/null
+    wait "$holder5" 2>/dev/null
 
     # 13. two takers that each want more than half of the pool both finish, one after the other.
     # Each takes two of three and holds them; taking one token at a time and waiting for the second
@@ -615,7 +654,7 @@ self_test() {
     rm -f "$log" "$log.lock" "$log".barrier.*
 
     rm -rf "$root"
-    if [ "$bad" -eq 0 ]; then echo 'selftest: 14 checks, 0 failed'; return 0; fi
+    if [ "$bad" -eq 0 ]; then echo 'selftest: 16 checks, 0 failed'; return 0; fi
     echo "selftest: $bad failed"; return 1
 }
 

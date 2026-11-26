@@ -225,12 +225,12 @@
 # a twenty-first row would have changed a number every lane compares. The number it prints is the
 # runner's own [SUMMARY] reduced to one line, never a second count kept here, and it is `unknown` --
 # not zero -- when the runner printed no summary at all. It runs on the caller's -Jobs, after the
-# checkers, and under the host's plan lock: it *is* a plan run and not a reader of one, so a number
-# taken beside five other lanes would not be comparable.
+# checkers, and through the host's token pool like any plan run: it *is* a plan run and not a reader
+# of one, so it takes its own tokens.
 #
 # What it prints is `check=gpu-plans total=<n> pass=<n> fail=<n> skip=<n> red=[<names>]
 # red_more=<n> seconds=<n> state=<read|noslot|nosummary> mode=report`. `state` says whether the layer
-# was read at all: `noslot` is a host whose plan lock was never obtained (no reading, and no red
+# was read at all: `noslot` is a host that gave no token within the wait (no reading, and no red
 # invented from it), `nosummary` is an observation that could not read its own runner.
 #
 # --- and the ratchet is what keeps it from being background noise -------------
@@ -472,8 +472,9 @@ param(
     # invocation appearing later in the same host checkout cannot change which directory is read. If
     # the named directory is not there, nothing is fetched and no other run is read instead.
     [switch]$FromThisRun,
-    # How long a run waits for the slot(s) it needs before it says `state=noslot` and stops, in
-    # seconds. 1800 s is the shape every wait here has had: a queue behind other lanes' builds is
+    # How long a run waits for a token of the host's pool before it says `state=noslot` and stops, in
+    # seconds (it reaches the host as `CAMEL_TOKEN_WAIT_S`, for the build and the plan alike). 1800 s
+    # is the shape every wait here has had: a queue behind other lanes' builds is
     # waiting, not a failure, and a reading that was never taken is not a red. It is a parameter
     # because the one case worth measuring on purpose is the refusal -- a lane that wants to see
     # `noslot` should not have to book half an hour of a shared host to read it.
@@ -1497,14 +1498,13 @@ $publishedPhase = $null
 $publishedTokens = $null
 
 # One line per run for the panel's run registry. The fields that say *how* this run was scheduled
-# are reported by the host itself and not guessed here: `testSlot` is 1 when the plan run held the
-# one test slot, and
-# `overlapping` names the other runs that were on the host when this one started and when it
+# are reported by the host itself and not guessed here: `overlapping` names the other runs that were
+# on the host when this one started and when it
 # stopped, as `runId:phase` or `none`. `loadAtStart`/`loadAtEnd` are the host's 1-minute load at
 # the same two moments. Without them a duration is a number taken in unknown company: two runs red
 # side by side and two runs red one after the other are different readings, and only these four
 # fields tell them apart. `state` is `read` when the run was measured and `noslot` when the host
-# refused to start it because a lock it needed was taken.
+# refused to start it because no token of the pool came in time.
 $run = @{
     runId           = "$PID-$($startedAt.ToString('yyyyMMddHHmmss'))"
     pid             = $PID
@@ -1517,12 +1517,6 @@ $run = @{
     updatedAt       = $startedAt.ToString('o')
     phase           = 'starting'
     state           = $null
-    testSlot        = $null
-    # The wait is a reading of its own. `phase=built` standing still for twenty-two minutes is what a
-    # queued run looks like when nobody writes the wait down -- and on 2026-11-24 it was read as
-    # `waiters = []` twice, which says "nobody is waiting" about three runs that were.
-    testWaitSince   = $null
-    testWaitSlots   = $null
     noslotWaitedFor = $null
     overlapping     = @{ atStart = $null; atEnd = $null }
     loadAtStart     = if ($null -ne $loadStart) { "$([math]::Round($loadStart[0], 2))" } else { $null }
@@ -1741,7 +1735,7 @@ try {
             Write-Host ("[camel-remote] another run is using this branch: the staging ref refs/heads/{0} was locked or moved while this push asked for it (git: {1})." -f `
                 $branch, "$($busyPush[0])".Trim())
             Write-Host '[camel-remote] nothing was measured, so nothing is red: a run that did not start is the'
-            Write-Host '[camel-remote] same class as one that found no host slot. The branch and its ref are fine --'
+            Write-Host '[camel-remote] same class as one that found no host token. The branch and its ref are fine --'
             Write-Host '[camel-remote] wait for the other run and re-run; do not delete anything.'
             Write-Host ("[camel-remote] {0} exit 4 (another run is using this branch)" -f $name)
             exit 4
@@ -1984,8 +1978,8 @@ $buildCmd = if ($Config -eq 'Debug') { "npm run debug$stackTraceArg" } else { "n
         ':'
     }
 
-    # The plan runs as a child of `camel-run`, which takes the slot and holds it until that command
-    # exits. The command travels as a file, byte for byte: quoting it into `bash -c` would rewrite it,
+    # The plan runs as a child of `camel-run`, which takes tokens for it and holds them until that
+    # command exits. The command travels as a file, byte for byte: quoting it into `bash -c` would rewrite it,
     # and a rewritten command is exactly how a run ends up looking normal while running less.
     #
     # NOT `exec`, and that is not style. This script's last lines are the run's own report of its
@@ -2051,12 +2045,11 @@ code=${PIPESTATUS[0]}
 '@.Replace('RUNPLAN', $runPlanExec)
     }
 
-    # The width the plan is started at. Nothing on the host is held while a plan runs except the test
-    # slot (one plan at a time, taken by `camel-run plan`), so the width is a ceiling this side
-    # chooses: 16 processes, narrowed by -Jobs and never widened. This is the number in the plan's
-    # command line *and* the number the registry records, so "what was asked for" and "what ran"
-    # cannot be the same field. `-UpdateGolden` rewrites files and runs one test at a time whatever
-    # --jobs says (run-tests.mjs), so that run's width is 1.
+    # The width the plan asks for: 16 processes, narrowed by -Jobs and never widened. It is a request,
+    # not a promise: `camel-run plan` takes up to that many tokens from the pool, runs the plan at the
+    # number it got and says it as `HOST_JOBS=`, which is the number the registry records -- so "what
+    # was asked for" (`HOST_JOBS_REQUESTED`) and "what ran" are different fields. `-UpdateGolden`
+    # rewrites files and runs one test at a time whatever --jobs says (run-tests.mjs), so its width is 1.
     $jobsBudget = if (-not ($planArgs -or $Changed)) {
         ':'
     } elseif ($UpdateGolden) {
@@ -2290,8 +2283,8 @@ echo "[camel-remote] --- ${checkName}: exit `$c ---"
     # The shape of a `reportOnly` entry, for a thing that is not a checker: the plan run's output is
     # captured, one machine-readable line is printed, and the exit code never reaches `checkfail`.
     # Three differences are the reading's own, and each is why the line can be trusted:
-    #   * it is a plan run (`scripts/test.js`, on the caller's -Jobs), and it takes the host's plan
-    #     lock for itself -- it is a second plan run and not a reader of the first one, and a number
+    #   * it is a plan run (`scripts/test.js`, on the caller's -Jobs), and it takes its own tokens
+    #     from the pool -- it is a second plan run and not a reader of the first one, and a number
     #     taken while five other lanes are running plans is a different number;
     #   * `--tier all` rather than the caller's `-Tier`: `test/plans/gpu` is a directory, so it is read
     #     at a tier, and the default `fast` layer would leave out the slow cases this observation
@@ -2304,42 +2297,30 @@ echo "[camel-remote] --- ${checkName}: exit `$c ---"
     $gpuBlock = ''
     if ($gpuWanted) {
         $gpuReadingFile = "$remoteScratch/$gpuObservationName.out"
-        # A second plan run, after the plan slot above was released: it takes the plan slot again
-        # below (fd 5), so its width is that slot's 16 at most and -Jobs can only narrow it. It is
-        # computed here rather than by the host block because this command is executed verbatim and
-        # also printed in the header, and two different widths in those two places is how a reading
-        # starts lying about itself.
+        # A second plan run, after the first one's tokens were given back: it takes tokens again
+        # through `camel-run plan`, asking for 16 at most (-Jobs can only narrow it) and running at
+        # what the pool gives. The width asked for is computed here because the command is also
+        # printed in the header, and two different asks in those two places is how a reading starts
+        # lying about itself.
         $gpuJobs = [Math]::Min($Jobs, 16)
         $shownGpu = "node scripts/test.js test/plans/gpu --jobs $gpuJobs --tier all"
         $gpuBlock = @"
 
 # --- the gpu layer: observed, never gating (see the header) -----------------
 echo '[camel-remote] --- $($gpuObservationName): $shownGpu ---'
-exec 5>/tmp/camel-host-test.lock
-# The wait says which second it is on, because a wait that says nothing is a wait the caller cannot
-# tell from a hang. The finish deadline after [SPLIT] is pushed out only by a line that carries a
-# reading -- a keep-alive does not (`Test-CamelRemoteReadingLine`) -- and this stage can sit here for
-# 1800 s, three times the default deadline. Waiting is not working: the observation is going to
-# happen, so it can say so every five seconds and the deadline keeps meaning "nothing has been
-# reported for that long".
-gpu_slot=0
-gpu_waited=0
-while [ "`$gpu_waited" -lt 1800 ]; do
-    if flock -n 5; then gpu_slot=1; break; fi
-    sleep 5
-    gpu_waited=`$(( gpu_waited + 5 ))
-    echo "[camel-remote] $($gpuObservationName): waiting for the host test slot (`$gpu_waited s of 1800)"
-done
-if [ "`$gpu_slot" -ne 1 ]; then
-    # No slot is not a red: this observation decides nothing, so it says it did not read and goes.
-    echo '[camel-remote] $($gpuObservationName): no host test slot within 1800 s, so the gpu layer was not read'
+# The observation is a plan run like any other: it takes tokens from the pool through `camel-run plan`
+# (up to the width asked for, never fewer than one) and runs at the width it got. No token within the
+# wait is exit 4 with `HOST_STATE=noslot` in its output, which is a reading that was not taken and
+# not a red. The sweep's own clock starts here, because the checks stage's seconds carry it: a lane
+# comparing that number with an earlier run's has to be able to see what the extra time was.
+gpu_started_ns=`$(date +%s%N)
+CAMEL_JOBS=$gpuJobs "`$CAMEL_RUN" plan --lane "`${CAMEL_LANE:-}" --branch "`${CAMEL_BRANCH:-}" -- bash -c 'node scripts/test.js test/plans/gpu --jobs "`$CAMEL_JOBS" --tier all' > '$gpuReadingFile' 2>&1
+gpu_code=`$?
+if [ "`$gpu_code" -eq 4 ] && grep -q '^HOST_STATE=noslot' '$gpuReadingFile'; then
+    # No tokens is not a red: this observation decides nothing, so it says it did not read and goes.
+    echo '[camel-remote] $($gpuObservationName): no host token within the wait, so the gpu layer was not read'
     echo "check=$($gpuObservationName) total=unknown pass=unknown fail=unknown skip=unknown red=[unknown] red_more=0 seconds=0 state=noslot mode=report"
 else
-    # The sweep's own clock, because the checks stage's seconds now carry it: a lane comparing that
-    # number with an earlier run's has to be able to see what the extra time was.
-    gpu_started_ns=`$(date +%s%N)
-    $shownGpu > '$gpuReadingFile' 2>&1
-    gpu_code=`$?
     gpu_ms=`$(( (`$(date +%s%N) - gpu_started_ns) / 1000000 ))
     gpu_seconds=`$(( gpu_ms / 1000 ))
     gpu_esc=`$(printf '\033')
@@ -2428,7 +2409,6 @@ else
     fi
     echo "[camel-remote] --- $($gpuObservationName): exit `$gpu_code ---"
 fi
-exec 5>&-
 "@
     }
 
@@ -2721,8 +2701,8 @@ orphan_watch() {
     pids=$(orphan_descendants "$run" "$me")
     [ -n "$pids" ] && kill -KILL $pids 2>/dev/null
     kill -KILL "$run" 2>/dev/null
-    # Ending the processes closes their descriptors, and that is how the host test slot and the token
-    # this run was queued on (both `flock`s) are given back: nothing here releases them by name.
+    # Ending the processes closes their descriptors, and that is how the tokens this run held or
+    # was queued for (`flock`s) are given back: nothing here releases them by name.
     exit 0
 }
 orphan_begin() {
@@ -2929,8 +2909,8 @@ export LD_LIBRARY_PATH='$($cfg.hostLibStdCxxDir)'":`$C/lib:`${LD_LIBRARY_PATH:-}
 # (the generated shell runs under `set -u`: an rpath written as a bare dollar-variable here would
 #  abort the run, so this line names the thing and not the syntax).
 echo "[camel-remote] libstdc++: a current build carries libs/libstdc++.so.6 and finds it by its own rpath; this export is for older builds only"
-# CMAKE_BUILD_PARALLEL_LEVEL is not set here any more. It is a slot budget, and the slot number is
-# only known after the lock below is taken: a flat 24 for every run is how two lawful builds filled
+# CMAKE_BUILD_PARALLEL_LEVEL is not set here. It is the width the build got from the pool, and that is
+# only known after the pool has handed it out: a flat 24 for every run is how two lawful builds filled
 # 48 compile jobs on a 32-core host (load 88).
 export CAMEL_HOME="`$R/out/latest"
 export CAMEL_TEST_TMP="`$HOME/$($cfg.hostWorkRoot)/$name-test-tmp"
@@ -2981,50 +2961,6 @@ finish_probe() {
 # Every exit path, including a failed build and a wait that runs out: the end reading is taken on
 # the way out, so a run that never reached the plan still says how the host looked when it stopped.
 trap finish_probe EXIT
-# --- who holds a host lock ------------------------------------------------
-# A waiting run that repeats only "still waiting" is indistinguishable from a hung one: the reader
-# cannot tell a queue from a deadlock, and a run that prints one line can then sit for
-# fifteen minutes while the answer -- its own parent held every slot it wanted -- was one `ps` away.
-# So every wait below prints the holder, and the reading is taken in two halves because neither half
-# answers alone:
-#
-#   * `/proc/locks` says *whether* the lock is held. The inode is the key, matched as `:<inode> `;
-#     a blocked waiter is a `->` entry and is skipped, because a waiter is not a holder. `fuser`
-#     cannot answer this: it lists the processes with the file *open*, which includes one that has
-#     already released the lock (internal/tools/README.md);
-#   * `fuser` says *who* has the descriptor, and that is the only half that names something a reader
-#     can ask. `flock(1)` acquires on an inherited descriptor and then exits, so the pid `/proc/locks`
-#     names is usually gone a millisecond later -- a report built from those pids printed
-#     "held by pid <dead>" and could not tell a holder from its own shadow. A pid whose
-#     `ps -o args=` is empty is dropped, because this script's own `$( )` substitutions inherit every
-#     descriptor and would otherwise be listed as blockers.
-#
-# A slot held by a lock in a container's namespace has no pid this namespace can resolve, and that is
-# said rather than printed as "free", which is what an empty listing would look like otherwise.
-lock_holders() {
-    local file="`$1" ino locks=' ' pid etime args shown=0
-    if [ -r /proc/locks ]; then
-        ino=`$(stat -c %i "`$file" 2>/dev/null) || ino=''
-        locks="`$(< /proc/locks)" 2>/dev/null || locks=' '
-        case "`$locks" in
-            *":`$ino "*) ;;
-            *) echo "  `$file: not held"; return ;;
-        esac
-        for pid in `$(fuser "`$file" 2>/dev/null | tr -s ' ' '\n' | grep -E '^[0-9]+$' | sort -u); do
-            args=`$(ps -o args= -p "`$pid" 2>/dev/null | cut -c1-90)
-            [ -n "`$args" ] || continue
-            etime=`$(ps -o etime= -p "`$pid" 2>/dev/null | tr -d ' ')
-            echo "  `$file: held by pid `$pid (`${etime:-?}) `$args"
-            shown=1
-        done
-        [ "`$shown" = 1 ] || echo "  `$file: held, and no process in this namespace has it open (a container, or a namespace of its own)"
-        return
-    fi
-    for pid in `$(fuser "`$file" 2>/dev/null | tr -s ' ' '\n' | grep -E '^[0-9]+$'); do
-        args=`$(ps -o args= -p "`$pid" 2>/dev/null | cut -c1-90)
-        echo "  `$file: opened by pid `$pid (fuser; /proc/locks unreadable) `$args"
-    done
-}
 run_note starting
 echo "HOST_LOAD_START=`$(cut -d' ' -f1 /proc/loadavg 2>/dev/null || echo unknown)"
 echo "HOST_OVERLAP_START=`$(others_now)"
@@ -3060,6 +2996,8 @@ export CAMEL_TOKEN_DIR="`${CAMEL_TOKEN_DIR:-/tmp/camel-tokens}"
 export CAMEL_TOKENS="`${CAMEL_TOKENS:-24}"
 export CAMEL_LANE='$name'
 export CAMEL_BRANCH='$branch'
+# How long the pool's taker waits for a token before the run says `noslot` (-SlotWaitSeconds).
+export CAMEL_TOKEN_WAIT_S='$SlotWaitSeconds'
 # The runner names its run directory this, so the fetch after the plan (`-FromThisRun`) reads exactly
 # this run's directory whatever other runner invocations appear later in the same checkout.
 export CAMEL_TEST_RUN_NAME='$runName'
@@ -3124,70 +3062,6 @@ if [ '$NoBuild' = 'True' ]; then
         echo "[camel-remote] WARNING: scripts/build-info.js is missing in this checkout; -NoBuild cannot verify out/$verifyTag (the tree predates the H149 guard)"
     fi
 fi
-# --- a time-sensitive plan takes the whole host -----------------------------
-# A plan that declares `time_sensitive = true` reads durations, and a duration measured beside
-# another lane's build is a duration of the wrong thing. So its run takes the plan slot and both
-# build slots together, before the build, and lets go of all three after the plan. All three or
-# none: a partial hold is released and retried, because two such runs polling in different orders
-# would otherwise wait on each other until the deadline. Running out of deadline is `state=noslot`
-# -- the reading was not taken, and it is neither green nor red.
-held_all=0
-if [ '$timeSensitive' = 'True' ]; then
-    ts_waited=0
-    while [ "`$held_all" = 0 ]; do
-        exec 9>/tmp/camel-host-build-1.lock
-        exec 8>/tmp/camel-host-build-2.lock
-        # All three test slots, because "exclusive" means the machine is this run's: a time-sensitive
-        # measurement that left one test slot open would be measuring beside whatever took it.
-        exec 21>/tmp/camel-host-test-1.lock
-        exec 22>/tmp/camel-host-test-2.lock
-        exec 23>/tmp/camel-host-test-3.lock
-        miss=
-        flock -n 9 || miss=build-1
-        if [ -z "`$miss" ]; then flock -n 8 || miss=build-2; fi
-        if [ -z "`$miss" ]; then flock -n 21 || miss=test-1; fi
-        if [ -z "`$miss" ]; then flock -n 22 || miss=test-2; fi
-        if [ -z "`$miss" ]; then flock -n 23 || miss=test-3; fi
-        if [ -z "`$miss" ]; then
-            held_all=1
-            echo '[camel-remote] time sensitive: hold taken on build-1, build-2 and test-1, test-2, test-3'
-        else
-            exec 9>&- 2>/dev/null; exec 8>&- 2>/dev/null
-            exec 21>&- 2>/dev/null; exec 22>&- 2>/dev/null; exec 23>&- 2>/dev/null
-            if [ "`$ts_waited" -ge '$SlotWaitSeconds' ]; then
-                echo "[camel-remote] noslot: waited `${ts_waited}s and the host `$miss slot is still held by another run; this plan is time sensitive, so it does not start without build-1, build-2 and test together" >&2
-                lock_holders "/tmp/camel-host-`$miss.lock" >&2
-                echo "HOST_NOSLOT=`$miss"
-                echo 'HOST_STATE=noslot'
-                exit 4
-            fi
-            if [ "`$((ts_waited % 30))" -eq 0 ]; then
-                echo "[camel-remote] still waiting for the host `$miss slot (a time-sensitive plan holds build-1, build-2 and test together; `${ts_waited}s of '$SlotWaitSeconds's, -SlotWaitSeconds); who holds it:"
-                lock_holders "/tmp/camel-host-`$miss.lock"
-            fi
-            sleep 3
-            ts_waited=`$((ts_waited + 3))
-        fi
-    done
-    echo 'HOST_BUILD_SLOT=1&2'
-    echo 'HOST_TEST_SLOT=1&2&3'
-    # The plan step is `camel-run plan` in a *child* process (below), and a lock lives on a file
-    # descriptor: the child inherits the descriptor's number only if this shell hands it over, and it
-    # asked for the same files -- so without this line the run queues behind the very process that
-    # started it. Measured on `perf/fib`: hold taken here, then the plan
-    # step printed "1 and 2 are held, and slot 3 is the merge seat's alone, so this run queues
-    # rather than borrow it" and waited until the lane killed it at fifteen minutes. `camel-run`
-    # reads every name back against /proc/locks and the parent chain, so this is a reading the child
-    # checks, not a claim it believes.
-    export CAMEL_TEST_SLOT_HELD='1 2 3'
-    # Holding the host means holding its whole process budget too: nothing else is running, so the
-    # plan and the build both get all 32 (still no more than the caller asked for).
-    export CAMEL_JOBS="`$(budget_jobs `$EXCLUSIVE_JOBS)"
-    export CMAKE_BUILD_PARALLEL_LEVEL="`$CAMEL_JOBS"
-    echo "HOST_BUILD_JOBS=`$CAMEL_JOBS"
-    echo "HOST_JOBS=`$CAMEL_JOBS"
-    run_note exclusive
-fi
 if [ '$NoBuild' != 'True' ]; then
     # --- the build, on the token pool ----------------------------------------
     # A build is a set of worker processes like anything else this host runs, so it takes tokens
@@ -3201,14 +3075,7 @@ if [ '$NoBuild' != 'True' ]; then
     # always passed it (npm run build -> cmake -> ninja). The pool sets it in the same process that
     # holds the tokens, because a variable written in this shell does not cross into the command: the
     # count has to be decided where the locks are.
-    #
-    # A time-sensitive run holds the whole host, so its build asks for the whole pool rather than
-    # this run's share: `held_all` is the hold block's answer, and `CAMEL_JOBS` is the budget it set
-    # for exactly that case (all 32, still no more than the caller asked for). Without this branch an
-    # exclusive run took the eight a slot would have given it while another lane's build took the
-    # rest, and "a duration measured beside another lane's build" was back.
     build_want=`$(budget_jobs `$BUILD_JOBS)
-    if [ "`$held_all" = 1 ]; then build_want="`$CAMEL_JOBS"; fi
     build_started_ns=`$(date +%s%N)
     timeout 2400 bash "`$R/internal/tools/host-tokens.sh" take-up-to "`$build_want" -- $buildCmd
     code=`$?
@@ -3232,37 +3099,26 @@ fi
 # record this stage writes.
 $astStage
 $vscodeDeps
-# One plan run at a time, the way the build has two slots and for the same reason: the readings a
-# gate produces are only comparable when the machine is not carrying six other lanes' tests. The
-# lock covers the plan and nothing else -- the transfer and the build are outside it, and the build
-# has its own slots -- so a full queue costs waiting time, never a wrong number. Waiting is not a
-# failure: only the plan's own exit code reaches the caller.
-# The test slot is NOT taken here. It is taken by `camel-run plan`, inside the process that runs the
-# plan, because a lock lives on a file descriptor and a descriptor does not cross a process boundary:
-# a slot opened here would be held by this shell and be invisible to the run it protects.
-#
-# What used to be here was a second implementation of taking a lock. On 2026-11-24 three slots were
-# added and the merge position's worktree -- still running the older copy of this generator -- never
-# took one of them; two takers that do not know about each other are the same thing as no lock.
-#
-# The old single lock `/tmp/camel-host-test.lock` is taken by `camel-run` during the transition, not
-# here, so that one process holds both and every run waits in the same order.
+# The plan takes tokens from the same pool the build does. They are taken by `camel-run plan`, inside
+# the process that runs the plan, because a token lives on a file descriptor and a descriptor does not
+# cross a process boundary: tokens opened here would be held by this shell and be invisible to the
+# run they are for. A plan waiting for a token is waiting, not failing: only the plan's own exit code
+# reaches the caller, and a wait that runs out is exit 4 with `HOST_STATE=noslot`.
 CAMEL_RUN="`${CAMEL_RUN:-`$HOME/camel-work/bin/camel-run}"
 if [ ! -x "`$CAMEL_RUN" ]; then
-    echo "[camel-remote] no lock taker at `$CAMEL_RUN; refusing to run without one." >&2
+    echo "[camel-remote] no admission tool at `$CAMEL_RUN; refusing to run without one." >&2
     echo "[camel-remote] install it from a checkout tracking origin/integration: camel-run.sh install" >&2
     exit 3
 fi
 echo "CAMEL_RUN_AT=`$CAMEL_RUN"
 run_note plan
-# The plan's budget belongs to the plan slot it now holds: 16, or the whole 32 when this run holds
-# all three. -UpdateGolden rewrites files and the runner drops to one test at a time whatever
-# --jobs says (run-tests.mjs), so that run's actual width is 1 and the registry says 1.
+# The plan's request: 16, narrowed by -Jobs. `camel-run plan` takes up to that many tokens and the plan
+# runs at the number it got. -UpdateGolden rewrites files and the runner drops to one test at a time
+# whatever --jobs says (run-tests.mjs), so that run asks for 1.
 $jobsBudget
-# Taken while this run holds the plan slot and before its own runner starts: every process this
-# counts is a plan running BESIDE this one. A slot is a promise only to the runs that ask for it --
-# a plan started by hand over ssh holds nothing -- so this is the number that says whether the
-# reading about to be taken was taken alone. One line, and the caller carries it into `busy`.
+# Taken before this run's own runner starts: every process this counts is a plan running BESIDE this
+# one. A run started by hand over ssh holds no tokens, so this is the number that says whether the
+# reading about to be taken was taken in company. One line, and the caller carries it into `busy`.
 echo "HOST_TEST_PROCS_AT_START=`$(pgrep -fc 'run-tests\.mjs' 2>/dev/null || echo 0)"
 $planMarker
 # The plan's stderr is folded into its own stdout here, on the host, before it leaves this script.
@@ -3289,22 +3145,8 @@ else
 fi
 $goldenStage
 $fetchStage
-# The plan slot is released here, before the checkers: they read a finished run and need no
-# exclusion. A time-sensitive run lets go of all three test slots here, for the same reason -- and
-# the build half is taken back by the check stage itself when a checker compiles (clang-syntax does),
-# so "released" here does not mean the checkers run outside the box.
-#
-# The test slots are closed by number (`21`, `22`, `23`): the hold block above opens them on those
-# descriptors and nothing closed them, so the line that said "lets go of all three" closed the build
-# slots and kept the three test slots held until the whole run exited -- which also kept the host's
-# plan slots shut while the checkers and the gpu sweep ran, the length of the stage this release
-# exists to leave open.
-if [ "`$held_all" = 1 ]; then
-    exec 21>&- 2>/dev/null; exec 22>&- 2>/dev/null; exec 23>&- 2>/dev/null
-    exec 8>&- 2>/dev/null; exec 9>&- 2>/dev/null
-else
-    exec 7>&- 2>/dev/null
-fi
+# The plan's tokens went back when `camel-run plan` returned, before the checkers: they read a
+# finished run and take what they need from the pool themselves (clang-syntax does).
 # --- the checkers -----------------------------------------------------------
 # One stage, one report: each checker prints its own output verbatim between a header naming it and
 # a footer naming its exit code. The stage carries the first failure out, so a red checker makes the
@@ -3343,7 +3185,7 @@ exit `$code
 
     # The script travels as a file: a string piped into `ssh bash -s` arrives with the pipe's
     # encoding, and a CR before a newline makes `exit 0` fail with "numeric argument required".
-    # The plan command, byte for byte. `camel-run plan` executes this file and holds the slot for as long
+    # The plan command, byte for byte. `camel-run plan` executes this file and holds its tokens for as long
     # as it runs, so the command the gate meant to run and the command that ran are the same characters.
     $planFile = Join-Path $scratch 'plan.sh'
     [System.IO.File]::WriteAllText($planFile, ($runPlan -replace "`r`n", "`n") + "`n",
@@ -3526,27 +3368,10 @@ exit `$code
             }
             # --- how the host scheduled this run -----------------------------
             # Four readings, all of them from the host and printed as well as recorded: a duration
-            # is only comparable to another duration when the slot it was taken in, the company it
+            # is only comparable to another duration when the company it
             # was taken with and the load at both ends travel with it. They arrive before the sync
             # marker, so the "first line after SYNCED is the build start" rule below is untouched.
-            if ($cleanLine -match '^HOST_TEST_WAIT_START=([0-9 ]+) (\S+)$') {
-                $run.testWaitSlots = ($Matches[1].Trim() -replace ' ', ',')
-                $run.testWaitSince = $Matches[2]
-                Publish-Run
-                Write-Host $line
-                return
-            }
-            if ($cleanLine -match '^HOST_TEST_SLOT=([0-9&]+)$') {
-                $run.testWaitSince = $null
-                $run.testWaitSlots = $null
-                # One plan run at a time is what `camel-run plan` enforces; the number is the slot it
-                # took, and it is kept as text so an older host copy that reports more than one slot is
-                # recorded as it said rather than rounded.
-                $run.testSlot = if ($Matches[1] -match '^\d+$') { [int]$Matches[1] } else { $Matches[1] }
-                Publish-Run
-                Write-Host $line
-                return
-            }
+
             # The width the run actually got, reported by the stage that got it: the pool's count for
             # the build, `budget_jobs` for the plan. Recorded as it arrives rather than written from
             # `$Jobs` at the start, so a request of 32 is not what the registry reports as what ran.
@@ -3599,13 +3424,13 @@ exit `$code
                 return
             }
             if ($cleanLine -match '^HOST_NOSLOT=(\S+)$') {
-                # The host refused to start: a lock it needs was held past the deadline. `noslot` is
+                # The host refused to start: no token of the pool came before the deadline. `noslot` is
                 # the reading of "nothing was measured" -- not a red (no reading was taken) and not a
                 # green.
                 $run.state = 'noslot'
                 $run.noslotWaitedFor = $Matches[1]
                 $run.phase = 'noslot'
-                $run.lastLine = "[camel-remote] state=noslot: waiting for the host $($Matches[1]) slot"
+                $run.lastLine = "[camel-remote] state=noslot: no host $($Matches[1]) within the wait"
                 Publish-Run
                 Write-Host $line
                 return
@@ -4262,7 +4087,7 @@ if ($FromThisRun -and $FetchFile -ne '') {
         }
         if ($gpuReading.state -ne 'read') {
             $why = if ($gpuReading.state -eq 'noslot') {
-                'the host gave it no plan slot, so the gpu layer was not read'
+                'the host gave it no token, so the gpu layer was not read'
             } else {
                 'the sweep printed no summary, so the gpu layer was not read'
             }
@@ -4399,21 +4224,21 @@ if ($FromThisRun -and $FetchFile -ne '') {
     # How this run was scheduled, on one line and next to the readings it qualifies: a duration
     # without its company and its load is a number taken in unknown conditions, and the difference
     # between "two runs red side by side" and "two runs red one after the other" is exactly this
-    # line. `testSlot` is the one test slot a plan run holds; `buildJobs` says what width the pool
-    # gave the build, which is the number the build actually ran at.
-    $testSlotText = if ($null -eq $run.testSlot) { '0' } else { "$($run.testSlot)" }
+    # line. `buildJobs` says what width the pool gave the build and `jobs` what it gave the plan,
+    # which are the numbers they actually ran at.
+    $jobsText = if ($null -eq $run.jobs) { 'no plan' } else { "$($run.jobs)" }
     $buildJobsText = if ($null -eq $run.buildJobs) { 'not built' } else { "$($run.buildJobs)" }
     $overlapText = if ($null -eq $run.overlapping -or $null -eq $run.overlapping.atStart) {
         'not reported'
     } else {
         "start [$($run.overlapping.atStart)] end [$($run.overlapping.atEnd)]"
     }
-    Write-Host ("[camel-remote] run {0}: state={1} buildJobs={2} testSlot={3} load {4} -> {5} (1m) overlapping {6}" -f `
-        $run.runId, $run.state, $buildJobsText, $testSlotText,
+    Write-Host ("[camel-remote] run {0}: state={1} buildJobs={2} planJobs={3} load {4} -> {5} (1m) overlapping {6}" -f `
+        $run.runId, $run.state, $buildJobsText, $jobsText,
         $(if ($run.loadAtStart) { $run.loadAtStart } else { 'unknown' }),
         $(if ($run.loadAtEnd) { $run.loadAtEnd } else { 'unknown' }), $overlapText)
     if ($run.state -eq 'noslot') {
-        Write-Host ("[camel-remote] state=noslot: the host did not start this run -- it waited {0} s for the {1} and gave up (-SlotWaitSeconds). A lock it needs was held, so this is a run that was not started rather than one that failed: nothing above is a reading" -f `
+        Write-Host ("[camel-remote] state=noslot: the host did not start this run -- it waited {0} s for the host's {1} and gave up (-SlotWaitSeconds). The pool was held by other runs, so this is a run that was not started rather than one that failed: nothing above is a reading" -f `
             $SlotWaitSeconds, $run.noslotWaitedFor)
     }
     # The transfer's own breakdown, under -TracePhases. Two lines: where the transfer's seconds went,
@@ -4500,14 +4325,14 @@ if ($FromThisRun -and $FetchFile -ne '') {
             'record may name it only as exit=unknown.'
         Write-Host "[camel-remote] $unknownWhy"
     } else {
-        # 4 is "this run did not start", and its two ways must not read alike: no host slot and a
+        # 4 is "this run did not start", and its two ways must not read alike: no host token and a
         # branch another run is using are different next steps. The tag puts the criterion in the
         # verdict line itself, because `exit 4` printed beside `exit 1` reads like a verdict, and a
         # reader matching `exit \d+` cannot tell a run that never started from one that came back red.
         # 1 needs no tag (its `[SUMMARY]` is the criterion) and 7 says `exit unknown` for itself.
         # The reason goes *inside* the one parenthesis the line already has: it is half of the same
         # verdict, not a second remark -- two brackets in a row read as two statements.
-        $codeWhy = if ($code -eq 4 -and $run.state -eq 'noslot') { 'no host slot; ' } else { '' }
+        $codeWhy = if ($code -eq 4 -and $run.state -eq 'noslot') { 'no host token; ' } else { '' }
         Write-Host ("[camel-remote] {0} exit {1} ({2}{3}; total {4} s)" -f `
             $name, $code, $codeWhy, $phases, [math]::Round($sw.Elapsed.TotalSeconds))
     }

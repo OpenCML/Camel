@@ -97,7 +97,6 @@ $testRow = @{
     state           = $null
     slots           = 0
     slot            = '0'
-    testSlot        = 1
     noslotWaitedFor = $null
     overlapping     = @{ atStart = $null; atEnd = $null }
     loadAtStart     = $null
