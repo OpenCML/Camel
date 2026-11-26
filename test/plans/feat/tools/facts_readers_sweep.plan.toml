@@ -1,0 +1,47 @@
+id = "tools.facts_readers_sweep"
+order = 919
+# Slow layer: the sweep starts one `camel` per case the tree has -- 4037 of them, 343530 ms of CPU
+# and 129 s of wall clock at six at a time (measured 2026-11-25, run 20261125_023228). A plan
+# selected by a case path under test/cases must stay cheap, so the entry is its own plan and the
+# case is the tool itself, a path under test/tools that no test/cases path owns.
+tier = "slow"
+tags = ["feat", "tools", "facts", "sweep"]
+desc = "`test::facts_compare` read over every case the tree has: the corpus is swept and the two answers for each node (`core.arrangeable` and `runtime::nodeIsFreelySchedulable`) are counted per node kind, so the totals a report quotes can be produced again by one command"
+
+# This is the instrument behind the readings the gate commits quote: `diff` 10471 before the gate
+# commit and 10376 after it, the 95 gates that moved from `kind_free_pred_kept` to `both_kept`, and
+# the corpus itself (4037 cases, 2747 readable, 211894 nodes). Those numbers belong to a tree and a
+# binary, and they move whenever the compiler moves -- a node added anywhere moves `nodes`, `agree`
+# and `diff` -- so a plan that asserted them would be red on every unrelated change, and one that
+# asserted nothing would be decoration.
+#
+# What it asserts is the instrument's own health, the two figures that are a defect when they are
+# not zero:
+#
+#   `silent=0`  every case the pass did not answer (a compile error, a GPU-only case) said so on
+#               its own stdout or stderr, and landed in `skipped`. A case that says nothing is a
+#               program that did not reach the pass, and a corpus read with those leaving no trace
+#               reads as coverage it does not have.
+#   `no_fact=0` every node the walk printed had a fact to print. A node the fact layer refuses to
+#               answer at is not a disagreement between the kind and the predicate, and folding it
+#               into either total would be a reading that says nothing about where it came from.
+#
+# The totals themselves are printed on `FACTS_READERS_SWEEP` and are the reading; this plan carries
+# the command that produces them, which is what makes them re-weighable. Before this file existed
+# the tool was a scratch script: the numbers were in two commit messages and nothing in the tree
+# could produce them, so nobody could check them or see whether they still held.
+[[tests]]
+name = "facts.readers_sweep"
+desc = "Every `.cml` under `test/cases` is read through `test::facts_compare`, and the sweep prints `FACTS_READERS_SWEEP cases=4037 read=… skipped=… silent=0 nodes=… agree=… diff=… no_fact=0 kinds=8` beside one `FACTS_READERS_KIND` line per node kind and one `FACTS_READERS_DIFF` line per disagreeing node; `silent=0` and `no_fact=0` say the reading covers the corpus it claims, and a kind the sweep does not know is printed rather than dropped."
+kind = "behavior"
+tool = "node"
+case = "../../../tools/probe-facts-readers.mjs"
+args = ["${case}", "--jobs", "6"]
+expect_exit = 0
+expect_stdout_contains = ["FACTS_READERS_SWEEP cases=", "silent=0", "no_fact=0"]
+normalizers = ["strip_ansi", "normalize_newlines"]
+# The sweep's cost is the coverage -- one `camel` per case the tree has -- so the way to a smaller
+# bound is fewer cases, which is the reading doing less. 4 x the 343530 ms the runner measured is
+# 1374120, rounded up here to 1400 s; the bound only bites on a hang, and the run above spent 129 s
+# of wall clock against it.
+timeout_ms = 1400000
