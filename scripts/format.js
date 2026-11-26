@@ -1,17 +1,23 @@
 // Copyright (c) the OpenCML Organization
 // SPDX-License-Identifier: MIT
 
-import { execSync } from 'child_process'
+import { execFileSync, execSync } from 'child_process'
 import fs from 'fs'
 import path from 'path'
 import { fileURLToPath } from 'url'
-import { formatWithPin, readPin } from './clang-format-pin.js'
+import { changedRanges, formatWithPin, readPin } from './clang-format-pin.js'
 import { explicitFilesArg, splitLineList, uniqueFiles } from './file-list.js'
 
-// Formatting is pinned to one clang-format major version (`.clang-format-version`). Versions of
-// clang-format lay the same source out differently, so a machine with another version would rewrite
-// hundreds of lines a commit never touched. When the formatter on PATH (or the one named by
-// CAMEL_CLANG_FORMAT) is not the pinned major, or is missing, no file is rewritten and one line says so.
+// Only the lines a commit changes are formatted. The layout of the tree comes from several clang-format
+// versions and no single version leaves it free of violations, so formatting a whole file would rewrite
+// lines nobody touched. For each file the new-side ranges of its diff against HEAD become `--lines`
+// arguments; a file without added or changed lines is not formatted.
+//
+// The formatter is pinned to one major version (`.clang-format-version`), the one on the machine where
+// commits are made: other versions break the same lines differently, so a formatter of another major
+// would still reformat the changed lines in a style the next commit undoes. When the formatter on PATH
+// (or the one named by CAMEL_CLANG_FORMAT) is not the pinned major, or is missing, no file is rewritten
+// and one line says so.
 //
 // The layout moved once: `src/`, `include/` and `modules/` became `src/kernel/`, `src/parse/`, `src/compile/`
 // and `src/stdlib/`. The roots are probed rather than assumed, so a tree of either layout is covered: a
@@ -44,7 +50,19 @@ function formatTargets(files) {
     )
 }
 
-const changedFiles = formatTargets(explicitFilesArg() ?? getChangedFiles())
+// With --files (the pre-commit hook) the files are staged and not partially so, so the staged diff is the
+// change. Without it the change is the working tree against HEAD.
+const explicitFiles = explicitFilesArg()
+const changedFiles = formatTargets(explicitFiles ?? getChangedFiles())
+
+function rangesOf(file) {
+    const args = ['diff', ...(explicitFiles ? ['--cached'] : []), '-U0', 'HEAD', '--', file]
+    try {
+        return changedRanges(execFileSync('git', args, { encoding: 'utf-8', cwd: repoRoot }))
+    } catch {
+        return []
+    }
+}
 
 if (changedFiles.length === 0) {
     console.log('No modified .cpp or .h files to format.')
@@ -52,5 +70,6 @@ if (changedFiles.length === 0) {
     formatWithPin(changedFiles, {
         bin: process.env.CAMEL_CLANG_FORMAT || 'clang-format',
         pin: readPin(repoRoot),
+        rangesOf,
     })
 }
