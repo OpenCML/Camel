@@ -1545,16 +1545,17 @@ static camel::runtime::GCFillKind fillKindOfType(camel::core::type::Type *type) 
 
 // A construction as an ordinary operator (`fill::<T, ...F>` of `lib/std/prelude.cml`; plan
 // 2.3, step 2). The first ordinary operand is the template -- one constant of the target type per
-// construction site, made by the compiler -- and the rest are the field values in component order,
-// which is how the declaration writes them: `with` is what configures the function (which function
-// this is), and what a construction is made of is the data of this call, so it is an ordinary
-// parameter. The node's two payload facts are that order and the fill kind, and neither is left to
-// the payload now: the kind is the target type's own, and the order is the order the call is built
-// with (`writeRuntimeFillSlots` writes component i with the i-th value). The template is cloned
+// construction site, made by the compiler -- and the rest are the field values, in the order the
+// call gives them; the `with` arguments, when there are any, state the component each field fills
+// (one `int` per field, in that same order), which is the shape the declaration writes and the one
+// a field order the aggregate cannot spell needs (plan 2.3, step 3). `with` is what configures the
+// function (which function this is, and the order), and what a construction is made of is the data
+// of this call, so it is an ordinary parameter. The node's two payload facts are that order and the
+// fill kind, and neither is left to the payload now: the kind is the target type's own, and the
+// order is the call's own `with` list (no `with` argument: component order). The template is cloned
 // rather than written to, which is what a FILL did with its constant too.
 slot_t __fill_value__(ArgsView &with, ArgsView &norm, Context &ctx) {
     (void)ctx;
-    (void)with;
     Type *type = norm.resultType();
     GUARD(type != nullptr, "a construction must state the type it makes.");
     GUARD(isGCTraced(type->code()), "a construction's target type is not GC-traced.");
@@ -1564,6 +1565,22 @@ slot_t __fill_value__(ArgsView &with, ArgsView &norm, Context &ctx) {
     const size_t fieldCount = norm.size() - 1;
     std::vector<size_t> slots(fieldCount);
     std::iota(slots.begin(), slots.end(), size_t{0});
+    if (with.size() > 0) {
+        // The components the fields fill, as the declaration states them: one `int` per field, in
+        // the order the fields are given. A count that does not match, or a component the target
+        // does not have, is a graph a tool built by hand -- the compiler writes the same list it
+        // wrote into a FILL's payload, so a call it builds states a permutation of the components.
+        GUARD(
+            with.size() == fieldCount,
+            "a construction's field order states one component per field.");
+        for (size_t i = 0; i < fieldCount; ++i) {
+            const Int64 at = with.get<Int64>(i);
+            GUARD(
+                at >= 0 && static_cast<size_t>(at) < fieldCount,
+                "a construction's field order names a component the target does not have.");
+            slots[i] = static_cast<size_t>(at);
+        }
+    }
     const std::vector<std::byte> payload =
         camel::runtime::makeFillPayload(fillKindOfType(type), slots);
     const auto *body = reinterpret_cast<const camel::runtime::GCFillBody *>(payload.data());

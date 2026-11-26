@@ -1,0 +1,5 @@
+// A construction whose fields are not in component order: the two `with` arguments say which
+// component each value fills, and the value made is that order -- (2, 1), not (1, 2).
+func main() {
+    println(fill::<(int, int)><1, 0>((0, 0), 1, 2))
+}
