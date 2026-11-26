@@ -417,7 +417,7 @@ def check_standalone(paths, args):
                "ok": False, "lines": [], "reason": ""}
         # The arguments of a `main` are a run-time thing, so the translation does not see them:
         # the same program is written once, and what changes is what it is handed when it runs.
-        code, out, err, _ = run([CAMEL, program_rel] + args.passes + ["std::cpp"],
+        code, out, err, _ = run([CAMEL, program_rel] + args.passes + ["std::cpp", "std::nop"],
                                 args.timeout, env)
         if code != 0 or "#include" not in out:
             rec["lines"] = ["  FAIL: std::cpp did not write a program",
@@ -550,7 +550,7 @@ def check(entry, workdir, args):
         # A bridged executable imports libcamel.dll before its main function can run.
         env["PATH"] = os.path.join(env["CAMEL_HOME"], "libs") + os.pathsep + env.get("PATH", "")
 
-    code, out, err, _ = run([CAMEL, rel] + args.passes + ["std::cpp"], args.timeout, env)
+    code, out, err, _ = run([CAMEL, rel] + args.passes + ["std::cpp", "std::nop"], args.timeout, env)
     text = out + "\n" + err
     if code != 0 or "#include" not in out:
         if "TranslationRefused" in text or "refused the graph" in text:
@@ -630,7 +630,7 @@ def back_end_run(program, entry_args, args, env, workdir, back_end):
         code, out, err, _ = run([CAMEL] + entry_args + [rel] + args.passes + [back_end],
                                 args.timeout, env)
         return code, (out + ("\n" + err if err.strip() else ""))
-    code, out, err, _ = run([CAMEL] + entry_args + [rel] + args.passes + ["std::cpp"],
+    code, out, err, _ = run([CAMEL] + entry_args + [rel] + args.passes + ["std::cpp", "std::nop"],
                             args.timeout, env)
     if code != 0 or "#include" not in out:
         return code, (out + err).strip()
@@ -737,7 +737,7 @@ def check_fault(entry, workdir, args):
         env["PATH"] = os.path.join(env["CAMEL_HOME"], "libs") + os.pathsep + env.get("PATH", "")
     rec = {"program": rel + "".join(" " + a for a in entry_args)}
 
-    code, out, err, _ = run([CAMEL] + entry_args + [rel] + args.passes + ["std::cpp"], args.timeout, env)
+    code, out, err, _ = run([CAMEL] + entry_args + [rel] + args.passes + ["std::cpp", "std::nop"], args.timeout, env)
     text = out + "\n" + err
     if code != 0 or "#include" not in out:
         # A program the writer does not translate has no fault sentence of its own to compare:
