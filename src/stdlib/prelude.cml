@@ -974,7 +974,7 @@ export func copy::<T>(x: T) => T
 /// language's own conversion rules; the call form is the name a graph holds the conversion under.
 /// The two type parameters are the pair a conversion is about, so a call names them.
 /// @pure
-/// @example cast::<int, float>(1)    // 1.0
+/// @example cast::<int, int>(1)    // the pair that is already one type: no table is asked
 #op(':op/cast')
 export func cast::<T, U>(x: T) => U panic
 
@@ -990,6 +990,7 @@ export func cast::<T, U>(x: T) => U panic
 /// two types meet would need a conversion that can fail, the program is a type error and no call
 /// is built at all, so what the compiler inserted never fails at run time.
 /// @pure
+/// @example let x: int? = 1    // the literal enters the optional that position asks for
 #op(':op/enter')
 export func enter::<T, U>(x: T) => U
 
@@ -1322,25 +1323,25 @@ export func append::<T>(xs: T[]) => T[]
 /// along the one axis that array has, and the result is by position: a function of one value
 /// becomes a function of an array of them, and of nothing else. Batching a second array, choosing
 /// or naming the axis, and applying the batch where no array is written yet are not this function.
-/// @example [1, 2, 3]->map<(x) => x * 2>    // [2, 4, 6]
+/// @example [1, 2, 3]->map<func (x) { x * 2 }>    // [2, 4, 6]
 #op(':mark/map_arr')
 with <f: (item: T) => U>
 export func map::<T, U>(xs: T[]) => U[]
 
 /// The elements for which f is true, in order; the calls of f have no order among them.
-/// @example [1, 2, 3, 4]->filter<(x) => x % 2 == 0>    // [2, 4]
+/// @example [1, 2, 3, 4]->filter<func (x) { x % 2 == 0 }>    // [2, 4]
 #op(':mark/filter_arr')
 with <f: (item: T) => bool>
 export func filter::<T>(xs: T[]) => T[]
 
 /// The elements combined from left to right: f(...f(f(initial, xs[0]), xs[1])..., xs[n-1]).
-/// @example [1, 2, 3]->reduce<(acc: int, x: int) => acc + x, 0>    // 6
+/// @example [1, 2, 3]->reduce<func (acc: int, x: int) { acc + x }, 0>    // 6
 #op(':mark/reduce_arr')
 with <f: (acc: U, item: T) => U, initial: U>
 export func reduce::<U, T>(xs: T[]) => U
 
 /// Calls f for every element, in order.
-/// @example [1, 2, 3]->foreach<(x) => println(x)>
+/// @example [1, 2, 3]->foreach<func (x) { println(x) }>
 #op(':mark/foreach_arr')
 with <f: (item: T) => void>
 export func foreach::<T>(xs: T[]) => void
@@ -1372,8 +1373,8 @@ export func fail(message: string) => never panic
 /// failures of the compiler itself are not isolated. `attempt(f)` itself calls nothing: the
 /// faults are those of a call of the value.
 /// @fails fault `DivisionByZero` and every other fault of a call of f: the call gives an error value whose kind is the fault's name, with the fault's message and position; an error value f itself returns is handed on unchanged
-/// @example attempt((x: int) => 10 / x)(2) !! -1    // 5
-/// @example attempt((x: int) => 10 / x)(0) !! -1    // -1: the division fault becomes an error value
+/// @example attempt(func (x: int) { 10 / x })(2) !! -1    // 5
+/// @example attempt(func (x: int) { 10 / x })(0) !! -1    // -1: the division fault becomes an error value
 #op(':mark/attempt')
 export func attempt::<F>(f: F) => F!
 

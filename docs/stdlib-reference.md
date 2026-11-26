@@ -657,7 +657,7 @@ language's own conversion rules; the call form is the name a graph holds the con
 The two type parameters are the pair a conversion is about, so a call names them.
 
 - Pure.
-- Example: `cast::<int, float>(1)` gives `1.0`
+- Example: `cast::<int, int>(1)` gives `the pair that is already one type: no table is asked`
 
 #### `enter`
 
@@ -678,6 +678,7 @@ two types meet would need a conversion that can fail, the program is a type erro
 is built at all, so what the compiler inserted never fails at run time.
 
 - Pure.
+- Example: `let x: int? = 1` gives `the literal enters the optional that position asks for`
 
 #### `fill`
 
@@ -996,7 +997,7 @@ string.
 #### `zip`
 
 ```camel
-zip: (...xs: ...A) => (...ElementOf<A>)[] panic
+zip: (...xs: ...A) => (...ElementOf<A>)[] panic when ...is_array::<A>()
 ```
 
 Two arrays combined element by element into pairs. They must have the same length.
@@ -1036,7 +1037,7 @@ along the one axis that array has, and the result is by position: a function of 
 becomes a function of an array of them, and of nothing else. Batching a second array, choosing
 or naming the axis, and applying the batch where no array is written yet are not this function.
 
-- Example: `[1, 2, 3]->map<(x) => x * 2>` gives `[2, 4, 6]`
+- Example: `[1, 2, 3]->map<func (x) { x * 2 }>` gives `[2, 4, 6]`
 
 #### `filter`
 
@@ -1046,7 +1047,7 @@ filter: <f: (item: T) => bool> (xs: T[]) => T[]
 
 The elements for which f is true, in order; the calls of f have no order among them.
 
-- Example: `[1, 2, 3, 4]->filter<(x) => x % 2 == 0>` gives `[2, 4]`
+- Example: `[1, 2, 3, 4]->filter<func (x) { x % 2 == 0 }>` gives `[2, 4]`
 
 #### `reduce`
 
@@ -1056,7 +1057,7 @@ reduce: <f: (acc: U, item: T) => U, initial: U> (xs: T[]) => U
 
 The elements combined from left to right: f(...f(f(initial, xs[0]), xs[1])..., xs[n-1]).
 
-- Example: `[1, 2, 3]->reduce<(acc: int, x: int) => acc + x, 0>` gives `6`
+- Example: `[1, 2, 3]->reduce<func (acc: int, x: int) { acc + x }, 0>` gives `6`
 
 #### `foreach`
 
@@ -1066,7 +1067,7 @@ foreach: <f: (item: T) => void> (xs: T[]) => void
 
 Calls f for every element, in order.
 
-- Example: `[1, 2, 3]->foreach<(x) => println(x)>`
+- Example: `[1, 2, 3]->foreach<func (x) { println(x) }>`
 
 ### Fault isolation
 
@@ -1106,8 +1107,8 @@ failures of the compiler itself are not isolated. `attempt(f)` itself calls noth
 faults are those of a call of the value.
 
 - Failure: fault `DivisionByZero` and every other fault of a call of f: the call gives an error value whose kind is the fault's name, with the fault's message and position; an error value f itself returns is handed on unchanged.
-- Example: `attempt((x: int) => 10 / x)(2) !! -1` gives `5`
-- Example: `attempt((x: int) => 10 / x)(0) !! -1` gives `-1: the division fault becomes an error value`
+- Example: `attempt(func (x: int) { 10 / x })(2) !! -1` gives `5`
+- Example: `attempt(func (x: int) { 10 / x })(0) !! -1` gives `-1: the division fault becomes an error value`
 
 #### `len`
 
@@ -1594,7 +1595,7 @@ The leaves of a tree, as a tuple.
 #### `save_tree`
 
 ```camel
-save_tree: <dir: string, dataset_manifest_sha256: string? = null> (tree: T) => void! panic uses var fs
+save_tree: <dir: string, dataset_manifest_sha256: string? = null> (tree: T) => void! panic uses var fs when has_ckpt_form::<T>()
 ```
 
 Saves a tree to a directory, one file per leaf named by its path (`blocks.0.w.npy` for an
@@ -1614,7 +1615,7 @@ time; one of two racing saves fails, and a reader still sees a complete checkpoi
 #### `load_tree`
 
 ```camel
-load_tree: <dataset_manifest_sha256: string? = null> (dir: string) => T! panic uses fs, var stderr
+load_tree: <dataset_manifest_sha256: string? = null> (dir: string) => T! panic uses fs, var stderr when has_ckpt_form::<T>()
 ```
 
 Reads a tree of the type T back from a directory `save_tree` wrote, checking the structure, the
@@ -1674,7 +1675,7 @@ shape: the callback then takes one leaf of each), and gives a tree of the result
 is that of the first tree.
 
 - Written in Camel: a subgraph, pure when the functions passed to it are.
-- Example: `tree_map<(x: int): int => x + 1>({ a: 1, b: (2, 3) })` gives `{ a: 2, b: (3, 4) }`
+- Example: `tree_map<func (x: int) => int { x + 1 }>({ a: 1, b: (2, 3) })` gives `{ a: 2, b: (3, 4) }`
 
 #### `tree_reduce`
 
@@ -1685,7 +1686,7 @@ tree_reduce: <f: (acc: R, leaf: A) => R> (t: T, init: R) => R
 Folds the leaves from the first to the last with f, starting from init.
 
 - Written in Camel: a subgraph, pure when the functions passed to it are.
-- Example: `tree_reduce<(acc: int, x: int): int => acc + x>({ a: 1, b: (2, 3) }, 0)` gives `6`
+- Example: `tree_reduce<func (acc: int, x: int) => int { acc + x }>({ a: 1, b: (2, 3) }, 0)` gives `6`
 
 #### `tree_unzip`
 
@@ -1713,7 +1714,7 @@ Forward mode: `jvp(f)` gives a function that takes the parameters of `f` followe
 tangents and returns the pair `(value, tangent)`. `jvp(f)(2.0, 1.0)` is the value `f(2.0)`
 together with the derivative of `f` at 2 in the direction 1.
 
-- Example: `let forward = jvp((x: float) => x * x)`
+- Example: `let forward = jvp(func (x: float) { x * x })`
 
 #### `split`
 
@@ -1775,7 +1776,7 @@ called once per step of a loop over one `lin` graph, and the transposition is wh
 costs, not what a call of it costs. What stays per call is the function value, closed over the
 residuals that call's `lin` carries.
 
-- Example: `let back = transpose((x: float) => 2.0 * x + 3.0 * x)`
+- Example: `let back = transpose(func (x: float) { 2.0 * x + 3.0 * x })`
 
 #### `vmap`
 
@@ -1796,7 +1797,7 @@ operator with no rule is refused by name at the primitive, never batched by a gu
 branch or a loop in the body is refused the same way, because the elementwise tier batches
 straight-line bodies.
 
-- Example: `let batched = vmap((x: f32) => x * 2.0)`
+- Example: `let batched = vmap(func (x: f32) { x * 2.0 })`
 
 #### `remat`
 
@@ -1819,7 +1820,7 @@ the name says. `lib/transforms/remat_operator.cpp` answers `(f: F) => F` and bui
 the value stands on; the shapes a call site can write today are the ones `jvp`'s and `split`'s
 declarations show, because the result of a call is the exit type its resolver gives.
 
-- Example: `let remembered = remat((x: int) => x + 1)`
+- Example: `let remembered = remat(func (x: int) { x + 1 })`
 
 #### `first_with_as_param`
 
@@ -1848,20 +1849,6 @@ than a value).
 
 - Example (a fragment, not compiled): `let reinterpreted = first_with_as_param(weighted)`
 - Why it is not compiled: `weighted` is a function the program declares, because the example needs a `with` parameter
-
-#### `reinterp`
-
-```camel
-reinterp: (f: F) => F! when is_function::<F>()
-```
-
-Builds the transform's own graph for every function of the program that is made of operators and
-prints what it built, one line per function:
-`REINTERP target=<graph name> primitives=<n> other=<n> graph=<id> nodes=<n>`. The primitives are
-the operator nodes a replacement has to replace; `other` is everything else in the function. The
-graph is the transform's own (a member of one draft group), not the function's.
-
-    camel f.cml transforms::reinterp std::nvm
 
 <a id="vjp"></a>
 
@@ -1939,7 +1926,7 @@ typed by the resolver hands the callee the wrong number of values. That ordering
 hole, or the `std::macro` stage evaluating the cut where the graph *is* in hand.
 
 - Written in Camel: a subgraph, pure when the functions passed to it are.
-- Example: `let (y, pullback) = vjp((x: float) => x * x)(3.0)` gives `y = 9.0, and pullback(1.0) is (6.0)`
+- Example: `let (y, pullback) = vjp(func (x: float) { x * x })(3.0)` gives `y = 9.0, and pullback(1.0) is (6.0)`
 
 #### `grad`
 
@@ -2398,7 +2385,7 @@ The extent of one axis; a negative axis counts from the last one (`-1` is the la
 #### `pick_at`
 
 ```camel
-pick_at: (t: T[...], position: int, length: int) => T
+pick_at: (t: T[...], position: int, length: int) => T when is_numeric::<T>()
 ```
 
 The element at `position` of a rank-1 tensor whose length is `length`: `t[position]`, with the
@@ -2958,7 +2945,7 @@ gradient of the wrong shape.
 #### `take_stated`
 
 ```camel
-take_stated: (t: T[...], indices: int[], extents: int[]) => T[...]
+take_stated: (t: T[...], indices: int[], extents: int[]) => T[...] when is_numeric::<T>()
 ```
 
 The rows `take` reads, with the indices it reads **and** the operand's extents stated:
@@ -2977,7 +2964,7 @@ outside the first dimension
 #### `mul_stated`
 
 ```camel
-mul_stated: (x: T[...], w: T[...], ax: int[], aw: int[]) => T[...]
+mul_stated: (x: T[...], w: T[...], ax: int[], aw: int[]) => T[...] when is_numeric::<T>()
 ```
 
 The product of two tensors, with **both** operands' extents stated: `x * w`, where `ax` is
@@ -3000,7 +2987,7 @@ operand that is one number states no extents, and its list is empty.
 #### `add_stated`
 
 ```camel
-add_stated: (x: T[...], w: T[...], ax: int[], aw: int[]) => T[...]
+add_stated: (x: T[...], w: T[...], ax: int[], aw: int[]) => T[...] when is_numeric::<T>()
 ```
 
 The sum of two tensors, with **both** operands' extents stated: `x + w`, where `ax` is
@@ -3024,7 +3011,7 @@ one number states no extents, and its list is empty.
 #### `subtract_stated`
 
 ```camel
-subtract_stated: (x: T[...], w: T[...], ax: int[], aw: int[]) => T[...]
+subtract_stated: (x: T[...], w: T[...], ax: int[], aw: int[]) => T[...] when is_numeric::<T>()
 ```
 
 The difference of two tensors, with **both** operands' extents stated: `x - w`, where `ax` is
@@ -3042,7 +3029,7 @@ type. The forward half is `rulesets.jvp`'s `jvp_subtract`.
 #### `div_stated`
 
 ```camel
-div_stated: (x: T[...], w: T[...], ax: int[], aw: int[]) => T[...]
+div_stated: (x: T[...], w: T[...], ax: int[], aw: int[]) => T[...] when is_numeric::<T>()
 ```
 
 The quotient of two tensors, with **both** operands' extents stated: `x / w`, where `ax` is
@@ -3065,7 +3052,7 @@ An operand that is one number states no extents, and its list is empty.
 #### `matmul_stated`
 
 ```camel
-matmul_stated: (a: T[...], b: T[...], sa: int[], sb: int[]) => T[...]
+matmul_stated: (a: T[...], b: T[...], sa: int[], sb: int[]) => T[...] when is_numeric::<T>()
 ```
 
 The matrix product, with **both** operands' extents stated: `a @ b`, where `sa` is `shape(a)` and
@@ -3084,7 +3071,7 @@ the answer's shape is neither operand's: a `[3, 4] @ [4, 2]` product reduces the
 #### `sum_axis_stated`
 
 ```camel
-sum_axis_stated: (t: T[...], axis: int, keepdims: bool, extents: int[]) => T[...]
+sum_axis_stated: (t: T[...], axis: int, keepdims: bool, extents: int[]) => T[...] when is_numeric::<T>()
 ```
 
 The sum of each lane along one axis, with the axis, `keepdims` and the operand's extents
@@ -3125,7 +3112,7 @@ element
 #### `max_axis_stated`
 
 ```camel
-max_axis_stated: (t: T[...], mask: bool[...], axis: int, keepdims: bool, extents: int[]) => T[...]
+max_axis_stated: (t: T[...], mask: bool[...], axis: int, keepdims: bool, extents: int[]) => T[...] when is_numeric::<T>()
 ```
 
 The largest element of each lane along one axis, with the tie selection, the axis, `keepdims` and
@@ -3148,7 +3135,7 @@ outside the rank
 #### `min_axis_stated`
 
 ```camel
-min_axis_stated: (t: T[...], mask: bool[...], axis: int, keepdims: bool, extents: int[]) => T[...]
+min_axis_stated: (t: T[...], mask: bool[...], axis: int, keepdims: bool, extents: int[]) => T[...] when is_numeric::<T>()
 ```
 
 The smallest element of each lane along one axis, with the tie selection, the axis, `keepdims` and
@@ -3234,16 +3221,6 @@ CBLAS, otherwise the canonical kernel's name, which is what the path forwards to
 
 - Pure.
 - Example: `gemm_library()`
-
-#### `fuse`
-
-```camel
-fuse: <safe_fp: bool = false> (f: F) => F! when is_function::<F>()
-```
-
-Writes the implementation choices of the tensor operators as node attributes, changing no
-operator (design principles 9.3). `safe_fp` keeps a matmul on the canonical algorithm (design
-principles 7.4); the default lets a matmul the 7.3 rule permits use the library GEMM.
 
 ### The reductions along an axis, computed rather than declared
 
@@ -3709,7 +3686,7 @@ The index of the first element for which pred is true, or null. pred is not call
 elements after it.
 
 - Written in Camel: a subgraph, pure when the functions passed to it are.
-- Example: `[3, 9, 2]->find_index<(x) => x > 4> ?? -1` gives `1`
+- Example: `[3, 9, 2]->find_index<func (x) { x > 4 }> ?? -1` gives `1`
 
 #### `find`
 
@@ -3720,7 +3697,7 @@ find: <pred: (x: T) => bool> (xs: T[]) => T?
 The first element for which pred is true, or null.
 
 - Written in Camel: a subgraph, pure when the functions passed to it are.
-- Example: `[3, 9, 2]->find<(x) => x > 4> ?? -1` gives `9`
+- Example: `[3, 9, 2]->find<func (x) { x > 4 }> ?? -1` gives `9`
 
 #### `index_of`
 
@@ -3742,7 +3719,7 @@ any: <pred: (x: T) => bool> (xs: T[]) => bool
 True when pred is true for at least one element; false for an empty array.
 
 - Written in Camel: a subgraph, pure when the functions passed to it are.
-- Example: `[3, 9, 2]->any<(x) => x > 4>` gives `true`
+- Example: `[3, 9, 2]->any<func (x) { x > 4 }>` gives `true`
 
 #### `all`
 
@@ -3753,7 +3730,7 @@ all: <pred: (x: T) => bool> (xs: T[]) => bool
 True when pred is true for every element; true for an empty array.
 
 - Written in Camel: a subgraph, pure when the functions passed to it are.
-- Example: `[3, 9, 2]->all<(x) => x > 4>` gives `false`
+- Example: `[3, 9, 2]->all<func (x) { x > 4 }>` gives `false`
 
 #### `count`
 
@@ -3764,7 +3741,7 @@ count: <pred: (x: T) => bool> (xs: T[]) => int
 The number of elements for which pred is true.
 
 - Written in Camel: a subgraph, pure when the functions passed to it are.
-- Example: `[3, 9, 2]->count<(x) => x > 2>` gives `2`
+- Example: `[3, 9, 2]->count<func (x) { x > 2 }>` gives `2`
 
 ### Reducing
 
@@ -3905,26 +3882,26 @@ The largest element along an axis, compared as `max` of the whole array compares
 #### `argmax`
 
 ```camel
-argmax: <axis: int, keepdims: bool = false> (xs: T[...]) => int[...]
+argmax: <axis: int, keepdims: bool = false> (xs: T[...]) => int[...] when is_integer::<T>() || is_float::<T>()
 ```
 
 The position along an axis of the first largest element, ordered as `argmax` of the whole
 array orders.
 
-- A native operator of this module: an opaque node, pure.
+- Written in Camel: a subgraph, pure when the functions passed to it are.
 - Failure: fault `InvalidArgument` when the axis is outside the rank or its extent is 0.
 - Example: `([[1.0, 2.0], [3.0, 4.0]] as float[2, 2])->argmax<1>` gives `[1, 1]`
 
 #### `argmin`
 
 ```camel
-argmin: <axis: int, keepdims: bool = false> (xs: T[...]) => int[...]
+argmin: <axis: int, keepdims: bool = false> (xs: T[...]) => int[...] when is_integer::<T>() || is_float::<T>()
 ```
 
 The position along an axis of the first smallest element, ordered as `argmin` of the whole
 array orders.
 
-- A native operator of this module: an opaque node, pure.
+- Written in Camel: a subgraph, pure when the functions passed to it are.
 - Failure: fault `InvalidArgument` when the axis is outside the rank or its extent is 0.
 - Example: `([[1.0, 2.0], [3.0, 4.0]] as float[2, 2])->argmin<0>` gives `[0, 0]`
 
@@ -4043,7 +4020,7 @@ sorting by one key and then by another works. key is called once for every eleme
 are ordered as `argsort` orders them; for a descending order of numbers use the negated key.
 
 - Written in Camel: a subgraph, pure when the functions passed to it are.
-- Example: `['pear', 'fig', 'apple']->sort_by<(w) => len(w)>` gives `['fig', 'pear', 'apple']`
+- Example: `['pear', 'fig', 'apple']->sort_by<func (w) { len(w) }>` gives `['fig', 'pear', 'apple']`
 
 ### Transforming
 
@@ -4056,7 +4033,7 @@ flat_map: <f: (x: T) => U[]> (xs: T[]) => U[]
 f applied to every element, the resulting arrays joined in order.
 
 - Written in Camel: a subgraph, pure when the functions passed to it are.
-- Example: `[1, 2]->flat_map<(x) => [x, x * 10]>` gives `[1, 10, 2, 20]`
+- Example: `[1, 2]->flat_map<func (x) { [x, x * 10] }>` gives `[1, 10, 2, 20]`
 
 #### `zip_with`
 
@@ -4068,7 +4045,7 @@ f(xs[i], ys[i]) for every i.
 
 - Written in Camel: a subgraph, pure when the functions passed to it are.
 - Failure: fault `InvalidArgument` (of zip) when the two arrays differ in length.
-- Example: `zip_with<(a, b) => a + b>([1, 2], [10, 20])` gives `[11, 22]`
+- Example: `zip_with<func (a, b) { a + b }>([1, 2], [10, 20])` gives `[11, 22]`
 
 ### Batching
 
@@ -4097,8 +4074,8 @@ applied to several arrays (`let batched = vmap(square)`), which is what makes it
 rather than a call form of `map`.
 
 - Written in Camel: a subgraph, pure when the functions passed to it are.
-- Example: `vmap((x: float) => x * x)([0.0, 1.0, 2.0])` gives `[0.0, 1.0, 4.0]`
-- Example: `vmap((r: f32[3]) => r[2] * r[2])([[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]] as f32[2, 3])` gives `[9.0, 36.0]`
+- Example: `vmap(func (x: float) { x * x })([0.0, 1.0, 2.0])` gives `[0.0, 1.0, 4.0]`
+- Example: `vmap(func (r: f32[3]) { r[2] * r[2] })([[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]] as f32[2, 3])` gives `[9.0, 36.0]`
 
 <a id="stream"></a>
 
@@ -4134,7 +4111,7 @@ The stream of what `step` answers from `state` on: one element with the state af
 `null` when there is nothing more. The states are threaded, not repeated.
 
 - Written in Camel: a subgraph, pure when the functions passed to it are.
-- Example: `loop acc = 0 for x in unfold(3, (n: int) => if n > 0 then (n, n - 1) else null) do acc + x` gives `6`
+- Example: `loop acc = 0 for x in unfold(3, func (n: int) { if n > 0 then (n, n - 1) else null }) do acc + x` gives `6`
 
 #### `empty`
 
@@ -4167,7 +4144,7 @@ iterate: <f: (x: T) => T> (x: T) => T..
 x, f(x), f(f(x)), ... without end.
 
 - Written in Camel: a subgraph, pure when the functions passed to it are.
-- Example: `1->iterate<(x: int) => x * 2>->take<4>->collect` gives `[1, 2, 4, 8]`
+- Example: `1->iterate<func (x: int) { x * 2 }>->take<4>->collect` gives `[1, 2, 4, 8]`
 
 ### Transforming
 
@@ -4180,7 +4157,7 @@ map: <f: (x: T) => U> (s: T..) => U..
 f of every element.
 
 - Written in Camel: a subgraph, pure when the functions passed to it are.
-- Example: `from_array([1, 2, 3])->map<(x: int) => x * 2>->collect` gives `[2, 4, 6]`
+- Example: `from_array([1, 2, 3])->map<func (x: int) { x * 2 }>->collect` gives `[2, 4, 6]`
 
 #### `filter`
 
@@ -4191,7 +4168,7 @@ filter: <pred: (x: T) => bool> (s: T..) => T..
 The elements for which pred is true, in order.
 
 - Written in Camel: a subgraph, pure when the functions passed to it are.
-- Example: `from_array([1, 2, 3, 4])->filter<(x: int) => x % 2 == 0>->collect` gives `[2, 4]`
+- Example: `from_array([1, 2, 3, 4])->filter<func (x: int) { x % 2 == 0 }>->collect` gives `[2, 4]`
 
 #### `take`
 
@@ -4203,7 +4180,7 @@ The first n elements; fewer when the stream ends first, none when n is not posit
 element after the n-th is never pulled.
 
 - Written in Camel: a subgraph, pure when the functions passed to it are.
-- Example: `1->iterate<(x: int) => x + 1>->take<3>->collect` gives `[1, 2, 3]`
+- Example: `1->iterate<func (x: int) { x + 1 }>->take<3>->collect` gives `[1, 2, 3]`
 
 #### `scan`
 
@@ -4215,7 +4192,7 @@ The running results of folding the elements with f from init: one per element, t
 being f(init, first element).
 
 - Written in Camel: a subgraph, pure when the functions passed to it are.
-- Example: `from_array([1, 2, 3])->scan<(acc: int, x: int) => acc + x, 0>->collect` gives `[1, 3, 6]`
+- Example: `from_array([1, 2, 3])->scan<func (acc: int, x: int) { acc + x }, 0>->collect` gives `[1, 3, 6]`
 
 #### `chunks`
 
@@ -4269,7 +4246,7 @@ The result is a tuple, and taking it apart is what consumes the two streams; the
 themselves are values like any other, so a `tee` of one of them is another `tee`.
 
 - Written in Camel: a subgraph, pure when the functions passed to it are.
-- Example: `let (left, right) = unfold(3, (n: int) => if n > 0 then (n, n - 1) else null)->tee<2>`
+- Example: `let (left, right) = unfold(3, func (n: int) { if n > 0 then (n, n - 1) else null })->tee<2>`
 
 <a id="math"></a>
 
@@ -5837,7 +5814,7 @@ Writes `f` of the content into the box `r` points at, and answers the new conten
 `pure`, so an update touches the one reference and no other resource: what it writes is a
 function of what it read.
 
-- Example (a fragment, not compiled): `update(r, (x: int) => x + 1)`
+- Example (a fragment, not compiled): `update(r, func (x: int) { x + 1 })`
 - Why it is not compiled: the box is one the surrounding program holds, so the example names it
 
 <a id="re"></a>
@@ -5904,7 +5881,7 @@ Every match of pattern in text, left to right, without overlap. After an empty m
 search goes on one code point further.
 
 - Failure: fault `RegexInvalid` when pattern is not a regular expression.
-- Example: `'a1b22'->find_all<'[0-9]+'>->map<(m: Match): string => m.text>` gives `['1', '22']`
+- Example: `'a1b22'->find_all<'[0-9]+'>->map<func (m: Match) => string { m.text }>` gives `['1', '22']`
 
 ### Rewriting
 
@@ -5917,7 +5894,7 @@ replace_with: <pattern: string, by: (m: Match) => string> (text: string) => stri
 text with every match of pattern replaced by what by makes of it.
 
 - Failure: fault `RegexInvalid` when pattern is not a regular expression.
-- Example: `'a1b22'->replace_with<'[0-9]+', (m: Match): string => '<' + m.text + '>'>` gives `'a<1>b<22>'`
+- Example: `'a1b22'->replace_with<'[0-9]+', func (m: Match) => string { '<' + m.text + '>' }>` gives `'a<1>b<22>'`
 
 #### `replace`
 
@@ -5959,7 +5936,7 @@ unordered_foreach: <f: (item: T) => void> (xs: T[]) => void
 
 Calls f for every element, for its effects; the calls have no order among them.
 
-- Example: `[1, 2]->unordered_foreach<(x: int) => println(x)>`
+- Example: `[1, 2]->unordered_foreach<func (x: int) { println(x) }>`
 
 #### `unordered_reduce`
 
@@ -5970,7 +5947,7 @@ unordered_reduce: <f: (acc: T, item: T) => T, initial: T> (xs: T[]) => T
 Combines the elements with f starting from initial; the order in which elements are combined is
 not fixed, so f should be associative and commutative.
 
-- Example: `[1, 2, 3]->unordered_reduce<(acc: int, x: int): int => acc + x, 0>` gives `6`
+- Example: `[1, 2, 3]->unordered_reduce<func (acc: int, x: int) => int { acc + x }, 0>` gives `6`
 
 <a id="test_support"></a>
 
@@ -6041,7 +6018,7 @@ condition a pass writes: the count of ordinary parameters (a pass takes one) tel
 apart, so this is an operator, exported and callable with its `with` arguments by name, as
 `onnx::export_model` is. It gives `tag * 10 + len(extra)`.
 
-- Example: `arity_probe<7, [1]>((x: int): int => x, 0)` gives `71`
+- Example: `arity_probe<7, [1]>(func (x: int) => int { x }, 0)` gives `71`
 
 <a id="this"></a>
 
@@ -6096,7 +6073,7 @@ graph_of: (f: F) => Graph when is_function::<F>()
 
 The graph of a function value: its body.
 
-- Example: `graph_of((x: int): int => x + 1)`
+- Example: `graph_of(func (x: int) => int { x + 1 })`
 
 #### `graphs_of`
 
@@ -6107,7 +6084,7 @@ graphs_of: (f: F) => Graph[] when is_function::<F>()
 The graph of a function value and every graph it calls, directly or not, in the order of
 their ids; each graph once.
 
-- Example: `len(graphs_of((x: int): int => x + 1))`
+- Example: `len(graphs_of(func (x: int) => int { x + 1 }))`
 
 ### The draft and the root queries
 
@@ -6132,7 +6109,7 @@ A draft has no canonical order -- its places are the order its nodes were made i
 commit replaces them -- so a draft answers its own order, and `id` of one of its nodes is
 refused rather than answered with a number that says nothing.
 
-- Example: `nodes(graph_of((x: int): int => x + 1))`
+- Example: `nodes(graph_of(func (x: int) => int { x + 1 }))`
 
 #### `graphs`
 
@@ -6144,7 +6121,7 @@ The graphs of the draft, `d` included: every graph the function of `d` calls, di
 each once, in the order of their ids. Each is the draft of that graph, so a node read through
 one of them is a node an edit changes.
 
-- Example: `len(graphs(graph_of((x: int): int => x + 1)))`
+- Example: `len(graphs(graph_of(func (x: int) => int { x + 1 })))`
 
 #### `params`
 
@@ -6156,7 +6133,7 @@ The parameter ports of the graph, in the order the declaration states them: the 
 takes its parameters as. A port is where an edit adds a parameter (`add_param`), and it is the
 node a caller's argument is read into.
 
-- Example: `len(params(graph_of((x: int): int => x + 1)))`
+- Example: `len(params(graph_of(func (x: int) => int { x + 1 })))`
 
 #### `exit`
 
@@ -6171,7 +6148,7 @@ build the value that takes its place, and `replace` this node by that value. Nul
 that hands no value out (a function of `void`), which has no node to put anything in the place
 of.
 
-- Example: `exit(graph_of((x: int): int => x + 1))`
+- Example: `exit(graph_of(func (x: int) => int { x + 1 }))`
 
 ### Reading nodes
 
@@ -6453,7 +6430,7 @@ function, in the order of their names; empty for a graph that is no declaration 
 for a declaration that writes none. The declaration's facts travel with the graph, so a pass
 reads them without the module that declares the function.
 
-- Example: `declaration_tags(graph_of((x: int): int => x + 1))`
+- Example: `declaration_tags(graph_of(func (x: int) => int { x + 1 }))`
 
 #### `tag_name`
 
@@ -6489,7 +6466,7 @@ The rule the declaration of `g` writes for the transformation `name`: `jvp` is f
 Null when the declaration writes none, when it writes that tag twice, and when what the tag
 names is not a function. The name is the one the program writes, or its qualified spelling.
 
-- Example: `rule_of(graph_of((x: int): int => x + 1), 'vjp')`
+- Example: `rule_of(graph_of(func (x: int) => int { x + 1 }), 'vjp')`
 
 ### Reading spelling
 
@@ -6508,7 +6485,7 @@ The name of the graph. This is *spelling*: it is the identifier the source wrote
 needs a declaration that writes `spelling` in its clause (design principles 9.5). A transform
 that would pick a function by its name takes the function value instead.
 
-- Example (a fragment, not compiled): `name(graph_of((x: int): int => x + 1))`
+- Example (a fragment, not compiled): `name(graph_of(func (x: int) => int { x + 1 }))`
 - Why it is not compiled: the reading needs a declaration that writes spelling in its clause, and a doc example is a body with nowhere to write one (design principles 9.5)
 
 #### `origin`
@@ -6634,7 +6611,7 @@ effects: (g: Graph) => Effects
 What running the graph once does besides computing its value: `external`, `writes_variables`,
 `may_fault`, `may_not_terminate`.
 
-- Example: `effects(graph_of((x: int): int => x + 1)).external`
+- Example: `effects(graph_of(func (x: int) => int { x + 1 })).external`
 
 #### `shape_text`
 
@@ -6693,7 +6670,7 @@ Opens a function's graphs as a draft and gives the graph of the function itself:
 changes and what the root queries read. Nothing changes until `commit`, which gives the changed
 function; the draft is reached through the handles read from it, so it is passed to no edit.
 
-- Example: `let d = open((x: int): int => x + 1)`
+- Example: `let d = open(func (x: int) => int { x + 1 })`
 
 #### `replace`
 
@@ -6769,7 +6746,7 @@ writes among the accesses already there is `order`'s to say. `fn` takes no argum
 function value that captures no variable can be expanded.
 
 - Failure: fault `InvalidArgument` when the function value captures variables, when the node anchors its graph (`at` standing in a chain), when the body cannot be spliced, when `at` is of a published graph, or when the draft is over.
-- Example (a fragment, not compiled): `inline(n, () => 0)`
+- Example (a fragment, not compiled): `inline(n, func () { 0 })`
 - Why it is not compiled: n is a node of the surrounding draft
 
 #### `outline`
@@ -6829,7 +6806,7 @@ Adds a value to the graph's static values and gives the node that holds it. The 
 number, a bool or a string; a string is copied into the permanent space because a value a draft
 creates may be live at a safepoint where its draft is not traced.
 
-- Example: `add_constant(graph_of((x: int): int => x + 1), 7)`
+- Example: `add_constant(graph_of(func (x: int) => int { x + 1 }), 7)`
 
 #### `commit`
 
@@ -6841,7 +6818,7 @@ Checks the edits and makes the changed function: the same type as the one that w
 the values it captured, sharing every graph nothing changed. The draft is over.
 
 - Failure: error value `GraphConflict` when a graph the draft touched changed since it was opened; error value `GraphInvalid` when an edit broke an invariant (the message names the graph, the node and the edge); error value `TxnUsed` when the draft was over already.
-- Example: `commit(open((x: int): int => x + 1))`
+- Example: `commit(open(func (x: int) => int { x + 1 }))`
 
 #### `abort`
 
@@ -6851,26 +6828,12 @@ abort: (d: Graph) => void
 
 Drops the draft.
 
-- Example: `abort(open((x: int): int => x + 1))`
+- Example: `abort(open(func (x: int) => int { x + 1 }))`
 
 ### Comparison
 
 `==` of the handle types (design principles 4.3): a library defines the operators of its own
 types. Two handles are equal when they name the same thing of the same function.
-
-#### `probe_handle`
-
-```camel
-probe_handle: (f: F) => F! when is_function::<F>()
-```
-
-The self-test of two checks that answer "a node the program has": makes a handle that claims a
-node the program does not have and reports whether the claim was refused where the handle was
-made; then asks `nodeRegion` of the same wrong ref, after printing the body region of a node
-that is there. It is a test, in no pipeline, and naming it is the whole switch: `HANDLE_PROBE
-allowed a node that is there` (the control), `HANDLE_PROBE refused: ...` for the node that is
-not, then `REGION_PROBE body region of node 0: 0` and, instead of a third answer, the abort the
-region guard raises -- 0 is the body, so a node that is not there has no region to be given.
 
 #### `check_pass_boundary`
 
@@ -7001,7 +6964,7 @@ checked at the types every operator group registered.
 #### `check`
 
 ```camel
-check: <samples: int = 100, seed: int = 0> (rules: Rule[], over: F) => CheckReport panic
+check: <samples: int = 100, seed: int = 0> (rules: Rule[], over: F) => CheckReport panic when is_function::<F>()
 ```
 
 The same, with the law also checked at the types of the values `over` has, each once, in the
@@ -7015,7 +6978,7 @@ either, because a `with` parameter without a default may not follow one that has
 `void`, and `F?` leaves `F` unbound). Written first, it is the argument the arrow carries:
 `rules->check<8, 1>(f)`.
 
-- Example (a fragment, not compiled): `rules->check((x: int) => x + 1)`
+- Example (a fragment, not compiled): `rules->check(func (x: int) { x + 1 })`
 - Why it is not compiled: `rules` comes from the caller
 
 #### `check_text`
@@ -7199,7 +7162,7 @@ program can be made for it, the host otherwise -- and gives the resident form of
 This is the operator `tiles::compile` inserts for an outlined region and the tests use; a
 program asks for the device with `#gpu`, not with this.
 
-- Example: `(f32(2.0), f32(3.0))->run_preferred_resident<(a: f32, b: f32): f32 => a + b>` gives `a Device<f32>`
+- Example: `(f32(2.0), f32(3.0))->run_preferred_resident<func (a: f32, b: f32) => f32 { a + b }>` gives `a Device<f32>`
 
 #### `source`
 
@@ -7209,7 +7172,7 @@ source: <fn: (a: f32, b: f32) => f32> (inputs: (f32, f32)) => string uses driver
 
 The CUDA source the function compiles to, without running it.
 
-- Example: `(f32(2.0), f32(3.0))->source<(a: f32, b: f32): f32 => a + b>`
+- Example: `(f32(2.0), f32(3.0))->source<func (a: f32, b: f32) => f32 { a + b }>`
 
 #### `inspect`
 
@@ -7220,7 +7183,7 @@ inspect: <fn: (a: f32, b: f32) => f32> (inputs: (f32, f32)) => string uses drive
 A report on the function's device plan, without running it: the kernel, its launch shape and
 the values it would keep on the device.
 
-- Example: `(f32(2.0), f32(3.0))->inspect<(a: f32, b: f32): f32 => a + b>`
+- Example: `(f32(2.0), f32(3.0))->inspect<func (a: f32, b: f32) => f32 { a + b }>`
 
 #### `benchmark`
 
@@ -7231,7 +7194,7 @@ benchmark: <fn: (a: f32, b: f32) => f32> (inputs: (f32, f32)) => string uses var
 Times the function on the device, and on the host for comparison, and gives the report as JSON
 text.
 
-- Example: `(f32(2.0), f32(3.0))->benchmark<(a: f32, b: f32): f32 => a + b>`
+- Example: `(f32(2.0), f32(3.0))->benchmark<func (a: f32, b: f32) => f32 { a + b }>`
 
 #### `regions`
 
@@ -7245,7 +7208,7 @@ resource -- it neither executes the graph nor initializes CUDA -- so it writes n
 clause, and it is not folded: the answer is an analysis of a graph the compiler cannot see
 through.
 
-- Example: `regions<(a: f32, b: f32): f32 => a + b>()`
+- Example: `regions<func (a: f32, b: f32) => f32 { a + b }>()`
 
 #### `available`
 
@@ -7270,48 +7233,6 @@ memory.
 
 - Failure: error value `DeviceUnavailable` when this build or this machine has no CUDA device.
 - Example: `device() !! 'no device'`
-
-#### `compile`
-
-```camel
-compile: (f: F) => F! uses var driver when is_function::<F>()
-```
-
-Outlines the regions the device can run, compiles them and executes the program; the card is
-chosen at run time with `--devices`, never by a pass parameter.
-
-- Failure: error value `GpuScopeUnsupported` when a `#gpu` scope holds an operator the device cannot run (the error names the operator and the scope).
-
-#### `census`
-
-```camel
-census: (f: F) => F! when is_function::<F>()
-```
-
-Prints the operator surface of the program and consumes it: one `TILES_CENSUS` line with the
-number of surface operators, how many the device's capability table names and how many it does
-not, then one `TILES_CENSUS_DEVICE` line per operator the table names and one `TILES_CENSUS_GAP`
-line per operator no device program exists for. The surface is what a `#gpu` scope asks the
-device for (the `tensor` and `nn` modules); a `#gpu` scope refuses every operator of the gap, so
-the list is the work the support surface has left. It reads the program where the pipeline
-stands, which is why `std::macro` is written before it when a derived graph's operators are to be
-counted.
-
-#### `test_outline_compiled`
-
-```camel
-test_outline_compiled: <reasons: bool = false, declarations: bool = false> (f: F) => F! when is_function::<F>()
-```
-
-The outline pass the tests drive directly, with the readings they assert as parameters rather
-than as environment variables: `reasons=true` prints, per operator node of the result, the
-declaration and the reason it is in no region (`TILES_OPERATOR_DECLARATION`,
-`TILES_OPERATOR_ID`, `TILES_REGION_REASON`), and `declarations=true` prints the six batches of
-the twenty-one operators of the B group with their ids and contracts (`TILES_DECLARATIONS_1`
-through `TILES_DECLARATIONS_6`). Both default to false: a pipeline that does not ask prints
-`TILES_OUTLINED` and nothing else.
-
-- Failure: error value `GpuScopeUnsupported` when the outlined region holds an operator the device cannot run.
 
 <a id="pyplot"></a>
 
@@ -8039,7 +7960,7 @@ the pair a training step needs from one evaluation. The same compile-time refusa
 #### `with_grad`
 
 ```camel
-with_grad: (f: F, has_aux: bool) => ValueAndGradientAndAux<F>
+with_grad: (f: F, has_aux: bool) => ValueAndGradientAndAux<F> when is_function::<F>()
 ```
 
 The value, the auxiliary value and the gradient of a function whose result is `(value, aux)`:
@@ -8436,27 +8357,27 @@ Two laws and the two tangents they write, indexed by the axis the call names.
 #### `softmax_jvp`
 
 ```camel
-softmax_jvp: (x: T[...], dx: T[...], axis: int) => T[...]
+softmax_jvp: (x: T[...], dx: T[...], axis: int) => T[...] when is_float::<T>()
 ```
 
 The tangent the rule above writes, with the axis handed over as an ordinary value: the softmax
 itself (`y`), the tangent's own sum over the axis, and the subtraction element by element. Written
 as one function and not in the rule's right side for the reason `reshape_jvp` gives.
 
-- A native operator of this module: an opaque node, pure.
+- Written in Camel: a subgraph, pure when the functions passed to it are.
 - Example: `softmax_jvp([0.0, 0.0] as float[], [1.0, 0.0] as float[], 0)` gives `[0.25, -0.25]`
 
 #### `log_softmax_jvp`
 
 ```camel
-log_softmax_jvp: (x: T[...], dx: T[...], axis: int) => T[...]
+log_softmax_jvp: (x: T[...], dx: T[...], axis: int) => T[...] when is_float::<T>()
 ```
 
 The tangent the rule above writes: `p = exp(log_softmax<axis>(x))`, the product `p * dx` summed
 over the axis, and that sum subtracted from the tangent element by element -- `p` inside the sum,
 which is what makes this the forward reading and not `log_softmax_t`'s.
 
-- A native operator of this module: an opaque node, pure.
+- Written in Camel: a subgraph, pure when the functions passed to it are.
 - Example: `log_softmax_jvp([1.0, 2.0] as float[], [1.0, 0.0] as float[], 0)` gives `[0.7310585786300049, -0.2689414213699951]`
 
 ### The forward rule of `layer_norm`
@@ -8509,13 +8430,13 @@ reverse walk stops there and names it. That is the `split` wall, and it is not t
 #### `layer_norm_tangent`
 
 ```camel
-layer_norm_tangent: (gamma: T[...], dgamma: T[...], dbeta: T[...], xhat: T[...], jx: T[...]) => T[...]
+layer_norm_tangent: (gamma: T[...], dgamma: T[...], dbeta: T[...], xhat: T[...], jx: T[...]) => T[...] when is_float::<T>()
 ```
 
 The three terms of `d(layer_norm)`, from the normalized value `xhat` and the input's tangent
 already through the normalization's jacobian (`jx = J dx`).
 
-- A native operator of this module: an opaque node, pure.
+- Written in Camel: a subgraph, pure when the functions passed to it are.
 - Example: `layer_norm_tangent([1.0, 2.0] as float[], [0.0, 0.0] as float[], [0.0, 0.0] as float[], [0.0, 0.0] as float[], [1.0, 1.0] as float[])` gives `[1.0, 2.0]`
 
 #### `layer_norm_neutral`
@@ -8836,7 +8757,7 @@ batch is an axis these operators already walk.
 #### `vmap_sum_axis`
 
 ```camel
-vmap_sum_axis: (xs: T[...], axis: int[], keepdims: bool[]) => T[...]
+vmap_sum_axis: (xs: T[...], axis: int[], keepdims: bool[]) => T[...] when is_numeric::<T>()
 ```
 
 `sum<axis, keepdims>(xs)` batched: each row's sum along the axis it was given. The parameters
@@ -8847,40 +8768,40 @@ The axis argument is the *row's*, so the example below reduces the row's axis 1 
 row of the value -- and not its axis 0: the batch is one axis in front of the one the row counts
 from (`batched_axis`).
 
-- A native operator of this module: an opaque node, pure.
+- Written in Camel: a subgraph, pure when the functions passed to it are.
 - Example: `vmap_sum_axis([[1.0, 2.0], [3.0, 4.0]] as float[2, 2], [0], [false])` gives `[3.0, 7.0]`
 
 #### `vmap_mean_axis`
 
 ```camel
-vmap_mean_axis: (xs: T[...], axis: int[], keepdims: bool[]) => T[...]
+vmap_mean_axis: (xs: T[...], axis: int[], keepdims: bool[]) => T[...] when is_float::<T>()
 ```
 
 `mean<axis, keepdims>(xs)` batched: each row's mean along the axis it was given.
 
-- A native operator of this module: an opaque node, pure.
+- Written in Camel: a subgraph, pure when the functions passed to it are.
 - Example: `vmap_mean_axis([[1.0, 2.0], [3.0, 4.0]] as float[2, 2], [0], [false])` gives `[1.5, 3.5]`
 
 #### `vmap_max_axis`
 
 ```camel
-vmap_max_axis: (xs: T[...], axis: int[], keepdims: bool[]) => T[...]
+vmap_max_axis: (xs: T[...], axis: int[], keepdims: bool[]) => T[...] when is_numeric::<T>()
 ```
 
 `max<axis, keepdims>(xs)` batched: each row's largest element along the axis it was given.
 
-- A native operator of this module: an opaque node, pure.
+- Written in Camel: a subgraph, pure when the functions passed to it are.
 - Example: `vmap_max_axis([[1.0, 5.0], [3.0, 4.0]] as float[2, 2], [0], [false])` gives `[5.0, 4.0]`
 
 #### `vmap_min_axis`
 
 ```camel
-vmap_min_axis: (xs: T[...], axis: int[], keepdims: bool[]) => T[...]
+vmap_min_axis: (xs: T[...], axis: int[], keepdims: bool[]) => T[...] when is_numeric::<T>()
 ```
 
 `min<axis, keepdims>(xs)` batched: each row's smallest element along the axis it was given.
 
-- A native operator of this module: an opaque node, pure.
+- Written in Camel: a subgraph, pure when the functions passed to it are.
 - Example: `vmap_min_axis([[1.0, 5.0], [3.0, 4.0]] as float[2, 2], [0], [false])` gives `[1.0, 3.0]`
 
 ### The positions along an axis
@@ -8896,7 +8817,7 @@ result's element type would be a rule about `int` arrays applied to floats.
 #### `vmap_argmax_axis`
 
 ```camel
-vmap_argmax_axis: (xs: T[...], axis: int[], keepdims: bool[]) => int[...]
+vmap_argmax_axis: (xs: T[...], axis: int[], keepdims: bool[]) => int[...] when is_numeric::<T>()
 ```
 
 `argmax<axis, keepdims>(xs)` batched: each row's position of its largest element along the
@@ -8904,20 +8825,20 @@ axis it was given. The positions are `int` whatever the operand's element is, so
 function is generic in is the operand's (`T`), not its result's.
     // [1, 2]
 
-- A native operator of this module: an opaque node, pure.
+- Written in Camel: a subgraph, pure when the functions passed to it are.
 - Example: `vmap_argmax_axis([[1.0, 9.0, 3.0], [4.0, 5.0, 6.0]] as float[2, 3], [0], [false])`
 
 #### `vmap_argmin_axis`
 
 ```camel
-vmap_argmin_axis: (xs: T[...], axis: int[], keepdims: bool[]) => int[...]
+vmap_argmin_axis: (xs: T[...], axis: int[], keepdims: bool[]) => int[...] when is_numeric::<T>()
 ```
 
 `argmin<axis, keepdims>(xs)` batched: each row's position of its smallest element along the
 axis it was given, with the earlier position on a tie.
     // [0, 0]
 
-- A native operator of this module: an opaque node, pure.
+- Written in Camel: a subgraph, pure when the functions passed to it are.
 - Example: `vmap_argmin_axis([[1.0, 9.0, 3.0], [4.0, 5.0, 6.0]] as float[2, 3], [0], [false])`
 
 ### The reductions over every axis
@@ -9035,13 +8956,13 @@ batched shape is `[the batch's rows, the written extents...]`.
 #### `vmap_reshape`
 
 ```camel
-vmap_reshape: (xs: T[...], dims: int[...]) => T[...]
+vmap_reshape: (xs: T[...], dims: int[...]) => T[...] when is_numeric::<T>()
 ```
 
 `reshape<dims>(xs)` batched: each row laid out in the shape the call wrote, the batch's axis in
 front of it.
 
-- A native operator of this module: an opaque node, pure.
+- Written in Camel: a subgraph, pure when the functions passed to it are.
 - Example: `vmap_reshape([[1.0, 2.0, 3.0, 4.0]] as float[1, 4], [2, 2])` gives `[[[1.0, 2.0], [3.0, 4.0]]]`
 
 ### Unsqueeze
@@ -9052,12 +8973,12 @@ of it: the written axis moves one place in, exactly as a reduction's axis does (
 #### `vmap_unsqueeze`
 
 ```camel
-vmap_unsqueeze: (xs: T[...], axis: int[]) => T[...]
+vmap_unsqueeze: (xs: T[...], axis: int[]) => T[...] when is_numeric::<T>()
 ```
 
 `unsqueeze<axis>(xs)` batched: the row's axis of extent one, one place further in.
 
-- A native operator of this module: an opaque node, pure.
+- Written in Camel: a subgraph, pure when the functions passed to it are.
 - Example: `vmap_unsqueeze([[1.0, 2.0]] as float[1, 2], [0])` gives `[[[1.0, 2.0]]]`
 
 ### Transpose, permute, concat and dim
@@ -9083,24 +9004,24 @@ row's last two.
 #### `vmap_permute`
 
 ```camel
-vmap_permute: (xs: T[...], perm: int[...]) => T[...]
+vmap_permute: (xs: T[...], perm: int[...]) => T[...] when is_numeric::<T>()
 ```
 
 `permute<perm>(xs)` batched: the row's axes in the written order, the batch's axis in front.
 
-- A native operator of this module: an opaque node, pure.
+- Written in Camel: a subgraph, pure when the functions passed to it are.
 - Example: `vmap_permute([[[1.0, 2.0], [3.0, 4.0]]] as float[1, 2, 2], [1, 0])` gives `[[[1.0, 3.0], [2.0, 4.0]]]`
 
 #### `vmap_concat`
 
 ```camel
-vmap_concat: (a: T[...], b: T[...], axis: int[]) => T[...]
+vmap_concat: (a: T[...], b: T[...], axis: int[]) => T[...] when is_numeric::<T>()
 ```
 
 `concat<axis>(xs, ys)` batched: the axis the row joins along is one place further in, and the two
 operands are the batch's rows, so the join is along the row's axis of the batch.
 
-- A native operator of this module: an opaque node, pure.
+- Written in Camel: a subgraph, pure when the functions passed to it are.
 - Example: `vmap_concat([[1.0]] as float[1, 1], [[2.0]] as float[1, 1], [0])` gives `[[[1.0], [2.0]]]`
 
 #### `vmap_dim`
@@ -9128,12 +9049,12 @@ condition to name the rule's `T`.
 #### `vmap_where`
 
 ```camel
-vmap_where: (cond: bool[...], a: T[...], b: T[...]) => T[...]
+vmap_where: (cond: bool[...], a: T[...], b: T[...]) => T[...] when is_numeric::<T>()
 ```
 
 `where(cond, a, b)` batched: the operator over the batch, all three operands one axis in front.
 
-- A native operator of this module: an opaque node, pure.
+- Written in Camel: a subgraph, pure when the functions passed to it are.
 - Example: `vmap_where([[true, false, true]] as bool[1, 3], [[1.0, 2.0, 3.0]] as float[1, 3], [[4.0, 5.0, 6.0]] as float[1, 3])` gives `[[1.0, 5.0, 3.0]]`
 
 <a id="sim"></a>
@@ -9214,20 +9135,6 @@ one that runtime has (`'none'` switches the check off).
 
 - With effects: writes a file and reads the function's graph.
 - Failure: error value `ExportUnsupported` when `fn` is not a function, when the graph cannot be translated (a call that remains, an operator without an ONNX lowering, a dtype or shape the exporter cannot name), or when the target runtime rejects a node; error value `IOError` when the model cannot be written.
-- Example: `export_model<out: "/tmp/model.onnx">((x: float) => x * 2.0, 2.0)`
-- Example: `export_model<out: "/tmp/model.onnx", dynamic_axes: [0]>((xs: f32[2, 3]) => xs[0][0], [[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]] as f32[2, 3])`
-- Example: `export_model<out: "/tmp/model.onnx", target: "onnxruntime-cpu">((x: float) => x * 2.0, 2.0)`
-
-#### `export_model`
-
-```camel
-export_model: <out: string = '', trace: bool = false, dump: bool = false, prep_stats: bool = false> (f: F) => F! when is_function::<F>()
-```
-
-Writes the model of the program's `main` (or of the one `export_model` call it makes) as an
-ONNX file, translating the function `main` refers to itself. `out` overrides the file the
-`out` argument of `export_model` names (then exactly one call is allowed) and names the file
-when the program makes no request. The three readings below print to standard error and
-change nothing the exporter does: `trace` every lowered call with the facts of its arguments,
-`dump` the simplified graph that is translated (as `std::rgir` does), `prep_stats` the size of
-the function when the export receives it and after the export's own simplification.
+- Example: `export_model<out: "/tmp/model.onnx">(func (x: float) { x * 2.0 }, 2.0)`
+- Example: `export_model<out: "/tmp/model.onnx", dynamic_axes: [0]>(func (xs: f32[2, 3]) { xs[0][0] }, [[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]] as f32[2, 3])`
+- Example: `export_model<out: "/tmp/model.onnx", target: "onnxruntime-cpu">(func (x: float) { x * 2.0 }, 2.0)`

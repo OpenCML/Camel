@@ -397,6 +397,8 @@ const MODULES = [
         name: 'laws',
         title: '`laws`: the mathematics a derivative rule is written from',
         kind: 'camel',
+        source: 'laws.cml',
+        declaration: true,
         // The tangent and the cotangent of each primitive: one function per name a rule's left
         // side binds. `rulesets.jvp` and `rulesets.transpose` name one of these on a rule's right
         // side, and nothing else reads the module -- it declares no rule, which is why it is not
@@ -697,6 +699,17 @@ function declarationText(lines, lineIndex, trimmed) {
         end++
         text += ` ${lines[end].trim()}`
     }
+    // The condition is part of the declaration too, and the formatter breaks it onto the next line
+    // when the signature does not fit (`array.cml`'s `argmax`/`argmin`, whose result type makes the
+    // line longer than `max`'s). A reader that stopped at the parameter list read the `when` clause
+    // as the first line of the body: `declarationBody` then saw a line that opens no brace, read the
+    // function as a body-less declaration, and the operator it declares was reported as "declared but
+    // no such operator is registered" -- `array:argmax` is the wrapper's own name, the operator is
+    // `tensor:argmax`.
+    while (end + 1 < lines.length && /^\s*when\b/.test(lines[end + 1]) && !/[{(]\s*$/.test(text)) {
+        end++
+        text += ` ${lines[end].trim()}`
+    }
     return { text, end }
 }
 
@@ -985,14 +998,19 @@ function readDeclarations(file, module, options = {}) {
             // can declare a pass: a file under stdlib/signatures/ is reference text that is never
             // compiled, and describes operators the C++ resolver gives a computed type, where the
             // same condition is the type's (`grad::<F>(f: F): Gradient<F> when is_function::<F>()`).
-            // A pass has the shape of a function transform, `(f: F): F!`; a declaration of
+            // A pass has the shape of a function transform, `(f: F) => F!`; a declaration of
             // another shape that is conditioned the same way is an operator of a function value
-            // (`graph_of::<F>(f: F): Graph`), and one that names its operator with `#op` is an
+            // (`graph_of::<F>(f: F) => Graph`), and one that names its operator with `#op` is an
             // engine the module implements (`rewrite`, called as `f->rewrite<rules>`).
             const passShaped = (() => {
                 const one = /^\s*\w+\s*:\s*(\w+)\s*$/.exec(args.inner)
                 // A pass may name the resources it uses (`uses driver`) before its condition.
-                const answer = /^\s*:\s*(\w+)!\s*(?:uses\s+[\w:, ]+?\s+)?when\b/.exec(after)
+                // The result is written after `=>` and nowhere else (`docs/language`, the notation
+                // the corpus adopted: `export func reinterp::<F>(f: F) => F!`). Reading `: F!` here
+                // was this reader's own drift from that notation: every pass of `transforms`,
+                // `tensor`, `tiles` and `graph` then failed the shape test and its declaration was
+                // compared as an operator declaration the module never registers.
+                const answer = /^\s*=>\s*(\w+)!\s*(?:uses\s+[\w:, ]+?\s+)?when\b/.exec(after)
                 return one !== null && answer !== null && one[1] === answer[1]
             })()
             if (!relative.startsWith('stdlib/signatures/') && !declarationBody(after, lines, i) &&
@@ -2784,7 +2802,7 @@ const EXCEPTIONS = {
                 'the rule registers no result text at all (`tree_leaves (type-directed)`); the declaration writes `L`',
         },
         'rule states a function type': {
-            'attempt (mark/attempt)#result':
+            'attempt (:mark/attempt)#result':
                 'the rule answers the function it was given, `((...args: A) => T!)`; the declaration states only the error `F!`',
             'first_with_as_param (transforms:first_with_as_param)#result':
                 'the rule answers a function type -- the reinterpreted function, `((the first `with` parameter, then the parameters) => any)` -- and the declaration writes it `FirstWithAsParam<F>`, a type function this checker does not expand',
@@ -2896,25 +2914,25 @@ const EXCEPTIONS = {
                 'the registered signature is `tree_leaves (type-directed)`, not a list of `name: type` positions',
         },
         'declared arity differs from rule arity': {
-            'slice (op/slice_bytes)#parameter':
+            'slice (:op/slice_bytes)#parameter':
                 'the declaration writes one parameter and the rule registers six positions, so there is no position-by-position pair',
-            'slice (op/slice_str)#parameter':
+            'slice (:op/slice_str)#parameter':
                 'the declaration writes one parameter and the rule registers six positions, so there is no position-by-position pair',
-            'slice (op/slice_sub)#parameter':
+            'slice (:op/slice_sub)#parameter':
                 'the declaration writes one parameter and the rule registers six positions, so there is no position-by-position pair',
             'upload (tiles:upload)#parameter':
                 'the declaration writes one parameter and the rule registers three, so there is no position-by-position pair',
         },
         'untyped pack ..rest': {
-            'eprintln (io/eprintln)#parameter':
+            'eprintln (:io/eprintln)#parameter':
                 'the rule writes `(x: T, ...rest)`, a pack with no type, so no position maps to the declaration',
-            'print (io/print)#parameter':
+            'print (:io/print)#parameter':
                 'the rule writes `(x: T, ...rest)`, a pack with no type, so no position maps to the declaration',
-            'println (io/println)#parameter':
+            'println (:io/println)#parameter':
                 'the rule writes `(x: T, ...rest)`, a pack with no type, so no position maps to the declaration',
         },
         'function-typed parameter': {
-            'attempt (mark/attempt)#parameter':
+            'attempt (:mark/attempt)#parameter':
                 'parameter 1 is `(...args: A) => T`, a function type whose arguments are a pack',
             'grad (autodiff:grad)#parameter':
                 'parameter 1 is `<W...>(N...) => float`, a function type with a `with` pack',
@@ -3006,6 +3024,8 @@ const EXAMPLE_STOPS = {
             '`t` is an open transaction and `n` a node of its graph: a doc example has neither',
         'src/stdlib/graph.cml#replace#1':
             '`t` is an open transaction and `n` a node of its graph: a doc example has neither',
+        'src/stdlib/graph.cml#add_param#1':
+            '`t` is an open transaction and `like` a node of its graph: a doc example has neither',
         'src/stdlib/graph.cml#name#1':
             'the example reads the name of a graph, and reading it is a capability a declaration writes in its clause; an example program is a body with no declaration to write it in (design principles 9.5)',
         'src/stdlib/graph.cml#origin#1':
