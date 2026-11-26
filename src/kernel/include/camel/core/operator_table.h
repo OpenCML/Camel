@@ -128,19 +128,11 @@ inline constexpr OperId VarNewEmpty = 20; // ":var/new/empty"
 /// may be `void`). The result is the cell itself; the call is an input so that taking the value
 /// makes the call run (design principles 3.1).
 inline constexpr OperId VarAfter = 21; // ":var/after"
-/// Id 22 is free and stays free: it held the keeper operator a pass wrote when a removal took
-/// the last use of a node whose running is observed. The keeper is a `GATE` now -- one data port
-/// reading the value that was there, the value passed through (design principles 3.3,
-/// docs/design/effects/edges.cn.md 5.3) -- so the operator is gone, and no other operator takes
-/// its id: reusing it would make the deletion a rename.
-///
-/// Of that shape, one half is necessary and the other has been measured in one use: a sync
-/// predecessor naming the node was part of it, and a measurement showed that the
-/// predecessor can be dropped here -- built with it and running, then built again without it and
-/// still holding. Whether another use needs the
-/// predecessor has not been measured, so this paragraph is not a statement that the keeper needs
-/// no order: it says which half was measured and where.
-inline constexpr OperId kWellKnownCount = 22; // kNoOper included
+/// The plain form `append` writes and the in-place form that grows a local array. The compiler
+/// writes both itself, so both are named once here and no reader spells the URI to recognise them.
+inline constexpr OperId Append        = 22; // ":struct/append_arr"
+inline constexpr OperId AppendInPlace = 23; // ":struct/append_arr_in_place"
+inline constexpr OperId kWellKnownCount = 24; // kNoOper included
 
 /// Reading a variable: `:var/get`, or `:var/peek`, the same read for a value that only goes to
 /// operations that cannot keep it (it leaves the variable's sole-reference mark set; see
@@ -223,7 +215,14 @@ inline constexpr std::string_view kWellKnownOperatorUris[oper::kWellKnownCount] 
     ":macro/cmp",
     ":var/new/empty",
     ":var/after",
+    ":struct/append_arr",
+    ":struct/append_arr_in_place",
 };
+
+/// The numbering is dense and fixed: an id is the index of its URI in this list. The assertion
+/// guards against a later entry inserted in the middle, which would move every id after it.
+static_assert(oper::VarNew == 1 && oper::AppendOwned == 18 && oper::VarAfter == 21 &&
+              oper::Append == 22 && oper::AppendInPlace == 23);
 
 /**
  * The types a conversion of the language reads and writes: `:op/itod` is an i32 going into a
