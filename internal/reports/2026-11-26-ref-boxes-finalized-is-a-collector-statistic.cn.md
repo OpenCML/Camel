@@ -5,7 +5,7 @@
 所以这一族既不是哪一侧的缺陷，也不是数值噪声，而是**把收集器的统计当程序输出打印了**。
 本该由负责人裁定"它算不算程序可观察输出"；裁定之前不改引擎、不改用例、不改断言。
 
-## 一、两份读数（同一轮、同一套旗标，最小用例 `ref_boxes_loop_ten`）
+## 一、两份读数（同一轮、同一套旗标，最小用例 `ref_boxes_loop_ten`；裁定前的读数）
 
 旗标取自该用例自己的计划条目（`test/plans/feat/compile/ref/ref.plan.toml`）：
 `--gc-stress alloc=7,safepoint=3,kind=both --gc-check foreign,verify=both --gc generational`。
@@ -84,14 +84,24 @@ nvm  alloc=1, safepoint=1   →  finalized=11      ← 与 fvm 相同
 五个程序可观察字段两侧逐字相同（`created=11 counted=11 released=11 live=0 disposed=0`）、
 以及"正常计划全绿、只有在 `--gc-stress` 的时间表下才出现这个差"。
 
-## 六、状态与后续
+## 六、答案与落点
 
-- `internal/backlog.md` 的 `D-1126-150` ① 已记："`finalized` 计数属语义、问负责人、先挂，
-  那几条照现在 `backends_agree` 不动"；`D-1126-176` 维持先挂、不动引擎。本页是该条的材料页。
-- 裁定之前：引擎不改、用例不改、金标不改、`ref.plan.toml` 的 `backends_agree` 不动。
-  差分侧已按裁定把这 5 条记为 `pending`（不计入 `differ`，数值仍在报告里），见 `lane/fvm-diff`。
-- 裁定之后的落点：分叉一 ⇒ 执行层（`main.cpp:316` 取快照之前的那一处）；分叉二 ⇒ 工具一处
-  （`finalized=<n>` 当占位符）。两条都不是本页能自行决定的。
+负责人裁的是**分叉一**：**退出前做完终结** —— 已释放的外部资源在程序退出前终结完，不随回收时机变。
+于是 nvm 在宽松时间表下少两块是缺陷，修在执行层的一处：
+
+- `src/kernel/core/rtdata/foreign.cpp` —— 计数把资源放掉的块不再从登记表里摘掉（退出扫描按
+  `disposed()` 跳过它，所以没有资源被释放两次）；新增 `finishReleasedLifetimesAtExit()`，在程序已停、
+  计数被读之前把"已释放、未终结"的寿命记满。包装对象自己的终结器照旧释放块的内存，并消费这一笔，
+  一个寿命只记一次。
+- `src/tools/camel-cli/main.cpp` —— `~ReleaseExternalResources()` 在取 `foreignResourceStats()` 快照
+  之前调用它，所以读的是一个已经做完的退出状态。
+- 锁：`test/plans/feat/compile/ref.plan.toml` 的五条 `ref.boxes_*` 各加一条断言
+  `counts.finalized === counts.released`（改前红、改后绿），这条断言就是"不随回收时机变"的守卫。
+- 差分侧：`pending` 这一档随裁定取消 —— `finalized` 的差现在是缺陷（nvm 偏），不再是待裁定；
+  工具回到正常比较。
+
+被否掉的另一种改法：退出时做一次完整收集。它会把**仍活着的**包装对象一起终结，于是退出扫描要释放的
+资源改由收集释放，`disposed` 恒为 0 —— "程序退出时还活着几个"这个读数就没了。
 
 ## 七、复核方式（两分钟，同一个二进制）
 
@@ -109,5 +119,12 @@ nvm  alloc=1, safepoint=1   →  finalized=11      ← 与 fvm 相同
         --gc generational <case>/ref_boxes_loop_ten.cml std::nvm
 ```
 
-三次的 `FOREIGN_RESOURCES` 行应当分别是 `finalized=9`、`finalized=11`、`finalized=11`；
-`<camel>` 三处写同一个绝对路径。
+三次的 `FOREIGN_RESOURCES` 行改后应当都是 `finalized=11`（裁定前分别是 9、11、11 —— `finalized`
+随收集时间表变，正是这条裁定要消掉的）；`<camel>` 三处写同一个绝对路径。
+
+四条时间表 × 两端 × 五个 `ref_boxes_*` 用例（默认、`alloc=7,safepoint=3,kind=both`、
+`alloc=1,safepoint=1,kind=minor`、`alloc=1,safepoint=1,kind=major`，两端 `std::nvm`/`std::fvm`）
+共四十格：改前二十三格 `finalized != released`（默认时间表下两端都是 `finalized=0`；宽松时间表下 nvm
+小两块；minor-only 下 fvm 也少），改后零格。程序自己无法从 CML 里强制收集，`std::gc::major` /
+`std::gc::minor` 是遍、跑在执行遍之前，所以"人工分批强制回收"这一档用 CLI 的逐次分配收集
+（`alloc=1,safepoint=1`）表达。
