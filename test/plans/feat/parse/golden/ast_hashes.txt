@@ -3148,7 +3148,7 @@ c70f9b16362640e6 ok test/cases/modules/autodiff/jax_names/remat.cml
 98f505ba1383c566 ok test/cases/modules/autodiff/jax_names/vjp.cml
 e5d8376fbcbef374 ok test/cases/modules/autodiff/jax_names/vmap_in_axes.cml
 adf05a056bba094f ok test/cases/modules/autodiff/jax_names/vmap_two_parameters.cml
-89edccb5b1b82b1a ok test/cases/modules/graph_facts/draft_effects_refused.cml
+d572cd28a4df49f5 ok test/cases/modules/graph_facts/draft_effects_refused.cml
 7e4124f45993e866 ok test/cases/modules/graph_facts/draft_facts.cml
 5e9f3d3e40466b0f ok test/cases/modules/graph_function/commit_effect.cml
 af7eddf1faa119d0 ok test/cases/modules/graph_function/edit.cml
@@ -3277,7 +3277,7 @@ ae1181b126edbf5d ok test/cases/modules/nn/library_law_conv2d.cml
 8298b105813f6d56 ok test/cases/modules/nn/lr.cml
 00a4d79835fdd748 ok test/cases/modules/nn/lrit.cml
 d5ada2788ff005e7 ok test/cases/modules/nn/matrix_factorization.cml
-08dda61df517c8ea ok test/cases/modules/nn/max_pool2d_window_transpose.cml
+9fc512bc9082140e ok test/cases/modules/nn/max_pool2d_window_transpose.cml
 b02e828d4f7d7acb ok test/cases/modules/nn/mnist.cml
 6137da87ff159682 ok test/cases/modules/nn/residual_mlp.cml
 8f6e6e5004ab44f8 ok test/cases/modules/nn/sgd_leaves_its_argument.cml
@@ -3712,8 +3712,8 @@ ee40795b32c725c5 ok test/cases/modules/tensor/binary_aggregate_roundtrip.cml
 4333f2e56ea2e57e ok test/cases/modules/tensor/binary_bytes.cml
 8ef809db20b606fa ok test/cases/modules/tensor/binary_length_error.cml
 9926dddbc5ec5262 ok test/cases/modules/tensor/binary_overflow_error.cml
-0fa31494282d4848 ok test/cases/modules/tensor/binary_roundtrip.cml
-3a083169eb5c401c ok test/cases/modules/tensor/broadcast_ops.cml
+21c80ab4337b4752 ok test/cases/modules/tensor/binary_roundtrip.cml
+1257d908258a5e94 ok test/cases/modules/tensor/broadcast_ops.cml
 9ff7d78d4249ef05 ok test/cases/modules/tensor/broadcast_scalar_operand.cml
 4b4d1437fb81c331 ok test/cases/modules/tensor/comparison.cml
 3974edba825d488c ok test/cases/modules/tensor/comparison_shape_error.cml
@@ -3746,7 +3746,7 @@ baf4190de0fb003f ok test/cases/modules/tensor/gradient_broadcast.cml
 069d1740c57bec34 ok test/cases/modules/tensor/int_division.cml
 4743f5cb4fc5aa3a ok test/cases/modules/tensor/int_division_by_zero.cml
 f16e765d52468cb2 ok test/cases/modules/tensor/int_remainder_by_zero.cml
-6e3047083d5fdfb6 ok test/cases/modules/tensor/linalg_layout.cml
+d88acf9e1f4bc7fa ok test/cases/modules/tensor/linalg_layout.cml
 3867c0b5f8e4ee8c ok test/cases/modules/tensor/mean_axis_elements.cml
 4e076481f2dbb695 ok test/cases/modules/tensor/mean_axis_narrow.cml
 4f2c622acbe6eb96 ok test/cases/modules/tensor/nan_text_in_a_tensor.cml
@@ -3765,10 +3765,10 @@ fd61c3190d9e026c ok test/cases/modules/tensor/runtime_shape_column.cml
 97a2c729412cec51 ok test/cases/modules/tensor/static_types.cml
 02fdde356c52bfba ok test/cases/modules/tensor/struct_covariance.cml
 773a378db4eac9fe ok test/cases/modules/tensor/sum_to_answers_a_leading_axis_reduction.cml
-fb3abcb1057ed02d ok test/cases/modules/tensor/take_negative.cml
-2d2e609c4b79570d ok test/cases/modules/tensor/take_oob.cml
-c013bada86ec2c1c ok test/cases/modules/tensor/take_ops.cml
-07ffaca1e6685ceb ok test/cases/modules/tensor/take_runtime_oob.cml
+cb409153a0eba3e9 ok test/cases/modules/tensor/take_negative.cml
+01ce65b197a984cf ok test/cases/modules/tensor/take_oob.cml
+f995af7c89f1c024 ok test/cases/modules/tensor/take_ops.cml
+96473f6393437867 ok test/cases/modules/tensor/take_runtime_oob.cml
 d07da79e0f8573c2 ok test/cases/modules/tensor/thread_count.cml
 ec9ce13a589c9ed8 ok test/cases/modules/tensor/thread_pools.cml
 2d0018d8f56becd2 ok test/cases/modules/tensor/thread_values.cml
