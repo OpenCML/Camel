@@ -12,9 +12,10 @@
 #   <local ref> <local sha> <remote ref> <remote sha>
 # and nothing else. A line whose remote ref is `refs/heads/develop` (a delete included -- `(delete)`
 # in the local-ref column) is the one the tree rule is about. A line whose remote ref is
-# `refs/heads/integration` is the one the shape rule is about. Everything else is allowed, which is
-# the normal case: a lane pushing its own branch, and the gate's own staging push to the host's bare
-# repository, whose refs are `refs/heads/lane-*`.
+# `refs/heads/integration` is the one the shape rule is about. A working branch or an archive tag
+# sent to the project's remote is refused (below). Everything else is allowed, which is the normal
+# case, the gate's own staging push to the host's bare repository included (its refs are
+# `refs/heads/lane-*`, and it goes to the host, not to the project's remote).
 #
 # Which tree is the merge worktree is machine-local, so it comes from
 # `internal/tools/camel-gate.local.json` (git-ignored) under `mergeWorktree`: one absolute path, or
@@ -56,6 +57,31 @@ while IFS=' ' read -r local_ref local_sha remote_ref remote_sha; do
 done <<EOF
 $refs
 EOF
+
+# --- the project's remote carries no working branches ----------------------------
+#
+# A lane's branch, a seat's batch branch and an archive tag are working state of the machine that
+# made them: the merge tools read them from the shared repository, and the project's public remote
+# shows only the lines people build on. So a push to the project's remote that would create or
+# move one of them is refused here. A delete is allowed, so that one that went out can be taken
+# back. The gate's staging pushes go to the build host by URL and are not to this remote.
+case "${2:-}" in
+    *github.com[:/]OpenCML/Camel | *github.com[:/]OpenCML/Camel.git)
+        while IFS=' ' read -r local_ref local_sha remote_ref remote_sha; do
+            [ -n "${remote_ref:-}" ] || continue
+            [ "$local_ref" != '(delete)' ] || continue
+            case "$remote_ref" in
+                refs/heads/lane/* | refs/heads/b/* | refs/heads/seat/* | refs/heads/meta/* | refs/tags/archive/*)
+                    echo "pre-push: refusing to push $remote_ref to the project's remote: working branches and archive tags stay in the local repository." >&2
+                    echo 'pre-push: the merge tools read lane branches locally; nothing needs them on the remote.' >&2
+                    exit 1
+                    ;;
+            esac
+        done <<EOF
+$refs
+EOF
+        ;;
+esac
 
 # --- every arrival on `integration` is a merge onto the tip it landed on ---------
 #

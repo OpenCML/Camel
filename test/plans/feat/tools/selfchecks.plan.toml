@@ -413,3 +413,18 @@ expect_exit = 0
 expect_stdout_contains = ["integration-readings: 3 checks, 0 failed"]
 normalizers = ["normalize_newlines"]
 timeout_ms = 120000
+
+# Fast: under 1 s. The real pre-push hook, run by sh with the refs on stdin: a working branch or an
+# archive tag sent to the project's remote is refused, a delete of one is allowed, and a staging
+# push to the build host is left alone.
+[[tests]]
+name = "selfchecks.push_working_branches"
+desc = "`test/tools/push-working-branches.test.mjs`: the pre-push hook refuses lane/, b/ and archive refs sent to the project's remote (by ssh or https URL), allows deleting one there, and allows a staging push of a lane to the build host (6 checks)."
+kind = "behavior"
+tool = "node"
+case = "../../../../test/tools/push-working-branches.test.mjs"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_contains = ["push-working-branches: 6 checks, 0 failed"]
+normalizers = ["normalize_newlines"]
+timeout_ms = 60000
