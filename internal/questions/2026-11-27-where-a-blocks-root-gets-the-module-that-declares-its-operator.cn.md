@@ -52,3 +52,22 @@
 请指示走哪一条（或第四条）。在此之前，块根的 DREF 会停在
 `The module that declares the operator the compiler emits did not register it: graph:open`：
 它报的是实话，缺的那一环在上面。
+
+## 四、三条候选的代价，各自在代码里的依据
+
+**甲（隐式 import 改可见性）**：代价是真的，而且不只是名字。`ProgramExports::importedOperatorOverloads`
+（`src/kernel/core/module/module.cpp:701-727`）是从 `importer.importSites_` 里逐模块取
+`exportedOperatorOverloads` 的：一条 import 站点同时决定「名字能不能解析到」和「这个程序的调用能选中
+哪些算子重载」。所以甲不是「多一个名字」，是**多出一层重载来源**。
+
+**乙（拆出「只依赖、不进作用域」的登记处）**：代价落在读取侧，不在写入侧。登记处只有
+`importSites_`（`module.h:238/339`），声明期沿它递归（`module_source.cpp:280-311`），而**所有**按名字
+解析的地方也都读它（同一条 `importedOperatorOverloads`，以及 `importedEntity`）。乙要做的是把这一张
+表拆成两张，并让每一处解析仍只读 import 那一张 —— 因此改动的面是「每一个读 `importSites_` 的地方」，
+不只是声明期那一处。
+
+**丙（从 `graph` 作为库编译的结果按编号取）**：`buildLibrary` 是**另一个 builder** 的事
+（`builder.h:66-71`：「the definition libraries of operators are built so, by a builder of their own」），
+它的导出表是那个 builder 的（`src/compile/src/module_source.cpp:296-299` 的注释也写着「this builder has
+its own export table」）。所以丙缺的是一条**跨 builder 的通道**：把一次库编译的结果按编号交给程序，
+并且回答「谁来建、建几次、活多久」—— 现在的结构里没有这样一个通道，也没有它的归属者。
