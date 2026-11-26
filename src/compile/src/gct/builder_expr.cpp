@@ -244,7 +244,11 @@ node_ptr_t Builder::visitBlockRoot(const AST::node_ptr_t &ast) {
     ENTER("BlockRoot");
     const bool isEdit = ast->loadAs<AST::BlockRootLoad>()->blockKind() == AST::DataType::EditExpr;
     const std::string uri = isEdit ? "graph:open" : "graph:graph_of";
-    context_->importModule("graph");
+    // The operator is the `graph` module's, so the program reads that module's declarations: an
+    // import, not only a load. A module the program does not import declares nothing into it, and
+    // the id would have no templates to resolve against. What the import brings is the module's
+    // names, not this call's: the reference stays the id.
+    context_->importModule("graph", module_.get());
     const auto oper = camel::core::OperatorTable::instance().lookup(uri);
     GUARD(oper.has_value(), "The table has no entry for the operator a block head binds: " + uri);
     // The id is the reference; the text is only the node's label (a GCT dump, a diagnostic). It is
