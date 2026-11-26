@@ -30,6 +30,7 @@
 #include <ostream>
 #include <span>
 #include <string>
+#include <string_view>
 #include <unordered_map>
 #include <utility>
 #include <vector>
@@ -329,7 +330,9 @@ gc_node_ref_t aggregateOfMembers(
 /// - `addCotangentTo`: file one cotangent on a value, summing it with what the place already holds
 ///   through the space's own addition (`sumOfCotangents`). A cotangent no parameter asks for is not
 ///   collected at all, and a value with no tangent space records the zero it contributes instead.
-/// - `noteRuleUsed`: the rules this member's answer used, once each, in first-use order.
+/// - `noteRuleUsed`: the rules this member's answer used, once each, in first-use order. Each one is
+///   also written as a `LAW_APPLIED` record (`transforms/law_readings.h`), which is the same fact in
+///   the shape a caller keeps across members.
 /// - `ruleCotangentOf`: one position's cotangent -- the rule the index filed for this operator, its
 ///   right side expanded where the operator stood, checked against the operand it answers for.
 /// - `joinMemberReadOf`: the adjoint of reading a value member by member -- that value's own
@@ -357,7 +360,7 @@ bool wantsCotangentAt(WalkContext &ctx, gc_node_ref_t target);
 
 void addCotangentTo(WalkContext &ctx, gc_node_ref_t ref, gc_node_ref_t node);
 
-void noteRuleUsed(WalkContext &ctx, const std::string &name);
+void noteRuleUsed(WalkContext &ctx, const std::string &name, std::string_view uri);
 
 /// The rule `ruleName`'s answer at `position`, expanded at the types the step really has, for the
 /// cotangent `ct` of the value at that position. `knownValue` hands over the value of an operand the

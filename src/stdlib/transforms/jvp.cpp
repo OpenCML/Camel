@@ -9,6 +9,7 @@
 #include "lift.h"
 #include "node_operator.h"
 
+#include "law_readings.h"
 #include "refusal_readings.h"
 #include "rule_expand.h"
 #include "rule_types.h"
@@ -2593,6 +2594,9 @@ bool liftGraph(
                 }
                 if (std::find(usedRules.begin(), usedRules.end(), ruleName) == usedRules.end()) {
                     usedRules.push_back(ruleName);
+                    // The forward half's answer to the same question the reverse walk records: which
+                    // law computed this step, at which operator.
+                    noteLawApplied(LawReading{"jvp", name, ruleName, uri});
                 }
                 break;
             }

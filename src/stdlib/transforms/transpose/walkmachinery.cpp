@@ -18,6 +18,7 @@
 
 #include "transpose/walk.h"
 
+#include "law_readings.h"
 #include "rule_expand.h"
 #include "node_operator.h"
 #include "transpose/cotangent.h"
@@ -473,10 +474,15 @@ void addCotangentTo(WalkContext &ctx, gc_node_ref_t ref, gc_node_ref_t node) {
     cotangent[ref] = summed;
 }
 
-void noteRuleUsed(WalkContext &ctx, const std::string &name) {
+void noteRuleUsed(WalkContext &ctx, const std::string &name, std::string_view uri) {
     std::vector<std::string> &usedRules = *ctx.book.usedRules;
     if (std::find(usedRules.begin(), usedRules.end(), name) == usedRules.end()) {
         usedRules.push_back(name);
+        // What the list above says, said once as a value: the law this step was answered by. The
+        // list is the member's (`rhs=` on the line that closes it); this line is what a caller can
+        // keep across members, written at the application and not split out of the sentence after
+        // it.
+        noteLawApplied(LawReading{"transpose", ctx.function->name(), name, uri});
     }
 }
 

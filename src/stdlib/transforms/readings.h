@@ -40,9 +40,52 @@
 #include <iostream>
 #include <ostream>
 #include <streambuf>
+#include <string>
+#include <string_view>
 
 namespace camel::transforms {
 
+namespace detail {
+
+/// A JSON string literal, escaped. The machine-readable readings (`READING_REFUSAL`, `LAW_APPLIED`)
+/// write values into an object, and this is the one place a value becomes a literal: two escapers
+/// would be two answers to "what does this name look like in the record".
+inline void appendJsonString(std::string &out, std::string_view text) {
+    out.push_back('"');
+    for (const char ch : text) {
+        switch (ch) {
+        case '"':
+            out += "\\\"";
+            break;
+        case '\\':
+            out += "\\\\";
+            break;
+        case '\n':
+            out += "\\n";
+            break;
+        case '\r':
+            out += "\\r";
+            break;
+        case '\t':
+            out += "\\t";
+            break;
+        default:
+            out.push_back(ch);
+            break;
+        }
+    }
+    out.push_back('"');
+}
+
+/// `,"name":"value"` -- the form every field after the first one takes.
+inline void appendJsonMember(std::string &out, const char *name, std::string_view value) {
+    out.push_back(',');
+    appendJsonString(out, name);
+    out.push_back(':');
+    appendJsonString(out, value);
+}
+
+} // namespace detail
 
 /// Whether this run asked for the readings of this area: the switch and the stream are the core's
 /// (`camel/core/trace.h`, whose registry has one row for `transforms`), so this module is one

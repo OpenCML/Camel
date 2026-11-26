@@ -701,8 +701,11 @@ bool buildTransposeMember(
                 unboundSlot);
         };
         // The rules this member's answer used, once each, in first-use order. The list is the
-        // context's (`book.usedRules`).
-        const auto noteRule = [&](const std::string &name) { noteRuleUsed(walkCtx, name); };
+        // context's (`book.usedRules`); the operator it was asked about travels with it, because the
+        // record written beside the list names the step as well as the law.
+        const auto noteRule = [&](const std::string &name, std::string_view uri) {
+            noteRuleUsed(walkCtx, name, uri);
+        };
         // The condition of a branch, copied: the transposed graph decides its arms with the same
         // predicate the forward graph did, at the same values -- which is why the parameters of `f`
         // are parameters of the transposed function too.
@@ -1611,7 +1614,7 @@ bool buildTransposeMember(
                     return {};
                 }
                 chosenRule = armChoice.rule.name;
-                noteRule(chosenRule);
+                noteRule(chosenRule, body->uri());
                 for (size_t i = 0; i < inputs.size(); ++i) {
                     if (isConstant(inputs[i])) {
                         continue;
@@ -2485,7 +2488,7 @@ bool buildTransposeMember(
                         return false;
                     }
                 }
-                noteRule(choice.rule.name);
+                noteRule(choice.rule.name, uri);
                 const std::string &chosenRule = choice.rule.name;
                 // The choice refused nothing; this asks the same question at the types the
                 // expansion will really build the right side from -- the choice decides *which*

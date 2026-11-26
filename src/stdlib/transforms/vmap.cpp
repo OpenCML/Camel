@@ -6,6 +6,7 @@
 
 #include "graph/graph_view.h"
 
+#include "law_readings.h"
 #include "node_order.h"
 #include "refusal_readings.h"
 #include "rule_expand.h"
@@ -636,6 +637,7 @@ VmapGraph buildVmapGraph(
                 }
                 ++refused.found;
                 usedRules.push_back(match->rule.name);
+                noteLawApplied(LawReading{"vmap", function->name(), match->rule.name, uri});
                 copyOf[ref] = batchThroughRule(ref, uri, *match);
                 if (copyOf[ref] == rt::kInvalidNodeRef) {
                     complete = false;
@@ -699,6 +701,9 @@ VmapGraph buildVmapGraph(
                 }
                 ++refused.found;
                 usedRules.push_back(match.rule.name);
+                // A call's rule is asked by a head, which is the name the reading states in the
+                // place a URI takes: the family has no operator URI to read a key off.
+                noteLawApplied(LawReading{"vmap", function->name(), match.rule.name, name});
                 copyOf[ref] = batchThroughRule(ref, name, match);
                 if (copyOf[ref] == rt::kInvalidNodeRef) {
                     refused.refusedConstruct = "a call";

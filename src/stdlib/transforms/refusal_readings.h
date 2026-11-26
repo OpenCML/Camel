@@ -152,44 +152,6 @@ struct RefusalReading {
     }
 };
 
-namespace detail {
-
-inline void appendJsonString(std::string &out, std::string_view text) {
-    out.push_back('"');
-    for (const char ch : text) {
-        switch (ch) {
-        case '"':
-            out += "\\\"";
-            break;
-        case '\\':
-            out += "\\\\";
-            break;
-        case '\n':
-            out += "\\n";
-            break;
-        case '\r':
-            out += "\\r";
-            break;
-        case '\t':
-            out += "\\t";
-            break;
-        default:
-            out.push_back(ch);
-            break;
-        }
-    }
-    out.push_back('"');
-}
-
-inline void appendJsonMember(std::string &out, const char *name, std::string_view value) {
-    out.push_back(',');
-    appendJsonString(out, name);
-    out.push_back(':');
-    appendJsonString(out, value);
-}
-
-} // namespace detail
-
 /// The machine-readable half of a refusal, on the diagnostic side and beside the line that says it
 /// in words. One line per refusal, `READING_REFUSAL {json}`: a plan reads the cause and the place
 /// it names out of this and never the sentence (`test/tools/reading-refusal.mjs`, the

@@ -82,6 +82,10 @@
 //   node scripts/vjp-parity.mjs --closure        the other direction of the same two files: does
 //                                                every key `transpose.cml` files have a `jvp.cml`
 //                                                law? (see "the closure" below)
+//   node scripts/vjp-parity.mjs --reaches        the third question of the same law set: did any
+//                                                program apply this law? Runs the corpus with
+//                                                `--trace transforms` (see "which law a program
+//                                                applied" below); needs a built install
 //   node scripts/vjp-parity.mjs --root DIR       read a tree other than this one (the self-test)
 //   node scripts/vjp-parity.mjs --exempt FILE    read another exemption list (the self-test)
 //
@@ -106,8 +110,10 @@
 // decision the caller makes by name.
 
 import fs from 'node:fs'
+import os from 'node:os'
 import path from 'node:path'
 import url from 'node:url'
+import { spawn } from 'node:child_process'
 
 const SELF = url.fileURLToPath(import.meta.url)
 const REPO_ROOT = path.resolve(path.dirname(SELF), '..')
@@ -188,6 +194,11 @@ const ROOT = path.resolve(rootOption)
 const TABLES = process.argv.includes('--tables')
 const JSON_MODE = process.argv.includes('--json')
 const CLOSURE = process.argv.includes('--closure')
+// `--reaches` asks a different question of the same law set: not "is there a law for this key" but
+// "did a program apply it". It runs the corpus and reads the `LAW_APPLIED` records the walks write
+// (`src/stdlib/transforms/law_readings.h`), so nothing here parses a sentence or counts a name a
+// person typed.
+const REACHES = process.argv.includes('--reaches')
 // `stale > 0` is a failure only when asked for by name: the count is reported either way, and the
 // default reading stays green so a mid-merge tree can still be read.
 const STRICT = process.argv.includes('--strict')
@@ -889,6 +900,370 @@ if (CLOSURE) {
     )
     console.log(lines.join('\n'))
     process.exit(missing.length === 0 ? 0 : 1)
+}
+
+// ---- which law a program applied --------------------------------------------------------------
+//
+// The comparison above answers "is there a law for this key"; `--closure` answers "does the other
+// half file it too". Neither answers the third question a reader of `src/stdlib/rulesets/*.cml`
+// asks: **did any program ever apply this law?** Until this mode existed the only record of that was
+// prose a person kept -- markers in test cases saying a law is "filed but not walked" -- and prose
+// kept by hand goes stale without saying so (a law given a working right side keeps its marker, and
+// the marker then tells the next reader the opposite of the truth).
+//
+// So the walks write what they applied, one record per application, in the shape a program reads
+// (`src/stdlib/transforms/law_readings.h`):
+//
+//     LAW_APPLIED {"transform":"transpose","function":"…","law":"conv2d_t","uri":"nn:conv2d"}
+//
+// and this mode runs the corpus once with `--trace transforms` and turns the records into a table.
+// A law is **reached** when some program's run printed a record naming it. The reason a row gives is
+// one of three, and they are decided by what the corpus did, not by what a case says about itself:
+//
+//   reached                          a program applied it, and at least one of those programs names
+//                                    no law of its own: an example, a showcase, a benchmark, or a
+//                                    test that walks it as part of the behaviour it pins. This is
+//                                    the row that is evidence a user can reach the law.
+//   reached only by a test that       every program that applied it is under `test/` and names the
+//   names it                         law's symbol -- in its own text or in the plan entry that
+//                                    runs it. A test written to reach a law is evidence that the
+//                                    law can be reached, and no evidence that anything else does.
+//   no program states it             nothing in the corpus applied it.
+//
+// Which half of the tree is which is a path rule and stays one: `test/` holds tests, and the four
+// directories beside it hold the programs the tree ships.
+//
+// The corpus is **every** `.cml` under those roots, not a list: a list is the hand-kept thing this
+// replaces, and a case added tomorrow is in the corpus without an edit here. The cost is one camel
+// run per program at the default pass, which is why this is a mode of its own and not part of the
+// gate's default reading.
+//
+//   node scripts/vjp-parity.mjs --reaches                  run the corpus, print the counts and the
+//                                                          rows that are not `reached`
+//   node scripts/vjp-parity.mjs --reaches --write           write the table to COVERAGE_TABLE
+//   node scripts/vjp-parity.mjs --reaches --all             print every row
+//   node scripts/vjp-parity.mjs --reaches --corpus DIR      run one directory (a smoke reading)
+//   node scripts/vjp-parity.mjs --reaches --limit N         the first N programs of the corpus
+//   --camel <install>    the install to run (default `out/latest`); the runs need a built binary
+//   --jobs N             how many runs at a time (default 4)
+//
+// Exit: 0 when the table was written, or when the table in the tree is what this run computed; 1
+// when it is not (the reading's stale half); 2 when the corpus or the binary cannot be read -- a
+// mode that ran nothing must not answer "no law is unreached".
+const COVERAGE_TABLE = 'docs/design/program-transforms/law-coverage.tsv'
+const CORPUS_ROOTS = ['test/cases', 'examples', 'showcase', 'benchmarks']
+
+if (REACHES) {
+    const installOption = option('--camel', path.join(ROOT, 'out', 'latest'))
+    if (installOption && installOption.error) {
+        console.log(`FAIL ${installOption.error}`)
+        process.exit(2)
+    }
+    const INSTALL = path.resolve(installOption)
+    const runsAtOnce = Number(option('--jobs', '4'))
+    if (!Number.isInteger(runsAtOnce) || runsAtOnce < 1) {
+        console.log('FAIL --jobs takes a positive whole number')
+        process.exit(2)
+    }
+    const corpusOption = option('--corpus', null)
+    if (corpusOption && corpusOption.error) {
+        console.log(`FAIL ${corpusOption.error}`)
+        process.exit(2)
+    }
+    const ALL_ROWS = process.argv.includes('--all')
+    const limitOption = option('--limit', null)
+    if (limitOption && limitOption.error) {
+        console.log(`FAIL ${limitOption.error}`)
+        process.exit(2)
+    }
+    const LIMIT = limitOption === null ? null : Number(limitOption)
+    if (LIMIT !== null && (!Number.isInteger(LIMIT) || LIMIT < 1)) {
+        console.log('FAIL --limit takes a positive whole number')
+        process.exit(2)
+    }
+
+    const executable = path.join(
+        INSTALL,
+        'bin',
+        process.platform === 'win32' ? 'camel.exe' : 'camel'
+    )
+    if (!fs.existsSync(executable)) {
+        console.log(
+            `FAIL ${path.relative(ROOT, executable) || executable} is not in the tree: --reaches ` +
+                `runs the corpus, so it needs a built install (--camel <install> names another)`
+        )
+        process.exit(2)
+    }
+
+    /// Every file under `directory` whose name ends with `suffix`, relative to `ROOT` with forward
+    /// slashes, in path order.
+    function programsUnder(directory, suffix = '.cml') {
+        const found = []
+        const walk = (at) => {
+            let entries
+            try {
+                entries = fs.readdirSync(at, { withFileTypes: true })
+            } catch {
+                return
+            }
+            for (const entry of entries) {
+                const full = path.join(at, entry.name)
+                if (entry.isDirectory()) {
+                    walk(full)
+                } else if (entry.isFile() && entry.name.endsWith(suffix)) {
+                    found.push(path.relative(ROOT, full).replaceAll(path.sep, '/'))
+                }
+            }
+        }
+        walk(path.join(ROOT, directory))
+        return found
+    }
+
+    const corpusRoots = corpusOption === null ? CORPUS_ROOTS : [corpusOption]
+    let corpus = []
+    for (const root of corpusRoots) {
+        const held = programsUnder(root)
+        if (held.length === 0) {
+            console.log(`FAIL ${root} holds no .cml: a corpus that is empty reaches nothing`)
+            process.exit(2)
+        }
+        corpus = corpus.concat(held)
+    }
+    corpus.sort()
+    const totalPrograms = corpus.length
+    if (LIMIT !== null) {
+        corpus = corpus.slice(0, LIMIT)
+    }
+
+    // What a test says about itself: its own text, and the plan entries that run it. A law's symbol
+    // is a word, so the match is a word -- `average_pool` must not name `_pool_t` by accident.
+    const planTextOf = new Map()
+    {
+        const plans = programsUnder('test/plans', '.plan.toml')
+        for (const plan of plans) {
+            const text = fs.readFileSync(path.join(ROOT, plan), 'utf8')
+            const blocks = text.split(/^\[\[tests\]\][^\n]*$/m)
+            for (const block of blocks) {
+                const caseMatch = block.match(/^[ \t]*case[ \t]*=[ \t]*"([^"]+)"$/m)
+                if (!caseMatch || !caseMatch[1].endsWith('.cml')) {
+                    continue
+                }
+                const relative = path
+                    .relative(ROOT, path.resolve(path.dirname(path.join(ROOT, plan)), caseMatch[1]))
+                    .replaceAll(path.sep, '/')
+                planTextOf.set(relative, (planTextOf.get(relative) || '') + '\n' + block)
+            }
+        }
+    }
+
+    const namesLaw = (program, symbol) => {
+        const pattern = new RegExp(`(^|[^A-Za-z0-9_])${symbol}([^A-Za-z0-9_]|$)`)
+        if (pattern.test(fs.readFileSync(path.join(ROOT, program), 'utf8'))) {
+            return true
+        }
+        const plan = planTextOf.get(program)
+        return plan !== undefined && pattern.test(plan)
+    }
+
+    // One run per program, in a scratch directory of its own: a case that writes beside itself
+    // cannot touch the tree, and two runs cannot read each other's files.
+    const scratch = fs.mkdtempSync(path.join(os.tmpdir(), 'vjp-parity-reaches-'))
+    const record = /LAW_APPLIED (\{[^\n]*\})/g
+
+    const runOne = (program) =>
+        new Promise((resolve) => {
+            const child = spawn(executable, ['--trace', 'transforms', path.join(ROOT, program)], {
+                cwd: scratch,
+                env: { ...process.env, CAMEL_HOME: INSTALL },
+                stdio: ['ignore', 'ignore', 'pipe'],
+                timeout: 30000,
+            })
+            let stderr = ''
+            child.stderr.on('data', (chunk) => {
+                // A run that floods the trace is a run whose laws are already recorded; the cap is
+                // on the bytes kept, not on the laws read, because the first records are the ones
+                // that name the law.
+                if (stderr.length < 4 * 1024 * 1024) {
+                    stderr += chunk.toString('utf8')
+                }
+            })
+            child.on('error', () => resolve({ program, code: -1, laws: [] }))
+            child.on('close', (code) => {
+                const laws = []
+                for (const match of stderr.matchAll(record)) {
+                    try {
+                        const reading = JSON.parse(match[1])
+                        if (typeof reading.law === 'string' && reading.law !== '') {
+                            laws.push(reading.law)
+                        }
+                    } catch {
+                        // A record the walk wrote and this reader cannot read is a broken reading,
+                        // and it is counted below: silence here would turn a broken record into a
+                        // law nobody reached.
+                        laws.push(null)
+                    }
+                }
+                resolve({ program, code, laws })
+            })
+        })
+
+    const runs = new Array(corpus.length)
+    {
+        let next = 0
+        const worker = async () => {
+            while (next < corpus.length) {
+                const at = next
+                next += 1
+                runs[at] = await runOne(corpus[at])
+            }
+        }
+        await Promise.all(Array.from({ length: Math.min(runsAtOnce, corpus.length) }, worker))
+    }
+
+    const unreadable = runs.flatMap((run) => run.laws.filter((law) => law === null))
+    if (unreadable.length > 0) {
+        console.log(`FAIL ${unreadable.length} LAW_APPLIED record(s) could not be read as JSON`)
+        process.exit(2)
+    }
+
+    // Which programs reached each law. `library.rules` is the law set, so a ruleset added tomorrow
+    // is in the table without an edit here; a `LAW_APPLIED` naming a symbol no ruleset declares is a
+    // name the reader and the walk spell differently, and it is reported rather than ignored.
+    const reachedBy = new Map()
+    for (const run of runs) {
+        for (const law of run.laws) {
+            if (!reachedBy.has(law)) {
+                reachedBy.set(law, new Set())
+            }
+            reachedBy.get(law).add(run.program)
+        }
+    }
+    const declared = new Set(library.rules.map((rule) => rule.symbol))
+    const undeclared = [...reachedBy.keys()].filter((law) => !declared.has(law)).sort()
+
+    const rows = library.rules
+        .map((rule) => {
+            const by = [...(reachedBy.get(rule.symbol) || [])].sort()
+            let reason
+            if (by.length === 0) {
+                reason = 'no program states it'
+            } else if (
+                by.every((program) => program.startsWith('test/') && namesLaw(program, rule.symbol))
+            ) {
+                reason = 'reached only by a test that names it'
+            } else {
+                reason = 'reached'
+            }
+            return { ...rule, reason, programs: by, witness: by[0] || '-' }
+        })
+        .sort((left, right) => (left.symbol < right.symbol ? -1 : left.symbol > right.symbol ? 1 : 0))
+
+    const header = [
+        '# Which law a program applied, out of every law the rulesets declare.',
+        '#',
+        '# Generated by `node scripts/vjp-parity.mjs --reaches --write`. Do not edit: the same',
+        '# command without `--write` recomputes the table, compares it with this file and names every',
+        '# row that moved. Re-running it at the same tree reproduces these bytes.',
+        '#',
+        '# The law set: every `rule` of src/stdlib/rulesets/*.cml, the same read `--closure` uses.',
+        `# The corpus: every .cml under ${CORPUS_ROOTS.join(', ')}, run once with`,
+        '#   `--trace transforms` at the default pass. A program reaches a law when its trace printed',
+        '#   `LAW_APPLIED {...,"law":"<symbol>",...}` (src/stdlib/transforms/law_readings.h).',
+        '#',
+        '# reason, for the row\'s law:',
+        '#   reached                     a program applied it and at least one of those programs names',
+        '#                               no law of its own -- an example, a showcase, a benchmark, or a',
+        '#                               test that walks it as part of what it pins.',
+        '#   reached only by a test      every program that applied it is a test, and every one of',
+        '#     that names it              them names the law in its text or in the plan entry that',
+        '#                               runs it.',
+        '#   no program states it        no program in the corpus applied it.',
+        '#',
+        '# The columns are the law, the key the compiler files it under, the ruleset that declares it,',
+        '# the reason, how many programs applied it, and the first of those in path order.',
+        'law\tkey\truleset\treason\tprograms\twitness',
+    ]
+
+    const body = rows.map(
+        (row) =>
+            `${row.symbol}\t${row.key}\t${row.file}\t${row.reason}\t${row.programs.length}\t${row.witness}`
+    )
+    const table = header.concat(body).join('\n') + '\n'
+
+    const counts = {
+        reached: rows.filter((row) => row.reason === 'reached').length,
+        named: rows.filter((row) => row.reason === 'reached only by a test that names it').length,
+        none: rows.filter((row) => row.reason === 'no program states it').length,
+    }
+    const silent = runs.filter((run) => run.code !== 0).length
+    // The rows that are not `reached` are the ones a reader acts on, so they print in full; the
+    // reached ones print last and as a sample, because a count of them is not evidence that the
+    // reading discriminates, and eight named laws with the program that applied each are.
+    const reachedRows = rows.filter((row) => row.reason === 'reached')
+    const shown =
+        ALL_ROWS || LIMIT !== null
+            ? rows
+            : [...rows.filter((row) => row.reason !== 'reached'), ...reachedRows.slice(0, 8)]
+
+    for (const row of shown) {
+        console.log(
+            `  ${row.reason}: ${row.symbol} (${row.key}) set by ${row.file}` +
+                (row.programs.length > 0
+                    ? `, ${row.programs.length} program(s), first ${row.witness}`
+                    : '')
+        )
+    }
+    for (const law of undeclared) {
+        console.log(
+            `  a LAW_APPLIED names '${law}', which no ruleset declares: the reader and the walk ` +
+                `spell the law differently, so no row here is that law's`
+        )
+    }
+
+    if (process.argv.includes('--write')) {
+        const file = path.join(ROOT, COVERAGE_TABLE)
+        fs.mkdirSync(path.dirname(file), { recursive: true })
+        fs.writeFileSync(file, table, 'utf8')
+        console.log(
+            `wrote ${COVERAGE_TABLE}: ${rows.length} row(s) -- ${counts.reached} reached, ` +
+                `${counts.named} reached only by a test that names it, ${counts.none} no program ` +
+                `states it`
+        )
+        console.log(
+            `corpus ${corpus.length} of ${totalPrograms} program(s), ${runsAtOnce} at a time, ` +
+                `${silent} run(s) exited non-zero (a case that dies still reports what it applied)`
+        )
+        process.exit(0)
+    }
+
+    const committedPath = path.join(ROOT, COVERAGE_TABLE)
+    if (!fs.existsSync(committedPath)) {
+        console.log(
+            `no ${COVERAGE_TABLE} in the tree: this run computed ${rows.length} row(s) and wrote ` +
+                `nothing (--write writes it). ${corpus.length} of ${totalPrograms} program(s) ran, ` +
+                `${counts.reached} reached, ${counts.named} reached only by a test that names it, ` +
+                `${counts.none} no program states it`
+        )
+        process.exit(2)
+    }
+    const committed = fs.readFileSync(committedPath, 'utf8')
+    if (committed !== table) {
+        const before = committed.split('\n')
+        const after = table.split('\n')
+        const at = before.findIndex((line, index) => line !== after[index])
+        console.log(
+            `FAIL ${COVERAGE_TABLE} is not what the corpus says: first difference at line ${at + 1}`
+        )
+        console.log(`  the tree: ${JSON.stringify(before[at] ?? '')}`)
+        console.log(`  this run: ${JSON.stringify(after[at] ?? '')}`)
+        process.exit(1)
+    }
+    console.log(
+        `PASS the corpus reached every law the way ${COVERAGE_TABLE} says: ${rows.length} law(s), ` +
+            `${counts.reached} reached, ${counts.named} reached only by a test that names it, ` +
+            `${counts.none} no program states it (${corpus.length} program(s), ${runsAtOnce} at a time)`
+    )
+    process.exit(0)
 }
 
 const engine = readEngine()
