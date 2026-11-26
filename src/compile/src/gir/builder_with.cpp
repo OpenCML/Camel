@@ -302,6 +302,20 @@ node_handle_t Builder::visitAccsNode(const GCT::node_ptr_t &gct) {
     ENTER("ACCS");
     node_handle_t tgtNode = valueNodeOf(visit(gct->at(0)));
     GUARD(tgtNode != nullptr, "Access node target is null.");
+    // One declaration, one answer. A destructuring declaration (`let (a, b) = x`) writes one access
+    // node per name, all at the declaration's own position, and each of them is a statement of the
+    // declaration's own scope -- so a refusal written at every one of them says the same sentence,
+    // at the same place, once per name (`let (dx, dy) = linear` was two `TypeNotIndexable`s, word
+    // for word). What is refused here is the value the declaration takes apart, not the name that
+    // asks for it, so the first name answers and the names after it are refused silently: the
+    // build fails the same way, and the program is told the one thing that is wrong with it. The
+    // tuple count below answers its own refusal this way already.
+    //
+    // `names` is how many names the declaration wrote, 0 for an access that is not a destructuring
+    // (`t.0`, `p.name`), which always answers.
+    const auto *accsTree   = GCT::Tree::of(gct);
+    const size_t names     = accsTree != nullptr ? accsTree->unpackCount(gct) : 0;
+    const bool firstAnswer = names == 0 || gct->accessIndex() == 0;
     if (EnumType *enumType = asEnumType(nodeTypeOf(tgtNode))) {
         // A value of an enum has the fields of the variant it is, and which one that is the
         // compiler does not know (design principles 3.8, 5.3): they are taken out by matching.
@@ -315,18 +329,22 @@ node_handle_t Builder::visitAccsNode(const GCT::node_ptr_t &gct) {
                 break;
             }
         }
-        diags_->of(SemanticDiag::EnumFieldAccess)
-            .atOrigin(gct->origin())
-            .commit(
-                gct->accessByIndex() ? std::to_string(gct->accessIndex()) : gct->accessKey(),
-                enumType->toString(),
-                example);
+        if (firstAnswer) {
+            diags_->of(SemanticDiag::EnumFieldAccess)
+                .atOrigin(gct->origin())
+                .commit(
+                    gct->accessByIndex() ? std::to_string(gct->accessIndex()) : gct->accessKey(),
+                    enumType->toString(),
+                    example);
+        }
         throw BuildAbortException();
     }
     if (!nodeTypeOf(tgtNode)->isComposite()) {
-        diags_->of(SemanticDiag::TypeNotIndexable)
-            .atOrigin(gct->origin())
-            .commit(nodeTypeOf(tgtNode)->toString());
+        if (firstAnswer) {
+            diags_->of(SemanticDiag::TypeNotIndexable)
+                .atOrigin(gct->origin())
+                .commit(nodeTypeOf(tgtNode)->toString());
+        }
         throw BuildAbortException();
     }
 
@@ -335,17 +353,17 @@ node_handle_t Builder::visitAccsNode(const GCT::node_ptr_t &gct) {
     if (asTagged(tgtType) != nullptr) {
         // A `T?` / `T!` has the layout of a tuple and is not one: its parts are reached by
         // `??`, `!!`, `->` and `match` only (design principles 3.9).
-        diags_->of(SemanticDiag::TaggedValueNotOpened)
-            .atOrigin(gct->origin())
-            .commit(tgtType->toString(), "a member cannot be read from it");
+        if (firstAnswer) {
+            diags_->of(SemanticDiag::TaggedValueNotOpened)
+                .atOrigin(gct->origin())
+                .commit(tgtType->toString(), "a member cannot be read from it");
+        }
         throw BuildAbortException();
     }
 
     switch (tgtType->code()) {
     case TypeCode::Tuple: {
         const auto &tupleType = tt::as_ptr<TupleType>(tgtType);
-        const auto *gctTree   = GCT::Tree::of(gct);
-        const size_t names    = gctTree != nullptr ? gctTree->unpackCount(gct) : 0;
         // A destructuring declaration binds one name per element: `let (x, y) = t` needs a tuple of
         // two, whichever way the count is wrong (design principles 3.9). Reported here, at the
         // declaration, and not as an element read past the end -- a name too few would drop the
@@ -371,9 +389,11 @@ node_handle_t Builder::visitAccsNode(const GCT::node_ptr_t &gct) {
         // `.N` reads a tuple element and `.name` a struct field. On an array no back end
         // implements either: the array was read as if it were a tuple, without a bounds
         // check, and the program printed whatever was there. An element is read with `[N]`.
-        diags_->of(SemanticDiag::TypeNotIndexable)
-            .atOrigin(gct->origin())
-            .commit(tgtType->toString());
+        if (firstAnswer) {
+            diags_->of(SemanticDiag::TypeNotIndexable)
+                .atOrigin(gct->origin())
+                .commit(tgtType->toString());
+        }
         throw BuildAbortException();
     }
     case TypeCode::Struct: {
@@ -407,9 +427,11 @@ node_handle_t Builder::visitAccsNode(const GCT::node_ptr_t &gct) {
         // asks a function for its element is a program with a mistake in it, and it is told which
         // type it asked (the split ABI in test/cases/transforms reaches
         // it).
-        diags_->of(SemanticDiag::TypeNotIndexable)
-            .atOrigin(gct->origin())
-            .commit(tgtType->toString());
+        if (firstAnswer) {
+            diags_->of(SemanticDiag::TypeNotIndexable)
+                .atOrigin(gct->origin())
+                .commit(tgtType->toString());
+        }
         throw BuildAbortException();
     }
 

@@ -2497,9 +2497,10 @@ refinedArg                = refineExtentNodeOf(
             // A write is a `var` argument like any other, but the assignment operator is the write
             // itself: it does not exist after the call, so it cannot carry the cell away. It is
             // remembered apart from the real escapes (a closure capturing the variable, a user
-            // function's `var` parameter) so that the SSA fold can tell "kept a resource because it
-            // is written" from "kept a resource because it leaves the body". Which operators are
-            // writes is `core::isAssignmentUri`, the answer the table's family bit is set from.
+            // function's `var` parameter) so that the fold that collapses a `var` which does not
+            // escape can tell "kept a resource because it is written" from "kept a resource because
+            // it leaves the body". Which operators are writes is `core::isAssignmentUri`, the
+            // answer the table's family bit is set from.
             const bool writeOperator =
                 targetOperator != nullptr && camel::core::isAssignmentUri(targetOperator->uri());
             if (writeOperator) {

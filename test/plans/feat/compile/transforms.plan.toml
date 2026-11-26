@@ -1639,6 +1639,15 @@ expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::TypeNotIndexable"
 expect_diagnostic_line = 28
 expect_output_contains = ["SemanticDiag::TypeNotIndexable", "does not support index access"]
+# One declaration answers once. `let (dx, dy) = linear` names two values a function cannot give up,
+# and the front end writes one access node per name, every one of them at the declaration's own
+# position -- so the refusal used to be reported twice, word for word, at 28:5. Two would still pass
+# the name and line assertions above, so the count is asserted here.
+verify_script = """
+assert(input.diagnostics.length === 1,
+       `one declaration, one answer; got ${input.diagnostics.length}: ` +
+       input.diagnostics.map(d => `${d.name} at ${d.line}:${d.column}`).join(', '))
+"""
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 20000
 
