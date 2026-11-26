@@ -1304,6 +1304,16 @@ void Builder::orderEffectsOnOneResourceIn(DraftGraphBuilder *graph) {
             for (const ResourceKey &key : named.keys) {
                 const auto found = block.open.find(key.key);
                 if (found == block.open.end()) {
+                    // The first effect on this resource in the block: it has nothing to be ordered
+                    // after, and it is the access that stands for the resource until something that
+                    // must follow it is written. Leaving it out would let the next effect on the
+                    // resource find no predecessor and take no edge to it.
+                    block.open.emplace(
+                        key.key,
+                        std::vector<OpenAccess>{OpenAccess{
+                            .node      = stands,
+                            .mode      = key.mode,
+                            .modifiers = key.modifiers}});
                     continue;
                 }
                 std::vector<OpenAccess> keep;
