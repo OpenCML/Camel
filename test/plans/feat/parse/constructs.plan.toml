@@ -170,6 +170,25 @@ expect_stdout_not_contains = ["readonly"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 
 [[tests]]
+name = "constructs.resource_modifiers_all_words"
+desc = "The five words a resource declaration may write after its name (design principles 3.3, the resource effect system): `unordered`, `idempotent`, `overwriting`, `readonly` and `observed`. `camel inspect --ast` prints each declaration with the word it wrote, and `cell_v` wrote `overwriting idempotent` while the tree prints its words in the canonical order (`idempotent overwriting`), so the reading says the words are a set and the order is the tree's. `overwriting` with `idempotent` is a combination the semantic layer accepts: a write that replaces an earlier one satisfies idempotence by construction."
+kind = "behavior"
+case = "../../../cases/effects/resource_modifier_words.cml"
+args = ["${inspect_ast}", "${case}"]
+expect_exit = 0
+expect_stdout_contains = ["ResourceDecl: queue unordered", "ResourceDecl: ledger idempotent", "ResourceDecl: cell_v idempotent overwriting", "ResourceDecl: geometry readonly", "ResourceDecl: trace observed"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+
+[[tests]]
+name = "constructs.resource_modifiers_all_words_run"
+desc = "The case of `constructs.resource_modifiers_all_words` compiles and runs: five declarations with the five words, one of them carrying two, are a program and print its value. The words are about what a pass may do with the effects on the resource, not about the values the program computes, so nothing about the output changes."
+kind = "behavior"
+case = "../../../cases/effects/resource_modifier_words.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_contains = ["42"]
+
+[[tests]]
 name = "constructs.resource_modifier_not_in_the_graph"
 desc = "Where the modifier is *not* seen, recorded so nobody reads its absence as a regression: `std::gir` prints the graph, and a resource declaration is not a node of it -- the dump names operators, ports, regions and exits, and says nothing about a resource or its modifier. So a `graph readonly` declaration reaches `std::gir` as the same graph as `graph` with no modifier, and the declaration's own reading is `camel inspect --ast` (`constructs.resource_modifier_in_ast`). This entry fails if the graph dump ever starts carrying declarations, which is the point: then the two readings have to agree on purpose."
 kind = "behavior"

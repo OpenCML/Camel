@@ -128,16 +128,106 @@ inline bool writes(AccessMode mode) { return mode != AccessMode::Read; }
 /// stands for. Every place that unites two uses of one resource reads this one rule.
 AccessMode uniteAccess(AccessMode left, AccessMode right);
 
+/// The modifiers a resource declaration writes (design principles 3.3, "资源修饰词说明写满足哪些
+/// 等式"; the framework is docs/design/effects/README.cn.md). They say which of the four equalities
+/// an access to the resource satisfies, so a pass can decide what it may do with the access without
+/// knowing the operator: `unordered` (a write commutes with a write), `idempotent` (the same write
+/// twice is one), `overwriting` (a later write replaces an earlier one), `readonly` (no access ever
+/// writes it) and `observed` (only written, and in the semantics writing it is nothing at all).
+///
+/// **One record per resource, whichever entry states it.** A module's `resource` declaration and
+/// the C++ side that registers the resource fill the same struct, and `resourceIdentities` compares
+/// the two as text, so an entry that says `unordered` where the other says nothing is a mismatch
+/// rather than a spelling difference (builder_modules.cpp#resourceIdentities). Anything that needs
+/// to know what a resource grants asks `equalitiesOf` or `commute` below rather than reading a
+/// word.
+struct ResourceModifiers {
+    bool unordered   = false;
+    bool idempotent  = false;
+    bool overwriting = false;
+    bool readonly    = false;
+    bool observed    = false;
+
+    bool any() const { return unordered || idempotent || overwriting || readonly || observed; }
+    bool operator==(const ResourceModifiers &) const = default;
+};
+
+/// A combination of modifiers the design page refuses ("组合"): two words that cannot both hold of
+/// one resource. `overwriting` with `idempotent` is not one of them: a write that replaces an
+/// earlier one satisfies idempotence by construction, so writing both states nothing contradictory.
+enum class ResourceModifierConflict : uint8_t {
+    None,
+    /// `unordered` + `overwriting`: two writes would both be swappable and leave only the later
+    /// one, which forces the two writes to be equal -- a promise no resource can keep.
+    UnorderedOverwriting,
+    /// `readonly` + a word of a write (`unordered`, `idempotent`, `overwriting`): a resource
+    /// nothing writes has no write for a write equality to describe.
+    ReadonlyWritten,
+    /// `observed` + `readonly`: something only read has nothing to observe.
+    ObservedReadonly,
+};
+
+/// The conflict the words hold, or `None` when they agree. The one place the answer is computed:
+/// the declaration builder reports what this returns, and no reader decides for itself which
+/// combinations are impossible.
+ResourceModifierConflict conflictOf(const ResourceModifiers &modifiers);
+
+/// The two words a conflict is about, for a report ("unordered" and "overwriting", or "readonly"
+/// and the write word the statement wrote); both empty for `None`.
+struct ResourceModifierConflictWords {
+    std::string_view first;
+    std::string_view second;
+};
+ResourceModifierConflictWords
+conflictWords(const ResourceModifiers &modifiers, ResourceModifierConflict conflict);
+
+/// The text a declaration writes, in one canonical order (the order `camel inspect --resources`
+/// lists them): " unordered", " idempotent overwriting" and so on, each word preceded by a space,
+/// empty for no modifiers. A canonical order is what makes two entries comparable as text.
+std::string toString(const ResourceModifiers &modifiers);
+
+/// The union of two statements about one resource: a word holds if either statement says it.
+/// Written once so that a reader uniting a call's ambient use with a declaration's record cannot
+/// invent a different rule.
+ResourceModifiers uniteModifiers(const ResourceModifiers &left, const ResourceModifiers &right);
+
+/// What one access may do, given the resource's words and whether the access writes (design
+/// effects README, "四条等式"): `discard` -- its value may go unused, so the access may be deleted;
+/// `copy` -- two identical accesses amount to one; `commute` -- it may be ordered either way
+/// against another access to this resource; `erase` -- in the semantics it is nothing at all.
+///
+/// **The one place the four are computed.** A pass that deletes, merges or reorders asks this; it
+/// does not read a word and decide for itself (design principles 3.3: 遍问的是资源声明里的等式).
+struct ResourceEqualities {
+    bool discard = false;
+    bool copy    = false;
+    bool commute = false;
+    bool erase   = false;
+
+    bool operator==(const ResourceEqualities &) const = default;
+};
+
+/// The equalities of one access. A read satisfies discard, copy and commute and never erases; a
+/// write satisfies none of them except what the resource's words grant, which is what makes "a read
+/// is a dependency, a write is an effect" (design principles 3.3) one statement.
+ResourceEqualities equalitiesOf(const ResourceModifiers &modifiers, AccessMode mode);
+
+/// Whether two accesses to one resource may be ordered either way: a read commutes with a read; a
+/// write commutes with a write only on an `unordered` resource; a read and a write never commute
+/// (`unordered` lets writes swap, not a read and a write -- a read must see the writes before it).
+/// The builder's ordering and the runtime's conflict query both ask this.
+bool commute(const ResourceModifiers &modifiers, AccessMode left, AccessMode right);
+
 struct ResourceAccess {
     Resource resource;
     ResourceBinding binding;
     ResourceRegion region;
     AccessMode mode = AccessMode::ReadModifyWrite;
-    /// The resource is declared `unordered` (design principles 3.3: `resource net unordered`), so
-    /// how two effects on it are written keeps no order: the builder writes no order edge between
-    /// them and they may run at the same time. The declaring library promises that the order does
-    /// not matter; where it does, the calls go in a `sync` block or through a handle.
-    bool unordered = false;
+    /// What the resource's declaration says about it (ResourceModifiers above); empty for a
+    /// resource no declaration names (a handle, a `var` cell, the conservative global reading). How
+    /// two effects on it are written follows from this record through `commute`, not from a flag
+    /// kept beside it.
+    ResourceModifiers modifiers;
 
     bool operator==(const ResourceAccess &) const = default;
 };
@@ -237,9 +327,10 @@ struct ResourceSignature {
     struct AmbientUse {
         std::string name;
         AccessMode mode = AccessMode::ReadModifyWrite;
-        /// The ambient resource is declared `unordered` (ResourceAccess::unordered): effects on
-        /// it keep no written order, so no order edge joins two of them.
-        bool unordered = false;
+        /// What the resource's declaration says (ResourceAccess::modifiers): how two effects on it
+        /// are written follows from this record through `commute`, so no order edge joins two that
+        /// commute.
+        ResourceModifiers modifiers;
 
         bool operator==(const AmbientUse &) const = default;
     };
@@ -376,17 +467,17 @@ std::string toString(const ResourceSignature &signature);
 /// An access to the resource named by the ordinary operand `operand`, whole.
 ResourceAccess
 operandAccess(ResourceClass cls, uint8_t operand, AccessMode mode, std::string name = {});
-/// An access to the ambient resource `name`.
-ResourceAccess ambientAccess(std::string name, AccessMode mode);
+/// An access to the ambient resource `name`, stating what its declaration says about it.
+ResourceAccess ambientAccess(std::string name, AccessMode mode, ResourceModifiers modifiers = {});
 /// The spec of an operator whose one touch is the ambient resource `name`, with an effect
 /// visible outside the program: a file system call, the console, the clock, a generator.
 ResourceSpec externalAmbient(std::string name, AccessMode mode);
-/// The same for an ambient resource the module declares `unordered` (design principles 3.3): the
-/// effects on it keep no written order, so the builder writes no order edge between two of them
-/// and a scheduler may run them at the same time. The declaration is the module's promise that
-/// the order does not matter; it is the language's own word for it in `stdlib/<module>.cml`
-/// (`resource net unordered`), and the two have to agree (builder_modules.cpp#resourceIdentities).
-ResourceSpec externalUnorderedAmbient(std::string name, AccessMode mode);
+/// The same for an ambient resource whose declaration writes modifiers (design principles 3.3):
+/// `resource net unordered` in `stdlib/<module>.cml` states the same record the C++ side passes
+/// here, and the two have to agree as text (builder_modules.cpp#resourceIdentities). A resource the
+/// C++ side registers as `unordered` while its declaration says nothing -- or the reverse -- is a
+/// mismatch, which is what makes the two entries one record instead of two opinions.
+ResourceSpec externalAmbient(std::string name, AccessMode mode, const ResourceModifiers &modifiers);
 
 /// The conservative reading of an operator that declares no access list (design principles 3.3:
 /// an operator that declares nothing is taken to use the "global" resource, which keeps it in

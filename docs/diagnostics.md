@@ -15,7 +15,7 @@ prints one entry.
 - **Message, help.** The templates; `{0}`, `{1}`, ... are filled in by the report.
 - **Example.** A program of the test suite that raises the diagnostic, where one is small enough to show.
 
-329 diagnostics: 307 errors, 22 warnings. 14 carry a machine-applicable edit, 315 say why they carry none.
+332 diagnostics: 310 errors, 22 warnings. 14 carry a machine-applicable edit, 318 say why they carry none.
 
 | Code | Name | Severity | Edit |
 |------|------|----------|------|
@@ -283,6 +283,9 @@ prints one entry.
 | `0x03000218` | [SemanticDiag::OperatorAccessesUndeclared](#operatoraccessesundeclared) | Error | no |
 | `0x03000219` | [SemanticDiag::OperatorSignatureUnresolved](#operatorsignatureunresolved) | Error | no |
 | `0x0300021A` | [SemanticDiag::ConversionNeededWhereTheCompilerWouldInsertOne](#conversionneededwherethecompilerwouldinsertone) | Error | no |
+| `0x0300021B` | [SemanticDiag::UnorderedOverwritingResource](#unorderedoverwritingresource) | Error | no |
+| `0x0300021C` | [SemanticDiag::ReadonlyWriteModifier](#readonlywritemodifier) | Error | no |
+| `0x0300021D` | [SemanticDiag::ObservedReadonlyResource](#observedreadonlyresource) | Error | no |
 | `0x03100002` | [SemanticDiag::IgnoredSideEffect](#ignoredsideeffect) | Warn | no |
 | `0x03100090` | [SemanticDiag::ExitInUnusedBranch](#exitinunusedbranch) | Warn | no |
 | `0x031000C0` | [SemanticDiag::UnusedFallibleValue](#unusedfalliblevalue) | Warn | no |
@@ -9464,6 +9467,117 @@ A step the compiler inserts to make two types meet always succeeds (design princ
 func main() => float {
     let x = enter::<int, float>(1)
     return x
+}
+```
+
+### UnorderedOverwritingResource
+
+`0x0300021B` · Error · `SemanticDiag::UnorderedOverwritingResource`
+
+**Fix**
+
+None: choice: the two words cannot both hold, and which one changes is the intent
+
+**Message**
+
+```text
+The resource '{0}' is declared both 'unordered' and 'overwriting'.
+```
+
+**Help**
+
+```text
+`unordered` says two writes to the resource may be swapped; `overwriting` says that of two writes only the later one is left. Both together force the two writes to be equal, whatever values the program writes, so the declaration promises something no resource can keep (design principles 3.3, the combinations the resource effect system refuses). Drop one of the two words: keep `unordered` when the writes may in fact be swapped, and `overwriting` when the later write replaces the earlier one.
+```
+
+**Example** (`test/cases/effects/err_resource_unordered_overwriting.cml`, run as `camel test/cases/effects/err_resource_unordered_overwriting.cml`)
+
+```camel
+// A resource cannot be both `unordered` and `overwriting` (design principles 3.3, the combinations
+// the resource effect system refuses): `unordered` says two writes to it may be swapped, and
+// `overwriting` says that of two writes only the later one is left. Both together force the two
+// writes to be equal, whatever values the program writes, so the declaration promises something no
+// resource can keep. The declaration is refused where it is written
+// (UnorderedOverwritingResource).
+
+resource cell_v unordered overwriting
+
+func main() => int {
+    println(42)
+    return 0
+}
+```
+
+### ReadonlyWriteModifier
+
+`0x0300021C` · Error · `SemanticDiag::ReadonlyWriteModifier`
+
+**Fix**
+
+None: choice: the write word and the declaration cannot both stand
+
+**Message**
+
+```text
+The resource '{0}' is declared 'readonly' and '{1}'.
+```
+
+**Help**
+
+```text
+'{1}' describes how writes to the resource behave: that they may be swapped, that repeating one is the same as doing it once, or that a later one replaces an earlier one. A `readonly` resource is never written, so there is no write for the word to describe and the two statements cannot both hold (design principles 3.3). Drop '{1}', or drop 'readonly' if the program writes the resource.
+```
+
+**Example** (`test/cases/effects/err_resource_readonly_write_word.cml`, run as `camel test/cases/effects/err_resource_readonly_write_word.cml`)
+
+```camel
+// `readonly` with a word of a write (design principles 3.3, the combinations the resource effect
+// system refuses): `idempotent` describes how writes to the resource behave, and a resource nothing
+// writes has no write for the word to describe, so the two statements cannot both hold. The
+// declaration is refused where it is written (ReadonlyWriteModifier), and the report names the
+// write word the author wrote.
+
+resource geometry readonly idempotent
+
+func main() => int {
+    println(42)
+    return 0
+}
+```
+
+### ObservedReadonlyResource
+
+`0x0300021D` · Error · `SemanticDiag::ObservedReadonlyResource`
+
+**Fix**
+
+None: choice: the two words cannot both hold
+
+**Message**
+
+```text
+The resource '{0}' is declared both 'observed' and 'readonly'.
+```
+
+**Help**
+
+```text
+An `observed` resource is written so a person watching the run sees the value; a `readonly` resource is never written, so there is nothing to observe (design principles 3.3, the resource effect system's combinations). Drop one of the two words.
+```
+
+**Example** (`test/cases/effects/err_resource_observed_readonly.cml`, run as `camel test/cases/effects/err_resource_observed_readonly.cml`)
+
+```camel
+// `observed` with `readonly` (design principles 3.3, the combinations the resource effect system
+// refuses): an `observed` resource is written so a person watching the run sees the value, and a
+// `readonly` resource is never written, so there is nothing to observe. The declaration is refused
+// where it is written (ObservedReadonlyResource).
+
+resource trace observed readonly
+
+func main() => int {
+    println(42)
+    return 0
 }
 ```
 

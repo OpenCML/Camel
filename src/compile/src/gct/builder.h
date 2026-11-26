@@ -246,12 +246,12 @@ class Builder {
     struct AmbientEntry {
         std::string key;
         bool external = false;
-        /// The resource is declared `unordered` (design principles 3.3): effects on it keep no
-        /// written order.
-        bool unordered = false;
-        /// The resource is declared `readonly` (design principles 9.12, 15.5): a clause may read
-        /// it, and one that writes it is refused.
-        bool readonly = false;
+        /// What the resource's declaration says about it (design principles 3.3, the resource
+        /// effect system): the words a `resource` declaration wrote, empty for a resource no
+        /// declaration names. A clause naming this resource keeps the record, so the signature it
+        /// publishes and the C++ entry that registers the resource are compared as one record
+        /// (builder_modules.cpp#resourceIdentities).
+        sem::ResourceModifiers modifiers;
     };
     /// The resources a function type's `uses`/`pure` clause publishes (design effects plan 3.1),
     /// in the numbering of `built`: parameters by class (a handle type a Handle, a `var` a

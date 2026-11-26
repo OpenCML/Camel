@@ -1,0 +1,11 @@
+// `observed` with `readonly` (design principles 3.3, the combinations the resource effect system
+// refuses): an `observed` resource is written so a person watching the run sees the value, and a
+// `readonly` resource is never written, so there is nothing to observe. The declaration is refused
+// where it is written (ObservedReadonlyResource).
+
+resource trace observed readonly
+
+func main() => int {
+    println(42)
+    return 0
+}

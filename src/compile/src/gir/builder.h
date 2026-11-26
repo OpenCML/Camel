@@ -2803,7 +2803,7 @@ class Builder {
         camel::core::sem::AccessMode mode) const;
     void addAmbientUse(
         BodyReach &walk, const std::string &name, camel::core::sem::AccessMode mode,
-        bool unordered = false) const;
+        const camel::core::sem::ResourceModifiers &modifiers = {}) const;
     // A use of a value this body captured, read onto the body itself (design principles 3.3,
     // effect masking): the resource may be a variable of a module's top level, a capture of an
     // enclosing function, or a cell this body made, which no caller can reach. False when the walk

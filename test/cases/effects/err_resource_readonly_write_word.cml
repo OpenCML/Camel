@@ -1,0 +1,12 @@
+// `readonly` with a word of a write (design principles 3.3, the combinations the resource effect
+// system refuses): `idempotent` describes how writes to the resource behave, and a resource nothing
+// writes has no write for the word to describe, so the two statements cannot both hold. The
+// declaration is refused where it is written (ReadonlyWriteModifier), and the report names the
+// write word the author wrote.
+
+resource geometry readonly idempotent
+
+func main() => int {
+    println(42)
+    return 0
+}

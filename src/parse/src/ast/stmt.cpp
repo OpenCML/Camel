@@ -93,10 +93,24 @@ const std::string ResourceDeclLoad::toString() const {
             result += (i > 0 ? ", " : "") + members_[i].toString();
         }
         result += "]";
-    } else if (unordered_) {
-        result += " unordered";
-    } else if (readonly_) {
-        result += " readonly";
+    } else {
+        // The words in one canonical order, the same order the declaration lists them in the
+        // modifier record: a dump of two statements that say the same thing reads the same.
+        if (unordered_) {
+            result += " unordered";
+        }
+        if (idempotent_) {
+            result += " idempotent";
+        }
+        if (overwriting_) {
+            result += " overwriting";
+        }
+        if (readonly_) {
+            result += " readonly";
+        }
+        if (observed_) {
+            result += " observed";
+        }
     }
     return result + docSuffix();
 }
@@ -112,8 +126,18 @@ const std::string ResourceDeclLoad::geneCode() const {
     }
     if (unordered_) {
         result += " unordered";
-    } else if (readonly_) {
+    }
+    if (idempotent_) {
+        result += " idempotent";
+    }
+    if (overwriting_) {
+        result += " overwriting";
+    }
+    if (readonly_) {
         result += " readonly";
+    }
+    if (observed_) {
+        result += " observed";
     }
     return result;
 }

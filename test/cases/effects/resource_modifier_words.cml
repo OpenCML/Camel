@@ -1,0 +1,25 @@
+/**
+ * The five words a resource declaration may write after its name (design principles 3.3, the
+ * resource effect system; docs/design/effects/README.cn.md): `unordered` (a write commutes with a
+ * write), `idempotent` (the same write twice is one), `overwriting` (a later write replaces an
+ * earlier one), `readonly` (nothing ever writes it) and `observed` (only written, and in the
+ * semantics writing it is nothing at all).
+ *
+ * Each declaration here writes one of them, and `cell_v` writes two: `overwriting idempotent` is a
+ * combination that stands, because a write that replaces an earlier one satisfies idempotence by
+ * construction, and the two words are written in that order while the tree prints them in the
+ * canonical order (`idempotent overwriting`), so the case also says the order is the tree's.
+ *
+ * `camel inspect --ast` prints every word, so a reading can tell each declaration from the others
+ * and from a declaration that wrote nothing.
+ */
+export resource queue unordered
+export resource ledger idempotent
+resource cell_v overwriting idempotent
+resource geometry readonly
+resource trace observed
+
+func main() => int {
+    println(42)
+    return 0
+}
