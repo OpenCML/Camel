@@ -162,6 +162,13 @@ window.__ModuleLoader__.load({
             const worst = alerts.some((a) => a.level === 'urgent') ? 'urgent' : alerts.some((a) => a.level === 'wake') ? 'wake' : alerts.length ? 'quiet' : 'ok'
             const lanesTone = lanes.running === undefined ? undefined : lanes.running < 6 ? 'wake' : 'ok'
             const unacked = (s.unacknowledged || []).length
+            // How long since the decision-maker last reached the channel. Its watch polls every few
+            // seconds and its scheduled check runs every twenty minutes, so an hour of silence means it
+            // is cut off, not merely idle; the owner sees that here without opening anything.
+            const dmSeen = s.decisionMaker && s.decisionMaker.lastSeen
+            const dmMinutes = dmSeen ? Math.round((Date.now() - dmSeen) / 60_000) : null
+            const dmText = dmMinutes === null ? '未连' : dmMinutes < 5 ? '在线' : `${dmMinutes} 分钟没连上`
+            const dmTone = dmMinutes === null ? undefined : dmMinutes >= 60 ? 'urgent' : dmMinutes >= 30 ? 'wake' : 'ok'
             // The branch gate: lanes waiting to be merged, and whether that holds new lanes back (the
             // gate is crossed exactly when its rule is among the open alerts).
             const branches = r.branches && r.branches.unmerged !== undefined ? r.branches : null
@@ -189,6 +196,7 @@ window.__ModuleLoader__.load({
                 h('div', { style: { display: 'flex', flexWrap: 'wrap', alignItems: 'center' } },
                     h('b', { style: { marginRight: 14 } }, 'Camel 协作'),
                     chip('协调者', s.target.status === 'running' ? '在跑' : '空闲', s.target.status === 'running' ? 'ok' : 'wake'),
+                    chip('决策者', dmText, dmTone),
                     chip('车道', lanes.running === undefined ? '—' : `${lanes.running}/${lanes.total}`, lanesTone),
                     chip('待合', branches ? `${branches.unmerged} 条${gateShut ? ' · 闸门关' : ''}` : '—', gateShut ? 'urgent' : 'ok'),
                     chip('develop', develop),

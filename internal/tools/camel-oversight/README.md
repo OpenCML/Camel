@@ -110,8 +110,9 @@ messages kept (`blockExempt` lists tool names that may run long).
 
 Every acknowledgement, message and reminder is kept (and rebuilt from the log at load), so a reader that
 lost the stream reconnects with `/oversee/events?since=<ms>` and receives what it missed. The decision-maker's
-client adds `client=dm` to its requests; after `dmOfflineMinutes` (45) without one, the coordinator is told
-to carry on without waiting. With no claim, a session working in the repository is told in its prompt that
+client adds `client=dm` to its requests; the band shows how long ago the last one came. After `dmOfflineMinutes`
+(60) without one, the coordinator is told to carry on without waiting, as an urgent reminder, so the owner also
+gets a toast that stays until clicked. With no claim, a session working in the repository is told in its prompt that
 the coordinator claims first. The full contingency table is in `internal/collab/SKILL.md`.
 
 ## Back-pressure

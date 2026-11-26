@@ -298,7 +298,8 @@ export const RULES = [
     },
     {
         id: 'decision-maker-offline',
-        level: 'quiet',
+        // Urgent so the owner sees it: an urgent reminder is a toast that stays until it is clicked.
+        level: 'urgent',
         hold: 0,
         cooldown: 120,
         check: ({ dmLastSeen, now, limits }) => {
@@ -338,7 +339,7 @@ export const DEFAULT_LIMITS = {
     promotionMinutes: 180,
     staleShown: 5,
     slotWaitMinutes: 30,
-    dmOfflineMinutes: 45,
+    dmOfflineMinutes: 60,
     stuckMinutes: 15,
     dayEndMinutes: 23 * 60 + 30,
 }
