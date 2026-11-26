@@ -5,7 +5,7 @@
 > 这一页由 `node scripts/check-doc-links.mjs --questions-index --write` 从目录生成，不要手改：
 > 规矩在 `internal/reviews/` 的裁定里，落没落地看代码和提交，不看这张表。
 
-## 现在在等作者：22 页
+## 现在在等作者：23 页
 
 | 页 | 问什么 |
 | --- | --- |
@@ -25,6 +25,7 @@
 | [`2026-11-27-does-a-pure-function-see-its-reads`](2026-11-27-does-a-pure-function-see-its-reads.cn.md) | 一个 `pure` 函数读资源，算不算“没有写”？两处口径需要作者裁 |
 | [`2026-11-27-fsh-dev-remote-script-line`](2026-11-27-fsh-dev-remote-script-line.cn.md) | 元层一行：`fsh-dev` 的 `camel-remote.ps1:2999` 让整批无法合入 |
 | [`2026-11-27-how-does-a-handle-type-name-become-visible-in-a-block`](2026-11-27-how-does-a-handle-type-name-become-visible-in-a-block.cn.md) | 块体里写 `Node` 这样的句柄类型名，要谁把它带进作用域 |
+| [`2026-11-27-is-a-rewrite-transaction-per-graph-or-per-program`](2026-11-27-is-a-rewrite-transaction-per-graph-or-per-program.cn.md) | 重写事务的作用域：一张图，还是整个程序 |
 | [`2026-11-27-is-a-top-level-var-a-compile-error`](2026-11-27-is-a-top-level-var-a-compile-error.cn.md) | 模块顶层的 `var` 是编译错误，还是模块的资源？ |
 | [`2026-11-27-should-a-forwarded-element-function-still-be-reported`](2026-11-27-should-a-forwarded-element-function-still-be-reported.cn.md) | 库里的包装转发元素函数之后，原地写的那个函数体还该不该报“丢弃了值” |
 | [`2026-11-27-should-a-module-renames-graph-identity-be-one-digest`](2026-11-27-should-a-module-renames-graph-identity-be-one-digest.cn.md) | 模块改名的“图身份”，该不该钉成整张图的摘要 |
