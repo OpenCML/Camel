@@ -10,8 +10,8 @@
 // draft, which must fault with the reason.
 //
 // The plan asserts the reason on **stdout**, and that is a transitional fact, not a decision: this
-// CLI prints a runtime fault on stdout today, and task-79 moves diagnostics to stderr. When it
-// lands, this plan's assertion moves with it -- the reason stays the same string, its stream does
+// CLI prints a runtime fault on stdout while diagnostics still go there. When they move to stderr,
+// this plan's assertion moves with them -- the reason stays the same string, its stream does
 // not, so do not read the current `expect_stdout_contains` as "the fault belongs on stdout".
 
 import { graph_of, open, effects } from graph
