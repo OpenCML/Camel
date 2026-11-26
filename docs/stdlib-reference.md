@@ -1625,7 +1625,7 @@ time; one of two racing saves fails, and a reader still sees a complete checkpoi
 #### `load_tree`
 
 ```camel
-load_tree: <dataset_manifest_sha256: string? = null> (dir: string) => T! panic uses fs, var stderr when has_ckpt_form::<T>()
+load_tree: <dataset_manifest_sha256: string? = null> (dir: string) => T! panic uses fs, var console when has_ckpt_form::<T>()
 ```
 
 Reads a tree of the type T back from a directory `save_tree` wrote, checking the structure, the
@@ -5365,7 +5365,7 @@ delete; a file or a symbolic link is an error too.
 ## `io`: terminal input
 
 The terminal as a keyboard: what has been typed and not yet read, the keys themselves, and raw
-mode. Reading is a use of the resource `stdin`, so reads and the changes of mode keep their
+mode. Reading is a use of the resource `console`, so reads and the changes of mode keep their
 written order. `input` reads a whole line after writing its prompt; writing to the terminal is
 the prelude's (`print`, `println`, `eprintln`).
 
