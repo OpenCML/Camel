@@ -5,7 +5,7 @@
 > 这一页由 `node scripts/check-doc-links.mjs --questions-index --write` 从目录生成，不要手改：
 > 规矩在 `internal/reviews/` 的裁定里，落没落地看代码和提交，不看这张表。
 
-## 现在在等作者：25 页
+## 现在在等作者：26 页
 
 | 页 | 问什么 |
 | --- | --- |
@@ -23,6 +23,7 @@
 | [`2026-11-26-a-block-name-need-not-sort-its-statements`](2026-11-26-a-block-name-need-not-sort-its-statements.cn.md) | 块的名字不必先给语句定序 |
 | [`2026-11-26-oper-uri-readings`](2026-11-26-oper-uri-readings.cn.md) | 算子「按编号认」还差两件事，缺哪一件由你定 |
 | [`2026-11-27-does-a-pure-function-see-its-reads`](2026-11-27-does-a-pure-function-see-its-reads.cn.md) | 一个 `pure` 函数读资源，算不算“没有写”？两处口径需要作者裁 |
+| [`2026-11-27-does-a-type-table-belong-to-a-context`](2026-11-27-does-a-type-table-belong-to-a-context.cn.md) | 类型表归谁：一个程序一份，还是进程一份？ |
 | [`2026-11-27-does-an-edit-blocks-root-need-a-module`](2026-11-27-does-an-edit-blocks-root-need-a-module.cn.md) | 一个 `edit`/`view` 块的根，要不要一个模块（它的组与模板从哪来） |
 | [`2026-11-27-fsh-dev-remote-script-line`](2026-11-27-fsh-dev-remote-script-line.cn.md) | 元层一行：`fsh-dev` 的 `camel-remote.ps1:2999` 让整批无法合入 |
 | [`2026-11-27-how-does-a-handle-type-name-become-visible-in-a-block`](2026-11-27-how-does-a-handle-type-name-become-visible-in-a-block.cn.md) | 块体里写 `Node` 这样的句柄类型名，要谁把它带进作用域 |
