@@ -1803,7 +1803,8 @@ any Formatter::visitRangeExpr(cst::RangeExpr context) {
 
 /*
 annoExpr
-    : accessExpr (({isAdjacent()}? (indices | parentArgues | angledValues | '!')) | memberAccess)*
+    : accessExpr (({isAdjacent()}? (indices | parentArgues | angledValues | bangExpr)) |
+memberAccess)*
     ;
 */
 any Formatter::visitAnnoExpr(cst::AnnoExpr context) {
@@ -1817,6 +1818,17 @@ any Formatter::visitAnnoExpr(cst::AnnoExpr context) {
         }
     }
     return result;
+}
+
+/*
+bangExpr
+    : '!'
+    ;
+*/
+any Formatter::visitBangExpr(cst::BangExpr context) {
+    // The mark goes back where it was: with no space before it and none after it, so `xs!` keeps
+    // reading as a take and `xs !` never becomes one.
+    return string("!");
 }
 
 /*
@@ -2362,6 +2374,7 @@ any Formatter::dispatch(syn::Node context) {
     case NK::PowerExpr:
         return formatBiOpsList(context, true);
         CAMEL_FORMAT(NullableExpr)
+        CAMEL_FORMAT(BangExpr)
         CAMEL_FORMAT(LinkExpr)
         CAMEL_FORMAT(RangeExpr)
         CAMEL_FORMAT(AnnoExpr)

@@ -108,7 +108,8 @@ enum class ReservedDataOp {
     Instantiate,
     Comp,    // `..`: the interval `[a, b)`
     Compose, // `<>`: the composition of two functions, and nothing else
-    As
+    As,
+    Unwrap // `x!`: the value out of a `T!`, whose failure is a fault
 };
 
 std::string to_string(DataType type);

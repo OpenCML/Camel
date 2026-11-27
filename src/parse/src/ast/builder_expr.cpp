@@ -1329,11 +1329,34 @@ Value Builder::visitAnnoExpr(cst::AnnoExpr context) {
                         "typeArg"));
                 }
                 registerAstSemanticBundle(exprNode, std::move(parts));
+            } else if (child.node().is(NK::BangExpr)) {
+                // `xs!`: the value out, and the failure it carries is a fault (design principles
+                // 3.9). The mark is the whole node, and it is where a report about the take points.
+                exprNode = createNodeAs<ReservedExprLoad>(ReservedDataOp::Unwrap);
+                setNodeTokenRangeByContext(exprNode, cst::BangExpr(child.node()));
+                *exprNode << lhsNode;
+                registerAstSemanticBundle(
+                    exprNode,
+                    {
+                        semanticPart(
+                            camel::source::SemanticRole::Operator,
+                            deriveAstAnchorOrigin(
+                                exprNode,
+                                cst::BangExpr(child.node())->firstToken(),
+                                "ast.unwrap.operator"),
+                            -1,
+                            "!"),
+                        semanticPart(
+                            camel::source::SemanticRole::Receiver,
+                            nodeOrigin(lhsNode),
+                            -1,
+                            "value"),
+                    });
             }
             lhsNode = exprNode;
         } else {
-            // Every shape of an `annoExpr` is read above; the postfix `!` is not one of them any
-            // more (the parser refuses it: the mark belongs to a `T!`, not to a value).
+            // Every shape of an `annoExpr` is read above, and the parser closes an `annoExpr` only
+            // over them: a child of any other shape is a defect here, not a shape to read.
             ASSERT(false, "an annoExpr child of another shape reached the builder");
         }
     }

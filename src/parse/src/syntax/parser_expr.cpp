@@ -401,15 +401,15 @@ void ParserImpl::parseNeg(bool underMinus) {
 }
 
 /// annoExpr : accessExpr (indices | parentArgues | structData | angledValues | typeArguments
-/// | memberAccess)*
+///  | memberAccess | '!')*
 /// memberAccess : '.' (IDENTIFIER | INTEGER | REAL | '[' dataExpr ']')
 /// Rule 1: an index, a call, an
 /// angle-bracket argument list and a member access touch the expression before them. For `<` the
 /// lexer has decided already (LAngle). `Shape::Rect { w: 2 }` is a struct variant construction:
 /// a struct literal follows a variant path, never a name that could be a value.
-/// The postfix `!` is not in the language: the mark `!` of a `T!` belongs to the type, and a
-/// value of that type is taken hold of with `!!`, `->` or `case error e`. A `!` after a value
-/// therefore fits nothing and is an ordinary syntax error.
+/// The postfix `!` is the suffix `!` of `x!` (design principles 3.9): with no space before it, the
+/// `!` after a value takes that value out of a `T!`, and the failure it carries becomes a fault.
+/// `x != y` and `x!!y` are untouched: `!=`, `!!` and `!==` are tokens of their own.
 void ParserImpl::parseAnno() {
     const size_t m = mark();
     bool any       = false;
@@ -423,6 +423,13 @@ void ParserImpl::parseAnno() {
     }
     while (!panic_) {
         if (adjacent()) {
+            if (cur_ == TK::Bang) {
+                const size_t mm = mark();
+                bump();
+                close(mm, NK::BangExpr);
+                any = true;
+                continue;
+            }
             if (cur_ == TK::ColonColon && (peek(1) == TK::Lt || peek(1) == TK::LAngle)) {
                 parseTypeArguments();
                 any = true;
