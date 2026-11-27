@@ -6709,7 +6709,7 @@ a program is immutable (design principles 3.3).
 #### `open`
 
 ```camel
-open: (f: F) => Graph when is_function::<F>()
+open: (f: F) => Draft<F> when is_function::<F>()
 ```
 
 Opens a function's graphs as a draft and gives the graph of the function itself: what an edit
@@ -6896,14 +6896,14 @@ creates may be live at a safepoint where its draft is not traced.
 #### `commit`
 
 ```camel
-commit: (d: Graph) => F!
+commit: (d: Draft<F>) => F! when is_function::<F>()
 ```
 
 Checks the edits and makes the changed function: the same type as the one that was opened, with
 the values it captured, sharing every graph nothing changed. The draft is over.
 
 - Failure: error value `GraphConflict` when a graph the draft touched changed since it was opened; error value `GraphInvalid` when an edit broke an invariant (the message names the graph, the node and the edge); error value `TxnUsed` when the draft was over already.
-- Example: `commit::<(x: int) => int>(open(func (x: int) => int { x + 1 }))`
+- Example: `commit(open(func (x: int) => int { x + 1 }))`
 
 #### `commit_of`
 
