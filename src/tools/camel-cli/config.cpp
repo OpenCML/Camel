@@ -649,33 +649,6 @@ bool rejectRetiredOptions(int argc, char *argv[]) {
     return true;
 }
 
-/// The option that carries a subcommand word. `camel explain <name>` is read as
-/// `--explain-command <name>`: the word is taken out of the command line before the parser sees
-/// it (parseArgs), because a clipp command matches a prefix of the token and would take a pass name
-/// such as `explain_pass::nothing` for the command `explain`. An option anchors the group of
-/// settings that belongs to its command, which a bare word that a run may also carry as a value
-/// does not.
-const char *commandFlagFor(std::string_view word) {
-    if (word == "docs") {
-        return "--docs-command";
-    }
-    if (word == "about") {
-        return "--about-command";
-    }
-    if (word == "zen") {
-        return "--zen-command";
-    }
-    if (word == "explain") {
-        return "--explain-command";
-    }
-    if (word == "check") {
-        return "--check-command";
-    }
-    if (word == "inspect") {
-        return "--inspect-command";
-    }
-    return nullptr;
-}
 /// The two places a run's collector and its spaces are set: `--gc
 /// kind=generational,nursery_mb=4,...` and `--spaces block_mb=2048,segment_kb=...`. Each word is
 /// one setting, named as the table lists it; a key neither knows is refused here rather than
@@ -925,6 +898,23 @@ bool parseArgs(int argc, char *argv[]) {
          opt_values("input", targetFiles) %
              "input file (optional if --input given; at least one required)");
 
+    // The subcommands, in the one table the three places that need them read: the word the command
+    // line is read by (below), the grammar group each one adds, and the usage line `--help` prints.
+    // A name added here is a subcommand in all three places at once.
+    struct Subcommand {
+        const char *name;  // the word, as the first argument of the command line
+        Command command;   // what the run is doing, once that word is the first argument
+        const char *usage; // the line `--help` prints for it
+    };
+
+    const Subcommand kSubcommands[] = {
+        {"docs", Command::Info, "camel docs [<module>...]"},
+        {"about", Command::Info, "camel about"},
+        {"zen", Command::Info, "camel zen"},
+        {"explain", Command::Info, "camel explain <name or code>"},
+        {"check", Command::Check, "camel check [options] <file>"},
+        {"inspect", Command::Inspect, "camel inspect [options] <file>"},
+    };
     // The information commands are subcommands, not options: they are not a setting of a run.
     // Each is its own group, so the first word of the command line decides which one it is.
     auto infoFlags =
@@ -933,23 +923,13 @@ bool parseArgs(int argc, char *argv[]) {
          option("-h", "--help").set(showHelp).set(selectedCommand, Command::Info) %
              "show this help message");
     auto docsCommand =
-        (option("--docs-command").set(showDocs).set(selectedCommand, Command::Info) %
-             "show the documentation of a module",
-         opt_values("module", docsModules) % "module whose documentation is shown (default: all)");
-    auto aboutCommand =
-        option("--about-command").set(showAbout).set(selectedCommand, Command::Info) %
-        "show copyright and related information";
-    auto zenCommand = option("--zen-command").set(showZen).set(selectedCommand, Command::Info) %
-                      "show the Zen of Camel";
-    auto explainCommand =
-        (option("--explain-command").set(selectedCommand, Command::Info) %
-             "describe a diagnostic by its name or code",
-         (value("name or code", Diag::explain) % "the diagnostic to describe"));
+        opt_values("module", docsModules) % "module whose documentation is shown (default: all)";
+    clipp::group aboutCommand;
+    clipp::group zenCommand;
+    auto explainCommand = value("name or code", Diag::explain) % "the diagnostic to describe";
 
     auto check =
-        (option("--check-command").set(selectedCommand, Command::Check) %
-             "check the code without running it (exit code 1 when an error is found)",
-         option("-i", "--lexical-only").set(lexical) %
+        (option("-i", "--lexical-only").set(lexical) %
              "lexical analysis only: report lexical errors and stop before parsing",
          option("-s", "--syntax-only").set(syntaxOnly) %
              "lexical and syntax analysis only: stop before names and types are checked",
@@ -962,8 +942,7 @@ bool parseArgs(int argc, char *argv[]) {
          values("input", targetFiles) % "input file");
 
     auto inspect =
-        (option("--inspect-command").set(selectedCommand, Command::Inspect) % "inspect the code",
-         joinable(
+        (joinable(
              option("-t", "-T").set(dumpTokens) % "dump tokens",
              option("-s", "-S").set(dumpCST) % "dump concrete syntax tree",
              option("-a", "-A").set(dumpAST) % "dump abstract syntax tree",
@@ -1017,26 +996,63 @@ bool parseArgs(int argc, char *argv[]) {
          globalOps,
          values("input", targetFiles) % "input file");
 
-    auto cli = docsCommand | aboutCommand | zenCommand | explainCommand | run | infoFlags | check |
-               inspect;
+    // The word is read before the grammar is built, so the groups are alternatives only where the
+    // command line has no word: a group that loses its command would otherwise fall back to a plain
+    // run, and its settings would be read as the ones of a run.
+    // A subcommand is the first word of the command line and only that: it is not a setting a run
+    // carries, so a word written after an option is refused with the sentence that says so instead
+    // of falling through to a run that then wants an input file.
+    const char *word = argc > 1 ? argv[1] : nullptr;
+    bool named       = false;
+    for (const Subcommand &sub : kSubcommands) {
+        if (word != nullptr && std::string_view(word) == sub.name) {
+            named           = true;
+            selectedCommand = sub.command;
+            break;
+        }
+    }
+    if (!named) {
+        word = nullptr;
+        for (int i = 2; i < argc; ++i) {
+            for (const Subcommand &sub : kSubcommands) {
+                if (std::string_view(argv[i]) == sub.name) {
+                    std::cerr << "Error: the subcommand '" << sub.name
+                              << "' is written first: 'camel " << sub.name
+                              << " <arguments>' takes no setting of a run before it." << std::endl;
+                    exitCode = 1;
+                    return false;
+                }
+            }
+        }
+    }
+
+    clipp::group cli;
+    if (word == nullptr) {
+        cli = run | infoFlags;
+    } else if (word == kSubcommands[0].name) {
+        showDocs = true;
+        cli      = docsCommand;
+    } else if (word == kSubcommands[1].name) {
+        showAbout = true;
+        cli       = aboutCommand;
+    } else if (word == kSubcommands[2].name) {
+        showZen = true;
+        cli     = zenCommand;
+    } else if (word == kSubcommands[3].name) {
+        cli = explainCommand;
+    } else if (word == kSubcommands[4].name) {
+        cli = check;
+    } else {
+        cli = inspect;
+    }
     startupMark("construct");
 
     std::vector<char *> args = takeWarningArguments(argc, argv);
+    if (word != nullptr && args.size() > 1) {
+        args.erase(args.begin() + 1); // the word is the command; what it governs follows it
+    }
     argc                     = static_cast<int>(args.size());
     argv                     = args.data();
-    // A subcommand answers to its whole word and to nothing else. The word is replaced here, before
-    // the parser runs, so a pass name that begins with one (`explain_pass::nothing`) stays a pass:
-    // only a token equal to the word is a command, and the rest of the command line is unchanged.
-    for (int i = 1; i < argc; ++i) {
-        const std::string_view token = args[i];
-        if (!token.empty() && token.front() == '-') {
-            continue;
-        }
-        if (const char *flag = commandFlagFor(token)) {
-            args[i] = const_cast<char *>(flag);
-        }
-        break;
-    }
     startupMark("warnings");
 
     const parsing_result parsed = parse(argc, argv, cli);
