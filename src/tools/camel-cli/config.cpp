@@ -649,6 +649,33 @@ bool rejectRetiredOptions(int argc, char *argv[]) {
     return true;
 }
 
+/// The option that carries a subcommand word. `camel explain <name>` is read as
+/// `--explain-command <name>`: the word is taken out of the command line before the parser sees
+/// it (parseArgs), because a clipp command matches a prefix of the token and would take a pass name
+/// such as `explain_pass::nothing` for the command `explain`. An option anchors the group of
+/// settings that belongs to its command, which a bare word that a run may also carry as a value
+/// does not.
+const char *commandFlagFor(std::string_view word) {
+    if (word == "docs") {
+        return "--docs-command";
+    }
+    if (word == "about") {
+        return "--about-command";
+    }
+    if (word == "zen") {
+        return "--zen-command";
+    }
+    if (word == "explain") {
+        return "--explain-command";
+    }
+    if (word == "check") {
+        return "--check-command";
+    }
+    if (word == "inspect") {
+        return "--inspect-command";
+    }
+    return nullptr;
+}
 /// The two places a run's collector and its spaces are set: `--gc
 /// kind=generational,nursery_mb=4,...` and `--spaces block_mb=2048,segment_kb=...`. Each word is
 /// one setting, named as the table lists it; a key neither knows is refused here rather than
@@ -906,20 +933,21 @@ bool parseArgs(int argc, char *argv[]) {
          option("-h", "--help").set(showHelp).set(selectedCommand, Command::Info) %
              "show this help message");
     auto docsCommand =
-        (command("docs").set(showDocs).set(selectedCommand, Command::Info) %
+        (option("--docs-command").set(showDocs).set(selectedCommand, Command::Info) %
              "show the documentation of a module",
          opt_values("module", docsModules) % "module whose documentation is shown (default: all)");
-    auto aboutCommand = command("about").set(showAbout).set(selectedCommand, Command::Info) %
-                        "show copyright and related information";
-    auto zenCommand =
-        command("zen").set(showZen).set(selectedCommand, Command::Info) % "show the Zen of Camel";
+    auto aboutCommand =
+        option("--about-command").set(showAbout).set(selectedCommand, Command::Info) %
+        "show copyright and related information";
+    auto zenCommand = option("--zen-command").set(showZen).set(selectedCommand, Command::Info) %
+                      "show the Zen of Camel";
     auto explainCommand =
-        (command("explain").set(selectedCommand, Command::Info) %
+        (option("--explain-command").set(selectedCommand, Command::Info) %
              "describe a diagnostic by its name or code",
          (value("name or code", Diag::explain) % "the diagnostic to describe"));
 
     auto check =
-        (command("check").set(selectedCommand, Command::Check) %
+        (option("--check-command").set(selectedCommand, Command::Check) %
              "check the code without running it (exit code 1 when an error is found)",
          option("-i", "--lexical-only").set(lexical) %
              "lexical analysis only: report lexical errors and stop before parsing",
@@ -934,7 +962,7 @@ bool parseArgs(int argc, char *argv[]) {
          values("input", targetFiles) % "input file");
 
     auto inspect =
-        (command("inspect").set(selectedCommand, Command::Inspect) % "inspect the code",
+        (option("--inspect-command").set(selectedCommand, Command::Inspect) % "inspect the code",
          joinable(
              option("-t", "-T").set(dumpTokens) % "dump tokens",
              option("-s", "-S").set(dumpCST) % "dump concrete syntax tree",
@@ -996,6 +1024,19 @@ bool parseArgs(int argc, char *argv[]) {
     std::vector<char *> args = takeWarningArguments(argc, argv);
     argc                     = static_cast<int>(args.size());
     argv                     = args.data();
+    // A subcommand answers to its whole word and to nothing else. The word is replaced here, before
+    // the parser runs, so a pass name that begins with one (`explain_pass::nothing`) stays a pass:
+    // only a token equal to the word is a command, and the rest of the command line is unchanged.
+    for (int i = 1; i < argc; ++i) {
+        const std::string_view token = args[i];
+        if (!token.empty() && token.front() == '-') {
+            continue;
+        }
+        if (const char *flag = commandFlagFor(token)) {
+            args[i] = const_cast<char *>(flag);
+        }
+        break;
+    }
     startupMark("warnings");
 
     const parsing_result parsed = parse(argc, argv, cli);
