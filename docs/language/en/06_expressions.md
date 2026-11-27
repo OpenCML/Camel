@@ -19,7 +19,7 @@ An expression is a node on the graph, and its operands are its input edges. Whet
 [1, 2, 3]                   // array
 (1, 'one')                  // tuple; a one-element tuple is written (x,)
 { x: 1, y: 2 }              // struct
-(x: int): int => x + 1      // lambda, see 6.9
+func (x: int) => int { x + 1 }   // lambda, see 6.9
 ```
 
 - The elements of an array literal must have the same type. An element is **a position with an expected type** ([3.3.1](03_data_model.md#331-arrays)): with a context every element takes that type, so the elements of `let xs: float[] = [1, 2.0]` are `float`; with none, the number literals of one array take the widest kind (integer < decimal), so `[1, 2.0]` is a `float[]` (as Go's untyped constants do). The element type of the empty array `[]` comes from the context: `let xs: int[] = []`, `[] as Map<string, int>`.
@@ -100,7 +100,7 @@ func main() => int sync {
   - A name that stands for more than one function has no function value: an overloaded built-in operator (such as `len`, which has three signatures) is one, and the refusal is `SemanticDiag::FunctionNameAsValue`. Write the call in a lambda there.
 - Arguments may be given by name (`f(x: 1)`): positional arguments first, named ones after; a name the callee does not declare as a parameter is `SemanticDiag::ParamArgumentUnknown`.
 - Two calls with angle brackets in one argument list (`f<a>(x), g<b>(y)`) are read as comparisons; a call with angle brackets followed by a pipe with angle brackets (`f<a>(x)->g<b>`) may be too. Write them as two statements.
-- A lambda written in parentheses can be called directly: `((x: int): int => x + 1)(3)`; it can also be written on the right of `->`: `3->(x: int): int => x + 1`, `parse_int(s) -> (x: int): int => x * 2`.
+- A lambda written in parentheses can be called directly: `(func (x: int) => int { x + 1 })(3)`; it can also be written on the right of `->`: `3->(func (x: int) => int { x + 1 })`, `parse_int(s) -> (func (x: int) => int { x * 2 })`.
 
 ## 6.5 Pipes
 

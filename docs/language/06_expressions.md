@@ -19,7 +19,7 @@ Camel 里几乎一切都是表达式：`if`、`match`、块、赋值都有值。
 [1, 2, 3]                   // 数组
 (1, 'one')                  // 元组；单元素写 (x,)
 { x: 1, y: 2 }              // 结构体
-(x: int): int => x + 1      // lambda，见 6.9
+func (x: int) => int { x + 1 }   // lambda，见 6.9
 ```
 
 - 数组字面量的元素类型必须相同。元素是**有期望类型的位置**（[3.3.1](03_data_model.md#331-数组)）：有上下文时每个元素取那个类型，`let xs: float[] = [1, 2.0]` 的元素都是 `float`；没有上下文时，同一个数组里的数字字面量取最宽的一种（整数 < 小数），所以 `[1, 2.0]` 是 `float[]`（与 Go 的无类型常量相同）。空数组 `[]` 的元素类型来自上下文：`let xs: int[] = []`、`[] as Map<string, int>`。
@@ -100,7 +100,7 @@ func main() => int sync {
   - 名字下不止一个函数时没有函数值：重载的内建算子（如 `len` 有三个签名）就是这样，报 `SemanticDiag::FunctionNameAsValue`。把调用写在 lambda 里。
 - 实参可以按名字给（`f(x: 1)`）：位置实参写在前面，按名字给的写在后面；名字不是被调函数声明的形参时是 `SemanticDiag::ParamArgumentUnknown`。
 - 同一个实参表里写两个带尖括号的调用（`f<a>(x), g<b>(y)`）会被读成比较；带尖括号的调用后面再接带尖括号的管道（`f<a>(x)->g<b>`）也可能如此。把它们分成两条语句。
-- 写在括号里的 lambda 可以直接调用：`((x: int): int => x + 1)(3)`；也可以直接写在 `->` 的右边：`3->(x: int): int => x + 1`、`parse_int(s) -> (x: int): int => x * 2`。
+- 写在括号里的 lambda 可以直接调用：`(func (x: int) => int { x + 1 })(3)`；也可以直接写在 `->` 的右边：`3->(func (x: int) => int { x + 1 })`、`parse_int(s) -> (func (x: int) => int { x * 2 })`。
 
 ## 6.5 管道
 
