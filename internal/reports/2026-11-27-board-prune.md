@@ -82,3 +82,18 @@ task-137 | the 16 output/value/count mismatches judged one by one | completed | 
 task-140 | two records repaired: the unordered_reduce scaffolding and four narrow pins | completed | owner: lane-editview-commit | r3
 task-142 | algebra rules: array_combine no longer merges like terms (evidence first) | completed | owner: lane-oper-shape-guard | r3
 ```
+
+## Recorded in batch 5 (10)
+
+```
+task-158 | Context lifetime: break the Context-Module strong cycle, move the cross-round holder to Context | completed | owner: lane-parked-rebase | r3
+task-162 | grammar notes cite an undefined production, context-keywords stale, two grammar blocks to regenerate | completed | owner: seat-merge-2 | r7
+task-163 | carrying-var write-back implemented once for stream and dynamic loops | completed | owner: seat-merge-2 | r4
+task-166 | a rewrite splices the matched term internal nodes onto the replacement place | completed | owner: lane-oper-shape-guard | r5
+task-167 | leftovers of the pins: re-run verification and five rows re-recorded | completed | owner: lane-misc | r4
+task-168 | range shared names and unordered_foreach(Range): only what upstream lacks | completed | owner: lane-arrangeable | r3
+task-169 | re-checking the crash fix on the new integration tip | completed | owner: lane-backend-speed | r3
+task-171 | defunctionalize streams: baseline readings and current touch points | completed | owner: lane-block-hash | r3
+task-173 | whether docs/tutorial/examples is consumed by cases, file by file | completed | owner: lane-block-hash | r3
+task-174 | docs examples versus the parse baseline, a reference reading | completed | owner: lane-arrangeable | r3
+```
