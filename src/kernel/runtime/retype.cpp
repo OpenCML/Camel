@@ -74,7 +74,8 @@ FunctionType *rebuildFunctionType(FunctionType *func, const GraphTypeSubstitutio
         } else if (func->withIsConstasAt(i)) {
             factory.addWithConstasArg(name, with[i]);
         } else {
-            factory.addWithArg(name, with[i], func->withIsVarAt(i), func->withNeedsValueAt(i));
+            factory
+                .addWithArg(name, with[i], func->withIsVarAt(i), func->withNeedsCompileTimeAt(i));
         }
     }
     for (size_t i = 0; i < norm.size(); ++i) {

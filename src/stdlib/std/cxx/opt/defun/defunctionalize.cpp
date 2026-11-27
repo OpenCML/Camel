@@ -438,7 +438,7 @@ void parameterizeCaptures(Draft &draft, const camel::runtime::GraphFootprint &fo
                 name,
                 type->withTypeAt(i),
                 type->withIsVarAt(i),
-                type->withNeedsValueAt(i));
+                type->withNeedsCompileTimeAt(i));
         }
     }
     const size_t withCount = type->withTypesCount();

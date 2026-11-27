@@ -70,7 +70,7 @@ class FunctionTypeFactory {
     /// compiler cannot compute is refused where the argument is written.
     void addWithArg(const std::string &ident, Type *type, bool isVar, bool recordsValue = false) {
         if (recordsValue) {
-            withConstIndices_.push_back(static_cast<uint16_t>(withTypes_.size()));
+            withCompileTimeIndices_.push_back(static_cast<uint16_t>(withTypes_.size()));
         }
         withTypes_.emplace_back(type, isVar);
         argNames_.push_back(ident);
@@ -156,7 +156,7 @@ class FunctionTypeFactory {
     std::vector<uint16_t> constasIndices_;
     /// The `with` parameters whose argument must be a value the compiler computes, as indices
     /// among the `with` parameters.
-    std::vector<uint16_t> withConstIndices_;
+    std::vector<uint16_t> withCompileTimeIndices_;
 };
 
 class FunctionType : public CompositeType {
@@ -265,9 +265,9 @@ class FunctionType : public CompositeType {
     }
 
     /// Whether the `with` parameter at `index` must be given a value the compiler computes.
-    bool withNeedsValueAt(size_t index) const {
-        return std::find(withConstIndices_.begin(), withConstIndices_.end(), index) !=
-               withConstIndices_.end();
+    bool withNeedsCompileTimeAt(size_t index) const {
+        return std::find(withCompileTimeIndices_.begin(), withCompileTimeIndices_.end(), index) !=
+               withCompileTimeIndices_.end();
     }
 
     std::span<Type *const> withTypesSpan() const { return {types(), withCount_}; }
@@ -315,7 +315,7 @@ class FunctionType : public CompositeType {
         bool hasWithRest = false;
         std::vector<uint16_t> constasIndices;
         /// The `with` parameters whose argument must be a compile-time value (see addWithArg).
-        std::vector<uint16_t> withConstIndices;
+        std::vector<uint16_t> withCompileTimeIndices;
         std::vector<SymId> names;
         sem::ResourceSignature resources;
         /// The signature is `split`'s backward half: its parameters are the tangents, and the values it
@@ -375,7 +375,7 @@ class FunctionType : public CompositeType {
     std::vector<uint16_t> constasIndices_;
     /// The `with` parameters whose argument must be a compile-time value, as indices among the
     /// `with` parameters (see FunctionTypeFactory::addWithArg).
-    std::vector<uint16_t> withConstIndices_;
+    std::vector<uint16_t> withCompileTimeIndices_;
     bool open_          = false;
     /// The resources the signature publishes (Generic when it says nothing).
     sem::ResourceSignature resources_;

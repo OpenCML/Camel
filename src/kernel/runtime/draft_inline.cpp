@@ -1058,7 +1058,7 @@ void setRenumberedClause(GraphDraft &draft, const sem::ResourceSignature &clause
                 name,
                 type->withTypeAt(i),
                 type->withIsVarAt(i),
-                type->withNeedsValueAt(i));
+                type->withNeedsCompileTimeAt(i));
         }
     }
     for (size_t i = 0; i < type->normTypesCount(); ++i) {

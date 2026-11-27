@@ -121,7 +121,7 @@ FunctionType *firstWithAsParamSignature(FunctionType *function) {
             withNameOf(function, i),
             function->withTypeAt(i),
             function->withIsVarAt(i),
-            function->withNeedsValueAt(i));
+            function->withNeedsCompileTimeAt(i));
     }
     // ... and the first ordinary parameter is the value the first `with` port carried.
     factory.addNormArg(withNameOf(function, 0), moved, false);

@@ -1,0 +1,11 @@
+// The same on a `with` parameter: `constas` is the word for a value the call must give as a
+// constant, and `const` is not a second spelling of it.
+
+with <const x: float[]>
+func total() => float {
+    return 1.0
+}
+
+func main() => int sync {
+    return 0
+}

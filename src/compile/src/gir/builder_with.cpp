@@ -169,7 +169,7 @@ node_handle_t Builder::visitWithNode(const GCT::node_ptr_t &gct) {
     };
     const auto refuseNonConstant = [&](size_t slot, const Argument &argument) {
         if (argumentSignature == nullptr || slot >= argumentSignature->withTypesCount() ||
-            !argumentSignature->withNeedsValueAt(slot)) {
+            !argumentSignature->withNeedsCompileTimeAt(slot)) {
             return;
         }
         if (argument.node != nullptr && constantOfNode(argument.node) != nullptr) {

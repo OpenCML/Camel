@@ -145,6 +145,7 @@ parentIdents       : '(' identList? ','? ')'
 bracedIdents       : '{' identList? ','? '}'
 bracketIdents      : '[' identList? ','? ']'
 keyParamPair       : ('var' | 'const')? identDef (':' typeExpr ('=' dataExpr)?)?
+                     | 'var'? identDef (':' typeExpr ('=' dataExpr)?)?
                      | '...' identDef (':' typeExpr)?
                      | '...' typeExpr
                      | 'constas' identDef (':' typeExpr)?

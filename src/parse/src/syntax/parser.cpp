@@ -1417,15 +1417,20 @@ void ParserImpl::parseBracketedIdents(TK closer, NK kind, bool wildcards) {
 }
 
 /// keyParamPair : ('var' | 'const')? identDef (':' typeExpr ('=' dataExpr)?)?
+///              | 'var'? identDef (':' typeExpr ('=' dataExpr)?)?
 ///              | '...' identDef (':' typeExpr)?
 ///              | '...' typeExpr
 ///              | 'constas' identDef (':' typeExpr)?
+/// The first alternative is a rule's or a fact's parameter, where `const` says the left side
+/// matches a constant there (design principles 9.11); everywhere else a parameter writes `var`,
+/// `constas` or nothing, and `const` is not a word a parameter takes.
 /// A rest parameter is written untyped and last in a function declaration's parameter list
 /// (design principles 5.5). A `constas` parameter is written first in that list and is a
 /// compile-time value, not a runtime parameter (design principles 5.4). A type written after a
 /// rest parameter, or left out of a `constas` one, is parsed so that the semantic stage can
 /// report it; the parameter lists of a lambda, a function type and a rule take neither.
-void ParserImpl::parseKeyParamPair(bool allowRest, bool allowConstas, bool angled) {
+void ParserImpl::parseKeyParamPair(
+    bool allowRest, bool allowConstas, bool angled, bool allowConst) {
     const size_t m = mark();
     if (lambdaParams_ && cur_ == TK::LParen) {
         // A lambda parameter destructured as a tuple: `((a, b)) => ...`. The rule is the one of
@@ -1483,7 +1488,7 @@ void ParserImpl::parseKeyParamPair(bool allowRest, bool allowConstas, bool angle
         close(m, NK::KeyParamPair);
         return;
     }
-    if (!eat(TK::KwVar)) {
+    if (!eat(TK::KwVar) && allowConst) {
         eat(TK::KwConst);
     }
     parseIdentDef();
@@ -1499,30 +1504,30 @@ void ParserImpl::parseKeyParamPair(bool allowRest, bool allowConstas, bool angle
 }
 
 /// pairedParams : keyParamPair (',' keyParamPair)*
-void ParserImpl::parsePairedParams(TK closer, bool allowRest, bool allowConstas) {
+void ParserImpl::parsePairedParams(TK closer, bool allowRest, bool allowConstas, bool allowConst) {
     const size_t m    = mark();
     const bool angled = closer == TK::Gt;
-    parseKeyParamPair(allowRest, allowConstas, angled);
+    parseKeyParamPair(allowRest, allowConstas, angled, allowConst);
     while (cur_ == TK::Comma && peek(1) != closer && !panic_) {
         bump();
-        parseKeyParamPair(allowRest, allowConstas, angled);
+        parseKeyParamPair(allowRest, allowConstas, angled, allowConst);
     }
     close(m, NK::PairedParams);
 }
 
 /// parentParams : '(' pairedParams? ','? ')'
-void ParserImpl::parseParentParams(bool allowRest, bool allowConstas) {
+void ParserImpl::parseParentParams(bool allowRest, bool allowConstas, bool allowConst) {
     const size_t m = mark();
     if (!expect(TK::LParen)) {
         return;
     }
     {
         Scope scope(*this, false);
-        if (cur_ == TK::Identifier || cur_ == TK::KwVar || cur_ == TK::KwConst ||
+        if (cur_ == TK::Identifier || cur_ == TK::KwVar || (allowConst && cur_ == TK::KwConst) ||
             (lambdaParams_ && cur_ == TK::LParen) ||
             (allowRest && (cur_ == TK::DotDot || cur_ == TK::Ellipsis)) ||
             (allowConstas && cur_ == TK::KwConstas)) {
-            parsePairedParams(TK::RParen, allowRest, allowConstas);
+            parsePairedParams(TK::RParen, allowRest, allowConstas, allowConst);
         } else if (cur_ != TK::RParen && cur_ != TK::Comma) {
             unexpected(
                 {e(TK::Comma), e(TK::RParen), e(TK::KwVar), e(TK::KwConstas), e(TK::Identifier)});
@@ -1537,7 +1542,7 @@ void ParserImpl::parseParentParams(bool allowRest, bool allowConstas) {
 
 /// angledParams : '<' pairedParams? ','? '>'
 /// The `<` of a parameter list need not touch anything (`with <T: type>`).
-void ParserImpl::parseAngledParams(bool allowRest, bool allowConstas) {
+void ParserImpl::parseAngledParams(bool allowRest, bool allowConstas, bool allowConst) {
     if (cur_ != TK::Lt && cur_ != TK::LAngle) {
         unexpected({e(TK::Lt)});
         return;
@@ -1547,8 +1552,10 @@ void ParserImpl::parseAngledParams(bool allowRest, bool allowConstas) {
     bump();
     {
         Scope scope(*this, false, open);
-        if (cur_ != TK::Gt && cur_ != TK::Comma) {
-            parsePairedParams(TK::Gt, allowRest, allowConstas);
+        if (!allowConst && cur_ == TK::KwConst) {
+            unexpected({e(TK::KwVar), e(TK::KwConstas), e(TK::Identifier), e(TK::Gt)});
+        } else if (cur_ != TK::Gt && cur_ != TK::Comma) {
+            parsePairedParams(TK::Gt, allowRest, allowConstas, allowConst);
         }
         eat(TK::Comma);
         if (!panic_ && cur_ != TK::Gt) {

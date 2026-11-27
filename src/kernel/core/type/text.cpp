@@ -731,7 +731,7 @@ bool sameTypeWith(const Type *a, const Type *b, ResourceMatch resources) {
                 // different signature from one that takes any argument (the interning key says
                 // the same).
                 if (lhs->withIsVarAt(i) != rhs->withIsVarAt(i) ||
-                    lhs->withNeedsValueAt(i) != rhs->withNeedsValueAt(i)) {
+                    lhs->withNeedsCompileTimeAt(i) != rhs->withNeedsCompileTimeAt(i)) {
                     return false;
                 }
                 pending.emplace_back(lhs->withTypeAt(i), rhs->withTypeAt(i));

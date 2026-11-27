@@ -27,6 +27,8 @@ baa3930e27b73d91 no test/cases/parse/rules/no_context.cml
 b8d9fb23131178aa ok test/cases/parse/rules/parameters.cml
 37162eb477a685e8 ok test/cases/parse/rules/values.cml
 bed54dbb47861601 no test/cases/parse/rules/when_after_body.cml
+50a1d4eda1f41c93 no test/cases/parse/rulings/err_const_parameter.cml
+0aaa4d1307d4a892 no test/cases/parse/rulings/err_const_with_parameter.cml
 f747bf1e7affb825 ok test/cases/parse/rulings/count_until.cml
 e881305f311ae736 ok test/cases/parse/rulings/doc_comment.cml
 8b89c2383bd831c6 ok test/cases/parse/rulings/doc_comment_blank_line.cml

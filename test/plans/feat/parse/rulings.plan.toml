@@ -375,3 +375,26 @@ expect_exit = 0
 expect_stdout_exact = "32 14 105\n"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 8000
+[[tests]]
+name = "rulings.const_parameter"
+desc = "A parameter written `const` is not a spelling the language has: the parser refuses it where the name belongs, and lists what may stand there (`var`, `constas`, a name)."
+kind = "negative"
+case = "../../../cases/parse/rulings/err_const_parameter.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SyntaxDiag::UnexpectedToken"
+expect_stderr_contains = ["Unexpected 'const'; expected ',', ')', 'var', 'constas' or a name."]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "rulings.const_with_parameter"
+desc = "The same on a `with` parameter: `constas` is the word for a value the call must give as a constant, and `const` is not a second spelling of it."
+kind = "negative"
+case = "../../../cases/parse/rulings/err_const_with_parameter.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SyntaxDiag::UnexpectedToken"
+expect_stderr_contains = ["Unexpected 'const'; expected 'var', 'constas', a name or '>'."]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
