@@ -1046,14 +1046,6 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             },
         },
         {
-            SemanticDiag::ConstasInNativeDeclaration,
-            {
-                "ConstasInNativeDeclaration",
-                "The body-less declaration '{0}' cannot take a 'constas' parameter.",
-                "A body-less declaration names a C++ operator whose signature is fixed; a 'constas' value would have to be part of the operator's compile-time identity, which the native declaration mechanism does not carry yet. Write the function with a body.",
-            },
-        },
-        {
             SemanticDiag::ConstasArgumentMissing,
             {
                 "ConstasArgumentMissing",

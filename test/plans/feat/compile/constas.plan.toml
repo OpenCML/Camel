@@ -338,16 +338,6 @@ expect_diagnostic_name = "SemanticDiag::ConstasFunctionNeedsCall"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000
 
-[[tests]]
-name = "constas_native"
-desc = "A body-less declaration cannot carry a `constas` parameter."
-kind = "negative"
-case = "../../../cases/compile/constas/constas_native.cml"
-args = ["${case}"]
-expect_exit = 1
-expect_diagnostic_name = "SemanticDiag::ConstasInNativeDeclaration"
-normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
-timeout_ms = 8000
 
 [[tests]]
 name = "constas_dimension_name_retired"
