@@ -9,12 +9,12 @@
  * in the graph did. `core.permissions` follows it, and is the kind the framework's own definition
  * of `Class::Content` names.
  *
- * What has not moved, and the one reason they share: `core.instance` and `core.reorder` both read
- * an operator's *instance*, which is instantiated from the node's operand types and from the static
- * arguments its constant operands hold (`runtime::fact::instanceOf`, `reorderFreedomOf`). The view
- * the store hands a computation has the operand types (`GraphView::typeOf`, `inputs`) and none of
- * the static argument values, so those two kinds wait for that read rather than being written
- * against `GCGraph` here and moved twice.
+ * `core.instance` and `core.reorder` follow, and they are the kinds that showed the read has to be
+ * one: both ask what the node's operator declares *at that node*, which is instantiated from the
+ * operand types and from the static arguments the constant operands hold. That question is now
+ * answered off the view (`runtime::instanceOf(const GraphView &, NodeRef)`), and the frozen-graph
+ * answers are thin shells over it, so the facts and the guard (an object constant counts only when
+ * every user of it recomputes) have one body.
  *
  * The value, its text form and its readers stay where they are (`camel/runtime/core_facts.h`):
  * `TensorShape` is the kind's payload in both registries, and a second copy of it would be a second
@@ -26,12 +26,15 @@
 #include "camel/facts/core_kinds.h"
 
 #include "camel/runtime/core_facts.h"
+#include "camel/runtime/operator_instance.h"
 
 #include <optional>
 #include <span>
 
 namespace camel::facts {
 
+using camel::runtime::fact::NodeInstance;
+using camel::runtime::fact::Reorder;
 using camel::runtime::fact::TensorShape;
 
 KindId shapeKind() {
@@ -154,4 +157,123 @@ KindId permissionsKind() {
     return id;
 }
 
+KindId instanceKind() {
+    static const KindId id = registerKind<NodeInstance>(Kind<NodeInstance>{
+        .key     = "core.instance",
+        .owner   = "core",
+        .version = 1,
+        // Derived: the instance is what the operator declares, instantiated with the facts at the
+        // node (the operand types and the constants among them), and both are the graph's content.
+        .cls   = Class::Derived,
+        .scope = Scope::Node,
+        // Reported: it reads the node and the operator's record, and says so below.
+        .dependence = Dependence::Reported,
+        .monotone   = false,
+        .compute    = [](std::span<const Anchor> anchors, const GraphAccess &graphs, ReadLog &log)
+            -> std::optional<NodeInstance> {
+            if (anchors.size() != 1 || anchors[0].graph == nullptr ||
+                anchors[0].node == kWholeGraph || !graphs.view) {
+                return std::nullopt;
+            }
+            const camel::graph::GraphView *view = graphs.view(*anchors[0].graph);
+            if (view == nullptr) {
+                return std::nullopt;
+            }
+            const auto ref = static_cast<camel::graph::NodeRef>(anchors[0].node);
+            if (!view->contains(ref)) {
+                return std::nullopt;
+            }
+            log.node(anchors[0].node);
+            const core::OperId oper = view->operatorOf(ref);
+            if (view->kindOf(ref) == camel::graph::NodeKind::Oper) {
+                // The record is half the answer: it is what says whether the operator declares
+                // index semantics at all, and what the instance's text is written against.
+                log.record(oper);
+            }
+            std::optional<camel::core::sem::IndexedInstance> instance =
+                camel::runtime::instanceOf(*view, ref);
+            if (!instance) {
+                return std::nullopt;
+            }
+            NodeInstance value;
+            value.instance = instance;
+            value.text     = camel::core::sem::toString(
+                *instance,
+                camel::core::OperatorTable::instance().semantics(oper));
+            return value;
+        },
+        // No merge, and the reason: an instance is what one node's operator declares with the facts
+        // at that node. Two nodes' instances are two answers, and an index instance has no union --
+        // a place computed by two different indices is not a place with one index.
+        .merge = {},
+        // The text the runtime kind prints: the instance's canonical text (`sem::toString`), which
+        // is what two instances are compared by.
+        .print     = [](const NodeInstance &value) { return value.text; },
+        .anchorsIn = {},
+        .encode    = {},
+        .decode    = {},
+    });
+    return id;
+}
+
+KindId reorderKind() {
+    static const KindId id = registerKind<Reorder>(Kind<Reorder>{
+        .key     = "core.reorder",
+        .owner   = "core",
+        .version = 1,
+        // Derived: the freedom is what the operator's law and the program's permissions make of the
+        // node, and both are the graph's content.
+        .cls   = Class::Derived,
+        .scope = Scope::Node,
+        // Reported: it reads the node, its operator's record and its permissions, and says so.
+        .dependence = Dependence::Reported,
+        .monotone   = false,
+        .compute    = [](std::span<const Anchor> anchors, const GraphAccess &graphs, ReadLog &log)
+            -> std::optional<Reorder> {
+            if (anchors.size() != 1 || anchors[0].graph == nullptr ||
+                anchors[0].node == kWholeGraph || !graphs.view) {
+                return std::nullopt;
+            }
+            const camel::graph::GraphView *view = graphs.view(*anchors[0].graph);
+            if (view == nullptr) {
+                return std::nullopt;
+            }
+            const auto ref = static_cast<camel::graph::NodeRef>(anchors[0].node);
+            if (!view->contains(ref)) {
+                return std::nullopt;
+            }
+            log.node(anchors[0].node);
+            if (view->kindOf(ref) == camel::graph::NodeKind::Oper) {
+                log.record(view->operatorOf(ref));
+            }
+            // The default policy asks for nothing the program did not write, which is what the
+            // runtime kind asked for: its signature defaulted to `explicitOnly()`.
+            const std::optional<camel::core::sem::ReorderFreedom> freedom =
+                camel::runtime::reorderFreedomOf(
+                    *view,
+                    ref,
+                    camel::core::sem::NumericPolicy::explicitOnly());
+            if (!freedom) {
+                return std::nullopt;
+            }
+            return Reorder{
+                .regroup         = freedom->regroup,
+                .permute         = freedom->permute,
+                .blockIdentity   = freedom->blockIdentity,
+                .contract        = freedom->contract,
+                .changePrecision = freedom->changePrecision,
+            };
+        },
+        // No merge, and the reason: what may be done with one reduction is about that reduction.
+        // Two nodes that both reduce do not give a freedom of their union -- a union of two loops
+        // is not a loop whose reduction anyone can relax.
+        .merge = {},
+        // The text the runtime kind prints, from the one function that names this value.
+        .print     = [](const Reorder &reorder) { return camel::runtime::fact::toString(reorder); },
+        .anchorsIn = {},
+        .encode    = {},
+        .decode    = {},
+    });
+    return id;
+}
 } // namespace camel::facts

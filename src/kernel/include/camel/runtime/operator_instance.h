@@ -46,6 +46,13 @@ KernelArguments kernelArgumentsOf(const class GraphDraft &draft, gc_node_ref_t n
 std::optional<camel::core::sem::IndexedInstance>
 instanceOf(const GCGraph &graph, gc_node_ref_t node);
 
+/// The same question asked of a view: what a facts computation has in its hands, since a store
+/// hands its computations a view and not a representation (`camel/facts/facts.h`, `GraphAccess`).
+/// One body answers both -- this overload reads the node through the view, and the one above
+/// converts.
+std::optional<camel::core::sem::IndexedInstance>
+instanceOf(const camel::graph::GraphView &view, camel::graph::NodeRef node);
+
 /**
  * What a back end may do with the reduction of the OPER node `node` (design 7.3): the law its
  * instance combines by, with the permissions the program granted the node
@@ -55,6 +62,14 @@ instanceOf(const GCGraph &graph, gc_node_ref_t node);
  */
 std::optional<camel::core::sem::ReorderFreedom> reorderFreedomOf(
     const GCGraph &graph, gc_node_ref_t node,
+    const camel::core::sem::NumericPolicy &policy =
+        camel::core::sem::NumericPolicy::explicitOnly());
+
+/// The same for a view, and for the same reason: the permissions come from the view's own answer
+/// (`effectivePermissionsOf`) and the reading from the view, so this is the body the overload above
+/// converts to.
+std::optional<camel::core::sem::ReorderFreedom> reorderFreedomOf(
+    const camel::graph::GraphView &view, camel::graph::NodeRef node,
     const camel::core::sem::NumericPolicy &policy =
         camel::core::sem::NumericPolicy::explicitOnly());
 

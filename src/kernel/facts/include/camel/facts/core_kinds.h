@@ -29,4 +29,12 @@ KindId shapeKind();
 /// (see the registration for the reason).
 KindId permissionsKind();
 
+/// The kind `core.instance`: the index semantics of an OPER node's operator, instantiated with the
+/// facts at that node. No merge -- see the registration for the reason.
+KindId instanceKind();
+
+/// The kind `core.reorder`: what may be done with the reduction of such a node, given the law its
+/// instance combines by and the permissions the program granted it. No merge, for the same kind of
+/// reason.
+KindId reorderKind();
 } // namespace camel::facts
