@@ -51,6 +51,10 @@ description: Camel 项目里一条实现车道（子代理）要遵守的一切�
   按**进程 cwd** 解析相对路径，`cd` 在上一句不代表这一句的 cwd）。相对路径写文件已经三次写进负责人的
   主检出 `D:\Projects\Camel` —— 那不是任何车道的树。批处理替换、脚本、`git checkout --` 一律先
   `Resolve-Path` 出绝对路径，`git` 用 `git -C <绝对树路径>`。
+· **机械动作（不做就是会犯）**：进自己的工作树之后第一件事、以及**每次 `cd` 之后**，执行一次
+  `[Environment]::CurrentDirectory = (Get-Location).Path`。这样即便某处漏了绝对路径，相对路径也落在**自己的树**里，
+  而不是车道 shell 的起点（`D:\Projects\Camel`，负责人的主检出）。写完立刻在本树核 `git -C <树> diff --numstat`：
+  **"git 说 clean" 可能是"你写到了别的树"**，diff 为空而 `Get-Content` 看得到内容时，先怀疑写错了树。
 ```
 
 ## 2. 改语义之前

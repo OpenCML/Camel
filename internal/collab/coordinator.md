@@ -249,6 +249,7 @@ pwsh -NoProfile -File ... -Path <wt> -Clean                        # 收尾：�
 **现在**由 camel-oversight 插件每 5 分钟自己量（`measure.js`），按 `rules.js` 判，只在不正常时提醒我（`[oversight · 提醒]`），每小时复读一次 `rules.md`。阈值只在 `rules.js`。要读数调 `oversight_readings`。
 
 - **原来的四条 DSH 定时任务删掉**（`schedule-654e707b…`、`schedule-d453ce11…`、`schedule-66540517…`、`schedule-8eaa4cc1…`），不再新建做同样事的定时。
+- **看规则以 `hotLoaded` 的 blob 为准，不以磁盘上那份文件为准**：插件按 `origin/integration` 热加载 `rules.js`，`oversee/state` 里的 `hotLoaded`（如 `2807e0bb18cd`，来自 `fsh-dev` 的 `1fe0e45d9`）才是**实际在跑**的那一版；`D:\Projects\camel-oversight-live` 下的旧文件**不是**。2026-11-27 我据旧文件断言"没有 `main-checkout-touched` 这条规则"，而它其实存在（`1fe0e45d9` 已进 `integration`）—— 它这次没报，是因为那条车道在 r 规则 5 分钟的保持期内自己还原了。教训与"读不到 ≠ 没变化"同族：**读到旧副本 ≠ 规则不存在**；查规则先看 `hotLoaded` 的 blob 与它对应的提交。
 - **会话只做判断，不做持有锁的长活**：跑到一半的闸门、解冲突、推送，一律交车道或后台。
 - 后台 `watch-fsh-dev.ps1` 不再需要：`fsh-dev` 有没合的提交由插件的 `fsh-dev-ahead` 提醒，决策者的派工经通道直达。
 
