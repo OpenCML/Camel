@@ -462,7 +462,6 @@ void mergeRecord(Record &into, const Record &from) {
             }
             return !a.has_value() ||
                    (a->callSiteAtArity == b->callSiteAtArity &&
-                    a->discardsCallbackResult == b->discardsCallbackResult &&
                     a->formatWithArg == b->formatWithArg && a->formatNormArg == b->formatNormArg);
         },
         [](const std::optional<CallSpec> &v) {

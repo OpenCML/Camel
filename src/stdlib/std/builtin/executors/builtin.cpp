@@ -929,8 +929,6 @@ void registerBuiltinOperatorTraits() {
         {.name = "append", .minArgs = 1, .declaredByModule = true});
     // What the compiler does at a call because of the operator (design principles log 2.17).
     registry.declareCallSpec(":op/error_new", {.callSiteAtArity = 2});
-    registry.declareCallSpec(":mark/foreach_arr", {.discardsCallbackResult = true});
-    registry.declareCallSpec(":mark/unordered_foreach_arr", {.discardsCallbackResult = true});
     for (const char *uri : {":io/print", ":io/println"}) {
         registry.declareCallSpec(uri, {.formatWithArg = 0, .checkFormat = checkFormatPattern});
     }
