@@ -2087,6 +2087,21 @@ class Builder {
     /// first, then the order the rules were written in. It is what a call with fewer than two
     /// candidates that write `when` means; a call with more is reported through `ambiguous` and
     /// the index is not used.
+    /// The two lists `resolveGroupedCall` reads besides the argument types, taken for `target`: the
+    /// constants among the arguments, and the explicit type arguments the call wrote.
+    ///
+    /// The with-arguments' constants follow the ordinary ones because an operator's kernel reads
+    /// one list (kernelArgumentsOf). Taking the explicit type arguments **empties** the record for
+    /// this call node: a call states them once, so the list is consumed here and nowhere else,
+    /// which is also why this is asked at the resolution and not before it.
+    struct CallResolutionInputs {
+        std::vector<camel::core::type::StaticArg> statics;
+        camel::core::type::type_vec_t explicitTypes;
+    };
+    CallResolutionInputs takeCallResolutionInputs(
+        node_handle_t target, const std::vector<Argument> &withInputs,
+        const std::vector<Argument> &normInputs);
+
     std::optional<oper_idx_ptr_t> resolveGroupedCall(
         const oper_group_ptr_t &ops, const camel::core::type::type_vec_t &explicitTypes,
         Type *expectedResult, const camel::core::type::type_vec_t &withTypes,
