@@ -77,26 +77,6 @@ oper_group_ptr_t Builder::internalOperatorGroup(camel::core::OperId oper) {
     return group;
 }
 
-oper_group_ptr_t Builder::operatorGroupOf(camel::core::OperId oper) {
-    // The way from the id back to the group is recorded where the group is registered, and every
-    // operator of the core and of the program's exports goes through one of the two: the built-in
-    // module when it is loaded, and the program's own export table when a declaration of the
-    // program is exported (ProgramExports::exportEntity). So the id alone finds the group, and no
-    // name of the program takes part.
-    if (const auto builtins = context_->importModule(""); builtins != nullptr) {
-        if (oper_group_ptr_t group = builtins->nativeOperatorGroup(oper); group != nullptr) {
-            return group;
-        }
-    }
-    {
-        const auto &exports = context_->programExports();
-        if (oper_group_ptr_t group = exports.operatorGroup(oper); group != nullptr) {
-            return group;
-        }
-    }
-    return nullptr;
-}
-
 GCT::node_ptr_t Builder::internalOperatorDref(camel::core::OperId oper) {
     // The id is the reference; the entity name is only the node's label (a GCT dump, a
     // diagnostic), as it was when the DREF was made by name.

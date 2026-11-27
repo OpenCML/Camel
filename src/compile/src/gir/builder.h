@@ -3195,12 +3195,6 @@ class Builder {
     /// built-in module registered it; an id is fixed at start-up, the group when that module is
     /// loaded, which is before any module of a program is compiled.
     oper_group_ptr_t internalOperatorGroup(camel::core::OperId oper);
-    /// The group of an operator the compiler emits itself, wherever it is declared: the built-in
-    /// module first, then the library modules the program loaded. The id is the whole question --
-    /// each module recorded the group it declares for that id when its declarations were exported
-    /// (Module::exportEntity) -- so no name of the program takes part and a name it writes cannot
-    /// shadow the operator the compiler emits.
-    oper_group_ptr_t operatorGroupOf(camel::core::OperId oper);
     /// The DREF of such an operator: the construction node carries the id, so the group is not
     /// looked up by a name the program could shadow (visitDRefNode).
     GCT::node_ptr_t internalOperatorDref(camel::core::OperId oper);
