@@ -117,6 +117,10 @@ Camel 的两个实数类型**按编译器解析的名字写，不按读者以为
   第 2 次拒「`# report this lane wrote, under the internal reports ...`」= **`lane` 这个词本身**也算过程痕迹。
   ⇒ 一条注释里想说“读数记在哪”时，写成**不含日期、不含 `internal/` 路径、不含 `lane`/角色词**的说法，例如
   「the report the repository keeps under its internal reports」；**不要**为了过钩子把注释删空 —— 钩子拦的是措辞，不是内容。
+· **PowerShell 会把提交信息吃掉，两次实测**：① `git commit -m "…"` 里出现 `` ` `` + 字母（如 `` `vjp ``）⇒ 反引号被当转义、
+  串被截断成半个词；② `git commit … | Select-Object -First 2` 提前关管道 ⇒ 报假「No staged files」。
+  ⇒ 提交信息一律走**单引号 here-string + `-F <文件>`**（`@'…'@` 不做任何替换），提交后**必看** `git log -1 --format='%h %s'`；
+  subject 与预期不一致就 `--amend -F` 重来，**报给协调者的永远是 amend 之后的 sha**，且报之前先自查 subject。
 ```
 
 ## 5. 不计兼容
