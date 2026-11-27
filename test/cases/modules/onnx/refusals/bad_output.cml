@@ -2,7 +2,7 @@
  * The result of an exported function must be a tensor or a number. The program the pass
  * translates returns a string, so the export is refused at the output of that function.
  * The case used to name that function in an export_model call; the thin stage form has no
- * function parameter (D-1127-102), so the entry function itself is the one that returns it.
+ * function parameter, so the entry function itself is the one that returns it.
  */
 
 func main() => string sync {

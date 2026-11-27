@@ -722,8 +722,8 @@ void exportEntry(
                 "onnx::export_model out=\"model.onnx\"")};
     }
     // The target is the pass's own parameter: it is checked here, where the pass starts, and it
-    // has nothing to do with whether the program holds an export request (D-1127-102 removed the
-    // request machinery, so this check must not live in it).
+    // has nothing to do with whether the program holds an export request: the request machinery
+    // is gone, so this check must not live in it.
     if (!options.target.empty() && options.target != "none" &&
         CapabilityTable::forTarget(options.target) == nullptr) {
         std::string known;
@@ -785,7 +785,7 @@ OnnxExportPass::apply(const camel::runtime::Program *program, std::ostream &os) 
         };
         // The body of the stage form: translate what the command line handed the pass (its `f`)
         // with the same translation `model` uses, write it to `out`, and hand `f` on unchanged
-        // (D-1127-102, D-1127-195). There is no request to look for in the program: the program is
+        // There is no request to look for in the program: the program is
         // the input, the way it is for every other pass.
         exportEntry(*context_, program, os, out_, asked(ExportOptions{}));
         return program;
