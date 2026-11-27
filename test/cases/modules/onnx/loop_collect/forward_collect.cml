@@ -1,0 +1,73 @@
+/**
+ * The CC main case, forward half: a model's loss over a loop whose rounds the data decides, and
+ * the value of every round collected into an array -- the residuals the reverse half will read.
+ *
+ * The round count is not a length the program states: the loop stops when the loss it has summed
+ * passes the budget, so the same six rows ask for two rounds under one budget and six under
+ * another. That is what the exported model has to keep: an ONNX Loop with a scan output, whose
+ * collected array's length is the run's business.
+ */
+import { get_env } from env
+import { export_model } from onnx
+import { reshape, save_npy, slice, sum } from tensor
+
+/// Row `t` of the data: a slice with bounds that depend on the counter, then the row's shape.
+func at(xs: float[6, 4], t: int) => float[4] {
+    return reshape<[4]>(slice(xs, 0, t, t + 1))
+}
+
+/// Target `t` of the data, as the scalar it is.
+func target(ts: float[6], t: int) => float {
+    return sum(slice(ts, 0, t, t + 1))
+}
+
+/// One round's loss: the model's prediction at a row, against its target.
+func loss(w: float[4], x: float[4], t: float) => float {
+    let err = sum(w * x) - t
+    return err * err
+}
+
+/// The forward loop: `acc` collects one loss per round, `total` sums them, and the budget on
+/// `total` decides how many rounds run.
+func forward(w: float[4], xs: float[6, 4], ts: float[6], budget: float[1]) => (float[], int, float) {
+    return loop acc = [] as float[], k = 0 as int, total = 0.0 while k < 6 && total < budget[0] do {
+        let l = loss(w, at(xs, k), target(ts, k))
+        (acc->append<l>, k + 1, total + l)
+    }
+}
+
+func main() => string! sync {
+    let w = [0.5, -1.0, 2.0, 0.25] as float[4]
+    let xs = [[1.0, 2.0, 3.0, 4.0], [2.0, 0.0, -1.0, 1.0], [0.5, 0.5, 0.5, 0.5], [-1.0, 1.0, -1.0, 1.0], [3.0, 3.0, 3.0, 3.0], [0.0, 0.0, 0.0, 0.0]] as float[6, 4]
+    let ts = [5.0, 0.0, 1.0, -3.0, 5.0, 0.0] as float[6]
+    let shortBudget = [0.5] as float[1]
+    let longBudget = [100.0] as float[1]
+    let (short, roundsShort, totalShort) = forward(w, xs, ts, shortBudget)
+    let (long, roundsLong, totalLong) = forward(w, xs, ts, longBudget)
+    println('rounds budget=0.5 {} budget=100 {}'->format<roundsShort, roundsLong>)
+    println('totals {} {}'->format<totalShort, totalLong>)
+    let out = get_env('ONNX_OUT') ?? ''
+    let dir = get_env('NPY_DIR') ?? ''
+    let recorded = if dir != '' then {
+        save_npy(w, '{}/w.npy'->format<dir>)
+        save_npy(xs, '{}/xs.npy'->format<dir>)
+        save_npy(ts, '{}/ts.npy'->format<dir>)
+        save_npy(shortBudget, '{}/budget_short.npy'->format<dir>)
+        save_npy(longBudget, '{}/budget_long.npy'->format<dir>)
+        save_npy(short, '{}/losses_short.npy'->format<dir>)
+        save_npy(long, '{}/losses_long.npy'->format<dir>)
+        save_npy([totalShort, totalLong] as float[2], '{}/totals.npy'->format<dir>)
+        save_npy([roundsShort, roundsLong] as int[2], '{}/rounds.npy'->format<dir>)
+        'recorded'
+    } else 'not recorded'
+    let _ = recorded
+    return if out == '' then '0'
+    else match export_model<out: out>(func (w: float[4], xs: float[6, 4], ts: float[6], budget: float[1]) => (float[], int, float) {
+        forward(w, xs, ts, budget)
+    }, (w, xs, ts, shortBudget)) {
+        case error e => {
+            return e
+        }
+        case v => '1'
+    }
+}
