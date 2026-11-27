@@ -249,6 +249,15 @@ std::vector<TextItem> structParts(const StructType *record, bool mangle) {
         }
         return parts;
     }
+    // A struct with no fields spells as the two braces with nothing between them, the way its value
+    // prints (`StructData::toString` answers `{}`) and the way a program writes the type
+    // (`type Nothing = {}`). Written as the opening half and the closing half with no member to
+    // separate them, the spelling carried the two halves' own spaces, which neither the value nor
+    // the source has.
+    if (record->size() == 0) {
+        parts.push_back(literal("{}"));
+        return parts;
+    }
     parts.push_back(literal("{ "));
     for (size_t i = 0; i < record->size(); ++i) {
         if (i > 0) {
