@@ -357,6 +357,11 @@ void declareBodiesOverDrafts(runtime::RuntimeGraphDraftSession &session) {
                 continue; // not a clause the language can write: the commit says so instead
             }
             auto &draft = session.edit(graph).edit();
+            // The edit record's high-side entry: whatever this block writes is one outline edit of
+            // the graph (docs/design/graph-editing/README.cn.md 8.1), recorded once with the union
+            // of the regions it touched and one notification, rather than once per primitive it
+            // calls.
+            runtime::GraphDraft::NamedEdit edit(draft, runtime::EditKind::Outline);
             draft.setFuncType(type->withResources(clause));
             wider.emplace_back(graph, draft.funcType());
         }
@@ -402,6 +407,11 @@ void declareBodiesOverDrafts(runtime::RuntimeGraphDraftSession &session) {
                 continue; // the value already names what its graph says
             }
             auto &draft = session.edit(graph).edit();
+            // The edit record's high-side entry: whatever this block writes is one outline edit of
+            // the graph (docs/design/graph-editing/README.cn.md 8.1), recorded once with the union
+            // of the regions it touched and one notification, rather than once per primitive it
+            // calls.
+            runtime::GraphDraft::NamedEdit edit(draft, runtime::EditKind::Outline);
             // The ids to read are the ones the encode wrote, not the draft's live-node count: the
             // first round of this loop erases the node it replaces, so the id it wrote outlives
             // `nodeCount()` -- and a scan bounded by the count stops one short of the value this
@@ -700,6 +710,10 @@ const runtime::Program *outlineRegions(
         if (analysis.regions.empty())
             continue;
         auto &draft = session.edit(graph).edit();
+        // The edit record's high-side entry: whatever this block writes is one outline edit of the
+        // graph (docs/design/graph-editing/README.cn.md 8.1), recorded once with the union of the
+        // regions it touched and one notification, rather than once per primitive it calls.
+        runtime::GraphDraft::NamedEdit edit(draft, runtime::EditKind::Outline);
         std::unordered_map<size_t, rt::gc_node_ref_t> resident;
         // The effects this rewrite writes, by the control region they were written in. The record
         // outlives this graph's rewrite: the edges are written once every graph is rewritten and
@@ -1080,6 +1094,11 @@ settleDeclarations(core::context::Context &context, const runtime::Program *prog
                 if (found == wider.end() || found->second == nodeType)
                     continue;
                 auto &draft = session.edit(graph).edit();
+                // The edit record's high-side entry: whatever this block writes is one outline edit
+                // of the graph (docs/design/graph-editing/README.cn.md 8.1), recorded once with the
+                // union of the regions it touched and one notification, rather than once per
+                // primitive it calls.
+                runtime::GraphDraft::NamedEdit edit(draft, runtime::EditKind::Outline);
                 const auto replacement =
                     draft.materializeStaticValue(graph->staticSlots()[slot], found->second);
                 draft.setNodeOrigin(replacement, graph->nodeOrigin(id));
