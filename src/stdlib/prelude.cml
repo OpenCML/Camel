@@ -285,31 +285,6 @@ export func operator -(x: c128) => c128
 #op(':op/idx_arr')
 export func operator []::<T>(xs: T[], i: int) => T panic
 
-/// The position `i` on the dimension `at` of `xs`: the read a subscript writes as `xs[.., 0]`, whose
-/// third word is the dimension the position is on. This is the operator's axis-carrying form, and it
-/// is declared under a name of its own because a rule's left side is a call and not a bracket form:
-/// `index_into_axis(x, i, at)` is what `:op/idx_arr` at three operands is, the way `index_into(x, i)`
-/// is what it is at two.
-///
-/// The forward and the reverse families each file a law for that form (`rulesets.jvp`'s
-/// `jvp_idx_arr_axis`, `rulesets.transpose`'s `idx_arr_axis_t`), and both are filed under this name.
-/// It is declared here rather than in either family because the two families cannot read each
-/// other's private functions, and this is the spelling they share.
-///
-/// The body is the built-in read's own (`struct/index_into_axis`, registered beside the subscript
-/// operators it reads with): the axis is the third word, so one function answers every rank.
-///
-/// Both types are the open rank `T[...]` rather than `T[]`/`T`: the read takes an array of any rank
-/// and answers the array of one rank less, and a type cannot state "one rank less" of a rank it is
-/// not told. Written as ranked types the two ends would pin the rank to one, and a rank-two operand
-/// (`float[2, 2]`) is not a value of `float[]` (`Type::assignableFrom` compares the element types:
-/// `float` against `float[2]`). The open rank takes every rank and is taken by every rank, and the
-/// rank-zero answer of a one-dimension read is the element itself (design principles 5.4).
-/// @pure
-/// @example [[1.0, 2.0], [3.0, 4.0]][.., 0]    // [1.0, 3.0]
-#op(':struct/index_into_axis')
-export func index_into_axis::<T>(xs: T[...], i: int, at: int) => T[...]
-
 /// The character at position i of a string.
 /// @example 'abc'[1]    // 'b'
 #op(':op/idx_str')

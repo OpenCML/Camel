@@ -997,15 +997,28 @@ export rule jvp_idx_arr::<T>(xs: T[], i: int) { index_into(xs, i) => func (dxs: 
 // `xs[.., i]` is the same operator with its third word written: the position `i` on the dimension
 // that word names. Its law is a key of its own (`index_into_axis`, three operands), because the
 // two-operand law above answers an element of the first dimension and one law is filed under one
-// key. The operator's third word is the axis, and it is a value like the index: `index_into_axis`
-// (`lib/std/prelude.cml`, the built-in read under a name) takes it as its third operand, so one law
-// answers every dimension and every rank.
+// key. The operator's third word is the axis, and it is a value like the index, so the law takes it
+// as its third operand and one law answers every dimension and every rank.
 //
 // The linear half is the same read of the array's tangent: a position on a dimension of `xs` is the
 // same position of `dxs`, and the dimension is the same. Nothing needs a length here -- the read
 // takes the dimension the tangent already has, and the reverse half of this law is the axis-carrying
 // scatter in `rulesets.transpose` (`idx_arr_axis_t`), whose zeros come from the extents the walk
 // states rather than from a value the primal forgot.
+
+/// `xs[.., i]`: what `:op/idx_arr` at three operands means, and the left side this rule is filed
+/// under.
+///
+/// Private, like `index_into` above and for the same reason: a family cannot read another module's
+/// private function, so each family that files a law for this key spells it itself. The body is the
+/// operator with its third word written, and that word is a *value* in the body -- a subscript takes
+/// any `int` there (`reshape<[2, 3]>(x)[.., idx]` with `idx` a parameter is
+/// `test/cases/modules/onnx/export_index_axis.cml`) -- so the axis travels into the law as an
+/// operand instead of being spelled in it.
+/// @example index_into_axis([[1.0, 2.0], [3.0, 4.0]], 0, 1)    // [1.0, 3.0]
+func index_into_axis::<T>(x: T[...], i: int, at: int) => T[...] {
+    return x[.., at]
+}
 
 /// `d(xs[.., i]) = dxs[.., i]`: the tangent of a position on the dimension the third word names.
 ///
