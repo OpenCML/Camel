@@ -7,6 +7,7 @@
 
 #include "camel/runtime/draft_types.h"
 
+#include "camel/core/context/context.h"
 #include "camel/core/mm/alloc/growable.h"
 #include "camel/core/operator_traits.h"
 #include "camel/core/type/composite/func.h"
@@ -70,8 +71,16 @@ std::optional<slot_t> staticSlotOf(const GraphDraft &draft, gc_node_ref_t id) {
 }
 
 std::optional<type::Type *> operResultType(const GraphDraft &draft, gc_node_ref_t id) {
-    const auto *body    = reinterpret_cast<const GCOperBody *>(draft.payloadOf(id).data());
-    const auto resolver = camel::core::OperatorTable::instance().resolver(body->oper);
+    const auto *body = reinterpret_cast<const GCOperBody *>(draft.payloadOf(id).data());
+    // The rule a call is typed through is the one the context the program is of holds: its
+    // signature names the nominal types that context's declarations wrote. A program made outside
+    // a context has no rules, and a node of it keeps the type it was given.
+    const std::shared_ptr<camel::core::context::Context> context =
+        draft.program() != nullptr ? draft.program()->context() : nullptr;
+    if (context == nullptr) {
+        return std::nullopt;
+    }
+    const auto resolver = context->resolverOf(std::string(body->uri()));
     if (!resolver) {
         return std::nullopt;
     }
@@ -106,7 +115,7 @@ std::optional<type::Type *> operResultType(const GraphDraft &draft, gc_node_ref_
         return arg.value.has_value() || arg.elements.has_value();
     });
     if (!anyStatic) {
-        const type::FunctionType *overload = operatorOverloadType(body->uri(), with, norm);
+        const type::FunctionType *overload = operatorOverloadType(context, body->uri(), with, norm);
         return overload ? std::optional<type::Type *>(overload->exitType()) : std::nullopt;
     }
     try {

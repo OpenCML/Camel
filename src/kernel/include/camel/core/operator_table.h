@@ -78,6 +78,10 @@ namespace camel::ops {
 struct Record;
 } // namespace camel::ops
 
+namespace camel::core::context {
+class Context;
+} // namespace camel::core::context
+
 namespace camel::core::data {
 class Data;
 using data_ptr_t = std::shared_ptr<Data>;
@@ -627,16 +631,14 @@ class OperatorTable {
 
     // ---- Type rules -----------------------------------------------------------------------
 
-    /// Registers (or replaces) the type resolver of an operator overload. An OPER node records
-    /// only the operator its call resolved to; passes that change what is known about the
-    /// arguments (binding input shapes, folding a shape to a constant) re-run the overload's
-    /// resolver through the table. Operator groups register their overloads when created, and the
-    /// id this answers is the one each rule records as its identity (`OperatorGroup::operAt`).
-    OperId setResolver(std::string_view uri, type::resolver_ptr_t resolver);
-
-    /// The resolver of the operator, or nullptr.
-    type::resolver_ptr_t resolver(OperId id) const;
-    type::resolver_ptr_t resolver(std::string_view uri) const;
+    /// Checks the type rule of an operator overload against what the operator declares, and
+    /// answers the id the URI is interned under. The rule itself is not kept here: it is the
+    /// context's, which is where a call is typed through it (`Context::registerResolver`), so a
+    /// second context answers with its own rule and no rule outlives the context that wrote it.
+    /// The check is the one direction this table owns: what an operator does to its operands is
+    /// declared to the table, and a rule written for it must agree (a `var` parameter and the
+    /// operand that is written are the same operand).
+    OperId checkResolver(std::string_view uri, const type::resolver_ptr_t &resolver);
 
     //  ---- Groups, and the types a group registered ---------------------------
 
@@ -732,12 +734,13 @@ class OperatorTable {
     /// (a dynamic one: `__rule`, the tensor shape rules) contributes nothing, and neither does a
     /// signature that still writes a type variable: a generic overload (`map::<T, U>`) names no
     /// concrete type, and a rule cannot be instantiated at one.
-    std::vector<type::Type *> registeredTypes(std::string_view group) const;
+    std::vector<type::Type *>
+    registeredTypes(camel::core::context::Context &context, std::string_view group) const;
 
     /// Every type any declared group registered, each once, in group and overload order. This is
     /// the candidate set `check` enumerates the instances of a generic rule over when it is given
     /// no program.
-    std::vector<type::Type *> allRegisteredTypes() const;
+    std::vector<type::Type *> allRegisteredTypes(camel::core::context::Context &context) const;
 
     /// Registers (or replaces) the type folder of an operator.
     void setTypeFolder(std::string_view uri, TypeFolder folder);
@@ -883,9 +886,19 @@ class OperatorTable {
         /// joined, and joining them at intern is what keeps a reader from searching by URI text.
         std::uint32_t record = 0;
         // Guarded by mutex_. A folder is heap-allocated once and replaced only at load time, so
-        // readers may keep the pointer after releasing the lock.
-        type::resolver_ptr_t resolver;
+        // readers may keep the pointer after releasing the lock. There is no rule here: a rule
+        // belongs to the context whose declarations wrote it (`Context::resolverOf`), and this
+        // entry keeps what an operator is -- its URI, its record, its traits, its effects.
         std::unique_ptr<TypeFolder> folder;
+        /// Which parameters of the rule registered for this operator are `var` (its with
+        /// parameters, then the ordinary ones), and the rule's signature as text. Not the rule: a
+        /// rule is the context's. These three are what the agreement between the rule and the
+        /// resources declared for the operator is checked from, in either order the two arrive
+        /// (checkVarAgainstResources), and the check is the table's business -- what a call may
+        /// write is declared to the table.
+        std::vector<bool> varWith;
+        std::vector<bool> varNorm;
+        std::string ruleText;
         /// The in-place form (setInPlaceForm); kEmptySym when there is none.
         SymId inPlace = kEmptySym;
         /// What this operator is the in-place form of (setInPlaceForm, written on the form's own

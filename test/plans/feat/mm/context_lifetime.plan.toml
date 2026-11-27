@@ -72,3 +72,15 @@ expect_exit = 0
 expect_stdout_contains = ["CONTEXTS-PROBE held=1 live_before=1 live_second=2 live_after=1 rootset_before=1 rootset_second=2 rootset_after=1 root_given_back=1 deferred_before=1 deferred_after=0 ran=1 alive=1", "contexts-1-2-3"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 60000
+
+[[tests]]
+name = "context_lifetime.two_contexts_each_own_rule"
+desc = "Two contexts alive at once each answer `to_range` with their own rule, and the `Range` each rule returns is that context's own: the running context's answer is not replaced by the second context's, and it is still there after the second context was destroyed. The defect this pins: the rules lived in the process's operator table, keyed by URI, so the second context's prelude overwrote the first's answer for `to_range` (both contexts then contended for one entry) and a rule outlived the context whose nominal types it names."
+kind = "behavior"
+case = "../../../cases/feat/mm/gc/context_lifetime.cml"
+args = ["--gc", "kind=generational", "${case}", "test::resolver_owner", "${run_nvm}"]
+
+expect_exit = 0
+expect_stdout_contains = ["RESOLVER-PROBE a_rule=1 b_rule=1 rule_differs=1 a_exit=Range b_exit=Range exit_differs=1 a_unchanged=1 a_exit_stable=1 a_alive=1 b_prelude=built", "contexts-1-2-3"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 60000

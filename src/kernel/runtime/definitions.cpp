@@ -340,6 +340,7 @@ std::optional<DefinitionStore::LibraryFunction> DefinitionStore::libraryFunction
         return remember(std::nullopt, false, std::move(location), what);
     }
     Program *program = context_.reserveProgram();
+    program->setContext(context_.handle());
     // Encoding a compiled graph into a runtime program is the compiler's, and the kernel reaches
     // it through the registered loader: this file names no compile graph.
     camel::core::module::SourceModuleLoader *loader =
@@ -421,6 +422,7 @@ DefinitionStore::Entry &DefinitionStore::build(core::OperId oper) {
     }
     // Kept for as long as the context, refused or not: nothing else owns them.
     Program *program = context_.reserveProgram();
+    program->setContext(context_.handle());
     GUARD(definitionLoader != nullptr, "No source module loader is registered to encode a graph.");
     definitionLoader->encodeProgram(function, *module, *program, true);
     context_.pinRuntimeProgram(program);

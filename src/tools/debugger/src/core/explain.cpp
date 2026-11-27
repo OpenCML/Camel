@@ -340,7 +340,7 @@ DebugCore::CallAnswer DebugCore::callAtFrame(
     }
     // The result type comes from the module's own type rule, the one the compiler uses, so the
     // tool does not keep a second copy of the signature either.
-    auto resolver = OperatorTable::instance().resolver(uri);
+    auto resolver = context->resolverOf(std::string(uri));
     if (!resolver) {
         answer.diagnostic = locatedDiagnostic(f, "the operator '" + uri + "' has no type rule");
         return answer;

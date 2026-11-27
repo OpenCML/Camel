@@ -31,6 +31,10 @@ class OpRegistry {
     /// Registers definitions under `protocol`. Re-registering a URI is an error.
     void add(std::string_view protocol, std::vector<OpDef> defs);
 
+    /// Hands the rules of the operators that belong to no group to the context that loaded the
+    /// module: a rule is its context's (Context::registerResolver), not the process's.
+    void registerResolvers(const std::shared_ptr<camel::core::context::Context> &context) const;
+
     /// Definition for a full URI such as "tensor:matmul", or nullptr.
     const OpDef *find(std::string_view uri) const;
     /// Definition for a graph's process-local operator identity, or nullptr.

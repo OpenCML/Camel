@@ -36,8 +36,8 @@ namespace camel::runtime {
  * question allocates nothing.
  */
 camel::core::type::FunctionType *operatorOverloadType(
-    std::string_view uri, const camel::core::type::type_vec_t &with,
-    const camel::core::type::type_vec_t &norm);
+    const std::shared_ptr<camel::core::context::Context> &context, std::string_view uri,
+    const camel::core::type::type_vec_t &with, const camel::core::type::type_vec_t &norm);
 
 /**
  * True when the value `id` holds may be written in place: it is passed to a `var` parameter,

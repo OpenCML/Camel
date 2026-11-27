@@ -113,6 +113,9 @@ const Program *makeProgram(
         *program = *base;
     }
     program->makeSatellite();
+    // The program is of this context, and says so: a draft's rewrite types its nodes through the
+    // rules of the context that holds them.
+    program->setContext(context.handle());
     for (auto *graph : graphs) {
         program->bindOwn(graph->id(), graph);
     }

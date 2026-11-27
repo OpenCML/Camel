@@ -97,6 +97,7 @@ void publish(
     const compile_graph_ptr_t &rhs, const compile_graph_ptr_t &when, GenericRuleInstance &instance) {
     camel::runtime::Program *program = context.reserveProgram();
     GUARD(program != nullptr, "The context reserves the program an instance is published in.");
+    program->setContext(context.handle());
     encodeToRuntimeProgram(lhs, *program, &context.graphIds());
     instance.program = program;
     instance.lhs     = program->root();
@@ -208,8 +209,10 @@ RuleConditionAt ruleConditionAt(
     return owner->ruleConditionVerdict(*entry, types, why);
 }
 
-std::vector<Type *> ruleInstanceTypes() {
-    return camel::core::OperatorTable::instance().allRegisteredTypes();
+std::vector<Type *> ruleInstanceTypes(camel::core::context::Context &context) {
+    // The types are the ones the rules of this context declare: another context's rules name its
+    // own nominal types, which no instance of a rule of this one is made at.
+    return camel::core::OperatorTable::instance().allRegisteredTypes(context);
 }
 
 namespace {

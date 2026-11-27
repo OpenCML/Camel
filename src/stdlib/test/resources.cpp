@@ -578,7 +578,7 @@ ResourcesTestPass::apply(const camel::runtime::Program *program, std::ostream &o
         using camel::core::type::StaticFuncTypeResolver;
         using camel::core::type::Type;
         table.set("semtest:var_op", {.stateOnly = true});
-        table.setResolver(
+        table.checkResolver(
             "semtest:var_op",
             StaticFuncTypeResolver::create({}, {{Type::Int64(), true}}, Type::Int64()));
         attempt(os, "var_param_written", "semtest:var_op", ResourceSpec{.accesses = {cellWrite}});
@@ -589,7 +589,7 @@ ResourcesTestPass::apply(const camel::runtime::Program *program, std::ostream &o
             ResourceSpec{
                 .accesses = {operandAccess(ResourceClass::Variable, 0, AccessMode::Read)}});
         table.set("semtest:plain_op", {.stateOnly = true});
-        table.setResolver(
+        table.checkResolver(
             "semtest:plain_op",
             StaticFuncTypeResolver::create({}, {{Type::Int64(), false}}, Type::Int64()));
         attempt(
@@ -605,7 +605,7 @@ ResourcesTestPass::apply(const camel::runtime::Program *program, std::ostream &o
             ResourceSpec{
                 .accesses = {operandAccess(ResourceClass::Variable, 0, AccessMode::Read)}});
         try {
-            table.setResolver(
+            table.checkResolver(
                 "semtest:late_op",
                 StaticFuncTypeResolver::create({}, {{Type::Int64(), true}}, Type::Int64()));
             os << "RESOURCES late_resolver accepted\n";
