@@ -1,23 +1,10 @@
 /**
- * The result of an exported function must be a tensor or a number. A function returning a
- * string is refused at the export_model call (line 11).
+ * The result of an exported function must be a tensor or a number. The program the pass
+ * translates returns a string, so the export is refused at the output of that function.
+ * The case used to name that function in an export_model call; the thin stage form has no
+ * function parameter (D-1127-102), so the entry function itself is the one that returns it.
  */
 
-import { export_model } from onnx
-import { reshape } from tensor
-
-func main() => int sync {
-    let r = export_model<out: 'tmp/test/onnx/refusal_output.onnx'>(func (t: float[...]) => string {
-        'text'
-    }, reshape<[2]>([1.0, 2.0]))
-    return match r {
-        case error e => sync {
-            println(e)
-            return 1
-        }
-        case _ => sync {
-            println('exported')
-            return 0
-        }
-    }
+func main() => string sync {
+    return 'text'
 }
