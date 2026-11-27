@@ -389,7 +389,7 @@ name = "gc_pacing.promoted_floor"
 desc = "`--gc large_budget_mb=` is the floor of the promoted-block budget too: with 16 MB (above 25 % of the live blocks) the majors fall from 64 to 22 and the high-water mark rises to 43 MB. Pipeline: std::fvm."
 kind = "behavior"
 case = "../../../cases/feat/mm/gc/gc_promoted_blocks.cml"
-args = ["--gc", "growth_percent=25", "--gc", "large_budget_mb=16", "${case}", "std::profile gc_stats=1 report=false hints=false", "--arg", "steps=300", "--arg", "rows=16", "--arg", "size=131072", "${run_fvm}"]
+args = ["--gc", "growth_percent=25,large_budget_mb=16", "${case}", "std::profile gc_stats=1 report=false hints=false", "--arg", "steps=300", "--arg", "rows=16", "--arg", "size=131072", "${run_fvm}"]
 expect_exit = 0
 expect_stdout_contains = ["gc_promoted_blocks base=0"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
@@ -449,7 +449,7 @@ name = "gc_pacing.adopted_block"
 desc = "An array promoted while inline (`--gc promotion_age=1`, small allocations fill the birth space first) then grows its own block to 8 MB: the takeover registers the block, the sweep counts 4.7 MB of elder block bytes, and one major collection is asked for. Without the takeover registration the block is never counted and the collection count is zero. Pipeline: std::fvm."
 kind = "behavior"
 case = "../../../cases/feat/mm/gc/gc_block_adopted.cml"
-args = ["--gc", "growth_percent=25", "--gc", "promotion_age=1", "${case}", "std::profile gc_stats=1 report=false hints=false", "--arg", "pause=20", "--arg", "rounds=3000", "--arg", "grow=450000", "${run_fvm}"]
+args = ["--gc", "growth_percent=25,promotion_age=1", "${case}", "std::profile gc_stats=1 report=false hints=false", "--arg", "pause=20", "--arg", "rounds=3000", "--arg", "grow=450000", "${run_fvm}"]
 expect_exit = 0
 expect_stdout_contains = ["gc_block_adopted len=450000"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
