@@ -108,3 +108,20 @@ out/latest/bin/camel docs/tutorial/examples/17_fact.cml
 - `lane-witness`：余量已尽，连"读卡 + 定落点"一轮都撑不完，未开工（`witness` 树 `git status` 空、`lane/item-13b @ 4128b8f8cf`）。
 - **⇒ 回到排队**：`D-1128-48` ② 的原话是"不占 CC 格，排在 CC 之后的第一个空格"。现在开发位 8/8 全满、合并位 2/2 在忙、缓冲 1/1 占着，**没有空格可给**；本卡继续留在 `internal/collab/`，等某条车道自然交回再起。
 - 谁接手都要先做第一件事：**报"落点 + 打算怎么翻"**（在规则库里找 `math:abs_l`，找一个同类算子照抄翻译，再改图算子表），再动手。
+## 实测读数（2026-11-28 07:2x，探针格 `lane-parked-rebase`，`perf` 树）
+
+`abs(INT_MIN)` 两个执行后端都返回 `INT_MIN`（回绕取负生效）：
+
+```
+import { abs } from math
+func main() {
+    let m: i32 = -2147483647 - 1
+    println(m)
+    println(abs(m))
+}
+→ [PASS] nvm  [stdout] -2147483648 / -2147483648
+→ [PASS] fvm  [stdout] -2147483648 / -2147483648
+→ std::cpp 产物含 `camel::standalone::intAbs`（文本级；运行级要仓库内 case + cppexec 的 expect.txt）
+```
+
+**坑（写用例的人必须照抄）**：直接写 `abs(-2147483648)` **测不到 Int32 分支** —— 字面量超出 `i32`，整个表达式按更宽类型算，实测两个后端都打 `2147483648`。要测 Int32 的最小值必须**显式声明宽度**：`let m: i32 = -2147483647 - 1`。
