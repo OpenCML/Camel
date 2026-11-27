@@ -229,7 +229,6 @@ enum class SemanticDiag : uint32_t {
     /// A `constas` declaration was used where a function value is needed.
     ConstasFunctionNeedsCall = 0x000199,
     /// A `constas` declaration is a body-less declaration of a C++ operator.
-    ConstasInNativeDeclaration = 0x00019A,
     /// A call to a `constas` declaration gives no value for the parameter.
     ConstasArgumentMissing = 0x00019B,
     /// A tag gives a fact one value where the node already has another.

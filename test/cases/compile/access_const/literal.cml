@@ -1,0 +1,5 @@
+// The control: a literal is a compile-time value, so the call is read and the read runs.
+func main() => int sync {
+    println(access::<(int, int), int><1>((10, 20)))
+    return 0
+}

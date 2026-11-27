@@ -532,7 +532,7 @@ ab449b7d874527d9 ok src/stdlib/opt.cml
 49015cbc4407a506 ok src/stdlib/optim.cml
 cfd1905583789732 ok src/stdlib/para.cml
 a82098797df46210 ok src/stdlib/perf.cml
-db6b57f07670f7c0 ok src/stdlib/prelude.cml
+e630d2946add20b5 ok src/stdlib/prelude.cml
 0a2356410c7e5b3c ok src/stdlib/process.cml
 8f9a9b5b4701c251 ok src/stdlib/pyplot.cml
 692ab627c3592a87 ok src/stdlib/python.cml
@@ -568,6 +568,9 @@ aa0941df5af401ba ok src/stdlib/rulesets/vmap.cml
 0c368faaef090af5 no src/stdlib/tensor/signatures/tensor.cml
 aa2ab77afb6218d5 ok src/stdlib/tiles/signatures/tiles.cml
 e4210adf416a6f2c no src/stdlib/transforms/signatures/transforms.cml
+1c3fad0be82cbf71 ok test/cases/compile/access_const/at_runtime.cml
+8ec3dc3a2c122257 ok test/cases/compile/access_const/key_runtime.cml
+1248d91fd7116c6f ok test/cases/compile/access_const/literal.cml
 2c8a06ba0fe2f3e6 ok test/cases/compile/broadcast_like_spreads_rank_zero.cml
 dc71e2d3ab7cd429 ok test/cases/compile/closed_rank_rejects_rank_zero.cml
 176c9efddaac8e32 ok test/cases/compile/err_lambda_tuple_arity.cml
@@ -744,7 +747,6 @@ babc83e483d876ff ok test/cases/compile/constas/constas_forward.cml
 643664f1a35decdd ok test/cases/compile/constas/constas_forward_field.cml
 e424cb32feace134 ok test/cases/compile/constas/constas_forward_rest.cml
 dec31d5bd08d5ac2 ok test/cases/compile/constas/constas_missing_argument.cml
-02a75d96c618059d ok test/cases/compile/constas/constas_native.cml
 81becfeeb8a301c8 ok test/cases/compile/constas/constas_no_type.cml
 392ea15392975f76 ok test/cases/compile/constas/constas_not_first.cml
 91e54e6a667e045f ok test/cases/compile/constas/constas_param.cml

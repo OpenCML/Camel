@@ -1037,7 +1037,7 @@ export func fill::<T, ...F>(template: T, ...fields: ...F) => T
 /// @pure
 /// @example access::<(int, int), int><0>((1, 2))    // 1
 #op(':op/access')
-with <at: int>
+with <constas at: int>
 export func access::<T, U>(x: T) => U
 
 /// The same member read by name: the field of a struct, which the compiler spells `s.x`. It is a
@@ -1048,7 +1048,7 @@ export func access::<T, U>(x: T) => U
 /// @pure
 /// @example access_key::<{ x: int, y: int }, int><'y'>({ x: 1, y: 2 })    // 2
 #op(':op/access_key')
-with <key: string>
+with <constas key: string>
 export func access_key::<T, U>(x: T) => U
 
 // ---- arrays ----
