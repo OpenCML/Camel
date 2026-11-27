@@ -337,7 +337,7 @@ GrowableFreeListAllocator &metaSpace() {
         "constants and function objects of the graphs being compiled",
         16 * MB,
         kDefaultMetaSpaceLimitBytes,
-        {selectedSizing.metaSpaceLimitMb, "--spaces meta_mb"}));
+        {selectedSizing.metaSpaceLimitMb, "--spaces meta_mb="}));
     return *allocator;
 }
 
@@ -348,7 +348,7 @@ GrowableFreeListAllocator &graphSpace() {
         "runtime graphs",
         64 * MB,
         kDefaultGraphSpaceLimitBytes,
-        {selectedSizing.graphSpaceLimitMb, "--spaces graph_mb"}));
+        {selectedSizing.graphSpaceLimitMb, "--spaces graph_mb="}));
     return *allocator;
 }
 
@@ -369,7 +369,7 @@ GrowableFreeListAllocator &blockSpace() {
             "data blocks",
             8 * MB,
             selected != 0 ? selected : kDefaultBlockSpaceLimitBytes,
-            {0, "--spaces block_mb"});
+            {0, "--spaces block_mb="});
         config.sizesFromHeaders = true;
         blockSpaceCreated.store(true, std::memory_order_release);
         return config;
@@ -384,7 +384,7 @@ GrowableBumpAllocator &permSpace() {
         "types and layouts",
         32 * MB,
         kDefaultPermSpaceLimitBytes,
-        {selectedSizing.permSpaceLimitMb, "--spaces perm_mb"}));
+        {selectedSizing.permSpaceLimitMb, "--spaces perm_mb="}));
     return *allocator;
 }
 
