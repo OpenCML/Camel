@@ -1,0 +1,34 @@
+id = "probe.foreach_lambda"
+tier = "fast"
+tags = ["probe"]
+desc = "One `foreach`, three iterables, one question: does a lambda written without parameter types take them from the position it stands in? The array form's does; the range form's is the reading this plan is about, and the array value is the control that says the position is the same position."
+
+[[tests]]
+name = "foreach_lambda.array_form"
+desc = "The array literal: `[1, 2, 3]->foreach<func (x) { println(x) }>` -- `x` is an `int` by the function type the `with` position expects."
+kind = "behavior"
+case = "../../cases/probe/foreach_lambda/array_form.cml"
+args = ["check", "${case}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "foreach_lambda.array_value_form"
+desc = "The same position with an array value (`to_array(0 .. 3)`) instead of a literal: the element type is the receiver's, and the lambda's parameter is still written without a type."
+kind = "behavior"
+case = "../../cases/probe/foreach_lambda/array_value_form.cml"
+args = ["check", "${case}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "foreach_lambda.range_form"
+desc = "The range form: `(0 .. 3)->foreach<func (x) { println(x) }>`. The declaration names the same `with <f: (item: int) => void>`, so the lambda's parameter is inferable here too."
+kind = "behavior"
+case = "../../cases/probe/foreach_lambda/range_form.cml"
+args = ["check", "${case}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000

@@ -1,0 +1,6 @@
+// The array form: the lambda's parameter takes its type from the function type the position
+// expects, so `x` is written without a type and is an `int`.
+func main() => int sync {
+    [1, 2, 3]->foreach<func (x) { println(x) }>
+    return 0
+}
