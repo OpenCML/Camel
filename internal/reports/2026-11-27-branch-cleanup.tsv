@@ -76,3 +76,11 @@ D:/Projects/Camel-wt/backfill	probe/d1123-102-backfill @ d2c3f10d6f	M semantic.c
 D:/Projects/Camel-wt/ex	detached @ b1c103bc1a	M 6 文件 57+/5-：graph 读取通道 + 三处文档同步（relative_cost_stated）	保档+退树（checkout -- 复原）	internal/reports/2026-11-27-parked-ex-relative-cost-stated.patch（integration 98ff0ee6af，13,179B/149 行）；代码里 relative_cost_stated 零命中，故这 57 行是真没落地的活
 # 合计 14 棵（不是 9）：第一批 3 + plain-gate-2/transpose-carry 2 + 五棵探针树 5 + ad/catchup 2 + backfill/ex 2。
 # worktree list 65 → 53；其间别人新增了 2 棵，故 65-14+2=53。
+# --- 其他已合本地枝（非 lane/*、非 camel-baseline-*、非 seat/*）---
+# 判据：git branch --merged origin/integration + 无工作树检出 + 不在保护名单（main/develop/integration/docs/*/fsh-dev/record/*/seat/*）。
+lane/revert-editview-gir	e8a120c287	deleted	merged, no worktree, not in the protected list	(no subject recorded: land before the ledger)
+probe/d1123-102-backfill	d2c3f10d6f	deleted	merged, no worktree, its tree was retired earlier	merge extraction-cost: an operator says how dear it is, and the library reads it to choose
+# 未删、等决策者裁定：acc/revert-check 2c930c3dcd（accept 位历史枝）、golden-probe-record 79cf4ab28c（记录枝）。
+# 未删、有人或保护名单：lane/editview-gir（C5 重落原材料）、lane/docs-lambda-probe（记录树）、lane/edit-session、lane/parse-old-syntax。
+# 远端已合 7 条非主干分支只报不删，由协调者清理：cyf-dev 822631ef4a / fsh-dev f353b63d67 / gj-dev 5026b9d2c5 /
+# hjx-dev 5026b9d2c5 / lrz-dev 78f3f4feb9 / lzc-dev 1e76d9c511 / wzj-dev 32ccd19d8e。
