@@ -60,7 +60,7 @@ timeout_ms = 20000
 # or not it is inside the window.
 [[tests]]
 name = "facts.arrangeable_every_operator_answers"
-desc = "`scripts/check-arrangeable.mjs` runs `test::facts_compare std::gir` on every `.cml` the revision tracks and sums the census it prints: the totals, one line per node kind, one per family the tree answered in, and the (node kind, operator) rows. It then reads three things -- the sweep read at least 1700 cases, no node of any graph went unanswered (`no_fact=0`, because an absent answer is not a placement decision but a fact-layer defect), and no row was dropped in the reading -- and prints the tables either way."
+desc = "`scripts/check-arrangeable.mjs` runs `test::facts_compare std::gir` on every `.cml` the revision tracks -- the `fixtures/` directories of `test/cases` are left out by one directory rule and counted -- and sums the census it prints: the totals, one line per node kind, one per family the tree answered in, the (node kind, operator) rows, and one line per case it could not read with the reason (`refused`: the pass never ran, the case does not compile on its own; `declined`: the pass ran and the store answered nothing). It then reads three things -- the sweep read at least 70% of the cases it walked, no node of any graph went unanswered (`no_fact=0`, because an absent answer is not a placement decision but a fact-layer defect), and nothing was dropped in the reading (`silent=0`) -- and prints the tables either way."
 kind = "behavior"
 tool = "node"
 case = "../../../../scripts/check-arrangeable.mjs"
@@ -68,8 +68,8 @@ args = ["${case}"]
 expect_exit = 0
 expect_stdout_contains = ["ARRANGEABLE_SWEEP files=", "ARRANGEABLE_KIND node_kind=oper", "ARRANGEABLE_ROW node_kind=oper oper=:op/cast", "every node the sweep read was answered by the fact"]
 # One `camel` per case, plus `std::gir` for each (the stopper that keeps a case from being executed:
-# the comparison pass hands the program on, and the next fallback would run it). The reading is 2,981
-# cases at 238,135 nodes, 453 s of CPU over eight workers on the gate host; 2,400,000 ms is over five
-# times that, so the bound is a bound and not the work's own time. A host that runs it slower spends
-# wall clock and no CPU, and CPU is what the runner reads.
+# the comparison pass hands the program on, and the next fallback would run it). The reading is 3,056
+# of 4,133 cases at 260,538 nodes, 55 s of wall clock over six workers on the gate host; 2,400,000 ms
+# is far over that, so the bound is a bound and not the work's own time. A host that runs it slower
+# spends wall clock and no CPU, and CPU is what the runner reads.
 timeout_ms = 2400000
