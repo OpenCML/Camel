@@ -386,10 +386,20 @@ function readTip(args, baseSha, tip) {
     // table is measured on one tier. Only the cases of that tier are compared; a row that says
     // nothing about its tier is compared, because a red that cannot be placed must not be dropped.
     const reds = rows.filter((row) => !NOT_RED.has(row.status) && (row.tier === undefined || row.tier === BASELINE_TIER))
-    const newReds = reds
-        .filter((row) => !known.has(`${row.plan}\t${row.test}`) && !known.has(`${row.test}\t${toSlashes(String(row.plan_path ?? ''))}`))
+    const outside = reds.filter((row) => !known.has(`${row.plan}\t${row.test}`) && !known.has(`${row.test}\t${toSlashes(String(row.plan_path ?? ''))}`))
+    // A case whose plan declares it `flaky` names the defect that makes it fail on its own, and the
+    // runner has already given it its second attempt. Its red is printed and recorded and does not
+    // stop the batch: the defect has its own row, and a batch is not where it is decided. Every other
+    // red outside the table is new.
+    const intermittent = outside.filter((row) => typeof row.flaky === 'string' && row.flaky.length > 0)
+    const newReds = outside
+        .filter((row) => !intermittent.includes(row))
         .map((row) => ({ plan: String(row.plan), case: String(row.test) }))
-    process.stdout.write(`merge-batch: ${rows.length} case(s) read, ${reds.length} red, ${newReds.length} not in ${baseline.name}\n`)
+    process.stdout.write(
+        `merge-batch: ${rows.length} case(s) read, ${reds.length} red, ${newReds.length} not in ${baseline.name}` +
+            `${intermittent.length > 0 ? `, ${intermittent.length} more declared flaky` : ''}\n`,
+    )
+    for (const row of intermittent) process.stdout.write(`flaky red  ${row.plan}  ${row.test}  (${row.flaky})\n`)
     if (newReds.length > 0) {
         for (const one of newReds) process.stdout.write(`new red  ${one.plan}  ${one.case}\n`)
         return { skipped: false, newReds, plans, reds: reds.length, baseline: baseline.name }
@@ -397,7 +407,15 @@ function readTip(args, baseSha, tip) {
     fs.mkdirSync(path.dirname(recordFile), { recursive: true })
     fs.writeFileSync(
         recordFile,
-        [`plans=${plans.join(',')}`, `reds=${reds.length}`, `baseline=${baseline.name}`, `tier=${BASELINE_TIER}`, 'new=0', ''].join('\n'),
+        [
+            `plans=${plans.join(',')}`,
+            `reds=${reds.length}`,
+            `baseline=${baseline.name}`,
+            `tier=${BASELINE_TIER}`,
+            ...(intermittent.length > 0 ? [`flaky=${intermittent.map((row) => `${row.plan}/${row.test}`).join(',')}`] : []),
+            'new=0',
+            '',
+        ].join('\n'),
     )
     return { skipped: false, newReds, plans, reds: reds.length, baseline: baseline.name }
 }
