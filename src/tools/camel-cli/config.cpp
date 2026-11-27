@@ -1038,6 +1038,17 @@ bool parseArgs(int argc, char *argv[]) {
     // both taken from the table above.
     auto cli = docsCommand | aboutCommand | zenCommand | explainCommand | run | infoFlags | check |
                inspect;
+    // The subcommands a reader can use are printed from the same table their names are read from,
+    // so a name added there is a name `--help` lists, with the line the table carries.
+    const auto subcommandUsage = [&kSubcommands] {
+        std::string lines;
+        for (const Subcommand &sub : kSubcommands) {
+            lines += "\t";
+            lines += sub.usage;
+            lines += '\n';
+        }
+        return lines;
+    };
     startupMark("construct");
 
     std::vector<char *> args = takeWarningArguments(argc, argv);
@@ -1089,6 +1100,7 @@ bool parseArgs(int argc, char *argv[]) {
         cout << "Usage: " << endl;
         cout << "\tcamel [options] [<target file>]  (run: need --input or positional)\n";
         cout << usage_lines(cli, "camel") << endl;
+        cout << subcommandUsage();
         cout << kWarningOptionsHelp;
         exitCode = 1;
         return false;
@@ -1125,6 +1137,7 @@ bool parseArgs(int argc, char *argv[]) {
 
     if (showHelp) {
         cout << make_man_page(cli, "camel");
+        cout << subcommandUsage();
         cout << kWarningOptionsHelp;
         cout << kMeasurementOptionsHelp;
     }
