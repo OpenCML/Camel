@@ -1,0 +1,26 @@
+// The reverse control of "the replacement takes the whole matched left side": a term the law
+// matched, whose value the program reads again after the rewrite, has to stay.
+//
+// `shared` writes the same combine `tensor_forms.cml` writes, and reads the first product a second
+// time. The rewrite replaces the add by `t * 8.0`, and closing the chain over the left side's terms
+// must not take the product `println` still reads: the term keeps the place it has, and its value is
+// still computed. Without the "nothing but the left side reads it" test the term would leave the
+// chain with a reader still pointing at it and the graph would have a value nobody computes.
+
+import { reshape } from tensor
+
+type Vec = f32[3]
+
+func shared(x: Vec) => Vec sync {
+    let p = x * 3.0
+    let a = p + x * 5.0
+    println(p)
+    println(a)
+    return x
+}
+
+func main() => int sync {
+    let v = reshape<[3]>([1.0, 2.0, 3.0] as f32[])
+    println(shared(v))
+    return 0
+}

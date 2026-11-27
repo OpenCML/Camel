@@ -607,11 +607,18 @@ class DraftWritings : private WritingObserver {
     /// to the single variable `remainder` reports. Only the bit-exact association is read, so a
     /// float sum is never regrouped here (`reassociate` and its rules are that path), and the
     /// written order is still tried first.
+    ///
+    /// `termOut` collects the operator nodes the left side read below its root: the terms of the
+    /// matched left side, root first. A rewrite replaces the whole left side and not only its root,
+    /// so the places those terms held in a `sync` block's chain are the left side's to close over
+    /// (`closeChainOver`) -- without them the chain keeps the terms as statements of a computation
+    /// the right side no longer reads. Only the greedy rewrite passes one: saturation and
+    /// extraction leave the alternatives standing and erase nothing.
     bool matchFrom(
         camel::core::sem::PermissionMask context, std::vector<Item> &work, size_t at,
         std::vector<gc_node_ref_t> &bind, std::vector<uint8_t> &bound,
-        std::vector<gc_node_ref_t> *waits, bool commuted, const std::function<bool()> &emit,
-        MatchRemainder *remainder = nullptr);
+        std::vector<gc_node_ref_t> *waits, std::vector<gc_node_ref_t> *termOut, bool commuted,
+        const std::function<bool()> &emit, MatchRemainder *remainder = nullptr);
     gc_node_ref_t build(const Pattern &pattern, const Match &match, const DraftNodeInit &base);
     void enqueue(gc_node_ref_t node);
     void

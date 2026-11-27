@@ -269,3 +269,58 @@ case = "../../../cases/opt/algebra_rules/tensor_forms.cml"
 args = ["${case}", "rules::simplify", "std::nvm"]
 compare_to = "algebra_rules.tensor.without_the_pass"
 compare_fields = ["exit_code", "stdout_normalized"]
+
+# ---- the reverse control of the left side's chain ----
+
+[[tests]]
+name = "algebra_rules.tensor.left_side_leaves_the_chain"
+desc = "`array_combine` after the rewrite, counted rather than compared: the replacement stands for the whole matched left side, so the two products the right side no longer reads leave the `sync` block's chain with it and the form comes out at 5 nodes and 6 edges -- one product, one `println`, the port, the folded constant and the gate -- which is the shape `array_double` already measures here. `tables.mjs` bounds the form against the reference column (`at most` its nodes and edges), so a library that only ever shrank would pass it; this entry names the number, and the rewriting engine that stops closing the chain over the left side's terms fails it by name and by count."
+kind = "behavior"
+case = "../../../cases/opt/algebra_rules/tensor_forms.cml"
+args = ["${case}", "rules::simplify", "std::cxx::dce values_only=true", "measure::report", "std::nvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+  const lines = input.normalized.stdout.split('\n').map((l) => l.trim()).filter(Boolean)
+  const row = lines.find((l) => l.split(/\s+/)[0] === 'array_combine')
+  assert(row !== undefined, `no 'array_combine' line among the measured graphs: ${lines.join(' | ')}`)
+  const words = row.split(/\s+/)
+  const field = (name) => {
+    const at = words.indexOf(name)
+    assert(at >= 0, `the measurement has no '${name}' field: ${row}`)
+    return words[at + 1]
+  }
+  assert(field('nodes') === '5', `the dropped products are still in the graph: ${row}`)
+  assert(field('edges') === '6', `the chain still carries the dropped products: ${row}`)
+  assert(field('tensor_mul') === '1', `more than the law's one product: ${row}`)
+  assert(field('tensor_add') === '0', `the matched add is still in the graph: ${row}`)
+  assert(field('println') === '1', `the effect the block writes was taken with the terms: ${row}`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "algebra_rules.tensor.shared_term_stays"
+desc = "The reverse control of `array_combine`'s measurement: the replacement takes the whole matched left side, the places its terms held in a `sync` block's chain included, and that must not take a term the program reads again. `shared` writes the same combine and prints the first product a second time, so the product `t * 3.0` is matched by the law and still has a reader after the rewrite: it keeps the place it has, the add is gone and the law's one product is added beside it, which is two products and no add on the graph. Without the test that asks who reads the term, closing the chain over the left side's terms would leave a value nothing computes, so this entry is what the reverse direction of the measurement stands on."
+kind = "behavior"
+case = "../../../cases/opt/algebra_rules/shared_term.cml"
+args = ["${case}", "rules::simplify", "measure::report", "std::nvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+  const lines = input.normalized.stdout.split('\n').map((l) => l.trim()).filter(Boolean)
+  const shared = lines.find((l) => l.split(/\s+/)[0] === 'shared')
+  assert(shared !== undefined, `no 'shared' line among the measured graphs: ${lines.join(' | ')}`)
+  const words = shared.split(/\s+/)
+  const count = (op) => {
+    const at = words.indexOf(op)
+    assert(at >= 0, `the measurement has no '${op}' count: ${shared}`)
+    return words[at + 1]
+  }
+  assert(count('tensor_add') === '0', `the matched add is still in the graph: ${shared}`)
+  assert(count('tensor_mul') === '2', `the term the program reads again did not stay beside the law's product: ${shared}`)
+}
+"""
+timeout_ms = 20000
