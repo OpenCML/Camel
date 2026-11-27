@@ -898,6 +898,7 @@ ca276e577b67b876 ok test/cases/compile/function_values/literal_operator_name.cml
 5010335750698432 ok test/cases/compile/function_values/literal_unknown_name.cml
 c2ce25d202453957 ok test/cases/compile/function_values/map_callback_not_same_type.cml
 946536749c7186b8 ok test/cases/compile/function_values/nested_function_value.cml
+6eb09eaa52b14dfb ok test/cases/compile/function_values/operator_name_has_a_graph.cml
 df56d4e09b395b06 ok test/cases/compile/function_values/partial_application_span.cml
 d9b6376b3eb9859d ok test/cases/compile/function_values/return_named_function.cml
 da40c2583eecefec ok test/cases/compile/function_values/return_operator_name.cml
