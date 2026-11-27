@@ -472,8 +472,11 @@ param(
     # invocation appearing later in the same host checkout cannot change which directory is read. If
     # the named directory is not there, nothing is fetched and no other run is read instead.
     [switch]$FromThisRun,
-    # How long a run waits for a token of the host's pool before it says `state=noslot` and stops, in
-    # seconds (it reaches the host as `CAMEL_TOKEN_WAIT_S`, for the build and the plan alike). 1800 s
+    # How long a run waits to be admitted before it says `state=noslot` and stops, in seconds. There
+    # are two admissions and this one number is the wait for both: a token of the host's pool (it
+    # reaches the host as `CAMEL_TOKEN_WAIT_S`, for the build and the plan alike) and the lock of the
+    # run's own checkout, which two runs on one worktree cannot share. A wait that runs out on the
+    # lock names the run that holds it. 1800 s
     # is the shape every wait here has had: a queue behind other lanes' builds is
     # waiting, not a failure, and a reading that was never taken is not a red. It is a parameter
     # because the one case worth measuring on purpose is the refusal -- a lane that wants to see
@@ -515,6 +518,8 @@ $ErrorActionPreference = 'Stop'
 # `-FetchFile -FromThisRun`: what a run is called, what a suffix may name, and where the file lands.
 # Also its own file: `camel-remote-fetch.test.ps1` decides all three without a host.
 . (Join-Path $PSScriptRoot 'camel-remote-fetch.ps1')
+# The host text of one checker, and the refusal of a table row that has no command.
+. (Join-Path $PSScriptRoot 'camel-remote-checkers.ps1')
 # This invocation's run name, made once so the host script and the fetch after it agree on it.
 $runName = New-CamelRunName
 # Where a `-FromThisRun` fetch lands in this tree: under the fetched directory, keeping the run's
@@ -861,6 +866,13 @@ if ($gpuReadingWanted -and $checkNames -notcontains $citationWalkName) {
 # The names the host script runs, in order, now that every one of them is decided: the entries the
 # caller asked for and the walk above. `$checkList` empty is what tells the host stage to skip
 # itself (`if [ -n '$checkList' ]`), so it is written once, after both sources.
+foreach ($checkName in $checkNames) {
+    $checkProblem = Get-CamelCheckerProblem -Name $checkName -Spec $checkers[$checkName]
+    if ($checkProblem) {
+        Write-Host "[camel-remote] $checkProblem; nothing was pushed or transferred"
+        exit 2
+    }
+}
 $checkList = $checkNames -join ' '
 
 # `-UpdateAstHashes` may not take a row out of the AST record while the file that row records is
@@ -1290,16 +1302,16 @@ function Set-Holder([string]$statePath, [System.Threading.Mutex]$stateMutex, $ho
 # The pid+remote guard matters because the state files hold one holder for the whole machine and
 # host: another worktree's run (or a local build) may have replaced ours while we were running, and
 # its holder is not ours to wipe.
-function Complete-Run([string]$statePath, [System.Threading.Mutex]$stateMutex, $entry) {
+function Complete-Run([string]$statePath, [System.Threading.Mutex]$stateMutex, $recentEntry) {
     Edit-State $statePath $stateMutex {
         param($state)
         if ($null -ne $state.holder -and $state.holder.pid -eq $PID -and
             $state.holder.remote -eq $remoteName) {
             $state.holder = $null
         }
-        if ($null -ne $entry) {
+        if ($null -ne $recentEntry) {
             $recent = @($state.recent | Where-Object { $_ } | Select-Object -First 29)
-            $state.recent = @($entry) + $recent
+            $state.recent = @($recentEntry) + $recent
         }
     }
 }
@@ -1626,10 +1638,10 @@ try {
     if ($statusOk) {
         $statusFields = $statusRaw -split "`0"
         for ($i = 0; $i -lt $statusFields.Count; $i++) {
-            $entry = $statusFields[$i]
-            if ($entry.Length -lt 4) { continue }
-            $code = $entry.Substring(0, 2)
-            $rel = $entry.Substring(3)
+            $statusField = $statusFields[$i]
+            if ($statusField.Length -lt 4) { continue }
+            $code = $statusField.Substring(0, 2)
+            $rel = $statusField.Substring(3)
             if ($code[1] -eq '?') { $untracked += $rel; continue }
             $dirtyTracked += $rel
             # A rename or a copy is two fields: the destination, then the source. The source is
@@ -1961,7 +1973,7 @@ $buildCmd = if ($Config -eq 'Debug') { "npm run debug$stackTraceArg" } else { "n
     # plan instead of a 32-wide one that oversubscribes a host whose cores are all spoken for. Width
     # `$jobsBudget` (below) sets it, between the request and this line.
     $runPlan = if ($UpdateGolden) {
-        "cd `$R/ && node test/tools/run-tests.mjs --update-golden $planArgs$(Get-EntryArgs -Entry $Entry) --jobs " + "`$CAMEL_JOBS$tierArg$listKnownArg"
+        Get-UpdateGoldenCommand -PlanArgs $planArgs -Entry $Entry -TierArg $tierArg -ListKnownArg $listKnownArg
     } elseif ($Changed) {
         # The list above travels with the patch: the host has the lane's commits but not the base
         # branch, so a selection made there answered "cannot read origin/develop" and the run fell
@@ -2206,7 +2218,9 @@ echo '__CAMEL_REMOTE_GOLDENS_END__'
     # here takes a lock on its behalf: a hold opened in this shell would be invisible to the process
     # it was meant to protect, and a fixed slot is the queue this run no longer has.
     foreach ($checkName in $checkNames) {
-        $entry = $checkers[$checkName]
+        # The row was validated where the names were decided; the block generator refuses the same
+        # case again, so a row without a script cannot reach the host text by any other path.
+        $checkerSpec = $checkers[$checkName]
         # A `--changed` checker reads a diff, and a diff needs two different commits. When this
         # checkout's HEAD is already contained in the base it compares against (a lane that has
         # been merged once, or a checkout sitting on develop itself) that diff is empty forever, and
@@ -2214,7 +2228,7 @@ echo '__CAMEL_REMOTE_GOLDENS_END__'
         # gate exists to remove. The base the host sees is useless for the question (the host's base
         # ref is the commit this run just pushed), so the question is asked here, on the caller's
         # checkout, before anything is transferred.
-        if ($entry.changed) {
+        if ($checkerSpec.changed) {
             $headSha = "$(& git -C $Path rev-parse HEAD 2>$null)".Trim()
             $baseSha = "$(& git -C $Path merge-base 'origin/develop' HEAD 2>$null)".Trim()
             if ($headSha -and $baseSha -and $headSha -eq $baseSha) {
@@ -2225,58 +2239,16 @@ echo '__CAMEL_REMOTE_GOLDENS_END__'
                 exit 2
             }
         }
-        # No per-checker LD_LIBRARY_PATH prefix any more (2026-11-03 15:35 ruling): the install a
-        # current build writes carries the toolchain's libstdc++.so.6 in `libs/` with a `$ORIGIN`
-        # rpath, so the checker that starts the tree's binary starts it in the run's own
-        # environment. `compiler` still decides the `--camel` argument below.
         # The install is named rather than left to the default (this tree's out/latest): a Debug run
         # builds out/debug, and this check must measure the tag the run built and -NoBuild guarded.
-        # The path is relative to the checkout, which is the working directory by now, so the header
-        # the host prints names a command a reader can run as it is.
-        $camelArg = if ($entry.compiler) { " --camel `"out/$verifyTag/bin/camel`"" } else { '' }
-        # Every entry but the generated-file pair is a node script; those two name their own
-        # interpreter because their generators are python (see the table above).
-        $interp = if ($entry.interpreter) { $entry.interpreter } else { 'node' }
         # A checker that compiles is handed the width the caller asked for and narrows it to the
         # tokens it can get: the pool is the only thing that knows how many workers the host can
         # carry right now, and this side is not.
-        $jobsArg = if ($entry.compiles) { " --jobs $Jobs" } else { '' }
-        $shownCommand = "$interp $($entry.script) $($entry.args -join ' ')$camelArg$jobsArg"
-        # Every checker runs under a token, and `run-quiet` hands it back the moment the checker is
-        # gone. A checker is this project's own process like any case, and the pool is the only
-        # thing that makes "our processes do not outnumber the pool" true -- a check that skipped
-        # the pool would be the one path where the count went above it, every run, silently.
-        # Waiting for a token here is the price of that sentence and not a cost to be optimised
-        # away: a bypass left in place to avoid the wait is the defect it was meant to prevent.
-        if ($entry.reportOnly) {
-            # The same invocation, with one difference that is the whole point of the entry: its
-            # output is captured so the reading can be reduced out of the checker's own summary, and
-            # its exit code is kept out of `checkfail`, so a report that finds something does not
-            # turn the gate red. The reading is `unknown` when the checker printed no summary (a
-            # missing script, an early refusal) -- never a zero this run did not measure.
-            $readingFile = "$remoteScratch/check-$checkName.out"
-            $checkBlocks += @"
-
-echo '[camel-remote] --- check ${checkName}: $shownCommand ---'
-out='$readingFile'
-timeout 2400 bash "`$R/internal/tools/host-tokens.sh" run-quiet -- $shownCommand > "`$out" 2>&1
-c=`$?
-cat "`$out"
-n=`$(sed -nE '$($entry.findings)' "`$out" | head -n 1)
-rm -f "`$out"
-echo "check=${checkName} findings=`${n:-unknown} mode=report"
-echo "[camel-remote] --- ${checkName}: exit `$c ---"
-"@
-            continue
-        }
-        $checkBlocks += @"
-
-echo '[camel-remote] --- check ${checkName}: $shownCommand ---'
-timeout 2400 bash "`$R/internal/tools/host-tokens.sh" run-quiet -- $shownCommand 2>&1
-c=`$?
-if [ `$c -ne 0 ] && [ `$checkfail -eq 0 ]; then checkfail=`$c; fi
-echo "[camel-remote] --- ${checkName}: exit `$c ---"
-"@
+        # Every checker runs under a token (see the generator), because a check that skipped the pool
+        # would be the one path where the count of our processes went above it, every run, silently.
+        # Waiting for a token here is the price of that and not a cost to be optimised away.
+        $checkBlocks += Get-CamelCheckerBlock -Name $checkName -Spec $checkerSpec `
+            -VerifyTag $verifyTag -Jobs $Jobs -RemoteScratch $remoteScratch
     }
 
     # --- the gpu observation -------------------------------------------------
@@ -2754,12 +2726,27 @@ R=`$HOME/camel-work/$name
 # concurrent run exit 1 with a plan half-run). The key is a checksum of the path, so a name with
 # spaces or a longer path cannot produce an invalid lock file name.
 tree_key=`$(printf '%s' "`$R" | cksum | cut -d' ' -f1)
-exec 6>"/tmp/camel-tree-`$tree_key.lock"
+tree_lock="/tmp/camel-tree-`$tree_key.lock"
+# Opened for append: opening must not erase the record of the run that holds the lock, which is what
+# a waiter reads when its wait runs out. The wait is the same -SlotWaitSeconds the token pool is
+# waited for with, so one parameter says how long this run waits for admission, whichever it is.
+exec 6>>"`$tree_lock"
 tree_wait_started_ns=`$(date +%s%N)
-if ! flock -w 1800 6; then
-    echo '[camel-remote] no slot on this checkout within 1800 s' >&2
+if ! flock -w '$SlotWaitSeconds' 6; then
+    holder_record=`$(head -n 1 "`$tree_lock" 2>/dev/null)
+    holder_pid=`$(printf '%s' "`$holder_record" | sed -n 's/^pid=\([0-9][0-9]*\) .*/\1/p')
+    if [ -z "`$holder_pid" ]; then
+        holder_note='no holder record was written'
+    elif kill -0 "`$holder_pid" 2>/dev/null; then
+        holder_note="`$holder_record, running"
+    else
+        holder_note="`$holder_record, no longer running (a process it started may still hold the lock)"
+    fi
+    echo "[camel-remote] no slot on this checkout within $SlotWaitSeconds s (-SlotWaitSeconds): the lock `$tree_lock is held by: `$holder_note"
+    echo 'HOST_NOSLOT=checkout'
     exit 4
 fi
+printf 'pid=%s since=%s\n' "`$`$" "`$(date -u +%Y-%m-%dT%H:%M:%SZ)" > "`$tree_lock"
 tree_wait_ms=`$(( (`$(date +%s%N) - tree_wait_started_ns) / 1000000 ))
 if [ `$tree_wait_ms -gt 5000 ]; then
     echo "[camel-remote] waited `$(awk "BEGIN{printf \"%.1f\", `$tree_wait_ms/1000}") s for this checkout"
@@ -2996,7 +2983,8 @@ export CAMEL_TOKEN_DIR="`${CAMEL_TOKEN_DIR:-/tmp/camel-tokens}"
 export CAMEL_TOKENS="`${CAMEL_TOKENS:-24}"
 export CAMEL_LANE='$name'
 export CAMEL_BRANCH='$branch'
-# How long the pool's taker waits for a token before the run says noslot (-SlotWaitSeconds).
+# How long the pool's taker waits for a token before the run says noslot (-SlotWaitSeconds); the
+# checkout's lock above is waited for the same number of seconds.
 export CAMEL_TOKEN_WAIT_S='$SlotWaitSeconds'
 # The runner names its run directory this, so the fetch after the plan (-FromThisRun) reads exactly
 # this run's directory whatever other runner invocations appear later in the same checkout.
@@ -3558,8 +3546,8 @@ exit `$code
             # different reason than the one written down is news rather than a known red.
             if ($cleanLine -match '^check=([A-Za-z0-9._-]+)-evidence \[(.*)\]$') {
                 if ($Matches[1] -eq $gpuObservationName) {
-                    foreach ($entry in @($Matches[2] -split ';' | Where-Object { $_.Trim() })) {
-                        $parts = $entry.Split('|', 2)
+                    foreach ($evidenceItem in @($Matches[2] -split ';' | Where-Object { $_.Trim() })) {
+                        $parts = $evidenceItem.Split('|', 2)
                         if ($parts.Count -eq 2) {
                             $gpuEvidence[$parts[0].Trim()] = $parts[1].Trim()
                         }
@@ -4074,10 +4062,10 @@ if ($FromThisRun -and $FetchFile -ne '') {
         $gpuBaseline = @()
         $gpuReason   = @{}
         if ($gpuBaselineFound) {
-            foreach ($entry in @(Get-Content -LiteralPath $gpuBaselinePath |
+            foreach ($baselineLine in @(Get-Content -LiteralPath $gpuBaselinePath |
                     ForEach-Object { "$_".Trim() } |
                     Where-Object { $_ -and -not $_.StartsWith('#') })) {
-                if ($entry -match '^(\S+)(?:\s*::\s*(.*?))?\s*$') {
+                if ($baselineLine -match '^(\S+)(?:\s*::\s*(.*?))?\s*$') {
                     $entryName   = $Matches[1]
                     $entryReason = if ($Matches.ContainsKey(2)) { "$($Matches[2])".Trim() } else { '' }
                     $gpuBaseline += $entryName
@@ -4238,7 +4226,7 @@ if ($FromThisRun -and $FetchFile -ne '') {
         $(if ($run.loadAtStart) { $run.loadAtStart } else { 'unknown' }),
         $(if ($run.loadAtEnd) { $run.loadAtEnd } else { 'unknown' }), $overlapText)
     if ($run.state -eq 'noslot') {
-        Write-Host ("[camel-remote] state=noslot: the host did not start this run -- it waited {0} s for the host's {1} and gave up (-SlotWaitSeconds). The pool was held by other runs, so this is a run that was not started rather than one that failed: nothing above is a reading" -f `
+        Write-Host ("[camel-remote] state=noslot: the host did not start this run -- it waited {0} s for the host's {1} and gave up (-SlotWaitSeconds). The pool or the checkout was held by other runs, so this is a run that was not started rather than one that failed: nothing above is a reading" -f `
             $SlotWaitSeconds, $run.noslotWaitedFor)
     }
     # The transfer's own breakdown, under -TracePhases. Two lines: where the transfer's seconds went,
@@ -4332,7 +4320,7 @@ if ($FromThisRun -and $FetchFile -ne '') {
         # 1 needs no tag (its `[SUMMARY]` is the criterion) and 7 says `exit unknown` for itself.
         # The reason goes *inside* the one parenthesis the line already has: it is half of the same
         # verdict, not a second remark -- two brackets in a row read as two statements.
-        $codeWhy = if ($code -eq 4 -and $run.state -eq 'noslot') { 'no host token; ' } else { '' }
+        $codeWhy = if ($code -eq 4 -and $run.state -eq 'noslot') { if ($run.noslotWaitedFor -eq 'checkout') { 'checkout held by another run; ' } else { 'no host token; ' } } else { '' }
         Write-Host ("[camel-remote] {0} exit {1} ({2}{3}; total {4} s)" -f `
             $name, $code, $codeWhy, $phases, [math]::Round($sw.Elapsed.TotalSeconds))
     }

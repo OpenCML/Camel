@@ -45,7 +45,7 @@ function check(label, ok, detail) {
 }
 
 // The program itself is fine: the failure is about the pass declarations, not about the source.
-const control = camel(['check', '-O', 'short', program])
+const control = camel(['check', '--diag-format', 'short', program])
 check('the program compiles without the pass declarations', control.status === 0, control.stderr)
 
 const run = camel([program, 'std::opt safe_fp=true'])

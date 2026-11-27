@@ -2,7 +2,7 @@
 /**
  * A diagnostic that carries a machine-applicable edit carries a correct one: this applies it.
  *
- * For every case below the compiler is run with `--error-format json`, the fix of the named
+ * For every case below the compiler is run with `--diag-format json`, the fix of the named
  * diagnostic is compared with the expected one byte for byte (title, and every edit's range and
  * replacement), the edits are then applied to the source, and the compiler is run again. What the
  * second run has to show is the point of the whole exercise: the diagnostic is gone, and where the
@@ -84,7 +84,7 @@ function registryEditNames() {
 const covered = new Map()
 const noFixCodes = new Map()
 
-function run(file, args = ['--error-format', 'json']) {
+function run(file, args = ['--diag-format', 'json']) {
     const proc = spawnSync(CAMEL, [file, ...args], { env, encoding: 'utf8' })
     if (proc.error) throw new Error(`cannot run ${CAMEL}: ${proc.error.message}`)
     return proc
@@ -188,7 +188,7 @@ function expectFix({ label, file, name, title, edits, accepted }) {
     // it stood, marked where it cuts). The line and the marker are derived from the fix the JSON
     // carries, so this compares the two formats with each other and not with a copy of one of them.
     {
-        const shown = run(path.join(CASE_DIR, file), ['--error-format', 'text', '--color', 'never'])
+        const shown = run(path.join(CASE_DIR, file), ['--diag-format', 'text', '--color', 'never'])
         const lines = shown.stdout.split('\n')
         const heading = lines.indexOf(`help: ${title}`)
         check(heading >= 0, `${label}: the text format names the fix in a help: line`, shown.stdout)

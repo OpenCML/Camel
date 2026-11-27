@@ -58,7 +58,7 @@ Source: `diagnostics/registry.tsv`, the one place a diagnostic is declared. Rege
 
 | `ComparisonAcrossLines` | This '>' is read as a comparison with the next line, which starts with {0}: two statements may have been joined into one. |
 
-**Semantic — errors** (`SemanticDiag`) — 237
+**Semantic — errors** (`SemanticDiag`) — 240
 
 | `Redeclaration` | Redeclaration of reference: '{0}'. |
 | `ModuleNotFound` | Module '{0}' not found. {1} |
@@ -297,6 +297,9 @@ Source: `diagnostics/registry.tsv`, the one place a diagnostic is declared. Rege
 | `OperatorAccessesUndeclared` | The operator '{0}' itemizes no accesses, and an operator of the built-in module must say what it touches. |
 | `OperatorSignatureUnresolved` | The signature of the operator '{0}' is not resolved: the type of {1} is not known where the compiler writes this call. |
 | `ConversionNeededWhereTheCompilerWouldInsertOne` | This value has type '{0}', and the position it stands in has type '{1}': getting from one to the other needs a conversion that may fail, and the compiler inserts only steps that cannot. |
+| `UnorderedOverwritingResource` | The resource '{0}' is declared both 'unordered' and 'overwriting'. |
+| `ReadonlyWriteModifier` | The resource '{0}' is declared 'readonly' and '{1}'. |
+| `ObservedReadonlyResource` | The resource '{0}' is declared both 'observed' and 'readonly'. |
 
 **Semantic — warnings** (`SemanticDiag`) — 15
 

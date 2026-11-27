@@ -358,7 +358,7 @@ expect_output_not_contains = ["enters region", "PassInternalError", "internal er
 #
 # Where each one first goes wrong, measured -- the build the campaign reduced them
 # on -- by adding the ladder's passes one at a time (`std::macro`, then devirtualize, specialize,
-# inline, fold, cse, algebra, dce, order, then `std::opt` as a whole) under `--gc generational
+# inline, fold, cse, algebra, dce, order, then `std::opt` as a whole) under `--gc kind=generational
 # std::nvm`, and comparing the bytes with the same program and no pass:
 #
 #   rc02_seed9   +std::cxx::fold    `q36 10` then `q36 0`
@@ -389,7 +389,7 @@ name = "rc02_seed9.without_the_pass"
 desc = "`rc02_seed9` (A16a) with no pass at all: the reading the optimized run is held to. Two lines, in this order -- `q36 0` from the call before the branch, `q36 10` from the one after it. First wrong pass: this program first goes wrong in `std::cxx::fold` (measured; correct on this baseline)."
 kind = "behavior"
 case = "../../../cases/opt/e9/rc02_seed9.cml"
-args = ["${case}", "--gc", "generational", "${backend}"]
+args = ["${case}", "--gc", "kind=generational", "${backend}"]
 expect_exit = 0
 expect_stdout_exact = "q36 0\nq36 10\n"
 normalizers = ["strip_ansi", "normalize_newlines"]
@@ -408,7 +408,7 @@ name = "rc02_seed9.specialize_inline_fold"
 desc = "`rc02_seed9` (A16a) under the reduced pipeline the campaign found it with: the same two lines in the same order. The branch the fold dissolves stood between the two calls, so the printed lines used to come out swapped -- the blank line of A16e and this one are one defect, one place `pruneBranch` now hands over. First wrong pass: this program first goes wrong in `std::cxx::fold` (measured; correct on this baseline)."
 kind = "behavior"
 case = "../../../cases/opt/e9/rc02_seed9.cml"
-args = ["${case}", "--gc", "generational", "std::cxx::specialize", "std::cxx::inline", "std::cxx::fold", "${backend}"]
+args = ["${case}", "--gc", "kind=generational", "std::cxx::specialize", "std::cxx::inline", "std::cxx::fold", "${backend}"]
 expect_exit = 0
 expect_stdout_exact = "q36 0\nq36 10\n"
 expect_output_not_contains = ["PassInternalError", "internal error", "cannot be encoded"]
@@ -428,7 +428,7 @@ name = "rc04_seed251.without_the_pass"
 desc = "`rc04_seed251` (A16b) with no pass at all: exactly one blank line. The count is the reading: the defect printed a blank line per element of the `loop` inside the inlined body. First wrong pass: this program first goes wrong in `std::cxx::inline` (measured; correct on this baseline)."
 kind = "behavior"
 case = "../../../cases/opt/e9/rc04_seed251.cml"
-args = ["${case}", "--gc", "generational", "${backend}"]
+args = ["${case}", "--gc", "kind=generational", "${backend}"]
 expect_exit = 0
 expect_stdout_exact = "\n"
 normalizers = ["strip_ansi", "normalize_newlines"]
@@ -446,7 +446,7 @@ name = "rc04_seed251.inline"
 desc = "`rc04_seed251` (A16b) under `std::cxx::inline`, the pass that printed the blank line once per element of the loop's array. One blank line, as with no pass at all. First wrong pass: this program first goes wrong in `std::cxx::inline` (measured; correct on this baseline)."
 kind = "behavior"
 case = "../../../cases/opt/e9/rc04_seed251.cml"
-args = ["${case}", "--gc", "generational", "std::cxx::inline", "${backend}"]
+args = ["${case}", "--gc", "kind=generational", "std::cxx::inline", "${backend}"]
 expect_exit = 0
 expect_stdout_exact = "\n"
 expect_output_not_contains = ["PassInternalError", "internal error", "cannot be encoded"]
@@ -465,7 +465,7 @@ name = "rc05_seed256.without_the_pass"
 desc = "`rc05_seed256` (A16c) with no pass at all: exactly one blank line. First wrong pass: this program first goes wrong in `std::opt` (measured; correct on this baseline)."
 kind = "behavior"
 case = "../../../cases/opt/e9/rc05_seed256.cml"
-args = ["${case}", "--gc", "generational", "${backend}"]
+args = ["${case}", "--gc", "kind=generational", "${backend}"]
 expect_exit = 0
 expect_stdout_exact = "\n"
 normalizers = ["strip_ansi", "normalize_newlines"]
@@ -483,7 +483,7 @@ name = "rc05_seed256.opt"
 desc = "`rc05_seed256` (A16c) under `std::opt`, which printed nothing at all. One blank line, as with no pass at all. First wrong pass: this program first goes wrong in `std::opt` (measured; correct on this baseline)."
 kind = "behavior"
 case = "../../../cases/opt/e9/rc05_seed256.cml"
-args = ["${case}", "--gc", "generational", "std::opt", "${backend}"]
+args = ["${case}", "--gc", "kind=generational", "std::opt", "${backend}"]
 expect_exit = 0
 expect_stdout_exact = "\n"
 expect_output_not_contains = ["PassInternalError", "internal error", "cannot be encoded"]
@@ -502,7 +502,7 @@ name = "rc07_seed140.without_the_pass"
 desc = "`rc07_seed140` (A16d) with no pass at all: exactly two blank lines. First wrong pass: this program first goes wrong in `std::cxx::dce` (measured; correct on this baseline)."
 kind = "behavior"
 case = "../../../cases/opt/e9/rc07_seed140.cml"
-args = ["${case}", "--gc", "generational", "${backend}"]
+args = ["${case}", "--gc", "kind=generational", "${backend}"]
 expect_exit = 0
 expect_stdout_exact = "\n\n"
 normalizers = ["strip_ansi", "normalize_newlines"]
@@ -520,7 +520,7 @@ name = "rc07_seed140.inline_dce"
 desc = "`rc07_seed140` (A16d) under `std::cxx::inline std::cxx::dce`, which printed one blank line of the two. Two blank lines, as with no pass at all. First wrong pass: this program first goes wrong in `std::cxx::dce` (measured; correct on this baseline)."
 kind = "behavior"
 case = "../../../cases/opt/e9/rc07_seed140.cml"
-args = ["${case}", "--gc", "generational", "std::cxx::inline", "std::cxx::dce", "${backend}"]
+args = ["${case}", "--gc", "kind=generational", "std::cxx::inline", "std::cxx::dce", "${backend}"]
 expect_exit = 0
 expect_stdout_exact = "\n\n"
 expect_output_not_contains = ["PassInternalError", "internal error", "cannot be encoded"]
@@ -539,7 +539,7 @@ name = "rc09_seed15.without_the_pass"
 desc = "`rc09_seed15` (A16e) with no pass at all: `L4 0 ` -- with the space that is part of the line -- and then a blank line. The trailing space is the reading, so `trim_trailing_space` is not a normalizer of these two entries. First wrong pass: this program first goes wrong in `std::cxx::fold` (measured; correct on this baseline)."
 kind = "behavior"
 case = "../../../cases/opt/e9/rc09_seed15.cml"
-args = ["${case}", "--gc", "generational", "${backend}"]
+args = ["${case}", "--gc", "kind=generational", "${backend}"]
 expect_exit = 0
 expect_stdout_exact = "L4 0 \n\n"
 normalizers = ["strip_ansi", "normalize_newlines"]
@@ -558,7 +558,7 @@ name = "rc09_seed15.inline_fold"
 desc = "`rc09_seed15` (A16e) under `std::cxx::inline std::cxx::fold`: the same two lines in the same order. The fold dissolves the branch the taken arm was, and that arm's print is the statement whose place the block's order was held by -- the shape of A16a's defect and the same fix. First wrong pass: this program first goes wrong in `std::cxx::fold` (measured; correct on this baseline)."
 kind = "behavior"
 case = "../../../cases/opt/e9/rc09_seed15.cml"
-args = ["${case}", "--gc", "generational", "std::cxx::inline", "std::cxx::fold", "${backend}"]
+args = ["${case}", "--gc", "kind=generational", "std::cxx::inline", "std::cxx::fold", "${backend}"]
 expect_exit = 0
 expect_stdout_exact = "L4 0 \n\n"
 expect_output_not_contains = ["PassInternalError", "internal error", "cannot be encoded"]
@@ -980,7 +980,7 @@ expect_stdout_exact = "P 5\n"
 # optimized run is held to, and the shortest prefix of the ladder the bisection named as the one
 # that loses the statement. Both cells of all five were measured on the `draft.cpp` of `2779ad600^1`
 # and on the one after that change (the file swapped in place and rebuilt either way, `std::nvm`,
-# `--gc generational`), which is where the before/after sentence in each entry comes from:
+# `--gc kind=generational`), which is where the before/after sentence in each entry comes from:
 #
 #   rc24_seed131  devirtualize + inline + fold  `L5 [{ x: 0, y: 0 }]` then the blank line: the
 #                                               closure's `println('')` moved to the end of the output
@@ -1015,7 +1015,7 @@ name = "rc24_seed131.without_the_pass"
 desc = "`rc24_seed131` with no pass at all: a blank line, then `L5 [{ x: 0, y: 0 }]`. The order is the reading -- the blank line is the closure's `println('')` at the point the loop body calls it, before the body's own line. First wrong prefix: `std::cxx::devirtualize std::cxx::inline std::cxx::fold` (measured on `2779ad600^1`; correct)."
 kind = "behavior"
 case = "../../../cases/opt/e9/rc24_seed131.cml"
-args = ["${case}", "--gc", "generational", "${backend}"]
+args = ["${case}", "--gc", "kind=generational", "${backend}"]
 expect_exit = 0
 expect_stdout_exact = "\nL5 [{ x: 0, y: 0 }]\n"
 normalizers = ["strip_ansi", "normalize_newlines"]
@@ -1034,7 +1034,7 @@ name = "rc24_seed131.devirtualize_inline_fold"
 desc = "`rc24_seed131` under the prefix the bisection named: the same two lines in the same order. Before the repair the line came first and the blank line last -- the closure's print moved to the end of the output, which is what a `println` left holding only the ORDER edge to the statement written after it looks like. `std::cxx::fold` alone and `inline + fold` both read it correctly (measured), so the `devirtualize` in front of them is part of the trigger."
 kind = "behavior"
 case = "../../../cases/opt/e9/rc24_seed131.cml"
-args = ["${case}", "--gc", "generational", "std::cxx::devirtualize", "std::cxx::inline", "std::cxx::fold", "${backend}"]
+args = ["${case}", "--gc", "kind=generational", "std::cxx::devirtualize", "std::cxx::inline", "std::cxx::fold", "${backend}"]
 expect_exit = 0
 expect_stdout_exact = "\nL5 [{ x: 0, y: 0 }]\n"
 expect_output_not_contains = ["PassInternalError", "internal error", "cannot be encoded"]
@@ -1054,7 +1054,7 @@ name = "rc25_seed141.without_the_pass"
 desc = "`rc25_seed141` with no pass at all: one blank line -- `q37`'s `println('')` runs when `g56` calls it. First wrong prefix: `std::cxx::inline std::cxx::fold` (measured on `2779ad600^1`; correct)."
 kind = "behavior"
 case = "../../../cases/opt/e9/rc25_seed141.cml"
-args = ["${case}", "--gc", "generational", "${backend}"]
+args = ["${case}", "--gc", "kind=generational", "${backend}"]
 expect_exit = 0
 expect_stdout_exact = "\n"
 normalizers = ["strip_ansi", "normalize_newlines"]
@@ -1072,7 +1072,7 @@ name = "rc25_seed141.inline_fold"
 desc = "`rc25_seed141` under `std::cxx::inline std::cxx::fold`: one blank line, as with no pass at all. Before the repair the program printed nothing -- `fold` folds the argument `if false then -1 else 10` to `10`, the call `q37(10, false)` is inlined, and the statement the inline moved lost its place, so the callee's `println` never ran. `std::cxx::fold` alone reads it correctly (measured): the inline has to come first."
 kind = "behavior"
 case = "../../../cases/opt/e9/rc25_seed141.cml"
-args = ["${case}", "--gc", "generational", "std::cxx::inline", "std::cxx::fold", "${backend}"]
+args = ["${case}", "--gc", "kind=generational", "std::cxx::inline", "std::cxx::fold", "${backend}"]
 expect_exit = 0
 expect_stdout_exact = "\n"
 expect_output_not_contains = ["PassInternalError", "internal error", "cannot be encoded"]
@@ -1091,7 +1091,7 @@ name = "rc26_seed417.without_the_pass"
 desc = "`rc26_seed417` with no pass at all: a blank line, then `L4 0 0`. First wrong prefix: `std::cxx::inline std::cxx::fold` (measured on `2779ad600^1`; correct)."
 kind = "behavior"
 case = "../../../cases/opt/e9/rc26_seed417.cml"
-args = ["${case}", "--gc", "generational", "${backend}"]
+args = ["${case}", "--gc", "kind=generational", "${backend}"]
 expect_exit = 0
 expect_stdout_exact = "\nL4 0 0\n"
 normalizers = ["strip_ansi", "normalize_newlines"]
@@ -1110,7 +1110,7 @@ name = "rc26_seed417.inline_fold"
 desc = "`rc26_seed417` under `std::cxx::inline std::cxx::fold`: the same two lines. Before the repair only `L4 0 0` was printed -- the `if true then true else false` in the argument folds, the body of `q31` the inline moved in loses its place, and the `println` in it stops running. `std::cxx::fold` alone reads it correctly (measured); the bisection's own probe is that either replacement alone keeps the line, so the pair needs the inline in front of the fold."
 kind = "behavior"
 case = "../../../cases/opt/e9/rc26_seed417.cml"
-args = ["${case}", "--gc", "generational", "std::cxx::inline", "std::cxx::fold", "${backend}"]
+args = ["${case}", "--gc", "kind=generational", "std::cxx::inline", "std::cxx::fold", "${backend}"]
 expect_exit = 0
 expect_stdout_exact = "\nL4 0 0\n"
 expect_output_not_contains = ["PassInternalError", "internal error", "cannot be encoded"]
@@ -1130,7 +1130,7 @@ name = "rc27_seed419.without_the_pass"
 desc = "`rc27_seed419` with no pass at all: one blank line -- `q21`'s `println('')` runs. First wrong prefix: `std::cxx::inline std::cxx::cse` (measured on `2779ad600^1`; correct)."
 kind = "behavior"
 case = "../../../cases/opt/e9/rc27_seed419.cml"
-args = ["${case}", "--gc", "generational", "${backend}"]
+args = ["${case}", "--gc", "kind=generational", "${backend}"]
 expect_exit = 0
 expect_stdout_exact = "\n"
 normalizers = ["strip_ansi", "normalize_newlines"]
@@ -1148,7 +1148,7 @@ name = "rc27_seed419.inline_cse"
 desc = "`rc27_seed419` under `std::cxx::inline std::cxx::cse`: one blank line, as with no pass at all. Before the repair nothing was printed -- `cse` merges the two null tests on `o44` (`n50 = o44 != null` and `if o44 == null`) into one place, and the `q21` call written between them, once the inline had moved it in, lost its place. `std::cxx::cse` alone reads it correctly (measured): the inline in front of it is part of the trigger."
 kind = "behavior"
 case = "../../../cases/opt/e9/rc27_seed419.cml"
-args = ["${case}", "--gc", "generational", "std::cxx::inline", "std::cxx::cse", "${backend}"]
+args = ["${case}", "--gc", "kind=generational", "std::cxx::inline", "std::cxx::cse", "${backend}"]
 expect_exit = 0
 expect_stdout_exact = "\n"
 expect_output_not_contains = ["PassInternalError", "internal error", "cannot be encoded"]
@@ -1167,7 +1167,7 @@ name = "rc28_seed484.without_the_pass"
 desc = "`rc28_seed484` with no pass at all: one blank line -- `q27`'s `println('')` runs. First wrong prefix: `std::cxx::inline std::cxx::fold` (measured on `2779ad600^1`; correct)."
 kind = "behavior"
 case = "../../../cases/opt/e9/rc28_seed484.cml"
-args = ["${case}", "--gc", "generational", "${backend}"]
+args = ["${case}", "--gc", "kind=generational", "${backend}"]
 expect_exit = 0
 expect_stdout_exact = "\n"
 normalizers = ["strip_ansi", "normalize_newlines"]
@@ -1185,7 +1185,7 @@ name = "rc28_seed484.inline_fold"
 desc = "`rc28_seed484` under `std::cxx::inline std::cxx::fold`: one blank line, as with no pass at all. Before the repair nothing was printed -- `fold` folds `true && true` (the JOIN and BRCH go with it) and the `:struct/concat_arr` of `concat([false], [false])` in the same stretch, and `q27`'s call, once the inline had moved it in, lost its place. `std::cxx::fold` alone reads it correctly (measured): the statement has to be inside an `Inline` region first."
 kind = "behavior"
 case = "../../../cases/opt/e9/rc28_seed484.cml"
-args = ["${case}", "--gc", "generational", "std::cxx::inline", "std::cxx::fold", "${backend}"]
+args = ["${case}", "--gc", "kind=generational", "std::cxx::inline", "std::cxx::fold", "${backend}"]
 expect_exit = 0
 expect_stdout_exact = "\n"
 expect_output_not_contains = ["PassInternalError", "internal error", "cannot be encoded"]
@@ -1241,7 +1241,7 @@ name = "rc29_seed311.without_the_pass"
 desc = "`rc29_seed311` with no pass at all: two blank lines -- `main`'s `println('')` and the one in `q18` it calls. This is the reference cell: the program is right without any pass, so the three cells below are held to this reading and not to a number written here."
 kind = "behavior"
 case = "../../../cases/opt/e9/rc29_seed311.cml"
-args = ["${case}", "--gc", "generational", "${backend}"]
+args = ["${case}", "--gc", "kind=generational", "${backend}"]
 expect_exit = 0
 expect_stdout_exact = "\n\n"
 normalizers = ["strip_ansi", "normalize_newlines"]
@@ -1260,7 +1260,7 @@ name = "rc29_seed311.macro_inline"
 desc = "`rc29_seed311` under the ladder the bisection named, `std::macro std::cxx::inline`: the same two blank lines. Before the repair only one line was printed -- the `println('')` written before the call stopped running once the inline expanded the macro `f1(true, 10.0)` into the argument slot, and `closeChainOver` refused to keep that statement's wait. This cell is what pins the repair; the two below say the defect was the pair alone."
 kind = "behavior"
 case = "../../../cases/opt/e9/rc29_seed311.cml"
-args = ["${case}", "--gc", "generational", "std::macro", "std::cxx::inline", "${backend}"]
+args = ["${case}", "--gc", "kind=generational", "std::macro", "std::cxx::inline", "${backend}"]
 expect_exit = 0
 expect_stdout_exact = "\n\n"
 expect_output_not_contains = ["PassInternalError", "internal error", "cannot be encoded"]
@@ -1280,7 +1280,7 @@ name = "rc29_seed311.macro_only"
 desc = "`rc29_seed311` under `std::macro` alone: the same two blank lines. The first reverse pin -- the expansion by itself was never the defect, so a red here would be a different one, and this cell is what says the ladder cell above cannot be read as `std::macro` being broken."
 kind = "behavior"
 case = "../../../cases/opt/e9/rc29_seed311.cml"
-args = ["${case}", "--gc", "generational", "std::macro", "${backend}"]
+args = ["${case}", "--gc", "kind=generational", "std::macro", "${backend}"]
 expect_exit = 0
 expect_stdout_exact = "\n\n"
 normalizers = ["strip_ansi", "normalize_newlines"]
@@ -1299,7 +1299,7 @@ name = "rc29_seed311.inline_only"
 desc = "`rc29_seed311` under `std::cxx::inline` alone: the same two blank lines. The second reverse pin -- the inline by itself was never the defect either; only the two passes together lose the statement, which is what the ladder cell above holds, and this one is what keeps that claim from being a claim about the inline."
 kind = "behavior"
 case = "../../../cases/opt/e9/rc29_seed311.cml"
-args = ["${case}", "--gc", "generational", "std::cxx::inline", "${backend}"]
+args = ["${case}", "--gc", "kind=generational", "std::cxx::inline", "${backend}"]
 expect_exit = 0
 expect_stdout_exact = "\n\n"
 normalizers = ["strip_ansi", "normalize_newlines"]

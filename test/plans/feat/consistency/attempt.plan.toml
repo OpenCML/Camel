@@ -124,7 +124,7 @@ desc = "Under std::jit the straight-line callee is compiled as frameless code, a
 kind = "behavior"
 backends = false
 case = "../../../cases/consistency/attempt/compiled.cml"
-args = ["--gc-check", "poison", "--gc", "mark-sweep", "-vv", "${case}", "std::jit"]
+args = ["--gc-check", "poison", "--gc", "kind=mark-sweep", "-vv", "${case}", "std::jit"]
 expect_output_contains = ["compiled & cached graph 'quot' as frameless code", "compiled & cached graph 'depth' as frameless code"]
 
 [[tests]]

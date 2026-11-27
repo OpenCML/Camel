@@ -526,7 +526,7 @@ name = "reshape_view_gc.nvm"
 desc = "reshape shares its input's block: views that outlive their owners read the right elements while the collector copies the young generation and marks the heap at every safepoint (NodeVM)."
 kind = "behavior"
 case = "../../../cases/modules/tensor/reshape_view_gc.cml"
-args = ["--gc-stress", "alloc=3,safepoint=1,kind=both", "--gc-check", "verify=both", "--gc", "generational", "${case}", "${run_nvm}"]
+args = ["--gc-stress", "alloc=3,safepoint=1,kind=both", "--gc-check", "verify=both", "--gc", "kind=generational", "${case}", "${run_nvm}"]
 expect_exit = 0
 expect_stdout_contains = ["total 16380.0", "[2.0, 4.0, 6.0, 8.0, 10.0, 12.0]"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
@@ -537,7 +537,7 @@ name = "reshape_view_gc.fvm"
 desc = "reshape shares its input's block: views that outlive their owners read the right elements while the collector copies the young generation and marks the heap at every safepoint (FastVM)."
 kind = "behavior"
 case = "../../../cases/modules/tensor/reshape_view_gc.cml"
-args = ["--gc-stress", "alloc=3,safepoint=1,kind=both", "--gc-check", "verify=both", "--gc", "generational", "${case}", "${run_fvm}"]
+args = ["--gc-stress", "alloc=3,safepoint=1,kind=both", "--gc-check", "verify=both", "--gc", "kind=generational", "${case}", "${run_fvm}"]
 expect_exit = 0
 expect_stdout_contains = ["total 16380.0", "[2.0, 4.0, 6.0, 8.0, 10.0, 12.0]"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
@@ -548,7 +548,7 @@ name = "reshape_view_gc.jit"
 desc = "reshape shares its input's block: views that outlive their owners read the right elements while the collector copies the young generation and marks the heap at every safepoint (the JIT)."
 kind = "behavior"
 case = "../../../cases/modules/tensor/reshape_view_gc.cml"
-args = ["--gc-stress", "alloc=3,safepoint=1,kind=both", "--gc-check", "verify=both", "--gc", "generational", "${case}", "${run_jit}"]
+args = ["--gc-stress", "alloc=3,safepoint=1,kind=both", "--gc-check", "verify=both", "--gc", "kind=generational", "${case}", "${run_jit}"]
 expect_exit = 0
 expect_stdout_contains = ["total 16380.0", "[2.0, 4.0, 6.0, 8.0, 10.0, 12.0]"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]

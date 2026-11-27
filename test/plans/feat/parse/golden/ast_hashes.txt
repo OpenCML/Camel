@@ -829,7 +829,7 @@ ba5d72ca28bd9a70 ok test/cases/compile/enum/err_field_count.cml
 11f418c21ee59ee9 ok test/cases/compile/enum/err_not_exhaustive_many.cml
 68d4e51faa551652 ok test/cases/compile/enum/err_struct_missing_field.cml
 2d77cd4dbd1bfa52 ok test/cases/compile/enum/err_unknown_variant.cml
-abc1a885aa2cd7fc ok test/cases/compile/enum/gc_stress.cml
+691a554358a07f17 ok test/cases/compile/enum/gc_stress.cml
 ac5ab7c74d576a89 ok test/cases/compile/enum/generic_tree.cml
 53350599e644fa79 ok test/cases/compile/enum/refuse_grad.cml
 9b45f099f395090b ok test/cases/compile/enum/refuse_onnx.cml
@@ -1357,7 +1357,7 @@ b3edaa80eba9abbb ok test/cases/compile/native/para_arity.cml
 057bb7065d0d60a4 ok test/cases/compile/native/para_type.cml
 4cf94353fc07880d ok test/cases/compile/native/para_unordered_arity.cml
 5e472d7e4b9869ad ok test/cases/compile/native/para_unordered_pure_result.cml
-71c79a2fc94ded5a ok test/cases/compile/native/para_unordered_reduce_callback_arity.cml
+0319797f2bded41f ok test/cases/compile/native/para_unordered_reduce_callback_arity.cml
 7561cea77ce38d15 ok test/cases/compile/native/para_unordered_type.cml
 693a1aed16254e52 ok test/cases/compile/native/private.cml
 75b0060d23722118 ok test/cases/compile/native/private_import.cml
@@ -2934,7 +2934,7 @@ bfa1111d73ffebe5 ok test/cases/loops/captures_constants.cml
 b4e48a882882aae1 ok test/cases/loops/collection.cml
 46c485a4fdab833e ok test/cases/loops/collection_in_place.cml
 a4addf578b988817 ok test/cases/loops/collection_large.cml
-f2e8e617ba03d954 ok test/cases/loops/collection_oom.cml
+335c868a76fab754 ok test/cases/loops/collection_oom.cml
 437970b261857c5f ok test/cases/loops/compiled.cml
 2b0d406fb3ae5a2f ok test/cases/loops/compiled_churn.cml
 1c421b2966b21656 ok test/cases/loops/compiled_fault.cml
@@ -4607,7 +4607,7 @@ a1d45f3281119d9f ok test/probe/refleak/call_box.cml
 95186c2086950a5b ok test/probe/refleak/loop_nested_outer_ref.cml
 0c375ca73274842a ok test/probe/refleak/loop_outer_ref.cml
 79dcc3f387356dfc ok test/tools/jitcov/workloads.cml
-d1a84c608f212598 ok test/tools/selftest/benchmark_failure.cml
+07f2715995fcd800 ok test/tools/selftest/benchmark_failure.cml
 0cbd289e65cdd4d8 ok test/tools/selftest/sweep/probe.cml
 c52a1164a7fed703 ok test/tools/selftest/sweep_names/reuse_sources/reuse.cml
 db721b9153f0cb68 ok test/tools/selftest/sweep_names/sources/alpha.cml

@@ -31,7 +31,7 @@ const program = path.join(HERE, 'only_cml_and_cmo', 'md_and_cml', 'main.cml')
 const missing = path.join(HERE, 'no_such_camel_home_directory')
 
 const run = (home) =>
-    spawnSync(camel, ['-E', 'short', program], {
+    spawnSync(camel, ['--diag-format', 'short', program], {
         encoding: 'utf8',
         env: { ...process.env, CAMEL_HOME: home },
     })

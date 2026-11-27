@@ -20,7 +20,7 @@ INSTALL = str(Path(EXE).resolve().parents[1])
 ENV = dict(os.environ, CAMEL_HOME=INSTALL)
 
 def run(case, passes, env=ENV):
-    return subprocess.run([EXE, *GCC_CHECK, '--gc', 'generational', str(Path(__file__).with_name(case + '.cml')), *passes],
+    return subprocess.run([EXE, *GCC_CHECK, '--gc', 'kind=generational', str(Path(__file__).with_name(case + '.cml')), *passes],
                           cwd=ROOT, env=env, capture_output=True, text=True, timeout=90)
 
 for vm in ['std::nvm', 'std::fvm', 'std::jit', 'std::prl']:

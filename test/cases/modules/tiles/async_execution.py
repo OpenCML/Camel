@@ -69,10 +69,10 @@ def run_matrix():
             folder = base / vm.replace('::', '-')
             values = prepare(folder)
             env['TILES_TEST_OUT'] = str(folder)
-            result = subprocess.run([EXE, *GCC_CHECK, '--gc', 'generational',
+            result = subprocess.run([EXE, *GCC_CHECK, '--gc', 'kind=generational',
                                      str(Path(__file__).with_suffix('.cml')), 'std::macro', vm],
                                     cwd=ROOT, env=env, capture_output=True, text=True, timeout=90)
-            fault = subprocess.run([EXE, *GCC_CHECK, '--gc', 'generational',
+            fault = subprocess.run([EXE, *GCC_CHECK, '--gc', 'kind=generational',
                                     str(Path(__file__).with_name('async_execution_fault.cml')), 'std::macro', vm],
                                    cwd=ROOT, env=env, capture_output=True, text=True, timeout=30)
             try:

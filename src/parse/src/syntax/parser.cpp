@@ -1250,7 +1250,8 @@ void ParserImpl::parseTypeDeclRest(size_t m) {
     close(m, NK::TypeDecl);
 }
 
-/// resourceDecl : 'export'? 'resource' identDef ('=' bracketIdents | modifier*)?
+/// resourceDecl : 'export'? 'resource' identDef ('=' bracketIdents
+///   | ('unordered' | 'idempotent' | 'overwriting' | 'readonly' | 'observed')*)?
 ///
 /// A resource declaration (design effects plan 3.1, design principles 3.3): `resource fs` names
 /// an ambient resource of the module, `resource io = [console, fs]` a group of resources and other

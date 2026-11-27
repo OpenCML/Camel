@@ -947,7 +947,7 @@ int runCommand(int argc, char *argv[]) {
             // `std::profile`: the report of the whole run. It is written here because only the
             // driver has seen the compilation, the pipeline and the fallback pass; the session
             // itself was started by the pass. The text form joins the program's output; under
-            // `--output-format json` it goes to standard error, so the diagnostics array on the
+            // `--diag-format json` it goes to standard error, so the diagnostics array on the
             // standard output keeps its shape.
             if (camel::profile::enabled() && camel::profile::reportOptions().report) {
                 std::ostream &reportOut = useJsonFormat ? std::cerr : os;
@@ -956,7 +956,7 @@ int runCommand(int argc, char *argv[]) {
 
             if (!useJsonFormat && warningsNotShown() > 0) {
                 std::cerr << "camel: " << warningsNotShown()
-                          << " more warning(s) not shown (--max-warning " << Diag::maxWarnings
+                          << " more warning(s) not shown (--max-warnings " << Diag::maxWarnings
                           << ")" << std::endl;
             }
 

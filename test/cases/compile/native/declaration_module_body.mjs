@@ -62,7 +62,7 @@ func main() => int sync {
 `,
 )
 
-const proc = spawnSync(CAMEL, ['--output-format', 'json', path.join(SCRATCH, 'main.cml')], {
+const proc = spawnSync(CAMEL, ['--diag-format', 'json', path.join(SCRATCH, 'main.cml')], {
     env,
     encoding: 'utf8',
     cwd: SCRATCH,

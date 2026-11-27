@@ -21,7 +21,7 @@ name = "imports.d1_shadow"
 desc = "The importing module has a top-level value of the same name: the imported function uses its own module's (it used the importer's silently: 1001 instead of 11)."
 kind = "behavior"
 case = "../../../cases/compile/module_imports/d1_shadow.cml"
-args = ["-E", "short", "${case}"]
+args = ["--diag-format", "short", "${case}"]
 expect_exit = 0
 expect_stdout_exact = "11\n"
 
@@ -30,7 +30,7 @@ name = "imports.d1_shadow_check"
 desc = "The same through `camel check`: no diagnostic."
 kind = "behavior"
 case = "../../../cases/compile/module_imports/d1_shadow.cml"
-args = ["check", "-O", "short", "${case}"]
+args = ["check", "--diag-format", "short", "${case}"]
 expect_exit = 0
 expect_output_not_contains = ["Error", "Warn"]
 
@@ -39,7 +39,7 @@ name = "imports.d1_unresolved"
 desc = "Without a value of that name in the importing module (it was UnresolvedReference pointing at the importer's `main`)."
 kind = "behavior"
 case = "../../../cases/compile/module_imports/d1_unresolved.cml"
-args = ["-E", "short", "${case}"]
+args = ["--diag-format", "short", "${case}"]
 expect_exit = 0
 expect_stdout_exact = "11\n"
 
@@ -48,7 +48,7 @@ name = "imports.d1_indirect"
 desc = "The exported function calls a function of its module that is not exported, and that one uses the value."
 kind = "behavior"
 case = "../../../cases/compile/module_imports/d1_indirect.cml"
-args = ["-E", "short", "${case}"]
+args = ["--diag-format", "short", "${case}"]
 expect_exit = 0
 expect_stdout_exact = "21\n"
 
@@ -57,7 +57,7 @@ name = "imports.d1_var"
 desc = "A top-level `var` of the declaring module, read by the exported function."
 kind = "behavior"
 case = "../../../cases/compile/module_imports/d1_var.cml"
-args = ["-E", "short", "${case}"]
+args = ["--diag-format", "short", "${case}"]
 expect_exit = 0
 expect_stdout_exact = "1\n"
 
@@ -66,7 +66,7 @@ name = "imports.d1_qualified"
 desc = "The imported function reached through its module (`m::f`)."
 kind = "behavior"
 case = "../../../cases/compile/module_imports/d1_qualified.cml"
-args = ["-E", "short", "${case}"]
+args = ["--diag-format", "short", "${case}"]
 expect_exit = 0
 expect_stdout_exact = "11\n"
 
@@ -75,7 +75,7 @@ name = "imports.d1_ok"
 desc = "Imported functions that use no top-level value (one takes the value as a parameter, one calls a function without parameters), from a module that also has functions which do; and the entry module's own functions using its own top-level `let` and `var`."
 kind = "behavior"
 case = "../../../cases/compile/module_imports/d1_ok.cml"
-args = ["-E", "short", "${case}"]
+args = ["--diag-format", "short", "${case}"]
 expect_exit = 0
 expect_stdout_exact = "2 2000 11\n1001 5 11\n"
 expect_output_not_contains = ["Error", "Warn"]
@@ -85,7 +85,7 @@ name = "imports.d1_ok_check"
 desc = "The same program through `camel check`: no diagnostic."
 kind = "behavior"
 case = "../../../cases/compile/module_imports/d1_ok.cml"
-args = ["check", "-O", "short", "${case}"]
+args = ["check", "--diag-format", "short", "${case}"]
 expect_exit = 0
 expect_output_not_contains = ["Error", "Warn"]
 
@@ -97,7 +97,7 @@ name = "imports.d2_value"
 desc = "`export let` used by the importing module (it crashed the compiler, then was ConstructNotSupported)."
 kind = "behavior"
 case = "../../../cases/compile/module_imports/d2_value.cml"
-args = ["-E", "short", "${case}"]
+args = ["--diag-format", "short", "${case}"]
 expect_exit = 0
 expect_stdout_exact = "3.14159\n"
 
@@ -106,7 +106,7 @@ name = "imports.d2_value_check"
 desc = "The same through `camel check`: no diagnostic."
 kind = "behavior"
 case = "../../../cases/compile/module_imports/d2_value.cml"
-args = ["check", "-O", "short", "${case}"]
+args = ["check", "--diag-format", "short", "${case}"]
 expect_exit = 0
 expect_output_not_contains = ["Error", "Warn"]
 
@@ -115,7 +115,7 @@ name = "imports.d2_qualified"
 desc = "The same value reached as `m::pi`."
 kind = "behavior"
 case = "../../../cases/compile/module_imports/d2_qualified.cml"
-args = ["-E", "short", "${case}"]
+args = ["--diag-format", "short", "${case}"]
 expect_exit = 0
 expect_stdout_exact = "3.14159\n"
 
@@ -124,7 +124,7 @@ name = "imports.d2_unused"
 desc = "Importing the value without using it stays accepted."
 kind = "behavior"
 case = "../../../cases/compile/module_imports/d2_unused.cml"
-args = ["-E", "short", "${case}"]
+args = ["--diag-format", "short", "${case}"]
 expect_exit = 0
 expect_stdout_exact = "2\n"
 
@@ -136,7 +136,7 @@ name = "imports.d3_mutual"
 desc = "a imports b, b imports a, their functions call each other (it crashed the compiler, then was ImportCycle)."
 kind = "behavior"
 case = "../../../cases/compile/module_imports/d3_mutual.cml"
-args = ["-E", "short", "${case}"]
+args = ["--diag-format", "short", "${case}"]
 expect_exit = 0
 expect_stdout_exact = "true\n"
 
@@ -145,7 +145,7 @@ name = "imports.d3_mutual_check"
 desc = "`camel check` on the program: no diagnostic."
 kind = "behavior"
 case = "../../../cases/compile/module_imports/d3_mutual.cml"
-args = ["check", "-O", "short", "${case}"]
+args = ["check", "--diag-format", "short", "${case}"]
 expect_exit = 0
 expect_output_not_contains = ["Error", "Warn"]
 
@@ -154,7 +154,7 @@ name = "imports.d3_ring"
 desc = "A ring of three modules."
 kind = "behavior"
 case = "../../../cases/compile/module_imports/d3_ring.cml"
-args = ["-E", "short", "${case}"]
+args = ["--diag-format", "short", "${case}"]
 expect_exit = 0
 expect_stdout_exact = "8\n"
 
@@ -165,7 +165,7 @@ name = "imports.d5_conflict"
 desc = "Two imports bring `f(int)`: the first was taken silently (printed 2). Design principles 10.2: an error, at the second import with the first."
 kind = "negative"
 case = "../../../cases/compile/module_imports/d5_conflict.cml"
-args = ["-E", "short", "${case}"]
+args = ["--diag-format", "short", "${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::ImportNameConflict"
 expect_diagnostic_line = 2
@@ -177,7 +177,7 @@ name = "imports.d5_conflict_check"
 desc = "The same through `camel check`."
 kind = "negative"
 case = "../../../cases/compile/module_imports/d5_conflict.cml"
-args = ["check", "-O", "short", "${case}"]
+args = ["check", "--diag-format", "short", "${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::ImportNameConflict"
 expect_diagnostic_line = 2
@@ -187,7 +187,7 @@ name = "imports.d5_overload"
 desc = "Unchanged, and undecided (design note Q11): the same name with different parameter types forms a set of overloads."
 kind = "behavior"
 case = "../../../cases/compile/module_imports/d5_overload.cml"
-args = ["-E", "short", "${case}"]
+args = ["--diag-format", "short", "${case}"]
 expect_exit = 0
 expect_stdout_exact = "2 a!\n"
 
@@ -196,7 +196,7 @@ name = "imports.d5_qualified"
 desc = "Not a conflict: both modules imported whole and the functions reached by qualified names."
 kind = "behavior"
 case = "../../../cases/compile/module_imports/d5_qualified.cml"
-args = ["-E", "short", "${case}"]
+args = ["--diag-format", "short", "${case}"]
 expect_exit = 0
 expect_stdout_exact = "2 101\n"
 
@@ -205,7 +205,7 @@ name = "imports.d5_same_twice"
 desc = "Not a conflict: the same name imported twice from the same module."
 kind = "behavior"
 case = "../../../cases/compile/module_imports/d5_same_twice.cml"
-args = ["-E", "short", "${case}"]
+args = ["--diag-format", "short", "${case}"]
 expect_exit = 0
 expect_stdout_exact = "2\n"
 
@@ -240,7 +240,7 @@ name = "imports.entry_dir_wins"
 desc = "A program's own `import graph` takes the graph.cml next to it, not stdlib/graph.cmo: the entry directory still wins for the entry's own imports."
 kind = "behavior"
 case = "../../../cases/compile/module_imports/importer_scope/main.cml"
-args = ["-E", "short", "${case}"]
+args = ["--diag-format", "short", "${case}"]
 expect_exit = 0
 expect_stdout_exact = "41\n"
 
@@ -249,7 +249,7 @@ name = "imports.library_dir_wins"
 desc = "In the same directory, std::opt compiles stdlib/rules.cml on demand; its `import graph` resolves next to rules (stdlib/graph.cmo), not the program's graph.cml, so the pass runs and the program prints its result."
 kind = "behavior"
 case = "../../../cases/compile/module_imports/importer_scope/opt.cml"
-args = ["-E", "short", "${case}", "std::opt", "std::nvm"]
+args = ["--diag-format", "short", "${case}", "std::opt", "std::nvm"]
 expect_exit = 0
 expect_stdout_exact = "42\n"
 
@@ -265,7 +265,7 @@ name = "imports.include_root_only"
 desc = "The import resolves only through the -I root: only_here is neither next to the program nor installed with Camel."
 kind = "behavior"
 case = "../../../cases/compile/module_imports/include_path/prog/only_from_include.cml"
-args = ["-E", "short", "-I", "../roots/one", "${case}"]
+args = ["--diag-format", "short", "-I", "../roots/one", "${case}"]
 expect_exit = 0
 expect_stdout_exact = "101\n"
 
@@ -274,7 +274,7 @@ name = "imports.include_root_entry_dir_wins"
 desc = "shadow exists both next to the program (value 1) and in the -I root (value 2): the program's own directory is searched first."
 kind = "behavior"
 case = "../../../cases/compile/module_imports/include_path/prog/local_wins.cml"
-args = ["-E", "short", "-I", "../roots/one", "${case}"]
+args = ["--diag-format", "short", "-I", "../roots/one", "${case}"]
 expect_exit = 0
 expect_stdout_exact = "1\n"
 
@@ -283,7 +283,7 @@ name = "imports.include_root_used_without_local_file"
 desc = "The other side of the same-name case: a program without a local shadow.cml takes the -I root's copy (value 2), so the root is live and the previous test really proves the order."
 kind = "behavior"
 case = "../../../cases/compile/module_imports/include_path/prog_root/root_wins.cml"
-args = ["-E", "short", "-I", "../roots/one", "${case}"]
+args = ["--diag-format", "short", "-I", "../roots/one", "${case}"]
 expect_exit = 0
 expect_stdout_exact = "2\n"
 
@@ -292,7 +292,7 @@ name = "imports.include_root_twice"
 desc = "-I given twice (long form on the second): alpha from ../roots/one and beta from ../roots/two."
 kind = "behavior"
 case = "../../../cases/compile/module_imports/include_path/prog/two_roots.cml"
-args = ["-E", "short", "-I", "../roots/one", "--include", "../roots/two", "${case}"]
+args = ["--diag-format", "short", "-I", "../roots/one", "--include", "../roots/two", "${case}"]
 expect_exit = 0
 expect_stdout_exact = "120\n"
 
@@ -301,7 +301,7 @@ name = "imports.include_root_missing"
 desc = "A -I root that does not exist is not passed over silently: the import fails with ModuleNotFound at the import, and the search attempts name the root and say the path does not exist. The name and position are asserted in the output because the diagnostic's message spans the search attempts (the structured diagnostic parser reads one line)."
 kind = "negative"
 case = "../../../cases/compile/module_imports/include_path/prog/missing_root.cml"
-args = ["-E", "short", "-I", "../roots/missing", "${case}"]
+args = ["--diag-format", "short", "-I", "../roots/missing", "${case}"]
 expect_exit = 1
 expect_output_contains = ["missing_root.cml:5:1", "Module 'nowhere_module' not found", "name=SemanticDiag::ModuleNotFound", "include_path/roots/missing", "path does not exist"]
 
@@ -310,7 +310,7 @@ name = "imports.include_root_library_import"
 desc = "A library that is not the entry resolves its own import through the same -I root (after its own directory)."
 kind = "behavior"
 case = "../../../cases/compile/module_imports/include_path/prog/library_via_include.cml"
-args = ["-E", "short", "-I", "../roots/one", "${case}"]
+args = ["--diag-format", "short", "-I", "../roots/one", "${case}"]
 expect_exit = 0
 expect_stdout_exact = "8\n"
 
@@ -319,7 +319,7 @@ name = "imports.include_root_before_camel_packages"
 desc = "order exists in both the -I root (100) and the CAMEL_PACKAGES root (200); -I is searched first, so both given prints 100."
 kind = "behavior"
 case = "../../../cases/compile/module_imports/include_path/prog/packages_order.cml"
-args = ["-E", "short", "-I", "../roots/one", "${case}"]
+args = ["--diag-format", "short", "-I", "../roots/one", "${case}"]
 envs = ["CAMEL_PACKAGES=../packages"]
 expect_exit = 0
 expect_stdout_exact = "100\n"
@@ -329,7 +329,7 @@ name = "imports.include_camel_packages_alone"
 desc = "The same program and CAMEL_PACKAGES root with no -I: the package copy is used (200), so the ordering test has both roots live."
 kind = "behavior"
 case = "../../../cases/compile/module_imports/include_path/prog/packages_order.cml"
-args = ["-E", "short", "${case}"]
+args = ["--diag-format", "short", "${case}"]
 envs = ["CAMEL_PACKAGES=../packages"]
 expect_exit = 0
 expect_stdout_exact = "200\n"
@@ -346,7 +346,7 @@ name = "imports.order_library_own_dir"
 desc = "sub/helper.cml imports `lib` and gets sub/lib.cml (helper+sub), not the entry directory's lib.cml (root): the module's own directory comes first."
 kind = "behavior"
 case = "../../../cases/compile/module_imports/import_order/entry/main_sub.cml"
-args = ["-E", "short", "${case}"]
+args = ["--diag-format", "short", "${case}"]
 expect_exit = 0
 expect_stdout_exact = "helper+sub\n"
 
@@ -355,7 +355,7 @@ name = "imports.order_entry_own_dir"
 desc = "The entry program follows the same rule: `import lib` beside the entry file takes that file (root)."
 kind = "behavior"
 case = "../../../cases/compile/module_imports/import_order/entry/main_lib.cml"
-args = ["-E", "short", "${case}"]
+args = ["--diag-format", "short", "${case}"]
 expect_exit = 0
 expect_stdout_exact = "root\n"
 
@@ -364,7 +364,7 @@ name = "imports.order_library_ignores_entry_dir"
 desc = "deep/helper.cml imports `lib`, has no lib.cml beside it, and there is no -I root: the entry directory is not a module root, so the import fails (it used to take ../lib.cml and print helper+root). The search attempts start with the library's own directory."
 kind = "negative"
 case = "../../../cases/compile/module_imports/import_order/entry/main_deep.cml"
-args = ["-E", "short", "${case}"]
+args = ["--diag-format", "short", "${case}"]
 expect_exit = 1
 expect_output_contains = ["deep/helper.cml:5:1", "Module 'lib' not found", "name=SemanticDiag::ModuleNotFound", "entry/deep", "path does not exist"]
 
@@ -373,7 +373,7 @@ name = "imports.order_library_via_include_root"
 desc = "The same library resolves `import lib` through the -I root (helper+root1): a library's fallback runs over the module roots, not over the entry directory (which used to win with root)."
 kind = "behavior"
 case = "../../../cases/compile/module_imports/import_order/entry/main_deep_include.cml"
-args = ["-E", "short", "-I", "../roots/one", "${case}"]
+args = ["--diag-format", "short", "-I", "../roots/one", "${case}"]
 expect_exit = 0
 expect_stdout_exact = "helper+root1\n"
 
@@ -382,7 +382,7 @@ name = "imports.order_same_name_two_files"
 desc = "two/a/one.cml and two/b/one.cml both import `lib`; each gets the file beside it, so this prints `1 2`. The cache used to be keyed by the import name and printed `1 1` (trap 1)."
 kind = "behavior"
 case = "../../../cases/compile/module_imports/import_order/two/main.cml"
-args = ["-E", "short", "${case}"]
+args = ["--diag-format", "short", "${case}"]
 expect_exit = 0
 expect_stdout_exact = "1 2\n"
 
@@ -391,7 +391,7 @@ name = "imports.order_local_shadows_stdlib"
 desc = "A library beside a graph.cml imports `graph`: the local file shadows the standard library's graph with no diagnostic (41; stdlib/graph has no `answer`). Pinned as the rule's consequence; whether a warning is wanted is an open author question."
 kind = "behavior"
 case = "../../../cases/compile/module_imports/import_order/stdlib_shadow/main.cml"
-args = ["-E", "short", "${case}"]
+args = ["--diag-format", "short", "${case}"]
 expect_exit = 0
 expect_stdout_exact = "41\n"
 
@@ -400,7 +400,7 @@ name = "imports.order_first_root_subtree"
 desc = "A module root holds pkg/helper.cml and pkg/lib.cml; the helper's own directory is the first root's pkg/, so `lib` is that root's (1), not the entry directory's pkg/lib.cml (9)."
 kind = "behavior"
 case = "../../../cases/compile/module_imports/import_order/roots_trap/main.cml"
-args = ["-E", "short", "-I", "roots/one", "${case}"]
+args = ["--diag-format", "short", "-I", "roots/one", "${case}"]
 expect_exit = 0
 expect_stdout_exact = "1\n"
 
@@ -409,7 +409,7 @@ name = "imports.order_first_root_wins_same_relative_path"
 desc = "Both roots hold pkg/: the first -I root supplies pkg.helper, and that helper's own directory supplies its pkg/lib.cml, so the second root's pkg/lib.cml is not used (1)."
 kind = "behavior"
 case = "../../../cases/compile/module_imports/import_order/roots_trap/main.cml"
-args = ["-E", "short", "-I", "roots/one", "-I", "roots/two", "${case}"]
+args = ["--diag-format", "short", "-I", "roots/one", "-I", "roots/two", "${case}"]
 expect_exit = 0
 expect_stdout_exact = "1\n"
 
@@ -418,7 +418,7 @@ name = "imports.order_root_order_selects_subtree"
 desc = "The same two roots in the other order: pkg.helper comes from roots/two, so its own directory supplies 2. The -I order selects the subtree, and each library still reads its own directory."
 kind = "behavior"
 case = "../../../cases/compile/module_imports/import_order/roots_trap/main.cml"
-args = ["-E", "short", "-I", "roots/two", "-I", "roots/one", "${case}"]
+args = ["--diag-format", "short", "-I", "roots/two", "-I", "roots/one", "${case}"]
 expect_exit = 0
 expect_stdout_exact = "2\n"
 
@@ -427,7 +427,7 @@ name = "imports.order_upward_path_is_syntax_error"
 desc = "`import ../lib` is not a module name and never was: an import names a module, and the own-directory rule adds no file-path traversal. The parent `lib.cml` exists, so a silent upward lookup would show up here."
 kind = "negative"
 case = "../../../cases/compile/module_imports/import_order/up/main.cml"
-args = ["-E", "short", "${case}"]
+args = ["--diag-format", "short", "${case}"]
 expect_exit = 1
 expect_output_contains = ["name=SyntaxDiag::UnexpectedToken", "Unexpected '/'", "expected a name"]
 
@@ -451,7 +451,7 @@ name = "imports.relative_name_too_deep_is_not_a_path"
 desc = "`import ..lib` in the entry program (`main`, one component) names nothing: ModuleNotFound explains that the prefix drops more components than the name has and that no directory was searched. It must not name / or /lib, the filesystem paths the spelling produced when read as a path."
 kind = "negative"
 case = "../../../cases/compile/module_imports/import_order/relative_name/main_dotdot.cml"
-args = ["-E", "short", "${case}"]
+args = ["--diag-format", "short", "${case}"]
 expect_exit = 1
 expect_output_contains = ["main_dotdot.cml:7:1", "Module '..lib' not found", "name=SemanticDiag::ModuleNotFound", "drops 2 name component(s)", "no directory was searched"]
 expect_output_not_contains = ["/: no file", "/lib: no file", "//lib"]
@@ -461,7 +461,7 @@ name = "imports.relative_name_too_deep_ignores_include_root"
 desc = "The same spelling with an -I root that holds lib.cml: the root is not a file to fall back to either, because `..lib` is not `lib`. The root's value is never printed and no directory is named, so the lookup cannot drift to a different module."
 kind = "negative"
 case = "../../../cases/compile/module_imports/import_order/relative_name/main_dotdot.cml"
-args = ["-E", "short", "-I", "roots/one", "${case}"]
+args = ["--diag-format", "short", "-I", "roots/one", "${case}"]
 expect_exit = 1
 expect_output_contains = ["drops 2 name component(s)", "no directory was searched"]
 expect_output_not_contains = ["root1-lib", "relative_name/roots/one"]
@@ -471,7 +471,7 @@ name = "imports.relative_name_three_dots"
 desc = "`...lib`: three dots drop three components, and the entry's name has one, so the same explanation and still no filesystem path."
 kind = "negative"
 case = "../../../cases/compile/module_imports/import_order/relative_name/main_3dot.cml"
-args = ["-E", "short", "${case}"]
+args = ["--diag-format", "short", "${case}"]
 expect_exit = 1
 expect_output_contains = ["Module '...lib' not found", "drops 3 name component(s)", "no directory was searched"]
 expect_output_not_contains = ["/: no file", "/lib: no file"]
@@ -481,7 +481,7 @@ name = "imports.relative_name_dot_is_a_name"
 desc = "`.x` can be formed: one dot drops `main`, so the name is `x`, and x.cml beside the program supplies local-x. The prefix is resolved before the lookup, so this is the ordinary own-directory lookup, not the path /x."
 kind = "behavior"
 case = "../../../cases/compile/module_imports/import_order/relative_name/main_dotx.cml"
-args = ["-E", "short", "${case}"]
+args = ["--diag-format", "short", "${case}"]
 expect_exit = 0
 expect_stdout_exact = "local-x\n"
 
@@ -490,7 +490,7 @@ name = "imports.relative_name_trailing_dot_is_syntax_error"
 desc = "`import x.` is not a module name: the parser stops at `x` and the dot is an unexpected token."
 kind = "negative"
 case = "../../../cases/compile/module_imports/import_order/relative_name/main_xdot.cml"
-args = ["-E", "short", "${case}"]
+args = ["--diag-format", "short", "${case}"]
 expect_exit = 1
 expect_output_contains = ["Unexpected '.'", "expected a declaration or the end of the file", "name=SyntaxDiag::UnexpectedToken"]
 
@@ -499,7 +499,7 @@ name = "imports.relative_name_missing_directory"
 desc = "`import pkg.lib` with no pkg/: an ordinary dotted name. ModuleNotFound lists the directories actually tried, starting with the importing module's own directory and then the module roots; the list does not begin at /."
 kind = "negative"
 case = "../../../cases/compile/module_imports/import_order/relative_name/main_pkgdot.cml"
-args = ["-E", "short", "${case}"]
+args = ["--diag-format", "short", "${case}"]
 expect_exit = 1
 expect_output_contains = ["Module 'pkg.lib' not found", "name=SemanticDiag::ModuleNotFound", "relative_name/pkg: path does not exist", "relative_name/pkg/lib: path does not exist"]
 expect_output_not_contains = ["/: no file"]
@@ -509,7 +509,7 @@ name = "imports.relative_name_formed_in_library"
 desc = "`level.helper` has two name components, so its `import ..lib` is the name `lib`, looked for in its own directory first: level/lib.cml (helper+level-lib). A prefix that can be formed is resolved against the loaded name and then looked up by the ordinary rule."
 kind = "behavior"
 case = "../../../cases/compile/module_imports/import_order/relative_name/main_level.cml"
-args = ["-E", "short", "${case}"]
+args = ["--diag-format", "short", "${case}"]
 expect_exit = 0
 expect_stdout_exact = "helper+level-lib\n"
 
@@ -518,7 +518,7 @@ name = "imports.relative_name_too_deep_in_library"
 desc = "The same spelling in a library loaded as `short` (one component) names nothing there either: its ModuleNotFound names the importing module `short` and no directory, and the entry reports the imported module's failure after it."
 kind = "negative"
 case = "../../../cases/compile/module_imports/import_order/relative_name/main_short.cml"
-args = ["-E", "short", "${case}"]
+args = ["--diag-format", "short", "${case}"]
 expect_exit = 1
 expect_output_contains = ["short.cml:4:1", "Module '..lib' not found", "importing module's name 'short' has 1", "name=SemanticDiag::ModuleNotFound", "name=SemanticDiag::ImportedModuleHasErrors"]
 expect_output_not_contains = ["/: no file", "/lib: no file"]
@@ -528,7 +528,7 @@ name = "imports.relative_name_ordinary_case"
 desc = "The ordinary relative case that must keep working: `import lib` takes lib.cml beside the program (local-lib)."
 kind = "behavior"
 case = "../../../cases/compile/module_imports/import_order/relative_name/main_lib.cml"
-args = ["-E", "short", "${case}"]
+args = ["--diag-format", "short", "${case}"]
 expect_exit = 0
 expect_stdout_exact = "local-lib\n"
 

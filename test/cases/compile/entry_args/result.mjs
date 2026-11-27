@@ -86,7 +86,7 @@ for (const pass of [null, 'std::fvm', 'std::nvm', 'std::jit', 'std::tf']) {
     const out = path.join(tmp, 'void.txt')
     const program = path.join(tmp, 'void_main.cml')
     fs.writeFileSync(program, "func main(n: int) => void sync {\n    println(n)\n}\n")
-    const proc = spawnSync(CAMEL, ['--output-format', 'json', program, '--arg', 'n=3', '-o', out], { env, encoding: 'utf8' })
+    const proc = spawnSync(CAMEL, ['--diag-format', 'json', program, '--arg', 'n=3', '-o', out], { env, encoding: 'utf8' })
     let name = '(none)'
     let line = -1
     try {
