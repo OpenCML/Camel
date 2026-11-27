@@ -617,9 +617,10 @@ void compareEffects(
         ++counts.noContext;
         return;
     }
-    camel::runtime::FactStore &old = context->facts();
-    const EffectSummary whole      = camel::runtime::fact::graphEffects(old, program, &graph);
-    EffectSummary unioned;
+    camel::runtime::fact::FactStore &old = context->facts();
+    const camel::runtime::EffectSummary whole =
+        camel::runtime::fact::graphEffects(old, program, &graph);
+    camel::runtime::EffectSummary unioned;
     for (gc_node_ref_t ref = 0; ref < static_cast<gc_node_ref_t>(graph.nodeCount()); ++ref) {
         if (graph.node(ref) == nullptr) {
             continue;
