@@ -30,19 +30,18 @@
 | 21 | native.graph_constant_wrong_arity | graph_constant_arity.cml | 同上 | 同上 | 同上 | 断言保留 |
 | 22 | native.graph_constant_wrong_type | graph_constant_type.cml | 同上 | 同上 | 同上 | 断言保留 |
 
-## §结论 A：不该给"普通库函数"补算子（6+6 条声明）
+## §结论 A：那 12 条是**定义**，不是"需要豁免"的例外（6+6 条声明）
 
-`random.cml` 的 `key`(:52)/`shuffle`(:189)/`choice`(:197)/`sample`(:205)/`rand`(:224)/`randn`(:230) 与 `array.cml` 的 `sort`(:351)/`flatten`(:73)/`unique`(:89) 都是**有函数体的 Camel 函数**；它们不是算子，没有算子可指。
-⇒ 这类声明**不需要 `#op`，也不该有**；`task-228` 里它们红，是因为"整块删掉 `declarationHasOperator` 豁免"后，连有体的函数也被当 native 声明去查算子——**红的是豁免被删，不是缺算子**。
-⇒ 结论：**改断言/改实现都不必要，只要豁免保留**；若决策者要"34 条全消"，这 12 条靠恢复豁免即可，不靠补 `#op`。
+⇒ 这类声明**不需要 `#op`，也不该有**；`task-228` 里它们红，是因为"整块删掉 `declarationHasOperator`"之后，连有体的函数也被当无体声明去查算子——**红的是这条判断被删，不是缺算子**。
+⇒ 结论：**改断言/改实现都不必要，只要那判断保留**；若决策者要"34 条全消"，这 12 条靠它即可，不靠补 `#op`。
 
-## §结论 B：算子已在模块里登记、但声明没有 `#op`（4 族 12 条）
+## §结论 B：算子已登记、默认 URI 与内核相等 ⇒ 不需要 `#op`（4 族 12 条）
 
 `tensor:show`、`nn:save_params`、`laws:stop_gradient`、`graph:constant`/`constant_bytes` —— 四个模块都在 C++ 里登记了算子（出处见总表），声明却不带 `#op`。
 ⇒ 这类**可以补 `#op`**（写法只有一种：`#op('<模块>:<模块内路径>')`，即 `tensor:show`、`nn:save_params`），补上后声明名与算子名的对应关系是显式的；
 ⇒ 但**即使不补也不该红**：声明名 `show` 落在模块 `tensor` 里，默认算子名就是 `tensor:show`，检查应能找到它。
 
-## §结论 C：`numel`（#9）待查
+## §结论 C：`numel`（结案）
 
 `stdlib/tensor.cml:71 numel` 不带 `#op`；本卡只读、未查它的 C++ 侧登记位置，需 `lane-kinds-oper` 在实测时顺带确认（若 `tensor` 模块登记了 `"numel"`，则与 §结论 B 同类）。
 
@@ -50,3 +49,23 @@
 
 **22 条里没有一条是"缺算子要补"**：12 条是**普通 Camel 函数**（靠豁免，不靠 `#op`），12 条是**算子已登记但声明没写 `#op`**（可补可不补，补了更显式），1 条 `numel` 待查。
 ⇒ 想让这 22 条全绿，要做的是**恢复"有体函数"的豁免**（`declarationHasOperator` 那条判断）与**修正检查路径**，不是再造 22 个算子。
+
+## 按 `D-1127-112` 的新口径重判（补记）
+
+新规则：无体声明的算子 URI 写了 `#op` 就用它，**没写就是 `<模块>:<声明名>`**（命名空间算进声明名）；名字与内核 URI 一致的，一条 `#op` 都不用写。
+
+**A 类 12 条（有函数体的那些）**：它们是**定义**，不是"需要豁免"——有体的 `export func` 根本不是无体声明，新规则对它不适用。
+原文说的"恢复豁免"指的就是这条：有体的函数不参与"声明 → 算子"的查证；把它写成"豁免"或"定义"都指同一件事，这里按**定义**记。
+
+**B 类 9 条（模块算子）按新口径重判**：逐条比"默认 URI"与"内核 URI"，全部**相等** ⇒ 都不需要 `#op`，红因只能是**检查路径**：
+
+| 用例 | 声明 | 默认 URI | 内核（出处） | 判定 |
+|---|---|---|---|---|
+| native.tensor_show_* | `stdlib/tensor.cml:351 show` | `tensor:show` | `tensor` 模块算子表 `{"show", …}`（`src/stdlib/tensor/ops/catalog.cpp:36`、`module.cpp:102`、kernel `utility_ops.cpp:120`） | 相等 ⇒ 检查路径 |
+| native.nn_declaration_import | `stdlib/nn.cml:41 save_params` | `nn:save_params` | `src/stdlib/nn/module.cpp:31`、`:89 OperatorTable::declare("nn", {{"save_params", false}})` | 相等 ⇒ 检查路径 |
+| native.autodiff_declaration_import | `laws` 的 `stop_gradient` | `laws:stop_gradient` | `src/stdlib/laws/operators.cpp:42 "laws:stop_gradient"` | 相等 ⇒ 检查路径 |
+| native.graph_constant_* | `stdlib/graph.cml:307 constant::<T>` | `graph:constant` | `src/stdlib/graph/module.cpp:224 {"constant", true}` | 相等 ⇒ 检查路径 |
+| （同上） | `stdlib/graph.cml:226 constant_bytes` | `graph:constant_bytes` | `src/stdlib/graph/module.cpp:196 {"constant_bytes", true}` | 相等 ⇒ 检查路径 |
+
+**C 类 1 条**：`native.declaration_type_argument` 结案不变（`tensor.cml:71 numel` 无体、算子 `numel` 已注册在 `tensor` 模块，`gradient_ops.cpp:393-398`、`module.cpp:98`；默认 URI `tensor:numel` 与内核相等）。
+
