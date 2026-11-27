@@ -157,3 +157,46 @@ PASS
 "the dtype or shape of a value changes from one call of a recursion to the next"，
 现在那条用例**先被 append 的点名拒绝接住**（`known failure changed its mind` 提示）。不是新红
 （它本来就在红集里），但那条 known-fail 的期望需要它的属主更新。
+## 八、step 6：③（五个算子读数）与 ④ 的第一步，以及一个必须改设计的地方
+
+### ③ 五个算子一个模型（`onnx.checker` + ORT 双口径）
+```
+export rc=0
+opset=11 nodes=['SequenceEmpty','SequenceInsert','SequenceLength','SequenceAt','ConcatFromSequence']
+input xs: 220c0a0a0a08080112040a020804      # seq(tensor(float)[4])，field4→field1→field1 三层
+onnx.checker ok (five sequence operators, opset 11)
+SequenceLength -> 2
+SequenceInsert+SequenceAt -> [7. 8. 9. 10.]
+SequenceInsert+ConcatFromSequence -> [7. 8. 9. 10.]
+PASS
+```
+**双口径救回来的一个真错**：上一版把元素的 `TypeProto.Tensor` 直接塞进 `Sequence.elem_type`（只包一层），字节
+`22040a020801`：**checker 接受**，**ORT 拒绝**（`Unsuported type proto value case`）。现在包两层
+（`22060a040a020801`），ORT 读得过。已提交 `3884ccb0d8`（`10 4`）。
+
+### ④ 第一步（已提交 `a765ee3973`）
+`Value::Form` 加 `Sequence` + `symbolicSequence` 工厂 + `valueInfoOf(name, const Value&)`（按值取
+`isSequence`，旧的事实接口默认 false ⇒ 不产生任何字节变化）；一处既有调用改用按值接口。
+读数：`BUILD_EXIT=0`、`binary built 2026-11-28T07:11:37+08:00`、`feat/trans/macro` **30/30 pass**。
+`numstat`：`13 3 exporter.cpp`、`21 1 value.h`。
+
+### 第四步真正卡住的不是形状门，而是 `stateIsTheCollection` 的前提
+`stateIsTheCollection` 的既有注释写着：被认领的 state"唯一用途就是那个 append，而那个 append 就是它自己的下一个值，
+所以这一轮不评估它"（`exporter.cpp:2911-2916` 把它的 body 端口绑成 `Value{}`，`2930-2934` 跳过它）。
+形状 A 的 ① 读数表明**这个前提不成立**：同一个 append 节点**又是 scan 槽 3 的分量**（`components[6] == components[0]`），
+于是它**会被评估**，而它读的正是那个被绑成 `Value{}` 的端口 —— 两条路径打架。
+
+⇒ 接线只有一条自洽的路（也就是决策者说的"用序列携带"）：
+1. 被认领的 collection **不再走 scan**，改成**一个携带的 sequence state**：init `SequenceEmpty`，
+   body 每轮对该 state `SequenceInsert(state, elem)`（elem 就是 scan 槽 0 那个元素），
+   Loop 之后用 `ConcatFromSequence(axis=0)` 得到消费者要的那个数组；
+2. scan 槽 0（元素堆叠）保持不变；**scan 槽 3 取消**（它的值由 sequence 承担，否则参差无法 stack）；
+3. `stateIsTheCollection` 的认领要与 1 一致：认领条件里加"该 append 同时不是 scan 分量"，
+   并对"是 scan 分量"的情形走 1 的新路 —— **同一数组只走一条路**（这条断言要写进代码注释）。
+未开始改（时间到）。
+
+### 待办（按 `D-1128-52` / `D-1128-57`）
+- `export_loop_carried_array_field` 正向化（desc/verify）；
+- `ort_loop_values_dynamic`、`ort_loop_loaded_weights` 的 `known_fail_reason` 指向 `task-383` 的缺口，
+  `known_fail_msg` 照实际输出，加 `known_fail_ends_when`；
+- 三条都要在降级落地后一起改（不先改成正向等降级）。
