@@ -32,22 +32,29 @@ import { is_function } from types
 /// @example let uris = supported_operators()
 export func supported_operators() => string[]
 
-/// Writes the ONNX model of `fn` applied to arguments like `example` to the file `out`, at the
-/// backend's default opset. `example` is one argument of a one-parameter `fn`, or a tuple with
-/// one example per parameter; the function's graph is translated after the generic passes, and a
-/// node the backend cannot lower is refused. `out`, `dynamic_axes` and `target` are `with`
+/// A translated function: the model `model` gives back. Its content is the ONNX file the function
+/// and its example were translated to, and `F` is the type of that function, which is what lets
+/// `save` and `run` be declared in terms of the arguments of `F`. A value of this type has no
+/// other source: only the translation knows those bytes.
+export type Model<F>
+
+/// Translates `fn` applied to arguments like `example` into an ONNX model, at the backend's
+/// default opset. `example` is one argument of a one-parameter `fn`, or a tuple with one example
+/// per parameter; the function's graph is translated after the generic passes, and a node the
+/// backend cannot lower is refused. A tensor the function captured from around it is translated
+/// as an initializer of the model, so a trained network is exported as it is, without being
+/// rewritten to take its parameters as arguments. `dynamic_axes` and `target` are `with`
 /// parameters because they are runtime values: `dynamic_axes` names the axes of the tensor inputs
 /// that are left unknown in the model (which is what lets one model run at several shapes), and
 /// `target` names the runtime whose capability data decides whether a node this backend lowers is
 /// one that runtime has (`'none'` switches the check off).
-/// @effect writes a file and reads the function's graph
-/// @fails error value `ExportUnsupported` when `fn` is not a function, when the graph cannot be translated (a call that remains, an operator without an ONNX lowering, a dtype or shape the exporter cannot name), or when the target runtime rejects a node; error value `IOError` when the model cannot be written
-/// @example export_model<out: "/tmp/model.onnx">(func (x: float) { x * 2.0 }, 2.0)
-/// @example export_model<out: "/tmp/model.onnx", dynamic_axes: [0]>(func (xs: f32[2, 3]) { xs[0][0] }, [[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]] as f32[2, 3])
-/// @example export_model<out: "/tmp/model.onnx", target: "onnxruntime-cpu">(func (x: float) { x * 2.0 }, 2.0)
-#op('onnx:export_model')
-with <out: string, dynamic_axes: int[] = [], target: string = 'onnxruntime-cpu'>
-export func export_model::<F, E>(fn: F, example: E) => void! when is_function::<F>()
+/// @effect reads the function's graph
+/// @fails error value `ExportUnsupported` when `fn` is not a function, when the graph cannot be translated (a call that remains, an operator without an ONNX lowering, a dtype or shape the exporter cannot name), or when the target runtime rejects a node
+/// @example let m = model(func (x: float) { x * 2.0 }, 2.0)
+/// @example let m = model<dynamic_axes: [0]>(func (xs: f32[2, 3]) { xs[0][0] }, [[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]] as f32[2, 3])
+#op('onnx:model')
+with <dynamic_axes: int[] = [], target: string = 'onnxruntime-cpu'>
+export func model::<F, E>(fn: F, example: E) => Model<F>! when is_function::<F>()
 
 // -----------------------------------------------------------------------------
 // Passes: functions the pipeline applies to the program
