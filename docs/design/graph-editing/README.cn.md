@@ -192,6 +192,18 @@ export func strip_debug_prints::<F>(f: F) => F! when is_function::<F>() {
 ## 11. 迁移
 
 - `lib/graph/graph.cml`：删除 `graph_of`、`graphs_of`、`Txn<F>`、`open`、`commit`、`abort`；查询与编辑算子的签名不变，句柄类型带上块标签；新增 `inline`、`outline`、`order`、`exit` 一类锚点查询；删除 `add_constant`（它是 `inline(at, () => v)` 的特例）。
+  - 状态（2026-11-28 核）。状态靠标注，事实靠出处；"被谁调用"也是事实的一部分，所以每行三段：公开面 / 谁在调 / 能删吗。
+    - `Txn<F>`：公开面 无（`src/stdlib/graph.cml` 的 `export type` 表 `:42-51` 里没有它）｜谁在调 无（编译器与库都不引用这个名字；`TxnUsed` 只是错误值名，`:494`）｜能删 已落地。
+    - `graph_of`：公开面 `src/stdlib/graph.cml:70`｜谁在调 编译器降级发它取块根（`src/compile/src/gct/builder_expr.cpp:285`）；例子与文档面也写着它（如 `examples/case-study/README.md:293`）｜能删 不能：降级依赖，且要先把块根句柄改成不发它。
+    - `graphs_of`：公开面 `src/stdlib/graph.cml:75`｜谁在调 `src/stdlib/opt.cml:198,363`（`cse` 与 `fold` 的入口判断）、`examples/case-study/edits.cml:48,126`｜能删 要迁移那两处遍与例子，不是删一行。
+    - `open`：公开面 `src/stdlib/graph.cml:402`｜谁在调 编译器降级（`src/compile/src/gct/builder_expr.cpp:228`，块闭包体的第一句）、`src/stdlib/opt.cml:188,250,350`、`examples/case-study/edits.cml:82,91`｜能删 不能：降级与库都依赖，这一项欠收口、不欠迁移。
+    - `commit`：公开面 `src/stdlib/graph.cml:496`｜谁在调 编译器降级**不**发它（块写的是内部的 `commit_of`，`src/compile/src/gct/builder_expr.cpp:231`）；Camel 面 `src/stdlib/opt.cml:192,246,337`、`examples/case-study/edits.cml:86,93`｜能删 先把那三处与例子换成块写法或 `commit_of`，再收口；只删名字会断库。
+    - `abort`：公开面 `src/stdlib/graph.cml:513`｜谁在调 `src/stdlib/opt.cml:341`（`fold` 一轮没折成时）、`test/cases/modules/graph_facts/draft_facts.cml:44`、`test/cases/modules/graph_pass/neutral.cml:101`；编译器不发｜能删 欠收口，且收口前先定"显式放弃"这个写法还要不要。
+    - `inline` / `outline` / `order` / `exit`：公开面 `src/stdlib/graph.cml:449` / `:465` / `:437` / `:114`｜谁在调 `test/cases/modules/graph_function/inline.cml:261,262`、`commit_effect.cml:76`、`outline.cml:96`、`test/cases/modules/graph_pass/orderprobe.cml:137,150`｜能删 已落地（新增完成）。
+    - `add_constant`：公开面 `src/stdlib/graph.cml:490`｜谁在调 `test/cases/modules/graph_pass/fold_constants.cml:32,58`、`typed_constants.cml:46`、`test/cases/modules/graph_draft_id.py:53,73`｜能删 未落地；换 `inline(at, () => v)` 之前先改这四个用例。
+    - 「查询与编辑算子的签名不变」：公开面 `open` / `commit` / `abort` 的形参都已是草稿句柄（`src/stdlib/graph.cml:402` / `:496` / `:513`）｜谁在调 不适用｜能删 这句断言**不成立**，应改为"签名随之改变"。
+    - 「句柄类型带上块标签」：随 `task-389` 定案，本轮不标（没出处不写）。
+    - **在途**：`commit` 与 `commit_of` 的形参正在变 —— `lane/editview-commit`（`ce14a0e31a`）的 8 笔把 `commit` 的形参改成 `Draft<F>`（该枝的 `src/stdlib/graph.cml:504`）并同步 `commit_of`（该枝 `:514`）；**尚未合入**。合入之后 `commit` 那行要再标一次（"形参已是 `Draft<F>`，上面按 `Graph` 写的调用点清单随之改变"），`commit_of` 同理。
 - 用 Camel 写的遍（`lib/opt/opt.cml` 的 `fold`/`cse`/`dce`、`examples/case-study/edits.cml`、`test/cases/modules/graph_pass/*`）：`open … commit` 改写成 `edit d = f { … }`；只读分析改写成 `view`。遍的形状不变，仍是 `(f: F) => F!`。
 - `probe_handle`、`check_pass_boundary` 改成 `view` 块里的查询。
 - 测试：每条现有的 `Txn` 用例改写；另加反例，各报一条具名诊断：句柄作为块的值交出、存进块外的 `Ref`、被离开的闭包带走、图算子写在块外、`view` 的节点交给 `replace`。
