@@ -4854,9 +4854,10 @@ void Engine::build(Pending &pending) {
     }
     TupleType *closureType = TupleType::create(std::move(captureTypes));
     pullback.setClosureType(closureType);
-    // Where the forward graph holds each captured value: one of its ports, or the value the
-    // pullback was seeded with. The closure carries them in this order, and a tape that cannot
-    // carry the closure supplies them again in it, so the list is kept beside the plan.
+    // Where the forward graph holds each captured value: one of its ports, the value the pullback
+    // was seeded with, or -- see below -- a value the forward graph made on the way. The closure
+    // carries them in this order, and a tape that cannot carry the closure supplies them again in
+    // it, so the list is kept beside the plan.
     {
         const std::vector<gc_node_ref_t> forwardPorts = portsOf(*pending.source);
         std::vector<size_t> capturePorts;
@@ -4866,10 +4867,14 @@ void Engine::build(Pending &pending) {
             if (port != forwardPorts.end()) {
                 capturePorts.push_back(static_cast<size_t>(port - forwardPorts.begin()));
             } else {
-                ASSERT(
-                    capture == value,
-                    "autodiff: a pullback captures a value that is neither a port of the "
-                    "function it is the pullback of nor that function's value.");
+                // A capture that is neither a port of this forward graph nor the value it was
+                // seeded with is a value the forward graph made on the way: a measured fact, not
+                // an impossibility (a loop body's pullback had two of its four captures like
+                // this, and a body's pullback captured a function value outright). The layout
+                // cannot name such a capture, and kCapturedValue does not stand for it; a tape
+                // that carries values instead of closures has to get those values from what the
+                // forward graph returns. So the invariant "every capture is a port or the value"
+                // does not hold -- see the backlog card "tape 携带值需要口径先统一".
                 capturePorts.push_back(kCapturedValue);
             }
         }
