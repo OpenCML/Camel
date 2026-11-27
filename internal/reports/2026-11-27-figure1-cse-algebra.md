@@ -66,12 +66,27 @@ N04 [label=":op/mul_l", type="OPER"]              ← (x+1)*7
 | 阶段 | 行数 | 变化 |
 |---|---|---|
 | 前 | 42 | — |
+| `opt::fold`（单独跑） | 42 | **一字未动**（与"前"`cmp` IDENTICAL） |
 | `opt::cse` | 38 | 两处 `x+1` 合成一颗（10 → 8 节点） |
 | `opt::cse opt::algebra` | 31 | `a*3 + a*4` → `a*7`（8 → 4 节点） |
-| `opt::cse std::cxx::algebra` | 31 | 与上一行逐字节相同 |
+| `opt::fold opt::cse opt::algebra` | 31 | 与上一行**逐字节相同**（`cmp` IDENTICAL） |
+| `opt::cse std::cxx::algebra` | 31 | 与上面两条逐字节相同 |
 
-**顺序是判据的一部分**：只跑 `opt::algebra`、不先 `cse`，图不动（仍 10 颗）—— 律匹配不到同一个 `x`。
-所以"fold → cse → algebra"里，`cse` 与 `algebra` 的活是**耦合**的，不能各自宣称。
+三条反面证据：
+
+```
+A) camel fig1.cml opt::algebra std::gir std::nop（不带 cse）→ 10 个节点，与"前"逐字节相同
+B) camel fig1.cml opt::fold std::gir std::nop             → 与"前"逐字节相同（fold 单独跑，图一字未动）
+C) camel fig1.cml opt::fold opt::cse opt::algebra …       → 与 opt::cse opt::algebra 逐字节相同
+```
+
+**所以"每一步都有可见的活"这句话要写准，不能一律这么说：**
+
+- `cse`：**有活**（10 → 8，两处 `x+1` 合成一颗 N02，被 N04 与 N06 共用）；
+- `algebra`：**有活，但前提是 `cse` 先合并**（8 → 4）；不带 `cse` 时 10 颗不动 —— 律匹配不到同一个 `x`；
+- `fold`：**在这条语料上无活**；`(1+2)` 这种字面量在**构建期**就已折成 `DATA 3`，`fold` 遍到不了它。
+
+⇒ 论文的写法：**"`fold` 的活发生在构建期（字面量到遍这一层时已经是图里的常量）；到遍这一层，`cse` 与 `algebra` 才有可见的变化。"** 既不夸大也不含糊。
 
 ## 相关读数（同一时期的对照用例）
 
