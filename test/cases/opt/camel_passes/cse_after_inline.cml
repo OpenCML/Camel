@@ -1,0 +1,13 @@
+// One expression is written twice: once inside `inc` and once in `f`. After `std::cxx::inline`
+// both writings are nodes of `f`, and a sweep of common subexpressions has to make them one.
+func inc(x: int) => int {
+    return x + 1
+}
+
+func f(x: int) => int {
+    return inc(x) * 3 + (x + 1) * 4
+}
+
+func main() {
+    println(f(2))
+}

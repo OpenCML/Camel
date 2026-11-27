@@ -29,7 +29,7 @@
  */
 
 import { flatten, all, any } from array
-import { Node, Graph, NodeKind, graphs_of, graphs, nodes, inputs, with_inputs, value_users, kind, op, op_name, may_be_recomputed, may_fault, may_be_rearranged, is_anchor, is_written_slot, is_constant, constant_bytes, type_of, type_name, region_of, permissions, tags, constant, open, replace, erase, eval, commit, abort } from graph
+import { Node, Graph, NodeKind, Region, RegionKind, graphs_of, graphs, nodes, inputs, with_inputs, value_users, kind, op, op_name, may_be_recomputed, may_fault, may_be_rearranged, is_anchor, is_written_slot, is_constant, constant_bytes, type_of, type_name, region_of, region_kind, region_parent, permissions, tags, constant, open, replace, erase, eval, commit, abort } from graph
 import { saturate as saturate_rules } from rewrite
 import { algebra as algebra_laws, distribution, simplify } from rules
 import { is_function } from types
@@ -100,19 +100,48 @@ func mergeable_operation(n: Node) => bool {
     return kind(n) == NodeKind::Oper && may_be_rearranged(n) && op_text(n) != '' && !is_written_slot(n) && !inputs(n)->any<is_written_slot> && !with_inputs(n)->any<is_written_slot>
 }
 
+// The control region a node lies in: the innermost region the node is in that decides *when* it
+// runs -- an arm of a branch, a loop's condition, a loop's body -- or the body itself (region 0)
+// when the node lies in none of them. It is the key the C++ sweep compares (`armRegions`,
+// std/cxx/opt/generic/generic.cpp: the walk up the parents keeps `Arm`, `LoopCond` and
+// `LoopBody` and nothing else).
+//
+// A region an `inline` made is **not** a control region: the inlined body runs where the call it
+// replaced was, not at a moment of its own, and the same holds of a `Block` region and of a
+// region the sweep itself left `Dead`. Asking for the innermost region instead makes an inlined
+// node answer with the region `inline` made and the call site's own node answer with the body --
+// two answers for one moment of the run -- and the sweep then never merges an inlined expression
+// with the one it duplicates, which is what the four-node gap between `opt::cse` and
+// `std::cxx::cse` after `std::cxx::inline` was.
+func control_region_of(r: Region) => Region {
+    return if is_control_region(r) then r else match region_parent(r) {
+        case null => r
+        case p => control_region_of(p)
+    }
+}
+
+func is_control_region(r: Region) => bool {
+    let k = region_kind(r)
+    return k == RegionKind::Arm || k == RegionKind::LoopCond || k == RegionKind::LoopBody
+}
+
+func control_region(n: Node) => Region {
+    return control_region_of(region_of(n))
+}
+
 // Whether the two operations are the same computation: the same operator on values of the same
-// type, the same operands in the same order, in the same region, with the same permissions and
-// the same attributes.
+// type, the same operands in the same order, in the same control region, with the same permissions
+// and the same attributes.
 func same_operation(a: Node, b: Node) => bool {
-    return op_text(a) == op_text(b) && type_text(a) == type_text(b) && permissions(a) == permissions(b) && tags(a) == tags(b) && region_of(a) == region_of(b) && same_nodes(inputs(a), inputs(b)) && same_nodes(with_inputs(a), with_inputs(b))
+    return op_text(a) == op_text(b) && type_text(a) == type_text(b) && permissions(a) == permissions(b) && tags(a) == tags(b) && control_region(a) == control_region(b) && same_nodes(inputs(a), inputs(b)) && same_nodes(with_inputs(a), with_inputs(b))
 }
 
 // Whether one node may stand for the other in a graph: as a constant of the same value, or as
-// the same operation. Two constants are one value only in one region: the C++ sweep keys them by
-// the region as well, because a value written in the body and one written in an arm are two
-// writings of the same number, not one node of the graph.
+// the same operation. Two constants are one value only in one control region, because a value
+// written in the body and one written in an arm are two writings of the same number, not one node
+// of the graph; the C++ sweep keys them by the same walk (`armRegions`) it keys operations by.
 func same_node(a: Node, b: Node) => bool {
-    return (mergeable_constant(a) && mergeable_constant(b) && region_of(a) == region_of(b) && same_constant(a, b)) || (mergeable_operation(a) && mergeable_operation(b) && same_operation(a, b))
+    return (mergeable_constant(a) && mergeable_constant(b) && control_region(a) == control_region(b) && same_constant(a, b)) || (mergeable_operation(a) && mergeable_operation(b) && same_operation(a, b))
 }
 
 // The node `n` is replaced by: the first node of its graph that has the same value, or `n`
