@@ -1,6 +1,6 @@
 # CC 截稿前的槽位：六格 CC、两格 3b
 
-负责人 2026-11-27 定：CC（摘要 12-01、全文 12-03）之前，八个开发槽里六格做 CC 要的特性，两格做重构阶段 3b；截稿后 3b、3c 回到满格。晋级、红的处置、文档同步、3a 残留不占开发槽，交给杂项与缓冲车道，或排在截稿之后。
+负责人 2026-11-27 定：CC（摘要 12-01、全文 12-03）之前，八个开发槽里六格做 CC 要的特性，两格做重构阶段 3b；同日又加 C7（在程序里生成 ONNX 模型并交 ORT 执行），排在 3b 之前；截稿后 3b、3c 回到满格。晋级、红的处置、文档同步、3a 残留不占开发槽，交给杂项与缓冲车道，或排在截稿之后。
 
 在跑的非 CC 车道（`task-187`、`task-89`、`task-153`、`task-85`、`task-32` 等）做完手上这一步就交回，交回后这一格不再接非 CC 的卡，改接下表里没人做的那一格。不为腾格子打断正在跑的一步。
 
@@ -14,6 +14,27 @@
 | C4 CC 主案例 · 反向 | 对 `loss` 做 `with_grad` 再接局部优化，反向循环倒序读残差，导出反向 `Loop`。可以先在 `std::nvm` 上把梯度做对，再接导出 | 梯度在 `std::nvm` 上与有限差分对照；导出后 ORT 与 `std::nvm` 逐值对照 |
 | C5 edit/view · 写法到图与查询面 | 计划 `2026-11-26-edit-view-frontend.cn.md` 的 A 段（在做：`task-181`，剩"延后实例化的体看不到块里的名字层"那一处）与 D 段（第 15 节的查询与编辑面、删 `graph_of`），连同 `task-170` 的 `inline` 节点实参与 `exit(d)` 收窄 | A、D 两段原文的判据；设计页第 2 节四个示例逐字编译、跑出结果；`probe/editview` 全绿 |
 | C6 edit/view · 句柄与提交 | B 段（句柄出不了块的四条反例）与 C 段（块尾提交与换出口，接在 D 后） | B、C 两段原文的判据；第 2 节 `log_result` 原样跑通 |
+
+## C7：在程序里生成 ONNX 模型并交 ORT 执行
+
+负责人 2026-11-27 定：截稿前做出来，排在 3b 两格之前（下一个空出来的开发格就给它）。这是 CC 稿运行示例里的那一步：程序把训练好的网络译成 ONNX 模型，再交给 ONNX Runtime 执行。
+
+| 名字与签名 | 做什么 |
+|---|---|
+| `onnx::model::<F, E>(fn: F, example: E) => Model<F>! when is_function::<F>()` | 把函数译成模型值。`Model<F>` 是 `onnx` 模块的命名类型，一个值，类型里带着来源函数的类型。`dynamic_axes`、`target` 照 `export_model` 作 `with` 参数 |
+| `with <model: Model<F>> onnx::run::<F>(...args: ParamsOf<F>) => ResultOf<F>!`（模型是 `with` 参数，数据走普通参数，调用写 `x->onnx::run<model>`） | 交 ORT 执行。意思就是把 `fn` 作用到实参上，ORT 只是怎么跑，所以效应与 `fn` 相同；ORT 不可用、加载失败走错误值 |
+| `with <out: string> onnx::save::<F>(m: Model<F>) => void!`（与 `export_model` 的 `out` 同名，调用写 `m->onnx::save<out: "...">`） | 写文件（写文件的效应） |
+
+- **翻译只有一条路**：`model` 与 `export_model` 共用同一张算子映射表、同样的拒绝诊断；写文件的函数形式 `export_model::<F, E>(fn, example) => void!` 删掉，写法变成 `onnx::model(fn, example)->onnx::save<out: path>`（不计兼容，用例与文档一并迁）。命令行上的阶段形式 `export_model::<F>(f: F) => F!` 保留。
+- **捕获的张量**：训练好的网络通常是捕获了参数的闭包，捕获的张量译成模型的初始值（initializer），不要求用户把参数改成实参。
+- **张量交接**：按"头加共享缓冲"，与仓库里已有的跨运行时交接同一套；先找现成的那条路（Python 桥或已有的 ORT 交接），没有再接 ORT 的 C 接口，选哪条在第一笔交回里写清依据。
+
+验收：
+- 主案例前向：`run(model(forward, example), x)` 与直接调用 `forward(x)` 在 `std::nvm` 上逐值相同（给出容差与依据）；
+- 一个在程序里训练了几步的两层 MLP：训练后的网络 `model` 再 `run`，与直接调用逐值相同，参数走初始值；
+- `model` 对一个映射表里没有的算子报原有的拒绝诊断（负例）；`run` 在 ORT 不可用时交回错误值（负例）；
+- `save` 写出的文件过 ONNX checker，与原 `export_model` 写出的逐字节相同（同一函数、同一参数）；
+- 迁完后 `git grep` 里不再有 `export_model` 的函数形式调用。
 
 ## 3b 两格
 

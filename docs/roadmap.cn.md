@@ -22,6 +22,8 @@ ECOOP 已交稿。CC 2027（摘要 12-01、全文 12-03）之前，**第一优�
 **账**：完成的标志按目标架构第 5 节各路线的"完成的标志"与第 7 节的守护检查（边的种类只在语义层、效应只经事实层、算子 URI 只在定义与登记表、引用检查为硬门槛）。`pace.sh` 的 convergence 一行（行数、大文件、残留）每次照读，当作哪里还乱的线索。
 
 **重构之后的新特性（已记下，不先做）**：
+- 在程序里生成 ONNX 对象并交 ORT 执行（负责人描述的目标用法，CC 稿的运行示例用到）：`onnx::model::<F, E>(fn: F, example: E) => Model<F>! when is_function::<F>()` 把函数译成模型值（翻译规则与 `export_model` 同一张表、同样的拒绝），`with <model: Model<F>> onnx::run::<F>(...args: ParamsOf<F>) => ResultOf<F>!`（模型是 `with` 参数，数据走普通参数，调用写 `x->onnx::run<model>`） 交 ORT 执行，`with <out: string> onnx::save::<F>(m: Model<F>) => void!` 写文件。`run` 的意思就是把 `fn` 作用到实参上，ORT 只是怎么跑，所以效应与 `fn` 相同（纯张量函数就是纯的），ORT 不可用走错误值。今天未实现，`export_model` 之外都是目标。
+- StableHLO 对接（负责人 2026-11-27 定为目标，排在重构 3b、3c 之后）：一个转译遍，与 ONNX 那条路同形，都是局部重写。输入是纯张量的函数或区域，输出是 StableHLO（MLIR）：算子映射到 StableHLO 的算子，循环与分支译成 `stablehlo.while`、`stablehlo.if` 的区域；交给 XLA 或 IREE 编译执行；张量按"头加共享缓冲"交接，与 ORT 那条路相同；效应（打印、读文件等）留在 Camel 这边执行。命名照 ONNX：模块 `stablehlo`，遍 `stablehlo::export_model`（导出）与执行入口同 ONNX 一侧的写法。对接的先后：ONNX 已有（推理运行时），StableHLO 其次（XLA、IREE 与 TPU），TOSA 以后（端侧 NPU）。
 - CC 主案例：轮数由数据决定的循环 → 对 `loss` 局部组合（`with_grad` 再接局部优化）→ `onnx::export_model` 把前向与反向循环导出成 ONNX `Loop` → ORT 与 `std::nvm` 数值对照，进测试。已知卡点：导出器拒绝"每轮收集一个值的循环"（`modules/onnx/exporter.cpp` 约 2476 行）；做法按原则 9.9（残差作 `Loop` 的逐轮输出，反向倒序读）。
 
 ## 0′. 上一版排期（2026-11-18，论文优先期间，已结束）
