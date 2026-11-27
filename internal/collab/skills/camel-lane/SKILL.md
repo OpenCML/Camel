@@ -242,7 +242,12 @@ pwsh -NoProfile -File <你的工作树>\internal\tools\camel-remote.ps1 `
 ## 7¾. 换底的四个时机
 
 ```
-换底 = `git fetch origin` + `git rebase origin/integration`：只把 integration 接上来，**不把 integration 合进你的分支**。
+换底 = 把 integration 接上来，**不把 integration 合进你的分支**；但**用 `rebase` 还是 `merge` 取决于这条分支推没推过**（2026-11-27 一条车道
+按仓库规矩纠正了协调者的说法）：`agents/branching.md:9` “do not fast-forward, **rebase shared history** or force-push shared branches”、
+`:42` “Synchronize by **merging** `origin/develop` into the lane, **never by rebasing a pushed lane**”
+  · **没推过的车道分支** ⇒ `git rebase origin/integration`（历史干净、`range-diff` 好看）
+  · **推过的分支**（gate/staging 推过的）⇒ `git merge origin/integration`，产生一笔 “Merge origin/integration (…) into lane/<名字>”
+  · 不确定推没推过 ⇒ 按 `merge` 做（它不会错）；反过来做错就是重写共享历史
 四处必须换：
   ① 交回之前（即使只是报进度）
   ② 插件点名你落后超过 100 笔时，当轮换
