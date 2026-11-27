@@ -166,6 +166,13 @@ bool MathModule::load() {
     for (const char *uri : {"math:erfc_f", "math:erfc_d"}) {
         camel::core::DerivativeRegistry::instance().setRule(uri, &erfVjp<true>);
     }
+    // `math:abs_d` stays without a rule, and the reason is a missing capability rather than an
+    // oversight: its law is a branch -- `dy` where `x >= 0`, `-dy` where it is not, which is the
+    // array width's `absVjp` -- and the scalar graph has no operator to write that branch with.
+    // `:op/ge_d` answers a bool and no conversion takes a bool to a float, so the sign cannot be
+    // turned into a number; the quotient `x / abs(x)` is not a substitute, because at zero it
+    // answers nothing where the array law answers `dy`, and two widths that disagree at the
+    // boundary are worse than a gradient refused by name.
     for (const char *uri : {"math:tanh_d"}) {
         camel::core::DerivativeRegistry::instance().setRule(uri, &tanhVjp);
     }
