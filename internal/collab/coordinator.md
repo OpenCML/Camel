@@ -184,6 +184,12 @@ pwsh -NoProfile -File ... -Path <wt> -Clean                        # 收尾：�
 - 禁止在 agent 提示里写 `cmake --build`、`npm run build`、`node scripts/test.js`；不要跑
   stress / progen / GC-stress / PyTorch 重测试。
 
+**合并位的 `scripts/merge-batch.mjs` 在本机必须 `--no-fetch`（2026-11-27 实测）：**工具自带的那一步 `git fetch origin`
+走 SSH，本机到 `ssh.github.com:443` 握手前就超时 ⇒ 整批根本起不来。合并位先用
+`git fetch https://github.com/OpenCML/Camel.git '+refs/heads/*:refs/remotes/origin/*' --prune` 刷共享 ref，
+再 `node scripts/merge-batch.mjs --no-fetch --base origin/integration …`。**只有 `origin/integration` 这一个 ref 是合并的判据**，
+刷它的路径不受限制（HTTPS 可用），但要**在起批前刷一次**——否则你合的是自己本地那份旧尖端，推送会被拒或把别人挤掉。
+
 ## 5. 一个任务的完整生命周期
 
 1. **派工前核对**（血泪）：`git log --oneline origin/develop --grep="Hxx"` + 看任务书那行 +
