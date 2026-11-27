@@ -146,16 +146,22 @@ class GraphModule final : public BuiltinModule {
                 HandleType::get(kind));
         }
         camel::core::type::registerNativeType("graph", "NodeKind", nodeKindType());
-        // `Draft<F>`: the draft an edit block opens on a function of type `F`. It is the graph
-        // handle
-        // -- the kernels take it as they take a graph -- and carries `F`, which is the type its
-        // commit hands back. Registered without one: a declaration that states one (`Draft<F>`)
-        // asks this entry for the draft of that function type.
-        camel::core::type::registerNativeType("graph", "Draft", HandleType::ofDraft(nullptr));
         camel::core::type::registerNativeType("graph", "RegionKind", regionKindType());
         // The type of the value `effects` gives: a structural type has no name of its own, and
         // the declaration of `effects` names its result.
         camel::core::type::registerNativeType("graph", "Effects", effectsType());
+        // `Draft<F>`: the draft an edit block opens on a function of type `F`. It is the graph
+        // handle -- the kernels take it as they take a graph -- and carries `F`, which is the type
+        // its commit hands back. Registered without one: a declaration that states one (`Draft<F>`)
+        // asks this entry for the draft of that function type.
+        //
+        // It is registered after every other type of the module, and it must not need the order:
+        // the module's registration is one sequence, and a type that read the table while the
+        // sequence was still being written could take the operator declarations after it down with
+        // it (a block that commits then finds `graph:commit` unregistered and aborts). The handle
+        // this names is built from the type alone (`HandleType::ofDraft`), so where it sits in the
+        // sequence decides nothing.
+        camel::core::type::registerNativeType("graph", "Draft", HandleType::ofDraft(nullptr));
         // The signatures C++ computes (standard library conventions 2): the four operators of a
         // function value take the type of an argument, so a declaration cannot express them.
         // Everything else is declared in stdlib/graph.cml, including the per-sample-type
