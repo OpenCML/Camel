@@ -10,7 +10,7 @@
 - 1 助手：`opt.cml:320 fold_rounds::<F>(f: F, budget: int) => F!`（两个参数，不是遍形状）。
 
 **决策者的一句裁定（据此定稿）：有函数体的组合遍是普通函数，不补 `#op`；`opt::saturate` 也不指引擎 —— 有体就是函数，指向引擎等于改了它的意思。**
-（我上一轮转的 `opt::saturate → #op('std::cxx::saturate')` 候选**撤销**，表里不留。）
+（我上一轮转的“opt::saturate 指向引擎”候选**撤销**，表里不留：有体就是函数，指向引擎等于改它的意思。）
 
 ## 先例清点结论（两个尖端逐条核过）
 
@@ -46,73 +46,88 @@
 
 **通用结论：模块函数也照样写 `#op('module:name')`**（`rewrite::rewrite` 就是模型：`#op('rewrite:rewrite')` 由模块函数表回答，不是例外）。
 
-## 第二节：65 条要补 —— 模块族 7 条，可直接替换（单冒号，照 456 条先例）
+## 为什么 `std:gir` 今天会报错（这是**待改的现状**，不是规范）
+
+`#op` 只有一种写法：`#op('<模块>:<模块内路径>')`，模块内命名空间仍用 `::` —— `std:gir`、`std:cxx::cse`、`onnx:model`。
+
+今天 `#op('std:gir')` 报 `Unrecognized … pass 'std::gir'`，原因不是"std 族另有写法"，而是：
+**std 的遍内核现在在过渡表里按字符串 `'std::gir'` 登记**（`registerModulePass(path)` 原样 intern 成键）。
+C1 第 2 步把登记方式改成按 `#op` 的 URI 驻留成 `OperId` 之后，单冒号写法即通。
+
+⇒ 所以"模块族单冒号 / std 族双冒号"是**缺陷**，不是两条规则；同一类事不能有两套写法。
+⇒ 表里不保留"逐字双冒号"作为备选；也不要因为单冒号今天报错就写"不可用"。
+
+`native.pass_shaped_not_loaded` 不归本卡：决策者已裁**不改断言**，是 C1 漏了"带 `#op` 但无实现要报 no loaded module implements it"的检查。
+
+## 第二节：65 条要补 —— 模块族 7 条（`module:name`，一条规则）
 | 文件 | 行 | 遍名（声明） | 可直接替换的写法 | 出处 |
 |---|---|---|---|---|
-## 第三节：65 条要补 —— std 族 58 条，**留空等实测**
+## 第三节：65 条要补 —— std 族 58 条（`std:<模块内路径>`，模块内 `::` 保留）
 
-两种候选（实测后只留一列；双冒号零先例、`std:` 族零先例，所以这次实验必须做）：
+写法（唯一一种）：`#op('<模块>:<模块内路径>')` —— 模块内命名空间仍用 `::`，只把**最外那一个** `::` 换成 `:`。
 
-| 文件 | 行 | 遍名（声明） | 候选 A（双冒号，零先例） | 候选 B（单冒号） | 实现路径出处 |
-|---|---|---|---|---|---|
-| src/stdlib/std.cml | 21 | std::nop | `#op('std::nop')` | `#op('std:nop')` | src/stdlib/std/nop/nop.cpp:29 (NopPass::kName) |
-| src/stdlib/std.cml | 30 | std::macro | `#op('std::macro')` | `#op('std:macro')` | src/stdlib/std/macro/macro.cpp:170 |
-| src/stdlib/std.cml | 48 | std::defunctionalize | `#op('std::defunctionalize')` | `#op('std:defunctionalize')` | src/stdlib/std/cxx/opt/defun/defunctionalize.cpp:2021 |
-| src/stdlib/std.cml | 55 | std::gir | `#op('std::gir')` | `#op('std:gir')` | src/stdlib/std/gir/dot/graphviz.cpp:945 |
-| src/stdlib/std.cml | 58 | std::rgir | `#op('std::rgir')` | `#op('std:rgir')` | src/stdlib/std/gir/dot/graphviz.cpp:946 |
-| src/stdlib/std.cml | 62 | std::gir_regions | `#op('std::gir_regions')` | `#op('std:gir_regions')` | src/stdlib/std/gir/dot/graphviz.cpp:947 |
-| src/stdlib/std.cml | 66 | std::rgir_regions | `#op('std::rgir_regions')` | `#op('std:rgir_regions')` | src/stdlib/std/gir/dot/graphviz.cpp:950 |
-| src/stdlib/std.cml | 77 | std::jgir | `#op('std::jgir')` | `#op('std:jgir')` | src/stdlib/std/gir/json/gir.cpp:538 |
-| src/stdlib/std.cml | 83 | std::cml | `#op('std::cml')` | `#op('std:cml')` | src/stdlib/std/cml/cml.cpp:4942 |
-| src/stdlib/std.cml | 86 | std::agir | `#op('std::agir')` | `#op('std:agir')` | src/stdlib/std/gir/dot/graphviz.cpp:953 |
-| src/stdlib/std.cml | 89 | std::argir | `#op('std::argir')` | `#op('std:argir')` | src/stdlib/std/gir/dot/graphviz.cpp:956 |
-| src/stdlib/std.cml | 92 | std::stats | `#op('std::stats')` | `#op('std:stats')` | src/stdlib/std/stats/stats.cpp:165 |
-| src/stdlib/std.cml | 112 | std::rulesets | `#op('std::rulesets')` | `#op('std:rulesets')` | src/stdlib/std/rulesets/rulesets.cpp:179 |
-| src/stdlib/std.cml | 142 | std::profile | `#op('std::profile')` | `#op('std:profile')` | src/stdlib/std/profile/profile.cpp:269 |
-| src/stdlib/std.cml | 145 | std::cpp | `#op('std::cpp')` | `#op('std:cpp')` | src/stdlib/std/cpp/cpp_export.cpp:64 |
-| src/stdlib/std.cml | 148 | std::topo_node_seq | `#op('std::topo_node_seq')` | `#op('std:topo_node_seq')` | src/stdlib/std/tns/topo_node_seq.cpp:238 |
-| src/stdlib/std.cml | 151 | std::tfdump | `#op('std::tfdump')` | `#op('std:tfdump')` | src/stdlib/std/prl/tfdump.cpp:173 |
-| src/stdlib/std.cml | 154 | std::arraytype | `#op('std::arraytype')` | `#op('std:arraytype')` | src/stdlib/std/selftest/selftest_passes.cpp:48 |
-| src/stdlib/std.cml | 157 | std::identitytype | `#op('std::identitytype')` | `#op('std:identitytype')` | src/stdlib/std/selftest/selftest_passes.cpp:49 |
-| src/stdlib/std.cml | 161 | std::module_file | `#op('std::cpp::module_file')` | `#op('std:cpp:module_file')` | src/stdlib/std/cpp/cpp_export.cpp:65 |
-| src/stdlib/std.cml | 164 | std::inspect | `#op('std::cpp::inspect')` | `#op('std:cpp:inspect')` | src/stdlib/std/cpp/cpp_export.cpp:66 |
-| src/stdlib/std.cml | 173 | std::snapshot | `#op('std::gc::snapshot')` | `#op('std:gc:snapshot')` | src/stdlib/std/gc/gc_passes.cpp:259 |
-| src/stdlib/std.cml | 176 | std::verify | `#op('std::gc::verify')` | `#op('std:gc:verify')` | src/stdlib/std/gc/gc_passes.cpp:260 |
-| src/stdlib/std.cml | 179 | std::minor | `#op('std::gc::minor')` | `#op('std:gc:minor')` | src/stdlib/std/gc/gc_passes.cpp:261 |
-| src/stdlib/std.cml | 182 | std::major | `#op('std::gc::major')` | `#op('std:gc:major')` | src/stdlib/std/gc/gc_passes.cpp:262 |
-| src/stdlib/std.cml | 185 | std::config | `#op('std::gc::config')` | `#op('std:gc:config')` | src/stdlib/std/gc/gc_passes.cpp:263 |
-| src/stdlib/std.cml | 188 | std::summary | `#op('std::gc::summary')` | `#op('std:gc:summary')` | src/stdlib/std/gc/gc_passes.cpp:264 |
-| src/stdlib/std.cml | 191 | std::blocks | `#op('std::gc::blocks')` | `#op('std:gc:blocks')` | src/stdlib/std/gc/gc_passes.cpp:265 |
-| src/stdlib/std.cml | 194 | std::views | `#op('std::gc::views')` | `#op('std:gc:views')` | src/stdlib/std/gc/gc_passes.cpp:266 |
-| src/stdlib/std.cml | 197 | std::views_escape | `#op('std::gc::views_escape')` | `#op('std:gc:views_escape')` | src/stdlib/std/gc/gc_passes.cpp:267 |
-| src/stdlib/std.cml | 200 | std::remembered_set | `#op('std::gc::remembered_set')` | `#op('std:gc:remembered_set')` | src/stdlib/std/gc/gc_passes.cpp:268 |
-| src/stdlib/std.cml | 203 | std::foreign_resource | `#op('std::gc::foreign_resource')` | `#op('std:gc:foreign_resource')` | src/stdlib/std/gc/gc_passes.cpp:270 |
-| src/stdlib/std.cml | 206 | std::poison | `#op('std::gc::poison')` | `#op('std:gc:poison')` | src/stdlib/std/gc/gc_passes.cpp:272 |
-| src/stdlib/std.cml | 212 | std::tuple_members | `#op('std::gc::tuple_members')` | `#op('std:gc:tuple_members')` | src/stdlib/std/gc/gc_passes.cpp:273 |
-| src/stdlib/std.cml | 213 | std::tuple_members_agree | `#op('std::gc::tuple_members_agree')` | `#op('std:gc:tuple_members_agree')` | src/stdlib/std/gc/gc_passes.cpp:274 |
-| src/stdlib/std.cml | 221 | std::nvm | `#op('std::nvm')` | `#op('std:nvm')` | src/stdlib/std/nvm/nodevm.cpp:1258 |
-| src/stdlib/std.cml | 233 | std::fvm | `#op('std::fvm')` | `#op('std:fvm')` | src/stdlib/std/fvm/fastvm.cpp:1606 |
-| src/stdlib/std.cml | 237 | std::bytecode | `#op('std::fastvm::bytecode')` | `#op('std:fastvm:bytecode')` | src/stdlib/std/fvm/bcdump.cpp:79 |
-| src/stdlib/std.cml | 240 | std::linked_bytecode | `#op('std::fastvm::linked_bytecode')` | `#op('std:fastvm:linked_bytecode')` | src/stdlib/std/fvm/bcdump.cpp:80 |
-| src/stdlib/std.cml | 252 | std::jit | `#op('std::fastvm::jit')` | `#op('std:fastvm:jit')` | src/stdlib/std/fvm/fastvm.cpp:1614 |
-| src/stdlib/std.cml | 255 | std::jit_asm | `#op('std::fastvm::jit_asm')` | `#op('std:fastvm:jit_asm')` | src/stdlib/std/fvm/jit/dump/asmdump.cpp:110 |
-| src/stdlib/std.cml | 258 | std::jit_bin | `#op('std::fastvm::jit_bin')` | `#op('std:fastvm:jit_bin')` | src/stdlib/std/fvm/jit/dump/bindump.cpp:189 |
-| src/stdlib/std.cml | 261 | std::jit_rmir | `#op('std::fastvm::jit_rmir')` | `#op('std:fastvm:jit_rmir')` | src/stdlib/std/fvm/jit/dump/mirdump.cpp:139 |
-| src/stdlib/std.cml | 264 | std::jit_mir | `#op('std::fastvm::jit_mir')` | `#op('std:fastvm:jit_mir')` | src/stdlib/std/fvm/jit/dump/mirdump.cpp:140 |
-| src/stdlib/std.cml | 296 | std::taskflow | `#op('std::taskflow')` | `#op('std:taskflow')` | src/stdlib/std/prl/taskflow.cpp:3275 |
-| src/stdlib/std.cml | 341 | std::opt | `#op('std::cxx::opt')` | `#op('std:cxx:opt')` | src/stdlib/std/cxx/opt/opt/opt.cpp:44 |
-| src/stdlib/std.cml | 347 | std::inline | `#op('std::cxx::inline')` | `#op('std:cxx:inline')` | src/stdlib/std/cxx/opt/inline/inline.cpp:52 |
-| src/stdlib/std.cml | 351 | std::small | `#op('std::cxx::small')` | `#op('std:cxx:small')` | src/stdlib/std/cxx/opt/inline/inline.cpp:53 |
-| src/stdlib/std.cml | 355 | std::arm | `#op('std::cxx::arm')` | `#op('std:cxx:arm')` | src/stdlib/std/cxx/opt/inline/inline.cpp:56 |
-| src/stdlib/std.cml | 359 | std::hybrid | `#op('std::cxx::hybrid')` | `#op('std:cxx:hybrid')` | src/stdlib/std/cxx/opt/inline/inline.cpp:59 |
-| src/stdlib/std.cml | 363 | std::devirtualize | `#op('std::cxx::devirtualize')` | `#op('std:cxx:devirtualize')` | src/stdlib/std/cxx/opt/devirtualize/devirtualize.cpp:33 |
-| src/stdlib/std.cml | 367 | std::specialize | `#op('std::cxx::specialize')` | `#op('std:cxx:specialize')` | src/stdlib/std/cxx/opt/specialize/specialize.cpp:33 |
-| src/stdlib/std.cml | 373 | std::fold | `#op('std::cxx::fold')` | `#op('std:cxx:fold')` | src/stdlib/std/cxx/opt/generic/generic.cpp:2190 |
-| src/stdlib/std.cml | 385 | std::algebra | `#op('std::cxx::algebra')` | `#op('std:cxx:algebra')` | src/stdlib/std/cxx/opt/generic/algebra.cpp:322 |
-| src/stdlib/std.cml | 399 | std::saturate | `#op('std::cxx::saturate')` | `#op('std:cxx:saturate')` | src/stdlib/std/cxx/opt/opt/opt.cpp:59 |
-| src/stdlib/std.cml | 402 | std::cse | `#op('std::cxx::cse')` | `#op('std:cxx:cse')` | src/stdlib/std/cxx/opt/generic/generic.cpp:2195 |
-| src/stdlib/std.cml | 407 | std::dce | `#op('std::cxx::dce')` | `#op('std:cxx:dce')` | src/stdlib/std/cxx/opt/generic/generic.cpp:2197 |
-| src/stdlib/std.cml | 412 | std::order | `#op('std::cxx::order')` | `#op('std:cxx:order')` | src/stdlib/std/cxx/opt/generic/generic.cpp:2202 |
+| 文件 | 行 | 遍名（声明） | 可直接替换的写法 | 实现路径出处 |
+|---|---|---|---|---|
+| src/stdlib/std.cml | 21 | std::nop | `#op('std:nop')` | src/stdlib/std/nop/nop.cpp:29 (NopPass::kName) |
+| src/stdlib/std.cml | 30 | std::macro | `#op('std:macro')` | src/stdlib/std/macro/macro.cpp:170 |
+| src/stdlib/std.cml | 48 | std::defunctionalize | `#op('std:defunctionalize')` | src/stdlib/std/cxx/opt/defun/defunctionalize.cpp:2021 |
+| src/stdlib/std.cml | 55 | std::gir | `#op('std:gir')` | src/stdlib/std/gir/dot/graphviz.cpp:945 |
+| src/stdlib/std.cml | 58 | std::rgir | `#op('std:rgir')` | src/stdlib/std/gir/dot/graphviz.cpp:946 |
+| src/stdlib/std.cml | 62 | std::gir_regions | `#op('std:gir_regions')` | src/stdlib/std/gir/dot/graphviz.cpp:947 |
+| src/stdlib/std.cml | 66 | std::rgir_regions | `#op('std:rgir_regions')` | src/stdlib/std/gir/dot/graphviz.cpp:950 |
+| src/stdlib/std.cml | 77 | std::jgir | `#op('std:jgir')` | src/stdlib/std/gir/json/gir.cpp:538 |
+| src/stdlib/std.cml | 83 | std::cml | `#op('std:cml')` | src/stdlib/std/cml/cml.cpp:4942 |
+| src/stdlib/std.cml | 86 | std::agir | `#op('std:agir')` | src/stdlib/std/gir/dot/graphviz.cpp:953 |
+| src/stdlib/std.cml | 89 | std::argir | `#op('std:argir')` | src/stdlib/std/gir/dot/graphviz.cpp:956 |
+| src/stdlib/std.cml | 92 | std::stats | `#op('std:stats')` | src/stdlib/std/stats/stats.cpp:165 |
+| src/stdlib/std.cml | 112 | std::rulesets | `#op('std:rulesets')` | src/stdlib/std/rulesets/rulesets.cpp:179 |
+| src/stdlib/std.cml | 142 | std::profile | `#op('std:profile')` | src/stdlib/std/profile/profile.cpp:269 |
+| src/stdlib/std.cml | 145 | std::cpp | `#op('std:cpp')` | src/stdlib/std/cpp/cpp_export.cpp:64 |
+| src/stdlib/std.cml | 148 | std::topo_node_seq | `#op('std:topo_node_seq')` | src/stdlib/std/tns/topo_node_seq.cpp:238 |
+| src/stdlib/std.cml | 151 | std::tfdump | `#op('std:tfdump')` | src/stdlib/std/prl/tfdump.cpp:173 |
+| src/stdlib/std.cml | 154 | std::arraytype | `#op('std:arraytype')` | src/stdlib/std/selftest/selftest_passes.cpp:48 |
+| src/stdlib/std.cml | 157 | std::identitytype | `#op('std:identitytype')` | src/stdlib/std/selftest/selftest_passes.cpp:49 |
+| src/stdlib/std.cml | 161 | std::module_file | `#op('std:cpp::module_file')` | src/stdlib/std/cpp/cpp_export.cpp:65 |
+| src/stdlib/std.cml | 164 | std::inspect | `#op('std:cpp::inspect')` | src/stdlib/std/cpp/cpp_export.cpp:66 |
+| src/stdlib/std.cml | 173 | std::snapshot | `#op('std:gc::snapshot')` | src/stdlib/std/gc/gc_passes.cpp:259 |
+| src/stdlib/std.cml | 176 | std::verify | `#op('std:gc::verify')` | src/stdlib/std/gc/gc_passes.cpp:260 |
+| src/stdlib/std.cml | 179 | std::minor | `#op('std:gc::minor')` | src/stdlib/std/gc/gc_passes.cpp:261 |
+| src/stdlib/std.cml | 182 | std::major | `#op('std:gc::major')` | src/stdlib/std/gc/gc_passes.cpp:262 |
+| src/stdlib/std.cml | 185 | std::config | `#op('std:gc::config')` | src/stdlib/std/gc/gc_passes.cpp:263 |
+| src/stdlib/std.cml | 188 | std::summary | `#op('std:gc::summary')` | src/stdlib/std/gc/gc_passes.cpp:264 |
+| src/stdlib/std.cml | 191 | std::blocks | `#op('std:gc::blocks')` | src/stdlib/std/gc/gc_passes.cpp:265 |
+| src/stdlib/std.cml | 194 | std::views | `#op('std:gc::views')` | src/stdlib/std/gc/gc_passes.cpp:266 |
+| src/stdlib/std.cml | 197 | std::views_escape | `#op('std:gc::views_escape')` | src/stdlib/std/gc/gc_passes.cpp:267 |
+| src/stdlib/std.cml | 200 | std::remembered_set | `#op('std:gc::remembered_set')` | src/stdlib/std/gc/gc_passes.cpp:268 |
+| src/stdlib/std.cml | 203 | std::foreign_resource | `#op('std:gc::foreign_resource')` | src/stdlib/std/gc/gc_passes.cpp:270 |
+| src/stdlib/std.cml | 206 | std::poison | `#op('std:gc::poison')` | src/stdlib/std/gc/gc_passes.cpp:272 |
+| src/stdlib/std.cml | 212 | std::tuple_members | `#op('std:gc::tuple_members')` | src/stdlib/std/gc/gc_passes.cpp:273 |
+| src/stdlib/std.cml | 213 | std::tuple_members_agree | `#op('std:gc::tuple_members_agree')` | src/stdlib/std/gc/gc_passes.cpp:274 |
+| src/stdlib/std.cml | 221 | std::nvm | `#op('std:nvm')` | src/stdlib/std/nvm/nodevm.cpp:1258 |
+| src/stdlib/std.cml | 233 | std::fvm | `#op('std:fvm')` | src/stdlib/std/fvm/fastvm.cpp:1606 |
+| src/stdlib/std.cml | 237 | std::bytecode | `#op('std:fastvm::bytecode')` | src/stdlib/std/fvm/bcdump.cpp:79 |
+| src/stdlib/std.cml | 240 | std::linked_bytecode | `#op('std:fastvm::linked_bytecode')` | src/stdlib/std/fvm/bcdump.cpp:80 |
+| src/stdlib/std.cml | 252 | std::jit | `#op('std:fastvm::jit')` | src/stdlib/std/fvm/fastvm.cpp:1614 |
+| src/stdlib/std.cml | 255 | std::jit_asm | `#op('std:fastvm::jit_asm')` | src/stdlib/std/fvm/jit/dump/asmdump.cpp:110 |
+| src/stdlib/std.cml | 258 | std::jit_bin | `#op('std:fastvm::jit_bin')` | src/stdlib/std/fvm/jit/dump/bindump.cpp:189 |
+| src/stdlib/std.cml | 261 | std::jit_rmir | `#op('std:fastvm::jit_rmir')` | src/stdlib/std/fvm/jit/dump/mirdump.cpp:139 |
+| src/stdlib/std.cml | 264 | std::jit_mir | `#op('std:fastvm::jit_mir')` | src/stdlib/std/fvm/jit/dump/mirdump.cpp:140 |
+| src/stdlib/std.cml | 296 | std::taskflow | `#op('std:taskflow')` | src/stdlib/std/prl/taskflow.cpp:3275 |
+| src/stdlib/std.cml | 341 | std::opt | `#op('std:cxx::opt')` | src/stdlib/std/cxx/opt/opt/opt.cpp:44 |
+| src/stdlib/std.cml | 347 | std::inline | `#op('std:cxx::inline')` | src/stdlib/std/cxx/opt/inline/inline.cpp:52 |
+| src/stdlib/std.cml | 351 | std::small | `#op('std:cxx::small')` | src/stdlib/std/cxx/opt/inline/inline.cpp:53 |
+| src/stdlib/std.cml | 355 | std::arm | `#op('std:cxx::arm')` | src/stdlib/std/cxx/opt/inline/inline.cpp:56 |
+| src/stdlib/std.cml | 359 | std::hybrid | `#op('std:cxx::hybrid')` | src/stdlib/std/cxx/opt/inline/inline.cpp:59 |
+| src/stdlib/std.cml | 363 | std::devirtualize | `#op('std:cxx::devirtualize')` | src/stdlib/std/cxx/opt/devirtualize/devirtualize.cpp:33 |
+| src/stdlib/std.cml | 367 | std::specialize | `#op('std:cxx::specialize')` | src/stdlib/std/cxx/opt/specialize/specialize.cpp:33 |
+| src/stdlib/std.cml | 373 | std::fold | `#op('std:cxx::fold')` | src/stdlib/std/cxx/opt/generic/generic.cpp:2190 |
+| src/stdlib/std.cml | 385 | std::algebra | `#op('std:cxx::algebra')` | src/stdlib/std/cxx/opt/generic/algebra.cpp:322 |
+| src/stdlib/std.cml | 399 | std::saturate | `#op('std:cxx::saturate')` | src/stdlib/std/cxx/opt/opt/opt.cpp:59 |
+| src/stdlib/std.cml | 402 | std::cse | `#op('std:cxx::cse')` | src/stdlib/std/cxx/opt/generic/generic.cpp:2195 |
+| src/stdlib/std.cml | 407 | std::dce | `#op('std:cxx::dce')` | src/stdlib/std/cxx/opt/generic/generic.cpp:2197 |
+| src/stdlib/std.cml | 412 | std::order | `#op('std:cxx::order')` | src/stdlib/std/cxx/opt/generic/generic.cpp:2202 |
+
+`std::opt` 那一行不是例外：裁定要求**同一笔**里删 `declareSpelling("std::opt","std::cxx::opt")`（`src/kernel/execute/pass.cpp`）并在 `std.cml` 给 `opt` 写 `#op('std:cxx::opt')`；"整表失效"是两边同时声明同一个名字造成的。
 
 ## 第四节：9 条组合遍 —— **不补**（有函数体 ⇒ 是普通函数，不是算子）
 
@@ -171,7 +186,7 @@
 | opt::dead_values | src/stdlib/opt.cml:220 | `… erased::<F>(d, hits)->dead_values` | 自身（尾调用）；`abandoned(d, f)` | 不补（内部遍，非 export） |
 | opt::dce | src/stdlib/opt.cml:228 | `return dead_values(f)` | `opt::dead_values` | 不补 |
 | opt::fold | src/stdlib/opt.cml:333 | `return if all_nodes(graphs_of(f))->any<evaluated> then fold_rounds(f, constant_budget) else f` | `fold_rounds`（边界两条之一） | 不补 |
-| opt::saturate | src/stdlib/opt.cml:345 | `return f->saturate_rules<concat(algebra, distribution), rounds: rounds, strict: strict>` | `saturate_rules`；语义引擎是 `std::cxx::saturate`（`src/stdlib/rules.cml:402-404` 原文："`std::cxx::saturate` is the saturation alone, which keeps every writing"） | 不补遍自身；若决策者要指向引擎，候选是 `#op('std::cxx::saturate')` |
+| opt::saturate | src/stdlib/opt.cml:345 | `return f->saturate_rules<concat(algebra, distribution), rounds: rounds, strict: strict>` | 不补 |
 | rules::simplify | src/stdlib/rules.cml:398 | `return f->rewrite<concat(algebra, accuracy_laws), strict: strict>` | `rewrite::rewrite` | 不补 |
 | rules::saturate_all | src/stdlib/rules.cml:408 | `return f->saturate<concat(algebra, distribution), rounds: rounds, strict: strict>->extract<nodes>` | `rewrite::saturate` → `rewrite::extract` | 不补 |
 | rules::accuracy | src/stdlib/rules.cml:414 | `return f->rewrite<accuracy_laws>` | `rewrite::rewrite` | 不补 |
@@ -209,6 +224,9 @@
 | graph | 3 | native.graph_declaration_import · native.graph_wrong_arity · native.graph_wrong_type |
 
 合计 **34**。原文形如：`(tensor)/…/stdlib/tensor.cml:399:1: [Error]: The declaration 'fuse' names the operator 'tensor:fuse', which no loaded module implements.`
+
+
+
 
 
 
