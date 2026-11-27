@@ -184,10 +184,8 @@ node_ptr_t Builder::visitBlockHeaded(const AST::node_ptr_t &ast) {
     if (headModule) {
         blockHeadModules_.pop_back();
     }
-    // The head's name is the block's root, and the body runs as a call of a closure that takes it
-    // as its first argument (design `docs/design/graph-editing/README.cn.md` 90), so the parameter
-    // is in the closure's type: a view's root is the read-only graph, an edit's the draft, and a
-    // handle is a `Graph` in both -- the two differ in which node is passed, not in the type.
+    const bool isEdit = ast->loadAs<AST::BlockHeadLoad>()->dataType() == AST::DataType::EditExpr;
+    // The head's name is the block's root, and the module the head is read through gives its type.
     const std::string headRoot = ast->loadAs<AST::BlockHeadLoad>()->root().toString();
     Type *rootType             = nullptr;
     if (headModule != nullptr) {
@@ -196,14 +194,65 @@ node_ptr_t Builder::visitBlockHeaded(const AST::node_ptr_t &ast) {
             rootType = *exported;
         }
     }
-    FunctionTypeFactory factory; // one parameter, the block's root; the result is the block's value
-    if (rootType != nullptr && !headRoot.empty()) {
+    // The head's function, visited once: this tree gives a node one parent (tree.cpp, `append`),
+    // because the same expression hanging here twice would be evaluated twice. The one function an
+    // edit block both opens and commits is therefore bound to a name and read by that name, and the
+    // binding is where the head expression is evaluated -- once. The name is internal: no program
+    // can write it, and it lives only in the closure's body.
+    node_ptr_t headValue = nullptr;
+    if (ast->at(0) != nullptr) {
+        headValue = visitData(ast->atAs<AST::DataLoad>(0));
+    }
+    const std::string overName = headRoot + "$over";
+    // The body of the closure, which for a view is the block's own statements.
+    node_ptr_t bodyNode = execNode;
+    if (isEdit && headValue != nullptr) {
+        // An edit block's value is the function its commit gives, not what its body writes (design
+        // 6, 15.1). Order and condition are the same sentence here: the commit is the last
+        // statement of the closure's body, after the body's own block, so a `return` written in the
+        // body ends the body and the commit still runs (design 15.1); and a body that faults never
+        // reaches the commit at all -- the fault boundary is outside the closure, so it catches the
+        // fault and answers with the error, the draft is never committed and the old function is
+        // untouched (design 6: the changes are all in or not at all). A commit written after the
+        // boundary would commit a body that faulted, which is why it is written inside it. The
+        // block's hand-over is the draft's root, so the commit is `commit_of(d, f)`: the draft is a
+        // `Graph`, which does not say what the commit gives, and the head's function is the witness
+        // that does (design 2: the fallback is `f`s type; design 5: the draft remembers the
+        // function it opened).
+        node_ptr_t overNameNode = tree_->makeNRef(overName);
+        *overNameNode << headValue;
+        // The draft: `open(f)`, read by the name the body reads the graph by, so the body's own
+        // references and this commit's argument are the same name read twice, not one node twice.
+        node_ptr_t draftNameNode = tree_->makeNRef(headRoot);
+        node_ptr_t openCall      = tree_->makeLink(2);
+        *openCall << tree_->makeDRef("graph::open") << tree_->makeDRef(overName);
+        *draftNameNode << openCall;
+        node_ptr_t commit = tree_->makeLink(3);
+        *commit << tree_->makeDRef("graph::commit_of") << tree_->makeDRef(headRoot)
+                << tree_->makeDRef(overName);
+        setOriginFromAst(
+            context_,
+            commit,
+            ast,
+            camel::source::OriginKind::GctNode,
+            "gct.block.commit");
+        bodyNode = makeExec();
+        *bodyNode << overNameNode << draftNameNode << execNode << commit;
+    }
+    // The head's name is the block's root, and a view's body runs as a call of a closure that takes
+    // it as its first argument (design `docs/design/graph-editing/README.cn.md` 90), so the
+    // parameter is in that closure's type: a view's root is the read-only graph. An edit's root is
+    // the draft, which the body's own closure binds from `open(f)` -- there is no parameter to
+    // give, because nothing outside that closure has the draft.
+    FunctionTypeFactory factory; // a view's root is a parameter; the result is the block's value
+    const bool hasRootParam = !isEdit && rootType != nullptr && !headRoot.empty();
+    if (hasRootParam) {
         factory.addNormArg(headRoot, rootType, false);
     }
     FunctionType *type  = factory.buildOpen();
     node_ptr_t typeNode = tree_->makeType(type);
     node_ptr_t funcNode = tree_->makeFunc("");
-    *funcNode << typeNode << execNode;
+    *funcNode << typeNode << bodyNode;
     // The body is the block's, and the module the head named is a name layer of that body alone
     // (design 15.1): kept beside the node, so the graph builder reads the same module the type
     // scope did, and no scope outside the body gains a name from it.
@@ -221,9 +270,9 @@ node_ptr_t Builder::visitBlockHeaded(const AST::node_ptr_t &ast) {
     // The block closure's one parameter is the block's root: the handle the compiler gives the
     // body, which no source name reaches (design `docs/design/graph-editing/README.cn.md` 64). It
     // is asked for from the head's function value -- the block's `f` -- and the operator answers
-    // with the read-only graph for a `view` and the draft for an `edit`; both are a `Graph`.
+    // with the read-only graph; a view's root is a `Graph` like a handle.
     node_ptr_t rootHandle = nullptr;
-    if (rootType != nullptr && !headRoot.empty() && ast->at(0) != nullptr) {
+    if (hasRootParam && headValue != nullptr) {
         // The handle is asked of `graph` by its qualified name: that is the module the head is
         // already read through, since the parser gives every module that writes a head the import
         // of `graph` (parse/src/ast/builder_expr.cpp, `visitBlockHeaded`), and it is where the
@@ -232,8 +281,7 @@ node_ptr_t Builder::visitBlockHeaded(const AST::node_ptr_t &ast) {
         // handle. A block's head is the only source of a handle (design
         // `docs/design/graph-editing/README.cn.md` 64), so the user surface gains no name: the
         // import is the head's own.
-        node_ptr_t headValue = visitData(ast->atAs<AST::DataLoad>(0));
-        rootHandle           = tree_->makeLink(1);
+        rootHandle = tree_->makeLink(1);
         *rootHandle << tree_->makeDRef("graph::graph_of") << headValue;
         setOriginFromAst(
             context_,
@@ -243,7 +291,11 @@ node_ptr_t Builder::visitBlockHeaded(const AST::node_ptr_t &ast) {
             "gct.block.root");
     }
     node_ptr_t valueNode = nullptr;
-    if (ast->loadAs<AST::BlockHeadLoad>()->dataType() == AST::DataType::EditExpr) {
+    if (isEdit) {
+        // `attempt(closure)()`: the closure's result is the commit's, `F!`, and a function that
+        // already returns `U!` gives `U!` under `attempt` (stdlib/std/exec/fault_isolation.cpp:
+        // there is no `U!!`) -- the fault boundary adds no second `!`. A fault anywhere in the body
+        // reaches the boundary and the block's value is the error it became.
         node_ptr_t transform = tree_->makeLink(1);
         *transform << tree_->makeDRef(camel::execute::kFaultIsolationName) << funcNode;
         setOriginFromAst(
@@ -252,11 +304,8 @@ node_ptr_t Builder::visitBlockHeaded(const AST::node_ptr_t &ast) {
             ast,
             camel::source::OriginKind::GctNode,
             "gct.block.isolate");
-        valueNode = rootHandle != nullptr ? tree_->makeLink(2) : tree_->makeLink(1);
+        valueNode = tree_->makeLink(1);
         *valueNode << transform;
-        if (rootHandle != nullptr) {
-            *valueNode << rootHandle;
-        }
     } else {
         valueNode = rootHandle != nullptr ? tree_->makeLink(2) : tree_->makeLink(1);
         *valueNode << funcNode;

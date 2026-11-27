@@ -495,6 +495,19 @@ export func add_constant::<T>(g: Graph, value: T) => Node when is_ordered::<T>()
 /// @example commit::<(x: int) => int>(open(func (x: int) => int { x + 1 }))
 export func commit::<F>(d: Graph) => F!
 
+/// The commit an edit block's lowering calls: the same commit, with the function the draft was
+/// opened from as a witness. The draft is a `Graph`, which does not say what the commit gives, and
+/// the block's expected type cannot reach into the closure's body where the commit is written;
+/// design `docs/design/graph-editing/README.cn.md` 2 gives the fallback as `f`'s type, and 5 has
+/// the draft remember the function it opened. Internal: written by the compiler, never named by a
+/// program.
+/// @example-fragment written by the compiler for `edit d = f { … }`
+/// @example-fragment commit_of(open(f), f)
+export func commit_of::<F>(d: Graph, f: F) => F! when is_function::<F>() {
+    let _ = f
+    return commit::<F>(d)
+}
+
 /// Drops the draft.
 /// @example abort(open(func (x: int) => int { x + 1 }))
 export func abort(d: Graph) => void
