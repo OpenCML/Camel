@@ -98,10 +98,56 @@ OperandClause callClause(const GCGraph &graph, gc_node_ref_t ref) {
     return clauseReach(clauseOfCall(graph, ref).clause);
 }
 
-struct EffectWalk {
+/// The questions the walk asks of what it walks. A walk over a `Program` holds one of these, and
+/// this is the only reader there is: every graph question the walk has goes through it, which is
+/// what lets the same walk run over a read of a graph that is not the program's own (a fact kind's
+/// `compute`, which reads through `GraphAccess` and reports what it read).
+struct ProgramReader {
     // program-holder-exempt: borrow-or-foreign-type -- a walk over the program of the call that
     // made it; effects() holds it for the walk.
     const Program &program;
+
+    uint32_t nodeCount(const GCGraph *graph) const { return graph->nodeCount(); }
+    bool hasNode(const GCGraph *graph, gc_node_ref_t ref) const {
+        return graph->node(ref) != nullptr;
+    }
+    GCNodeKind nodeKind(const GCGraph *graph, gc_node_ref_t ref) const {
+        return graph->node(ref)->kind;
+    }
+    uint32_t nodeRegion(const GCGraph *graph, gc_node_ref_t ref) const {
+        return graph->nodeRegion(ref);
+    }
+    /// The parent of `region`, or nothing when `region` is not a region of `graph`.
+    std::optional<uint32_t> regionParent(const GCGraph *graph, uint32_t region) const {
+        const auto *found = graph->region(region);
+        if (found == nullptr) {
+            return std::nullopt;
+        }
+        return found->parent;
+    }
+    camel::core::OperId operatorOf(const GCGraph *graph, gc_node_ref_t ref) const {
+        return graph->nodeBodyAs<GCOperBody>(ref)->oper;
+    }
+    /// The one reading of an operator's effect at the node it runs at
+    /// (`effectSummaryOfOperator`, which `core.operatorEffects` and a per-node reader ask as well),
+    /// so this summary and those readers cannot disagree.
+    EffectSummary operatorEffect(const GCGraph *graph, gc_node_ref_t ref) const {
+        return effectSummaryOfOperator(operatorOf(graph, ref), graph, ref);
+    }
+    /// The graph a `Func` node stands for: the callee's body, which is a graph of the program.
+    const GCGraph *calleeOf(const GCGraph &graph, gc_node_ref_t ref) const {
+        return program.calleeOf(graph, ref);
+    }
+    OperandClause callClauseOf(const GCGraph &graph, gc_node_ref_t ref) const {
+        return callClause(graph, ref);
+    }
+};
+
+/// The walk, over whatever answers those questions. Nothing here reaches a graph except through
+/// `reader`, which is why the same walk is one statement whether it runs over the program or over a
+/// read of it.
+template <class Reader> struct EffectWalkT {
+    Reader reader;
     std::unordered_map<const GCGraph *, EffectSummary> done;
     std::unordered_set<const GCGraph *> active;
 
@@ -128,27 +174,26 @@ struct EffectWalk {
     /// The nodes of `graph` that lie in `region` (0: all of them).
     EffectSummary ofNodes(const GCGraph *graph, uint32_t region) {
         EffectSummary summary;
-        for (gc_node_ref_t ref = 0; ref < graph->nodeCount(); ++ref) {
+        for (gc_node_ref_t ref = 0; ref < reader.nodeCount(graph); ++ref) {
             if (region != 0) {
-                uint32_t at = graph->nodeRegion(ref);
-                while (at != 0 && at != region && graph->region(at) != nullptr) {
-                    at = graph->region(at)->parent;
+                uint32_t at = reader.nodeRegion(graph, ref);
+                while (at != 0 && at != region) {
+                    const std::optional<uint32_t> parent = reader.regionParent(graph, at);
+                    if (!parent.has_value()) {
+                        break;
+                    }
+                    at = parent.value();
                 }
                 if (at != region) {
                     continue;
                 }
             }
-            const GCNode *node = graph->node(ref);
-            if (node == nullptr) {
+            if (!reader.hasNode(graph, ref)) {
                 continue;
             }
-            switch (node->kind) {
+            switch (reader.nodeKind(graph, ref)) {
             case GCNodeKind::Oper: {
-                // The one reading of an operator's effect, at the node it runs at
-                // (`effectSummaryOfOperator`, which `core.operatorEffects` and a per-node reader
-                // ask as well), so this summary and those readers cannot disagree.
-                summary |=
-                    effectSummaryOfOperator(graph->nodeBodyAs<GCOperBody>(ref)->oper, graph, ref);
+                summary |= reader.operatorEffect(graph, ref);
                 break;
             }
             case GCNodeKind::Call:
@@ -158,12 +203,12 @@ struct EffectWalk {
                 // external effect. A reader that answers from no type at all calls every call
                 // "external", `pure` included, which is what makes a pure call look like a write
                 // nobody can name.
-                summary.external |= callClause(*graph, ref).external;
+                summary.external |= reader.callClauseOf(*graph, ref).external;
                 summary.mayFault        = true;
                 summary.mayNotTerminate = true;
                 break;
             case GCNodeKind::Func:
-                summary |= of(program.calleeOf(*graph, ref));
+                summary |= of(reader.calleeOf(*graph, ref));
                 break;
             case GCNodeKind::Loop:
                 // The condition and the body are regions of this graph, so their effects are in
@@ -183,17 +228,26 @@ struct EffectWalk {
 
 namespace effectwalk {
 
-EffectSummary ofGraph(const Program &program, const GCGraph *graph) {
-    return EffectWalk{program}.of(graph);
+template <class Reader> EffectSummary ofGraph(Reader reader, const GCGraph *graph) {
+    return EffectWalkT<Reader>{std::move(reader)}.of(graph);
 }
 
-EffectSummary ofRegion(const Program &program, const GCGraph *graph, uint32_t region) {
+template <class Reader>
+EffectSummary ofRegion(Reader reader, const GCGraph *graph, uint32_t region) {
     if (graph == nullptr || region == 0) {
         return {};
     }
-    EffectWalk walk{program};
+    EffectWalkT<Reader> walk{std::move(reader)};
     walk.active.insert(graph);
     return walk.ofNodes(graph, region);
+}
+
+EffectSummary ofGraph(const Program &program, const GCGraph *graph) {
+    return ofGraph(ProgramReader{program}, graph);
+}
+
+EffectSummary ofRegion(const Program &program, const GCGraph *graph, uint32_t region) {
+    return ofRegion(ProgramReader{program}, graph, region);
 }
 
 } // namespace effectwalk
@@ -235,25 +289,26 @@ EffectSummary declaredEffectsOfOperator(camel::core::OperId oper) {
 
 namespace effectwalk {
 
-EffectSummary ofNode(const Program &program, const GCGraph *graph, gc_node_ref_t ref) {
+template <class Reader>
+EffectSummary ofNode(Reader reader, const GCGraph *graph, gc_node_ref_t ref) {
     EffectSummary summary;
-    if (graph == nullptr || graph->node(ref) == nullptr) {
+    if (graph == nullptr || !reader.hasNode(graph, ref)) {
         return summary;
     }
-    switch (graph->node(ref)->kind) {
+    switch (reader.nodeKind(graph, ref)) {
     case GCNodeKind::Oper:
         // The one reading of an operator's effect, at this node (`effectSummaryOfOperator`).
-        summary |= effectSummaryOfOperator(graph->nodeBodyAs<GCOperBody>(ref)->oper, graph, ref);
+        summary |= reader.operatorEffect(graph, ref);
         break;
     case GCNodeKind::Call:
         // A call through a function value: its reach is the value's clause (design principles 3.3),
         // and nothing says what it runs may end or cannot fault.
-        summary.external |= callClause(*graph, ref).external;
+        summary.external |= reader.callClauseOf(*graph, ref).external;
         summary.mayFault        = true;
         summary.mayNotTerminate = true;
         break;
     case GCNodeKind::Func:
-        return ofGraph(program, program.calleeOf(*graph, ref));
+        return ofGraph(reader, reader.calleeOf(*graph, ref));
     case GCNodeKind::Loop:
         summary.mayFault        = true;
         summary.mayNotTerminate = true;
@@ -264,6 +319,10 @@ EffectSummary ofNode(const Program &program, const GCGraph *graph, gc_node_ref_t
         break;
     }
     return summary;
+}
+
+EffectSummary ofNode(const Program &program, const GCGraph *graph, gc_node_ref_t ref) {
+    return ofNode(ProgramReader{program}, graph, ref);
 }
 
 } // namespace effectwalk
