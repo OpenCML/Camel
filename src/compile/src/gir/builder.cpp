@@ -856,53 +856,6 @@ any Builder::dispatch(const GCT::node_ptr_t &node) {
     return nullptr;
 }
 
-bool Builder::isPassDeclaration(const GCT::node_ptr_t &gct) {
-    if (!gct->nativeDeclaration()) {
-        return false;
-    }
-    const auto *when = GCT::Tree::of(gct)->whenOf(gct);
-    if (when == nullptr) {
-        return false;
-    }
-    // A pass is a function transform `(f: F) => F!` (design principles 9.1): one ordinary
-    // parameter and the same type, failable, as the result, and `when is_function::<F>()`. That is
-    // the whole classification; what implements it does not enter. A body-less declaration of
-    // another shape that is conditioned the same way declares an operator of a function value
-    // (`graph_of::<F>(f: F): Graph when is_function::<F>()`).
-    const auto *signature = tt::as_ptr<FunctionType>(gct->at(0)->dataType());
-    if (signature == nullptr || signature->normTypesCount() != 1 || !signature->hasExitType()) {
-        return false;
-    }
-    const auto *answer = asFallible(signature->exitType());
-    if (answer == nullptr || !answer->payloadType()->equals(signature->normTypeAt(0))) {
-        return false;
-    }
-    // The text the pipeline reads, normalized the same way: `is_function::<T>()` with any
-    // identifier for the type parameter (pass_declarations.cpp, passDeclarationApplies). A
-    // body-less declaration without that condition declares an operator, as before.
-    std::string text;
-    for (const char c : when->text) {
-        if (!std::isspace(static_cast<unsigned char>(c))) {
-            text += c;
-        }
-    }
-    const std::string prefix = "is_function::<";
-    if (text.rfind(prefix, 0) != 0 || text.size() <= prefix.size() + 3 ||
-        text.compare(text.size() - 3, 3, ">()") != 0) {
-        return false;
-    }
-    // A pass takes the function it is applied to and nothing else. The same condition on a
-    // declaration with more ordinary parameters is an operator that wants a function.
-    if (const auto *declared = tt::as_ptr<FunctionType>(gct->at(0)->dataType());
-        declared != nullptr && declared->normTypesCount() != 1) {
-        return false;
-    }
-    const std::string parameter = text.substr(prefix.size(), text.size() - prefix.size() - 3);
-    return !parameter.empty() && std::all_of(parameter.begin(), parameter.end(), [](char c) {
-        return std::isalnum(static_cast<unsigned char>(c)) || c == '_';
-    });
-}
-
 /// Whether the module implements the operator this body-less declaration names (`#op`, or the
 /// declaration's own `module:name`) for it. A name declared more than once is an operator beside
 /// something else of the same name (`export_model`: the operator takes the function and an example,
@@ -941,19 +894,17 @@ parameterPortOrigins(const context_ptr_t &context, const GCT::node_ptr_t &gct);
 void_ptr_t Builder::visitDeclNode(const GCT::node_ptr_t &gct) {
     ENTER("DECL");
     if (gct->nativeDeclaration()) {
-        if (isPassDeclaration(gct)) {
-            // A pass is a function the pipeline applies to the program, not an operator of the
-            // module: it has no executor, no signature to publish and nothing to export. The
-            // declaration is the pipeline's (design principles 9.3); this records the name so
-            // the export list does not look for an entity that will not exist.
+        if (!declarationHasOperator(gct)) {
+            // The module implements no operator for this body-less declaration, so nobody calls
+            // it: it is the pipeline's own (a pass, design principles 9.3), which has no executor,
+            // no signature to publish and nothing to export, or a declaration the module promised
+            // and implements nowhere. The operator table answers that, not the declaration's
+            // shape: a function transform `(f: F) => F!` that a module also implements an operator
+            // for is that operator (`rewrite`'s engine, called as `f->rewrite<rules>`). This
+            // records the name so the export list does not look for an entity that will not exist.
             unit_->passDeclarations.insert(gct->name());
-            // A pass is told by its type alone, whatever implements it: a module that also
-            // implements the operator (an engine of `rewrite`, called as `f->rewrite<rules>`)
-            // declares that operator as well.
-            if (!declarationHasOperator(gct)) {
-                LEAVE("DECL");
-                return nullptr;
-            }
+            LEAVE("DECL");
+            return nullptr;
         }
         // A body-less declaration declares an operator of a C++ module (design principles 6.4):
         // it is checked and kept as an operator rule, not as a graph (step 1).
