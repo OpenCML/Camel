@@ -2123,8 +2123,8 @@ Builder::visitLinkNode(const GCT::node_ptr_t &gct, std::optional<GCT::Assignment
             // that what the node says about its inputs -- its index-semantics instance among them
             // -- is what it says when the program writes the array itself. A range at a position
             // that states no array (`f(x: T)`) keeps its own type and is passed as the value it
-            // is (design principles 5.4: a range enters an array position only where the expected
-            // type writes the array shape).
+            // is: a range enters an array position only where the expected type writes the array
+            // shape (design principles 5.4, ranges are values).
             for (size_t i = 0; i < normInputs.size(); ++i) {
                 if (i >= targetOperator->funcType()->normTypesCount()) {
                     break;
