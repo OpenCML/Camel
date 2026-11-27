@@ -1463,6 +1463,9 @@ $syncedAt = $null
 # `transfer`: a run that queued half an hour behind another on the same checkout did not transfer
 # for half an hour.
 $checkoutWaitSeconds = 0.0
+# The gpu observation's skipped cases (`check=<name>-skipped [...]`): a recorded red that was skipped
+# is not shown to pass, so it is never offered for trimming.
+$gpuSkipped = @()
 # The checker stage's own clock and results. The start is the stage's marker; the results are read
 # back from the per-checker footers, so the summary at the end names what actually ran instead of
 # what was asked for.
@@ -2328,6 +2331,9 @@ else
         # `fail=` said sixteen. The `$0` is escaped because this text is a PowerShell here-string and
         # an unescaped `$0` arrives at the host as nothing at all.
         gpu_red=`$(printf '%s\n' "`$gpu_reds" | awk 'NR>1{printf ","} {printf "%s", `$0}')
+        # The skipped names, so the local side can tell "not red because it passed" from "not red
+        # because it did not run": only the first lets a recorded name go.
+        gpu_skipped=`$(printf '%s\n' "`$gpu_clean" | sed -nE 's/^\[SKIP\] ([^ ]+).*/\1/p' | awk 'NR>1{printf ","} {printf "%s", `$0}')
         gpu_more=0
         # WHY each red is red, one `<name>|<reason>` per fail, so a recorded entry can be checked
         # against the reason it was recorded for and not only against its name. The reason is the
@@ -2380,6 +2386,7 @@ else
         printf '%s\n' "`$gpu_clean" | tail -n 20
         gpu_total=unknown; gpu_pass=unknown; gpu_fail=unknown; gpu_skip=unknown
         gpu_red=unknown; gpu_more=0; gpu_state=nosummary
+        gpu_skipped=''
         # No reading, so no reasons either; set, because the evidence line below reads it under set -u.
         gpu_evidence=''
     fi
@@ -2393,6 +2400,7 @@ else
     if [ -n "`$gpu_evidence" ]; then
         echo "check=$($gpuObservationName)-evidence [`${gpu_evidence%;}]"
     fi
+    echo "check=$($gpuObservationName)-skipped [`${gpu_skipped}]"
     echo "[camel-remote] --- $($gpuObservationName): exit `$gpu_code ---"
 fi
 "@
@@ -3562,6 +3570,9 @@ exit `$code
                     }
                 }
             }
+            if ($cleanLine -match ('^check=' + [regex]::Escape($gpuObservationName) + '-skipped \[([^\]]*)\]$')) {
+                $gpuSkipped = @($Matches[1] -split ',' | ForEach-Object { $_.Trim() } | Where-Object { $_ })
+            }
             # The reason line that follows the reading: `<name>|<reason>` per red, `;` between them.
             # A name is checked against the reason it was recorded for, so a case that is red for a
             # different reason than the one written down is news rather than a known red.
@@ -4128,12 +4139,15 @@ if ($FromThisRun -and $FetchFile -ne '') {
             # reach the reason, and it is said to be that rather than turned into a verdict.
             $gpuUnchecked = @($gpuStill | Where-Object {
                     $gpuReason[$_] -and (-not $gpuEvidence.ContainsKey($_) -or $gpuEvidence[$_] -eq '-') })
-            # Only a reading that named every red may say a recorded name is gone.
+            # Only a reading that named every red may say a recorded name is gone, and only of a name
+            # that ran: a skipped case is not red and did not pass either, so it stays recorded and is
+            # said to have been skipped.
             $gpuGone = if ($gpuIncomplete) {
                 @()
             } else {
-                @($gpuBaseline | Where-Object { $gpuReds -notcontains $_ })
+                @($gpuBaseline | Where-Object { $gpuReds -notcontains $_ -and $gpuSkipped -notcontains $_ })
             }
+            $gpuSkippedRecorded = @($gpuBaseline | Where-Object { $gpuSkipped -contains $_ })
             $gpuKnown = $gpuReds.Count - $gpuNew.Count
             Write-Host ("[camel-remote] gpu-plans: {0} red, {1} recorded, {2} new, {3} recorded for another reason, {4} recorded name(s) no longer red" -f `
                 $gpuReds.Count, $gpuKnown, $gpuNew.Count, $gpuChanged.Count, $gpuGone.Count)
@@ -4169,6 +4183,9 @@ if ($FromThisRun -and $FetchFile -ne '') {
             }
             if ($gpuGone.Count -gt 0) {
                 Write-Host "[camel-remote] gpu-plans: no longer red, and accepted as it is: $($gpuGone -join ', ') -- $gpuBaselineRel can be trimmed"
+            }
+            if ($gpuSkippedRecorded.Count -gt 0) {
+                Write-Host "[camel-remote] gpu-plans: recorded but skipped in this run, so not shown to pass and kept: $($gpuSkippedRecorded -join ', ')"
             }
         }
     }
