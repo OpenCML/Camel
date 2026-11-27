@@ -217,6 +217,64 @@ if [ -n "$integration_pushes" ]; then
     check_integration_readings
 fi
 
+# --- a change the build reads arrives on `integration` built -----------------------
+#
+# Merges arrive without a test run, but a tip that does not compile stops every lane that starts
+# from it, so a push that changes what the build reads must carry a commit that was built.
+# camel-remote records `<git common dir>/camel-built/<sha>` when the host built that commit with
+# nothing uncommitted beside it. Walking back from the pushed tip by first parent, the push is
+# accepted at the first recorded commit -- a build of a commit is a build of everything under it --
+# and refused at a commit that changes a path the build reads before any recorded one is met; the
+# records and pages written on top of a built merge need no build of their own. The paths the build
+# reads are the ones its stamp hashes (scripts/common.js: BUILD_INFO_ROOTS, BUILD_INFO_ROOT_FILES).
+check_integration_built() {
+    common=$(git rev-parse --path-format=absolute --git-common-dir 2>/dev/null)
+    # The list is read from the checkout this hook belongs to, the one whose tools made the build.
+    scripts_dir=$(cd "$(dirname "$0")/.." 2>/dev/null && { pwd -W 2>/dev/null || pwd; })
+    if [ -z "$common" ] || [ ! -f "$scripts_dir/common.js" ]; then
+        echo "pre-push: refusing to push to $integration_ref: the git directory or scripts/common.js could not be found, so whether the tip was built cannot be answered." >&2
+        exit 1
+    fi
+    while IFS=' ' read -r local_ref local_sha remote_sha; do
+        [ "$local_ref" != '(delete)' ] || continue
+        [ -n "$local_sha" ] || continue
+        case "$remote_sha" in
+            '' | *[!0]*) : ;;
+            *) continue ;;
+        esac
+        commits=$(git rev-list --first-parent "$remote_sha..$local_sha" 2>/dev/null) || {
+            echo "pre-push: refusing to push $local_ref to $integration_ref: the commits in $remote_sha..$local_sha could not be listed." >&2
+            exit 1
+        }
+        for commit in $commits; do
+            [ ! -f "$common/camel-built/$commit" ] || continue 2
+            reads=$(git diff --name-only "$commit^1" "$commit" 2>/dev/null | node --input-type=module -e '
+import { pathToFileURL } from "url"
+import fs from "fs"
+const { BUILD_INFO_ROOTS, BUILD_INFO_ROOT_FILES } = await import(pathToFileURL(process.argv[1] + "/common.js").href)
+const paths = fs.readFileSync(0, "utf8").split("\n").filter(Boolean)
+const hit = paths.find(p => BUILD_INFO_ROOT_FILES.includes(p) || BUILD_INFO_ROOTS.includes(p.split("/")[0]))
+console.log(hit ?? "")
+' "$scripts_dir") || {
+                echo "pre-push: refusing to push $local_ref to $integration_ref: which paths $commit changes could not be read against the build's inputs." >&2
+                exit 1
+            }
+            if [ -n "$reads" ]; then
+                echo "pre-push: refusing to push $local_ref to $integration_ref: $commit changes $reads, which the build reads, and no commit from there to the tip was built." >&2
+                echo "pre-push:   $commit $(git log -n 1 --format=%s "$commit")" >&2
+                echo "pre-push: build the tip with internal/tools/camel-remote.ps1 on a clean tree (it records the build), then push." >&2
+                exit 1
+            fi
+        done
+    done <<EOF3
+$integration_pushes
+EOF3
+}
+
+if [ -n "$integration_pushes" ]; then
+    check_integration_built
+fi
+
 # Nothing here is about another branch: a hook that speaks on every push is read as noise.
 [ -n "$develop_push" ] || exit 0
 

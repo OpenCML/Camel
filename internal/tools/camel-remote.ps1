@@ -1826,6 +1826,11 @@ try {
         $commonDir = ''
     }
     $isMainCheckout = ($gitDir -ne '' -and $gitDir -eq $commonDir)
+    # Whether this run builds the commit and nothing else: only then does a green build say that
+    # the commit compiles, and only then is it recorded for the push hook (see where BUILD_EXIT is
+    # read).
+    $buildsCommitAlone = $statusOk -and $dirtyTracked.Count -eq 0 -and
+        @($untracked | Where-Object { $_ -ne $fetchLocalRel }).Count -eq 0
     if ($dirtyTracked.Count -gt 0) {
         # A comma also separates, because `pwsh -File` hands every argument over as one string: the
         # array syntax the parameter asks for is read literally there, so a whitelist written that
@@ -3643,6 +3648,19 @@ exit `$code
                 if ($buildExit -eq 0) {
                     Set-BuildPhase 'done' '[camel-remote] build finished on the host'
                     $run.lastLine = '[camel-remote] build finished on the host'
+                    # The record the push hook asks for before a change the build reads goes onto
+                    # integration (scripts/hooks/pre-push: check_integration_built). It sits in the
+                    # common git directory, so a build made in any worktree of this repository
+                    # counts for the commit it built.
+                    if ($buildsCommitAlone -and $commonDir -ne '' -and $commit -match '^[0-9a-f]{40}$') {
+                        try {
+                            $builtDir = Join-Path $commonDir 'camel-built'
+                            New-Item -ItemType Directory -Force -Path $builtDir | Out-Null
+                            [System.IO.File]::WriteAllText((Join-Path $builtDir $commit), "$Config $((Get-Date).ToString('o'))`n")
+                        } catch {
+                            Write-Host "[camel-remote] the build of $($commit.Substring(0, 9)) could not be recorded for the push hook: $($_.Exception.Message)"
+                        }
+                    }
                 } else {
                     Set-BuildPhase 'fail' "[camel-remote] build failed on the host (exit $buildExit)"
                     $run.lastLine = "[camel-remote] build failed on the host (exit $buildExit)"
