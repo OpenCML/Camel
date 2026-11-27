@@ -93,3 +93,8 @@
 - 清理（全部未跟踪，删前先 `git grep` 查引用）：`t302_*` 8 case + 8 plan、`t307_sugar`、`t312_bad_law_body`、`t350_run_param_probe.plan.toml`（临时探针）、`test/tools/probe-parity-counts.mjs`（按引用决定留删）
 - 交付：第三笔提交 + 计划逐名读数 + 清理后 `status --porcelain` 原文 + tip/numstat + 对 promotion-26（149 名）的逐名差集
 - 前手：`lane-kinds-oper`（上下文到极限，`task-366` 已在其名下 complete）
+
+### L. 工作树登记（2026-11-28 02:3x）
+- `D:\Projects\Camel-wt\op-names` —— 协调者指定，供 `lane-kinds-oper` 做 `task-21`（`git worktree add ... -b lane/op-names origin/integration`）；创建人是该车道，登记在此
+- `D:\Projects\Camel-wt\backend-speed` —— `lane/onnx-g2`（`lane-backend-speed` 于 02:0x 自建，事后追认）
+- 注意：`D:\Projects\Camel-wt\kinds-oper` 目录**不是** `lane/kinds-oper`（该枝不存在），现被 `acc/revert-check2 @ 59f7d17f65` 占着
