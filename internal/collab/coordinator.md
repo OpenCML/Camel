@@ -426,5 +426,6 @@ git worktree add --detach <旧提交>
 - `team_task_create` 的 `write_scopes` **只接受工作区相对路径**（传 `D:\Projects\...` 会被拒：`invalid workspace-relative write scope`）⇒ 写 `docs/reference`、`test/cases/modules/rename` 这种形式。
 - 板子有 **256 条上限**，撞到就 `Team task limit 256 reached`、新派工建不出任务。**常态清理**（不等撞墙）：满足三条才删 —— ① 状态 `completed`；② `internal/backlog.md` 有对应行且**写着结果与提交**（没有就先补行，补不出就不删）；③ **不是今天建的**。`open`/`doing`/`blocked` 一律不动。删前把 id + 标题存 `internal/reports/2026-MM-DD-board-prune.txt`，删后报“删了几条、板上还剩几格”。
   查条件 ② 的便宜办法：`Select-String internal/backlog.md "task-<号>"`，再看同一行有没有 9–40 位 hex（有 sha 才算“写着提交”）。**只被“任务板固化为派工流程”那条总账行提到的任务不算** —— 那行的 sha 是它自己的提交，不是那些任务的结果。
+- **删除归 Lead、留底一次列表写成（`D-1127-165`）**：`team_task_update` 的 `delete` **只允许该任务的原 owner 或 Team Lead**，DSH 工具层不改 ⇒ 车道删不动别人的任务，清理只能由协调者做。所以分工是：**车道每次列表取 10 条 completed、按 `id | 标题 | status | owner | revision` 一行一条写进 `internal/reports/2026-11-27-board-prune.md`（结果与提交在 git 与 backlog 里，留底只要能查回是哪条），提交并推 integration；协调者照那份 `id + r<n>` 清单连续删。** 代价的真相：不是“删”贵，而是**每删一条返回一整条任务转储（约 2.5–6k 字符）**，所以一轮能清的条数取决于上下文余量，报数时按实测报、不估。
 
 **回执与 backlog 里贴原文前先遮密钥**：`ps` 命令行里的 `-e KEY=…`、`--token`、`api_key`、口令，一律先写成 `sk-[已隐去]`。2026-11-26 实例：构建机上一个挂了三天的一次性探针，其 `argv` 里带着明文 `KG_EXTRACT_LLM_API_KEY=sk-ws-…`，我在回执里贴了截断形式（未泄漏全文），随后把它作为**固定规矩**写进两条 skill 页。
