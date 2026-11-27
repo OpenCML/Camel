@@ -274,8 +274,8 @@ remembered when promotion leaves old-to-young edges behind.
 
 The verifier compares remembered entries against typed old/large objects whose layouts are known
 from barriers, roots, or relocation metadata. Missing remembered entries report the owner slot, slot
-type, region, and young target. `--gc generational`, the default of a release build, selects the
-moving collector; `--gc mark-sweep` keeps objects where they are.
+type, region, and young target. `--gc kind=generational`, the default of a release build, selects the
+moving collector; `--gc kind=mark-sweep` keeps objects where they are.
 
 Intentionally unbarriered paths are limited to storage that is not an old auto-space container:
 dynamic frame slots are traced roots, graph-space static tuples are graph roots rather than
@@ -395,7 +395,7 @@ do not need source changes:
 - `--gc-stress safepoint=N` requests a collection every `N` explicit runtime safepoints.
 - `--gc-stress kind=minor|major|both` selects which collection kind stress requests use.
 - `--gc-check moves` emits movement records when the copying path relocates an object.
-- `--gc generational` selects the generational collector (the default);
+- `--gc kind=generational` selects the generational collector (the default);
   The older `CAMEL_GC_ENABLE_YOUNG_COPYING` is not read and changes nothing.
 - `--gc-check config` prints the effective GC diagnostic configuration to stderr when the
   process-level allocator is initialized.

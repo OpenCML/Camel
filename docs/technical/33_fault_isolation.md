@@ -457,7 +457,7 @@ the machine; times are minima of several runs and still noisy).
   130 µs.
 - **Collector.** `collector.cml` with `--gc-check verify=both`, `--gc-stress alloc=5`,
   `--gc-stress safepoint=1`, modes `major` and `both`, on the four back ends, and with
-  `--gc generational` on `std::nvm`, `std::fvm`, `std::prl`: correct output, no
+  `--gc kind=generational` on `std::nvm`, `std::fvm`, `std::prl`: correct output, no
   verification issue.
 - **An `attempt` that does not fault.** Two million calls of a one-line function in a
   tail-recursive loop, directly / through a function value / through `attempt ... !! 0`:

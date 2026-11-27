@@ -8,7 +8,7 @@ may be managed by a generational collector and may move; foreign memory is owned
 Camel-native object and stays outside the movable heap; **a module does not keep a raw pointer
 to a Camel object across calls.**
 
-The rules hold for both collectors (`--gc generational`, the default, and `--gc mark-sweep`).
+The rules hold for both collectors (`--gc kind=generational`, the default, and `--gc kind=mark-sweep`).
 Under mark-sweep an object keeps its address, so a violation of rules 2, 3 and 6 goes unnoticed
 until the object is freed; under the generational collector it reads moved memory. Write code
 for the generational collector.
@@ -315,7 +315,7 @@ root tracers), and nothing read before a call is used after it.
 1. Run its tests with `--gc-check poison` (section 8). Tests under `test/plans/feat/modules`,
    `compile`, `linear`, `para`, `trans` and `smoke` are run that way by the default test set
    (`mm.gc_poison_sweep`), so a module with tests there is covered as it is.
-2. Run them with `--gc generational` with `--gc-check verify=both --gc-stress safepoint=1
+2. Run them with `--gc kind=generational` with `--gc-check verify=both --gc-stress safepoint=1
    --gc-stress kind=minor --gc promotion_age= 1`: everything is promoted at once, which
    is what shows a missing write barrier (rule 6) as "Old-to-young reference is missing from
    remembered set".
@@ -414,4 +414,4 @@ a stale pointer that is never used again; code that no test runs.
   `any` is removed from the language and from the type system, `json.decode` gives a `Json`
   (`lib/json/value.h`: a kind and a payload whose type the kind fixes, traced like a
   function value or a tensor), and a commit refuses a graph with an undetermined type.
-- **Whether the generational collector becomes the default.** `--gc generational` 可用；默认仍是标记-清除。
+- **Whether the generational collector becomes the default.** `--gc kind=generational` 可用；默认仍是标记-清除。
