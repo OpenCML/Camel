@@ -166,7 +166,10 @@ for (const l of [
   'norm 0   (d0, start + step*d1)',
   'norm 0   (d1, 0, d2)',
   'write    (d1, 0) combine law sum_to_f32',
-  'oh = derived((s0_2 - kernel) floordiv kernel + 1)',
+  // The window is written out by the query, as a call writes it, so the derived extent names the
+  // stride and the padding the call states rather than the values a reader used to substitute for
+  // arguments it left out (stride 1, no padding, and the kernel itself as the pooling stride).
+  'oh = derived((s0_2 + 2*pad - kernel) floordiv stride + 1)',
 ]) assert(out.includes(l), `missing: ${l}`)
 }
 """

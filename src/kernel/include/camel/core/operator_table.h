@@ -538,6 +538,21 @@ class OperatorTable {
     /// view stays valid; a node whose storage must not be reused runs this form instead.
     std::optional<std::string_view> plainForm(std::string_view uri) const;
 
+    /// The name the program writes for an operator: the call shape declared for `uri`, or the call
+    /// shape of the form it stands for (`plainForm`) when `uri` is one a program cannot write, or
+    /// the operator's own tail when nothing declares either. Two readings that report what an
+    /// operator's name is both answer here, so they answer the same name; the spelling of `uri`
+    /// never decides it.
+    ///
+    /// Two declarations answer it, both written where the operator is registered: the call shape of
+    /// the operator itself (`stdlib/prelude.cml` declares `export func append::<T>(xs: T[])` with
+    /// `#op(':struct/append_arr')`, so `append` is a fact of that declaration and not of the URI's
+    /// tail; `array:sort_i` answers `sort_i` the same way, as does the loop-state append, which
+    /// states its own shape `:struct/append_arr_owned`), and for a form a program cannot write, the
+    /// operator that form stands for (`plainForm`), whose call shape is then the name: the program
+    /// wrote the plain call, and the verdict is the form's.
+    std::string writtenName(std::string_view uri) const;
+
     /// Declares that the operator `uri` may return one of its operands, changed in place, when
     /// the compiler hands it a value no one else holds (design principles 11.3; the block must
     /// also be unshared and Camel-owned at run time, Array::canWriteInPlace). One fact, written

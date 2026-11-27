@@ -1287,8 +1287,12 @@ void queries(std::ostream &os) {
           {std::nullopt, Arg::intsArg({2, 1})});
     query(os, "show_max_pool2d", "nn:max_pool2d", {T(StaticShape{1, 2, 5, 5}), integer, integer, integer},
           {std::nullopt, Arg::integerArg(3), Arg::integerArg(2), Arg::integerArg(1)});
-    query(os, "show_avg_pool2d_unknown_extents", "nn:avg_pool2d", {T(StaticShape{1, 2, std::nullopt, std::nullopt}), integer},
-          {std::nullopt, Arg::integerArg(2)});
+    // The window the declaration states as required is written out in full, as a call would: a
+    // kernel, a stride and a padding all three (the reading no longer supplies a value the query
+    // left out, so a query that omitted them would be asking about no operator at all).
+    query(os, "show_avg_pool2d_unknown_extents", "nn:avg_pool2d",
+          {T(StaticShape{1, 2, std::nullopt, std::nullopt}), integer, integer, integer},
+          {std::nullopt, Arg::integerArg(2), Arg::integerArg(2), Arg::integerArg(0)});
 }
 
 } // namespace
