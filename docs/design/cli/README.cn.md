@@ -56,6 +56,8 @@ camel --version | camel --help
 | `--gc <collector>`、`--graph-gc-mb`、`--gc-nursery-mb`、`--gc-promotion-age`、`--gc-large-threshold-kb`、`--gc-large-budget-mb`、`--gc-growth-percent`、`--gc-heap-limit-mb` | `--gc kind=generational,nursery_mb=4,promotion_age=4,…,graph_mb=64` | 一个选项一组键值，与 `--gc-stress` 同一风格 |
 | `--block-limit`、`--space-segment-kb`、`--meta-space-limit-mb`、`--graph-space-limit-mb`、`--perm-space-limit-mb` | `--spaces block_mb=2048,segment_kb=…,meta_mb=…,graph_mb=…,perm_mb=…` | 同上 |
 | `--gc-stress`、`--gc-check`、`--coll`、`--native-stack-guard` | 保留 | 进程级、已是键值写法 |
+
+紧凑写法：一个选项的全部 word 写在**一个参数**里，word 之间用逗号分隔、**逗号后不留空格**，空格就是下一个参数的分隔（`--gc kind=generational,nursery_mb=4`、`--spaces block_mb=2048,perm_mb=2`）。逗号后带空格会被拒绝，并提示改成紧凑写法。
 | `--max-recursion-depth`、`--devices`、`--tensor-isa`、`-t`/`--threads` | 保留 | 进程级 |
 | `-I`/`--include`、`-L`/`--stdlib` | 保留 | 进程级 |
 | `-n`, `--no-cache` | `--no-cache` | 不常用，不占单字母 |
@@ -70,7 +72,7 @@ camel --version | camel --help
 | `check -o`/`--output` | `check --report <file>` | `-o` 不再一词两义 |
 | `check -c`/`--config`、`-e`/`--ignore` | `--rules <file>`、`--no-rules` | 长名说清是规则定义 |
 | `inspect --tok/--cst/--ast/--gct`（及大小写两套单字母） | `inspect tokens\|cst\|ast\|gct` | 图之前的阶段只有这里看得到 |
-| `inspect --ops` | `inspect ops` | 同上 |
+| `inspect --ops` | `inspect ops` | 同上。`--ops` 今天仍被接受（计划与 `stdlib-reference` 都在用），`ops` 是之后的拼写 |
 | `inspect --gir`、`--tns`、`--pass-until`、`--instances`、`--facts`、`--tags`、`--copies` | 删；对应的都是遍（`std::gir`、`std::gir_regions` 等），`--pass-until` 就是写出流水线的前一段再接 `std::gir std::nop` | 从图开始的转储都是遍 |
 | `inspect --gen` | 删 | 与 `camel-format` 重复 |
 
