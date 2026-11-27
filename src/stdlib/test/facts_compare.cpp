@@ -780,14 +780,16 @@ FactsCompareTestPass::apply(const camel::runtime::Program *program, std::ostream
         effects.noOld,
         effects.noContext,
         effects.noNew);
-        "FACTS_COMPARE kind=core.kinds graphs={} nodes={} same={} diff={} no_new={} no_old={}\n",
+    os << std::format(
+        "FACTS_COMPARE kind=core.kinds graphs={} nodes={} same={} diff={} no_new={} no_old={} "
+        "ok={}\n",
         coreKinds.graphs,
         coreKinds.nodes,
         coreKinds.same,
         coreKinds.diff,
         coreKinds.noNew,
-        coreKinds.noOld);
-    os << std::format(
+        coreKinds.noOld,
+        (coreKinds.diff == 0 && coreKinds.noNew == 0 && coreKinds.same >= 1) ? 1 : 0);
     os << std::format(
         "FACTS_COMPARE kind=core.arrangeable graphs={} nodes={} same={} diff={} no_old={} "
         "conversions={}\n",

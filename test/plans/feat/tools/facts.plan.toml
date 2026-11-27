@@ -311,6 +311,6 @@ kind = "behavior"
 case = "../../../cases/facts/tensors_and_loops.cml"
 args = ["${case}", "test::facts_compare"]
 expect_exit = 0
-expect_stdout_contains = ["FACTS_COMPARE kind=core.kinds graphs="]
+expect_stdout_contains = ["FACTS_COMPARE kind=core.kinds graphs=", " ok=1"]
 normalizers = ["strip_ansi", "normalize_newlines"]
 timeout_ms = 30000
