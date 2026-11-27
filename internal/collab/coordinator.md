@@ -526,3 +526,11 @@ git worktree add --detach <旧提交>
 1. 先推 `develop` 到**被测量的那个 sha**（pre-push 靠"这个 tip 有 record"放行）；
 2. 再把 record 与红表作为**单独一笔**落到 integration —— 而且是 `git merge --no-ff <record 提交>` + 提交信息带 `Lane-Reading: docs-only` 尾注（直推被拒两次：`a lane commit that went straight in` / `merge(s) without a Lane-Reading trailer`）。
 漏做第 2 步的后果：`newestRedTable()` 仍选上一张表，下一趟的"甲"是拿旧尺子量的 —— 今晚 `promotion-67` 就这样漏过一次，是协调者手工补的。
+
+**9. 在"枝被别的工作树占着"的树里提交，会造出悬空提交。**
+`lane-arrangeable` 的两笔（代码 `cab8cec417`、卡 `9e0749733f`）在 `lane/task-229` 上找不到：它当时在 `cli-rework` 树里干活，而那棵树是 **detached HEAD**，`lane/task-229` 的枝却挂在 `value-ports` 上 ⇒ 提交只挂在游离头上，`reset --hard`/`switch` 一过就成了悬空对象，枝一格没动，交回形式上不成立。
+**判据**：交回前用 `git branch --contains <sha>` 核一次；`git log -1` 看到的分支名不是它自己的枝，就说明在别人的树里提交。**修法**：在枝所在的那棵树里 `switch` 后重放（这次是 `reset --hard 9e0749733f`），别在两棵树之间搬提交。**记法**：交回 = 提交在 `lane/<名字>` 上 **且** `--contains` 有输出，两样都要报。
+
+**10. 台账提交也是推送，会和合并位抢锁。**
+一晚上 `cannot lock ref 'refs/heads/integration'` 出现了三次，其中两次的原因是我在一刻钟里推了五笔台账（`D-1128-58` 回执、卡尾 step 7/8/9、nvm 比较卡、`D-1128-59` 回执）；合并位那边看到的是"远端每十分钟被推一次"。
+**规矩**：合并位在推一批时，**协调者停推**，台账在本地攒着（`git status` 干净、提交可以留）；合并位推完（它报"推上了"或 `ls-remote` 回读变化）再落。合并位连被挡两次就停手报一声，别连推。
