@@ -6,7 +6,7 @@ fence with `camel <file> std::gir`, so a fence the language does not accept pins
 without depending on the region generator.
 
 ```camel
-func main(): int sync {
+func main() => int sync {
     return missing_name()
 }
 ```
