@@ -1064,6 +1064,9 @@ const camel::runtime::Program *Context::materializeRuntimeProgram() {
     auto rootModule = tt::as_shared<UserDefinedModule>(mainModule_);
     camel::utils::phase::Scope phaseScope("encode");
     camel::runtime::Program *program = runtimeGraphMgr_->reserve();
+    // The program this context installs is of this context: a rewrite types the nodes it touches
+    // through the rules of the context that holds them (`Program::context`).
+    program->setContext(handle());
     // Encoding a compiled graph into a runtime program is the compiler's job, and this is the
     // kernel asking for it through the registered loader: the kernel names no compile graph.
     const auto graph =
@@ -1111,7 +1114,11 @@ void Context::clearRuntimeGraphs() {
 
 camel::runtime::Program *Context::reserveProgram() {
     GUARD(runtimeGraphMgr_ != nullptr, "Runtime graph manager is not initialized.");
-    return runtimeGraphMgr_->reserve();
+    camel::runtime::Program *program = runtimeGraphMgr_->reserve();
+    // A program a context reserves is of that context: the rules a rewrite types its nodes
+    // through are the context's, and they go out of the world with it.
+    program->setContext(handle());
+    return program;
 }
 
 void Context::trackDetachedRuntimeProgram(const camel::runtime::Program *program) {

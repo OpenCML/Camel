@@ -160,7 +160,7 @@ RuleConditionAt ruleConditionAt(
 /// The types the operator groups registered (OperatorTable::allRegisteredTypes): the candidate set
 /// `check` enumerates the instances of a generic rule over when it is given no program. Built when
 /// it is asked for, from the declarations the loaded modules made.
-std::vector<camel::core::type::Type *> ruleInstanceTypes();
+std::vector<camel::core::type::Type *> ruleInstanceTypes(camel::core::context::Context &context);
 
 /// The rules the context has registered, in the order they were registered: `ruleId - 1` indexes
 /// it. Rules are registered while a library is compiled and live as long as the context, which is

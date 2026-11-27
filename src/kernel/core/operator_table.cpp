@@ -35,8 +35,10 @@ void OperatorGroup::publishResolvers() {
         }
         // The table keeps what an operator is and what implements it; the rule a call is typed
         // through belongs to the context that holds this group, and registerResolvers puts it
-        // there. All this asks of the table is the operator's identity.
-        opers_.push_back(camel::core::OperatorTable::instance().intern(uri));
+        // there. What this asks of the table is the operator's identity, and the agreement
+        // between the rule and what the operator declares (checkResolver): what a call may write
+        // is the table's business, and the rule written for it must say the same.
+        opers_.push_back(camel::core::OperatorTable::instance().checkResolver(uri, resolver));
         uris.push_back(uri);
     }
     if (!uris.empty()) {
@@ -383,11 +385,48 @@ namespace {
 
 /// The resource declaration against the `var` parameters of the signature (design principles
 /// 3.3); an empty string when they agree or the signature does not say.
+/// True when the rule registered for the operator says which of its parameters are `var`, and what
+/// its signature is: the two facts the agreement with the declared resources is read from.
+struct RuleRoles {
+    bool known = false;
+    std::vector<bool> with, norm;
+    std::string text;
+};
+
+/// The roles of the rule, as the operator's entry keeps them.
+RuleRoles
+ruleRoles(const std::vector<bool> &varWith, const std::vector<bool> &varNorm, std::string text) {
+    RuleRoles roles;
+    roles.known = !text.empty();
+    roles.with  = varWith;
+    roles.norm  = varNorm;
+    roles.text  = std::move(text);
+    return roles;
+}
+
+std::string checkVarAgainstResources(
+    std::string_view uri, const sem::ResourceSpec &resources, const RuleRoles &roles) {
+    if (!roles.known) {
+        return {};
+    }
+    if (auto problem = sem::checkVarParameters(resources, roles.with, roles.norm)) {
+        return std::format(
+            "The resources declared for the operator '{}' disagree with its signature {}: {}.",
+            uri,
+            roles.text,
+            *problem);
+    }
+    return {};
+}
+
 std::string checkVarAgainstResources(
     std::string_view uri, const sem::ResourceSpec &resources,
     const type::FuncTypeResolver *resolver) {
+    if (resolver == nullptr) {
+        return {};
+    }
     std::vector<bool> with, norm;
-    if (resolver == nullptr || !resolver->varParameters(with, norm)) {
+    if (!resolver->varParameters(with, norm)) {
         return {};
     }
     if (auto problem = sem::checkVarParameters(resources, with, norm)) {
@@ -401,22 +440,6 @@ std::string checkVarAgainstResources(
 }
 
 } // namespace
-
-OperId OperatorTable::setResolver(std::string_view uri, type::resolver_ptr_t resolver) {
-    std::unique_lock lock(mutex_);
-    const OperId id = internLocked(uri);
-    Entry &entry    = entries_[id];
-    if (const sem::OperatorSemantics *declared = entry.declared.load(std::memory_order_relaxed);
-        declared != nullptr && declared->resources) {
-        const std::string problem =
-            checkVarAgainstResources(uri, *declared->resources, resolver.get());
-        if (!problem.empty()) {
-            throw std::invalid_argument(problem);
-        }
-    }
-    entry.resolver = std::move(resolver);
-    return id;
-}
 
 bool OperatorTable::writesOperand(OperId id, bool isWith, size_t index) const {
     if (const sem::OperatorSemantics *facts = record(id); facts && facts->resources) {
@@ -447,14 +470,32 @@ std::vector<sem::ResourceAccess> OperatorTable::accessList(OperId id) const {
     return {sem::globalAccess(sem::AccessMode::Write)};
 }
 
-type::resolver_ptr_t OperatorTable::resolver(OperId id) const {
-    std::shared_lock lock(mutex_);
-    return entries_[id].resolver;
-}
-
-type::resolver_ptr_t OperatorTable::resolver(std::string_view uri) const {
-    const auto id = lookup(uri);
-    return id ? resolver(*id) : nullptr;
+OperId OperatorTable::checkResolver(std::string_view uri, const type::resolver_ptr_t &resolver) {
+    std::unique_lock lock(mutex_);
+    const OperId id = internLocked(uri);
+    Entry &entry    = entries_[id];
+    if (const sem::OperatorSemantics *declared = entry.declared.load(std::memory_order_relaxed);
+        declared != nullptr && declared->resources) {
+        const std::string problem =
+            checkVarAgainstResources(uri, *declared->resources, resolver.get());
+        if (!problem.empty()) {
+            throw std::invalid_argument(problem);
+        }
+    }
+    // The roles of the rule are kept, so that the same agreement is checked when the resources
+    // are declared after it: a semantics declared for an operator whose rule came first is still
+    // held to the signature that answers for it. The rule itself is not kept.
+    std::vector<bool> with, norm;
+    if (resolver != nullptr && resolver->varParameters(with, norm)) {
+        entry.varWith  = with;
+        entry.varNorm  = norm;
+        entry.ruleText = resolver->signature();
+    } else {
+        entry.varWith.clear();
+        entry.varNorm.clear();
+        entry.ruleText.clear();
+    }
+    return id;
 }
 
 void OperatorTable::declareGroup(std::string_view group, const std::vector<std::string> &uris) {
@@ -583,7 +624,8 @@ std::string OperatorTable::groupOf(std::string_view uri) const {
     return first;
 }
 
-std::vector<type::Type *> OperatorTable::registeredTypes(std::string_view group) const {
+std::vector<type::Type *> OperatorTable::registeredTypes(
+    camel::core::context::Context &context, std::string_view group) const {
     std::vector<std::string> uris;
     {
         std::shared_lock lock(mutex_);
@@ -615,8 +657,10 @@ std::vector<type::Type *> OperatorTable::registeredTypes(std::string_view group)
     };
     // The lock is taken once per overload, after the group's list has been read: a group may be
     // declared again while modules load, and an overload's resolver may be replaced then.
+    // The rules are the context's (Context::resolverOf): the types a group registered are the ones
+    // its own context's declarations wrote, and another context's answer would be another type.
     for (const std::string &uri : uris) {
-        const type::resolver_ptr_t resolver = this->resolver(uri);
+        const type::resolver_ptr_t resolver = context.resolverOf(uri);
         type::FunctionType *const signature =
             resolver != nullptr ? resolver->fixedSignature() : nullptr;
         if (signature == nullptr) {
@@ -635,10 +679,11 @@ std::vector<type::Type *> OperatorTable::registeredTypes(std::string_view group)
     return types;
 }
 
-std::vector<type::Type *> OperatorTable::allRegisteredTypes() const {
+std::vector<type::Type *>
+OperatorTable::allRegisteredTypes(camel::core::context::Context &context) const {
     std::vector<type::Type *> types;
     for (const std::string &group : groups()) {
-        for (type::Type *type : registeredTypes(group)) {
+        for (type::Type *type : registeredTypes(context, group)) {
             bool known = false;
             for (type::Type *have : types) {
                 if (have == type || have->equals(type)) {
@@ -959,12 +1004,17 @@ void OperatorTable::declareSemantics(std::string_view uri, sem::OperatorSemantic
             ? std::optional<OperatorTraits>(traitsOf(*old))
             : std::nullopt;
     std::string problem = checkSemantics(uri, semantics, traits);
+    // The other half of the same agreement, whichever of the two came first: what this declaration
+    // says the operands are held to has to agree with the rule that answers for the operator. The
+    // rule itself is the context's; the entry keeps only which of its parameters are `var` and its
+    // signature as text, which is what the check reads (checkResolver records them).
     if (problem.empty() && semantics.resources) {
-        // Declared before or after its signature is registered: checked once both are there.
-        const std::string signature =
-            checkVarAgainstResources(uri, *semantics.resources, entry.resolver.get());
-        if (!signature.empty()) {
-            throw std::invalid_argument(signature);
+        const std::string disagreement = checkVarAgainstResources(
+            uri,
+            *semantics.resources,
+            ruleRoles(entry.varWith, entry.varNorm, entry.ruleText));
+        if (!disagreement.empty()) {
+            throw std::invalid_argument(disagreement);
         }
     }
     if (problem.empty() && old != nullptr &&

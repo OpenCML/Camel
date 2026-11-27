@@ -603,7 +603,7 @@ tuplesOf(Context &ctx, const camel::runtime::Program &program, uint64_t ruleId, 
 /// registered, at most `kCheckTupleCap` of them. A rule of one parameter is named by the value's
 /// type alone; a rule of two is not, and this is what a question about one value can still ask
 /// (`why_not`).
-std::vector<std::vector<Type *>> tuplesHolding(const Type *type, size_t arity) {
+std::vector<std::vector<Type *>> tuplesHolding(Context &ctx, const Type *type, size_t arity) {
     std::vector<std::vector<Type *>> tuples;
     if (arity == 0) {
         // A rule of no type parameters: the empty tuple is its one instance per value bound.
@@ -614,7 +614,7 @@ std::vector<std::vector<Type *>> tuplesHolding(const Type *type, size_t arity) {
         tuples.push_back({const_cast<Type *>(type)});
         return tuples;
     }
-    const std::vector<Type *> universe = camel::compile::gir::ruleInstanceTypes();
+    const std::vector<Type *> universe = camel::compile::gir::ruleInstanceTypes(ctx);
     if (universe.empty()) {
         return tuples;
     }
@@ -1571,7 +1571,7 @@ slot_t whyNotKernel(ArgsView &with, ArgsView &norm, Context &ctx) {
             std::string firstTuple;
             std::string firstWhy;
             size_t tried                                      = 0;
-            const std::vector<std::vector<Type *>> candidates = tuplesHolding(type, arity);
+            const std::vector<std::vector<Type *>> candidates = tuplesHolding(ctx, type, arity);
             for (const std::vector<Type *> &tuple : candidates) {
                 ++tried;
                 const size_t index = camel::compile::gir::genericRuleInstance(
@@ -4405,7 +4405,7 @@ void checkGenericRule(
     // has: a call that leaves the
     // parameter out reads its null and the candidate set is the registered types alone, which is
     // every reading the check had before the parameter existed.
-    std::vector<Type *> universe = camel::compile::gir::ruleInstanceTypes();
+    std::vector<Type *> universe = camel::compile::gir::ruleInstanceTypes(ctx);
     for (Type *type : programTypes) {
         const bool known = std::any_of(universe.begin(), universe.end(), [&](const Type *seen) {
             return seen == type || seen->equals(type);

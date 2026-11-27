@@ -1499,8 +1499,10 @@ void bindRegionArguments(
     if (arguments.size() != program.parameterInputs.size())
         throw std::runtime_error("compiled region argument count changed");
     // Reuse the ordinary input snapshot implementation; no graph node, operator
-    // instantiation, inference, scheduling or source generation is visited here.
-    Compiler bindings(facts, nullptr, program.context());
+    // instantiation, inference, scheduling or source generation is visited here. It asks no
+    // type rule, so it takes no context: a compiler with no rule to ask says so rather than
+    // answering from another context's.
+    Compiler bindings(facts, nullptr, nullptr);
     for (size_t i = 0; i < arguments.size(); ++i) {
         const auto &argument = arguments[i];
         const auto value     = bindings.host(argument.value, argument.type, true);
