@@ -161,6 +161,7 @@ pwsh -NoProfile -File <你的工作树>\internal\tools\camel-remote.ps1 `
   **已在 integration 修好**（正确形状：`--- check check-doc-links: node scripts/check-doc-links.mjs --citations ---` → `--- check-doc-links: exit 0 ---`，约 3 秒）。
   ⇒ 你那条 run 若**仍然**挂在这行，先看是不是你的树还没换底到带修复的 integration，别再去查宿主、也别为绕锁去抢别人的树。
   ⇒ 例外照旧：读到 `[SUMMARY]` / `RUN_EXIT` / `[TREE]` 就算读数到手，挂住超过 3 分钟就按你自己记录的 PID 整棵收掉。
+  ⇒ **`exit` 非 0 时先看 `RUN_EXIT` 与 `[camel-remote] checks:` 两行，再开口说红**（2026-11-27 一条车道实测）：`RUN_EXIT=0` + `checks: 1 run, 1 failed (check-doc-links exit 1)` = **计划全绿、收尾文档检查红**（那次是别人探针文件里一条失效引用 `test/cases/probe/probe_pools_reverse.cml:1` 把行号当引用）。这类“计划绿但命令红”最常见的误读是把红记到自己的改动上 —— 先分清是 `[SUMMARY]` 里的 fail 还是 `checks:` 里的 failed。
 · **要换一把宿主 tree lock，就换 checkout 路径**：锁是按 checkout 路径的 cksum 建的。合法的换法只有“另开一棵树”（`-Detach <sha>` 造测量树，或 `git worktree add --detach`）并跑完删掉；**不要动别人的树，也不要去动别人的锁**。
 · **新开的树没有钩子**：`git worktree add` 不会装 `.husky/_`，而 `npx husky` 需要那棵树里有 `node_modules`。缺钩子时 git **不报错**（`core.hooksPath` 指向不存在的目录 ⇒ 每一次 push 的所有钩子静默跳过）。要么用 `new-worktree.ps1` 建（它把这件事做成一步），要么从主检出复制 **husky 自己的 `_` 目录**（不是手写），再用 `-VerifyOnly` 读到检查器自己的输出才算有守卫。
 · **新开的树还缺 `internal/tools/camel-gate.local.json`**（git-ignored 的本地闸门配置）：2026-11-27 一条车道换到新树后，第一次起跑直接报错退出，把本地配置从原树复制过去才跑起来。`new-worktree.ps1` 不管这个文件（它不入库，所以也不该入库）。换树时先 `Test-Path <新树>\internal\tools\camel-gate.local.json`，缺就从原树复制（同机、只读来源）。
