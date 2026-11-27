@@ -54,7 +54,7 @@ import path from 'node:path'
 import { runLimitedSync } from './lib/job.mjs'
 
 const DEFAULT_BUILD =
-    'pwsh -NoProfile -File "{seat}/internal/tools/camel-remote.ps1" -Path "{seat}" -Jobs 8'
+    'pwsh -NoProfile -File "{seat}/internal/tools/camel-remote.ps1" -Path "{seat}" -Jobs 8 -TokenClass funnel'
 
 function fail(code, why) {
     process.stderr.write(`merge-batch: ${why}\n`)

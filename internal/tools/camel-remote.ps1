@@ -482,6 +482,12 @@ param(
     # because the one case worth measuring on purpose is the refusal -- a lane that wants to see
     # `noslot` should not have to book half an hour of a shared host to read it.
     [int]$SlotWaitSeconds = 1800,
+    # How important this run is to everyone else waiting for the host's token pool. The pool serves
+    # waiters by class, then by arrival (internal/tools/host-tokens.sh): `funnel` is the run every lane
+    # waits on (the merge seat's build, a promotion), `build` a lane's own build, `test` an ordinary
+    # run, `batch` work nobody is waiting for. The class also sets the CPU priority the run's
+    # processes start at (`funnel` and `build` normal, `test` nice 10, `batch` nice 19).
+    [ValidateSet('funnel', 'build', 'test', 'batch')][string]$TokenClass = 'test',
     # How long the *closing* of a finished run waits, in seconds.
     #
     # After the plan's own last line ([SPLIT], the runner's summary) the run is over; what is left is
@@ -3017,6 +3023,8 @@ export CAMEL_BRANCH='$branch'
 # How long the pool's taker waits for a token before the run says noslot (-SlotWaitSeconds); the
 # checkout's lock above is waited for the same number of seconds.
 export CAMEL_TOKEN_WAIT_S='$SlotWaitSeconds'
+# The pool's queue order and CPU priority for this run (-TokenClass).
+export CAMEL_TOKEN_CLASS='$TokenClass'
 # The plan step's runner names its run directory this (it is set on that one command, see `$runPlan`),
 # so the fetch after the plan (-FromThisRun) reads exactly this run's directory.
 echo "[camel-remote] run name: $runName"
