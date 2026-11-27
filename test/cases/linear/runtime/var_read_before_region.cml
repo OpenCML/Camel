@@ -30,7 +30,7 @@ func interval_loop() => int sync {
     let before = z
     loop i = 0 for k in 0 .. 3 do sync {
         z = z + 1
-        (i + 1, z)
+        i + 1
     }
     println(before, z)
     return 0
