@@ -1561,6 +1561,13 @@ $run = @{
     # Who held this run's checkout when it stopped at that lock, in the holder's own words (pid, when
     # it took the lock, its run id, its command line). Null when no lock was contended.
     lockHolder      = $null
+    # The processes actually on that lock file, by pid and command: the record names the run that took
+    # the lock, and when that run is gone these are what keep it held. Naming them is the difference
+    # between a message and an action (2026-11-27: nine npm/ninja processes of a dead run).
+    lockHolders     = $null
+    # Where this run's output stays on the host when the workstation side is killed: the guard's copy
+    # under `~/<workroot>/.remote-runs/`. Null when the host did not say.
+    hostCopy        = $null
     overlapping     = @{ atStart = $null; atEnd = $null }
     loadAtStart     = if ($null -ne $loadStart) { "$([math]::Round($loadStart[0], 2))" } else { $null }
     loadAtEnd       = $null
@@ -2085,9 +2092,14 @@ $buildCmd = if ($Config -eq 'Debug') { "npm run debug$stackTraceArg" } else { "n
     # thing a consumer may rely on -- the presence of the block is the evidence that it was asked
     # for, and its absence is not evidence about the tree.
     $rowsChannel = [bool]($ListKnown -and ($planArgs -or $Changed))
+    # `( ... ) 6>&-`: the plan is the one child that runs for hours with compilers under it, so it is
+    # the one whose inheritance of the checkout lock's fd 6 matters most -- a plan left behind by a
+    # dead run kept a whole checkout unavailable (see the note beside the token reporter below). A
+    # subshell changes nothing else: `code=${PIPESTATUS[0]}` is the subshell's status, which is the
+    # plan's, because it is the subshell's last command.
     $planRunStage = if ($rowsChannel) {
         @'
-RUNPLAN 2>&1 | tee 'TEETMP'
+( RUNPLAN 2>&1 ) 6>&- | tee 'TEETMP'
 code=${PIPESTATUS[0]}
 echo '__CAMEL_REMOTE_ROWS_START__'
 grep '^{' 'TEETMP' || true
@@ -2095,7 +2107,7 @@ echo '__CAMEL_REMOTE_ROWS_END__'
 '@.Replace('RUNPLAN', $runPlanExec).Replace('TEETMP', "$remoteScratch/rows.txt")
     } else {
         @'
-RUNPLAN 2>&1
+( RUNPLAN 2>&1 ) 6>&-
 code=${PIPESTATUS[0]}
 '@.Replace('RUNPLAN', $runPlanExec)
     }
@@ -2128,7 +2140,7 @@ echo "HOST_JOBS=$CAMEL_JOBS"
     $vscodeDeps = if ($planArgs -or $Changed) {
         "if [ -d `"`$R/editors/vscode`" ] && [ ! -d `"`$R/editors/vscode/node_modules/vscode-textmate`" ]; then" + "`n" +
         "    echo '[camel-remote] installing editors/vscode dev dependencies (npm ci) so the grammar snapshot runs'" + "`n" +
-        "    ( cd `"`$R/editors/vscode`" && timeout 600 bash `"`$R/internal/tools/host-tokens.sh`" run-quiet -- npm ci --no-audit --no-fund ) || echo '[camel-remote] editors/vscode install failed: the grammar snapshot will skip'" + "`n" +
+        "    ( cd `"`$R/editors/vscode`" && timeout 600 bash `"`$R/internal/tools/host-tokens.sh`" run-quiet -- npm ci --no-audit --no-fund ) 6>&- || echo '[camel-remote] editors/vscode install failed: the grammar snapshot will skip'" + "`n" +
         "fi"
     } else { ':' }
 
@@ -2173,7 +2185,7 @@ $fetchStage = if ($FetchFile -ne '' -and -not $FromThisRun) {
 echo '__CAMEL_REMOTE_AST_START__'
 echo "[machine] out/TAG/bin/camel-parsecheck built $(date -r out/TAG/bin/camel-parsecheck '+%Y-%m-%d %H:%M')NOTE"
 echo '[camel-remote] recording the AST snapshot (frontend.ast_snapshot) on the host'
-CAMEL_HOME="$R/out/TAG" python3 test/tools/parsecheck/check.py snapshot --updateONLYDROP 2>&1
+CAMEL_HOME="$R/out/TAG" python3 test/tools/parsecheck/check.py snapshot --updateONLYDROP 2>&1 6>&-
 astc=$?
 echo "AST_UPDATE_EXIT=$astc"
 if [ $astc -ne 0 ]; then
@@ -2705,23 +2717,61 @@ orphan_descendants() {
     done
     echo "${out[@]:-}"
 }
+# The process group of $1, from the same line `orphan_ppid` reads: after `(comm)` come the state,
+# the parent and then the group, so the group is field 3.
+orphan_pgrp() {
+    local s
+    s=$(cat "/proc/$1/stat" 2>/dev/null) || return 1
+    s=${s##*) }
+    set -- $s
+    printf '%s' "$3"
+}
 orphan_watch() {
     local reader="$1" run="$2" log="$3" poll="${CAMEL_ORPHAN_POLL_S:-5}" grace="${CAMEL_ORPHAN_GRACE_S:-10}"
-    local me="$BASHPID" now pids p
+    local me="$BASHPID" now seen=" " my_pg
+    my_pg=$(orphan_pgrp "$me" 2>/dev/null)
+    # Every pid this run has been seen with, not only the ones under it at the end. The parent links
+    # answer "who is under the run now", and they stop answering the moment the run's own shell dies:
+    # the kernel reparents its children, and a build started under `setsid` is a session of its own
+    # from the first instant. That gap is what the 2026-11-27 reading shows -- a run whose session was
+    # gone still had three of its processes running and holding the checkout lock on fd 6, and three
+    # later runs waited out -SlotWaitSeconds for a lock nobody held. So each poll writes down what it
+    # can see, and the end kills the union: what is under the run then, and everything that was.
+    orphan_remember() {
+        local one
+        for one in $(orphan_descendants "$run" "$me"); do
+            case " $seen " in *" $one "*) ;; *) seen="$seen$one ";; esac
+        done
+    }
+    # The same list, ended -- and then the groups it leads. A build runs under `setsid`, so ending
+    # its leader leaves the compilers under it running; the group is the only handle on them. This
+    # watchdog's own group is skipped: it is the run's group, and ending it would end the kill before
+    # its second pass.
+    orphan_end_pids() {
+        local one pgid
+        [ -n "${seen// /}" ] || return 0
+        for one in $seen; do
+            kill "-$1" "$one" 2>/dev/null
+            pgid=$(orphan_pgrp "$one" 2>/dev/null)
+            [ -n "$pgid" ] && [ "$pgid" != "$my_pg" ] && kill "-$1" -- "-$pgid" 2>/dev/null
+        done
+    }
     while :; do
-        sleep "$poll"
-        now=$(orphan_ppid "$run") || exit 0
-        if kill -0 "$reader" 2>/dev/null && [ "$now" = "$reader" ]; then continue; fi
+        orphan_remember
+        now=$(orphan_ppid "$run") || break
+        if kill -0 "$reader" 2>/dev/null && [ "$now" = "$reader" ]; then sleep "$poll"; continue; fi
         break
     done
     echo "[camel-remote] the process that started this run ($reader) is gone: ending the run $run and everything under it" >> "$log"
-    # Frozen first, so that the run does not go on to its next step as its children die.
+    # Frozen first, so that the run does not go on to its next step as its children die. Frozen is not
+    # dead, and that is the point of doing it first: a stopped process keeps its parent links, so the
+    # sweep below still sees what it started rather than a set of children the kernel has adopted.
     kill -STOP "$run" 2>/dev/null
-    pids=$(orphan_descendants "$run" "$me")
-    [ -n "$pids" ] && kill -TERM $pids 2>/dev/null
+    orphan_remember
+    orphan_end_pids TERM
     sleep "$grace"
-    pids=$(orphan_descendants "$run" "$me")
-    [ -n "$pids" ] && kill -KILL $pids 2>/dev/null
+    orphan_remember
+    orphan_end_pids KILL
     kill -KILL "$run" 2>/dev/null
     # Ending the processes closes their descriptors, and that is how the tokens this run held or
     # was queued for (`flock`s) are given back: nothing here releases them by name.
@@ -2732,8 +2782,17 @@ orphan_begin() {
     mkdir -p "$orphan_dir" 2>/dev/null || return 0
     stamp=$(date +%Y%m%d-%H%M%S)-$$
     base="$orphan_dir/$stamp"
+    # The name of this run's copy, for the pointer the remote script prints after the guard is sourced
+    # (and for anyone reading the host afterwards): the copy is the only place a `[SUMMARY]` survives
+    # the workstation side going away, and 2026-11-27 cost five Debug reruns to the fact that nothing
+    # said where it was.
+    orphan_copy="$base.out"
     # The host's copy of the run's output. Each stream still reaches ssh byte for byte; a tee whose
     # reader went away ignores the broken pipe and keeps writing the file, so what came before is kept.
+    # The pair is made on disk before the prune below counts it: a tee the shell starts asynchronously
+    # may create the file a moment after the count, and then "the newest 20 pairs" keeps 21.
+    : >> "$base.out"
+    : >> "$base.err"
     exec > >(trap '' PIPE; exec tee --output-error=warn-nopipe -a "$base.out") \
          2> >(trap '' PIPE; exec tee --output-error=warn-nopipe -a "$base.err" >&2)
     # Only the newest 20 pairs stay.
@@ -2758,6 +2817,13 @@ orphan_begin "$PPID"
 set -u
 orphan_dir="`$HOME/$($cfg.hostWorkRoot)/.remote-runs"
 $orphanGuard
+# Where this run's output lives on this host, said before anything else runs. If the workstation side
+# is killed, the ssh pipe and this script's own session go with it -- but the guard's copy keeps
+# writing to `~/<workroot>/.remote-runs/<stamp>.out` and nothing else does: the run's scratch
+# directory is removed when the run ends, that directory is not. Printing the path here means the
+# last line a person saw names the file that still holds the whole run (`[SUMMARY]`, stack, exit
+# code), instead of costing a rerun to find out what happened. 2026-11-27: five Debug reruns.
+[ -n "`${orphan_copy:-}" ] && echo "[camel-remote] this run's output is kept on the host at `$orphan_copy (the .err beside it), also after this connection is gone"
 # The host's half of -TracePhases: one monotonic mark per segment of "get this checkout to the run's
 # commit". Nothing is printed unless the caller asked, and the mark is taken at the line *after* the
 # work it names -- so a segment's duration is the distance between two marks. `date +%s%N` is
@@ -2809,6 +2875,42 @@ tree_holder() {
         printf 'host=%s pid=%s since=%s run=%s cmd=%s (that pid is gone: a process it started may still hold the lock)' "`${host:-?}" "`$pid" "`${since:-?}" "`${run:-?}" "`${cmd:-?}"
     fi
 }
+# Which processes have the lock file open, named by pid and command. `flock` says the lock is taken
+# and the record in the file says which run took it; neither says who is holding it *now*. Those are
+# different facts exactly when the run has died and something it started lives on -- 2026-11-27: the
+# record named run 65756, that shell was gone, and nine npm/ninja processes it had started were still
+# holding fd 6, so every run behind it printed "may still hold the lock" and had nothing to act on.
+# Reading the descriptor out of /proc answers it: whoever has this file open is what keeps it held.
+# Only fd 6 and above are looked at, because that is the number this shell opens the lock as and
+# every child inherits it under that number; nothing here opens a descriptor above 5.
+tree_lock_holders() {
+    local d l pid list="" out=""
+    for d in /proc/[0-9]*/fd; do
+        pid=`${d#/proc/}; pid=`${pid%/fd}
+        for l in "`$d"/*; do
+            if [ "`$(readlink "`$l" 2>/dev/null)" = "`$tree_lock" ]; then
+                case " `$list " in *" `$pid "*) ;; *) list="`$list `$pid";; esac
+                break
+            fi
+        done
+    done
+    for pid in `$list; do
+        out="`$out `$pid(`$(tr '\0' ' ' < "/proc/`$pid/cmdline" 2>/dev/null | cut -c1-100))"
+    done
+    printf '%s' "`${out:-none}"
+}
+# What a run that cannot get the checkout prints: who the record names, and who is actually on the
+# lock. When the record's pid is gone and something still holds the lock, those holders are the whole
+# answer -- naming them is what turns a message into an action, so the sentence says so and names them.
+tree_busy_note() {
+    local rec_pid holders
+    rec_pid=`$(printf '%s' "`$(head -n 1 "`$tree_lock" 2>/dev/null)" | sed -n 's/.* pid=\([0-9][0-9]*\).*/\1/p')
+    holders=`$(tree_lock_holders)
+    printf '%s; processes on the lock: %s' "`$(tree_holder)" "`$holders"
+    if [ -n "`$rec_pid" ] && ! kill -0 "`$rec_pid" 2>/dev/null && [ "`$holders" != none ]; then
+        printf ' -- the run that took the lock is gone and these are what keep it: end them and this checkout frees'
+    fi
+}
 exec 6>>"`$tree_lock"
 tree_wait_started_ns=`$(date +%s%N)
 if ! flock -n 6; then
@@ -2816,18 +2918,20 @@ if ! flock -n 6; then
     # here and say who holds it, because a run that silently queues for half an hour reads exactly
     # like a run that is building.
     if [ '$($QueueOnTreeLock.IsPresent)' != 'True' ]; then
-        echo "[camel-remote] this checkout is busy: another run holds its lock, and this run did not ask to wait for it (-QueueOnTreeLock): `$(tree_holder)"
+        echo "[camel-remote] this checkout is busy: another run holds its lock, and this run did not ask to wait for it (-QueueOnTreeLock): `$(tree_busy_note)"
         echo "HOST_LOCK_HOLDER=`$(tree_holder)"
+        echo "HOST_LOCK_HOLDERS=`$(tree_lock_holders)"
         echo "HOST_CHECKOUT_WAIT_MS=`$(( (`$(date +%s%N) - tree_wait_started_ns) / 1000000 ))"
         echo 'HOST_NOSLOT=checkout'
         exit 4
     fi
-    echo "[camel-remote] this checkout is held; waiting for it (-QueueOnTreeLock, at most $SlotWaitSeconds s): `$(tree_holder)"
+    echo "[camel-remote] this checkout is held; waiting for it (-QueueOnTreeLock, at most $SlotWaitSeconds s): `$(tree_busy_note)"
     tree_waited=0
     while ! flock -n 6; do
         if [ "`$tree_waited" -ge '$SlotWaitSeconds' ]; then
-            echo "[camel-remote] no slot on this checkout within $SlotWaitSeconds s (-SlotWaitSeconds): the lock `$tree_lock is held by: `$(tree_holder)"
+            echo "[camel-remote] no slot on this checkout within $SlotWaitSeconds s (-SlotWaitSeconds): the lock `$tree_lock is held by: `$(tree_busy_note)"
             echo "HOST_LOCK_HOLDER=`$(tree_holder)"
+        echo "HOST_LOCK_HOLDERS=`$(tree_lock_holders)"
             echo "HOST_CHECKOUT_WAIT_MS=`$(( (`$(date +%s%N) - tree_wait_started_ns) / 1000000 ))"
             echo 'HOST_NOSLOT=checkout'
             exit 4
@@ -2835,7 +2939,7 @@ if ! flock -n 6; then
         sleep 5
         tree_waited=`$((tree_waited + 5))
         if [ `$((tree_waited % 60)) -eq 0 ]; then
-            echo "[camel-remote] still waiting for this checkout (`$tree_waited s of at most $SlotWaitSeconds): `$(tree_holder)"
+            echo "[camel-remote] still waiting for this checkout (`$tree_waited s of at most $SlotWaitSeconds): `$(tree_busy_note)"
         fi
     done
 fi
@@ -3125,7 +3229,14 @@ echo '__CAMEL_REMOTE_SYNCED__'
             printf 'HOST_ALIVE\n'
         fi
     done
-) &
+# 6>&-: the checkout lock lives on fd 6 of this shell, and the kernel gives it back when the last
+# process holding that file description exits. A child that inherits fd 6 therefore holds the lock
+# after its holder is gone, which is the state found on 2026-11-27: a run's session had died, three
+# processes it had started still carried /tmp/camel-tree-*.lock on fd 6, and three later runs waited
+# out -SlotWaitSeconds and exited 4 on a lock nobody held. So every process here that can outlive one
+# step -- this reporter, the build, the plan, the two installers -- is started with fd 6 closed, and
+# the lock is held by this shell alone.
+) 6>&- &
 tokens_reporter=`$!
 if [ '$NoBuild' = 'True' ]; then
     if [ -f scripts/build-info.js ]; then
@@ -3174,7 +3285,9 @@ if [ '$NoBuild' != 'True' ]; then
     build_idle_limit=1200
     build_total_limit=10800
     build_progress=`$(mktemp)
-    CAMEL_TOKEN_CLASS='$buildTokenClass' setsid bash -c 'bash "`$1/internal/tools/host-tokens.sh" take-up-to "`$2" -- $buildCmd 2>&1 | tee "`$3"; exit "`${PIPESTATUS[0]}"' _ "`$R" "`$build_want" "`$build_progress" &
+# `6>&-` for the reason beside the reporter above: the token wrappers under this build are the
+    # processes that were still holding the checkout lock a day after their run died.
+    CAMEL_TOKEN_CLASS='$buildTokenClass' setsid bash -c 'bash "`$1/internal/tools/host-tokens.sh" take-up-to "`$2" -- $buildCmd 2>&1 | tee "`$3"; exit "`${PIPESTATUS[0]}"' _ "`$R" "`$build_want" "`$build_progress" 6>&- &
     build_pid=`$!
     build_stopped=''
     while kill -0 "`$build_pid" 2>/dev/null; do
@@ -3549,6 +3662,23 @@ exit `$code
                 # lock, its run id and its command line. Kept because the run that stops here has to
                 # be able to say what it was waiting behind, on the line a reader sees.
                 $run.lockHolder = $Matches[1].Trim()
+                Publish-Run
+                Write-Host $line
+                return
+            }
+            if ($cleanLine -match '^HOST_LOCK_HOLDERS=(.*)$') {
+                # ... and who is actually on the lock file, pid and command each: a holder record names
+                # the run that took the lock, which is a different fact once that run is gone.
+                $run.lockHolders = $Matches[1].Trim()
+                Publish-Run
+                Write-Host $line
+                return
+            }
+            if ($cleanLine -match "^\[camel-remote\] this run's output is kept on the host at (\S+)") {
+                # The guard's copy of this run's output, named by the host before anything else runs.
+                # Kept so the summary can end with it: a run whose workstation side dies still has a
+                # `[SUMMARY]` on the host, and this is the path that finds it.
+                $run.hostCopy = $Matches[1]
                 Publish-Run
                 Write-Host $line
                 return
@@ -4397,13 +4527,19 @@ if ($FromThisRun -and $FetchFile -ne '') {
         if ($run.noslotWaitedFor -eq 'checkout' -and -not $QueueOnTreeLock) {
             Write-Host ("[camel-remote] state=noslot: this checkout is held by another run, so this run did not start -- nothing above is a reading. It stopped at once instead of waiting; pass -QueueOnTreeLock to wait for the checkout instead. Held by: {0}" -f `
                 $(if ($run.lockHolder) { $run.lockHolder } else { 'the lock file names no holder' }))
+            if ($run.lockHolders) { Write-Host "[camel-remote] processes on that lock: $($run.lockHolders)" }
         }
         else {
             Write-Host ("[camel-remote] state=noslot: the host did not start this run -- it waited {0} s for the host's {1} and gave up (-SlotWaitSeconds). The pool or the checkout was held by other runs, so this is a run that was not started rather than one that failed: nothing above is a reading" -f `
                 $SlotWaitSeconds, $run.noslotWaitedFor)
             if ($run.lockHolder) { Write-Host "[camel-remote] held by: $($run.lockHolder)" }
+            if ($run.lockHolders) { Write-Host "[camel-remote] processes on that lock: $($run.lockHolders)" }
         }
     }
+    # Where this run's own output stays on the host. Said at the end so a finished run names it too,
+    # and said on every run rather than only on a failed one: the case this exists for is a run whose
+    # workstation side is killed, where there is no later line to print it on.
+    if ($run.hostCopy) { Write-Host "[camel-remote] this run's output on the host: $($run.hostCopy) (the .err beside it)" }
     # The transfer's own breakdown, under -TracePhases. Two lines: where the transfer's seconds went,
     # and what travelled. Segments are the distance between consecutive marks, each named by the mark
     # it ends at, so a run whose host took the fast path simply has no `fetch`/`checkout`/`clean`/
