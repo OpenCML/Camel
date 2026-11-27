@@ -1154,11 +1154,6 @@ compile_graph_ptr_t Builder::visitFuncNode(const GCT::node_ptr_t &gct) {
             reportWhenProblem(early, name, when->condition);
         }
     }
-    // A headed block's body reads the module its head named, and reads it there and nowhere else
-    // (design 15.1): the module is a name layer of the body, in force while the body is built.
-    const BlockHeadModuleScope headScope(
-        blockHeadModules_,
-        GCT::Tree::of(gct)->blockHeadModuleOf(gct));
     buildFuncBody(gct, graph, funcType, name, tags, written);
     // A declaration tag whose argument names a function (`#vjp(cube_rule)`) keeps that graph
     // in the reference table of the function's graph: the fact is a graph reference, and the
@@ -1512,6 +1507,15 @@ void Builder::buildFuncBody(
     NumericPermissionScope permissions(
         numericPermissions_,
         static_cast<camel::core::sem::PermissionMask>(inherited | bodyTags.permissions));
+    // A headed block's body reads the module its head named, and reads it there and nowhere else
+    // (design 15.1): the module is a name layer of the body, in force while the body is built.
+    // It is read from the syntax tree beside this body's function node and pushed here rather than
+    // at the callers, because a body inside a generic function is built when an instance asks for
+    // it (`instantiateGeneric`), not where the block is written, and the layer is the body's either
+    // way.
+    const BlockHeadModuleScope headScope(
+        blockHeadModules_,
+        GCT::Tree::of(gct)->blockHeadModuleOf(gct));
     // The attributes its decorators grant join those in force where it is written (each key's
     // combine rule, camel/core/node_attrs.h), for everything written in it; so do the facts of
     // the tags written before it, which hold for the nodes of its body (`on nodes`).
