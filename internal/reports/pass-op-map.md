@@ -96,6 +96,7 @@ src/stdlib/std.cml:413   }                     ← cxx 块在这里闭合，两�
 ```
 - ⇒ 声明名是 `cxx::opt`，默认 URI `std:cxx::opt`，与该遍内核 `const PassKernel("std::cxx::opt", …)`（`src/stdlib/std/cxx/opt/opt/opt.cpp:44`）相同 ⇒ 按规则不写。
 - 用户写 `std::opt` 仍可用，是因为有**通行名别名**：`declareSpelling("std::opt", "std::cxx::opt")`（`src/kernel/execute/pass.cpp:111`，同组还有 `std::default`→`std::nvm`、`std::tf`→`std::taskflow` 等 10 余条）。
+  **（这一句只在 `c1-measure` 枝上有；`origin/integration` 上没有 `declareSpelling`。引它是为了说明别名从哪来，不要当成现存代码读。）**
   别名是**给通行名用的**，不是声明缺 `#op` 的证据。
 - 若决策者仍要求显式写，写上 `#op('std:cxx::opt')` 也无害，但与"同名不写"这条规则不一致；本表按规则判**不写**，等你一句话改。
 
