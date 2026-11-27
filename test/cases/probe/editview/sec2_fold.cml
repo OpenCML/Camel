@@ -1,3 +1,5 @@
+import { Node } from graph
+
 // Design `docs/design/graph-editing/README.cn.md` section 2, example 1, verbatim.
 // 改一个函数：块的值是改好的函数，或一个错误值
 export func fold_zero_adds::<F>(f: F) => F! when is_function::<F>() {
