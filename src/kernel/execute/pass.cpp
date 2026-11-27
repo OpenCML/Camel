@@ -181,20 +181,6 @@ void ensureCoreTagReaders() {
 }
 
 
-/// The implementation bound to the function `module::function`, whichever side of the core it
-/// belongs to. The name, documentation and parameters are the declaration's; this answers only
-/// which function implements it. The name is resolved to the operator at this boundary and the
-/// table below is asked by id (`findPassKernel`); a name the operator table does not know has no
-/// implementation, and this does not add one (`lookup`, not `intern`).
-std::optional<PassDescriptor> findImplementation(const std::string &path) {
-    ensureCoreTagReaders();
-    const auto id = camel::core::OperatorTable::instance().lookup(path);
-    if (!id.has_value() || *id == camel::core::kNoOper) {
-        return std::nullopt;
-    }
-    return findPassKernel(*id);
-}
-
 } // namespace
 
 // -----------------------------------------------------------------------------
@@ -379,6 +365,36 @@ std::string resolveAlias(const std::string &name) {
     return name;
 }
 
+/// The operator a written path is, resolved here and nowhere else: the operator table answers what
+/// the name is. A name the table does not know is not interned -- asking whether a name is a pass
+/// must not make it one -- so a reader that needs the operator a name stands for, and a reader that
+/// only asks whether the name is a pass at all, ask the same question here.
+///
+/// The alias table is applied by `findDescriptor`, before it comes here: an alias is a *spelling*
+/// of a pass, and the declaration is still the one the written name's own module would give, so the
+/// fallback in `findDescriptor` is what re-enters this point with the target's spelling.
+std::optional<camel::core::OperId> resolvePassOperator(const std::string &written) {
+    const auto id = camel::core::OperatorTable::instance().lookup(written);
+    if (!id.has_value() || *id == camel::core::kNoOper) {
+        return std::nullopt;
+    }
+    return id;
+}
+
+/// The implementation bound to the function `module::function`, whichever side of the core it
+/// belongs to. The name, documentation and parameters are the declaration's; this answers only
+/// which function implements it. The name is resolved to the operator at this boundary
+/// (`resolvePassOperator`) and the table is asked by id (`findPassKernel`); a name the operator
+/// table does not know has no implementation, and this does not add one.
+std::optional<PassDescriptor> findImplementation(const std::string &path) {
+    ensureCoreTagReaders();
+    const auto id = resolvePassOperator(path);
+    if (!id.has_value()) {
+        return std::nullopt;
+    }
+    return findPassKernel(*id);
+}
+
 /// A pass a name resolves to: how to make it and the parameters its declaration gives. The
 /// declaration is the standard library's; a pass written in Camel's is its signature's `with`
 /// list.
@@ -420,10 +436,11 @@ std::optional<FoundPass> findDescriptor(const context_ptr_t &ctx, const std::str
             return std::nullopt;
         }
         const std::string path = module + "::" + function;
-        // The name is resolved to the operator here, once: the registry below is asked by id, so a
-        // reader that already holds the id (a program calling the pass as a function) asks without
-        // spelling the name again.
-        const auto operatorId = camel::core::OperatorTable::instance().lookup(path);
+        // The name is resolved to the operator in one place (`resolvePassOperator`), so a spelling
+        // the alias table answers and a spelling the operator table answers arrive here as the same
+        // id: the registry is asked by id, and a reader that already holds the id (a program
+        // calling the pass as a function) asks without spelling the name again.
+        const auto operatorId = resolvePassOperator(path);
         const auto implementation =
             operatorId.has_value() ? findPassKernel(*operatorId) : std::nullopt;
         // The module's declaration file is read before the pass is looked for in it. A file that
