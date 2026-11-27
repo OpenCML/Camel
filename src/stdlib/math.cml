@@ -497,6 +497,12 @@ export func clamp::<T>(x: T, lo: T, hi: T) => T when is_real::<T>() {
 
 /// The absolute value of an integer or a float. The sign of a zero is cleared, a NaN stays a NaN,
 /// and the smallest integer is its own absolute value (negation wraps, as it does in `-x`).
+///
+/// On a float this is `max(x, -x)`, so a differentiated `abs` reaches `math:max_d` and not
+/// `math:abs_d`: the rule that would answer it is a choice between two values, and the scalar
+/// graph has no select/where to write one with (no bool-to-float conversion either). So
+/// `math:abs_d` holds no derivative rule, and a gradient that reaches it is refused by name
+/// instead of being answered with a number the array width's `absVjp` would not agree with.
 /// @example abs(-3)    // 3
 #impl(abs_kernel)
 export func abs::<T>(x: T) => T when is_real::<T>() {
