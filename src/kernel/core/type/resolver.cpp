@@ -164,7 +164,7 @@ FunctionType *closedSignature(FunctionType *declared) {
                 std::string(declared->argNameAt(i)),
                 declared->withTypeAt(i),
                 declared->withIsVarAt(i),
-                declared->withNeedsValueAt(i));
+                declared->withNeedsCompileTimeAt(i));
         }
     }
     for (size_t i = 0; i < declared->normTypesCount(); ++i) {
@@ -201,7 +201,7 @@ FunctionType *withoutPacks(FunctionType *declared) {
                 std::string(declared->argNameAt(i)),
                 declared->withTypeAt(i),
                 declared->withIsVarAt(i),
-                declared->withNeedsValueAt(i));
+                declared->withNeedsCompileTimeAt(i));
         }
     }
     for (size_t i = 0; i < normCount; ++i) {

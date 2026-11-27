@@ -532,7 +532,7 @@ ab449b7d874527d9 ok src/stdlib/opt.cml
 49015cbc4407a506 ok src/stdlib/optim.cml
 cfd1905583789732 ok src/stdlib/para.cml
 a82098797df46210 ok src/stdlib/perf.cml
-db6b57f07670f7c0 ok src/stdlib/prelude.cml
+e630d2946add20b5 ok src/stdlib/prelude.cml
 0a2356410c7e5b3c ok src/stdlib/process.cml
 8f9a9b5b4701c251 ok src/stdlib/pyplot.cml
 692ab627c3592a87 ok src/stdlib/python.cml
