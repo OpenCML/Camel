@@ -1,0 +1,65 @@
+{
+  "kind": "promotion",
+  "promotion": 26,
+  "tip": "9c6f270c87edeadcf2f1e05e18bd0b0e8c5fcd53",
+  "measured_tip": "9c6f270c87edeadcf2f1e05e18bd0b0e8c5fcd53",
+  "pushed_develop_sha": "a6ff436b95a66b8436279c782fd13046947b378b",
+  "note": "the layer was measured at 9c6f270c87, the tip the four reverts arrive on; the record it could not read was the one the reverts own conflict resolution had broken, not the compiler, so the record was re-taken whole one merge above (a6ff436b95) and develop advances to that tip: the two merges between them change source, and this layer does not cover that source",
+  "tier": "fast",
+  "scope": "test/plans (the whole plan tree)",
+  "jobs": 2,
+  "host": "the build host, promote checkout at 9c6f270c87; load 1m 32.81 at the start of the run",
+  "binary_built": "2026-11-28T01:31:52+08:00",
+  "readings": {
+    "total": 9859,
+    "pass": 9650,
+    "fail": 149,
+    "skip": 27,
+    "known": 33,
+    "killed_by_a_signal": 0,
+    "timed_out": 2,
+    "load_before": "1m 32.81 at the start"
+  },
+  "comparison": {
+    "against": "internal/reports/2026-11-27-promotion-25-reds.tsv (the twenty-fifth promotion, tip a48f8d65b8, 161 names)",
+    "method": "the two red sets compared by case name: a name the previous table had red and this reading does not is counted as turned green; a name this reading has and the previous table did not is counted as new",
+    "still_red": 148,
+    "turned_green": 13,
+    "turned_green_names": [
+      "docs.ai_reference.current",
+      "docs.ai_reference.example_does_not_compile",
+      "mnist",
+      "nn.mnist",
+      "stdlib.fault.zip_with.fvm",
+      "stdlib.fault.zip_with.jit",
+      "stdlib.fault.zip_with.nvm",
+      "stdlib.fault.zip_with.opt",
+      "stdlib.fault.zip_with.prl",
+      "sync.effect_call_stays_on_the_chain",
+      "sync.faulting_call_stays_on_the_chain",
+      "sync.pure_call_is_arranged_freely",
+      "tools.member_init.sweep"
+    ],
+    "new_reds": 1,
+    "new_reds_names": [
+      "frontend.ast_record"
+    ],
+    "arithmetic": "161 names before: 13 turned green, 0 vanished, 1 appeared, 148 remain red; 148 + 1 = 149 = this reading red case names",
+    "notes": [
+      "the one new name is frontend.ast_record, known-cause: the record at the reverted tip was broken by the reverts own conflict resolution (diff3 base segments), and it clears when the record is re-taken whole; the re-take is the merge one above this tip (a6ff436b95), which is also the tip develop advances to",
+      "the 34 names the withdrawn thin-shell batch was arriving with are absent from this table: a revert that removes a batch removes its reds with it"
+    ]
+  },
+  "red_table": "internal/reports/2026-11-28-promotion-26-reds.tsv",
+  "red_table_rows": 149,
+  "next_promotion_compares_against": "internal/reports/2026-11-28-promotion-26-reds.tsv",
+  "new_red_names": [
+    "frontend.ast_record"
+  ],
+  "pushed_as": "develop, fast-forwarded from 8e29d45d1c to a6ff436b95 (the tip where the record was re-taken)",
+  "develop_before": "8e29d45d1c",
+  "develop_after": "a6ff436b95",
+  "commits_brought_in": 244,
+  "commits_touching_src": 48,
+  "ast_hashes": "4688 file(s) checked, 0 stale at a6ff436b95"
+}
