@@ -247,8 +247,14 @@ node_ptr_t Builder::visitBlockRoot(const AST::node_ptr_t &ast) {
     // The operator is the `graph` module's, so the program reads that module's declarations: an
     // import, not only a load. A module the program does not import declares nothing into it, and
     // the id would have no templates to resolve against. What the import brings is the module's
-    // names, not this call's: the reference stays the id.
-    context_->importModule("graph", module_.get());
+    // names, not this call's: the reference stays the id. The block may stand at the program's own
+    // level, where there is no enclosing module to import into; there the import names no target
+    // and the program's own scope is the one that declares.
+    if (module_ != nullptr) {
+        context_->importModule("graph", module_.get());
+    } else {
+        context_->importModule("graph");
+    }
     const auto oper = camel::core::OperatorTable::instance().lookup(uri);
     GUARD(oper.has_value(), "The table has no entry for the operator a block head binds: " + uri);
     // The id is the reference; the text is only the node's label (a GCT dump, a diagnostic). It is

@@ -79,10 +79,12 @@ oper_group_ptr_t Builder::internalOperatorGroup(camel::core::OperId oper) {
 
 oper_group_ptr_t Builder::operatorGroupOf(camel::core::OperId oper) {
     // The way from the id back to the group is recorded where the group is registered, and every
-    // operator of the core and of the program's exports goes through one of the two: the built-in
-    // module when it is loaded, and the program's own export table when a declaration of the
-    // program is exported (ProgramExports::exportEntity). So the id alone finds the group, and no
-    // name of the program takes part.
+    // operator the compiler emits goes through one of three: the built-in module when it is loaded,
+    // the program's own export table when a declaration of the program is exported
+    // (ProgramExports::exportEntity), and a module the compiler imported itself, which declares its
+    // operators into itself rather than into either of those. That last one is named by the id's
+    // URI (`<module>:<group>`), so its prefix is the module to ask. The id alone finds the group,
+    // and no name of the program takes part.
     if (const auto builtins = context_->importModule(""); builtins != nullptr) {
         if (oper_group_ptr_t group = builtins->nativeOperatorGroup(oper); group != nullptr) {
             return group;
@@ -92,6 +94,16 @@ oper_group_ptr_t Builder::operatorGroupOf(camel::core::OperId oper) {
         const auto &exports = context_->programExports();
         if (oper_group_ptr_t group = exports.operatorGroup(oper); group != nullptr) {
             return group;
+        }
+    }
+    const std::string_view uri = camel::core::OperatorTable::instance().uri(oper);
+    const std::size_t colon    = uri.find(':');
+    if (colon != std::string::npos && colon != 0) {
+        if (const auto module = context_->importModule(std::string(uri.substr(0, colon)));
+            module != nullptr) {
+            if (oper_group_ptr_t group = module->nativeOperatorGroup(oper); group != nullptr) {
+                return group;
+            }
         }
     }
     return nullptr;
