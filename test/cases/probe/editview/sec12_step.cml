@@ -1,3 +1,4 @@
+import { is_function } from types
 // Design `docs/design/graph-editing/README.cn.md` section 12, first example, verbatim in the
 // block; the surrounding function is the least a block needs to be written in.
 func drop_two::<F>(f: F) => F! when is_function::<F>() {

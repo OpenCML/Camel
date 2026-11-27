@@ -53,6 +53,10 @@
 #include "camel/compile/literal.h"
 #include "camel/core/operator_table.h"
 
+namespace camel::core::module {
+class Module;
+} // namespace camel::core::module
+
 namespace camel::compile::gct {
 
 /// The table's operator index (see the DREF the compiler makes for an operator by id).
@@ -90,6 +94,16 @@ class Tree {
     void addFieldTagUses(const Node *decl, size_t field, std::vector<TagUse> uses);
     /// The fields of `decl` that have tag uses, by field index; nullptr when none has.
     const std::map<size_t, std::vector<TagUse>> *fieldTagUsesOf(const Node *decl) const;
+
+// ---- The module a headed block's body reads (design 15.1) --------------------------------
+/// The module the body of function node `func` reads because its block's head named it, and that
+/// body's names are read there and nowhere else. Kept beside the node for the same reason the tag
+/// uses are: it is a fact of the compiler, and a Node is 32 bytes.
+void setBlockHeadModule(const Node *func, std::shared_ptr<camel::core::module::Module> module);
+/// The module the body of `func` reads, or null when `func` is not a headed block's body. The
+/// module is a name layer of that body only: it is not an import of the module it is written in,
+/// and no scope outside the body gains a name from it.
+std::shared_ptr<camel::core::module::Module> blockHeadModuleOf(const Node *func) const;
 
     // One function per kind of node. A new node has no children, no origin and no parent.
     // A name is the written reference (`a::b`); one that is empty or ends in `::` is not a
@@ -394,6 +408,9 @@ class Tree {
     std::unordered_map<const Node *, std::vector<UnwrittenParam>> unwrittenParams_;
     std::unordered_map<const Node *, std::vector<TupleParamBinding>> tupleParams_;
     std::unordered_map<const Node *, WhenClause> whenClauses_;
+    // The module each headed block's body reads (setBlockHeadModule): a name layer of that body.
+    std::unordered_map<const Node *, std::shared_ptr<camel::core::module::Module>>
+        blockHeadModules_;
     std::unordered_map<const Node *, node_ptr_t> caseGuards_;
     std::unordered_map<const Node *, std::vector<std::string>> headTypeParams_;
     std::unordered_map<const Node *, ParameterDefaults> parameterDefaults_;

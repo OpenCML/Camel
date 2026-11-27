@@ -165,12 +165,36 @@ is what the body does with the binding and what the block hands on.
 */
 node_ptr_t Builder::visitBlockHeaded(const AST::node_ptr_t &ast) {
     ENTER("BlockHeaded");
+    // The head is the block's one source of handle types (design 15.1), so the module it imports is
+    // read in its body and only there: the scope is pushed for the body the head stands for. The
+    // module is the one the import already loaded, so nothing is imported twice and an import that
+    // failed is not reported a second time here.
+    camel::core::module::module_ptr_t headModule;
+    for (const auto &[importAst, mod] : importedModules_) {
+        (void)importAst;
+        if (mod && mod->name() == "graph") {
+            headModule = mod;
+            break;
+        }
+    }
+    if (headModule) {
+        blockHeadModules_.push_back(headModule);
+    }
     node_ptr_t execNode = visitStmtBlock(ast->atAs<AST::StmtBlockLoad>(2), false);
+    if (headModule) {
+        blockHeadModules_.pop_back();
+    }
     FunctionTypeFactory factory; // no parameters; the result is the block's value
     FunctionType *type  = factory.buildOpen();
     node_ptr_t typeNode = tree_->makeType(type);
     node_ptr_t funcNode = tree_->makeFunc("");
     *funcNode << typeNode << execNode;
+    // The body is the block's, and the module the head named is a name layer of that body alone
+    // (design 15.1): kept beside the node, so the graph builder reads the same module the type
+    // scope did, and no scope outside the body gains a name from it.
+    if (headModule) {
+        tree_->setBlockHeadModule(funcNode, headModule);
+    }
     setOriginFromAst(context_, typeNode, ast, camel::source::OriginKind::GctNode, "gct.block.type");
     setOriginFromAst(context_, funcNode, ast, camel::source::OriginKind::GctNode, "gct.block.func");
     // An edit block's changes are all in or not at all (design 6, 15.1): the block's value is the
