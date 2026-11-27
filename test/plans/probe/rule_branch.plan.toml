@@ -1,0 +1,24 @@
+id = "probe.rule_branch"
+tier = "fast"
+tags = ["probe"]
+desc = "Whether a rule's right side may branch: an ordinary program's `if` is differentiated (the control), a rule whose right side is `if a >= b then da else db` is the question, and the two readings tell the rule's own copy apart from the transform it stands in."
+
+[[tests]]
+name = "rule_branch.program_if_control"
+desc = "The control: `g(a) = if a > 0.0 then a * a else 0.0 - a` differentiated, the same two readings the transform gave before a rule's right side could branch."
+kind = "behavior"
+case = "../../cases/probe/rule_branch/program_if_control.cml"
+args = ["${case}", "std::nvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "rule_branch.rule_if_right_side"
+desc = "A rule whose right side is a branch on the two operands: `my_max`'s forward rule answers `da` where `a >= b` and `db` where it is not, so the tangent is 1 for the larger operand and 0 for the smaller."
+kind = "behavior"
+case = "../../cases/probe/rule_branch/rule_if_right_side.cml"
+args = ["${case}", "std::nvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000

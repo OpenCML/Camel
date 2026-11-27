@@ -1,0 +1,16 @@
+// The control for the rule-branch probe: a branch written in an ordinary program is
+// differentiated, and this is what it reads. The same branch written in a rule's right side is the
+// question the other case asks.
+import { jvp } from transforms
+
+func g(a: float) => float {
+    return if a > 0.0 then a * a else 0.0 - a
+}
+
+func main() => int sync {
+    let (v1, t1) = jvp(g)(2.0, 1.0)
+    println("if>0 value=" + to_string(v1) + " tangent=" + to_string(t1))
+    let (v2, t2) = jvp(g)(-3.0, 1.0)
+    println("if<0 value=" + to_string(v2) + " tangent=" + to_string(t2))
+    return 0
+}

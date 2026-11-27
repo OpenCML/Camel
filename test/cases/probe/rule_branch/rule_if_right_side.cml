@@ -1,0 +1,29 @@
+// A rule's right side may branch on the values its left side bound: the answer is one of two
+// computations of the tangent, chosen by a condition that reads only the inputs. `max` is the
+// operator that needs this; the function below is the same shape written in the case, so the
+// reading does not depend on a rule set that lands separately.
+import { jvp } from transforms
+
+func my_max(a: float, b: float) => float {
+    return if a >= b then a else b
+}
+
+rule jvp_my_max(a: float, b: float) {
+    my_max(a, b) => func (da: float, db: float) {
+        if a >= b then da else db
+    }
+}
+
+func g(a: float, b: float) => float {
+    return my_max(a, b)
+}
+
+func main() => int sync {
+    // The tangent of the first operand is 1 and of the second 0, so the chosen arm is readable from
+    // the number: the larger operand answers 1, the smaller answers 0.
+    let (v1, t1) = jvp(g)(2.0, 1.0)
+    println("a>b value=" + to_string(v1) + " tangent=" + to_string(t1))
+    let (v2, t2) = jvp(g)(1.0, 2.0)
+    println("a<b value=" + to_string(v2) + " tangent=" + to_string(t2))
+    return 0
+}
