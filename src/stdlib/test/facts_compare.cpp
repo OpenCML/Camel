@@ -11,6 +11,7 @@
 #include "camel/execute/pass/registration.h"
 #include "camel/facts/arrangeable.h"
 #include "camel/facts/control_regions.h"
+#include "camel/facts/core_kinds.h"
 #include "camel/runtime/control_regions.h"
 #include "camel/runtime/core_facts.h"
 #include "camel/runtime/effects.h"
@@ -634,6 +635,95 @@ void compareEffects(
     }
 }
 
+/// The four core kinds that live in two registries while they move: the same question asked of the
+/// frozen store and of the framework's, node by node. `same` is the reading that lets an old
+/// registration go; `no_new` is the framework answering nothing where the frozen store answered (a
+/// kind registered but never computed -- the state a move must not be mistaken for), `no_old` is
+/// the framework answering where the frozen one does not (a kind the move added), and `diff` is two
+/// answers that disagree, which is the one the counts exist to make impossible to overlook.
+struct CoreKindCounts {
+    size_t graphs = 0, nodes = 0, same = 0, diff = 0, noNew = 0, noOld = 0;
+};
+
+void compareCoreKinds(
+    const camel::runtime::Program &program, const GCGraph &graph, camel::facts::Store &store,
+    camel::runtime::fact::FactStore &frozen, CoreKindCounts &counts) {
+    using camel::runtime::fact::coreKinds;
+    namespace rt                               = camel::runtime::fact;
+    const camel::graph::GraphView &view        = graph.view();
+    const camel::facts::KindId shapeKind       = camel::facts::shapeKind();
+    const camel::facts::KindId instanceKind    = camel::facts::instanceKind();
+    const camel::facts::KindId reorderKind     = camel::facts::reorderKind();
+    const camel::facts::KindId permissionsKind = camel::facts::permissionsKind();
+    ++counts.graphs;
+    for (gc_node_ref_t ref = 0; ref < static_cast<gc_node_ref_t>(graph.nodeCount()); ++ref) {
+        const camel::graph::NodeRef node = static_cast<camel::graph::NodeRef>(ref);
+        // The view's notion of a node (`censusArrangeable` says why).
+        if (!view.contains(node)) {
+            continue;
+        }
+        ++counts.nodes;
+        const rt::Anchor frozenAnchor{&program, &graph, ref};
+        const camel::facts::Anchor movedAnchor{&graph, static_cast<camel::facts::NodeId>(ref)};
+        // shape
+        {
+            const auto here  = frozen.obtain<rt::TensorShape>(coreKinds().shape, frozenAnchor);
+            const auto there = store.obtain<rt::TensorShape>(shapeKind, movedAnchor);
+            if (here && there) {
+                ++(rt::toString(*here) == rt::toString(*there) ? counts.same : counts.diff);
+            } else if (here) {
+                ++counts.noNew;
+            } else if (there) {
+                ++counts.noOld;
+            } else {
+                ++counts.same;
+            }
+        }
+        // instance
+        {
+            const auto here  = frozen.obtain<rt::NodeInstance>(coreKinds().instance, frozenAnchor);
+            const auto there = store.obtain<rt::NodeInstance>(instanceKind, movedAnchor);
+            if (here && there) {
+                ++(here->text == there->text ? counts.same : counts.diff);
+            } else if (here) {
+                ++counts.noNew;
+            } else if (there) {
+                ++counts.noOld;
+            } else {
+                ++counts.same;
+            }
+        }
+        // reorder
+        {
+            const auto here  = frozen.obtain<rt::Reorder>(coreKinds().reorder, frozenAnchor);
+            const auto there = store.obtain<rt::Reorder>(reorderKind, movedAnchor);
+            if (here && there) {
+                ++(rt::toString(*here) == rt::toString(*there) ? counts.same : counts.diff);
+            } else if (here) {
+                ++counts.noNew;
+            } else if (there) {
+                ++counts.noOld;
+            } else {
+                ++counts.same;
+            }
+        }
+        // permissions
+        {
+            const auto here  = frozen.obtain<int>(coreKinds().permissions, frozenAnchor);
+            const auto there = store.obtain<int>(permissionsKind, movedAnchor);
+            if (here && there) {
+                ++(*here == *there ? counts.same : counts.diff);
+            } else if (here) {
+                ++counts.noNew;
+            } else if (there) {
+                ++counts.noOld;
+            } else {
+                ++counts.same;
+            }
+        }
+    }
+}
+
 } // namespace
 
 const camel::runtime::Program *
@@ -644,6 +734,7 @@ FactsCompareTestPass::apply(const camel::runtime::Program *program, std::ostream
     AnswerCounts answers;
     DraftCounts draft;
     EffectCounts effects;
+    CoreKindCounts coreKinds;
     for (auto *graph : collectReachableGraphs(*program)) {
         if (graph == nullptr) {
             continue;
@@ -661,6 +752,9 @@ FactsCompareTestPass::apply(const camel::runtime::Program *program, std::ostream
         censusArrangeable(*graph, *store, answers);
         compareDraft(*program, *graph, *store, draft, os);
         compareEffects(*program, *graph, effects);
+        if (const auto &context = program.context(); context != nullptr) {
+            compareCoreKinds(*program, *graph, *store, context->facts(), coreKinds);
+        }
     }
     os << std::format(
         "FACTS_COMPARE kind=core.controlRegions graphs={} regions={} enclosing_same={} "
@@ -686,6 +780,14 @@ FactsCompareTestPass::apply(const camel::runtime::Program *program, std::ostream
         effects.noOld,
         effects.noContext,
         effects.noNew);
+        "FACTS_COMPARE kind=core.kinds graphs={} nodes={} same={} diff={} no_new={} no_old={}\n",
+        coreKinds.graphs,
+        coreKinds.nodes,
+        coreKinds.same,
+        coreKinds.diff,
+        coreKinds.noNew,
+        coreKinds.noOld);
+    os << std::format(
     os << std::format(
         "FACTS_COMPARE kind=core.arrangeable graphs={} nodes={} same={} diff={} no_old={} "
         "conversions={}\n",
