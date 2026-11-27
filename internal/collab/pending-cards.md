@@ -117,3 +117,16 @@
 ### P. `task-361`（`opt::inline`，CC Figure 1）已改派 `lane-kinds-oper`
 - 决策者 `D-1128-8` ③：`opt-inline` 2.7 小时无树无读数，原 owner `lane-editview-commit` 上下文已用尽 ⇒ 第一步（图算子）已落地编过，**第二步（Camel 写的遍）与第三步（逐字节对照）** 立即另派，CC 优先级排前。
 - 派工要点：按 `src/stdlib/std/cxx/opt/inline/engine.cpp` 的选择规则照写、不另起复制逻辑；`cxx_isolation.plan.toml` 加 `inline.by_cpp`/`inline.by_camel` 四条语料逐字节相等 + "确实内联/确实没内联"断言；"C++ 那边说不清"的单列报协调者。
+
+### Q. `rule-branch` holds `lane/pass-as-value-crash` and untracked t353 probes; owner unknown
+
+Read on 2026-11-28 03:06 (read-only, `git -C rule-branch status --porcelain`):
+
+```
+?? test/cases/probe/t353/          (paper_body_one / paper_body_rewrite / paper_body_two / paper_body_identity, each d.cml + passes.cml)
+?? test/plans/probe/t353_passes_as_value.plan.toml
+?? test/tools/probe/t353_gdb_stack.py
+branch = lane/pass-as-value-crash   HEAD = 031196ca1e
+```
+
+Last write 00:54:11; no write for 2h11m at the time of the reading. Git does not record who writes a file and the worktree carries no owner mark, so the session is not identifiable from the tree. Do not tidy this tree by asking around or by touching it: the rebase of that lane was done on a carrier branch (`wip/pass-as-value-crash @ c2e67fa0db`) precisely so that neither the original branch nor this tree was disturbed. Close `rule-branch` (detach, delete `lane/pass-as-value-crash`, collect or drop the t353 probes) only after its author hands back.
