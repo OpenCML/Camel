@@ -43,3 +43,28 @@ src/kernel/execute/pass.cpp:2295-2309 applyRegisteredPass = resolvePassWithModul
 ```
 
 判据：命令行 `std::jgir canonical=true` 与改动前逐字节相同；程序里调与命令行跑逐字节相同；`readsTags` 原文；快层逐名新增红 0。
+## 第三个消费者：导出那一步（2026-11-28 01:43 d1 读数钉死）
+
+加了 `#op` 之后名字仍 `Unresolved reference: 'std::cxx::cse'`。原因不在载入、不在 `#op`、也不在"安装根的 `std.cml` 是旧的"（d1 三行打印：`module="std"` 解析到 `out/latest/stdlib/std.cml`、`hasOp=yes`、`exportDeclarations reached` 多次 ⇒ 那份是新的、builder 确实编译了模块）。
+
+真因是**名字形状两侧不一致**：
+
+```
+src/compile/src/gir/builder_modules.cpp:1351-1358  导出循环
+    const std::string name = ref.toString();               // "cxx::cse"（限定名）
+    if (unit_->passDeclarations.contains(name)) continue;  // passDeclarations 里也是 "cxx::cse"
+    而声明的裸名是 "cse"（builder.cpp:949 插的是 gct->name()）
+⇒ 判定时拿"限定名"和"裸名"比 ⇒ 恒不相等 ⇒ 例外永远不成立
+```
+
+所以例外要**按末段比**（`cxx::cse` → `cse`），注释写："the export walks qualified names while a declaration's own name is bare"。
+
+## 三个消费者，一个都不能漏
+
+```
+① builder.cpp:943-959        载入/声明：带 #op 的遍形声明同时登记为算子
+② builder_modules.cpp:1351    导出：名称要按末段比，否则带 #op 的也被当"纯遍"跳过
+③ pass.cpp:615-637           命令行：按文本读 std.cml 的遍声明（第二个消费者，与编译期不同源）
+```
+
+**检查清单**：将来任何"两条身份合一"的活，先把 `passDeclarations` 的**所有**消费者 `git grep` 出来，逐个问"它认的是裸名还是限定名"。
