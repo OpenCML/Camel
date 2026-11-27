@@ -1,0 +1,10 @@
+/**
+ * The exported half of the other direction: a body-less declaration whose shape is not a pass's.
+ *
+ * `twice` takes a function and gives one back, but it is not `(f: F) => F!` under
+ * `when is_function::<F>()`: the operator table is never asked about it. It is still a
+ * declaration, and still exported -- the main case is red because of that, not because of silence:
+ * a declaration that answers no operator-table entry is checked for an implementer.
+ */
+
+export func twice(f: ((x: int) => int)) => ((x: int) => int)
