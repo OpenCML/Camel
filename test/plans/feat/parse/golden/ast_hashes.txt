@@ -511,7 +511,7 @@ f79ea67592f74be6 ok showcase/d4-mcts/search.cml
 17c1aae53fb1cddd ok showcase/i2-diffusion-step/step.cml
 efe0812d084c8e33 ok showcase/i2-diffusion-step/step_gpu.cml
 dd2ea83e194df789 ok showcase/s1-stream-fib/fib.cml
-f08d75d4ce88b08a ok src/stdlib/array.cml
+ed0613345f968be5 ok src/stdlib/array.cml
 5a5825a1965452d6 ok src/stdlib/autodiff.cml
 ff143e01e0e4dbb0 ok src/stdlib/bytes.cml
 a5076fc3f00f63eb ok src/stdlib/ckpt.cml
@@ -529,7 +529,7 @@ cb32c9dd5cb81d91 ok src/stdlib/io.cml
 49015cbc4407a506 ok src/stdlib/optim.cml
 cfd1905583789732 ok src/stdlib/para.cml
 a82098797df46210 ok src/stdlib/perf.cml
-70f39794110162e2 ok src/stdlib/prelude.cml
+9ced9c0e382e22c9 ok src/stdlib/prelude.cml
 0a2356410c7e5b3c ok src/stdlib/process.cml
 8f9a9b5b4701c251 ok src/stdlib/pyplot.cml
 692ab627c3592a87 ok src/stdlib/python.cml
@@ -561,10 +561,10 @@ c9d3d78f5c41f835 ok src/stdlib/rulesets/jvp.cml
 8375a530eff268c4 ok src/stdlib/rulesets/probe_batch.cml
 7a11798394cc6e2c ok src/stdlib/rulesets/probe_missing.cml
 433b3b7c7d0a0813 ok src/stdlib/rulesets/transpose.cml
-a338d98395d2f704 ok src/stdlib/rulesets/vmap.cml
+aa0941df5af401ba ok src/stdlib/rulesets/vmap.cml
 0c368faaef090af5 no src/stdlib/tensor/signatures/tensor.cml
 aa2ab77afb6218d5 ok src/stdlib/tiles/signatures/tiles.cml
-8f1307f447a4fe68 no src/stdlib/transforms/signatures/transforms.cml
+e4210adf416a6f2c no src/stdlib/transforms/signatures/transforms.cml
 2c8a06ba0fe2f3e6 ok test/cases/compile/broadcast_like_spreads_rank_zero.cml
 dc71e2d3ab7cd429 ok test/cases/compile/closed_rank_rejects_rank_zero.cml
 176c9efddaac8e32 ok test/cases/compile/err_lambda_tuple_arity.cml
@@ -2387,7 +2387,7 @@ debac9969e64d467 ok test/cases/consistency/entering/graph_explicit.cml
 b118668f656aa978 ok test/cases/consistency/entering/rank_not_zero.cml
 4301a1dbc7eb188b ok test/cases/consistency/entering/rank_zero_edges.cml
 596cbf3eb8420f30 ok test/cases/consistency/entering/void_arm.cml
-2672a07d04d64107 ok test/cases/consistency/entry/declared_int.cml
+2a6e7f804dc778d8 ok test/cases/consistency/entry/declared_int.cml
 cb18bb34987aa27c ok test/cases/consistency/entry/declared_string.cml
 9318d23596b83db1 ok test/cases/consistency/entry/error_from_attempt.cml
 e34a9fc5a67144b6 ok test/cases/consistency/entry/error_from_operator.cml
@@ -4610,6 +4610,11 @@ da6ed42cdf78bb59 ok test/cases/transforms/transpose/cotangent_enters_the_array_p
 942f77adcded9054 ok test/cases/transforms/transpose/floatgate_f32_scalar.cml
 9b6cd96c156838ef ok test/cases/transforms/transpose/residuals_in_the_closure.cml
 56ea0353460e651e ok test/conformance/cases/unused_effect_not_executed.cml
+724036f73ea0fb56 ok test/plans/feat/docs_links/fixture/stdlib_ambiguous/array.cml
+edfa3cc0b7e69cbc ok test/plans/feat/docs_links/fixture/stdlib_ambiguous/prelude.cml
+57dc23cddf29dfb5 ok test/plans/feat/docs_links/fixture/stdlib_ambiguous/tensor.cml
+af2c35160953322f ok test/plans/feat/docs_links/fixture/stdlib_autoimport/prelude.cml
+75efc061a07828b9 ok test/plans/feat/docs_links/fixture/stdlib_autoimport/types.cml
 861d6510fa8bdf78 ok test/plans/feat/format/golden/compose_and_return_type.cml
 615201f751ba284e ok test/plans/feat/format/golden/fstring.cml
 78cb48d2d5b0e915 ok test/plans/feat/format/golden/imports_first_declaration.cml
