@@ -474,6 +474,10 @@ self_test() {
     export CAMEL_LANE=selftest
     POOL_SIZE=3
     export CAMEL_TOKENS=3
+    # The test measures its own pool, so a cover it inherited does not apply to it: run inside a plan
+    # run (as a case is), CAMEL_TOKENS_COVERED=1 would make every take below take nothing and every
+    # check below read an empty pool.
+    unset CAMEL_TOKENS_COVERED CAMEL_TOKENS_HELD
 
     # 1. three tokens exist and none is held
     out=$(show)

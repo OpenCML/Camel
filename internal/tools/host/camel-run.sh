@@ -365,6 +365,9 @@ cmd_self_test() {
     root=$(mktemp -d "${TMPDIR:-/tmp}/camel-run-selftest.XXXXXX") || die "cannot make a test directory"
     export CAMEL_TOKEN_DIR="$root/pool" CAMEL_TOKENS=4 CAMEL_LANE=selftest CAMEL_TOKEN_WAIT_S=120
     POOL_DIR="$root/pool"
+    # The test measures its own pool, so a cover it inherited does not apply to it (see the same line
+    # in host-tokens.sh's self-test): inside a plan run every take would otherwise take nothing.
+    unset CAMEL_TOKENS_COVERED CAMEL_TOKENS_HELD
     "$taker" show >/dev/null 2>&1
 
     # Wait until the pool shows PATTERN, at most about 30 s.
