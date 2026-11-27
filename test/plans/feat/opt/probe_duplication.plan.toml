@@ -16,7 +16,7 @@ expect_exit = 0
 timeout_ms = 20000
 verify_script = """
 const doc = JSON.parse(input.normalized.stdout)
-const calls = (doc.graphs || []).reduce((a, g) => a + (g.nodes || []).filter((n) => n.kind === "CALL").length, 0)
+const calls = (doc.graphs || []).reduce((a, g) => a + (g.nodes || []).filter((n) => (n.kind === "CALL" || n.kind === "FUNC")).length, 0)
 const nodes = (doc.graphs || []).reduce((a, g) => a + (g.nodes || []).length, 0)
 throw new Error("DUP fits.before calls=" + calls + " nodes=" + nodes)
 """
@@ -30,7 +30,7 @@ expect_exit = 0
 timeout_ms = 20000
 verify_script = """
 const doc = JSON.parse(input.normalized.stdout)
-const calls = (doc.graphs || []).reduce((a, g) => a + (g.nodes || []).filter((n) => n.kind === "CALL").length, 0)
+const calls = (doc.graphs || []).reduce((a, g) => a + (g.nodes || []).filter((n) => (n.kind === "CALL" || n.kind === "FUNC")).length, 0)
 const nodes = (doc.graphs || []).reduce((a, g) => a + (g.nodes || []).length, 0)
 throw new Error("DUP fits.after calls=" + calls + " nodes=" + nodes)
 """
@@ -44,7 +44,7 @@ expect_exit = 0
 timeout_ms = 20000
 verify_script = """
 const doc = JSON.parse(input.normalized.stdout)
-const calls = (doc.graphs || []).reduce((a, g) => a + (g.nodes || []).filter((n) => n.kind === "CALL").length, 0)
+const calls = (doc.graphs || []).reduce((a, g) => a + (g.nodes || []).filter((n) => (n.kind === "CALL" || n.kind === "FUNC")).length, 0)
 const nodes = (doc.graphs || []).reduce((a, g) => a + (g.nodes || []).length, 0)
 throw new Error("DUP over.before calls=" + calls + " nodes=" + nodes)
 """
@@ -58,7 +58,7 @@ expect_exit = 0
 timeout_ms = 20000
 verify_script = """
 const doc = JSON.parse(input.normalized.stdout)
-const calls = (doc.graphs || []).reduce((a, g) => a + (g.nodes || []).filter((n) => n.kind === "CALL").length, 0)
+const calls = (doc.graphs || []).reduce((a, g) => a + (g.nodes || []).filter((n) => (n.kind === "CALL" || n.kind === "FUNC")).length, 0)
 const nodes = (doc.graphs || []).reduce((a, g) => a + (g.nodes || []).length, 0)
 throw new Error("DUP over.after calls=" + calls + " nodes=" + nodes)
 """
