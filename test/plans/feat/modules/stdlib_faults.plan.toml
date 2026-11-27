@@ -6,9 +6,21 @@ desc = "The core standard library: an index or range out of bounds and an argume
 
 # Only an operation declared to fail returns an error value (design principles 3.9); out of
 # range is a fault. Each case prints a line, faults, and must not print the next line. The
-# four back ends agree on exit code, standard output and the diagnostic (name, line, column).
+# four back ends agree on exit code, standard output and the diagnostic (its name, its message,
+# and the file it comes from).
 # Each is also run through std::opt: the faulting call has constant arguments and the operator
-# is pure, and the fault must still happen when the program runs, at the same place.
+# is pure, and the fault must still happen when the program runs.
+#
+# A fault raised inside the standard library names the file it came from and its kind, never a
+# line: that line moves with any comment added to `src/stdlib`, so pinning it turns a correct
+# library into a red test (an added comment in `math.cml` moved `clamp` from 495 to 506 and took
+# twenty green entries with it). The file is written as the compiler reports it -- the installed
+# copy `out/latest/stdlib/<name>.cml`, which is the same file the build made from `src/stdlib`
+# -- because that is the path the diagnostic carries; its name does not move when the library
+# gains a comment.
+# A fault attributed to the program's own text -- indexing a string, a shift width -- keeps its
+# line: that line is in `test/cases/**`, the case's own source, and only a change to that case
+# can move it.
 
 [defaults]
 kind = "negative"
@@ -154,7 +166,8 @@ desc = "clamp whose lower bound is above the upper one: the fault of `clamp`, lo
 case = "../../../cases/modules/stdlib/fault_clamp_bounds.cml"
 skip_unless = ["node", "test/tools/have-native-jit.mjs"]
 expect_diagnostic_name = "RuntimeDiag::InvalidArgument"
-expect_diagnostic_line = 506
+expect_output_contains = ["clamp needs lo <= hi"]
+expect_diagnostic_file = "../../../../out/latest/stdlib/math.cml"
 
 [[tests]]
 name = "stdlib.fault.clamp_bounds.opt"
@@ -163,7 +176,8 @@ case = "../../../cases/modules/stdlib/fault_clamp_bounds.cml"
 backends = false
 args = ["${case}", "std::opt", "std::fvm"]
 expect_diagnostic_name = "RuntimeDiag::InvalidArgument"
-expect_diagnostic_line = 506
+expect_output_contains = ["clamp needs lo <= hi"]
+expect_diagnostic_file = "../../../../out/latest/stdlib/math.cml"
 
 [[tests]]
 name = "stdlib.fault.clamp_nan"
@@ -171,7 +185,8 @@ desc = "clamp with a NaN bound: the fault of `clamp`, located in the library at 
 case = "../../../cases/modules/stdlib/fault_clamp_nan.cml"
 skip_unless = ["node", "test/tools/have-native-jit.mjs"]
 expect_diagnostic_name = "RuntimeDiag::InvalidArgument"
-expect_diagnostic_line = 506
+expect_output_contains = ["clamp needs lo <= hi"]
+expect_diagnostic_file = "../../../../out/latest/stdlib/math.cml"
 
 [[tests]]
 name = "stdlib.fault.clamp_nan.opt"
@@ -180,7 +195,8 @@ case = "../../../cases/modules/stdlib/fault_clamp_nan.cml"
 backends = false
 args = ["${case}", "std::opt", "std::fvm"]
 expect_diagnostic_name = "RuntimeDiag::InvalidArgument"
-expect_diagnostic_line = 506
+expect_output_contains = ["clamp needs lo <= hi"]
+expect_diagnostic_file = "../../../../out/latest/stdlib/math.cml"
 
 [[tests]]
 name = "stdlib.fault.gcd_overflow"
@@ -188,7 +204,8 @@ desc = "gcd of the smallest integer, which has no positive counterpart: the faul
 case = "../../../cases/modules/stdlib/fault_gcd_overflow.cml"
 skip_unless = ["node", "test/tools/have-native-jit.mjs"]
 expect_diagnostic_name = "RuntimeDiag::InvalidArgument"
-expect_diagnostic_line = 593
+expect_output_contains = ["gcd does not accept the smallest integer"]
+expect_diagnostic_file = "../../../../out/latest/stdlib/math.cml"
 
 [[tests]]
 name = "stdlib.fault.gcd_overflow.opt"
@@ -197,7 +214,8 @@ case = "../../../cases/modules/stdlib/fault_gcd_overflow.cml"
 backends = false
 args = ["${case}", "std::opt", "std::fvm"]
 expect_diagnostic_name = "RuntimeDiag::InvalidArgument"
-expect_diagnostic_line = 593
+expect_output_contains = ["gcd does not accept the smallest integer"]
+expect_diagnostic_file = "../../../../out/latest/stdlib/math.cml"
 
 [[tests]]
 name = "stdlib.fault.lcm_overflow"
@@ -205,7 +223,8 @@ desc = "lcm that does not fit the integer type: the fault of `lcm`, located in t
 case = "../../../cases/modules/stdlib/fault_lcm_overflow.cml"
 skip_unless = ["node", "test/tools/have-native-jit.mjs"]
 expect_diagnostic_name = "RuntimeDiag::InvalidArgument"
-expect_diagnostic_line = 608
+expect_output_contains = ["lcm does not fit the type"]
+expect_diagnostic_file = "../../../../out/latest/stdlib/math.cml"
 
 [[tests]]
 name = "stdlib.fault.lcm_overflow.opt"
@@ -214,7 +233,8 @@ case = "../../../cases/modules/stdlib/fault_lcm_overflow.cml"
 backends = false
 args = ["${case}", "std::opt", "std::fvm"]
 expect_diagnostic_name = "RuntimeDiag::InvalidArgument"
-expect_diagnostic_line = 608
+expect_output_contains = ["lcm does not fit the type"]
+expect_diagnostic_file = "../../../../out/latest/stdlib/math.cml"
 
 [[tests]]
 name = "stdlib.fault.quantile_range"
@@ -222,7 +242,8 @@ desc = "quantile outside 0..1: located in the library."
 case = "../../../cases/modules/stdlib/fault_quantile_range.cml"
 skip_unless = ["node", "test/tools/have-native-jit.mjs"]
 expect_diagnostic_name = "RuntimeDiag::InvalidArgument"
-expect_diagnostic_line = 48
+expect_output_contains = ["a quantile is between 0 and 1"]
+expect_diagnostic_file = "../../../../out/latest/stdlib/statistics.cml"
 
 [[tests]]
 name = "stdlib.fault.quantile_range.opt"
@@ -231,7 +252,8 @@ case = "../../../cases/modules/stdlib/fault_quantile_range.cml"
 backends = false
 args = ["${case}", "std::opt", "std::fvm"]
 expect_diagnostic_name = "RuntimeDiag::InvalidArgument"
-expect_diagnostic_line = 48
+expect_output_contains = ["a quantile is between 0 and 1"]
+expect_diagnostic_file = "../../../../out/latest/stdlib/statistics.cml"
 
 [[tests]]
 name = "stdlib.fault.variance_short"
@@ -239,7 +261,8 @@ desc = "The variance of one element: a fault, located in the library."
 case = "../../../cases/modules/stdlib/fault_variance_short.cml"
 skip_unless = ["node", "test/tools/have-native-jit.mjs"]
 expect_diagnostic_name = "RuntimeDiag::InvalidArgument"
-expect_diagnostic_line = 54
+expect_output_contains = ["a variance needs at least two elements"]
+expect_diagnostic_file = "../../../../out/latest/stdlib/statistics.cml"
 
 [[tests]]
 name = "stdlib.fault.variance_short.opt"
@@ -248,7 +271,8 @@ case = "../../../cases/modules/stdlib/fault_variance_short.cml"
 backends = false
 args = ["${case}", "std::opt", "std::fvm"]
 expect_diagnostic_name = "RuntimeDiag::InvalidArgument"
-expect_diagnostic_line = 54
+expect_output_contains = ["a variance needs at least two elements"]
+expect_diagnostic_file = "../../../../out/latest/stdlib/statistics.cml"
 
 [[tests]]
 name = "stdlib.fault.stdev_short"
@@ -256,7 +280,8 @@ desc = "The standard deviation of one element: the variance underneath faults."
 case = "../../../cases/modules/stdlib/fault_stdev_short.cml"
 skip_unless = ["node", "test/tools/have-native-jit.mjs"]
 expect_diagnostic_name = "RuntimeDiag::InvalidArgument"
-expect_diagnostic_line = 54
+expect_output_contains = ["a variance needs at least two elements"]
+expect_diagnostic_file = "../../../../out/latest/stdlib/statistics.cml"
 
 [[tests]]
 name = "stdlib.fault.stdev_short.opt"
@@ -265,7 +290,8 @@ case = "../../../cases/modules/stdlib/fault_stdev_short.cml"
 backends = false
 args = ["${case}", "std::opt", "std::fvm"]
 expect_diagnostic_name = "RuntimeDiag::InvalidArgument"
-expect_diagnostic_line = 54
+expect_output_contains = ["a variance needs at least two elements"]
+expect_diagnostic_file = "../../../../out/latest/stdlib/statistics.cml"
 
 [[tests]]
 name = "stdlib.fault.median_empty"
@@ -273,7 +299,8 @@ desc = "The median of no element: the quantile underneath faults."
 case = "../../../cases/modules/stdlib/fault_median_empty.cml"
 skip_unless = ["node", "test/tools/have-native-jit.mjs"]
 expect_diagnostic_name = "RuntimeDiag::InvalidArgument"
-expect_diagnostic_line = 49
+expect_output_contains = ["the quantile of no elements"]
+expect_diagnostic_file = "../../../../out/latest/stdlib/statistics.cml"
 
 [[tests]]
 name = "stdlib.fault.median_empty.opt"
@@ -282,7 +309,8 @@ case = "../../../cases/modules/stdlib/fault_median_empty.cml"
 backends = false
 args = ["${case}", "std::opt", "std::fvm"]
 expect_diagnostic_name = "RuntimeDiag::InvalidArgument"
-expect_diagnostic_line = 49
+expect_output_contains = ["the quantile of no elements"]
+expect_diagnostic_file = "../../../../out/latest/stdlib/statistics.cml"
 
 [[tests]]
 name = "stdlib.fault.zip_with"
@@ -308,6 +336,7 @@ desc = "min of an empty int[]: the kernel faults at the call, `InvalidArgument`.
 case = "../../../cases/modules/stdlib/fault_array_min_empty.cml"
 skip_unless = ["node", "test/tools/have-native-jit.mjs"]
 expect_diagnostic_name = "RuntimeDiag::InvalidArgument"
+expect_output_contains = ["a reduction over no elements"]
 expect_diagnostic_line = 6
 
 [[tests]]
@@ -316,6 +345,7 @@ desc = "max of an empty int[]: the kernel faults at the call, `InvalidArgument`.
 case = "../../../cases/modules/stdlib/fault_array_max_empty.cml"
 skip_unless = ["node", "test/tools/have-native-jit.mjs"]
 expect_diagnostic_name = "RuntimeDiag::InvalidArgument"
+expect_output_contains = ["a reduction over no elements"]
 expect_diagnostic_line = 6
 
 [[tests]]
@@ -324,7 +354,8 @@ desc = "min of an empty string[]: no kernel, so the body faults, located in the 
 case = "../../../cases/modules/stdlib/fault_array_min_empty_string.cml"
 skip_unless = ["node", "test/tools/have-native-jit.mjs"]
 expect_diagnostic_name = "RuntimeDiag::InvalidArgument"
-expect_diagnostic_line = 150
+expect_output_contains = ["a reduction over no elements"]
+expect_diagnostic_file = "../../../../out/latest/stdlib/array.cml"
 
 [[tests]]
 name = "stdlib.fault.mean_empty"
@@ -332,7 +363,8 @@ desc = "mean of an empty float[]: the fault of `some_elements`, located in the l
 case = "../../../cases/modules/stdlib/fault_array_mean_empty.cml"
 skip_unless = ["node", "test/tools/have-native-jit.mjs"]
 expect_diagnostic_name = "RuntimeDiag::InvalidArgument"
-expect_diagnostic_line = 150
+expect_output_contains = ["a reduction over no elements"]
+expect_diagnostic_file = "../../../../out/latest/stdlib/array.cml"
 
 [[tests]]
 name = "stdlib.fault.argmax_empty"
@@ -340,7 +372,8 @@ desc = "argmax of an empty int[]: the fault of `some_elements`, located in the l
 case = "../../../cases/modules/stdlib/fault_array_argmax_empty.cml"
 skip_unless = ["node", "test/tools/have-native-jit.mjs"]
 expect_diagnostic_name = "RuntimeDiag::InvalidArgument"
-expect_diagnostic_line = 150
+expect_output_contains = ["a reduction over no elements"]
+expect_diagnostic_file = "../../../../out/latest/stdlib/array.cml"
 
 [[tests]]
 name = "stdlib.fault.argmin_empty"
@@ -348,7 +381,8 @@ desc = "argmin of an empty int[]: the fault of `some_elements`, located in the l
 case = "../../../cases/modules/stdlib/fault_array_argmin_empty.cml"
 skip_unless = ["node", "test/tools/have-native-jit.mjs"]
 expect_diagnostic_name = "RuntimeDiag::InvalidArgument"
-expect_diagnostic_line = 150
+expect_output_contains = ["a reduction over no elements"]
+expect_diagnostic_file = "../../../../out/latest/stdlib/array.cml"
 
 [[tests]]
 name = "stdlib.fault.chunks_zero"
@@ -356,4 +390,5 @@ desc = "chunks<0>: a chunk holds at least one element, `InvalidArgument` located
 case = "../../../cases/modules/stdlib/fault_array_chunks_zero.cml"
 skip_unless = ["node", "test/tools/have-native-jit.mjs"]
 expect_diagnostic_name = "RuntimeDiag::InvalidArgument"
-expect_diagnostic_line = 62
+expect_output_contains = ["a chunk holds at least one element"]
+expect_diagnostic_file = "../../../../out/latest/stdlib/array.cml"
