@@ -468,6 +468,7 @@ class GraphDraft : public camel::graph::Graph {
     /// The graph the draft's graph is written in (GCGraph::outerGraphId).
     GraphId outerGraphId() const { return outerGraphId_; }
     void setOuterGraphId(GraphId outer) {
+        noteGraphWideEdit();
         ++mutations_;
         outerGraphId_ = outer;
     }
@@ -492,6 +493,7 @@ class GraphDraft : public camel::graph::Graph {
     /// of a new graph is given one with setId (Context::graphIds) before it is encoded.
     GraphId id() const { return id_; }
     void setId(GraphId id) {
+        noteGraphWideEdit();
         ++mutations_;
         id_ = id;
     }
@@ -499,11 +501,13 @@ class GraphDraft : public camel::graph::Graph {
     /// decode takes them from the graph it decodes.
     GraphId typeSpecializationRoot() const { return typeSpecializationRoot_; }
     void setTypeSpecializationRoot(GraphId root) {
+        noteGraphWideEdit();
         ++mutations_;
         typeSpecializationRoot_ = root;
     }
     uint8_t flags() const { return flags_; }
     void setFlags(uint8_t flags) {
+        noteGraphWideEdit();
         ++mutations_;
         flags_ = flags;
     }
@@ -755,6 +759,7 @@ class GraphDraft : public camel::graph::Graph {
     void retargetOperNode(gc_node_ref_t id, std::string_view uri);
 
     void setFuncType(camel::core::type::FunctionType *funcType) {
+        noteGraphWideEdit();
         noteOriginalTypes();
         ++mutations_;
         funcType_ = funcType;
@@ -772,6 +777,7 @@ class GraphDraft : public camel::graph::Graph {
     /// The same for the resources the signature publishes (`OpenFunctionType::setResources`).
     void setOpenResources(const camel::core::sem::ResourceSignature &resources);
     void setCaptureNames(std::span<const camel::core::SymId> names) {
+        noteGraphWideEdit();
         noteOriginalTypes();
         ++mutations_;
         captureNames_.assign(names.begin(), names.end());
@@ -780,12 +786,14 @@ class GraphDraft : public camel::graph::Graph {
     void addCaptureName(std::string_view name);
     /// Gives the graph this frame layout (possibly one without slots).
     void setRuntimeSlotTypes(std::span<camel::core::type::Type *const> slotTypes) {
+        noteGraphWideEdit();
         noteOriginalTypes();
         ++mutations_;
         runtimeSlotTypes_.assign(slotTypes.begin(), slotTypes.end());
         hasFrameLayout_ = true;
     }
     void setClosureType(camel::core::type::TupleType *closureType) {
+        noteGraphWideEdit();
         noteOriginalTypes();
         ++mutations_;
         closureType_ = closureType;
@@ -794,6 +802,7 @@ class GraphDraft : public camel::graph::Graph {
     /// are. A rewrite that retypes what a constant stands for changes the layout here and not the
     /// value (camel/runtime/retype.h), which is why the two are set apart.
     void setStaticSlotTypes(std::span<camel::core::type::Type *const> slotTypes) {
+        noteGraphWideEdit();
         noteOriginalTypes();
         ++mutations_;
         staticSlotTypes_.assign(slotTypes.begin(), slotTypes.end());
@@ -1212,6 +1221,7 @@ class GraphDraft : public camel::graph::Graph {
     /// Which region a node is added into. A segment writes it and puts it back with everything
     /// else the draft itself holds (`UndoScalars`), so the write goes through the hook.
     void setInsertRegion(uint32_t region) {
+        noteGraphWideEdit();
         noteOriginalScalars();
         insertRegion_ = region;
     }
@@ -1269,6 +1279,7 @@ class GraphDraft : public camel::graph::Graph {
         noteOriginalScalars();
         ++mutations_;
         entry_ = id;
+        noteEditedNode(id, true);
     }
     void setExitNode(gc_node_ref_t id) {
         noteOriginalScalars();
