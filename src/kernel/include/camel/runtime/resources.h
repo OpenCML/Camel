@@ -125,6 +125,13 @@ struct GraphFootprint {
 
 GraphFootprint footprintOf(const Program &program, const GCGraph *graph);
 
+/// The footprint of the graph `view` belongs to, for a reader that holds the view.
+///
+/// A transitional entry: the walk still reaches the graph's storage through the implementation
+/// handle, so the view is paired with it at this one place. Once the walk reads views itself the
+/// pairing goes away and this overload is the only entry.
+GraphFootprint footprintOf(const Program &program, const camel::graph::GraphView &view);
+
 /// Where a value comes from within one activation of its graph, seen through GATEs.
 struct ValueOrigin {
     enum class Kind : uint8_t {
