@@ -3,10 +3,6 @@
 // where the program runs and not where the compiler reads it; nothing in the body catches it, so the
 // block's value is the error that fault became. The function the head was given is untouched: it
 // answers as it did before, and the block's error says nothing about it.
-//
-// The body changes the draft with an edit operator, which is how a draft is changed (design 6,
-// item 2: the graph-editing operators are writes on the draft handle); `add_constant` is the one that
-// takes a value rather than a node, which keeps the step on the value the call above computed.
 func zero() => int {
     return 0
 }
@@ -19,7 +15,7 @@ func edited(f: (x: int) => int) => int sync {
     let g = edit d = f {
         let z = zero()
         let q = 10 / z
-        let _ = add_constant(d, q)
+        let _ = d(q)
     }
     return match g {
         case error e => -1

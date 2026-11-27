@@ -29,7 +29,7 @@
  */
 
 import { flatten, all, any } from array
-import { Node, Graph, Draft, NodeKind, graphs_of, graphs, nodes, inputs, with_inputs, value_users, kind, op, op_name, may_be_recomputed, may_fault, may_be_rearranged, is_anchor, is_written_slot, is_constant, constant_bytes, type_of, type_name, region_of, permissions, tags, constant, open, replace, erase, eval, commit, abort } from graph
+import { Node, Graph, NodeKind, graphs_of, graphs, nodes, inputs, with_inputs, value_users, kind, op, op_name, may_be_recomputed, may_fault, may_be_rearranged, is_anchor, is_written_slot, is_constant, constant_bytes, type_of, type_name, region_of, permissions, tags, constant, open, replace, erase, eval, commit, abort } from graph
 import { saturate as saturate_rules } from rewrite
 import { algebra, distribution } from rules
 import { is_function } from types
@@ -210,7 +210,7 @@ func dead_value(n: Node) => bool {
 
 // An edit acts on the draft its node belongs to, so the hits are erased in the draft they were
 // found in, and that draft is the one committed.
-func erased::<F>(d: Draft<F>, hits: Node[]) => F! sync {
+func erased::<F>(d: Graph, hits: Node[]) => F! sync {
     hits->foreach<func (n: Node) => void {
         erase(n)
     }>
@@ -304,7 +304,7 @@ func fold_round(hits: Node[], budget: int) => bool {
 // round started from is then the answer. Each is a function of its own because an effect written
 // inside an arm of a `match` or an `if` does not run, so one branch cannot commit inline while the
 // other abandons.
-func committed::<F>(d: Draft<F>) => F! sync {
+func committed::<F>(d: Graph) => F! sync {
     return commit(d)
 }
 

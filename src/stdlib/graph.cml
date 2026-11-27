@@ -6,11 +6,8 @@
  * draft, edits it. The handles `Graph`, `Node`, `Op`, `TypeRef`, `Region` and `Tag` name things
  * inside the graphs of one function and compare with `==` and `!=`. Reads are pure.
  *
- * A draft is a `Draft<F>`: `open(f)` answers the graph `f` is, in a copy the edits go to, and every
- * handle read through it names a node of that copy. `F` is the type of the function its commit
- * makes, so a draft goes where a `Graph` is stated -- the queries and the edit operators take it as
- * one -- and a `Graph` does not go where a draft is stated: committing one is committing the type it
- * was opened on. The root queries take the draft -- `nodes(d)`,
+ * A draft is a `Graph`: `open(f)` answers the graph `f` is, in a copy the edits go to, and every
+ * handle read through it names a node of that copy. The root queries take the draft -- `nodes(d)`,
  * `graphs(d)`, `params(d)`, `exit(d)` -- and an edit names the nodes it changes and nothing else:
  * `replace(old, new)`, `erase(n)`. The draft is reached through the nodes, so a second argument
  * naming it is not needed and not offered (docs/design/graph-editing/README.cn.md 15.2, 15.3).
@@ -43,11 +40,6 @@ import { is_function, is_ordered } from types
 /// The types of the module are provided by it (design principles 10.4); a handle names a thing
 /// inside the graphs of one function and compares with `==` and `!=`.
 export type Graph
-/// The draft an edit block opens on a function of type `F` (design 5, 6): the graphs of `f`, in a
-/// copy the block's edits go to, for as long as the block runs. It is read and edited as a `Graph`
-/// -- the queries and the edit operators take it as they take one -- and `F` is the type of the
-/// function its commit makes, so the commit names no type the draft does not already state.
-export type Draft<F>
 export type Node<T>
 export type Region
 export type TypeRef
@@ -407,7 +399,7 @@ export func relative_cost(n: Node) => float
 /// changes and what the root queries read. Nothing changes until `commit`, which gives the changed
 /// function; the draft is reached through the handles read from it, so it is passed to no edit.
 /// @example let d = open(func (x: int) => int { x + 1 })
-export func open::<F>(f: F) => Draft<F> when is_function::<F>()
+export func open::<F>(f: F) => Graph when is_function::<F>()
 
 /// Puts the node `new` of the same graph in the place of `old`, which is removed; what `old`
 /// ordered stays ordered. Both nodes are of the draft, and `new` is normally a node `eval` or
@@ -500,8 +492,8 @@ export func add_constant::<T>(g: Graph, value: T) => Node when is_ordered::<T>()
 /// Checks the edits and makes the changed function: the same type as the one that was opened, with
 /// the values it captured, sharing every graph nothing changed. The draft is over.
 /// @fails error value `GraphConflict` when a graph the draft touched changed since it was opened; error value `GraphInvalid` when an edit broke an invariant (the message names the graph, the node and the edge); error value `TxnUsed` when the draft was over already
-/// @example commit(open(func (x: int) => int { x + 1 }))
-export func commit::<F>(d: Draft<F>) => F! when is_function::<F>()
+/// @example commit::<(x: int) => int>(open(func (x: int) => int { x + 1 }))
+export func commit::<F>(d: Graph) => F!
 
 /// Drops the draft.
 /// @example abort(open(func (x: int) => int { x + 1 }))
