@@ -25,6 +25,7 @@
 | `with <model: Model<F>> onnx::run::<F>(...args: ParamsOf<F>) => ResultOf<F>!`（模型是 `with` 参数，数据走普通参数，调用写 `x->onnx::run<model>`） | 交 ORT 执行。意思就是把 `fn` 作用到实参上，ORT 只是怎么跑，所以效应与 `fn` 相同；ORT 不可用、加载失败走错误值 |
 | `with <out: string> onnx::save::<F>(m: Model<F>) => void!`（与 `export_model` 的 `out` 同名，调用写 `m->onnx::save<out: "...">`） | 写文件（写文件的效应） |
 
+- **`model`、`run`、`save` 是普通算子**：登记在 `onnx` 模块的 `Executor` 里，内核在运行时拿到实参里的函数值（连同它的图）就地翻译，和程序里调用遍（C2）是同一个机制：算子收函数值、交回值。不在程序里找"导出请求"节点：`model` 的结果可以先绑到名字上、放在分支里、传给别的函数，换成哪种写法都一样能用，`run` 也只能这样实现。现在 `src/stdlib/onnx/passes/export.cpp` 里找请求的那一套（`isRequest`、`holdsRequest`、`requestIsReachable`、`leadsToRequest`、`callLeadingToRequest`，以及"入口图里还有没内联的调用"那条拒绝）随函数形式一起删掉，不改成去认 `model(...)->save` 这个写法，也不扩到嵌套图。拒绝诊断指向函数体里翻不过去的那个节点。
 - **翻译只有一条路**：`model` 与 `export_model` 共用同一张算子映射表、同样的拒绝诊断；写文件的函数形式 `export_model::<F, E>(fn, example) => void!` 删掉，写法变成 `onnx::model(fn, example)->onnx::save<out: path>`（不计兼容，用例与文档一并迁）。命令行上的阶段形式 `export_model::<F>(f: F) => F!` 保留。
 - **捕获的张量**：训练好的网络通常是捕获了参数的闭包，捕获的张量译成模型的初始值（initializer），不要求用户把参数改成实参。
 - **张量交接**：按"头加共享缓冲"，与仓库里已有的跨运行时交接同一套；先找现成的那条路（Python 桥或已有的 ORT 交接），没有再接 ORT 的 C 接口，选哪条在第一笔交回里写清依据。
