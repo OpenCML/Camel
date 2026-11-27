@@ -1,0 +1,8 @@
+// The third iterable that reaches the same declaration: an array value, not an array literal. Its
+// element type is known at the call, so the lambda's parameter is known too -- the position is the
+// same position as the literal's.
+func main() => int sync {
+    let xs = to_array(0 .. 3)
+    xs->foreach<func (x) { println(x) }>
+    return 0
+}

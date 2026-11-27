@@ -1,0 +1,6 @@
+// The array form of the same call, green before this change: `T` comes from the receiver.
+func main() => int sync {
+    let total = [1, 2, 3, 4]->reduce<func (acc, x) { acc + x }, 0>
+    println(total)
+    return 0
+}

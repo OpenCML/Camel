@@ -1,0 +1,6 @@
+// The array form of `map`: the lambda's parameter is inferred from `with <f: (item: T) => U>`.
+func main() => int sync {
+    let ys = [1, 2, 3]->map<func (x) { x * 2 }>
+    println(ys[0])
+    return 0
+}

@@ -1,0 +1,7 @@
+// The range form of the same call: `(0 .. 3)` is a `Range`, and `foreach` over one is declared in
+// the prelude with the same `with <f: (item: int) => void>` the array form writes. The lambda is
+// written the same way, without a parameter type.
+func main() => int sync {
+    (0 .. 3)->foreach<func (x) { println(x) }>
+    return 0
+}
