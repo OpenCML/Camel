@@ -468,8 +468,9 @@ export func trunc::<T>(x: T) => T when is_float::<T>() {
 ///
 /// Its derivative is a choice, the mirror of `max`: `d(min(a, b))` is `da` where `a <= b` and `db`
 /// where it is not, a tie going to the left operand (`stdlib/rulesets/jvp.cml#jvp_min_d`).
-/// `with_grad` refuses it: the derivative engine's table is a frozen reference and this rule lives
-/// in the library -- `vjp` reads it, the engine does not.
+/// `with_grad` answers it too: the engine's own table carries the same rule
+/// (`stdlib/math/module.cpp#extremumScalarVjp`), a branch per operand, so the two paths pick the
+/// same operand and the same tie.
 #impl(min_kernel)
 export func min::<T>(a: T, b: T) => T when is_ordered::<T>() {
     return match type T {
@@ -487,8 +488,8 @@ export func min::<T>(a: T, b: T) => T when is_ordered::<T>() {
 ///
 /// Its derivative is a choice: `d(max(a, b))` is `da` where `a >= b` and `db` where it is not, a tie
 /// going to the left operand (`stdlib/rulesets/jvp.cml#jvp_max_d`, the rule the array width's
-/// `extremumVjp` writes). `with_grad` refuses it for the same reason: the engine's table is a
-/// frozen reference.
+/// `extremumVjp` writes). `with_grad` answers it through the engine's own rule, which picks the
+/// same operand and the same tie.
 #impl(max_kernel)
 export func max::<T>(a: T, b: T) => T when is_ordered::<T>() {
     return match type T {
@@ -509,9 +510,9 @@ export func clamp::<T>(x: T, lo: T, hi: T) => T when is_real::<T>() {
 /// and the smallest integer is its own absolute value (negation wraps, as it does in `-x`).
 ///
 /// On a float this is `max(x, -x)`, so a differentiated `abs` reaches `math:max_d` and not
-/// `math:abs_d`: the law that answers it is the one `max` carries, and it differentiates through
-/// `vjp`. `with_grad` still refuses it, because the derivative engine's table is a frozen
-/// reference and this rule lives in the library (`stdlib/rulesets/jvp.cml`).
+/// `math:abs_d`: the law that answers it is the one `max` carries. `vjp` reads that law
+/// (`stdlib/rulesets/jvp.cml`) and `with_grad` reads the engine's rule for the same maximum, and
+/// the two pick the same operand.
 /// @example abs(-3)    // 3
 #impl(abs_kernel)
 export func abs::<T>(x: T) => T when is_real::<T>() {

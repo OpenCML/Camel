@@ -1324,16 +1324,27 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 
 [[tests]]
-name = "scalar_max_gradient_is_refused"
-desc = "`with_grad` on a scalar `max` is refused by name, and the refusal is the answer rather than a defect: the derivative engine's table is a frozen reference (one `setRule` per operator it answers), while the law that answers `max` lives in the library (`stdlib/rulesets/jvp.cml#jvp_max_d`) and is reached through `vjp`. The program stops with `no derivative rule for operator 'math:max_d'` instead of being handed a number the frozen engine never agreed to; this entry pins that reading -- exit 1, nothing on stdout, the operator named on the diagnostic side."
-kind = "negative"
-case = "../../../cases/compile/transforms/scalar_max_gradient_is_refused.cml"
+name = "scalar_extremum_gradient_is_derivable"
+desc = "`with_grad` on a scalar `max`, `min`, `abs` and `relu` answers the gradient of the operand each one took, beside a central difference of the forward at h = 1e-3 over the same points: (2.001 - 1.999) / 0.002 = 1.0 for `abs` and for `relu`, which is the gradient both rules answer. `abs` on a float is `max(x, -x)` and a `relu` is `max(x, 0.0)`, so all four reach one rule. A tie takes the left operand, the choice the array width's `extremumVjp` makes, and the last two lines print the array width on the same numbers so the two answers are compared as text rather than paraphrased: a scalar 1.0 beside an array [1.0, 1.0]."
+kind = "behavior"
+case = "../../../cases/compile/transforms/scalar_extremum_gradient.cml"
 args = ["${case}"]
-expect_exit = 1
-expect_stdout_exact = ""
-expect_stderr_contains = ["no derivative rule for operator 'math:max_d'"]
+expect_exit = 0
+expect_stdout_exact = """abs forward=2.0 grad=1.0
+abs negative forward=3.0 grad=-1.0
+relu forward=2.0 grad=1.0
+relu negative forward=0.0 grad=0.0
+max win forward=2.0 grad=1.0
+max lose forward=2.0 grad=0.0
+max tie forward=2.0 grad=1.0
+min tie forward=2.0 grad=1.0
+tensor max tie grad=[1.0, 1.0]
+tensor min tie grad=[1.0, 1.0]
+abs difference h=1e-3 forward +=2.001 -=1.999
+relu difference h=1e-3 forward +=2.001 -=1.999
+"""
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 60000
-
 [[tests]]
 name = "transpose_no_tangent.a_refusal_is_a_diagnostic_not_the_programs_output"
 desc = "The channel a refusal is spoken on, pinned so it cannot drift back: the same shape as `function_value_is_refused` (`g2(x) = let h = (y: float) => y*x; h(2)`, refused at the call because `h` is a closure with no graph at that point), asserted as `expect_stdout_exact = \"2.0\\n\"` -- the program prints one line and the transform says nothing into it -- with the reason itself on the diagnostic side (`TRANSPOSE function=g2 skip=call-no-transpose node=4 callee=none` and `reason=function-closure`), and `expect_stdout_not_contains` naming both prefixes so a reading that came back to stdout fails here. This is the author's review item, high-3 second half: the refusal reason used to exist only in the program's own output, where a caller collecting diagnostics never saw it and a caller collecting output was handed the transform's debugging. The refusal also carries the reason to the reader as an error (`transpose has no transpose for this function`, on the library's own line)."
