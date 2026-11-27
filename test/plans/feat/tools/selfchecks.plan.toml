@@ -402,16 +402,22 @@ expect_stdout_contains = ["gates: ", " checks, 0 failed"]
 normalizers = ["normalize_newlines"]
 timeout_ms = 60000
 
-# Fast: 1.5 s. The merge seat's tool over a throwaway remote with five lanes: two that merge and
+# Slow, not fast: 1.5 s on a quiet host. The merge seat's tool over a throwaway remote with five lanes: two that merge and
 # build, one that could be fast-forwarded, one that conflicts with the tip and one that breaks a stub
 # build. The breaking lane sits between good ones, so a search that drops the wrong lane, or
 # everything after the first bad prefix, ends with a different merged set. First parents, the
 # trailer on every merge, the untouched remote without `--push` and the pushed tip with it are read
 # from the repository, not from the tool's own output.
+# It carries its own tier line rather than the plan's, because its verdict depends on the host's wall
+# clock and load: it stands up fixture repositories and really `git push`es to them, and one of its
+# cases ends a build that hangs past `--build-timeout 3`, so the time it takes is part of what it
+# measures. Green run on its own, red under the whole fast layer at 8 jobs -- so it is not a fast-layer
+# test (the same class as "no timeout and high-load tests on the build host").
 [[tests]]
 name = "selfchecks.merge_batch"
 desc = "`test/tools/merge-batch.test.mjs`: `scripts/merge-batch.mjs` merges the clean and fast-forwardable lanes as merge commits on the integration tip, skips the conflicting lane with its file named, tells the build-breaking lane from the clean ones by building prefixes of the batch after building the base, writes the Lane-Reading trailer and the lane commit titles into every merge, pushes only with --push, and does not read a build that never ran as a verdict on a lane, and stops with its own exit code, dropping and pushing nothing, when the integration tip itself does not build, and ends a build that hangs past its limit with its whole process tree and reads it as no verdict (exit 2, nothing dropped or pushed)."
 kind = "behavior"
+tier = "slow"
 tool = "node"
 case = "../../../../test/tools/merge-batch.test.mjs"
 args = ["${case}"]
