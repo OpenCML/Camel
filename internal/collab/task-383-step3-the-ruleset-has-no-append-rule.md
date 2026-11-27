@@ -267,3 +267,35 @@ if (!lowering || !with.empty()) {
 ### 状态
 枝 `lane/loop-tape-values @ 07e61574fe`（五笔，未推）；`git status` 空；探针与 `cherry-pick` 已还原。
 四段**未开始改**：这条路要求一次落完才有可检查、可被 ORT 读的中间态；本轮时间盒内只做到把落法定死 + 发现元素秩约束。
+## 十一、step 9：秩 1 元素先单独验（checker + ORT）
+
+先按卡的顺序把"元素秩 ≥ 1"这条单独落盘验过一次，再谈四段。模型：两个标量输入各 `Unsqueeze(axes=[0])` 成 `float[1]`，
+`SequenceEmpty(dtype=1)` → 两次 `SequenceInsert` → `ConcatFromSequence(axis=0)` → `float[2]`；opset 11。
+
+```
+export rc=0
+opset=11 nodes=['Unsqueeze','Unsqueeze','SequenceEmpty','SequenceInsert','SequenceInsert','ConcatFromSequence']
+value e:  220c0a0a0a08080112040a020801   # sequence { elem_type { tensor_type { elem_type: 1, shape {1} } } }
+value s1: 220c0a0a0a08080112040a020801
+value s2: 220c0a0a0a08080112040a020801
+onnx.checker ok (sequence of float[1], opset 11)
+ORT ConcatFromSequence -> [3. 4.] (expect [3. 4.])
+PASS
+```
+⇒ **秩 1 元素 + `axis=0` 拼接在 opset 11 下 checker 与 ORT 都读得过**（ORT 是真的加载了模型并跑出了 `[3. 4.]`）。
+
+### 两种元素各一例
+- 元素秩 0（`float[]` 这类，元素是标量）⇒ **要插 `Unsqueeze(axes=[0])`**，携带成 `sequence(tensor(float[1]))`：
+  读数即上面这次（`[3. 4.]`）。
+- 元素秩 ≥ 1（`float[4][]` 这类，元素本身是 `float[4]`）⇒ **不插 `Unsqueeze`**：
+  读数取 step 6 那次（`seq(tensor(float[4]))` 元素、`SequenceInsert` + `ConcatFromSequence(axis=0)`）：
+```
+opset=11 nodes=['SequenceEmpty','SequenceInsert','SequenceLength','SequenceAt','ConcatFromSequence']
+onnx.checker ok (five sequence operators, opset 11)
+SequenceEmpty+SequenceInsert+ConcatFromSequence -> [ 7.  8.  9. 10.] (expect same)
+```
+⇒ 判据可判定：**元素 facts 的 shape 为空（秩 0）才插 `Unsqueeze`，非空不插**。
+
+### 状态
+枝 `lane/loop-tape-values @ 07e61574fe`（五笔，未推）；`git status` 空；探针已删干净（`src` 里 `[t383` 与 `T383_RANK1` 均为 0 处）。
+四段落（`SequenceEmpty` init → append→`SequenceInsert`(+`Unsqueeze`) → 消费端 `ConcatFromSequence` → `stateIsTheCollection` 一致性）**未开始改**。
