@@ -48,6 +48,20 @@ description: Camel 项目里一条实现车道（子代理）要遵守的一切�
 · 你可以在实现里选「怎么做到」，不可以在实现里选「要求什么」。
 ```
 
+## 2½. 报「视图/接口缺 X」之前的搜法（付过三次代价）
+
+「`GraphView` 没有这个读法」这类结论，已经三次是**按旧名字搜、没按语义搜**得出的假结论（`nodes()`、`inputs(ref, PortGroup::Context)`、`constantOf` 都是）。报之前必须走完四步：
+
+```
+① 按**语义**搜，不止按旧名：`git grep -n -E 'constant|const|value|static|literal|slot|data|origin|region' -- src/kernel/graph/graph_view.h`
+② 读旧机制的**替代注释**：老函数被替代处常写着 `Replaces staticArea()` / `Replaces exitNodeRef` / `Replaces … loopBodyOf`，
+   那些就是新名字的指路牌 —— 用被替代的旧名去搜注释，比搜标识符有效。
+③ 读那张头的**公开面**本身（`class GraphView {` 之后到文件尾），而不是只 grep 关键词。
+④ 仍找不到才报，并**附上你搜过的词、每条 grep 的原文输出**。没有这份输出，报告按「没查」退回。
+```
+
+推论：接口请求（给 `GraphView` 加口）是**最后手段**。它是所有适配器共用的一张脸，动它要单独一笔、由决策者当轮审；一个 kind 的迁移不值得。
+
 ## 3. 代码形状：架构的四个唯一
 
 `docs/design/architecture/README.cn.md` 定的四条，每日审查反复抓到的就是这四类：
