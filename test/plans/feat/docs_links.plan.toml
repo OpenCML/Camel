@@ -214,20 +214,22 @@ tier = "slow"
 # the reason are printed from the list on every run, and when the list is empty the line says the
 # list is empty rather than stay silent.
 #
-# The run passes: nothing waits and every snippet compiles, so there is nothing left to refuse on, and
-# the zero is a reading the run states about itself. The case is red when that line goes silent or
-# stops saying the list is empty, and red when a snippet no longer compiles, because such a run does
-# not reach a zero. `--no-pending` is kept so the case reads that line and not how many entries the
-# list holds: an entry added legally, for a snippet ahead of the tree, does not turn this case red.
+# The exit is 1 while a page is ahead of the tree, and it is the second half of the same reading:
+# emptying the list does not make the tree pass, it exposes the snippets the list was exempting --
+# today the two chapter 17 pages, which show the law firing while the program reports the `math:abs_l`
+# translation it does not have. So the run says "0 snippet(s) wait" and refuses on the same breath,
+# which is what an emptied list has to do. When `math:abs_l` is translated the exposed snippets
+# compile and print what their text blocks say, and this case goes back to `expect_exit = 0` with the
+# second assertion deleted; until then the two assertions below are what the run says.
 [[tests]]
 name = "docs.snippets_pending_zero_says_why"
-desc = "With the pending list read as empty, the run says `[PENDING] 0 snippet(s) wait for a ruled construct: the list holds 0 entries and none of them is behind in this scope` and passes: the zero names itself instead of looking like a run that never looked."
+desc = "With the pending list read as empty, the run says `[PENDING] 0 snippet(s) wait for a ruled construct: the list holds 0 entries and none of them is behind in this scope` and refuses on the snippets the emptied list exposes -- today the two chapter 17 pages, ahead of the `math:abs_l` translation -- so a zero names itself instead of looking like a run that never looked; when the translation lands the same sentence is printed and the run passes, and this case is flipped to expect_exit = 0."
 kind = "behavior"
 tool = "node"
 case = "../../../scripts/check-doc-snippets.mjs"
 args = ["${case}", "--default-roots", "--no-pending", "--camel", "${camel}"]
-expect_exit = 0
-expect_stdout_contains = ["[PENDING] 0 snippet(s) wait for a ruled construct: the list holds 0 entries and none of them is behind in this scope"]
+expect_exit = 1
+expect_stdout_contains = ["[PENDING] 0 snippet(s) wait for a ruled construct: the list holds 0 entries and none of them is behind in this scope", "stale snippet problem(s)"]
 normalizers = ["normalize_newlines"]
 # 300000 ms at the 4x rule, and the reason is the shape of the work, not its size: this case starts
 # one compiler per snippet across eight jobs, so its CPU time is not its wall clock -- on the build

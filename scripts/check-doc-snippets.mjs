@@ -180,7 +180,18 @@ const EXCERPTS = [
 // snippets wait and for what: the list is a debt whose balance is printed, not an exemption that
 // stays in force. `--no-pending` reads the list as empty, which is how the plan pins that line's
 // zero (see below).
-const PENDING_ALL = []
+const PENDING_ALL = [
+    {
+        file: 'docs/tutorial/17_teaching_a_law.cn.md',
+        key: '12ee3b07b5c68a43',
+        reason: 'math:abs_l is not translated, so the law cannot fire',
+    },
+    {
+        file: 'docs/tutorial/17_teaching_a_law.en.md',
+        key: '12ee3b07b5c68a43',
+        reason: 'math:abs_l is not translated, so the law cannot fire',
+    },
+]
 
 // `--no-pending` reads the list as empty. It is the way to run the one case that pins the zero
 // reading, and the only honest way to see what a run says when nothing waits: a screen that shows
