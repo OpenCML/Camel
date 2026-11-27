@@ -1356,6 +1356,11 @@ void RuntimeGraphDraftSession::rememberSpecialization(
     specializationCache_.insert_or_assign(std::move(key), graph);
 }
 
+const ProgramSpecializationKey *
+RuntimeGraphDraftSession::specializationOriginOf(GraphId graph) const {
+    return work_->specializations().keyFor(graph);
+}
+
 uint64_t RuntimeGraphDraftSession::nextSpecializationNonce() {
     return work_->specializations().nextSpecializationNonce();
 }
