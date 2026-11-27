@@ -460,8 +460,24 @@ bool Builder::rangeEntersArray(Type *param, Type *value) {
     }
     Type *rangeValue = rangeValueType();
     Type *rangeArray = rangeArrayType();
-    return rangeValue != nullptr && rangeArray != nullptr && value->equals(rangeValue) &&
-           param->assignableFrom(rangeArray);
+    if (rangeValue == nullptr || rangeArray == nullptr || !value->equals(rangeValue)) {
+        return false;
+    }
+    if (param->assignableFrom(rangeArray)) {
+        return true;
+    }
+    // `xs: T[]` -- an array whose element the declaration leaves to a type variable -- writes the
+    // same position: the array shape is stated and the element is whatever the argument holds, so
+    // the variable binds to the element the range's array has. Only that shape: a rank the
+    // parameter fixes (`T[3]`, `T[..]`) is a different entrance, and another element type
+    // (`f32[]`) is the refusal the position states.
+    const auto *array = tt::as_ptr<const ArrayType>(param);
+    if (array == nullptr || array->rank() != 0 || array->anyRank()) {
+        return false;
+    }
+    Type *element = array->elemType();
+    return element != nullptr && element->code() == TypeCode::TypeVar &&
+           array->unify(rangeArray) != nullptr;
 }
 
 node_handle_t Builder::rangeArrayNode(node_handle_t node, const GCT::node_ptr_t &origin) {

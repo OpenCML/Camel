@@ -4069,7 +4069,9 @@ class Builder {
     void readRangeConversion();
     /// Whether a value of type `value` reaches the array `param` through that conversion: the
     /// question a call asks before its callee is known (builder_call.cpp, enteringTypes), the
-    /// same one `coerceTo` answers with the conversion itself.
+    /// same one `coerceTo` answers with the conversion itself. `param` states the array the
+    /// conversion makes (`int[]`), or an array whose element a variable still holds (`xs: T[]`),
+    /// where the variable takes that element.
     bool rangeEntersArray(camel::core::type::Type *param, camel::core::type::Type *value);
     /// The range `node` materialized as its array, by that same conversion. The call is written
     /// the way a program writes it (`to_array(r)`) except that its callee is the declaration
