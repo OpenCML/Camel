@@ -783,6 +783,11 @@ struct CallSite {
     gc_node_ref_t pullback = kInvalidNodeRef;
     std::vector<gc_node_ref_t> inputs;
     PullbackPlan plan;
+    /// The call whose (value, pullback) pair the site's pullback was projected out of, and the
+    /// node that projection makes the call's value: a tape that rebuilds the pullback's closure
+    /// supplies the values it captures out of the call (task-212).
+    gc_node_ref_t call  = kInvalidNodeRef;
+    gc_node_ref_t value = kInvalidNodeRef;
     /// A call of a function carrying a custom rule (see rules.h): the rule replaces the pullback.
     ::Function *rule = nullptr;
 };
@@ -1191,6 +1196,15 @@ class Backward final : public VjpBuilder {
     /// Target-graph node holding the primal value `primal`.
     gc_node_ref_t ref(gc_node_ref_t primal);
 
+    /// The call site whose pullback `node` is, where the graph projects one out of a call's
+    /// (value, pullback) pair.
+    const CallSite *siteOfPullback(gc_node_ref_t node);
+    /// The closure of a site's pullback, built in the pullback graph out of the values a tape can
+    /// supply: the call's arguments and the call's value, in the order the pullback first read
+    /// them (`Engine::pullbackCapturePorts`). kInvalidNodeRef when no layout was kept, which
+    /// leaves the function value to be carried like any other residual.
+    gc_node_ref_t siteClosure(const CallSite *site);
+
     /// The gradient of the differentiated result. Aggregate results are split element-wise, as
     /// accumulateInto does for every other whole-value gradient — otherwise visitFill, which
     /// distributes elements, would find none and the seed would stop at the result node.
@@ -1349,6 +1363,10 @@ class Backward final : public VjpBuilder {
     /// The forward node whose rule is producing gradients right now (an operator's rule or a
     /// custom rule call), for the location of a refused accumulation; kInvalidNodeRef outside.
     gc_node_ref_t producing_ = kInvalidNodeRef;
+    /// The pullback projection of each call site, read the first time a function value has to be
+    /// materialized: the sites are keyed by the call's value, and a tape asks by the projection.
+    std::unordered_map<gc_node_ref_t, const CallSite *> pullbackSites_;
+    bool pullbackSitesBuilt_ = false;
 };
 
 // ---------------------------------------------------------------- engine
@@ -1438,6 +1456,13 @@ class Engine {
         bool arrayGradient);
     /// The group of graphs this transformation adds to the program.
     rt::GraphDraftGroup &group() { return group_; }
+    /// Where the forward graph of the pullback `graph` holds the values that pullback captures, in
+    /// the order the closure carries them (see pullbackCapturePorts_); null when no plan recorded
+    /// them. A tape that cannot carry the closure rebuilds it from these (design principles 9.9).
+    const std::vector<size_t> *pullbackCapturePorts(rt::GraphId graph) const {
+        const auto it = pullbackCapturePorts_.find(graph);
+        return it == pullbackCapturePorts_.end() ? nullptr : &it->second;
+    }
     /// The refusals collected so far: a region differentiated in place reports its own.
     std::vector<Refusal> &refusals() { return refusals_; }
     /// Reserves a pullback graph for a region differentiated in place (its forward is the
@@ -1967,7 +1992,12 @@ void ForwardRewrite::split(
     }
     sites_.emplace(
         value,
-        CallSite{.pullback = pullback, .inputs = std::move(inputs), .plan = plan});
+        CallSite{
+            .pullback = pullback,
+            .inputs   = std::move(inputs),
+            .plan     = plan,
+            .call     = node,
+            .value    = value});
 }
 
 // ---------------------------------------------------------------- the tape of a loop
@@ -3212,16 +3242,26 @@ gc_node_ref_t Backward::ref(gc_node_ref_t primal) {
     if (auto it = toTarget_.find(primal); it != toTarget_.end()) {
         return it->second;
     }
-    gc_node_ref_t node;
+    gc_node_ref_t node = kInvalidNodeRef;
     if (auto value = staticValue(forwardTransaction_, primal)) {
         // Constants are copied rather than captured.
         node = target().materializeStaticValue(*value, typeOf(forwardTransaction_, primal));
     } else if (residualPorts_) {
         // The tape mode: the residual is a parameter of the pullback, in the order it is first
-        // read, so a loop can hand each round's collected value to the same graph.
-        node = addPort(targetTransaction_, typeOf(forwardTransaction_, primal));
-        target().appendNormPort(node);
-        captures_.push_back(primal);
+        // read, so a loop can hand each round's collected value to the same graph. A function
+        // value is not one of those values (design principles 9.9: the residuals are values, not
+        // closures): a site's pullback is a known graph, so the pullback graph builds that
+        // closure here out of the very values the tape does carry -- the call's arguments and the
+        // call's value, in the order the pullback first read them -- and the reverse pass calls
+        // it with the tape's residuals.
+        if (const CallSite *const site = siteOfPullback(primal); site != nullptr) {
+            node = siteClosure(site);
+        }
+        if (node == kInvalidNodeRef) {
+            node = addPort(targetTransaction_, typeOf(forwardTransaction_, primal));
+            target().appendNormPort(node);
+            captures_.push_back(primal);
+        }
     } else {
         node = addPort(targetTransaction_, typeOf(forwardTransaction_, primal));
         target().appendClosureNode(node);
@@ -3230,6 +3270,46 @@ gc_node_ref_t Backward::ref(gc_node_ref_t primal) {
     toTarget_.emplace(primal, node);
     toPrimal_.emplace(node, primal);
     return node;
+}
+
+const CallSite *Backward::siteOfPullback(gc_node_ref_t node) {
+    if (!pullbackSitesBuilt_) {
+        pullbackSitesBuilt_ = true;
+        for (const auto &[value, site] : sites_) {
+            pullbackSites_.emplace(site.pullback, &site);
+        }
+    }
+    const auto it = pullbackSites_.find(node);
+    return it == pullbackSites_.end() ? nullptr : it->second;
+}
+
+gc_node_ref_t Backward::siteClosure(const CallSite *const site) {
+    const std::vector<size_t> *const layout = engine_.pullbackCapturePorts(site->plan.pullback);
+    if (layout == nullptr || site->call == kInvalidNodeRef || site->value == kInvalidNodeRef) {
+        return kInvalidNodeRef;
+    }
+    const auto args = forward().normInputsOf(site->call);
+    std::vector<gc_node_ref_t> captures;
+    std::vector<Type *> captureTypes;
+    captures.reserve(layout->size());
+    captureTypes.reserve(layout->size());
+    for (const size_t position : *layout) {
+        const gc_node_ref_t captured = position == kCapturedValue ? site->value
+                                       : position < args.size()   ? args[position]
+                                                                  : kInvalidNodeRef;
+        if (captured == kInvalidNodeRef) {
+            return kInvalidNodeRef;
+        }
+        captures.push_back(ref(captured));
+        captureTypes.push_back(typeOf(forwardTransaction_, captured));
+    }
+    return addClosure(
+        engine_.group(),
+        targetTransaction_,
+        site->plan.pullback,
+        site->plan.pullbackType,
+        TupleType::create(captureTypes),
+        captures);
 }
 
 std::optional<gc_node_ref_t> Backward::primalOf(gc_node_ref_t target) const {
