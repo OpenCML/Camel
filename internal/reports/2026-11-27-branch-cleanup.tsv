@@ -1,3 +1,6 @@
+# 2026-11-27 fourth pass: the five probe trees (editview-b, gc-pacing, hdrweight-tools, pooljvp, timeout-retry) lost their untracked
+# artifacts to lane/probe-evidence 70fbfad2d4, were removed, and their branches deleted. ad and catchup-f-parser-old-spelling
+# were detached trees holding only scratch output and a git-ignored config copy, so they went without touching any branch.
 # 2026-11-27 third pass, approved discards: the two untracked duplicates in plain-gate-2, internal/_tcprobe/ in
 # transpose-carry, and the fifteen .log files of pooljvp/internal/_pjprobe (its probe programs and plans stay).
 # plain-gate-2 and transpose-carry then had empty working trees and ancestor tips, so both trees were retired.
@@ -32,20 +35,20 @@ lane/abort-fix	f8749cdba0	blocked	checked-out-at D:/Projects/Camel-wt/abort-fix	
 lane/cap-probe	4a7d63d3bc	blocked	checked-out-at D:/Projects/Camel-wt/value-ports	parse: record the arrays example's syntax as the parser reads it
 lane/cpp-noise	7cdbdcbae9	deleted	worktree stdlib-exceptions removed first (clean, ancestor)	cpp standalone: a fault's report goes to standard error, where camel writes its diagnostics
 lane/docs-lambda-probe	c78f57c85e	blocked	checked-out-at D:/Projects/Camel-wt/docs	backlog: the test tiers and the slow tests leave the build host; and a note on my own collision
-lane/editview-b	7c17dc39b4	blocked	checked-out-at D:/Projects/Camel-wt/editview-b	Merge lane/editnote-complete into integration
+lane/editview-b	7c17dc39b4	deleted	tree retired after its probe artifacts were archived in lane/probe-evidence (70fbfad2d4)	Merge lane/editnote-complete into integration
 lane/editview-commit	6ba0c83007	blocked	checked-out-at D:/Projects/Camel-wt/editview-commit	gir: the value a function parameter drops is judged by the parameter's type
 lane/editview-gir	b073860954	hold	KEEP: raw material for the C5 re-land (the promotion seat reverted it); merged is not the same as deletable	compile: a block's root imports the module whose operator opens it
 lane/facts-kinds	f92b09c353	blocked	checked-out-at D:/Projects/Camel-wt/console-res	feat(facts): core.instance and core.reorder, and the one read behind them
-lane/gc-pacing	6c7dffe5cb	blocked	checked-out-at D:/Projects/Camel-wt/gc-pacing	test(mm): the pacing cases allocate the arrays they document, not a range
+lane/gc-pacing	6c7dffe5cb	deleted	tree retired after its probe artifacts were archived in lane/probe-evidence (70fbfad2d4)	test(mm): the pacing cases allocate the arrays they document, not a range
 lane/grammar-notes	c55275edcb	deleted	worktree grammar-notes removed first (clean, ancestor)	grammar: the resource declaration names its modifiers instead of a production it never had
-lane/hdrweight-tools	f6f5ea2a80	blocked	checked-out-at D:/Projects/Camel-wt/hdrweight-tools	merge docs/coordinator: the promotion-8 page and record close, and eight backlog rows
+lane/hdrweight-tools	f6f5ea2a80	deleted	tree retired after its probe artifacts were archived in lane/probe-evidence (70fbfad2d4)	merge docs/coordinator: the promotion-8 page and record close, and eight backlog rows
 lane/loop-handback	fcccbaac9b	deleted	worktree loop-handback removed first (clean, ancestor)	gir: a loop hands its carried states out through one function
 lane/pass-as-function-names	475b2bec4e	blocked	checked-out-at D:/Projects/Camel-wt/witness	compile: a pass-shaped declaration that claims an operator is still checked
 lane/plain-gate-2	93ab748d73	deleted	tree retired after its two untracked files went away (both were stale copies of committed files)	selftest: the two passes a case declares itself are compiled into libcamel again
-lane/pool-jvp	750191c745	blocked	checked-out-at D:/Projects/Camel-wt/pooljvp	transpose: say what the pooling walks do, in the walk's own words
+lane/pool-jvp	750191c745	deleted	tree retired after its probe artifacts were archived in lane/probe-evidence (70fbfad2d4)	transpose: say what the pooling walks do, in the walk's own words
 lane/resource-eq	c8cbceabaf	blocked	checked-out-at D:/Projects/Camel-wt/resource-eq	gir: an effect is the open access of its resource before the next one is written
 lane/reuse-reading	0a45980e8c	blocked	checked-out-at D:/Projects/Camel-wt/reuse	inspect: make the two reuse vocabularies tellable apart, and pin it
-lane/timeout-retry	08fdf3d04d	blocked	checked-out-at D:/Projects/Camel-wt/timeout-retry	selftest: the re-run case that is red by design gets a plan of its own
+lane/timeout-retry	08fdf3d04d	deleted	tree retired after its probe artifacts were archived in lane/probe-evidence (70fbfad2d4)	selftest: the re-run case that is red by design gets a plan of its own
 lane/transpose-carry	314c6f6504	deleted	tree retired after internal/_tcprobe/ went away (its readings are transcribed in the two transpose reports)	conv2d_t: give the shaped operators their own parameter lists
 lane/loop-tape-values-wip	6c6e94efec	skipped-guard	not-an-ancestor (TEMP probe branch)	TEMP: compare closure slots with the site's capture type
 lane/task-216-probe	6d114cb579	skipped-guard	not-an-ancestor (TEMP probe branch)	TEMP(probe): are inner captures among the forward graph
