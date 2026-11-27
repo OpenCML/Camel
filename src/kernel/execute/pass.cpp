@@ -344,8 +344,10 @@ void registerModulePass(const std::string &path, PassDescriptor descriptor) {
         registry.kernels[id] = std::move(descriptor);
     }
     if (readsTags) {
-        // The pass is a reader of tag facts.
-        camel::core::tag::declareReader(path);
+        // The pass is a reader of tag facts, and it says so where the operator is registered: one
+        // fact, in the entry the operator's record is published from, which the tag registry's
+        // `isReader` reads. No list of readers beside the table names the same passes again.
+        camel::core::OperatorTable::instance().declareReadsTags(path);
     }
 }
 

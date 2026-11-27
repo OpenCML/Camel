@@ -747,6 +747,31 @@ bool OperatorTable::reusesOperand(std::string_view uri) const {
     return entries_[*id].reusesOperand;
 }
 
+void OperatorTable::declareReadsTags(std::string_view uri, bool reads) {
+    std::unique_lock lock(mutex_);
+    entries_[internLocked(uri)].readsTags = reads;
+}
+
+bool OperatorTable::readsTags(std::string_view uri) const {
+    const auto id = lookup(uri);
+    if (!id) {
+        return false;
+    }
+    std::shared_lock lock(mutex_);
+    return entries_[*id].readsTags;
+}
+
+std::vector<std::string_view> OperatorTable::tagReadingOperators() const {
+    std::shared_lock lock(mutex_);
+    std::vector<std::string_view> readers;
+    for (uint32_t id = 1; id < entries_.size(); ++id) {
+        if (entries_[id].readsTags) {
+            readers.push_back(symbolText(entries_[id].uri));
+        }
+    }
+    return readers;
+}
+
 void OperatorTable::declareHandsOnOperandValue(std::string_view uri, bool onlyOutsideArrays) {
     // One field on the operator's entry, the way `declareReusesOperand` above is one: the fact is
     // about the operator's operands and result, not a release of its semantics, and publishing it
