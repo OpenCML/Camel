@@ -842,10 +842,13 @@ Builder::visitLinkNode(const GCT::node_ptr_t &gct, std::optional<GCT::Assignment
             }
             // A range where the parameter wants the array of its integers enters through the
             // conversion the library declares for it (design principles 5.4): the position states
-            // the array, and the range answers it. The conversion itself is made once the callee
-            // is known (enterParameters, coerceTo), here as for every other entrance.
+            // the array, and the range answers it. What the candidate is asked with is that array
+            // -- `int[]` -- and not the parameter's own text: a parameter whose element is still a
+            // variable (`xs: T[]`) takes its type from the array the argument becomes, and passing
+            // the pattern back would bind the variable to itself. The conversion itself is made
+            // once the callee is known (enterParameters, coerceTo), here as for every entrance.
             if (rangeEntersArray(param, entered[i])) {
-                entered[i] = param;
+                entered[i] = rangeArrayType();
             }
         }
         return entered;
