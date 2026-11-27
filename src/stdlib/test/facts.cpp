@@ -514,7 +514,6 @@ FactSeedTestPass::apply(const camel::runtime::Program *program, std::ostream &os
         // were, and their lines are that registration's reading.
         for (const auto &kind : moved) {
             const std::string key = camel::facts::kindInfo(kind).key;
-            std::cerr << "SEEDED-DIAG " << key << " " << counted[key] << "\n";
             perKind[key] = counted[key];
         }
     }
