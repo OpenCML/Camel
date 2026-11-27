@@ -3778,7 +3778,7 @@ class CmlPrinter {
             // ... but only when the value already *is* the type, field for field: the position
             // supplies the conversion, and a position does not build the fields of a value
             // that has none. A struct with no fields converted to one with a field has no
-            // spelling at all (`({  } as Inner)` is `LiteralNotRepresentable`,
+            // spelling at all (`({} as Inner)` is `LiteralNotRepresentable`,
             // `compile/array_shape/rank_zero_slot_nested_field.cml`), so it is refused rather
             // than written as the empty literal it is not.
             const auto *target = static_cast<const StructType *>(node->dataType());
@@ -4726,7 +4726,7 @@ class CmlPrinter {
             const auto *value  = fromSlot<Struct *>(slot);
             const auto *record = static_cast<const StructType *>(type);
             // A template value of a struct type that holds no struct: the fields the type has are
-            // not in the value, so the literal written from it is `{  }` -- an empty struct where
+            // not in the value, so the literal written from it is `{}` -- an empty struct where
             // the type has fields, which the front end refuses (`DeclaredTypeMismatch`,
             // `compile/array_shape/rank_zero_slot_nested_field.cml`). No spelling of the type is a
             // value that has none of its fields.
