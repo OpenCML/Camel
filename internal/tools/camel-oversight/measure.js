@@ -287,7 +287,9 @@ export async function measure({ repo, fetch = true, stateDir = '', buildHost = '
                 head: await git(['rev-parse', '--abbrev-ref', 'HEAD']),
                 dirty: lines.length,
                 // The paths themselves, so a reminder can say where a write landed (the first few).
-                paths: lines.slice(0, 8).map((line) => line.slice(3)),
+                // `git` trims its output, so the first line has lost the leading space of a status
+                // like ` M`: strip the status word by its shape, not by a fixed width.
+                paths: lines.slice(0, 8).map((line) => line.replace(/^[ MTADRCU?!]{1,2} /, '')),
                 behind: Number(await git(['rev-list', '--count', 'HEAD..origin/develop'])),
             }
         }),
