@@ -133,7 +133,6 @@ export const SLOW_PLANS = [
     'test/plans/feat/tools/cli.plan.toml',
     'test/plans/feat/tools/debugger.plan.toml',
     'test/plans/feat/tools/exit_reporting.plan.toml',
-    'test/plans/feat/tools/facts_readers_sweep.plan.toml',
     'test/plans/feat/tools/find_fix.plan.toml',
     'test/plans/feat/tools/layer_accounting.plan.toml',
     'test/plans/feat/tools/load_class.plan.toml',

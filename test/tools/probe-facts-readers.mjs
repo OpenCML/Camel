@@ -10,9 +10,10 @@
 // every `.cml` under `test/cases`, and the numbers it prints move whenever the compiler moves (a
 // node added anywhere moves `nodes` and `free`). A plan entry that asserted those numbers would be
 // red on every unrelated change, and one that asserted nothing would be decoration. So the numbers
-// live in the reports that cite them, and this file is the command that produces them;
-// `test/plans/feat/tools/facts_readers_sweep.plan.toml` runs it in the slow layer, where a change to
-// the pass or to the corpus is meant to be looked at.
+// live in the reports that cite them, and this file is the command that produces them. It is run by
+// hand: the sweep the gate keeps an eye on is `scripts/check-arrangeable.mjs`, which reads the same
+// pass over the same corpus and decides its health, and this one is the wider reading -- it also
+// sums the older comparison with `runtime::nodeIsFreelySchedulable` and the per-family cuts.
 //
 // What it prints, in this order:
 //
@@ -101,9 +102,8 @@ function usage() {
         [
             '',
             'It sweeps every `.cml` under `test/cases` except the `fixtures/` directories, which are',
-            'other tools’ inputs. It is not part of the fast layer.',
-            '`--tier slow test/plans/feat/tools/facts_readers_sweep.plan.toml` runs the same sweep',
-            'through the runner, which adds the provenance line the runner prints.',
+            'other tools’ inputs. It is run by hand, from a tree with a built binary; the sweep the',
+            'gate runs is `scripts/check-arrangeable.mjs`.',
             '',
         ].join('\n')
     )
