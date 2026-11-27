@@ -214,7 +214,7 @@ tier = "slow"
 # the reason are printed from the list on every run, and when the list is empty the line says the
 # list is empty rather than stay silent.
 #
-# It reads its own page -- `test/cases/docs/pending_zero_sample.md`, which `--default-roots` does not
+# It reads its own page -- `test/plans/feat/docs_links/fixture/snippets/pending_zero_sample.md`, which `--default-roots` does not
 # walk -- and that page's fence does not compile, with no entry in the list to exempt it. So one run
 # says the list holds nothing waiting and refuses on that page in the same breath, and the reading does
 # not depend on what the reader-facing list holds: an entry added for a snippet ahead of the tree, or
@@ -225,7 +225,7 @@ desc = "With the pending list read as empty, the run says `[PENDING] 0 snippet(s
 kind = "behavior"
 tool = "node"
 case = "../../../scripts/check-doc-snippets.mjs"
-args = ["${case}", "--no-pending", "--camel", "${camel}", "test/cases/docs/pending_zero_sample.md"]
+args = ["${case}", "--no-pending", "--camel", "${camel}", "test/plans/feat/docs_links/fixture/snippets/pending_zero_sample.md"]
 expect_exit = 1
 expect_stdout_contains = ["[PENDING] 0 snippet(s) wait for a ruled construct: the list holds 0 entries and none of them is behind in this scope", "stale snippet problem(s)"]
 normalizers = ["normalize_newlines"]
