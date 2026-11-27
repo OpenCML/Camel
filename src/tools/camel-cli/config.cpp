@@ -898,6 +898,21 @@ bool parseArgs(int argc, char *argv[]) {
          opt_values("input", targetFiles) %
              "input file (optional if --input given; at least one required)");
 
+    // A subcommand answers to its whole word and to nothing else: `camel file.cml
+    // explain_pass::nothing` names a pass, not the `explain` command. clipp matches a command by
+    // prefix of the token and hands the rest of it back as an argument, so the word alone does not
+    // decide this -- the token must be the word.
+    const auto wordCommand = [](const char *word) {
+        const std::string text = word;
+        return clipp::parameter{clipp::match_predicate{[text](const clipp::arg_string &token) {
+                   return token == text;
+               }}}
+            .required(true)
+            .blocking(true)
+            .repeatable(false)
+            .label(text);
+    };
+
     // The information commands are subcommands, not options: they are not a setting of a run.
     // Each is its own group, so the first word of the command line decides which one it is.
     auto infoFlags =
@@ -906,20 +921,20 @@ bool parseArgs(int argc, char *argv[]) {
          option("-h", "--help").set(showHelp).set(selectedCommand, Command::Info) %
              "show this help message");
     auto docsCommand =
-        (command("docs").set(showDocs).set(selectedCommand, Command::Info) %
+        (wordCommand("docs").set(showDocs).set(selectedCommand, Command::Info) %
              "show the documentation of a module",
          opt_values("module", docsModules) % "module whose documentation is shown (default: all)");
-    auto aboutCommand = command("about").set(showAbout).set(selectedCommand, Command::Info) %
+    auto aboutCommand = wordCommand("about").set(showAbout).set(selectedCommand, Command::Info) %
                         "show copyright and related information";
-    auto zenCommand =
-        command("zen").set(showZen).set(selectedCommand, Command::Info) % "show the Zen of Camel";
+    auto zenCommand   = wordCommand("zen").set(showZen).set(selectedCommand, Command::Info) %
+                        "show the Zen of Camel";
     auto explainCommand =
-        (command("explain").set(selectedCommand, Command::Info) %
+        (wordCommand("explain").set(selectedCommand, Command::Info) %
              "describe a diagnostic by its name or code",
          (value("name or code", Diag::explain) % "the diagnostic to describe"));
 
     auto check =
-        (command("check").set(selectedCommand, Command::Check) %
+        (wordCommand("check").set(selectedCommand, Command::Check) %
              "check the code without running it (exit code 1 when an error is found)",
          option("-i", "--lexical-only").set(lexical) %
              "lexical analysis only: report lexical errors and stop before parsing",
@@ -934,7 +949,7 @@ bool parseArgs(int argc, char *argv[]) {
          values("input", targetFiles) % "input file");
 
     auto inspect =
-        (command("inspect").set(selectedCommand, Command::Inspect) % "inspect the code",
+        (wordCommand("inspect").set(selectedCommand, Command::Inspect) % "inspect the code",
          joinable(
              option("-t", "-T").set(dumpTokens) % "dump tokens",
              option("-s", "-S").set(dumpCST) % "dump concrete syntax tree",
