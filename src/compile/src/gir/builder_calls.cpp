@@ -1478,16 +1478,13 @@ bool Builder::completeWithFor(
         // calls of one graph that leave the parameter out (as bindArguments makes it).
         const ParameterDefaultValue &value = *(*defaults)[i];
         node_handle_t dataNode{};
-        if (const auto graph = defaultNodes_.find(currGraph_.get()); graph != defaultNodes_.end()) {
-            if (const auto found = graph->second.find(value.expr); found != graph->second.end()) {
-                dataNode = found->second;
-            }
-        }
+        dataNode = recordedDefaultNode(value.expr);
+
         if (dataNode == nullptr) {
             dataNode = currGraph_->addStaticDataNode(value.data);
             rememberConstant(dataNode, value.data);
             registerNodeOrigin(context_, dataNode, value.expr, "gir.data.static.paramdefault");
-            defaultNodes_[currGraph_.get()][value.expr] = dataNode;
+            recordDefaultNode(value.expr, dataNode);
         }
         completed[i] = Argument{dataNode, value.expr, std::nullopt, false};
     }
@@ -1651,16 +1648,13 @@ void Builder::bindArguments(
         // graph that leave the same parameter out share that node: the value was computed once.
         const ParameterDefaultValue &value = *(*defaults)[i];
         node_handle_t dataNode{};
-        if (const auto graph = defaultNodes_.find(currGraph_.get()); graph != defaultNodes_.end()) {
-            if (const auto found = graph->second.find(value.expr); found != graph->second.end()) {
-                dataNode = found->second;
-            }
-        }
+        dataNode = recordedDefaultNode(value.expr);
+
         if (dataNode == nullptr) {
             dataNode = currGraph_->addStaticDataNode(value.data);
             rememberConstant(dataNode, value.data);
             registerNodeOrigin(context_, dataNode, value.expr, "gir.data.static.paramdefault");
-            defaultNodes_[currGraph_.get()][value.expr] = dataNode;
+            recordDefaultNode(value.expr, dataNode);
         }
         ordered[i] = Argument{dataNode, value.expr, std::nullopt};
         filled[i]  = true;
@@ -1669,6 +1663,29 @@ void Builder::bindArguments(
     // The call reads its arguments by the declaration's parameter order, and the types are
     // built from the nodes in that order by the caller, once every deferred argument has been
     // built. Nothing here fills a type list: the two would diverge.
+}
+
+node_handle_t Builder::recordedDefaultNode(const GCT::node_ptr_t &expr) const {
+    if (!scratchLayers_.empty()) {
+        const auto trial = scratchLayers_.back().defaultNodes.find(expr);
+        if (trial != scratchLayers_.back().defaultNodes.end()) {
+            return trial->second;
+        }
+    }
+    const auto graph = defaultNodes_.find(currGraph_.get());
+    if (graph == defaultNodes_.end()) {
+        return nullptr;
+    }
+    const auto found = graph->second.find(expr);
+    return found == graph->second.end() ? nullptr : found->second;
+}
+
+void Builder::recordDefaultNode(const GCT::node_ptr_t &expr, node_handle_t node) {
+    if (!scratchLayers_.empty()) {
+        scratchLayers_.back().defaultNodes[expr] = node;
+        return;
+    }
+    defaultNodes_[currGraph_.get()][expr] = node;
 }
 
 } // namespace camel::compile::gir

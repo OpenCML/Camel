@@ -325,6 +325,17 @@ Builder::visitPipeLink(const GCT::node_ptr_t &call, const GCT::node_ptr_t &repla
         unusedStatement_                 = nullptr;
         auto &draft                      = currGraph_->transaction().edit();
         const draft_node_ref_t firstNode = static_cast<draft_node_ref_t>(draft.nodeSlotCount());
+        // The trial arm's records die with the arm -- a record that outlives the arm names a node
+        // the arm deletes. The layer is what the arm's records go into while it builds (see
+        // `scratchLayers_` in builder.h), and it is dropped whole here, with the arm's nodes: the
+        // arm's records are exactly the layer, and nothing outside it can name them.
+        struct ScratchLayerScope {
+            Builder &self;
+            explicit ScratchLayerScope(Builder &builder) : self(builder) {
+                self.scratchLayers_.emplace_back();
+            }
+            ~ScratchLayerScope() { self.scratchLayers_.pop_back(); }
+        } scratchLayer(*this);
         // Nothing the dropped arm built stays in the graph: a node of it that had an effect would
         // be reported as one that never runs, and one that did would run.
         const auto dropScratch = [&] {

@@ -141,7 +141,31 @@ inline runtime::GCNodeKind nodeKindOf(node_handle_t node) {
 
 inline camel::core::type::Type *nodeTypeOf(node_handle_t node) {
     GUARD(node != nullptr, "Draft node is null.");
-    return nodeDraftOf(node)->header(node.id)->dataType;
+    runtime::GraphDraft *draft             = nodeDraftOf(node);
+    const runtime::DraftNodeHeader *header = draft->header(node.id);
+    // The draft above is this handle's and it is alive -- `nodeDraftOf` answered that -- so a
+    // handle with no node is one whose node was released while its draft went on: the type is not
+    // "not yet known", it is gone. Following the missing header to `dataType` is how this used to
+    // end (SIGSEGV, with no word about the node), and a signal answers nothing: this reads the
+    // node, the draft, its epoch, that draft's size and the region the builder is inserting into,
+    // which is what tells "a handle read after the body it named was let go" (`nodeIsCurrent`,
+    // above) from "a handle that never belonged here".
+    GUARD(
+        header != nullptr,
+        std::format(
+            "The draft is alive and the node is not: node {} of the draft at {} (epoch {}) names "
+            "no "
+            "draft node, so it has no type. That draft holds {} node(s) and the builder inserts "
+            "into "
+            "region {}. A handle kept across a body a pass has measured must be asked whether it "
+            "is "
+            "still current ('nodeIsCurrent') before it is read.",
+            static_cast<unsigned>(node.id),
+            static_cast<const void *>(node.draft),
+            node.epoch,
+            draft->nodeCount(),
+            draft->insertRegion()));
+    return header->dataType;
 }
 
 inline const runtime::DraftNodeHeader *nodeHeaderOf(node_handle_t node) {
