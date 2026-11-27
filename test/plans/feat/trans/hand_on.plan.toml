@@ -42,7 +42,7 @@ name = "one_dump_runs_it"
 desc = "`std::gir` alone prints the graph and hands it on: nothing consumes it, so the default scheduling pass runs the program, which prints `ran`; the run ends 0, the returned 7 being the function's own value (design principles 9.8)."
 case = "../../../cases/trans/hand_on/hand_on.cml"
 args = ["${case}", "std::gir"]  # camel-pass-scan: keep -- this case pins that the program runs
-expect_stdout_contains = ["ran"]
+expect_stdout_matches = ["^ran$"]
 expect_exit = 0
 expect_stdout_starts_with = "digraph"
 
