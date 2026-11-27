@@ -1,6 +1,6 @@
 id = "tools.member_init"
 order = 915
-tier = "fast"
+tier = "slow"
 tags = ["feat", "tools", "member_init"]
 desc = "Every data member a constructor leaves out carries a default member initializer."
 
@@ -16,6 +16,7 @@ desc = "Every data member a constructor leaves out carries a default member init
 
 [[tests]]
 name = "tools.member_init.sweep"
+tier = "slow"
 desc = "No data member of a class with a constructor is left without a default initializer."
 kind = "behavior"
 tool = "node"

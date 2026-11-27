@@ -295,6 +295,7 @@ timeout_ms = 10000
 
 [[tests]]
 name = "registry_sweep_unique_arm"
+tier = "slow"
 desc = "Checks inline registry cleanup keeps distinct branch-arm helper bodies separate."
 kind = "behavior"
 case = "../../../cases/opt/inline/registry_sweep_unique_arm.cml"

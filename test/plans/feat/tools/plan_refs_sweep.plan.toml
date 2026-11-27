@@ -1,6 +1,6 @@
 id = "tools.plan_refs_sweep"
 order = 918
-tier = "fast"
+tier = "slow"
 tags = ["feat", "tools", "exec"]
 desc = "The plan-side table of the references that come back, checked on every case the tree has: `produced + copies == give-backs + kept + packed` per graph."
 
@@ -16,6 +16,7 @@ desc = "The plan-side table of the references that come back, checked on every c
 # names it (test/plan-selection.json) selects this plan and nothing rides a common case edit into it.
 [[tests]]
 name = "plan_refs.every_case_balances"
+tier = "slow"
 desc = "Every case the tree has is read through `test::plan_refs`, and every graph of every case that compiles balances `produced + copies == give-backs + kept + packed`, with no graph left unprinted."
 kind = "behavior"
 tool = "node"

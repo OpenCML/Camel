@@ -8,7 +8,7 @@ name = "root_window.gru_lite.poison"
 # Fast layer: `-Plan test/plans/feat/mm -Tier milestone -Jobs 8` reads it at 0.74 s,
 # under the 2 s line, and the two entries beside it are already fast. The `residual_mlp` half of the
 # pair is 3.08 s and stays where it is.
-tier = "fast"
+tier = "slow"
 desc = "A pass-created Program and the graph versions reachable from it stay alive while its C++ holder needs them."
 kind = "behavior"
 case = "../../../cases/modules/nn/gru_lite.cml"
@@ -44,7 +44,7 @@ timeout_ms = 120000
 [[tests]]
 name = "root_window.residual_mlp.moving_stress"
 desc = "The residual model remains valid under ordinary moving collection without poison."
-tier = "fast"
+tier = "slow"
 kind = "behavior"
 case = "../../../cases/modules/nn/residual_mlp.cml"
 args = ["--gc", "kind=generational", "--gc-stress", "safepoint=1,kind=minor", "--gc-check", "verify=both", "${case}", "std::cxx::specialize", "std::opt", "tensor::fuse", "std::cxx::dce", "std::cxx::fold", "std::macro", "std::cxx::devirtualize", "std::fvm"]

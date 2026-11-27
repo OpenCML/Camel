@@ -53,6 +53,7 @@ timeout_ms = 8000
 
 [[tests]]
 name = "json.gc.default.nvm"
+tier = "slow"
 desc = "A Json kept across allocation in a frame slot, through a function and in an array of Json is traced (mark-sweep, no forced collection; nvm). As an `any` it was not."
 kind = "behavior"
 case = "../../../cases/modules/std/json/json_gc.cml"
@@ -76,6 +77,7 @@ timeout_ms = 60000
 
 [[tests]]
 name = "json.gc.forced_major.nvm"
+tier = "slow"
 desc = "A Json kept across allocation in a frame slot, through a function and in an array of Json is traced (mark-sweep, a major collection at every safepoint; nvm). As an `any` it was not."
 kind = "behavior"
 case = "../../../cases/modules/std/json/json_gc.cml"
@@ -94,6 +96,7 @@ args = ["--gc-stress", "safepoint=1,kind=minor", "--gc-check", "verify=both", "-
 expect_exit = 0
 expect_stdout_starts_with = "300 [alpha, beta, gamma] x-300\n300 [v-0, v-1, v-2]"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+tier = "slow"
 timeout_ms = 60000
 
 [[tests]]
@@ -266,6 +269,7 @@ timeout_ms = 60000
 
 [[tests]]
 name = "json.gc_macro.poison.nvm"
+tier = "slow"
 desc = "A Json computed by std::macro is a constant in the static area of main and is traced there (safepoint poisoning; nvm). As an `any` constant it was not."
 kind = "behavior"
 case = "../../../cases/modules/std/json/json_gc_macro.cml"
