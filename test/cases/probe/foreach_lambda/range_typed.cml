@@ -1,0 +1,8 @@
+// The range form with every parameter type written: the reading that says whether the call is
+// refused only for the types it does not write, or for the form itself.
+func main() => int sync {
+    (0 .. 3)->foreach<func (x: int) { println(x) }>
+    let ys = (0 .. 3)->map<func (x: int) => int { x * 2 }>
+    println(ys[1])
+    return 0
+}

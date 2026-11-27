@@ -71,3 +71,12 @@ args = ["check", "${case}"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
+[[tests]]
+name = "foreach_lambda.range_typed"
+desc = "The range forms with every parameter type written: if these pass, the call form is fine and only the unwritten parameter is the question."
+kind = "behavior"
+case = "../../cases/probe/foreach_lambda/range_typed.cml"
+args = ["check", "${case}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
