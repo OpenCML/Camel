@@ -6,7 +6,15 @@
  * `core.shape`, and it is the shape every later kind is written in: a computation reads the graph
  * through the view the store hands it (`GraphAccess::view`) and reports what it read into
  * `ReadLog`, so the fact is stale when that node's own content changed and not when anything else
- * in the graph did.
+ * in the graph did. `core.permissions` follows it, and is the kind the framework's own definition
+ * of `Class::Content` names.
+ *
+ * What has not moved, and the one reason they share: `core.instance` and `core.reorder` both read
+ * an operator's *instance*, which is instantiated from the node's operand types and from the static
+ * arguments its constant operands hold (`runtime::fact::instanceOf`, `reorderFreedomOf`). The view
+ * the store hands a computation has the operand types (`GraphView::typeOf`, `inputs`) and none of
+ * the static argument values, so those two kinds wait for that read rather than being written
+ * against `GCGraph` here and moved twice.
  *
  * The value, its text form and its readers stay where they are (`camel/runtime/core_facts.h`):
  * `TensorShape` is the kind's payload in both registries, and a second copy of it would be a second
@@ -74,6 +82,72 @@ KindId shapeKind() {
         .anchorsIn = {},
         // No encode/decode yet: their forms live with the runtime kind for now, and a portable form
         // belongs to the step that persists facts, not to the move of the kind.
+        .encode = {},
+        .decode = {},
+    });
+    return id;
+}
+
+KindId permissionsKind() {
+    static const KindId id = registerKind<int>(Kind<int>{
+        .key     = "core.permissions",
+        .owner   = "core",
+        .version = 1,
+        // Content, and the framework's own definition of the class says so in as many words: "what
+        // cannot be recovered from the graph -- the numeric permissions a program granted: the
+        // graph's content. A kind of this class reads it from the view each time; it is never
+        // stored, so it is never stale." The runtime kind it replaces said
+        // `FactClass::GraphContent`, which is the same class under the registry that came before
+        // this one.
+        .cls = Class::Content,
+        // One node: the permissions are granted at a place, and `#strict` revokes them there.
+        .scope = Scope::Node,
+        // The field is inert for a Content kind -- nothing is stored, so nothing is ever found
+        // stale -- and `Reported` is what the computation would claim if it were stored: it reads
+        // the node's own tags and says so.
+        .dependence = Dependence::Reported,
+        // Adding nodes or edges cannot change what a node was granted.
+        .monotone = false,
+        .compute  = [](std::span<const Anchor> anchors, const GraphAccess &graphs, ReadLog &log)
+            -> std::optional<int> {
+            if (anchors.size() != 1 || anchors[0].graph == nullptr ||
+                anchors[0].node == kWholeGraph || !graphs.view) {
+                return std::nullopt;
+            }
+            const graph::GraphView *view = graphs.view(*anchors[0].graph);
+            if (view == nullptr) {
+                return std::nullopt;
+            }
+            const auto ref = static_cast<graph::NodeRef>(anchors[0].node);
+            if (!view->contains(ref)) {
+                return std::nullopt;
+            }
+            // The node's own tags are what it read; the mask itself is the view's answer and this
+            // kind does not derive it a second time (`core::tag::permissionsOfTags` stays the one
+            // place that reads a tag set, and every adapter's `permissionsOf` goes through it).
+            log.node(anchors[0].node);
+            const camel::core::sem::PermissionMask mask = view->permissionsOf(ref);
+            // No mask is not the value 0: a node nobody granted anything at has no fact of this
+            // kind, which is the difference between "nothing granted" and "granted nothing".
+            return mask != 0 ? std::optional<int>(static_cast<int>(mask)) : std::nullopt;
+        },
+        // No merge, and the reason: permissions are granted per place, and there is no permission
+        // of a union of two places -- a union is not a place a program can be in. The framework
+        // requires the reason where a kind has no merge, and for a Content kind it is also why the
+        // class cannot be an analysis: nothing to combine because nothing is stored.
+        .merge = {},
+        // The text the kind prints, from the one function that names a mask in text; a second
+        // spelling here would be a second answer to "what is this mask".
+        .print =
+            [](const int &mask) {
+                return camel::core::sem::permissionsText(
+                    static_cast<camel::core::sem::PermissionMask>(mask));
+            },
+        // No anchorsIn override: a Node kind is asked at every node of the view, which is where a
+        // program can grant a permission.
+        .anchorsIn = {},
+        // No encode/decode yet: the runtime kind keeps its own form (a decimal number) until the
+        // step that persists facts, and two encoders now would be two texts for one value.
         .encode = {},
         .decode = {},
     });

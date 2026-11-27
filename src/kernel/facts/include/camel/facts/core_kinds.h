@@ -23,4 +23,10 @@ namespace camel::facts {
 /// registration for why a union of two shapes is not a shape.
 KindId shapeKind();
 
+/// The kind `core.permissions`: the numeric permissions the program granted at a node -- the one
+/// example the framework's own definition of `Class::Content` names, so it is the kind that states
+/// what a Content kind is. Read from the view every time and never stored, so never stale; no merge
+/// (see the registration for the reason).
+KindId permissionsKind();
+
 } // namespace camel::facts
