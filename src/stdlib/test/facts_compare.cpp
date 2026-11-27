@@ -864,9 +864,7 @@ FactsCompareTestPass::apply(const camel::runtime::Program *program, std::ostream
         draft.noStore,
         draft.kept,
         draft.stale);
-    // Also on stderr, and alone there: a run that truncates the pass output keeps the tail window,
-    // and the one line a case pins must not be what a truncation drops.
-    std::cerr << std::format(
+    os << std::format(
         "FACTS_COMPARE kind=core.kinds graphs={} nodes={} same={} diff={} no_new={} no_old={} "
         "ok={}\n",
         coreKinds.graphs,
@@ -876,6 +874,23 @@ FactsCompareTestPass::apply(const camel::runtime::Program *program, std::ostream
         coreKinds.noNew,
         coreKinds.noOld,
         (coreKinds.diff == 0 && coreKinds.noNew == 0 && coreKinds.same >= 1) ? 1 : 0);
+    return program;
+}
+
+const camel::runtime::Program *
+CoreKindsCompareTestPass::apply(const camel::runtime::Program *program, std::ostream &os) {
+    CoreKindCounts coreKinds;
+    for (auto *graph : camel::runtime::collectReachableGraphs(*program)) {
+        if (graph == nullptr) {
+            continue;
+        }
+        camel::facts::Store *store = camel::facts::storeHolding(*graph);
+        if (store == nullptr) {
+            os << std::format("FACTS_COMPARE graph={} state=no-store\n", graph->name());
+            continue;
+        }
+        compareCoreKinds(*program, *graph, *store, context_->facts(), coreKinds);
+    }
     os << std::format(
         "FACTS_COMPARE kind=core.kinds graphs={} nodes={} same={} diff={} no_new={} no_old={} "
         "ok={}\n",
@@ -896,5 +911,9 @@ using camel::execute::PassKernel;
 
 /// The pass this file implements; the name is the constant facts_compare.h declares.
 const PassKernel factsCompareKernel(kFactsCompareTestPass, makePass<FactsCompareTestPass>());
+
+/// The same comparison with its own name, for a case that wants one line and no neighbours.
+const PassKernel
+    coreKindsCompareKernel(kCoreKindsCompareTestPass, makePass<CoreKindsCompareTestPass>());
 
 } // namespace
