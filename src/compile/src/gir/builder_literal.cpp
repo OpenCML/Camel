@@ -479,8 +479,11 @@ bool Builder::rangeEntersArray(Type *param, Type *value) {
         return false;
     }
     Type *element = array->elemType();
-    return element != nullptr && element->code() == TypeCode::TypeVar &&
-           array->unify(rangeArray) != nullptr;
+    // The variable takes the element the range's array has. An array of a type that is not fixed
+    // by the declaration is what this entrance is about; a variable the call binds elsewhere to a
+    // type the range's array does not have is refused when each argument is held to its parameter,
+    // not here, because the two readings of one variable are one question.
+    return element != nullptr && element->code() == TypeCode::TypeVar;
 }
 
 node_handle_t Builder::rangeArrayNode(node_handle_t node, const GCT::node_ptr_t &origin) {
