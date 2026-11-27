@@ -2969,56 +2969,98 @@ bool buildTransposeMember(
                         const auto with = function->withInputsOf(oldBodyResult);
                         results.assign(with.begin(), with.end());
                     }
-                    // The round's cotangent is the **whole** cotangent of what the body answers,
-                    // not one scalar per state: the body's answer is the `Fill` that builds the
-                    // tuple of the states, and the transpose of a construction is the member-wise
-                    // projection of the aggregate's cotangent (design principles 9.9). A seed per
-                    // member would have to reach the arm's walk as a member, and the arm's walk
-                    // meets the `Fill` -- so the seed is the aggregate the `Fill` built, assembled
-                    // here from the cotangent ports of the states that take part, in the order the
-                    // `Fill` declares them. A state carried by the loop unchanged has no cotangent
-                    // to seed: the round that value belongs to delivers nothing to it (see the
-                    // port loop above), so its member is the zero of its own space -- a tuple with
-                    // a hole is not a cotangent of the tuple.
-                    std::vector<gc_node_ref_t> parts(results.size(), rt::kInvalidNodeRef);
-                    for (size_t i = 0; i < stateCount && i < parts.size(); ++i) {
-                        if (stateComponent[i] == kNoComponent) {
-                            continue;
-                        }
-                        parts[i] = ctPorts[stateComponent[i]];
-                    }
-                    for (size_t i = 0; i < parts.size(); ++i) {
-                        if (parts[i] == rt::kInvalidNodeRef) {
-                            parts[i] = zeroOfValue(walkCtx, results[i]);
-                        }
-                        if (parts[i] == rt::kInvalidNodeRef) {
-                            parts.clear();
-                            break;
-                        }
-                    }
-                    bool seededTheWhole = false;
-                    if (!parts.empty()) {
-                        const camel::runtime::GCNode *const wholeNode =
-                            function->node(oldBodyResult);
-                        Type *const wholePrimal = wholeNode != nullptr
-                                                      ? const_cast<Type *>(wholeNode->dataType())
-                                                      : nullptr;
-                        const camel::core::TangentSpaceAnswer wholeSpace =
-                            wholePrimal != nullptr ? camel::core::tangentSpaceOf(wholePrimal)
-                                                   : camel::core::TangentSpaceAnswer{};
-                        if (wholeSpace.hasSpace() && wholeSpace.space != nullptr) {
-                            const gc_node_ref_t whole =
-                                aggregateOfMembers(walkCtx, wholeSpace.space, parts);
-                            if (whole != rt::kInvalidNodeRef) {
-                                seeds.push_back(ArmSeed{oldBodyResult, whole});
-                                seededTheWhole = true;
+                    // A round answers the tuple of its states, and the body answers it through
+                    // the arms of a branch: one entry of `results` per arm, each of them the whole
+                    // tuple (`(int.., bool, float)` for `thrice`). That tuple has no cotangent of
+                    // its own -- `aggregateAnswer` (`kernel/core/tangent_space.cpp`) gives an
+                    // aggregate no space as soon as one member has none, and a loop's states
+                    // include the round's `int..` index and its `bool` flag -- so the seed a state
+                    // takes is the **member** the state is, read off the construction inside the
+                    // arm that answers it (`fillPayloadOf`, matched by the state's own cotangent
+                    // type: the tuple holds members that are not states at all, so a state's place
+                    // among the states is not its place among the members). A state with no space
+                    // is carried through untouched, takes no member and no port, exactly as `jvp`
+                    // leaves it unpaired.
+                    bool seededTheStates = false;
+                    if (!results.empty()) {
+                        for (const gc_node_ref_t product : results) {
+                            if (product == rt::kInvalidNodeRef) {
+                                continue;
+                            }
+                            const uint32_t productRegion = function->nodeRegion(product);
+                            const camel::runtime::GCNode *const productNode =
+                                function->node(product);
+                            Type *const productType =
+                                productNode != nullptr ? const_cast<Type *>(productNode->dataType())
+                                                       : nullptr;
+                            const std::optional<size_t> productArity =
+                                productType != nullptr ? camel::core::type::tree::arity(productType)
+                                                       : std::nullopt;
+                            if (!productArity.has_value()) {
+                                continue;
+                            }
+                            const auto productFill = fillPayloadOf(*function, product);
+                            std::optional<FillPayload> construction;
+                            if (productFill.has_value() &&
+                                productFill->values.size() == *productArity) {
+                                construction = productFill;
+                            } else {
+                                for (const gc_node_ref_t candidateRef : walkOrder) {
+                                    if (function->nodeRegion(candidateRef) != productRegion ||
+                                        nodeOperatorOf(*function, candidateRef) !=
+                                            NodeOperator::Fill) {
+                                        continue;
+                                    }
+                                    const auto candidate = fillPayloadOf(*function, candidateRef);
+                                    if (candidate.has_value() &&
+                                        candidate->values.size() == *productArity) {
+                                        construction = candidate;
+                                        break;
+                                    }
+                                }
+                            }
+                            if (!construction.has_value()) {
+                                continue;
+                            }
+                            std::vector<bool> memberUsed(construction->values.size(), false);
+                            for (size_t i = 0; i < stateCount; ++i) {
+                                if (stateComponent[i] == kNoComponent ||
+                                    stateCotangentTypes[i] == nullptr) {
+                                    continue;
+                                }
+                                const std::string wanted = stateCotangentTypes[i]->toString();
+                                size_t chosen            = construction->values.size();
+                                for (size_t j = 0; j < construction->values.size(); ++j) {
+                                    if (memberUsed[j]) {
+                                        continue;
+                                    }
+                                    const camel::runtime::GCNode *const memberNode =
+                                        function->node(construction->values[j]);
+                                    if (memberNode == nullptr ||
+                                        memberNode->dataType() == nullptr ||
+                                        memberNode->dataType()->toString() != wanted) {
+                                        continue;
+                                    }
+                                    chosen = j;
+                                    break;
+                                }
+                                if (chosen >= construction->values.size()) {
+                                    continue;
+                                }
+                                memberUsed[chosen]         = true;
+                                const gc_node_ref_t member = construction->values[chosen];
+                                if (member == rt::kInvalidNodeRef ||
+                                    function->nodeRegion(member) != productRegion) {
+                                    continue;
+                                }
+                                seeds.push_back(ArmSeed{member, ctPorts[stateComponent[i]]});
+                                seededTheStates = true;
                             }
                         }
                     }
-                    if (!seededTheWhole) {
-                        // The aggregate could not be built (no cotangent space for the tuple, or a
-                        // member's zero that this walk cannot write): the per-state seeds are what
-                        // is left, and the arm's walk says by name where it stops.
+                    if (!seededTheStates) {
+                        // Nothing was found to seed at a member: the per-state seeds are what is
+                        // left, and the arm's walk says by name where it stops.
                         for (size_t i = 0; i < stateCount; ++i) {
                             if (stateComponent[i] == kNoComponent) {
                                 continue;
@@ -3031,7 +3073,57 @@ bool buildTransposeMember(
                     }
                 }
                 std::vector<gc_node_ref_t> statePorts(regionPorts.begin() + 1, regionPorts.end());
-                const std::vector<gc_node_ref_t> back = runSeeded(bodyRegionOld, seeds, statePorts);
+                // The seeds can stand in more than one region: a round's states are answered by
+                // the arms of a branch, and an arm is a region of its own, so the member a state
+                // takes its cotangent from is a node of the arm's region. The sweep that walks a
+                // region only takes nodes of *that* region (`:1085`), so each region is walked with
+                // its own seeds and the answers are summed per stop -- the arms answer the same
+                // stops, and an arm the condition did not choose contributes nothing.
+                std::vector<gc_node_ref_t> back(statePorts.size(), rt::kInvalidNodeRef);
+                {
+                    std::vector<std::pair<uint32_t, std::vector<ArmSeed>>> byRegion;
+                    for (const ArmSeed &seed : seeds) {
+                        if (seed.at == rt::kInvalidNodeRef) {
+                            continue;
+                        }
+                        const uint32_t seedRegion = function->nodeRegion(seed.at);
+                        auto slot                 = byRegion.begin();
+                        while (slot != byRegion.end() && slot->first != seedRegion) {
+                            ++slot;
+                        }
+                        if (slot == byRegion.end()) {
+                            byRegion.push_back({seedRegion, {seed}});
+                        } else {
+                            slot->second.push_back(seed);
+                        }
+                    }
+                    for (const auto &[seedRegion, group] : byRegion) {
+                        const std::vector<gc_node_ref_t> answer =
+                            runSeeded(seedRegion, group, statePorts);
+                        if (!armsOk) {
+                            break;
+                        }
+                        for (size_t i = 0; i < statePorts.size() && i < answer.size(); ++i) {
+                            if (answer[i] == rt::kInvalidNodeRef) {
+                                continue;
+                            }
+                            Type *const space = cotangentTypeOf(statePorts[i]);
+                            const gc_node_ref_t summed =
+                                sumOfCotangents(walkCtx, space, back[i], answer[i]);
+                            if (summed == rt::kInvalidNodeRef) {
+                                os << "TRANSPOSE function=" << function->name()
+                                   << " arm-stop region=" << seedRegion
+                                   << " why=no-addition-for-a-stop stop=" << i << '\n';
+                                armsOk = false;
+                                break;
+                            }
+                            back[i] = summed;
+                        }
+                        if (!armsOk) {
+                            break;
+                        }
+                    }
+                }
                 const gc_node_ref_t bodyCotangent =
                     carriedStates.empty() || carriedStates.front() >= back.size()
                         ? rt::kInvalidNodeRef
