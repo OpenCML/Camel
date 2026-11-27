@@ -52,3 +52,12 @@
 ### F. `tangentSpaceOf` 的用户面与机件面要一起走（`D-1127-278` 执行记录，截稿后整理）
 - 已落地：`Tangent<T>` 走用户面（`Tangent<bool> = bool`、`Tangent<int> = int`）、`jvp.cml:43` 例子改 `(int, int)`、聚合恒等（`54ccaacc55`：全成员都是自己的切空间时交回 `primal`）
 - 仍存：`tangentSpaceOf` 在机件内部的零节点策略（"内部聚合只带真正需要梯度的成员"）与用户面口径在注释里未成文 ⇒ 截稿后把原则 9.9 的这段话写进 `derivative.h` 注释，别让下一个人再从测试反推
+
+### J. 后缀 `!` 拆 `T!`：文档说支持、实现连最小样本都拒绝（语法/解析层，与 C2 无关；已报决策者 2026-11-28 01:5x）
+- 文档（`docs/design-principles.cn.md`）：`:58` "`x!`，`x` 是 `T?`／`T!` ⇒ …另一臂是拆开的值"；`:228`/`:230` 把"后缀 `!`"与 `??`、`!!`、`match` 固定模式并列为拆包手段
+- 树里取证（`lane-editview-a`）：`git grep` 命中**全在类型位置**（`=> int!`、`x: int!`），`(let|return|=) … )!` 的**拆值用法 0 命中** ⇒ 无现成样本可照抄
+- 最小探针（不依赖任何算子）：`func one() => int! { return 1 }` + `let x = one()!` ⇒ `t205_suffix_bang.cml:7:18 No matching function found for argument types: <> (string); operator '!' is not defined for these operand types`
+- 同形报错在四种自然写法里重复（`let h = g!`、`match g { case ok(h) => … }`、`…(f)!(3)`、`one()!`）；其中 `let h = g!` 会**吃掉下一行的 `let`** ⇒ `!` 被解析成作用在后续 token 上的算子调用
+- 影响：`task-205`（C1→C2）的程序面 `c2.by_program` 因此红；命令行侧 PASS 且与 `8ce4bd4e4e` 金标逐字节相同
+- 未试的一条线索：文档 `:58` 说"与 `!! fail` 是同一种结构" ⇒ **前缀 `!!`** 可能是真正的拆包形态（T5 `let x = !!one()`）；若成立则本缺口是文档措辞问题（文档归协调者改），否则按语法缺口立卡
+- 处置：`task-205` 四笔**不进合并队列**（带红进去就是新红），等这条定论
