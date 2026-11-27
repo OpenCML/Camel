@@ -1056,10 +1056,10 @@ bool parseArgs(int argc, char *argv[]) {
                 return parse(argc, argv, docsCommand);
             }
             if (word == kSubcommands[1].name) {
-                return parse(argc, argv, aboutCommand);
+                return parse(argc, argv, infoFlags); // bout takes no argument of its own
             }
             if (word == kSubcommands[2].name) {
-                return parse(argc, argv, zenCommand);
+                return parse(argc, argv, infoFlags); // zen takes no argument of its own
             }
             if (word == kSubcommands[3].name) {
                 return parse(argc, argv, explainCommand);
