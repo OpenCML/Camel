@@ -267,6 +267,8 @@ pwsh -NoProfile -File ... -Path <wt> -Clean                        # 收尾：�
 2. `git status --porcelain` 为空（干净）；
 3. **该树对应的车道当前不在 `list_agents` 里 `running`** —— 这一条是新增的，前两条今天证明不够。
 
+**`mtime` 不是活死判据（2026-11-27）**：它只证明「文件被写过」，不覆盖三种情形 —— **只在内存里编辑**、**正在跑长构建/长测试**、**待唤醒的会话**，这三类都可能几十分钟不落一次盘。判死树只认上面三步（`ahead == 0` + `status` 空 + 不在 `running`），`mtime` 只能当辅助证据，单独命中「60 分钟无写盘」不足以回收。当晚实例：`editview-commit` 11:17 之后没有写盘，但那个座位正有活在修 `4de37116f3`；`value-ports`/`witness` 各挂着在跑或待唤醒的座位 —— 按 mtime 判会把三条活线一起清掉。
+
 另外：**正在跑的线要自己把可复现物落到树外**（`D:\Temp\` 或主机 `/tmp`，并在报告里写明路径），因为树随时可能被重建成更早的 sha，主机上的 `~/camel-work/<lane>` 也可能一起消失。
 
 **工作树当池子用，但池子不是一个脚本参数**（2026-11-27 更正：`new-worktree.ps1` **没有** `-Reuse` / `-Release` / `-Pool`，它的参数只有 `Path/Branch/Base/FromCheckout/VerifyOnly/NoHusky/NoFetch`；此前那一版写着有，是错的，害得一条车道到处找开关）：合完的树**留着**（不 `worktree remove`），切成 detached head 放回 `D:\Projects\Camel-wt\`；新车道先**挑一棵 detached 且干净的**直接 `git checkout -B lane/<名字>` 用，挑不到才 `new-worktree.ps1` 新建。「空闲」只认「detached 且干净」两条。
