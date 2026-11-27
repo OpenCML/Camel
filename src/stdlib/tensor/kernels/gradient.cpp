@@ -6,6 +6,7 @@
  */
 
 #include "gradient.h"
+#include "shape_rules.h"
 
 #include "cpu.h"
 #include "gemm.h"
@@ -82,26 +83,13 @@ broadcastStrides(std::span<const int64_t> small, std::span<const int64_t> big, c
     // target shape does not say which axis it is spread along, and the shape check alone cannot
     // tell -- `[10, 20]` spread over `[2, 2, 2]` fills the last axis by the suffix reading and the
     // middle one by another. A longer operand keeps the suffix reading, and the other reading stays
-    // a limitation until the axis goes into the call.
-    if (small.size() == 1 && small[0] != 1 && big.size() >= 3) {
-        std::string fits;
-        size_t candidates = 0;
-        for (size_t d = 0; d < big.size(); ++d) {
-            if (big[d] != small[0]) {
-                continue;
-            }
-            if (candidates != 0) {
-                fits += (candidates + 1 == big.size()) ? " or " : ", ";
-            }
-            fits += std::to_string(d);
-            ++candidates;
-        }
-        if (candidates > 1) {
-            throw ShapeError(
-                std::string(what) + ": the operand " + shapeText(small) + " fits axes " + fits +
-                " and does not say which one; a rank-1 operand that fits more than "
-                "one axis is refused");
-        }
+    // a limitation until the axis goes into the call. The judgement is `shape_rules.h`'s, shared
+    // with `sum_to`'s declaration, so the kernel and the declaration cannot drift apart.
+    if (const std::string fits = ambiguousRankOneAxes(small, big); !fits.empty()) {
+        throw ShapeError(
+            std::string(what) + ": the operand " + shapeText(small) + " fits axes " + fits +
+            " and does not say which one; a rank-1 operand that fits more than "
+            "one axis is refused");
     }
     return strides;
 }
@@ -320,27 +308,14 @@ void requireSuffixTarget(
     // middle one by another, and both are shapes the tensor has: the numbers differ, so the
     // ambiguity is refused by name instead of answered with the last axis alone. A longer target
     // keeps the suffix reading: `[2, 2]` on `[2, 2, 2]` is the trailing block, and the other
-    // reading stays a limitation until the axis goes into the call.
-    if (at.size() == 1 && at[0] != 1 && shape.size() >= 3) {
-        std::string fits;
-        size_t candidates = 0;
-        for (size_t d = 0; d < shape.size(); ++d) {
-            if (shape[d] != at[0]) {
-                continue;
-            }
-            if (candidates != 0) {
-                fits += (candidates + 1 == shape.size()) ? " or " : ", ";
-            }
-            fits += std::to_string(d);
-            ++candidates;
-        }
-        if (candidates > 1) {
-            throw ShapeError(
-                std::string(what) + ": the target extents " + shapeText(at) + " fit axes " + fits +
-                " of the tensor's shape " + shapeText(shape) +
-                " and do not say which one; a rank-1 target that fits more than one "
-                "axis is refused");
-        }
+    // reading stays a limitation until the axis goes into the call. The judgement is
+    // `shape_rules.h`'s, shared with the declaration, so the two cannot drift apart.
+    if (const std::string fits = ambiguousRankOneAxes(at, shape); !fits.empty()) {
+        throw ShapeError(
+            std::string(what) + ": the target extents " + shapeText(at) + " fit axes " + fits +
+            " of the tensor's shape " + shapeText(shape) +
+            " and do not say which one; a rank-1 target that fits more than one "
+            "axis is refused");
     }
 }
 
