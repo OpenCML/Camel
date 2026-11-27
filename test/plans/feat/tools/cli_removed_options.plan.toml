@@ -340,3 +340,78 @@ expect_exit = 0
 expect_stdout_contains = ["RuntimeDiag::IndexOutOfRange"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 10000
+# An option that reads key=value words is refused when a word carries a space around it, and the
+# refusal says what the writer did and prints the word as it should be written. The plan runner
+# validates these words itself, so the negative side runs through test/tools/option_spelling.py,
+# which starts camel (a rule this file cannot express as `args`). All four options that read such
+# words share the sentence: --gc, --spaces, --gc-stress, --gc-check.
+
+[[tests]]
+name = "spelling.gc.refuses_space_after_comma"
+desc = "`--gc kind=generational, large_threshold_kb=64` is refused, and the message names the comma and prints the compact word."
+kind = "negative"
+tool = "python"
+case = "../../../tools/option_spelling.py"
+args = ["${case}", "refuse", "../../../cases/compile/check/clean.cml", "gc"]
+expect_exit = 0
+expect_stdout_contains = ["camel exit=1"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 95000
+
+[[tests]]
+name = "spelling.spaces.refuses_space_after_comma"
+desc = "The same for `--spaces`."
+kind = "negative"
+tool = "python"
+case = "../../../tools/option_spelling.py"
+args = ["${case}", "refuse", "../../../cases/compile/check/clean.cml", "spaces"]
+expect_exit = 0
+expect_stdout_contains = ["camel exit=1"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 95000
+
+[[tests]]
+name = "spelling.gc_stress.refuses_space_after_comma"
+desc = "The same for `--gc-stress`."
+kind = "negative"
+tool = "python"
+case = "../../../tools/option_spelling.py"
+args = ["${case}", "refuse", "../../../cases/compile/check/clean.cml", "gc-stress"]
+expect_exit = 0
+expect_stdout_contains = ["camel exit=1"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 95000
+
+[[tests]]
+name = "spelling.gc_check.refuses_space_after_comma"
+desc = "The same for `--gc-check`."
+kind = "negative"
+tool = "python"
+case = "../../../tools/option_spelling.py"
+args = ["${case}", "refuse", "../../../cases/compile/check/clean.cml", "gc-check"]
+expect_exit = 0
+expect_stdout_contains = ["camel exit=1"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 95000
+
+[[tests]]
+name = "spelling.compact_words_accepted"
+desc = "The compact spelling of the same four options is accepted: no space after a comma."
+tool = "python"
+case = "../../../tools/option_spelling.py"
+args = ["${case}", "accept", "test/cases/compile/check/clean.cml", "gc"]
+expect_exit = 0
+expect_stdout_contains = ["camel exit=0"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 95000
+
+[[tests]]
+name = "spelling.compact_spaces_accepted"
+desc = "The same for `--spaces`."
+tool = "python"
+case = "../../../tools/option_spelling.py"
+args = ["${case}", "accept", "test/cases/compile/check/clean.cml", "spaces"]
+expect_exit = 0
+expect_stdout_contains = ["camel exit=0"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 95000
