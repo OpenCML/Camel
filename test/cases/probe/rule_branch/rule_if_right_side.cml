@@ -1,0 +1,41 @@
+// A rule's right side may branch on the values its left side bound: the answer is one of two
+// computations of the tangent, chosen by a condition that reads only the inputs. `max` is the
+// operator that needs this; the function below is the same shape written in the case, so the
+// reading does not depend on a rule set that lands separately.
+//
+// The right side was refused at two places that ask two different questions: "the rule's right side
+// is not a straight line: it has a region" (the node's region) and `node 6 kind 6 of 7` (the node's
+// kind, read by the copy's `default:`). A branch written in an ordinary program was differentiated
+// while the same branch written in a rule was not, so the defect was the copy's, not the
+// transform's.
+import rulesets.jvp
+import { jvp } from transforms
+
+func my_max(a: float, b: float) => float {
+    return if a >= b then a else b
+}
+
+rule jvp_my_max(a: float, b: float) {
+    my_max(a, b) => func (da: float, db: float) {
+        if a >= b then da else db
+    }
+}
+
+func g(a: float, b: float) => float {
+    return my_max(a, b)
+}
+
+func close(x: float, to: float) => bool {
+    let d = x - to
+    return d < 1.0e-9 && d > -1.0e-9
+}
+
+func main() => int sync {
+    // The tangent of the first operand is 1 and of the second 0, so the chosen arm is readable from
+    // the number: the larger operand answers 1, the smaller answers 0.
+    let (v1, t1) = jvp(g)(2.0, 1.0, 1.0, 0.0)
+    println(if v1 == 2.0 && close(t1, 1.0) then "a>b picks da" else "a>b wrong")
+    let (v2, t2) = jvp(g)(1.0, 2.0, 1.0, 0.0)
+    println(if v2 == 2.0 && close(t2, 0.0) then "a<b picks db" else "a<b wrong")
+    return 0
+}

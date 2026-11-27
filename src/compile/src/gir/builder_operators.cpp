@@ -1044,7 +1044,6 @@ void Builder::exportOperatorOverloads(const std::string &group, const GCT::node_
     // entity, and a template is not a graph a set could hold.
     if (auto it = operatorTemplates_.find(group); it != operatorTemplates_.end()) {
         size_t index = 0;
-        std::vector<std::shared_ptr<void>> all;
         for (const auto &[declaredIn, tmpl] : it->second) {
             if (declaredIn != templateScope_) {
                 continue; // declared inside a function: not the module's
@@ -1055,20 +1054,7 @@ void Builder::exportOperatorOverloads(const std::string &group, const GCT::node_
                 ref,
                 camel::core::module::detail::EntityAccess::makeGenericTemplate(
                     std::static_pointer_cast<void>(tmpl)));
-            all.push_back(std::static_pointer_cast<void>(tmpl));
             exported = true;
-        }
-        // The name the export above carries is `<group>#<k>`: one entity per template, because an
-        // exported name holds one entity. A caller that holds the operator's id and no name --
-        // the DREF the compiler makes for a block's root -- cannot spell that: it asks by id, so
-        // the way from the id to the templates is recorded here, at export, once, under the URI
-        // the declaration was interned as (`<module>:<group>`, the algorithm
-        // `declareNativeOperator` uses). No group is made for them: a body-less generic
-        // declaration has none, and calls resolve against the templates.
-        if (!all.empty()) {
-            exports_->recordOperatorTemplates(
-                camel::core::OperatorTable::instance().intern(module_->name() + ":" + group),
-                camel::core::module::detail::EntityAccess::makeGenericTemplates(all));
         }
     }
     if (!exported) {

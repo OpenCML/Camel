@@ -18,6 +18,7 @@ name = "fail.located"
 desc = "fail<'BadLimit'> raises the fault BadLimit at the call: the shape of DivisionByZero with the kind the program chose, and what was printed before it stays. The position is the call's kind clause, as every call written with one is located."
 kind = "negative"
 case = "../../../cases/consistency/fail_never/fail_located.cml"
+skip_unless = ["node", "test/tools/have-native-jit.mjs"]
 args = ["${case}", "${backend}"]
 backends = ["nvm", "fvm", "jit", "prl"]
 backends_agree = ["exit_code", "stdout_normalized", "diagnostics"]

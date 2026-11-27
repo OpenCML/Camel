@@ -21,6 +21,7 @@ timeout_ms = 20000
 name = "cleanup.unflushed_print_fault"
 desc = "Text written with print (no line end, so not flushed by the call) before a fault is on standard output, ahead of the diagnostic."
 case = "../../../cases/consistency/cleanup/unflushed_print_fault.cml"
+skip_unless = ["node", "test/tools/have-native-jit.mjs"]
 expect_exit = 1
 expect_diagnostic_name = "RuntimeDiag::DivisionByZero"
 expect_diagnostic_line = 11
@@ -31,6 +32,7 @@ expect_stdout_starts_with = "line\npending text"
 name = "cleanup.unflushed_print_exit"
 desc = "Text written with print before exit(4) is written; the exit code is 4."
 case = "../../../cases/consistency/cleanup/unflushed_print_exit.cml"
+skip_unless = ["node", "test/tools/have-native-jit.mjs"]
 expect_exit = 4
 verify_script = """
 assert(input.normalized.stdout === 'line\npending', JSON.stringify(input.normalized.stdout))
@@ -40,6 +42,7 @@ assert(input.normalized.stdout === 'line\npending', JSON.stringify(input.normali
 name = "cleanup.file_written_before_fault"
 desc = "A file written (twice) before a fault holds the second, complete content after the program has stopped."
 case = "../../../cases/consistency/cleanup/file_written_before_fault.cml"
+skip_unless = ["node", "test/tools/have-native-jit.mjs"]
 envs = ["CAMEL_TEST_DIR=${test_tmp}", "CAMEL_TEST_FILE=before_fault.txt"]
 expect_exit = 1
 expect_diagnostic_name = "RuntimeDiag::DivisionByZero"
@@ -55,6 +58,7 @@ fs.rmSync(file)
 name = "cleanup.file_written_before_exit"
 desc = "A file written before exit(5) is complete; the write after the exit did not happen."
 case = "../../../cases/consistency/cleanup/file_written_before_exit.cml"
+skip_unless = ["node", "test/tools/have-native-jit.mjs"]
 envs = ["CAMEL_TEST_DIR=${test_tmp}", "CAMEL_TEST_FILE=before_exit.txt"]
 expect_exit = 5
 verify_script = """
@@ -69,6 +73,7 @@ fs.rmSync(file)
 name = "cleanup.exit_zero"
 desc = "exit(0) from a nested sync call: what was printed before it, nothing after it, exit code 0 whatever main would have returned."
 case = "../../../cases/consistency/cleanup/exit_zero.cml"
+skip_unless = ["node", "test/tools/have-native-jit.mjs"]
 expect_exit = 0
 verify_script = """
 assert(input.normalized.stdout === 'level 3\nlevel 2\nlevel 1\n', JSON.stringify(input.normalized.stdout))
@@ -78,6 +83,7 @@ assert(input.normalized.stdout === 'level 3\nlevel 2\nlevel 1\n', JSON.stringify
 name = "cleanup.exit_in_map"
 desc = "exit(9) in one element function of a map: the exit code is 9 and nothing after the map runs."
 case = "../../../cases/consistency/cleanup/exit_in_map.cml"
+skip_unless = ["node", "test/tools/have-native-jit.mjs"]
 expect_exit = 9
 verify_script = """
 assert(input.normalized.stdout === 'before\n', JSON.stringify(input.normalized.stdout))
@@ -91,6 +97,7 @@ assert(input.normalized.stdout === 'before\n', JSON.stringify(input.normalized.s
 name = "cleanup.python_output_normal"
 desc = "Lines printed by Python through the bridge arrive, in order with the program's own lines."
 case = "../../../cases/consistency/cleanup/python_output_normal.cml"
+skip_unless = ["node", "test/tools/have-native-jit.mjs"]
 expect_exit = 0
 verify_script = """
 assert(input.normalized.stdout === 'camel 1\npython 1\ncamel 2\npython 2\ncamel 3\n', JSON.stringify(input.normalized.stdout))
@@ -100,6 +107,7 @@ assert(input.normalized.stdout === 'camel 1\npython 1\ncamel 2\npython 2\ncamel 
 name = "cleanup.python_output_before_fault"
 desc = "Lines printed by Python before a fault of the program are there, ahead of the diagnostic."
 case = "../../../cases/consistency/cleanup/python_output_before_fault.cml"
+skip_unless = ["node", "test/tools/have-native-jit.mjs"]
 expect_exit = 1
 expect_diagnostic_name = "RuntimeDiag::DivisionByZero"
 expect_diagnostic_line = 32
@@ -110,6 +118,7 @@ expect_stdout_starts_with = "camel 1\npython 1\ncamel 2\npython 2\n"
 name = "cleanup.python_output_before_exit"
 desc = "Lines printed by Python before exit(6) are there."
 case = "../../../cases/consistency/cleanup/python_output_before_exit.cml"
+skip_unless = ["node", "test/tools/have-native-jit.mjs"]
 expect_exit = 6
 verify_script = """
 assert(input.normalized.stdout === 'camel 1\npython 1\n', JSON.stringify(input.normalized.stdout))

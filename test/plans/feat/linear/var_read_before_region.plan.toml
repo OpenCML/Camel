@@ -59,6 +59,7 @@ name = "var_read_before_region.jit"
 desc = "A read of a var made before a loop or a branch arm reads the value the variable had at that point, not the one the region left there: a write after the read must not be what it sees, and a read made after the region still reads what the region left (while loop, interval loop, branch arm, nothing written, a value type). Pipeline: std::jit."
 kind = "behavior"
 case = "../../../cases/linear/runtime/var_read_before_region.cml"
+skip_unless = ["node", "test/tools/have-native-jit.mjs"]
 args = ["${case}", "std::jit"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]

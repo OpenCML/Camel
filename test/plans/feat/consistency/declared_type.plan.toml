@@ -14,6 +14,7 @@ name = "declared_type.same_type"
 desc = "`var acc: V = p` with `p: V` (it was refused as 'dynamic type casting'), a typed `let` from a call, from a name and from `map`, and a declared `T?` from an element. Alike on the four back ends."
 kind = "behavior"
 case = "../../../cases/consistency/declared_type/same_type.cml"
+skip_unless = ["node", "test/tools/have-native-jit.mjs"]
 args = ["${case}", "${backend}"]
 backends = ["nvm", "fvm", "jit", "prl"]
 backends_agree = ["exit_code", "stdout_normalized"]

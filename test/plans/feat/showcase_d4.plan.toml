@@ -18,6 +18,7 @@ name = "search.win"
 desc = "`XX.OO....`: X to move with a line one place from completion. The search takes it (best=2), the child that wins is worth exactly 1.0 -- its position is over, so every playout through it is the game's result -- and no other move is worth 1.0."
 kind = "behavior"
 case = "../../../showcase/d4-mcts/search.cml"
+skip_unless = ["node", "test/tools/have-native-jit.mjs"]
 args = ["${case}", "--arg", "seed=42", "--arg", "playouts=2000", "--arg", "position=XX.OO....", "${backend}"]
 backends = ["nvm", "fvm", "jit", "prl"]
 backends_agree = ["exit_code", "stdout_normalized"]
@@ -57,6 +58,7 @@ name = "search.block"
 desc = "`.X..O.X.O`: O completes 0-4-8 on its next move and X cannot win first, so place 0 is the only move that does not lose. The search finds it: best=0, and every other move is far below it. This is the case a search that always returned the same node fails."
 kind = "behavior"
 case = "../../../showcase/d4-mcts/search.cml"
+skip_unless = ["node", "test/tools/have-native-jit.mjs"]
 args = ["${case}", "--arg", "seed=42", "--arg", "playouts=2000", "--arg", "position=.X..O.X.O", "${backend}"]
 backends = ["nvm", "fvm", "jit", "prl"]
 backends_agree = ["exit_code", "stdout_normalized"]
@@ -91,6 +93,7 @@ name = "search.fork"
 desc = "`X..OX...O`: X forks at 1 or 2 and both win by force. The search separates them from the rest (above 0.9 against below 0.8) and prefers 2. Their means are below 1.0 on purpose: the value of a move is the average of the playouts the tree ran through it, and the tree explores moves below the fork too."
 kind = "behavior"
 case = "../../../showcase/d4-mcts/search.cml"
+skip_unless = ["node", "test/tools/have-native-jit.mjs"]
 args = ["${case}", "--arg", "seed=42", "--arg", "playouts=2000", "--arg", "position=X..OX...O", "${backend}"]
 backends = ["nvm", "fvm", "jit", "prl"]
 backends_agree = ["exit_code", "stdout_normalized"]
@@ -125,6 +128,7 @@ name = "search.empty"
 desc = "`.........`: the full search. 5000 playouts build 4937 nodes, the root counts all of them, and the centre (place 4) is the move the search values highest. This is the case that says the search is a search: the tree is built by the playouts, not by a heuristic."
 kind = "behavior"
 case = "../../../showcase/d4-mcts/search.cml"
+skip_unless = ["node", "test/tools/have-native-jit.mjs"]
 args = ["${case}", "--arg", "seed=7", "--arg", "playouts=5000", "--arg", "position=.........", "${backend}"]
 backends = ["nvm", "fvm", "jit", "prl"]
 backends_agree = ["exit_code", "stdout_normalized"]

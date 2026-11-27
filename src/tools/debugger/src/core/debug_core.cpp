@@ -1240,6 +1240,18 @@ std::vector<DebugCore::Variable> DebugCore::localsOf(const Chain &chain) {
         }
         auto v = nodeVariable(*home, *found, b->name, b->variable);
         if (!v) {
+            // The binding is there and its node is on the chain, but the node has no slot or no
+            // type yet. It is listed unevaluated rather than left out, so a frame's names do not
+            // depend on how far the run has got.
+            if (known == byDeclaration.end() && shown.count(b->name) == 0) {
+                Variable missing;
+                missing.name      = b->name;
+                missing.evaluated = false;
+                missing.note      = "<not evaluated>";
+                missing.view.type = b->type;
+                byDeclaration.emplace(b->decl, out.size());
+                out.push_back(std::move(missing));
+            }
             continue;
         }
         if (known != byDeclaration.end()) {

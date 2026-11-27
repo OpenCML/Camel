@@ -55,6 +55,7 @@ name = "constant_fault_untaken.simplify_jit"
 desc = "std::opt alone: one warning, 7, exit 0 on the JIT."
 kind = "behavior"
 case = "../../../cases/opt/generic/fold_constant_fault.cml"
+skip_unless = ["node", "test/tools/have-native-jit.mjs"]
 args = ["${case}", "std::opt", "std::jit"]
 expect_exit = 0
 verify_script = """

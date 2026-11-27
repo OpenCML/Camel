@@ -48,6 +48,12 @@ node scripts/merge-batch.mjs --seat <座位工作树> --lanes <lanes.json> --pus
 在公共 git 目录下记 `camel-built/<sha>`；`merge-batch` 的那次编译就会留下这条记录。所以手工做的合并或撤回，
 推之前也要对座位跑一次 `camel-remote.ps1`（不带计划），编不过的尖端推不上去。
 
+**本地 `npm run build` 对钩子无效**（2026-11-27 交付夜实测，卡了 40 分钟）：座位在本地编出 `BUILD_EXIT=0` 也**不写** `camel-built/<sha>`，
+钩子仍拒，原文是
+`pre-push: refusing to push HEAD to refs/heads/integration: <sha>… changes src/tools/camel-cli/config.cpp, which the build reads, and no commit from there to the tip was built.`
+改成对座位跑 `camel-remote.ps1 -Path . -Jobs 1 -NoGpuWatch`（`BUILD_EXIT=0`、`BUILD_SECONDS=30`）后一次通过。
+⇒ 判据只有一条：**推之前必须有一次 `camel-remote` 留下的构建记录**，本地编过不算。看到上面那句拒文，不要重跑合并，去补那次 remote 构建。
+
 `--build "<命令>"` 换编译命令（`{seat}` 代表座位路径；退出码等于 `--red-exit`，默认 1，才算"源码编不过"，
 别的非零码是没跑成，工具停手、不拿掉任何车道）。推送被拒（尖端动了或钩子拒绝）退出码 3：从新尖端重跑。
 整批编不过时，工具在二分前先单独编一次起点（集成尖端）：起点本身也编不过，退出码 4，不拿掉任何车道、不推送，

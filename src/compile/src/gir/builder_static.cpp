@@ -308,12 +308,6 @@ void Builder::walkStaticBodyNames(
         }
         return;
     case GCT::NodeKind::DREF: {
-        // A DREF the compiler made for an operator it knows by id stands for that operator, not
-        // for a name of any scope (gct::Tree::operRefOf): a block's root is such a node, and its
-        // label is not a name the program declared.
-        if (GCT::Tree::of(node)->operRefOf(node).has_value()) {
-            return;
-        }
         bool found = false;
         for (auto it = locals.rbegin(); it != locals.rend() && !found; ++it) {
             found = it->contains(node->name());

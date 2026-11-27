@@ -112,6 +112,7 @@ name = "math_kernels.erf"
 desc = "`erf` and `erfc` of the module, on kernels `erf_f/d` and `erfc_f/d`: `erf(0.5)`, `erf(-1.0)` and `erfc(2.0)` to three decimals as Python's `math.erf` and `math.erfc` give them (0.52, -0.843, 0.005), and `erf` of an `f32`. Four schedulers."
 kind = "behavior"
 case = "../../../cases/modules/math_calls/erf_values.cml"
+skip_unless = ["node", "test/tools/have-native-jit.mjs"]
 args = ["${case}", "${backend}"]
 backends = ["nvm", "fvm", "jit", "prl"]
 backends_agree = ["exit_code", "diagnostics", "stdout_normalized"]

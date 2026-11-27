@@ -14,6 +14,7 @@ name = "narrowing.behaviour"
 desc = "`x != null`, `null != x`, `x == null`, several tests and a test among other operands joined by `&&`, the right side of `&&` / `||`, an `if` without `else`, nested `if`s, a lambda capturing the narrowed name, the comparison as an expression, a nullable function value compared with null. Alike on the four back ends."
 kind = "behavior"
 case = "../../../cases/consistency/narrowing/narrow.cml"
+skip_unless = ["node", "test/tools/have-native-jit.mjs"]
 args = ["${case}", "${backend}"]
 backends = ["nvm", "fvm", "jit", "prl"]
 backends_agree = ["exit_code", "stdout_normalized"]
@@ -145,6 +146,7 @@ name = "narrowing.after_narrowing"
 desc = "In the arm where `x` is narrowed, `??` and a `match` with `case null` on `x` are allowed (KnownNotNull), also in a nested arm, and testing `x` against null again gives a fixed result (NullTestNeverNull); design principles 3.8. Alike on the four back ends."
 kind = "behavior"
 case = "../../../cases/consistency/narrowing/after_narrowing.cml"
+skip_unless = ["node", "test/tools/have-native-jit.mjs"]
 args = ["--diag-format", "short", "${case}", "${backend}"]
 backends = ["nvm", "fvm", "jit", "prl"]
 backends_agree = ["exit_code", "stdout_normalized"]

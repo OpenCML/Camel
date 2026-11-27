@@ -90,6 +90,20 @@ Camel 的两个实数类型**按编译器解析的名字写，不按读者以为
   不要凭"我记得 C++ 里怎么叫"来写。名字错时编译器说的是"未解析的名字"，不是"这个类型不存在" —— 别被那句话带偏。
 ```
 
+## 2¾½. 库里的 `@example` 是**一行一条**、各自独立（付过三次代价）
+
+`src/stdlib/**/*.cml` 的 `/// @example` 行由 `scripts/check-doc-snippets.mjs --source-examples` 编译。两条实测规则：
+
+```
+① **连续多行 `/// @example` 不是同一片段的续行**，每条各自编译、各自计数（`734` 条示例加两行 `@example` 就变 `736`）。
+   ⇒ 想写多行示例，得把整个程序写在**同一条 `@example`** 的那一行里；另起一行 `@example` 等于另起一个示例。
+② 示例按"**写在该模块里的代码**"读：它看得见所在文件的导出名，也应当看得见**该文件自己的 `import`**；
+   要用的跨模块名字没解析，先补**模块自身的 import**（真代码的 import），不是给示例加 import 行
+   （示例里单写一行 `import { x } from y` 会被当独立片段编译，报语法错）。
+```
+
+⇒ 2026-11-27 三条车道先后在示例里加 import 行都白跑（`is_same`、`to_bytes` 那批）。判据：`@example` 只在**一行**里写完整程序；跨模块名字靠**模块 import** 带进来。
+
 ## 3. 代码形状：架构的四个唯一
 
 `docs/design/architecture/README.cn.md` 定的四条，每日审查反复抓到的就是这四类：
@@ -117,6 +131,10 @@ Camel 的两个实数类型**按编译器解析的名字写，不按读者以为
   第 2 次拒「`# report this lane wrote, under the internal reports ...`」= **`lane` 这个词本身**也算过程痕迹。
   ⇒ 一条注释里想说“读数记在哪”时，写成**不含日期、不含 `internal/` 路径、不含 `lane`/角色词**的说法，例如
   「the report the repository keeps under its internal reports」；**不要**为了过钩子把注释删空 —— 钩子拦的是措辞，不是内容。
+· **PowerShell 会把提交信息吃掉，两次实测**：① `git commit -m "…"` 里出现 `` ` `` + 字母（如 `` `vjp ``）⇒ 反引号被当转义、
+  串被截断成半个词；② `git commit … | Select-Object -First 2` 提前关管道 ⇒ 报假「No staged files」。
+  ⇒ 提交信息一律走**单引号 here-string + `-F <文件>`**（`@'…'@` 不做任何替换），提交后**必看** `git log -1 --format='%h %s'`；
+  subject 与预期不一致就 `--amend -F` 重来，**报给协调者的永远是 amend 之后的 sha**，且报之前先自查 subject。
 ```
 
 ## 5. 不计兼容

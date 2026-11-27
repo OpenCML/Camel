@@ -256,6 +256,7 @@ name = "operator_overloads.struct_equality"
 desc = "An overload of `==` for exactly a struct type is more specific than the built-in comparison by content and is called (design principles 4.3); it gives `!=` as its negation; another struct type and the scalars keep the built-in operators. Alike on the four back ends."
 kind = "behavior"
 case = "../../../cases/consistency/operator_overloads/specific/struct_equality.cml"
+skip_unless = ["node", "test/tools/have-native-jit.mjs"]
 args = ["--diag-format", "short", "${case}", "${backend}"]
 backends = ["nvm", "fvm", "jit", "prl"]
 backends_agree = ["exit_code", "stdout_normalized"]

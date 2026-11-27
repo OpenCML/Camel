@@ -14,6 +14,7 @@ name = "logical_branch.short_circuit"
 desc = "Effects on the right side happen only when it is evaluated; chains stop at the side that decides; a fault on the right side is not reached; `&`, `|`, `&=`, `|=` evaluate both sides. Alike on the four back ends."
 kind = "behavior"
 case = "../../../cases/consistency/logical/short_circuit.cml"
+skip_unless = ["node", "test/tools/have-native-jit.mjs"]
 args = ["${case}", "${backend}"]
 backends = ["nvm", "fvm", "jit", "prl"]
 backends_agree = ["exit_code", "stdout_normalized"]
