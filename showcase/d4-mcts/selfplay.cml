@@ -68,9 +68,8 @@ func loss_of(board: int[], target: float) => float {
 // needs more than one game -- a step on one sample is a step on noise.
 with <m: Net>
 func batch_loss(boards: int[][], targets: float[]) => float {
-    let total = loop acc = 0.0 for i in 0 .. len(boards) do {
-        return acc + loss_of<m>(boards[i], targets[i])
-    }
+    let total = loop acc = 0.0 for i in 0 .. len(boards) do
+        acc + loss_of<m>(boards[i], targets[i])
     return total / float(len(boards))
 }
 
