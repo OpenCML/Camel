@@ -4038,6 +4038,7 @@ ea123086c0149664 ok test/cases/modules/types/type_functions.cml
 4b210b1ac8528772 ok test/cases/opt/algebra_rules/divergence.cml
 7fab6f537ff16bca ok test/cases/opt/algebra_rules/library_only.cml
 76b851f10195d52d ok test/cases/opt/algebra_rules/measure.cml
+74aab71b209a1b30 ok test/cases/opt/algebra_rules/shared_term.cml
 2000978eeb50dfa2 ok test/cases/opt/algebra_rules/tensor_forms.cml
 4dc2612264792cf6 ok test/cases/opt/camel_passes/cse_subject.cml
 1487fe6bb0a822d1 ok test/cases/opt/camel_passes/dce_subject.cml
