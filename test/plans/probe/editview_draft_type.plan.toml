@@ -34,3 +34,24 @@ args = ["check", "${case}"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
+[[tests]]
+name = "editview.a_draft_carries_no_effect_qualifier"
+desc = "The draft `open(inc)` on a function the compiler proved `pure` is `Draft<(x: int) => int pure>`, and `commit::<(x: int) => int>(d)` is accepted: an effect qualifier is a subtype relation, not part of what a function type is (design principles 5.2), so the two writings are one draft type and the commit answers with 5."
+kind = "behavior"
+case = "../../cases/probe/editview_b/draft_carries_no_effect_qualifier.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_exact = "5\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "editview.a_pure_position_refuses_an_impure_value"
+desc = "The same relation read the other way: `pure` runs one way only, so a function that writes the console does not fit a parameter that states `pure`, and the call is refused."
+kind = "behavior"
+case = "../../cases/probe/editview_b/a_pure_position_refuses_an_impure_value.cml"
+args = ["check", "${case}"]
+expect_exit = 1
+expect_output_contains = ["pure"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000

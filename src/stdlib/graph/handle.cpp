@@ -5,6 +5,8 @@
 
 #include "camel/core/error/runtime.h"
 #include "camel/core/mm.h"
+#include "camel/core/resource_semantics.h"
+#include "camel/core/type/composite/func.h"
 #include "camel/core/type/intern.h"
 #include "camel/core/type/text.h"
 #include "camel/runtime/draft.h"
@@ -19,6 +21,7 @@ namespace camel::graphmod {
 namespace err = camel::core::error;
 
 using namespace camel::core::type;
+namespace sem = camel::core::sem;
 using camel::runtime::GraphId;
 using camel::runtime::Program;
 
@@ -133,10 +136,23 @@ HandleType *HandleType::ofDraft(Type *functionType) {
                 return new (mem) HandleType(graph->code(), HandleKind::Graph, nullptr, true);
             }));
     }
+    // Effect qualifiers take no part in a function type's identity (design principles 5.2):
+    // `(x: int) => int` and `(x: int) => int pure` are one type, so `Draft<A>` and `Draft<B>` are
+    // one type too, and a draft opened on a `pure` function commits through a call that writes the
+    // type without the qualifier. The key is the canonical id of the signature with its resource
+    // clause left unwritten; the type the draft states is the one it was first asked for, since a
+    // type has no identity but its structure (5.2), and the value's effects are read off the value.
+    Type *draftKey = functionType;
+    if (functionType->code() == TypeCode::Function) {
+        auto *signature = static_cast<FunctionType *>(functionType);
+        if (signature->resources().mode != sem::ResourceSignature::Mode::Generic) {
+            draftKey = signature->withResources(sem::ResourceSignature{});
+        }
+    }
     const uintptr_t parts[3] = {
         static_cast<uintptr_t>(HandleKind::Graph),
         kDraftKeyWord,
-        typeKeyWord(TypeTable::instance().canonical(functionType))};
+        typeKeyWord(TypeTable::instance().canonical(draftKey))};
     return static_cast<HandleType *>(TypeTable::instance().internOther(
         graph->code(),
         std::span<const uintptr_t>(parts, 3),
@@ -193,7 +209,7 @@ Type *HandleType::unify(Type *other) const {
         // that same type (design 6; `commit`'s own "the same type as the one that was opened"): the
         // two are one type, not two the one gives way to. A draft of `(x: int) => int` is not a
         // draft of `(x: float) => float`, however far one function type can stand for the other.
-        return mine->equals(theirs) ? const_cast<HandleType *>(this) : nullptr;
+        return typeEqualsIgnoringResources(mine, theirs) ? const_cast<HandleType *>(this) : nullptr;
     }
     Type *united = mine->unify(theirs);
     if (united == nullptr) {
@@ -212,7 +228,10 @@ bool HandleType::equals(Type *other) const {
     if (mine == nullptr || theirs == nullptr) {
         return mine == theirs;
     }
-    return mine->equals(theirs);
+    // The draft states the function type it commits, and an effect qualifier is not part of that
+    // type (design principles 5.2): `Draft<(x: int) => int>` and `Draft<(x: int) => int pure>` are
+    // one type, so a draft of one is the draft the other names.
+    return typeEqualsIgnoringResources(mine, theirs);
 }
 
 CastSafety HandleType::castSafetyFrom(Type *source) const {
@@ -237,7 +256,7 @@ CastSafety HandleType::castSafetyFrom(Type *source) const {
         if (binding(mine) || binding(theirs)) {
             return CastSafety::Safe;
         }
-        return mine->equals(theirs) ? CastSafety::Safe : CastSafety::Forbidden;
+        return typeEqualsIgnoringResources(mine, theirs) ? CastSafety::Safe : CastSafety::Forbidden;
     }
     return CastSafety::Safe;
 }
