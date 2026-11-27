@@ -8,7 +8,6 @@ func target(a: int, b: int) => int {
     return a + (b + 1)
 }
 
-func main() => int sync {
+func main() sync {
     println(target(3, 4))
-    return 0
 }

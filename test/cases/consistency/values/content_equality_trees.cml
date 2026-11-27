@@ -32,7 +32,7 @@ func box(m: Map<int, string>, s: Set<int>) => Box {
     return { name: 'x', table: m, seen: s }
 }
 
-func main() => int sync {
+func main() sync {
     let empty = [(0, 'v0')] as Map<int, string>
     let none = [0] as Set<int>
     let a = up(empty, 0, 200)
@@ -53,5 +53,4 @@ func main() => int sync {
     let y = box(c, t)
     let z = box(d, t)
     println(x == y, x != y, x == z, [x, y]->contains<z>, [z, y]->contains<x>)
-    return 0
 }

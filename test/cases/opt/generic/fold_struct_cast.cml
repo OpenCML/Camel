@@ -16,9 +16,8 @@ func mk() => P {
     return { a: three(), b: 1.5 }
 }
 
-func main() => int sync {
+func main() sync {
     let p = mk()
     println(p.a)
     println(p.b)
-    return 0
 }

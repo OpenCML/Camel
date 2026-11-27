@@ -14,7 +14,6 @@ func loss() => float {
     return float(sum(g(p)))
 }
 
-func main() => int sync {
+func main() sync {
     println(grad(loss)<reshape<[3]>([0.5, 0.25, -0.35])>())
-    return 0
 }

@@ -68,11 +68,10 @@ func text() => int sync {
     return 0
 }
 
-func main() => int sync {
+func main() sync {
     while_loop()
     interval_loop()
     arm()
     nothing_written()
     text()
-    return 0
 }

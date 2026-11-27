@@ -7,6 +7,5 @@ func f(y: Vec<const constas n>) => int {
     return 0
 }
 
-func main() => int {
-    return 0
+func main() {
 }

@@ -11,11 +11,10 @@ func apply(f: (x: float) => float, x: float) => float {
     return f(x)
 }
 
-func main() => int sync {
+func main() sync {
     // the parameter says which function is meant
     println(apply(scale<2>, 1.5))
     // nothing does here
     let g = scale<2>
     println(g(3))
-    return 0
 }

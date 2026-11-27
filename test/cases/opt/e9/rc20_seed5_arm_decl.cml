@@ -1,8 +1,7 @@
-func main() => int sync {
+func main() sync {
     if false then sync {
         var v1 = 1
         v1 = 2
         null
     }
-    return 0
 }

@@ -26,7 +26,7 @@ func loss(x: float) => float sync {
     return a * 2.0 + a + float(seen)
 }
 
-func main() => int sync {
+func main() sync {
     let vg = with_grad(loss)<3.0>(2.0)
     println(calls)
     println(total)
@@ -35,5 +35,4 @@ func main() => int sync {
     let g = grad(loss)<3.0>(2.0)
     println(calls)
     println(g)
-    return 0
 }

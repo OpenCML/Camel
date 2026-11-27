@@ -57,7 +57,7 @@ func at(i: int) => f32 {
     return xs[i]
 }
 
-func main() => int sync {
+func main() sync {
     // an ordinary call: an array literal, integer elements, a struct literal, and `[]`
     println(pick([1.5]), pick([1, 2]), total([1.0, 2.25]), count([]))
     println(norm({ x: 3.0, y: 4.0 }), volume({ xs: [3.0, 4.0] }), corner([[1.0, 2.0], [3.0, 4.0]]))
@@ -71,5 +71,4 @@ func main() => int sync {
     // the value as written, converted once: 1.00000012, never 1.0
     println('{:.9g}'->format<pick([1.0000000596046447753906251])>)
     println('{:.9g}'->format<px({ x: 1.0000000596046447753906251, y: 0.0 })>)
-    return 0
 }

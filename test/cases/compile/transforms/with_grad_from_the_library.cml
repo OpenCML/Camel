@@ -61,7 +61,7 @@ func scaled() => float {
     return k * x * 2.0
 }
 
-func main() => int sync {
+func main() sync {
     let p = { a: 2.0, b: 3.0 }
     let w = reshape<[3]>([1.0, 2.0, 3.0])
     let x = reshape<[3]>([4.0, 5.0, 6.0])
@@ -110,5 +110,4 @@ func main() => int sync {
     'wg/wvg engine={} library={}'->format<engine_with_grad(dot)<w>(x), k3>->println
     'sk/sx  engine={} {} library={}'->format<engine_grad(scaled)<2.0, 3.0>(), sx, k4>->println
     'why={}'->format<why>->println
-    return 0
 }

@@ -24,7 +24,7 @@ func probe() => float {
     return float(sum(a[1..4]))
 }
 
-func main() => int sync {
+func main() sync {
     let x = reshape<[6]>([1.0, 2.0, 3.0, 4.0, 5.0, 6.0] as f32[])
     let g = grad(probe)<x>()
     'core_slice_adjoint value={:.1f} grad_sum={:.1f} grad_dot={:.1f}'->format<
@@ -32,5 +32,4 @@ func main() => int sync {
         sum(g),
         sum(g * reshape<[6]>([0.0, 1.0, 1.0, 1.0, 0.0, 0.0] as f32[]))
     >->println
-    return 0
 }

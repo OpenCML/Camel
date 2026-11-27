@@ -37,9 +37,8 @@ func read() => float {
     return pick_at(w, 1, 3)
 }
 
-func main() => int sync {
+func main() sync {
     let slope = grad(read)
     let d = slope<[1.0, 2.0, 3.0] as float[]>()
     `engine dL/dw={}`->format<d>->println
-    return 0
 }

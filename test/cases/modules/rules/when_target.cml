@@ -33,8 +33,7 @@ func floatDouble(x: float) => float {
     return x + x
 }
 
-func main() => int sync {
+func main() sync {
     println(byConst(7), notConst(7, 3), mulSum(2, 4), mulPlain(3, 4))
     println(intDouble(5), floatDouble(1.25))
-    return 0
 }

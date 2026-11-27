@@ -27,7 +27,7 @@ func sorted_param(var v: int[]) => int sync {
     return len(v)
 }
 
-func main() => int sync {
+func main() sync {
     var xs: int[] = []
     xs = xs->append<3>
     xs = xs->append<1>
@@ -56,5 +56,4 @@ func main() => int sync {
     var gs = [2.5, -1.0, 0.5]
     gs = gs->sort
     println(len(gs), gs)
-    return 0
 }

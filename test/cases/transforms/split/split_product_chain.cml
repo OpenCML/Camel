@@ -30,7 +30,7 @@ func quartic(x: float) => float {
     return x * x * x * x
 }
 
-func main() => int sync {
+func main() sync {
     let f3 = split(jvp(cubic))
     let (y3, l3) = f3(2.0)
     println('cubic y=', y3)
@@ -39,5 +39,4 @@ func main() => int sync {
     let (y4, l4) = f4(2.0)
     println('quartic y=', y4)
     println('quartic dx1=', l4(1.0))
-    return 0
 }

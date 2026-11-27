@@ -33,7 +33,7 @@ func s(x: float) => float {
     return x ^ x
 }
 
-func main() => int sync {
+func main() sync {
     let (value, tangent) = jvp(p)(3.0, 1.0)
     println(value)
     println(tangent)
@@ -49,5 +49,4 @@ func main() => int sync {
     let (negExpValue, negExpTangent) = jvp(s)(0.0 - 3.0, 1.0)
     println(negExpValue)
     println(negExpTangent)
-    return 0
 }

@@ -12,9 +12,8 @@ func size::<K, V>(t: type_lib::Table<K, V>) => int {
     return len(t.keys)
 }
 
-func main() => int sync {
+func main() sync {
     println(swap((1, 2)))
     println(swap(('x', 'y')))
     println(size({ keys: ['a', 'b'], values: [1.0, 2.0] }))
-    return 0
 }

@@ -10,7 +10,7 @@ import { exists } from fs
 import { save_params } from nn
 import tensor
 
-func main() => int sync {
+func main() sync {
     let root = get_env('CAMEL_TEST_TMPDIR') ?? ''
     let dir = if root == '' then 'test/tmp/nn_declaration' else root + '/nn_declaration'
     let params = { w: [1.0, 2.0] as float[], b: [0.0] as float[] }
@@ -20,5 +20,4 @@ func main() => int sync {
     // A parameter tree is not required: the type variable accepts any value, and the operator
     // ignores leaves that are not tensors.
     save_params('not a tree', dir)
-    return 0
 }

@@ -10,8 +10,7 @@ func make::<T>() => T[] {
     return xs
 }
 
-func main() => int sync {
+func main() sync {
     let xs = make()
     println(len(xs))
-    return 0
 }

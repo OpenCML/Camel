@@ -30,7 +30,6 @@ func churn::<T>(x: T, k: int) => int {
     else if k == 9 then churn(aC64, k - 1) else churn(aC128, k - 1)
 }
 
-func main() => int sync {
+func main() sync {
     println(churn(0, 3))
-    return 0
 }

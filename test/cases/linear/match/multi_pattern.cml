@@ -19,7 +19,7 @@ func small(n: int) => int {
     }
 }
 
-func main() => int sync {
+func main() sync {
     println(kind('a'))
     println(kind('e'))
     println(kind('u'))
@@ -32,5 +32,4 @@ func main() => int sync {
     println(small(3))
     println(small(4))
     println(small(9))
-    return 0
 }

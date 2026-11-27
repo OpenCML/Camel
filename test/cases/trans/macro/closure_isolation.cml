@@ -11,11 +11,10 @@ func make_adder(x: int) => Adder {
     }
 }
 
-func main() => int sync {
+func main() sync {
     let add10 = make_adder(10)
     let add20 = make_adder(20)
     let lhs = add10(5)
     let rhs = add20(5)
     'macro_closure_isolation lhs={} rhs={}'->format<lhs, rhs>->println
-    return 0
 }

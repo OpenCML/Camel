@@ -7,6 +7,6 @@ func field(t: { a: int }) => int {
     return 0
 }
 
-func main() => int {
-    return field({ a: 1 })
+func main() {
+    field({ a: 1 })
 }

@@ -21,7 +21,7 @@ func report(text: string, r: int!) => string {
     }
 }
 
-func main() => int sync {
+func main() sync {
     let inputs = ['42', '7', 'forty', '-3', '999']
     inputs->foreach<func (text: string) sync {
         // The first failing step decides the result; the steps after it are skipped.
@@ -38,5 +38,4 @@ func main() => int sync {
         case error e => e.message
         case v => 'ok'
     })
-    return 0
 }

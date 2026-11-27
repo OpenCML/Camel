@@ -10,7 +10,6 @@ func run(f: () => int pure) => int {
     return f()
 }
 
-func main() => int sync {
+func main() sync {
     println(run(bump))
-    return 0
 }

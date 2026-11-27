@@ -25,7 +25,7 @@ func err(actual: f32[...], name: string) => float {
     return float(sum(abs(actual - fixture('ref_' + name))))
 }
 
-func main() => int sync {
+func main() sync {
     let x = fixture('x')
     let w = fixture('w')
     let b = fixture('b')
@@ -41,5 +41,4 @@ func main() => int sync {
     let bn = err(batch_norm(x, fixture('m'), fixture('v'), fixture('gm'), fixture('bt')), 'bn')
     'spatial conv={} dx={} dw={} db={}'->format<conv, dx, dw, db>->println
     'spatial max_pool={} max_pool_grad={} avg_pool={} avg_pool_grad={} batch_norm={}'->format<mp, dmp, ap, dap, bn>->println
-    return 0
 }

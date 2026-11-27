@@ -28,11 +28,10 @@ func loss() => float {
     return float(sum(h))
 }
 
-func main() => int sync {
+func main() sync {
     let d = grad(loss)<0.25>()
     let hi = loss<0.2505>()
     let lo = loss<0.2495>()
     let fd = (hi - lo) / 1.0e-3
     'loop_grad_record_tensor_fd d={:.6f} fd={:.6f} gap={:.9f}'->format<d, fd, abs(d - fd)>->println
-    return 0
 }

@@ -5,8 +5,7 @@ func bump(var counter: int) {
     counter += 1
 }
 
-func main() => int sync {
+func main() sync {
     let k = 0
     bump(k)
-    return 0
 }

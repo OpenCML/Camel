@@ -8,6 +8,5 @@ func onlyBlockComment() {
     /* the only content, as a block */
 }
 
-func main() => int {
-    return 0
+func main() {
 }

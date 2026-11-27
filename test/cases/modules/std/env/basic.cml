@@ -4,7 +4,7 @@
 
 import { get_env, get_cwd } from env
 
-func main() => int sync {
+func main() sync {
     println('=== Env Module Basic Tests ===')
     
     println("\n[1] get_env('PATH')")
@@ -16,5 +16,4 @@ func main() => int sync {
     println('  cwd =', cwd)
     
     println('\n=== Env tests completed ===')
-    return 0
 }

@@ -31,7 +31,7 @@ func agreement(x: f32[...], y: f32[...]) => float {
     return float(mean(f32((x > 0.0) === (y > 0.5))))
 }
 
-func main() => int sync {
+func main() sync {
     let x = reshape<[4]>([1.0, -2.0, 3.0, -4.0] as f32[])
     let none = reshape<[4]>([0.0, 1.0, 0.0, 1.0] as f32[])
     let all = reshape<[4]>([1.0, 1.0, 1.0, 1.0] as f32[])
@@ -41,5 +41,4 @@ func main() => int sync {
     println(count_hits_selected(x, all))
     println(agreement(x, none))
     println(agreement(x, all))
-    return 0
 }

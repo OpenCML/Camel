@@ -13,7 +13,7 @@ func show(m: Match?) => string {
     }
 }
 
-func main() => int sync {
+func main() sync {
     println(show('room 42 and 7'->find<'[0-9]+'>), show('room'->find<'[0-9]+'>))
     println(show('room 42 and 7'->find<'[0-9]+', 8>), show('ab'->find<'', 2>))
     println(show('日本語 42'->find<'[0-9]+'>), show('日本語'->find<'本.'>))
@@ -36,5 +36,4 @@ func main() => int sync {
     println('a, b,c'->split<', *'>, len(''->split<','>))
     println(validate('[0-9]+') !! 'bad', validate('(') !! 'bad')
     println('x'->has_match<'a|x'>, ''->has_match<'^$'>)
-    return 0
 }

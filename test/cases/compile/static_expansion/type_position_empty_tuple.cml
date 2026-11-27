@@ -32,10 +32,9 @@ func zeroFields() => int {
     return rounds
 }
 
-func main() => int sync {
+func main() sync {
     println(describeEmpty())
     println(zeroFields())
     let e: () = noElements()
     println(describeTuple(e))
-    return 0
 }

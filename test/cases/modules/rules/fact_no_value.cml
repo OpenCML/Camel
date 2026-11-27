@@ -63,7 +63,6 @@ func kept(a: int) => int {
     return a * 2
 }
 
-func main() => int spelling sync {
+func main() spelling sync {
     println('kept', kept(7))
-    return 0
 }

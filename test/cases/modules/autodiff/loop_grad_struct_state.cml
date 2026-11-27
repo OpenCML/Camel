@@ -126,7 +126,7 @@ func treeLoss() => float {
     return sumP(q.p) + q.c
 }
 
-func main() => int sync {
+func main() sync {
     let g_whole = grad(whole)<1.0>()
     let g_nested = grad(nested)<1.0>()
     let g_counter = grad(counter)<1.0>()
@@ -137,5 +137,4 @@ func main() => int sync {
     let g_box_read = grad(boxRead)<1.0>()
     let g_tree = grad(treeLoss)<{ p: { a: 2.0, b: 3.0 }, c: 4.0 }>()
     'loop_grad_struct_state grads={} {} {} {} {} {} {} {} {}'->format<g_whole, g_nested, g_counter, g_one, g_mixed, g_tuple, g_box, g_box_read, g_tree>->println
-    return 0
 }

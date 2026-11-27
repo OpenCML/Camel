@@ -4,7 +4,6 @@
 // (NoMatchingFunction) and exits 1.
 func keep(acc: int[], i: int) => int[] { return acc }
 
-func main() => int sync {
+func main() sync {
     println([0, 1, 2]->reduce<keep, 0 .. 3>)
-    return 0
 }

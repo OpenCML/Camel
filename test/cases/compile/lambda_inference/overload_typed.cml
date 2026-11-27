@@ -21,7 +21,7 @@ func pick(f: (x: int) => int, v: string) => string {
     return 'string'
 }
 
-func main() => int sync {
+func main() sync {
     println('over', over(func (x: int) {
         x * 2
     }, 20), over(func (x: float) {
@@ -32,5 +32,4 @@ func main() => int sync {
     }, 41), pick(func (x: int) {
         x + 1
     }, 'a'))
-    return 0
 }

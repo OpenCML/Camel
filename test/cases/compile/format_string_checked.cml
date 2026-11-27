@@ -1,4 +1,3 @@
-func main() => int sync {
+func main() sync {
     println<'{} and {}'>(1)
-    return 0
 }

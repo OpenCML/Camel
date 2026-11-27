@@ -17,7 +17,7 @@ type Nest = enum {
     More(Nest[])
 }
 
-func main() => int sync {
+func main() sync {
     let t1: Tree<int> = Tree::Node{ left: Tree::Leaf(1), right: Tree::Leaf(2) }
     let t2: Tree<int> = Tree::Node{ left: Tree::Leaf(1), right: Tree::Leaf(3) }
     println(t1)
@@ -28,5 +28,4 @@ func main() => int sync {
     let n = Nest::More([Nest::More([Nest::Leaf(3)])])
     println(n)
     println(n == Nest::More([Nest::More([Nest::Leaf(3)])]))
-    return 0
 }

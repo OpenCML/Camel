@@ -17,8 +17,7 @@ func dropsWhatItGives(flag: bool) => void {
     if flag then {}
 }
 
-func main() => int sync {
+func main() sync {
     println(seed([1, 2, 3]))
     dropsWhatItGives(true)
-    return 0
 }

@@ -9,7 +9,7 @@ func try(x: int) => int {
     return x + 1
 }
 
-func main() => int sync {
+func main() sync {
     let catch = 2
     let finally = 3
     let is = 4
@@ -17,5 +17,4 @@ func main() => int sync {
     let keyof = 6
     let total = try(1) + catch + finally + is + of + keyof
     println(total)
-    return 0
 }

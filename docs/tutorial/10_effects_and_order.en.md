@@ -20,9 +20,8 @@ func greet() => int {
     return 1
 }
 
-func main() => int sync {
+func main() sync {
     println(greet())
-    return 0
 }
 ```
 
@@ -66,9 +65,8 @@ func greet() => int sync {
     return 1
 }
 
-func main() => int sync {
+func main() sync {
     println(greet())
-    return 0
 }
 ```
 
@@ -104,9 +102,8 @@ func report(second: bool) => int sync {
     return 0
 }
 
-func main() => int sync {
+func main() sync {
     println(report(true))
-    return 0
 }
 ```
 
@@ -164,10 +161,9 @@ func latest() => int sync {
     return before
 }
 
-func main() => int sync {
+func main() sync {
     println(twice())
     println(latest())
-    return 0
 }
 ```
 
@@ -221,10 +217,9 @@ func ordered() => int sync {
     return before
 }
 
-func main() => int sync {
+func main() sync {
     println(unordered())
     println(ordered())
-    return 0
 }
 ```
 
@@ -267,10 +262,9 @@ The read below is wanted by nobody, so it does not run; `println` is a
 ```cml
 import { get_env } from env
 
-func main() => int {
+func main() {
     get_env("CAMEL_TUTORIAL_NOBODY_READS_THIS")
     println(7)
-    return 0
 }
 ```
 
@@ -298,9 +292,8 @@ func report() => int {
     return 5->println->println
 }
 
-func main() => int sync {
+func main() sync {
     println(report())
-    return 0
 }
 ```
 
@@ -352,13 +345,12 @@ func bump(var cell: int) => int sync {
     return cell
 }
 
-func main() => int sync {
+func main() sync {
     let s: Stream = { id: 7 }
     println(read_id(s))
     tick()
     var cell = 0
     println(bump(cell))
-    return 0
 }
 ```
 
@@ -441,9 +433,8 @@ func stamp() => int uses var db sync {
     return 1
 }
 
-func main() => int sync {
+func main() sync {
     println(stamp())
-    return 0
 }
 ```
 
@@ -503,9 +494,8 @@ func twice(x: int) => int pure {
     return x * 2
 }
 
-func main() => int sync {
+func main() sync {
     println(apply(twice, 4))
-    return 0
 }
 ```
 
@@ -538,9 +528,8 @@ func noisy(x: int) => int sync {
     return x * 2
 }
 
-func main() => int sync {
+func main() sync {
     println(apply(noisy, 4))
-    return 0
 }
 ```
 
@@ -625,10 +614,9 @@ func square(x: int) => int pure {
     return x * x
 }
 
-func main() => int sync {
+func main() sync {
     println(sum_upto(4))
     println(apply(square, 5))
-    return 0
 }
 ```
 

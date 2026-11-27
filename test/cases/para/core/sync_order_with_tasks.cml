@@ -39,7 +39,7 @@ func independent(timeout: float) => int {
     return l + r
 }
 
-func main() => int sync {
+func main() sync {
     println(ordered())
     println('independent calls that met: {}'->format<independent(3.0) - 2>)
     println(ordered())
@@ -49,5 +49,4 @@ func main() => int sync {
     let z = bump(total, 0, 3)
     println('{} {} {}'->format<x, y, z>)
     println(total)
-    return 0
 }

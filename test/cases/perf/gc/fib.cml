@@ -3,7 +3,6 @@ func fib(n: int) => int {
     return if n < 2 then n else fib(n - 1) + fib(n - 2)
 }
 
-func main(n: int) => int sync {
+func main(n: int) sync {
     println('fib={}'->format<fib(n)>)
-    return 0
 }

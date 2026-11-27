@@ -63,7 +63,6 @@ func strictTagged(x: float) => float {
     }
 }
 
-func main() => int sync {
+func main() sync {
     println(plain(1.0), tagged(2.0), blockTagged(3.0), tagged2(4.0), finite(5.0), grouped(6.0), drifting(7.0), strict(8.0), strictBlock(9.0), strictTagged(10.0))
-    return 0
 }

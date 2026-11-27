@@ -9,9 +9,8 @@ func coefficients32(n: i32) => i32 {
     return n * i32(3) + n * i32(5)
 }
 
-func main(n: int) => int sync {
+func main(n: int) sync {
     println(coefficients(n))
     println(chain(n))
     println(coefficients32(i32(2147483647)))
-    return 0
 }

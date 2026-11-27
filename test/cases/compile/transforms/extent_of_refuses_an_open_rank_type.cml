@@ -26,7 +26,6 @@ func open_rank(t: float[...]) => int[] {
     return extent_of::<float[...]>()
 }
 
-func main() => int sync {
+func main() sync {
     println(open_rank([1.0, 2.0]))
-    return 0
 }

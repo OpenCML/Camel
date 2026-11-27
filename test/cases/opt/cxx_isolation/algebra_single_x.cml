@@ -18,7 +18,6 @@ func single_x(x: int) => int {
     return x * 3 + x * 4
 }
 
-func main() => int sync {
+func main() sync {
     println(single_x(5))
-    return 0
 }

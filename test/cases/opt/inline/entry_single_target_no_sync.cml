@@ -7,9 +7,8 @@ func inc(v: int) => int {
     return t
 }
 
-func main() => int sync {
+func main() sync {
     let x = 7
     let y = inc(x)
     'inline_entry_single_target_no_sync x={} y={}'->format<x, y>->println
-    return 0
 }

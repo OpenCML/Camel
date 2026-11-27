@@ -8,11 +8,10 @@ func divider(d: int) => (x: int) => int {
     }
 }
 
-func main() => int sync {
+func main() sync {
     let by2 = divider(2)
     let by0 = divider(0)
     println(by2(10))
     println(by0(10))
     println('not reached')
-    return 0
 }

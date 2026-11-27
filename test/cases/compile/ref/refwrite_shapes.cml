@@ -102,7 +102,7 @@ func two_names() => int {
     return write_one_read_the_other(c, c)
 }
 
-func main() => int sync {
+func main() sync {
     let r1b = branch_value(true)
     let r5 = written_here()
     let r6 = read_in_the_caller()
@@ -110,5 +110,4 @@ func main() => int sync {
     let r8 = two_names()
     let reported = p()
     println(`r1b=${r1b} r5=${r5} r6=${r6} r7=${r7} r8=${r8} p=${reported}`)
-    return 0
 }

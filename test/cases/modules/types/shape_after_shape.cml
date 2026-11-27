@@ -7,7 +7,6 @@ func f::<T>() => int {
     }
 }
 
-func main() => int sync {
+func main() sync {
     println(f::<Map<string, int>>())
-    return 0
 }

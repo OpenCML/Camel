@@ -8,10 +8,9 @@ func risky(d: int) => int {
     return 100 / d
 }
 
-func main() => int sync {
+func main() sync {
     println(attempt(risky)(0) !! -1)
     println(attempt(risky)(4) !! -1)
     println(risky(0))
     println('not reached')
-    return 0
 }

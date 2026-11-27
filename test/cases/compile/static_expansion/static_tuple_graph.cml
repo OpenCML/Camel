@@ -8,7 +8,6 @@ func sum(...ts) => int {
     return static loop acc = 0 for j in indices ts do acc + ts.[j]
 }
 
-func main() => int sync {
+func main() sync {
     println(sum(1, 2, 3))
-    return 0
 }

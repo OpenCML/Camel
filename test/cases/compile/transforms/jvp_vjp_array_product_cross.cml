@@ -22,7 +22,7 @@ func energy(xs: float[...], w: float[...]) => float {
     return sum(xs * w)
 }
 
-func main() => int sync {
+func main() sync {
     let xs = [1.0, 2.0, 3.0] as float[...]
     let w = [2.0, 3.0, 4.0] as float[...]
     let dxs = [1.0, -1.0, 2.0] as float[...]
@@ -34,5 +34,4 @@ func main() => int sync {
     println(`value = ${value:.1f}`)
     println(`forward  <jvp tangent, ct> = ${tangent:.1f}`)
     println(`backward <dxs, d/dxs> + <dws, d/dw> = ${paired:.1f}`)
-    return 0
 }

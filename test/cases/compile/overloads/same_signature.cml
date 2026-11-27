@@ -12,8 +12,7 @@ func f(y: int) => int {
     return y
 }
 
-func main() => int sync {
+func main() sync {
     println(f(1))
     println('never printed')
-    return 0
 }

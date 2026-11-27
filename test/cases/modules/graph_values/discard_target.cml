@@ -49,8 +49,7 @@ func targetIn::<F>(p: F) => Graph {
     return found[0]
 }
 
-func main() => int spelling sync {
+func main() spelling sync {
     println(`running: ${target(5)}`)
     println(`current: ${addOnes(targetIn(main))}`)
-    return 0
 }

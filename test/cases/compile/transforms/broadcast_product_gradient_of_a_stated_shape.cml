@@ -55,7 +55,7 @@ func total(x: float[3], w: float[1]) => float {
     return sum(x * w)
 }
 
-func main() => int sync {
+func main() sync {
     let gx = grad(total_x)
     let ex = gx<[1.0, 2.0, 3.0] as float[3]>()
     `engine d/dx numel={} d/dx={}`->format<numel(ex), ex>->println
@@ -65,5 +65,4 @@ func main() => int sync {
     let (value, pullback) = vjp(total)([1.0, 2.0, 3.0] as float[3], [2.0] as float[1])
     let (dx, dw) = pullback(1.0)
     `library value={} d/dx numel={} d/dx={} d/dw numel={} d/dw={}`->format<value, numel(dx), dx, numel(dw), dw>->println
-    return 0
 }

@@ -9,9 +9,8 @@ func scaled(k: float) => float {
     return geometry::tau * k
 }
 
-func main() => int sync {
+func main() sync {
     println('main starts')
     println(pi, area, scaled(1.0))
     println(geometry::circumference(1.0), geometry::unit.0)
-    return 0
 }

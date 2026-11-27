@@ -12,10 +12,9 @@ func score(a: int, b: int) => int {
     return lt + le * 10 + gt * 100 + ge * 1000 + eq * 10000 + ne * 100000
 }
 
-func main() => int sync {
+func main() sync {
     let s0 = score(2, 5)
     let s1 = score(5, 5)
     let s2 = score(7, 3)
     'comparison_matrix s0={} s1={} s2={}'->format<s0, s1, s2>->println
-    return 0
 }

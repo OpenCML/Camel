@@ -41,12 +41,11 @@ import { sqrt } from math
 import { hypot, Vec } from geometry
 import geometry
 
-func main() => int sync {
+func main() sync {
     println(sqrt(2.0))
     let v: Vec = { x: 3.0, y: 4.0 }
     println(hypot(v))
     println(geometry::area(2.0, 5.0))
-    return 0
 }
 ```
 
@@ -101,12 +100,11 @@ func tally(words: string[]) => Map<string, int> {
     return words->reduce<func (acc: Map<string, int>, w: string) => Map<string, int> { acc->put<w, (acc[w] ?? 0) + 1> }, [] as Map<string, int>>
 }
 
-func main(path: string) => int sync {
+func main(path: string) sync {
     let words = words_of(path->read_text !! '')
     let counts = tally(words)
     println(len(words))
     println(encode(counts))
-    return 0
 }
 ```
 
@@ -161,10 +159,9 @@ func tally(path: string) => Map<string, int> {
     return words->reduce<func (acc: Map<string, int>, w: string) => Map<string, int> { acc->put<w, (acc[w] ?? 0) + 1> }, [] as Map<string, int>>
 }
 
-func main(path: string) => int sync {
+func main(path: string) sync {
     let counts = tally(path)
     println(len(keys(counts)), counts['fox'] ?? 0, encode(counts))
-    return 0
 }
 ```
 

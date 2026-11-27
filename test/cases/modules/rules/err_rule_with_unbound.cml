@@ -15,6 +15,5 @@ export func apply(p: () => int) => (() => int)! {
     return p->rewrite<rules>
 }
 
-func main() => int sync {
-    return 0
+func main() sync {
 }

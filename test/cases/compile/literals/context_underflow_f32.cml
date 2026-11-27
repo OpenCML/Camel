@@ -3,8 +3,7 @@
  * nearest `f32` is zero, so it is refused.
  */
 
-func main() => int sync {
+func main() sync {
     let x: f32 = 1e-50
     println(x)
-    return 0
 }

@@ -26,8 +26,7 @@ func g(x: float[], n: float) => float {
     return n * 2.0
 }
 
-func main() => int sync {
+func main() sync {
     let back = transpose(g)
     println(back(1.0))
-    return 0
 }

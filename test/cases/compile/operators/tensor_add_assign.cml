@@ -7,7 +7,7 @@
 
 import { ones, sum } from tensor
 
-func main() => int sync {
+func main() sync {
     var a: f32[3] = ones::<f32>([3])
     let b: f32[3] = ones::<f32>([3]) + ones::<f32>([3])
     let old = a
@@ -15,5 +15,4 @@ func main() => int sync {
     println(sum(a), sum(old))
     a *= b
     println(sum(a), sum(old))
-    return 0
 }

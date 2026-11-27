@@ -13,23 +13,22 @@ func f11(a12: (a0: int, a1: string) => bool) => Q {
     return { n: if false then 12 else 5, tag: ['']->join<''> }
 }
 
-func main() => int sync {
+func main() sync {
     let n21 = 0
     let n27 = 'x'
     let n49 = match n21 {
         case 10 => sync {
-            return { n: 0, tag: '' }
+            { n: 0, tag: '' }
         }
         case 3 => sync {
-            return { n: 0, tag: '' }
+            { n: 0, tag: '' }
         }
         case _ => sync {
             let n46 = n27
-            return f11(func (p47: int, p48: string) => bool {
+            f11(func (p47: int, p48: string) => bool {
                 false
             })
         }
     }
     println('L6 {}'->format<n49>)
-    return 0
 }

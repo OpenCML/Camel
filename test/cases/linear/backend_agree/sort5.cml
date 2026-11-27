@@ -42,12 +42,11 @@ func network5(v0: int, v1: int, v2: int, v3: int, v4: int) => int[] {
     return [j0, j1, i2, g3, d4]
 }
 
-func main() => int sync {
+func main() sync {
     let down = network5(5, 4, 3, 2, 1)
     println(down[0], down[1], down[2], down[3], down[4])
     let mixed = network5(1, 5, 2, 4, 3)
     println(mixed[0], mixed[1], mixed[2], mixed[3], mixed[4])
     let repeats = network5(7, 7, 1, 1, 7)
     println(repeats[0], repeats[1], repeats[2], repeats[3], repeats[4])
-    return 0
 }

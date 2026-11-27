@@ -128,10 +128,9 @@ func control() => int spelling sync {
     return 0
 }
 
-func main() => int spelling sync {
+func main() spelling sync {
     println('[run] subject, before any edit')
     subject(4)
     outlined()
     control()
-    return 0
 }

@@ -16,7 +16,7 @@ func positions(t: (int, string)) => (int, int) {
     return (static for j in indices t do j)
 }
 
-func main() => int {
+func main() {
     let p = positions((1, 'x'))
-    return loopSum((1, 2, 3)) - unrolled((1, 2, 3)) + p.0
+    loopSum((1, 2, 3)) - unrolled((1, 2, 3)) + p.0
 }

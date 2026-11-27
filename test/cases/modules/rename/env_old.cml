@@ -4,7 +4,6 @@
 
 import { get_env } from sys
 
-func main() => int sync {
+func main() sync {
     println(get_env('PATH') ?? '')
-    return 0
 }

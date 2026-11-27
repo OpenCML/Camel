@@ -22,10 +22,9 @@ func say(text: string) => void sync {
     let _ = [wrap(text)]->call<print>
 }
 
-func main() => int sync {
+func main() sync {
     println('camel 1')
     say('python 1')
     exit(6)
     println('not reached')
-    return 0
 }

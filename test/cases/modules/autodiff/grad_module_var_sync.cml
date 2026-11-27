@@ -22,10 +22,9 @@ func f(x: float) => float sync {
     return w * w * x
 }
 
-func main() => int sync {
+func main() sync {
     let vg = with_grad(f)<3.0>(1.0)
     println(vg.0)
     println(vg.1)
     println(calls)
-    return 0
 }

@@ -27,7 +27,7 @@ func show(e: (string, int)) => string {
     return e.0 + ' ' + string(e.1)
 }
 
-func main() => int sync {
+func main() sync {
     let text = '
         The quick fox sees the lazy dog.
         The dog sees the fox, and the fox runs.
@@ -55,5 +55,4 @@ func main() => int sync {
     }>
     println('top 5:')
     println(ranked->take<5>->map<show>->join<'\n'>)
-    return 0
 }

@@ -34,7 +34,7 @@ func half(x: f32) => f32 {
     return x * k
 }
 
-func main() => int sync {
+func main() sync {
     // exact: the int overload, not the f32 one
     let s = scale<2>
     println(s(3))
@@ -44,5 +44,4 @@ func main() => int sync {
     // no exact match: the only fitting parameter takes the literal
     let h = half<3>
     println(h(1.5))
-    return 0
 }

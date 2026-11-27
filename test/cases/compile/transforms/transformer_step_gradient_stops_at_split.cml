@@ -74,7 +74,7 @@ func loss_plain(
     return sum((ln + (h @ w2 + b2)) * [[1.0, 2.0, 4.0, 8.0], [1.0, 3.0, 5.0, 7.0]] as float[2, 4])
 }
 
-func main() => int sync {
+func main() sync {
     let wq1 = [[0.25, 0.0], [0.0, 0.25], [-0.25, 0.5], [0.5, -0.25]] as float[4, 2]
     let wk1 = [[0.5, -0.25], [0.25, 0.0], [0.0, -0.25], [-0.25, 0.5]] as float[4, 2]
     let wv1 = [[0.0, 0.5], [0.25, -0.25], [-0.5, 0.0], [0.25, 0.75]] as float[4, 2]
@@ -92,5 +92,4 @@ func main() => int sync {
     let (value, pullback) = vjp(loss_plain)(wq1, wk1, wv1, wq2, wk2, wv2, wo1, wo2, g, w1, b1, w2, b2)
     let cotangents = pullback(1.0)
     `transformer step library loss={} dL/db1={}`->format<value, cotangents.11>->println
-    return 0
 }

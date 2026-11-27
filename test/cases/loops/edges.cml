@@ -9,10 +9,9 @@ func fib(n: int) => int {
     return a
 }
 
-func main() => int sync {
+func main() sync {
     let empty = loop acc = 7 for x in none do acc + x
     let never = loop i = 5 while i < 0 do i + 1
     let long = loop s = 0, i = 0 while i < 1000000 do (s + i % 7, i + 1)
     println(empty, never, fib(30), squares, long.0)
-    return 0
 }

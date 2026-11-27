@@ -7,7 +7,7 @@
  * program prints 60.
  */
 
-func main() => int sync {
+func main() sync {
     let (last, total) = loop i = 0, acc = 0 while i < 3 do {
         var step = (i + 1) * 10
         let f = func () {
@@ -16,5 +16,4 @@ func main() => int sync {
         (i + 1, acc + f())
     }
     println(total)
-    return 0
 }

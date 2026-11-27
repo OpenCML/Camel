@@ -3,7 +3,6 @@
  * without a `process::exit(code)` call the run ends 0, after printing `done`.
  */
 
-func main() => int sync {
+func main() sync {
     println('done')
-    return 7
 }

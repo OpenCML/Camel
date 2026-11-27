@@ -7,7 +7,6 @@ func signed(constas negate: bool, x: int) => int {
     return if negate then 0 - x else x
 }
 
-func main() => int sync {
+func main() sync {
     println(signed(true, 3), signed(false, 3))
-    return 0
 }

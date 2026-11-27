@@ -31,7 +31,7 @@ func step(x: f32[...]) => (f32[...], int, float[...], f32[...]) {
     return (h, k, reshape<[1]>([g.0]), g.1.w)
 }
 
-func main() => int sync {
+func main() sync {
     let m = { w: reshape<[2, 2]>([0.5, -0.25, 0.1, 0.3] as f32[]) }
     let x = load_npy::<f32>('x.npy')
     let r = step<m>(x)
@@ -54,5 +54,4 @@ func main() => int sync {
     if (get_env('ONNX_OUT') ?? '') != '' && exported != 1 then sync {
         exit(1)
     }
-    return 0
 }

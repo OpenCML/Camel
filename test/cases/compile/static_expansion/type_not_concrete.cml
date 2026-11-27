@@ -5,6 +5,6 @@ func f::<T>(x: int) => int {
     }
 }
 
-func main() => int sync {
-    return f(1)
+func main() sync {
+    f(1)
 }

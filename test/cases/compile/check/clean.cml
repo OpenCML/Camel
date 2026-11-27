@@ -1,4 +1,3 @@
-func main() => int sync {
+func main() sync {
     println('not printed by check')
-    return 0
 }

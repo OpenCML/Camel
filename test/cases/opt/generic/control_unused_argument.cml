@@ -8,10 +8,9 @@ func consume(ignored: bool) => int sync {
     return 0
 }
 
-func main() => int sync {
+func main() sync {
     println('before')
     consume([1.0]->reduce<func (a: bool, b: float) => bool {
         false
     }, true>)
-    return 0
 }

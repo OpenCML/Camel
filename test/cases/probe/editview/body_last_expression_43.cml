@@ -18,7 +18,6 @@ func family(f: (x: int) => int) => int sync {
     }
 }
 
-func main() => int sync {
+func main() sync {
     println('answer=', family(inc))
-    return 0
 }

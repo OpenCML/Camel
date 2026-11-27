@@ -4,6 +4,6 @@ func take(p: (void, int)) => int {
     return 0
 }
 
-func main() => int sync {
-    return take(('a', 1))
+func main() sync {
+    take(('a', 1))
 }

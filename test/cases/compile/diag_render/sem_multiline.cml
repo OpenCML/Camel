@@ -1,4 +1,4 @@
-func main() => int sync {
+func main() sync {
     let x = 5
     let y = if x > 1 then {
         1
@@ -7,5 +7,4 @@ func main() => int sync {
         let r = 3
         'a'
     }
-    return 0
 }

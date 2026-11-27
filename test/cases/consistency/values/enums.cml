@@ -21,7 +21,7 @@ func area(s: Shape) => float {
     }
 }
 
-func main() => int sync {
+func main() sync {
     let a = Shape::Circle(1.0)
     let b = Shape::Rect{ w: 2.0, h: 3.0 }
     let c = Shape::Empty
@@ -42,5 +42,4 @@ func main() => int sync {
     println(full)
     println(full == Slot::Full(b))
     println(full == Slot::Empty)
-    return 0
 }

@@ -6,6 +6,6 @@
 func probe(a: int) => int {
     return a * 0
 }
-func main() => int {
-    return println(probe(41))
+func main() {
+    println(probe(41))
 }

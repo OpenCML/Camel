@@ -36,12 +36,11 @@ func digit_sum(n: int, acc: int) => int {
     return if n == 0 then acc else digit_sum(n - 1, acc + digits(n))
 }
 
-func main() => int sync {
+func main() sync {
     let n = int(get_env('N') ?? '')
     println(churn(n, 0))
     println(ping(n, 0))
     println(total(build(n / 100, [0]), 0, 0))
     println(digit_sum(n, 0))
     println('done')
-    return 0
 }

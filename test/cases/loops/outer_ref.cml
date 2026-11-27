@@ -61,11 +61,10 @@ func plain() => int sync {
     return total
 }
 
-func main() => int sync {
+func main() sync {
     println(read_only())
     println(written())
     println(after())
     println(nested())
     println(plain())
-    return 0
 }

@@ -255,7 +255,6 @@ func f61() => string {
     return 'a'
 }
 
-func main() => int sync {
+func main() sync {
     println(f0())
-    return 0
 }

@@ -65,7 +65,7 @@ func train_adam(
     return if steps == 0 then model else train_adam(updated.0, updated.1, x, y, steps - 1)
 }
 
-func main() => int sync {
+func main() sync {
     let x = full([2, 2], f32(1.0))
     let y = full([2, 2], f32(1.0))
     let model = init()
@@ -76,5 +76,4 @@ func main() => int sync {
     let by_adam = train_adam(model, adam_state(model), x, y, 20)
     let after_adam = loss<by_adam>(x, y)
     'residual_mlp start={} value={} sgd={} adam={} depth={}'->format<start, vg.0, after_sgd, after_adam, by_sgd.depth>->println
-    return 0
 }

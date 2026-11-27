@@ -70,7 +70,7 @@ func digest(m: Map<int, string>) => int {
     }, len(m)>
 }
 
-func main() => int sync {
+func main() sync {
     let t = labels(400)
     println(len(t), digest(t), t[7] ?? '?', t[(399 * 7) % 1009] ?? '?', t[1008] ?? '?')
     let grown = t->put<1008, 'last'>->remove<0>->put<-5, 'first'>
@@ -86,5 +86,4 @@ func main() => int sync {
     })>), apply(ops->put<300, (func (x: int) => int {
         x * x
     })>, 300, 21))
-    return 0
 }

@@ -20,9 +20,8 @@ func show(r: int!) => string {
     }
 }
 
-func main() => int sync {
+func main() sync {
     println(21->double)
     println(show(failed('x')->double))
     println('end')
-    return 0
 }

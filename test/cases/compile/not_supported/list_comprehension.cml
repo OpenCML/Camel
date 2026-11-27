@@ -3,10 +3,9 @@
  * as not implemented, and before that compiled as the empty array.
  */
 
-func main() => int sync {
+func main() sync {
     let xs = [1, 2, 3]
     let ys = [x * 2 for x in xs if x > 1]
     println('reached')
     println(ys)
-    return 0
 }

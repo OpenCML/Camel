@@ -6,7 +6,7 @@ func f9(
     return a12(31, 31)
 }
 
-func main() => int sync {
+func main() sync {
     let n62 = 0
     let n63 = ''
     func g65(a66: int) => string {
@@ -15,6 +15,7 @@ func main() => int sync {
         })
     }
     let n88 = if ['' for q80 in ['']]->contains<''> then sync {
+        7
         return 7
     } else 0
     let n94 = f9((0, ''), false, func (p92: int, p93: int) => string {

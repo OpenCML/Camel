@@ -4,10 +4,9 @@
  * (design principles 5.9, 5.10). This one is bound by a `let` with no annotation.
  */
 
-func main() => int sync {
+func main() sync {
     let g = func (x) {
         x + 1
     }
     println(g(1))
-    return 0
 }

@@ -7,7 +7,7 @@ func decode_return(b: Bytes) => f32[...] {
 func measure(t: f32[...]) => float {
     return float(sum(t))
 }
-func main() => int sync {
+func main() sync {
     let source = [1.0, -2.5, 0.0, -0.0] as f32[]
     let b = to_bytes(source)
     println(to_array(to_bytes(from_bytes::<f32>(b, [2, 2]))))
@@ -24,5 +24,4 @@ func main() => int sync {
     println(to_array(to_bytes(from_bytes::<f32>(from_array([0, 0, 128, 63]), empty_shape))))
     let decoder: (b: Bytes, shape: int[]) => f32[...] = from_bytes::<f32>
     println(to_array(to_bytes(decoder(b, [4]))))
-    return 0
 }

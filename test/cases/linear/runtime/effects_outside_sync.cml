@@ -34,11 +34,10 @@ func returned(x: int) => void {
     return println('returned')
 }
 
-func main() => int sync {
+func main() sync {
     println('main start')
     let a = plain(1) + nested(1) + suffix(1)
     returned(1)
     println(a)
     println('main end')
-    return 0
 }

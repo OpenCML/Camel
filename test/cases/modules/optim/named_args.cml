@@ -17,7 +17,7 @@ import { constant, adam, init, sgd, update } from optim
 
 type Model = { w: float }
 
-func main() => int sync {
+func main() sync {
     let m: Model = { w: 1.0 }
     let g: Model = { w: 0.5 }
     let rate = constant(0.5)
@@ -44,5 +44,4 @@ func main() => int sync {
     if s_next.1.step != 1 then failures = failures + 1
     
     'optim named_args sgd={} sgd_step={} adam={} adam_m={} adam_v={} adam_step={} mismatches={}'->format<s_next.0.w, s_next.1.step, a_next.0.w, a_next.1.m.w, a_next.1.v.w, a_next.1.step, failures>->println
-    return failures
 }

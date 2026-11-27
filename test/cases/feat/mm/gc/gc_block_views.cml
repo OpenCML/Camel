@@ -9,7 +9,7 @@
 
 import { reshape, zeros, numel } from tensor
 
-func main(steps: int, temp: int) => int sync {
+func main(steps: int, temp: int) sync {
     let a = zeros::<f32>([750000])
     let b = reshape<[750000]>(a)
     let (iLeft, peak, total, x, y) = loop i = steps, peak = 0, total = 0, x = a, y = b while i > 0 do {
@@ -19,5 +19,4 @@ func main(steps: int, temp: int) => int sync {
         (i - 1, if bytes > peak then bytes else peak, total + len(tmp), x, y)
     }
     println('gc_block_views peak={} total={} keep={} {}'->format<peak, total, numel(x), numel(y)>)
-    return 0
 }

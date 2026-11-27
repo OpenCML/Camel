@@ -21,8 +21,7 @@ func f(x: f32) => f32 {
     return g()
 }
 
-func main() => int sync {
+func main() sync {
     let back = transpose(f)
     println('f_pullback=', back(1.5))
-    return 0
 }

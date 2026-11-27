@@ -18,7 +18,7 @@ func build(i: int, acc: string) => string {
     return if i == 0 then acc else build(i - 1, acc + string(i % 10))
 }
 
-func main() => int sync {
+func main() sync {
     let a = greet('camel', 1)
     println(greet(a, 2))
     println(kind('a'), kind('e'), kind('x'))
@@ -28,5 +28,4 @@ func main() => int sync {
     println('{:>8}|{:<6}|{:^7}|{:+.3f}|{:8.2f}|{:.17g}'->format<'ab', 12, 'mid', 3.14159, 2.5, 0.1>)
     println('{} and {:.2f} and {:>5}|'->format<1, 2.0, true>)
     println('{0}-{0}-{1}'->format<'x', 'y'>)
-    return 0
 }

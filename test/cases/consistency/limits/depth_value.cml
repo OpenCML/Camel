@@ -13,10 +13,9 @@ func step(n: int) => int {
     return 0 + via(step, n)
 }
 
-func main() => int sync {
+func main() sync {
     let n = int(get_env('N') ?? '')
     println('start')
     println(step(n))
     println('done')
-    return 0
 }

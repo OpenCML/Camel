@@ -11,8 +11,7 @@ func f(x: float) => float {
     return x * 2.0
 }
 
-func main() => int sync {
+func main() sync {
     let xs: float[3] = [1.0, 2.0, 3.0]
     println(vmap(f)(xs))
-    return 0
 }

@@ -46,7 +46,7 @@ func totalOf(v: f32[2, 3]) => float {
     return loop acc = 0.0 for row in v do acc + float(sum(row))
 }
 
-func main() => int sync {
+func main() sync {
     let w = reshape<[2, 3]>([1.0, 2.0, 3.0, 4.0, 5.0, 6.0] as f32[])
     let d = grad(total)<w>()
     let v = reshape<[2, 3]>([1.0, 2.0, 3.0, 4.0, 5.0, 6.0] as f32[])
@@ -72,5 +72,4 @@ func main() => int sync {
     let gap = if fd > dot then fd - dot else dot - fd
     let ok = gap < 0.001
     'loop_grad_tensor_iterable f={:.1f} d={} fd={:.6f} dot={:.6f} gap={:.6f} ok={}'->format<total<w>(), d, fd, dot, gap, ok>->println
-    return 0
 }

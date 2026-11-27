@@ -36,7 +36,6 @@ func array_neg_neg(x: Vec) => Vec {
     return -(-x)
 }
 
-func main() => int sync {
+func main() sync {
     println(int_zero(7), int_sub_self(7), div_one(7), neg_neg(7), int_combine(2))
-    return 0
 }

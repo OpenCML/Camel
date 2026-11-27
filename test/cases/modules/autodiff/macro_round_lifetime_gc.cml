@@ -50,7 +50,7 @@ func wide_loss() => float {
     return float(sum(wide_mark(sum<1>(x))))
 }
 
-func main() => int sync {
+func main() sync {
     let df = grad(loss)
     let dn = grad(negative_loss)
     let dk = grad(keep_loss)
@@ -61,5 +61,4 @@ func main() => int sync {
     let small = ds<zeros::<f32>([2, 3, 2])>()
     println(shape(small), sum(small), sum(dw<zeros::<f32>([2, 3, 4, 5])>()))
     println(sum(df<a>()))
-    return 0
 }

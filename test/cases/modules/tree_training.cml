@@ -30,7 +30,7 @@ func update::<P>(p: P, g: P) => (P, P) {
     }>(p, g)
     return tree_unzip(r, p)
 }
-func main() => int sync {
+func main() sync {
     let p = initialize()
     let vg = loss_with_grad
     let cpu = vg(p)
@@ -44,5 +44,4 @@ func main() => int sync {
     println(download(measured.0) - cpu.0)
     println(sum(abs(actual.0.weight - expected.0.weight)))
     println(sum(abs(actual.1.nested.0 - expected.1.nested.0)))
-    return 0
 }

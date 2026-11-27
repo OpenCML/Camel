@@ -13,9 +13,8 @@ func c(x: int) {
 func d(x: int) => void {
     return x + 1
 }
-func main() => int sync {
+func main() sync {
     println(a(2))
     println(c(2))
     d(2)
-    return 0
 }

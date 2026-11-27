@@ -19,7 +19,7 @@ func mergesort(arr: int[]) => int[] sync {
     return res
 }
 
-func main() => int sync {
+func main() sync {
     let n = 100000000
     let m = 100
     let s = 1
@@ -41,5 +41,4 @@ func main() => int sync {
     sorted[0..m]->println
     
     'Mergesort completed in {:.2f} seconds'->format<duration>->println
-    return 0
 }

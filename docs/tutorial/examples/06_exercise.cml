@@ -7,8 +7,7 @@ func tally(words: string[]) => Map<string, int> {
     }, [] as Map<string, int>>
 }
 
-func main() => int sync {
+func main() sync {
     let counts = tally(['fig', 'pear', 'fig', 'apple', 'fig'])
     println(counts, counts['fig'], counts['cherry'] ?? 0)
-    return 0
 }

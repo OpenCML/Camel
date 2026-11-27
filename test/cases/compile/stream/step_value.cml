@@ -25,7 +25,6 @@ func total(s: int.., acc: int) => int {
     }
 }
 
-func main() => int sync {
+func main() sync {
     println(total(count(3), 0))
-    return 0
 }

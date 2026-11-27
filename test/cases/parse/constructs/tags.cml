@@ -40,11 +40,10 @@ type Bits = {
 #[shaped(4), width(16)]
 type Mixed = { a: int }
 
-func main() => int sync {
+func main() sync {
     #kernel
     {
         let a = marked()
     }
     println(grouped() + marked())
-    return 0
 }

@@ -44,7 +44,7 @@ func kind_only(r: int!) => string {
     }
 }
 
-func main() => int sync {
+func main() sync {
     println(kind(attempt(depth)(50)))
     println(kind(attempt(depth)(1000000)))
     println(kind(attempt(depth)(50)))
@@ -56,5 +56,4 @@ func main() => int sync {
     println((attempt(tower)(0) !! -1) > 10)
     println(depth(60))
     println('end')
-    return 0
 }

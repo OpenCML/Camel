@@ -39,11 +39,10 @@ func h(p: Point) => float {
     return p.a * 2.0 + sum_p(p)
 }
 
-func main() => int sync {
+func main() sync {
     println('hand  y= 9.0  dq= ((3.0, 1.0))  dp= ({ a: 3.0, b: 1.0 })')
     let (y, pullback) = vjp(f)((2.0, 3.0))
     println('vjp   y=', y, ' dq=', pullback(1.0))
     let (py, ppullback) = vjp(h)({ a: 2.0, b: 3.0 })
     println('vpjp  y=', py, ' dp=', ppullback(1.0))
-    return 0
 }

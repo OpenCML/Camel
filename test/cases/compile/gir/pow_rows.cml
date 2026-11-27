@@ -26,10 +26,9 @@ func main(
     p: i32,
     h: bf16,
     g: f16
-) => int sync {
+) sync {
     println(i ^ i, l ^ l, f ^ f, d ^ d, p ^ p)
     println(a ^ a, a ^ p, a ^ i)
     println(b ^ b, b ^ p, b ^ i)
     println(h ^ h, g ^ g)
-    return 0
 }

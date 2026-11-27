@@ -8,7 +8,6 @@ func a() => int {
 func b() => int {
     return inc(10)
 }
-func main() => int sync {
+func main() sync {
     println(a(), b())
-    return 0
 }

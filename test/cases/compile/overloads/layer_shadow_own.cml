@@ -10,7 +10,6 @@ func len(s: string) => int {
     return 99
 }
 
-func main() => int sync {
+func main() sync {
     println(len('abc'))
-    return 0
 }

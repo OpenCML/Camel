@@ -48,7 +48,7 @@ func combine::<T>(a: T, b: T) => T {
     return a * b
 }
 
-func main() => int sync {
+func main() sync {
     let x: i32 = 19
     let y: i32 = 23
     // `i32`: the first arm's executor.
@@ -57,5 +57,4 @@ func main() => int sync {
     'arm_int={}'->format<combine(19, 23)>->println
     // `float`: neither condition holds, so this instance has no executor and runs the body.
     'body={}'->format<int(combine(19.0, 23.0))>->println
-    return 0
 }

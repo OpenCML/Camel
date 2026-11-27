@@ -4,7 +4,7 @@
 
 import { seed, randint, next_key } from random
 
-func main() => int sync {
+func main() sync {
     seed(42)
     // Wrong tool: next_key advances a hidden state, so each element depends on which ran first.
     let drawn = (0 .. 8)->map<func (i: int) => int {
@@ -18,5 +18,4 @@ func main() => int sync {
         concat(acc, [next_key()->randint<0, 100>])
     }, [0][0..0]>
     println(ordered)
-    return 0
 }

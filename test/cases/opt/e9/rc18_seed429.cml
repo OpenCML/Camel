@@ -1,4 +1,4 @@
-func main() => int sync {
+func main() sync {
     var v53 = 0
     if false then sync {
         if false then sync {
@@ -8,5 +8,4 @@ func main() => int sync {
         null
     }
     println('L6 {}'->format<v53>)
-    return 0
 }

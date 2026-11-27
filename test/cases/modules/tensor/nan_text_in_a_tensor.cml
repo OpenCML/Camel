@@ -18,7 +18,7 @@ func div(a: float, b: float) => float {
     return a / b
 }
 
-func main() => int sync {
+func main() sync {
     let inf = mul(1.0e308, 10.0)
     let ninf = mul(-1.0e308, 10.0)
     let nan = sub(inf, inf)
@@ -32,5 +32,4 @@ func main() => int sync {
     println(float([nan, inf, ninf, div(-1.0, inf), div(1.0, inf)]))
     println('tensor-f32')
     println(f32([f32(nan)]))
-    return 0
 }

@@ -28,7 +28,7 @@ func ge(a: float, b: float) => bool {
     return a >= b
 }
 
-func main() => int sync {
+func main() sync {
     let inf = mul(1.0e308, 10.0)
     let nan = sub(inf, inf)
     let nzero = mul(-1.0, 0.0)
@@ -43,5 +43,4 @@ func main() => int sync {
     println([1.0, nan, 3.0]->filter<func (x: float) => bool {
         x == x
     }>)
-    return 0
 }

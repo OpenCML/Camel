@@ -39,10 +39,9 @@ func broadcast_sum(x: float[2, 3], w: float[3]) => float[...] {
     return x + w
 }
 
-func main() => int sync {
+func main() sync {
     let start = [[1.0, 1.0, 1.0], [1.0, 1.0, 1.0]] as float[2, 3]
     // The cotangent of the result: two rows of ones, the seed `Σ` would hand a sum.
     let (dx, dw) = transpose(broadcast_sum)(start)
     `law answer shape dx numel={} dw numel={}`->format<numel(dx), numel(dw)>->println
-    return 0
 }

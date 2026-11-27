@@ -24,8 +24,7 @@ func loss_pool(x: float[1, 1, 6, 6]) => float {
     return sum(max_pool2d<3, 1, 0>(x))
 }
 
-func main() => int sync {
+func main() sync {
     let back = transpose(loss_pool)(1.0)
     'pooling transpose should have been refused, and it answered {}'->format<back.0>->println
-    return 0
 }

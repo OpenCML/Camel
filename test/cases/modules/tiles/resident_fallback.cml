@@ -8,7 +8,7 @@ func cpu(x: f32[...]) => f32[...] sync {
 func square(x: f32[...]) => f32[...] {
     return x * x
 }
-func main() => int sync {
+func main() sync {
     let x = reshape<[2, 3]>([1.0, 2.0, 3.0, 4.0, 5.0, 6.0] as f32[])
     let input = upload(x)
     let host = run_preferred_resident<cpu>(input)
@@ -16,5 +16,4 @@ func main() => int sync {
     println(sum(download(host)))
     println(sum(download(device)))
     println(sum(download(input)))
-    return 0
 }

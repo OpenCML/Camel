@@ -12,8 +12,7 @@ func step(d: float) => float sync {
     return float(sum(acc))
 }
 
-func main() => int sync {
+func main() sync {
     var xs = ['a', 'b']
     println(step<xs>(0.5))
-    return 0
 }

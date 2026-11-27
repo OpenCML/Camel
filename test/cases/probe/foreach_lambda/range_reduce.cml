@@ -1,7 +1,6 @@
 // `reduce` over a range: `with <f: (acc: U, item: int) => U, initial: U>` -- the accumulator type
 // is the initial value's, and the lambda's two parameter types follow it.
-func main() => int sync {
+func main() sync {
     let total = (0 .. 4)->reduce<func (acc, x) { acc + x }, 0>
     println(total)
-    return 0
 }

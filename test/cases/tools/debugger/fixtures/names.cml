@@ -15,11 +15,10 @@ func neverCalled(x: int) => int {
     return x - 1 // mark:never
 }
 
-func main() => int sync {
+func main() sync {
     let a = names_lib::twice(21) // mark:a
     let b = names_lib::Config::clamp(a) // mark:b
     let c = util::half(b) // mark:c
     let d = names_other::twice(c) // mark:d
     println(d) // mark:print
-    return 0
 }

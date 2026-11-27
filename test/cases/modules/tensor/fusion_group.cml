@@ -39,7 +39,7 @@ func shared_chain() => float {
     return float(sum(m.a / m.w))
 }
 
-func main() => int sync {
+func main() sync {
     let x = reshape<[2, 3]>([1.5, -2.25, 3.0, 0.1, -7.0, 1e-8] as f32[])
     let w = reshape<[2, 3]>([3.0, 7.0, 0.1, -3.0, 1e-8, 1234567.0] as f32[])
     
@@ -58,5 +58,4 @@ func main() => int sync {
     'shared value={} sum={}'->format<shared, sum(shared_gradient.a)>->println
     println(to_array(to_bytes(shared_gradient.a)))
     'shared sum_w={}'->format<sum(shared_gradient.w)>->println
-    return 0
 }

@@ -65,7 +65,7 @@ func do_run(m: Mlp) => int sync {
     return 0
 }
 
-func main() => int sync {
+func main() sync {
     let m = load()
-    return if (get_env('MODE') ?? '') == 'export' then do_export(m) else do_run(m)
+    if (get_env('MODE') ?? '') == 'export' then do_export(m) else do_run(m)
 }

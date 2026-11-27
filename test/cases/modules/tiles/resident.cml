@@ -7,7 +7,7 @@ func read(x: Device<f32[...]>) => f32[...] {
 func churn(x: f32[...], count: int) => float {
     return if count == 0 then 0.0 else float(sum(abs(download(upload(x)) - x))) + churn(x + 1.0, count - 1)
 }
-func main() => int sync {
+func main() sync {
     let x = reshape<[2, 3]>([1.0, 2.0, 3.0, 4.0, 5.0, 6.0] as f32[])
     let first = upload(x)
     let second = upload(x + 7.0)
@@ -16,5 +16,4 @@ func main() => int sync {
     println(churn(x, 40))
     println(sum(abs(download(first) - x)))
     println(sum(download(upload(zeros::<f32>([0, 3])))))
-    return 0
 }

@@ -8,9 +8,8 @@
 import { abs } from math
 import { unordered_foreach } from para
 
-func main() => int sync {
+func main() sync {
     unordered_foreach<func (item: int) {
         abs(item)
     }>([-1, 2])
-    return 0
 }

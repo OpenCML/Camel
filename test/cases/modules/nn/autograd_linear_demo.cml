@@ -29,7 +29,7 @@ func train(layer: Linear, X: f32[...], y: f32[...], steps: int) => Linear {
     return if steps == 0 then layer else train(sgd(layer, grads, 0.01), X, y, steps - 1)
 }
 
-func main() => int sync {
+func main() sync {
     let X = ones::<f32>([4, 2])
     let y = ones::<f32>([4, 1])
     let layer = init()
@@ -45,5 +45,4 @@ func main() => int sync {
     'autograd_linear_demo w0={}'->format<layer.weight>->println
     'autograd_linear_demo w1={}'->format<stepped.weight>->println
     'autograd_linear_demo weight_grad={}'->format<grads.weight>->println
-    return 0
 }

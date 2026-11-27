@@ -23,7 +23,7 @@ import {
     uniform
 } from random
 
-func main() => int sync {
+func main() sync {
     seed(42)
     let r = rand()
     let n = randn()
@@ -39,5 +39,4 @@ func main() => int sync {
     let p: int[] = permutation(key(42), 4)
     println(p)
     println(uniform::<f32>(key(42)) < f32(1.0))
-    return 0
 }

@@ -5,9 +5,8 @@
 
 import { Range, len } from prelude
 
-func main() => int sync {
+func main() sync {
     let r: Range = 0 .. 5
     println(r->len())
     println(len(r))
-    return 0
 }

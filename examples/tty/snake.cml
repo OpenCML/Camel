@@ -65,9 +65,8 @@ func game_loop(snake: Point[], dir: string, steps: int) => void sync {
 }
 
 // Entry point
-func main() => int sync {
+func main() sync {
     let _ = set_terminal_raw_mode(true)
     let initial_snake = [{ x: 5, y: 5 }, { x: 4, y: 5 }, { x: 3, y: 5 }]
     game_loop(initial_snake, 'w', 0)
-    return 0
 }

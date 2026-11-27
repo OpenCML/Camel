@@ -12,8 +12,7 @@ func quiet() => int {
     return 5
 }
 
-func main() => int sync {
+func main() sync {
     println(quiet())
     println(cnt)
-    return 0
 }

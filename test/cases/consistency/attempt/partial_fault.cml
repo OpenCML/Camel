@@ -29,7 +29,7 @@ func probe(x: int) => int sync {
     return q
 }
 
-func main() => int sync {
+func main() sync {
     let r = attempt(func () {
         (0 .. 64)->map<probe>
     })()
@@ -37,5 +37,4 @@ func main() => int sync {
         case error e => e.message
         case v => 'no fault'
     })
-    return 0
 }

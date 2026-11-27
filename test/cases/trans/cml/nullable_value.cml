@@ -15,8 +15,8 @@ func takes_str(b: string?) => int sync {
     return 0
 }
 
-func main() => int sync {
+func main() sync {
     let a: int? = 3
     let b: string? = 'q'
-    return takes_int(a) + takes_str(b)
+    takes_int(a) + takes_str(b)
 }

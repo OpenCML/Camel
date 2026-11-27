@@ -15,8 +15,7 @@ func work(x: int) => int {
     return c
 }
 
-func main() => int sync {
+func main() sync {
     let r = work(3) // mark:call
     println(r) // mark:print
-    return 0
 }

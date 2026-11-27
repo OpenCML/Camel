@@ -37,12 +37,11 @@ rule fold_unguarded(x: Vec, const c1: f32, const c2: f32) { (x * c1) * c2 => x *
 
 rule mixed_unguarded(x: Vec, const c1: f32, const c2: f32) { x * c1 + x * c2 => x * (c1 + c2) }
 
-func main() => int sync {
+func main() sync {
     let y = reshape<[3]>([1.0e30, 1.0, 2.0] as f32[])
     println(overflow(reshape<[3]>([0.0, 0.0, 0.0] as f32[])), 0.0)
     println(underflow(y), 1.0e-30)
     println(mixed_zero(reshape<[3]>([-1.0, 1.0, -0.0] as f32[])), 0.0)
-    return 0
 }
 
 /// The unguarded laws, applied to the same program: the boundary lines collapse.

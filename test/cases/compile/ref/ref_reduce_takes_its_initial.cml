@@ -24,11 +24,10 @@
 
 import state
 
-func main() => int {
+func main() {
     let r = state::ref(1)
     let total = [1, 2, 3]->reduce<func (a: state::Ref<int>, x: int) => state::Ref<int> {
         a
     }, r>
     println(state::get(total))
-    return 0
 }

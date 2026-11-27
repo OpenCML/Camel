@@ -3,7 +3,6 @@
 
 import only_here
 
-func main() => int sync {
+func main() sync {
     println(only_here::value())
-    return 0
 }

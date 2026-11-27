@@ -8,7 +8,7 @@ import state
 
 type Point = { x: int, y: int }
 
-func main() => int sync {
+func main() sync {
     let p: Point = { x: 1, y: 2 }
     let r = state::ref(p)
     let q = state::get(r)
@@ -16,5 +16,4 @@ func main() => int sync {
     state::set(r, { x: 10, y: 20 })
     let s = state::get(r)
     println(s.x + s.y)
-    return 0
 }

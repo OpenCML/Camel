@@ -2,7 +2,6 @@
 /// imports `level.helper`, which does the failing import itself.
 import { answer } from level.helper
 
-func main() => int sync {
+func main() sync {
     println(answer)
-    return 0
 }

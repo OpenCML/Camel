@@ -12,7 +12,7 @@ func check(m: int, k: int, n: int) => float {
     let b = reshape<[k, n]>((0 .. (k * n))->map<value>)
     return float(sum(abs(download(run_preferred_resident<product>((a, b))) - product(a, b))))
 }
-func main() => int sync {
+func main() sync {
     println(check(17, 0, 19))
     println(check(17, 1, 19))
     println(check(17, 15, 19))
@@ -21,5 +21,4 @@ func main() => int sync {
     println(check(17, 34, 19))
     println(check(0, 17, 19))
     println(check(17, 17, 0))
-    return 0
 }

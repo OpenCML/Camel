@@ -33,9 +33,8 @@ func arm(flag: bool) => int {
     return state::get(c)
 }
 
-func main() => int sync {
+func main() sync {
     let r2 = in_the_untaken_arm()
     let r2b = arm(false)
     println(`r2=${r2} r2b=${r2b}`)
-    return 0
 }

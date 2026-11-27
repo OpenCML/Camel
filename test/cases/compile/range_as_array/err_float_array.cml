@@ -4,7 +4,7 @@
  * apply, and the declaration is the mismatch it was before.
  */
 
-func main() => int sync {
+func main() sync {
     let fs: f32[] = 0 .. 3
-    return len(fs)
+    len(fs)
 }

@@ -7,6 +7,6 @@ func first(...ts) => int {
     return ts
 }
 
-func main() => int sync {
-    return first(1, 2)
+func main() sync {
+    first(1, 2)
 }

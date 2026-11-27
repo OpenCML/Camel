@@ -22,7 +22,7 @@ func say(text: string) => void sync {
     let _ = [wrap(text)]->call<print>
 }
 
-func main() => int sync {
+func main() sync {
     println('camel 1')
     say('python 1')
     let held = eval('[1, 2, 3]') !! wrap(0)
@@ -31,5 +31,4 @@ func main() => int sync {
     let z = 0
     println(1 / z)
     println('not reached')
-    return 0
 }

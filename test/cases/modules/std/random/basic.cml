@@ -5,7 +5,7 @@
 // random 模块基础测试
 import { seed, rand, randn, randint, choice, shuffle, next_key } from random
 
-func main() => int sync {
+func main() sync {
     println('=== Random Module Basic Tests ===')
     
     seed(42)
@@ -31,5 +31,4 @@ func main() => int sync {
     println('  shuffle =', s)
     
     println('\n=== Random tests completed ===')
-    return 0
 }

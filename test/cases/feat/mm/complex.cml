@@ -6,7 +6,7 @@ func negate(x: float) => float {
 
 // Complex numbers: imaginary literals, the two types, arithmetic, printing and the accessors
 // (design principles 5.1 and 10.5).
-func main() => int sync {
+func main() sync {
     // With no context an imaginary literal is a c128; both parts print.
     let a = 3 + 4i
     println(a)
@@ -77,5 +77,4 @@ func main() => int sync {
     let twisted = c128(bad) * 1i
     println(twisted)
     println<'{:.2f}'>(twisted)
-    return 0
 }

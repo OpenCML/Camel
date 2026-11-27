@@ -8,8 +8,7 @@
 
 import json
 
-func main() => int sync {
+func main() sync {
     let bad = json::decode('{')!
     println('not reached')
-    return 0
 }

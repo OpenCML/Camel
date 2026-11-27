@@ -17,7 +17,7 @@
  */
 import { argmax, argmin, argsort } from array
 
-func main() => int sync {
+func main() sync {
     let xs: bf16[] = [0.5, -1.5, 2.0]
     println(argsort(xs))
     println(argmax(xs))
@@ -49,5 +49,4 @@ func main() => int sync {
     let m: bf16[2, 2] = [[0.5, 1.5], [2.5, 3.5]]
     println(argmax(m))
     println(argmin(m))
-    return 0
 }

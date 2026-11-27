@@ -29,7 +29,7 @@ func lane(x: float[...]) => float[...] {
     return sum<0, false>(x)
 }
 
-func main() => int sync {
+func main() sync {
     let x = [[1.0, 2.0], [3.0, 4.0]] as float[2, 2]
     let (value, tangent) = jvp(lane)(x, [[1.0, 1.0], [1.0, 1.0]] as float[2, 2])
     `sum<0> forward={}`->format<value>->println
@@ -37,5 +37,4 @@ func main() => int sync {
     let (_v, pullback) = vjp(lane)(x)
     let gradient = pullback([1.0, 1.0] as float[2]).0
     `sum<0> gradient={}`->format<gradient>->println
-    return 0
 }

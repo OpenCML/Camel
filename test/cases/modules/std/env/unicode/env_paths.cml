@@ -8,7 +8,7 @@
 import { get_env, get_cwd } from env
 import { write_text, read_text, exists, file_size } from fs
 
-func main() => int sync {
+func main() sync {
     let cwd = get_cwd() !! ''
     'cwd={}'->format<cwd>->println
     'value={}'->format<(get_env('CAMEL_H9_VALUE') ?? '')>->println
@@ -27,5 +27,4 @@ func main() => int sync {
     'nested={}'->format<(nested->read_text !! '')>->println
     
     'missing={}'->format<exists(cwd + '/不存在 文件 🐪.txt')>->println
-    return 0
 }

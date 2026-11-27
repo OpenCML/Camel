@@ -14,7 +14,6 @@ func drain() => int sync {
     }
 }
 
-func main() => int sync {
+func main() sync {
     println(drain())
-    return 0
 }

@@ -8,7 +8,7 @@ import { sha256 } from hash
 import { has_match } from re
 import { split, trim, replace, index_of, starts_with, repeat, codepoints, to_upper } from str
 
-func main() => int sync {
+func main() sync {
     let s = '中文x😀'
     println(len(s), s[0], s[1], s[2], s[3], '中'[0] == '中')
     println(len(''), len('abc'), len('é'), len('\u{1F600}'), '\u{4E2D}\u{6587}' == '中文')
@@ -30,5 +30,4 @@ func main() => int sync {
     
     // regular expressions: `.` is one character
     println('中'->has_match<'^.$'>, '中文'->has_match<'^.{2}$'>, 'ab'->has_match<'^.$'>, 'a文b'->has_match<'文'>)
-    return 0
 }

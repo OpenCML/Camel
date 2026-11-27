@@ -49,7 +49,7 @@ func rowmin_i(r: int[3]) => int {
     return min(r)
 }
 
-func main() => int sync {
+func main() sync {
     let xs: float[3, 3] = [[1.0, -0.0, 2.0], [3.0, 5.0, 4.0], [nan, 1.0, 2.0]]
     println(vmap(rowmax)(xs))
     println(vmap(rowmin)(xs))
@@ -63,5 +63,4 @@ func main() => int sync {
     let is: int[2, 3] = [[1, 5, 2], [4, 0, 3]]
     println(vmap(rowmax_i)(is))
     println(vmap(rowmin_i)(is))
-    return 0
 }

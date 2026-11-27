@@ -7,8 +7,7 @@
 import { get_env } from env
 import { twice } from helper
 
-func main() => int sync {
+func main() sync {
     'package={}'->format<twice(21)>->println
     'home={}'->format<(get_env('CAMEL_HOME') ?? '')>->println
-    return 0
 }

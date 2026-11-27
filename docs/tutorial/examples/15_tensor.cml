@@ -3,7 +3,7 @@
 
 import { ones, zeros, shape, sum, transpose } from tensor
 
-func main() => int sync {
+func main() sync {
     let a = ones::<f32>([2, 3])
     let b = ones::<f32>([3, 1])
     let c = a @ b // matrix product: 2x3 @ 3x1
@@ -11,5 +11,4 @@ func main() => int sync {
     println(c)
     println(sum(a * 2.0 + 1.0))
     println(shape(transpose(a)))
-    return 0
 }

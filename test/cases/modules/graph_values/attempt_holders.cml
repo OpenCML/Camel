@@ -42,10 +42,9 @@ func ratio(x: int) => int {
     return 12 / x
 }
 
-func main() => int sync {
+func main() sync {
     let before = size(graph_of(ratio))
     println(`isolated: ${attempt(ratio)(4) !! -1} ${attempt(ratio)(0) !! -1}`)
     println(`same: ${ratio(4)} ${size(graph_of(ratio)) == before}`)
     println(ratio(0))
-    return 0
 }

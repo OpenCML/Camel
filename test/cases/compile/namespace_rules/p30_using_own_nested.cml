@@ -13,7 +13,6 @@ namespace Shapes {
     }
 }
 
-func main() => int sync {
+func main() sync {
     println(Shapes::both(2))
-    return 0
 }

@@ -15,7 +15,7 @@ func step(n: int) => () => (int, int..)? {
     }
 }
 
-func main() => int sync {
+func main() sync {
     let s = count(2)
     if true then {
         println(loop acc = 0 for x in s do acc + x)
@@ -23,5 +23,4 @@ func main() => int sync {
         println(loop acc = 0 for x in s do acc + x)
         println(nowhere_name)
     }
-    return 0
 }

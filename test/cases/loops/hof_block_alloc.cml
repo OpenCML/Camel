@@ -1,4 +1,4 @@
-func main() => int sync {
+func main() sync {
     let n = 10000
     let xs = (0 .. n)->map<func (i: int) => (int, int) {
         (i, i + 1)
@@ -25,5 +25,4 @@ func main() => int sync {
     
     println(len(mapped), b1.allocs - b0.allocs, len(kept), b2.allocs - b1.allocs)
     println(total, b3.allocs - b2.allocs, b4.allocs - b3.allocs)
-    return 0
 }

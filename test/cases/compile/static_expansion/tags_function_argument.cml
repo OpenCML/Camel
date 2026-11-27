@@ -25,7 +25,6 @@ func read(b: Box) => int {
     })
 }
 
-func main() => int sync {
+func main() sync {
     println(read({ scaled: 1, plain: 2 }))
-    return 0
 }

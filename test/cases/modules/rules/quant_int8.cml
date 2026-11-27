@@ -56,7 +56,7 @@ func measure(label: string, quantized: float[2, 2], reference: float[2, 2], rewr
 
 import { exit } from process
 
-func main(tol: float) => int sync {
+func main(tol: float) sync {
     let xs = inputs()
     let reference = model(xs)
     let quantized = match model->run<[matmul_int8]> {

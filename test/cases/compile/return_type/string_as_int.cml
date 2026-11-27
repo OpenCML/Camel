@@ -1,8 +1,7 @@
 func f() => int {
     return 'abc'
 }
-func main() => int sync {
+func main() sync {
     println('ran')
     println(f())
-    return 0
 }

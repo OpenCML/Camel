@@ -29,8 +29,7 @@ func slot_writes(n: int) => int[][] sync {
     return seen
 }
 
-func main() => int sync {
+func main() sync {
     println(snapshots(3))
     println(slot_writes(3))
-    return 0
 }

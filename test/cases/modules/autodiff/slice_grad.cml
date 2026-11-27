@@ -67,7 +67,7 @@ func distance(g: f32[...], expected: f32[...]) => float {
     return float(sum(abs(g - expected)))
 }
 
-func main() => int sync {
+func main() sync {
     let x = reshape<[6]>([1.0, 2.0, 3.0, 4.0, 5.0, 6.0] as f32[])
     let zero = reshape<[6]>([0.0, 0.0, 0.0, 0.0, 0.0, 0.0] as f32[])
     let g1 = grad(slice_loss)<x>()
@@ -94,5 +94,4 @@ func main() => int sync {
         v,
         nonzero
     >->println
-    return 0
 }

@@ -38,7 +38,7 @@ func weighted_concat() => float {
     return float(sum(y * d))
 }
 
-func main() => int sync {
+func main() sync {
     let model = { w: 2.0 }
     let g = grad(loss)<model>()
     let w = [5.0, 6.0]
@@ -51,5 +51,4 @@ func main() => int sync {
         gw,
         d0 * d0 + d1 * d1
     >->println
-    return 0
 }

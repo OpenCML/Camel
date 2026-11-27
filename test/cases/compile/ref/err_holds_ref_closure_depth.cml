@@ -8,7 +8,7 @@
 
 import state
 
-func main() => int sync {
+func main() sync {
     let n = state::ref(0)
     let h = func () => int {
         state::get(n)
@@ -22,5 +22,4 @@ func main() => int sync {
     let box = state::ref(f)
     let call = state::get(box)
     println(call())
-    return 0
 }

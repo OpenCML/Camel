@@ -23,10 +23,9 @@ func scaled(x: float) => float sync {
     return t + t
 }
 
-func main() => int sync {
+func main() sync {
     let x = 2.0
     'first'->println
     'scaled {} {}'->format<scaled(x), scaled(x)>->println
     'last'->println
-    return 0
 }

@@ -47,7 +47,7 @@ func train(
     return if steps == 0 then model else train(sgd(model, grad(rnn_loss)<model>(x0, x1, target), 0.05), x0, x1, target, steps - 1)
 }
 
-func main() => int sync {
+func main() sync {
     let model = init()
     let x0 = full([1, 2], f32(1.0))
     let x1 = full([1, 2], f32(0.5))
@@ -67,5 +67,4 @@ func main() => int sync {
     'tiny_rnn wxh_grad={}'->format<vg.1.wxh>->println
     'tiny_rnn whh_grad={}'->format<vg.1.whh>->println
     'tiny_rnn b_grad={}'->format<vg.1.b>->println
-    return 0
 }

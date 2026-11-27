@@ -10,7 +10,7 @@
 
 import { encode } from bytes
 
-func main() => int sync {
+func main() sync {
     let xs = [1, 2, 3]
     println(xs->contains<3>, xs->contains<4>, ([] as int[])->contains<0>)
     println('abc'->contains<'bc'>, 'abc'->contains<'z'>, 'abc'->contains<''>)
@@ -18,5 +18,4 @@ func main() => int sync {
     let ab = encode('ab')
     println(len(empty), len(ab))
     println(ab == encode('ab'), ab == empty, ab != empty, empty == encode(''))
-    return 0
 }

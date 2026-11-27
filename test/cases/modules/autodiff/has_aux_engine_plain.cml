@@ -26,7 +26,7 @@ func square_plain(x: float) => float {
     return x * x
 }
 
-func main() => int sync {
+func main() sync {
     let g = grad(square)<3.0>()
     let vg = with_grad(square)<3.0>()
     let engine_value = vg.0
@@ -38,5 +38,4 @@ func main() => int sync {
     println('grad={} value={} with_grad_grad={}'->format<g, engine_value, engine_grad>)
     println('library value={} grad={}'->format<y, library_grad>)
     println('same_value={} same_grad={}'->format<engine_value == y, g == library_grad>)
-    return 0
 }

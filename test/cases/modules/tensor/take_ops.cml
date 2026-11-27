@@ -13,7 +13,7 @@ func row_sum() => float {
     return float(sum(take(w, [0, 0, 1])))
 }
 
-func main() => int sync {
+func main() sync {
     let t = reshape<[4, 3]>(to_array(0 .. 12))
     let rows = take(t, [2, 0, 2])
     'take rows={} shape={} sum={}'->format<rows, shape(rows), sum(f32(rows))>->println
@@ -43,5 +43,4 @@ func main() => int sync {
     let weights = f32(reshape<[2, 3]>(to_array(0 .. 6)))
     let repeated = grad(row_sum)<weights>()
     'take grad={}'->format<repeated>->println
-    return 0
 }

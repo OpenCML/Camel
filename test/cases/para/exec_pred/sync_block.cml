@@ -12,7 +12,7 @@ func inner(a: int) => int sync {
     return s
 }
 
-func main() => int sync {
+func main() sync {
     println('main 1')
     let block = func (a: int) => int sync {
         println('block 1', a)
@@ -22,5 +22,5 @@ func main() => int sync {
     }
     let x = block(5)
     println('main 2', x)
-    return 0
+    0
 }

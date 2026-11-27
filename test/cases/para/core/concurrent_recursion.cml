@@ -27,7 +27,6 @@ func tree(depth: int) => int {
     }
 }
 
-func main() => int sync {
+func main() sync {
     println('leaves that met a peer: {} of 8'->format<tree(3)>)
-    return 0
 }

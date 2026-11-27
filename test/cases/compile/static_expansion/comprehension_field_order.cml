@@ -14,9 +14,8 @@ func read(r: { a: (int, float), b: (float, float) }) => string {
     return 'a then b'
 }
 
-func main() => int sync {
+func main() sync {
     let r = pairEach({ a: 2, b: 3.5 })
     println(r.a.0, r.a.1, r.b.0, r.b.1)
     println(read(r))
-    return 0
 }

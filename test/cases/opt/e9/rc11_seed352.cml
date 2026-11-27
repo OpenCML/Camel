@@ -6,6 +6,5 @@ func f1(a2: string, a3: float[]) => int {
     }, -3>) for q13 in [1.0] do (c12 - c12, 0)).0
 }
 
-func main() => int sync {
-    return 0
+func main() sync {
 }

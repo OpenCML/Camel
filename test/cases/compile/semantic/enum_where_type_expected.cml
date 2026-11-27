@@ -10,6 +10,5 @@ func take(s: enum { Dot }) => int {
     return 0
 }
 
-func main() => int {
-    return 0
+func main() {
 }

@@ -17,9 +17,8 @@ func cube() => float {
     return w ^ 3.0
 }
 
-func main() => int sync {
+func main() sync {
     let slope = grad(cube)
     let d = slope<2.0>()
     `pow engine value=8.0 dL/dw={}`->format<d>->println
-    return 0
 }

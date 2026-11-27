@@ -12,7 +12,7 @@
  */
 import { key, fold, uniform, normal, randint, permutation, seed, next_key, rand } from random
 
-func main() => int sync {
+func main() sync {
     let k = key(42)
     println('fold', fold(k, 3))
     println('uniform', uniform::<float>(k), uniform::<f32>(k), uniform::<f16>(k), uniform::<bf16>(k))
@@ -25,5 +25,4 @@ func main() => int sync {
     println('permutation', permutation(k, 8), permutation(k, 0), permutation(k, -3))
     println('array', k->uniform::<f32><shape: [2, 3]>)
     println('scalars', uniform::<f32>(fold(k, 0)), uniform::<f32>(fold(k, 1)), uniform::<f32>(fold(k, 5)))
-    return 0
 }

@@ -16,8 +16,7 @@ func masked_score(x: f32[...]) => float {
     return float(sum(x + mask()))
 }
 
-func main() => int sync {
+func main() sync {
     let scores = ones::<f32>([2, 2])
     println(`masked score = ${masked_score(scores):.4f}`)
-    return 0
 }

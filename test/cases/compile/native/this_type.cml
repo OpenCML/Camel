@@ -8,7 +8,6 @@
 
 import { zen } from this
 
-func main() => int sync {
+func main() sync {
     println(zen(42))
-    return 0
 }

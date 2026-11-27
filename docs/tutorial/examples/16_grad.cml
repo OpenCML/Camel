@@ -9,9 +9,8 @@ func f(y: float) => float {
     return x * x * y + y
 }
 
-func main() => int sync {
+func main() sync {
     println(f<3.0>(2.0))
     println(grad(f)<3.0>(2.0)) // df/dx = 2xy = 12
     println(with_grad(f)<3.0>(2.0)) // (value, gradient) = (20, 12)
-    return 0
 }

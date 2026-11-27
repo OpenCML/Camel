@@ -58,7 +58,7 @@ func make_array() => int[] {
     ]
 }
 
-func main() => int sync {
+func main() sync {
     var v = make_array()
     let s0 = std::mem::blocks()
     v[0] = 1
@@ -94,5 +94,4 @@ func main() => int sync {
     let c1 = std::mem::blocks()
     println(c1.allocs - c0.allocs)
     println(v[9], last[9])
-    return 0
 }

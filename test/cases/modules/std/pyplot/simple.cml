@@ -5,7 +5,7 @@
 import { get_env } from env
 import { plot } from pyplot
 
-func main() => int sync {
+func main() sync {
     let data = [1.0, 2.0, 3.0]
     // The runner's per-test scratch directory, so nothing is left under a fixed path; a direct
     // run keeps the older fixed path.
@@ -13,5 +13,4 @@ func main() => int sync {
     let out = if root == '' then 'test/tmp/pyplot' else root + '/pyplot'
     plot(data, out + '/simple_out.png')
     println('pyplot.plot OK')
-    return 0
 }

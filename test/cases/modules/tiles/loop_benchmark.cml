@@ -15,7 +15,6 @@ func empty(a: float) => float {
 func pair(a: float) => (float, float, float) {
     return (strict(a), relaxed(a), empty(a))
 }
-func main() => int sync {
+func main() sync {
     println(benchmark<pair>(1.25))
-    return 0
 }

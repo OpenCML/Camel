@@ -9,7 +9,7 @@ func scale(x: float) => float {
     return sqrt(x * x + 1.0)
 }
 
-func main() => int sync {
+func main() sync {
     println('io 1', scale(3.0))
     let xs = [1, 2, 3]
     println('io 2', xs)
@@ -25,5 +25,4 @@ func main() => int sync {
     }>
     let shifted = [x + 1 for x in ys]
     println('io 5', doubled, shifted)
-    return 0
 }

@@ -36,7 +36,7 @@ func apply(ops: Map<string, (x: int) => int>, name: string, x: int) => int {
     return f(x)
 }
 
-func main() => int sync {
+func main() sync {
     let t = table(4)
     println(t, t[2] ?? '?', len(t))
     println(names(), names()->contains<'alpha'>, names()->contains<'delta'>)
@@ -45,5 +45,4 @@ func main() => int sync {
     println(n, len((n['outer'] ?? ([] as Map<string, int[]>))['xs'] ?? [0]))
     let ops = operations()
     println(apply(ops, 'double', 21), apply(ops, 'negate', 21), apply(ops, 'none', 21), keys(ops))
-    return 0
 }

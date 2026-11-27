@@ -1,7 +1,6 @@
 /** `rule` and `when` are names that mean something only where a rule declaration starts. */
-func main() => int sync {
+func main() sync {
     let rule = 3
     let when = 4
     println(rule + when)
-    return 0
 }

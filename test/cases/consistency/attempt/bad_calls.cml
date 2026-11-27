@@ -12,11 +12,10 @@ func scaled(d: int) => int {
     return k / d
 }
 
-func main() => int sync {
+func main() sync {
     println(attempt(5) !! -1)
     println(attempt(scaled) !! -1)
     println(attempt(risky, 1) !! -1)
     println(attempt(risky, 'one') !! -1)
     println(attempt(risky, 1, 2) !! -1)
-    return 0
 }

@@ -25,7 +25,7 @@ func outer(...xs) => () => int {
     }
 }
 
-func main() => int sync {
+func main() sync {
     let f = outer(4, 5)
-    return f()
+    f()
 }

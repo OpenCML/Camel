@@ -31,7 +31,7 @@ func calleeText(n: Node) => string spelling {
     }
 }
 
-func main() => int spelling sync {
+func main() spelling sync {
     let p = main
     let found = graphs_of(p)->filter<func (g: Graph) => bool {
         name(g) == 'compute'
@@ -64,5 +64,5 @@ func main() => int spelling sync {
         name(g) == 'wrap'
     }>
     println(nodes(wrap_graph[0])->map<calleeText>)
-    return wrap(1) - 3
+    wrap(1) - 3
 }

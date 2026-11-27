@@ -43,10 +43,9 @@ func through_library(x: float[]) => float {
     return mean<0, false>(x)
 }
 
-func main() => int sync {
+func main() sync {
     let engine = grad(stated)<[1.0, 2.0, 3.0, 4.0] as float[]>()
     let (value, pullback) = vjp(through_library)([1.0, 2.0, 3.0, 4.0] as float[])
     let fromLibrary = pullback(1.0).0
     `value={} engine dL/dw={} library dL/dx={}`->format<value, engine, fromLibrary>->println
-    return 0
 }

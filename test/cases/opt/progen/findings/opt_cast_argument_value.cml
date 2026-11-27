@@ -18,12 +18,11 @@ func h(x: float, y: float) => float {
     return x * 2.0 + y + 0.25
 }
 
-func main() => int sync {
+func main() sync {
     let i = 7
     let j = 3
     let d = 3.5
     println(f(float(i)))
     println(h(float(i), float(j)))
     println(h(d, float(j)) + f(0.0))
-    return 0
 }

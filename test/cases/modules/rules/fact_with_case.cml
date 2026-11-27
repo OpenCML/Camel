@@ -38,7 +38,6 @@ func left(x: int) => int {
     return x * 1
 }
 
-func main() => int sync {
+func main() sync {
     println(left(3))
-    return 0
 }

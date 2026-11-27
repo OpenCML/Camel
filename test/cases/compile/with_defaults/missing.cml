@@ -8,6 +8,6 @@ func f(x: int) => int {
     return if strict then x * rounds else x + rounds
 }
 
-func main() => int sync {
-    return f<strict: true>(1)
+func main() sync {
+    f<strict: true>(1)
 }

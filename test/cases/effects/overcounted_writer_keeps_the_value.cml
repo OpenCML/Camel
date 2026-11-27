@@ -18,9 +18,8 @@ func apply(f: (x: int) => void, v: int) => int {
     return counter
 }
 
-func main() => int sync {
+func main() sync {
     println(apply(func (y: int) {
         println('called', y)
     }, 3))
-    return 0
 }

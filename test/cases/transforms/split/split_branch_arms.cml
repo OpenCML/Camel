@@ -25,7 +25,7 @@ func leaky(x: float) => float {
     return if x > 0.0 then x * x else 0.5 * x
 }
 
-func main() => int sync {
+func main() sync {
     let forward = split(jvp(leaky))
     let (up, upBackward) = forward(2.0)
     'branch x=2.0 value={}'->format<up>->println
@@ -33,5 +33,4 @@ func main() => int sync {
     let (down, downBackward) = forward(-1.0)
     'branch x=-1.0 value={}'->format<down>->println
     'branch x=-1.0 dgdx={}'->format<downBackward(1.0)>->println
-    return 0
 }

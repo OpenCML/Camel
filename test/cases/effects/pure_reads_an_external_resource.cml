@@ -12,7 +12,6 @@ func exists(path: string) => bool pure {
     return fs::exists(path)
 }
 
-func main() => int sync {
+func main() sync {
     println(exists("."))
-    return 0
 }

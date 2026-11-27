@@ -35,7 +35,7 @@ func selected::<T>(t: T) => int {
     }
 }
 
-func main() => int sync {
+func main() sync {
     println(shape({ a: 1, b: 2.0 }))
     println(shape((1, 2.0)))
     println(shape(42))
@@ -49,5 +49,4 @@ func main() => int sync {
     println(fallback(3))
     println(selected({ a: 1 }))
     println(selected(2))
-    return 0
 }

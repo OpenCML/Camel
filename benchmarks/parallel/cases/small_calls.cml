@@ -13,7 +13,6 @@ func spin(i: int, n: int, acc: int) => int {
     return if i == n then acc else spin(i + 1, n, mix(acc, i))
 }
 
-func main() => int sync {
+func main() sync {
     println(spin(0, 2000000, 0))
-    return 0
 }

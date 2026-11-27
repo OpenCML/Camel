@@ -4,9 +4,8 @@
 func inc(x: int) => int { return x + 1 }
 func dbl(x: int) => int { return x * 2 }
 
-func main() => int sync {
+func main() sync {
     let g = inc?..dbl
     println('never printed')
     println(g(3))
-    return 0
 }

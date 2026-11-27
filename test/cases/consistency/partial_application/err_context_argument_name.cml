@@ -9,9 +9,8 @@ func scale(x: f32) => f32 {
     return x * k
 }
 
-func main() => int sync {
+func main() sync {
     let n = 2
     let s = scale<n>
     println(s(3.0))
-    return 0
 }

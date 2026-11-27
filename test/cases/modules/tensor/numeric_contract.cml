@@ -13,7 +13,7 @@ func pick(mask: float[], vals: float[]) => f32[...] {
     return (m / m) * f32(vals)
 }
 
-func main() => int sync {
+func main() sync {
     let nz = -0.0
     // relu([NaN, -0, 1, -2])
     println(relu(pick([0.0, 1.0, 1.0, 1.0], [1.0, nz, 1.0, -2.0])))
@@ -54,5 +54,4 @@ func main() => int sync {
     // observable that says the same thing, so it is printed.
     let s = softmax<0>(pick([1.0, 0.0, 1.0], [1.0, 2.0, 3.0]))
     'softmax axis={}'->format<s>->println
-    return 0
 }

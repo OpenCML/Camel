@@ -5,7 +5,6 @@ func report() => int {
     return 5->println->println
 }
 
-func main() => int sync {
+func main() sync {
     println(report())
-    return 0
 }

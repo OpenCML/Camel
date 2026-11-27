@@ -29,7 +29,6 @@ func e8() => P sync {
     return { x: 0, y: 0 }
 }
 
-func main() => int sync {
+func main() sync {
     let n24 = e8()
-    return 0
 }

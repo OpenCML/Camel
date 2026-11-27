@@ -4,7 +4,7 @@
 
 import { zen } from this
 
-func main() => int sync {
+func main() sync {
     println('=== This Module Basic Tests ===')
     
     println('\n[1] zen()')
@@ -12,5 +12,4 @@ func main() => int sync {
     println(z)
     
     println('\n=== This tests completed ===')
-    return 0
 }

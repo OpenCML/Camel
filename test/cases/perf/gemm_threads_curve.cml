@@ -119,7 +119,7 @@ func curve_at(round: int, shapes: Shapes, t: int, reps: int) => void sync {
     time_exact(round, '512x256x512', shapes.small_a, shapes.small_b, reps)
 }
 
-func main(rounds: int, reps: int) => int sync {
+func main(rounds: int, reps: int) sync {
     let shapes = {
         cube_a: zeros::<f32>([1024, 1024]) + 0.001,
         cube_b: zeros::<f32>([1024, 1024]) + 0.001,
@@ -142,8 +142,7 @@ func main(rounds: int, reps: int) => int sync {
         curve_at(round, shapes, 8, reps)
         curve_at(round, shapes, 16, reps)
         curve_at(round, shapes, 32, reps)
-        return round + 1
+        round + 1
     }
     'gemm_threads_curve rounds={} reps={}'->format<done, reps>->println
-    return 0
 }

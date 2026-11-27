@@ -23,7 +23,7 @@ func walks(count: int, ends: int[]) => int[] sync {
     return if count == 0 then ends else walks(count - 1, concat(ends, [walk(100, 0)]))
 }
 
-func main() => int sync {
+func main() sync {
     seed(2024)
     let no_ints: int[] = []
     let ends = walks(12, no_ints)
@@ -37,5 +37,4 @@ func main() => int sync {
     }>
     println(format<mean(wide), stdev(wide)>('mean distance {:.2f}  stdev {:.2f}'))
     println('farthest:', max(distances))
-    return 0
 }

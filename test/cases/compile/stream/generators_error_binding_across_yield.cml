@@ -24,10 +24,9 @@ func g(x: int!) => string.. sync {
     }
 }
 
-func main() => int sync {
+func main() sync {
     loop acc = 0 for s in g(fail()) do sync {
         println(s)
         acc + 1
     }
-    return 0
 }

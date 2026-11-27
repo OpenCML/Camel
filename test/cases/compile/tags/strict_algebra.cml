@@ -36,7 +36,6 @@ func tightPair(x: float) => float {
     return x * 0.1 + x * 0.3
 }
 
-func main() => int sync {
+func main() sync {
     println(loose(3.0), tight(3.0), tightBlock(3.0), loosePair(3.0), tightPair(3.0))
-    return 0
 }

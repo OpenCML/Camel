@@ -9,11 +9,10 @@
  * runs is a running region, so a statement written there needs no `sync` to run.
  */
 
-func main() => int sync {
+func main() sync {
     let total = loop i = 0 while i < 3 do {
         println(i)
         i + 1
     }
     'total={}'->format<total>->println
-    return 0
 }

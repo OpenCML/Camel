@@ -1,6 +1,5 @@
 import { pi, pure } from mi_values
 
-func main() => int sync {
+func main() sync {
     println(pure(1))
-    return 0
 }

@@ -4,6 +4,6 @@ func f() => int pure uses fs {
     return 0
 }
 
-func main() => int {
-    return f()
+func main() {
+    f()
 }

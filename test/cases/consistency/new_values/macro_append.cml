@@ -14,7 +14,6 @@ func squares(n: int) => int[] sync {
     return out
 }
 
-func main() => int sync {
+func main() sync {
     println(squares(5), len(squares(3)))
-    return 0
 }

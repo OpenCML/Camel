@@ -74,7 +74,7 @@ func f16WithinEps(x: f16, y: f16) => bool {
     return abs(f64(r) - exact) / abs(exact) <= 0.00048828125
 }
 
-func main() => int sync {
+func main() sync {
     // ---- bf16: each form beside the binary operator it stands for ----
     var b = bf16(1.5)
     b += bf16(2.25)
@@ -123,5 +123,4 @@ func main() => int sync {
     rootF16 ^= f16(0.5)
     println(bitsOfBf16(rootBf), f32(rootBf), bf16WithinEps(bf16(3.0), bf16(0.5)))
     println(bitsOfF16(rootF16), f32(rootF16), f16WithinEps(f16(3.0), f16(0.5)))
-    return 0
 }

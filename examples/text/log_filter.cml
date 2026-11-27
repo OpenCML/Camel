@@ -31,7 +31,7 @@ func parse(line: string) => Entry {
     }
 }
 
-func main() => int sync {
+func main() sync {
     // The runner's per-test scratch directory; a direct run keeps the header's fixed path.
     let root = get_env('CAMEL_TEST_TMPDIR') ?? ''
     let dir = if root == '' then 'tmp/examples' else root
@@ -75,5 +75,4 @@ func main() => int sync {
     println('lines with a number followed by a unit:', lines->count<func (l: string) => bool {
         l->has_match<'[0-9]+(%|s)'>
     }>)
-    return 0
 }

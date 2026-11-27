@@ -12,11 +12,10 @@ func take3(x: float[3]) => void {
     println(x)
 }
 
-func main() => int sync {
+func main() sync {
     let byCast = [1.5, 2.5, 2.5] as float[3]
     let byDeclaration: float[3] = [1.5, 2.5, 2.5]
     take3([1.5, 2.5, 2.5])
     take3(byCast)
     take3(byDeclaration)
-    return 0
 }

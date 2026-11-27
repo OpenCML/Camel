@@ -10,7 +10,7 @@ func sha256_rounds(s: string, rounds: int) => string {
     return digest
 }
 
-func main() => int sync {
+func main() sync {
     println('=== Hash Module Basic Tests ===')
     
     println("\n[1] sha256('abc')")
@@ -24,5 +24,4 @@ func main() => int sync {
     println('  differs from sha256 =', rounds_digest != digest)
     
     println('\n=== Hash tests completed ===')
-    return 0
 }

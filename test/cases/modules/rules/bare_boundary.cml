@@ -21,11 +21,10 @@ func zero(x: f32) => f32 {
 
 rule combine_one_unguarded(x: f32, const c: f32) { x * c + x => x * (c + 1.0) }
 
-func main() => int sync {
+func main() sync {
     let inf = f32(3.0e38) * 2.0
     println(minus_one(-0.0), 0.0)
     println(zero(inf), inf)
-    return 0
 }
 
 /// The unguarded law, applied to the same program: the two boundary lines collapse.

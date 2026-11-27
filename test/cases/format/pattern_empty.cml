@@ -1,5 +1,4 @@
-func main() => int sync{
+func main() sync{
 let value=()
 let result=match value{case () => 1 case {} => 2 case _ => 3}
-return result
 }

@@ -137,10 +137,10 @@ func log(x: int) => int {
     return x + 1
 }
 
-func main() => int sync {
+func main() sync {
     let a = log(1)
     let b = log(a)
-    return b            // returns 3, prints 1 and 2
+    b            // returns 3, prints 1 and 2
 }
 ```
 

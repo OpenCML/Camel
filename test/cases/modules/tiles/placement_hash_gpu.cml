@@ -7,10 +7,10 @@ func other() => int {
     return 5
 }
 
-func main() => int {
+func main() {
     #gpu
     {
         7
     }
-    return other()
+    other()
 }

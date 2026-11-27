@@ -10,7 +10,6 @@ func shout() => int uses var console sync {
     return 1
 }
 
-func main() => int sync {
+func main() sync {
     println(shout())
-    return 0
 }

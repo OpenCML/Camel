@@ -21,7 +21,6 @@ func inc(x: int) => int {
     return x + 1
 }
 
-func main() => int sync {
+func main() sync {
     println(apply(inc, 41))
-    return 0
 }

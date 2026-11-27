@@ -74,7 +74,7 @@ func compare(
     return 0
 }
 
-func main() => int sync {
+func main() sync {
     let x = [[0.5, -1.0, 2.0, 0.25], [1.5, -0.75, 0.1, 3.0], [-2.0, 0.6, 1.2, -0.3]] as f32[3, 4]
     compare('softmax', grad(op_softmax), grad(def_softmax), x)
     compare('softmax 0', grad(op_softmax0), grad(def_softmax0), x)
@@ -82,5 +82,4 @@ func main() => int sync {
     compare('mean', grad(op_mean), grad(def_mean), x)
     compare('relu', grad(op_relu), grad(def_relu), x)
     compare('sigmoid', grad(op_sigmoid), grad(def_sigmoid), x)
-    return 0
 }

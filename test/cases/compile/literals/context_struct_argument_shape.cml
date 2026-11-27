@@ -10,7 +10,6 @@ func norm(p: Point) => f32 {
     return p.x * p.x + p.y * p.y
 }
 
-func main() => int sync {
+func main() sync {
     println(norm({ x: 1.0 }))
-    return 0
 }

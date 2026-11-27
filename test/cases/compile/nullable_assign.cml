@@ -14,7 +14,7 @@ type Acc = { best: float?, count: int }
 
 var seen: float? = null
 
-func main() => int sync {
+func main() sync {
     var best: float? = null
     let hi = 2.5
     best = hi
@@ -36,5 +36,4 @@ func main() => int sync {
         seen = x
     }>
     println(seen)
-    return 0
 }

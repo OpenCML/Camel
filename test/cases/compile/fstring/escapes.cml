@@ -1,4 +1,4 @@
-func main() => int sync {
+func main() sync {
     println('single: \`')
     println('double: \`')
     println(`formatted: \``)
@@ -12,5 +12,4 @@ func main() => int sync {
     println('braces from escapes: [\x7B][\x7D]')
     println(`braces from escapes: [\x7B][\x7D][\u{7B}][\u{7D}]`)
     println(`invalid unicode kept: \u{xyz}`)
-    return 0
 }

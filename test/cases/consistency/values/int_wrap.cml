@@ -16,7 +16,7 @@ func neg(a: int) => int {
     return 0 - a
 }
 
-func main() => int sync {
+func main() sync {
     let half = 4611686018427387904
     let max = half - 1 + half
     let min = neg(max) - 1
@@ -29,5 +29,4 @@ func main() => int sync {
     println(neg(min))
     println(mul(4294967296, 4294967296))
     println(mul(3037000500, 3037000500))
-    return 0
 }

@@ -61,7 +61,7 @@ func wrap::<T>(x: T) => PyObject {
     return must(to_py(x))
 }
 
-func main() => int sync {
+func main() sync {
     // an exception is an error value that keeps its class
     println(shown_void(exec('raise KeyError("missing")')))
     println(shown(import_module('no_such_module_zzz')))
@@ -88,5 +88,4 @@ func main() => int sync {
     println(outcome(from_py::<(int, int)>(expr('(1, 2, 3)'))))
     println(outcome(from_py::<{ a: int, b: int }>(expr('{"a": 1}'))))
     println(outcome(from_py::<int[]>(expr('[1, 2, 3]'))))
-    return 0
 }

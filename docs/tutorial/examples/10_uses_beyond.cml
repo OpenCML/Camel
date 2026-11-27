@@ -10,7 +10,6 @@ func stamp() => int uses var db sync {
     return 1
 }
 
-func main() => int sync {
+func main() sync {
     println(stamp())
-    return 0
 }

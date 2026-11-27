@@ -36,12 +36,11 @@ func total_plain(x: float[...]) => float {
     return sum(take(lane, [1]))
 }
 
-func main() => int sync {
+func main() sync {
     let x = [[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]] as float[2, 3]
     let engine = grad(total)<[[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]] as float[2, 3]>()
     let (value, pullback) = vjp(total_plain)(x)
     let library = pullback(1.0).0
     let same = sum(abs(engine - library)) == 0.0
     `sum<0>: value={} engine={} library={} same={}`->format<value, engine, library, same>->println
-    return 0
 }

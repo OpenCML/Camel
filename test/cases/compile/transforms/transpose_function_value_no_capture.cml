@@ -35,11 +35,10 @@ func g(x: float) => float {
     return h(x)
 }
 
-func main() => int sync {
+func main() sync {
     println(g(1.0))
     let back = transpose(g)
     println(back(1.0))
     // Twice the cotangent, 4: a number no forward line prints, so the claim is about the transpose.
     println(back(2.0))
-    return 0
 }

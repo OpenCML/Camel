@@ -2,7 +2,7 @@ import { inc, rev, plus_helper, root_len } from export_lib
 import export_lib
 import { rev_ints } from export_mid
 
-func main() => int sync {
+func main() sync {
     println(inc(1))
     println(rev([1, 2, 3]))
     println(rev(['a', 'b']))
@@ -12,5 +12,4 @@ func main() => int sync {
     println(root_len([1, 2, 3, 4]))
     println(export_lib::rev([true, false]))
     println(export_lib::Tools::twice(3))
-    return 0
 }

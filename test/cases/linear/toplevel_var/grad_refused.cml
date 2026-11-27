@@ -9,8 +9,7 @@ func f(x: float) => float sync {
     return acc * 2.0
 }
 
-func main() => int sync {
+func main() sync {
     let g = grad(f)
     println(g<3.0>(2.0))
-    return 0
 }

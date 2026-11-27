@@ -38,7 +38,7 @@ func shared_chain() => float {
     return float(sum(m.a / m.w))
 }
 
-func main(fused: int) => int sync {
+func main(fused: int) sync {
     var x = zeros::<f32>([8, 8])
     x = x + 1.0
     var w = zeros::<f32>([8, 8])
@@ -52,5 +52,4 @@ func main(fused: int) => int sync {
         let (value, gradient) = h<{ a: x, w: w }>()
         'profile shared v={} sum={}'->format<value, sum(gradient.a)>->println
     }
-    return 0
 }

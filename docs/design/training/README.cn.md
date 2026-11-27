@@ -215,7 +215,7 @@ func train_step(s: Device<State>, data: Device<Tensor<f32>>, cfg: Config) => (De
     return ({ params: p, m: m, v: v, ema: ema(s.ema, p), key: s.key, step: s.step + 1 }, l)
 }
 
-func main() => int sync {
+func main() sync {
     ...
     let final = loop s = upload(init_state(cfg)) for i in range(0, cfg.steps) do sync {
         let (next, l) = train_step(s, data, cfg)

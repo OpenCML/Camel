@@ -28,10 +28,9 @@ func fill() => int[] {
     return [0]
 }
 
-func main() => int sync {
+func main() sync {
     println(total([1, 2]))
     println([1, 2]->total<axis: 3>)
     println([1, 2]->total<1, true>)
     println(fill(), fill<3>())
-    return 0
 }

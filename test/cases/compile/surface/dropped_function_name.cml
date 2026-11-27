@@ -27,11 +27,10 @@ func calls_it() => int {
     return step([10, 20, 30])
 }
 
-func main() => int sync {
+func main() sync {
     void_tail()
     void_tail_plain()
     arm_tail()
     println(calls_it())
     println('done')
-    return 0
 }

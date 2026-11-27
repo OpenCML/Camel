@@ -69,7 +69,7 @@ func drift(a: Mlp, b: Mlp) => float {
     return float(sum(abs(a.l0.weight - b.l0.weight))) + float(sum(abs(a.l0.bias - b.l0.bias))) + float(sum(abs(a.l1.weight - b.l1.weight))) + float(sum(abs(a.l1.bias - b.l1.bias)))
 }
 
-func main(steps: int) => int sync {
+func main(steps: int) sync {
     // A tiny deterministic batch: four samples of three features, four class ids.
     let x = reshape<[4, 3]>(f32(to_array(0 .. 12))) * 0.125 - 0.5
     let labels = to_array(0 .. 4)
@@ -86,7 +86,7 @@ func main(steps: int) => int sync {
         let missed = if before != 0.0 then 1 else 0
         let next = update(opt, m, gradient, s)
         let other = native_adam(r, gradient, ns, opt.schedule(step + 1))
-        return (next.0, other.0, next.1, other.1, step + 1, curve->append<value>, bad + missed)
+        (next.0, other.0, next.1, other.1, step + 1, curve->append<value>, bad + missed)
     }
     let final = drift(camel, reference)
     let camel_loss = loss<camel>(x, labels)
@@ -105,5 +105,4 @@ func main(steps: int) => int sync {
     'optim training camel sum_w1={} b1_3={} sum_w2={}'->format<sum(camel.l0.weight), camel.l0.bias[3], sum(camel.l1.weight)>->println
     'optim training nn sum_w1={} b1_3={} sum_w2={}'->format<sum(reference.l0.weight), reference.l0.bias[3], sum(reference.l1.weight)>->println
     'optim training curve={}'->format<curve>->println
-    return failures
 }

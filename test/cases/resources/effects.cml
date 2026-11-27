@@ -26,7 +26,7 @@ func countdown(var t: int, n: int) => int sync {
     return if n <= 0 then t else countdown(t, n - 1)
 }
 
-func main() => int sync {
+func main() sync {
     var c = 0
     var d = 10
     c = c + 2
@@ -46,5 +46,5 @@ func main() => int sync {
     println(c)
     println(d)
     println(xs)
-    return 0
+    0
 }

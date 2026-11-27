@@ -20,7 +20,7 @@ func add_via_body(a: int, b: int) => int {
     return a - (0 - b)
 }
 
-func main() => int sync {
+func main() sync {
     let k1 = add_via_kernel(19, 23)
     let b1 = add_via_body(19, 23)
     let k2 = add_via_kernel(-5, 7)
@@ -30,5 +30,5 @@ func main() => int sync {
     let k4 = add_via_kernel(1000000, -999999)
     let b4 = add_via_body(1000000, -999999)
     'kernel={},{},{},{} body={},{},{},{} diff={},{},{},{}'->format<k1, k2, k3, k4, b1, b2, b3, b4, k1 - b1, k2 - b2, k3 - b3, k4 - b4>->println
-    return (k1 - b1) + (k2 - b2) + (k3 - b3) + (k4 - b4)
+    (k1 - b1) + (k2 - b2) + (k3 - b3) + (k4 - b4)
 }

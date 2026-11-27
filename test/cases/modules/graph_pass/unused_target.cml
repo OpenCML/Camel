@@ -11,8 +11,7 @@ func spare(s: string) => int {
     return 4
 }
 
-func main() => int sync {
+func main() sync {
     println(waste(3, 4))
     println(spare('ab'))
-    return 0
 }

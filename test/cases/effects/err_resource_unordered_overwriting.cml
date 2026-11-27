@@ -7,7 +7,6 @@
 
 resource cell_v unordered overwriting
 
-func main() => int {
+func main() {
     println(42)
-    return 0
 }

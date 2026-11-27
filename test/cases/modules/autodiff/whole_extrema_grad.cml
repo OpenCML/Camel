@@ -26,10 +26,9 @@ func low() => float {
     return min(xs)
 }
 
-func main() => int sync {
+func main() sync {
     println(grad(high)<5.0>())
     println(grad(high)<3.0>())
     println(grad(low)<1.0>())
     println(grad(low)<3.0>())
-    return 0
 }

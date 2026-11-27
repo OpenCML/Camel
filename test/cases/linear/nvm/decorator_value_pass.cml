@@ -18,7 +18,7 @@ func inc(x: int) => int {
     return x + 1
 }
 
-func main() => int sync {
+func main() sync {
     let v = apply_once(inc, 10)
-    return if v == 16 then 0 else 1
+    if v == 16 then 0 else 1
 }

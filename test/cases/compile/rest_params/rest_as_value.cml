@@ -2,7 +2,7 @@ func sum(...ts) => int {
     return static loop acc = 0 for j in indices ts do acc + ts.[j]
 }
 
-func main() => int sync {
+func main() sync {
     let f = sum
-    return f(1, 2)
+    f(1, 2)
 }

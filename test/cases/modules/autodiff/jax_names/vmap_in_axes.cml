@@ -17,8 +17,7 @@ func square(x: float) => float {
     return x * x
 }
 
-func main() => int sync {
+func main() sync {
     let batched = vmap(square, in_axes: 1)
     println(batched([1.0, 2.0]))
-    return 0
 }

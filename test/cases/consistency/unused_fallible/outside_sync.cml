@@ -8,7 +8,6 @@ func quiet(s: string) => int {
     return 1
 }
 
-func main() => int sync {
+func main() sync {
     println(quiet('zz'))
-    return 0
 }

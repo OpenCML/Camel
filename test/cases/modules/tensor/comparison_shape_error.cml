@@ -7,9 +7,8 @@
 
 import tensor
 
-func main() => int sync {
+func main() sync {
     let a = [1.0, 2.0, 3.0] as float[]
     let c = [1.0, 2.0] as float[]
     println('{}', a === c)
-    return 0
 }

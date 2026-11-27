@@ -3,6 +3,6 @@ func len_or_zero(s: string?) => int {
     return if s != null then len(s) else 0
 }
 
-func main() => int {
-    return len_or_zero('abc')
+func main() {
+    len_or_zero('abc')
 }

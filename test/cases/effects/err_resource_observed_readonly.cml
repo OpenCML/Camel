@@ -5,7 +5,6 @@
 
 resource trace observed readonly
 
-func main() => int {
+func main() {
     println(42)
-    return 0
 }

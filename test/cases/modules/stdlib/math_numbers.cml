@@ -4,7 +4,7 @@
 
 import { min, max, clamp, sign, gcd, lcm, abs, nan, inf, is_nan } from math
 
-func main() => int sync {
+func main() sync {
     let top = 9223372036854775807
     let bottom = -9223372036854775807 - 1
     
@@ -35,5 +35,4 @@ func main() => int sync {
     let a = i32(12)
     let b = i32(18)
     println(min(a, b), max(a, b), clamp(a, b, b), sign(a), gcd(a, b), lcm(a, b))
-    return 0
 }

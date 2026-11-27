@@ -2,8 +2,7 @@ func id::<T>(x: T) => T {
     return x
 }
 
-func main() => int sync {
+func main() sync {
     let f = id
     println([1, 2]->map<id>)
-    return 0
 }

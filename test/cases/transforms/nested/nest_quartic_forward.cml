@@ -23,11 +23,10 @@ func quartic(x: float) => float {
     return x * x * x * x
 }
 
-func main() => int sync {
+func main() sync {
     let g = jvp(jvp(quartic))
     let (pair, slope) = g(2.0, 1.0, 1.0, 0.0)
     let (y, t0) = pair
     let (_, t1) = slope
     'nested_quartic_forward y={} t0={} t1={}'->format<y, t0, t1>->println
-    return 0
 }

@@ -7,7 +7,6 @@
 
 import { supported_operators } from onnx
 
-func main() => int {
+func main() {
     let count: int = supported_operators()
-    return count
 }

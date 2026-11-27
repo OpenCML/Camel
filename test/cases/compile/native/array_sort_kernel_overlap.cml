@@ -31,8 +31,7 @@ func sort_camel::<T>(xs: T[]) => T[] {
     return xs
 }
 
-func main() => int sync {
+func main() sync {
     let small: i32[] = [1, 2, 3]
     println(sort_camel(small))
-    return 0
 }

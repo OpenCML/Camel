@@ -69,7 +69,7 @@ func train(
     return if steps == 0 then model else train(sgd(model, grad(sequence_loss)<model>(x0, x1, target), 0.05), x0, x1, target, steps - 1)
 }
 
-func main() => int sync {
+func main() sync {
     let model = init()
     let x0 = full([1, 2], f32(1.0))
     let x1 = full([1, 2], f32(0.5))
@@ -91,5 +91,4 @@ func main() => int sync {
     'gru_lite whz_grad={}'->format<vg.1.whz>->println
     'gru_lite wxn_grad={}'->format<vg.1.wxn>->println
     'gru_lite whn_grad={}'->format<vg.1.whn>->println
-    return 0
 }

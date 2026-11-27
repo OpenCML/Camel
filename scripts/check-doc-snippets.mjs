@@ -30,7 +30,7 @@
 // snippet is read as code written in that module), not an import of its own.
 //   * Otherwise the snippet only has to compile: parse, GCT and GIR, asserted with
 //     `camel <file> std::gir`. A fence with no entry point is compiled as a module with a
-//     generated `func main() => int sync { return 0 }`; the fence itself is not changed.
+//     generated `func main() sync {}`; the fence itself is not changed.
 //   * Adjacent Camel fences whose first lines name files (`// shapes.cml`, then `// main.cml`)
 //     are one example: the files are written into one directory and the entry is the fence
 //     with `func main`.
@@ -183,12 +183,12 @@ const EXCERPTS = [
 const PENDING_ALL = [
     {
         file: 'docs/tutorial/17_teaching_a_law.cn.md',
-        key: '12ee3b07b5c68a43',
+        key: 'cd76bbae032a82b2',
         reason: "the law checker does not yet sample a conditional law's scalar parameters, so the law cannot fire",
     },
     {
         file: 'docs/tutorial/17_teaching_a_law.en.md',
-        key: '12ee3b07b5c68a43',
+        key: 'cd76bbae032a82b2',
         reason: "the law checker does not yet sample a conditional law's scalar parameters, so the law cannot fire",
     },
 ]
@@ -787,7 +787,7 @@ function writeSnippet(snippet, tempDir) {
     if (!entry.entry) {
         // A fence with no entry point is checked as a module: parse, GCT and GIR only need an
         // entry graph to build, and a generated main does not change the fence.
-        fs.appendFileSync(entry.file, '\nfunc main() => int sync { return 0 }\n')
+        fs.appendFileSync(entry.file, '\nfunc main() sync {}\n')
     }
     return { entry, files }
 }
@@ -1288,7 +1288,7 @@ function docExampleSource(context, entry, code, asStatement) {
         lines.push(`    let __doc_example = ${code}`)
     }
     lines.push('}')
-    lines.push('func main() => int sync { return 0 }')
+    lines.push('func main() sync {}')
     return lines.join('\n') + '\n'
 }
 

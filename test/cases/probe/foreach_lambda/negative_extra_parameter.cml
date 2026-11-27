@@ -1,7 +1,6 @@
 // A lambda with a parameter the position does not have: the second one has no type and nothing
 // expects it. Inference that invents a type would accept this; it must not.
-func main() => int sync {
+func main() sync {
     let ys = (0 .. 3)->map<func (x, y) { x + y }>
     println(len(ys))
-    return 0
 }

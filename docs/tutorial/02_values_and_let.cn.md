@@ -16,7 +16,7 @@
 
 type Point = { x: int, y: int }
 
-func main() => int sync {
+func main() sync {
     let n = 42                      // int (64-bit)
     let ratio = 0.75                // float (64-bit)
     let ok = true                   // bool
@@ -39,7 +39,6 @@ func main() => int sync {
     count = count + 1
     count += 10
     println(count)
-    return 0
 }
 ```
 
@@ -84,11 +83,10 @@ func scale(x: int) => float {
     return float(x) * 1.5
 }
 
-func main() => int sync {
+func main() sync {
     let a: float = 1 + 2.0      // the declared type is float, so both literals are read as float
     let b: f32 = 1              // the literal is read as the f32 one
     println(a, b, scale(3), 1.0 + 2)
-    return 0
 }
 ```
 
@@ -185,7 +183,7 @@ func to_fahrenheit(c: float) => float {
     return c * 9.0 / 5.0 + 32.0
 }
 
-func main() => int sync {
+func main() sync {
     let c = 100.0
     println(to_fahrenheit(c))
     println(`${to_fahrenheit(37.0):.1f}`)
@@ -194,7 +192,6 @@ func main() => int sync {
     let n = 3
     let ratio = 1.5
     println(float(n) * ratio)
-    return 0
 }
 ```
 

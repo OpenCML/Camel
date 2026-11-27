@@ -19,7 +19,7 @@ func h() => float {
     return sq(x) + 3.0 * sq(x + 1.0)
 }
 
-func main(x: float) => int sync {
+func main(x: float) sync {
     'collapse_runtime dh={}'->format<grad(h)<x>()>->println
-    return 0
+    0
 }

@@ -56,7 +56,6 @@ func repeat(n: int, left: int, total: int) => int sync {
     return if left == 0 then total else repeat(n, left - 1, total + probe(collect(n, left), n) + total_of(lasts(n, left)))
 }
 
-func main(reps: int) => int sync {
+func main(reps: int) sync {
     println('gc_nested_foreach total={}'->format<repeat(128, reps, 0)>)
-    return 0
 }

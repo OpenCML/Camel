@@ -6,7 +6,7 @@ func pick(flag: bool, v: int) => int? {
     return if flag then v as int? else null as int?
 }
 
-func main() => int sync {
+func main() sync {
     let n = 42
     let ratio = 2.5
     let ok = true
@@ -35,5 +35,4 @@ func main() => int sync {
     println(ratio)
     println(ok)
     println(later)
-    return 0
 }

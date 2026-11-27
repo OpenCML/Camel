@@ -44,10 +44,9 @@ func carried() => () => int {
     }
 }
 
-func main() => int sync {
+func main() sync {
     let a = in_one_body()
     let b = two_names()
     let f = carried()
     println(`a=${a} b=${b} r7=${f()}`)
-    return 0
 }

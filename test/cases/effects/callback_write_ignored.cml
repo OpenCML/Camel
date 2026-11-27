@@ -19,7 +19,6 @@ func add(x: int) => int {
     return counter
 }
 
-func main() => int sync {
+func main() sync {
     println(add(3))
-    return 0
 }

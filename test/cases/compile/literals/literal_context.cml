@@ -29,7 +29,7 @@ func armExit(c: bool) => float {
     return v
 }
 
-func main() => int sync {
+func main() sync {
     // The declared type: 2 is an f32, 1 a float, 1 + 2 an i32.
     let a: f32 = 2
     let b: float = 1
@@ -63,5 +63,4 @@ func main() => int sync {
     let point: f32 = 0.1 + 0.2
     println(third, point)
     println(7 / 2, -7 / 2, 7 % 2, -7 % 2)
-    return 0
 }

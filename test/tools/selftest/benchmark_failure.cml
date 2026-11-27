@@ -2,7 +2,7 @@
 // comes from an array), so the timed pass fails and `--timeit --diag-format json` reports the
 // failed iteration instead of a mean.
 
-func main() => int {
+func main() {
     let xs = [1, 0]
-    return 10 / xs[1]
+    10 / xs[1]
 }

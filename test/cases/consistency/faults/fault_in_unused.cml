@@ -7,7 +7,6 @@ func careless(z: int) => int {
     return z + 1
 }
 
-func main() => int sync {
+func main() sync {
     println(careless(0))
-    return 0
 }

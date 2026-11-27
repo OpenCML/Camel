@@ -14,8 +14,7 @@ func kind::<T>(t: T) => int {
     }
 }
 
-func main() => int sync {
+func main() sync {
     let p: Point = { x: 1 }
     println(kind(p))
-    return 0
 }

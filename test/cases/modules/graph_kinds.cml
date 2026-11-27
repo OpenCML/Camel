@@ -17,10 +17,9 @@ func kinds(g: Graph) => NodeKind[] {
     return nodes(g)->map<kind>
 }
 
-func main() => int sync {
+func main() sync {
     println(total([1, 5, 9]))
     let all = graphs_of(main)
     println(all->map<name>)
     println(all->map<kinds>)
-    return 0
 }

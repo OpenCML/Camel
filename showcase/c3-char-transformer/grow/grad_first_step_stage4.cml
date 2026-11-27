@@ -93,7 +93,7 @@ func initial() => Model {
     }
 }
 
-func main() => int sync {
+func main() sync {
     let tokens = [0, 1] as int[]
     let m = initial()
     let (value, g) = with_grad(loss_of)<m>(tokens)
@@ -148,5 +148,4 @@ func main() => int sync {
     g.gout->println
     'grad bout '->print
     g.bout->println
-    return 0
 }

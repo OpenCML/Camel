@@ -18,9 +18,8 @@ func repeat(n: int, acc: int) => int {
     return if n == 0 then acc else repeat(n - 1, sixfold(acc))
 }
 
-func main() => int sync {
+func main() sync {
     let a = sixfold(1)
     let b = repeat(1000, 1)
     'call_chain_hot a={} b={}'->format<a, b>->println
-    return 0
 }

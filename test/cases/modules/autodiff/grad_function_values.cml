@@ -138,7 +138,7 @@ func loss10() => float {
     return float(sum(mk(s * 0.5)(p)))
 }
 
-func main() => int sync {
+func main() sync {
     let x = reshape<[3]>([0.5, 0.25, -0.35] as f32[])
     println(grad(loss1)<x>())
     println(grad(loss2)<x>())
@@ -150,5 +150,4 @@ func main() => int sync {
     println(grad(loss8)<x>())
     println(grad(loss9)<x>())
     println(grad(loss10)<x>())
-    return 0
 }

@@ -45,7 +45,7 @@ func sameLiteral(n: int) => (int[], int[]) {
     return loop a = [0], b = [0] while len(a) < n do (a->append<1>, b->append<2>)
 }
 
-func main() => int sync {
+func main() sync {
     let (xs, count, flip, total) = threeTyped(5)
     let (ms, fs) = growMixed(5)
     let (sn, sl) = growStructState(5)
@@ -66,5 +66,4 @@ func main() => int sync {
     println(len(cs), cs[4], cc, len(cz), cz[4])
     println(la, lb, len(lx), lx[4])
     println(len(sa), sa[4], len(sb), sb[4])
-    return 0
 }

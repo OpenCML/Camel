@@ -14,7 +14,7 @@ func fail() => int! {
     return error('Probe', 'always')
 }
 
-func main() => int sync {
+func main() sync {
     let o: bool? = true || false
     let p: bool? = false && true
     let q: bool? = !(true || false)
@@ -47,5 +47,4 @@ func main() => int sync {
     println(h)
     println(w)
     println(f)
-    return 0
 }

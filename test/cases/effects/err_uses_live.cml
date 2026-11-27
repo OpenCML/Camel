@@ -9,7 +9,6 @@ func stamp() => int uses var fs sync {
     return 1
 }
 
-func main() => int sync {
+func main() sync {
     println(stamp())
-    return 0
 }

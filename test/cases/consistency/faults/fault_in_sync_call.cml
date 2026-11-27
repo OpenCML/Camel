@@ -7,12 +7,11 @@ func bump(var x: int, d: int) {
     x = x / d
 }
 
-func main() => int sync {
+func main() sync {
     var i = 5
     bump(i, 3)
     println(i)
     bump(i, 0)
     println(i)
     println('not reached')
-    return 0
 }

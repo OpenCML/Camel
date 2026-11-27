@@ -29,10 +29,9 @@ func df0() => float {
     return g[0]
 }
 
-func main() => int sync {
+func main() sync {
     let xs = [3.0, 4.0]
     let g = grad(f)<xs>()
     'second_order_array_append_init d0={:.1f} d1={:.1f}'->format<g[0], g[1]>->println
     println(grad(df0)<xs>())
-    return 0
 }

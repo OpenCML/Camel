@@ -25,11 +25,10 @@ func churn(n: int) => int {
     }>)
 }
 
-func main() => int sync {
+func main() sync {
     println(tag(50), count(50, 0))
     let c = churn(200)
     println(tag(60), count(60, 0), c)
     let c2 = churn(200)
     println(tag(70), count(70, 0), c2)
-    return 0
 }

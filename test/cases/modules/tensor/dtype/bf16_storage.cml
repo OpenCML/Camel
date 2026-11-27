@@ -29,7 +29,7 @@ func narrowHalf(x: f32[...]) => f16[...] {
     return f16(x)
 }
 
-func main() => int sync {
+func main() sync {
     let tenthValue: f32[] = [0.1]
     let tenth = narrow(tenthValue)
     println(len(to_bytes(tenth)))
@@ -51,5 +51,4 @@ func main() => int sync {
     let product = (narrow(threeValue) * narrow(factorValue))
     println(len(to_bytes(product)))
     println(to_array(to_bytes(product)))
-    return 0
 }

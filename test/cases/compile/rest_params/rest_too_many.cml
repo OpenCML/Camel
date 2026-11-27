@@ -2,6 +2,6 @@ func pair(a: int, b: int) => int {
     return a + b
 }
 
-func main() => int sync {
-    return pair(...(1, 2, 3))
+func main() sync {
+    pair(...(1, 2, 3))
 }

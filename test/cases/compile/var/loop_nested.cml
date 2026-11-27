@@ -9,7 +9,7 @@
  *
  * Run: camel test/cases/compile/var/loop_nested.cml std::nvm
  */
-func main() => int sync {
+func main() sync {
     var total = 0
     let _ = loop i = 0 while i < 3 do {
         let _ = loop j = 0 while j < 2 do {
@@ -19,5 +19,4 @@ func main() => int sync {
         i + 1
     }
     println(total)
-    return 0
 }

@@ -28,10 +28,9 @@ func initial(c: Color) => string {
     }
 }
 
-func main() => int sync {
+func main() sync {
     println(initial(Color::Green))
     println(area(Shape::Circle(1.0)))
     println(area(Shape::Rect{ w: 2.0, h: 3.0 }))
     println(area(Shape::Empty))
-    return 0
 }

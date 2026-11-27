@@ -6,8 +6,7 @@ func literal() => int {
     return 42
 }
 
-func main() => int sync {
+func main() sync {
     let v = literal()
     'inline_empty_entry_targets_fallback v={}'->format<v>->println
-    return 0
 }

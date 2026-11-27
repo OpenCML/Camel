@@ -4,7 +4,6 @@
  * 5.4), so what the position holds decides, not what the range could become.
  */
 
-func main() => int sync {
+func main() sync {
     let n: int = 0 .. 3
-    return n
 }

@@ -16,12 +16,11 @@ type UnguardedShapeOf<T> = match type T {
     case _ => int[0]
 }
 
-func main() => int sync {
+func main() sync {
     // ① a string has no dimension to state, and the bare default answers what it answers for a
     //    scalar: `int[0]`, silently.
     println(is_same::<UnguardedShapeOf<string>, int[0]>())
     // ② the same default answers a nullable type and a function type the same way -- it answers
     //    every type it reaches, which is what makes it a default and not a case about a property.
     println(is_same::<UnguardedShapeOf<string?>, int[0]>())
-    return 0
 }

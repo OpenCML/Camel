@@ -10,10 +10,9 @@ func f1(a: int) => int {
     return a + 1
 }
 
-func main() => int sync {
+func main() sync {
     let g = f1
     println([1]->map<func (x: int) => int {
         g(x)
     }>)
-    return 0
 }

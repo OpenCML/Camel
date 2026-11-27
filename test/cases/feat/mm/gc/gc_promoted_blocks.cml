@@ -11,7 +11,7 @@
 
 import { drop } from array
 
-func main(steps: int, rows: int, size: int) => int sync {
+func main(steps: int, rows: int, size: int) sync {
     let start = std::mem::blocks()
     let base = start.bytes
     let seed: int[][] = []
@@ -25,5 +25,4 @@ func main(steps: int, rows: int, size: int) => int sync {
         (i - 1, next, if bytes > peak then bytes else peak, if bytes < low then bytes else low, now.frees - start.frees, total + n)
     }
     println('gc_promoted_blocks base={} peak={} low={} released={} total={}'->format<base, peak, low, released, total>)
-    return 0
 }

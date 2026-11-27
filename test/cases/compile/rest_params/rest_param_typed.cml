@@ -2,6 +2,6 @@ func bad(...ts: int) => int {
     return 0
 }
 
-func main() => int sync {
-    return bad(1)
+func main() sync {
+    bad(1)
 }

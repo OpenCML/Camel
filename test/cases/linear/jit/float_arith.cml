@@ -8,8 +8,7 @@ func mix(x: float) => float {
     return b / 2.0
 }
 
-func main() => int sync {
+func main() sync {
     let y = mix(1.5)
     'float_arith y={:.6f}'->format<y>->println
-    return 0
 }

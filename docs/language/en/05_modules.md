@@ -33,9 +33,8 @@ import { inc } from lib::Tools       // bring in names of a namespace of the mod
 import math
 using namespace math
 
-func main() => int sync {
+func main() sync {
     println(math::sqrt(9.0), floor(2.5))
-    return 0
 }
 ```
 
@@ -92,11 +91,10 @@ export func area(w: float, h: float) => float {
 import { hypot, Vec } from shapes
 import shapes
 
-func main() => int sync {
+func main() sync {
     let v: Vec = { x: 3.0, y: 4.0 }
     println(hypot(v))
     println(shapes::area(2.0, 5.0))
-    return 0
 }
 ```
 
@@ -123,9 +121,8 @@ export func current() => int { return cnt }
 import counter
 let step = 1000                 // unrelated to counter's step
 
-func main() => int sync {
+func main() sync {
     println(counter::bump(), counter::bump(), counter::current())
-    return 0
 }
 ```
 
@@ -148,9 +145,8 @@ import { pi } from geometry
 import geometry
 
 let area = pi * 2.0 * 2.0
-func main() => int sync {
+func main() sync {
     println(area, geometry::tau)
-    return 0
 }
 ```
 
@@ -181,10 +177,9 @@ namespace Counter {
     func twice(c: Counter) => Counter { return next(next(c)) }   // names of the block need no prefix
 }
 
-func main() => int sync {
+func main() sync {
     let c = Counter::twice(Counter::new())
     println(c.n)
-    return 0
 }
 ```
 

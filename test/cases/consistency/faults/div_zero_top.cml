@@ -3,10 +3,9 @@
  * printed, then DivisionByZero at the division.
  */
 
-func main() => int sync {
+func main() sync {
     let z = 0
     println('before')
     println(7 / z)
     println('not reached')
-    return 0
 }

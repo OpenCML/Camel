@@ -19,7 +19,7 @@ func exact(c: Cooling, start: float, t: float) => float {
     return c.room + (start - c.room) * exp(0.0 - c.k * t)
 }
 
-func main() => int sync {
+func main() sync {
     let coffee: Cooling = { k: 0.1, room: 20.0 }
     let start = 90.0
     let minutes = 30.0
@@ -32,7 +32,6 @@ func main() => int sync {
         report(coffee, start, minutes, n, truth)
     }>
     println(rows->join<'\n'>)
-    return 0
 }
 
 func report(

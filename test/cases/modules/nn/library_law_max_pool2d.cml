@@ -30,7 +30,7 @@ func loss_engine() => float {
     return sum(max_pool2d<2, 2, 0>(x))
 }
 
-func main() => int sync {
+func main() sync {
     let x = [[[
         [1.0, 2.0, 3.0, 4.0],
         [5.0, 6.0, 7.0, 8.0],
@@ -58,5 +58,4 @@ func main() => int sync {
     let forwardDiff = forward - sum(engine * seed)
     let forwardOk = forwardDiff < 1e-6 && forwardDiff > -1e-6
     `max_pool2d forward={} forward_ok={} forward_diff={:.12e}`->format<forward, forwardOk, forwardDiff>->println
-    return 0
 }

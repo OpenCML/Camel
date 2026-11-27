@@ -1,8 +1,7 @@
 // using namespace inside a function body
 import lib
 
-func main() => int sync {
+func main() sync {
     using namespace lib::Tools
     println(inc(1))
-    return 0
 }

@@ -3,9 +3,8 @@
 
 import { ones } from tensor
 
-func main() => int sync {
+func main() sync {
     var w = ones::<f32>([2, 3])
     w = ones::<f32>([5])
     println(len(w))
-    return 0
 }

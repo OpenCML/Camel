@@ -10,7 +10,7 @@ type S = { x: int }
 #op(':op/idx_str')
 func field(s: S, k: string) => int
 
-func main() => int sync {
+func main() sync {
     let s: S = { x: 1 }
-    return field(s, 'y')
+    field(s, 'y')
 }

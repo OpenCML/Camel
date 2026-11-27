@@ -32,7 +32,7 @@ func family::<T>() => int {
 
 type Point = { x: float, y: float }
 
-func main() => int sync {
+func main() sync {
     // ① the shape words decide without asking anything: an array is not a struct and neither is
     //    asked whether it is a number.
     println(is_same::<FamilyOf<int[]>, int[1]>(), is_same::<FamilyOf<Point>, int[2]>())
@@ -49,5 +49,4 @@ func main() => int sync {
     // ⑤ the same answers where the match gives a value.
     println(family::<int[]>(), family::<Point>(), family::<int>(), family::<c64>())
     println(family::<string>(), family::<bool>(), family::<Point?>())
-    return 0
 }

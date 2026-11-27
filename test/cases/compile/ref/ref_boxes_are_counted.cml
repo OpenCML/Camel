@@ -23,7 +23,7 @@ func drop_many(i: int, n: int) => int {
     return if i + 1 >= n then v else v + drop_many(i + 1, n)
 }
 
-func main() => int sync {
+func main() sync {
     let kept = state::ref(41)
     println(drop_many(0, 1000))
     // A tail that allocates: a box is freed when the collector finds its last handle gone, so the
@@ -31,5 +31,4 @@ func main() => int sync {
     let tail = (0 .. 20000)->to_array()
     println(len(tail))
     println(state::get(kept))
-    return 0
 }

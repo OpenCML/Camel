@@ -11,7 +11,6 @@ func decode(shape: int[]) => int {
     return len(shape)
 }
 
-func main() => int sync {
+func main() sync {
     println(decode([1, 2, 3]))
-    return 0
 }

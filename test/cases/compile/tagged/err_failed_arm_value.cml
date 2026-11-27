@@ -11,8 +11,7 @@ func check(x: int) => int! {
     }
 }
 
-func main() => int sync {
+func main() sync {
     println('never printed')
     println(check(1) !! 0)
-    return 0
 }

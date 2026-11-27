@@ -2,7 +2,7 @@
 // insertion order: the literal below is written out of order and the keys still come out
 // ascending. String keys, an empty map, a tuple state that carries the last key, and a
 // `for ... while` that stops after two pairs.
-func main() => int sync {
+func main() sync {
     let m = [(3, 'c'), (1, 'a'), (2, 'b')] as Map<int, string>
     let seen = loop acc = '', last = -1, ordered = 1 for kv in m do (
         acc + kv.1,
@@ -15,5 +15,4 @@ func main() => int sync {
     let count = loop c = 0 for kv in m do c + 1
     let two = loop n = 0, acc = '' for kv in m while n < 2 do (n + 1, acc + kv.1)
     println(seen.0, seen.1, seen.2, total, sk, empty, count, two.1)
-    return 0
 }

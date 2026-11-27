@@ -3,12 +3,11 @@
 
 type Point = { x: int, y: int }
 
-func main() => int sync {
+func main() sync {
     let a: Point = { x: 3, y: 4 }
     let b: Point = { x: 3, y: 4 }
     println(a == b)
     println((1, 'one') == (1, 'one'))
     println([1, 2] == [1, 2])
     println('ab' == 'ab')
-    return 0
 }

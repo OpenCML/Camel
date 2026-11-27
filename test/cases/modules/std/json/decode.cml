@@ -7,7 +7,7 @@
 
 import { encode, decode_as } from json
 
-func main() => int sync {
+func main() sync {
     println('=== JSON decode tests ===')
     
     println('\n[1] decode string')
@@ -35,5 +35,4 @@ func main() => int sync {
     println('  decode(...).id =', restored.id, ', .name =', restored.name, ', .vals =', restored.vals)
     
     println('\n=== JSON decode tests completed ===')
-    return 0
 }

@@ -17,7 +17,7 @@ The first half of [`examples/06_collections.cml`](examples/06_collections.cml):
 
 type Point = { x: int, y: int }
 
-func main() => int sync {
+func main() sync {
     // A struct names its fields; a tuple is positional and carries no names.
     let a: Point = { x: 3, y: 4 }
     println(a, a.x + a.y)
@@ -37,7 +37,6 @@ func main() => int sync {
     let seen = [3, 1, 2, 3, 1] as Set<int>
     println(seen, seen->contains<2>, seen->contains<9>)
     println(union(seen, [9] as Set<int>), intersect(seen, [1, 9] as Set<int>))
-    return 0
 }
 ```
 
@@ -93,14 +92,13 @@ Two values are equal when what they hold is equal, not when they are the same pl
 
 type Point = { x: int, y: int }
 
-func main() => int sync {
+func main() sync {
     let a: Point = { x: 3, y: 4 }
     let b: Point = { x: 3, y: 4 }
     println(a == b)
     println((1, 'one') == (1, 'one'))
     println([1, 2] == [1, 2])
     println('ab' == 'ab')
-    return 0
 }
 ```
 
@@ -144,10 +142,9 @@ func tally(words: string[]) => Map<string, int> {
     return words->reduce<func (acc: Map<string, int>, w: string) => Map<string, int> { acc->put<w, (acc[w] ?? 0) + 1> }, [] as Map<string, int>>
 }
 
-func main() => int sync {
+func main() sync {
     let counts = tally(['fig', 'pear', 'fig', 'apple', 'fig'])
     println(counts, counts['fig'], counts['cherry'] ?? 0)
-    return 0
 }
 ```
 

@@ -28,9 +28,8 @@ func loss2() => float {
     return if s < 0.0 then float(sum(g(p))) else float(sum(g(p * 2.0))) * 0.5
 }
 
-func main() => int sync {
+func main() sync {
     let x = reshape<[3]>([0.5, 0.25, -0.35] as f32[])
     println(grad(loss1)<x>())
     println(grad(loss2)<x>())
-    return 0
 }

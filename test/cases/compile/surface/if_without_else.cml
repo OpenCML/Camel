@@ -1,5 +1,4 @@
-func main() => int sync {
+func main() sync {
     let a = 1
     if a < 2 then println('lt')
-    return 0
 }

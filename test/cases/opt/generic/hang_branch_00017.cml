@@ -59,7 +59,7 @@ func mc_main(w1: f32[...], b2: f32[...], x3: f32[...]) => f32[...] {
     return t42
 }
 
-func main() => int sync {
+func main() sync {
     let mc_p0 = load_npy::<f32>('test/cases/opt/generic/hang_branch_00017_par_0.npy')
     let mc_p1 = load_npy::<f32>('test/cases/opt/generic/hang_branch_00017_par_1.npy')
     let x3_0 = load_npy::<f32>('test/cases/opt/generic/hang_branch_00017_in_0.npy')
@@ -78,5 +78,4 @@ func main() => int sync {
     println('@CALL 4')
     println('@OUT', float(mc_main(mc_p0, mc_p1, x3_4)[0]))
     println('@END')
-    return 0
 }

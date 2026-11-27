@@ -37,9 +37,8 @@ func grad_unrolled(w: float, x: float) => float {
     return grad(unrolled)<w>(x)
 }
 
-func main() => int sync {
+func main() sync {
     println('before grad')
     // d/dw (x * w * 2 * 3) = 6x = 30; h = x w^3 + w^2 + w + 1 = 15, d/dw h^2 = 2 * 15 * 17 = 510
     'grad_specialized_callee scaled={} unrolled={}'->format<grad_scaled(2.0, 5.0), grad_unrolled(2.0, 1.0)>->println
-    return 0
 }

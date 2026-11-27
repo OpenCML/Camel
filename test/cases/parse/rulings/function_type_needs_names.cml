@@ -3,7 +3,6 @@
 
 func g(x: float, y: float) => float sync { return x + y }
 
-func main() => int sync {
+func main() sync {
     let f: (float, float) => float = g
-    return 0
 }

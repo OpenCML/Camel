@@ -38,7 +38,7 @@ func nested(t: { p: (int, int) }) => int {
     return sum
 }
 
-func main() => int sync {
+func main() sync {
     println(sum((1, 2, 3)))
     let (a, b) = positions((10, 'x'))
     println(a, b)
@@ -47,5 +47,4 @@ func main() => int sync {
     println(empty(()))
     println(weighted((1, 2, 3)))
     println(nested({ p: (5, 6) }))
-    return 0
 }

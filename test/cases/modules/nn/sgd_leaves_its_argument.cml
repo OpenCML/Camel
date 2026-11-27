@@ -26,7 +26,7 @@ func mse_loss(X: f32[...]) => float {
     return float(sum(errors * errors))
 }
 
-func main() => int sync {
+func main() sync {
     let X = ones::<f32>([4, 2])
     let y = ones::<f32>([4, 1])
     let p: Linear = { weight: zeros::<f32>([2, 1]) }
@@ -34,5 +34,4 @@ func main() => int sync {
     let q = sgd(p, grads, 0.1)
     println(p.weight)
     println(q.weight)
-    return 0
 }

@@ -4,7 +4,7 @@ func apply_all(ps: (int, int)[]) => int[] {
     return ps->map<f>
 }
 
-func main() => int sync {
+func main() sync {
     let pairs = [(1, 2), (3, 4), (5, 6)]
     println(apply_all<func ((a, b)) {
         a + b
@@ -12,5 +12,4 @@ func main() => int sync {
     println(apply_all<func ((a, b)) {
         a * b
     }>(zip([1, 2], [10, 20])))
-    return 0
 }

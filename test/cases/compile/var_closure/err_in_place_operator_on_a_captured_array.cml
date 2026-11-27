@@ -11,12 +11,11 @@
 
 import { sort } from array
 
-func main() => int sync {
+func main() sync {
     var xs = [3, 1, 2]
     let f = func () sync {
         xs = xs->sort
         xs
     }
     println(f())
-    return 0
 }

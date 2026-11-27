@@ -4,10 +4,9 @@
 
 import { exit } from process
 
-func main() => int sync {
+func main() sync {
     println('line')
     print('pending')
     exit(4)
     println('not reached')
-    return 0
 }

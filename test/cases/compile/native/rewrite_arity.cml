@@ -10,7 +10,6 @@ func target() => int {
     return 0
 }
 
-func main() => int sync {
+func main() sync {
     let q = target->rewrite
-    return 0
 }

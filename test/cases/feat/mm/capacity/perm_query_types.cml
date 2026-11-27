@@ -99,7 +99,7 @@ func w29(a30: int, var c31: int) => int sync {
     }
 }
 
-func main() => int sync {
+func main() sync {
     let n35 = int(get_env('PROGEN_I0') ?? '')
     let n36 = int(get_env('PROGEN_I1') ?? '')
     let n38 = (if (if false then true else false) then concat([n36, 5, n36, n35], [n35]) else concat([n35, n36, -7, n36], [n35, n36]))->map<func (p37: int) => int {
@@ -135,23 +135,22 @@ func main() => int sync {
                 case 1 => string(10)
                 case _ => {
                     let n45 = true
-                    return ([false, true, n45]->map<func (p46: bool) => string {
+                    ([false, true, n45]->map<func (p46: bool) => string {
                         'r:{},{:.1f}{},'->format<'pq', 0.5, n35>
                     }>)->join<''>
                 }
             }
-            return n36 % 10
+            n36 % 10
         }
     }
     let n53 = if (n36 < 12) && (1.5 >= 2.5) then if false then ('b', -2) else {
         let n49 = if true then [{ x: n35, y: 0 }, { x: n35, y: n48 }] else [{ x: n48, y: 1 }, { x: n35, y: -7 }]
         let n50 = if true then (0.5, n38) else (1.0, [-2])
-        return if true then ('ab', n35) else ('cd', n35)
+        if true then ('ab', n35) else ('cd', n35)
     } else (if true then 'a' else 'b', f13([n48, 5], func (p51: bool, p52: float) => float {
         p52
     }))
     println('L6 {} {}'->format<n38, n35>)
     println('L7 {}'->format<n48>)
     println('L8 {}'->format<n53>)
-    return 0
 }

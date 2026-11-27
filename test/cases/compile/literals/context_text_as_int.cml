@@ -4,8 +4,7 @@
  * write `int(s)` or `parse_int(s)`.
  */
 
-func main() => int sync {
+func main() sync {
     let x = '42' as int
     println(x)
-    return 0
 }

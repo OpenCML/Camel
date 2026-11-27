@@ -15,7 +15,6 @@ func counted_returned() => int sync {
     return v
 }
 
-func main() => int sync {
+func main() sync {
     println(counted(), counted_returned())
-    return 0
 }

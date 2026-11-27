@@ -19,6 +19,6 @@ func f(e: E) => int {
     }
 }
 
-func main() => int sync {
-    return f(E::A)
+func main() sync {
+    f(E::A)
 }

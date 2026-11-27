@@ -20,8 +20,7 @@ func computedArray(v: f64[]) => MB {
     return { n: 1, v: v }
 }
 
-func main() => int {
+func main() {
     println(wrongSibling(1.0).n)
     println(computedArray([1.0]).n)
-    return 0
 }

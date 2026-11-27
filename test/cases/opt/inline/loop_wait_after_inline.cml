@@ -41,11 +41,10 @@ func w22(a23: int, var c24: int) => int sync {
     }
 }
 
-func main() => int sync {
+func main() sync {
     var v60 = 0
     let n69 = f8(0.25, [(v60, 'k9')])
     let n70 = w22(0, v60)
     println('L9 [{}]'->format<n69>)
     println('L10 [{}]'->format<n70>)
-    return 0
 }

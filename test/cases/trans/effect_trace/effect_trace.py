@@ -124,11 +124,11 @@ def main() -> int:
             special = 'q"b\\s|p\tz'  # quote, backslash, the separator character, a tab
             program = Path(t) / "payload.cml"
             program.write_text(
-                "func main() => int sync {\n"
+                "func main() sync {\n"
                 '    println("hi")\n'
                 '    println("q\\"b\\\\s|p\\tz")\n'
                 f'    println("{long_text}")\n'
-                "    return 0\n}\n", encoding="utf-8")
+                "}\n", encoding="utf-8")
             code, out, lines = run(program, ["std::nvm"], trace)
             check(code == 0 and len(lines) == 3, f"exit 0 and three trace lines (got {code}, {len(lines)})")
             if len(lines) == 3:
@@ -150,12 +150,12 @@ def main() -> int:
         elif mode == "variables":
             program = Path(t) / "variables.cml"
             program.write_text(
-                "func main() => int sync {\n"
+                "func main() sync {\n"
                 "    var c = 1\n"
                 "    let a = c + 1\n"
                 "    c += a\n"
                 "    println(c)\n"
-                "    return 0\n}\n", encoding="utf-8")
+                "}\n", encoding="utf-8")
             for passes in (["std::nvm"], ["std::fvm"], ["std::cxx::inline", "std::nvm"]):
                 code, out, lines = run(program, passes, trace)
                 uris = [l["uri"] for l in lines]

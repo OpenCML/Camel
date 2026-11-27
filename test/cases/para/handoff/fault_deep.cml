@@ -36,7 +36,7 @@ func late(i: int) => int {
     return pick(i * 3, if i % 4 == 1 && i > 4 then 100 + i else 2)
 }
 
-func main() => int sync {
+func main() sync {
     (0 .. 30)->foreach<func (round: int) sync {
         let r = attempt(row)(round)
         let line = match r {
@@ -52,5 +52,4 @@ func main() => int sync {
     println('before')
     println((0 .. 16)->map<late>)
     println('not reached')
-    return 0
 }

@@ -10,8 +10,7 @@ func k14(a15: int) => (a0: int) => int sync {
     }
 }
 
-func main() => int sync {
+func main() sync {
     let n62 = (if false then null else true) ?? (if false then false else null) ?? false
     let n75 = k14(len([1.0]))
-    return 0
 }

@@ -6,10 +6,9 @@
 
 import { Box, mk } from models
 
-func main() => int sync {
+func main() sync {
     var b: Box = mk(1)
     let c: Box = mk(2)
     b += c
     println(b.v)
-    return 0
 }

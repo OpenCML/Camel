@@ -4,6 +4,5 @@ tag fast on nodes
 #fast
 rule r(x: int) { x + 0 => x }
 
-func main() => int {
-    return 0
+func main() {
 }

@@ -14,8 +14,7 @@ func loss(x: float) => float {
     return residual * residual
 }
 
-func main() => int sync {
+func main() sync {
     let d = grad(loss)
     println(d<1.0>(2.0))
-    return 0
 }

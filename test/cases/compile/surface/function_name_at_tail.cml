@@ -5,6 +5,5 @@ func int_tail() => int {
     let step = len
 }
 
-func main() => int sync {
-    return 0
+func main() sync {
 }

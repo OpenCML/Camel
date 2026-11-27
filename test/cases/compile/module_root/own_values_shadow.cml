@@ -6,9 +6,8 @@ import { bump, current } from counter
 let step = 1000
 var cnt = 1000
 
-func main() => int sync {
+func main() sync {
     println(bump())
     println(current())
     println(step, cnt)
-    return 0
 }

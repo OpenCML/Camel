@@ -46,7 +46,7 @@ func product_with_u(x: float[2, 2]) => float {
     return sum(matmul(x, u))
 }
 
-func main() => int sync {
+func main() sync {
     let x = [[1.0, 2.0], [3.0, 4.0]] as float[2, 2]
     let u = [0.5, 0.25] as float[2]
     
@@ -66,5 +66,4 @@ func main() => int sync {
     let dx11 = abs(dx[1][1] - engine_x[1][1])
     let dx_diff = max(max(dx00, dx01), max(dx10, dx11))
     `matmul_t vector_rhs max_abs_diff_library_vs_engine u={:.12e} x={:.12e} value={:.12e}`->format<max(abs(du[0] - engine_u[0]), abs(du[1] - engine_u[1])), dx_diff, dvalue>->println
-    return 0
 }

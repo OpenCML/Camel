@@ -37,7 +37,7 @@ func pair() => (int, int) sync {
     return (7, 8)
 }
 
-func main() => int sync {
+func main() sync {
     println(pick(true))
     println(pick(false))
     println(nested(11, 22))
@@ -49,5 +49,4 @@ func main() => int sync {
         x + 1
     }
     println(f(4))
-    return 0
 }

@@ -10,7 +10,7 @@ func entry_name(g: Graph) => string {
     return name(g)
 }
 
-func main() => int {
+func main() {
     let text = entry_name(graph_of(main))
-    return len(text)
+    len(text)
 }

@@ -15,8 +15,7 @@ func from_ints::<T>(xs: int[]) => T[] {
     return T(xs)
 }
 
-func main() => int sync {
+func main() sync {
     println(from_int::<f32>(3), from_int::<float>(3), from_int::<int>(3))
     println(from_ints::<f32>([1, 2, 3]), from_ints::<float>([4, 5]))
-    return 0
 }

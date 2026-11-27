@@ -21,8 +21,7 @@ func greet() => string {
     return 'pair law'
 }
 
-func main() => int sync {
+func main() sync {
     println(greet())
     println(i64_pair(3, 4), i32_pair(5, 6))
-    return 0
 }

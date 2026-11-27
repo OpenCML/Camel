@@ -1,8 +1,7 @@
 // The take `x!`: here the value must be there, and a failed value ends the program at the `!`.
 // Run: camel docs/tutorial/examples/07_take.cml
 
-func main() => int sync {
+func main() sync {
     let n = parse_int('40')!
     println(n + 2)
-    return 0
 }

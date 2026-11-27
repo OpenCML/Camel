@@ -11,7 +11,6 @@ func dbl(x: int) => int {
     return x * 2
 }
 
-func main() => int sync {
+func main() sync {
     println(3->inc <> dbl)
-    return 0
 }

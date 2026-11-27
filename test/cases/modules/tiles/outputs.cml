@@ -18,7 +18,7 @@ func identity(x: f32[...]) => (f32[...], f32[...]) {
 func with_empty(x: f32[...]) => (f32[...], f32[...]) {
     return (slice(x, 0, 0, 0), x + 2.0)
 }
-func main() => int sync {
+func main() sync {
     let x = reshape<[2, 3]>([1.0, 2.0, 3.0, 4.0, 5.0, 6.0] as f32[])
     let gpu = download(run_preferred_resident<compute>(x))
     let cpu = compute(x)
@@ -34,5 +34,4 @@ func main() => int sync {
     println(sum(abs(mixed.1 - (x + 2.0))))
     println(inspect<compute>(x))
     println(benchmark<compute>(x))
-    return 0
 }

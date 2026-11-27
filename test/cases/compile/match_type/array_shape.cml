@@ -15,8 +15,7 @@ func kind::<T>() => string {
     }
 }
 
-func main() => int sync {
+func main() sync {
     println(kind::<int[]>(), kind::<string[]>(), kind::<float[][]>(), kind::<Point[]>())
     println(kind::<Point>(), kind::<int>(), kind::<string>())
-    return 0
 }

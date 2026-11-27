@@ -16,7 +16,7 @@ func loss(x: f32[...]) => float {
     return float(sum(x / m.w))
 }
 
-func main(steps: int) => int sync {
+func main(steps: int) sync {
     let x = zeros::<f32>([16]) + 0.5
     let model: Model = { w: zeros::<f32>([16]) + 2.0 }
     let grad = with_grad(loss)
@@ -26,5 +26,4 @@ func main(steps: int) => int sync {
         (next, step + 1)
     }
     'step steps={} w={}'->format<done, sum(trained.w)>->println
-    return 0
 }

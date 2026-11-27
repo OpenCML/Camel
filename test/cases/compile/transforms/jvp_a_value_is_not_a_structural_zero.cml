@@ -32,12 +32,11 @@ func power(x: float, w: float) => float {
     return x ^ w
 }
 
-func main() => int sync {
+func main() sync {
     let (productValue, productTangent) = jvp(product)(3.0, 2.0, 1.0, 1.0)
     `product  value={} tangent={}`->format<productValue, productTangent>->println
     let (halfValue, halfTangent) = jvp(halfProduct)(3.0, 2.0, 1.0, 1.0)
     `half     value={} tangent={}`->format<halfValue, halfTangent>->println
     let (powerValue, powerTangent) = jvp(power)(0.0 - 3.0, 2.0, 1.0, 0.0)
     `zeroed   value={} tangent={}`->format<powerValue, powerTangent>->println
-    return 0
 }

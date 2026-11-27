@@ -25,9 +25,8 @@ func f(xs: float[]) => float {
     return loop s = 0.0 for e in xs do s + e
 }
 
-func main() => int sync {
+func main() sync {
     let (value, tangent) = jvp(f)([1.0, 2.0], [1.0, 1.0])
     println('value=', value)
     println('tangent=', tangent)
-    return 0
 }

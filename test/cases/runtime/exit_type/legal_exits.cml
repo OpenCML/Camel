@@ -64,7 +64,7 @@ func same_type_float(x: float) => float {
     x * 2.0
 }
 
-func main() => int sync {
+func main() sync {
     void_hands_on_its_value()
     let open_rank = open_rank_from_any([1.0, 2.0]) as float[]
     let any_rank = any_rank_from_fixed([1.0, 2.0, 3.0])
@@ -84,5 +84,4 @@ func main() => int sync {
         ordinary,
         ordinary_f
     >->println
-    return 0
 }

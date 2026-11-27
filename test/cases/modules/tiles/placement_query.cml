@@ -35,6 +35,5 @@ func blocks(x: f32[...]) => f32[...] {
     }
 }
 
-func main() => int {
-    return 0
+func main() {
 }

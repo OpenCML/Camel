@@ -30,7 +30,7 @@ func train(m: Mlp, x: f32[...], steps: int, last: float) => float {
     return if steps == 0 then last else train(sgd(m, vg.1, 0.000001), x, steps - 1, vg.0)
 }
 
-func main() => int sync {
+func main() sync {
     let m = {
         fc1_w: ones::<f32>([784, 256]) * 0.001,
         fc1_b: ones::<f32>([256]) * 0.01,
@@ -40,5 +40,4 @@ func main() => int sync {
         fc3_b: ones::<f32>([10]) * 0.01
     }
     println(format<train(m, ones::<f32>([64, 784]), 60, 0.0)>('final loss: {:.6f}'))
-    return 0
 }

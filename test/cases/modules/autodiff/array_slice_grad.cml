@@ -65,7 +65,7 @@ func distance(
     return square(g[0] - e0) + square(g[1] - e1) + square(g[2] - e2) + square(g[3] - e3) + square(g[4] - e4)
 }
 
-func main() => int sync {
+func main() sync {
     let xs = [1.0, 2.0, 3.0, 4.0, 5.0]
     let g1 = grad(subscript)<xs>()
     let g2 = grad(call_form)<xs>()
@@ -84,5 +84,4 @@ func main() => int sync {
         distance(g5, 2.0, 0.0, 3.0, 0.0, 5.0),
         nonzero
     >->println
-    return 0
 }

@@ -22,11 +22,10 @@ func double_f16(x: f16[3]) => f16[3] {
     return x * 2.0
 }
 
-func main() => int sync {
+func main() sync {
     println(regions<double_bf16>())
     println(regions<double_f16>())
     let halves: bf16[3] = [0.5, -1.5, 2.0]
     let narrows: f16[3] = [0.5, -1.5, 2.0]
     println(sum(double_bf16(halves)), sum(double_f16(narrows)))
-    return 0
 }

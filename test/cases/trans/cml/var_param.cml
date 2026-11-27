@@ -3,9 +3,8 @@ func bump(var x: int) {
     x += 1
 }
 
-func main() => int sync {
+func main() sync {
     var n = 1
     bump(n)
     println(n)
-    return 0
 }

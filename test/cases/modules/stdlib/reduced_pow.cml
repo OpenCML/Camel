@@ -90,7 +90,7 @@ func bf16WithinF16Eps(x: bf16, y: bf16) => bool {
     return abs(f64(r) - exact) / abs(exact) <= 0.00048828125
 }
 
-func main() => int sync {
+func main() sync {
     // ---- the exact powers, by the bytes of the stored element ----
     let bfTen: bf16 = bf16(2.0) ^ bf16(10.0)
     let bfCubic: bf16 = bf16(1.5) ^ bf16(3.0)
@@ -146,5 +146,4 @@ func main() => int sync {
     println(bf16WithinEps(bf16(1.5), bf16(3.0)), f16WithinEps(f16(1.5), f16(3.0)))
     // The bf16 probe inside f16's bound: false, so the tolerance above is each type's own.
     println(bf16WithinF16Eps(bf16(3.0), bf16(0.5)), bf16WithinEps(bf16(3.0), bf16(0.5)))
-    return 0
 }

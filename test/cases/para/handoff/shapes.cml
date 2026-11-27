@@ -63,7 +63,7 @@ func sum_to(n: int) => int {
     }, 0> else churn(0, n, 7)
 }
 
-func main() => int sync {
+func main() sync {
     // serial graphs called directly from a graph the scheduler evaluates
     println(fib(20))
     println(gcd(1071, 462))
@@ -95,5 +95,4 @@ func main() => int sync {
     // serial code behind a fault-isolation boundary
     println(attempt(gcd)(84, 36) !! -1)
     println(attempt(mix)(5, 7) !! -1)
-    return 0
 }

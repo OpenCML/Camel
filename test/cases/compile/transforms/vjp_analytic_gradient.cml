@@ -22,7 +22,7 @@ func f(x: float, y: float) => float {
     return x * x * y
 }
 
-func main() => int sync {
+func main() sync {
     let value = f(3.0, 2.0)
     let (pair_value, pullback) = vjp(f)(3.0, 2.0)
     let (dx, dy) = pullback(1.0)
@@ -32,5 +32,4 @@ func main() => int sync {
     println(`analytic df/dx = 12.0`)
     println(`library  df/dy = ${dy:.1f}`)
     println(`analytic df/dy = 9.0`)
-    return 0
 }

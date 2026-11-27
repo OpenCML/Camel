@@ -30,9 +30,8 @@ func pair_zero(x: (float, float)) => Tangent<(float, float)> {
     return Tangent<(float, float)> { static for n, F in fields (float, float) do 0.0 }
 }
 
-func main() => int sync {
+func main() sync {
     println(is_same::<Tangent<(float, int)>, (float, ())>())
     println(zeros((1.0, 7)))
     println(pair_zero((3.0, 4.0)))
-    return 0
 }

@@ -18,7 +18,7 @@ func risky(x: int) => int {
     return 100 / x
 }
 
-func main() => int sync {
+func main() sync {
     let a = find([5, 6], 5)
     let b = find([5, 6], 6)
     println(a, b, a ?? -1, b ?? -1)
@@ -31,5 +31,4 @@ func main() => int sync {
         case _ => 'fine'
     }
     println(k)
-    return 0
 }

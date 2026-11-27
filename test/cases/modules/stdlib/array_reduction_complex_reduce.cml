@@ -21,7 +21,7 @@
  * the record of what happens when it is reached.
  */
 
-func main() => int sync {
+func main() sync {
     let z0: c64 = 1 + 2i
     let z1: c64 = 3 + 4i
     let zs: c64[] = [z0, z1]
@@ -30,5 +30,4 @@ func main() => int sync {
         a + b
     }, c64(0)>
     println('reduce {}', acc)
-    return 0
 }

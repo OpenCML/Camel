@@ -36,7 +36,7 @@ func g3(x: float) => float {
     return g2(x) * x
 }
 
-func main() => int sync {
+func main() sync {
     let forward = split(jvp(g3))
     let (atTwo, dAtTwo) = forward(2.0)
     'y2={}'->format<atTwo>->println
@@ -46,5 +46,4 @@ func main() => int sync {
     'd3_1={}'->format<dAtThree(1.0)>->println
     'd3_2={}'->format<dAtThree(2.0)>->println
     'd3_0={}'->format<dAtThree(0.0)>->println
-    return 0
 }

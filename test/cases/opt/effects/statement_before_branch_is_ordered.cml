@@ -17,7 +17,6 @@ func pick(c: bool) => int {
     return if c then a else (println(2) - 1)
 }
 
-func main() => int sync {
+func main() sync {
     println(pick(false))
-    return 0
 }

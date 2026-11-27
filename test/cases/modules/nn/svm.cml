@@ -45,7 +45,7 @@ func svm_predict(X: f32[...], model: f32[...]) => f32[...] sync {
     return (((predictions > 0) * 2.0) - 1.0)
 }
 
-func main() => int sync {
+func main() sync {
     println('=== Support Vector Machine ===')
     
     let X1: f32[][] = [[1.0, 2.0], [2.0, 3.0], [3.0, 1.0]]
@@ -74,5 +74,4 @@ func main() => int sync {
     println('Predictions:')
     show(predictions)
     
-    return 0
 }

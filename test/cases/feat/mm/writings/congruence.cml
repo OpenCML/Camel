@@ -10,7 +10,6 @@ func f(a: int, b: int) => int {
     return p * q + r
 }
 
-func main() => int sync {
+func main() sync {
     println(f(2, 3))
-    return 0
 }

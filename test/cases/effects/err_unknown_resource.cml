@@ -4,6 +4,6 @@ func f(x: int) => int uses nowhere {
     return x
 }
 
-func main() => int {
-    return f(1)
+func main() {
+    f(1)
 }

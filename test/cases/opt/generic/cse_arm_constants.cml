@@ -25,10 +25,9 @@ func nested(x: float) => int {
     return a * 100 + b
 }
 
-func main() => int sync {
+func main() sync {
     let s = now()
     let a = if s > 1.0 then 7 else 8
     let b = if s < 1.0 then 7 else 9
     'cse_arm_constants l={} {} n={} {} rt={}'->format<literal(1.5), literal(3.5), nested(1.5), nested(0.5), a + b>->println
-    return 0
 }

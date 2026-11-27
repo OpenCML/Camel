@@ -27,7 +27,7 @@ func step(i: int, acc: int) => int sync {
     return if i % 2 == 0 then count_down(i - 1, acc + 2) else count_down(i - 1, acc + 1)
 }
 
-func main() => int sync {
+func main() sync {
     println('start')
     let labels = [3, 1, 4]
     let n = 3

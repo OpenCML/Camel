@@ -14,7 +14,7 @@ import state
 
 type Pair = { name: string, at: int }
 
-func main() => int sync {
+func main() sync {
     let early = state::ref('early')
     let point: Pair = { name: 'pair', at: 3 }
     let pair = state::ref(point)
@@ -29,5 +29,4 @@ func main() => int sync {
     let back = state::get(pair)
     println(back.name, back.at)
     println(state::get(late))
-    return 0
 }

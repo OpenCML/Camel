@@ -1,5 +1,5 @@
 // Set<T>: construction (duplicates are dropped), membership, and the set operations.
-func main() => int sync {
+func main() sync {
     let s = [3, 1, 2, 3, 1] as Set<int>
     println(s, len(s))
     println(s->contains<2>, s->contains<9>, s->contains<3>, s->contains<0>)
@@ -16,5 +16,4 @@ func main() => int sync {
     println(words, words->contains<'fig'>, words->contains<'plum'>)
     println([true, false, true] as Set<bool>)
     println(string(words), format<s>('s = {}'))
-    return 0
 }

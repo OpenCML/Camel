@@ -1,5 +1,4 @@
-func main() => int sync {
+func main() sync {
     let days = 7
     println(days * 6)
-    return 0
 }

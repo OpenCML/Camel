@@ -14,8 +14,7 @@ func bump() => int sync {
     return cnt
 }
 
-func main() => int sync {
+func main() sync {
     println(cnt)
     println(bump())
-    return 0
 }

@@ -8,12 +8,12 @@
 import { get_env } from env
 import { read_text, write_text } from fs
 
-func main() => int sync {
+func main() sync {
     let path = get_env('CAMEL_TIMEIT_COUNTER') ?? ''
     let count = int(path->read_text !! '0')
     let next = count + 1
     let _ = (string(next))->write_text<path>
     // Only the third execution has a zero here; the compiler cannot fold the division because
     // `next` comes from a file at run time.
-    return 1 / (next - 3)
+    1 / (next - 3)
 }

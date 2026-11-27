@@ -23,8 +23,7 @@ func f_abs(x: float[3]) => float {
     return float(sum(abs(x)))
 }
 
-func main() => int sync {
+func main() sync {
     let cotangent = transpose(f_abs)(1.0)
     `abs  ct=1.0  {}`->format<cotangent>->println
-    return 0
 }

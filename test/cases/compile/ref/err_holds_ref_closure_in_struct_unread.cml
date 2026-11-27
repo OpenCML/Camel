@@ -19,9 +19,9 @@ func make(f: () => int) => int sync {
     return call.cb()
 }
 
-func main() => int sync {
+func main() sync {
     let k = 42
-    return make(func () => int {
+    make(func () => int {
         k
     })
 }

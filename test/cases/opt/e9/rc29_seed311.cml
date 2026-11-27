@@ -13,9 +13,8 @@ func w26(a28: string, a29: string) => int {
     return 0
 }
 
-func main() => int sync {
+func main() sync {
     println('')
     q18(f1(true, 10.0), true)
     let n39 = w26<f1(true, 2.5)>
-    return 0
 }

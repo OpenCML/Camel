@@ -6,12 +6,11 @@
 
 import { set_terminal_raw_mode, has_input, get_char, get_chars } from io
 
-func main() => int sync {
+func main() sync {
     println(has_input())
     let first = get_char() ?? ''
     let rest = get_chars(4)
     let _ = set_terminal_raw_mode(false)
     print(first)
     println(rest)
-    return 0
 }

@@ -1,4 +1,4 @@
-func main() => int sync {
+func main() sync {
     let a = 1
     if a < 2 then sync {
         println('lt')
@@ -9,5 +9,4 @@ func main() => int sync {
         null
     }
     println('done')
-    return 0
 }

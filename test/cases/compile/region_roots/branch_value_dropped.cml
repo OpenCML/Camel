@@ -28,7 +28,6 @@ func value_dropped() => int {
     return 0
 }
 
-func main() => int sync {
+func main() sync {
     value_dropped()
-    return 0
 }

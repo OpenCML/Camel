@@ -13,11 +13,10 @@ func close(x: float, to: float) => bool {
     return d < 1.0e-9 && d > -1.0e-9
 }
 
-func main() => int sync {
+func main() sync {
     // g(2) = 4 and g'(2) = 4; g(-3) = 3 and g'(-3) = -1.
     let (v1, t1) = jvp(g)(2.0, 1.0)
     println(if v1 == 4.0 && close(t1, 4.0) then "if>0 ok" else "if>0 wrong")
     let (v2, t2) = jvp(g)(-3.0, 1.0)
     println(if v2 == 3.0 && close(t2, -1.0) then "if<0 ok" else "if<0 wrong")
-    return 0
 }

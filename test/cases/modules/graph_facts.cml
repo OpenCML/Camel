@@ -29,7 +29,7 @@ func withName(text: string) => Graph[] spelling {
     }>
 }
 
-func main() => int spelling sync {
+func main() spelling sync {
     let q = effects(withName('quiet')[0])
     let l = effects(withName('loud')[0])
     let f = effects(withName('fragile')[0])
@@ -43,5 +43,4 @@ func main() => int spelling sync {
     println(nodes(withName('quiet')[0])->map<func (n: Node) => int {
         permissions(n)
     }>)
-    return 0
 }

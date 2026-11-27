@@ -62,10 +62,9 @@ func arms() => int {
     return c + r * 100
 }
 
-func main() => int sync {
+func main() sync {
     println(writes())
     println(orders())
     println(reads())
     println(arms())
-    return 0
 }

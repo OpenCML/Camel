@@ -12,6 +12,6 @@ func f(b: float, a: float) => int {
     return a * 10 + b
 }
 
-func main() => int sync {
-    return f(a: 1, b: 2)
+func main() sync {
+    f(a: 1, b: 2)
 }

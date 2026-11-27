@@ -16,12 +16,11 @@ func name_of::<T>(t: T) => string {
     }
 }
 
-func main() => int sync {
+func main() sync {
     let p: Point = { x: 1, y: 2 }
     let q: Pair = { x: 1, y: 2 }
     println(name_of(p))
     println(name_of(q))
     println(name_of({ x: 1, y: 2 }))
     println(name_of((1, 2)))
-    return 0
 }

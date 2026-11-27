@@ -27,7 +27,7 @@ func firstDim::<T>(t: T[...]) => int when is_numeric::<T>() {
     return len(t)
 }
 
-func main() => int sync {
+func main() sync {
     let a: f32[3] = [1.0, 2.0, 3.0]
     let open: f32[...] = a
     let ints: int[3] = [10, 20, 30]
@@ -52,5 +52,4 @@ func main() => int sync {
     // The tensor spelling still fills the same names, so no existing program changed.
     let t: f32[...] = ones::<f32>([2, 3])
     println(shape(t))
-    return 0
 }

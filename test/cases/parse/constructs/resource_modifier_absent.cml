@@ -14,7 +14,6 @@ func twice(f: int) => int uses graph {
     return f * 2
 }
 
-func main() => int {
+func main() {
     println(twice(21))
-    return 0
 }

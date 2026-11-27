@@ -13,9 +13,8 @@ func step(d: float) => float sync {
     return float(sum(acc))
 }
 
-func main() => int sync {
+func main() sync {
     var w = reshape<[2]>([0.0, 0.0])
     let r = step<w>(0.5)
     println('{} {}'->format<r, sum(w)>)
-    return 0
 }

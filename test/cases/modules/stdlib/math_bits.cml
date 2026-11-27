@@ -6,7 +6,7 @@
 
 import { bit_and, bit_or, bit_xor, shl, shr } from math
 
-func main() => int sync {
+func main() sync {
     let top = 9223372036854775807
     let bottom = -9223372036854775807 - 1
     
@@ -29,5 +29,4 @@ func main() => int sync {
     let x = 123456789
     println(bit_xor(bit_xor(x, 4242), 4242) == x, ~(~x) == x, bit_or(bit_and(x, 255), bit_and(x, ~255)) == x)
     println(x->shl<8>->shr<8> == x, bit_and(x->shr<4>, 15))
-    return 0
 }

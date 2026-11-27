@@ -20,7 +20,6 @@ func probe() => int sync {
     return w + h()
 }
 
-func main() => int sync {
+func main() sync {
     println(probe())
-    return 0
 }

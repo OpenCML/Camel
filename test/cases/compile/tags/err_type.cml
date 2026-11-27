@@ -4,6 +4,5 @@ tag width(w: int) on type
 #width(true)
 type T = { x: int }
 
-func main() => int {
-    return 0
+func main() {
 }

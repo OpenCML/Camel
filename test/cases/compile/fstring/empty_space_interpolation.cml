@@ -1,4 +1,3 @@
-func main() => int sync {
+func main() sync {
     print(`A ${ }`)
-    return 0
 }

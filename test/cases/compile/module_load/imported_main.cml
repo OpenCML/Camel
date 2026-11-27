@@ -1,7 +1,6 @@
 // The `main` of an imported module is an ordinary function (design principles 10.1).
 import lib_main
 
-func main() => int sync {
+func main() sync {
     println(lib_main::main() + 1)
-    return 0
 }

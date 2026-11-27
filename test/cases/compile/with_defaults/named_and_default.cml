@@ -9,10 +9,9 @@ func show(x: int) => string {
     return label + ':' + string(x * rounds)
 }
 
-func main() => int sync {
+func main() sync {
     println(show(2))
     println(show<label: 'a'>(2))
     println(show<rounds: 3>(2))
     println(show<1, label: 'p'>(2))
-    return 0
 }

@@ -6,9 +6,8 @@
  * three nodes.
  */
 
-func main() => int sync {
+func main() sync {
     var v = [1, 2, 3]
     v = v->append<4>
     println(v)
-    return 0
 }

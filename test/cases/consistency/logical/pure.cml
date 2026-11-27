@@ -16,7 +16,7 @@ func classify(x: int) => string {
     else if inside(x, 0, 9) || outside(x, -99, 99) then 'odd digit or far' else 'other'
 }
 
-func main() => int sync {
+func main() sync {
     println([4, 7, 12, 120, -5]->map<classify>)
     println(inside(5, 1, 9), inside(0, 1, 9), outside(5, 1, 9), outside(10, 1, 9))
     let t = true
@@ -26,5 +26,4 @@ func main() => int sync {
     println(t & t, t & f, f & t, f & f)
     println(t | t, t | f, f | t, f | f)
     println(!(t && f) == (!t || !f))
-    return 0
 }

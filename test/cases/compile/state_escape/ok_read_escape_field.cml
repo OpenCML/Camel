@@ -23,11 +23,10 @@ func fill(var b: Box, base: int) {
     }
 }
 
-func main() => int sync {
+func main() sync {
     var box: Box = { f: func (x: int) => int {
         x
     }, n: 0 }
     fill(box, 7)
     println(box.f(1))
-    return 0
 }

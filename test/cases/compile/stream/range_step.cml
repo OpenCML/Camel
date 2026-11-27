@@ -3,7 +3,7 @@
 // the rule). It is the array of a step: `a..b` is the range *value* of the unit step (design
 // principles 5.4) and `to_array` is where the two are the same integers.
 
-func main() => int sync {
+func main() sync {
     // A positive step: a, a + step, ... below b, and the last element is the last one below b.
     println(range(0, 10, 3))
     println(range(0, 9, 3))
@@ -33,5 +33,4 @@ func main() => int sync {
     // The bounds are the call's own arguments, so an expression is written as it is anywhere.
     let n = 3
     println(range(n - 1, n + 7, 2))
-    return 0
 }

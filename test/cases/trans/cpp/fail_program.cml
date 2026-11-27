@@ -18,7 +18,7 @@ func kind(r: float!) => string {
     }
 }
 
-func main() => int sync {
+func main() sync {
     // The kind an `attempt` catches, and the value of a call that did not fail.
     println(kind(attempt(limit)(-1.0)))
     println((attempt(limit)(2.0) !! -1.0) == 2.0)
@@ -33,5 +33,4 @@ func main() => int sync {
     
     // The last statement: the fault is raised, nothing after it runs, and the run ends with 1.
     stop('the end')
-    return 0
 }

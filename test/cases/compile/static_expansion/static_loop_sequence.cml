@@ -45,7 +45,7 @@ func triangular() => int {
     return static loop acc = 0 for i in 0 .. 4 do acc + (static loop inner = 0 for j in 0 .. i do inner + 1)
 }
 
-func main() => int sync {
+func main() sync {
     println(sumTo5())
     println(stepped())
     println(empty())
@@ -55,5 +55,4 @@ func main() => int sync {
     let (total, last) = several((1, 2, 3))
     println(total, last)
     println(triangular())
-    return 0
 }

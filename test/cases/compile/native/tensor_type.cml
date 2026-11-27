@@ -6,7 +6,6 @@
 
 import { to_bytes } from tensor
 
-func main() => int sync {
+func main() sync {
     println(to_bytes('x'))
-    return 0
 }

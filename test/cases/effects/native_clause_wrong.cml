@@ -9,7 +9,6 @@ import { read_text } from fs
 #op('fs:exists')
 export func exists(path: string) => bool pure
 
-func main() => int sync {
+func main() sync {
     println(exists('no/such/file'))
-    return 0
 }

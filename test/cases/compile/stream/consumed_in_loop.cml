@@ -27,6 +27,6 @@ func twice(s: int..) => int {
     return loop acc = 0 while acc < 2 do acc + firstOf(s())
 }
 
-func main() => int sync {
-    return twice(count(3))
+func main() sync {
+    twice(count(3))
 }

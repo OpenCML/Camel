@@ -3,12 +3,11 @@ func run(f: (...A) => int) => int {
     return 1
 }
 
-func main() => int sync {
+func main() sync {
     println(run(func (x: int, y: int) => int {
         x + y
     }))
     println(run(func () => int {
         7
     }))
-    return 0
 }

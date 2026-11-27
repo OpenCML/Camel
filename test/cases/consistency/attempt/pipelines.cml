@@ -32,7 +32,7 @@ func kind(r: int!) => string {
     }
 }
 
-func main() => int sync {
+func main() sync {
     println(kind(attempt(risky)(0)))
     println(kind(attempt(risky)(5)))
     println(kind(attempt(always)()))
@@ -49,5 +49,4 @@ func main() => int sync {
         add(risky(4), 1)
     })()))
     println('end')
-    return 0
 }

@@ -73,7 +73,7 @@ func bitsOfF16(value: f16) => int[] {
     return to_array(to_bytes(one))
 }
 
-func main() => int sync {
+func main() sync {
     // ---- math::min and math::max over the two types: the answer is an operand, not a computed 0
     let smalls: bf16[] = [1.0, 2.0]
     let halves: f16[] = [1.0, 2.0]
@@ -152,5 +152,4 @@ func main() => int sync {
     // f32 accumulator answers 0 for, and the exact f64 sum rounds once to the f32 1.0.
     let wide: f32[] = [16777216.0, 1.0, -16777216.0]
     println(sum(wide))
-    return 0
 }

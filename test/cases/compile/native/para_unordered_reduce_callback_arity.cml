@@ -7,10 +7,9 @@
 
 import { unordered_reduce } from para
 
-func main() => int sync {
+func main() sync {
     let xs: int[] = to_array(1 .. 5)
     let total: int = unordered_reduce<func (acc: int, item: int, extra: int) => int {
         acc + item + extra
     }, 0>(xs)
-    return total
 }

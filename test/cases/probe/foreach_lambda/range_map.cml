@@ -1,6 +1,5 @@
 // The range form of `map`, declared in the prelude with the same `with <f: (item: int) => U>`.
-func main() => int sync {
+func main() sync {
     let ys = (0 .. 3)->map<func (x) { x * 2 }>
     println(ys[0])
-    return 0
 }

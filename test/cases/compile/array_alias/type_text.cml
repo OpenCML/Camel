@@ -6,8 +6,7 @@ func takes(a: f32[...], b: f32[2, 3]) => int {
     return 0
 }
 
-func main() => int sync {
+func main() sync {
     let s: string[] = ['a']
     println(takes(s, s))
-    return 0
 }

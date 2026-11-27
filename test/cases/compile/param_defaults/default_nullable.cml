@@ -20,7 +20,7 @@ func only(p: int? = null) => string {
     }
 }
 
-func main() => int sync {
+func main() sync {
     // Left out: the declaration's null.
     println(pick())
     // The default overridden by a value, and by a value the call computes.
@@ -29,5 +29,4 @@ func main() => int sync {
     println(pick(fallback: 9))
     println(only())
     println(only(5))
-    return 0
 }

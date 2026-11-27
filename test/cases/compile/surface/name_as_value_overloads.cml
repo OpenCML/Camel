@@ -1,6 +1,5 @@
 import { abs } from math
 
-func main() => int sync {
+func main() sync {
     println([1, -2]->map<abs>)
-    return 0
 }

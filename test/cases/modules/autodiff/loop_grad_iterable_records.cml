@@ -15,7 +15,6 @@ func f() => float {
     return loop acc = 0.0 for p in ps do acc + p.a * p.b
 }
 
-func main() => int sync {
+func main() sync {
     'loop_grad_iterable_records v={} d={}'->format<f<2.0>(), grad(f)<2.0>()>->println
-    return 0
 }

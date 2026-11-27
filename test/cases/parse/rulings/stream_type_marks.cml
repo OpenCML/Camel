@@ -35,7 +35,6 @@ func tupleOfStreams(pair: (int.., int..)) => int {
     return 0
 }
 
-func main() => int sync {
+func main() sync {
     println(4)
-    return 0
 }

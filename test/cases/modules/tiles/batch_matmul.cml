@@ -47,7 +47,7 @@ func check(
     }
     return 0
 }
-func main(run_gpu: bool) => int sync {
+func main(run_gpu: bool) sync {
     set_num_threads(1)
     seed(173)
     check('equal3', next_key()->normal::<f32><shape: [2, 3, 4]>, next_key()->normal::<f32><shape: [2, 4, 5]>, next_key()->normal::<f32><shape: [2, 3, 5]>, run_gpu)
@@ -74,5 +74,4 @@ func main(run_gpu: bool) => int sync {
         }
     }
     println('BATCH MATMUL CHECKS PASS')
-    return 0
 }

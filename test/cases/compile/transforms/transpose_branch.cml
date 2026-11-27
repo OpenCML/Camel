@@ -27,7 +27,7 @@ func merged(x: float) => float {
     }
 }
 
-func main() => int sync {
+func main() sync {
     // The value each arm reads is captured by the half the cut returns, so the transpose of that half
     // takes the cotangent and nothing else: 2 at a positive x, 3 at a negative one, 7 and 4 for the
     // function that reads its parameter twice on one side.
@@ -39,5 +39,4 @@ func main() => int sync {
     println(transpose(merged_pos)(1.0))
     let (_, merged_neg) = split(jvp(merged))(-1.0)
     println(transpose(merged_neg)(1.0))
-    return 0
 }

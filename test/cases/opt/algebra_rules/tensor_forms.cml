@@ -34,11 +34,10 @@ func tensor_zero(x: Vec) => Vec sync {
     return x
 }
 
-func main() => int sync {
+func main() sync {
     let v = reshape<[3]>([1.0, 2.0, 3.0] as f32[])
     println(array_combine(v))
     println(array_fold(v))
     println(array_double(v))
     println(tensor_zero(v))
-    return 0
 }

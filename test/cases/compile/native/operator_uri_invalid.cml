@@ -2,6 +2,6 @@
 #op('stdadd')
 func add(a: int, b: int) => int
 
-func main() => int sync {
-    return add(1, 2)
+func main() sync {
+    add(1, 2)
 }

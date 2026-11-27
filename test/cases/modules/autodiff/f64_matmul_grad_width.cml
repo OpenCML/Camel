@@ -47,7 +47,7 @@ func loss() => float sync {
     return float(sum(m.x @ m.w))
 }
 
-func main() => int sync {
+func main() sync {
     let m = {
         x: reshape<[2, 3]>([1.0, 2.0, 3.0, 4.0, 5.0, 6.0] as f64[]),
         w: reshape<[3, 1]>([1.0, 1.0, 1.0] as f64[])
@@ -73,5 +73,4 @@ func main() => int sync {
     println('f64_matmul_grad_width value={} a_w={} a_x={} wa={}'->format<vg.0, a_w, a_x, wa>)
     println('gw {}'->format<g.w>)
     println('wg {}'->format<wg>)
-    return 0
 }

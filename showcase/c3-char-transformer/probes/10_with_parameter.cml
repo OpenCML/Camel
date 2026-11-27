@@ -17,12 +17,11 @@ func residual(x: float[]) => float {
     return d * d + m.b[0] * x[1]
 }
 
-func main() => int sync {
+func main() sync {
     let m = { w: [1.0, 2.0] as float[], b: [0.5] as float[] }
     let g = vjp(residual)
     let (value, pullback) = g<m>([3.0, 4.0])
     println(`value = ${value:.4f}`)
     let cotangents = pullback(1.0)
     println(`cotangent of x = ${cotangents.0}`)
-    return 0
 }

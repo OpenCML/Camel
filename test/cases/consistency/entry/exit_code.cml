@@ -5,7 +5,7 @@
  */
 import process
 
-func main() => int sync {
+func main() sync {
     println('before')
     process::exit(7)
 }

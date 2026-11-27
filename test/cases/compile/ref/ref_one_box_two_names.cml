@@ -52,7 +52,7 @@ func param_and_fresh(a: state::Ref<int>) => int {
     return t * 10 + w
 }
 
-func main() => int sync {
+func main() sync {
     let r = state::ref(1)
     println(read_then_write(r, r))
     state::set(r, 1)
@@ -61,5 +61,4 @@ func main() => int sync {
     println(same_sync(r, r))
     state::set(r, 1)
     println(param_and_fresh(r))
-    return 0
 }

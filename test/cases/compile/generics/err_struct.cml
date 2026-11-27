@@ -2,8 +2,7 @@ func name_of::<T>(s: { name: T }) => T {
     return s.name
 }
 
-func main() => int sync {
+func main() sync {
     println(name_of({ name: 'n', extra: 1 }))
     println(name_of({ title: 'n' }))
-    return 0
 }

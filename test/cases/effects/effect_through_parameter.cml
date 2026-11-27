@@ -36,12 +36,11 @@ func guarded(f: (x: int) => int) => int sync {
     return f(1)
 }
 
-func main() => int sync {
+func main() sync {
     let g: (x: int) => int = add
     let dropped_ = dropped(g)
     let afterDropped = total
     let afterGuarded = guarded(g)
     let direct = g(1)
     println(dropped_, afterDropped, afterGuarded, direct)
-    return 0
 }

@@ -21,8 +21,7 @@ func f10(a11: int, a12: int) => int {
     }
 }
 
-func main() => int sync {
+func main() sync {
     let n26 = f10(0, 7)
     println('L4 {} {} {}'->format<0, n26, 'a'>)
-    return 0
 }

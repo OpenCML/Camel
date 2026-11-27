@@ -26,8 +26,7 @@ func same() => int {
     return x + y + state::get(a)
 }
 
-func main() => int sync {
+func main() sync {
     println(apart())
     println(same())
-    return 0
 }

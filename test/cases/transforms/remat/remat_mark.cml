@@ -12,11 +12,10 @@ func h(x: float, y: float) => float {
     return x * x * y
 }
 
-func main() => int sync {
+func main() sync {
     'remat_mark plain value={}'->format<h(3.0, 2.0)>->println
     let marked = remat(h)
     'remat_mark marked value={}'->format<marked(3.0, 2.0)>->println
     let again = remat(marked)
     'remat_mark again value={}'->format<again(3.0, 2.0)>->println
-    return 0
 }

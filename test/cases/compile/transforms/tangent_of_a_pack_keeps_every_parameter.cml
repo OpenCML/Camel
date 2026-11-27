@@ -27,7 +27,7 @@ type VjpOfF3 = (a: float[...], b: int[...], c: int[...]) => (float, PullbackOfF3
 type TangentsOfTwoFloats = (...Tangent<ParamsOf<TwoFloats>>) => float
 type TwoFloatsWritten = (x: float, y: float) => float
 
-func main() => int sync {
+func main() sync {
     // The tangent of a float array is the array itself; the tangent of an integer is nothing.
     println(`tangent_of_float_array ${is_same::<Tangent<float[...]>, float[...]>()}`)
     println(`tangent_of_int_array ${is_same::<Tangent<int[...]>, ()>()}`)
@@ -39,5 +39,4 @@ func main() => int sync {
     println(`vjp_of_f3 ${is_same::<Vjp<F3>, VjpOfF3>()}`)
     // A function of two floats is the case that must not change: two tangents, both `float`.
     println(`tangents_of_two_floats ${is_same::<TangentsOfTwoFloats, TwoFloatsWritten>()}`)
-    return 0
 }

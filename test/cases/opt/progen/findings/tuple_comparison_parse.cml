@@ -6,9 +6,8 @@
  * Expected output: (true, x1)
  */
 
-func main() => int sync {
+func main() sync {
     let a = 1
     let u = (a < 2, 'x{}'->format<a>)
     println(u)
-    return 0
 }

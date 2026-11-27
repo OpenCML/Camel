@@ -132,7 +132,7 @@ func f64_mixed_ok(x: float) => float {
     return x * 3.0 + x * -5.0
 }
 
-func main() => int sync {
+func main() sync {
     println(i32_neutral(-2147483648), i32_mul_one(-2147483648), i32_mul_zero(-2147483648))
     println(i32_div_one(-2147483648), i32_neg(-2147483648), i32_sub_self(-2147483648))
     println(i32_combine(2), i32_combine_wrap(1), i32_fold(200000000), i32_fold_wrap(1), i32_fold_add_wrap(1))
@@ -143,5 +143,4 @@ func main() => int sync {
     println(f32_double(3.0), f32_double_big(1.0), f32_double_frac(1.0), f32_mixed_ok(2.0), f32_mixed_zero(-1.0), f32_mixed_ungranted(2.0))
     println(f64_combine(2.0), f64_combine_over(0.0), f64_fold_zero(1.0e300), f64_fold_over(1.0e-200))
     println(f64_mixed_zero(-1.0), f64_mixed_ok(2.0))
-    return 0
 }

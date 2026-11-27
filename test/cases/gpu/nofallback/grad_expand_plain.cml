@@ -34,7 +34,7 @@ func step(m: M) => f32[3] sync {
     return vg.1.p0
 }
 
-func main() => int sync {
+func main() sync {
     let m = {
         p0: reshape<[3]>([0.5, 0.25, 2.0] as f32[]),
         x: reshape<[2, 3]>([1.0, 2.0, 3.0, 4.0, 5.0, 6.0] as f32[])
@@ -43,5 +43,4 @@ func main() => int sync {
     let expected = reshape<[3]>([5.0, 7.0, 9.0] as f32[])
     println('gradient {}'->format<gradient>)
     println('wrong {}'->format<sum(expected - expected) + sum(abs(gradient - expected))>)
-    return 0
 }

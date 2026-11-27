@@ -6,9 +6,8 @@
 import { twice } from anon_gen
 import anon_models
 
-func main() => int sync {
+func main() sync {
     let a = { v: 1 }
     let b = twice(a)
     println(b.v)
-    return 0
 }

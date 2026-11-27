@@ -23,9 +23,8 @@ func f(x: f32) => f32 {
     return w * x
 }
 
-func main() => int {
+func main() {
     let a = with_grad(f)
     let b = grad(f)
     let c = vjp(f)
-    return 0
 }

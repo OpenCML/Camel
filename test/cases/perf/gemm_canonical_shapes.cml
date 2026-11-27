@@ -70,7 +70,7 @@ func bench_reference(
     'gemm_canonical_shapes round={} reference=naive_sum shape={} ms={} gflops={} checksum={}'->format<round, '128x128x128', ms, gflops, measured.1>->println
 }
 
-func main(rounds: int, reps: int) => int sync {
+func main(rounds: int, reps: int) sync {
     // One thread: the d=256 step's configuration, and the only one where a rate is a property of
     // the kernel rather than of the pool.
     set_num_threads(1)
@@ -96,8 +96,7 @@ func main(rounds: int, reps: int) => int sync {
         bench(round, '512x512x256', 512, 512, 256, a5, b5, 8 * reps)
         bench(round, '32x32x16', 32, 32, 16, a6, b6, 500 * reps)
         bench_reference(round, 128, 128, 128, reference, reference, 3 * reps)
-        return round + 1
+        round + 1
     }
     'gemm_canonical_shapes rounds={} reps={}'->format<done, reps>->println
-    return 0
 }

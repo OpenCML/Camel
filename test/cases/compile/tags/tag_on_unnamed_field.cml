@@ -5,6 +5,5 @@ func f(x: { #width(8) a: int }) => int {
     return x.a
 }
 
-func main() => int {
-    return 0
+func main() {
 }

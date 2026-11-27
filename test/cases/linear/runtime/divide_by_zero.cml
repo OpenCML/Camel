@@ -2,8 +2,7 @@
  * Ensures runtime diagnostics surface division-by-zero faults with source mapping instead of silently producing garbage.
  */
 
-func main() => int sync {
+func main() sync {
     let z = 0
     println(10 / z)
-    return 0
 }

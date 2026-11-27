@@ -33,7 +33,7 @@ func sliced() => float {
     return s[0] * 5.0
 }
 
-func main() => int sync {
+func main() sync {
     let ga = grad(appended)<2.0>()
     let gw = [2.0, 3.0]
     let ge = grad(extended)<gw>()
@@ -41,5 +41,4 @@ func main() => int sync {
     'value_with_grad appended value={:.1f} grad={:.1f}'->format<appended<2.0>(), ga>->println
     'value_with_grad extended grad={:.1f},{:.1f}'->format<ge[0], ge[1]>->println
     'value_with_grad sliced value={:.1f} grad={:.1f}'->format<sliced<2.5>(), gs>->println
-    return 0
 }

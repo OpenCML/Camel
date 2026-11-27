@@ -23,9 +23,8 @@ func g2(x: float) => float {
     return h(2.0)
 }
 
-func main() => int sync {
+func main() sync {
     println(g2(1.0))
     let back = transpose(g2)
     println(back(1.0))
-    return 0
 }

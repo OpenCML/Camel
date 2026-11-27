@@ -32,7 +32,7 @@ func first_then_climb(var c: int) => int sync {
     return k * 10 + r
 }
 
-func main() => int sync {
+func main() sync {
     var a = 0
     let ra = first_then_climb(a)
     println('use: {} counter {}'->format<ra, a>)
@@ -45,5 +45,4 @@ func main() => int sync {
     var e = 0
     let re = both_sides(0, 3, e)
     println('around 3: {} counter {}'->format<re, e>)
-    return 0
 }

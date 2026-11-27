@@ -10,7 +10,6 @@ func entry_name(g: Graph) => string spelling {
     return name(g)
 }
 
-func main() => int spelling {
+func main() spelling {
     println(entry_name(graph_of(main)))
-    return 0
 }

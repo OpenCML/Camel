@@ -18,7 +18,7 @@ with <x: f32[...]>
 func without_cast() => float {
     return float(sum(x))
 }
-func main() => int sync {
+func main() sync {
     let x = reshape<[3]>([1.0, 2.0, 3.0] as f32[])
     let cast_grad = func (v: f32[...]) => f32[...] {
         grad(with_cast)<v>()
@@ -30,5 +30,4 @@ func main() => int sync {
     println(sum(abs(cast_grad(x) - reshape<[3]>([1.0, 1.0, 1.0] as f32[]))))
     println(inspect<cast_grad>(x))
     println(inspect<plain_grad>(x))
-    return 0
 }

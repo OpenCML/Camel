@@ -16,12 +16,11 @@ export func operator [](t: Table, i: int) => int {
     return t.rows[i]
 }
 
-func main() => int sync {
+func main() sync {
     let a: Point = { x: 1, y: 2 }
     let b: Point = { x: 3, y: 4 }
     let p = a + b
     println(p.x, p.y)
     let t: Table = { rows: [10, 20, 30] }
     println(t[1])
-    return 0
 }

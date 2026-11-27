@@ -17,8 +17,7 @@ func ordered() => int sync {
     return before
 }
 
-func main() => int sync {
+func main() sync {
     println(unordered())
     println(ordered())
-    return 0
 }

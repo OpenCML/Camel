@@ -19,11 +19,10 @@ func h(x: float) => float {
     return loop s = 0.0 for i in [1, 2, 3, 4] do s + 2.0
 }
 
-func main() => int sync {
+func main() sync {
     println('h value=', h(1.0))
     let (value, pullback) = vjp(h)(1.0)
     println('h vjp value=', value)
     println('h pullback(1.0)=', pullback(1.0))
     println('h pullback(2.0)=', pullback(2.0))
-    return 0
 }

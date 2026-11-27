@@ -19,7 +19,7 @@ import rulesets.vmap
 import tensor
 import { vmap } from transforms
 
-func main() => int sync {
+func main() sync {
     let m = [[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]] as f32[2, 3]
     println(row_vmap(func (r: f32[3]) {
         r[0] + r[1]
@@ -34,5 +34,4 @@ func main() => int sync {
     println(vmap(func (r: f32[3]) {
         r[0] + r[1]
     })(one))
-    return 0
 }

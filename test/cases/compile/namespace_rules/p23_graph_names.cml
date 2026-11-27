@@ -7,7 +7,6 @@ namespace N {
 func f(x: int) => int {
     return x
 }
-func main() => int sync {
+func main() sync {
     println(f(1), N::f(0))
-    return 0
 }

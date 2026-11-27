@@ -14,8 +14,7 @@ func dup_sort(xs: i32[]) => i32[]
 #op(':op/add_l')
 func dup_sort(xs: i32[]) => i32[]
 
-func main() => int sync {
+func main() sync {
     let xs: i32[] = [1, 2]
     println(dup_sort(xs))
-    return 0
 }

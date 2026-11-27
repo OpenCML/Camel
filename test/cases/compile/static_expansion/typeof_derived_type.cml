@@ -33,12 +33,11 @@ func tangent_signature::<P, Q>(p: P, q: Q) => Tangent<Pair<P, typeof (q)>> {
     return { first: (), second: q }
 }
 
-func main() => int sync {
+func main() sync {
     println(generic_value(3).value)
     println(ordinary_value(4))
     println(element_value([6, 7]))
     println(tangent_pair(9, 10.0))
     println(tangent_pair(13.0, 14.0))
     println(tangent_signature(11, 12.0).second)
-    return 0
 }

@@ -8,6 +8,5 @@ func operator +(a: int, b: int) => int {
     return 99
 }
 
-func main() => int {
-    return 0
+func main() {
 }

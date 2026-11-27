@@ -6,7 +6,7 @@
  * rather than about the declaration alone.
  */
 
-func main() => int sync {
+func main() sync {
     let empty = [] as Map<string, int>
     let one = [('a', 1)] as Map<string, int>
     println(empty->has<'a'>)
@@ -17,5 +17,4 @@ func main() => int sync {
     println(es->contains<1>, pair->contains<2>, pair->contains<3>)
     println(empty == empty, one == one, one == empty, one != empty)
     println(is_subset(es, es), is_subset(es, pair), is_subset(pair, small), is_subset(small, pair))
-    return 0
 }

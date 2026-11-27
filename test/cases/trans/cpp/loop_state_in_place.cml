@@ -26,7 +26,7 @@ func growConst(n: int) => (int[], int) {
     return loop xs = [0], fixed = 9 while len(xs) < n do (xs->append<7>, 0)
 }
 
-func main() => int sync {
+func main() sync {
     let xs = grow(5)
     let zs = gather([1, 2, 3, 4, 5])
     let (ws, wr) = growCounted(5)
@@ -37,5 +37,4 @@ func main() => int sync {
     println(len(ws), ws[0], ws[4], wr, len(vs), vs[0], vs[4], vr)
     println(len(ms), ms[0], ms[4], len(ns), ns[0], ns[4])
     println(len(cs), cs[0], cs[4], ck)
-    return 0
 }

@@ -88,12 +88,11 @@ Faster computation whose results may differ is granted explicitly by the program
 ### 3.3.1 Arrays
 
 ```cml
-func main() => int sync {
+func main() sync {
     let xs = [1, 2, 3]
     let names: string[] = []          // an empty array needs its type written out
     let grid = [[1, 2], [3]]          // int[][]
     println(xs[0], len(xs), grid[0][1])
-    return 0
 }
 ```
 
@@ -125,11 +124,10 @@ func main() => int sync {
 ### 3.3.2 Tuples
 
 ```cml
-func main() => int sync {
+func main() sync {
     let pair = (1, 'one')
     let (n, s) = pair              // destructuring
     println(pair.0, pair.1, n, s)
-    return 0
 }
 ```
 
@@ -144,11 +142,10 @@ A member index is a literal; one beyond the length is a compile-time error (`Sem
 ```cml
 type Point = { x: int, y: int }
 
-func main() => int sync {
+func main() sync {
     let p: Point = { x: 3, y: 4 }
     let q = { x: p.x + 1, y: p.y }     // "modifying" means building a new one
     println(p, q.x)
-    return 0
 }
 ```
 
@@ -191,10 +188,9 @@ The remaining string functions are in the `str` module ([standard library refere
 ```cml
 import { split, trim, to_upper } from str
 
-func main() => int sync {
+func main() sync {
     println('a, b ,c'->split<','>->map<func (w) { trim(w) }>)
     println('héllo'->to_upper, len('héllo'), 'héllo'[1], 'hello'[1])
-    return 0
 }
 ```
 
@@ -225,11 +221,10 @@ func safe_div(a: int, b: int) => int! {
     return if b == 0 then { return error('DivByZero', 'the divisor is zero') } else a / b
 }
 
-func main() => int sync {
+func main() sync {
     println(positive(4) ?? 0, positive(-4) ?? 0)
     println(safe_div(9, 3) !! -1, safe_div(9, 0) !! -1)
     println(safe_div(9, 0))
-    return 0
 }
 ```
 
@@ -316,7 +311,7 @@ func area(s: Shape) => float {
 `Map<K, V>` and `Set<T>` are built-in types and need no `import`. There is no dedicated literal; construct them from an array with `as`:
 
 ```cml
-func main() => int sync {
+func main() sync {
     let ages = [('bob', 31), ('alice', 28)] as Map<string, int>
     let more = ages->put<'carol', 45>->remove<'bob'>
     println(ages)
@@ -326,7 +321,6 @@ func main() => int sync {
     let seen = [3, 1, 2, 3, 1] as Set<int>
     println(seen, seen->contains<2>, union(seen, [9] as Set<int>))
     println([] as Map<string, int>)
-    return 0
 }
 ```
 
@@ -368,9 +362,8 @@ func count_words(words: string[]) => Map<string, int> {
     return words->reduce<func (acc: Map<string, int>, w: string) => Map<string, int> { acc->put<w, (acc[w] ?? 0) + 1> }, [] as Map<string, int>>
 }
 
-func main() => int sync {
+func main() sync {
     println(count_words(['a', 'b', 'a']))
-    return 0
 }
 ```
 
@@ -398,7 +391,7 @@ For the implementation and trade-offs see [technical document 31](../../technica
 - **All values are passed by reference.** A `var` parameter is a reference: a write to it by the function is a write to the caller's variable. Captures of variables by lambdas and branches are references too.
 
 ```cml
-func main() => int sync {
+func main() sync {
     var count = 0
     count = count + 1
     count += 10
@@ -409,7 +402,6 @@ func main() => int sync {
     let ys = xs->append<4>     // a new array; xs is unchanged
     xs = xs->append<5>         // append to the variable: bind it to the new array, as x = x + 1 does
     println(xs, ys)
-    return 0
 }
 ```
 

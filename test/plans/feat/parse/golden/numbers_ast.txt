@@ -8,7 +8,6 @@ Module
          |  |-NamedPair*
          |  |-NamedPair*
          |  \-Type?
-         |     \-RefType: int
          \-StmtBlock: sync
             \-Stmt*
                |-DataDecl: a
@@ -43,16 +42,13 @@ Module
                |           |     |-1
                |           |     \-2
                |           \-3
-               |-ExprStmt
-               |  \-ReservedExpr: ()
-               |     |-RefData: println
-               |     |-Data*
-               |     |  \-ReservedExpr: .
-               |     |     |-ReservedExpr: .
-               |     |     |  |-RefData: t
-               |     |     |  \-RefData: 0
-               |     |     \-RefData: 1
-               |     \-NamedData*
-               \-ExitStmt: return
-                  \-Data*
-                     \-0
+               \-ExprStmt
+                  \-ReservedExpr: ()
+                     |-RefData: println
+                     |-Data*
+                     |  \-ReservedExpr: .
+                     |     |-ReservedExpr: .
+                     |     |  |-RefData: t
+                     |     |  \-RefData: 0
+                     |     \-RefData: 1
+                     \-NamedData*

@@ -13,7 +13,6 @@ func twice(x: int) => int {
     return x * 2
 }
 
-func main() => int sync {
+func main() sync {
     println(usePure(twice))
-    return 0
 }

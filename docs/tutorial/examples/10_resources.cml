@@ -21,11 +21,10 @@ func bump(var cell: int) => int sync {
     return cell
 }
 
-func main() => int sync {
+func main() sync {
     let s: Stream = { id: 7 }
     println(read_id(s))
     tick()
     var cell = 0
     println(bump(cell))
-    return 0
 }

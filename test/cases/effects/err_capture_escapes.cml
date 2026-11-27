@@ -19,8 +19,7 @@ func make(x: int) => ((k: int) => int, int) pure {
     (add, x)
 }
 
-func main() => int sync {
+func main() sync {
     let (g, n) = make(0)
     println(g(n))
-    return 0
 }

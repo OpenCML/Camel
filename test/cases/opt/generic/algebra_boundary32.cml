@@ -8,8 +8,7 @@ func fractional(x: f32) => f32 {
     return t + t
 }
 
-func main(x: f32) => int sync {
+func main(x: f32) sync {
     println(positive(x))
     println(fractional(x))
-    return 0
 }

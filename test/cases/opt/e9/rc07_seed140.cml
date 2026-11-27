@@ -7,8 +7,7 @@ func q43(a44: int, a45: bool) => bool sync {
     return false
 }
 
-func main() => int sync {
+func main() sync {
     let n56 = q43(100, true)
     q43(f10(3, true), false)
-    return 0
 }

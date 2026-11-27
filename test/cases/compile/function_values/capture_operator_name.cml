@@ -4,12 +4,11 @@
  * "Function of type 'void' cannot be called").
  */
 
-func main() => int sync {
+func main() sync {
     let p = len
     println(p('abc'))
     println(['a']->map<func (s: string) => int {
         p(s)
     }>)
     println('never printed')
-    return 0
 }

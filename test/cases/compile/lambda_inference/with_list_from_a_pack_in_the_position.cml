@@ -35,7 +35,7 @@ func loss3(x: float, y: float) => float {
     return w * x * y
 }
 
-func main() => int sync {
+func main() sync {
     let one: GradientAux<<w: float>() => float> = func <w, ...rest>() {
         (w, 1.0)
     }
@@ -48,5 +48,4 @@ func main() => int sync {
     println(`one ${one<2.0>()}`)
     println(`two ${two<2.0, 3.0>()}`)
     println(`three ${three<2.0>(3.0, 4.0)}`)
-    return 0
 }

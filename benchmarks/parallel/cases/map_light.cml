@@ -1,7 +1,7 @@
 // `map`, `filter` and `reduce` over a large array with element functions of a few built-in
 // operators each: the work of an element is far smaller than a task.
 
-func main() => int sync {
+func main() sync {
     let n = 300000
     let values = (0 .. n)->map<func (x: int) => int {
         x * x % 1000 + 1
@@ -14,5 +14,4 @@ func main() => int sync {
     }, 0>
     println(len(kept))
     println(total)
-    return 0
 }

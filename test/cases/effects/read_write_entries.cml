@@ -35,10 +35,9 @@ func shout() => int uses var io sync {
     return 1
 }
 
-func main() => int sync {
+func main() sync {
     println(reads())
     println(writes())
     println(maybe())
     println(shout())
-    return 0
 }

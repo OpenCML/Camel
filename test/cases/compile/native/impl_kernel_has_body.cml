@@ -12,6 +12,6 @@ func add(a: int, b: int) => int {
     return a - (0 - b)
 }
 
-func main() => int sync {
-    return add(1, 2)
+func main() sync {
+    add(1, 2)
 }

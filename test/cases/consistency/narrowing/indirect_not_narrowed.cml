@@ -3,7 +3,6 @@ func f(x: int?, flag: bool) => int {
     return if x != null || flag then x + 1 else 0
 }
 
-func main() => int sync {
+func main() sync {
     println(f(1, true))
-    return 0
 }

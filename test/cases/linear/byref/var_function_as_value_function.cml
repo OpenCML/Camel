@@ -13,7 +13,6 @@ func call(f: (x: int) => void, v: int) => int sync {
     return v
 }
 
-func main() => int sync {
+func main() sync {
     println(call(bump, 1))
-    return 0
 }

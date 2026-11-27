@@ -7,7 +7,6 @@ func order(x: int) => int {
     return x + 0
 }
 
-func main() => int sync {
+func main() sync {
     println(order(5))
-    return 0
 }

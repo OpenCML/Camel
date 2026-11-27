@@ -20,7 +20,6 @@ func render(snake: Point[]) => void sync {
     println('')
 }
 
-func main() => int sync {
+func main() sync {
     render([{ x: 5, y: 5 }, { x: 5, y: 6 }, { x: 5, y: 7 }])
-    return 0
 }

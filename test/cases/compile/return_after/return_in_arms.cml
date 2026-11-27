@@ -21,10 +21,9 @@ func scaled(x: int) => int {
     }
 }
 
-func main() => int sync {
+func main() sync {
     println(pick(true))
     println(pick(false))
     println(scaled(11))
     println(scaled(1))
-    return 0
 }

@@ -14,7 +14,7 @@ func sum_losses(n: int) => float {
     return losses[0] + losses[n - 1]
 }
 
-func main() => int sync {
+func main() sync {
     println(sum_losses<2.0>(4))
     println(grad(sum_losses)<2.0>(4))
     let before = std::mem::blocks()
@@ -22,5 +22,4 @@ func main() => int sync {
     let after = std::mem::blocks()
     println(value)
     println(after.allocs - before.allocs)
-    return 0
 }

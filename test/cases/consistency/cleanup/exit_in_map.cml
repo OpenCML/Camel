@@ -12,9 +12,8 @@ func check(x: int) => int sync {
     return x
 }
 
-func main() => int sync {
+func main() sync {
     println('before')
     let ys = (0 .. 8)->map<check>
     println('not reached')
-    return 0
 }

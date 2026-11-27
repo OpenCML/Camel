@@ -14,7 +14,7 @@ with <k: float>
 func shifted(x: float) => float {
     return x + k
 }
-func main() => int sync {
+func main() sync {
     let x = reshape<[3]>([1.0, 2.0, 3.0] as f32[])
     // A boundary scalar takes the element type of the tensor beside it (design principles 7.3),
     // so an argument written where `scale` declares `k: f32` says f32: a literal is a `float`, and
@@ -32,5 +32,4 @@ func main() => int sync {
     println(inspect<scale>((x, f32(1.25))))
     println(benchmark<arithmetic>((5.0, 3.0)))
     println(benchmark<arithmetic>((11.0, 7.0)))
-    return 0
 }

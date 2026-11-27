@@ -54,7 +54,7 @@ func loss() => float sync {
     return float(sum(m.x * m.p0))
 }
 
-func main() => int sync {
+func main() sync {
     let m = {
         p0: reshape<[3]>([0.5, 0.25, 2.0] as f64[]),
         x: reshape<[2, 3]>([1.0, 2.0, 3.0, 4.0, 5.0, 6.0] as f64[])
@@ -84,5 +84,4 @@ func main() => int sync {
     println('gx {}'->format<gx>)
     println('gp {}'->format<gp>)
     println('wp {}'->format<wp>)
-    return 0
 }

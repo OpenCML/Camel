@@ -22,9 +22,8 @@ func squared(x: int) => int {
     return abs(x * x)
 }
 
-func main() => int sync {
+func main() sync {
     // `check` samples the law together with its premise, so the fact decides where it may fire.
     println(check_text([abs_of_nonnegative]->check<100, 1>))
     println(squared(-3))
-    return 0
 }

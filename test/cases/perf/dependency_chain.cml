@@ -17,15 +17,14 @@ func chain(x: f32[...], w: f32[...], b: f32[...]) => f32[...] {
     return relu(x @ w + b) @ w
 }
 
-func main(rounds: int) => int sync {
+func main(rounds: int) sync {
     let x: f32[...] = zeros::<f32>([64, 64]) + 0.01
     let w: f32[...] = zeros::<f32>([64, 64]) + 0.01
     let b: f32[...] = zeros::<f32>([64, 1]) + 0.001
     let started = now()
     let (out, done) = loop y = x, step = 0 while step < rounds do {
-        return (chain(y, w, b), step + 1)
+        (chain(y, w, b), step + 1)
     }
     let elapsed = now() - started
     'perf chain rounds={} us_per_round={:.3f} out={}'->format<done, elapsed * 1000000.0 / float(done), sum(out)>->println
-    return 0
 }

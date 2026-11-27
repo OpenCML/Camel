@@ -1,4 +1,3 @@
-func main() => int sync {
+func main() sync {
     println('\xE4\xB8\xAD', len('\xE4\xB8\xAD'))
-    return 0
 }

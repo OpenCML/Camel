@@ -27,7 +27,7 @@ func arrayInTuple(n: int) => MD {
     return { n: n, t: ([1.0000000596046447753906251, 2.0], 3.0) }
 }
 
-func main() => int sync {
+func main() sync {
     let a = tupleField(1)
     println(a.n, '{:.9g}'->format<a.t.0>, '{:.9g}'->format<a.t.1>)
     let b = arrayFixed(2)
@@ -39,5 +39,4 @@ func main() => int sync {
     // the same rule in a declared position, with the second element computed
     let p: (f32, f32) = (0.3333333333333333, a.t.1)
     println('{:.9g}'->format<p.0>, '{:.9g}'->format<p.1>)
-    return 0
 }

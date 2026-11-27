@@ -3,9 +3,8 @@ func twice::<T>(x: T) => T {
     return n
 }
 
-func main() => int sync {
+func main() sync {
     println(twice(21))
     println(twice([1]))
     println(twice(true))
-    return 0
 }

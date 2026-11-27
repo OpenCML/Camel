@@ -9,7 +9,6 @@ func squares(xs: int[]) => int {
     return total // mark:ret
 }
 
-func main() => int sync {
+func main() sync {
     println(squares([1, 2, 3])) // mark:call
-    return 0
 }

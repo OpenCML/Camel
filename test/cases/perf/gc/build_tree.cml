@@ -22,7 +22,6 @@ func run(d: int, left: int, total: int) => int {
     return if left == 0 then total else run(d, left - 1, (total + weigh(build(d, left))) % 1000000007)
 }
 
-func main(depth: int, reps: int) => int sync {
+func main(depth: int, reps: int) sync {
     println('build_tree total={}'->format<run(depth, reps, 0)>)
-    return 0
 }

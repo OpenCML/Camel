@@ -5,8 +5,7 @@
 import bytes
 import { to_array } from bytes_tag
 
-func main() => int sync {
+func main() sync {
     let b = bytes::encode('abc')
     println(to_array(b))
-    return 0
 }

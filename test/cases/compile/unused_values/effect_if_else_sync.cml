@@ -14,7 +14,6 @@ func report(take_then: bool) => int sync {
     return 0
 }
 
-func main() => int sync {
+func main() sync {
     report(false)
-    return 0
 }

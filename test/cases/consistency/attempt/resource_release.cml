@@ -61,7 +61,7 @@ func hold_and_fault(d: int) => int sync {
     return q
 }
 
-func main() => int sync {
+func main() sync {
     let _ = exec('class Resource:\n    def __init__(self, name):\n        self.name = name\n        print("acquire", name, flush=True)\n    def touch(self):\n        print("touch", self.name, flush=True)\n    def __del__(self):\n        print("release", self.name, flush=True)\n')
     let end = get_env('END') ?? ''
     let a = open_resource('a')
@@ -78,5 +78,4 @@ func main() => int sync {
         exit(5)
     }
     println('last line of main')
-    return 0
 }

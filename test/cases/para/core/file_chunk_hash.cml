@@ -17,7 +17,7 @@ func digest_chunk(path: string, offset: int, size: int) => string sync {
     return sha256_rounds(block->sha256 !! '', 2047)
 }
 
-func main() => int sync {
+func main() sync {
     let dbg_path = './out/latest/bin/camel-db.exe'
     let exe_path = './out/latest/bin/camel.exe'
     let fallback_path = './README.md'
@@ -45,5 +45,4 @@ func main() => int sync {
     chunk_hashes[0..4]->println
     'Final digest = {}'->format<final_digest>->println
     'Chunk hashing completed in {:.2f} seconds'->format<duration>->println
-    return 0
 }

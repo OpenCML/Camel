@@ -8,7 +8,7 @@
 let base = 100
 
 // declared after its first use below
-func main() => int sync {
+func main() sync {
     println(add_base(1))
     println(wrap(3))
     println(wrap('s'))
@@ -27,7 +27,6 @@ func main() => int sync {
     println(s)
     println(capture_param(10))
     println(ann(4))
-    return 0
 }
 
 func id::<T>(x: T) => T {

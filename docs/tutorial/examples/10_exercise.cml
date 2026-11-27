@@ -19,8 +19,7 @@ func square(x: int) => int pure {
     return x * x
 }
 
-func main() => int sync {
+func main() sync {
     println(sum_upto(4))
     println(apply(square, 5))
-    return 0
 }

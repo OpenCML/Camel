@@ -14,6 +14,6 @@ func a(n: int) => int {
     }
 }
 
-func main() => int sync {
-    return a(1)
+func main() sync {
+    a(1)
 }

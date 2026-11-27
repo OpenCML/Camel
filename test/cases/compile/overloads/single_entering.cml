@@ -11,8 +11,7 @@ func first(xs: f32[]) => f32 {
     return xs[0]
 }
 
-func main() => int sync {
+func main() sync {
     println(bump(3))
     println(first([2]))
-    return 0
 }

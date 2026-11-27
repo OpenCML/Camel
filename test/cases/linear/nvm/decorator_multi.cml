@@ -22,7 +22,7 @@ func core(x: int) => int {
     return x + 3
 }
 
-func main() => int sync {
+func main() sync {
     let v = core(1)
-    return if v == 9 then 0 else 1
+    if v == 9 then 0 else 1
 }

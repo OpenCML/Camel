@@ -9,9 +9,8 @@ func apply(g: (a: float) => float) => float {
     return g(1.0)
 }
 
-func main() => int sync {
+func main() sync {
     println(apply(func (a, b, ...xs) {
         0.0
     }))
-    return 0
 }

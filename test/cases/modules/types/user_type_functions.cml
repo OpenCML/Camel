@@ -38,11 +38,10 @@ func pair_of::<T>(x: ElemOrSelf<T>) => Pair<ElemOrSelf<T>> {
     return (x, x)
 }
 
-func main() => int sync {
+func main() sync {
     println(element_is_integer::<int[]>(), element_is_integer::<int>(), element_is_integer::<f32[]>())
     println(shown_is_string::<int>(), shown_is_string::<f32>(), shown_is_string::<string>(), shown_is_string::<bool>())
     println(twice_is_float::<float[][]>(), twice_is_float::<float[]>(), twice_is_float::<int[][]>())
     println(pair_of::<int[]>(7), pair_of::<string>('s'))
     println(is_same::<Twice<int[][]>, int>(), is_same::<Pair<ElemOrSelf<f32[]>>, (f32, f32)>())
-    return 0
 }

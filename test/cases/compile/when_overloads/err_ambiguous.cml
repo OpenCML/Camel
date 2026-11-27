@@ -8,7 +8,6 @@ func pick(x: int) => string when wide {
     return 'wide'
 }
 
-func main() => int sync {
+func main() sync {
     println(pick<true, true>(1))
-    return 0
 }

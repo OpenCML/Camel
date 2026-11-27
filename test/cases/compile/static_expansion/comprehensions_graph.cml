@@ -13,8 +13,7 @@ func sum(r: { p: (int, int) }) => int {
     return r.p.0 + r.p.1
 }
 
-func main() => int sync {
+func main() sync {
     let r = pairUp({ p: (1, 2) })
     println(sum(r))
-    return 0
 }

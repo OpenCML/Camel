@@ -9,7 +9,6 @@ func sum32(xs: i32[]) => i32 {
     return xs[0] + xs[1]
 }
 
-func main() => int sync {
+func main() sync {
     println(sum32([1, 3000000000]))
-    return 0
 }

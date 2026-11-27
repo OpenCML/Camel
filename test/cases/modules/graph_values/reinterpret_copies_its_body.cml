@@ -72,12 +72,11 @@ func scaledIn::<F>(p: F) => Graph {
     return found[0]
 }
 
-func main() => int spelling sync {
+func main() spelling sync {
     let rules: Rule[] = [drop_one]
     let q = weighted->rewrite<rules> !! weighted
     let moved = first_with_as_param(q)
     println('copy', moved(2, 5), addOnes(scaledIn(moved)))
     println('given', plain(5), addOnes(scaledIn(plain)))
     println('form', name(graph_of(moved)))
-    return 0
 }

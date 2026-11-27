@@ -5,8 +5,7 @@
 import { combine } from enum_gen
 import { Color } from enum_models
 
-func main() => int sync {
+func main() sync {
     println(combine(Color::Red, Color::Red) == Color::Blue)
     println(combine(Color::Red, Color::Green) == Color::Green)
-    return 0
 }

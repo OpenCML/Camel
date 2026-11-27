@@ -6,7 +6,6 @@ func kind::<T>() => string {
     }
 }
 
-func main() => int sync {
+func main() sync {
     println(kind::<int[]>())
-    return 0
 }

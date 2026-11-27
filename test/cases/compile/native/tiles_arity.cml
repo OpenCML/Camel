@@ -6,7 +6,6 @@
 
 import { available } from tiles
 
-func main() => int sync {
+func main() sync {
     println(available(1, 2))
-    return 0
 }

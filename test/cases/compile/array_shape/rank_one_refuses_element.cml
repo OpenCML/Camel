@@ -7,8 +7,7 @@ func rank(v: f32[]) => int {
     return len(v)
 }
 
-func main() => int sync {
+func main() sync {
     let scalar: f32 = 2.5
     println(rank(scalar))
-    return 0
 }

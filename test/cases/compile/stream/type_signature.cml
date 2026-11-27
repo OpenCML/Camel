@@ -40,7 +40,6 @@ func openRank(rows: f32[...]) => int {
     return 0
 }
 
-func main() => int sync {
+func main() sync {
     println(1)
-    return 0
 }

@@ -21,7 +21,7 @@ func chain(x: f32[...]) => f32[...] {
 func empty(x: f32[...]) => f32[...] {
     return slice(x, 2, 7, 7)
 }
-func main() => int sync {
+func main() sync {
     seed(47)
     let x = (next_key()->uniform::<f32><shape: [2, 3, 7]> * 10.0 - 5.0)
     println(sum(abs(download(run_preferred_resident<trans>(x)) - trans(x))))
@@ -30,5 +30,4 @@ func main() => int sync {
     println(sum(abs(download(run_preferred_resident<chain>(x)) - chain(x))))
     println(sum(download(run_preferred_resident<empty>(x))))
     println(sum(download(run_preferred_resident<trans>(zeros::<f32>([2, 0, 7])))))
-    return 0
 }

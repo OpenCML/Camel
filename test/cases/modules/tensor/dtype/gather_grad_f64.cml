@@ -31,7 +31,7 @@ func gather_loss() => float {
     return float(sum(m.w[m.labels]))
 }
 
-func main() => int sync {
+func main() sync {
     let model = {
         w: reshape<[2, 3]>([1.0, 2.0, 3.0, -4.0, 5.0, -6.0] as f64[]),
         labels: int([1, 0])
@@ -42,5 +42,4 @@ func main() => int sync {
     let row0 = sum(take(g2.w, int([0])))
     let row1 = sum(take(g2.w, int([1])))
     'gather={:.1f} grad_sum={:.1f} row0={:.1f} row1={:.1f}'->format<v2, sum(g2.w), row0, row1>->println
-    return 0
 }

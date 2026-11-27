@@ -27,10 +27,9 @@ func iter(r: Range) => int.. {
     return iter_upto(100, 110)
 }
 
-func main() => int sync {
+func main() sync {
     // The range's own operator answers: the rounds are 0, 1, 2.
     println(loop acc = 0 for i in 0 .. 3 do acc * 10 + i)
     // The ordinary function is called where it is written, and only there.
     println(loop s = 0 for i in iter(0 .. 0) do s + i)
-    return 0
 }

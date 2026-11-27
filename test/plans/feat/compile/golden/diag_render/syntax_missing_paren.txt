@@ -1,8 +1,8 @@
-error[SyntaxDiag::MissingClosingDelimiter]: Expected ')' before 'return', to close the '('.
-  --> <ROOT>/test/cases/compile/diag_render/syntax_missing_paren.cml:3:5
+error[SyntaxDiag::MissingClosingDelimiter]: Expected ')' before '}', to close the '('.
+  --> <ROOT>/test/cases/compile/diag_render/syntax_missing_paren.cml:3:1
    |
- 3 |     return 0
-   |     ^^^^^^
+ 3 | }
+   | ^
 note: the '(' that is not closed is opened
   --> <ROOT>/test/cases/compile/diag_render/syntax_missing_paren.cml:2:12
    |

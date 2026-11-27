@@ -3,7 +3,7 @@
 
 type Point = { x: int, y: int }
 
-func main() => int sync {
+func main() sync {
     // A struct names its fields; a tuple is positional and carries no names.
     let a: Point = { x: 3, y: 4 }
     println(a, a.x + a.y)
@@ -23,5 +23,4 @@ func main() => int sync {
     let seen = [3, 1, 2, 3, 1] as Set<int>
     println(seen, seen->contains<2>, seen->contains<9>)
     println(union(seen, [9] as Set<int>), intersect(seen, [1, 9] as Set<int>))
-    return 0
 }

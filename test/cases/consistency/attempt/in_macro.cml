@@ -14,8 +14,7 @@ func table(n: int) => int {
     })(n) !! -1
 }
 
-func main() => int sync {
+func main() sync {
     println(table(0))
     println(table(4))
-    return 0
 }

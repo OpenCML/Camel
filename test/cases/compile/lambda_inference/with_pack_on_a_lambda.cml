@@ -32,7 +32,7 @@ func scaled(x: float) => float {
     return x * w
 }
 
-func main() => int sync {
+func main() sync {
     let named = apply(func (x) {
         x * w
     })
@@ -43,5 +43,4 @@ func main() => int sync {
     let slope = pullback(1.0).0
     println(`named={:.17f} packed={:.17f}`->format<named, packed>)
     println(`square value={:.17f} slope={:.17f}`->format<square, slope>)
-    return 0
 }

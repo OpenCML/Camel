@@ -22,11 +22,10 @@ func walk(w: float, steps: int) => float {
     return if steps == 0 then w else walk(if steps > 2 then pick(w, 1) + 1.0 else pick(w, steps) * 0.25, steps - 1)
 }
 
-func main() => int sync {
+func main() sync {
     println(train(1.0, 3))
     println(walk(1.0, 5))
     println(pick(3.0, 1))
     println(pick(3.0, 2))
     println(pick(3.0, 3))
-    return 0
 }

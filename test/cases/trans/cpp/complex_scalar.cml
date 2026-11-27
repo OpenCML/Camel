@@ -13,7 +13,7 @@ func negate(x: float) => float {
     return -x
 }
 
-func main() => int sync {
+func main() sync {
     let a = 3 + 4i
     let b = 1 - 2i
     println(a, b)
@@ -76,5 +76,4 @@ func main() => int sync {
     // Division by the complex zero is a fault at the site, as in the interpreter.
     let zero = a - a
     println(a / zero)
-    return 0
 }

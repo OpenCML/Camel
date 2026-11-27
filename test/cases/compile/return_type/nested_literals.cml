@@ -30,7 +30,7 @@ func every(a: int, b: int) => ((int, int), int[], { x: int }) {
     return ((a, 1), [b, 2], { x: a })
 }
 
-func main() => int sync {
+func main() sync {
     let (p, q) = pairs(3, 0.5)
     println('pairs {} {} {} {}'->format<p.0, p.1, q.0, q.1>)
     let (m, n) = mixed(1.5, 6, 0.25)
@@ -49,5 +49,4 @@ func main() => int sync {
     let z = ((k, k + 1), [k, k])
     let z0 = z.0
     println('local {} {} {}'->format<z0.0, z0.1, z.1>)
-    return 0
 }

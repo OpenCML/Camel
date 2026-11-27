@@ -114,8 +114,8 @@ digraph GraphIR {
         N28 [label=":op/add_l", type="OPER", origin=<ORIGIN>, span="42:24-42:25", srcfile="<ROOT>/test/cases/opt/generic/written_variable.cml", value_type="int"];
         N29 [label="refilled", type="FUNC", origin=<ORIGIN>, span="43:12-43:23", srcfile="<ROOT>/test/cases/opt/generic/written_variable.cml", value_type="int"];
         N2A [label=":op/add_l", type="OPER", origin=<ORIGIN>, span="43:24-43:25", srcfile="<ROOT>/test/cases/opt/generic/written_variable.cml", value_type="int"];
-        N2B [label="reread", type="FUNC", origin=<ORIGIN>, span="44:11-44:20", srcfile="<ROOT>/test/cases/opt/generic/written_variable.cml", value_type="int"];
-        N2C [label=":op/add_l", type="OPER", origin=<ORIGIN>, span="44:21-44:22", srcfile="<ROOT>/test/cases/opt/generic/written_variable.cml", value_type="int"];
+        N2B [label="reread", type="FUNC", origin=<ORIGIN>, span="44:4-44:13", srcfile="<ROOT>/test/cases/opt/generic/written_variable.cml", value_type="int"];
+        N2C [label=":op/add_l", type="OPER", origin=<ORIGIN>, span="44:14-44:15", srcfile="<ROOT>/test/cases/opt/generic/written_variable.cml", value_type="int"];
         N2C -> O01 [label="0", type="EXIT"];
         N25 -> N26 [label="0|0", type="NORM"];
         N25 -> N27 [label="1|0", type="NORM"];

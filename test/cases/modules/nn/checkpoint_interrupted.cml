@@ -2,8 +2,7 @@
 import { save_tree } from ckpt
 import { zeros, set_num_threads } from tensor
 
-func main(out: string) => int sync {
+func main(out: string) sync {
     set_num_threads(1)
     let _ = zeros::<f32>([16777216])->save_tree<out>
-    return 0
 }

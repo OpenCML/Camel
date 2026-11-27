@@ -18,10 +18,9 @@ func load_at::<T>(depth: int) => T {
     }
 }
 
-func main() => int sync {
+func main() sync {
     let tree: { a: int, b: (int, { c: int }) } = load_at(0)
     println(tree.a)
     println(tree.b.0)
     println(tree.b.1.c)
-    return 0
 }

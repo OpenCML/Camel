@@ -1,7 +1,6 @@
 import json
 
-func main() => int sync {
+func main() sync {
     println(json::decode_as::<(x: int) => int>('1'))
     println('never printed')
-    return 0
 }

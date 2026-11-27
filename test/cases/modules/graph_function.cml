@@ -27,7 +27,7 @@ func adds(f: (x: int) => int) => int {
     return len(nodes(graph_of(f))->filter<isAddZero>)
 }
 
-func main() => int spelling sync {
+func main() spelling sync {
     println(name(graph_of(target)))
     println(adds(target))
     let d = open(target)
@@ -38,5 +38,4 @@ func main() => int spelling sync {
     println(adds(g))
     println(g(5))
     println(target(5))
-    return 0
 }

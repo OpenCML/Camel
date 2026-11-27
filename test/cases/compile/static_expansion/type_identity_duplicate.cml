@@ -10,7 +10,6 @@ func twice::<T>(t: T) => int {
     }
 }
 
-func main() => int sync {
+func main() sync {
     println(twice(1))
-    return 0
 }

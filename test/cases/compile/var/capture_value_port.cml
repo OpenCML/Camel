@@ -15,9 +15,8 @@ func read_c(a: int) => int {
     return a + c
 }
 
-func main() => int sync {
+func main() sync {
     println(read_c(1))
     let k = read_c
     println(k(1))
-    return 0
 }

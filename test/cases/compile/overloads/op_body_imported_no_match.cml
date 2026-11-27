@@ -6,7 +6,6 @@
 
 import { pick } from op_body_lib
 
-func main() => int sync {
+func main() sync {
     println(pick(1.5))
-    return 0
 }

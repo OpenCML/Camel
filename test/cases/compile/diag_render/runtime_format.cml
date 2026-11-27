@@ -5,8 +5,7 @@ func pattern() => string {
     return '{} and {}'
 }
 
-func main() => int sync {
+func main() sync {
     let a = 1
     println(format<a>(pattern()))
-    return 0
 }

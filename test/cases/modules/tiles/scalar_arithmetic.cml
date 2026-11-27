@@ -12,7 +12,7 @@ func loss_value(x: f32[...]) => float {
 func arithmetic(a: float, b: float) => float {
     return (a + b) * 2.0 - a / b
 }
-func main() => int sync {
+func main() sync {
     let x = reshape<[3]>([1.0, 2.0, 3.0] as f32[])
     println(download(run_preferred_resident<loss_value>(x)) - loss<x>())
     let vg = func (v: f32[...]) => (float, f32[...]) {
@@ -28,5 +28,4 @@ func main() => int sync {
     println(download(run_preferred_resident<arithmetic>((a, b))) - arithmetic(16777217.0, 2.0))
     println(inspect<arithmetic>((a, b)))
     println(benchmark<arithmetic>((a, b)))
-    return 0
 }

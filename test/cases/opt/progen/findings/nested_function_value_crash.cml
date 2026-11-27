@@ -5,7 +5,7 @@
  * Expected output: [1]
  */
 
-func main() => int sync {
+func main() sync {
     let b = 1
     func g(a: int) => int {
         return a + b

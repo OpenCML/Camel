@@ -5,7 +5,7 @@
  */
 import { erf, erfc, round } from math
 
-func main() => int sync {
+func main() sync {
     let a = 0.5
     let b = -1.0
     let c = 2.0
@@ -13,5 +13,4 @@ func main() => int sync {
     println(round(erfc(c) * 1000.0) / 1000.0)
     let x: f32 = 0.5
     println(round(float(erf(x)) * 1000.0) / 1000.0)
-    return 0
 }

@@ -18,12 +18,11 @@ func first_four() => int[] {
     return 1 .. 5
 }
 
-func main() => int sync {
+func main() sync {
     let xs: int[] = 0 .. 3
     let ys = count(2 .. 6)
     let zs = first_four()
     let ws = count_all(1 .. 6)
     let r = 0 .. 3
     'xs={} ys={} zs={} ws={} r_len={}'->format<len(xs), ys, len(zs), ws, len(r)>->println
-    return 0
 }

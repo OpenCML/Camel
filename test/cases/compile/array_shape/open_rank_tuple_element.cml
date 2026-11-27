@@ -7,10 +7,9 @@ func rank(v: (int, f32)[...]) => int {
     return 1
 }
 
-func main() => int sync {
+func main() sync {
     let pair: (int, f32) = (7, 2.5)
     println(rank(pair))
     let pairs: (int, f32)[] = [pair, pair]
     println(rank(pairs))
-    return 0
 }

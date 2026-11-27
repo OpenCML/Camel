@@ -69,7 +69,6 @@ func two(x: int) => int {
     return x * 2
 }
 
-func main() => int spelling sync {
+func main() spelling sync {
     println(one(7), two(7))
-    return 0
 }

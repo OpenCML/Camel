@@ -23,11 +23,10 @@ func pair::<A, B>(a: A, b: B) => (A, B) {
     return (a, b)
 }
 
-func main() => int {
+func main() {
     let one = match 1 + 1 {
         case 1 => 10
         case _ => 20
     }
     println(one, id::<int>(1), pair::<A: int, B: string>(1, 's'), area(Shape::Empty))
-    return 0
 }

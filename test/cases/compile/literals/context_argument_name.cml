@@ -8,8 +8,7 @@ func pick(xs: f32[]) => f32 {
     return xs[0]
 }
 
-func main() => int sync {
+func main() sync {
     let n: int = 1
     println(pick([n]))
-    return 0
 }

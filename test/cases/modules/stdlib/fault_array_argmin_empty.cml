@@ -1,9 +1,8 @@
 import { argmin } from array
 
-func main() => int sync {
+func main() sync {
     let xs: int[] = []
     println('before')
     println(argmin(xs))
     println('not reached')
-    return 0
 }

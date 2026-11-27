@@ -5,10 +5,9 @@
 import { twice, same, differs } from gen
 import { mk } from models
 
-func main() => int sync {
+func main() sync {
     let b = twice(mk(2))
     println(b.v)
     println(same(mk(1), mk(1)))
     println(differs(mk(1), mk(2)))
-    return 0
 }

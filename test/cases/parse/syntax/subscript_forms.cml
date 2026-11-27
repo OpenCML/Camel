@@ -32,7 +32,7 @@ func end(xs: int[]) => int {
     return last(xs)
 }
 
-func main() => int sync {
+func main() sync {
     let xs = [1, 2, 3, 4]
     'part {}'->format<part(xs, 1, 3)>->println
     'after {}'->format<after(xs, 2)>->println
@@ -41,5 +41,4 @@ func main() => int sync {
     'stepped {}'->format<stepped(xs, 0, 4)>->println
     'rows {}'->format<rows(xs, [2, 0])>->println
     'end {}'->format<end(xs)>->println
-    return 0
 }

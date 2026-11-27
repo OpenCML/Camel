@@ -3,7 +3,7 @@
 
 type Point = { x: int, y: int }
 
-func main() => int sync {
+func main() sync {
     let n = 42 // int (64-bit)
     let ratio = 0.75 // float (64-bit)
     let ok = true // bool
@@ -26,5 +26,4 @@ func main() => int sync {
     count = count + 1
     count += 10
     println(count)
-    return 0
 }

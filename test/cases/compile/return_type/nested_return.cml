@@ -48,7 +48,6 @@ func f(x: int) => int {
     } else 19
 }
 
-func main() => int sync {
+func main() sync {
     println(f(3), f(100))
-    return 0
 }

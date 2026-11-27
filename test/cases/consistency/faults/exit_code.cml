@@ -12,9 +12,8 @@ func stop(code: int) => int sync {
     return 0
 }
 
-func main() => int sync {
+func main() sync {
     println('before')
     stop(3)
     println('not reached')
-    return 0
 }

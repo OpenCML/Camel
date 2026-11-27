@@ -48,7 +48,7 @@ func train(model: Siamese, xa: f32[...], xb: f32[...], steps: int) => Siamese {
     return if steps == 0 then model else train(sgd(model, grad(siamese_loss)<model>(xa, xb), 0.2), xa, xb, steps - 1)
 }
 
-func main() => int sync {
+func main() sync {
     let model = init()
     let xa = full([1, 2], f32(1.0))
     let xb = full([1, 2], f32(0.5))
@@ -65,5 +65,4 @@ func main() => int sync {
     'siamese_shared_encoder bias={}'->format<stepped.encoder.bias>->println
     'siamese_shared_encoder weight_grad={}'->format<vg.1.encoder.weight>->println
     'siamese_shared_encoder bias_grad={}'->format<vg.1.encoder.bias>->println
-    return 0
 }

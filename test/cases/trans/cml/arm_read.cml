@@ -36,6 +36,6 @@ func picked(c: bool) => int sync {
     return t
 }
 
-func main() => int sync {
-    return picked(true) + picked(false)
+func main() sync {
+    picked(true) + picked(false)
 }

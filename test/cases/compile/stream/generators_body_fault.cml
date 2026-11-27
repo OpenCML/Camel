@@ -17,11 +17,10 @@ func halves() => int.. sync {
     yield 1234
 }
 
-func main() => int sync {
+func main() sync {
     loop acc = 0 for v in halves() do sync {
         println(v)
         acc + 1
     }
     println('after')
-    return 0
 }

@@ -38,7 +38,7 @@ func older(c: bool) => int sync {
     return 1
 }
 
-func main() => int sync {
+func main() sync {
     println(noisy(true, 3))
     println(noisy(false, 1))
     tail(true)
@@ -49,5 +49,4 @@ func main() => int sync {
     [1, 5, 9]->foreach<func (x: int) sync {
         if x > 2 then println(x)
     }>
-    return 0
 }

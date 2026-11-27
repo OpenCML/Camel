@@ -66,12 +66,11 @@ func leaf_is_empty(m: Marked) => int {
     })
 }
 
-func main() => int sync {
+func main() sync {
     println(bool_field({ flagged: 1, wide: 2, plain: 3 }))
     println(bool_value({ flagged: 1, wide: 2, plain: 3 }))
     println(width_value({ flagged: 1, wide: 2, plain: 3 }))
     println(width_key({ flagged: 1, wide: 2, plain: 3 }))
     println(untagged_is_empty({ flagged: 1, wide: 2, plain: 3 }))
     println(leaf_is_empty({ marked: 5 }))
-    return 0
 }

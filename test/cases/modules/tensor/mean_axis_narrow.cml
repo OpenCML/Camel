@@ -10,12 +10,11 @@
  */
 import { mean } from tensor
 
-func main() => int sync {
+func main() sync {
     let apart: f32[3] = [16777216.0, 1.0, -16777216.0]
     let narrow: bf16[3] = bf16(apart)
     println(mean<0, false>(narrow))
     let small: f32[3] = [2048.0, 1.0, -2048.0]
     let halves: f16[3] = f16(small)
     println(mean<0, false>(halves))
-    return 0
 }

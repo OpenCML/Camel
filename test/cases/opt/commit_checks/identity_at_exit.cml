@@ -18,6 +18,5 @@ func f(b: bool) => bool {
     return not(y)
 }
 
-func main() => int {
-    return 48
+func main() {
 }

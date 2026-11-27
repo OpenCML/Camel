@@ -5,10 +5,10 @@ func other() => int {
     return 5
 }
 
-func main() => int {
+func main() {
     #cpu
     {
         7
     }
-    return other()
+    other()
 }

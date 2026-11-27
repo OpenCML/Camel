@@ -5,7 +5,7 @@
 
 import { seed, rand, key, split, permutation } from random
 
-func main() => int sync {
+func main() sync {
     seed(7)
     let first = rand()
     let k = key(42)
@@ -16,5 +16,4 @@ func main() => int sync {
     let again = rand()
     'random_independence first={} second={} again={} same={} keyed={} {} {}'->format<first, second, again, first == again, k, a, b>->println
     'random_independence order={} repeat={}'->format<order, permutation(k, 5)>->println
-    return 0
 }

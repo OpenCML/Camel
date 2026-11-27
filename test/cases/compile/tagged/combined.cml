@@ -31,7 +31,7 @@ func show(r: int?!) => string {
     }
 }
 
-func main() => int sync {
+func main() sync {
     let r = { name: null as string?, n: 1 }
     println(r.name ?? 'anonymous')
     println(total([1 as int?, null as int?]))
@@ -49,5 +49,4 @@ func main() => int sync {
     println(v ?? 9)
     let w: int! = 4
     println(w !! 0)
-    return 0
 }

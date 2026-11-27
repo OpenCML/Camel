@@ -14,9 +14,9 @@ import { sha256 } from hash
 import { next_key, normal, seed } from random
 import { num_threads, sum, to_bytes } from tensor
 
-func main(expected: int) => int sync {
+func main(expected: int) sync {
     if num_threads() != expected then {
-        return 1
+        1
     }
     
     seed(20261023)
@@ -26,5 +26,4 @@ func main(expected: int) => int sync {
     let product = x @ y
     'reduction={}'->format<sha256(to_bytes(columns))>->println
     'product={}'->format<sha256(to_bytes(product))>->println
-    return 0
 }

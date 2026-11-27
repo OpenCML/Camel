@@ -10,7 +10,6 @@ func never_called() => int {
     return boom(0)
 }
 
-func main() => int sync {
+func main() sync {
     println(42)
-    return 0
 }

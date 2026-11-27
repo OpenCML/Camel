@@ -6,9 +6,8 @@ func varred(x: float) => float {
     return v * x
 }
 
-func main() => int sync {
+func main() sync {
     var v = 1.0
     let g = grad(varred)
     println(g<v>(2.0))
-    return 0
 }

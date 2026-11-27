@@ -19,8 +19,7 @@ func steps(n: int) => int {
     return if n <= 0 then 1 else ways(n) + 0
 }
 
-func main() => int sync {
+func main() sync {
     println(fib(20))
     println(ways(15))
-    return 0
 }

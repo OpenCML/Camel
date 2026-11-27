@@ -3,7 +3,6 @@
 /// the loader refuses, it fails there.
 import { value } from thing
 
-func main() => int sync {
+func main() sync {
     println(value)
-    return 0
 }

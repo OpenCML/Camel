@@ -11,8 +11,7 @@ func square(x: float) => float {
     return x * x
 }
 
-func main() => int sync {
+func main() sync {
     let (y, dy) = jvp(square)(2.0, 1.0)
     println('jax_jvp y={} dy={}'->format<y, dy>)
-    return 0
 }

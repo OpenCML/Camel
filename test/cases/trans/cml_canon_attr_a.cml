@@ -6,7 +6,6 @@ func quad(x: float) => float {
     return x * 1.0 + 2.0
 }
 
-func main() => int sync {
+func main() sync {
     println(quad(3.0))
-    return 0
 }

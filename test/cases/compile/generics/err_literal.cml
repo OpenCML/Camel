@@ -3,8 +3,7 @@ func zero_of::<T>(x: T) => T {
     return z
 }
 
-func main() => int sync {
+func main() sync {
     println(zero_of(5))
     println(zero_of(2.5))
-    return 0
 }

@@ -32,10 +32,9 @@ func churn(live: int[][][], n: int, left: int, total: int) => int {
 }
 
 // One block is 4096 rows: about 0.6 MB.
-func main(mb: int, reps: int) => int sync {
+func main(mb: int, reps: int) sync {
     let n = 4096
     let count = mb * 10 / 6 + 1
     let live = blocks(count, n)
     println('gc_live_large blocks={} total={}'->format<count, churn(live, n, reps, 0)>)
-    return 0
 }

@@ -58,12 +58,11 @@ func tupleKey(t: (int, int)) => int {
     return t.['0'] + t.[0]
 }
 
-func main() => int sync {
+func main() sync {
     showStruct({ a: 1, b: 2 })
     showTuple((3, 4))
     nested({ p: { x: 5 }, q: (6, 7) })
     println(emptyStruct({}))
     println(emptyTuple())
     println(tupleKey((10, 0)))
-    return 0
 }

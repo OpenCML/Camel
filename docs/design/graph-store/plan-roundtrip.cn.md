@@ -811,11 +811,11 @@ func pick(x: int): string { return 'wide' }
 func f() => int sync { let a = println(1)
     let b = println(2)
     return b }
-func main() => int sync { var x = 1
+func main() sync { var x = 1
     x = 2
     x = 3
     println(x)
-    return f() }
+    f() }
 ```
 整个文档里 `order` 出现 0 次（节点字段只有 `callee/id/inputs/kind/payload/type/value`）。
 代价：给 canonical v2 加 `syncPreds`/`orderPreds`（或把 `control` 拆成 `sync`/`order` 两种 kind），并让检查器比较它们。这**不改变源码表面**（`edges.cn.md:42`），只让判定器看得见第三种边。不做的话，打印机把顺序边写错/丢掉永远测不出来。

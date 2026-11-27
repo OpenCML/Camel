@@ -2,11 +2,10 @@ func echo(x: int) => int sync {
     return println(x)
 }
 
-func main() => int sync {
+func main() sync {
     var x = 0
     x = 1
     println(x)
     x = 2
     echo(x)
-    return 0
 }

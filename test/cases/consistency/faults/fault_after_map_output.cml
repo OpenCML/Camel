@@ -7,7 +7,7 @@ func inv(x: int) => int {
     return 60 / (x - 5)
 }
 
-func main() => int sync {
+func main() sync {
     (0 .. 20)->foreach<func (i: int) sync {
         println('line', i)
     }>
@@ -15,5 +15,4 @@ func main() => int sync {
     let ys = (0 .. 8)->map<inv>
     println(ys)
     println('not reached')
-    return 0
 }

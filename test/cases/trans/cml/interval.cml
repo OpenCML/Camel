@@ -14,7 +14,6 @@ func step_of(n: int) => int {
     return span.step
 }
 
-func main() => int sync {
+func main() sync {
     println(step_of(3), step_of(0))
-    return 0
 }

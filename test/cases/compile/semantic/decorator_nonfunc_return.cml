@@ -20,6 +20,6 @@ func base(x: int) => int {
     return x
 }
 
-func main() => int sync {
-    return base(1)
+func main() sync {
+    base(1)
 }

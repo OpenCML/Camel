@@ -11,8 +11,7 @@ func element_of(x: f32[...]) => f32 {
     return x
 }
 
-func main() => int sync {
+func main() sync {
     println(element_of(1.5))         // rank zero: the element itself
     println(element_of([1.0, 2.0]))  // rank one: not the element, and a rank is not a type
-    return 0
 }

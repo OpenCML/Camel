@@ -10,7 +10,6 @@ func corner(xss: int[][]) => int sync {
     return e
 }
 
-func main() => int sync {
+func main() sync {
     println(corner([[7, 8], [9]]))
-    return 0
 }

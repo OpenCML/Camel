@@ -23,7 +23,7 @@ func count(n: int) => int.. sync {
     }
 }
 
-func main() => int sync {
+func main() sync {
     loop acc = 0 for v in count(3) do sync {
         println(v)
         acc + 1
@@ -38,5 +38,4 @@ func main() => int sync {
         acc + 1
     }
     println('end')
-    return 0
 }

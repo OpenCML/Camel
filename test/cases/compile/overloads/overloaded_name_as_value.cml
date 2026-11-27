@@ -15,8 +15,7 @@ func pick() => (x: int) => string {
     return f
 }
 
-func main() => int sync {
+func main() sync {
     println(pick()(1))
     println('never printed')
-    return 0
 }

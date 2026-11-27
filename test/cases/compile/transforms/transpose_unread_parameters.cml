@@ -27,12 +27,11 @@ func at(x: float, w: float, dx: float, dw: float) => float {
     return add_tangent(x, w, dx, dw)
 }
 
-func main() => int sync {
+func main() sync {
     // The observation: a transposed function answers one cotangent per parameter, so the four numbers
     // need a function of four parameters. `x` and `w` are read by nothing in the body, and their
     // answers are the zeros this case is about. Two seeds, because one seed alone cannot tell a
     // pullback from the derivatives themselves -- at ct = 1 the two are the same numbers.
     println(transpose(at)(1.0))
     println(transpose(at)(2.0))
-    return 0
 }

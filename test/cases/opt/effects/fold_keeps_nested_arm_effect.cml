@@ -16,8 +16,7 @@ func pick(c: bool, d: bool) => int sync {
     } else 0
 }
 
-func main() => int sync {
+func main() sync {
     println(pick(true, true))
     println(pick(true, false))
-    return 0
 }

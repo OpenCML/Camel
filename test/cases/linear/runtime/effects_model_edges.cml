@@ -21,8 +21,7 @@ func var_order() => int {
     return x
 }
 
-func main() => int sync {
+func main() sync {
     println(block_chain())
     println(var_order())
-    return 0
 }

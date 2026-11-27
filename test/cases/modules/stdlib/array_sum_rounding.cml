@@ -51,7 +51,7 @@ func sameBits(a: int[], b: int[]) => bool {
     return a[0] == b[0] && a[1] == b[1] && a[2] == b[2] && a[3] == b[3]
 }
 
-func main() => int sync {
+func main() sync {
     let a = (0 .. 1026)->map<func (i: int) {
         if i == 0 then f32(16777216.0) else f32(1.0)
     }>
@@ -106,5 +106,5 @@ func main() => int sync {
     'differs from the per-step fold: {} {}'->format<differsA, differsB>->println
     'tensor agrees: {} {}'->format<agreesA, agreesB>->println
     
-    return if onceA && onceB && differsA && differsB && agreesA && agreesB then 0 else 1
+    if onceA && onceB && differsA && differsB && agreesA && agreesB then 0 else 1
 }

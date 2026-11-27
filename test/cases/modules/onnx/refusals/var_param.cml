@@ -20,19 +20,19 @@ func forward(x: float[...]) => float[...] sync {
     return acc
 }
 
-func main() => int sync {
+func main() sync {
     let x = reshape<[2, 2]>([1.0, -2.0, 3.0, 4.0])
     let r = export_model<out: get_env('ONNX_OUT') ?? ''>(func (x: float[...]) => float[...] {
         forward(x)
     }, x)
-    return match r {
+    match r {
         case error e => sync {
             println(e)
-            return 1
+            1
         }
         case _ => sync {
             println('exported')
-            return 0
+            0
         }
     }
 }

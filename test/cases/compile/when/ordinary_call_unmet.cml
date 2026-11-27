@@ -11,6 +11,6 @@ func drop(x: int) => int when is_positive(0) {
     return x - 1
 }
 
-func main() => int sync {
-    return drop(1)
+func main() sync {
+    drop(1)
 }

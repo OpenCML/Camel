@@ -3,7 +3,6 @@
 // that this module provides no such pass, not that the pass is not found anywhere (
 // probe C).
 
-func main() => int sync {
+func main() sync {
     println(42)
-    return 0
 }

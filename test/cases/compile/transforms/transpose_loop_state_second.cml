@@ -36,7 +36,7 @@ func carried_p(x: float) => float {
     return (loop s = x, p = x for i in 0 .. 3 do (s + p, p + q)).1
 }
 
-func main() => int sync {
+func main() sync {
     // The algebra first, forward and un-transposed: 7 is the value this case reads out.
     println(carried_p(1.0))
     let back = transpose(carried_p)
@@ -44,5 +44,4 @@ func main() => int sync {
     // Twice the cotangent, 14: the last reading is the transpose's alone, since the forward line
     // prints 7.
     println(back(2.0))
-    return 0
 }

@@ -4,7 +4,7 @@
 
 import { encode } from json
 
-func main() => int sync {
+func main() sync {
     println('=== JSON encode tests ===')
     
     println('\n[1] encode primitives')
@@ -31,5 +31,4 @@ func main() => int sync {
     println(orig->encode<indent: 2>)
     
     println('\n=== JSON encode tests completed ===')
-    return 0
 }

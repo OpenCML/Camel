@@ -6,7 +6,6 @@
 
 import { rule_needs } from rewrite
 
-func main() => int sync {
+func main() sync {
     println(rule_needs())
-    return 0
 }

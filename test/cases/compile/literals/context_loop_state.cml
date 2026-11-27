@@ -34,7 +34,7 @@ func fromStates() => f32 {
     pair.0 + pair.1
 }
 
-func main() => int sync {
+func main() sync {
     // A declaration types the state's first value...
     let n: f32 = loop s = 0.0 while s < 3.0 do s + 1.0
     println(n)
@@ -45,5 +45,4 @@ func main() => int sync {
     println(fromFor())
     println(fromFold())
     println(fromStates())
-    return 0
 }

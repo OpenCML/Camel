@@ -3,12 +3,11 @@
  * inside the element function is the error, with the rebinding as the fix.
  */
 
-func main() => int sync {
+func main() sync {
     var out: int[] = []
     (0 .. 3)->foreach<func (i: int) sync {
         out->append<i>
         return null
     }>
     println(out)
-    return 0
 }

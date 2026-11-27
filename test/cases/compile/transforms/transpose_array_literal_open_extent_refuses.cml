@@ -16,8 +16,7 @@ func pair(a: f32, b: f32) => f32[] {
     return [a, b]
 }
 
-func main() => int sync {
+func main() sync {
     let back = transpose(pair)
     println('pair_pullback=', back([1.5, 2.5]))
-    return 0
 }

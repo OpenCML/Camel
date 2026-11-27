@@ -13,7 +13,7 @@ func sha256_rounds(s: string, rounds: int) => string {
     return digest
 }
 
-func main() => int sync {
+func main() sync {
     let expected = 'ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad'
     let text: string = sha256('abc')
     let binary: string = sha256(encode('abc'))
@@ -21,5 +21,4 @@ func main() => int sync {
     println(binary == expected)
     println(sha256_rounds('abc', 0) == 'abc')
     println(sha256_rounds('abc', 1) == expected)
-    return 0
 }

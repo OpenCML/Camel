@@ -21,10 +21,9 @@ func make(c: float) => (x: float) => float {
     }
 }
 
-func main() => int sync {
+func main() sync {
     let xs: float[3] = [1.0, 2.0, 3.0]
     let marked = remat(make(3.0))
     'remat capture value={}'->format<marked(1.0)>->println
     println(vmap(remat(make(3.0)))(xs))
-    return 0
 }

@@ -22,10 +22,9 @@ func f32_mixed_zero(x: f32) => f32 {
     return x * 3.0 + x * -3.0
 }
 
-func main() => int sync {
+func main() sync {
     println(f32_combine_over(0.0))
     println(f32_fold_zero(1.0e30))
     println(f32_fold_over(1.0e-30))
     println(f32_mixed_zero(-1.0))
-    return 0
 }

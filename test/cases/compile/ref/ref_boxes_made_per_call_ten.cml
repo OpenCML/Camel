@@ -27,9 +27,9 @@ func burn(i: int) => int {
     return state::get(r)
 }
 
-func main() => int sync {
+func main() sync {
     let kept = state::ref(41)
     let total = [burn(i) for i in 0 .. 10]
     println(len(total), state::get(kept))
-    return 0
+    0
 }

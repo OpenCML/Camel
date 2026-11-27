@@ -32,13 +32,12 @@ func (x: int) => int { x + 1 }   // lambda，见 6.9
 反引号字符串 `` `...` `` 里的 `${表达式}` 是插值，可以带格式说明 `${表达式:格式说明}`（词法见 [2.5.4.1](02_lexical.md#2541-格式化字符串)）。它与 `'...'->format<...>` 是**同一棵树**：把 `${...}` 换成 `format` 的占位符（`{}` 或 `{:格式说明}`），把文字里的 `{`、`}` 写成 `{{`、`}}`，再以各插值表达式为 with 实参、以这段文字为普通实参调用 `format`。
 
 ```cml
-func main() => int sync {
+func main() sync {
     let name = 'Camel'
     let n = 42
     println(`hello, ${name}!`)          // 'hello, {}!'->format<name>
     println(`n = ${n}, twice = ${n * 2}`)
     println(`pi = ${3.14159:.2f}`)      // 'pi = {:.2f}'->format<3.14159>
-    return 0
 }
 ```
 
@@ -77,10 +76,9 @@ func main() => int sync {
 with <factor: int>
 func scale(x: int) => int { return x * factor }
 
-func main() => int sync {
+func main() sync {
     println(scale<3>(5))        // with 实参写在尖括号里
     println(5->scale<3>)        // 管道：左边的值作实参
-    return 0
 }
 ```
 
@@ -107,13 +105,12 @@ func main() => int sync {
 `a->f` 把 `a` 作为 `f` 的实参：`a->f` 就是 `f(a)`，`a->f<w>` 就是 `f<w>(a)`。左结合，适合把数据流写成一条链：
 
 ```cml
-func main() => int sync {
+func main() sync {
     let total = (1..6)
         ->map<func (x) { x * x }>
         ->filter<func (x) { x % 2 == 1 }>
         ->reduce<func (acc: int, x: int) => int { acc + x }, 0>
     println(`total = ${total}`)
-    return 0
 }
 ```
 
@@ -140,11 +137,10 @@ func half(x: int) => int! {
     return if x % 2 == 0 then x / 2 else { return error('Odd', 'not even') }
 }
 
-func main() => int sync {
+func main() sync {
     println(parse_int('12') !! 0, parse_int('twelve') !! 0)
     println(parse_int('12') -> half -> half !! -1)
     println(parse_int('10') -> half -> half !! -1)
-    return 0
 }
 ```
 
@@ -161,10 +157,9 @@ func main() => int sync {
 - **`x!` 说"这里必须成功"**：`x` 是 `T!` 时，有值就交出值，是错误就把这个错误原样变成故障——种类、消息用错误自己的，报告站在 `!` 上，旁边再说一句错误产生的位置；`x` 是 `T?` 时，`null` 变成故障 `NullValue`。所以读训练数据、解析配置这类"失败了也没有别的路可走"的地方，不必编一个种类和消息去写 `!! fail`：
 
 ```cml
-func main() => int sync {
+func main() sync {
     let n = parse_int('40')!
     println(n + 2)
-    return 0
 }
 ```
 
@@ -210,10 +205,9 @@ func noisy(tag: string, v: bool) => bool sync {
     return v
 }
 
-func main() => int sync {
+func main() sync {
     println(noisy('l1', false) && noisy('r1', true))
     println(noisy('l2', false) & noisy('r2', true))
-    return 0
 }
 ```
 
@@ -312,10 +306,9 @@ func right(x: int) => string {
     return if x < 0 then { return 'negative' } else { return 'not negative' }
 }
 
-func main() => int sync {
+func main() sync {
     println(wrong(-1))
     println(right(-1))
-    return 0
 }
 ```
 
@@ -361,9 +354,8 @@ func kind(c: string) => string {
     }
 }
 
-func main() => int sync {
+func main() sync {
     println(kind('e'), kind(' '), kind('x'))
-    return 0
 }
 ```
 
@@ -391,10 +383,9 @@ func report(r: int!) => string {
     }
 }
 
-func main() => int sync {
+func main() sync {
     println(show(5), show(null))
     println(report(parse_int('7')), report(parse_int('x')))
-    return 0
 }
 ```
 
@@ -660,10 +651,9 @@ func (x: int) sync { total = total + x }        // 写入被捕获的变量：�
 - `->` 后面的 lambda：形参就是接收者，所以它的类型是接收者的类型，或者从 `T?`、`T!` 里取出的值的类型（3.9 的流水线）：
 
   ```cml
-  func main() => int sync {
+  func main() sync {
       let a = 5 -> func (y) { y + 1 }                  // y: int
       println(a)
-      return 0
   }
   ```
 
@@ -686,12 +676,11 @@ func adder(n: int) => (x: int) => int {
     return func (x: int) => int { x + n }          // 捕获 n
 }
 
-func main() => int sync {
+func main() sync {
     let g = inc
     let add5 = adder(5)
     println(g(1), apply_twice(dbl, 3), add5(10))
     println([inc, dbl]->map<func (f: (x: int) => int) => int { f(10) }>)
-    return 0
 }
 ```
 
@@ -716,13 +705,12 @@ func main() => int sync {
 | `xs->foreach<f>` | 无；对每个元素调用 `f` | 按元素顺序 |
 
 ```cml
-func main() => int sync {
+func main() sync {
     let xs = 1..6
     println(xs->map<func (x) { x * x }>)
     println(xs->filter<func (x) { x % 2 == 0 }>)
     println(xs->reduce<func (acc: int, x: int) => int { acc + x }, 0>)
     xs->filter<func (x) { x > 3 }>->foreach<func (x) sync { println('item', x) }>
-    return 0
 }
 ```
 
@@ -743,7 +731,7 @@ item 5
 ```cml
 func risky(d: int) => int { return 100 / d }
 
-func main() => int sync {
+func main() sync {
     println(attempt(risky)(4) !! -1)
     println(attempt(risky)(0) !! -1)
     println(attempt(func () { [1, 0, 4]->map<risky> })() !! [-1])
@@ -752,7 +740,6 @@ func main() => int sync {
         case error e => e.kind + ' at ' + e.location
         case v => 'no fault'
     })
-    return 0
 }
 ```
 

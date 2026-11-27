@@ -6,9 +6,8 @@ func conv(s: string) => int {
     return int(s)
 }
 
-func main() => int sync {
+func main() sync {
     println(conv('12'))
     println(conv('12abc'))
     println('not reached')
-    return 0
 }

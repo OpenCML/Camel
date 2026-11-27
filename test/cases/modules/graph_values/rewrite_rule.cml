@@ -57,7 +57,7 @@ func user() => int spelling {
     return target(5)
 }
 
-func main() => int spelling sync {
+func main() spelling sync {
     let p = user
     let rules: Rule[] = [drop_one]
     let q = p->rewrite<rules> !! p
@@ -69,5 +69,4 @@ func main() => int spelling sync {
     }
     println(`made after: ${later(5)}`)
     println(`current: ${addOnes(targetIn(main))}`)
-    return 0
 }

@@ -19,8 +19,7 @@ namespace ns {
     }
 }
 
-func main() => int sync {
+func main() sync {
     let t = (10, 20, 30)
     println(t.[ns::slot::<int>()])
-    return 0
 }

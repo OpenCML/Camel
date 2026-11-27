@@ -13,7 +13,6 @@ func take::<T>(v: T) => string when is_plain::<T>() {
     return 'plain'
 }
 
-func main() => int sync {
+func main() sync {
     println(take({ p: { x: 1, y: 2.0 }, tag: 3 }))
-    return 0
 }

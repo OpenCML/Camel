@@ -91,7 +91,7 @@ func main(
     lr: float,
     log_every: int,
     threads: int
-) => int sync {
+) sync {
     set_num_threads(threads)
     
     // == data ==
@@ -126,7 +126,7 @@ func main(
         let y = take(train_labels, chosen)
         let (value, gradient) = loss_with_grad<m>(x, y)
         let next = adam(m, gradient, opt, lr)
-        return (next.0, next.1, step + 1, losses->append<value>)
+        (next.0, next.1, step + 1, losses->append<value>)
     }
     let elapsed = now() - started
     report(losses, steps, log_every)
@@ -150,5 +150,4 @@ func main(
     }>(trained, restored), 0.0)
     `c2 checkpoint val_loss=${after_restore.0:.9f} val_accuracy=${after_restore.1:.9f} l1_drift=${drift:.9f}`->println
     `c2 leaves ${leaves}`->println
-    return 0
 }

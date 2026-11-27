@@ -15,12 +15,11 @@ func my_map::<T, U>(xs: T[], f: (x: T) => U) => U[] {
     return xs->map<f>
 }
 
-func main() => int sync {
+func main() sync {
     println(first([1, 2, 3]))
     println(first(['a', 'b']))
     println(swap((1, 2)), swap(('x', 'y')))
     println(my_map([1, 2, 3], func (x: int) => string {
         string(x) + '!'
     }))
-    return 0
 }

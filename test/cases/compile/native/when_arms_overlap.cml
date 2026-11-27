@@ -37,9 +37,8 @@ func combine::<T>(a: T, b: T) => T {
     return a * b
 }
 
-func main() => int sync {
+func main() sync {
     let x: i32 = 19
     let y: i32 = 23
     println(combine(x, y))
-    return 0
 }

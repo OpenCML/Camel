@@ -28,8 +28,7 @@ func total::<T>(xs: T[]) => T {
     }, 0>
 }
 
-func main() => int sync {
+func main() sync {
     let small: i32[] = [1, 2, 3]
     println(total(small))
-    return 0
 }

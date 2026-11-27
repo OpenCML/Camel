@@ -4,8 +4,7 @@
 
 type Tree = { value: int, children: Tree[] }
 
-func main() => int sync {
+func main() sync {
     let tree: Tree = { value: 'seven', children: [] }
     println(len(tree.children))
-    return 0
 }

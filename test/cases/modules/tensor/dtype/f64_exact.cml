@@ -9,7 +9,7 @@ func scaled(x: f64[...], by: f64) => f64[...] {
     return (x * by)
 }
 
-func main() => int sync {
+func main() sync {
     let numbers: f64[] = [16777217.0]
     let t = numbers
     println(sum(t))
@@ -20,5 +20,4 @@ func main() => int sync {
     println(to_array(to_bytes(t)))
     let back: f64[...] = from_bytes(to_bytes(t), [1])
     println(sum(back))
-    return 0
 }
