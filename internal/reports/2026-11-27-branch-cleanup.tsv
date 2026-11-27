@@ -1,4 +1,6 @@
-# 2026-11-27 local branch cleanup — scope: merged lane/* branches, transforms-*, TEMP probe branches
+# 2026-11-27 second pass, approved: stdlib-exceptions, grammar-notes, loop-handback removed (trees clean, tips ancestors)
+# and lane/pass-classify-tests archived then deleted. edit-gir and lane/editview-gir are held: they are the raw material
+# the C5 re-land needs after the promotion seat's revert. Merged is a necessary condition, never a sufficient one.# 2026-11-27 local branch cleanup — scope: merged lane/* branches, transforms-*, TEMP probe branches
 # guard for every row: `git merge-base --is-ancestor <tip> origin/integration` must hold before `git branch -D`
 # local branches only; no remote ref was touched
 # columns: branch<TAB>tip<TAB>result<TAB>reason-or-worktree<TAB>subject
@@ -24,16 +26,16 @@ lane/transforms-view	ebcbb5e572	deleted	ancestor-of-integration	Merge the ledger
 lane/transforms-walk	69a2116b25	deleted	ancestor-of-integration	backlog: a payload reader is not a view reader, and the view says so itself
 lane/abort-fix	f8749cdba0	blocked	checked-out-at D:/Projects/Camel-wt/abort-fix	Merge lane/edit-session: the channel a graph-header write needs to fold into a named edit
 lane/cap-probe	4a7d63d3bc	blocked	checked-out-at D:/Projects/Camel-wt/value-ports	parse: record the arrays example's syntax as the parser reads it
-lane/cpp-noise	7cdbdcbae9	blocked	checked-out-at D:/Projects/Camel-wt/stdlib-exceptions	cpp standalone: a fault's report goes to standard error, where camel writes its diagnostics
+lane/cpp-noise	7cdbdcbae9	deleted	worktree stdlib-exceptions removed first (clean, ancestor)	cpp standalone: a fault's report goes to standard error, where camel writes its diagnostics
 lane/docs-lambda-probe	c78f57c85e	blocked	checked-out-at D:/Projects/Camel-wt/docs	backlog: the test tiers and the slow tests leave the build host; and a note on my own collision
 lane/editview-b	7c17dc39b4	blocked	checked-out-at D:/Projects/Camel-wt/editview-b	Merge lane/editnote-complete into integration
 lane/editview-commit	6ba0c83007	blocked	checked-out-at D:/Projects/Camel-wt/editview-commit	gir: the value a function parameter drops is judged by the parameter's type
-lane/editview-gir	b073860954	blocked	checked-out-at D:/Projects/Camel-wt/edit-gir	compile: a block's root imports the module whose operator opens it
+lane/editview-gir	b073860954	hold	KEEP: raw material for the C5 re-land (the promotion seat reverted it); merged is not the same as deletable	compile: a block's root imports the module whose operator opens it
 lane/facts-kinds	f92b09c353	blocked	checked-out-at D:/Projects/Camel-wt/console-res	feat(facts): core.instance and core.reorder, and the one read behind them
 lane/gc-pacing	6c7dffe5cb	blocked	checked-out-at D:/Projects/Camel-wt/gc-pacing	test(mm): the pacing cases allocate the arrays they document, not a range
-lane/grammar-notes	c55275edcb	blocked	checked-out-at D:/Projects/Camel-wt/grammar-notes	grammar: the resource declaration names its modifiers instead of a production it never had
+lane/grammar-notes	c55275edcb	deleted	worktree grammar-notes removed first (clean, ancestor)	grammar: the resource declaration names its modifiers instead of a production it never had
 lane/hdrweight-tools	f6f5ea2a80	blocked	checked-out-at D:/Projects/Camel-wt/hdrweight-tools	merge docs/coordinator: the promotion-8 page and record close, and eight backlog rows
-lane/loop-handback	fcccbaac9b	blocked	checked-out-at D:/Projects/Camel-wt/loop-handback	gir: a loop hands its carried states out through one function
+lane/loop-handback	fcccbaac9b	deleted	worktree loop-handback removed first (clean, ancestor)	gir: a loop hands its carried states out through one function
 lane/pass-as-function-names	475b2bec4e	blocked	checked-out-at D:/Projects/Camel-wt/witness	compile: a pass-shaped declaration that claims an operator is still checked
 lane/plain-gate-2	93ab748d73	blocked	checked-out-at D:/Projects/Camel-wt/plain-gate-2	selftest: the two passes a case declares itself are compiled into libcamel again
 lane/pool-jvp	750191c745	blocked	checked-out-at D:/Projects/Camel-wt/pooljvp	transpose: say what the pooling walks do, in the walk's own words
@@ -43,7 +45,7 @@ lane/timeout-retry	08fdf3d04d	blocked	checked-out-at D:/Projects/Camel-wt/timeou
 lane/transpose-carry	314c6f6504	blocked	checked-out-at D:/Projects/Camel-wt/transpose-carry	conv2d_t: give the shaped operators their own parameter lists
 lane/loop-tape-values-wip	6c6e94efec	skipped-guard	not-an-ancestor (TEMP probe branch)	TEMP: compare closure slots with the site's capture type
 lane/task-216-probe	6d114cb579	skipped-guard	not-an-ancestor (TEMP probe branch)	TEMP(probe): are inner captures among the forward graph
-lane/pass-classify-tests	91f7193879	skipped-guard	not-an-ancestor, but patch already upstream (`git cherry` = -1)	test: a declaration that is not shaped like a pass is checked, not swallowed
+lane/pass-classify-tests	91f7193879	archived-then-deleted	content already upstream (cherry -1); tag archive/pass-classify-tests points at the tip	test: a declaration that is not shaped like a pass is checked, not swallowed
 lane/pass-registry	a3ebba304c	skipped-hold	patch-identical to c1-measure (range-diff =); awaiting one-word confirm against the "do not delete lane/pass-registry*" clause	pass: a pass that reads tag facts states it on the operator, not in a list beside it
 lane/pass-registry-salvaged	34f83155ce	skipped-hold	patch-identical to c1-measure (range-diff =); same clause as above	ops: a pass written under another spelling is the same operator, said on its record
 lane/pass-registry-from-e0	e0e31424d9	skipped-hold	patch-identical to c1-measure (range-diff =); same clause as above	pass: a pass that reads tag facts states it on the operator, not in a list beside it
