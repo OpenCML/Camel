@@ -1209,6 +1209,93 @@ node_handle_t Builder::visitTaggedBrchNode(const GCT::node_ptr_t &gct) {
     return buildBranch(gct, tagNode, &arms);
 }
 
+// `x!` (design principles 3.9): the value out of `x`, and the failure it carries becomes a fault.
+// It is the same structure as `x !! fail(...)`: a branch on the tag of `x`, whose arm taken when
+// the value is null (has failed) raises the fault, and whose other arm is the value taken out. The
+// mark does not say which tag it takes apart -- the type of `x` does -- so both arms are made here:
+// a `T?` whose `null` becomes the fault `NullValue`, a `T!` whose error becomes a fault with that
+// error's own kind and message. The report is located at the `!`, where the program said the take
+// has to succeed.
+node_handle_t Builder::visitUnwrapBrchNode(const GCT::node_ptr_t &gct) {
+    node_handle_t subject = nullptr;
+    {
+        ExpectedValueScope subjectScope(expectedValueType_, nullptr);
+        subject = valueNodeOf(visit(gct->at(0)));
+    }
+    Type *subjectType = valueTypeOf(nodeTypeOf(subject));
+    TupleType *tagged = asTagged(subjectType);
+    if (tagged == nullptr) {
+        diags_->of(SemanticDiag::TaggedOperandMismatch)
+            .atOrigin(gct->origin())
+            .commit(
+                "!",
+                "its operand has type '" +
+                    (subjectType != nullptr ? subjectType->toString() : std::string("void")) +
+                    "', and a take reads a 'T?' or a 'T!'");
+        throw BuildAbortException();
+    }
+    const bool onNull      = tagged->isNullable();
+    const std::string name = bindTemporary(subject);
+    node_handle_t tagNode  = applyTagOperator(
+        onNull ? camel::core::oper::TagIsNull : camel::core::oper::TagIsError,
+        name,
+        gct);
+    std::vector<arm_ptr_t> arms(2);
+    // The arm the tag selects: there is no value to take out, so the take raises the fault.
+    arms[0] = buildArm(gct, [&] {
+        if (onNull) {
+            // `null` becomes the fault `NullValue` (design principles 3.9). The kind says what
+            // happened, and the value gives no message of its own.
+            const auto textNode = [&](const char *text) {
+                const data_ptr_t data =
+                    tt::as_shared<Data>(std::make_shared<StringData>(std::string(text)));
+                node_handle_t node = currGraph_->addStaticDataNode(data);
+                rememberConstant(node, data);
+                registerNodeOrigin(context_, node, gct, "gir.data");
+                return node;
+            };
+            return faultNodeOf(textNode("NullValue"), nullptr, gct);
+        }
+        // The error out of the value, and its own kind and message out of the error.
+        node_handle_t info   = applyTagOperator(camel::core::oper::TagErrorInfo, name, gct);
+        node_handle_t kind   = memberReadNodeOf(info, Type::String(), "kind", gct);
+        node_handle_t notice = memberReadNodeOf(info, Type::String(), "message", gct);
+        return faultNodeOf(kind, notice, gct);
+    });
+    // The arm the tag does not select: the value taken out, which is the take's value.
+    arms[1] = buildArm(gct, [&] {
+        return applyTagOperator(
+            onNull ? camel::core::oper::TagNullValue : camel::core::oper::TagErrorValue,
+            name,
+            gct);
+    });
+    return buildBranch(gct, tagNode, &arms);
+}
+
+// The fault of a value taken out by `!`: the call `fail(<kind>, <message>)` the program would
+// write, built from the operands the branch already holds. A built node is handed to a call built
+// from a synthesized GCT by binding it to a name first, which is how a call takes an operand that
+// is not a GCT node of the program's own (applyTagOperatorCall takes the same route for its one
+// operand). The kind and the message are ordinary arguments, so `fail` reports the fault where the
+// call stands -- the `!` -- and carries what the error said.
+node_handle_t
+Builder::faultNodeOf(node_handle_t kind, node_handle_t message, const GCT::node_ptr_t &origin) {
+    const auto make = [&](GCT::node_ptr_t node) {
+        node->setOrigin(origin->origin());
+        return node;
+    };
+    // A fault with no message is the one-argument `fail(<kind>)`: the kind says what happened and
+    // there is nothing to add, which is the same report the program gets from `fail('Kind')`.
+    const bool withMessage = message != nullptr;
+    GCT::node_ptr_t call   = make(tree_->makeLink(withMessage ? 2 : 1));
+    *call << make(internalOperatorDref(camel::core::constructedOperators().fail))
+          << make(tree_->makeDRef(bindTemporary(kind)));
+    if (withMessage) {
+        *call << make(tree_->makeDRef(bindTemporary(message)));
+    }
+    return visitLinkNode(call);
+}
+
 // `x -> f` where `x` is a `T?` or a `T!` and no overload of `f` takes it as it is (design
 // principles 3.9): a branch on the tag of `x`. The arm taken when `x` is null (has failed) hands it
 // on as the result; the other arm calls `f` with the value taken out, and gives a `U?` (`U!`; a
@@ -1776,6 +1863,11 @@ node_handle_t Builder::visitBrchNode(const GCT::node_ptr_t &gct) {
     const auto kind = gct->branchKind();
     if (kind == GCT::BranchKind::NullThen || kind == GCT::BranchKind::ErrorThen) {
         node_handle_t node = visitTaggedBrchNode(gct);
+        LEAVE("BRCH");
+        return node;
+    }
+    if (kind == GCT::BranchKind::Unwrap) {
+        node_handle_t node = visitUnwrapBrchNode(gct);
         LEAVE("BRCH");
         return node;
     }

@@ -104,13 +104,16 @@ std::string to_string(AssignmentForm form);
 ///    `T?` / `T!` with the fixed patterns). Children: condition, CASE...
 ///  - NullThen: `a ?? b`. Children: a, CASE(True)[EXEC b].
 ///  - ErrorThen: `a !! b`. Children: a, CASE(True)[EXEC b].
+///  - Unwrap: `x!`. Children: a. The graph builder makes both arms from the tag `a` carries
+///    (a `T?` or a `T!`): the arm the tag selects raises the fault, and the other is the value
+///    taken out (design principles 3.9).
 ///  - LogicalAnd: `a && b`, which is `if a then b else false` (design principles 4.2).
 ///    Children: a, CASE(True)[EXEC b], CASE(Else)[EXEC false].
 ///  - LogicalOr: `a || b`, which is `if a then true else b`.
 ///    Children: a, CASE(True)[EXEC true], CASE(Else)[EXEC b].
 ///    Both have exactly the children of that `if`; the kind only records what was written,
 ///    so that the operands are required to be `bool` and reported as operands.
-enum class BranchKind : uint8_t { Cond, NullThen, ErrorThen, LogicalAnd, LogicalOr };
+enum class BranchKind : uint8_t { Cond, NullThen, ErrorThen, LogicalAnd, LogicalOr, Unwrap };
 
 /// The pattern of a CASE node.
 ///  - Value: a value the scrutinee is compared with. Children: the value, the body.

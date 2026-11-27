@@ -1,7 +1,7 @@
 // A pinned reading of the language, measured while choosing how a yielded element is delivered:
-// the postfix `!` is not a spelling of the language -- it left the grammar, so `x!` is an ordinary
-// syntax error ("Expected ',' or ')' before '!'") -- so a value of a nullable type is not unwrapped
-// with `x!`; `??` is the form the language has.
+// the postfix `!` is the take of design principles 3.9 -- `x!` takes the value out of a `T?` (the
+// fault `NullValue` where it is null) -- so a value of a nullable type is unwrapped with it, and
+// `??` stays the form that gives a replacement. The reading here is the value that is there.
 
 func main() => int sync {
     let x: int? = 5

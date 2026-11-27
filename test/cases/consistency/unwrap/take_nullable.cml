@@ -1,0 +1,17 @@
+/**
+ * `x!` on a `T?` whose value is null raises the fault `NullValue` (design principles 3.9): there is
+ * no error to take the kind from, so the kind says what was missing. A value that is there is
+ * taken out as it is.
+ */
+
+func maybe(flag: bool) => int? {
+    return if flag then 7 else null
+}
+
+func main() => int sync {
+    let here = maybe(true)!
+    println(format<here>('value={}'))
+    let gone = maybe(false)!
+    println('not reached')
+    return 0
+}

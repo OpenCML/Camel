@@ -608,15 +608,14 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "norma
 timeout_ms = 10000
 
 [[tests]]
-name = "stream.non_null_assertion_not_implemented"
-desc = "The postfix `!` is not a spelling of the language -- it left the grammar, so `x!` is an ordinary syntax error -- and a value of a nullable type is therefore not unwrapped with it; `??` is the form the language has. Measured while choosing how a yielded element is delivered."
+name = "stream.non_null_assertion_is_the_take"
+desc = "The postfix `!` is the take (design principles 3.9): a value of a nullable type is unwrapped with `x!`, and the value that is there is printed. It was pinned as a syntax error while choosing how a yielded element is delivered; `??` stays the form that gives a replacement instead of faulting."
 kind = "behavior"
 case = "../../../cases/compile/stream/probe_unwrap_nullable.cml"
 args = ["${case}"]
-expect_exit = 1
-expect_diagnostic_name = "SyntaxDiag::MissingComma"
-expect_output_contains = ["Expected ',' or ')' before '!'"]
-expect_output_not_contains = ["UnknownInternalError"]
+expect_exit = 0
+expect_stdout_starts_with = "5\n"
+expect_output_not_contains = ["NullValue", "Segmentation fault", "dumped core"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 10000
 

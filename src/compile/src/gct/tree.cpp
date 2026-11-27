@@ -805,6 +805,8 @@ std::string Node::toString() const {
             return "BRCH: &&";
         case BranchKind::LogicalOr:
             return "BRCH: ||";
+        case BranchKind::Unwrap:
+            return "BRCH: !";
         default:
             return "BRCH";
         }

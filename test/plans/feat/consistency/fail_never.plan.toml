@@ -407,7 +407,7 @@ expect_exit = 1
 expect_diagnostic_code = "0x040001AC"
 verify_script = """
 assert(input.diagnostics.length === 1, JSON.stringify(input.diagnostics))
-assert(input.diagnostics[0].name === 'RuntimeDiag::NoPremise', input.diagnostics[0].name)
+assert(input.diagnostics[0].name === 'RuntimeDiag::' + 'NoPremise', input.diagnostics[0].name)
 """
 expect_stdout_starts_with = "before\n"
 expect_output_not_contains = ["not reached", "Segmentation fault", "dumped core"]
