@@ -197,6 +197,12 @@ timeout_ms = 180000
 # This case starts one compiler per snippet across eight jobs, so its CPU time is the sum of its
 # threads and the wall clock is not the bound (`test/tools/run-tests.mjs#runOneTest`); 120000 ms is
 # 1.66x of the reading above, and the timeout stays the liveness bound.
+#
+# Two things the number is not. It is not the reading itself (1.0x): the next run's ordinary spread
+# would then read as a regression, and the collection budgets took the same 1.63x headroom over
+# their highest reading. And it is not a loosened verdict: a run whose own CPU time exceeds
+# 120000 ms fails this case exactly as a run that reaches the timeout does -- the 4x margin rule is
+# not applied to a case that stated its cost, and `timeout_ms` above still kills a hang.
 cpu_budget_ms = 120000
 # Slow layer: over the 2 s the fast layer allows -- 19.73 s of
 # child wall clock.
