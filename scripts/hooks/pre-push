@@ -228,7 +228,14 @@ fi
 # records and pages written on top of a built merge need no build of their own. The paths the build
 # reads are the ones its stamp hashes (scripts/common.js: BUILD_INFO_ROOTS, BUILD_INFO_ROOT_FILES).
 check_integration_built() {
-    common=$(git rev-parse --path-format=absolute --git-common-dir 2>/dev/null)
+    # `--git-common-dir` answers relative to the current directory when it is not absolute; the
+    # absolute form is made here rather than asked of git, because `--path-format` needs git 2.31
+    # and the build host's is older.
+    common=$(git rev-parse --git-common-dir 2>/dev/null)
+    case "$common" in
+        '' | /* | [A-Za-z]:*) : ;;
+        *) common="$(pwd)/$common" ;;
+    esac
     if [ -z "$common" ]; then
         echo "pre-push: refusing to push to $integration_ref: the git directory could not be found, so whether the tip was built cannot be answered." >&2
         exit 1

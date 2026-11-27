@@ -143,7 +143,7 @@ check(
     unbuilt.status === 1 && unbuilt.out.includes(codeMerge) && unbuilt.out.includes('src/unit.cpp'),
     unbuilt.out,
 );
-const builtDir = path.join(git(code.dir, ['rev-parse', '--path-format=absolute', '--git-common-dir']), 'camel-built');
+const builtDir = path.join(path.resolve(code.dir, git(code.dir, ['rev-parse', '--git-common-dir'])), 'camel-built');
 fs.mkdirSync(builtDir, { recursive: true });
 fs.writeFileSync(path.join(builtDir, codeMerge), 'Release\n');
 const built = pushIntegration(code.dir, shell, codeMerge, code.tip);
