@@ -103,3 +103,8 @@
 - `transpose_loop_escape.int_is_a_zero_tangent_space.nvm`、`transpose_loop_escape.two_values_of_two_kinds.nvm`：名字正对着 `Tangent` 律，但 E 卡落地后**仍红** ⇒ 它们的红另有原因（不是律本身）。
 - 下一手碰之前：先用同一跑的原文确认"红在哪一句"，再决定是修还是改期望；不要按名字推。
 - 出处：`lane/arg-parse-uaf-w @ 05395ebfd9` 的 `feat/compile/transforms 221/212/8` 读数（8 条逐名已对 promotion-26 表，新增红 0）。
+
+### N. 新建车道树的第一句：补 `camel-gate.local.json`（2026-11-28 记）
+- 新 `git worktree add` 出来的树**不继承** git-ignored 的 `internal/tools/camel-gate.local.json`，缺它时 `camel-remote` 直接拒跑。
+- 做法：从任一在跑的树复制该文件过去，再跑构建/读层；建树记录里写明这一步，否则下一条车道会卡在第一句。
+- 已照此办理的：`backend-speed`（`lane/onnx-g2`，自 console-res 复制）、`op-names`（`lane/op-names`，自 editview-commit 复制）。
