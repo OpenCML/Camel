@@ -26,7 +26,7 @@ import { add_tangent, div_tangent, mul_tangent, neg_tangent, stop_gradient, sub_
 // second import of a name does not add an overload to the first, it hides it (with both imported,
 // `pow_tangent`'s `log(x)` stops resolving: "No matching function found for
 // argument types: <> (float)"). So the scalar one is named here instead.
-import { erfc as math_erfc, erf as math_erf, exp as math_exp, log as math_log, pow, sqrt as math_sqrt, tanh as math_tanh } from math
+import { erfc as math_erfc, erf as math_erf, exp as math_exp, log as math_log, max as math_max, min as math_min, pow, sqrt as math_sqrt, tanh as math_tanh } from math
 // The `nn` module's primitives, whose forward rules file below. This is the first `import` from a
 // module that is a library into a module that is a ruleset, and it is the direction design
 // principles 10.1 allows (modules may import each other; only a *type* cycle is diagnosed) -- the
@@ -1175,6 +1175,106 @@ export rule jvp_exp_d(x: float) { exp_d(x) => func (dx: float) {
 } }
 
 
+
+/// `max(a, b)` at `float`: what `math:max_d` means, and the left side this rule is filed under.
+func max_d(a: float, b: float) => float {
+    return math_max(a, b)
+}
+
+/// `max(a, b)` at `f32`: what `math:max_f` means, and the left side this rule is filed under.
+func max_f(a: f32, b: f32) => f32 {
+    return math_max(a, b)
+}
+
+/// `max(a, b)` at `bf16`: what `math:max_bf` means, and the left side this rule is filed under.
+func max_bf(a: bf16, b: bf16) => bf16 {
+    return math_max(a, b)
+}
+
+/// `max(a, b)` at `f16`: what `math:max_f6` means, and the left side this rule is filed under.
+func max_f6(a: f16, b: f16) => f16 {
+    return math_max(a, b)
+}
+
+/// `d(max(a, b)) = da` where `a >= b`, and `db` where it is not: the choice the array width's
+/// `extremumVjp` makes for `maximum` (`stdlib/tensor/ops/elementwise_ops.cpp:455-465`: `ge(lhs, rhs)`,
+/// so a tie goes to the left operand). The branch is written with `if` because the scalar graph has
+/// no select/where operator; the condition reads only the inputs and both arms are linear in the
+/// tangents.
+export rule jvp_max_d(a: float, b: float) { max_d(a, b) => func (da: float, db: float) {
+    if a >= b then da else db
+} }
+
+/// `d(max(a, b)) = da` where `a >= b`, and `db` where it is not: the choice the array width's
+/// `extremumVjp` makes for `maximum` (`stdlib/tensor/ops/elementwise_ops.cpp:455-465`: `ge(lhs, rhs)`,
+/// so a tie goes to the left operand). The branch is written with `if` because the scalar graph has
+/// no select/where operator; the condition reads only the inputs and both arms are linear in the
+/// tangents.
+export rule jvp_max_f(a: f32, b: f32) { max_f(a, b) => func (da: f32, db: f32) {
+    if a >= b then da else db
+} }
+
+/// `d(max(a, b)) = da` where `a >= b`, and `db` where it is not: the choice the array width's
+/// `extremumVjp` makes for `maximum` (`stdlib/tensor/ops/elementwise_ops.cpp:455-465`: `ge(lhs, rhs)`,
+/// so a tie goes to the left operand). The branch is written with `if` because the scalar graph has
+/// no select/where operator; the condition reads only the inputs and both arms are linear in the
+/// tangents.
+export rule jvp_max_bf(a: bf16, b: bf16) { max_bf(a, b) => func (da: bf16, db: bf16) {
+    if a >= b then da else db
+} }
+
+/// `d(max(a, b)) = da` where `a >= b`, and `db` where it is not: the choice the array width's
+/// `extremumVjp` makes for `maximum` (`stdlib/tensor/ops/elementwise_ops.cpp:455-465`: `ge(lhs, rhs)`,
+/// so a tie goes to the left operand). The branch is written with `if` because the scalar graph has
+/// no select/where operator; the condition reads only the inputs and both arms are linear in the
+/// tangents.
+export rule jvp_max_f6(a: f16, b: f16) { max_f6(a, b) => func (da: f16, db: f16) {
+    if a >= b then da else db
+} }
+
+/// `min(a, b)` at `float`: what `math:min_d` means, and the left side this rule is filed under.
+func min_d(a: float, b: float) => float {
+    return math_min(a, b)
+}
+
+/// `min(a, b)` at `f32`: what `math:min_f` means, and the left side this rule is filed under.
+func min_f(a: f32, b: f32) => f32 {
+    return math_min(a, b)
+}
+
+/// `min(a, b)` at `bf16`: what `math:min_bf` means, and the left side this rule is filed under.
+func min_bf(a: bf16, b: bf16) => bf16 {
+    return math_min(a, b)
+}
+
+/// `min(a, b)` at `f16`: what `math:min_f6` means, and the left side this rule is filed under.
+func min_f6(a: f16, b: f16) => f16 {
+    return math_min(a, b)
+}
+
+/// `d(min(a, b)) = da` where `a <= b`, and `db` where it is not: the mirror of `jvp_max_d`, with
+/// the array width's `extremumVjp` for `minimum` (`le(lhs, rhs)`, a tie to the left operand).
+export rule jvp_min_d(a: float, b: float) { min_d(a, b) => func (da: float, db: float) {
+    if a <= b then da else db
+} }
+
+/// `d(min(a, b)) = da` where `a <= b`, and `db` where it is not: the mirror of `jvp_max_f`, with
+/// the array width's `extremumVjp` for `minimum` (`le(lhs, rhs)`, a tie to the left operand).
+export rule jvp_min_f(a: f32, b: f32) { min_f(a, b) => func (da: f32, db: f32) {
+    if a <= b then da else db
+} }
+
+/// `d(min(a, b)) = da` where `a <= b`, and `db` where it is not: the mirror of `jvp_max_bf`, with
+/// the array width's `extremumVjp` for `minimum` (`le(lhs, rhs)`, a tie to the left operand).
+export rule jvp_min_bf(a: bf16, b: bf16) { min_bf(a, b) => func (da: bf16, db: bf16) {
+    if a <= b then da else db
+} }
+
+/// `d(min(a, b)) = da` where `a <= b`, and `db` where it is not: the mirror of `jvp_max_f6`, with
+/// the array width's `extremumVjp` for `minimum` (`le(lhs, rhs)`, a tie to the left operand).
+export rule jvp_min_f6(a: f16, b: f16) { min_f6(a, b) => func (da: f16, db: f16) {
+    if a <= b then da else db
+} }
 
 /// `erf(x)` in the double width: what `math:erf_d` means, and the left side this rule is filed under.
 /// @example erf_d(0.0)    // 0.0
