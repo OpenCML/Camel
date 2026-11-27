@@ -27,11 +27,12 @@ using camel::passes::test::blankNode;
 #include <algorithm>
 #include <chrono>
 #include <format>
+#include <iostream>
 #include <map>
-#include <unordered_map>
 #include <ostream>
 #include <stdexcept>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 namespace {
@@ -503,6 +504,7 @@ FactSeedTestPass::apply(const camel::runtime::Program *program, std::ostream &os
             });
         }
         for (const auto &[key, n] : counted) {
+            std::cerr << "SEEDED-DIAG " << key << " " << n << "\n";
             perKind[key] = n;
         }
     }
