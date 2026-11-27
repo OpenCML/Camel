@@ -39,6 +39,7 @@
       "src/kernel/runtime/writings_match.cpp",
       "src/stdlib/graph/txn.cpp",
       "src/stdlib/std/cxx/opt/inline/engine.cpp",
+      "src/stdlib/std/macro/rewrite.cpp",
       "src/stdlib/test/block_body.cpp",
       "src/stdlib/test/commit_checks.cpp",
       "src/stdlib/test/edit_record.cpp",
