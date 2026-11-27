@@ -706,7 +706,14 @@ export function apply(ctx, rawConfig) {
             }
         }
     }
-    ctx.effect(() => ctx.timer.interval(checkBlocking, 60_000))
+    // Same rule as the beat below: a check that throws is logged, never left to stop the host.
+    ctx.effect(() => ctx.timer.interval(() => {
+        try {
+            checkBlocking()
+        } catch (error) {
+            ctx.logger && ctx.logger.warn(`camel-oversight: the blocking check failed: ${error && error.message}`)
+        }
+    }, 60_000))
 
     const beat = async () => {
         if (beating || !config.repo) return
@@ -779,6 +786,12 @@ export function apply(ctx, rawConfig) {
             await loadRules()
             await refreshRules(now)
             emit({ kind: 'beat', at: now, alerts: [...alerts.keys()] })
+        } catch (error) {
+            // A beat that throws is one missed reading, not the host's end: an error left to escape
+            // becomes an unhandled rejection, and the host process stops with every session in it.
+            // The common one is a beat still awaiting git when the plugin's context is disposed (a
+            // reload, a failed start of another bundle): the services it then asks for are gone.
+            ctx.logger && ctx.logger.warn(`camel-oversight: a beat failed: ${error && error.message}`)
         } finally {
             beating = false
         }
