@@ -61,3 +61,10 @@
 - 影响：`task-205`（C1→C2）的程序面 `c2.by_program` 因此红；命令行侧 PASS 且与 `8ce4bd4e4e` 金标逐字节相同
 - 未试的一条线索：文档 `:58` 说"与 `!! fail` 是同一种结构" ⇒ **前缀 `!!`** 可能是真正的拆包形态（T5 `let x = !!one()`）；若成立则本缺口是文档措辞问题（文档归协调者改），否则按语法缺口立卡
 - 处置：`task-205` 四笔**不进合并队列**（带红进去就是新红），等这条定论
+
+### J. 后缀 `!` 拆 `T!` —— **撤回：不是缺口，是底旧了**（决策者 `D-1128-2` 裁定，2026-11-28 01:5x）
+- 决策者：后缀 `!` 是设计支持的语法、文档不改；`lane/bang-suffix` 23:45 已合入 integration（`4f8db392c`；解析 `7e9b30d70`、降级 `e3adf1b46`、文档 `f258e756d`），用例 `test/cases/parse/syntax/postfix_bang.cml`、`test/cases/consistency/unwrap/take_postfix.cml`
+- `task-205` 那棵树的底（`8ce4bd4e4e`）早于 23:45 ⇒ 树里没有该语法；`!!` 不是拆包符（文档里 `!! fail` 是另一处用法）
+- 因此本轮读数（`one()!` 报 `operator '!' is not defined`、`!!one()` 报 `Unexpected '!!'`）**不是缺陷**
+- **教训（要进 skill）**：报"语法/特性不支持"之前，先 `git merge-base --is-ancestor <那次合入的提交> HEAD` 核自己的底；底旧时所有"实现不认"的读数都不成立
+- 后续：换底后重跑最小探针与 `c2.by_program`；若仍报同一句，才是缺陷
