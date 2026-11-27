@@ -50,7 +50,7 @@
 - `--max-recursion-depth <n>`：可同时处于打开状态且不是尾调用的调用数上限（1 到 1000000；见“资源上限”）。  
 - `--max-macro-depth <n>`：`std::macro` 提前求值一次调用时嵌套调用的上限（默认 64；取值范围相同）。  
 - `--max-macro-rounds <n>`：`std::macro` 提前求值时一个循环至多运行的轮数（默认 1000000，取值 1 到 2^40）；超过则这次求值失败。  
-- `--gc <collector>`：运行时值的回收器：`generational`（默认；分代，年轻对象会被复制）或 `mark-sweep`（对象地址不变）。详见英文版 `docs/cli.md` 的 "The collector" 一节  
+- `--gc kind=<collector>`：运行时值的回收器：`generational`（默认；分代，年轻对象会被复制）或 `mark-sweep`（对象地址不变）。详见英文版 `docs/cli.md` 的 "The collector" 一节  
 - `--spaces block_mb=<megabytes>`：数据块空间的上限（默认 2048 MB，取值 1 到 2^20 MB）；它只防范失控的分配，最后一个持有者消失时块的内存立即归还  
 - `--gc graph_mb=<megabytes>`：图空间比上次回收后多出这么多时要求回收（默认 64）  
 - `--gc nursery_mb=<megabytes>,promotion_age=<n>,large_threshold_kb=<kilobytes>,large_budget_mb=<megabytes>,growth_percent=<n>,heap_limit_mb=<megabytes>`：回收器的尺寸，在堆存在之前读入：初生空间（默认 4 MB）、晋升前存活的次回收次数（默认 4）、多大算大对象（generational 默认 64 KB，mark-sweep 4 KB）、两次回收之间允许的大对象字节（默认 4 MB）、该空间的增长比例（默认 100%）、堆上限（默认无）。每一项做什么见“回收器”一节  
