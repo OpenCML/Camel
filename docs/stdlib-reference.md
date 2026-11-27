@@ -695,9 +695,9 @@ by capture (`lib/std/builtin/operators/struct.cpp`). A caller whose field order 
 component order states the component each field fills as a `with` argument -- the same rule
 `:op/access` follows with `with <at: int>` -- one `int` per field, in the order the fields are
 given, because a position is a compile-time constant of the call and an ordinary parameter
-could not be told apart from a field value that is an `int`. `fill::<(int, int), int,
-int><1, 0>((0, 0), 1, 2)` reads the first value into component 1 and the second into component
-0, which is the value `(2, 1)`; with no `with` argument the fields are the components in order.
+could not be told apart from a field value that is an `int`. `fill::<(int, int)><1, 0>((0, 0),
+1, 2)` reads the first value into component 1 and the second into component 0, which is the
+value `(2, 1)`; with no `with` argument the fields are the components in order.
 
 A program writes a construction as the aggregate itself, `(1, 'a')` or `Point { x: 1 }`, and
 those reach this operator through the language's own rules; the call form is the name a graph
