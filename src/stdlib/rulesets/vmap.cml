@@ -48,7 +48,7 @@ import { argmax, argmin, concat, dim, matmul, max, mean, min, numel, permute, re
 // the rule's left side does not build. The product's rule at the bottom of this file is the one
 // that needs it.
 import tensor
-import { is_float, is_numeric, RowsOf } from types
+import { is_float, is_numeric, is_same, RowsOf } from types
 
 /// A value of type `T` with its batch in front: the type a batched function takes for one value.
 /// @example is_same::<Lift<f32>, f32[]>()    // true

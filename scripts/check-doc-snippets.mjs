@@ -224,38 +224,6 @@ const PENDING_ALL = [
             'reachable from the page; `D-1123-81` sends these sites back to `0 .. n` once it does',
     },
     {
-        file: 'docs/tutorial/08_modules_and_stdlib.cn.md',
-        key: '7c62e03d1c46ada5',
-        reason:
-            'range values: `C-1123-61` (lane `lane/op-overload-merge`) has not landed, so a ' +
-            '`Range` still shares no `map`/`filter`/`reduce`/`len`, and `to_array` is not ' +
-            'reachable from the page; `D-1123-81` sends these sites back to `0 .. n` once it does',
-    },
-    {
-        file: 'docs/tutorial/08_modules_and_stdlib.cn.md',
-        key: 'd212419bb682fccc',
-        reason:
-            'range values: `C-1123-61` (lane `lane/op-overload-merge`) has not landed, so a ' +
-            '`Range` still shares no `map`/`filter`/`reduce`/`len`, and `to_array` is not ' +
-            'reachable from the page; `D-1123-81` sends these sites back to `0 .. n` once it does',
-    },
-    {
-        file: 'docs/tutorial/08_modules_and_stdlib.en.md',
-        key: '7c62e03d1c46ada5',
-        reason:
-            'range values: `C-1123-61` (lane `lane/op-overload-merge`) has not landed, so a ' +
-            '`Range` still shares no `map`/`filter`/`reduce`/`len`, and `to_array` is not ' +
-            'reachable from the page; `D-1123-81` sends these sites back to `0 .. n` once it does',
-    },
-    {
-        file: 'docs/tutorial/08_modules_and_stdlib.en.md',
-        key: 'd212419bb682fccc',
-        reason:
-            'range values: `C-1123-61` (lane `lane/op-overload-merge`) has not landed, so a ' +
-            '`Range` still shares no `map`/`filter`/`reduce`/`len`, and `to_array` is not ' +
-            'reachable from the page; `D-1123-81` sends these sites back to `0 .. n` once it does',
-    },
-    {
         file: 'docs/tutorial/tutorial.cn.md',
         key: '49e18a2d16879dcb',
         reason:
