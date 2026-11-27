@@ -72,20 +72,21 @@ The pass driver (`applyPassesDetailed`, `kernel/execute/pass.cpp`) checks
 each scheduler, so it holds for every scheduling pass, present and future.
 
 The result goes out through the output of the command line (`-o` / `--output <file>`, standard
-output by default). Every scheduling pass already hands the entry result to
-`Context::captureProcessExitCode`; the context passes it on to a handler when one is set, and
-the driver always sets one (`writeEntryResultTo(ctx, path)`, `path` empty for standard output):
+output by default). The value `main` returns is an ordinary function's value, not a result of the
+program (design principles 9.8): what the run does with it depends on what it is.
 
 | `main` returns | standard output (no `-o`) | `-o file` |
 |---|---|---|
 | nothing | nothing | `EntryResultNotWritten` |
-| an exit code (`int`, `bool`, `byte`) | nothing: it is the exit code | the literal, as text |
+| a status-like value (`int`, `int64`, `bool`, `byte`) | nothing: the value is the function's own, and it is not the exit code | the literal, as text |
 | any other value | its `println` form, one line | the layout the loaders read |
 
-The second row is what keeps ordinary programs unchanged: a `main` that returns its status
-prints nothing new. The file layout is the one the loaders read (`registerEntryResultSaver` for
-module-defined types: the tensor module writes `.npy`), so a result can be given back as an
-argument. On standard output there is no refusal: every value has a `println` form.
+The second row is what keeps ordinary programs unchanged: a `main` that returns its status prints
+nothing new. The exit code is only what `process::exit(code)` gives, so a program that needs one
+calls it; the returned value is written to the file and nowhere else. The file layout is the one the
+loaders read (`registerEntryResultSaver` for module-defined types: the tensor module writes `.npy`),
+so a result can be given back as an argument. On standard output there is no refusal: every value
+has a `println` form.
 
 ## 3. Passes of modules the program does not import
 

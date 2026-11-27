@@ -61,7 +61,7 @@ camel examples/text/word_frequency.cml
 | 文件 | 展示的内容 | 运行命令 |
 |------|------|------|
 | [`temperature.cml`](cli/temperature.cml) | `main` 的参数就是程序的输入，由 `--arg name=value` 给出；单位用 `trim` 和 `to_upper` 规范化 | `camel examples/cli/temperature.cml --arg value=21.5 --arg unit=C --arg steps=3` |
-| [`exit_status.cml`](cli/exit_status.cml) | `main` 返回的 `int` 是进程退出码；`exit(n)` 立即结束程序 | `camel examples/cli/exit_status.cml --arg used=91 --arg limit=80`<br>`camel examples/cli/exit_status.cml --arg used=40 --arg limit=80` |
+| [`exit_status.cml`](cli/exit_status.cml) | `exit(n)` 设置进程退出码并立即结束程序；`main` 的返回值是函数自己的值（原则 9.8） | `camel examples/cli/exit_status.cml --arg used=91 --arg limit=80`<br>`camel examples/cli/exit_status.cml --arg used=40 --arg limit=80` |
 
 ### 并行执行: `parallel/`
 

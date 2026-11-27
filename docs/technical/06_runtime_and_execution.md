@@ -453,8 +453,10 @@ located diagnostic.
 
 #### 4.4.4 How a program ends
 
-- `main` returns: the scheduler hands the value to `Context::captureProcessExitCode`, the pass
-  driver sees the pipeline consumed, and the command line returns from `main` with the code.
+- `main` returns: the scheduler hands the value to the context's entry-result channel, the pass
+  driver sees the pipeline consumed, and the value is written only where asked (`-o`, or nowhere on
+  standard output for a status-like value). The command line returns 0 unless `exit(n)` gave a code
+  (design principles 9.8: the value `main` returns is not the exit code).
 - A fault: the `Diagnostic` unwinds the scheduler (frames released, running tasks joined), the
   pass driver records the failure, the command line prints the diagnostics after the program's
   output on standard output and returns 1 from `main`.

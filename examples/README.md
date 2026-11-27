@@ -75,7 +75,7 @@ signatures and examples in the [standard library reference](../docs/stdlib-refer
 | File | What it shows | Run |
 |------|------|------|
 | [`temperature.cml`](cli/temperature.cml) | The parameters of `main` are the program's inputs and come from `--arg name=value`; the unit is normalised with `trim` and `to_upper` | `camel examples/cli/temperature.cml --arg value=21.5 --arg unit=C --arg steps=3` |
-| [`exit_status.cml`](cli/exit_status.cml) | The `int` returned by `main` is the exit code; `exit(n)` ends the program at once | `camel examples/cli/exit_status.cml --arg used=91 --arg limit=80`<br>`camel examples/cli/exit_status.cml --arg used=40 --arg limit=80` |
+| [`exit_status.cml`](cli/exit_status.cml) | `exit(n)` sets the process exit code and ends the program at once; the value `main` returns is its own (design principles 9.8) | `camel examples/cli/exit_status.cml --arg used=91 --arg limit=80`<br>`camel examples/cli/exit_status.cml --arg used=40 --arg limit=80` |
 
 ### Parallel execution: `parallel/`
 

@@ -61,7 +61,7 @@
 1. `framePool_.acquire(graph)` 得到 **rootFrame**；
 2. `call(graph, rootFrame)`；
 3. `call` 内部负责释放 **rootFrame**（及尾调路径上可能涉及的 **curr / twin**）；
-4. 将返回值交给 `context_->captureProcessExitCode`。
+4. 把入口图的返回值交给 context 的入口结果通道（`setEntryResultHandler` 登记的那个写出器）；退出码不取自这个返回值（原则 9.8）。
 
 ### 3.2 `call` 的状态变量
 
