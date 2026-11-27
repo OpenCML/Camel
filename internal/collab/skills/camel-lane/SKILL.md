@@ -90,6 +90,13 @@ Camel 的两个实数类型**按编译器解析的名字写，不按读者以为
   不要凭"我记得 C++ 里怎么叫"来写。名字错时编译器说的是"未解析的名字"，不是"这个类型不存在" —— 别被那句话带偏。
 ```
 
+**调一个成员之前先看它是字段还是方法**：`DraftNodeHeader::dataType` 是**字段**（写 `->dataType`），写成 `->dataType()` 编译器报的是 `called object type 'Type *' is not a function` —— 这句话看着像类型不匹配，实际是"你把字段当函数调了"。同理 `camel::core::type::tree::arity` 要 `#include "camel/core/type/tree.h"`，且会被同作用域同名局部 `arity` 遮蔽。
+
+```
+⇒ 2026-11-28 jvp 值投影为此白跑 4 轮构建（每轮 Release 增量 ~2 分钟）
+ 判据：写 `.h` 里出现过的成员之前，先 `git grep -n 'dataType\|arity' -- <该头文件>` 看那一行的形状是 `Type *dataType;` 还是 `Type *dataType() const;`。
+```
+
 ## 2¾½. 库里的 `@example` 是**一行一条**、各自独立（付过三次代价）
 
 `src/stdlib/**/*.cml` 的 `/// @example` 行由 `scripts/check-doc-snippets.mjs --source-examples` 编译。两条实测规则：
