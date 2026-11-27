@@ -162,6 +162,40 @@ a text that is not a number), so it is part of the value and the type makes you 
 being wrong (an index that is miscounted, recursion with no way out), so it stops with a position and you go and fix
 it.
 
+### Turning an error into a fault: `x!`
+
+An error value is there to be handled; but in some places a failure leaves no other road -- reading training data,
+parsing a configuration file. What is wanted there is not a substitute value but "stop right here". The postfix `!`
+does that:
+
+[`examples/07_take.cml`](examples/07_take.cml):
+
+```cml
+// The take `x!`: here the value must be there, and a failed value ends the program at the `!`.
+// Run: camel docs/tutorial/examples/07_take.cml
+
+func main() => int sync {
+    let n = parse_int('40')!
+    println(n + 2)
+    return 0
+}
+```
+
+```text
+42
+```
+
+Change that line to `println(parse_int('x')!)` and the program stops there: the report points at the `!`
+(`07_take.cml:7:27`), the kind and the message of the fault are that error's own (`'x' is not an integer`), and
+beside it there is a line `note: the error was made here: <parse_int>` -- `parse_int` is a built-in operator, so the
+place it records is its own name, not a line of a file. The place travels as text, and nothing tries to guess which
+file it means.
+
+`x!` is the inverse of `attempt`: `attempt` turns a fault into an error value, `x!` turns an error value into a
+fault, keeping both kind and message. When `x` is a `T?`, null becomes the fault `NullValue`. It is a postfix that
+directly follows, at the same precedence as `.` and `[ ]`, so `read(p)!.rows` takes the value out and then reads the
+field.
+
 ## On the graph
 
 - On the graph `int`, `int?` and `int!` are **the same kind of value**: the "may be `null`, may carry an error" is one

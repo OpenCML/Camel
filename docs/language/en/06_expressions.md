@@ -126,13 +126,14 @@ total = 35
 
 ## 6.6 Operators for null and errors
 
-For `T?` and `T!` see [3.4](03_data_model.md#34-may-be-null-t-and-may-fail-t). On the graph each of the three operators below is a branch whose condition is a one-bit tag on the value.
+For `T?` and `T!` see [3.4](03_data_model.md#34-may-be-null-t-and-may-fail-t). On the graph each of the four operators below is a branch whose condition is a one-bit tag on the value.
 
 | Form | Left side | Right side | Result |
 |---|---|---|---|
 | `a ?? b` | `T?` | `T` | `b` when `a` is null, otherwise the value inside `a` |
 | `a !! b` | `T!` | `T` | `b` when `a` is an error, otherwise the value inside `a` |
 | `x -> f` | `T?` or `T!` | A function that does not accept the `T?` / `T!` itself | A null `x` gives null and an error is passed on unchanged, otherwise `f` is called with the value; the result is `U?` or `U!` (`f` may return either `U` or a value already of that form) |
+| `x!` | `T?` or `T!` | none | The value taken out; null and an error both become a fault (see below) |
 
 ```cml
 func half(x: int) => int! {
@@ -157,6 +158,21 @@ func main() => int sync {
 - **The right-hand side may be nullable.** In `a ?? b`, when `b` is a `T` the result is a `T`; when `b` is a `T?` the result is a `T?`. So `a ?? b ?? 9` tries `a`, then `b`, then gives the default, and the result is the same however it is parenthesized. Likewise `!!` (when `b` is a `T!` the result is a `T!`). On the graph each `??` is still one branch. A right-hand side `[]` takes the element type of the left-hand side.
 - **`->` asks the overloads of `f` first, with the value as it is.** `f` is looked for among the functions of that name by the type of `x` itself (`T?` or `T!`), their `when` conditions included: one that takes it (a parameter of type `T?`, or a generic `T` its condition allows to be a `T?`) is called with `x` whole. Only when none does, the call takes `x` apart: a null `x` gives null, a failed `x` gives its error as it is, and anything else calls `f` with the value inside. The other arguments of the call belong to the call that is taken and are evaluated only then. A value that is tagged twice (`T?!`) is taken apart one tag at a time, the same way.
 - The right side of `??` and `!!` extends to the end of the expression: `x ?? 0 + 1` is `x ?? (0 + 1)`. To take the value first and then compute, add parentheses: `(x ?? 0) + 1`.
+- **`x!` says "here it must succeed"**: when `x` is a `T!`, a value is handed out as it is, and an error becomes a fault unchanged -- the kind and the message are the error's own, the report stands at the `!`, and it says beside it where the error was made; when `x` is a `T?`, null becomes the fault `NullValue`. So a place where a failure leaves no other road -- reading training data, parsing a configuration -- needs no invented kind and message and no `!! fail`:
+
+```cml
+func main() => int sync {
+    let n = parse_int('40')!
+    println(n + 2)
+    return 0
+}
+```
+
+```text
+42
+```
+
+  `parse_int('x')!` ends the program there instead: the report points at the `!`, and the kind and message of the fault are that error's own. It is the inverse of `attempt` (`attempt` turns a fault into an error value, `x!` turns an error value into a fault, keeping kind and message). It is a postfix that must directly follow, at the same precedence as `.` and `[ ]`, so `read(p)!.rows` takes the value out and then reads the field, and `x!=y` matches the longest form, `x != y`. A `T!` in a type says "may fail"; an `x!` in an expression says "here it must succeed".
 - A left side that is not of the required form (`!!` on a `T?`, `??` on a `T!`), or a right side of the wrong type, is `SemanticDiag::TaggedOperandMismatch`. `??` on a value that cannot be null (a plain `int`, or a name an `if` already narrowed to a `T`) is allowed: its null arm is never taken and the result is the value itself; the compiler warns (`SemanticDiag::KnownNotNull`, design principles 3.8).
 
 ## 6.7 Other operators
@@ -238,7 +254,7 @@ false
 
 `as` never changes the type of a value unchecked. The result of `json::decode` is a `Json`, which does not convert to another type with `as`; JSON of a known shape is decoded with `json::decode_as::<int[]>(s)`, which checks the shape while decoding and gives a `T!`.
 
-Conversions between numbers use functions such as `float(x)` ([3.2](03_data_model.md#32-numbers)). `is` is not a keyword: the `is` of `e is T` is an ordinary name, and writing it is a syntax error (there is no type information at run time). A postfix `!` is not a form of the language: the `!` of `T!` belongs to the type, and the value of a `T?` is taken out with `x ?? default`, so `x!` is an ordinary syntax error (at the `!`).
+Conversions between numbers use functions such as `float(x)` ([3.2](03_data_model.md#32-numbers)). `is` is not a keyword: the `is` of `e is T` is an ordinary name, and writing it is a syntax error (there is no type information at run time). A postfix `x!` takes the value out ([6.6](#66-operators-for-null-and-errors)): it does not belong to a type, and the `!` of `T!` and the `!` of an expression are two things in two places, the first saying "may fail" and the second "here it must succeed".
 
 ## 6.8 `if` and `match`
 
@@ -795,6 +811,6 @@ From lowest to highest:
 | 10 | `as` | |
 | 10a | Unary `-` `!` `~` | Looser than `->` and `^`: `!xs->is_empty()` is `!(xs->is_empty())`, `-a->f` is `-(a->f)`, `-a ^ 2` is `-(a ^ 2)`; a literal and a name read alike (`-1->abs` is `-(1->abs)`; to negate first write `(-1)->abs`) |
 | 11 | `->` | Left-associative |
-| 13 | Postfix: `.field`, `[subscript]`, `(arguments)`, `<with arguments>` | Must directly follow |
+| 13 | Postfix: `.field`, `[subscript]`, `(arguments)`, `<with arguments>`, `!` | Must directly follow; `!` takes the value out, and `x!=y` matches the longest form, `x != y` |
 
 `if` and `match` can appear wherever an expression is required; their arms extend to the end of the expression, so add parentheses when they are embedded in a larger expression.

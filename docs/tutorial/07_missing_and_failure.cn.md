@@ -155,6 +155,37 @@ help: Ensure the index is within the valid range of the collection.
 **为什么要分两种**：错误值是程序要处理的正常情况（一个键不在、一段文本不是数），所以它是值的一部分，
 类型逼着你看它；故障是程序写错了（下标算错、递归没有出口），所以它带着位置停下来，让你去修。
 
+### 把错误变成故障：`x!`
+
+错误值是要处理的；但有的地方失败了没有别的路可走——读训练数据、解析配置文件。那里要的不是一个替代值，
+而是"就在这里停下"。后缀 `!` 做这件事：
+
+[`examples/07_take.cml`](examples/07_take.cml)：
+
+```cml
+// The take `x!`: here the value must be there, and a failed value ends the program at the `!`.
+// Run: camel docs/tutorial/examples/07_take.cml
+
+func main() => int sync {
+    let n = parse_int('40')!
+    println(n + 2)
+    return 0
+}
+```
+
+```text
+42
+```
+
+把那一行换成 `println(parse_int('x')!)`，程序就在这里停下：报告指向 `!`（`07_take.cml:7:27`），
+故障的种类与消息是那个错误自己的（`'x' is not an integer`），旁边还有一句
+`note: the error was made here: <parse_int>`——`parse_int` 是内建算子，它记的发生处是它自己的名字，
+不是文件里的一行。位置当文本带着，不去猜它是哪个文件。
+
+`x!` 与 `attempt` 互逆：`attempt` 把故障变成错误值，`x!` 把错误值变成故障，种类与消息都原样保留。
+`x` 是 `T?` 时，`null` 变成故障 `NullValue`。后缀、紧贴，与 `.`、`[ ]` 同一优先级，所以 `read(p)!.rows`
+是先取值再取字段。
+
 ## 在图上
 
 - 在图上，`int`、`int?`、`int!` **是同一种值**：那个"可能是 `null`、可能带着错误"是一位标记，附着在值上。
