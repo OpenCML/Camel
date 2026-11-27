@@ -1,140 +1,147 @@
-# 遍声明 → `#op` 映射表
+# 遍声明 → `#op`：哪些需要显式写
 
-## 数字（决策者 D-1127-103 的最终口径）
+## 规则（D-1127-112，实现落在 `src/compile/src/gir/builder_modules.cpp:456`）
 
-**79 = 4 已有 `#op` + 65 要补 + 9 组合遍（有体，不补）+ 1 助手（`fold_rounds`，不补）**
+一条无体声明的算子 URI：**写了 `#op` 就用它；没写就是 `'<模块>:<声明名>'`**，命名空间里的声明名带命名空间（`std:cxx::cse`）。
 
-- 4 已有：`rewrite:rewrite`、`rewrite:saturate`、`rewrite:extract`（`src/stdlib/rewrite.cml:108/123/133`）、`attempt`（`src/stdlib/prelude.cml:1387` `#op(':mark/attempt')`）。
-- 65 要补：`std.cml` 58 + `tiles.cml` 3 + `tensor.cml` 1 + `transforms.cml` 1 + `graph.cml` 1 + `onnx.cml` 1。
-- 9 组合遍：`opt` 5（cse / dead_values / dce / fold / saturate）+ `rules` 4（simplify / saturate_all / accuracy / fusion）。
-- 1 助手：`opt.cml:320 fold_rounds::<F>(f: F, budget: int) => F!`（两个参数，不是遍形状）。
+- ⇒ **名字与内核 URI 一致的，一个 `#op` 都不用写**；C1 第 2 步按 URI 登记内核之后自然解析对。
+- ⇒ **同名声明不需要写 `#op`**；只有内核在别处的才需要写。
+- 命名空间算进声明名：`std.cml` 里 `namespace cxx { export func opt::<F>(f: F) => F! }` 的声明名是 `cxx::opt`，
+  默认 URI 就是 `std:cxx::opt`，与该内核的登记名一致。
 
-**决策者的一句裁定（据此定稿）：有函数体的组合遍是普通函数，不补 `#op`；`opt::saturate` 也不指引擎 —— 有体就是函数，指向引擎等于改了它的意思。**
-（我上一轮转的 `opt::saturate → #op('std::cxx::saturate')` 候选**撤销**，表里不留。）
+## 三个计数（主表 65 行）
 
-## 先例清点结论（两个尖端逐条核过）
+- 主表行数：**65**
+- 取值分布：**不写 65 / 写 0 / 待定 0**
+- **“写”的名单：空。** 65 行的 `PassKernel` 登记路径与 `'<模块>:<声明名>'` 逐行比对，全部相等 ⇒ 一条都不用写。
 
-- `origin/integration` 与 `c1-measure @ 3d7928a388` 上的 `#op(` 都是 **456 条**；逐笔核过 `c1-measure` 的 9 笔提交：**新增 0 条**。
-- 456 条**全是单冒号** `module:name`（`array:dim`、`rewrite:rewrite`、`onnx:export_model`、`tensor:sum_axis`…）；**双冒号零先例**；**`std:` 族零先例**（核心算子走 `:op/add_l`、`:mark/map_arr` 这类 `:` 前缀内建族）。
-- 通配先例：`#op('tensor:load_npy_*')`、`#op('tensor:from_bytes_*')`（`src/stdlib/tensor/signatures/tensor.cml:431/448`）。
-- ⇒ **模块族照先例直接写 `#op('module:name')`；只有 std 族 58 条必须实测**（双冒号零先例，`std:` 族零先例）。
+## 主表（65 行；全表结论：默认即正确，无需显式 `#op`）
 
-## 判据（下一个人照这个复核）
+| 文件 | 行 | 声明（命名空间限定） | 默认算子 URI | 内核登记路径 | 要不要显式 `#op` | 备注 |
+|---|---|---|---|---|---|---|
+| src/stdlib/graph.cml | 526 | probe_handle | `graph:probe_handle` | `graph:probe_handle` | **不写** | 默认即 `graph:probe_handle` |
+| src/stdlib/onnx.cml | 68 | export_model | `onnx:export_model` | `onnx:export_model` | **不写** | 默认即 `onnx:export_model` |
+| src/stdlib/std.cml | 21 | nop | `std:nop` | `std:nop` | **不写** | 默认即 `std:nop` |
+| src/stdlib/std.cml | 30 | macro | `std:macro` | `std:macro` | **不写** | 默认即 `std:macro` |
+| src/stdlib/std.cml | 48 | defunctionalize | `std:defunctionalize` | `std:defunctionalize` | **不写** | 默认即 `std:defunctionalize` |
+| src/stdlib/std.cml | 55 | gir | `std:gir` | `std:gir` | **不写** | 默认即 `std:gir` |
+| src/stdlib/std.cml | 58 | rgir | `std:rgir` | `std:rgir` | **不写** | 默认即 `std:rgir` |
+| src/stdlib/std.cml | 62 | gir_regions | `std:gir_regions` | `std:gir_regions` | **不写** | 默认即 `std:gir_regions` |
+| src/stdlib/std.cml | 66 | rgir_regions | `std:rgir_regions` | `std:rgir_regions` | **不写** | 默认即 `std:rgir_regions` |
+| src/stdlib/std.cml | 77 | jgir | `std:jgir` | `std:jgir` | **不写** | 默认即 `std:jgir` |
+| src/stdlib/std.cml | 83 | cml | `std:cml` | `std:cml` | **不写** | 默认即 `std:cml` |
+| src/stdlib/std.cml | 86 | agir | `std:agir` | `std:agir` | **不写** | 默认即 `std:agir` |
+| src/stdlib/std.cml | 89 | argir | `std:argir` | `std:argir` | **不写** | 默认即 `std:argir` |
+| src/stdlib/std.cml | 92 | stats | `std:stats` | `std:stats` | **不写** | 默认即 `std:stats` |
+| src/stdlib/std.cml | 112 | rulesets | `std:rulesets` | `std:rulesets` | **不写** | 默认即 `std:rulesets` |
+| src/stdlib/std.cml | 142 | profile | `std:profile` | `std:profile` | **不写** | 默认即 `std:profile` |
+| src/stdlib/std.cml | 145 | cpp | `std:cpp` | `std:cpp` | **不写** | 默认即 `std:cpp` |
+| src/stdlib/std.cml | 148 | topo_node_seq | `std:topo_node_seq` | `std:topo_node_seq` | **不写** | 默认即 `std:topo_node_seq` |
+| src/stdlib/std.cml | 151 | tfdump | `std:tfdump` | `std:tfdump` | **不写** | 默认即 `std:tfdump` |
+| src/stdlib/std.cml | 154 | arraytype | `std:arraytype` | `std:arraytype` | **不写** | 默认即 `std:arraytype` |
+| src/stdlib/std.cml | 157 | identitytype | `std:identitytype` | `std:identitytype` | **不写** | 默认即 `std:identitytype` |
+| src/stdlib/std.cml | 161 | cpp::module_file | `std:cpp::module_file` | `std:cpp::module_file` | **不写** | 默认即 `std:cpp::module_file` |
+| src/stdlib/std.cml | 164 | cpp::inspect | `std:cpp::inspect` | `std:cpp::inspect` | **不写** | 默认即 `std:cpp::inspect` |
+| src/stdlib/std.cml | 173 | gc::snapshot | `std:gc::snapshot` | `std:gc::snapshot` | **不写** | 默认即 `std:gc::snapshot` |
+| src/stdlib/std.cml | 176 | gc::verify | `std:gc::verify` | `std:gc::verify` | **不写** | 默认即 `std:gc::verify` |
+| src/stdlib/std.cml | 179 | gc::minor | `std:gc::minor` | `std:gc::minor` | **不写** | 默认即 `std:gc::minor` |
+| src/stdlib/std.cml | 182 | gc::major | `std:gc::major` | `std:gc::major` | **不写** | 默认即 `std:gc::major` |
+| src/stdlib/std.cml | 185 | gc::config | `std:gc::config` | `std:gc::config` | **不写** | 默认即 `std:gc::config` |
+| src/stdlib/std.cml | 188 | gc::summary | `std:gc::summary` | `std:gc::summary` | **不写** | 默认即 `std:gc::summary` |
+| src/stdlib/std.cml | 191 | gc::blocks | `std:gc::blocks` | `std:gc::blocks` | **不写** | 默认即 `std:gc::blocks` |
+| src/stdlib/std.cml | 194 | gc::views | `std:gc::views` | `std:gc::views` | **不写** | 默认即 `std:gc::views` |
+| src/stdlib/std.cml | 197 | gc::views_escape | `std:gc::views_escape` | `std:gc::views_escape` | **不写** | 默认即 `std:gc::views_escape` |
+| src/stdlib/std.cml | 200 | gc::remembered_set | `std:gc::remembered_set` | `std:gc::remembered_set` | **不写** | 默认即 `std:gc::remembered_set` |
+| src/stdlib/std.cml | 203 | gc::foreign_resource | `std:gc::foreign_resource` | `std:gc::foreign_resource` | **不写** | 默认即 `std:gc::foreign_resource` |
+| src/stdlib/std.cml | 206 | gc::poison | `std:gc::poison` | `std:gc::poison` | **不写** | 默认即 `std:gc::poison` |
+| src/stdlib/std.cml | 212 | gc::tuple_members | `std:gc::tuple_members` | `std:gc::tuple_members` | **不写** | 默认即 `std:gc::tuple_members` |
+| src/stdlib/std.cml | 213 | gc::tuple_members_agree | `std:gc::tuple_members_agree` | `std:gc::tuple_members_agree` | **不写** | 默认即 `std:gc::tuple_members_agree` |
+| src/stdlib/std.cml | 221 | nvm | `std:nvm` | `std:nvm` | **不写** | 默认即 `std:nvm` |
+| src/stdlib/std.cml | 233 | fvm | `std:fvm` | `std:fvm` | **不写** | 默认即 `std:fvm` |
+| src/stdlib/std.cml | 237 | fastvm::bytecode | `std:fastvm::bytecode` | `std:fastvm::bytecode` | **不写** | 默认即 `std:fastvm::bytecode` |
+| src/stdlib/std.cml | 240 | fastvm::linked_bytecode | `std:fastvm::linked_bytecode` | `std:fastvm::linked_bytecode` | **不写** | 默认即 `std:fastvm::linked_bytecode` |
+| src/stdlib/std.cml | 252 | fastvm::jit | `std:fastvm::jit` | `std:fastvm::jit` | **不写** | 默认即 `std:fastvm::jit` |
+| src/stdlib/std.cml | 255 | fastvm::jit_asm | `std:fastvm::jit_asm` | `std:fastvm::jit_asm` | **不写** | 默认即 `std:fastvm::jit_asm` |
+| src/stdlib/std.cml | 258 | fastvm::jit_bin | `std:fastvm::jit_bin` | `std:fastvm::jit_bin` | **不写** | 默认即 `std:fastvm::jit_bin` |
+| src/stdlib/std.cml | 261 | fastvm::jit_rmir | `std:fastvm::jit_rmir` | `std:fastvm::jit_rmir` | **不写** | 默认即 `std:fastvm::jit_rmir` |
+| src/stdlib/std.cml | 264 | fastvm::jit_mir | `std:fastvm::jit_mir` | `std:fastvm::jit_mir` | **不写** | 默认即 `std:fastvm::jit_mir` |
+| src/stdlib/std.cml | 296 | taskflow | `std:taskflow` | `std:taskflow` | **不写** | 默认即 `std:taskflow` |
+| src/stdlib/std.cml | 341 | cxx::opt | `std:cxx::opt` | `std:cxx::opt` | **不写** | 默认即 `std:cxx::opt` |
+| src/stdlib/std.cml | 347 | cxx::inline | `std:cxx::inline` | `std:cxx::inline` | **不写** | 默认即 `std:cxx::inline` |
+| src/stdlib/std.cml | 351 | cxx::small | `std:cxx::small` | `std:cxx::small` | **不写** | 默认即 `std:cxx::small` |
+| src/stdlib/std.cml | 355 | cxx::arm | `std:cxx::arm` | `std:cxx::arm` | **不写** | 默认即 `std:cxx::arm` |
+| src/stdlib/std.cml | 359 | cxx::hybrid | `std:cxx::hybrid` | `std:cxx::hybrid` | **不写** | 默认即 `std:cxx::hybrid` |
+| src/stdlib/std.cml | 363 | cxx::devirtualize | `std:cxx::devirtualize` | `std:cxx::devirtualize` | **不写** | 默认即 `std:cxx::devirtualize` |
+| src/stdlib/std.cml | 367 | cxx::specialize | `std:cxx::specialize` | `std:cxx::specialize` | **不写** | 默认即 `std:cxx::specialize` |
+| src/stdlib/std.cml | 373 | cxx::fold | `std:cxx::fold` | `std:cxx::fold` | **不写** | 默认即 `std:cxx::fold` |
+| src/stdlib/std.cml | 385 | cxx::algebra | `std:cxx::algebra` | `std:cxx::algebra` | **不写** | 默认即 `std:cxx::algebra` |
+| src/stdlib/std.cml | 399 | cxx::saturate | `std:cxx::saturate` | `std:cxx::saturate` | **不写** | 默认即 `std:cxx::saturate` |
+| src/stdlib/std.cml | 402 | cxx::cse | `std:cxx::cse` | `std:cxx::cse` | **不写** | 默认即 `std:cxx::cse` |
+| src/stdlib/std.cml | 407 | cxx::dce | `std:cxx::dce` | `std:cxx::dce` | **不写** | 默认即 `std:cxx::dce` |
+| src/stdlib/std.cml | 412 | cxx::order | `std:cxx::order` | `std:cxx::order` | **不写** | 默认即 `std:cxx::order` |
+| src/stdlib/tensor.cml | 400 | fuse | `tensor:fuse` | `tensor:fuse` | **不写** | 默认即 `tensor:fuse` |
+| src/stdlib/tiles.cml | 54 | compile | `tiles:compile` | `tiles:compile` | **不写** | 默认即 `tiles:compile` |
+| src/stdlib/tiles.cml | 64 | census | `tiles:census` | `tiles:census` | **不写** | 默认即 `tiles:census` |
+| src/stdlib/tiles.cml | 74 | test_outline_compiled | `tiles:test_outline_compiled` | `tiles:test_outline_compiled` | **不写** | 默认即 `tiles:test_outline_compiled` |
+| src/stdlib/transforms.cml | 25 | reinterp | `transforms:reinterp` | `transforms:reinterp` | **不写** | 默认即 `transforms:reinterp` |
 
-一条声明“已有 `#op`”的判据：**从声明行往上，跳过 `///` 注释、`with <…>` 行与空行之后，第一个非注释行必须是 `#op('…')`。**“前 10 行内出现过 `#op`”这种粗判会误判。
+## 一处与决策者口径不符，已按证据写、请你判
 
-## 易误判点（别人最容易重犯的一处）
+`D-1127-112` 的要点里提到"已知一例：顶层 `opt` → `#op('std:cxx::opt')`"。本表把它判成**不写**，依据是它在源码里不是顶层：
 
-`src/stdlib/graph.cml:526 export func probe_handle::<F>(f: F) => F!` —— 它上方第 516 行有 `#op('graph:eq')`，但那条属于另一条声明（`operator ==(a: Tag, b: Tag) => bool`）。粗判会把它误算“已有”，按上面的判据它是**缺**的（属 65 要补里的 `graph` 1 条）。
+```
+src/stdlib/std.cml:319   namespace cxx {
+src/stdlib/std.cml:341       export func opt::<F>(f: F) => F! when is_function::<F>()
+src/stdlib/std.cml:413   }                     ← cxx 块在这里闭合，两行之间没有别的顶层声明
+```
+- ⇒ 声明名是 `cxx::opt`，默认 URI `std:cxx::opt`，与该遍内核 `const PassKernel("std::cxx::opt", …)`（`src/stdlib/std/cxx/opt/opt/opt.cpp:44`）相同 ⇒ 按规则不写。
+- 用户写 `std::opt` 仍可用，是因为有**通行名别名**：`declareSpelling("std::opt", "std::cxx::opt")`（`src/kernel/execute/pass.cpp:111`，同组还有 `std::default`→`std::nvm`、`std::tf`→`std::taskflow` 等 10 余条）。
+  **（这一句只在 `c1-measure` 枝上有；`origin/integration` 上没有 `declareSpelling`。引它是为了说明别名从哪来，不要当成现存代码读。）**
+  别名是**给通行名用的**，不是声明缺 `#op` 的证据。
+- 若决策者仍要求显式写，写上 `#op('std:cxx::opt')` 也无害，但与"同名不写"这条规则不一致；本表按规则判**不写**，等你一句话改。
 
-## 第一节：4 条已有 `#op`（勿动）
+## 已有 `#op` 的 4 条（勿动）
 
-| 文件 | 行 | 遍名 | 已有的 `#op` | 为什么它真在（依据） |
+| 文件 | 行 | 声明 | 已有的 `#op` | 为什么它真在 |
 |---|---|---|---|---|
-| src/stdlib/graph.cml | 526 | graph::probe_handle | `#op('graph:probe_handle')` | src/stdlib/graph/probe.cpp:81 |
-| src/stdlib/onnx.cml | 68 | onnx::export_model | `#op('onnx:export_model')` | src/stdlib/onnx/passes/export.cpp:54,831 |
-| src/stdlib/tensor.cml | 400 | tensor::fuse | `#op('tensor:fuse')` | src/stdlib/tensor/passes/fuse.cpp:284 |
-| src/stdlib/tiles.cml | 54 | tiles::compile | `#op('tiles:compile')` | src/stdlib/tiles/src/region_pass.cpp:87 |
-| src/stdlib/tiles.cml | 64 | tiles::census | `#op('tiles:census')` | src/stdlib/tiles/src/census.cpp:97 |
-| src/stdlib/tiles.cml | 74 | tiles::test_outline_compiled | `#op('tiles:test_outline_compiled')` | src/stdlib/tiles/src/region_test_pass.cpp:434 |
-| src/stdlib/transforms.cml | 25 | transforms::reinterp | `#op('transforms:reinterp')` | src/stdlib/transforms/module.cpp:368 |
+| src/stdlib/rewrite.cml | 110 | rewrite | `#op('rewrite:rewrite')`（:108） | 模块函数表 `{"rewrite", rewriteKernel}`（`src/stdlib/rewrite/module.cpp:4717`） |
+| src/stdlib/rewrite.cml | 125 | saturate | `#op('rewrite:saturate')`（:123） | `module.cpp:4722` `{"saturate", saturateKernel}` |
+| src/stdlib/rewrite.cml | 135 | extract | `#op('rewrite:extract')`（:133） | `registerPassKernel("rewrite::extract")`（`module.cpp:1868-1872`） |
+| src/stdlib/prelude.cml | 1388 | attempt | `#op(':mark/attempt')`（:1387） | 内建算子族 `:mark/*` |
 
-| src/stdlib/rewrite.cml | 110 | rewrite::rewrite | `#op('rewrite:rewrite')`（同文件 :108） | 算子由模块函数表回答：`src/stdlib/rewrite/module.cpp:4717` `{"rewrite", rewriteKernel}` |
-| src/stdlib/rewrite.cml | 125 | rewrite::saturate | `#op('rewrite:saturate')`（:123） | `module.cpp:4722` `{"saturate", saturateKernel}` |
-| src/stdlib/rewrite.cml | 135 | rewrite::extract | `#op('rewrite:extract')`（:133） | 另有一条 PassKernel 登记：`registerPassKernel("rewrite::extract")`，`module.cpp:1868-1872` |
-| src/stdlib/prelude.cml | 1388 | attempt | `#op(':mark/attempt')`（:1387） | 内建算子族 `:mark/*`（如 `#op(':mark/map_arr')`、`' :mark/filter_arr')`） |
+## 9 条组合遍 —— 不补（有函数体 ⇒ 是普通函数，不是算子；D-1127-103）
 
-**通用结论：模块函数也照样写 `#op('module:name')`**（`rewrite::rewrite` 就是模型：`#op('rewrite:rewrite')` 由模块函数表回答，不是例外）。
+| 遍名 | 位置 | 函数体里的调用（原文） |
+|---|---|---|
+| opt::cse | src/stdlib/opt.cml:168 | `return if graphs_of(f)->any<graph_has_hit> then merge_hits(f)->cse else f` |
+| opt::dead_values | src/stdlib/opt.cml:220 | `… erased::<F>(d, hits)->dead_values（内部遍，非 export）` |
+| opt::dce | src/stdlib/opt.cml:228 | `return dead_values(f)` |
+| opt::fold | src/stdlib/opt.cml:333 | `return if all_nodes(graphs_of(f))->any<evaluated> then fold_rounds(f, constant_budget) else f` |
+| opt::saturate | src/stdlib/opt.cml:345 | `return f->saturate_rules<concat(algebra, distribution), rounds: rounds, strict: strict>` |
+| rules::simplify | src/stdlib/rules.cml:398 | `return f->rewrite<concat(algebra, accuracy_laws), strict: strict>` |
+| rules::saturate_all | src/stdlib/rules.cml:408 | `return f->saturate<concat(algebra, distribution), rounds: rounds, strict: strict>->extract<nodes>` |
+| rules::accuracy | src/stdlib/rules.cml:414 | `return f->rewrite<accuracy_laws>` |
+| rules::fusion | src/stdlib/rules.cml:421 | `return f->rewrite<fusion_laws>` |
 
-## 第二节：65 条要补 —— 模块族 7 条，可直接替换（单冒号，照 456 条先例）
-| 文件 | 行 | 遍名（声明） | 可直接替换的写法 | 出处 |
-|---|---|---|---|---|
-## 第三节：65 条要补 —— std 族 58 条，**留空等实测**
+注：`opt::cse` 体里的 `cse` 落在 `opt` 模块自己的遍命名空间，**不是** `std::cxx::cse`；两者同名不同物。
 
-两种候选（实测后只留一列；双冒号零先例、`std:` 族零先例，所以这次实验必须做）：
-
-| 文件 | 行 | 遍名（声明） | 候选 A（双冒号，零先例） | 候选 B（单冒号） | 实现路径出处 |
-|---|---|---|---|---|---|
-| src/stdlib/std.cml | 21 | std::nop | `#op('std::nop')` | `#op('std:nop')` | src/stdlib/std/nop/nop.cpp:29 (NopPass::kName) |
-| src/stdlib/std.cml | 30 | std::macro | `#op('std::macro')` | `#op('std:macro')` | src/stdlib/std/macro/macro.cpp:170 |
-| src/stdlib/std.cml | 48 | std::defunctionalize | `#op('std::defunctionalize')` | `#op('std:defunctionalize')` | src/stdlib/std/cxx/opt/defun/defunctionalize.cpp:2021 |
-| src/stdlib/std.cml | 55 | std::gir | `#op('std::gir')` | `#op('std:gir')` | src/stdlib/std/gir/dot/graphviz.cpp:945 |
-| src/stdlib/std.cml | 58 | std::rgir | `#op('std::rgir')` | `#op('std:rgir')` | src/stdlib/std/gir/dot/graphviz.cpp:946 |
-| src/stdlib/std.cml | 62 | std::gir_regions | `#op('std::gir_regions')` | `#op('std:gir_regions')` | src/stdlib/std/gir/dot/graphviz.cpp:947 |
-| src/stdlib/std.cml | 66 | std::rgir_regions | `#op('std::rgir_regions')` | `#op('std:rgir_regions')` | src/stdlib/std/gir/dot/graphviz.cpp:950 |
-| src/stdlib/std.cml | 77 | std::jgir | `#op('std::jgir')` | `#op('std:jgir')` | src/stdlib/std/gir/json/gir.cpp:538 |
-| src/stdlib/std.cml | 83 | std::cml | `#op('std::cml')` | `#op('std:cml')` | src/stdlib/std/cml/cml.cpp:4942 |
-| src/stdlib/std.cml | 86 | std::agir | `#op('std::agir')` | `#op('std:agir')` | src/stdlib/std/gir/dot/graphviz.cpp:953 |
-| src/stdlib/std.cml | 89 | std::argir | `#op('std::argir')` | `#op('std:argir')` | src/stdlib/std/gir/dot/graphviz.cpp:956 |
-| src/stdlib/std.cml | 92 | std::stats | `#op('std::stats')` | `#op('std:stats')` | src/stdlib/std/stats/stats.cpp:165 |
-| src/stdlib/std.cml | 112 | std::rulesets | `#op('std::rulesets')` | `#op('std:rulesets')` | src/stdlib/std/rulesets/rulesets.cpp:179 |
-| src/stdlib/std.cml | 142 | std::profile | `#op('std::profile')` | `#op('std:profile')` | src/stdlib/std/profile/profile.cpp:269 |
-| src/stdlib/std.cml | 145 | std::cpp | `#op('std::cpp')` | `#op('std:cpp')` | src/stdlib/std/cpp/cpp_export.cpp:64 |
-| src/stdlib/std.cml | 148 | std::topo_node_seq | `#op('std::topo_node_seq')` | `#op('std:topo_node_seq')` | src/stdlib/std/tns/topo_node_seq.cpp:238 |
-| src/stdlib/std.cml | 151 | std::tfdump | `#op('std::tfdump')` | `#op('std:tfdump')` | src/stdlib/std/prl/tfdump.cpp:173 |
-| src/stdlib/std.cml | 154 | std::arraytype | `#op('std::arraytype')` | `#op('std:arraytype')` | src/stdlib/std/selftest/selftest_passes.cpp:48 |
-| src/stdlib/std.cml | 157 | std::identitytype | `#op('std::identitytype')` | `#op('std:identitytype')` | src/stdlib/std/selftest/selftest_passes.cpp:49 |
-| src/stdlib/std.cml | 161 | std::module_file | `#op('std::cpp::module_file')` | `#op('std:cpp:module_file')` | src/stdlib/std/cpp/cpp_export.cpp:65 |
-| src/stdlib/std.cml | 164 | std::inspect | `#op('std::cpp::inspect')` | `#op('std:cpp:inspect')` | src/stdlib/std/cpp/cpp_export.cpp:66 |
-| src/stdlib/std.cml | 173 | std::snapshot | `#op('std::gc::snapshot')` | `#op('std:gc:snapshot')` | src/stdlib/std/gc/gc_passes.cpp:259 |
-| src/stdlib/std.cml | 176 | std::verify | `#op('std::gc::verify')` | `#op('std:gc:verify')` | src/stdlib/std/gc/gc_passes.cpp:260 |
-| src/stdlib/std.cml | 179 | std::minor | `#op('std::gc::minor')` | `#op('std:gc:minor')` | src/stdlib/std/gc/gc_passes.cpp:261 |
-| src/stdlib/std.cml | 182 | std::major | `#op('std::gc::major')` | `#op('std:gc:major')` | src/stdlib/std/gc/gc_passes.cpp:262 |
-| src/stdlib/std.cml | 185 | std::config | `#op('std::gc::config')` | `#op('std:gc:config')` | src/stdlib/std/gc/gc_passes.cpp:263 |
-| src/stdlib/std.cml | 188 | std::summary | `#op('std::gc::summary')` | `#op('std:gc:summary')` | src/stdlib/std/gc/gc_passes.cpp:264 |
-| src/stdlib/std.cml | 191 | std::blocks | `#op('std::gc::blocks')` | `#op('std:gc:blocks')` | src/stdlib/std/gc/gc_passes.cpp:265 |
-| src/stdlib/std.cml | 194 | std::views | `#op('std::gc::views')` | `#op('std:gc:views')` | src/stdlib/std/gc/gc_passes.cpp:266 |
-| src/stdlib/std.cml | 197 | std::views_escape | `#op('std::gc::views_escape')` | `#op('std:gc:views_escape')` | src/stdlib/std/gc/gc_passes.cpp:267 |
-| src/stdlib/std.cml | 200 | std::remembered_set | `#op('std::gc::remembered_set')` | `#op('std:gc:remembered_set')` | src/stdlib/std/gc/gc_passes.cpp:268 |
-| src/stdlib/std.cml | 203 | std::foreign_resource | `#op('std::gc::foreign_resource')` | `#op('std:gc:foreign_resource')` | src/stdlib/std/gc/gc_passes.cpp:270 |
-| src/stdlib/std.cml | 206 | std::poison | `#op('std::gc::poison')` | `#op('std:gc:poison')` | src/stdlib/std/gc/gc_passes.cpp:272 |
-| src/stdlib/std.cml | 212 | std::tuple_members | `#op('std::gc::tuple_members')` | `#op('std:gc:tuple_members')` | src/stdlib/std/gc/gc_passes.cpp:273 |
-| src/stdlib/std.cml | 213 | std::tuple_members_agree | `#op('std::gc::tuple_members_agree')` | `#op('std:gc:tuple_members_agree')` | src/stdlib/std/gc/gc_passes.cpp:274 |
-| src/stdlib/std.cml | 221 | std::nvm | `#op('std::nvm')` | `#op('std:nvm')` | src/stdlib/std/nvm/nodevm.cpp:1258 |
-| src/stdlib/std.cml | 233 | std::fvm | `#op('std::fvm')` | `#op('std:fvm')` | src/stdlib/std/fvm/fastvm.cpp:1606 |
-| src/stdlib/std.cml | 237 | std::bytecode | `#op('std::fastvm::bytecode')` | `#op('std:fastvm:bytecode')` | src/stdlib/std/fvm/bcdump.cpp:79 |
-| src/stdlib/std.cml | 240 | std::linked_bytecode | `#op('std::fastvm::linked_bytecode')` | `#op('std:fastvm:linked_bytecode')` | src/stdlib/std/fvm/bcdump.cpp:80 |
-| src/stdlib/std.cml | 252 | std::jit | `#op('std::fastvm::jit')` | `#op('std:fastvm:jit')` | src/stdlib/std/fvm/fastvm.cpp:1614 |
-| src/stdlib/std.cml | 255 | std::jit_asm | `#op('std::fastvm::jit_asm')` | `#op('std:fastvm:jit_asm')` | src/stdlib/std/fvm/jit/dump/asmdump.cpp:110 |
-| src/stdlib/std.cml | 258 | std::jit_bin | `#op('std::fastvm::jit_bin')` | `#op('std:fastvm:jit_bin')` | src/stdlib/std/fvm/jit/dump/bindump.cpp:189 |
-| src/stdlib/std.cml | 261 | std::jit_rmir | `#op('std::fastvm::jit_rmir')` | `#op('std:fastvm:jit_rmir')` | src/stdlib/std/fvm/jit/dump/mirdump.cpp:139 |
-| src/stdlib/std.cml | 264 | std::jit_mir | `#op('std::fastvm::jit_mir')` | `#op('std:fastvm:jit_mir')` | src/stdlib/std/fvm/jit/dump/mirdump.cpp:140 |
-| src/stdlib/std.cml | 296 | std::taskflow | `#op('std::taskflow')` | `#op('std:taskflow')` | src/stdlib/std/prl/taskflow.cpp:3275 |
-| src/stdlib/std.cml | 341 | std::opt | `#op('std::cxx::opt')` | `#op('std:cxx:opt')` | src/stdlib/std/cxx/opt/opt/opt.cpp:44 |
-| src/stdlib/std.cml | 347 | std::inline | `#op('std::cxx::inline')` | `#op('std:cxx:inline')` | src/stdlib/std/cxx/opt/inline/inline.cpp:52 |
-| src/stdlib/std.cml | 351 | std::small | `#op('std::cxx::small')` | `#op('std:cxx:small')` | src/stdlib/std/cxx/opt/inline/inline.cpp:53 |
-| src/stdlib/std.cml | 355 | std::arm | `#op('std::cxx::arm')` | `#op('std:cxx:arm')` | src/stdlib/std/cxx/opt/inline/inline.cpp:56 |
-| src/stdlib/std.cml | 359 | std::hybrid | `#op('std::cxx::hybrid')` | `#op('std:cxx:hybrid')` | src/stdlib/std/cxx/opt/inline/inline.cpp:59 |
-| src/stdlib/std.cml | 363 | std::devirtualize | `#op('std::cxx::devirtualize')` | `#op('std:cxx:devirtualize')` | src/stdlib/std/cxx/opt/devirtualize/devirtualize.cpp:33 |
-| src/stdlib/std.cml | 367 | std::specialize | `#op('std::cxx::specialize')` | `#op('std:cxx:specialize')` | src/stdlib/std/cxx/opt/specialize/specialize.cpp:33 |
-| src/stdlib/std.cml | 373 | std::fold | `#op('std::cxx::fold')` | `#op('std:cxx:fold')` | src/stdlib/std/cxx/opt/generic/generic.cpp:2190 |
-| src/stdlib/std.cml | 385 | std::algebra | `#op('std::cxx::algebra')` | `#op('std:cxx:algebra')` | src/stdlib/std/cxx/opt/generic/algebra.cpp:322 |
-| src/stdlib/std.cml | 399 | std::saturate | `#op('std::cxx::saturate')` | `#op('std:cxx:saturate')` | src/stdlib/std/cxx/opt/opt/opt.cpp:59 |
-| src/stdlib/std.cml | 402 | std::cse | `#op('std::cxx::cse')` | `#op('std:cxx:cse')` | src/stdlib/std/cxx/opt/generic/generic.cpp:2195 |
-| src/stdlib/std.cml | 407 | std::dce | `#op('std::cxx::dce')` | `#op('std:cxx:dce')` | src/stdlib/std/cxx/opt/generic/generic.cpp:2197 |
-| src/stdlib/std.cml | 412 | std::order | `#op('std::cxx::order')` | `#op('std:cxx:order')` | src/stdlib/std/cxx/opt/generic/generic.cpp:2202 |
-
-## 第四节：9 条组合遍 —— **不补**（有函数体 ⇒ 是普通函数，不是算子）
-
-| 遍名 | 位置 | 函数体里的调用（原文） | 结论 |
-|---|---|---|---|
-| opt::cse | src/stdlib/opt.cml:168 | `return if graphs_of(f)->any<graph_has_hit> then merge_hits(f)->cse else f` | 不补 `#op`（决策者 D-1127-103） |
-| opt::dead_values | src/stdlib/opt.cml:220 | `… erased::<F>(d, hits)->dead_values（内部遍，非 export）` | 不补 `#op`（决策者 D-1127-103） |
-| opt::dce | src/stdlib/opt.cml:228 | `return dead_values(f)` | 不补 `#op`（决策者 D-1127-103） |
-| opt::fold | src/stdlib/opt.cml:333 | `return if all_nodes(graphs_of(f))->any<evaluated> then fold_rounds(f, constant_budget) else f` | 不补 `#op`（决策者 D-1127-103） |
-| opt::saturate | src/stdlib/opt.cml:345 | `return f->saturate_rules<concat(algebra, distribution), rounds: rounds, strict: strict>` | 不补 `#op`（决策者 D-1127-103） |
-| rules::simplify | src/stdlib/rules.cml:398 | `return f->rewrite<concat(algebra, accuracy_laws), strict: strict>` | 不补 `#op`（决策者 D-1127-103） |
-| rules::saturate_all | src/stdlib/rules.cml:408 | `return f->saturate<concat(algebra, distribution), rounds: rounds, strict: strict>->extract<nodes>` | 不补 `#op`（决策者 D-1127-103） |
-| rules::accuracy | src/stdlib/rules.cml:414 | `return f->rewrite<accuracy_laws>` | 不补 `#op`（决策者 D-1127-103） |
-| rules::fusion | src/stdlib/rules.cml:421 | `return f->rewrite<fusion_laws>` | 不补 `#op`（决策者 D-1127-103） |
-
-注：`opt::cse` 体里写出的 `cse` 落在 `opt` 模块自己的遍命名空间，**不是** `std::cxx::cse`；两者同名不同物。
-
-## 第五节：1 条助手 —— **不补**
+## 1 条助手 —— 不补
 
 | 文件:行 | 声明原文 | 结论 |
 |---|---|---|
 | src/stdlib/opt.cml:320 | `func fold_rounds::<F>(f: F, budget: int) => F! when is_function::<F>()` | 两个参数，是 `opt::fold` 的助手，不是遍形状；不补 `#op` |
+
+## 判据（复核用）
+
+“已有 `#op`”的判据：**从声明行往上，跳过 `///` 注释、`with <…>` 行与空行之后，第一个非注释行必须是 `#op('…')`。**
+“默认 URI”的判据：**模块名（`std.cml` → `std`，`tiles/tensor/...` 取文件名）+ `:` + 声明名（含 `namespace` 前缀）。**
+易误判点：`src/stdlib/graph.cml:526 probe_handle` 上方第 516 行有 `#op('graph:eq')`，那条属另一条声明（`operator ==`）；粗判会把它误算“已有”。
+
+## 先例清点（两个尖端逐条核过，供写法参考）
+
+- `origin/integration` 与 `c1-measure @ 3d7928a388` 上 `#op(` 都是 456 条，`c1-measure` 的 9 笔提交**新增 0 条**。
+- 456 条全为 `module:name`（单冒号）写法；`std:` 族此前 0 条，是因为 std 的声明名带命名空间、而它们此前一条 `#op` 都没写。
+
 ## 本表覆盖不到的那 22 条（34 条红名 − 本表覆盖的 12 条）
 
 `task-228` 的 34 条红里，本表只覆盖 12 条（tensor 3 / tiles 3 / rewrite 3 / graph 3）。剩下 22 条**不在本表**，原因是它们**不是遍形状**（没有 `(f: F) => F!` + `when is_function::<F>()` 这一对），补 `#op` 不覆盖它们——它们是另一件事。
@@ -152,40 +159,6 @@
 | graph_constant | native.graph_constant_import · native.graph_constant_wrong_arity · native.graph_constant_wrong_type | `src/stdlib/graph.cml:307 export func constant::<T>(n: Node) => T? when is_ordered::<T>()`、`:226 constant_bytes(n: Node) => int` —— 返回 `T?`/`int`，不是遍 |
 
 合计 **22**。结论一句话：**补 `#op` 只解决 34 条红里的 12 条；另 22 条是"普通 native 声明没有算子"的另一件事，需要单独一张卡。**
-## 边界两条（不计入 77，附签名与原因）
-
-| 文件:行 | 声明原文 | 为什么不算遍形状 |
-|---|---|---|
-| src/stdlib/opt.cml:320 | `func fold_rounds::<F>(f: F, budget: int) => F! when is_function::<F>()` | 两个参数；它是遍的助手（被 `opt::fold` 调用），不是遍本身 |
-| src/stdlib/prelude.cml | `export func attempt::<F>(f: F) => F!` | 没有 `when is_function::<F>()`：不是"接受一个函数"的遍形状 |
-
-## 无指向：9 条组合遍（原 11 条里的 2 条 `rewrite::*` 已带 `#op`，移到第二节“已补好”）
-
-### A. 组合遍：9 条 —— **不补 `#op`，理由是它不是算子**
-
-函数体只是调用别的遍（或自己的实现），没有内核可指；下表给出它调用的那个遍，供写卡人判断要不要往下追。
-
-| 遍名 | 位置 | 函数体里的调用（原文） | 它调用的那个遍 | 结论 |
-|---|---|---|---|---|
-| opt::cse | src/stdlib/opt.cml:168 | `return if graphs_of(f)->any<graph_has_hit> then merge_hits(f)->cse else f` | `cse`（见下注） | 不补 |
-| opt::dead_values | src/stdlib/opt.cml:220 | `… erased::<F>(d, hits)->dead_values` | 自身（尾调用）；`abandoned(d, f)` | 不补（内部遍，非 export） |
-| opt::dce | src/stdlib/opt.cml:228 | `return dead_values(f)` | `opt::dead_values` | 不补 |
-| opt::fold | src/stdlib/opt.cml:333 | `return if all_nodes(graphs_of(f))->any<evaluated> then fold_rounds(f, constant_budget) else f` | `fold_rounds`（边界两条之一） | 不补 |
-| opt::saturate | src/stdlib/opt.cml:345 | `return f->saturate_rules<concat(algebra, distribution), rounds: rounds, strict: strict>` | `saturate_rules`；语义引擎是 `std::cxx::saturate`（`src/stdlib/rules.cml:402-404` 原文："`std::cxx::saturate` is the saturation alone, which keeps every writing"） | 不补遍自身；若决策者要指向引擎，候选是 `#op('std::cxx::saturate')` |
-| rules::simplify | src/stdlib/rules.cml:398 | `return f->rewrite<concat(algebra, accuracy_laws), strict: strict>` | `rewrite::rewrite` | 不补 |
-| rules::saturate_all | src/stdlib/rules.cml:408 | `return f->saturate<concat(algebra, distribution), rounds: rounds, strict: strict>->extract<nodes>` | `rewrite::saturate` → `rewrite::extract` | 不补 |
-| rules::accuracy | src/stdlib/rules.cml:414 | `return f->rewrite<accuracy_laws>` | `rewrite::rewrite` | 不补 |
-| rules::fusion | src/stdlib/rules.cml:421 | `return f->rewrite<fusion_laws>` | `rewrite::rewrite` | 不补 |
-
-注：`opt::cse` 体里写出的 `cse` 落在 `opt` 模块自己的遍命名空间（`src/stdlib/opt.cml` 的 `cse`），不是 `std::cxx::cse`；两者同名不同物，写代码那格不要顺手替换。
-
-### B. 模块函数：**已补好（勿动）** —— 依据是模块函数表原文，且 `#op` 写法与普通模块遍相同
-
-| 遍名 | 位置 | 判断依据（原文） | 结论 |
-|---|---|---|---|
-| rewrite::rewrite | src/stdlib/rewrite.cml:110 | 声明上方已有 `#op('rewrite:rewrite')`（`rewrite.cml:108`）；算子由模块函数表 `{"rewrite", rewriteKernel}`（`module.cpp:4717`）回答 | **已补好，勿动**；结论：模块函数也照样写 `#op('module:name')` |
-| rewrite::saturate | src/stdlib/rewrite.cml:125 | 声明上方已有 `#op('rewrite:saturate')`（`rewrite.cml:123`）；`module.cpp:4722` `{"saturate", saturateKernel}` | **已补好，勿动** |
-
 ## 第三判据：`task-228` 实测红名单（34 条，逐字，来源：`120 pass / 86 pass / 34 fail` 那次运行）
 
 **映射口径（重要，别误读）：** 34 条是**测试用例名**，不是遍名；它们按**模块**分组，一条红＝该模块的某条声明被当 operator 查、查不到就拒。
@@ -209,6 +182,10 @@
 | graph | 3 | native.graph_declaration_import · native.graph_wrong_arity · native.graph_wrong_type |
 
 合计 **34**。原文形如：`(tensor)/…/stdlib/tensor.cml:399:1: [Error]: The declaration 'fuse' names the operator 'tensor:fuse', which no loaded module implements.`
+
+
+
+
 
 
 

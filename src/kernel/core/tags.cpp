@@ -17,6 +17,7 @@
 
 #include "camel/core/tags.h"
 
+
 #include <algorithm>
 #include <deque>
 #include <map>
@@ -371,13 +372,26 @@ void declareReader(std::string_view pass) {
 }
 
 bool isReader(std::string_view written) {
+    // A pass states that it reads tag facts where the operator is registered, and the operator's
+    // entry is the one place that says so: the table answers first, and a name that is a path
+    // below a reading operator (`std::cxx` for `std::cxx::fold`) is a reader too. What follows is
+    // only the Camel passes, whose declarations state it in their own registry.
+    const std::string prefix = std::string(written) + "::";
+    if (camel::core::OperatorTable::instance().readsTags(written)) {
+        return true;
+    }
+    for (const std::string_view reader :
+         camel::core::OperatorTable::instance().tagReadingOperators()) {
+        if (reader.starts_with(prefix)) {
+            return true;
+        }
+    }
     Readers &r = readers();
     std::shared_lock lock(r.mutex);
     if (r.passes.contains(std::string(written))) {
         return true;
     }
     // A module name names every pass of the module (`tensor` for `tensor::fuse`).
-    const std::string prefix = std::string(written) + "::";
     for (const std::string &pass : r.passes) {
         if (pass.starts_with(prefix)) {
             return true;
