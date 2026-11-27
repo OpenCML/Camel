@@ -487,6 +487,8 @@ git worktree add --detach <旧提交>
 
 **日志"停住"不等于卡住：结果按 plan 块落盘。** promo54 预检的日志在 `[PLAN] feat.opt.fold_warning` 那三条 PASS 之后 4 分钟不动，看着像挂死；实际 `run 目录` 里已有 49 条完成、4 个 `child-cpu.mjs` 在跑。**判据是 run 目录的计数与宿主进程，不是日志尾部。** 反过来也成立：日志不长 ≠ 没进度。
 
-**宿主侧"永久 `starting`"的运行记录会占位。** `HOST_OVERLAP_START` 里一串 `36844-20261127200107:starting` 在**开始与结束两份清单里都在**，而别的 run 结束后会消失 ⇒ 那是一条本地已 kill、宿主侧仍挂在 `starting` 的残留运行。它的代价是所有后来者排队（合并位 `-Jobs 1` 排了近一小时、witness 的 Debug 进不了构建）。**处置**：只有它的**所有者**能清（按 `host-tokens`/`/tmp/camel-tokens` 的持有者核，按工具自己的释放方式）；**不许按名字杀进程**，也不许碰别人的 run。
+**`starting` 记录不持令牌：判"排队是不是被别人占着"要读 holder 文件，不要读重叠清单（我按后者判错过一次）。** `HOST_OVERLAP_START` 里一条 `36844-20261127200107:starting` 在**开始与结束两份清单里都在**（别的 run 结束后会消失），我据此断言"一条本地已 kill 的残留运行在宿主侧占位、卡住全队"，是错的：把 `/tmp/camel-tokens/token-*.holder` 逐条读出来，24 枚全被**活运行**持有（`merge-seat-1` ×8、`bang-suffix` ×3、`editview-commit` ×2、`onnx-run` ×2、`cli-rework` ×4、`misc` ×4、`witness` ×1），`grep` 那次运行 id **无命中**，它不持令牌、没有持有者、不需要释放。
+真正的瓶颈是**池子被活车道占满**：合并位那次排队 `wait 1,200.2 s`、构建只 `31.0 s` —— 排队 20 分钟、编 31 秒，这个比例说明等的是令牌，不是构建。
+判据顺序：① `token-*.holder` 逐条（谁拿着、拿了几枚、什么时间拿的）② run 目录的 `run.json` ③ 最后才看重叠清单。**重叠清单是给人看的进度摘要，不是占用证据。**
 
 **"读数一字不差"先查两棵树差什么。** promo54 预检与上一次晋级的四栏（9778/9535/182/28/33）**完全相同**，第一反应是"读到旧日志"。用 `git rev-list --count <base>..<tip>` = 16 笔 + `git diff --stat … -- src/ test/ scripts/ stdlib/` = 空 就排除了：那 16 笔只动 `internal/`，读数相同是**必然**。**同形读数先量"两棵树差什么"，再怀疑工具。**
