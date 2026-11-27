@@ -98,48 +98,50 @@ task-260 | Regenerate the AI reference, and bisect why the normalized GIR hash m
 These three classes are a criterion, not a conclusion. The first cut called a task `@done` when a
 backlog row named it and a sha on that row was in integration. That is not enough: a row often names
 several ids, and a sha on it can belong to a different task entirely. So for each of the 32 the sha on
-the row was read back with `git log -1 --format="%h %s"` and compared with the task subject.
+the row was read back with `git log -1 --format=%s` and compared with the task subject.
 
 · `@remove` — the commit title states the work the subject states. The commit is the record, so the
   board row adds nothing.
 · `@keep` — the title is about something else, or the id is only mentioned in passing. The row is then
   the only trace this task has: do not delete it.
-· `@mixed` — the title is a plan or a partly-overlapping change, so the sha cannot be called this task's
-  delivery. Not guessed at.
+· `@mixed` — the title is a plan, or a change that only partly overlaps, so the sha cannot be called
+  this task's delivery. Not guessed at.
 
-Counts: @remove 11, @keep 20, @mixed 1.
+Counts: @remove 11, @keep 19, @mixed 2.
+
+The title column is the commit subject as git prints it, not a summary.
 
 ```
-task-3   | Paper A: edit/view productions                    | e16717d31 | collab: a dispatch is a task, and the merge seat takes work from the board | @keep
-task-32  | fib(30) nvm 793 ms / fvm 155 ms slower than before   | aa2d3dbaa | Merge lane/transfer into integration | @keep
-task-44  | stdlib `return f` warns on its own, 63 cases dirtied  | db6ca4622 | stdlib(opt): dead_values ends when nothing is left to erase | @keep
-task-45  | four probe.editview probes marked known-failing      | d1d4ef3bb | test: a named run does not pass its name to the runs its cases start | @keep
-task-51  | edit/view C: tail commit and replace(exit(d), v)      | 29a27d65b | stdlib(opt): cse finds the first equal node by the draft's own order | @keep
-task-70  | slow-layer reds: three debugger cases judged by class  | 8749ac78c0 | runtime: a conversion and a copy are calls of :op/cast and :op/copy | @keep
-task-77  | resnet batch eats the default block space             | e0cfa48a23 | probe(mm): judge whether resnet's block space is what it should be | @remove
-task-82  | pass-as-function step 1: declarations still exported   | 291e32b76 | plans: passes are functions in naming, registration and calling | @remove
-task-89  | debugger: the var cell names its initial node          | 26d9a37e85 | Merge fsh-dev: a session that is gone leaves nothing in memory | @keep
-task-91  | resource audit: clock counted as a write, pure as a read | 1d9ebcbc8 | docs, plans: modifiers are the equations writes satisfy | @keep
-task-107 | std::profile opstats=true prints no operator tree      | 535d928be7 | test(tensor): build the array a range names through its one conversion | @keep
-task-108 | inspect --reuse: uses / last-use / alias readings      | 7881492071 | inspect: read what every operator node was told about its result's storage | @remove
-task-113 | lane/cpp-noise: std::cpp fault report goes to stderr   | c65c0bf6b6 | console: the console is one resource | @keep
-task-117 | after console became one resource: 3 reds to follow     | c65c0bf6b6 | console: the console is one resource | @remove
-task-122 | 324 stale-position reds: digits only, three classes     | 05bdceadfc | test: the prose that says what `pure` forbids says no write | @keep
-task-138 | buildStreamLoop does not fill the carried state         | 36140ad994 | fix: hand a stream loop the state its body's return gives | @remove
-task-139 | Camel-side opt::cse diverges from the C++ side         | d5f0ac1233 | docs: the pages stop saying a translating pass consumes the graph | @keep
-task-151 | a law written with `with` arguments should match them  | 79d21aa586 | transpose: a law that writes a <> value on its left side answers that node | @remove
-task-154 | selfplay.cml crashes 0xC0000005 about one run in four   | 36140ad994 | fix: hand a stream loop the state its body's return gives | @keep
-task-194 | 3b graph lane: the two entry points of an edit session | f0ba3eb30 | Schedule: until the CC deadline six slots go to CC features | @keep
-task-196 | 3b facts lane 2: five analyses into the facts framework | f0ba3eb30 | Schedule: until the CC deadline six slots go to CC features | @keep
-task-197 | 3b facts lane 3: footprint rules written once          | 9a4f8ac4bc | backlog: the footprint walk unifies on the view | @remove
-task-204 | C1: close step 1 (delete passAliases) and step 2        | 8f472bed1d | compile: a pass is the declaration the module implements no operator for | @remove
-task-226 | one footprint walk: FootprintWalk takes a GraphView     | 9a4f8ac4bc | backlog: the footprint walk unifies on the view | @remove
-task-227 | B1 effects facts: core.effects and core.nodeEffects     | 71dcbe43bd | Merge lane/facts-kinds: four kinds join the facts framework | @remove
-task-233 | C7: onnx::model, with <model>, onnx::run               | c05c2de39 | CC plan: C7, the in-program ONNX model run through ONNX Runtime | @mixed
-task-235 | parser: drop the colon return type and arrow lambda     | eba9e377a | Principles: the examples write the return type after => | @mixed
-task-236 | find the nine SIGABRTs in probe.editview/blockscope     | 36419e2003 | Merge fsh-dev: a lane works its card without stopping for context | @keep
-task-250 | C1 step 2: pass kernels under the #op URI as an OperId  | 215094fb18 | Merge fsh-dev: the host's heap is read every beat | @keep
-task-251 | C2: a program calls a pass as a function                | 215094fb18 | Merge fsh-dev: the host's heap is read every beat | @keep
-task-256 | compile-view: name the frozen graph and the draft       | 215094fb18 | Merge fsh-dev: the host's heap is read every beat | @keep
+task-3 | Paper A: edit/view productions, block body as program | e16717d31 | collab: a dispatch is a task, and the merge seat takes work from the board | @keep
+task-32 | fib(30) nvm 793 ms / fvm 155 ms slower than before | aa2d3dbaa | Merge lane/transfer into integration | @keep
+task-44 | stdlib return f warns on its own, 63 cases dirtied | db6ca4622 | stdlib(opt): dead_values ends when nothing is left to erase, and erases in the draft its hits were found in | @keep
+task-45 | four probe.editview probes marked known-failing | d1d4ef3bb | test: a named run does not pass its name to the runs its cases start | @keep
+task-51 | edit/view C: tail commit and replace(exit(d), v) | 29a27d65b | stdlib(opt): cse finds the first equal node by the draft's own order, not by id | @keep
+task-70 | slow-layer reds: three debugger cases judged by class | 8749ac78c0 | runtime: a conversion and a copy are calls of :op/cast and :op/copy (plan 2.3, step 1) | @keep
+task-77 | resnet batch eats the default block space | e0cfa48a23 | probe(mm): 判 resnet 全批运行的数据块空间是"本来就该这么大"还是"有块被留住" | @remove
+task-82 | pass-as-function step 1: declarations still exported | 291e32b76 | plans: passes are functions in naming, registration and calling | @remove
+task-89 | debugger: the var cell names its initial node | 26d9a37e85 | Merge fsh-dev into integration: a session that is gone leaves nothing in memory, and the tells read at start keep their live bound | @keep
+task-91 | resource audit: clock as a write, pure as a read, undeclared natives | 1d9ebcbc8 | docs, plans: modifiers are the equations writes satisfy, debug observation is apart from program output, and the plan that carries both | @keep
+task-107 | std::profile opstats=true prints no operator tree | 535d928be7 | test(tensor): build the array a range names through its one conversion | @keep
+task-108 | inspect --reuse: uses / last-use / alias readings | 7881492071 | inspect: read what every operator node was told about its result's storage | @remove
+task-113 | lane/cpp-noise: std::cpp fault report goes to stderr | c65c0bf6b6 | console: the console is one resource, and its channels reach the person in the written order | @keep
+task-117 | after console became one resource: 3 reds to follow | c65c0bf6b6 | console: the console is one resource, and its channels reach the person in the written order | @remove
+task-122 | 324 stale-position reds: digits only, three classes | 05bdceadfc | test: the prose that says what `pure` forbids says no write | @keep
+task-138 | buildStreamLoop does not fill the carried state | 36140ad994 | fix: hand a stream loop the state its body's return gives | @remove
+task-139 | Camel-side opt::cse diverges from the C++ side | d5f0ac1233 | docs: the pages stop saying a translating pass consumes the graph | @keep
+task-151 | a law written with with-arguments should match them | 79d21aa586 | transpose: a law that writes a <> value on its left side answers the node carrying that value | @remove
+task-154 | selfplay.cml crashes 0xC0000005 about one run in four | 36140ad994 | fix: hand a stream loop the state its body's return gives | @keep
+task-194 | 3b graph lane: the two entry points of an edit session | f0ba3eb30 | Schedule: until the CC deadline six development slots go to CC features and two to stage 3b | @keep
+task-196 | 3b facts lane 2: five analyses into the facts framework | f0ba3eb30 | Schedule: until the CC deadline six development slots go to CC features and two to stage 3b | @keep
+task-197 | 3b facts lane 3: footprint rules written once | 9a4f8ac4bc | backlog: the footprint walk unifies on the view, and the earlier ruling was wrong | @remove
+task-204 | C1: close step 1 (delete passAliases) and step 2 | 8f472bed1d | compile: a pass is the declaration the module implements no operator for, not a type shape | @remove
+task-226 | one footprint walk: FootprintWalk takes a GraphView | 9a4f8ac4bc | backlog: the footprint walk unifies on the view, and the earlier ruling was wrong | @remove
+task-227 | B1 effects facts: core.effects and core.nodeEffects | 71dcbe43bd | Merge lane/facts-kinds: four kinds join the facts framework, and the ten that are still KindSpec stay | @remove
+task-233 | C7: onnx::model, with <model>, onnx::run | c05c2de39 | CC plan: C7, the in-program ONNX model run through ONNX Runtime, ahead of stage 3b | @mixed
+task-235 | parser: drop the colon return type and the arrow lambda | eba9e377a | Principles: the examples write the return type after =>, as the rule they sit under says | @mixed
+task-236 | find the nine SIGABRTs in probe.editview/blockscope | 36419e2003 | Merge fsh-dev: a lane works its card without stopping for context headroom, and the ONNX-in-program plan is written | @keep
+task-250 | C1 step 2: pass kernels under the #op URI as an OperId | 215094fb18 | Merge fsh-dev: the host's heap is read every beat, and a beat that throws is only logged; and the bang suffix and fail's new writing enter the principles | @keep
+task-251 | C2: a program calls a pass as a function | 215094fb18 | Merge fsh-dev: the host's heap is read every beat, and a beat that throws is only logged; and the bang suffix and fail's new writing enter the principles | @keep
+task-256 | compile-view: name the frozen graph and the draft | 215094fb18 | Merge fsh-dev: the host's heap is read every beat, and a beat that throws is only logged; and the bang suffix and fail's new writing enter the principles | @keep
 task-259 | gct Tree: eight of ten node-keyed tables dropped on copy | bd97680b77 | gct: a copied subtree keeps the names and the block head its nodes carry | @remove
 ```
