@@ -75,7 +75,16 @@
   "timeouts_rerun": {
     "why": "the host ran at 1m load 76.8 and every case went through the token pool (8890 waits); a timeout here is a wait, not a hang",
     "count": 6,
-    "run_alone": false,
-    "note": "six cases timed out on their first pass and passed on the re-run (6 of 6); no case was left red by a timeout"
+    "run_alone": true,
+    "green": [
+      "rulings.open_range_not_in_language",
+      "callform_err_has",
+      "err_key_enum_element",
+      "branch.42.inline_dce.prl",
+      "branch.42.opt_dce.nvm",
+      "end.main_returns_code.fvm"
+    ],
+    "still_red_not_timeout": [],
+    "note": "six cases timed out on their first pass and passed on the re-run (6 of 6), the names as the runner printed them; no case was left red by a timeout, so still_red_not_timeout is empty"
   }
 }
