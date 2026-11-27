@@ -183,19 +183,16 @@ void ensureCoreTagReaders() {
 
 /// The implementation bound to the function `module::function`, whichever side of the core it
 /// belongs to. The name, documentation and parameters are the declaration's; this answers only
-/// which function implements it.
+/// which function implements it. The name is resolved to the operator at this boundary and the
+/// table below is asked by id (`findPassKernel`); a name the operator table does not know has no
+/// implementation, and this does not add one (`lookup`, not `intern`).
 std::optional<PassDescriptor> findImplementation(const std::string &path) {
     ensureCoreTagReaders();
     const auto id = camel::core::OperatorTable::instance().lookup(path);
     if (!id.has_value() || *id == camel::core::kNoOper) {
         return std::nullopt;
     }
-    auto &registry = passImplementations();
-    std::lock_guard lock(registry.mutex);
-    if (static_cast<size_t>(*id) >= registry.kernels.size()) {
-        return std::nullopt;
-    }
-    return registry.kernels[*id];
+    return findPassKernel(*id);
 }
 
 } // namespace
@@ -356,6 +353,18 @@ void registerModulePass(const std::string &path, PassFactory factory) {
     registerModulePass(path, passWithoutParameters(std::move(factory)));
 }
 
+std::optional<PassDescriptor> findPassKernel(camel::core::OperId pass) {
+    if (pass == camel::core::kNoOper) {
+        return std::nullopt; // no operator, no pass
+    }
+    auto &registry = passImplementations();
+    std::lock_guard lock(registry.mutex);
+    if (static_cast<size_t>(pass) >= registry.kernels.size()) {
+        return std::nullopt;
+    }
+    return registry.kernels[pass];
+}
+
 namespace {
 
 /// The pass a written name resolves to: the core's table, whose one entry `std::opt` is the default
@@ -408,8 +417,13 @@ std::optional<FoundPass> findDescriptor(const context_ptr_t &ctx, const std::str
         if (function.empty()) {
             return std::nullopt;
         }
-        const std::string path    = module + "::" + function;
-        const auto implementation = findImplementation(path);
+        const std::string path = module + "::" + function;
+        // The name is resolved to the operator here, once: the registry below is asked by id, so a
+        // reader that already holds the id (a program calling the pass as a function) asks without
+        // spelling the name again.
+        const auto operatorId = camel::core::OperatorTable::instance().lookup(path);
+        const auto implementation =
+            operatorId.has_value() ? findPassKernel(*operatorId) : std::nullopt;
         // The module's declaration file is read before the pass is looked for in it. A file that
         // does not parse is a diagnostic against that module -- the same one the module loader
         // would give -- and this is where that answer is carried: the report below turns it into
