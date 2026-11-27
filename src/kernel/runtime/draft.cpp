@@ -1347,6 +1347,9 @@ void GraphDraft::setNodeOrigin(gc_node_ref_t id, uint64_t origin) {
             id,
             nodesById_.size()));
     draftNode->header.origin = origin;
+    // The low-level entry: an origin written on a node is a change in place, and the region the
+    // node is in is what the record keeps of it.
+    noteEditedNode(id, true);
 }
 
 gc_node_ref_t GraphDraft::addNode(const DraftNodeInit &init) {

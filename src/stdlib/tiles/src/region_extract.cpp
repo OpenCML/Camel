@@ -154,6 +154,11 @@ RegionDraft extractRegion(const rt::GCGraph &source, const Segment &region, rt::
         {},
         std::vector<rt::gc_node_ref_t>(source.nodeCount(), rt::kInvalidNodeRef)};
     auto &draft = result.graph->edit();
+    // The edit record's high-side entry for this write: taking a region out of a graph is the
+    // `outline` row of docs/design/graph-editing/README.cn.md 8.1, so the copy is recorded as one
+    // edit of that kind, with the union of the regions it touched and one notification, rather than
+    // as one low-level edit per node it makes.
+    rt::GraphDraft::NamedEdit edit(draft, rt::EditKind::Outline);
     std::unordered_set<size_t> members(region.members.begin(), region.members.end());
     require(members.size() == region.members.size(), "duplicate member");
     for (auto id : members)

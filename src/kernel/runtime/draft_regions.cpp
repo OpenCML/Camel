@@ -33,6 +33,9 @@ void GraphDraft::setNodeRegion(gc_node_ref_t id, uint32_t region) {
     ASSERT(region == 0 || region < regions_.size(), "A node is put in a region that is not there.");
     noteOriginalNode(id);
     draftNode->header.region = region;
+    // The low-level entry: the node now stands in another region, which is the region the record
+    // keeps of this change.
+    noteEditedNode(id, true);
 }
 
 uint32_t
