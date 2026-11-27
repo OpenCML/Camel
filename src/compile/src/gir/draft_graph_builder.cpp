@@ -42,8 +42,12 @@ struct DraftRegistration {
     uint64_t epoch             = 0;
 };
 
-std::unordered_map<const runtime::GraphDraft *, DraftRegistration> &draftOwners() {
-    static std::unordered_map<const runtime::GraphDraft *, DraftRegistration> owners;
+/// A draft in this registry is only an identity, never a type: what the table answers is which
+/// builder a handle's address belongs to, and the address is all it is asked.
+using DraftIdentity = const void *;
+
+std::unordered_map<DraftIdentity, DraftRegistration> &draftOwners() {
+    static std::unordered_map<DraftIdentity, DraftRegistration> owners;
     return owners;
 }
 

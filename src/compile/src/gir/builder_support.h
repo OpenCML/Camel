@@ -109,7 +109,7 @@ inline runtime::PortRole toPortRole(LinkType type) {
 /// handle outlives the draft it names, so the bytes at its address are not this call's to read --
 /// not even the epoch that decides the question. A handle the registration does not name is refused
 /// here rather than answered with a draft nobody owns.
-inline runtime::GraphDraft *nodeDraftOf(node_handle_t node) {
+inline auto *nodeDraftOf(node_handle_t node) {
     GUARD(node != nullptr, "Draft node is null.");
     DraftGraphBuilder *owner = DraftGraphBuilder::fromRef(node);
     GUARD(

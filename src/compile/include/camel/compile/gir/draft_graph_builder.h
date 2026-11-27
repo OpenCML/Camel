@@ -53,6 +53,7 @@ class DraftGraphBuilder {
     /// The graph itself. Private: a reader asks view(), a writer asks edit(), and this is the name the
     /// class keeps for its own forty uses. It is not part of the interface.
     runtime::GraphDraft &draft() const { return transaction_->edit(); }
+
   public:
     /// The graph as it stands, for a caller that only reads it. On the writing side the same graph is
     /// called draft(): the two sides get their own names first, and their own types after (a reader
