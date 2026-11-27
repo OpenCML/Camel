@@ -333,6 +333,12 @@ write(
     '# newest\nplan_a\tknown_red\nlegacy_red\ttest/plans/feat/compile.plan.toml\tfast\t\n',
 );
 write(readMaker, 'internal/reports/2026-01-02-promotion-3-reds-extra.tsv', 'plan_a\tnot_a_table\n');
+// Promotions 2 and 3 published develop; promotion 4 found new reds and did not, so its table (which
+// lists the reds it found, here every name the plan run reports) is not a baseline.
+write(readMaker, 'internal/reports/2026-01-01-promotion-2.record.json', '{"promotion": 2, "pushed_develop_sha": "2222222222222222222222222222222222222222"}\n');
+write(readMaker, 'internal/reports/2026-01-02-promotion-3.record.json', '{"promotion": 3, "pushed_develop_sha": "3333333333333333333333333333333333333333"}\n');
+write(readMaker, 'internal/reports/2026-01-03-promotion-4.record.json', '{"promotion": 4}\n');
+write(readMaker, 'internal/reports/2026-01-03-promotion-4-reds.tsv', '# not published\nplan_a\tknown_red\nplan_a\tonly_in_older\nplan_a\tbrand_new\nplan_a\tfast_new\n');
 const readBase = commit(readMaker, 'the tip with a selector and red tables');
 git(readMaker, ['push', '--quiet', 'origin', 'integration']);
 git(readMaker, ['checkout', '--quiet', '-b', 'lane/code', readBase]);
@@ -426,6 +432,67 @@ check(
     'a fast-tier red that the table does not list is new beside a slow one, and only it is named',
     mixed.status === 5 && mixed.out.includes('new red  plan_a  fast_new\n') && !mixed.out.includes('slow_new'),
     mixed.out,
+);
+
+// Integration moves while the batch builds. The build stub pushes a commit to the remote from the
+// maker's clone, so the batch's first push is refused; a page the build does not read is merged onto
+// the batch and the second push lands, while a change the build reads stops the batch.
+function laneFrom(name, file, text) {
+    git(readMaker, ['fetch', '--quiet', 'origin', 'integration']);
+    git(readMaker, ['checkout', '--quiet', '-B', name, 'origin/integration']);
+    write(readMaker, file, text);
+    commit(readMaker, `lane ${name}`);
+    git(readMaker, ['push', '--quiet', '--force', 'origin', name]);
+    git(readSeat, ['fetch', '--quiet', 'origin', `${name}:${name}`]);
+}
+const arrivalStub = path.join(readRoot, 'stub-arrival.mjs');
+fs.writeFileSync(
+    arrivalStub,
+    `import { execFileSync } from 'node:child_process';\nimport fs from 'node:fs';\nimport path from 'node:path';\n` +
+        `const [dir, rel] = process.argv.slice(2);\n` +
+        `const g = (...a) => execFileSync('git', ['-C', dir, ...a], { encoding: 'utf8' });\n` +
+        `g('fetch', '--quiet', 'origin', 'integration');\n` +
+        `g('checkout', '--quiet', '-B', 'arrival', 'origin/integration');\n` +
+        `fs.mkdirSync(path.dirname(path.join(dir, rel)), { recursive: true });\n` +
+        `fs.writeFileSync(path.join(dir, rel), 'arrived ' + Date.now() + '\\n');\n` +
+        `g('add', '-A'); g('commit', '--quiet', '-m', 'arrival');\n` +
+        `g('push', '--quiet', 'origin', 'HEAD:integration');\n`,
+);
+function runArrival(lane, arrival) {
+    fs.writeFileSync(scenario, JSON.stringify([row('plan_a', 'known_red', 'fail')]));
+    const result = spawnSync(
+        process.execPath,
+        [
+            tool, '--seat', readSeat, '--lane', `${lane}=adds a unit; plan smoke green`,
+            '--build', `node "${arrivalStub}" "${readMaker}" ${arrival}`,
+            '--read', `node "${readStub}" "{seat}" {plans}`,
+            '--base', 'origin/integration', '--push',
+        ],
+        { encoding: 'utf8', timeout: 120000 },
+    );
+    return { status: result.status ?? -1, out: `${result.stdout ?? ''}${result.stderr ?? ''}` };
+}
+laneFrom('lane/docs-arrives', 'src/second.cpp', 'int second() { return 2; }\n');
+const docsArrive = runArrival('lane/docs-arrives', 'internal/page.md');
+const docsTip = remoteTip();
+check(
+    'a page that arrives while the batch is read is merged onto the batch, and the second push lands',
+    docsArrive.status === 0 &&
+        /pushed\s+yes/.test(docsArrive.out) &&
+        docsArrive.out.includes('the build does not read; merging them onto the batch') &&
+        git(readRemote, ['log', '-1', '--format=%(trailers:key=Lane-Reading,valueonly)', 'integration']).trim() === 'docs-only' &&
+        git(readRemote, ['cat-file', '-e', `${docsTip}:internal/page.md`]) === '',
+    docsArrive.out,
+);
+laneFrom('lane/source-arrives', 'src/third.cpp', 'int third() { return 3; }\n');
+const sourceBefore = remoteTip();
+const sourceArrive = runArrival('lane/source-arrives', 'src/arrived.cpp');
+check(
+    'a change the build reads that arrives meanwhile stops the batch: nothing of the batch is pushed',
+    sourceArrive.status === 3 &&
+        sourceArrive.out.includes('with a change the build reads; run the batch again from the new tip') &&
+        !git(readRemote, ['log', '--format=%s', `${sourceBefore}..integration`]).includes('lane/source-arrives'),
+    sourceArrive.out,
 );
 
 fs.rmSync(readRoot, { recursive: true, force: true });

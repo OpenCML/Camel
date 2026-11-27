@@ -266,19 +266,36 @@ function touchedPlans(baseSha) {
     return [...new Set(plans)]
 }
 
-/** The newest promotion's red table (by promotion number) in the seat's tree, or null when there is none. */
+/**
+ * The red table of the newest promotion that published develop, in the seat's tree, or null when there
+ * is none. A promotion that found new reds still writes its table, and that table lists those reds:
+ * comparing with it would accept them as known. So a table counts only beside a record of the same
+ * promotion number that names the develop sha it pushed.
+ */
 function newestRedTable() {
     const dir = path.join(seat, 'internal', 'reports')
-    let best = null
     let names = []
     try {
         names = fs.readdirSync(dir)
     } catch {
         return null
     }
+    const published = new Set()
+    for (const name of names) {
+        const record = /^\d{4}-\d{2}-\d{2}-promotion-(\d+)\.record\.json$/.exec(name)
+        if (!record) continue
+        try {
+            const parsed = JSON.parse(fs.readFileSync(path.join(dir, name), 'utf8'))
+            if (parsed && typeof parsed.pushed_develop_sha === 'string' && parsed.pushed_develop_sha) published.add(Number(record[1]))
+        } catch {
+            // A record that does not parse publishes nothing.
+        }
+    }
+    let best = null
     for (const name of names) {
         const found = /^\d{4}-\d{2}-\d{2}-promotion-(\d+)-reds\.tsv$/.exec(name)
-        if (found && (best === null || Number(found[1]) > best.n)) best = { n: Number(found[1]), name, file: path.join(dir, name) }
+        if (!found || !published.has(Number(found[1]))) continue
+        if (best === null || Number(found[1]) > best.n) best = { n: Number(found[1]), name, file: path.join(dir, name) }
     }
     return best
 }
@@ -474,10 +491,29 @@ function main() {
     let pushed = false
     let pushCode = 0
     if (args.push && merged.length > 0 && !held) {
-        const run = spawnSync('git', ['-C', seat, 'push', args.remote, `HEAD:refs/heads/${args.integration}`], { encoding: 'utf8' })
-        process.stdout.write(`${run.stdout || ''}${run.stderr || ''}`)
-        pushCode = run.status ?? -1
-        pushed = pushCode === 0
+        // A batch builds and reads for minutes, and integration may move meanwhile. What arrived and
+        // touches nothing the build reads (a page, a backlog row) is merged onto the batch's tip and the
+        // push is tried again: the merge's first parent is the commit the build and the reading are
+        // recorded for, and the hook walks the first parent to it. An arrival the build reads means the
+        // reading is of a tree that is not the one integration now holds, so the batch stops there.
+        for (let attempt = 1; ; attempt++) {
+            const run = spawnSync('git', ['-C', seat, 'push', args.remote, `HEAD:refs/heads/${args.integration}`], { encoding: 'utf8' })
+            process.stdout.write(`${run.stdout || ''}${run.stderr || ''}`)
+            pushCode = run.status ?? -1
+            pushed = pushCode === 0
+            if (pushed || attempt >= 5) break
+            if (git(['fetch', '--quiet', args.remote, args.integration], { allowFailure: true }).code !== 0) break
+            const arrived = git(['rev-parse', 'FETCH_HEAD']).out
+            const since = git(['merge-base', 'HEAD', arrived], { allowFailure: true }).out
+            if (!since) break
+            const files = git(['diff', '--name-only', since, arrived]).out.split('\n').filter(Boolean)
+            if (reachesBuild(files)) {
+                process.stdout.write(`merge-batch: integration moved to ${arrived.slice(0, 12)} with a change the build reads; run the batch again from the new tip\n`)
+                break
+            }
+            process.stdout.write(`merge-batch: integration moved to ${arrived.slice(0, 12)} with ${files.length} file(s) the build does not read; merging them onto the batch and pushing again\n`)
+            git(['merge', '--no-ff', '--quiet', '-m', `Merge ${args.integration}: the documents that arrived while the batch was read\n\nLane-Reading: docs-only`, arrived])
+        }
     }
 
     const total = (Date.now() - startedAt) / 1000
