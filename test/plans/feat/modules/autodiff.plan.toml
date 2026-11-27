@@ -2628,7 +2628,7 @@ desc = "resnet with relu replaced by tanh on both sides (benchmarks/tools/grad_r
 kind = "behavior"
 tool = "python"
 case = "../../../../benchmarks/tools/grad_referee.py"
-args = ["${case}", "--model", "resnet", "--activation", "tanh", "--spaces block_mb=", "8192", "--require", "--no-fd", "--no-sensitivity"]
+args = ["${case}", "--model", "resnet", "--activation", "tanh", "--spaces", "block_mb=8192", "--require", "--no-fd", "--no-sensitivity"]
 skip_unless = ["${python}", "-c", "import numpy, psutil, torch"]
 expect_exit = 0
 expect_stdout_contains = ["verdict resnet seed=benchmark activation=tanh: PASS (", "gradient referee: PASS"]
@@ -2672,7 +2672,7 @@ desc = "resnetbn (20 training-mode batch_norms) with relu replaced by tanh on bo
 kind = "behavior"
 tool = "python"
 case = "../../../../benchmarks/tools/grad_referee.py"
-args = ["${case}", "--model", "resnetbn", "--activation", "tanh", "--spaces block_mb=", "8192", "--require", "--no-fd", "--no-sensitivity"]
+args = ["${case}", "--model", "resnetbn", "--activation", "tanh", "--spaces", "block_mb=8192", "--require", "--no-fd", "--no-sensitivity"]
 skip_unless = ["${python}", "-c", "import numpy, psutil, torch"]
 expect_exit = 0
 expect_stdout_contains = ["verdict resnetbn seed=benchmark activation=tanh: PASS (", "gradient referee: PASS"]
@@ -2699,7 +2699,7 @@ desc = "resnet as benchmarked, against PyTorch float64 autograd. The direct comp
 kind = "behavior"
 tool = "python"
 case = "../../../../benchmarks/tools/grad_referee.py"
-args = ["${case}", "--model", "resnet", "--kinks", "--spaces block_mb=", "8192", "--require", "--no-fd", "--no-sensitivity"]
+args = ["${case}", "--model", "resnet", "--kinks", "--spaces", "block_mb=8192", "--require", "--no-fd", "--no-sensitivity"]
 skip_unless = ["${python}", "-c", "import numpy, psutil, torch"]
 expect_exit = 0
 expect_stdout_contains = ["verdict resnet seed=benchmark activation=relu: PASS", "gradient referee: PASS"]
@@ -2731,7 +2731,7 @@ desc = "resnetbn as benchmarked, against PyTorch float64 autograd, by the criter
 kind = "behavior"
 tool = "python"
 case = "../../../../benchmarks/tools/grad_referee.py"
-args = ["${case}", "--model", "resnetbn", "--kinks", "--spaces block_mb=", "8192", "--require", "--no-fd", "--no-sensitivity"]
+args = ["${case}", "--model", "resnetbn", "--kinks", "--spaces", "block_mb=8192", "--require", "--no-fd", "--no-sensitivity"]
 skip_unless = ["${python}", "-c", "import numpy, psutil, torch"]
 expect_exit = 0
 expect_stdout_contains = ["verdict resnetbn seed=benchmark activation=relu: PASS", "gradient referee: PASS"]

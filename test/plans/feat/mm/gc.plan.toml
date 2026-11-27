@@ -304,7 +304,7 @@ name = "gc.born_old.poison.nvm"
 desc = "A large array filled with young strings by plain stores (random.sample, shuffle) keeps them through minor collections (poison, nvm)."
 kind = "behavior"
 case = "../../../cases/feat/mm/gc/gc_born_old.cml"
-args = ["--gc-check", "poison", "--gc large_threshold_kb=", "4", "${case}", "${run_nvm}"]
+args = ["--gc-check", "poison", "--gc", "large_threshold_kb=4", "${case}", "${run_nvm}"]
 expect_exit = 0
 expect_stdout_contains = ["picked 600 600 64", "mixed 600 600 64"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
@@ -315,7 +315,7 @@ name = "gc.born_old.moving_stress.nvm"
 desc = "A large array filled with young strings by plain stores (random.sample, shuffle) keeps them through minor collections (moving stress, nvm)."
 kind = "behavior"
 case = "../../../cases/feat/mm/gc/gc_born_old.cml"
-args = ["--gc-stress", "safepoint=1,kind=minor", "--gc large_threshold_kb=", "4", "--gc", "kind=generational", "${case}", "${run_nvm}"]
+args = ["--gc-stress", "safepoint=1,kind=minor", "--gc", "large_threshold_kb=4", "--gc", "kind=generational", "${case}", "${run_nvm}"]
 expect_exit = 0
 expect_stdout_contains = ["picked 600 600 64", "mixed 600 600 64"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
@@ -326,7 +326,7 @@ name = "gc.born_old.poison.fvm"
 desc = "A large array filled with young strings by plain stores (random.sample, shuffle) keeps them through minor collections (poison, fvm)."
 kind = "behavior"
 case = "../../../cases/feat/mm/gc/gc_born_old.cml"
-args = ["--gc-check", "poison", "--gc large_threshold_kb=", "4", "${case}", "${run_fvm}"]
+args = ["--gc-check", "poison", "--gc", "large_threshold_kb=4", "${case}", "${run_fvm}"]
 expect_exit = 0
 expect_stdout_contains = ["picked 600 600 64", "mixed 600 600 64"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
@@ -337,7 +337,7 @@ name = "gc.born_old.moving_stress.fvm"
 desc = "A large array filled with young strings by plain stores (random.sample, shuffle) keeps them through minor collections (moving stress, fvm)."
 kind = "behavior"
 case = "../../../cases/feat/mm/gc/gc_born_old.cml"
-args = ["--gc-stress", "safepoint=1,kind=minor", "--gc large_threshold_kb=", "4", "--gc", "kind=generational", "${case}", "${run_fvm}"]
+args = ["--gc-stress", "safepoint=1,kind=minor", "--gc", "large_threshold_kb=4", "--gc", "kind=generational", "${case}", "${run_fvm}"]
 expect_exit = 0
 expect_stdout_contains = ["picked 600 600 64", "mixed 600 600 64"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
@@ -348,7 +348,7 @@ name = "gc.born_old.poison.prl"
 desc = "A large array filled with young strings by plain stores (random.sample, shuffle) keeps them through minor collections (poison, prl)."
 kind = "behavior"
 case = "../../../cases/feat/mm/gc/gc_born_old.cml"
-args = ["--gc-check", "poison", "--gc large_threshold_kb=", "4", "${case}", "${run_prl}"]
+args = ["--gc-check", "poison", "--gc", "large_threshold_kb=4", "${case}", "${run_prl}"]
 expect_exit = 0
 expect_stdout_contains = ["picked 600 600 64", "mixed 600 600 64"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
@@ -359,7 +359,7 @@ name = "gc.born_old.moving_stress.prl"
 desc = "A large array filled with young strings by plain stores (random.sample, shuffle) keeps them through minor collections (moving stress, prl)."
 kind = "behavior"
 case = "../../../cases/feat/mm/gc/gc_born_old.cml"
-args = ["--gc-stress", "safepoint=1,kind=minor", "--gc large_threshold_kb=", "4", "--gc", "kind=generational", "${case}", "${run_prl}"]
+args = ["--gc-stress", "safepoint=1,kind=minor", "--gc", "large_threshold_kb=4", "--gc", "kind=generational", "${case}", "${run_prl}"]
 expect_exit = 0
 expect_stdout_contains = ["picked 600 600 64", "mixed 600 600 64"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
