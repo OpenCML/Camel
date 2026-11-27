@@ -28,6 +28,7 @@
 #include "camel/runtime/core_facts.h"
 #include "camel/runtime/operator_instance.h"
 
+#include <charconv>
 #include <optional>
 #include <span>
 
@@ -83,10 +84,15 @@ KindId shapeKind() {
         // No anchorsIn override: the default for a Node kind is every node of the view, and every
         // node of a graph has a type, so every node is a place to ask.
         .anchorsIn = {},
-        // No encode/decode yet: their forms live with the runtime kind for now, and a portable form
-        // belongs to the step that persists facts, not to the move of the kind.
-        .encode = {},
-        .decode = {},
+        // The portable text form (`test::facts_persist` exports it): the one the runtime kind
+        // stated, now stated here too, because a fact's text must not depend on the registry that
+        // wrote it. The functions are the value's (`camel/runtime/core_facts.h`), not the
+        // registration's -- one spelling, two registrations, until the older one is retired.
+        .encode =
+            [](const TensorShape &shape) {
+                return std::optional<std::string>(camel::runtime::fact::encodeShape(shape));
+            },
+        .decode = camel::runtime::fact::decodeShape,
     });
     return id;
 }
@@ -149,10 +155,20 @@ KindId permissionsKind() {
         // No anchorsIn override: a Node kind is asked at every node of the view, which is where a
         // program can grant a permission.
         .anchorsIn = {},
-        // No encode/decode yet: the runtime kind keeps its own form (a decimal number) until the
-        // step that persists facts, and two encoders now would be two texts for one value.
-        .encode = {},
-        .decode = {},
+        // The portable text form: the mask as a decimal number, which is what the runtime kind
+        // wrote. A Content kind is never stored, so its export enumerates the nodes that have a
+        // mask (`FACTS exported core.permissions`); 0 is the absence of a fact, never a value.
+        .encode = [](const int &mask) { return std::optional<std::string>(std::to_string(mask)); },
+        .decode = [](std::string_view text) -> std::optional<int> {
+            int value = 0;
+            const auto [end, error] =
+                std::from_chars(text.data(), text.data() + text.size(), value);
+            if (error != std::errc{} || end != text.data() + text.size() || value <= 0 ||
+                value > 255) {
+                return std::nullopt;
+            }
+            return value;
+        },
     });
     return id;
 }
@@ -218,8 +234,12 @@ KindId instanceKind() {
         // is what two instances are compared by.
         .print     = [](const NodeInstance &value) { return value.text; },
         .anchorsIn = {},
-        .encode    = {},
-        .decode    = {},
+        // No portable form, and not because the move is unfinished: the runtime kind stated none
+        // either (`core_facts.cpp`: `core.instance` has no encode and decode), so its facts were
+        // never exported. A form now would add a line to the export ledger with no counterpart to
+        // compare it against; what an instance's text is across processes is that step's question.
+        .encode = {},
+        .decode = {},
     });
     return id;
 }
@@ -279,8 +299,13 @@ KindId reorderKind() {
         // The text the runtime kind prints, from the one function that names this value.
         .print     = [](const Reorder &reorder) { return camel::runtime::fact::toString(reorder); },
         .anchorsIn = {},
-        .encode    = {},
-        .decode    = {},
+        // The portable text form, from the value's own functions: unchanged by which registration
+        // states the kind, so a fact exported from this store matches the text the older one wrote.
+        .encode =
+            [](const Reorder &reorder) {
+                return std::optional<std::string>(camel::runtime::fact::encodeReorder(reorder));
+            },
+        .decode = camel::runtime::fact::decodeReorder,
     });
     return id;
 }

@@ -623,12 +623,90 @@ FactCheckTestPass::apply(const camel::runtime::Program *program, std::ostream &o
 
 // ---- Persistence ------------------------------------------------------------------------------
 
+namespace {
+
+/// The kinds whose facts the framework's store answers and whose portable text the value states
+/// (`camel/runtime/core_facts.h`): the three the older store's exporter printed. An instance is
+/// not among them because neither store states a form for one (`core.instance` has no encode).
+std::vector<camel::facts::KindId> movedEncodableKinds() {
+    return {
+        camel::facts::shapeKind(),
+        camel::facts::reorderKind(),
+        camel::facts::permissionsKind(),
+    };
+}
+
+/// The portable facts of the moved kinds, asked of the framework's store: the questions the
+/// older exporter asks (`fact_persist.cpp`), so the text is the same text and a reader of the
+/// export cannot tell which store answered. A Derived kind hands over what it has stored, as the
+/// older exporter does with `probe == Valid`; a Content kind (permissions) is never stored, so
+/// its facts are the nodes the view gives a mask for.
+std::vector<PortableFact> exportMovedFacts(const Program &program) {
+    const std::vector<camel::facts::KindId> kinds = movedEncodableKinds();
+    const std::vector<GCGraph *> graphs           = collectReachableGraphs(program);
+    const auto names                              = qualifiedGraphNames(graphs);
+    std::unordered_map<const GCGraph *, uint64_t> hashes;
+    const auto hashOf = [&](const GCGraph *graph) {
+        const auto it = hashes.find(graph);
+        if (it != hashes.end()) {
+            return it->second;
+        }
+        return hashes.emplace(graph, portableGraphHash(program, graph)).first->second;
+    };
+    std::vector<PortableFact> out;
+    for (GCGraph *graph : graphs) {
+        camel::facts::Store *store = camel::facts::storeHolding(*graph);
+        if (store == nullptr) {
+            continue;
+        }
+        // Computed where they are answered: a store that holds several graphs is asked once per
+        // graph, and asking again at the same anchors is a hit, not a second fact.
+        camel::facts::computeAll(*store, *graph, graph->view(), kinds);
+        for (camel::facts::KindId kind : kinds) {
+            const camel::facts::KindInfo &info = camel::facts::kindInfo(kind);
+            if (!info.encode) {
+                continue;
+            }
+            for (gc_node_ref_t ref = 0; ref < graph->nodeCount(); ++ref) {
+                const camel::facts::Anchor anchor{graph, static_cast<camel::facts::NodeId>(ref)};
+                const std::shared_ptr<const void> value =
+                    store->getValue(kind, std::span<const camel::facts::Anchor>(&anchor, 1));
+                if (!value) {
+                    continue;
+                }
+                const std::optional<std::string> text = info.encode(value.get());
+                if (!text) {
+                    continue;
+                }
+                PortableFact fact{.kind = info.key, .version = info.version};
+                fact.anchors.emplace_back(names.at(graph), ref);
+                fact.graphHashes.push_back(hashOf(graph));
+                fact.value = *text;
+                out.push_back(std::move(fact));
+            }
+        }
+    }
+    return out;
+}
+
+} // namespace
+
 const camel::runtime::Program *
 FactPersistTestPass::apply(const camel::runtime::Program *program, std::ostream &os) {
     auto *graph                    = program->root();
     FactStore &store = context_->facts();
     computeFacts(store, *program);
-    const std::vector<PortableFact> facts = exportFacts(store, *program);
+    std::vector<PortableFact> facts = exportFacts(store, *program);
+    // The three kinds the framework answers now come from its store: the older exporter prints
+    // them today, and the move retires that line without changing a single count below.
+    const std::vector<camel::facts::KindId> moved = movedEncodableKinds();
+    std::erase_if(facts, [&](const PortableFact &fact) {
+        return std::ranges::any_of(moved, [&](camel::facts::KindId kind) {
+            return camel::facts::kindInfo(kind).key == fact.kind;
+        });
+    });
+    const std::vector<PortableFact> fromFramework = exportMovedFacts(*program);
+    facts.insert(facts.end(), fromFramework.begin(), fromFramework.end());
     std::map<std::string, size_t> perKind;
     size_t textRoundTrips = 0;
     for (const PortableFact &fact : facts) {
