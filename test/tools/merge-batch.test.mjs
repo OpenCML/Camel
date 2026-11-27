@@ -360,7 +360,7 @@ function runRead(rows, extra = []) {
     return { status: result.status ?? -1, out };
 }
 
-const row = (plan, test, status, plan_path = 'test/plans/feat/compile.plan.toml') => ({ plan, test, status, plan_path });
+const row = (plan, test, status, tier = 'fast', plan_path = 'test/plans/feat/compile.plan.toml') => ({ plan, test, status, tier, plan_path });
 const common = path.resolve(readSeat, git(readSeat, ['rev-parse', '--git-common-dir']));
 const remoteTip = () => git(readRemote, ['rev-parse', 'integration']);
 
@@ -383,7 +383,7 @@ check(
     record.includes('plans=test/plans/smoke,test/plans/feat/compile\n') &&
         record.includes('reds=2\n') &&
         record.includes('baseline=2026-01-02-promotion-3-reds.tsv\n') &&
-        record.includes('new=0\n'),
+        record.includes('tier=fast\nnew=0\n'),
     record,
 );
 
@@ -405,6 +405,27 @@ check(
     'a batch with new reds pushes nothing and leaves no reading record',
     remoteTip() === heldBefore && !fs.existsSync(path.join(common, 'camel-read')) && /pushed\s+no \(new reds\)/.test(held.out),
     held.out,
+);
+
+// A plan file named as a target runs its slow cases too, and the table is measured on the fast tier:
+// a slow-tier red the table does not list is not compared, and a fast-tier one is.
+fs.rmSync(path.join(common, 'camel-read'), { recursive: true, force: true });
+const slow = runRead(
+    [row('plan_a', 'known_red', 'fail'), row('plan_a', 'slow_new', 'fail', 'slow'), row('plan_a', 'slow_ok', 'pass', 'slow')],
+    ['--base', readBase, '--no-fetch'],
+);
+const slowTip = slow.out.split('\n').find((one) => one.startsWith('  tip '))?.trim().split(/\s+/)[1];
+const slowRecord = slowTip && fs.existsSync(path.join(common, 'camel-read', slowTip)) ? fs.readFileSync(path.join(common, 'camel-read', slowTip), 'utf8') : '';
+check(
+    'a slow-tier red that the table does not list is not a new red: exit 0, and the record counts only the fast tier',
+    slow.status === 0 && !slow.out.includes('new red') && slowRecord.includes('reds=1\n') && slowRecord.includes('tier=fast\n'),
+    `${slow.out}${slowRecord}`,
+);
+const mixed = runRead([row('plan_a', 'slow_new', 'fail', 'slow'), row('plan_a', 'fast_new', 'fail', 'fast')], ['--base', readBase, '--no-fetch']);
+check(
+    'a fast-tier red that the table does not list is new beside a slow one, and only it is named',
+    mixed.status === 5 && mixed.out.includes('new red  plan_a  fast_new\n') && !mixed.out.includes('slow_new'),
+    mixed.out,
 );
 
 fs.rmSync(readRoot, { recursive: true, force: true });

@@ -4767,6 +4767,9 @@ function slotTiming(entry, clock, marks, windows) {
         plan: entry.plan.id,
         plan_path: entry.plan.__planPath,
         test: entry.test.name,
+        // The layer the case belongs to, so a reader that compares reds across runs can compare
+        // like with like: a plan file named as a target runs in full, whatever the tier asked for.
+        tier: testTier(entry.plan, entry.test),
         status: entry.outcome ? entry.outcome.status : 'fail',
         // The child was ended at its limit: what separates a case that is slow from one that is wrong.
         timed_out: result ? result.timedOut === true : false,
