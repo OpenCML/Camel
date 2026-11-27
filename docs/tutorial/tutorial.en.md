@@ -265,7 +265,7 @@ There is no "early return" in Camel. Make the branch the last expression of the 
 ```cml
 
 func main() => int sync {
-    let xs = (1 .. 11)->to_array()    // [1, ..., 10]
+    let xs: int[] = 1 .. 11    // [1, ..., 10]
     let squares = xs->map<func (x) { x * x }>
     let evens = squares->filter<func (x) { x % 2 == 0 }>
     let total = evens->reduce<func (acc: int, x: int) => int { acc + x }, 0>
