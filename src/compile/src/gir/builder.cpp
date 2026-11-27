@@ -1159,7 +1159,7 @@ compile_graph_ptr_t Builder::visitFuncNode(const GCT::node_ptr_t &gct) {
     buildFuncBody(gct, graph, funcType, name, tags, written);
     // A declaration tag whose argument names a function (`#vjp(cube_rule)`) keeps that graph
     // in the reference table of the function's graph: the fact is a graph reference, and the
-    // reader finds it in the frozen graph (GCGraph::ruleGraphs).
+    // reader finds it in the frozen graph (the frozen graph's `ruleGraphs`).
     attachRuleGraphs(graph, tags.declaration);
     // A declaration fact that has to live on the graph itself: a scheduler reads
     // `#independent` from the exit node of the function it is about to call (design 3.6), and

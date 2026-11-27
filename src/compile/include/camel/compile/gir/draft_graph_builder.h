@@ -53,6 +53,7 @@ class DraftGraphBuilder {
     /// The graph itself. Private: a reader asks view(), a writer asks edit(), and this is the name the
     /// class keeps for its own forty uses. It is not part of the interface.
     runtime::GraphDraft &draft() const { return transaction_->edit(); }
+
   public:
     /// The graph as it stands, for a caller that only reads it. On the writing side the same graph is
     /// called draft(): the two sides get their own names first, and their own types after (a reader
@@ -94,9 +95,9 @@ class DraftGraphBuilder {
     /// Completes the signature with the result type its body decided: an open signature (the
     /// type of a function the program declared, camel/core/type/composite/func.h) is completed
     /// in place, so every value of the function sees it; any other is replaced by the interned
-    /// signature with that result type. Interned types are never modified, and the in-place write goes
-    /// through the draft (`GraphDraft::setOpenExitType`), which journals the content it replaces so
-    /// that a rollback puts the result type back.
+    /// signature with that result type. Interned types are never modified, and the in-place write
+    /// goes through the draft (the draft's `setOpenExitType`), which journals the content it
+    /// replaces so that a rollback puts the result type back.
     void setExitType(camel::core::type::Type *exitType);
     /// Completes the signature with the resources its body was measured to reach: what a function
     /// promises about resources is part of its type, so a function that wrote no clause promises
@@ -104,10 +105,10 @@ class DraftGraphBuilder {
     /// place, so every value of the function and every reader of its type sees the same set; any
     /// other is replaced by the interned signature with those resources. Interned types are never
     /// modified, and the in-place write goes through the draft
-    /// (`GraphDraft::setOpenResources`), which journals the content it replaces so that a rollback
+    /// (the draft's `setOpenResources`), which journals the content it replaces so that a rollback
     /// puts the signature back.
     void setResources(const camel::core::sem::ResourceSignature &resources);
-    /// The names the function captures, in capture order (runtime::GraphDraft::captureNames).
+    /// The names the function captures, in capture order (the draft's `captureNames`).
     std::vector<std::string_view> captureNames() const;
     /// Records that the function captures `name` (one entry per capture port, in order).
     void addCaptureName(std::string_view name) { draft().addCaptureName(name); }
@@ -211,7 +212,7 @@ class DraftGraphBuilder {
     /// The operator declaration this builder recorded for a node of kind OPER, or `nullptr` when it
     /// recorded none. **Asking is not a precondition**: nothing recorded is an ordinary answer.
     ///
-    /// A pass writes a call by naming its operator's URI -- `GraphDraft::addOperNode(type, nullptr,
+    /// A pass writes a call by naming its operator's URI -- the draft's `addOperNode(type, nullptr,
     /// uri)`, which is how `:op/cast` and `:op/copy` are written -- and the builder of the graph a
     /// pass hands on never resolved that call, so no declaration is here to hand back. The URI is
     /// not lost with it: the node's payload names its operator (`GCOperBody::uri()`, design

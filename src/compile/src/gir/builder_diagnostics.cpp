@@ -531,7 +531,7 @@ void Builder::layRegionWriteEdges() {
     //
     // So what is laid here is a GATE, not a fan-in of sync edges: the exit receives the writes as
     // **normal inputs** and nothing joins the writes to one another. That is what makes the
-    // promise keepable at all -- a node has one sync predecessor (`GraphDraft::setSyncInputs`
+    // promise keepable at all -- a node has one sync predecessor (the draft's `setSyncInputs`
     // refuses two), so an exit cannot receive one edge per statement the region owes, while a GATE
     // holds as many inputs as it likes.
     //

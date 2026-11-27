@@ -4,7 +4,7 @@
 /*
  * Compile-time static function carrier implementation.
  *
- * Runtime `::Function` now models only executable GCGraph closures. GIR still
+ * Runtime `::Function` now models only executable frozen-graph closures. GIR still
  * needs a GC-traced object form for static function values during rewrite and
  * validation, so this file keeps that representation entirely on the
  * compile-time side.

@@ -13,7 +13,7 @@ namespace camel::compile::gir {
  *
  * This object is intentionally GIR-local. It exists only inside compile-time
  * graph static slots so rewrite and validation logic can keep using normal
- * GC-traced object graphs while runtime `::Function` stays a pure GCGraph
+ * GC-traced object graphs while runtime `::Function` stays a pure frozen graph
  * closure carrier.
  */
 class StaticFunction : public camel::core::rtdata::Object {
