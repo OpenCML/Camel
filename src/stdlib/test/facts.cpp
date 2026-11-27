@@ -14,6 +14,7 @@
 #include "camel/execute/pass/registration.h"
 #include "camel/facts/core_kinds.h"
 #include "camel/facts/facts.h"
+#include "camel/passes/test/anchor.h"
 #include "camel/runtime/draft_session.h"
 #include "camel/runtime/fact_persist.h"
 #include "camel/runtime/facts.h"
