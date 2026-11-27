@@ -230,6 +230,10 @@ pwsh -NoProfile -File <你的工作树>\internal\tools\camel-remote.ps1 `
 · **要换一把 `flock` 锁就换路径**：宿主的 tree lock 按 checkout 路径的 `cksum` 建，同一棵树同时只许一条 run。
   换锁的合法办法是另开一棵（`-Path D:\Projects\Camel-wt\<新名字> -Branch <branch> -Base <sha>`，或 `git worktree add --detach <路径>`），
   跑完 `git worktree remove` + `git worktree prune`；**不要去动别人的树，也不要去动别人的锁。**
+  **锁文件一律只 `cat`、不 `rm`**（2026-11-27 两次代价）：`cat` 出来的持有者 pid 会在你 `ps` 它之前就换人
+  —— 第一次删时文件里已是 `pid=726230`（另一个 run 刚拿走），第二次 `cat` 到 `783448` 却仍按上一轮的 pid 验，
+  两次都删掉了**活锁**（都按删前原字节恢复、持有者未受惊动，但那是运气）。持有者已死时留下的文件只是旧记录，
+  `flock` 已自动放手，**它不挡下一条**：所以它既不需要你删，也轮不到你删 —— 只把 `cat` 与 `ps -p <当次 cat 的 pid>` 两条原文报给协调者。
 · **建树只走一个入口**（槽位第一次建；池里没有空位时），不要手抄 `git worktree add`：
     pwsh -NoProfile -File internal/tools/new-worktree.ps1 `
       -Path D:\Projects\Camel-wt\<lane> -Branch <branch> -Base origin/develop
