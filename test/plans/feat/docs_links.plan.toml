@@ -189,6 +189,15 @@ normalizers = ["normalize_newlines"]
 # (`no stale snippet in`, exit 0). 180000 ms puts the margin at 45000 ms, a third above that
 # reading, and still catches a genuine hang inside three minutes.
 timeout_ms = 180000
+# What the case costs, stated as cost and not as a longer timeout: at its first green reading on
+# the build host it used 72140 ms of CPU -- that reading is the 4x rule's red against the bound
+# above (72140 x 4 > 180000), and the work is what grew, not the check's verdict, which was green on
+# its own witness. Green work costs more than red work did: a red example stops at the first
+# diagnostic, so a reading taken while twenty-six snippets were stale measured the failure path.
+# This case starts one compiler per snippet across eight jobs, so its CPU time is the sum of its
+# threads and the wall clock is not the bound (`test/tools/run-tests.mjs#runOneTest`); 120000 ms is
+# 1.66x of the reading above, and the timeout stays the liveness bound.
+cpu_budget_ms = 120000
 # Slow layer: over the 2 s the fast layer allows -- 19.73 s of
 # child wall clock.
 tier = "slow"
@@ -294,6 +303,51 @@ case = "../../../scripts/check-doc-snippets.mjs"
 args = ["${case}", "test/plans/feat/docs_links/fixture/snippets/fault_shown_by_the_page.md", "--camel", "${camel}"]
 expect_exit = 0
 expect_stdout_contains = ["no stale snippet in"]
+normalizers = ["normalize_newlines"]
+timeout_ms = 60000
+
+# The comparison the case above reads, from its other side: the same program, and a block that
+# declares another index and another column. A page whose declared fault text is not what the run
+# printed is red, so widening what is compared (the printed lines and the located diagnostic, both
+# streams) is not a licence to accept any text block.
+[[tests]]
+name = "docs.snippets_fault_text_differs_from_the_page"
+desc = "A page whose text block declares a fault the run does not print -- another index, another column -- fails naming the line that differs, so the run comparison is a reading and not a formality."
+kind = "behavior"
+tool = "node"
+case = "../../../scripts/check-doc-snippets.mjs"
+args = ["${case}", "test/plans/feat/docs_links/fixture/snippets/fault_text_wrong.md", "--camel", "${camel}"]
+expect_exit = 1
+expect_stdout_contains = ['output differs from the text block', 'page says "error[RuntimeDiag::IndexOutOfRange]: Index 4 is out of range for an array of length 3."']
+normalizers = ["normalize_newlines"]
+timeout_ms = 60000
+
+# Two readings of one rule about a name the example does not bring into scope, on a miniature
+# library named with `--stdlib`: a name exactly one module exports is imported from it, and a name
+# two modules export is reported instead of guessed. The module names are the real ones (`types`,
+# `array`, `tensor`) because the compiler resolves an import against the install it runs, so what
+# the fixtures vary is the library's shape and not whether the module exists.
+[[tests]]
+name = "docs.snippets_free_name_is_imported"
+desc = "An `@example` that calls a function only another module exports compiles: `is_same` is `types`'s, the page that calls it imports nothing, and the checker imports the name from the one module that exports it."
+kind = "behavior"
+tool = "node"
+case = "../../../scripts/check-doc-snippets.mjs"
+args = ["${case}", "--source-examples", "--stdlib", "test/plans/feat/docs_links/fixture/stdlib_autoimport", "--camel", "${camel}"]
+expect_exit = 0
+expect_stdout_contains = ["0 of the standard library's 1 @example(s) do not compile"]
+normalizers = ["normalize_newlines"]
+timeout_ms = 60000
+
+[[tests]]
+name = "docs.snippets_two_modules_same_name_is_refused"
+desc = "An `@example` that calls a name two modules export (`to_bytes`, as `array` and `tensor` both declare it) fails with a message naming both, because importing one of them would decide the example's meaning for the reader."
+kind = "behavior"
+tool = "node"
+case = "../../../scripts/check-doc-snippets.mjs"
+args = ["${case}", "--source-examples", "--stdlib", "test/plans/feat/docs_links/fixture/stdlib_ambiguous", "--camel", "${camel}"]
+expect_exit = 1
+expect_stdout_contains = ["an ambiguous name", "more than one module exports to_bytes (array, tensor)"]
 normalizers = ["normalize_newlines"]
 timeout_ms = 60000
 

@@ -1,0 +1,1 @@
+export func to_bytes::<T>(t: T[...]) => Bytes when is_plain::<T>()

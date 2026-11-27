@@ -1,0 +1,1 @@
+export func to_bytes::<T>(xs: T[...]) => Bytes panic when is_plain::<T>()
