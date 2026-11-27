@@ -4064,6 +4064,7 @@ c946f2b9c4d7a780 ok test/cases/opt/cost/cost_choice.cml
 7cedb974857cebb4 ok test/cases/opt/defun/higher_order.cml
 0cd48452a62cc794 ok test/cases/opt/defun/native_map.cml
 1118373db3aefc95 ok test/cases/opt/defun/nested_signature.cml
+41ba760de7feea8d ok test/cases/opt/defun/stream_pull.cml
 7492da3dc3c8c7dc ok test/cases/opt/defun/value_tag.cml
 b4e202123dc4dec9 ok test/cases/opt/defun/widened_own_values.cml
 b9af67d5be80435f ok test/cases/opt/devirtualize/recallee_arity.cml
