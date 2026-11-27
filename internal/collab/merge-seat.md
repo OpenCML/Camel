@@ -314,6 +314,50 @@ c) 差集非空 ⇒ **停下，报给协调者**，附三样：差集里的用�
 跑之前先核**计划路径存在**：把不存在的路径交给 runner，它不报"没有这个计划"，而是**空跑 2.7 s 后 exit 1**
 （本晚实测：`-Plan test/plans/feat/docs/ai_reference.plan.toml` 不存在，真名是 `test/plans/feat/docs_ai_reference.plan.toml`）。
 看到一次"计划秒返回 + exit 1 + 日志里没有 `[SUMMARY]`"，先 `git ls-files` 核路径，别当成用例红了。
+目录型目标同理：`test/plans/feat/docs_links`（目录）与 `test/plans/feat/docs_links.plan.toml`（文件）是两个目标，
+给目录而目录里没有 `*.plan.toml` ⇒ `[PLAN ERROR] … holds no *.plan.toml`、exit 2，**一个用例都没跑**。
+
+**指名一个计划文件时，它会跑该文件的全部层**（含 `slow`）—— 所以"尖端上这条红"与"全快层里有这条红"是两件事：
+
+- `docs.snippets_compile` 是 slow 用例，`-Tier fast` 从不跑它；它在指名 `docs_links.plan.toml` 时才出现，
+  而它的红是既存的 C7 缺陷（`src/stdlib/onnx.cml:78/:114` 两条 `@example` 的 `UnresolvedReference`）。
+- 报账时写清"这条不在快层名单里"，别让下一轮读者以为它"消失了"。反过来，**别拿一次指名运行的名单去改快层基准**。
+
+## 构建/跑测撞上 `state=noslot`：先当陈旧锁，加 `-QueueOnTreeLock`，不要杀 pid
+
+```
+[camel-remote] this checkout is busy: another run holds its lock, and this run did not ask to wait for it (-QueueOnTreeLock):
+               host=… pid=… since=… run=… cmd=bash /tmp/camel-remote-…/run.sh  (that pid is gone: a process it started may still hold the lock)
+[camel-remote] state=noslot: this checkout is held by another run, so this run did not start -- nothing above is a reading.
+[camel-remote] merge-seat-1 exit 4 (checkout held by another run; … build 0.0 s)
+```
+
+三步：
+
+1. 看钩子报的 `pid`：**`(that pid is gone)`** 就说明持锁进程已经不在了，锁是残留 ⇒ 不是"这台机器跑不动"。
+2. 同一条命令加 **`-QueueOnTreeLock`** 重试（本晚实测：加完 `BUILD_EXIT=0 BUILD_SECONDS=15.0`）。
+3. **不要**去 kill 那个 pid：它不是你的记录，而且已经消失；真正要修的是"锁没有一个活着的持有者"这件事本身（`task-364` / `lane/checkout-lock`）。
+
+`state=noslot` 时日志里那句 `nothing above is a reading` 很重要：**一次 `noslot` 的退出码不是读数**，别把它记成"构建失败"。
+
+## 合并冲突：取"含得更多"的那版，再把另一版的规则手工补回，并用 `numstat` 自证
+
+本晚一次真实冲突（`lane/runner-diagnostic-file` 与 `lane/dead-citation` 改同一个计划文件）：前者把 13 条 `expect_diagnostic_line`
+改成 `expect_diagnostic_file`，后者把 21 条改成 `file` 并加消息断言、但**不含** `zip_with`（因为前者的规则当时还不在尖端）。
+两笔都"对"，冲突只是同一行被两种写法都碰过。
+
+```
+1. 取"含得更多"的那一版：git show <lane>:<path> > <path>      # 21 条 file + 消息断言
+2. 把另一版独有的规则手工补回（这里是两条 zip_with 的 file 钉法）
+3. 自证没有夹带：git diff --numstat HEAD^1 HEAD -- <path>   # 相对"含得少"的那版应是它自己的改动量
+                 git diff --numstat HEAD^2 HEAD -- <path>   # 相对"含得多"的那版应只剩补回的那几行（这次是 2 2）
+4. 冲突解决必须写进合并记录：两笔各自改了什么、为什么取这版、补回了什么、为什么要"合完再跑"
+```
+
+第 3 步是防"整文件行尾翻动"（Windows 上 `Set-Content` 会把 LF 写成 CRLF）：`numstat` 若等于全文件行数，说明行尾被改了，
+那不是解决冲突，是重写文件 —— 用 `[System.IO.File]::WriteAllText` 或 `git checkout --theirs` 之后再定向 `-replace`。
+第 4 步是让"顺序"有据：`dead-citation` 的 5 条 `zip_with` 红只有在 `runner` 的规则落地后才该转绿，
+所以合并记录里写的是"**合完再跑那 5 条**"，而不是"枝上已经绿了"。
 
 ## 合之前先判：这一笔动的是不是量具（元层）
 
