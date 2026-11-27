@@ -500,3 +500,13 @@ capacity 同二进制连跑 3 次：18/18 → 17/18(tf) → 16/18(fvm+tf)
 **批 5 已落**：`ea54f1a186`（`carried-from d679eca503`），三枝 = `native-constas` + `gen-constas` + `opt-inline`，147 red / **0 甲**。
 
 **闸门口的石头**：`fault_deep.prl_off` 是偶发（晋升绿 → 批 5 首趟红 → 这批绿）。新版 `merge-batch`（`fsh-dev 9b5e234f70`，已合 `2f9f9a60c2`）会把"用例声明了 `flaky` 的红"打印成 `flaky red`、不算新增；但**真正的解是第 2 条那条根因修复** —— 它合了之后 `flaky` 字段删除，闸门回到"只看真新增"。
+
+### 队列更新（2026-11-28 07:08）
+
+- **已落**：#1 `frame-codeat b40a415f626b`（`4ada220bf5`，`147 red / 0 not in table / pushed yes`；`flaky` 字段已删）；批 5（`ea54f1a186`，三枝、0 甲）。
+- **#1 现为 `cc-loop-forward 224aeff25b`**（游离提交，需 `seat/carrier-ccl` 载体枝；`modules` 新增红 0、`compile` 13 全在表内）。
+- **#2 `stdlib-reds bf8a61b35a`**（4059 文件；进队前再换底；先探不合）。
+- **#3 `index-axis`**（等 `enter-shape` 录 ast 哈希 → `parse 131/131`）。
+- **`editview-commit` 暂不进批**：枝底 `1007403717` 不是 integration 的祖先 ⇒ `feat/modules` 81 红中 **39 条不在 66 表里的是这条枝自己的新红**；`lane-editview-a` 正在逐笔二分 → 换底（`ahead 13 / behind 58`）→ 换底后复判。表到之前整层报的 39 条甲照旧拦。
+- **promotion-67**：06:56:31 起跑，`tip 3f968c32aa`，约 07:15 出数；`editview-commit` 以 `merge-base --is-ancestor` 回读判断覆盖与否。
+- **工具版本**：新版 `merge-batch`（`fsh-dev 9b5e234f70` → `2f9f9a60c2`）已在 integration；合并位下一批起跑前要把 `scripts/merge-batch.mjs` + `test/tools/run-tests.mjs` 对齐到尖端，才会出现 `flaky=` 行。
