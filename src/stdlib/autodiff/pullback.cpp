@@ -92,6 +92,38 @@ using type::TupleType;
 using type::Type;
 using type::TypeCode;
 
+/// The type of a graph the transform built (the forward graph, a tape loop's body, the pullback,
+/// the gradient itself). Its parameters carry the names of the source signature it was lifted
+/// from where there is one -- a `with` parameter is bound by its name at a call site
+/// (`f<m: v>(...)`), so the call sites' spelling has to keep working -- and their position
+/// (`arg0`, `arg1`, ...) elsewhere. Nothing binds by a positional name; the point is only that a
+/// signature recording no name at all is a fact several readers take as license to read nothing
+/// (the ONNX export names a model's inputs from them), and asking such a type for a name it does
+/// not have is not the program's fault.
+FunctionType *rewrittenFunctionType(
+    const param_vec_t &withParams, const param_vec_t &normParams, Type *exit,
+    const FunctionType *namesFrom = nullptr) {
+    FunctionTypeFactory factory;
+    factory.setHasCompileInfo(true);
+    factory.setExitType(exit);
+    size_t position   = 0;
+    const auto nameAt = [&]() -> std::string {
+        const size_t index = position++;
+        if (namesFrom != nullptr && namesFrom->hasArgNames() &&
+            index < namesFrom->argNamesCount()) {
+            return std::string(namesFrom->argNameAt(index));
+        }
+        return std::format("arg{}", index);
+    };
+    for (const type::param_t &param : withParams) {
+        factory.addWithArg(nameAt(), param.first, param.second);
+    }
+    for (const type::param_t &param : normParams) {
+        factory.addNormArg(nameAt(), param.first, param.second);
+    }
+    return factory.build();
+}
+
 /// Which of the two answers of the core's tangent query a node's tangent is built for. `Machinery`
 /// is the tangent of a value the transform carries itself -- a loop's state, a captured tuple, an
 /// aggregate on the reverse tape
@@ -4780,7 +4812,7 @@ const PullbackPlan &Engine::planForClosure(GCGraph *graph) {
         normParams.emplace_back(captured, false);
         portTypes.push_back(captured);
     }
-    liftedDraft.setFuncType(FunctionType::create(withParams, normParams, type->exitType()));
+    liftedDraft.setFuncType(rewrittenFunctionType(withParams, normParams, type->exitType()));
     liftedDraft.setClosureType(nullptr);
     PullbackPlan plan = reserve(
         graph->name(),
@@ -4990,7 +5022,8 @@ void Engine::build(Pending &pending) {
     // The forward graph runs the function's own body and hands the primal value back beside the
     // pullback, so it touches exactly what the function touches: the clause travels as it is, and
     // the parameters are the same positions, so nothing is renumbered.
-    FunctionType *forwardType = FunctionType::create(withParams, normParams, plan.forwardValueType);
+    FunctionType *forwardType =
+        rewrittenFunctionType(withParams, normParams, plan.forwardValueType, sourceType);
     if (plan.sourceClause && plan.sourceClause->mode == sem::ResourceSignature::Mode::Concrete) {
         forwardType = forwardType->withResources(*plan.sourceClause);
     }
@@ -5199,7 +5232,7 @@ LoopBodyPlan Engine::buildLoopBody(
         pullbackParams.emplace_back(residual, false);
     }
     pullback.setFuncType(
-        FunctionType::create(param_vec_t{}, pullbackParams, plan.graphs.tangentsType));
+        rewrittenFunctionType(param_vec_t{}, pullbackParams, plan.graphs.tangentsType));
 
     // The body the loop runs: the next state, then the values one round collects. The builder's
     // collections, if any, stay first; the tape follows.
@@ -5555,7 +5588,7 @@ gradientSignature(FunctionType *function, bool withValue, bool hasAux) {
     for (size_t i = 0; i < function->normTypesCount(); ++i) {
         normParams.emplace_back(function->normTypeAt(i), function->normIsVarAt(i));
     }
-    signature.functionType = FunctionType::create(withParams, normParams, result);
+    signature.functionType = rewrittenFunctionType(withParams, normParams, result, function);
     // The gradient runs the transformed function, so what a call through the gradient touches is
     // what the transformed function's own clause says -- and the parameters are the same, in the
     // same order, because the two loops above copy them one for one (design effects plan 2.2/2.3: a
