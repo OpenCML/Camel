@@ -987,6 +987,9 @@ function isSerial(plan, test) {
  * Node has of a child's CPU is the `cutime` + `cstime` delta of /proc/self/stat, which sums every
  * child this process reaped, and the runner reaps every test's child from one process.
  */
+// How long a killed child's output pipes get to drain before its result is delivered anyway.
+const REAP_GRACE_MS = 2000
+
 function runProcess(command, args, { cwd, env, timeoutMs, marks, cpuReport = false }) {
     return new Promise((resolve) => {
         const started = performance.now()
@@ -1004,6 +1007,7 @@ function runProcess(command, args, { cwd, env, timeoutMs, marks, cpuReport = fal
         let timedOut = false
         let settled = false
         let timer = null
+        let reapTimer = null
         let child = null
         const finish = (status, signal, error) => {
             if (settled) return
@@ -1013,6 +1017,7 @@ function runProcess(command, args, { cwd, env, timeoutMs, marks, cpuReport = fal
             // slot is held while the runner does its own work".
             if (marks) marks.exitedAt = performance.now()
             if (timer) clearTimeout(timer)
+            if (reapTimer) clearTimeout(reapTimer)
             resolve({
                 status: typeof status === 'number' ? status : null,
                 signal: signal ?? null,
@@ -1065,6 +1070,11 @@ function runProcess(command, args, { cwd, env, timeoutMs, marks, cpuReport = fal
             timer = setTimeout(() => {
                 timedOut = true
                 killProcessTree(child)
+                // `close` waits for every holder of the child's output pipes, so a process the
+                // child left behind can keep it from ever coming. The bound is a promise to the
+                // caller: once the tree has been killed the result is delivered after a short
+                // grace, whether or not the pipes have drained.
+                reapTimer = setTimeout(() => finish(null, 'SIGKILL', null), REAP_GRACE_MS)
             }, timeoutMs)
         }
     })
@@ -1152,6 +1162,8 @@ function parseArgs(argv) {
         updateGolden: false,
         // `fast` is the default layer: the full test set is opt-in (`--tier all`, `npm run test:all`).
         tier: 'fast',
+        // Whether `--tier` was typed, as opposed to the default layer.
+        tierExplicit: false,
         // Which build the tests run against. `release` is out/latest; `debug` is out/debug.
         build: envBuild || 'release',
         buildExplicit: envBuild !== undefined,
@@ -1230,10 +1242,12 @@ function parseArgs(argv) {
             const tier = argv[++i]
             if (!TIERS.has(tier)) throw new Error(`--tier must be one of ${[...TIERS].join(', ')}, got '${tier}'`)
             options.tier = tier
+            options.tierExplicit = true
         } else if (arg.startsWith('--tier=')) {
             const tier = arg.slice('--tier='.length)
             if (!TIERS.has(tier)) throw new Error(`--tier must be one of ${[...TIERS].join(', ')}, got '${tier}'`)
             options.tier = tier
+            options.tierExplicit = true
         } else if (arg === '--build' && i + 1 < argv.length) {
             const build = argv[++i]
             if (!Object.hasOwn(BUILDS, build)) throw new Error(`--build must be one of ${Object.keys(BUILDS).join(', ')}, got '${build}'`)
@@ -2187,6 +2201,12 @@ async function selectCudaDeviceFor(test) {
  * the repository root before the test. A non-zero exit skips the test, reporting the command's
  * output as the reason; the test is then neither passed nor failed. Use it only for conditions
  * outside the code under test, such as network access for a dataset download.
+ *
+ * The probe is a static question about the host. It takes no card from the device selection (that
+ * happens after it, for a test that passed it) and it has a time limit of its own,
+ * `skip_unless_timeout_ms`. Returns null when the test may run, `{ skip }` with the reason when the
+ * probe answered no, and `{ fail }` with the message when the probe did not answer within its
+ * limit: a probe that never returns is a defect of the entry, not a fact about the host.
  */
 async function checkPrecondition(test, sharedVars, scratch, scratchRelative) {
     if (!test.skip_unless || test.skip_unless.length === 0) {
@@ -2200,22 +2220,35 @@ async function checkPrecondition(test, sharedVars, scratch, scratchRelative) {
     // skip is a silent loss of coverage, not a red (docs/test-plans.md, "CUDA visibility").
     const env = { ...process.env, CAMEL_TEST_TMPDIR: scratch }
     if (pythonEntryPoints(test).precondition) hideCudaDevicesFrom(env, test)
-    // The precondition is the test's own question about the host, so it is asked with the card the
-    // test will be given: a probe that answered "no device" against the card another tenant filled
-    // would skip the very test this card was chosen for.
-    applyCudaDevice(env, test)
+    const limitMs = test.skip_unless_timeout_ms || PRECONDITION_TIMEOUT_MS
     const proc = await runProcess(cmd, args, {
         cwd: REPO_ROOT,
         // The precondition writes where the test would: a dataset downloaded for it lands in
         // its own scratch directory, so two tests (or two runs) cannot corrupt one cache.
         env,
-        timeoutMs: test.skip_unless_timeout_ms || 120000,
+        timeoutMs: limitMs,
     })
+    if (proc.timedOut) {
+        return { fail: `precondition probe did not return within ${limitMs} ms (${test.skip_unless.join(' ')})` }
+    }
     if (proc.status === 0) {
         return null
     }
     const detail = `${proc.stdout || ''}${proc.stderr || ''}`.trim() || proc.error?.message || `exit ${proc.status}`
-    return `precondition not met (${test.skip_unless.join(' ')}): ${detail}`
+    return { skip: `precondition not met (${test.skip_unless.join(' ')}): ${detail}` }
+}
+
+// The limit of a `skip_unless` probe that names none.
+const PRECONDITION_TIMEOUT_MS = 120000
+
+/**
+ * The outcome a precondition answer gives the entry: a skip for "not met", a failure with a runner
+ * message for a probe that did not return.
+ */
+function preconditionOutcome(test, answer) {
+    if (answer.skip !== undefined) return { status: 'skip', reason: answer.skip }
+    const result = runnerErrorResult(entryCasePath(test), answer.fail)
+    return { status: 'fail', result, metric: '', failures: result.failures }
 }
 
 /**
@@ -5267,24 +5300,22 @@ async function executePlans(plans, options, sharedVars, logDir) {
                         entry.outcome = { status: 'fail', result, metric: '', failures: result.failures }
                         return
                     }
-                    // The host checks begin here: the card selection and the `skip_unless` probe
-                    // are both questions about the machine, and they are counted as such.
+                    // The host checks begin here: the `skip_unless` probe and the card selection
+                    // are both questions about the machine, and they are counted as such. The
+                    // probe goes first and holds no card: a test that cannot run on this host
+                    // never takes one.
                     clock.probeAt = performance.now()
-                    // The card goes before the probe: the probe is this test's own question about
-                    // the host, and it must be asked against the card the test will get.
-                    const deviceSkip = await selectCudaDeviceFor(entry.test)
-                    if (deviceSkip) {
-                        probes.release(1)
-                        probeHeld = false
-                        entry.outcome = { status: 'skip', reason: deviceSkip }
-                        return
-                    }
-                    const skipReason = await checkPrecondition(entry.test, sharedVars, scratch, scratchRelative)
+                    const answer = await checkPrecondition(entry.test, sharedVars, scratch, scratchRelative)
+                    const deviceSkip = answer ? null : await selectCudaDeviceFor(entry.test)
                     clock.preconditionAt = performance.now()
                     probes.release(1)
                     probeHeld = false
-                    if (skipReason) {
-                        entry.outcome = { status: 'skip', reason: skipReason }
+                    if (answer) {
+                        entry.outcome = preconditionOutcome(entry.test, answer)
+                        return
+                    }
+                    if (deviceSkip) {
+                        entry.outcome = { status: 'skip', reason: deviceSkip }
                         return
                     }
                 }
@@ -5309,21 +5340,21 @@ async function executePlans(plans, options, sharedVars, logDir) {
                         entry.outcome = { status: 'fail', result, metric: '', failures: result.failures }
                         return
                     }
+                    // The mark is only taken for a test that has a precondition: `performance.now()`
+                    // around a call that returns at once is a rounding artefact (0.1 ms) on
+                    // thousands of tests, not a probe, and it would be counted as one.
+                    if (wantsProbe) clock.probeAt = performance.now()
+                    const answer = await checkPrecondition(entry.test, sharedVars, scratch, scratchRelative)
+                    if (wantsProbe) clock.preconditionAt = performance.now()
+                    if (answer) {
+                        entry.outcome = preconditionOutcome(entry.test, answer)
+                        return
+                    }
                     // A serial test (or one with no probe) picks its card inside its own slot:
                     // nothing may run next to a serial test, and the selection is a child process.
                     const deviceSkip = await selectCudaDeviceFor(entry.test)
                     if (deviceSkip) {
                         entry.outcome = { status: 'skip', reason: deviceSkip }
-                        return
-                    }
-                    // The mark is only taken for a test that has a precondition: `performance.now()`
-                    // around a call that returns at once is a rounding artefact (0.1 ms) on
-                    // thousands of tests, not a probe, and it would be counted as one.
-                    if (wantsProbe) clock.probeAt = performance.now()
-                    const skipReason = await checkPrecondition(entry.test, sharedVars, scratch, scratchRelative)
-                    if (wantsProbe) clock.preconditionAt = performance.now()
-                    if (skipReason) {
-                        entry.outcome = { status: 'skip', reason: skipReason }
                         return
                     }
                 }
@@ -5848,11 +5879,12 @@ async function main() {
             `${COLORS.cyan}[INFO]${COLORS.reset} selected plan target(s) follow --tier ${options.tier}: ${options.layeredPlans.size}`
         )
     }
-    if (namedPlans.length > 0 && options.tier !== 'all') {
-        // Naming a plan is the user's intent: it runs in full, whatever `--tier` says. A
-        // directory target still selects the layer (see loadPlans).
+    if (namedPlans.length > 0 && options.tierExplicit) {
+        // Naming a plan file runs all of its entries, whatever `--tier` says; a directory target
+        // still selects the layer (see loadPlans). The line is printed only when the tier was typed,
+        // because that is the case where a reader would expect it to filter.
         console.log(
-            `${COLORS.cyan}[INFO]${COLORS.reset} named plan target(s) run in full: ${namedPlans.length} (the tier filter leaves a named plan alone)`
+            `${COLORS.cyan}[INFO]${COLORS.reset} named plan target(s) run in full: ${namedPlans.length} (--tier ${options.tier} does not filter a plan file's entries)`
         )
     }
     if (options.selectionEmpty) {

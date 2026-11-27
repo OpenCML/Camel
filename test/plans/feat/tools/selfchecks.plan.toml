@@ -169,7 +169,7 @@ timeout_ms = 120000
 # Fast: 0.6 s on the workstation, 2026-11-25.
 [[tests]]
 name = "selfchecks.camel_remote_args"
-desc = "`internal/tools/camel-remote-args.test.ps1`: the list parameters split on commas as `-Plan` already did, the `--only`/`--drop` words are built from them, and an `-AstOnly` that names no `.cml` of this tree is refused instead of selecting nothing on the host."
+desc = "`internal/tools/camel-remote-args.test.ps1`: the list parameters split on commas as `-Plan` already did, the `--only`/`--drop`/`--entry` words and the `-UpdateGolden` runner line are built from them, an `-AstOnly` that names no `.cml` of this tree is refused instead of selecting nothing on the host, every checker block of the real table names a script and reads no input, a table row without a script is refused by name, and no script-scope variable is a parameter under another spelling."
 kind = "behavior"
 tool = "node"
 case = "../../../../internal/tools/camel-remote-args.test.ps1"

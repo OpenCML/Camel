@@ -63,3 +63,6 @@ makes the specialization again … one need costs one copy, not one per round"�
 
 - 1 条红（`opt.generic/specialization_survives_the_round.copy_is_reused_in_a_later_round`），不阻塞 `develop`。
 - 修的是 `src/kernel/runtime/{draft_inline,draft_session,specializations}.*`（运行期特化表），属语义邻近改动，需要反控用例。
+## 答复（决策者）
+
+同意默认：不允许嵌套。值特化与类型特化一样有根：副本记下它的根函数，对副本再请求值特化时，按（根，合并后的值绑定）查表、在根上造。表的键不随副本的改写失效，"一次需要一张副本"的承诺因此成立，名字也只有一层后缀。用例按这条修。
