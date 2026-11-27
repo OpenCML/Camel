@@ -359,7 +359,9 @@ register_ticket() {
             flock 9
             n=0
             { read -r n < "$q/seq"; } 2> /dev/null || true
-            case "$n" in ''|*[!0-9]*) n=0 ;; esac
+            # The pattern opens with `(`: bash before 5.2 finds the end of `$( ... )` by counting
+            # parentheses, and a bare `pattern)` here would close the substitution early.
+            case "$n" in (''|*[!0-9]*) n=0 ;; esac
             n=$((n + 1))
             printf -v name 't-%010d' "$n"
             if mv "$tmp" "$q/$name" 2> /dev/null; then
