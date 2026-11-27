@@ -121,7 +121,7 @@ verify_script = """
 ({ input, assert }) => {
 const text = input.normalized.output
 assert(text.includes("operator 'nn:softmax_cross_entropy' has no ONNX lowering at opset 17"), 'missing unsupported-operator detail')
-assert(/[^ ]*export_unsupported[.]cml:14:85:/.test(text), 'missing source position of the unsupported call')
+assert(/[^ ]*export_unsupported[.]cml:15:13:/.test(text), 'missing source position of the unsupported call')
 assert(text.includes('ExportUnsupported'), 'the refusal must be the error value of the export_model call')
 }
 """
