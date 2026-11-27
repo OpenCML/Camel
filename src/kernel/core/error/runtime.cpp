@@ -70,7 +70,16 @@ camel::source::origin_id_t resolveOriginFromSite(
         }
     }
 
-    // A site names the node that was running; a graph has no position of its own to fall back to.
+    // A site names the node that was running; when that node has no origin, the graph it belongs
+    // to does. A graph the compiler synthesized -- a pullback, say -- has no node that a parser
+    // ever saw, and its own origin is the call that asked for it.
+    if (site.runtimeGraph != nullptr) {
+        auto origin = debugMap.graphOrigin(site.runtimeGraph->id());
+        if (origin != camel::source::kInvalidOriginId) {
+            return origin;
+        }
+    }
+
     return sourceContext->currentRuntimeOrigin();
 }
 
