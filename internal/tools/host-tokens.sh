@@ -134,24 +134,24 @@ prepare() {
 
 # Who holds a token file now. `/proc/locks` is the reading: it is the kernel's table of held locks,
 # so a process that opened the file and did not lock it is not in it, and a process that released it
-# is gone from it. `fuser` cannot tell those two from a holder, which is how an open descriptor was
-# read as "the old lock is held" on 2026-11-24 (internal/tools/README.md). It is used only when
-# /proc/locks cannot be read at all, and then the reading says so rather than passing itself off.
+# is gone from it. `fuser` cannot tell those two from a holder: it reads an open descriptor as a held
+# lock (internal/tools/README.md). It is used only when /proc/locks cannot be read at all, and then
+# the reading says so rather than passing itself off.
 read_holder_mode() {
     if [ -r /proc/locks ]; then echo /proc/locks; else echo fuser; fi
 }
 
+# `holders_of INDEX TABLE`: TABLE is one copy of /proc/locks, taken by the caller in one builtin read
+# for the whole listing. Reading the file costs as much as the kernel takes to regenerate the table,
+# and a `read` loop straight on it regenerates it for every line, so on a host with a few hundred
+# locks a walk per token turned a listing of the pool into a minute; `count_held` reads it once
+# for the same reason.
 holders_of() {
-    local file ino i pid locks
+    local file ino locks="$2"
     file=$(token_path "$1")
     if [ -r /proc/locks ]; then
         ino=$(stat -c %i "$file" 2>/dev/null) || return 0
         [ -n "$ino" ] || return 0
-        # The table is taken in one builtin read and the lines are walked from that copy. A `read`
-        # loop straight on /proc/locks makes the kernel regenerate the table for every line it hands
-        # out, so on a host with a few hundred locks one walk costs seconds and a `show` over the pool
-        # costs a minute; `count_held` reads it the same way for the same reason.
-        locks="$(< /proc/locks)" 2>/dev/null || return 0
         # `N: FLOCK ADVISORY WRITE <pid> <major>:<minor>:<inode> <start> <end>`: the pid is the field
         # before the one that ends in this inode. A blocked waiter is a `->` entry and is skipped.
         while read -r _ type _ _ lpid where _ _; do
@@ -216,9 +216,11 @@ show() {
     free=0
     held=0
     echo "pool: $TOKEN_DIR size=$POOL_SIZE lane=$LANE reading=$(read_holder_mode)"
+    local table=''
+    [ -r /proc/locks ] && table="$(< /proc/locks)" 2>/dev/null
     i=1
     while [ "$i" -le "$POOL_SIZE" ]; do
-        pids=$(holders_of "$i")
+        pids=$(holders_of "$i" "$table")
         if [ -z "$pids" ]; then
             free=$((free + 1))
         else
