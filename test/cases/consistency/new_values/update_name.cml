@@ -1,0 +1,12 @@
+/**
+ * An element update on a value another name holds: the update cannot take the array's storage, so
+ * it is the in-place form of the store. `--copies` names it by the call shape the operator's
+ * declaration states, and `--reuse` names every operator node the same way.
+ */
+func main() => int sync {
+    var a: int[] = [1, 2, 3]
+    let b: int[] = a
+    a[0] = 5
+    println(a[0] + b[0])
+    return 0
+}

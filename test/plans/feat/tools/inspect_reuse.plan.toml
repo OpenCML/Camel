@@ -144,3 +144,38 @@ verify_script = '''
   assert(summaries.length > 0, 'the copies reading still summarises its graphs: ' + said)
 }
 '''
+
+# The two readings ask one fact -- what does the program write for this operator -- so they answer
+# one name. The case has an element update whose storage the store cannot take, which is a form no
+# program can write: its name comes from the plain form the operator table declares, not from the
+# URI's spelling. A reading that skipped that step named the node `:op/set_index_in_place` while
+# `--copies` named it `set_index_in_place`.
+
+[[tests]]
+name = "inspect.reuse.name_is_the_written_name"
+desc = "Both readings name the same update with the same word: `--reuse` names the element update `set_index_in_place`, the call shape of the plain form the operator table declares, exactly as `--copies` names it, and no operator row of either reading is named by a URI's spelling -- no `:` group separator and no `/` in a name."
+case = "../../../cases/consistency/new_values/update_name.cml"
+args = ["inspect", "--copies", "--reuse", "${case}"]
+expect_exit = "script"
+verify_script = '''
+({ input, assert }) => {
+  const said = input.normalized.output.replace(/\n/g, ' | ')
+  assert(input.exit_code === 0, 'inspect --copies --reuse exited 0: ' + input.exit_code + ' ' + said)
+  const out = input.normalized.stdout
+  const rows = out.split('\n').filter(l => l.startsWith('REUSE ')).map(l => l.split(' '))
+  const named = rows.filter(f => f.length === 6 && /^uses=\d+$/.test(f[3]))
+  assert(named.length > 0, 'the reuse reading names operator nodes: ' + said)
+  const uriNames = named.filter(f => f[2].includes(':') || f[2].includes('/'))
+  assert(uriNames.length === 0,
+    'a name is the call shape the declaration states, never the URI: ' + uriNames.map(f => f.join(' ')).join(' | '))
+  const updates = out.split('\n').filter(l => l.startsWith('COPIES ')).map(l => l.split(' '))
+    .filter(f => f.length === 4 && ['in-place', 'by-count', 'copied', 'declared'].includes(f[3]))
+  assert(updates.length === 1, 'the program has one update and the copies reading lists it: ' + said)
+  const place = updates[0][1]
+  assert(updates[0][2] === 'set_index_in_place',
+    'the copies reading names the update set_index_in_place: ' + updates[0].join(' '))
+  const reused = named.filter(f => f[1] === place && f[2] === updates[0][2])
+  assert(reused.length === 1,
+    'the same update is one operator row of the reuse reading, named the same word: ' + said)
+}
+'''
