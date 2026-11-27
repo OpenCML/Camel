@@ -110,9 +110,19 @@ function changedAgainstFirstParent() {
     ])
 }
 
-function runFormatterScripts(stagedFiles) {
-    run(process.execPath, ['scripts/format.js', '--files', ...stagedFiles], { stdio: 'inherit' })
-    run(process.execPath, ['scripts/update.js', '--files', ...stagedFiles], { stdio: 'inherit' })
+// The staged paths go to the formatter, the updater and `git add` through one NUL-separated list
+// file, not on the command line: a merge of a migration lane changes thousands of paths, and a
+// command line that long is refused on Windows (ENAMETOOLONG) before any script runs.
+function writePathList(files) {
+    const gitDir = git(['rev-parse', '--git-dir']).stdout.trim()
+    const listFile = path.resolve(REPO_ROOT, gitDir, 'precommit-paths')
+    fs.writeFileSync(listFile, files.map((file) => `${file}\0`).join(''))
+    return listFile
+}
+
+function runFormatterScripts(listFile) {
+    run(process.execPath, ['scripts/format.js', '--files-from', listFile], { stdio: 'inherit' })
+    run(process.execPath, ['scripts/update.js', '--files-from', listFile], { stdio: 'inherit' })
 }
 
 function main() {
@@ -137,8 +147,13 @@ function main() {
         rejectPartialStaging(stagedFiles)
     }
 
-    runFormatterScripts(stagedFiles)
-    git(['add', '--', ...stagedFiles], { stdio: 'inherit' })
+    const listFile = writePathList(stagedFiles)
+    try {
+        runFormatterScripts(listFile)
+        git(['add', `--pathspec-from-file=${listFile}`, '--pathspec-file-nul'], { stdio: 'inherit' })
+    } finally {
+        fs.rmSync(listFile, { force: true })
+    }
 
     // Formatting (and update.js) must not leave the commit empty. Comparing the
     // index tree with the tree before the commit covers both scripts, and it
