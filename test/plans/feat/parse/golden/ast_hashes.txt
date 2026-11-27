@@ -1520,6 +1520,9 @@ a0c40fb621ea59f6 ok test/cases/compile/prelude_signatures/function_type_pack.cml
 e6d8e76e5d67d222 ok test/cases/compile/prelude_signatures/unimported_function.cml
 f2e40dcb3928a40b ok test/cases/compile/prelude_signatures/untyped_lambdas.cml
 4eadfa91dbe13b9e ok test/cases/compile/prelude_signatures/with_pack_with_body.cml
+62f896a5609a67fb ok test/cases/compile/range_as_array/as_array.cml
+818b5b616633fbdf ok test/cases/compile/range_as_array/err_float_array.cml
+a61df0898a012435 ok test/cases/compile/range_as_array/err_scalar.cml
 b42f6fbad97cf545 ok test/cases/compile/range_shared_names/array_versions.cml
 a0b65daae342b567 ok test/cases/compile/range_shared_names/range_versions.cml
 b700b11288210932 ok test/cases/compile/ref/err_holds_ref.cml
