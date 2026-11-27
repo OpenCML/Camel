@@ -1062,7 +1062,12 @@ bool parseArgs(int argc, char *argv[]) {
                 return parse(argc, argv, infoFlags); // zen takes no argument of its own
             }
             if (word == kSubcommands[3].name) {
-                return parse(argc, argv, explainCommand | infoFlags);
+                // The name is the argument the word introduced, so it is read here and the parser
+                // is left with the flags: a diagnostic name is never a setting of the parser.
+                if (argc > 1) {
+                    Diag::explain = argv[1];
+                }
+                return parse(1, argv, infoFlags);
             }
             if (word == kSubcommands[4].name) {
                 return parse(argc, argv, check);
