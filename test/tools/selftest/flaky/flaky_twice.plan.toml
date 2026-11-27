@@ -1,0 +1,23 @@
+# Fixture of test/tools/selftest/run.mjs: the case that fails on both attempts and is marked `flaky`.
+#
+# It is a red on purpose -- "failed on the first pass, failed again on re-run" is the verdict this
+# file exists to pin, and the run must count it in `fail` with no `flaky` count at all. A mechanism
+# that excused a second failure would excuse every regression the moment someone wrote the field, so
+# this fixture is the field's limit, not its example. It lives in a plan of its own that only the
+# self-test starts and judges, never in a run a layer reads.
+id = "selftest.flaky_twice"
+order = 8
+tier = "fast"
+
+[defaults]
+tool = "node"
+kind = "behavior"
+case = "always_fails.mjs"
+args = ["${case}"]
+normalizers = ["normalize_newlines"]
+
+[[tests]]
+name = "flaky.never_passes"
+desc = "Fails on both attempts: the re-run does not excuse it, and the run stays red."
+flaky = "selftest fixture: the case fails every time and the field only buys it a second attempt (test/tools/selftest/run.mjs owns it)"
+expect_exit = 0

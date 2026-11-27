@@ -1,0 +1,22 @@
+# Fixture of test/tools/selftest/run.mjs: `flaky` written with nothing in it.
+#
+# The field makes a first failure not count, so it has to say why the case is intermittent and which
+# row owns it -- a run cannot check either. An empty string is refused where the plan is loaded, and
+# the refusal names the field: a plan that loads with a mark whose reason is blank would be a red
+# excused by an empty sentence. This plan must never run, and the self-test asserts that it does not.
+id = "selftest.flaky_empty"
+order = 9
+tier = "fast"
+
+[defaults]
+tool = "node"
+kind = "behavior"
+case = "passes.mjs"
+args = ["${case}"]
+normalizers = ["normalize_newlines"]
+
+[[tests]]
+name = "flaky.empty_reason"
+desc = "The field names no reason at all, so the plan is refused before its entry runs."
+flaky = ""
+expect_exit = 0

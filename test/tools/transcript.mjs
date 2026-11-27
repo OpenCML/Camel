@@ -33,11 +33,13 @@ import { fileURLToPath } from 'node:url'
 export const TRANSCRIPT_NAME = 'transcript.txt'
 
 /**
- * One case line. The four verdicts the runner prints, and nothing else: a failure's detail lines
- * are indented under their case line and a plan header is `[PLAN]`, so a line that starts with one
- * of these labels is exactly one counted verdict.
+ * One case line. The five verdicts the runner prints, and nothing else: a failure's detail lines
+ * are indented under their case line, a plan header is `[PLAN]`, and the roster of names that only
+ * passed on a re-run is `[INFO]` -- so a line that starts with one of these labels is exactly one
+ * counted verdict. `FLAKY` is a verdict, not a detail: the case was red on its first attempt and
+ * green on its second, and `[SUMMARY] total:` counts it.
  */
-export const CASE_LINE = /^\[(PASS|FAIL|SKIP|XFAIL)\] /
+export const CASE_LINE = /^\[(PASS|FAIL|SKIP|XFAIL|FLAKY)\] /
 
 /**
  * How many case lines `text` holds. The count the check is made of, as a pure function.
@@ -114,9 +116,9 @@ export function openTranscript(dir) {
  * The end of the run, read off the record it wrote: how many case lines the transcript holds, and
  * whether that is the number the summary counted.
  *
- * `total` is the summary's own total -- pass + fail + skip + xfail, the number `printRunSummary`
- * prints. Nothing here writes to it, and nothing here writes to the transcript; the question is
- * only whether the file that exists holds one line per counted verdict.
+ * `total` is the summary's own total -- pass + fail + skip + xfail + flaky, the number
+ * `printRunSummary` prints. Nothing here writes to it, and nothing here writes to the transcript;
+ * the question is only whether the file that exists holds one line per counted verdict.
  */
 export function judgeTranscript(transcript, total) {
     transcript.close()
