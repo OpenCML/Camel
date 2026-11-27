@@ -3421,10 +3421,10 @@ fd769b1a2b6f9912 ok test/cases/modules/onnx/loop_collect/for_collect_static.cml
 de83b3de99a9fd4d ok test/cases/modules/onnx/refusals/as_constant_fails.cml
 17990328fb0cf2c6 ok test/cases/modules/onnx/refusals/as_unproven.cml
 02cc8236160fb56e ok test/cases/modules/onnx/refusals/bad_arity.cml
-500af39dd53be171 ok test/cases/modules/onnx/refusals/bad_axis.cml
-d2b43d132a9f6b41 ok test/cases/modules/onnx/refusals/bad_output.cml
-25a3ba6e5c97803a ok test/cases/modules/onnx/refusals/bad_path.cml
-f7e12b5e9873a526 ok test/cases/modules/onnx/refusals/bad_target.cml
+dc9c680bf83b8fdb ok test/cases/modules/onnx/refusals/bad_axis.cml
+d98318492f3c66fc ok test/cases/modules/onnx/refusals/bad_output.cml
+246351da207a3d34 ok test/cases/modules/onnx/refusals/bad_path.cml
+e55fa306a33611be ok test/cases/modules/onnx/refusals/bad_target.cml
 d2b5b8016a1bdc6a ok test/cases/modules/onnx/refusals/compute_nodes_two_shapes.cml
 bd6ff4acbe6c9714 ok test/cases/modules/onnx/refusals/example_mismatch.cml
 cbf1f11aebb3ba1b ok test/cases/modules/onnx/refusals/function_branch.cml
@@ -4358,6 +4358,7 @@ f68beec6d501120e ok test/cases/probe/editview/sec12_escape.cml
 fa8b9a295cd6a5c9 ok test/cases/probe/editview/syntax_only.cml
 758acda9bdfa28b7 ok test/cases/probe/editview/view_only.cml
 45c52dd25a1dd471 ok test/cases/probe/editview/view_value.cml
+f29f25c55200f3ba ok test/cases/probe/editview/view_value_is_a_plain_value.cml
 65346afeaf5f514d ok test/cases/probe/editview/view_value_is_not_an_int.cml
 d243b9bf2aafcaf4 ok test/cases/probe/editview_b/design_view_min.cml
 10bf3ec93ed55652 ok test/cases/probe/editview_b/draft_handle_leaves.cml
