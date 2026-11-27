@@ -108,3 +108,12 @@
 - 新 `git worktree add` 出来的树**不继承** git-ignored 的 `internal/tools/camel-gate.local.json`，缺它时 `camel-remote` 直接拒跑。
 - 做法：从任一在跑的树复制该文件过去，再跑构建/读层；建树记录里写明这一步，否则下一条车道会卡在第一句。
 - 已照此办理的：`backend-speed`（`lane/onnx-g2`，自 console-res 复制）、`op-names`（`lane/op-names`，自 editview-commit 复制）。
+
+### O. 两条枝的去向（决策者 `D-1128-8` ① ②）
+- **`lane/case-study @ 54868b520f`（已恢复、标签 `archive/case-study-20261128` 保留）**：保留；那一笔 `examples: the case study's edits take their nodes from the draft` 写的是**旧的 `open`/`commit` 形状** ⇒ 交给 **edit/view 那一格**（`task-345/352/366`）在**块的降级落地后**改成用 `edit` 块改写，再合。**不要**在降级落地前动它。
+- **`lane/editview-commit`（无树）**：**保留不删** —— 它是 `Draft<F>` 与 C5 的那一版；edit/view 那一格（`task-345/352/366`）修好降级后要在**它的基础上**重落。
+- 相关：`lane/call-resolve-fix` 内容已全合（`git cherry` 两行 `-`），但树 `enter-shape`（`task-319`）停着它 ⇒ 等 319 交回再 detach + 删。
+
+### P. `task-361`（`opt::inline`，CC Figure 1）已改派 `lane-kinds-oper`
+- 决策者 `D-1128-8` ③：`opt-inline` 2.7 小时无树无读数，原 owner `lane-editview-commit` 上下文已用尽 ⇒ 第一步（图算子）已落地编过，**第二步（Camel 写的遍）与第三步（逐字节对照）** 立即另派，CC 优先级排前。
+- 派工要点：按 `src/stdlib/std/cxx/opt/inline/engine.cpp` 的选择规则照写、不另起复制逻辑；`cxx_isolation.plan.toml` 加 `inline.by_cpp`/`inline.by_camel` 四条语料逐字节相等 + "确实内联/确实没内联"断言；"C++ 那边说不清"的单列报协调者。
