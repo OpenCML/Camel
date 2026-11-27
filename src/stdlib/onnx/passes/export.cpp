@@ -766,36 +766,12 @@ OnnxExportPass::apply(const camel::runtime::Program *program, std::ostream &os) 
             options.prepStats = prepStats_;
             return options;
         };
-        // Every request is translated before any file is written: a refusal leaves no model.
-        std::vector<Request> requests = collectRequests(*context_, graph, out_);
-        for (Request &request : requests) {
-            request.options = asked(std::move(request.options));
-        }
-        if (requests.empty()) {
-            exportEntry(*context_, program, os, out_, asked(ExportOptions{}));
-            return program;
-        }
-        if (requests.size() > 1 && !out_.empty()) {
-            // Reported at the second call: the first one is what the file name stands for.
-            throw Refusal{
-                requests[1].origin,
-                std::format(
-                    "the parameter out names one model file but the entry graph contains {} "
-                    "onnx.export_model calls",
-                    requests.size())};
-        }
-        std::vector<Model> models;
-        for (const Request &request : requests) {
-            models.push_back(translate(*context_, request));
-        }
-        for (size_t i = 0; i < requests.size(); ++i) {
-            try {
-                writeModelFile(models[i], camel::utils::pathFromUtf8(requests[i].path));
-            } catch (const std::runtime_error &e) {
-                throw Refusal{requests[i].origin, e.what()};
-            }
-            os << std::format("onnx::export_model: wrote {}\n", requests[i].path);
-        }
+        // The body of the stage form: translate what the command line handed the pass (its `f`)
+        // with the same translation `model` uses, write it to `out`, and hand `f` on unchanged
+        // (D-1127-102, D-1127-195). There is no request to look for in the program: the program is
+        // the input, the way it is for every other pass.
+        exportEntry(*context_, program, os, out_, asked(ExportOptions{}));
+        return program;
     } catch (const Refusal &refusal) {
         // Every refusal is located: at the node it names, else at the export_model call it
         // concerns (set where it is raised), else at the entry function.
