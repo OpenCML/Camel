@@ -25,6 +25,7 @@
 #include "camel/execute/fault_isolation.h"
 #include "camel/runtime/control.h"
 #include "camel/runtime/graph.h"
+#include "camel/utils/debug.h"
 #include "camel/utils/log.h"
 #include "camel/utils/scope.h"
 #include "camel/utils/str.h"
@@ -1901,6 +1902,40 @@ refinedArg                = refineExtentNodeOf(
                         }
                     }
                 }
+                // The group, the rules it offers and the types the call wrote: a resolution that
+                // finds no rule is read from the log, where the room is, since the diagnostic
+                // carries the verdict alone (design principles 10.2).
+                EXEC_WHEN_DEBUG(CAMEL_LOG_DEBUG_S(
+                    "GIR Builder",
+                    "operator '{}' matches none of its {} rule(s); the types the call wrote: {}",
+                    ops->name(),
+                    ops->resolvers().size(),
+                    strutil::join(withInputTypes, ", ", [](Type *t) { return t->toString(); })));
+                EXEC_WHEN_DEBUG(CAMEL_LOG_DEBUG_S(
+                    "GIR Builder",
+                    "  its rules: {}",
+                    strutil::join(
+                        ops->resolvers(),
+                        "\n    ",
+                        [](const std::pair<std::string, resolver_ptr_t> &rule) {
+                            return rule.first + ": " + rule.second->signature();
+                        })));
+                EXEC_WHEN_DEBUG(
+                    CAMEL_LOG_DEBUG_S("GIR Builder", "  the program's own overloads: {}", [&] {
+                        std::string texts;
+                        if (auto found = operatorOverloads_.find(targetNode);
+                            found != operatorOverloads_.end()) {
+                            for (const auto &graph : found->second.graphs) {
+                                texts += "\n    " + displayNameOf(graph->name()) + ": " +
+                                         graph->funcType()->toString();
+                            }
+                            for (const auto &tmpl : found->second.templates) {
+                                texts += "\n    " + displayNameOf(tmpl->name) + ": " +
+                                         tmpl->funcType->toString();
+                            }
+                        }
+                        return texts;
+                    }()));
                 std::string overloadsStr =
                     "\n    " +
                     strutil::join(
