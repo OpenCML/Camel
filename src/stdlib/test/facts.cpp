@@ -475,6 +475,35 @@ FactSeedTestPass::apply(const camel::runtime::Program *program, std::ostream &os
     computeFacts(store, *program);
     std::map<std::string, size_t> perKind;
     store.forEach([&](const StoredFact &fact) { ++perKind[kindInfo(fact.kind).key]; });
+    // The four core kinds that have moved to the framework's registry are counted where they are
+    // answered now: the framework's store, asked over every graph the program reaches. The line a
+    // plan pins (`FACTS seeded core.shape 18`) is therefore a reading of the moved kind and not of
+    // the registration it is leaving -- and a count that changed would say the move changed an
+    // answer, which is the one thing it must not do.
+    {
+        std::vector<camel::facts::KindId> moved{
+            camel::facts::shapeKind(),
+            camel::facts::instanceKind(),
+            camel::facts::reorderKind(),
+            camel::facts::permissionsKind()};
+        std::map<std::string, size_t> counted;
+        for (auto *graph : collectReachableGraphs(*program)) {
+            if (graph == nullptr) {
+                continue;
+            }
+            camel::facts::Store *movedStore = camel::facts::storeHolding(*graph);
+            if (movedStore == nullptr) {
+                continue;
+            }
+            camel::facts::computeAll(*movedStore, *graph, graph->view(), moved);
+            movedStore->forEach([&](const camel::facts::StoredFact &fact) {
+                ++counted[camel::facts::kindInfo(fact.kind).key];
+            });
+        }
+        for (const auto &[key, n] : counted) {
+            perKind[key] = n;
+        }
+    }
     for (const auto &[kind, n] : perKind) {
         os << "FACTS seeded " << kind << " " << n << "\n";
     }
