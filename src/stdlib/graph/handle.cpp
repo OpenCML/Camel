@@ -26,6 +26,18 @@ namespace {
 /// The intern key that tells a draft from the graph it behaves as: a draft is the `Graph` handle
 /// kind, so only the key of the table entry and the type argument tell the two apart.
 constexpr uintptr_t kDraftKeyWord = 0x4452u; // "DR"
+
+/// Whether a type is one the compiler is still binding -- a type variable of a generic function, or
+/// the argument of an enum instance its value does not determine. A draft's type argument is one of
+/// these on the declaration side (`commit(d: Draft<F>)`), and it takes the type the argument has;
+/// once it is a function type on both sides, the two have to be the same one.
+bool binding(const Type *type) {
+    if (type == nullptr) {
+        return false;
+    }
+    const auto code = type->code();
+    return code == TypeCode::TypeVar || code == TypeCode::EnumHole;
+}
 } // namespace
 
 const char *handleKindName(HandleKind kind) {
@@ -176,6 +188,13 @@ Type *HandleType::unify(Type *other) const {
     if (theirs == nullptr) {
         return const_cast<HandleType *>(this);
     }
+    if (draft_ && !binding(mine) && !binding(theirs)) {
+        // A draft is committed as the function type it was opened on, and the commit answers with
+        // that same type (design 6; `commit`'s own "the same type as the one that was opened"): the
+        // two are one type, not two the one gives way to. A draft of `(x: int) => int` is not a
+        // draft of `(x: float) => float`, however far one function type can stand for the other.
+        return mine->equals(theirs) ? const_cast<HandleType *>(this) : nullptr;
+    }
     Type *united = mine->unify(theirs);
     if (united == nullptr) {
         return nullptr;
@@ -197,7 +216,30 @@ bool HandleType::equals(Type *other) const {
 }
 
 CastSafety HandleType::castSafetyFrom(Type *source) const {
-    return is(source, kind_) ? CastSafety::Safe : CastSafety::Forbidden;
+    const auto *have = asHandleType(source, kind_);
+    if (have == nullptr) {
+        return CastSafety::Forbidden;
+    }
+    // A handle type with a type argument stands for a particular one of the things of its kind --
+    // `Node<int>` for a node of an int, `Draft<F>` for the draft of a function of type `F` -- so
+    // the argument is compared for sameness and never for standing in: a draft of one function type
+    // is not a draft of another, and a graph is not a draft (design 6; `commit` answers "the same
+    // type as the one that was opened").
+    if (draft_) {
+        if (!have->draft_) {
+            return CastSafety::Forbidden;
+        }
+        Type *mine   = valueType();
+        Type *theirs = have->valueType();
+        if (mine == nullptr || theirs == nullptr) {
+            return mine == theirs ? CastSafety::Safe : CastSafety::Forbidden;
+        }
+        if (binding(mine) || binding(theirs)) {
+            return CastSafety::Safe;
+        }
+        return mine->equals(theirs) ? CastSafety::Safe : CastSafety::Forbidden;
+    }
+    return CastSafety::Safe;
 }
 
 bool HandleType::assignableFrom(Type *source) const {
@@ -207,9 +249,22 @@ bool HandleType::assignableFrom(Type *source) const {
     }
     // A draft is a graph -- the kernels take it as one -- but a graph is not a draft, and a draft
     // of one function type is not a draft of another: that is the type error committing the wrong
-    // function type would otherwise not be.
-    if (draft_ && !have->draft_) {
-        return false;
+    // function type would otherwise not be. Two drafts are the same draft only when their function
+    // types are the same type; before the compiler has bound a type variable there is nothing to
+    // compare, and the algebra binds it.
+    if (draft_) {
+        if (!have->draft_) {
+            return false;
+        }
+        Type *mine   = valueType();
+        Type *theirs = have->valueType();
+        if (mine == nullptr || theirs == nullptr) {
+            return mine == theirs;
+        }
+        if (binding(mine) || binding(theirs)) {
+            return true;
+        }
+        return mine->equals(theirs);
     }
     // A node written without a value type is a node whose value type the program did not state: a
     // caller takes it where a value type is stated (`range::<int>(n)`), and a node whose value type
