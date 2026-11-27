@@ -200,3 +200,34 @@ PASS
 - `ort_loop_values_dynamic`、`ort_loop_loaded_weights` 的 `known_fail_reason` 指向 `task-383` 的缺口，
   `known_fail_msg` 照实际输出，加 `known_fail_ends_when`；
 - 三条都要在降级落地后一起改（不先改成正向等降级）。
+## 九、step 7：Loop 能携带序列（`07e61574fe`）+ 前缀读数（决定形状）
+
+### 已提交 `07e61574fe`（`26 8 exporter.cpp`）
+`isCarriable` 接受 `Sequence`；`placeholderLike` 保形；被携带序列的 body 输出**不套 `Identity`**（opset 11 无 sequence 型 schema），
+直接用长出序列的那个节点的名字；state 输入/输出的 `ValueInfo` 都写 `sequence`。读数：`BUILD_EXIT=0`、
+`binary built 2026-11-28T07:18:23+08:00`、`feat/trans/macro` 30/30、**零 graph 变化**（还没有任何地方造 sequence 值）。
+
+### 前缀读数（形状 A，借 `616f65b436`，同一次 `BUILD_EXIT=0`）
+探针在 `evalLoopNode` 的 components 上打每个 `:struct/append_arr` 的 norm 来源：
+```
+export rc=1
+[t383q] loop body component[0] :struct/append_arr states=3
+[t383q]   norm[0] <- body state param 1 (the round's state entry)
+[t383q] loop body component[6] :struct/append_arr states=3
+[t383q]   norm[0] <- body state param 1 (the round's state entry)
+```
+**结论（读数，不是推理）**：append 的 `norm` 绑的是**当轮的携带 state 入口** ⇒ 它读的是**前缀**（这一轮之前的数组）。
+component[0] 与 component[6] 是同一个节点（与 ① 的 `components[6] == components[0]` 一致），所以两行读数相同。
+
+⇒ 走的形状是"**前缀**"那一种：
+- 被认领的 collection 改成**携带的 sequence state**：init `SequenceEmpty`，body 每轮 `SequenceInsert(S, elem)`，
+  `S` 的当轮值就是前缀；
+- 需要把前缀**当数组读**的地方（append 的 `norm`，以及任何 elementwise 读它的 Oper），在消费端做一次
+  **`ConcatFromSequence(S, axis=0)`** 的强制转换 —— 这是 `SequenceInsert` 的逆操作，是**同一条规则**；
+- scan 槽 3（值参差）取消；正向/逆向两侧是**同一变换**：两侧的 append 都从自己的携带 state 前缀读数据，
+  所以两侧的 collection 都变成 sequence state，代码只有一条路（不是特例）。
+
+### 未做（时间到）
+`SequenceInsert` 接进 append 的降级、`ConcatFromSequence` 的消费端强制转换、`SequenceEmpty` 的 init、
+取 `stateIsTheCollection` 的认领一致性（"同一数组两条路 ⇒ `unsupported`"）。三条 known-fail 与正向化
+按 `D-1128-57` 排在降级能过之后。
