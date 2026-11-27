@@ -906,10 +906,10 @@ void computeAll(
 
 void dump(
     Store &store, const graph::Graph &root, const graph::GraphView &rootView, std::ostream &os,
-    std::span<const KindId> only) {
+    std::span<const KindId> only, std::string_view rootLabel) {
     const std::function<std::string(const graph::Graph *)> labelOf =
-        [&root](const graph::Graph *graph) {
-            return graph == &root ? std::string("root") : std::string("outside-the-walk");
+        [&root, rootLabel](const graph::Graph *graph) {
+            return graph == &root ? std::string(rootLabel) : std::string("outside-the-walk");
         };
     // The kinds a dump prints: every one, or the ones the caller named.
     const auto wanted = [only](KindId kind) {

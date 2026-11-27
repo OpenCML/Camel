@@ -614,7 +614,13 @@ int runCommand(int argc, char *argv[]) {
                             }
                             try {
                                 camel::facts::computeAll(*each, *graph, graph->view(), moved);
-                                camel::facts::dump(*each, *graph, graph->view(), os, moved);
+                                camel::facts::dump(
+                                    *each,
+                                    *graph,
+                                    graph->view(),
+                                    os,
+                                    moved,
+                                    graph->name());
                             } catch (const std::exception &error) {
                                 for (const camel::facts::KindId kind : moved) {
                                     os << "FACT-KIND-REFUSED {\"kind\":"

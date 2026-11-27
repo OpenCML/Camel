@@ -644,6 +644,13 @@ void forgetGraph(const graph::Graph *graph);
  * "reads": {"nodes", "regions", "names", "records"}, "epoch", "target"}; null for a Content
  * kind). A stale fact is not printed, and is dropped.
  *
+ * `rootLabel` is the name the caller gives the graph it dumped. A `graph::Graph` has no name of
+ * its own -- the framework's face is `view()`, which is all a computation may read -- so the
+ * tool that holds the `GCGraph` passes `GCGraph::name()`, and a dump of one callee reads
+ * "layer" instead of "root". That is what lets a reader dump every graph the program reaches
+ * and still tell the rows apart. A fact anchored on any other graph is still labelled
+ * "outside-the-walk": a dump is about one graph, and a fact about a neighbour is not its own.
+ *
  * `only` prints just those kinds -- the tool's `--fact <key>`, which asks by name. Empty prints
  * every registered kind, which is what `--facts` asks for. A kind nobody registered is not a
  * request this function can answer: an enumeration of what is registered never mentions what is
@@ -651,6 +658,6 @@ void forgetGraph(const graph::Graph *graph);
  */
 void dump(
     Store &store, const graph::Graph &root, const graph::GraphView &rootView, std::ostream &os,
-    std::span<const KindId> only = {});
+    std::span<const KindId> only = {}, std::string_view rootLabel = "root");
 
 } // namespace camel::facts
