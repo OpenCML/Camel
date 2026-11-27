@@ -69,41 +69,6 @@ CopyVerdict verdictOfDecision(StorageReuse decision) {
     return CopyVerdict::Copied;
 }
 
-/// The name the program writes for an update, read off the operator table and never derived from the
-/// URI's spelling (a reading that strips the suffixes
-/// `_in_place`, `_owned` and `_arr`, which is a second spelling of the connection the table already
-/// declares). Two declarations answer it, both written where the operator is registered:
-///
-///   * the call shape declared for the operator (`OperatorTable::callFormOf`):
-///     `stdlib/prelude.cml` declares `export func append::<T>(xs: T[])` with `#op(':struct/append_arr')`,
-///     so `append` is a fact of that declaration and not of the URI's tail; `array:sort_i` answers
-///     `sort_i` the same way; and the loop-state append states its own shape
-///     (`declareCallForm(":struct/append_arr_owned", ...)`) because a program writes `xs->append<v>`
-///     for it -- which is why this reading carries no URI constant for that form;
-///   * for a form a program cannot write, the operator the form stands for (`plainForm`), whose own
-///     call shape is then the name: the program wrote the plain call, and the verdict is the form's.
-std::string updateName(const camel::core::OperatorTable &table, std::string_view uri) {
-    const auto writtenName = [&](std::string_view at) -> std::optional<std::string> {
-        if (const std::optional<camel::core::OperatorTable::CallForm> form = table.callFormOf(at);
-            form.has_value() && !form->name.empty()) {
-            return form->name;
-        }
-        return std::nullopt;
-    };
-    if (std::optional<std::string> name = writtenName(uri); name.has_value()) {
-        return *name;
-    }
-    if (const std::optional<std::string_view> plain = table.plainForm(uri); plain.has_value()) {
-        if (std::optional<std::string> name = writtenName(*plain); name.has_value()) {
-            return *name;
-        }
-    }
-    // Nothing a program can write: the operator's own tail is all there is to name it by. That is a
-    // fallback for an operator no reading should reach, and not a rule about how names are made.
-    const size_t separator = uri.find_last_of("/:");
-    return std::string(uri.substr(separator == std::string_view::npos ? 0 : separator + 1));
-}
-
 /// Whether the node is the loop-state append: `xs->append<v>` on a loop state the compiler proved
 /// no one else can see (Builder::markLoopStateInPlace). Read by the id the operator table fixes for
 /// it (`camel::core::oper::AppendOwned`, operator_table.h), not by its URI's spelling -- the same
@@ -252,7 +217,7 @@ void dumpStorageReuse(
             // of its own now (`declareCallForm(":struct/append_arr_owned", ...)` beside the two
             // forms in src/stdlib/std/builtin/executors/builtin.cpp), so there is no shape left whose name has
             // to be spelled out, and no URI constant in this reading.
-            const std::string name = updateName(table, uri);
+            const std::string name = table.writtenName(uri);
             os << "COPIES " << placeOf(*graph, ref, sources) << " " << name << " "
                << verdictOf(read) << "\n";
         }

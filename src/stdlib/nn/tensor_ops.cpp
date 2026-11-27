@@ -9,9 +9,9 @@
  * The window of a convolution or a pooling operator (the stride, the padding, and the
  * pooling kernel) is a compile-time parameter of the call, written in angle brackets
  * (`conv2d<2, 1>(x, w, b)`, `max_pool2d<2, 2, 0>(x)`), so the type a call reads states
- * the shape that window gives. A node a pass builds may leave them out, and the reading
- * functions below then mean stride 1, no padding, and a pooling stride equal to the
- * kernel.
+ * the shape that window gives. The declarations state the window as required (with <stride:
+ * int, padding: int>), so no reading below supplies a value the call did not write: a node that
+ * wrote less than its declaration states is the compiler's to refuse, not a reader's to guess.
  */
 
 #include "layers.h"
@@ -44,12 +44,28 @@ using camel::tensor::kernelExtents;
 using camel::tensor::knownShape;
 using camel::tensor::StaticShape;
 
-int64_t optInt(ArgsView &norm, size_t index, int64_t fallback) {
-    return hasArg(norm, index) ? intArg(norm, index) : fallback;
+/// Reads a window parameter the declaration states as required (`with <stride: int, padding: int>`
+/// and, for pooling, `with <kernel: int, stride: int, padding: int>`): the value is the call's, so
+/// there is nothing here to fall back to, and a node that wrote no window is refused rather than
+/// read past its arguments.
+int64_t requiredWindow(ArgsView &norm, size_t index, const char *name) {
+    if (!hasArg(norm, index)) {
+        throwRuntimeFault(RuntimeDiag::RuntimeError,
+                          std::string("the call wrote no ") + name +
+                              "; the operator's declaration states it as required");
+    }
+    return intArg(norm, index);
 }
 
-std::optional<int64_t> optConstInt(const InferContext &ctx, size_t index, int64_t fallback) {
-    return ctx.has(index) ? ctx.constInt(index) : std::optional<int64_t>(fallback);
+// The two shaped conv gradients declare their window optional (stride?: int, padding?: int), so
+// there the absence of an argument means the value the declaration states: stride 1, no padding.
+// Every other window is required by its declaration and is read, never defaulted.
+int64_t optInt(ArgsView &norm, size_t index, int64_t declared) {
+    return hasArg(norm, index) ? intArg(norm, index) : declared;
+}
+
+std::optional<int64_t> optConstInt(const InferContext &ctx, size_t index, int64_t declared) {
+    return ctx.has(index) ? ctx.constInt(index) : std::optional<int64_t>(declared);
 }
 
 bool known(const std::optional<StaticShape> &shape) {
@@ -110,17 +126,17 @@ slot_t conv2dKernel(ArgsView &, ArgsView &norm, context::Context &) {
                 tensorArg(norm, 2),
                 // A call writes the window (`conv2d<2, 1>(x, w, b)`); a node a pass builds may
                 // leave these out, and these are the values it then means.
-                optInt(norm, 3, 1),
-                optInt(norm, 4, 0),
+                requiredWindow(norm, 3, "stride"),
+                requiredWindow(norm, 4, "padding"),
                 resultAllocator()));
     });
 }
 
 std::optional<Type *> conv2dInfer(const InferContext &ctx) {
     const TensorFacts x = ctx.facts(0), w = ctx.facts(1);
-    // A call writes the window; a node a pass builds may leave it out, and this is the window it
-    // then means (`conv2dKernel` reads the same defaults).
-    const auto stride = optConstInt(ctx, 3, 1), pad = optConstInt(ctx, 4, 0);
+    // The window the call writes; nothing here supplies a value it did not write (the declaration
+    // states both as required), so an unwritten one leaves the shape less known, not guessed.
+    const auto stride = ctx.constInt(3), pad = ctx.constInt(4);
     if ((x.shape && x.shape->size() != 4) || (w.shape && w.shape->size() != 4)) {
         return std::nullopt;
     }
@@ -150,8 +166,8 @@ slot_t conv2dInputGradKernel(ArgsView &, ArgsView &norm, context::Context &) {
                 tensorArg(norm, 1),
                 tensorArg(norm, 2),
                 // As `conv2dKernel`: a call writes the window, a node a pass builds may omit it.
-                optInt(norm, 3, 1),
-                optInt(norm, 4, 0),
+                requiredWindow(norm, 3, "stride"),
+                requiredWindow(norm, 4, "padding"),
                 resultAllocator()));
     });
 }
@@ -165,8 +181,8 @@ slot_t conv2dKernelGradKernel(ArgsView &, ArgsView &norm, context::Context &) {
                 tensorArg(norm, 1),
                 tensorArg(norm, 2),
                 // As `conv2dKernel`: a call writes the window, a node a pass builds may omit it.
-                optInt(norm, 3, 1),
-                optInt(norm, 4, 0),
+                requiredWindow(norm, 3, "stride"),
+                requiredWindow(norm, 4, "padding"),
                 resultAllocator()));
     });
 }
@@ -288,11 +304,11 @@ slot_t conv2dBiasGradShapedKernel(ArgsView &, ArgsView &norm, context::Context &
 // ------------------------------------------------------------------ pooling
 
 k::Window2d windowArg(ArgsView &norm, size_t first) {
-    const int64_t kernel = intArg(norm, first);
-    // A call writes the window (`max_pool2d<2, 2, 0>(x)`); a node a pass builds may leave the
-    // stride and the padding out, and these are the values it then means.
-    const int64_t stride = optInt(norm, first + 1, kernel);
-    const int64_t pad    = optInt(norm, first + 2, 0);
+    const int64_t kernel = requiredWindow(norm, first, "kernel");
+    // The window a call writes (`max_pool2d<2, 2, 0>(x)`); the declaration states all three as
+    // required, so these are read, never defaulted.
+    const int64_t stride = requiredWindow(norm, first + 1, "stride");
+    const int64_t pad    = requiredWindow(norm, first + 2, "padding");
     return k::Window2d{kernel, kernel, stride, stride, pad, pad};
 }
 
@@ -322,11 +338,11 @@ std::optional<Type *> poolInfer(const InferContext &ctx) {
     if (x.shape && x.shape->size() != 4) {
         return std::nullopt;
     }
-    // A call writes the window; a node a pass builds may leave it out, and this is the window it
-    // then means (`windowArg` reads the same defaults).
+    // The window the call writes; nothing here supplies a value it did not write (the declaration
+    // states all three as required), so an unwritten one leaves the shape less known, not guessed.
     const auto kernel   = ctx.constInt(1);
-    const auto stride   = ctx.has(2) ? ctx.constInt(2) : kernel;
-    const auto pad      = optConstInt(ctx, 3, 0);
+    const auto stride   = ctx.constInt(2);
+    const auto pad      = ctx.constInt(3);
     const TypeCode elem = elementTypeOf(x);
     if (known(x.shape) && kernel && stride && pad) {
         const k::Window2d window{*kernel, *kernel, *stride, *stride, *pad, *pad};
@@ -342,8 +358,8 @@ std::optional<Type *> poolInfer(const InferContext &ctx) {
 
 /**
  * The index semantics of max_pool2d and avg_pool2d (docs/design/op-semantics 5.2, example 4:
- * the window): x: [N, C, H, W] (f32), a square window of `kernel`, `stride` (default the
- * kernel) and `pad` (default 0):
+ * the window): x: [N, C, H, W] (f32), a square window of `kernel`, `stride` and `pad`, all
+ * three written by the call:
  *
  *   params   oh = derived((H + 2*pad - kernel) floordiv stride + 1), ow likewise
  *   domain   d0 < N, d1 < C, d2 < oh, d3 < ow parallel; d4 < kernel, d5 < kernel reduction
@@ -360,8 +376,8 @@ IndexFn poolIndexing(bool max) {
     return [max](const InferContext &ctx) -> std::optional<sem::IndexedInstance> {
         const TensorFacts x = ctx.facts(0);
         const auto kernel   = ctx.constInt(1);
-        const auto stride   = ctx.has(2) ? ctx.constInt(2) : kernel;
-        const auto pad      = optConstInt(ctx, 3, 0);
+        const auto stride   = ctx.constInt(2);
+        const auto pad      = ctx.constInt(3);
         if (!x.shape || x.shape->size() != 4 || x.dtype != TypeCode::Float32 || !kernel ||
             !stride || !pad || *kernel <= 0 || *stride <= 0 || *pad < 0) {
             return std::nullopt;
@@ -375,8 +391,8 @@ IndexFn poolIndexing(bool max) {
         IndexBuilder b;
         auto &e        = b.x();
         const ExprId K = b.constant("kernel", 1, *kernel);
-        const ExprId S = ctx.has(2) ? b.constant("stride", 2, *stride) : K;
-        const ExprId P = ctx.has(3) ? b.constant("pad", 3, *pad) : e.constant(0);
+        const ExprId S = b.constant("stride", 2, *stride);
+        const ExprId P = b.constant("pad", 3, *pad);
         const ExprId N = b.extent(0, 0, s[0]), C = b.extent(0, 1, s[1]);
         const ExprId H = b.extent(0, 2, s[2]), W = b.extent(0, 3, s[3]);
         b.require(e.constant(1), Rel::Le, S);
@@ -668,7 +684,7 @@ const OpTraits kPure{};
 // The three convolution operators and the four pooling ones take their window as `with`
 // parameters (`conv2d<stride, padding>(x, w, b)`, `max_pool2d<kernel, stride, padding>(x)`): the
 // window is a compile-time fact, so the result's type states the shape it gives, and a call writes
-// every one of them. A node a pass builds may leave them out -- see the reading functions below.
+// every one of them: none of the readings below carries a value the call left out.
 std::vector<ParamSpec> convParams(std::string_view third) {
     return {
         {"input", ParamKind::Tensor},

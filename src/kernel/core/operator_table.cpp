@@ -733,6 +733,28 @@ std::optional<std::string_view> OperatorTable::plainForm(std::string_view uri) c
     return symbolText(plain);
 }
 
+std::string OperatorTable::writtenName(std::string_view uri) const {
+    const auto written = [this](std::string_view at) -> std::optional<std::string> {
+        const std::optional<CallForm> form = callFormOf(at);
+        if (form.has_value() && !form->name.empty()) {
+            return form->name;
+        }
+        return std::nullopt;
+    };
+    if (std::optional<std::string> name = written(uri); name.has_value()) {
+        return *name;
+    }
+    if (const std::optional<std::string_view> plain = plainForm(uri); plain.has_value()) {
+        if (std::optional<std::string> name = written(*plain); name.has_value()) {
+            return *name;
+        }
+    }
+    // Nothing a program can write: the operator's own tail is all there is to name it by. That is
+    // a fallback for an operator no reading should reach, and not a rule about how names are made.
+    const size_t separator = uri.find_last_of("/:");
+    return std::string(uri.substr(separator == std::string_view::npos ? 0 : separator + 1));
+}
+
 void OperatorTable::declareReusesOperand(std::string_view uri, bool reuses) {
     std::unique_lock lock(mutex_);
     entries_[internLocked(uri)].reusesOperand = reuses;
