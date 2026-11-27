@@ -50,6 +50,7 @@
 #include "camel/runtime/node_kind.h"
 
 #include <deque>
+#include <functional>
 #include <optional>
 #include <shared_mutex>
 #include <span>
@@ -103,6 +104,26 @@ class VjpBuilder {
     /// several values use it to read the gradient of one result and to hand one gradient of a
     /// multi-result gradient operator to each input.
     virtual vjp_node_t addAccess(vjp_node_t aggregate, size_t index);
+    /// A branch whose value is the arm `condition` selects: `condition` is a boolean node,
+    /// `armCount` the number of arms, and `armValue` is called once per arm with the arm's index
+    /// and answers that arm's result. The nodes it adds belong to the arm it was called for.
+    ///
+    /// The node kind is the one the graph already has -- a branch of arms, which a program writes
+    /// as `if` (design principles 3) -- so a rule that must choose between two values, such as
+    /// which of two operands a maximum took, states the choice instead of approximating it with
+    /// arithmetic: no operator is added for it, and no arm runs before the condition picks it.
+    ///
+    /// The default answers `kInvalidNodeRef`: an engine with no branch to emit still
+    /// differentiates every rule that does not need one.
+    virtual vjp_node_t addBranch(
+        type::Type *type, vjp_node_t condition, size_t armCount,
+        const std::function<vjp_node_t(size_t arm)> &armValue) {
+        (void)type;
+        (void)condition;
+        (void)armCount;
+        (void)armValue;
+        return camel::runtime::kInvalidNodeRef;
+    }
     /// Gradient accumulated so far for a node, if any.
     virtual std::optional<vjp_node_t> gradientOf(vjp_node_t primal) const = 0;
     /// Adds `gradient` to the gradient of `primal`. Ignored for values without a tangent space.
