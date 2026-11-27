@@ -45,6 +45,24 @@ println(abs(m) == abs(m)) true / true
 - 2026-11-28 07:3x：卡建立，派给 `lane-witness`（先证方向，再修）。
 - `lane-misc` 的 `abs(INT_MIN)` 正式用例**只断言"值"与"差为 0"**，`==` 那条在定因与修复之前不进断言。
 
+## 结案（`lane/nvm-int-compare`，`1d75f5b1ff` + `06e99d6f63`）
+
+**判词：不是"缺提升"，也不是"取错槽"，是 `==` 把整个 64 位槽字当值比。** 两侧类型都读成 `Int32`
+（gate 打印 `type0=0 type1=0`），取到的数是同一个，只是槽的上半高 32 位一个保留符号
+（`0xfffffffffffffffd`）、一个留零（`0x00000000fffffffd`）；`valuesEqualByContent` 的 `Int32`
+落到 `if (!type->isGCTraced()) return a == b;` 这条默认整字比较，于是同一批数不相等。
+
+修在比较这一层的一处：`comparePair` 对 `TypeCode::Int32` 用 `fromSlot<Int32>` 比值——i32 的值是
+类型点名的那 32 位，槽只是载体，高半不参与值；FastVM 的 `EQ` 也按 32 位读。修后 `m == m + 0`、
+`m == m + z` 在 nvm/fvm/jit 三后端全 true，`<`/`>` 全 false。
+
+同 switch 里其余"窄于槽"的类型逐个判过：`f32`/`bf16`/`f16` 本来就有显式按值比较的 case，
+`f64`/`i64` 填满槽（整字即值），`bool` 一字节且只有一种写法，语言没有 `i8`/`i16`；
+`Set<i32>`/`Map<i32,int>` 的键比较不受影响（三后端一致 `len=1`）。
+
+常设用例：`test/cases/compile/equality/i32_compares_by_number.cml`（`-3`、`INT32_MIN`、`i64`、
+显式窄化、`f32`、`bool`、`float`）＋计划 `test/plans/feat/compile/int_compare.plan.toml`（三后端）。
+
 ## 定位（2026-11-28 07:4x，`lane/nvm-int-compare`，未打 gate、未改代码）
 
 按"先证方向再动手"的顺序走，卡在这一步：**执行点已收窄到两处，但还没读到"位型 + 标签"的原文**。
