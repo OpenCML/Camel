@@ -87,3 +87,19 @@ test/plans/probe/editview_draft_type.plan.toml
 - **不改** `targetOperator->funcType()->toString()`：`__w0` / `__n1` 出现在 overload 转述里是正常的，要改的是判定不是转述；
 - **不废掉** `2609eeef38` 的改进：它让"一个函数类型的草稿被当成另一个提交"被拒，这是必须保持的行为；
 - 不在本枝继续改（本枝只留证据）。
+
+## 九、已修（`ff94ce915f`）
+
+`builder_call.cpp` 的 `explicitTypes` 块在硬失败之前问一句 `containsTypeVar(targetOperator->funcType())`
+（谓词在 `core/type/typevar.h:118`，本文件 `:309/317/389/641/645` 早在用），签名还写着类型变量就 `continue`：
+模板算子的形参与实参在这一步本来不同型，这里没有可判的错。`numstat 10 0`。
+
+四条判据全绿（同一次构建 `BUILD_EXIT=0`、`binary built 2026-11-28T06:23:10`）：
+`[PASS] fillslots.permuted_order_runs`；`editview_draft_type` 3/3/0（`No matching function` 仍报，`2609eeef38`
+的改进保住）；`probe.editview` 20/19/1、`probe.editview_b` 3/1/2；`test/plans/probe -Tier fast` 67/68，
+唯一红 `editview.sec2_log`。
+
+副作用面（`feat/compile` + `feat/modules`，`-Tier fast`，同一构建）：
+`[SUMMARY] total 4818, pass 4726, fail 81`；**与枝底 `1007403717` 的 81 条逐名完全相同（NEW 0 / GONE 0）**。
+其中 39 条不在 `promotion-66` 的 147 行红表里 —— 它们在枝底就已经红，红表对这几组计划（`graph*`、`json_value`、
+`stdlib_registry`、`rules_conditions`）已过期，不是本笔造成的。
