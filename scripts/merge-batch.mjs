@@ -21,10 +21,22 @@
  *      prefix, and the result is built again until it is green. The search presumes the tip the
  *      batch started from builds; so, once, when the first build fails, the tip itself is built
  *      before any prefix is. A tip that is red stops the tool: no lane is to blame, none is dropped.
- *   5. With --push, the result is pushed to integration.
+ *   5. Read the built tip. A batch whose files reach the build is the one that can bring reds, and a
+ *      lane's own reading, taken on the lane's branch, says nothing about the merged tip. So the plans
+ *      the batch touched (`node scripts/test.js --changed --list`, with the integration tip the batch
+ *      started from as the base) are run on the seat through the same command family as the build,
+ *      and the cases that are red are compared by name with the red table of the newest promotion
+ *      (`internal/reports/*-promotion-<n>-reds.tsv`). A red that is not in that table is new: the
+ *      tool prints it with its plan and pushes nothing. It does not look for the lane to blame; the
+ *      seat decides. With no new red, the tool writes `<git common dir>/camel-read/<sha>` beside the
+ *      build record (`plans=`, `reds=`, `baseline=`, `new=0`), which the pre-push hook requires
+ *      before a change to the build's inputs reaches integration. A batch that changes no path the
+ *      build reads (the hook's own list) is not read and leaves no record; the hook does not ask for
+ *      one either.
+ *   6. With --push, the result is pushed to integration.
  *
- * What lanes do to each other that a build cannot see is not this tool's question. The promotion
- * measures the tip with the full fast layer and compares it with the previous promotion.
+ * What lanes do to each other beyond the plans a batch touches is not this tool's question. The
+ * promotion measures the tip with the full fast layer and compares it with the previous promotion.
  *
  * Every merge message lists the lane's own commit titles and ends with the trailer
  * `Lane-Reading: <the line the lane handed in>`; the pre-push hook refuses a merge to integration
@@ -35,26 +47,40 @@
  *        [--lanes <file.json>]      a JSON array of {"branch": ..., "reading": ...}
  *        [--build <command>]        run in the seat; {seat} is replaced by the seat path
  *        [--red-exit <n>]           the build's exit code that means "the sources do not build"
-        [--build-timeout <s>]      a build still running after this long is ended with its whole tree
-                                   and counts as "no verdict", not as red (default 5400)
+ *        [--build-timeout <s>]      a build still running after this long is ended with its whole tree
+ *                                   and counts as "no verdict", not as red (default 5400)
+ *        [--read <command>]         the plan run of step 5; {seat} is the seat path and {plans} the
+ *                                   touched plans, comma-joined and relative to the seat. It must leave
+ *                                   {seat}/test/results/fetched/summary.json (the runner's summary)
+ *        [--read-timeout <s>]       the same limit for the plan run (default 5400)
  *        [--remote origin] [--integration integration] [--base <ref>] [--no-fetch] [--push]
  *
  * The default build command runs `internal/tools/camel-remote.ps1` on the seat with no plan, which
- * builds on the host and runs nothing else.
+ * builds on the host and runs nothing else. The default plan run is the same script with `-Plan` and
+ * `-Tier fast`, the layer the promotion's red table is measured on.
  *
  * Exit codes: 0 done (lanes may have been skipped; read the summary), 2 the tool could not do its
- * job (bad arguments, dirty seat, a build that did not run), 3 the push was refused, 4 the
- * integration tip itself does not build (nothing dropped, nothing pushed; fix the tip first).
+ * job (bad arguments, dirty seat, a build that did not run, touched plans that could not be
+ * selected, a plan run that left no summary), 3 the push was refused, 4 the integration tip itself
+ * does not build (nothing dropped, nothing pushed; fix the tip first), 5 the plans the batch touched
+ * have reds the newest promotion does not (nothing pushed; the reds are printed).
  */
 
 import { spawnSync } from 'node:child_process'
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
+import { BUILD_INFO_ROOT_FILES, BUILD_INFO_ROOTS } from './common.js'
 import { runLimitedSync } from './lib/job.mjs'
 
 const DEFAULT_BUILD =
     'pwsh -NoProfile -File "{seat}/internal/tools/camel-remote.ps1" -Path "{seat}" -Jobs 8 -TokenClass funnel'
+
+const DEFAULT_READ =
+    'pwsh -NoProfile -File "{seat}/internal/tools/camel-remote.ps1" -Path "{seat}" -Plan "{plans}" -Tier fast -Jobs 8 -TokenClass funnel -NoGpuWatch -FetchFile summary.json -FromThisRun'
+
+// A case with one of these verdicts is not red; the promotion reads the same three.
+const NOT_RED = new Set(['pass', 'skip', 'xfail'])
 
 function fail(code, why) {
     process.stderr.write(`merge-batch: ${why}\n`)
@@ -69,6 +95,8 @@ function parseArgs(argv) {
         build: DEFAULT_BUILD,
         redExit: 1,
         buildTimeout: 5400,
+        read: DEFAULT_READ,
+        readTimeout: 5400,
         remote: 'origin',
         integration: 'integration',
         base: null,
@@ -92,6 +120,8 @@ function parseArgs(argv) {
         else if (name === '--build') out.build = value()
         else if (name === '--red-exit') out.redExit = Number(value())
         else if (name === '--build-timeout') out.buildTimeout = Number(value())
+        else if (name === '--read') out.read = value()
+        else if (name === '--read-timeout') out.readTimeout = Number(value())
         else if (name === '--remote') out.remote = value()
         else if (name === '--integration') out.integration = value()
         else if (name === '--base') out.base = value()
@@ -123,6 +153,7 @@ function parseArgs(argv) {
     }
     if (!Number.isInteger(out.redExit)) fail(2, '--red-exit needs an integer')
     if (!(out.buildTimeout > 0)) fail(2, '--build-timeout needs a positive number of seconds')
+    if (!(out.readTimeout > 0)) fail(2, '--read-timeout needs a positive number of seconds')
     if (!out.base) out.base = `${out.remote}/${out.integration}`
     return out
 }
@@ -195,10 +226,152 @@ function noVerdict(run, redExit) {
         : `the build did not run to a verdict (exit ${run.code}, a red build exits ${redExit})`
 }
 
+let readTimeout = 5400
+
+const toSlashes = (text) => text.replace(/\\/g, '/').replace(/^\.\//, '')
+
+/** Whether any of the files is one the build reads; the list is the one the build's stamp hashes. */
+function reachesBuild(files) {
+    return files.some((file) => BUILD_INFO_ROOT_FILES.includes(file) || BUILD_INFO_ROOTS.includes(file.split('/')[0]))
+}
+
+/**
+ * The plans the batch touched, relative to the seat: the seat's own selector, asked about the change
+ * against the integration tip the batch started from. A selector that cannot answer is no answer, and
+ * the caller stops: an unknown selection is not an empty one.
+ */
+function touchedPlans(baseSha) {
+    const script = path.join(seat, 'scripts', 'test.js')
+    const run = spawnSync(process.execPath, [script, '--changed', '--list'], {
+        cwd: seat,
+        encoding: 'utf8',
+        env: { ...process.env, CAMEL_TEST_BASE: baseSha },
+        maxBuffer: 64 * 1024 * 1024,
+    })
+    if (run.error || run.status !== 0) {
+        const why = run.error ? run.error.message : `exit ${run.status}: ${(run.stdout + run.stderr).trim().split('\n').slice(-3).join(' | ')}`
+        fail(2, `the plans the batch touched could not be selected (${why}); nothing was pushed`)
+    }
+    const plans = []
+    for (const raw of (run.stdout || '').split(/\r?\n/)) {
+        const line = raw.trim()
+        if (!line || line.startsWith('[') || line.startsWith('(no plan')) continue
+        const rel = path.isAbsolute(line) ? path.relative(seat, line) : line
+        plans.push(toSlashes(rel))
+    }
+    return [...new Set(plans)]
+}
+
+/** The newest promotion's red table (by promotion number) in the seat's tree, or null when there is none. */
+function newestRedTable() {
+    const dir = path.join(seat, 'internal', 'reports')
+    let best = null
+    let names = []
+    try {
+        names = fs.readdirSync(dir)
+    } catch {
+        return null
+    }
+    for (const name of names) {
+        const found = /^\d{4}-\d{2}-\d{2}-promotion-(\d+)-reds\.tsv$/.exec(name)
+        if (found && (best === null || Number(found[1]) > best.n)) best = { n: Number(found[1]), name, file: path.join(dir, name) }
+    }
+    return best
+}
+
+/**
+ * The names a red table holds, as keys a summary row can be looked up by. The promotion writes
+ * `<plan id>\t<case>`; a table written by hand has `<case>\t<plan path>\t...`. A row is looked up
+ * under both shapes, so either table answers.
+ */
+function parseRedTable(text) {
+    const keys = new Set()
+    for (const raw of text.split(/\r?\n/)) {
+        const line = raw.trimEnd()
+        if (!line || line.startsWith('#')) continue
+        const cells = line.split('\t')
+        if (cells.length < 2) continue
+        keys.add(`${cells[0]}\t${cells[1]}`)
+        keys.add(`${cells[0]}\t${toSlashes(cells[1])}`)
+    }
+    return keys
+}
+
+function readSummary(file) {
+    let doc
+    try {
+        doc = JSON.parse(fs.readFileSync(file, 'utf8'))
+    } catch (error) {
+        fail(2, `the plan run left no readable summary.json at ${file}: ${error.message}; nothing was pushed`)
+    }
+    if (!Array.isArray(doc.test_timings) || doc.test_timings.length === 0) {
+        fail(2, `${file} holds no test_timings rows, so nothing was measured; nothing was pushed`)
+    }
+    return doc.test_timings
+}
+
+/**
+ * Step 5: run the plans the batch touched on the built tip and compare the reds with the newest
+ * promotion. Returns `{ skipped }` when the batch does not reach the build, otherwise the reds that
+ * are new. The record the hook asks for is written only when there are none.
+ */
+function readTip(args, baseSha, tip) {
+    const files = git(['diff', '--name-only', baseSha, tip]).out.split('\n').filter(Boolean)
+    if (!reachesBuild(files)) {
+        process.stdout.write('merge-batch: the batch changes no path the build reads; no plan is run and no reading record is written\n')
+        return { skipped: true, newReds: [] }
+    }
+    const common = path.resolve(seat, git(['rev-parse', '--git-common-dir']).out)
+    const recordFile = path.join(common, 'camel-read', tip)
+    // A record of an earlier reading of this commit does not speak for this one.
+    fs.rmSync(recordFile, { force: true })
+
+    const baseline = newestRedTable()
+    if (!baseline) fail(2, 'no promotion red table (internal/reports/*-promotion-<n>-reds.tsv) was found to compare with; nothing was pushed')
+    const known = parseRedTable(fs.readFileSync(baseline.file, 'utf8'))
+
+    const plans = touchedPlans(baseSha)
+    process.stdout.write(`merge-batch: reading ${plans.length} touched plan(s): ${plans.join(', ') || '(none)'}\n`)
+    let rows = []
+    if (plans.length > 0) {
+        const summary = path.join(seat, 'test', 'results', 'fetched', 'summary.json')
+        fs.rmSync(summary, { force: true })
+        const command = args.read.split('{seat}').join(seat).split('{plans}').join(plans.join(','))
+        const started = Date.now()
+        const run = runLimitedSync(command, { cwd: seat, shell: true, timeoutMs: readTimeout * 1000 })
+        process.stdout.write(
+            run.timedOut
+                ? `merge-batch: plan run ran past its limit of ${readTimeout} s and was ended with its process tree\n`
+                : `merge-batch: plan run exit ${run.code} in ${((Date.now() - started) / 1000).toFixed(1)} s\n`,
+        )
+        // The runner exits 0 with no red and 1 with reds; anything else is a run that gave no reading.
+        if (run.timedOut || (run.code !== 0 && run.code !== 1)) {
+            fail(2, `the plan run did not run to a reading (${run.timedOut ? 'it was cut off at its limit' : `exit ${run.code}`}); nothing was pushed`)
+        }
+        rows = readSummary(summary)
+    }
+    const reds = rows.filter((row) => !NOT_RED.has(row.status))
+    const newReds = reds
+        .filter((row) => !known.has(`${row.plan}\t${row.test}`) && !known.has(`${row.test}\t${toSlashes(String(row.plan_path ?? ''))}`))
+        .map((row) => ({ plan: String(row.plan), case: String(row.test) }))
+    process.stdout.write(`merge-batch: ${rows.length} case(s) read, ${reds.length} red, ${newReds.length} not in ${baseline.name}\n`)
+    if (newReds.length > 0) {
+        for (const one of newReds) process.stdout.write(`new red  ${one.plan}  ${one.case}\n`)
+        return { skipped: false, newReds, plans, reds: reds.length, baseline: baseline.name }
+    }
+    fs.mkdirSync(path.dirname(recordFile), { recursive: true })
+    fs.writeFileSync(
+        recordFile,
+        [`plans=${plans.join(',')}`, `reds=${reds.length}`, `baseline=${baseline.name}`, 'new=0', ''].join('\n'),
+    )
+    return { skipped: false, newReds, plans, reds: reds.length, baseline: baseline.name }
+}
+
 function main() {
     const args = parseArgs(process.argv.slice(2))
     seat = path.resolve(args.seat)
     buildTimeout = args.buildTimeout
+    readTimeout = args.readTimeout
     const startedAt = Date.now()
     if (git(['status', '--porcelain']).out) fail(2, `the seat ${seat} has uncommitted changes; a batch starts on a clean tree`)
     if (args.fetch) {
@@ -288,9 +461,12 @@ function main() {
     const tip = merged.length ? merged[merged.length - 1].sha : baseSha
     git(['checkout', '--quiet', '--detach', tip])
 
+    const reading = merged.length > 0 ? readTip(args, baseSha, tip) : { skipped: true, newReds: [] }
+    const held = reading.newReds.length > 0
+
     let pushed = false
     let pushCode = 0
-    if (args.push && merged.length > 0) {
+    if (args.push && merged.length > 0 && !held) {
         const run = spawnSync('git', ['-C', seat, 'push', args.remote, `HEAD:refs/heads/${args.integration}`], { encoding: 'utf8' })
         process.stdout.write(`${run.stdout || ''}${run.stderr || ''}`)
         pushCode = run.status ?? -1
@@ -306,7 +482,11 @@ function main() {
     for (const one of skipped) process.stdout.write(`    ${one.branch}: ${one.reason}\n`)
     process.stdout.write(`  builds    ${builds}, ${buildSeconds.toFixed(1)} s\n`)
     process.stdout.write(`  total     ${total.toFixed(1)} s\n`)
-    process.stdout.write(`  pushed    ${args.push ? (merged.length === 0 ? 'nothing to push' : pushed ? 'yes' : `REFUSED (exit ${pushCode})`) : 'no (--push not given)'}\n`)
+    process.stdout.write(
+        `  reading   ${reading.skipped ? 'not needed (no path the build reads)' : `${reading.plans.length} plan(s), ${reading.reds} red, ${reading.newReds.length} new against ${reading.baseline}`}\n`,
+    )
+    for (const one of reading.newReds) process.stdout.write(`    new red  ${one.plan}  ${one.case}\n`)
+    process.stdout.write(`  pushed    ${held ? 'no (new reds)' : args.push ? (merged.length === 0 ? 'nothing to push' : pushed ? 'yes' : `REFUSED (exit ${pushCode})`) : 'no (--push not given)'}\n`)
     process.stdout.write(
         `MERGE_BATCH_RESULT ${JSON.stringify({
             base: baseSha,
@@ -317,8 +497,12 @@ function main() {
             buildSeconds,
             totalSeconds: total,
             pushed,
+            newReds: reading.newReds,
         })}\n`,
     )
+    if (held) {
+        fail(5, `the plans the batch touched have ${reading.newReds.length} red(s) that ${reading.baseline} does not list; nothing was pushed (the seat decides which lane brought them)`)
+    }
     if (args.push && merged.length > 0 && !pushed) {
         fail(3, 'the push was refused (the integration tip may have moved, or a hook refused it); run the batch again from the new tip')
     }
