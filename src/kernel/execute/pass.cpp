@@ -159,9 +159,13 @@ const std::map<std::string, std::string> passAliases = {
     {"std::tfg", "std::tfdump"},
     {"std::prof", "std::profile"},
 };
+/// The kernel of every registered pass, **by the operator the pass's declaration names**. The id is
+/// the function's identity in the operator table -- the one a call of it carries -- so a pass has one
+/// entry whatever spelling a pipeline wrote, and the name is resolved to the id at the boundary where
+/// the name is read (`findDescriptor`), never inside this table.
 struct PassImplementationRegistry {
     std::mutex mutex;
-    std::map<std::string, PassDescriptor> passes; // ordered for the "available passes" listing
+    std::vector<std::optional<PassDescriptor>> kernels; // indexed by `OperId`
 };
 
 PassImplementationRegistry &passImplementations() {
@@ -182,12 +186,16 @@ void ensureCoreTagReaders() {
 /// which function implements it.
 std::optional<PassDescriptor> findImplementation(const std::string &path) {
     ensureCoreTagReaders();
+    const auto id = camel::core::OperatorTable::instance().lookup(path);
+    if (!id.has_value() || *id == camel::core::kNoOper) {
+        return std::nullopt;
+    }
     auto &registry = passImplementations();
     std::lock_guard lock(registry.mutex);
-    auto it = registry.passes.find(path);
-    if (it == registry.passes.end())
+    if (static_cast<size_t>(*id) >= registry.kernels.size()) {
         return std::nullopt;
-    return it->second;
+    }
+    return registry.kernels[*id];
 }
 
 } // namespace
@@ -327,10 +335,16 @@ void setPassWarningHandler(PassWarningHandler handler, void *userData) {
 
 void registerModulePass(const std::string &path, PassDescriptor descriptor) {
     const bool readsTags = descriptor.readsTags;
-    auto &registry       = passImplementations();
+    // The name is resolved to the operator here, at the boundary, and nowhere else: the table
+    // below holds one entry per operator, not one per spelling.
+    const camel::core::OperId id = camel::core::OperatorTable::instance().intern(path);
+    auto &registry               = passImplementations();
     {
         std::lock_guard lock(registry.mutex);
-        registry.passes.insert_or_assign(path, std::move(descriptor));
+        if (static_cast<size_t>(id) >= registry.kernels.size()) {
+            registry.kernels.resize(static_cast<size_t>(id) + 1);
+        }
+        registry.kernels[id] = std::move(descriptor);
     }
     if (readsTags) {
         // The pass is a reader of tag facts.
@@ -805,7 +819,13 @@ void listAvailablePasses(const std::string &name, const context_ptr_t &ctx) {
         auto &registry = passImplementations();
         std::lock_guard lock(registry.mutex);
         bool listed = false;
-        for (const auto &[path, descriptor] : registry.passes) {
+        for (size_t id = 1; id < registry.kernels.size(); ++id) {
+            if (!registry.kernels[id].has_value()) {
+                continue;
+            }
+            const PassDescriptor &descriptor = *registry.kernels[id];
+            const std::string path(camel::core::OperatorTable::instance().uri(
+                static_cast<camel::core::OperId>(id)));
             // The core's kernels are listed from their declarations above; this section is the
             // passes a module contributed. A test-only pass is not a module's: the section below
             // lists it.
@@ -835,7 +855,13 @@ void listAvailablePasses(const std::string &name, const context_ptr_t &ctx) {
         help << std::format("Passes that exist for the tests only:\n");
         auto &registry = passImplementations();
         std::lock_guard lock(registry.mutex);
-        for (const auto &[path, descriptor] : registry.passes) {
+        for (size_t id = 1; id < registry.kernels.size(); ++id) {
+            if (!registry.kernels[id].has_value()) {
+                continue;
+            }
+            const PassDescriptor &descriptor = *registry.kernels[id];
+            const std::string path(camel::core::OperatorTable::instance().uri(
+                static_cast<camel::core::OperId>(id)));
             if (path.rfind("test::", 0) != 0) {
                 continue;
             }
