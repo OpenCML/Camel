@@ -56,3 +56,37 @@ $ rg -n 'append' src/stdlib/rulesets/
 ## 五、本卡为什么停在这
 
 前一格连续三轮"构建 + 读源码"，余量到极限；再往下就是盲改 append / pullback，而它上面三次都拒绝了这个赌法。**停得对**：现在的状态是"三份读数在手 + 一行读数就能把路分成两条"，交给下一格接着打。
+## 六、step 4 读数（结论：**(b)**，本卡结论改成"这个形状的 tape 在 ONNX 侧无解"）
+
+树 `D:\Projects\Camel-wt\mm-capacity`，枝 `lane/loop-tape-values @ d3be48080e`（= `origin/integration`），
+`git cherry-pick -n 616f65b436` 借底子；观测对象 = `task-383-shape-a-probe.md` 的 A 全文。
+同一次运行：`BUILD_EXIT=0`、`[provenance] tip (dirty: 3 files) | binary built 2026-11-28T05:20:02+08:00`。
+探针（`pullback.cpp`，buildLoopBody 里 `setRegionResult(bodyRegion, bodyResult)` 之后）：对每条
+`residual` 取 `draft.normUsersOf`/`withUsersOf`，打消费节点的 oper/kind/type。原文：
+
+```
+[t383p] residual[0] type=float[] users=#15(:struct/append_arr[22],ty=float[]) #42(-,ty=(…大元组…))
+[t383p] residual[1] type=float   users=#18(:op/add_d[158],ty=float) #15(:struct/append_arr[22],ty=float[]) #20(-,ty=(float[], int, float, float)) #42(-,…)
+[t383p] residual[2] type=float[] users=#20(-,ty=(float[], int, float, float)) #42(-,…)
+[t383p] residual[3] type=float   users=#18(:op/add_d[158],ty=float) #42(-,…)
+[t383p] residual[4] type=float   users=#20(-,…) #42(-,…)
+[t383p] residual[5] type=(float) => (float[4], float[4]) pure       users=#42(-,…)
+[t383p] residual[6] type=(float[4]) => (float[4, 4],) pure          users=#42(-,…)
+```
+
+判读：
+
+- **`residual[0]`（`float[]`，累积数组）的消费者就是 `:struct/append_arr[22]` 本身** —— 即反向 body 每轮
+  都对上一轮的数组做一次 append（把这一轮的贡献收进去）。这不是"只要长度"的用法：append 的**第一个
+  操作数是整个数组**。⇒ 分支 **(b)**：不能改成长度。
+- `residual[2]`（另一个 `float[]`）没有算子消费者，只被 `#20`（GATE）与 `#42`（聚合）带过去 ⇒ 它本身
+  可以被丢/保留，**但 `residual[0]` 决定了这条路走不通**。
+- `residual[5]/[6]` 是函数值，只有聚合消费（另一条活的料，本卡不管）。
+- `#20`/`#42` 是 GATE/聚合（非 Oper），这也是为什么"对非 Oper 取 `normInputsOf`"会假崩。
+
+⇒ 结论：`float[]` 这一路的 tape 在 ONNX 侧**无解**（ONNX 的 Loop/Scan 不提供"对携带数组做 append"的
+算子，append 的逆向虽然不读该数组，但**正向 body 自己每轮都读它**）。判据②（导出成功 + ORT/nvm 逐值）
+在本卡范围内**不可达**；边界建议：导出对这个形状**点名拒绝**并给可判定诊断（"the reverse pass of a
+collecting loop appends into an array, which ONNX has no operator for"），而不是落到通用的
+"operator ':struct/append_arr' has no ONNX lowering …"。
+`pullback.cpp:2478` 仍未动；源码零改动，`git status` 回 0。
