@@ -847,7 +847,7 @@ foreach: <f: (item: int) => void> (r: Range) => void
 
 Calls f for every integer r names, in order, as `foreach` on the array the range names.
 
-- Example: `(0 .. 3)->foreach<func (x) { println(x) }>`
+- Example: `(0 .. 3)->foreach<func (x: int) { println(x) }>`
 
 #### `count`
 
@@ -2043,7 +2043,7 @@ what the generic form is written with when the library takes it, and this name k
 that shape until then.
 
 - Written in Camel: a subgraph, pure when the functions passed to it are.
-- Example (a fragment, not compiled): `let step = has_aux(loss)`
+- Example (a fragment, not compiled): `let step = has_aux(func (w: float) { (w * 2.0, w) })`
 - Why it is not compiled: `loss` must be a function of one parameter whose result is a pair, and that takes a declaration, so the example is a fragment of a program that declares it
 
 <a id="tensor"></a>
@@ -4606,6 +4606,12 @@ The smaller of two values of one ordered type. For numbers this is the IEEE 754 
 NaN on either side gives NaN, and -0 is below +0. Strings compare by code point (a proper
 prefix first), and false is below true.
 
+Its derivative is a choice, the mirror of `max`: `d(min(a, b))` is `da` where `a <= b` and `db`
+where it is not, a tie going to the left operand (`stdlib/rulesets/jvp.cml#jvp_min_d`).
+`with_grad` answers it too: the engine's own table carries the same rule
+(`stdlib/math/module.cpp#extremumScalarVjp`), a branch per operand, so the two paths pick the
+same operand and the same tie.
+
 - Example: `min(3, 5)` gives `3`
 - Example: `min('b', 'a')` gives `'a'`
 
@@ -4618,6 +4624,11 @@ max: (a: T, b: T) => T when is_ordered::<T>()
 The larger of two values of one ordered type. For numbers this is the IEEE 754 maximum: a
 NaN on either side gives NaN, and -0 is below +0. Strings compare by code point (a proper
 prefix first), and false is below true.
+
+Its derivative is a choice: `d(max(a, b))` is `da` where `a >= b` and `db` where it is not, a tie
+going to the left operand (`stdlib/rulesets/jvp.cml#jvp_max_d`, the rule the array width's
+`extremumVjp` writes). `with_grad` answers it through the engine's own rule, which picks the
+same operand and the same tie.
 
 - Example: `max(3, 5)` gives `5`
 - Example: `max('a', 'b')` gives `'b'`
@@ -4641,6 +4652,11 @@ abs: (x: T) => T when is_real::<T>()
 
 The absolute value of an integer or a float. The sign of a zero is cleared, a NaN stays a NaN,
 and the smallest integer is its own absolute value (negation wraps, as it does in `-x`).
+
+On a float this is `max(x, -x)`, so a differentiated `abs` reaches `math:max_d` and not
+`math:abs_d`: the law that answers it is the one `max` carries. `vjp` reads that law
+(`stdlib/rulesets/jvp.cml`) and `with_grad` reads the engine's rule for the same maximum, and
+the two pick the same operand.
 
 - Example: `abs(-3)` gives `3`
 
