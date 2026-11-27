@@ -508,6 +508,27 @@ type_vec_t Builder::rangeEnteredTypes(const oper_group_ptr_t &ops, const type_ve
                                          ? resolver->fixedSignature()
                                          : resolver->declaredSignature();
             if (declared == nullptr || i >= declared->normTypesCount()) {
+                // A rule the kernel keeps without a typed declaration -- the slice and the index
+                // write theirs as text -- still states where its form reads: the first operand of
+                // a subscript is the value being read, and the form that makes it one is the
+                // operator record's answer rather than a URI this file would have to spell. The
+                // range's own form is not one of these: its operands are the bounds.
+                if (i != 0) {
+                    continue;
+                }
+                const std::optional<camel::core::OperId> rule =
+                    camel::core::OperatorTable::instance().lookup(uri);
+                if (!rule.has_value()) {
+                    continue;
+                }
+                const camel::ops::SubscriptForm form =
+                    camel::core::OperatorTable::instance().subscriptFormOf(*rule);
+                if (form == camel::ops::SubscriptForm::Index ||
+                    form == camel::ops::SubscriptForm::Slice) {
+                    entered[i] = rangeArrayType();
+                    changed    = true;
+                    break;
+                }
                 continue;
             }
             if (rangeEntersArray(declared->normTypeAt(i), entered[i])) {
