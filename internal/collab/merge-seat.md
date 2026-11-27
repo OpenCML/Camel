@@ -484,3 +484,19 @@ capacity 同二进制连跑 3 次：18/18 → 17/18(tf) → 16/18(fvm+tf)
 - **看得见**：一条**红而不在表里**的用例 —— 判法就是"红而不在表里即新增"。所以"尖端为绿、不在任何表里、被这枝弄红"这条，**名表照样判成新增**，`merge-batch` 读整个快层时会被它拦下（`task-389` 的 `fillslots.permuted_order_runs` 属于这一类，不需要靠对照才看得见）。
 - **看不见**：**在基线表里、后来已经转绿、又被这枝弄红**的用例 —— 名字在表里，会被当成"已知红"放过。**干净尖端对照捞的正是这一类。**
 - 所以：**对照只在车道自查与二分时用，不进合并闸门**（每批多跑一整层的代价不值）；闸门仍只读名表，读的是整个快层。
+
+## 合并队列（2026-11-28 06:55，协调者维护；每次起批前更新这一节）
+
+按"谁挡谁"排，不是按交回先后。起批前先读这里，再读 `newestRedTable()`。
+
+| # | 车道 / tip | 为什么在这个位置 | 状态 |
+|---|---|---|---|
+| 1 | `editview-commit ff94ce915f`（12 笔） | 队列里最大的一枝，`fillslots` 已修（`containsTypeVar` 前提）；分支闸最老的一条 | 1 号位在跑整层 |
+| 2 | `frame-codeat b40a415f626b`（`task-385`） | **根因修复**：`OperatorCallSite` 持 `const ExecPlan &` 越过调用 ⇒ 引用比所有者活得久；修后 20/20、三路并发 45/45、`feat/para 103/103`、`flaky` 字段已删 | 等它 `feat/modules` + `feat/compile` 两组读数 |
+| 3 | `cc-loop-forward 224aeff25b` | 断言跟随已批准语义（签名带名字改了打印文本，`pure` 与驳回行为未变）；三计划 3/3、`modules` 新增红 0、`compile` 13 全在表内 | 可合 |
+| 4 | `stdlib-reds bf8a61b35a` | 4059 文件大改（`main` 迁移 + 快照重录），对 66 表 `new 0 / fixed 4`、`147 − 4 = 143` 自洽 | 进队前再换底一次 |
+| 5 | `index-axis`（`enter-shape`） | 新诊断 `SemanticDiag::IndexAxisOutOfRange`；交回只差录 ast 哈希 | 等它补 `parse 131/131` |
+
+**批 5 已落**：`ea54f1a186`（`carried-from d679eca503`），三枝 = `native-constas` + `gen-constas` + `opt-inline`，147 red / **0 甲**。
+
+**闸门口的石头**：`fault_deep.prl_off` 是偶发（晋升绿 → 批 5 首趟红 → 这批绿）。新版 `merge-batch`（`fsh-dev 9b5e234f70`，已合 `2f9f9a60c2`）会把"用例声明了 `flaky` 的红"打印成 `flaky red`、不算新增；但**真正的解是第 2 条那条根因修复** —— 它合了之后 `flaky` 字段删除，闸门回到"只看真新增"。
