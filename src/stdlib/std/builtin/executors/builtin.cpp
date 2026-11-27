@@ -344,6 +344,11 @@ std::unordered_map<std::string, operator_t> makeOpsImplMap() {
         {"op/idx_arr", __builtin__idx__},
         {"op/idx_str", __builtin__idx__},
         {"op/idx_take", __idx_take_arr__},
+        // The axis-carrying read under a name a rule may call: the operator's third operand is the
+        // axis, so the subscript itself spells it only where the axis is a written dimension
+        // (`xs[.., 0]`), and a law's left and right sides are calls. Same body as the operator --
+        // it is the operator, reached by a name (`lib/std/prelude.cml#index_into_axis`).
+        {"struct/index_into_axis", __builtin__idx__},
         {"op/slice_sub", __slice_sub__},
         {"op/slice_str", __slice_str__},
         {"op/slice_bytes", __slice_bytes__},
@@ -727,6 +732,7 @@ void registerBuiltinOperatorTraits() {
         "struct/contains_arr",
         "struct/contains_str",
         "struct/iter_str",
+        "struct/index_into_axis",
         "struct/last_arr",
         "struct/len_arr",
         "struct/len_bytes",

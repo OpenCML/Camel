@@ -210,9 +210,15 @@ gc_node_ref_t buildRuleTangent(
     // `Type::Float64()` here was the review's P1-9), and a rule whose condition does not hold there
     // is skipped rather than applied. The last refusal is reported, so a caller that tried
     // everything says the closest thing to why.
-    const auto candidates = camel::core::forwardRulesOf(std::string(uri));
+    // The question carries the node's own operand count (`dataOperandCount`): an operator can spell
+    // one key at one count and another key at another (`:op/idx_arr` is `index_into(x, i)` at two
+    // operands and `index_into_axis(x, i, at)` at three), and the count is what tells the two
+    // apart. It is the node's data operands, not the law's ports: a law may take more ports than
+    // the node has operands (the extents a transpose law is handed), and those extra ports are not
+    // operands.
+    const auto candidates = camel::core::forwardRulesOf(std::string(uri), dataOperandCount);
     if (candidates.empty()) {
-        const auto match = camel::core::forwardRuleOf(std::string(uri));
+        const auto match = camel::core::forwardRuleOf(std::string(uri), dataOperandCount);
         if (!match.has_value()) {
             why = "the operator has no forward rule bound at all";
         } else if (match->status == camel::core::RuleLookup::NoSuchFamily) {
