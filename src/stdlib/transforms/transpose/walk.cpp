@@ -1605,6 +1605,74 @@ bool buildTransposeMember(
                     }
                     continue;
                 }
+                if (node->kind == rt::GCNodeKind::Brch) {
+                    // The branch itself carries no value: which arm a value came from is decided by
+                    // the join that names it, and each arm's own region is where that arm's chain
+                    // is reversed. A branch read as a value has nothing to hand back.
+                    continue;
+                }
+                if (node->kind == rt::GCNodeKind::Join) {
+                    // A control node inside the region: the cotangent of a join is the cotangent of
+                    // the chain downstream of it, and which arm produced the value decides which
+                    // arm's chain receives it. The reversal the top of the graph uses is called
+                    // here, so a region and the top of the graph reverse a branch one way. It
+                    // answers one cotangent per stop of this region, so each part goes to its own
+                    // stop -- a state's cotangent to the state's stop and the round's to the
+                    // round's -- which is why the parts are read by index rather than handed over
+                    // whole.
+                    const gc_node_ref_t branchCotangent =
+                        transposeBranchInRegion(ref, local[ref], stops);
+                    if (!armsOk || branchCotangent == rt::kInvalidNodeRef) {
+                        return {};
+                    }
+                    std::vector<Type *> stopTypes;
+                    stopTypes.reserve(stops.size());
+                    for (const gc_node_ref_t stop : stops) {
+                        stopTypes.push_back(cotangentTypeOf(stop));
+                    }
+                    // A branch that answers a different number of parts than the region places is
+                    // the walk's own defect, and it is named rather than placed by guess: a part
+                    // written at a stop it does not belong to is one state's cotangent read as
+                    // another's.
+                    if (stops.size() > 1) {
+                        const std::optional<size_t> producedArity =
+                            camel::core::type::tree::arity(draft.header(branchCotangent)->dataType);
+                        if (!producedArity.has_value() || *producedArity != stops.size()) {
+                            os << "TRANSPOSE function=" << function->name()
+                               << " arm-stop region=" << oldRegion << " node=" << ref
+                               << " kind=join why=a-branch-answers-a-different-number-of-parts-"
+                                  "than-this-region-places\n";
+                            armsOk = false;
+                            return {};
+                        }
+                    }
+                    for (size_t i = 0; i < stops.size(); ++i) {
+                        const gc_node_ref_t part = componentReadOf(
+                            walkCtx,
+                            stopTypes,
+                            branchCotangent,
+                            static_cast<uint32_t>(i));
+                        if (part == rt::kInvalidNodeRef) {
+                            os << "TRANSPOSE function=" << function->name()
+                               << " arm-stop region=" << oldRegion << " node=" << ref
+                               << " kind=join stop=" << i
+                               << " why=a-part-of-a-branch-has-no-type-here\n";
+                            armsOk = false;
+                            return {};
+                        }
+                        const gc_node_ref_t summed =
+                            sumOfCotangents(walkCtx, stopTypes[i], portCotangents[i], part);
+                        if (summed == rt::kInvalidNodeRef) {
+                            os << "TRANSPOSE function=" << function->name()
+                               << " arm-stop region=" << oldRegion << " node=" << ref
+                               << " kind=join stop=" << i << " why=no-addition-for-a-stop\n";
+                            armsOk = false;
+                            return {};
+                        }
+                        portCotangents[i] = summed;
+                    }
+                    continue;
+                }
                 if (node->kind != rt::GCNodeKind::Oper) {
                     // Named, not silent: an arm whose body holds something other than an operator
                     // with a transpose rule stops here, and the line says which node and which
