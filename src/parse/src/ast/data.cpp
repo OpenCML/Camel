@@ -36,8 +36,6 @@ std::string to_string(DataType type) {
         return "EditExpr";
     case DataType::ViewExpr:
         return "ViewExpr";
-    case DataType::BlockRoot:
-        return "BlockRoot";
     case DataType::Literal:
         return "Literal";
     case DataType::Array:
@@ -303,16 +301,6 @@ const std::string BlockHeadLoad::toString() const {
 
 const std::string BlockHeadLoad::geneCode() const {
     return (dataType() == DataType::EditExpr ? "edit " : "view ") + root_.toString() + " =";
-}
-
-const std::string BlockRootLoad::toString() const {
-    return blockKind() == DataType::EditExpr ? "EditRoot" : "ViewRoot";
-}
-
-const std::string BlockRootLoad::geneCode() const {
-    // The value has no source spelling: it is what a block head's binding stands for, and the
-    // block itself is what a program writes.
-    return blockKind() == DataType::EditExpr ? "<edit root>" : "<view root>";
 }
 
 } // namespace camel::parse::ast

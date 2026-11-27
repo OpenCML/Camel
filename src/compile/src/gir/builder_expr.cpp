@@ -939,32 +939,12 @@ const char *conversionNameOf(const Type *type) {
 
 std::any Builder::resolveDRefNode(const GCT::node_ptr_t &gct) {
     if (const auto oper = tree_->operRefOf(gct); oper.has_value()) {
-        // A DREF the compiler made for an operator it knows by id: the group is the one the module
-        // that declares the operator registered for that id; no name of the program takes part.
+        // A DREF the compiler made for an operator it knows by id: the group is the built-in
+        // module's, which registered it; no name of the program takes part.
         ENTER("DREF");
         genericCalleeAllowed_        = false;
         refOrigin_                   = gct->origin();
-        const oper_group_ptr_t group = operatorGroupOf(*oper);
-        if (group == nullptr) {
-            // A body-less *generic* declaration makes no operator group: its declarations are
-            // templates, and a call of it resolves against those (the same node a call of a name
-            // that means a generic template builds, a DREF whose templates are in genericDrefs_
-            // and whose payload is an empty graph set). No group is made for it here: a group of
-            // no rules would be a second truth about an operator that has none.
-            const auto templates = context_->programExports().operatorTemplates(*oper);
-            GUARD(
-                templates.has_value(),
-                "The module that declares the operator the compiler emits did not register it: " +
-                    std::string(camel::core::OperatorTable::instance().uri(*oper)));
-            node_handle_t drefNode{currGraph_->addDrefNode(
-                std::variant<graph_vec_ptr_t, oper_group_ptr_t, graph_ptr_t>{
-                    std::make_shared<graph_set_t>()})};
-            genericDrefs_[drefNode] =
-                generic_ref_t(std::make_shared<GenericGroup>(genericTemplatesOfEntity(*templates)));
-            registerNodeOrigin(context_, drefNode, gct, "gir.dref.generic");
-            LEAVE("DREF");
-            return drefNode;
-        }
+        const oper_group_ptr_t group = internalOperatorGroup(*oper);
         node_handle_t drefNode{currGraph_->addDrefNode(
             std::variant<graph_vec_ptr_t, oper_group_ptr_t, graph_ptr_t>{group})};
         registerNodeOrigin(context_, drefNode, gct, "gir.dref");
