@@ -686,6 +686,27 @@ bool applyMachineSpecs() {
                     }
                 }
                 if (found == nullptr) {
+                    // A space around a word is a typo, not a name: say so, and print the word as it
+                    // is written -- `--gc a=1,b=2`, without the space the writer put after a comma.
+                    std::string trimmed = word.key;
+                    while (!trimmed.empty() &&
+                           std::isspace(static_cast<unsigned char>(trimmed.front()))) {
+                        trimmed.erase(trimmed.begin());
+                    }
+                    while (!trimmed.empty() &&
+                           std::isspace(static_cast<unsigned char>(trimmed.back()))) {
+                        trimmed.pop_back();
+                    }
+                    for (size_t i = 0; i < count; ++i) {
+                        if (trimmed == keys[i].name) {
+                            std::cerr << "Invalid " << option << " key: '" << word.key
+                                      << "'. A comma separates the words and no space follows it: "
+                                      << "write '" << option << " " << trimmed << "="
+                                      << (word.value.empty() ? "..." : word.value) << "'"
+                                      << std::endl;
+                            return false;
+                        }
+                    }
                     std::cerr << "Invalid " << option << " key: '" << word.key << "'. Expected "
                               << keys[0].name;
                     for (size_t i = 1; i < count; ++i) {
