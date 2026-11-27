@@ -136,6 +136,9 @@ class ImportLoad : public Load {
     const std::string toString() const override;
 
     void setPath(const std::string &path) { path_ = path; }
+    /// Whether a path is set, without the throw: a block head checks the imports the source wrote
+    /// before adding its own, and an entry being built has none yet.
+    bool hasPath() const { return !path_.empty(); }
     const std::string &getPath() const {
         if (path_.empty()) {
             throw std::runtime_error("ImportLoad: Path is not set");

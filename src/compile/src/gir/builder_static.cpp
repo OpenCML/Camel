@@ -262,8 +262,19 @@ void Builder::walkStaticBodyNames(
                 tt::as_ptr<FunctionType>(node->at(0)->dataType()),
                 locals.back());
         }
+        // A headed block's body reads the module its head named, and this walk reads the body
+        // before any build does: the same module is in force for the names written in it, so a
+        // name of that module is not a name this body may not read (design 15.1).
+        const camel::core::module::module_ptr_t headModule =
+            GCT::Tree::of(node)->blockHeadModuleOf(node);
+        if (headModule != nullptr) {
+            staticBodyHeadModules_.push_back(headModule);
+        }
         if (node->size() > 1) {
             walkStaticBodyNames(node->at(1), locals, true);
+        }
+        if (headModule != nullptr) {
+            staticBodyHeadModules_.pop_back();
         }
         locals.pop_back();
         return;
@@ -330,6 +341,18 @@ void Builder::walkStaticBodyNames(
         // `match type`) keeps the stricter reading it was written with.
         if (!found && intoFunctions && moduleSourceDeclares(node->name())) {
             found = true;
+        }
+        // The name may be one the module a headed block's head named exports: that module is a
+        // layer of the body being read, and the innermost head answers first, as it does in the
+        // value chain of the build (name_layers.h, row `BlockHead`).
+        for (auto head = staticBodyHeadModules_.rbegin();
+             !found && head != staticBodyHeadModules_.rend();
+             ++head) {
+            if (*head == nullptr || exports_ == nullptr) {
+                continue;
+            }
+            const auto entity = exports_->exportedEntity(**head, Reference(node->name()));
+            found             = entity.has_value() && !entity->isTag();
         }
         if (!found && !valueNameExists(node->name(), node)) {
             diags_->of(SemanticDiag::UnresolvedReference)

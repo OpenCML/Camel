@@ -97,6 +97,10 @@ class Builder {
     // visitStructType). Null outside a type declaration.
     node_ptr_t fieldTagOwner_ = nullptr;
     std::vector<std::pair<AST::node_ptr_t, camel::core::module::module_ptr_t>> importedModules_;
+    // The modules whose exports a headed block's body reads by bare name (graph-editing design
+    // 15.1: a handle type comes from the block's head and from nowhere else). One entry per block
+    // being built, so the names are readable inside that body and not outside it.
+    std::vector<camel::core::module::module_ptr_t> blockHeadModules_;
     // Compiles the imported modules written in Camel as far as their declarations; one in
     // error is reported at its import (ImportedModuleHasErrors).
     void compileImportedModules();
