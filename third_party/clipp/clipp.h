@@ -2024,6 +2024,11 @@ public:
             if(std::find(flags_.begin(), flags_.end(), arg) != flags_.end()) {
                 return subrange{0,arg.size()};
             }
+            // VENDORED CHANGE, camel -- carry this block over a clipp upgrade. Stock clipp matches
+            // a flag as a prefix of the argument, so `--gc` matched `--gc-nursery-mb` with
+            // `-nursery-mb` attached as its value; camel refuses a name the command line no longer
+            // has by whole word, and only this rule makes the parser say "unknown option" instead.
+            // Drop it and the refusal goes back to being a value error on the surviving option.
             // A word that begins with two dashes is one option name: `--gc` is not a prefix of
             // `--gc-nursery-mb`, and reading it as `--gc` with `-nursery-mb` attached counted a
             // name the command line no longer has as an option that exists. Such a word matches

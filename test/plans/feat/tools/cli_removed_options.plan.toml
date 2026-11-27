@@ -296,6 +296,35 @@ expect_stderr_contains = ["unknown option '--explain'"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000
 
+# The parser is what refuses a retired spelling now, so the word it refuses must be refused as a
+# word. `--gc-nursery-mb` begins with the option `--gc`: a parser that matches a long option by
+# prefix reads it as `--gc` with `-nursery-mb` attached, and the refusal then says nothing about
+# the option being gone. This case holds that reading down on its own, without the deleted list
+# that once named the spelling.
+[[tests]]
+name = "removed.a_long_option_is_one_word"
+desc = "`--gc-nursery-mb` is refused as an unknown option, not read as `--gc` with `-nursery-mb` attached."
+kind = "negative"
+case = "../../../cases/compile/check/clean.cml"
+args = ["--gc-nursery-mb", "64", "${case}"]
+expect_exit = 1
+expect_stderr_contains = ["unknown option '--gc-nursery-mb'"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+# And the other side of the same rule: the whole-word match did not take the `=` spelling with it.
+# `--time-phases=<file>` is one of the two long options the command line writes with `=`; it is
+# read before the parser is handed the line, and must still be accepted.
+[[tests]]
+name = "removed.the_equals_spelling_still_works"
+desc = "`--time-phases=<file>` is still accepted: the whole-word rule is about which words are one name, not about `=`."
+kind = "behavior"
+case = "../../../cases/compile/check/clean.cml"
+args = ["--time-phases=test/results/phases.txt", "${case}", "std::nop"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 20000
+
 # The positive side of each rename lives with the option it belongs to: `--diag-format` in
 # compile.diag_options, `--spaces`/`--gc` in the sizing plans, and the subcommands here.
 
