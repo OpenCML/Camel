@@ -701,6 +701,31 @@ gc_node_ref_t staticZeroOf(camel::runtime::GraphDraft &draft, camel::core::type:
     return draft.materializeStaticValue(*zero, type, rt::kGCNodeFlagConstant);
 }
 
+/// Writes nodes into `region` while it is alive. A copy that walks a branch's arm writes that arm's
+/// nodes into the region the branch made for it, and a copy that refuses does so from inside a
+/// case; putting the draft's own insert region back on every way out keeps a refusal from leaving
+/// the next node of some other copy in an arm it has nothing to do with.
+class InsertRegionRestore {
+  public:
+    InsertRegionRestore(camel::runtime::GraphDraft &draft, uint32_t region)
+        : draft_(draft), region_(region) {
+        if (region_ != 0) {
+            draft_.setInsertRegion(region_);
+        }
+    }
+    InsertRegionRestore(const InsertRegionRestore &)            = delete;
+    InsertRegionRestore &operator=(const InsertRegionRestore &) = delete;
+    ~InsertRegionRestore() {
+        if (region_ != 0) {
+            draft_.setInsertRegion(0);
+        }
+    }
+
+  private:
+    camel::runtime::GraphDraft &draft_;
+    uint32_t region_;
+};
+
 } // namespace
 
 std::vector<camel::core::type::Type *>
@@ -1046,6 +1071,44 @@ gc_node_ref_t expandRuleRightSide(
 
     auto &draft = transaction.edit();
     std::unordered_map<gc_node_ref_t, gc_node_ref_t> copied;
+    // A branch's Join is made before the copy walks it, and its head is wired after: an arm yields
+    // a value, the Join is where that value lands, and the Brch that chooses the arm is wired to
+    // the condition -- a value of the region the branch stands in, which the walk may not have
+    // reached when it meets the Brch. This is the shape the other two writers of a branch in this
+    // tree build (`split.cpp#buildHalfBranch`, and `jvp.cpp`'s lift): the Join is made first and
+    // names the Brch, then the Join is rewritten to take the Brch and the arms' results.
+    std::unordered_map<gc_node_ref_t, gc_node_ref_t> joinOfBrch; // a body Brch -> the Join it names
+    for (gc_node_ref_t ref = 0; ref < body->nodeCount(); ++ref) {
+        const rt::GCNode *brch = body->node(ref);
+        if (brch == nullptr || brch->kind != rt::GCNodeKind::Brch) {
+            continue;
+        }
+        const auto *brchBody = body->nodeBodyAs<rt::GCBrchBody>(ref);
+        if (brchBody == nullptr || brchBody->join == rt::kInvalidNodeRef) {
+            continue;
+        }
+        const rt::GCNode *join = body->node(brchBody->join);
+        if (join == nullptr) {
+            continue;
+        }
+        joinOfBrch[ref] =
+            draft.addJoinNode(join->dataType(), rt::kInvalidNodeRef, brchBody->armCount);
+    }
+    // Where a node of a region is written: the region a branch made for its arm. A node of a region
+    // no branch made waits for the branch that owns it, like a node whose input is not copied yet.
+    std::unordered_map<uint32_t, uint32_t> dstRegionOf;
+    // Arm `index` of branch `brch`, as the body's own region table records it: the region of kind
+    // `Arm` this Brch owns whose index is the arm's number.
+    const auto armRegionOfBody = [&](gc_node_ref_t brch, uint32_t index) -> uint32_t {
+        for (uint32_t r = 1; r < body->regionCount(); ++r) {
+            const rt::GCRegion *region = body->region(r);
+            if (region != nullptr && region->kind == rt::GCRegionKind::Arm &&
+                region->owner == brch && region->index == index) {
+                return r;
+            }
+        }
+        return 0;
+    };
     // A rule's right side is copied in one pass because a node's inputs are written before it, and
     // that order is what makes the right side a straight line. An instance built at types the law
     // was written for is usually in that order; one built at other types is not always -- a
@@ -1097,6 +1160,23 @@ gc_node_ref_t expandRuleRightSide(
                 // picked, and a whole-answer expansion reaches it without that pass.
                 continue;
             }
+            // A node of a region is a node of an arm: the branch that owns the region made a region
+            // of this graph for it, and the node is written there. Two facts about a branch are
+            // asked in two places -- which region a node is in (here) and what kind of node it is
+            // (the switch below) -- and neither answers for the other: a Brch is refused by its
+            // kind, not by the region it stands in, and an arm's node is copied by the region it is
+            // in, not by the kind the branch has.
+            const uint32_t srcRegion = body->nodeRegion(ref);
+            uint32_t dstRegion       = 0;
+            if (srcRegion != 0) {
+                const auto dest = dstRegionOf.find(srcRegion);
+                if (dest == dstRegionOf.end()) {
+                    blocked = true;
+                    continue;
+                }
+                dstRegion = dest->second;
+            }
+            InsertRegionRestore insertRegion(draft, dstRegion);
             if (node->kind == rt::GCNodeKind::Port) {
                 // A port of the body is a value the call passes: bound, never copied, so the copy
                 // has no parameters of its own. A port nothing reads is neither bound nor copied.
@@ -1111,10 +1191,6 @@ gc_node_ref_t expandRuleRightSide(
                 }
                 copied[ref] = at->second;
                 continue;
-            }
-            if (body->nodeRegion(ref) != 0) {
-                why = "the rule's right side is not a straight line: it has a region";
-                return rt::kInvalidNodeRef;
             }
             std::vector<gc_node_ref_t> inputs;
             bool missing = false;
@@ -1289,6 +1365,106 @@ gc_node_ref_t expandRuleRightSide(
                 copied[ref] = made;
                 break;
             }
+            case NodeCase::Brch: {
+                // A branch on the rule's right side. The choice of arm is not a value a derivative
+                // flows through -- a branch chooses between two computations of the answer, and the
+                // answer is what the copy carries -- so the branch is copied as it stands: the same
+                // condition, one region per arm, and each arm's own value carried into it. The
+                // condition is the branch's one ordinary input; it is a value of the region the
+                // branch stands in, so it is copied before the branch and read, never rewritten.
+                const auto *brchBody = body->nodeBodyAs<rt::GCBrchBody>(ref);
+                const auto joinAt    = joinOfBrch.find(ref);
+                if (brchBody == nullptr || joinAt == joinOfBrch.end()) {
+                    why = "the rule's right side has a branch with no join";
+                    return rt::kInvalidNodeRef;
+                }
+                const auto conditionInputs = body->normInputsOf(ref);
+                if (conditionInputs.size() != 1) {
+                    why = "the rule's right side has a branch that names no single condition";
+                    return rt::kInvalidNodeRef;
+                }
+                const auto condition = copied.find(conditionInputs.front());
+                if (condition == copied.end()) {
+                    blocked = true;
+                    continue;
+                }
+                const gc_node_ref_t madeBrch = draft.addBrchNode(
+                    camel::core::type::Type::Int64(),
+                    joinAt->second,
+                    brchBody->armCount);
+                const std::array<gc_node_ref_t, 1> conditionInput{condition->second};
+                draft.setNormInputs(madeBrch, std::span<const gc_node_ref_t>(conditionInput));
+                copied[ref] = madeBrch;
+                // Each arm is a region of the body, taken from the branch's own record of them: the
+                // region this Brch owns whose index is the arm's number. The region is made here
+                // and the arm's nodes are written into it where the walk meets them.
+                for (uint32_t arm = 0; arm < brchBody->armCount; ++arm) {
+                    const uint32_t srcArm = armRegionOfBody(ref, arm);
+                    if (srcArm == 0) {
+                        why = "the rule's right side has a branch whose arm " +
+                              std::to_string(arm + 1) + " is no region of the rule";
+                        return rt::kInvalidNodeRef;
+                    }
+                    dstRegionOf[srcArm] = draft.addRegion(rt::GCRegionKind::Arm, 0, madeBrch, arm);
+                }
+                break;
+            }
+            case NodeCase::Join: {
+                // The Join the branch answers with: its arms' results are its inputs, one per arm,
+                // in arm order, and it names the Brch. Its head was made before the walk; here it
+                // is wired once every arm has a value to hand it.
+                const auto *joinBody = body->nodeBodyAs<rt::GCJoinBody>(ref);
+                if (joinBody == nullptr || joinBody->brch == rt::kInvalidNodeRef ||
+                    joinOfBrch.find(joinBody->brch) == joinOfBrch.end()) {
+                    why = "the rule's right side has a join with no branch";
+                    return rt::kInvalidNodeRef;
+                }
+                const auto brchAt = copied.find(joinBody->brch);
+                if (brchAt == copied.end()) {
+                    blocked = true;
+                    continue;
+                }
+                std::vector<gc_node_ref_t> armResults;
+                bool armMissing = false;
+                for (uint32_t arm = 0; arm < joinBody->armCount; ++arm) {
+                    const uint32_t srcArm      = armRegionOfBody(joinBody->brch, arm);
+                    const rt::GCRegion *region = srcArm == 0 ? nullptr : body->region(srcArm);
+                    const auto result =
+                        region == nullptr ? copied.end() : copied.find(region->result);
+                    if (result == copied.end()) {
+                        armMissing = true;
+                        break;
+                    }
+                    armResults.push_back(result->second);
+                }
+                if (armMissing) {
+                    blocked = true;
+                    continue;
+                }
+                const gc_node_ref_t madeJoin      = joinOfBrch.at(joinBody->brch);
+                const rt::DraftNodeHeader *header = draft.header(madeJoin);
+                rt::DraftNodeInit init;
+                init.dataIndex    = header->dataIndex;
+                init.dataType     = header->dataType;
+                init.kind         = rt::GCNodeKind::Join;
+                init.runtimeFlags = header->runtimeFlags;
+                init.origin       = header->origin;
+                init.permissions  = header->permissions;
+                init.attrs        = header->attrs;
+                init.region       = header->region;
+                init.name         = header->name;
+                const rt::GCJoinBody joinBodyRecord{
+                    .brch     = brchAt->second,
+                    .armCount = joinBody->armCount};
+                init.payload = std::span<const std::byte>(
+                    reinterpret_cast<const std::byte *>(&joinBodyRecord),
+                    sizeof(joinBodyRecord));
+                init.normInputs = std::span<const gc_node_ref_t>(&brchAt->second, 1);
+                init.withInputs = armResults;
+                draft.rewriteNode(madeJoin, init);
+                copied[ref] = madeJoin;
+                break;
+            }
             default:
                 why = std::string(
                           "the rule's right side is not a straight line of computations: node ") +
@@ -1305,6 +1481,21 @@ gc_node_ref_t expandRuleRightSide(
             // reason the last one was blocked is why this expansion cannot be built.
             return rt::kInvalidNodeRef;
         }
+    }
+    // Each arm yields the value its own region names as its exit: the region's record says which
+    // node that is, so the copy reads it from there instead of guessing where an arm ends.
+    for (const auto &[srcRegion, dstRegion] : dstRegionOf) {
+        const rt::GCRegion *region = body->region(srcRegion);
+        if (region == nullptr || region->result == rt::kInvalidNodeRef) {
+            why = "the rule's right side has an arm that answers with no value";
+            return rt::kInvalidNodeRef;
+        }
+        const auto result = copied.find(region->result);
+        if (result == copied.end()) {
+            why = "the rule's right side has an arm whose value the transform cannot read";
+            return rt::kInvalidNodeRef;
+        }
+        draft.setRegionResult(dstRegion, result->second);
     }
     // The body's exit is the value the call of the closure would answer with; a gate in front of it
     // carries the same value. A position asks for one component of that value, which the gate walk
