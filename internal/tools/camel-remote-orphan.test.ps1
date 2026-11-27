@@ -35,7 +35,7 @@ if (-not $Source) { $Source = Join-Path $PSScriptRoot 'camel-remote.ps1' }
 $script:failed = 0
 $script:checked = 0
 $script:skipped = 0
-$behaviourChecks = 9
+$behaviourChecks = 11
 
 function Check {
     param([string]$Name, [bool]$Ok, [string]$Detail = '')
@@ -58,6 +58,24 @@ Check 'the remote script carries the guard after setting the directory it writes
     'no line reading "$orphanGuard" right after orphan_dir'
 Check 'the exit trap that replaces the guard''s still ends the watchdog' `
     ([regex]::IsMatch($srcText, '(?s)finish_probe\(\) \{.*?\n\s*orphan_end\r?\n\}')) 'finish_probe does not call orphan_end'
+
+# The lock the guard exists for is a `flock` on fd 6 of the run's shell, and the kernel gives it back
+# when the last descriptor on it closes. A child that inherits fd 6 therefore holds that lock after
+# its holder is gone, and the runs behind it wait for a lock nobody holds. The spawn points below
+# are the ones that can outlive a step, so the script must close fd 6 in each. These checks read the
+# script rather than run it: the alternative is a run that has to die to show the difference.
+Check 'the token reporter is started with fd 6 closed' `
+    ([regex]::IsMatch($srcText, '(?m)^\) 6>&- &$')) 'the reporter subshell still inherits the checkout lock on fd 6'
+Check 'the build is started with fd 6 closed' `
+    ([regex]::IsMatch($srcText, '"`\$build_progress" 6>&- &')) 'the setsid build still inherits the checkout lock on fd 6'
+Check 'the plan stage closes fd 6' `
+    ([regex]::IsMatch($srcText, '(?m)\( RUNPLAN 2>&1 \) 6>&-\r?$')) 'the plan still inherits the checkout lock on fd 6'
+Check 'the plan''s --ListKnown rows channel closes fd 6' `
+    ([regex]::IsMatch($srcText, "\( RUNPLAN 2>&1 \) 6>&- \| tee 'TEETMP'")) 'the plan behind the rows tee still inherits the checkout lock on fd 6'
+Check 'the AST recorder closes fd 6' `
+    ([regex]::IsMatch($srcText, 'check\.py snapshot --update\w+ 2>&1 6>&-')) 'the parse-check recorder still inherits the checkout lock on fd 6'
+Check 'the editor install closes fd 6' `
+    ([regex]::IsMatch($srcText, '--no-audit --no-fund \) 6>&-')) 'the npm ci install still inherits the checkout lock on fd 6'
 
 . (Join-Path $PSScriptRoot 'git-bash.ps1')
 $bash = Get-GitBash
@@ -130,6 +148,24 @@ for i in 4 5 6; do echo "out $i"; echo "err $i" >&2; done
 echo "__CAMEL_REMOTE_EXIT__=0"
 '@ -replace '__W__', $w)
 
+    # A run that starts two long-lived children and then has its own shell killed between two polls:
+    # by then the kernel has adopted the children, and one of them moved to a session of its own, so
+    # the parent links the sweep reads are gone. What ends them is the list the watchdog wrote down
+    # while the run was still alive, which is the whole reason it writes one down.
+    WriteLf (Join-Path $scratch 'short.sh') (@'
+set -u
+orphan_dir="__W__/runs"
+. "__W__/guard.sh"
+bash -c 'echo $$ > "__W__/pid.short"; exec sleep 300' &
+if command -v setsid >/dev/null 2>&1; then
+    setsid bash -c 'echo $$ > "__W__/pid.short_session"; exec sleep 300' &
+else
+    bash -c 'echo $$ > "__W__/pid.short_session"; exec sleep 300' &
+fi
+echo $$ > "__W__/pid.short_run"
+sleep 5
+'@ -replace '__W__', $w)
+
     WriteLf (Join-Path $scratch 'drive.sh') (@'
 set -u
 export CAMEL_ORPHAN_POLL_S=1 CAMEL_ORPHAN_GRACE_S=2
@@ -143,15 +179,34 @@ wait_for_pids() {
     done
     return 1
 }
+wait_for_short() {
+    for i in $(seq 1 40); do
+        [ -s "$W/pid.short_run" ] && [ -s "$W/pid.short" ] && [ -s "$W/pid.short_session" ] && return 0
+        sleep 0.25
+    done
+    return 1
+}
 res() { echo "RESULT $1 $2"; }
-logged() { cat "$W"/runs/*.err 2>/dev/null | grep -c 'is gone'; }
+logged() { grep -l 'is gone' "$W"/runs/*.err 2>/dev/null | wc -l; }
 killall_recorded() {
-    for f in run child grand session; do p=$(pid_of $f); [ -n "$p" ] && kill -9 "$p" 2>/dev/null; done
+    for f in run child grand short short_run short_session; do p=$(pid_of $f); [ -n "$p" ] && kill -9 "$p" 2>/dev/null; done
     rm -f "$W"/pid.*
+}
+# Nothing of the last case may still be running when the next one starts: a case's stdout/stderr
+# copies are written by tees the shell starts asynchronously, and a tee that starts after the next
+# case wiped the directory recreates a file under an earlier case's name -- which is then the newest
+# thing `ls | head -1` picks. That is a race in the harness, not in the guard, so the harness waits.
+quiesce() {
+    local i
+    for i in $(seq 1 40); do
+        [ -z "$(ps -ef 2>/dev/null | grep -F "$W" | grep -v grep)" ] && return 0
+        sleep 0.25
+    done
+    return 0
 }
 
 # A: the starter (a shell that started run.sh and waits for it) is killed.
-rm -rf "$W/runs"; rm -f "$W"/pid.*
+quiesce; rm -rf "$W/runs"; rm -f "$W"/pid.*
 bash -c "bash $W/stub.sh > $W/a.out 2> $W/a.err & wait" &
 reader=$!
 if wait_for_pids; then res started 1; else res started 0; fi
@@ -164,7 +219,7 @@ res a_logged "$(logged)"
 killall_recorded
 
 # B: the starter lives; nothing is touched over several polls.
-rm -rf "$W/runs"
+quiesce; rm -rf "$W/runs"
 bash -c "bash $W/stub.sh > $W/b.out 2> $W/b.err & wait" &
 reader=$!
 wait_for_pids
@@ -176,14 +231,27 @@ res b_not_logged "$(logged)"
 kill -9 "$reader" 2>/dev/null
 killall_recorded
 
+
 # C: the copy equals the stream; 25 old pairs are pruned so that 20 pairs stay.
-rm -rf "$W/runs"; mkdir -p "$W/runs"
+quiesce; rm -rf "$W/runs"; mkdir -p "$W/runs"
 for i in $(seq 1 25); do
     : > "$W/runs/old-$i.out"; : > "$W/runs/old-$i.err"
     touch -d "2020-01-01 00:00:$(printf %02d $i)" "$W/runs/old-$i.out" "$W/runs/old-$i.err"
 done
 bash "$W/talk.sh" > "$W/c.out" 2> "$W/c.err"
-sleep 1
+# The copies are written by tees this shell starts asynchronously, so they can still be arriving when
+# the run has ended: wait until the pair stops growing, up to five seconds, and compare then.
+settle_pair() {
+    local last="" size i
+    for i in $(seq 1 20); do
+        size=$(cat "$W"/runs/*.out "$W"/runs/*.err 2>/dev/null | wc -c)
+        [ "$size" = "$last" ] && return 0
+        last=$size
+        sleep 0.25
+    done
+    return 0
+}
+settle_pair
 cp_out=$(ls "$W"/runs/*.out | grep -v old- | head -1)
 cp_err=$(ls "$W"/runs/*.err | grep -v old- | head -1)
 if cmp -s "$W/c.out" "$cp_out"; then res copy_out 1; else res copy_out 0; fi
@@ -191,10 +259,26 @@ if cmp -s "$W/c.err" "$cp_err"; then res copy_err 1; else res copy_err 0; fi
 res pairs "$(ls "$W"/runs/*.out | wc -l)"
 
 # D: the stream's reader leaves after the first line; the host copy still has all seven lines.
-rm -rf "$W/runs"
+quiesce; rm -rf "$W/runs"
 bash "$W/talk.sh" 2>/dev/null | head -n 1 > /dev/null
 sleep 4
 res kept_after_reader "$(cat "$W"/runs/*.out 2>/dev/null | wc -l)"
+# E: the run's own shell is killed between two polls. Its children are nobody's children after that
+# and one of them is in a session of its own, so this is the reading that what the watchdog wrote
+# down is what ends them -- and a process left running is what keeps the checkout lock held.
+quiesce; rm -rf "$W/runs"; rm -f "$W"/pid.*
+bash -c "bash $W/short.sh > $W/e.out 2> $W/e.err & wait" &
+reader=$!
+if wait_for_short; then res e_started 1; else res e_started 0; fi
+sleep 2
+kill -9 "$(pid_of short_run)" 2>/dev/null
+sleep 6
+gone=1
+for f in short short_session; do alive "$(pid_of $f)" && gone=0; done
+res e_gone $gone
+res e_logged "$(logged)"
+kill -9 "$reader" 2>/dev/null
+killall_recorded
 '@ -replace '__W__', $w)
 
     $raw = & $bash (ToBash (Join-Path $scratch 'drive.sh')) 2>&1
@@ -210,6 +294,8 @@ res kept_after_reader "$(cat "$W"/runs/*.out 2>/dev/null | wc -l)"
     Check 'the host copy of stderr equals the stream' ($r['copy_err'] -eq 1) $detail
     Check 'only the newest 20 pairs stay (19 old + this run)' ($r['pairs'] -eq 20) $detail
     Check 'the host copy keeps all of stdout after the stream''s reader left' ($r['kept_after_reader'] -eq 7) $detail
+    Check 'run''s own shell killed: what it started is gone even though it is nobody''s child by then' ($r['e_gone'] -eq 1) $detail
+    Check 'run''s own shell killed: the host log has the line saying so' ($r['e_logged'] -eq 1) $detail
 }
 
 if (-not $Keep) { Remove-Item -Recurse -Force $scratch -ErrorAction SilentlyContinue } else { Write-Host "kept: $scratch" }
