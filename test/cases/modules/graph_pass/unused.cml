@@ -1,5 +1,5 @@
 import { flatten } from array
-import { Node, Graph, NodeKind, nodes, graphs, kind, is_pure, is_constant, is_anchor, value_users, open, erase, abort, commit } from graph
+import { Node, Graph, Draft, NodeKind, nodes, graphs, kind, is_pure, is_constant, is_anchor, value_users, open, erase, abort, commit } from graph
 import { is_function } from types
 
 /// Whether the node is no more than its value: a constant, an access, a fill or a pure operation.
@@ -21,7 +21,7 @@ func allNodes(d: Graph) => Node[] {
     }>)
 }
 
-func eraseAll::<F>(d: Graph, hits: Node[]) => F! sync {
+func eraseAll::<F>(d: Draft<F>, hits: Node[]) => F! sync {
     hits->foreach<func (n: Node) {
         erase(n)
     }>
