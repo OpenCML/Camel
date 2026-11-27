@@ -34,6 +34,7 @@
 #include "camel/facts/facts.h"
 
 #include "camel/facts/arrangeable.h"
+#include "camel/facts/core_values.h"
 
 #include "camel/core/loop_kind.h"
 #include "camel/core/operator_table.h"
@@ -1205,6 +1206,60 @@ bool nodeIsFreelyArrangeable(const graph::Graph &graph, NodeId node) {
         return false;
     }
     return store->obtain<Arrangeable>(arrangeableKind(), Anchor{&graph, node})->all();
+}
+
+namespace {
+
+/// The store that can answer about `node` of `graph`, or nullptr when none can. A node the graph's
+/// own face does not have -- a JOIN, a reference to a place that was removed -- is not one a fact
+/// is anchored on: the store rejects such an anchor (`checkAnchors`), because "no such node" is a
+/// caller's mistake and not a fact. A graph no store was told about has no answers at all
+/// (`storeHolding`), and a reader that asked anyway would be inventing one.
+Store *storeForNode(const graph::Graph &graph, NodeId node) {
+    if (!graph.view().contains(static_cast<graph::NodeRef>(node))) {
+        return nullptr;
+    }
+    return storeHolding(graph);
+}
+
+} // namespace
+
+std::optional<camel::runtime::fact::TensorShape> shapeOf(const graph::Graph &graph, NodeId node) {
+    Store *store = storeForNode(graph, node);
+    if (store == nullptr) {
+        return std::nullopt;
+    }
+    const std::shared_ptr<const camel::runtime::fact::TensorShape> value =
+        store->obtain<camel::runtime::fact::TensorShape>(shapeKind(), Anchor{&graph, node});
+    if (value == nullptr) {
+        return std::nullopt;
+    }
+    // A copy: the caller keeps an answer, not the store's entry (which the next read may drop).
+    return *value;
+}
+
+int permissionsOf(const graph::Graph &graph, NodeId node) {
+    Store *store = storeForNode(graph, node);
+    if (store == nullptr) {
+        return 0;
+    }
+    const std::shared_ptr<const int> mask =
+        store->obtain<int>(permissionsKind(), Anchor{&graph, node});
+    return mask != nullptr ? *mask : 0;
+}
+
+std::optional<camel::runtime::fact::NodeInstance>
+instanceAt(const graph::Graph &graph, NodeId node) {
+    Store *store = storeForNode(graph, node);
+    if (store == nullptr) {
+        return std::nullopt;
+    }
+    const std::shared_ptr<const camel::runtime::fact::NodeInstance> value =
+        store->obtain<camel::runtime::fact::NodeInstance>(instanceKind(), Anchor{&graph, node});
+    if (value == nullptr) {
+        return std::nullopt;
+    }
+    return *value;
 }
 
 std::string toString(const Arrangeable &arrangeable) {
