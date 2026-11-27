@@ -27,8 +27,6 @@ baa3930e27b73d91 no test/cases/parse/rules/no_context.cml
 b8d9fb23131178aa ok test/cases/parse/rules/parameters.cml
 37162eb477a685e8 ok test/cases/parse/rules/values.cml
 bed54dbb47861601 no test/cases/parse/rules/when_after_body.cml
-50a1d4eda1f41c93 no test/cases/parse/rulings/err_const_parameter.cml
-0aaa4d1307d4a892 no test/cases/parse/rulings/err_const_with_parameter.cml
 f747bf1e7affb825 ok test/cases/parse/rulings/count_until.cml
 e881305f311ae736 ok test/cases/parse/rulings/doc_comment.cml
 8b89c2383bd831c6 ok test/cases/parse/rulings/doc_comment_blank_line.cml
@@ -36,6 +34,8 @@ c82a0a25af2c3a52 ok test/cases/parse/rulings/dotdot_after_cast.cml
 2e3469e87bd7a742 ok test/cases/parse/rulings/dotdot_looser_than_link.cml
 4b63cd1ba088cbd1 ok test/cases/parse/rulings/dotdot_precedence.cml
 9fc530c1da811ffb ok test/cases/parse/rulings/eager_logic.cml
+50a1d4eda1f41c93 no test/cases/parse/rulings/err_const_parameter.cml
+0aaa4d1307d4a892 no test/cases/parse/rulings/err_const_with_parameter.cml
 525eef5b991f60e3 ok test/cases/parse/rulings/exponent.cml
 654375d03f7037b4 no test/cases/parse/rulings/function_type_needs_names.cml
 98db0952379834a5 ok test/cases/parse/rulings/if_statement.cml
@@ -520,7 +520,7 @@ ff143e01e0e4dbb0 ok src/stdlib/bytes.cml
 a5076fc3f00f63eb ok src/stdlib/ckpt.cml
 091e49283aec1438 ok src/stdlib/env.cml
 0797036114bc4a4c ok src/stdlib/fs.cml
-a9069f30241ae067 ok src/stdlib/graph.cml
+d212a4f761e59cd2 ok src/stdlib/graph.cml
 c653d7d211aed8b2 ok src/stdlib/hash.cml
 cb32c9dd5cb81d91 ok src/stdlib/io.cml
 70530f2be80f49bf ok src/stdlib/json.cml
@@ -528,7 +528,7 @@ cb32c9dd5cb81d91 ok src/stdlib/io.cml
 ff9eee9cbc6a4008 ok src/stdlib/math.cml
 4bd3189fe34a101a ok src/stdlib/nn.cml
 109cb1c3af0c4f8a ok src/stdlib/onnx.cml
-ab449b7d874527d9 ok src/stdlib/opt.cml
+8e30555972565f0c ok src/stdlib/opt.cml
 49015cbc4407a506 ok src/stdlib/optim.cml
 cfd1905583789732 ok src/stdlib/para.cml
 a82098797df46210 ok src/stdlib/perf.cml
@@ -4072,6 +4072,10 @@ ea123086c0149664 ok test/cases/modules/types/type_functions.cml
 76b851f10195d52d ok test/cases/opt/algebra_rules/measure.cml
 74aab71b209a1b30 ok test/cases/opt/algebra_rules/shared_term.cml
 2000978eeb50dfa2 ok test/cases/opt/algebra_rules/tensor_forms.cml
+00cc3b04b92646ea ok test/cases/opt/camel_inline/mixed_call_sites.cml
+3269418556c614f8 ok test/cases/opt/camel_inline/mutual_recursion.cml
+8117da9e59a3ce26 ok test/cases/opt/camel_inline/self_recursion.cml
+c04ae1905256101b ok test/cases/opt/camel_inline/two_level_call.cml
 dd336349713ffca6 ok test/cases/opt/camel_passes/cse_after_inline.cml
 4dc2612264792cf6 ok test/cases/opt/camel_passes/cse_subject.cml
 1487fe6bb0a822d1 ok test/cases/opt/camel_passes/dce_subject.cml

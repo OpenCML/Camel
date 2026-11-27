@@ -1,0 +1,18 @@
+/**
+ * The positive control: nothing here recurses, so both passes inline every call and leave no CALL
+ * or FUNC node at all. A pass that inlined nothing would keep the calls, and this case would say so.
+ */
+
+func inc(x: int) => int {
+    return x + 1
+}
+
+func twice(x: int) => int {
+    return inc(x) * 2
+}
+
+func main() => int sync {
+    let out = twice(5)
+    'opt_camel_inline_two_level out={}'->format<out>->println
+    return 0
+}
