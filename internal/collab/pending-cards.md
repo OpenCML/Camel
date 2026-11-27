@@ -77,3 +77,11 @@
 - **下一手**：纯 `.cml` 探针绕开 `vjp` 宏，直接实例化那两条类型律，看切向半是 `int` 还是 `()`；三支判读（律里就是 `()` ⇒ 改律｜律里是 `int` 而宏里是 `()` ⇒ 宏声明层｜探针写不出该形状 ⇒ 报"设计上不可达"）
 - **取类型的手法**：把值传给形参、让 `NoMatchingFunction` 打印真实类型（沿用 T1 的做法），**不新造工具、不改 plan 断言**
 - **已记的坑**：把 `lift.cpp` 的**普通**参数读法也改成"`int` ⇒ `Tangent` 位"会一次打红 **59** 个 transforms 用例；只能动"提升签名的切向半"
+
+### I. onnx G2：8 条 refusal 位置重录（撤销作废的残影）—— 已派 `lane-backend-speed`（`lane/onnx-g2` 自 `ba5a45e9bf`）
+- 判据：8 条绿到断言层；`export_impure_op`、`as_refusal.constant_fails.pass/.operator`（丙）不变；报 153 六数 + 对基线 `9c6f270c87` onnx 6 行的逐名差集；每条贴旧壳/新壳两段原文并排
+- 边界：只动 `test/cases/modules/onnx/refusals/` 8 条 case 与计划里那几条 entry；不碰 `export_*.cml`、不碰 `src/`
+
+### J. onnx 他族 12 条：只读分诊 —— 已派 `lane-witness`（用 `Camel-wt\witness` 树，`ba5a45e9bf` 上只读）
+- 12 条逐名：`ort_core_slice`、`ort_var_parameter`、`ort_const_under_as`、`ort_duplicate_outputs`、`ort_struct_casts`、`example_refusal.tuple.pass`、`example_refusal.shape.pass`、`typed_constant_ends_unrolling.pass`、`function_branch.pass`、`as_refusal.unproven.pass`、`as_refusal.always_fails.pass`、`resnetbn_train_step_export`(timeout)
+- 每条要：第一条诊断原文｜归类（src 缺陷/断言过时/超时/未迁移）｜是否在基线 6 行里｜一句话根因
