@@ -840,6 +840,16 @@ Builder::visitLinkNode(const GCT::node_ptr_t &gct, std::optional<GCT::Assignment
                 compositeLiteralEntersIn(inputs[i].node, param, inputs[i].expr)) {
                 entered[i] = param;
             }
+            // A range where the parameter wants the array of its integers enters through the
+            // conversion the library declares for it (design principles 5.4): the position states
+            // the array, and the range answers it. What the candidate is asked with is that array
+            // -- `int[]` -- and not the parameter's own text: a parameter whose element is still a
+            // variable (`xs: T[]`) takes its type from the array the argument becomes, and passing
+            // the pattern back would bind the variable to itself. The conversion itself is made
+            // once the callee is known (enterParameters, coerceTo), here as for every entrance.
+            if (rangeEntersArray(param, entered[i])) {
+                entered[i] = rangeArrayType();
+            }
         }
         return entered;
     };
@@ -1734,6 +1744,38 @@ refinedArg                = refineExtentNodeOf(
                     }
                 }
             }
+            if (!res.has_value()) {
+                // A range in a position a declared rule writes as an array reaches that rule
+                // through the conversion the library declares (design principles 5.4): the group
+                // is asked again with the array the range converts to, `int[]`, in those positions
+                // only. The answer is the rule's; the conversion itself is made when the chosen
+                // rule's parameters are entered (enterParameters, coerceTo), as for every other
+                // entrance. Tried only where the first resolution failed, so a call that already
+                // has an answer keeps it.
+                type_vec_t enteredTypes = rangeEnteredTypes(ops, normInputTypes);
+                if (enteredTypes != normInputTypes) {
+                    // The argument nodes stay the ones written: only the types the rules are
+                    // asked about change.
+                    auto held      = normInputTypes;
+                    normInputTypes = enteredTypes;
+                    std::vector<std::pair<std::string, std::string>> enteredUnmet;
+                    std::vector<StaticArg> sameStatics = normStatics;
+                    auto answered                      = resolveGroupedCall(
+                        ops,
+                        explicitTypes,
+                        expectedResult,
+                        withInputTypes,
+                        normInputTypes,
+                        sameStatics,
+                        enteredUnmet,
+                        &ambiguousConditions);
+                    if (answered.has_value()) {
+                        res = answered;
+                    } else {
+                        normInputTypes = std::move(held);
+                    }
+                }
+            }
             if (!ambiguousConditions.empty()) {
                 // The candidates are listed each with the condition it wrote, sorted, so that
                 // two files holding one program with the declarations in the two orders report
@@ -2076,6 +2118,29 @@ refinedArg                = refineExtentNodeOf(
             rejectValueDroppedByParameter(
                 argumentSignature != nullptr ? argumentSignature : targetFuncType,
                 withInputs);
+            // A range at a position this rule writes as an array is the array here, not the range
+            // it was written as: the rule was chosen with the array the conversion makes
+            // (`rangeEnteredTypes`), and the operand the node reads is that converted value, so
+            // that what the node says about its inputs -- its index-semantics instance among them
+            // -- is what it says when the program writes the array itself. A range at a position
+            // that states no array (`f(x: T)`) keeps its own type and is passed as the value it
+            // is (the ruling on conversion by expected type).
+            for (size_t i = 0; i < normInputs.size(); ++i) {
+                if (i >= targetOperator->funcType()->normTypesCount()) {
+                    break;
+                }
+                Type *parameter = targetOperator->funcType()->normTypeAt(i);
+                Type *actual    = valueTypeOf(nodeTypeOf(normInputs[i].node));
+                if (!rangeEntersArray(parameter, actual)) {
+                    continue;
+                }
+                if (node_handle_t entered =
+                        checkValue(normInputs[i].node, parameter, normInputs[i].expr);
+                    entered != nullptr) {
+                    normInputs[i].node = entered;
+                    normInputTypes[i]  = parameter;
+                }
+            }
             // A constant format string is checked against the arguments it formats now, not
             // when the program runs (CallSpec::checkFormat; design principles 5.4).
             const auto *callSpec =

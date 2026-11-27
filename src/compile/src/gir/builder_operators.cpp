@@ -463,6 +463,15 @@ const Builder::OperatorOverloads &Builder::preludeOperatorOverloadsOf(const std:
             }
         }
     }
+    // An empty answer is not one to keep: the prelude's declarations are read while a module is
+    // being loaded, so a name asked about before that finishes is answered "none" by a table that
+    // is still being filled. Reading again later finds them; remembering the empty answer here
+    // would keep them out of every later call of the program, which is a different program from
+    // the one written. A set with something in it is what this cache is for.
+    if (set.graphs.empty() && set.templates.empty()) {
+        static const OperatorOverloads empty;
+        return empty;
+    }
     return preludeOperators_.emplace(group, std::move(set)).first->second;
 }
 

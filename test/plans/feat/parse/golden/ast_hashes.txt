@@ -376,7 +376,7 @@ f221e4c2b522ac50 ok docs/tutorial/examples/04_block_return.cml
 4cdade48bf9fc0c0 ok docs/tutorial/examples/04_branches.cml
 1eebbce871b548fb ok docs/tutorial/examples/04_exercise.cml
 87dfc14258b4340f ok docs/tutorial/examples/04_guards.cml
-c6a4e825db9407ac ok docs/tutorial/examples/05_arrays.cml
+ff928854b9e70854 ok docs/tutorial/examples/05_arrays.cml
 a1f60684d33515d2 ok docs/tutorial/examples/05_exercise.cml
 9e260ff474fea32b ok docs/tutorial/examples/05_loops.cml
 f5a123373c9cc02c ok docs/tutorial/examples/05_map_order.cml

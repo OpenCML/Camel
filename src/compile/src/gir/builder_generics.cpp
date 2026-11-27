@@ -1689,6 +1689,14 @@ compile_graph_ptr_t Builder::instantiateForCallBinding(
         return substituteExtentValues(pattern, extents);
     };
     const auto actualAt = [&](size_t i) { return valueTypeOf(typeAt(i)); };
+    // The type a variable is bound to here: a range in a parameter that states an array (`xs: T[]`)
+    // binds the variable to the element the range's array has, so the position states an array and
+    // the range answers with its own (design principles 5.4), as the conversion does once the
+    // callee is known (`coerceTo`). Every other actual type is what the argument writes.
+    const auto bindingActualAt = [&](size_t i) -> Type * {
+        Type *actual = actualAt(i);
+        return rangeEntersArray(patternAt(i), actual) ? rangeArrayType() : actual;
+    };
     const auto describe = [&](size_t i) {
         const size_t signatureIndex = signatureIndexAt(i);
         const std::string paramName = signatureIndex < signature->argNamesCount()
@@ -1762,7 +1770,7 @@ compile_graph_ptr_t Builder::instantiateForCallBinding(
                 isUnnamedStructArgument(actualAt(i)) != (pass == 1)) {
                 continue;
             }
-            if (!bindEntering(patternAt(i), actualAt(i))) {
+            if (!bindEntering(patternAt(i), bindingActualAt(i))) {
                 reject(describe(i) + " needs a type of that form to bind its type variables");
             }
         }
@@ -1772,7 +1780,7 @@ compile_graph_ptr_t Builder::instantiateForCallBinding(
     // the constraints of all arguments are collected before any is held to its parameter.
     for (size_t i = 0; i < withCount + normCount; ++i) {
         if (!waiting[i] && !literalArgument(i)) {
-            unifyTypeVars(patternAt(i), actualAt(i), bindings);
+            unifyTypeVars(patternAt(i), bindingActualAt(i), bindings);
         }
     }
     // 3. The callee's result type aligned with the type of the position the call stands in solves
@@ -1799,7 +1807,7 @@ compile_graph_ptr_t Builder::instantiateForCallBinding(
         if (waiting[i] || !literalArgument(i)) {
             continue;
         }
-        if (!bindEntering(patternAt(i), actualAt(i))) {
+        if (!bindEntering(patternAt(i), bindingActualAt(i))) {
             reject(describe(i) + " needs a type of that form to bind its type variables");
         }
     }
@@ -1894,6 +1902,16 @@ compile_graph_ptr_t Builder::instantiateForCallBinding(
         }
         if (entersImplicitly(wanted, actualAt(i))) {
             continue;
+        }
+        // A range where the parameter states the array of its integers (`xs: T[]` with the
+        // variable bound, or a written `int[]`): the position expects an array, and the range
+        // answers with the one the library declares for it, as it does for an ordinary call.
+        if (rangeEntersArray(wanted, actualAt(i))) {
+            if (node_handle_t entered = checkValue(inputAt(i).node, wanted, inputAt(i).expr)) {
+                inputAt(i).node = entered;
+                typeAt(i)       = wanted;
+                continue;
+            }
         }
         // A literal enters the parameter's type as every literal does (design principles
         // 5.1): with `T` fixed to `f32` by the position or by another argument, `[1.0]` in the
