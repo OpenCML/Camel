@@ -2220,23 +2220,7 @@ Builder::visitLinkNode(const GCT::node_ptr_t &gct, std::optional<GCT::Assignment
                         typed != nullptr) {
                         normInputs[i].node = typed;
                         normInputTypes[i]  = parameter;
-                        continue;
                     }
-                    // The argument does not take the parameter the call's own type arguments leave
-                    // it, and nothing has been reported for it: a call whose argument does not fit
-                    // is a call with no instance, the same report an ordinary call gives (design
-                    // principles 4.4). Swallowing it here lets the call through with a value of a
-                    // type its parameters never accepted -- a draft of one function type committed
-                    // as another, for one.
-                    std::string overloadsStr = "\n    " + targetOperator->name() + ": " +
-                                               (targetOperator->funcType() != nullptr
-                                                    ? targetOperator->funcType()->toString()
-                                                    : std::string("?")) +
-                                               "\n";
-                    diags_->of(SemanticDiag::NoMatchingFunction)
-                        .atOrigin(gct->origin())
-                        .commit(argumentTypes(), overloadsStr);
-                    throw BuildAbortException();
                 }
             }
             // A parameter that hands back nothing drops the value the body of the function at it
