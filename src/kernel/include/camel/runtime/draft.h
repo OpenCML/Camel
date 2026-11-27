@@ -1536,6 +1536,15 @@ class GraphDraft : public camel::graph::Graph {
     /// With a named edit open the node's region goes into that edit's union and no note is written
     /// here: the named edit is the edit, and it records once when it closes.
     void noteEditedNode(gc_node_ref_t id, bool inPlace);
+
+    /// Notes a write that names no node: a field of the graph itself, such as its function type,
+    /// which stands in no region. It is the shape noteEditedNode has and not a call to recordEdit:
+    /// with a named edit open that edit is the edit -- a header write is part of it, there is no
+    /// region of its own to union, and it records once when it closes -- so recording here would
+    /// put a second edit beside the named one. With none open the draft records it at once with an
+    /// empty region list, because the kind and the listeners are owed for it either way
+    /// (docs/design/graph-editing/README.cn.md 8.1, the low-level row).
+    void noteGraphWideEdit();
     /// The regions the named edit open right now has changed so far, ascending and without
     /// repetition.
     std::vector<uint32_t> namedEditRegions_;
