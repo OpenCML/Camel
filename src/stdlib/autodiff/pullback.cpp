@@ -785,7 +785,7 @@ struct CallSite {
     PullbackPlan plan;
     /// The call whose (value, pullback) pair the site's pullback was projected out of, and the
     /// node that projection makes the call's value: a tape that rebuilds the pullback's closure
-    /// supplies the values it captures out of the call (task-212).
+    /// supplies the values it captures out of the call.
     gc_node_ref_t call  = kInvalidNodeRef;
     gc_node_ref_t value = kInvalidNodeRef;
     /// A call of a function carrying a custom rule (see rules.h): the rule replaces the pullback.
@@ -1496,7 +1496,7 @@ class Engine {
     /// of its ports, or `kCapturedValue` for the function's own value. This is the order the
     /// closure the forward graph builds carries them in -- the order the pullback first read them
     /// -- and it is what a tape, which cannot carry that closure, has to supply again in the same
-    /// order (design principles 9.9, task-212). The pullback graph's own `closureType` is the
+    /// order (design principles 9.9). The pullback graph's own `closureType` is the
     /// types of the same slots, in the same order.
     std::unordered_map<rt::GraphId, std::vector<size_t>> pullbackCapturePorts_;
     std::map<std::pair<const rt::GraphTransaction *, gc_node_ref_t>, LoopBodyPlan> loopBodyPlans_;
