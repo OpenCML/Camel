@@ -1360,7 +1360,7 @@ rows.engineOnly.sort(byKey)
 //
 // The forward transform copies a node and asks whether the copy's type has a tangent space before it
 // looks a rule up (`src/compile/.../jvp.cpp`, the copy-then-look-up order), and
-// `tangentspace.cpp#tangentSpaceOf` answers "no space" exactly where
+// `src/kernel/core/tangent_space.cpp#tangentSpaceOf` answers "no space" exactly where
 // `DerivativeRegistry::isDiscrete` says so -- `derivative.cpp#isDiscrete` spells that as Int32,
 // Int64 and Bool. An operator answering one of those types is differentiated by that one general
 // step: there is no tangent to carry, and a law for it would have nothing to say. A key whose every
