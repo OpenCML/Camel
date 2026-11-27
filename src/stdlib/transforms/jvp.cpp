@@ -2786,6 +2786,79 @@ bool liftGraph(
                 draft.setRegionResult(liftedRegion[r], newState);
                 draft.setInsertRegion(0);
             }
+            // A loop the source program wrote with a `while` also states a **condition**, in a
+            // region of its own that the lifted loop owns in the same way and the same place. Its
+            // ports are the loop's states, and the copies the walk built for those ports are the
+            // lifted states -- a number for a state no rule differentiates, the pair for one that
+            // carries a tangent. A condition is a test on the values, so a *read* of a pair port
+            // would have to go through the pair's value half, and that projection is not written
+            // here; a condition that reads one is refused by name rather than closed over with a
+            // port of the wrong type. A condition that never reads the state the caller
+            // differentiates against -- the rounds it decides are not a function of that value --
+            // reads only plain ports, and its copies are the test it wrote.
+            for (uint32_t r = 1; r < function.regionCount(); ++r) {
+                const rt::GCRegion *part = function.region(r);
+                if (part == nullptr || part->owner != ref ||
+                    part->kind != rt::GCRegionKind::LoopCond) {
+                    continue;
+                }
+                std::vector<gc_node_ref_t> ports;
+                std::unordered_set<gc_node_ref_t> pairedPorts;
+                for (gc_node_ref_t port : function.regionPorts(r)) {
+                    if (port >= function.nodeCount() || !copied[port]) {
+                        complete = false;
+                        break;
+                    }
+                    const rt::GCNode *portNode          = nodeOf(function, port);
+                    const rt::DraftNodeHeader *portCopy = draft.header(copyOf[port]);
+                    // The copy is the lifted state: it is a pair exactly when its type moved away
+                    // from the state's own, which is one question about this graph and not a rule
+                    // written from the state's spelt type.
+                    if (portNode != nullptr && portCopy != nullptr &&
+                        portCopy->dataType != portNode->dataType()) {
+                        pairedPorts.insert(port);
+                    }
+                    ports.push_back(copyOf[port]);
+                }
+                if (!complete) {
+                    break;
+                }
+                bool readsAPair = false;
+                for (gc_node_ref_t inside = 0; inside < function.nodeCount() && !readsAPair;
+                     ++inside) {
+                    if (function.nodeRegion(inside) != r || nodeOf(function, inside) == nullptr) {
+                        continue;
+                    }
+                    const auto normInputs = function.normInputsOf(inside);
+                    const auto withInputs = function.withInputsOf(inside);
+                    for (const auto &inputs : {normInputs, withInputs}) {
+                        for (gc_node_ref_t in : inputs) {
+                            if (pairedPorts.count(in) != 0) {
+                                readsAPair = true;
+                                break;
+                            }
+                        }
+                        if (readsAPair) {
+                            break;
+                        }
+                    }
+                }
+                if (readsAPair) {
+                    os << "REINTERP jvp function=" << name
+                       << " skip=" << refusalCauseName(RefusalCause::Loop) << '\n';
+                    noteRefusal(RefusalReading("jvp", name, RefusalCause::Loop));
+                    return fail(refusal);
+                }
+                draft.setRegionOwner(liftedRegion[r], loopCopy, part->index);
+                if (!ports.empty()) {
+                    draft.setRegionPorts(liftedRegion[r], ports);
+                }
+                if (part->result == rt::kInvalidNodeRef || !copied[part->result]) {
+                    complete = false;
+                    break;
+                }
+                draft.setRegionResult(liftedRegion[r], copyOf[part->result]);
+            }
             if (!complete || newState == rt::kInvalidNodeRef) {
                 complete = false;
                 break;
