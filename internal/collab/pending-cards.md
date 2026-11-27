@@ -17,3 +17,10 @@
 - 下一步：`if (!complete)` 之前把**每个 region 的 kind / owner / index / portCount** 不经任何过滤打一行；并 grep `liftedShapeOf`/`pairTypeOf`/`mixedMemberTypeOf` 看"对"的类型由谁拼（`TupleCode::Tuple` 判一次没命中）
 - 判据：`jvp` 对 `f(x: float, n: int) = loop (i,a)=(0,x) while i<n do (i+1, a*2.0)` 给 `value=8.0 tangent=8.0`（x=1,n=3），与中心差分 `h=1e-5`、解析 `2^3=8` 三者一致；两个分母 218（209/8/1）、72（44/5/23）新增红 0
 - API 形状三条：临时 `std::span` 绑局部；`camel::core::type::tree::arity` 需 include 且会被同名局部遮蔽；**`DraftNodeHeader::dataType` 是字段不是方法**
+
+### D. `sum_to` / `broadcast_like` 的轴身份应当进调用（截稿后，源自 `task-327` 的 (b) 方向，`lane-ssa-residue` 2026-11-28 读数）
+- 读数：`x: float[2,2,2]`、`x[n][c][k]=n*4+c*2+k+1` ⇒ `sum_to(x,[2]) = [16,20]`，按通道应为 `[14,22]`；`broadcast_like([10,20], x)` 落在**最后轴**，按通道应沿 `C` 展开。无报错、量级合理 ⇒ **静默错数**
+- 根因：`sum_to`/`broadcast_like` 是**后缀对齐**的，而"按通道（轴 1）"在任意秩上需要与秩无关的写法；`I == C` 时形状检查完全通过，所以错数不可能被形状发现
+- 本卡已先做 (a)：目标可多重对齐时**拒绝并点名候选轴**（拒绝可以，错数不行）；(b) 是把轴显式化（`sum_to(t, at, axis=…)`）
+- (b) 的代价与边界：改库 API，涉及 `src/stdlib/rulesets/jvp.cml`、`transpose.cml` 与**引擎 vjp 调用点**，且与 `task-322`（Float32 分配）相邻 ⇒ 截稿后单独开卡，不并进 `task-327`
+- 判据草案：(b) 落地后 `jvp` 与有限差分在 rank 2/3/4 上逐值一致，且旧签名委派新签名（不破坏既有用例）
