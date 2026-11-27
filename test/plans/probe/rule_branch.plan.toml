@@ -10,6 +10,7 @@ kind = "behavior"
 case = "../../cases/probe/rule_branch/program_if_control.cml"
 args = ["${case}", "std::nvm"]
 expect_exit = 0
+expect_stdout_contains = ["if>0 ok", "if<0 ok"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 
@@ -20,5 +21,6 @@ kind = "behavior"
 case = "../../cases/probe/rule_branch/rule_if_right_side.cml"
 args = ["${case}", "std::nvm"]
 expect_exit = 0
+expect_stdout_contains = ["a>b picks da", "a<b picks db"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000

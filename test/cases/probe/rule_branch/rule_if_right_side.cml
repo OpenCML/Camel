@@ -2,6 +2,8 @@
 // computations of the tangent, chosen by a condition that reads only the inputs. `max` is the
 // operator that needs this; the function below is the same shape written in the case, so the
 // reading does not depend on a rule set that lands separately.
+import rulesets.jvp
+import { abs } from prelude
 import { jvp } from transforms
 
 func my_max(a: float, b: float) => float {
@@ -18,14 +20,16 @@ func g(a: float, b: float) => float {
     return my_max(a, b)
 }
 
+func close(x: float, to: float) => bool {
+    return abs(x - to) < 1.0e-9
+}
+
 func main() => int sync {
     // The tangent of the first operand is 1 and of the second 0, so the chosen arm is readable from
     // the number: the larger operand answers 1, the smaller answers 0.
     let (v1, t1) = jvp(g)(2.0, 1.0, 1.0, 0.0)
-    println(v1)
-    println(t1)
+    println(if v1 == 2.0 && close(t1, 1.0) then "a>b picks da" else "a>b wrong")
     let (v2, t2) = jvp(g)(1.0, 2.0, 1.0, 0.0)
-    println(v2)
-    println(t2)
+    println(if v2 == 2.0 && close(t2, 0.0) then "a<b picks db" else "a<b wrong")
     return 0
 }
