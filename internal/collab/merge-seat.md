@@ -469,3 +469,13 @@ capacity 同二进制连跑 3 次：18/18 → 17/18(tf) → 16/18(fvm+tf)
 **兜底不变**：每日全量闸门里的 gc-stress 那一层照常，它只兜"漏网的"，不能替代车道的连跑读数。
 
 **一条附带的定位纪律**：这类崩溃先上 **ASAN 或 gdb 拿到写越界那一行再改代码**；`-StackTrace` 构建在这条路径上可能压根不出回溯（`cap-probe` 实测 stderr 只有 malloc 那句），凭猜改会和这个 bug 缠一夜。
+
+## 比红有两种口径，别混用（2026-11-28 立，`task-383`/`task-368` 各证一次）
+
+**快层批**（`-Tier fast`，整棵 `test/plans` 或一个目录）⇒ 对 **`newestRedTable()`** 逐名比，这是合并闸门与晋级用的口径。
+
+**单计划文件为目标**（`-Plan test/plans/....plan.toml`）⇒ **会连慢层一起跑**（`agents/test.md`：a plan file named as the target runs in full, whatever `--tier` says），此时对名表比会凭空多出差集。正确做法是**纯净尖端对照**：同一台机、把 `origin/integration` 干净检出（`--detach`、无本枝改动）跑同一目标，**两边红集合完全相同才算"新增红 0"**（`task-383` 的读数就是这么做出来的：枝上 11 红、纯净尖端同 11 红）。
+
+**两条已经踩过的坑**
+- `feat/modules/onnx` 里 5 条（`export_loop_for`、`ort_core_slice`、`ort_loop_loaded_weights`、`pass_export_equals_export_model`、`resnetbn_train_step_export`）都是 **`tier = "slow"`** ⇒ 按计划文件跑会看到它们，按快层跑**一条都不会被选中** ⇒ **它们永远不会是晋级的甲**，只能记成"慢层的红"。
+- 反过来：把"慢层红"当甲会让合并位退回一条根本没改坏东西的车道；把"名表落后于尖端"当甲会让闸门一直不开。判之前先问一句：**这条红所在条目是哪个 tier、这次选中的是哪个层**。
