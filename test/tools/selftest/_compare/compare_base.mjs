@@ -24,8 +24,8 @@ import { fileURLToPath } from 'url'
 
 const here = path.dirname(fileURLToPath(import.meta.url))
 const repoRoot = path.resolve(here, '..', '..', '..', '..')
-// The commit this lane branched from. Named as a sha and not as a branch: a branch ref is another
-// tree's commit the moment someone pushes.
+// The tree the comparison runs against, written out as a sha rather than as a branch name: a
+// branch ref is another tree's commit the moment someone pushes.
 const BASE = 'f6f5ea2a80a10c2fbf2f37f7d716b1d9a15fec93'
 const baseRunner = path.join(repoRoot, 'test', 'tools', 'run-tests-base.mjs')
 const branchRunner = path.join(repoRoot, 'test', 'tools', 'run-tests.mjs')
