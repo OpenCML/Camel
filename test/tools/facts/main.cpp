@@ -578,10 +578,14 @@ int runSelfCheck() {
     check(store.size() > 0, "dropping one fact leaves the others");
 
     // ---- A fact outlives the version of the graph it was read from ---------------------------
-    // The owner answers one identity and two revisions: the same graph, re-encoded around a node
-    // nobody touched. A fact of a kind that reports what it read holds across that version -- the
-    // store revalidates it instead of dropping it, because the node it read is unchanged
-    // (architecture, core abstractions 1: a node's number is stable on one version line).
+    // The owner answers one identity for both versions: the graph was re-encoded around a node
+    // nobody touched, and the version the fact was read from ends. The fact is about the graph, so
+    // it moves to the version that is still there -- and is revalidated against it, because what it
+    // reported reading did not change (architecture, core abstractions 1).
+    //
+    // Two versions that are both alive are *not* one graph: a value transaction hands out a copy
+    // while the original keeps running (design principles 9.1), so an entry is only found again by
+    // the object it was re-anchored on, never by the identity alone.
     const facts::KindId reportedKind = facts::registerKind<std::uint32_t>(facts::Kind<std::uint32_t>{
         .key        = "check.reported",
         .owner      = "check",
@@ -606,14 +610,20 @@ int runSelfCheck() {
         return std::uint64_t{7};
     };
     facts::Store versionedStore(versionedAccess);
+    facts::holdGraph(versionedStore, firstVersion, 1);
+    facts::holdGraph(versionedStore, laterVersion, 1);
     const facts::Anchor takenAt{&firstVersion, 1};
     check(
         versionedStore.obtain<std::uint32_t>(reportedKind, takenAt) != nullptr,
         "a reported-read fact is computed and kept on the version it was read from");
     const facts::Anchor askedAt{&laterVersion, 1};
     check(
+        versionedStore.probe(reportedKind, asSpan(askedAt)) == facts::Status::Absent,
+        "two live versions of one graph are not one graph: the fact of one is not the other's");
+    facts::forgetGraph(&firstVersion, 1);
+    check(
         versionedStore.probe(reportedKind, asSpan(askedAt)) == facts::Status::Revalidated,
-        "a fact about a node nobody touched is revalidated across a version of its graph");
+        "the fact of a version that ended is revalidated against the version that is still there");
 
     // ---- A fact lives until the whole version line is unreachable -----------------------------
     // Both ends in one place, because a store that clears on the first version to end and a store
@@ -637,7 +647,6 @@ int runSelfCheck() {
     check(
         lineage.size() == 0,
         "a fact is cleared when the last version of its line ends, and not before");
-
     if (failures == 0) {
         std::cout << "facts self-check: passed\n";
         return 0;

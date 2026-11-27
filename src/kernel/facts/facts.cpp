@@ -132,21 +132,19 @@ std::uint64_t identityOf(const GraphAccess &graphs, const graph::Graph &graph) {
     return graphs.identity ? graphs.identity(graph) : 0;
 }
 
-/// Whether two anchor lists name the same things, in the same order: the same graph -- by its
-/// identity on its version line, not by the object that holds it -- at the same node. Two versions
-/// of one graph name the same anchor, which is what lets a fact taken on one version be found again
-/// and revalidated against another.
-bool sameAnchors(
-    std::span<const Anchor> left, std::span<const Anchor> right, const GraphAccess &graphs) {
+/// Whether two anchor lists name the same things, in the same order: the same graph object at the
+/// same node. The object, not the identity, is what an entry is matched by -- two graphs can carry
+/// one identity and be two different graphs (a value transaction hands out a copy of a function
+/// while the original keeps running: design principles 9.1), and a fact taken while running one of
+/// them is not a fact about the other. What carries a fact from one version of a graph to the next
+/// is the version line itself: when a version ends, its entries are re-anchored on the version that
+/// is still there (`graphGone`), and only then is the entry found by the new object.
+bool sameAnchors(std::span<const Anchor> left, std::span<const Anchor> right) {
     if (left.size() != right.size()) {
         return false;
     }
     for (size_t i = 0; i < left.size(); ++i) {
-        const std::uint64_t leftIdentity =
-            left[i].graph == nullptr ? 0 : identityOf(graphs, *left[i].graph);
-        const std::uint64_t rightIdentity =
-            right[i].graph == nullptr ? 0 : identityOf(graphs, *right[i].graph);
-        if (leftIdentity != rightIdentity || left[i].node != right[i].node) {
+        if (left[i].graph != right[i].graph || left[i].node != right[i].node) {
             return false;
         }
     }
@@ -670,40 +668,58 @@ void Store::graphGone(const graph::Graph *graph, std::uint64_t identity) {
             }
         }
     }
-    bool keptAnything = false;
     for (auto row = entries_.begin(); row != entries_.end();) {
         if (row->first.graph != identity) {
             ++row;
             continue;
         }
-        auto &list = row->second;
+        const Scope scope = kindInfo(row->first.kind).scope;
+        auto &list        = row->second;
         for (auto entry = list.begin(); entry != list.end();) {
-            bool unreachable = false;
-            for (Anchor &anchor : entry->anchors) {
+            // The slot this entry published lives in the graph that is ending, and a slot that
+            // outlived its fact would name a value nobody owns -- in memory a later graph may
+            // reuse (camel/runtime/fact_slots.h). It is cleared here, while that graph is still
+            // there, whether the fact moves to another version of the line or goes with it.
+            bool named = false;
+            for (const Anchor &anchor : entry->anchors) {
                 if (anchor.graph != graph) {
                     continue;
                 }
-                if (successor != nullptr) {
-                    anchor.graph = successor; // the same graph, a version that is still here
-                } else {
-                    unreachable = true;
-                }
+                named = true;
+                clearSlot(graphs_, row->first.kind, std::span<const Anchor>(&anchor, 1));
             }
-            if (!unreachable) {
-                keptAnything = true;
+            if (!named) {
                 ++entry;
                 continue;
             }
-            // No version of the line can be reached any more: the fact is void. Its slot is
-            // cleared while the value is still the store's and the graph is still there to clear
-            // it (the caller announces the end before the object goes).
-            clearSlot(graphs_, row->first.kind, entry->anchors);
-            entry = list.erase(entry);
+            if (successor == nullptr) {
+                // No version of the line can be reached any more: the fact is void.
+                entry = list.erase(entry);
+                continue;
+            }
+            // The fact is about the graph, not about the object that held it: it moves to the
+            // version that is still there, and is published there so a reader of that version
+            // finds it in the slot as it would have found it in the old one.
+            for (Anchor &anchor : entry->anchors) {
+                if (anchor.graph == graph) {
+                    anchor.graph = successor;
+                }
+            }
+            bool duplicate = false;
+            for (auto other = list.begin(); other != entry && !duplicate; ++other) {
+                duplicate = sameAnchors(other->anchors, entry->anchors);
+            }
+            if (duplicate) {
+                // The version that is still there already has this fact: the moved copy would be
+                // two entries for one anchor, and the one that was there is the answer.
+                entry = list.erase(entry);
+                continue;
+            }
+            publishSlot(graphs_, row->first.kind, scope, entry->anchors, entry->value.get());
+            ++entry;
         }
         row = list.empty() ? entries_.erase(row) : std::next(row);
-    }
-    (void)keptAnything;
-    // The books: this version is no longer alive, and a line that kept no successor is gone.
+    } // The books: this version is no longer alive, and a line that kept no successor is gone.
     alive_.erase(graph);
     if (const auto line = lines_.find(identity); line != lines_.end()) {
         line->second.erase(graph);
@@ -754,7 +770,7 @@ Store::find(KindId kind, std::span<const Anchor> anchors, std::uint64_t target, 
     }
     auto &list = bucket->second;
     auto it    = std::find_if(list.begin(), list.end(), [&](const Entry &entry) {
-        return sameAnchors(entry.anchors, anchors, graphs_);
+        return sameAnchors(entry.anchors, anchors);
     });
     if (it == list.end()) {
         return nullptr;
@@ -844,7 +860,7 @@ void Store::putValue(
     std::lock_guard lock(mutex_);
     auto &list = entries_[Key{kind, identity, anchors[0].node}];
     auto it    = std::find_if(list.begin(), list.end(), [&](const Entry &known) {
-        return sameAnchors(known.anchors, anchors, graphs_);
+        return sameAnchors(known.anchors, anchors);
     });
     if (it == list.end()) {
         list.push_back(std::move(entry));
@@ -932,7 +948,7 @@ Store::obtainValue(KindId kind, std::span<const Anchor> anchors, std::uint64_t t
     std::lock_guard lock(mutex_);
     auto &list = entries_[Key{kind, identity, anchors[0].node}];
     auto it    = std::find_if(list.begin(), list.end(), [&](const Entry &known) {
-        return sameAnchors(known.anchors, anchors, graphs_);
+        return sameAnchors(known.anchors, anchors);
     });
     if (it == list.end()) {
         list.push_back(std::move(entry));
@@ -999,7 +1015,7 @@ void Store::invalidate(KindId kind, std::span<const Anchor> anchors) {
     }
     auto &list = bucket->second;
     for (auto it = list.begin(); it != list.end();) {
-        if (sameAnchors(it->anchors, anchors, graphs_)) {
+        if (sameAnchors(it->anchors, anchors)) {
             clearSlotsOfLocked(kind, *it);
             it = list.erase(it);
         } else {
