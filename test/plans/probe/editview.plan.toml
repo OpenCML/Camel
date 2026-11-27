@@ -170,3 +170,23 @@ args = ["check", "${case}"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
+[[tests]]
+name = "editview.root_observable_as_graph"
+desc = "`view d = inc { nodes(d) }`: the name a view block's head binds is the block's root, the graph its body reads (design 15.1), so `nodes` -- which takes a `Graph` -- reads it. The name is not the function the block is over."
+kind = "behavior"
+case = "../../cases/probe/editview/root_observable_as_graph.cml"
+args = ["check", "${case}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "editview.root_observable_as_function"
+desc = "The counter-proof: the head's name is a `Graph` handle and a handle is not callable, so `view d = inc { d(2.0) }` is refused. A compiler that accepts it is reading the head's name as the function, which is the value the name must not have."
+kind = "behavior"
+case = "../../cases/probe/editview/root_observable_as_function.cml"
+args = ["check", "${case}"]
+expect_exit = 1
+expect_output_contains = ["No matching function found for argument types"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000

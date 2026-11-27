@@ -1,0 +1,12 @@
+// The name a view block's head binds is the block's root -- the graph its body reads (design 15.1) --
+// so it is a `Graph`, and `nodes(d)` is the reading that proves it: `nodes` takes a graph. The name is
+// not the function the block is over: that function is what the block is made from, and `d` is the
+// root of the block, not `f`.
+func inc(x: float) => float {
+    return x + 1.0
+}
+
+func root_observable_as_graph() => int sync {
+    let c = view d = inc { nodes(d) }
+    return 0
+}
