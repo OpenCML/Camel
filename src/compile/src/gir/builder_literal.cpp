@@ -486,6 +486,40 @@ bool Builder::rangeEntersArray(Type *param, Type *value) {
     return element != nullptr && element->code() == TypeCode::TypeVar;
 }
 
+type_vec_t Builder::rangeEnteredTypes(const oper_group_ptr_t &ops, const type_vec_t &normTypes) {
+    // A group answers for the types the call is asked with, and a rule that declares an array
+    // parameter does not take a `Range`: the answer is "no overload", not a conversion, because
+    // nothing in the group asks the position's question. The position's question is the one
+    // `rangeEntersArray` answers, and it is asked here of every declared signature of the group,
+    // so that the call is put to the rules a second time with the array the range converts to.
+    // Only positions a declared parameter writes as an array change: a variable position
+    // (`f(x: T)`) and a position with no shape keep the range as the value it is.
+    if (rangeValueType() == nullptr) {
+        return normTypes;
+    }
+    type_vec_t entered = normTypes;
+    bool changed       = false;
+    for (size_t i = 0; i < entered.size(); ++i) {
+        if (entered[i] == nullptr || !entered[i]->equals(rangeValueType())) {
+            continue;
+        }
+        for (const auto &[uri, resolver] : ops->resolvers()) {
+            FunctionType *declared = resolver->fixedSignature() != nullptr
+                                         ? resolver->fixedSignature()
+                                         : resolver->declaredSignature();
+            if (declared == nullptr || i >= declared->normTypesCount()) {
+                continue;
+            }
+            if (rangeEntersArray(declared->normTypeAt(i), entered[i])) {
+                entered[i] = rangeArrayType();
+                changed    = true;
+                break;
+            }
+        }
+    }
+    return changed ? entered : normTypes;
+}
+
 node_handle_t Builder::rangeArrayNode(node_handle_t node, const GCT::node_ptr_t &origin) {
     // The call is written the way `to_array(r)` is, except that its callee is the declaration
     // itself, held under a name of this graph and called through it: no name of the program is

@@ -4073,6 +4073,16 @@ class Builder {
     /// conversion makes (`int[]`), or an array whose element a variable still holds (`xs: T[]`),
     /// where the variable takes that element.
     bool rangeEntersArray(camel::core::type::Type *param, camel::core::type::Type *value);
+    /// The non-`with` argument types of a call to a grouped set, with every range that a declared
+    /// rule of the group takes as an array written as that array (`int[]`). A group answers for
+    /// the types it is asked with, and a rule that declares `(xs: int[])` or `(xs: T[])` does not
+    /// take a `Range` as written; asking again with the array the conversion makes is how such a
+    /// rule is found (builder_call.cpp, the retry after a failed resolution). Positions whose
+    /// declared parameter is not an array are left as written: a type variable, or a parameter
+    /// with no shape stated, keeps the range a value (the ruling on conversion by expected type).
+    /// Returns `normTypes` itself, the same vector, when no position changes.
+    camel::core::type::type_vec_t
+    rangeEnteredTypes(const oper_group_ptr_t &ops, const camel::core::type::type_vec_t &normTypes);
     /// The range `node` materialized as its array, by that same conversion. The call is written
     /// the way a program writes it (`to_array(r)`) except that its callee is the declaration
     /// itself and not a name of the program.

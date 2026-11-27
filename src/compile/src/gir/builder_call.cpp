@@ -1744,6 +1744,38 @@ refinedArg                = refineExtentNodeOf(
                     }
                 }
             }
+            if (!res.has_value()) {
+                // A range in a position a declared rule writes as an array reaches that rule
+                // through the conversion the library declares (design principles 5.4): the group
+                // is asked again with the array the range converts to, `int[]`, in those positions
+                // only. The answer is the rule's; the conversion itself is made when the chosen
+                // rule's parameters are entered (enterParameters, coerceTo), as for every other
+                // entrance. Tried only where the first resolution failed, so a call that already
+                // has an answer keeps it.
+                type_vec_t enteredTypes = rangeEnteredTypes(ops, normInputTypes);
+                if (enteredTypes != normInputTypes) {
+                    // The argument nodes stay the ones written: only the types the rules are
+                    // asked about change.
+                    auto held      = normInputTypes;
+                    normInputTypes = enteredTypes;
+                    std::vector<std::pair<std::string, std::string>> enteredUnmet;
+                    std::vector<StaticArg> sameStatics = normStatics;
+                    auto answered                      = resolveGroupedCall(
+                        ops,
+                        explicitTypes,
+                        expectedResult,
+                        withInputTypes,
+                        normInputTypes,
+                        sameStatics,
+                        enteredUnmet,
+                        &ambiguousConditions);
+                    if (answered.has_value()) {
+                        res = answered;
+                    } else {
+                        normInputTypes = std::move(held);
+                    }
+                }
+            }
             if (!ambiguousConditions.empty()) {
                 // The candidates are listed each with the condition it wrote, sorted, so that
                 // two files holding one program with the declarations in the two orders report
