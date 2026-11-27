@@ -15,3 +15,5 @@ case = "../../cases/probe/sce_f32.cml"
 args = ["${case}", "${backend}"]
 backends = ["nvm", "fvm"]
 expect_exit = 0
+
+
