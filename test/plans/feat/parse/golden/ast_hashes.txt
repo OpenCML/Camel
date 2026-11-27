@@ -557,7 +557,7 @@ a2ca595975c02dee ok src/stdlib/autodiff/signatures/autodiff.cml
 6ae5ad8be3ee4eec ok src/stdlib/ckpt/signatures/ckpt.cml
 c219592077b5b712 no src/stdlib/nn/signatures/nn.cml
 b9b23c3234979dee ok src/stdlib/rulesets/int8.cml
-f7adf171a49cd53b ok src/stdlib/rulesets/jvp.cml
+9f824c295c51c0d6 ok src/stdlib/rulesets/jvp.cml
 8375a530eff268c4 ok src/stdlib/rulesets/probe_batch.cml
 7a11798394cc6e2c ok src/stdlib/rulesets/probe_missing.cml
 54be2679c5526d37 ok src/stdlib/rulesets/transpose.cml
@@ -4338,7 +4338,6 @@ a3d372c4bd6d36c5 ok test/cases/probe/dpack_dots_ok.cml
 8927fe1d274101df no test/cases/probe/dpack_old_rank.cml
 798734aec9c73109 ok test/cases/probe/fill_slots.cml
 74b1e954cd349a00 ok test/cases/probe/gc_pacing_probe2.cml
-ccb11c99dfb9221f ok test/cases/probe/idx_axis_read_second.cml
 43594fd5547a371d ok test/cases/probe/probe_avg_reverse.cml
 94f6d74a134aef38 ok test/cases/probe/probe_max_forward.cml
 7f7416ab6e443a69 ok test/cases/probe/probe_max_reverse.cml
