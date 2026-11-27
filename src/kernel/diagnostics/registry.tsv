@@ -256,7 +256,6 @@ semantic	ConstasValueNotConstant	0x000195	error	The value given for the 'constas
 #/ A `constas` declaration was used where a function value is needed.
 semantic	ConstasFunctionNeedsCall	0x000199	error	The declaration '{0}' takes a 'constas' parameter, so it has no function value.	The value must be known where the call is written. Call the declaration directly with its constant ('{0}(4, ...)'), or wrap it in a function that does.	none: choice: the repair is a decision only the writer can make
 #/ A `constas` declaration is a body-less declaration of a C++ operator.
-semantic	ConstasInNativeDeclaration	0x00019A	error	The body-less declaration '{0}' cannot take a 'constas' parameter.	A body-less declaration names a C++ operator whose signature is fixed; a 'constas' value would have to be part of the operator's compile-time identity, which the native declaration mechanism does not carry yet. Write the function with a body.	none: choice: the repair is a decision only the writer can make
 #/ A call to a `constas` declaration gives no value for the parameter.
 semantic	ConstasArgumentMissing	0x00019B	error	The call gives no value for the 'constas' parameter '{0}'.	A 'constas' value is bound at the call, like any other argument, but it is not a runtime argument: give the constant at the parameter's position, as in 'f(4, x)'.	none: choice: the repair is a decision only the writer can make
 #/ A tag gives a fact one value where the node already has another.

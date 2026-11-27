@@ -959,16 +959,12 @@ void_ptr_t Builder::visitDeclNode(const GCT::node_ptr_t &gct) {
         }
         // A body-less declaration declares an operator of a C++ module (design principles 6.4):
         // it is checked and kept as an operator rule, not as a graph (step 1).
-        // A `constas` parameter belongs to the declaration's compile-time identity, which the
-        // native declaration mechanism does not carry (design principles 5.4). A pass-shaped
-        // declaration is not an operator; it was handled above.
-        FunctionType *funcType = tt::as_ptr<FunctionType>(gct->at(0)->dataType());
-        if (funcType->hasConstas()) {
-            diags_->of(SemanticDiag::ConstasInNativeDeclaration)
-                .atOrigin(gct->origin())
-                .commit(gct->name());
-            throw BuildAbortException();
-        }
+        // A `constas` parameter is the declaration's compile-time parameter, and a body-less
+        // declaration carries it the same way a function with a body does (design principles 5.4):
+        // the parameter sits in the declaration's function type, and the call that supplies it is
+        // held to a compile-time constant by that type. The operator it declares needs nothing
+        // else -- the value reaches it as one of the call's `with` slots, as a `with` parameter's
+        // value always does.
         declareNativeOperator(gct);
         LEAVE("DECL");
         return nullptr;

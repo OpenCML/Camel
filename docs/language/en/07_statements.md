@@ -414,7 +414,7 @@ func main() => int sync {
   ```
 
   Two calls that differ only in the string are two graphs, each reading the field its value names.
-- A declaration with a `constas` parameter **has no function value**: the constant must be written at the call, so it cannot be assigned or passed on (`SemanticDiag::ConstasFunctionNeedsCall`). A body-less declaration (the declaration of a C++ operator) cannot take one (`SemanticDiag::ConstasInNativeDeclaration`).
+- A declaration with a `constas` parameter **has no function value**: the constant must be written at the call, so it cannot be assigned or passed on (`SemanticDiag::ConstasFunctionNeedsCall`). A body-less declaration (the declaration of a C++ operator) takes one the same way: the shape is worked out from the parameter in the type, so these parameters can only be compile-time constants.
 - The value must be a compile-time constant (`SemanticDiag::ConstasValueNotConstant`): a runtime value cannot select an instance. Constants today are literals, another `constas` value, compile-time names such as the `n` of `static for` and the `j` of `indices`, and a call of a pure function whose arguments are compile-time constants (`label(first_field::<S>())`), which the compiler folds to its value; a call it cannot read at build time is refused by its own name (`SemanticDiag::FoldCallNotEvaluable`, and the other `FoldCall*` diagnostics).
 - `n` is bound only inside the instance body. A named dimension is written in the declared type of a parameter (`x: f32[n]`); a type position in the body reads a dimension name as bound by the first plain occurrence in a parameter type, so `let z: f32[n]` there does not bring the instance's `n` in (`SemanticDiag::DimensionNameNotBound`).
 

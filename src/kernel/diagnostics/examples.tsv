@@ -77,7 +77,6 @@ SemanticDiag::ComprehensionSourceRefused	test/cases/consistency/comprehension/er
 SemanticDiag::ConditionNotBool	test/cases/compile/any_typing/if_condition.cml
 SemanticDiag::ConstasArgumentMissing	test/cases/compile/constas/constas_missing_argument.cml
 SemanticDiag::ConstasFunctionNeedsCall	test/cases/compile/constas/constas_as_value.cml
-SemanticDiag::ConstasInNativeDeclaration	test/cases/compile/constas/constas_native.cml
 SemanticDiag::ConstasNotAllowed	test/cases/compile/constas/constas_dimension_name.cml
 SemanticDiag::ConstasTypeRequired	test/cases/compile/constas/constas_no_type.cml
 SemanticDiag::ConstasValueNotConstant	test/cases/compile/constas/constas_value_not_constant.cml

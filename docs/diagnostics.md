@@ -15,7 +15,7 @@ prints one entry.
 - **Message, help.** The templates; `{0}`, `{1}`, ... are filled in by the report.
 - **Example.** A program of the test suite that raises the diagnostic, where one is small enough to show.
 
-332 diagnostics: 310 errors, 22 warnings. 14 carry a machine-applicable edit, 318 say why they carry none.
+331 diagnostics: 309 errors, 22 warnings. 14 carry a machine-applicable edit, 317 say why they carry none.
 
 | Code | Name | Severity | Edit |
 |------|------|----------|------|
@@ -169,7 +169,6 @@ prints one entry.
 | `0x03000193` | [SemanticDiag::ConstasTypeRequired](#constastyperequired) | Error | no |
 | `0x03000195` | [SemanticDiag::ConstasValueNotConstant](#constasvaluenotconstant) | Error | no |
 | `0x03000199` | [SemanticDiag::ConstasFunctionNeedsCall](#constasfunctionneedscall) | Error | no |
-| `0x0300019A` | [SemanticDiag::ConstasInNativeDeclaration](#constasinnativedeclaration) | Error | no |
 | `0x0300019B` | [SemanticDiag::ConstasArgumentMissing](#constasargumentmissing) | Error | no |
 | `0x0300019C` | [SemanticDiag::StaticTupleEscapes](#statictupleescapes) | Error | no |
 | `0x0300019D` | [SemanticDiag::TagValueConflict](#tagvalueconflict) | Error | no |
@@ -5407,41 +5406,6 @@ func apply(f: (x: f32[...]) => float, x: f32[...]) => float {
 func main() => int sync {
     // The value must be known where the call is written, so `total` has no function value.
     println(apply(total, ones::<f32>([3])))
-    return 0
-}
-```
-
-### ConstasInNativeDeclaration
-
-`0x0300019A` · Error · `SemanticDiag::ConstasInNativeDeclaration`
-
-**Fix**
-
-None: choice: the repair is a decision only the writer can make
-
-**Message**
-
-```text
-The body-less declaration '{0}' cannot take a 'constas' parameter.
-```
-
-**Help**
-
-```text
-A body-less declaration names a C++ operator whose signature is fixed; a 'constas' value would have to be part of the operator's compile-time identity, which the native declaration mechanism does not carry yet. Write the function with a body.
-```
-
-**Example** (`test/cases/compile/constas/constas_native.cml`, run as `camel test/cases/compile/constas/constas_native.cml`)
-
-```camel
-import tensor
-
-// A body-less declaration names a C++ operator whose signature does not carry a compile-time
-// value parameter, even when the value writes the result's extent.
-func zeros(constas n: int) => f32[n]
-
-func main() => int sync {
-    println(zeros(3))
     return 0
 }
 ```
