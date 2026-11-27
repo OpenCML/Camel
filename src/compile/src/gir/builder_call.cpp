@@ -2315,6 +2315,16 @@ Builder::visitLinkNode(const GCT::node_ptr_t &gct, std::optional<GCT::Assignment
                         normInputTypes[i]  = parameter;
                         continue;
                     }
+                    // The operator this call resolved to may still be a template: its signature
+                    // writes its type variables (`fill` resolves to
+                    // `(template: T, ...fields: ...F)`), and the type argument the call wrote
+                    // instantiates it where the rule runs, not here. The premise of this check --
+                    // that the parameters are the concrete types the call's type arguments left --
+                    // does not hold for such a signature, so an argument that does not compare with
+                    // it is not an argument that fits no parameter (design principles 4.4).
+                    if (containsTypeVar(targetOperator->funcType())) {
+                        continue;
+                    }
                     // The argument does not take the parameter the call's own type arguments leave
                     // it, and nothing has been reported for it: a call whose argument does not fit
                     // is a call with no instance, the same report an ordinary call gives (design
