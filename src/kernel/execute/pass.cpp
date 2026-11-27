@@ -2653,7 +2653,7 @@ PassApplyResult applyPassesDetailed(
             // read below for both consequences -- the observer above and the entry's arguments.
             const bool executes = scheduling != nullptr && scheduling->executesTheProgram();
             if (auto *observer = camel::execute::executionObserver()) {
-                observer->passStarting(executes, program->root());
+                observer->passStarting(executes, &program->root()->view());
             }
             // Diagnostics raised while this pass runs carry its stage: "run" for a scheduling pass
             // (the program executes there), "pass:<name>" for rewrite and translation passes. The

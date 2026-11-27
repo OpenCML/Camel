@@ -78,7 +78,7 @@ class ExecutionObserver {
     /// here, when `node` is that group's tail; the members before the tail do not run and are not
     /// reported. A back end reports a group at its tail and only there (fusion_group.h).
     virtual void beforeNode(
-        runtime::GCGraph *graph, core::context::Frame *frame, runtime::gc_node_ref_t node,
+        const camel::graph::GraphView *graph, core::context::Frame *frame, runtime::gc_node_ref_t node,
         const FusionGroupSite *group = nullptr) = 0;
     /// std::nvm is about to replace the frame of the running activation by a tail call: the
     /// next node reported belongs to the callee, which took the caller's place.
@@ -96,7 +96,7 @@ class ExecutionObserver {
     /// whose apply runs the program; a rewrite or translation pass may evaluate graphs for
     /// its work (the rules library, a macro function), and that is not the program's run.
     /// `root` is the program root the pass is given, or null.
-    virtual void passStarting(bool /*schedules*/, runtime::GCGraph * /*root*/) {}
+    virtual void passStarting(bool /*schedules*/, const camel::graph::GraphView * /*root*/) {}
 };
 
 /// The installed observer, or null.

@@ -109,7 +109,7 @@ enum class GraphRole {
 };
 
 struct GraphInfo {
-    camel::runtime::GCGraph *graph = nullptr;
+    const camel::graph::GraphView *graph = nullptr;
     /// The graph's name as the builder gave it: the full name of a function.
     std::string name;
     /// The name shown to the user: `name`, or for a graph the compiler named itself what it
@@ -118,7 +118,7 @@ struct GraphInfo {
     GraphRole role = GraphRole::Function;
     /// For a subgraph that folds (GraphRole::Arm): the graphs whose branch nodes call it, so
     /// the graphs it is part of when a frame of one of them calls it.
-    std::vector<camel::runtime::GCGraph *> owners;
+    std::vector<const camel::graph::GraphView *> owners;
     std::string graphId; // the text of the graph's id (camel::runtime::toText)
     /// The ports that hold captured values (closure nodes, or `with` ports after the declared
     /// ones of a function called directly), named by the full names of those values.
@@ -205,9 +205,9 @@ class ProgramIndex {
     camel::compile::SemanticRecorder *recorder();
     /// After the compilation: reads what the builders created; `root` is the graph before any
     /// pass (may be null when the program did not compile).
-    void compiled(camel::runtime::GCGraph *root);
+    void compiled(const camel::graph::GraphView *root);
     /// When the scheduler starts: `root` is the graph it was given.
-    void running(camel::runtime::GCGraph *root);
+    void running(const camel::graph::GraphView *root);
     bool hasRunningGraph() const { return runningKnown_; }
     bool isCompiled() const { return compiledKnown_; }
 
@@ -222,9 +222,9 @@ class ProgramIndex {
                                                                             : nullptr;
     }
 
-    GraphInfo &graph(camel::runtime::GCGraph *graph);
+    GraphInfo &graph(const camel::graph::GraphView *graph);
     /// Every graph reachable from the running root (empty before running()).
-    const std::vector<camel::runtime::GCGraph *> &runningGraphs() const { return runningGraphs_; }
+    const std::vector<const camel::graph::GraphView *> &runningGraphs() const { return runningGraphs_; }
     /// A graph with this id is part of the program that runs.
     bool runs(const std::string &graphId) const { return runningGraphIds_.count(graphId) != 0; }
     /// A node with this origin is in the program before the passes.
@@ -244,7 +244,7 @@ class ProgramIndex {
 
     /// The full name of a value `graph` captures, from the name the capturing module writes
     /// (GCGraph::captureNames): with the module, unless it is the entry module's own.
-    std::string capturedName(camel::runtime::GCGraph *graph, std::string_view shown);
+    std::string capturedName(const camel::graph::GraphView *graph, std::string_view shown);
 
     /// The bindings whose value is the node with this origin.
     std::vector<const Binding *> bindingsOfNode(origin_t node) const;
@@ -268,12 +268,12 @@ class ProgramIndex {
     };
 
     using ArmOwners =
-        std::unordered_map<camel::runtime::GCGraph *, std::vector<camel::runtime::GCGraph *>>;
+        std::unordered_map<const camel::graph::GraphView *, std::vector<const camel::graph::GraphView *>>;
     /// Walks the graphs reachable from `root`: the located nodes by line, the graphs, the
     /// origins of all nodes (when asked) and the arms of the branches (when asked).
     void collect(
-        camel::runtime::GCGraph *root, std::map<LineKey, LineNodes> &lines,
-        std::vector<camel::runtime::GCGraph *> &graphs, std::unordered_set<origin_t> *origins,
+        const camel::graph::GraphView *root, std::map<LineKey, LineNodes> &lines,
+        std::vector<const camel::graph::GraphView *> &graphs, std::unordered_set<origin_t> *origins,
         ArmOwners *arms);
     void finishBindings();
     /// Full names and reachability of the functions, from the graphs before the passes.
@@ -281,7 +281,7 @@ class ProgramIndex {
     /// The graphs the program can run: from `root`, the graphs it calls (FUNC nodes) and the
     /// graphs of the function values it holds (static references), and so on. A function
     /// nothing calls is a subgraph of the root but not among them.
-    void findLiveGraphs(camel::runtime::GCGraph *root);
+    void findLiveGraphs(const camel::graph::GraphView *root);
     void findModules();
     /// The module a file of the program belongs to; "" for the entry module (whose names are
     /// shown without it) and for a file of no user module.
@@ -300,7 +300,7 @@ class ProgramIndex {
     std::vector<Binding> bindings_;
     std::unordered_multimap<origin_t, uint32_t> bindingByNode_;
     std::unordered_multimap<int, uint32_t> bindingByFunction_;
-    std::unordered_map<camel::runtime::GCGraph *, std::unique_ptr<GraphInfo>> graphs_;
+    std::unordered_map<const camel::graph::GraphView *, std::unique_ptr<GraphInfo>> graphs_;
     std::map<LineKey, std::vector<origin_t>> builtLines_; // origins the builder created
     std::map<LineKey, LineNodes> initialLines_;
     std::map<LineKey, LineNodes> runningLines_;
@@ -309,8 +309,8 @@ class ProgramIndex {
     /// ids of the graphs it can run, and the origins of their nodes.
     std::unordered_set<std::string> liveGraphIds_;
     std::unordered_set<origin_t> liveOrigins_;
-    std::vector<camel::runtime::GCGraph *> initialGraphs_;
-    std::vector<camel::runtime::GCGraph *> runningGraphs_;
+    std::vector<const camel::graph::GraphView *> initialGraphs_;
+    std::vector<const camel::graph::GraphView *> runningGraphs_;
     std::unordered_set<std::string> runningGraphIds_;
     std::unordered_set<std::string> armGraphIds_;
     /// The arms of the branches of the running program, with the graphs that branch to them.
@@ -322,7 +322,7 @@ class ProgramIndex {
     std::unordered_set<std::string> moduleNames_; // the user modules other than the entry one
     std::unordered_set<std::string> topLevelNames_; // full names of top-level values
     /// For a compiler-made graph: the names of what its callers pass, by port position.
-    std::unordered_map<camel::runtime::GCGraph *, std::unordered_map<size_t, std::string>>
+    std::unordered_map<const camel::graph::GraphView *, std::unordered_map<size_t, std::string>>
         inheritedPortNames_;
     bool compiledKnown_ = false;
     bool runningKnown_  = false;

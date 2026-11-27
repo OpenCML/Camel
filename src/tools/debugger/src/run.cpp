@@ -48,6 +48,8 @@ struct PassGraphCollector {
     size_t nextIndex = 1; // index 0 保留给 pass 管线之前的入口图
 };
 
+// The pass snapshot handler is the pipeline's own hook, so what it is handed is the graph as the
+// pass that made it holds it (the implementation side), not the view a reader is given.
 void passGraphSnapshotHandler(
     const char *passName, size_t passOutputIndex, camel::runtime::GCGraph *graph, void *userData) {
     (void)passOutputIndex; // 以收集器的单调 nextIndex 为准，跨多次 applyPassesDetailed 不重复
@@ -187,7 +189,7 @@ bool compileInto(const std::string &targetFile) {
     } catch (std::exception &e) {
         std::cout << "Error: " << e.what() << std::endl;
     }
-    core.endCompile(ok ? st.ctx->runtimeProgram()->root() : nullptr);
+    core.endCompile(ok ? &st.ctx->runtimeProgram()->root()->view() : nullptr);
     st.compiledPending = ok;
     return ok;
 }

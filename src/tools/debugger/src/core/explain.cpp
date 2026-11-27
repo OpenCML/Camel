@@ -411,7 +411,7 @@ DebugCore::CallAnswer DebugCore::callAtFrame(
             if (auto reporter = context->runtimeErrorReporter()) {
                 auto site = camel::core::error::makeGraphExecutionSite(
                     context->sourceContext(),
-                    f.graph,
+                    f.impl,
                     stack_.size());
                 if (f.origin != 0) {
                     site.cachedOrigin = f.origin;

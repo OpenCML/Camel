@@ -73,7 +73,7 @@ class DebugCore final : public camel::execute::ExecutionObserver {
     /// Before the compilation: attaches the recorder to `ctx`.
     void beginCompile(const camel::core::context::context_ptr_t &ctx);
     /// After it. `root` is the graph before any pass; null when the program did not compile.
-    void endCompile(camel::runtime::GCGraph *root);
+    void endCompile(const camel::graph::GraphView *root);
     /// Before the passes run. `notice`: what the user is told about this run (a back end
     /// replaced by a debuggable one); empty when there is nothing to say.
     void beginRun(const std::string &notice);
@@ -103,13 +103,13 @@ class DebugCore final : public camel::execute::ExecutionObserver {
     void activationEntered() override;
     void activationLeft() override;
     void beforeNode(
-        camel::runtime::GCGraph *graph, camel::core::context::Frame *frame,
+        const camel::graph::GraphView *graph, camel::core::context::Frame *frame,
         camel::runtime::gc_node_ref_t node,
         const camel::execute::FusionGroupSite *group) override;
     void tailCall() override;
     void beforeInstruction(const camel::execute::InstructionSite &site) override;
     void faultRaised(const camel::core::error::RuntimeFault &fault, bool isolated) override;
-    void passStarting(bool schedules, camel::runtime::GCGraph *root) override;
+    void passStarting(bool schedules, const camel::graph::GraphView *root) override;
 
   private:
     DebugCore() = default;
@@ -127,7 +127,12 @@ class DebugCore final : public camel::execute::ExecutionObserver {
 
     struct ShadowFrame {
         uint64_t id                        = 0;
-        camel::runtime::GCGraph *graph     = nullptr;
+        const camel::graph::GraphView *graph     = nullptr;
+        // The graph as the implementation that runs it holds it. Every reading of the graph goes
+        // through `graph` above; this one exists for the single caller that asks where in the
+        // implementation a node sits (an execution site for a diagnostic), a question the view
+        // does not answer, and it is never read here.
+        camel::runtime::GCGraph *impl      = nullptr;
         camel::core::context::Frame *frame = nullptr;
         GraphInfo *info                    = nullptr;
         const NodeInfo *node               = nullptr; // about to run, running, or waited in
@@ -252,12 +257,20 @@ class DebugCore final : public camel::execute::ExecutionObserver {
     };
 
     // program thread
-    ShadowFrame &pushFrame(camel::runtime::GCGraph *graph, camel::core::context::Frame *frame);
+    /// `impl` is the graph as the implementation holds it, kept for the one diagnostic that asks
+    /// where in the implementation a node sits; every reading is of `graph`.
+    ShadowFrame &pushFrame(
+        const camel::graph::GraphView *graph, camel::core::context::Frame *frame,
+        camel::runtime::GCGraph *impl);
     /// The frame of a call, above the caller's.
-    ShadowFrame &pushCallee(camel::runtime::GCGraph *graph, camel::core::context::Frame *frame);
+    ShadowFrame &pushCallee(
+        const camel::graph::GraphView *graph, camel::core::context::Frame *frame,
+        camel::runtime::GCGraph *impl);
     /// The frame of a tail call, in the place of the top frame.
-    ShadowFrame &replaceTop(camel::runtime::GCGraph *graph, camel::core::context::Frame *frame);
-    void firstNodeOfRun(camel::runtime::GCGraph *root);
+    ShadowFrame &replaceTop(
+        const camel::graph::GraphView *graph, camel::core::context::Frame *frame,
+        camel::runtime::GCGraph *impl);
+    void firstNodeOfRun(const camel::graph::GraphView *root);
     /// What a stop at a group's tail says about the group: its name, its members' operators in
     /// execution order and the one sentence a console prints (2).
     json fusionDetails(const ShadowFrame &frame, const camel::execute::FusionGroupSite &site);

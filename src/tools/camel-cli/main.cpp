@@ -111,6 +111,10 @@ void writePassDump(PassDumpState &state, const string &passName, camel::runtime:
     }
 }
 
+// The pass snapshot handler is the pipeline's own hook: it is told about the graph as the pass
+// that made it holds it, before anything reads the graph, so the handle here is the
+// implementation's and not the view's. What is done with it -- a dump, a statistics reading --
+// goes through the reads those two already take.
 void passDumpHandler(const char *passName, size_t, camel::runtime::GCGraph *graph, void *userData) {
     writePassDump(*static_cast<PassDumpState *>(userData), passName ? passName : "", graph);
 }

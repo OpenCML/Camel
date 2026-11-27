@@ -497,7 +497,7 @@ slot_t NodeVMSchedPass::call(
                     groupMembers.push_back(nodeRef);
                     const camel::execute::FusionGroupSite site{group.name, groupMembers};
                     if (auto *observer = camel::execute::executionObserver()) [[unlikely]] {
-                        observer->beforeNode(currRuntimeGraph, currFrame, nodeRef, &site);
+                        observer->beforeNode(&currRuntimeGraph->view(), currFrame, nodeRef, &site);
                     }
                     // The group's members are done for this round; a later round defers them
                     // again from the head.
@@ -514,7 +514,7 @@ slot_t NodeVMSchedPass::call(
             // is installed. It fires after branch-skip resolution and before the node
             // executes, so breakpoints and steps stop at the node that is about to run.
             if (auto *observer = camel::execute::executionObserver()) [[unlikely]] {
-                observer->beforeNode(currRuntimeGraph, currFrame, nodeRef);
+                observer->beforeNode(&currRuntimeGraph->view(), currFrame, nodeRef);
             }
 
             EXEC_WHEN_DEBUG({
