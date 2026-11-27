@@ -491,7 +491,7 @@ case = "../../../cases/modules/rules/err_requires_not_permission.cml"
 args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::TagNotAPermission"
-expect_diagnostic_line = 5
+expect_diagnostic_line = 4
 expect_diagnostic_column = 11
 expect_output_contains = ["The tag 'plain' grants no numeric permission."]
 
@@ -503,7 +503,7 @@ case = "../../../cases/modules/rules/err_rule_tag.cml"
 args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::RuleTagNotRequires"
-expect_diagnostic_line = 5
+expect_diagnostic_line = 4
 expect_diagnostic_column = 2
 expect_output_contains = ["A rule may be preceded only by '#requires(...)', not by the tag 'fast'."]
 
@@ -515,7 +515,7 @@ case = "../../../cases/modules/rules/err_requires_on_func.cml"
 args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::TagUndeclared"
-expect_diagnostic_line = 3
+expect_diagnostic_line = 2
 expect_diagnostic_column = 2
 expect_output_contains = ["No tag 'requires' is declared."]
 
@@ -527,7 +527,7 @@ case = "../../../cases/modules/rules/err_requires_empty.cml"
 args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::TagArgumentCount"
-expect_diagnostic_line = 3
+expect_diagnostic_line = 2
 expect_diagnostic_column = 2
 expect_output_contains = ["The tag 'requires' takes 1 parameter(s), but 0 argument(s) are written."]
 
@@ -1764,8 +1764,8 @@ case = "../../../cases/modules/rules/fact_arg_not_constant.cml"
 args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::FactArgumentNotConstant"
-expect_diagnostic_line = 16
-expect_output_contains = ["The argument 'cap' of a fact is not a compile-time constant of type 'int'.", "An argument is therefore a value the compiler computes where the query is written", "fact_arg_not_constant.cml:16:42"]
+expect_diagnostic_line = 17
+expect_output_contains = ["The argument 'cap' of a fact is not a compile-time constant of type 'int'.", "An argument is therefore a value the compiler computes where the query is written", "fact_arg_not_constant.cml:17:42"]
 expect_output_not_contains = ["UnknownInternalError"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 10000

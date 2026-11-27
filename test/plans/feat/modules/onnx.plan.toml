@@ -114,8 +114,8 @@ envs = ["ONNX_OUT=${test_tmp}/export_unsupported.onnx"]
 expect_exit = 1
 expect_diagnostic_name = "RuntimeDiag::UnhandledError"
 expect_diagnostic_code = "0x04000051"
-expect_diagnostic_line = 14
-expect_diagnostic_column = 85
+expect_diagnostic_line = 15
+expect_diagnostic_column = 13
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
@@ -137,8 +137,8 @@ envs = ["ONNX_OUT=${test_tmp}/export_impure.onnx"]
 expect_exit = 1
 expect_diagnostic_name = "RuntimeDiag::UnhandledError"
 expect_diagnostic_code = "0x04000051"
-expect_diagnostic_line = 13
-expect_diagnostic_column = 89
+expect_diagnostic_line = 14
+expect_diagnostic_column = 17
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
@@ -1143,7 +1143,7 @@ args = ["${case}", "std::macro", "std::opt", 'onnx::export_model out="${test_tmp
 expect_exit = 1
 expect_diagnostic_name = "RuntimeDiag::TranslationRefused"
 expect_diagnostic_code = "0x0400000B"
-expect_diagnostic_line = 13
+expect_diagnostic_line = 15
 expect_diagnostic_column = 25
 expect_output_contains = ["the parameter out names one model file but the entry graph contains 2 onnx.export_model calls"]
 expect_output_not_contains = ["onnx::export_model: wrote", ":?:?:"]
@@ -3027,7 +3027,7 @@ expect_diagnostic_name = "RuntimeDiag::UnhandledError"
 expect_diagnostic_code = "0x04000051"
 expect_diagnostic_line = 15
 expect_diagnostic_column = 13
-expect_output_contains = ["this conversion of a constant always fails: conversion to 'f32[3, 2]' failed: the array has shape [2, 3]", "as_constant_fails.cml:15:13"]
+expect_output_contains = ["this conversion of a constant always fails: conversion to 'f32[3, 2]' failed: the array has shape [2, 3]", "as_constant_fails.cml:17:13"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 20000
 

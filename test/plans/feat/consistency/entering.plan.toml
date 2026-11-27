@@ -241,7 +241,7 @@ args = ["--diag-format", "short", "${case}"]
 backends = ["nvm"]
 expect_exit = 1
 expect_output_not_contains = ["Segmentation fault", "dumped core", "internal error"]
-expect_output_contains = ["name=SemanticDiag::NoMatchingFunction", "err_arg_reverse.cml:4:14:"]
+expect_output_contains = ["name=SemanticDiag::NoMatchingFunction", "err_arg_reverse.cml:6:14:"]
 
 [[tests]]
 name = "entering.err_other_payload"
@@ -252,7 +252,7 @@ args = ["--diag-format", "short", "${case}"]
 backends = ["nvm"]
 expect_exit = 1
 expect_output_not_contains = ["Segmentation fault", "dumped core", "internal error"]
-expect_output_contains = ["name=SemanticDiag::NoMatchingFunction", "err_other_payload.cml:4:14:"]
+expect_output_contains = ["name=SemanticDiag::NoMatchingFunction", "err_other_payload.cml:6:14:"]
 
 [[tests]]
 name = "entering.err_numeric"
@@ -263,7 +263,7 @@ args = ["--diag-format", "short", "${case}"]
 backends = ["nvm"]
 expect_exit = 1
 expect_output_not_contains = ["Segmentation fault", "dumped core", "internal error"]
-expect_output_contains = ["name=SemanticDiag::NoMatchingFunction", "err_numeric.cml:4:14:"]
+expect_output_contains = ["name=SemanticDiag::NoMatchingFunction", "err_numeric.cml:6:14:"]
 
 [[tests]]
 name = "entering.err_assignment_reverse"

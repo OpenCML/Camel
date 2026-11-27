@@ -30,7 +30,7 @@ kind = "negative"
 case = "../../../cases/loops/native_callback_fault.cml"
 args = ["--gc-stress", "safepoint=1,kind=minor", "--gc-check", "verify=both", "--gc", "kind=generational", "${case}", "test::native_callback", "std::prl"]
 expect_exit = 1
-expect_diagnostic_line = 3
+expect_diagnostic_line = 6
 expect_output_contains = ["native before fault once", "RuntimeDiag::DivisionByZero", "native_callback_fault.cml:3:61"]
 expect_output_not_contains = ["native after fault"]
 timeout_ms = 20000
@@ -41,7 +41,7 @@ kind = "negative"
 case = "../../../cases/loops/native_callback_fault.cml"
 args = ["--gc-stress", "safepoint=1,kind=minor", "--gc-check", "verify=both", "--gc", "kind=generational", "${case}", "test::native_callback", "std::prl bytecode=false"]
 expect_exit = 1
-expect_diagnostic_line = 3
+expect_diagnostic_line = 6
 expect_output_contains = ["native before fault once", "RuntimeDiag::DivisionByZero", "native_callback_fault.cml:3:61"]
 expect_output_not_contains = ["native after fault"]
 timeout_ms = 20000
@@ -122,7 +122,7 @@ timeout_ms = 20000
 
 [[tests]]
 name = "loops.zero_leaf_state.dump"
-desc = "On the graph the zero-leaf state stays the loop's one state, not a list of components: the LOOP node's value_type is the empty struct '{  }', and its value enters the named type `Nothing` by a CAST, so what the program sees is still a zero-leaf struct of the type it declared."
+desc = "On the graph the zero-leaf state stays the loop's one state, not a list of components: the state the head declares is the empty struct '{  }', and its value enters the named type `Nothing` by the conversion node `:op/enter`, so what the program sees is still a zero-leaf struct of the type it declared. A `for` over a range also carries the stream's cursor and its end beside that state -- that is the loop's own state, not the program's (design principles 5.4) -- so the entry this reads is the user's state, the last component of the tuple."
 kind = "behavior"
 case = "../../../cases/loops/zero_leaf_state.cml"
 args = ["${case}", "std::gir", "std::nop"]
@@ -133,8 +133,22 @@ verify_script = """
 const lines = input.normalized.stdout.split(String.fromCharCode(10))
 const loops = lines.filter((l) => l.includes('type="LOOP"'))
 assert(loops.length > 0, 'the dump has no LOOP node to read the state shape from: ' + input.normalized.stdout)
-assert(loops.every((l) => l.includes('value_type="{  }"')), 'a zero-leaf loop state is not the empty struct: ' + loops.join(' | '))
-assert(lines.some((l) => l.includes('label=":op/cast"') && l.includes('value_type="Nothing"')), 'the empty struct does not enter the named type: ' + input.normalized.stdout)
+// A `for` over a range walks a stream, and a stream's cursor is the loop's own state (design
+// principles 5.4), so that loop carries `(int.., bool)` beside the state the program wrote.
+// What this reads is the user's state: the last component of the tuple, or the only value when
+// the head declares no other state. The premise moved when a range became a value; the reading
+// below is the same one it always made.
+const userState = (l) => {
+    const m = l.match(/value_type="([^"]*)"/)
+    let t = m ? m[1] : ''
+    if (t.startsWith('(') && t.endsWith(')')) { t = t.slice(1, -1) }
+    return t.split(', ').pop() === '{  }'
+}
+assert(loops.every((l) => userState(l)), 'a zero-leaf loop state is not the empty struct: ' + loops.join(' | '))
+// The state enters the named type by a conversion node, and that node is `:op/enter` (it was
+// `:op/cast` when this case was written): the entry of a region, `type="OPER"`, holding the
+// empty struct it enters with. Same claim, the name the graph gives it today.
+assert(lines.some((l) => l.includes('label=":op/enter"') && l.includes('value_type="Nothing"')), 'the empty struct does not enter the named type: ' + input.normalized.stdout)
 }
 """
 timeout_ms = 20000
@@ -275,7 +289,7 @@ case = "../../../cases/loops/open_rank_round_scalar_read.cml"
 args = ["--diag-format", "short", "${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::ArgumentsRejected"
-expect_diagnostic_line = 10
+expect_diagnostic_line = 9
 expect_diagnostic_column = 39
 expect_output_contains = ["Invalid call to '__add__' with argument types <> (float, f32[...])", "the scalar operand has type 'float', but the tensor's element type is 'f32'", "write the conversion, f32(value)", "a scalar read out of the array is written sum(v) or an explicit conversion"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
@@ -289,8 +303,8 @@ case = "../../../cases/loops/open_rank_round_iterate_round.cml"
 args = ["--diag-format", "short", "${case}"]
 expect_exit = 1
 expect_diagnostic_name = "RuntimeDiag::RuntimeError"
-expect_diagnostic_line = 12
-expect_diagnostic_column = 14
+expect_diagnostic_line = 10
+expect_diagnostic_column = 43
 expect_output_contains = ["a value with no dimension has no first dimension to iterate over", "open_rank_round_iterate_round.cml:12:"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000

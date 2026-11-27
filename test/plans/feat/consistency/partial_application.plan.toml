@@ -164,7 +164,7 @@ args = ["--diag-format", "short", "${case}"]
 backends = ["nvm"]
 expect_exit = 1
 expect_output_not_contains = ["Segmentation fault", "dumped core", "internal error"]
-expect_output_contains = ["name=SemanticDiag::AmbiguousCall", "err_ambiguous.cml:12:13:", "<k: int> (x: int) => int", "<k: int> (x: float) => float", "annotate the literal with its type"]
+expect_output_contains = ["name=SemanticDiag::AmbiguousCall", "err_ambiguous.cml:18:13:", "<k: int> (x: int) => int", "<k: int> (x: float) => float", "annotate the literal with its type"]
 
 [[tests]]
 name = "partial_application.err_entering_ambiguous"
@@ -175,7 +175,7 @@ args = ["--diag-format", "short", "${case}"]
 backends = ["nvm"]
 expect_exit = 1
 expect_output_not_contains = ["Segmentation fault", "dumped core", "internal error"]
-expect_output_contains = ["name=SemanticDiag::AmbiguousCall", "err_entering_ambiguous.cml:10:13:", "<k: f32> (x: f32) => f32", "<k: float> (x: float) => float", "annotate the literal with its type"]
+expect_output_contains = ["name=SemanticDiag::AmbiguousCall", "err_entering_ambiguous.cml:14:13:", "<k: f32> (x: f32) => f32", "<k: float> (x: float) => float", "annotate the literal with its type"]
 
 [[tests]]
 name = "partial_application.context_arguments"
@@ -224,7 +224,7 @@ args = ["--diag-format", "short", "${case}"]
 backends = ["nvm"]
 expect_exit = 1
 expect_output_not_contains = ["Segmentation fault", "dumped core", "internal error"]
-expect_output_contains = ["name=SemanticDiag::PartialApplicationRefused", "err_overload_choice_name.cml:17:13:", "<k: f32> (x: f32) => f32", "<k: float> (x: float) => float"]
+expect_output_contains = ["name=SemanticDiag::PartialApplicationRefused", "err_overload_choice_name.cml:21:13:", "<k: f32> (x: f32) => f32", "<k: float> (x: float) => float"]
 
 [[tests]]
 name = "partial_application.err_context_argument_name"
@@ -246,7 +246,7 @@ args = ["--diag-format", "short", "${case}"]
 backends = ["nvm"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::LiteralNotRepresentable"
-expect_diagnostic_line = 11
+expect_diagnostic_line = 13
 expect_diagnostic_column = 22
 expect_output_not_contains = ["Segmentation fault", "dumped core", "internal error"]
 expect_output_contains = ["'1e40'", "type 'f32'", "out of range (at most about 3.4e38 in magnitude)"]

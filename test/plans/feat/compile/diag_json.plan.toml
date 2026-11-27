@@ -360,7 +360,7 @@ verify_script = """
 assert(input.normalized.stdout === '2\n2011\n', 'the program runs once: ' + JSON.stringify(input.normalized.stdout))
 const lines = input.normalized.stderr.trim().split('\n')
 assert(lines.length === 1, 'one warning line: ' + input.normalized.stderr)
-assert(lines[0].includes("[Warn]: Pass 'std::nvm' consumes the graph, so 'std::cxx::inline', 'std::fvm' written after it will not run."), lines[0])
+assert(lines[0].includes("[Warn]: Pass 'std::nvm' answered with an empty graph, so 'std::cxx::inline', 'std::fvm' written after it will not run."), lines[0])
 assert(lines[0].endsWith('(name=RuntimeDiag::PassesNeverRun, code=0x0410000F)'), lines[0])
 """
 normalizers = ["strip_ansi", "normalize_newlines"]
