@@ -715,7 +715,7 @@ that answered "cannot fault" while it was a node kind.
 #### `access`
 
 ```camel
-access: <at: int> (x: T) => U
+access: <constas at: int> (x: T) => U
 ```
 
 A member read as an ordinary operator: the ACCS node kind written as a call of the operator
@@ -738,7 +738,7 @@ check. The `ACCS` kind this operator used to be answered the same way.
 #### `access_key`
 
 ```camel
-access_key: <key: string> (x: T) => U
+access_key: <constas key: string> (x: T) => U
 ```
 
 The same member read by name: the field of a struct, which the compiler spells `s.x`. It is a
