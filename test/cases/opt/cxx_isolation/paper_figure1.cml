@@ -1,0 +1,18 @@
+/**
+ * The program the figure of the paper is drawn from: `inc(x) * 3 + (x + 1) * 4`, printed, so a run
+ * of it is the evaluated program and not only a graph. `f` calls `inc`, so the call one level down
+ * is what the inliner has to expand; the count this program prints is 21.
+ */
+
+func inc(x: int) => int {
+    return x + 1
+}
+
+func f(x: int) => int {
+    return inc(x) * 3 + (x + 1) * 4
+}
+
+func main() => int sync {
+    println(f(2))
+    return 0
+}
