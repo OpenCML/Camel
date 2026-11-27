@@ -666,6 +666,36 @@ bool liftGraph(
         }
         return TupleType::create(std::move(lifted));
     };
+    // A tuple with no tangent space of its own whose members are not all alike: a member with a
+    // pair lifts to that pair, a member with none stays the value it is. This is the rule for a
+    // loop's state over a range -- `(int.., bool, float)`, whose accumulator is the derivative --
+    // and it is asked in three places that must agree: the fill that builds such a tuple, the join
+    // that stands for what the arms write, and the gate that forwards it. One function, three
+    // callers.
+    const auto mixedMemberTypeOf = [&pairOf](Type *valueType) -> Type * {
+        if (valueType == nullptr || valueType->code() != camel::core::type::TypeCode::Tuple) {
+            return nullptr;
+        }
+        const auto *parts = static_cast<const TupleType *>(valueType);
+        std::vector<Type *> lifted;
+        lifted.reserve(parts->size());
+        size_t paired = 0;
+        for (size_t j = 0; j < parts->size(); ++j) {
+            TupleType *memberPair = pairOf(parts->typeAt(j));
+            paired                = paired + (memberPair != nullptr ? 1 : 0);
+            lifted.push_back(
+                memberPair != nullptr ? static_cast<Type *>(memberPair) : parts->typeAt(j));
+        }
+        // "Not all alike" is the whole of the rule: a tuple whose members all have a pair is the
+        // pair of the tuple (`liftedShapeOf`), and one whose members have none is the value it is.
+        // Answering a lifted type here for either of those would be a second, disagreeing reading
+        // of a type the law already answers -- a struct of floats would come out as a tuple of
+        // pairs, which is the same type written the other way round and not the same value.
+        if (paired == 0 || paired == parts->size()) {
+            return nullptr;
+        }
+        return TupleType::create(std::move(lifted));
+    };
     // How many states a loop carries: one port per state in its body region, after the iterable's
     // element port when the loop walks an array (`LoopView::iterable` and `LoopView::initialState`
     // are the two, and a `for` body's first port is that round's element).
@@ -969,6 +999,99 @@ bool liftGraph(
         // new graph -- the value came out of an input nobody had copied.
         std::vector<gc_node_ref_t> copyOf(function.nodeCount(), rt::kInvalidNodeRef);
         std::vector<bool> copied(function.nodeCount(), false);
+        // The order a gate carries, copied as the gate it was written on: a gate hands one value on
+        // and makes the rest of the graph wait for what it names, so the copy must name the copies
+        // of the same nodes in the same kinds, or the order the body runs in changes.
+        //
+        // The three kinds are the three `src/kernel/facts/facts.cpp` names ("GATE node without a
+        // wait"): its control inputs, its sync predecessors, and the values it hands on beside the
+        // value itself -- a region's exit gate reads what the region wrote after the value it hands
+        // out. A gate that carries none of the three is not a node a program can run, so a copy
+        // that could name none of them answers `false` rather than building one: a wait left behind
+        // stops a statement from running, and one re-added from outside the body runs a statement
+        // where nobody wrote it.
+        //
+        // `forwarded` is the copy of the value the gate hands on -- the caller knows it (it may be
+        // a pair the lift built rather than the copy of one node), so it is passed in and written
+        // first. A node of the order the walk has not reached answers `false` too: the lift copies
+        // every node of the body, so such a node is outside it, and naming it here would move a
+        // statement from another graph.
+        const auto copyGateOrder = [&function, &copyOf, &copied](
+                                       gc_node_ref_t sourceGate,
+                                       gc_node_ref_t forwarded,
+                                       std::vector<gc_node_ref_t> &norm,
+                                       std::vector<gc_node_ref_t> &with,
+                                       std::vector<gc_node_ref_t> &ctrl,
+                                       std::vector<gc_node_ref_t> &sync) -> bool {
+            norm.clear();
+            with.clear();
+            ctrl.clear();
+            sync.clear();
+            norm.push_back(forwarded);
+            const auto copyOne = [&](gc_node_ref_t node, std::vector<gc_node_ref_t> &into) -> bool {
+                if (node >= function.nodeCount() || !copied[node]) {
+                    return false;
+                }
+                into.push_back(copyOf[node]);
+                return true;
+            };
+            for (gc_node_ref_t wait : gateWaitsOf(function, sourceGate)) {
+                if (!copyOne(wait, norm)) {
+                    return false;
+                }
+            }
+            const gc_node_ref_t forwardedSource = forwardedInputOf(function, sourceGate);
+            const bool forwardsThroughNorm      = !function.normInputsOf(sourceGate).empty();
+            for (gc_node_ref_t input : function.withInputsOf(sourceGate)) {
+                // A gate that hands its value on through a context port has that value in this list
+                // already; it is not carried twice.
+                if (!forwardsThroughNorm && input == forwardedSource) {
+                    continue;
+                }
+                if (!copyOne(input, with)) {
+                    return false;
+                }
+            }
+            for (gc_node_ref_t input : function.ctrlInputsOf(sourceGate)) {
+                if (!copyOne(input, ctrl)) {
+                    return false;
+                }
+            }
+            for (const camel::runtime::GCGraphSyncEdge &edge : function.syncPredsOf(sourceGate)) {
+                if (!copyOne(edge.pred, sync)) {
+                    return false;
+                }
+            }
+            return norm.size() > 1 || !with.empty() || !ctrl.empty() || !sync.empty();
+        };
+        // A gate whose order was copied: the node itself, or `kInvalidNodeRef` when the order could
+        // not be copied (the caller refuses the body it was building rather than running it in an
+        // order nobody wrote).
+        const auto addCopiedGate = [&draft, &copyGateOrder](
+                                       gc_node_ref_t sourceGate,
+                                       Type *gateType,
+                                       gc_node_ref_t forwarded) -> gc_node_ref_t {
+            std::vector<gc_node_ref_t> norm;
+            std::vector<gc_node_ref_t> with;
+            std::vector<gc_node_ref_t> ctrl;
+            std::vector<gc_node_ref_t> sync;
+            if (!copyGateOrder(sourceGate, forwarded, norm, with, ctrl, sync)) {
+                return rt::kInvalidNodeRef;
+            }
+            const gc_node_ref_t gate =
+                draft.addGateNode(gateType, draft.allocateRuntimeSlot(gateType));
+            draft.setNormInputs(gate, norm);
+            if (!with.empty()) {
+                draft.setWithInputs(gate, with);
+            }
+            if (!ctrl.empty()) {
+                draft.setCtrlInputs(gate, ctrl);
+            }
+            if (!sync.empty()) {
+                draft.setSyncInputs(gate, sync);
+            }
+            return gate;
+        };
         // The value a node hands to a reader: the copy itself, except where the copy is a lifted
         // pair -- a loop's state port -- and the reader wants the value half.
         std::vector<gc_node_ref_t> valueOf(function.nodeCount(), rt::kInvalidNodeRef);
@@ -987,6 +1110,12 @@ bool liftGraph(
         // exactly what `split` cannot cut. A slot the payload does not list (it takes the
         // template's constant) is left out and its projection is copied as the projection it is.
         std::unordered_map<gc_node_ref_t, std::vector<gc_node_ref_t>> membersOfFill;
+        // The *tangent* of the member in each slot of the same fill, by slot (see `membersOfFill`):
+        // the slot's tangent is the one its member node carries, and a slot the payload leaves to
+        // the template has none. A tuple with no tangent space of its own cannot be projected for
+        // its tangents, so this is the only way a reader of such a tuple's *components* can ask for
+        // the component's tangent -- a loop whose state carries an iterator (`(int.., bool,
+        // float)`).
         bool complete = true;
         // Step 3, second layer: a tangent for every node. A constant's tangent is zero, a port's is
         // the tangent parameter the caller passed, and a primitive's is the forward rule the
@@ -1127,12 +1256,18 @@ bool liftGraph(
                                            &liftedPair,
                                            &fillTupleOf,
                                            &liftedLoopValueType,
+                                           &valueOf,
+                                           &function,
                                            &copyOf,
                                            &tangentOf](
                                               gc_node_ref_t exit,
                                               size_t collectionCount,
                                               size_t stateCount) -> gc_node_ref_t {
             Type *exitType = valueTypeOf(exit);
+            if (exitType == nullptr) {
+                const rt::GCNode *exitFace = nodeOf(function, exit);
+                exitType = exitFace != nullptr ? const_cast<Type *>(exitFace->dataType()) : nullptr;
+            }
             if (exitType == nullptr || exitType->code() != camel::core::type::TypeCode::Tuple) {
                 return rt::kInvalidNodeRef;
             }
@@ -1142,9 +1277,22 @@ bool liftGraph(
             }
             const gc_node_ref_t exitCopy    = copyOf[exit];
             const gc_node_ref_t exitTangent = tangentOf[exit];
-            if (exitCopy == rt::kInvalidNodeRef || exitTangent == rt::kInvalidNodeRef) {
+            if (exitCopy == rt::kInvalidNodeRef) {
                 return rt::kInvalidNodeRef;
             }
+            // The body's result is read one member at a time, at each member's own lifted shape: a
+            // member with a pair is inside it as that pair -- the Fill lifts each member at its own
+            // shape (`NodeCase::Fill`), so both halves are projections of the same node -- and a
+            // member with no tangent space is spliced back as it stands, which is what the loop's
+            // value type says of it too. A body whose result carries the iterator (`int..`) has no
+            // tuple-level tangent at all, and needs none: nothing here asks for one.
+            const rt::GCNode *exitCopyFace = nodeOf(function, exitCopy);
+            Type *exitCopyType =
+                exitCopyFace != nullptr ? const_cast<Type *>(exitCopyFace->dataType()) : nullptr;
+            const bool copyHasPairs =
+                exitCopyType != nullptr &&
+                exitCopyType->code() == camel::core::type::TypeCode::Tuple &&
+                static_cast<TupleType *>(exitCopyType)->size() == tuple->size();
             Type *liftedType = liftedLoopValueType(exitType, collectionCount, stateCount);
             if (liftedType == nullptr || liftedType->code() != camel::core::type::TypeCode::Tuple) {
                 return rt::kInvalidNodeRef;
@@ -1152,16 +1300,33 @@ bool liftGraph(
             std::vector<gc_node_ref_t> members;
             members.reserve(tuple->size());
             for (size_t j = 0; j < stateCount; ++j) {
-                // The j-th state, projected out of the body's result and its tangent: the same two
-                // halves a straight-line exit hands `liftedPair`. A state with no pair is spliced
-                // back as it stands, which is what the value type says of it too.
-                const gc_node_ref_t half =
-                    draft.addAccsNode(tuple->typeAt(j), static_cast<uint32_t>(j));
-                draft.setNormInputs(half, std::span<const gc_node_ref_t>(&exitCopy, 1));
                 if (pairOf(tuple->typeAt(j)) == nullptr) {
+                    const gc_node_ref_t half =
+                        draft.addAccsNode(tuple->typeAt(j), static_cast<uint32_t>(j));
+                    draft.setNormInputs(half, std::span<const gc_node_ref_t>(&exitCopy, 1));
                     members.push_back(half);
                     continue;
                 }
+                if (copyHasPairs) {
+                    Type *pairType = pairOf(tuple->typeAt(j));
+                    const gc_node_ref_t held =
+                        draft.addAccsNode(pairType, static_cast<uint32_t>(j));
+                    draft.setNormInputs(held, std::span<const gc_node_ref_t>(&exitCopy, 1));
+                    const gc_node_ref_t half =
+                        draft.addAccsNode(pairType, static_cast<uint32_t>(0));
+                    draft.setNormInputs(half, std::span<const gc_node_ref_t>(&held, 1));
+                    const gc_node_ref_t halfTangent =
+                        draft.addAccsNode(pairType, static_cast<uint32_t>(1));
+                    draft.setNormInputs(halfTangent, std::span<const gc_node_ref_t>(&held, 1));
+                    members.push_back(liftedPair(tuple->typeAt(j), half, halfTangent));
+                    continue;
+                }
+                if (exitTangent == rt::kInvalidNodeRef) {
+                    return rt::kInvalidNodeRef;
+                }
+                const gc_node_ref_t half =
+                    draft.addAccsNode(tuple->typeAt(j), static_cast<uint32_t>(j));
+                draft.setNormInputs(half, std::span<const gc_node_ref_t>(&exitCopy, 1));
                 const gc_node_ref_t halfTangent =
                     draft.addAccsNode(tuple->typeAt(j), static_cast<uint32_t>(j));
                 draft.setNormInputs(halfTangent, std::span<const gc_node_ref_t>(&exitTangent, 1));
@@ -1216,7 +1381,15 @@ bool liftGraph(
             // lifted graph, so the node that joins the arms is the pair's type -- the value's own
             // (`pairTypeOf`), not one type written for the whole transform.
             TupleType *joinPairType = pairOf(join->dataType());
-            Type *joinType          = joinPairType != nullptr ? joinPairType : join->dataType();
+            // A value with no tangent space of its own may still carry members that have one: the
+            // state tuple of a loop over a range is `(int.., bool, float)`, and the arms yield it
+            // with the accumulator already paired (`NodeCase::Fill` lifts a member at its own
+            // shape). The Join stands for what the arms write, so its type is that mixed tuple and
+            // not the plain value -- written from the same rule, member by member.
+            Type *mixedJoinType = mixedMemberTypeOf(join->dataType());
+            Type *joinType      = joinPairType != nullptr    ? joinPairType
+                                  : mixedJoinType != nullptr ? mixedJoinType
+                                                             : join->dataType();
             const gc_node_ref_t made =
                 draft.addJoinNode(joinType, rt::kInvalidNodeRef, body->armCount);
             liftedJoin[body->join] = made;
@@ -1289,7 +1462,18 @@ bool liftGraph(
             // transform nobody can name stays a refusal, which is what `vjp`'s own reading says.
             const bool isFunctionValue     = isFunctionValueNode(ref, *callee);
             const FunctionType *calledType = callee->funcType();
-            if (!isFunctionValue && calledType != nullptr && calledType->normTypesCount() == 0) {
+            // Two shapes of callee are copied as they stand. The first has no ordinary parameter:
+            // nothing of the call moves, so there is no pair to build. The second answers a value
+            // with **no tangent space**: nothing of its derivative can move either, and asking it
+            // for a lift refuses a whole body over an answer that carries no derivative at all.
+            // The second shape is the loop machinery's own -- `prelude.cml`'s `operator for`
+            // answers a stream, and a `for` loop over a range calls it -- so refusing it refused
+            // every function with a range loop in it (the case the measurement below pins).
+            const bool answersNoTangentSpace =
+                calledType != nullptr &&
+                !camel::core::tangentSpaceOf(calledType->exitType()).hasSpace();
+            if (!isFunctionValue && calledType != nullptr &&
+                (calledType->normTypesCount() == 0 || answersNoTangentSpace)) {
                 constantCalls.insert(ref);
                 return true;
             }
@@ -1480,6 +1664,8 @@ bool liftGraph(
             // a member read) are cases by operator; every other kind is a case by its kind
             // (`node_operator.h`).
             const NodeCase nodeCase = nodeCaseOf(function, ref);
+            if (node != nullptr && node->kind == rt::GCNodeKind::Oper && ref >= 20) {
+            }
             switch (nodeCase) {
             case NodeCase::Port: {
                 if (copied[ref]) {
@@ -1665,10 +1851,26 @@ bool liftGraph(
                 // and a function value's lift is not a fill of its members but `jvp(v)` -- its
                 // static code lifted (`liftedValueOf`), so its own node is copied as the closure it
                 // is and the lift is written where the value is *read*.
+                // ... and only a tuple that **has** a lifted form. A tuple with no tangent space --
+                // a loop's value when it carries an iterator, `(int.., bool, float)` for a loop
+                // over a range -- is a value like any other value with no space: it is copied
+                // whole, and its members are copied as the values they are. Lifting them by
+                // component asked `liftedValueOf` about a stream, which has no lift, and the fill
+                // was left uncopied; one stage later that read as "the branch has no arms".
                 const bool liftsByComponent =
                     fillShape.type != nullptr && !fillShape.pair && node->dataType() != nullptr &&
-                    node->dataType()->code() == camel::core::type::TypeCode::Tuple;
-                const Type *fillType = liftsByComponent ? fillShape.type : node->dataType();
+                    node->dataType()->code() == camel::core::type::TypeCode::Tuple &&
+                    pairOf(node->dataType()) != nullptr;
+                // A tuple with no tangent space of its own may still carry members that have one:
+                // a loop's state is `(int.., bool, float)` over a range, and the accumulator's
+                // derivative is the whole point of the lift. Such a tuple is lifted member by
+                // member -- a member with a pair becomes that pair, a member with no tangent space
+                // stays the value it is -- which is the rule `liftedLoopValueType` writes for the
+                // loop's own value, read here for the fill that builds it.
+                Type *mixedFillType  = mixedMemberTypeOf(node->dataType());
+                const Type *fillType = liftsByComponent           ? fillShape.type
+                                       : mixedFillType != nullptr ? mixedFillType
+                                                                  : node->dataType();
                 std::vector<gc_node_ref_t> values;
                 std::vector<gc_node_ref_t> memberTangents;
                 values.reserve(members.size());
@@ -1676,10 +1878,35 @@ bool liftGraph(
                 bool allCopied = true;
                 for (gc_node_ref_t member : members) {
                     if (member >= function.nodeCount() || !copied[member]) {
+                        const rt::GCNode *mf =
+                            member < function.nodeCount() ? nodeOf(function, member) : nullptr;
                         allCopied = false;
                         break;
                     }
-                    if (liftsByComponent) {
+                    if (mixedFillType != nullptr) {
+                        const rt::GCNode *memberFace = nodeOf(function, member);
+                        Type *memberType          = memberFace != nullptr
+                                                        ? const_cast<Type *>(memberFace->dataType())
+                                                        : nullptr;
+                        const gc_node_ref_t plain = valueOf[member] != rt::kInvalidNodeRef
+                                                        ? valueOf[member]
+                                                        : copyOf[member];
+                        if (pairOf(memberType) == nullptr) {
+                            // A member with no tangent space stays the value it is.
+                            values.push_back(plain);
+                        } else if (tangentOf[member] != rt::kInvalidNodeRef) {
+                            values.push_back(liftedPair(memberType, plain, tangentOf[member]));
+                        } else {
+                            // A member that has a pair and no tangent: the slot is a pair and the
+                            // value is not one. Filling it with the value alone would be a graph
+                            // whose type and whose value disagree (`the node is a float` where the
+                            // shape says a pair), and filling it with a zero would be a derivative
+                            // nobody computed. So the body is left uncopied and the caller refuses
+                            // it: nothing is invented in the place of a tangent that was not there.
+                            allCopied = false;
+                            break;
+                        }
+                    } else if (liftsByComponent) {
                         const rt::GCNode *memberFace = nodeOf(function, member);
                         const gc_node_ref_t lifted   = liftedValueOf(
                             member,
@@ -1745,6 +1972,13 @@ bool liftGraph(
                         }
                     }
                     membersOfFill[made] = std::move(bySlot);
+                    if (fill) {
+                        const std::vector<rt::gc_slot_idx_t> &slots = fill->slots;
+                        for (size_t i = 0; i < slots.size() && i < memberTangents.size(); ++i) {
+                            if (slots[i] >= 0 && static_cast<size_t>(slots[i]) < arity) {
+                            }
+                        }
+                    }
                 }
                 if (pairOf(node->dataType()) != nullptr) {
                     // The components in slot order, with a zero for every slot the payload leaves
@@ -1807,8 +2041,12 @@ bool liftGraph(
                 // a keyed access by the number the payload carries would project another member.
                 const std::optional<MemberRead> read = memberReadOf(function, ref);
                 const auto inputs                    = function.normInputsOf(ref);
-                if (!read.has_value() || inputs.size() != 1 ||
-                    inputs.front() >= function.nodeCount() || !copied[inputs.front()]) {
+                // The projection's aggregate is its first normal input. A `Accs` node has exactly
+                // one; an access written as an operator (`:op/access`) also carries the member
+                // template as a second one, and reading the aggregate off `back()` would project
+                // the template instead.
+                if (!read.has_value() || inputs.empty() || inputs.front() >= function.nodeCount() ||
+                    !copied[inputs.front()]) {
                     break;
                 }
                 const bool tupleIndexed = read->kind == rt::GCAccsKind::TupleIndex;
@@ -1820,7 +2058,7 @@ bool liftGraph(
                     draft.setNormInputs(projection, std::span<const gc_node_ref_t>(&from, 1));
                     return projection;
                 };
-                const gc_node_ref_t tuple = inputs.back();
+                const gc_node_ref_t tuple = inputs.front();
                 // Which node a projection reads, and what type the projection has, is `Lift<...>`
                 // of the aggregate and of the member (`liftedShapeOf`) -- the law again, not a kind
                 // test here. A pair-shaped aggregate is carried as the walk's two halves, and
@@ -1830,11 +2068,51 @@ bool liftGraph(
                 const rt::GCNode *tupleFace = nodeOf(function, tuple);
                 const LiftedShape aggregate = liftedShapeOf(
                     tupleFace != nullptr ? const_cast<Type *>(tupleFace->dataType()) : nullptr);
-                if (aggregate.type == nullptr) {
-                    break;
-                }
                 const gc_node_ref_t source =
                     valueOf[tuple] != rt::kInvalidNodeRef ? valueOf[tuple] : copyOf[tuple];
+                if (aggregate.type == nullptr) {
+                    // An aggregate with no lifted shape *of its own* -- a loop's value whose state
+                    // carries an iterator, `(int.., bool, float)` -- is still carried member by
+                    // member (`liftedLoopValueType`): a member with a pair is that pair, and a
+                    // member with no tangent space stays the value it is. So a projection of such
+                    // an aggregate is a projection **of its lifted value**, at the member's own
+                    // lifted shape -- and a member that does not lift is the projection it is.
+                    // Refusing was refusing the loop's own escape.
+                    const LiftedShape memberShape = liftedShapeOf(node->dataType());
+                    if (memberShape.type != nullptr) {
+                        copyOf[ref] = keyed ? draft.addAccsNode(memberShape.type, read->key)
+                                            : draft.addAccsNode(memberShape.type, read->place);
+                        draft.setNormInputs(
+                            copyOf[ref],
+                            std::span<const gc_node_ref_t>(&source, 1));
+                        copied[ref] = true;
+                        ++copiedKinds;
+                        if (memberShape.pair) {
+                            const gc_node_ref_t half = draft.addAccsNode(node->dataType(), 0);
+                            draft.setNormInputs(
+                                half,
+                                std::span<const gc_node_ref_t>(&copyOf[ref], 1));
+                            const gc_node_ref_t halfTangent =
+                                draft.addAccsNode(node->dataType(), 1);
+                            draft.setNormInputs(
+                                halfTangent,
+                                std::span<const gc_node_ref_t>(&copyOf[ref], 1));
+                            valueOf[ref]   = half;
+                            tangentOf[ref] = halfTangent;
+                        } else {
+                            valueOf[ref] = copyOf[ref];
+                        }
+                    } else if (node->dataType() != nullptr) {
+                        copyOf[ref] = keyed ? draft.addAccsNode(node->dataType(), read->key)
+                                            : draft.addAccsNode(node->dataType(), read->place);
+                        draft.setNormInputs(
+                            copyOf[ref],
+                            std::span<const gc_node_ref_t>(&source, 1));
+                        copied[ref] = true;
+                        ++copiedKinds;
+                    }
+                    break;
+                }
                 // A member of a tuple this transform filled is that member's own node, not a
                 // projection of the tuple: the fill exists so a reader of the *whole* tuple sees
                 // what the program sees, and a reader of one member has no business reading every
@@ -1850,6 +2128,23 @@ bool liftGraph(
                 if (!aggregate.pair) {
                     const LiftedShape memberShape = liftedShapeOf(node->dataType());
                     if (memberShape.type == nullptr) {
+                        // A member with no tangent space has no lifted shape of its own, and the
+                        // aggregate's lifted value keeps that member as the value it is
+                        // (`liftedLoopValueType`: a member with no pair stays as it is). So the
+                        // projection is the projection, at the member's own type, over the
+                        // aggregate's value. Left uncopied, the loop's state fill found no member
+                        // for it and the branch above it answered "no arms".
+                        if (node->dataType() != nullptr &&
+                            !camel::core::tangentSpaceOf(node->dataType()).hasSpace()) {
+                            copyOf[ref] = keyed ? draft.addAccsNode(node->dataType(), read->key)
+                                                : draft.addAccsNode(node->dataType(), read->place);
+                            draft.setNormInputs(
+                                copyOf[ref],
+                                std::span<const gc_node_ref_t>(&source, 1));
+                            copied[ref] = true;
+                            ++copiedKinds;
+                        } else {
+                        }
                         break;
                     }
                     const gc_node_ref_t valueMember = memberHalf(copyOf[tuple]);
@@ -1919,6 +2214,51 @@ bool liftGraph(
                     break;
                 }
                 copyOf[ref] = draft.addBrchNode(Type::Int64(), at->second, body->armCount);
+                copied[ref] = true;
+                ++copiedKinds;
+                break;
+            }
+            case NodeCase::Gate: {
+                // A gate forwards its **first** input and carries an order for the rest (a gate's
+                // trailing inputs are waits, not uses: `camel/runtime/graph.h`). Copied as a gate
+                // with the same order in the same kind it was written in, because the order is the
+                // gate: a wait left behind would stop a statement of the body from running, and one
+                // re-added from outside the body would run a statement where nobody wrote it. The
+                // three kinds a gate's order is written in are the three read here
+                // (`src/kernel/facts/facts.cpp`, "GATE node without a wait"): its control inputs,
+                // its sync predecessors, and the values it hands on beside the value itself -- a
+                // region's exit gate reads what the region wrote after the value it hands out.
+                // The value it forwards is the copy of what it forwarded, and its type is that
+                // value's lifted shape: a state tuple with a paired member (`mixedMemberTypeOf`) is
+                // what a loop's body exit gate carries.
+                const gc_node_ref_t forwarded = valueBehindGates(function, ref);
+                if (forwarded == rt::kInvalidNodeRef || forwarded >= function.nodeCount() ||
+                    !copied[forwarded]) {
+                    complete = false;
+                    break;
+                }
+                Type *gateType = node->dataType();
+                // A gate hands on the value the body wrote, so its type is that value's lifted
+                // shape, read in the order the law reads it: a value with a tangent space is
+                // `(value, tangent)` as a whole (`pairOf` -- what a loop's one state becomes), a
+                // tuple with no space whose members are mixed lifts member by member
+                // (`mixedMemberTypeOf`), and a value the law does not answer for is carried as it
+                // is. Asking the pair first is what the lift does everywhere else: a struct of
+                // floats pairs as one value, and lifting it member by member would give the same
+                // type by a different route -- the route that says "one component per member" when
+                // the loop says "one state".
+                if (TupleType *gatePairType = pairOf(gateType); gatePairType != nullptr) {
+                    gateType = gatePairType;
+                } else if (
+                    Type *mixedGateType = mixedMemberTypeOf(gateType); mixedGateType != nullptr) {
+                    gateType = mixedGateType;
+                }
+                const gc_node_ref_t gate = addCopiedGate(ref, gateType, copyOf[forwarded]);
+                if (gate == rt::kInvalidNodeRef) {
+                    complete = false;
+                    break;
+                }
+                copyOf[ref] = gate;
                 copied[ref] = true;
                 ++copiedKinds;
                 break;
@@ -2195,6 +2535,32 @@ bool liftGraph(
                         : nullptr;
                 if (calleeType == nullptr) {
                     return fail(refusal);
+                }
+                // A callee whose answer has no tangent space is copied as it stands, the same
+                // reading the pre-pass takes for the same reason: the call's contribution to the
+                // derivative is nothing, and the value it answers is what the body reads. The
+                // arguments are the with-inputs after the callee (`(int, int..) => (int, int..)?`,
+                // the loop's `next`), copied as values; a pair never reaches them, because nothing
+                // here moves.
+                if (!camel::core::tangentSpaceOf(calleeType->exitType()).hasSpace()) {
+                    std::vector<gc_node_ref_t> callArguments;
+                    for (gc_node_ref_t input : function.withInputsOf(ref)) {
+                        if (input >= function.nodeCount() || !copied[input]) {
+                            return fail(refusal);
+                        }
+                        callArguments.push_back(copyOf[input]);
+                    }
+                    const gc_node_ref_t made = draft.addCallNode(node->dataType());
+                    if (!callArguments.empty()) {
+                        draft.setNormInputs(made, callArguments);
+                    }
+                    std::vector<gc_node_ref_t> callCarries;
+                    callCarries.push_back(copyOf[calleeValue]);
+                    draft.setWithInputs(made, callCarries);
+                    copyOf[ref] = made;
+                    copied[ref] = true;
+                    ++copiedKinds;
+                    break;
                 }
                 FunctionType *jvpType = liftedOperatorType(calleeType);
                 if (jvpType == nullptr) {
@@ -2686,16 +3052,30 @@ bool liftGraph(
                         break;
                     }
                 }
+                // An arm's result is the pair when its type has a tangent space and the value alone
+                // when it does not: an arm of a loop's condition answers the condition (a `bool`),
+                // and a branch whose arms answer a value with no space has no tangent to join --
+                // refusing it refused every loop over a range, whose condition is a region of the
+                // function's own graph. The Join's type is decided the same way, from `pairOf`
+                // (`liftedJoin`, made before the walk), so the two cannot disagree.
+                const bool armHasSpace =
+                    arm != nullptr && arm->result != rt::kInvalidNodeRef &&
+                    camel::core::tangentSpaceOf(valueTypeOf(arm->result)).hasSpace();
                 if (arm == nullptr || arm->result == rt::kInvalidNodeRef || !copied[arm->result] ||
-                    tangentOf[arm->result] == rt::kInvalidNodeRef) {
+                    (armHasSpace && tangentOf[arm->result] == rt::kInvalidNodeRef)) {
+                    if (arm != nullptr && arm->result != rt::kInvalidNodeRef) {
+                        const rt::GCNode *rn = nodeOf(function, arm->result);
+                    } else {
+                    }
                     complete = false;
                     break;
                 }
                 draft.setInsertRegion(liftedRegion[armRegion]);
-                const gc_node_ref_t pair = liftedPair(
-                    valueTypeOf(arm->result),
-                    copyOf[arm->result],
-                    tangentOf[arm->result]);
+                const gc_node_ref_t pair = armHasSpace ? liftedPair(
+                                                             valueTypeOf(arm->result),
+                                                             copyOf[arm->result],
+                                                             tangentOf[arm->result])
+                                                       : copyOf[arm->result];
                 draft.setRegionOwner(liftedRegion[armRegion], brch, static_cast<uint32_t>(k));
                 draft.setRegionResult(liftedRegion[armRegion], pair);
                 draft.setInsertRegion(0);
@@ -2789,10 +3169,22 @@ bool liftGraph(
                     // nothing else, so its body's result *is* the value: the exit becomes the pair
                     // of it and its tangent, which is the path this lift has always taken.
                     if (tangentOf[exit] == rt::kInvalidNodeRef) {
-                        complete = false;
-                        break;
+                        // A state whose type has **no tangent space** -- the loop over a range
+                        // keeps its iterator in the state -- has no pair: its lifted value is the
+                        // value, which is what the loop node's own value type already says
+                        // (`liftedLoopValueType`, read in the walk). Without this the body's exit
+                        // has no tangent to pair it with and the whole loop was refused, which is
+                        // how a range loop's `jvp` gave no answer at all.
+                        if (valueTypeOf(exit) != nullptr &&
+                            !camel::core::tangentSpaceOf(valueTypeOf(exit)).hasSpace()) {
+                            newState = copyOf[exit];
+                        } else {
+                            complete = false;
+                            break;
+                        }
+                    } else {
+                        newState = liftedPair(valueTypeOf(exit), copyOf[exit], tangentOf[exit]);
                     }
-                    newState = liftedPair(valueTypeOf(exit), copyOf[exit], tangentOf[exit]);
                 } else {
                     // More than one state, or a tape: the body yields `Tuple(next state…, value per
                     // collection slot)`, the state part is lifted component by component and the
@@ -3000,28 +3392,13 @@ bool liftGraph(
                 exitShape.type != nullptr
                     ? exitShape.type
                     : (exitPair != nullptr ? static_cast<Type *>(exitPair) : valueTypeOf(oldValue));
-            const gc_node_ref_t gate =
-                draft.addGateNode(gateType, draft.allocateRuntimeSlot(gateType));
-            // The waits are the gate's **trailing ordinary inputs** -- a gate's trailing input is a
-            // wait rather than a use -- so the lifted gate carries the same list after the pair it
-            // forwards, as ordinary inputs and not as sync edges. A wait that was not copied is not
-            // re-added: the lift copies every node of the body, so this is a wait outside it and
-            // naming it here would move a statement from another graph.
-            std::vector<gc_node_ref_t> gateInputs;
-            gateInputs.push_back(out);
-            for (gc_node_ref_t wait : gateWaitsOf(function, originalExit)) {
-                if (wait < function.nodeCount() && copied[wait]) {
-                    gateInputs.push_back(copyOf[wait]);
-                }
-            }
-            draft.setNormInputs(
-                gate,
-                std::span<const gc_node_ref_t>(gateInputs.data(), gateInputs.size()));
-            for (const camel::graph::NodeRef edge :
-                 function.view().predecessors(originalExit, camel::graph::EdgeKind::Sync)) {
-                if (edge < function.nodeCount() && copied[edge]) {
-                    (void)draft.appendChainStatement(gate, copyOf[edge]);
-                }
+            // The same order the original exit gate carried, in the same kinds (`copyGateOrder`).
+            // Its waits are what keeps a `sync` block's effect -- a print among them -- from being
+            // dropped as an effect whose result nobody reads; an order that could not be copied is
+            // a body this lift will not run in an order nobody wrote.
+            const gc_node_ref_t gate = addCopiedGate(originalExit, gateType, out);
+            if (gate == rt::kInvalidNodeRef) {
+                return fail(refusal);
             }
             exit = gate;
         }
