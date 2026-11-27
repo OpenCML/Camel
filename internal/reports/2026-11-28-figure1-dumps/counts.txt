@@ -1,0 +1,150 @@
+```
+Figure 1 原图逐节点核对 —— 原文与事实，不含摘要、不含"大约/基本"
+tree:    lane/opt-inline @ 4fc2dcd735d8d7ba7dd0ad409faba0d858104c02（是否已合进 integration：未合；integration 当时 tip 89cfe650f5）
+binary:  out/latest，build-info.json 载 revision 4fc2dcd735…、dirty false、builtAt 2026-11-27T20:26:04.457Z（= 2026-11-28T04:26:04+08:00）
+program: 仓库外 /home/zjwei/fig1/fig1.cml（本地副本 D:\Projects\Camel-scratch\fig1\fig1.cml）
+    func inc(x: int) => int { return x + 1 }
+    func f(x: int) => int { return inc(x) * 3 + (x + 1) * 4 }
+    func main() => int sync { println(f(2)); return 0 }
+```
+
+# 0. 四颗 dump 是怎样取的
+
+四条命令，四次独立运行（同一二进制），`std::gir` 原文分别落在 `b0.dot`（无遍）/ `g1.dot`（①）/ `g2.dot`（②）/ `g3.dot`（③，`a0.dot` 复跑一次，与 `g3.dot` `cmp` 相同）：
+
+```
+无遍  camel fig1.cml std::gir std::nop                                          -> b0.dot  59 行
+①     camel fig1.cml opt::inline std::gir std::nop                              -> g1.dot  78 行
+②     camel fig1.cml opt::inline opt::cse std::gir std::nop                     -> g2.dot  70 行
+③     camel fig1.cml opt::inline opt::cse opt::algebra std::gir std::nop        -> g3.dot  56 行
+      camel fig1.cml std::cxx::inline opt::cse opt::algebra std::gir std::nop   -> g4.dot  56 行；cmp g3.dot g4.dot => 0 (IDENTICAL)
+```
+
+本目录四份切片的来源：`01-f-before.dot` = `b0.dot` 第 4–40 行（`subgraph cluster_F02`），`02-f-after.dot` = `a0.dot` 第 4–31 行，`03-inc.dot` = `a0.dot` 第 6–17 行（`cluster_F03`），`04-main.dot` = `a0.dot` 第 2–50 行（`cluster_F01`）。四份文件除开头 `//` 注释外**逐字符等于**上述行段（已用同一套切分代码反过来比对，结果 True/True/True/True）；`03-inc.dot` 的这 12 行在 `b0.dot` 里也逐字符相同。
+
+下面的点数是把 DOT 按 `subgraph cluster_Fxx` 嵌套切分后逐行数的：节点行 = `^\s*(N…|F…|O…) \[`，边行 = `^\s*A -> B \[`。
+
+# ① 19 / 28 / 24 / 18 到底数的是什么
+
+同一次 `std::stats` 的原文（四条命令各自一行，`std::stats std::nop`）：
+
+```
+无遍  GRAPH_STATS {"graphs":4,"nodes":19,"edges":16,"opers":6,"direct_calls":2,"indirect_calls":1,"closures":0,"branches":0,"loops":0,"bytes":716,"specializations":0,"cycle_dropped_sessions":0,"graph_names":["__root__","main","inc","f"],"macro":[false,false,false,false]}
+①     GRAPH_STATS {"graphs":4,"nodes":28,"edges":26,"opers":12,"direct_calls":0,"indirect_calls":1,"closures":0,"branches":0,"loops":0,"bytes":1088,"specializations":0,"cycle_dropped_sessions":0,"graph_names":["__root__","main","inc","f"],"macro":[false,false,false,false]}
+②     GRAPH_STATS {"graphs":4,"nodes":24,"edges":22,"opers":10,"direct_calls":0,"indirect_calls":1,"closures":0,"branches":0,"loops":0,"bytes":928,"specializations":0,"cycle_dropped_sessions":0,"graph_names":["__root__","main","inc","f"],"macro":[false,false,false,false]}
+③     GRAPH_STATS {"graphs":4,"nodes":18,"edges":14,"opers":6,"direct_calls":0,"indirect_calls":1,"closures":0,"branches":0,"loops":0,"bytes":664,"specializations":0,"cycle_dropped_sessions":0,"graph_names":["__root__","main","inc","f"],"macro":[false,false,false,false]}
+```
+
+按图逐个数 `Nxx` 行（同一批 dump）：
+
+```
+step        __root__   main    f     inc    合计 N 节点
+无遍           2        5      9      3        19
+① opt::inline  2       13     10      3        28
+② +opt::cse    2       11      8      3        24
+③ +opt::algebra 2       8      5      3        18
+```
+
+**结论（一句）**：`GRAPH_STATS.nodes` 数的是 **全程序四张图里所有带 `Nxx` 编号的节点之和**（`PORT`/`DATA`/`OPER`/`FUNC`/`CALL`/`GATE` 都算），**不是**某一图，也**不含** `ARGS`/`EXIT` 那两种记账行。
+
+对上号的依据（同一批 dump 直接数）：`b0.dot` 一共 25 行节点行 = 19 行 `Nxx` + 6 行 `Fxx`/`Oxx`（`F03 O03 F02 O02 O01 O00`），`std::stats` 报 `nodes=19`；`a0.dot`（③）一共 24 行 = 18 行 `Nxx` + 同样 6 行，`std::stats` 报 `nodes=18`。`"graphs":4` 与 `graph_names:["__root__","main","inc","f"]` 也一致：四张图分别是 root、main、f、inc。
+
+# ② 按图逐个列节点数与节点种类（四步各一张）
+
+```
+无遍 (b0.dot)
+  __root__  N=2   DATA 1  CALL 1
+  main      N=5   DATA 2  FUNC 1  GATE 1  OPER 1
+  f         N=9   DATA 3  FUNC 1  OPER 4  PORT 1
+  inc       N=3   DATA 1  OPER 1  PORT 1
+  合计      N=19  另 ARGS/EXIT 行 6
+
+① opt::inline (g1.dot)
+  __root__  N=2   DATA 1  CALL 1
+  main      N=13  DATA 6  GATE 1  OPER 6
+  f         N=10  DATA 4  OPER 5  PORT 1
+  inc       N=3   DATA 1  OPER 1  PORT 1
+  合计      N=28  另 ARGS/EXIT 行 6
+
+② opt::inline opt::cse (g2.dot)
+  __root__  N=2   DATA 1  CALL 1
+  main      N=11  DATA 5  GATE 1  OPER 5
+  f         N=8   DATA 3  OPER 4  PORT 1
+  inc       N=3   DATA 1  OPER 1  PORT 1
+  合计      N=24  另 ARGS/EXIT 行 6
+
+③ opt::inline opt::cse opt::algebra (a0.dot)
+  __root__  N=2   DATA 1  CALL 1
+  main      N=8   DATA 4  GATE 1  OPER 3
+  f         N=5   DATA 2  OPER 2  PORT 1
+  inc       N=3   DATA 1  OPER 1  PORT 1
+  合计      N=18  另 ARGS/EXIT 行 6
+```
+
+`__root__` 那两行是 `Function(graph=main, tupleSlots=0)` 的 DATA 行 + `CALL` 行（无遍那份里它们是 `N11`/`N12`，③ 那份里是 `N10`/`N11`——**每份 dump 的节点 id 各自重新编号，同一 id 在不同步不是同一个节点**），四步都是 2 个不变。`GATE` 在 `main` 里，四步都在。
+
+# ③ `add_l` 的 7 与 5 分别落在哪些图里（逐个点名）
+
+```
+① （合计 7）
+  main  x3   N14, N17, N19
+  f     x3   N07, N0A, N0C
+  inc   x1   N02
+
+② （合计 5）
+  main  x2   N12, N15
+  f     x2   N07, N0A
+  inc   x1   N02
+```
+
+参照（同样口径，逐个点名）：
+```
+无遍 （合计 3）  f x2 (N08, N0B) + inc x1 (N02)；main 里 0 个（main 对 f 的调用是 FUNC 节点，未被内联）
+③    （合计 3）  main x1 (N0D) + f x1 (N05) + inc x1 (N02)
+```
+
+`7→5` 少掉的两个，一个在 `main` 里（3→2），一个在 `f` 里（3→2）：`cse` 把"两份 `(x+1)` 各算一次"改成"一份 `(x+1)` 被两处读"，`main` 与 `f` 各少一个 `add_l`。**跨步不要比节点 id**——每份 dump 的 id 各自重新编号；跨步可比的是每图计数，以及 `label`/`span`/`origin` 属性。`inc` 自己那一个 `add_l`（③ 那份里是 `N02`）四步都在，因为 `inc` 的图没被任何一趟动过（见 `03-inc.dot` 头注：`b0.dot` 与 `a0.dot` 里的它逐字符相同）。
+
+# ④ ② 里 `f` 有没有没人读的死节点（没跑 dce）
+
+**没有。** 依据是 `f` 八个 `Nxx` 节点的出边，逐个列出（`g2.dot` 原文的边行）：
+
+```
+N03 (x, PORT)   -> N07 [0|0]
+N04 (3, DATA)   -> N05 [0|1]
+N05 (mul_l)     -> N0A [0|0]
+N06 (1, DATA)   -> N07 [0|1]
+N07 (add_l)     -> N05 [0|0] , N09 [1|0]     <- (x+1) 被读两次，就是 cse 合并出来的那一份
+N08 (4, DATA)   -> N09 [0|1]
+N09 (mul_l)     -> N0A [0|1]
+N0A (add_l)     -> O02 [0, EXIT]
+F02 (ARGS)      -> N03 [0, NORM_PORT]
+```
+
+八点个个有出边；末点是 `f` 的 `EXIT`，所以 `f` 里没有"没人读"的悬空节点。同一口径扫四步所有图（不止 `f`）：无遍 / ① / ② / ③ 的死节点数都是 **0**。`f` 里唯一"被读两次"的是 `N07`，它是共享而不是死——`dce` 若跑，删的也是重复的另一份，而 ② 里已经没有那一份了。
+
+# 与论文"前 10 个、后 6 个"的对照（只摆数，不做圆场）
+
+同一份程序、四个计数单位，`f` 与 `main` 的读数：
+
+```
+                 f:N节点   f:本图边数   f:含ARGS/EXIT   main:N节点   全程序:N节点   dump行数
+无遍                9          11           11              5            19          59
+① opt::inline      10          12           12             13            28          78
+② +opt::cse         8          10           10             11            24          70
+③ +opt::algebra     5           6            7              8            18          56
+```
+
+- 今天 `f` 的节点数是 **9（无遍）→ 10（①）→ 8（②）→ 5（③）**；论文那张图画的是"前 10 个、后 6 个"。
+- "10" 在这张表里只出现一次：`f` 在 **① 一步之后**（`opt::inline` 单独跑完、`cse`/`algebra` 之前），此时全程序是 28 个节点。
+- "6" 在 `f` 的 N 节点列里**任何一步都没有**；`f` 的本图边数在 ③ 恰好是 6，② 是 10——这是巧合性的两处相同数字，写成观察，不作为解释。
+- 因此两种可能读数是能分开的：(a) 若论文的数与今天同一单位，则它对应的不是"无遍 vs 三步之后"这两个端点（两点是 9 与 5）；(b) 若论文数的范围不是 `f` 这一张图（例如含 `main` 或含 `ARGS`/`EXIT`），表里 11/12/10/7 与 5/13/11/8 都不是 10/6。两种情况都只由上面这份原文判断，本文件不给结论。
+
+# 文件清单
+
+```
+01-f-before.dot   `f` 的图，无遍（`subgraph cluster_F02` 原文，内嵌 callee `inc` 保留原位）
+02-f-after.dot    `f` 的图，③ 之后（同上切法）
+03-inc.dot        `inc` 的图，③ 那份 dump 里（`cluster_F03`；与无遍那份逐字符相同）
+04-main.dot       `main` 的图，③ 那份 dump 里（`cluster_F01`；emitter 把 callee 图嵌在调用者里，所以这段原文里还含 `cluster_F02`、`cluster_F03`，main 自身的 8 个 N 节点是 N08 N0C N0D N0E N0F N09 N0A N0B）
+```

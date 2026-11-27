@@ -1,0 +1,61 @@
+// 04-main.dot -- the graph of `main`, from the same dump as 02-f-after.dot.
+// command:     camel fig1.cml opt::inline opt::cse opt::algebra std::gir std::nop
+// source dump: a0.dot; this file is lines 2..50 of it, verbatim
+//              (`subgraph cluster_F01 { label="main" }`).
+// tree:        lane/opt-inline @ 4fc2dcd735d8d7ba7dd0ad409faba0d858104c02
+// binary:      built 2026-11-28T04:22:21+08:00
+//
+// The slice carries the callee graphs nested inside the caller, as `std::gir` emits them:
+// cluster_F02 (label="f", 5 N nodes) and cluster_F03 (label="inc", 3 N nodes) are inside this
+// text. `main`s own N nodes are the 8 ids N08 N0C N0D N0E N0F N09 N0A N0B
+// (2 -> (+)1 -> (*)7 -> :io/println, plus GATE). 8 + 5 + 3 = 16 N nodes in the slice;
+// the other 2 of the program`s 18 are the root (`__root__`, outside every cluster).
+    subgraph cluster_F01 {
+        label="main";
+        subgraph cluster_F02 {
+            label="f";
+            subgraph cluster_F03 {
+                label="inc";
+                F03 [label="ARGS", type="ARGS"];
+                O03 [label="EXIT", type="EXIT"];
+                N00 [label="x", type="PORT", param_name="x", param_kind="normal", param_index="0", value_type="int", origin=5, span="0:9-0:15", srcfile="fig1.cml"];
+                N01 [label="1", type="DATA", origin=8364, span="0:37-0:38", srcfile="fig1.cml", value_type="int"];
+                N02 [label=":op/add_l", type="OPER", origin=8365, span="0:35-0:36", srcfile="fig1.cml", value_type="int"];
+                F03 -> N00 [label="0", type="NORM_PORT"];
+                N02 -> O03 [label="0", type="EXIT"];
+                N00 -> N02 [label="0|0", type="NORM"];
+                N01 -> N02 [label="0|1", type="NORM"];
+            }
+            F02 [label="ARGS", type="ARGS"];
+            O02 [label="EXIT", type="EXIT"];
+            N03 [label="x", type="PORT", param_name="x", param_kind="normal", param_index="0", value_type="int", origin=23, span="1:7-1:13", srcfile="fig1.cml"];
+            N04 [label="1", type="DATA", origin=8375, span="1:49-1:50", srcfile="fig1.cml", value_type="int"];
+            N05 [label=":op/add_l", type="OPER", origin=8376, span="1:47-1:48", srcfile="fig1.cml", value_type="int"];
+            N06 [label="7", type="DATA", value_type="int"];
+            N07 [label=":op/mul_l", type="OPER", origin=8379, span="1:42-1:43", srcfile="fig1.cml", value_type="int"];
+            F02 -> N03 [label="0", type="NORM_PORT"];
+            N07 -> O02 [label="0", type="EXIT"];
+            N03 -> N05 [label="0|0", type="NORM"];
+            N04 -> N05 [label="0|1", type="NORM"];
+            N05 -> N07 [label="0|0", type="NORM"];
+            N06 -> N07 [label="0|1", type="NORM"];
+        }
+        O01 [label="EXIT", type="EXIT"];
+        N08 [label="2", type="DATA", origin=8383, span="2:36-2:37", srcfile="fig1.cml", value_type="int"];
+        N09 [label=":io/println", type="OPER", origin=8385, span="2:26-2:33", srcfile="fig1.cml", value_type="int"];
+        N0A [label="0", type="DATA", origin=8386, span="2:48-2:49", srcfile="fig1.cml", value_type="int"];
+        N0B [label="GATE", type="GATE", value_type="int"];
+        N0C [label="1", type="DATA", origin=8375, span="1:49-1:50", srcfile="fig1.cml", value_type="int"];
+        N0D [label=":op/add_l", type="OPER", origin=8376, span="1:47-1:48", srcfile="fig1.cml", value_type="int"];
+        N0E [label="7", type="DATA", value_type="int"];
+        N0F [label=":op/mul_l", type="OPER", origin=8379, span="1:42-1:43", srcfile="fig1.cml", value_type="int"];
+        N0B -> O01 [label="0", type="EXIT"];
+        N0F -> N09 [label="0|0", type="NORM"];
+        N0A -> N0B [label="0|0", type="NORM"];
+        N09 -> N0B [label="0|0", type="CTRL"];
+        N09 -> N0B [label="SYNC", type="SYNC"];
+        N08 -> N0D [label="0|0", type="NORM"];
+        N0C -> N0D [label="0|1", type="NORM"];
+        N0D -> N0F [label="0|0", type="NORM"];
+        N0E -> N0F [label="0|1", type="NORM"];
+    }

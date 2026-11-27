@@ -1,0 +1,37 @@
+// 02-f-after.dot -- the graph of `f`, after opt::inline opt::cse opt::algebra.
+// command:     camel fig1.cml opt::inline opt::cse opt::algebra std::gir std::nop
+// source dump: a0.dot (56 lines, byte-identical to the dump taken for the report); this file is lines 4..31 of it, verbatim.
+// tree:        lane/opt-inline @ 4fc2dcd735d8d7ba7dd0ad409faba0d858104c02
+// binary:      built 2026-11-28T04:22:21+08:00
+//
+// The slice IS `subgraph cluster_F02 { label="f" }`; the block nested inside it
+// (cluster_F03, label="inc") is the callee graph, kept in place as emitted. `f`s own N nodes
+// are the 5 ids N03 N04 N05 N06 N07: PORT x -> (+)1 -> (*)7.
+        subgraph cluster_F02 {
+            label="f";
+            subgraph cluster_F03 {
+                label="inc";
+                F03 [label="ARGS", type="ARGS"];
+                O03 [label="EXIT", type="EXIT"];
+                N00 [label="x", type="PORT", param_name="x", param_kind="normal", param_index="0", value_type="int", origin=5, span="0:9-0:15", srcfile="fig1.cml"];
+                N01 [label="1", type="DATA", origin=8364, span="0:37-0:38", srcfile="fig1.cml", value_type="int"];
+                N02 [label=":op/add_l", type="OPER", origin=8365, span="0:35-0:36", srcfile="fig1.cml", value_type="int"];
+                F03 -> N00 [label="0", type="NORM_PORT"];
+                N02 -> O03 [label="0", type="EXIT"];
+                N00 -> N02 [label="0|0", type="NORM"];
+                N01 -> N02 [label="0|1", type="NORM"];
+            }
+            F02 [label="ARGS", type="ARGS"];
+            O02 [label="EXIT", type="EXIT"];
+            N03 [label="x", type="PORT", param_name="x", param_kind="normal", param_index="0", value_type="int", origin=23, span="1:7-1:13", srcfile="fig1.cml"];
+            N04 [label="1", type="DATA", origin=8375, span="1:49-1:50", srcfile="fig1.cml", value_type="int"];
+            N05 [label=":op/add_l", type="OPER", origin=8376, span="1:47-1:48", srcfile="fig1.cml", value_type="int"];
+            N06 [label="7", type="DATA", value_type="int"];
+            N07 [label=":op/mul_l", type="OPER", origin=8379, span="1:42-1:43", srcfile="fig1.cml", value_type="int"];
+            F02 -> N03 [label="0", type="NORM_PORT"];
+            N07 -> O02 [label="0", type="EXIT"];
+            N03 -> N05 [label="0|0", type="NORM"];
+            N04 -> N05 [label="0|1", type="NORM"];
+            N05 -> N07 [label="0|0", type="NORM"];
+            N06 -> N07 [label="0|1", type="NORM"];
+        }
