@@ -122,7 +122,7 @@ timeout_ms = 20000
 
 [[tests]]
 name = "loops.zero_leaf_state.dump"
-desc = "On the graph the zero-leaf state stays the loop's one state, not a list of components: the state the head declares is the empty struct '{  }', and its value enters the named type `Nothing` by a CAST, so what the program sees is still a zero-leaf struct of the type it declared. A `for` over a range also carries the stream's cursor and its end beside that state -- that is the loop's own state, not the program's (design principles 5.4) -- so the entry this reads is the user's state, the last component of the tuple."
+desc = "On the graph the zero-leaf state stays the loop's one state, not a list of components: the state the head declares is the empty struct '{  }', and its value enters the named type `Nothing` by the conversion node `:op/enter`, so what the program sees is still a zero-leaf struct of the type it declared. A `for` over a range also carries the stream's cursor and its end beside that state -- that is the loop's own state, not the program's (design principles 5.4) -- so the entry this reads is the user's state, the last component of the tuple."
 kind = "behavior"
 case = "../../../cases/loops/zero_leaf_state.cml"
 args = ["${case}", "std::gir", "std::nop"]
@@ -145,7 +145,10 @@ const userState = (l) => {
     return t.split(', ').pop() === '{  }'
 }
 assert(loops.every((l) => userState(l)), 'a zero-leaf loop state is not the empty struct: ' + loops.join(' | '))
-assert(lines.some((l) => l.includes('label=":op/cast"') && l.includes('value_type="Nothing"')), 'the empty struct does not enter the named type: ' + input.normalized.stdout)
+// The state enters the named type by a conversion node, and that node is `:op/enter` (it was
+// `:op/cast` when this case was written): the entry of a region, `type="OPER"`, holding the
+// empty struct it enters with. Same claim, the name the graph gives it today.
+assert(lines.some((l) => l.includes('label=":op/enter"') && l.includes('value_type="Nothing"')), 'the empty struct does not enter the named type: ' + input.normalized.stdout)
 }
 """
 timeout_ms = 20000
