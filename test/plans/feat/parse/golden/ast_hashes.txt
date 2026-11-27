@@ -525,13 +525,8 @@ cb32c9dd5cb81d91 ok src/stdlib/io.cml
 781c6adf9b64b7fe ok src/stdlib/laws.cml
 ff9eee9cbc6a4008 ok src/stdlib/math.cml
 4bd3189fe34a101a ok src/stdlib/nn.cml
-2f99ae94bcec8605 ok src/stdlib/onnx.cml
-ab449b7d874527d9 ok src/stdlib/opt.cml
-||||||| e6639c4f6b (Merge seat/golden3: the AST record follows the onnx batch - eleven rows, six moved, one added, four gone)
-7894f59b36eee8c4 ok src/stdlib/onnx.cml
-93780c4e22a23893 ok src/stdlib/opt.cml
 109cb1c3af0c4f8a ok src/stdlib/onnx.cml
-93780c4e22a23893 ok src/stdlib/opt.cml
+ab449b7d874527d9 ok src/stdlib/opt.cml
 49015cbc4407a506 ok src/stdlib/optim.cml
 cfd1905583789732 ok src/stdlib/para.cml
 a82098797df46210 ok src/stdlib/perf.cml
@@ -3459,7 +3454,6 @@ f5172da767d096fc ok test/cases/modules/onnx/refusals/var_param.cml
 2f6bcede98d28643 ok test/cases/modules/onnx/with_forms/all_defaults.cml
 b8215af40abfa3c3 ok test/cases/modules/onnx/with_forms/only_target.cml
 561c059176dbe9fd ok test/cases/modules/onnx/with_forms/with_dynamic_axes.cml
-||||||| e6639c4f6b (Merge seat/golden3: the AST record follows the onnx batch - eleven rows, six moved, one added, four gone)
 1f49552b5adfd209 ok test/cases/modules/optim/agreement.cml
 9a03c38846aedd82 ok test/cases/modules/optim/derived_typeof.cml
 927412d31ff00040 ok test/cases/modules/optim/dtype_exact.cml
