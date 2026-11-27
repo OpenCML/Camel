@@ -1,0 +1,16 @@
+/**
+ * A pass of the `opt` module called from a program, through the module's own name:
+ * `import opt` puts the module's name in scope, and `loss->opt::cse` is the qualified spelling
+ * the reference uses. The result is the same graph the pass built, and `12.0` is what it computes.
+ */
+
+import opt
+
+with <w: float>
+func loss(x: float) => float { w*x + w*x }
+
+func main() => int sync {
+    let g = loss->opt::cse !! loss
+    println(g<2.0>(3.0))
+    return 0
+}
