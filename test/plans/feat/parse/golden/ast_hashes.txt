@@ -747,7 +747,6 @@ babc83e483d876ff ok test/cases/compile/constas/constas_forward.cml
 643664f1a35decdd ok test/cases/compile/constas/constas_forward_field.cml
 e424cb32feace134 ok test/cases/compile/constas/constas_forward_rest.cml
 dec31d5bd08d5ac2 ok test/cases/compile/constas/constas_missing_argument.cml
-02a75d96c618059d ok test/cases/compile/constas/constas_native.cml
 81becfeeb8a301c8 ok test/cases/compile/constas/constas_no_type.cml
 392ea15392975f76 ok test/cases/compile/constas/constas_not_first.cml
 91e54e6a667e045f ok test/cases/compile/constas/constas_param.cml
