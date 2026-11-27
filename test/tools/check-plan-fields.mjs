@@ -214,6 +214,10 @@ const ALWAYS_EVALUATED = [
     'verify_js',
     'verify_script_path',
     'normalizers',
+    // Read for every entry, whatever its kind: `expandBackends` carries it into the run's own test
+    // object and the re-run block is the only reader. An entry that wrote it and had it reported as
+    // unread would be the one shape this table exists to catch, so it is listed here.
+    'flaky',
 ]
 
 // The three blocks `validateTest` gates on the kind, and the fields each one reads. Written as
@@ -510,6 +514,21 @@ function scanTree(rootDir) {
                     } else {
                         waitsOn.push({ name: shape.text, file: relative, line, entry: entry.name })
                     }
+                }
+            }
+            // `flaky` makes a first failure not count, so it has to say why the case is intermittent
+            // and which row owns it; a run cannot check either, and an entry that writes the field
+            // with nothing behind it is a red excused by an empty sentence. The runner refuses the
+            // same value where the plan is loaded -- this reports it before a run, because a plan
+            // that cannot load takes its other entries out of service too.
+            if (entry.flaky !== undefined) {
+                const text = typeof entry.flaky === 'string' ? entry.flaky.trim() : ''
+                if (text.length === 0) {
+                    add(
+                        'flaky-without-reason',
+                        'flaky',
+                        `the value is ${JSON.stringify(entry.flaky)}: flaky must be a non-empty string saying why this case is intermittent, which row owns it, and that the field goes when the defect does`,
+                    )
                 }
             }
         }

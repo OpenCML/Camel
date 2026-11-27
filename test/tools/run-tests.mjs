@@ -96,6 +96,7 @@ const TEST_FIELDS = new Set([
     'cuda_free_device',
     'known_fail', 'known_fail_owner', 'known_fail_reason', 'known_fail_note', 'known_fail_msg',
     'known_fail_ends_when',
+    'flaky',
     'failure_note',
     'silenced_warnings',
     'backends', 'backends_agree', 'compare_to', 'compare_fields',
@@ -238,6 +239,38 @@ function checkDiagnosticFileField(planPath, entry, where) {
             : JSON.stringify(value)
     throw new PlanSchemaError(
         `${planLabel(planPath)}: ${where}: expect_diagnostic_file must be a string naming one file, got ${shown}`,
+    )
+}
+
+/**
+ * `flaky = "<why it is intermittent and which row owns it>"`, or absent.
+ *
+ * The field says one thing a `known_fail` mark cannot: this case is not always red. A failing
+ * attempt is re-run once, and only a second failure counts -- so an entry that carries it must say
+ * in the same breath why it is intermittent and where that is recorded, because the run's reading
+ * (`[FLAKY]`, and the roster of names that passed only on the second attempt) is otherwise a green
+ * nobody can follow up. An empty string is refused rather than read as "no reason": it would give
+ * the run a mark with nothing behind it, which is the shape this repository has spent several pages
+ * removing from `known_fail`.
+ *
+ * The text carries the exit condition too -- a flaky field is deleted on the day the defect it
+ * names is fixed -- because that is the one thing a run cannot check for the author.
+ */
+function checkFlakyField(planPath, entry, inherited, where) {
+    // `inherited` is null for `[defaults]` itself, and `inherited && inherited.flaky` would then read
+    // as null rather than "not written" -- an absent field must stay absent, or every plan whose
+    // defaults table has no `flaky` is refused for writing one.
+    const value = entry.flaky !== undefined ? entry.flaky : inherited ? inherited.flaky : undefined
+    if (value === undefined) return
+    if (typeof value === 'string' && value.trim().length > 0) return
+    const shown = Array.isArray(value)
+        ? `${JSON.stringify(value)}: a list of reasons is not a reason`
+        : typeof value === 'string'
+            ? `${JSON.stringify(value)}: an empty string says nothing about why the case is flaky`
+            : JSON.stringify(value)
+    throw new PlanSchemaError(
+        `${planLabel(planPath)}: ${where}: flaky must be a non-empty string saying why this case is ` +
+            `intermittent and which row owns it (and that the field goes when the defect does), got ${shown}`,
     )
 }
 
@@ -530,6 +563,9 @@ function validatePlanSchema(doc, planPath) {
         // refuse it: the runner reads a plan once, here, and a promise checked later than this is
         // a promise kept by whoever remembered to look.
         checkKnownFailMark(planPath, entry, where === '[defaults]' ? null : doc.defaults, where)
+        // Same place and the same reason: a field that makes a failure not count has to be readable
+        // where the plan is read, or the run counts reds by a promise nobody validated.
+        checkFlakyField(planPath, entry, where === '[defaults]' ? null : doc.defaults, where)
         checkFieldType(planPath, entry, 'expect_stdout_exact', where, 'string')
         checkFieldType(planPath, entry, 'expect_stdout', where, 'string')
         // A pattern, or a list of them, every one of which has to find a line. The shape is typed
@@ -1651,6 +1687,11 @@ function rerunCandidate(entry, options) {
     const outcome = entry.outcome
     if (!outcome || outcome.status !== 'fail' || !outcome.result) return false
     if (entry.test.__knownFail) return false
+    // An entry that declares itself intermittent is re-run whatever its first failure looked like: a
+    // crash, an exit code, a line that did not appear. That is the whole claim `flaky` makes, and the
+    // second attempt is what decides it -- `[FLAKY]` only when that attempt passes, a red otherwise.
+    // A marked known failure keeps its own rule (`known_fail_ends_when`) and is not re-run.
+    if (entry.test.__flaky) return true
     return outcome.result.timedOut === true
 }
 
@@ -1681,14 +1722,18 @@ function formatLoad(load) {
 }
 
 /**
- * What a re-run case's one line says beyond its verdict: that the first attempt timed out, and what
- * the second attempt did with twice the bound. Both facts stay on the line, because the point of
+ * What a re-run case's one line says beyond its verdict: how the first attempt failed, and what the
+ * second attempt did with twice the bound. Both facts stay on the line, because the point of
  * the mechanism is that a green reached this way is not the same reading as a green reached first
  * time -- and a failure reached this way is not the same as one that never got a second look.
+ *
+ * The first attempt's shape is read off the result rather than assumed to be a timeout: a case that
+ * declares itself `flaky` is re-run after a crash, an exit code or a missing line too, and a line
+ * that called every first attempt a timeout would be the one reading this runner must never produce.
  */
-function rerunNote(status, result, load) {
-    const opening = 'timed out on the first pass'
-    if (status === 'pass') {
+function rerunNote(status, result, load, first) {
+    const opening = !first || first.timedOut === true ? 'timed out on the first pass' : 'failed on the first pass'
+    if (status === 'pass' || status === 'flaky') {
         return `${opening}, passed in ${formatDurationMs(result.wallMs)} on re-run (${formatLoad(load)})`
     }
     // The second attempt can end otherwise than by its bound, and each shape is said: a crash on
@@ -1722,7 +1767,11 @@ function printStatusLine(status, name, metric = '') {
             ? `${COLORS.yellow}[SKIP]${COLORS.reset}`
             : status === 'xfail'
                 ? `${COLORS.yellow}[XFAIL]${COLORS.reset}`
-                : `${COLORS.red}[FAIL]${COLORS.reset}`
+                : status === 'flaky'
+                    // Yellow, and a tag of its own: the case did not pass, and it is not red. A
+                    // reader who greps `[PASS]` does not see it, which is the point.
+                    ? `${COLORS.yellow}[FLAKY]${COLORS.reset}`
+                    : `${COLORS.red}[FAIL]${COLORS.reset}`
     const left = `${label} ${name}`
     if (!metric) {
         console.log(left)
@@ -2034,7 +2083,7 @@ function listedName(plan, test) {
  * two different sums.
  */
 function summaryTotal(summary) {
-    return summary.pass + summary.fail + summary.skip + summary.xfail
+    return summary.pass + summary.fail + summary.skip + summary.xfail + summary.flaky
 }
 
 /**
@@ -2066,6 +2115,10 @@ function printRunSummary(summary, transcript) {
     const total = summaryTotal(summary)
     const skipped = summary.skip > 0 ? `, skip: ${summary.skip}` : ''
     const known = summary.xfail > 0 ? `, known failures: ${summary.xfail}` : ''
+    // The cases that were green only on the second attempt: counted here and never folded into
+    // `pass`, because a promotion that cannot see them is a promotion reading a green it did not get
+    // first time. The roster under the summary names them, so the count is followable.
+    const flaky = summary.flaky > 0 ? `, flaky: ${summary.flaky}` : ''
     // The two ways a failing run ends without an exit code, counted apart. They are printed only
     // when one happened, so a green run's summary keeps its shape -- and a red one says which of
     // the two it was without the reader having to look at the individual failures.
@@ -2085,7 +2138,7 @@ function printRunSummary(summary, transcript) {
     console.log('')
     const line =
         `${COLORS.cyan}[SUMMARY]${COLORS.reset} total: ${total}, pass: ${summary.pass}, fail: ${summary.fail}` +
-        `${skipped}${known}${timedOut}${crashed}${rerun}${staleAllowedMark()}`
+        `${skipped}${known}${flaky}${timedOut}${crashed}${rerun}${staleAllowedMark()}`
     console.log(line)
     // The same line, without its colour, closes the transcript: the file then states the total its
     // own lines were counted under, so a reader of the file alone -- `transcript.mjs --check` -- can
@@ -2124,6 +2177,29 @@ function printKnownRoster(summary) {
         `${COLORS.cyan}[KNOWN]${COLORS.reset} ${missing} of ${rows.length} known failure(s) ` +
             'carry no known_fail_ends_when'
     )
+}
+
+/**
+ * The names that were green only on the second attempt, one line each, printed beside the known
+ * failures' roster.
+ *
+ * `flaky: 1` in the summary says a pass was not first-time and nothing about which case: the
+ * promotion has to be able to name the case, because the field's own exit condition is "delete it
+ * when the defect is fixed", and nobody deletes a field whose case they cannot find. The count and
+ * the roster are printed from the same list (`summary.flakyRows`), so they cannot disagree.
+ */
+function printFlakyRoster(summary) {
+    const rows = summary.flakyRows || []
+    if (rows.length === 0) return
+    // `[INFO]`, not `[FLAKY]`: this block is a roster under the run's numbers, and a second line
+    // starting with a status tag would be a second verdict for one case to every reader and every
+    // `^\[(PASS|FAIL|...)\]` check. The case's own verdict line, above the summary, carries the tag.
+    for (const name of rows) {
+        console.log(
+            `${COLORS.cyan}[INFO]${COLORS.reset} flaky: ${name} passed on the second attempt only -- ` +
+                'first attempt failed, so this run\'s pass came from the re-run'
+        )
+    }
 }
 
 /**
@@ -3560,6 +3636,13 @@ function writeLogFiles(plan, test, result, status, logDir, attempt = '') {
  */
 function expandBackends(test) {
     const marked = test.known_fail ?? false
+    // A field the run reads before the first attempt: an entry that is intermittent says so here,
+    // and `executePlans` gives a failing attempt one more chance only for these (see
+    // `rerunCandidate`). Trimmed once, so a plan can be read by eye and still compare equal.
+    const flaky = typeof test.flaky === 'string' && test.flaky.trim().length > 0 ? test.flaky.trim() : null
+    // Carried on every shape below, so an entry that is intermittent reads the same whatever its
+    // back ends look like: `rerunCandidate` asks the expanded test, not the plan's table.
+    test = { ...test, __flaky: flaky }
     if (!Array.isArray(test.backends)) {
         if (marked === false || (Array.isArray(marked) && marked.length === 0)) return [test]
         if (marked !== true) {
@@ -5106,6 +5189,11 @@ async function executePlans(plans, options, sharedVars, logDir) {
         // instead would list marks that did not run here (a back end this host skipped, a tier the
         // run did not select) as if they had.
         knownRows: [],
+        // One name per case that was green only on its second attempt, and the count of them. Written
+        // where the verdict is counted, for the same reason `knownRows` is: a roster read off the plan
+        // tree would name entries that did not run here. `flaky` never counts as `pass` (see the
+        // re-run block), so this is the only place the reading is kept.
+        flaky: 0, flakyRows: [],
     }
     // Results by test name, as a serial run had them: a differential test and a back end after
     // the first read the result of the test they compare against.
@@ -5478,9 +5566,17 @@ async function executePlans(plans, options, sharedVars, logDir) {
     // A timeout is the one verdict a loaded host can hand a case that did nothing wrong: the child
     // is killed at its bound, and a starved case and a slow one read the same in that kill. So every
     // case whose bound took it gets one more attempt -- at the end of the run, one at a time, with
-    // twice the bound (`runOneTest` doubles it from `logContext.rerun`). Nothing else is re-run: a
-    // case that failed with an exit code, a diagnostic or a verification failure has answered its
-    // question with its own output.
+    // twice the bound (`runOneTest` doubles it from `logContext.rerun`).
+    //
+    // The second reason a case is here is that it said so itself: `flaky` on the entry means the case
+    // is intermittent -- a scheduler that crashes one run in three, a race that loses occasionally --
+    // and that failure says nothing about the change under test. Those entries are re-run whatever
+    // their first failure looked like; the attempt decides them. A first-attempt pass is not here at
+    // all: a case that is green when it ran is green, and the field never turns a pass into a
+    // question (which is exactly what `known_fail` does, and why this is not `known_fail`).
+    //
+    // Every other failure -- an exit code, a diagnostic, a verification failure -- has answered its
+    // question with its own output and is not re-run.
     //
     // Serial and after every other case, because a timeout that came from being starved must not be
     // re-tested beside the same crowd it was starved by. Nothing takes a slot here: there is nothing
@@ -5488,8 +5584,8 @@ async function executePlans(plans, options, sharedVars, logDir) {
     //
     // The second attempt is judged by `runOneTest` -- the same assertions, the same normalizers, the
     // same CPU-budget and timeout-margin rules -- so the re-run decides exactly what the first
-    // attempt would have decided given room. It is a run, not an excuse: a case that times out
-    // again stays red, and one that dies by a signal on the second attempt is a failure too.
+    // attempt would have decided given room. It is a run, not an excuse: a case that fails again
+    // stays red, and one that dies by a signal on the second attempt is a failure too.
     const rerunWaiting = entries.filter((entry) => entry.rerunPending === true)
     for (const entry of rerunWaiting) {
         const { plan, test } = entry
@@ -5541,29 +5637,45 @@ async function executePlans(plans, options, sharedVars, logDir) {
         result.rerun = {
             attempt: 2,
             load,
-            first_pass: { wall_ms: first.wallMs, timeout_ms: first.timeoutMs, timed_out: true },
+            first_pass: {
+                wall_ms: first.wallMs,
+                timeout_ms: first.timeoutMs,
+                timed_out: first.timedOut === true,
+                signal: first.signal ?? null,
+            },
         }
-        const outcome = { status: result.status, result, metric: formatMetric(result), failures: result.failures }
+        // A case that declared itself intermittent and came back green is not counted as a pass: it
+        // did not pass, it passed on the second attempt, and the difference is the reading the field
+        // exists to keep. Its own verdict and its own count (`[FLAKY]`, `flaky: N`), so the promotion
+        // can list the names that only got through a re-run while `pass` stays "green when it ran".
+        const flakyPassed = entry.test.__flaky !== null && entry.test.__flaky !== undefined && result.status === 'pass'
+        const status = flakyPassed ? 'flaky' : result.status
+        const outcome = { status, result, metric: formatMetric(result), failures: result.failures }
         // The row of this case in `test_timings[]` is written when its first attempt settles; the
         // verdict that decides the case is the second one, so the row is brought up to it. A reader of
         // the summary (the promotion) then finds one final status per case and does not re-run it.
         if (entry.timing) {
             entry.timing.status = outcome.status
             entry.timing.timed_out = result.timedOut === true
-            entry.timing.rerun = { first_timed_out: true, status: outcome.status }
+            entry.timing.rerun = { first_timed_out: first.timedOut === true, status: outcome.status }
         }
         // One case, one verdict, one line: the summary counts the case once (`total` does not move
-        // with an attempt), `rerun` counts the attempt, and `pass` counts the verdict it reached.
+        // with an attempt), `rerun` counts the attempt, and the verdict it reached counts once --
+        // `pass`, or `flaky` for the case that needed the attempt to be green.
         summary.rerun += 1
-        if (outcome.status === 'pass') {
+        if (status === 'pass') {
             summary.pass += 1
             summary.rerunPassed += 1
+        } else if (status === 'flaky') {
+            summary.flaky += 1
+            summary.rerunPassed += 1
+            summary.flakyRows.push(listedName(plan, test))
         } else {
             summary.fail += 1
             if (result.timedOut) summary.timedOut += 1
             else if (result.signal) summary.crashed += 1
         }
-        transcript.caseLine(printStatusLine(outcome.status, test.name, rerunNote(outcome.status, result, load)))
+        transcript.caseLine(printStatusLine(status, test.name, rerunNote(status, result, load, first)))
         if (options.listKnownRows) {
             const firstFailure = Array.isArray(outcome.failures) && outcome.failures.length > 0
                 ? outcome.failures[0]
@@ -6018,11 +6130,12 @@ async function main() {
     // this on purpose: a change whose plans hold no case in this layer. Refusing to call that a pass
     // is the point -- a run that proves nothing is not a run that found nothing wrong.
     //
-    // The count is the summary's own four fields, the same sum `printRunSummary` prints as `total`:
+    // The count is the summary's own five fields, the same sum `printRunSummary` prints as `total`:
     // the summary has no `total` field, and reading one would have made this condition always false
     // -- the run would have exited 0 while these words said 2.
     const nothingStarted =
-        outcome.summary.pass + outcome.summary.fail + outcome.summary.skip + outcome.summary.xfail === 0
+        outcome.summary.pass + outcome.summary.fail + outcome.summary.skip + outcome.summary.xfail +
+            outcome.summary.flaky === 0
     if (nothingStarted) {
         // Before the `[provenance]` line, which has to stay right before `[SUMMARY]`
         // (test/cases/tools/provenance.mjs pins the pair): the sentence explains the numbers that
@@ -6040,6 +6153,7 @@ async function main() {
     // tree that line named is still the tree that ran.
     printTreeVerdict(treeVerdict)
     printKnownRoster(outcome.summary)
+    printFlakyRoster(outcome.summary)
     if (marginSkippedTests > 0) {
         // The rule's own reading, so a run on a host without a CPU figure says what it did not judge
         // and how often, instead of leaving 105 bounds looking judged.

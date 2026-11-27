@@ -143,7 +143,7 @@ function runTestCli(args, extraEnv = {}) {
 }
 
 function statusLines(output) {
-    return [...output.matchAll(/^\[(PASS|FAIL|XFAIL|SKIP)\] (\S+)/gm)].map((match) => `${match[1]} ${match[2]}`)
+    return [...output.matchAll(/^\[(PASS|FAIL|XFAIL|SKIP|FLAKY)\] (\S+)/gm)].map((match) => `${match[1]} ${match[2]}`)
 }
 
 // This fixture's own status lines: the entries whose name carries `needle`, in the order the run
@@ -1826,6 +1826,81 @@ if (!rerunRunName || !twiceRunName) {
     } catch (error) {
         problems.push(`re-run: the run's records could not be read (${error.message})`)
     }
+}
+
+// --- an entry that declares itself intermittent gets one re-run, and nothing more ----------------
+// Three runs over three fixture plans, because the field's whole claim is about which world the
+// second attempt lands in:
+//
+//   * flaky.plan.toml: `flaky.then_passes` fails its first attempt and passes the re-run, so the run
+//     reports `[FLAKY]` and counts it in `flaky`, never in `pass` -- and its case line says the pass
+//     came second. The same plan's `flaky.passes_first_time` is green first time and carries the
+//     field too: it has to read as a plain `[PASS]`. That pair is the difference between this field
+//     and `known_fail`, whose mark turns a pass into `marked known_fail but passes`;
+//   * flaky_twice.plan.toml: the case fails on both attempts and stays red. A re-run is an attempt,
+//     not an excuse, so the run's exit code and its `fail` count see a failure;
+//   * empty_flaky.plan.toml: the field written with nothing in it is refused where the plan is
+//     loaded, by file, entry and field, before any entry of that plan runs.
+// The summaries are asserted as text: `flaky: N` is the number a promotion reads, and a count that
+// disagreed with the roster below it would be two readings of one run.
+const flakyRun = runRunner([path.join(here, 'flaky', 'flaky.plan.toml')])
+const flakyLines = statusLines(flakyRun.output)
+// The order is the plan's: the control entry runs where it is written, and the case that fails
+// is printed at the end of the run, where its second attempt happened.
+const flakyOrder = ['PASS flaky.passes_first_time', 'FLAKY flaky.then_passes']
+if (flakyLines.join(' | ') !== flakyOrder.join(' | ')) {
+    problems.push(`flaky: the verdicts or their order moved (${flakyLines.join(', ') || 'none'})`)
+}
+if (!flakyRun.output.includes('[SUMMARY] total: 2, pass: 1, fail: 0, flaky: 1, re-run: 1, re-run passed: 1')) {
+    problems.push(`flaky: unexpected summary (${summaryLine(flakyRun.output)})`)
+}
+if (flakyRun.status !== 0) {
+    problems.push(`flaky: a run whose flaky case passed on its re-run did not exit green (exit ${flakyRun.status})`)
+}
+// The case line says how the green was reached: the first attempt failed, the second is the one that
+// passed, and the load is printed beside it for the same reason a timed-out re-run prints it.
+const flakyLine = flakyRun.output.split('\n').find((line) => line.startsWith('[FLAKY] flaky.then_passes'))
+if (!/^\[FLAKY\] flaky\.then_passes .*failed on the first pass, passed in \d+\.\d+ (?:s|ms) on re-run \(load /.test(flakyLine || '')) {
+    problems.push(`flaky: the verdict line does not say how it passed (${flakyLine || 'missing'})`)
+}
+// The name a promotion has to be able to list: under the summary, once, carrying the same name.
+const flakyRoster = flakyRun.output.split('\n').filter((line) => line.includes('passed on the second attempt only'))
+if (flakyRoster.length !== 1 || !flakyRoster[0].includes('flaky.then_passes')) {
+    problems.push(`flaky: the roster of names that only passed on the re-run is ${JSON.stringify(flakyRoster)}`)
+}
+if (!flakyRoster.every((line) => line.startsWith('[INFO] '))) {
+    problems.push('flaky: the roster line wears a status tag, so it would read as a second verdict')
+}
+// And the case that was green first time is a plain pass: no roster row, no mark, one `[PASS]`.
+const firstTimeLines = flakyRun.output.split('\n').filter((line) => line.includes('flaky.passes_first_time'))
+if (firstTimeLines.length !== 1 || !firstTimeLines[0].startsWith('[PASS] flaky.passes_first_time')) {
+    problems.push(`flaky: a first-time pass of a flaky-marked case is ${JSON.stringify(firstTimeLines)}`)
+}
+// Two runs: one where the re-run is the difference, one where it is not.
+const flakyTwiceRun = runRunner([path.join(here, 'flaky', 'flaky_twice.plan.toml')])
+if (statusLines(flakyTwiceRun.output).join(' | ') !== 'FAIL flaky.never_passes') {
+    problems.push(`flaky: a case that failed both attempts is ${JSON.stringify(statusLines(flakyTwiceRun.output))}`)
+}
+if (!flakyTwiceRun.output.includes('[SUMMARY] total: 1, pass: 0, fail: 1, re-run: 1, re-run passed: 0')) {
+    problems.push(`flaky: unexpected summary for the twice-failed case (${summaryLine(flakyTwiceRun.output)})`)
+}
+if (flakyTwiceRun.status === 0) {
+    problems.push('flaky: a case that failed on both attempts did not make the run red')
+}
+const twiceLine = flakyTwiceRun.output.split('\n').find((line) => line.startsWith('[FAIL] flaky.never_passes'))
+if (!/^\[FAIL\] flaky\.never_passes .*failed on the first pass, failed again on re-run \(load /.test(twiceLine || '')) {
+    problems.push(`flaky: the twice-failed line does not say both attempts failed (${twiceLine || 'missing'})`)
+}
+if (flakyTwiceRun.output.includes('passed on the second attempt only')) {
+    problems.push('flaky: a case that failed both attempts was rostered as passing on its second')
+}
+// A field with no reason is refused, by name, before the plan's entries run.
+const emptyFlakyRun = runRunner([path.join(here, 'flaky', 'empty_flaky.plan.toml')])
+if (!emptyFlakyRun.output.includes("test 'flaky.empty_reason': flaky must be a non-empty string")) {
+    problems.push(`flaky: an empty flaky field was not refused (${emptyFlakyRun.output.trim().split('\n').slice(-3).join(' / ')})`)
+}
+if (emptyFlakyRun.status === 0) {
+    problems.push('flaky: a plan whose flaky field is empty ran green')
 }
 // A reading, printed and used by nothing: how many child runs it took, what width this file put
 // them at, and what the run cost in wall time on this host. `timeout_ms` is untouched -- that is

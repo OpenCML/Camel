@@ -1,0 +1,38 @@
+# Fixture of test/tools/selftest/run.mjs: an entry that declares itself intermittent.
+#
+# `flaky.then_passes` fails on its first attempt (the case exits 1 the first time it is started in a
+# run) and passes on the second, so the run must report `[FLAKY]` and count it apart from `pass`:
+# it did not pass, it passed on the re-run, and the difference is the reading the field exists for.
+# `flaky.passes_first_time` carries the field too and is green first time, so it has to read as an
+# ordinary `[PASS]` -- a field that turned a first-time pass into a question would be the fault the
+# `known_fail` mark has, and this fixture is what makes that regression visible.
+#
+# The case that fails on both attempts lives in flaky_twice.plan.toml, and the entry that writes the
+# field with nothing in it lives in empty_flaky.plan.toml; both are runs this self-test starts and
+# judges, never runs a layer reads.
+id = "selftest.flaky"
+order = 7
+tier = "fast"
+
+[defaults]
+tool = "node"
+kind = "behavior"
+case = "passes.mjs"
+args = ["${case}"]
+normalizers = ["normalize_newlines"]
+
+[[tests]]
+name = "flaky.then_passes"
+desc = "Fails on the first attempt and passes on the re-run: reported [FLAKY], not counted as a pass."
+case = "fails_once.mjs"
+args = ["${case}"]
+flaky = "selftest fixture: the case fails only on its first attempt -- a stand-in for a scheduler that crashes one run in three (test/tools/selftest/run.mjs owns it, so the field goes when the fixture does)"
+expect_exit = 0
+expect_stdout_contains = ["second attempt"]
+
+[[tests]]
+name = "flaky.passes_first_time"
+desc = "Green first time and marked flaky: still a plain pass, never a question."
+flaky = "selftest fixture: marked to prove a first-time pass is not turned into anything else (test/tools/selftest/run.mjs owns it)"
+expect_exit = 0
+expect_stdout_contains = ["ok"]
