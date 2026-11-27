@@ -214,32 +214,26 @@ tier = "slow"
 # the reason are printed from the list on every run, and when the list is empty the line says the
 # list is empty rather than stay silent.
 #
-# The exit is 1 while a page is ahead of the tree, and it is the second half of the same reading:
-# emptying the list does not make the tree pass, it exposes the snippets the list was exempting --
-# today the two chapter 17 pages, which show the law firing while the program reports the `math:abs_l`
-# translation it does not have. So the run says "0 snippet(s) wait" and refuses on the same breath,
-# which is what an emptied list has to do. When `math:abs_l` is translated the exposed snippets
-# compile and print what their text blocks say, and this case goes back to `expect_exit = 0` with the
-# second assertion deleted; until then the two assertions below are what the run says.
+# It reads its own page -- `test/cases/docs/pending_zero_sample.md`, which `--default-roots` does not
+# walk -- and that page's fence does not compile, with no entry in the list to exempt it. So one run
+# says the list holds nothing waiting and refuses on that page in the same breath, and the reading does
+# not depend on what the reader-facing list holds: an entry added for a snippet ahead of the tree, or
+# deleted when a page catches up, moves nothing here.
 [[tests]]
 name = "docs.snippets_pending_zero_says_why"
-desc = "With the pending list read as empty, the run says `[PENDING] 0 snippet(s) wait for a ruled construct: the list holds 0 entries and none of them is behind in this scope` and refuses on the snippets the emptied list exposes -- today the two chapter 17 pages, ahead of the `math:abs_l` translation -- so a zero names itself instead of looking like a run that never looked; when the translation lands the same sentence is printed and the run passes, and this case is flipped to expect_exit = 0."
+desc = "With the pending list read as empty, the run says `[PENDING] 0 snippet(s) wait for a ruled construct: the list holds 0 entries and none of them is behind in this scope` and refuses on the page it was handed -- a fence that does not compile and that no entry exempts -- so a zero names itself instead of looking like a run that never looked."
 kind = "behavior"
 tool = "node"
 case = "../../../scripts/check-doc-snippets.mjs"
-args = ["${case}", "--default-roots", "--no-pending", "--camel", "${camel}"]
+args = ["${case}", "--no-pending", "--camel", "${camel}", "test/cases/docs/pending_zero_sample.md"]
 expect_exit = 1
 expect_stdout_contains = ["[PENDING] 0 snippet(s) wait for a ruled construct: the list holds 0 entries and none of them is behind in this scope", "stale snippet problem(s)"]
 normalizers = ["normalize_newlines"]
-# 300000 ms at the 4x rule, and the reason is the shape of the work, not its size: this case starts
-# one compiler per snippet across eight jobs, so its CPU time is not its wall clock -- on the build
-# host it used 63710 ms of CPU and 17.2 s of wall clock. A bound read off the wall clock is wrong
-# here: 180000 ms looks generous against 17 s, and is 2.8x of the CPU the 4x rule reads, which was
-# itself the red. 300000 ms puts it at 4.7x of the CPU.
-timeout_ms = 300000
-# The same work as `docs.snippets_compile` -- it compiles the whole reader-facing scope -- so it
-# costs what that case costs and belongs on the same side of the 2 s line.
-tier = "slow"
+# One compiler and one page: 0.1 s on the build host, so 60000 ms is the bound the plan's other
+# one-page cases carry. The case is in the fast layer for the same reason -- the whole-scope compile
+# that made it slow is now `docs.snippets_compile`, whose own budget is above.
+timeout_ms = 60000
+tier = "fast"
 
 [[tests]]
 name = "docs.snippets_dump_is_compared"
