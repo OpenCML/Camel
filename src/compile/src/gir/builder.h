@@ -909,6 +909,28 @@ class Builder {
     /// at the declaration, not once per call. Keyed by the graph, then by the default's
     /// expression (one per parameter of a declaration).
     std::unordered_map<const void *, std::unordered_map<const void *, node_handle_t>> defaultNodes_;
+    /// What a `Scratch` trial arm records that would otherwise outlive it. A trial arm builds
+    /// through the real draft -- the receiver it has to try is a node of that draft -- so the arm's
+    /// nodes are deleted with the arm (`visitPipeLink`), and **a record that outlives the arm names
+    /// a node the arm deletes**: the next build to ask for that record would read the type of a
+    /// node its graph no longer holds. A record made while a trial is open goes into the trial's
+    /// own layer, and the layer is dropped whole with the arm -- not entry by entry, because the
+    /// arm's records are exactly the layer. Scanning the tables by node id afterwards cannot stand
+    /// in for this: a handle a frame holds by reference (`pipe_->receiver`, the `Argument` vector
+    /// being filled) is in no table at all, so the record layer is the side this has to be fixed
+    /// on.
+    struct ScratchLayer {
+        /// The default's expression, within the graph the layer belongs to, to the static node that
+        /// carries it. The graph is not part of the key: one trial is open on one graph.
+        std::unordered_map<const void *, node_handle_t> defaultNodes;
+    };
+    std::vector<ScratchLayer> scratchLayers_;
+    /// The static node that carries the default `expr` into this graph: the trial's record while a
+    /// trial is open, the graph's own record otherwise. Null when neither has one.
+    node_handle_t recordedDefaultNode(const GCT::node_ptr_t &expr) const;
+    /// Records `node` as this graph's carrier of the default `expr`, in the trial's layer while a
+    /// trial is open and in the graph's table otherwise.
+    void recordDefaultNode(const GCT::node_ptr_t &expr, node_handle_t node);
     /// Evaluates the defaults `decl` writes and keeps them under `owner` (a graph or a generic
     /// template). `parametersInScope` is false when the declaration's own parameters are not
     /// names of the scope (a declaration at a module's top level): a default that reads one is
