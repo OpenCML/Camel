@@ -1,0 +1,20 @@
+// Two `i32` values that carry the same number are equal whatever route each one took to its
+// slot: a value that came through a wider one keeps its sign in the high half of the slot, a
+// value that came out of `i32` arithmetic leaves zeros there, and the number is the low half in
+// both cases. Comparing the whole slot word compares the encoding instead, and a value stops
+// being equal to itself.
+
+func main() => int {
+    let m: i32 = -3
+    let z: i32 = 0
+    let low: i32 = -2147483647 - 1
+    println(m == m + z, m + z == m, m == m + i32(0))
+    println(low == low + z, low + z == low)
+    println(m == i32(-3), i32(-3) == m)
+    println(m < m + z, m > m + z, low < low + z, low > low + z)
+    let wide: i64 = -3
+    println(wide == wide + 0, wide == wide + i64(0))
+    let narrow: i32 = i32(wide)
+    println(narrow == m, narrow + z == m)
+    return 0
+}

@@ -1,0 +1,75 @@
+id = "compile.int_compare"
+order = 1015
+tier = "fast"
+tags = ["feat", "compile", "equality", "numeric", "types"]
+desc = "`==`, `<` and `>` on `i32` read the number the type names: the low 32 bits of the slot, not the whole word, so a value that reached its slot through a wider one stays equal to itself (nvm used to answer false there)"
+
+[defaults]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 30000
+
+[[tests]]
+name = "i32_compares_by_number.nvm"
+desc = "Two `i32` values of the same number compare equal and unordered, whether each came from a variable, from `i32` arithmetic or from a narrowing conversion, at `-3` and at the smallest `i32`; the same for `i64` (nvm)"
+kind = "behavior"
+case = "../../../cases/compile/equality/i32_compares_by_number.cml"
+args = ["${case}", "${run_nvm}"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim()
+const want = [
+  "true true true",
+  "true true",
+  "true true",
+  "false false false false",
+  "true true",
+  "true true",
+].join('\n')
+assert(out === want, `unexpected output: ${out}`)
+}
+"""
+
+[[tests]]
+name = "i32_compares_by_number.fvm"
+desc = "Two `i32` values of the same number compare equal and unordered, whether each came from a variable, from `i32` arithmetic or from a narrowing conversion, at `-3` and at the smallest `i32`; the same for `i64` (fvm)"
+kind = "behavior"
+case = "../../../cases/compile/equality/i32_compares_by_number.cml"
+args = ["${case}", "${run_fvm}"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim()
+const want = [
+  "true true true",
+  "true true",
+  "true true",
+  "false false false false",
+  "true true",
+  "true true",
+].join('\n')
+assert(out === want, `unexpected output: ${out}`)
+}
+"""
+
+[[tests]]
+name = "i32_compares_by_number.jit"
+desc = "Two `i32` values of the same number compare equal and unordered, whether each came from a variable, from `i32` arithmetic or from a narrowing conversion, at `-3` and at the smallest `i32`; the same for `i64` (jit)"
+kind = "behavior"
+case = "../../../cases/compile/equality/i32_compares_by_number.cml"
+args = ["${case}", "${run_jit}"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim()
+const want = [
+  "true true true",
+  "true true",
+  "true true",
+  "false false false false",
+  "true true",
+  "true true",
+].join('\n')
+assert(out === want, `unexpected output: ${out}`)
+}
+"""
