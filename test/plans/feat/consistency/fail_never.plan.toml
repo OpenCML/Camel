@@ -343,12 +343,17 @@ args = ["${case}", "${run_nvm}"]
 expect_exit = 1
 verify_script = """
 // The name is built from two pieces here too: the kind the program writes is its own word.
+// The two warnings are the ones the check form prints, at the positions it prints them (19:35 and
+// 20:41 -- `never.tagged_position` above reads the same two), and the run's own diagnostic comes
+// last: it is raised when the program runs, not when it compiles, and it names line 15, the
+// `fail<'Stopped'>` call, which is where this case puts the fault.
 assert(input.diagnostics.length === 3, JSON.stringify(input.diagnostics))
-assert(input.diagnostics[0].name === 'RuntimeDiag::' + 'Stopped', JSON.stringify(input.diagnostics[0]))
-assert(input.diagnostics[0].line === 13 && input.diagnostics[0].column === 16, JSON.stringify(input.diagnostics[0]))
-for (const d of input.diagnostics.slice(1)) {
-    assert(d.name === 'SemanticDiag::NeverArgumentCall', JSON.stringify(d))
-}
+assert(input.diagnostics[0].name === 'SemanticDiag::NeverArgumentCall', JSON.stringify(input.diagnostics[0]))
+assert(input.diagnostics[0].line === 19 && input.diagnostics[0].column === 35, JSON.stringify(input.diagnostics[0]))
+assert(input.diagnostics[1].name === 'SemanticDiag::NeverArgumentCall', JSON.stringify(input.diagnostics[1]))
+assert(input.diagnostics[1].line === 20 && input.diagnostics[1].column === 41, JSON.stringify(input.diagnostics[1]))
+assert(input.diagnostics[2].name === 'RuntimeDiag::' + 'Stopped', JSON.stringify(input.diagnostics[2]))
+assert(input.diagnostics[2].line === 15 && input.diagnostics[2].column === 16, JSON.stringify(input.diagnostics[2]))
 """
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 20000

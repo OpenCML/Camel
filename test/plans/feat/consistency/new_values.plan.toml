@@ -377,7 +377,7 @@ verify_script = """
   const param = 'COPIES sorted_param updates 1 in-place 0 by-count 1 declared 0 copied 0'
   assert(lines.includes(param), 'the var parameter stays with the array count: ' + lines.join(' | '))
   // The closure `fs` is read after the sort, so it copies: nothing about capturing is in place.
-  const closure = 'COPIES __g_235__ updates 1 in-place 0 by-count 0 declared 0 copied 1'
+  const closure = 'COPIES __g_248__ updates 1 in-place 0 by-count 0 declared 0 copied 1'
   assert(lines.includes(closure), 'the closure copies: ' + lines.join(' | '))
 }
 """
