@@ -26,3 +26,14 @@
 - 判据草案：(b) 落地后 `jvp` 与有限差分在 rank 2/3/4 上逐值一致，且旧签名委派新签名（不破坏既有用例）
 - **更正（`lane-ssa-residue` 2026-11-28 读源）**：`task-327` 卡里那处 `conv.cpp:656` 不是 conv —— 它是 `bnTrainGeometry`（batch-norm 的 N/C/inner 几何：`C = dim(1)`、`d>=2` 乘进 `inner`、`p->dim(0)==C` 才过）。`conv.cpp` 的四个入口（`:213 :529 :551 :575 :612`）都要求 `rank == 4`，所以 conv 属"秩被钉死、不可能静默错数"
 - **同为疑似（待实测，`batch_norm`）**：参数是 `[C]`（只有长度、没有轴身份）；rank 3 且 `I == C` 时长度与轴 1、轴 2 同时对得上 ⇒ `[N,I,C]` 布局的调用者形状全过、统计量却按轴 1 算。构造 `[2,2,2]` + `[2]` 参数、手算"按轴 1"与"按轴 2"两组统计量即可判定；若成立，它与 `sum_to` 是同一类
+
+### E. 离散参数在转置构出侧的第四处组装点（`task-301` 收口后剩下 2 名，cap-probe 2026-11-28 交回）
+- 起点 `54ccaacc55`（`lane/arg-parse-uaf-w`，工作树 `witness`）；两名红：`grad_array_with_int.fvm`、`grad_array_int_parameter_first.nvm`
+- 卡点原文："声明侧（类型法则）现在说 `(float[], int)`，转置构出侧仍是 `(float[], ())` ⇒ `vjp.cml:132` 报「返回类型 `(float, (float) => (float[], ()))` 与声明的 `(float, (ct: float) => (float[], int))` 不符」"
+- **四处组装点，必须一起改才闭合**：① `transpose/signature.cpp:199` 参与位成员（机械 `space.space` → `gradientTypeOf(parameter)`）；② `transpose/walk.cpp` 出口组装（原 4114–4293，加 `answerTypeOf`/`answerZeroOf`，离散位用 `discreteZeroSlot` 物化同型零）；③ `split` 提升处把该位当 `LiftedPlace::Value`；④ 提升法则给该位声明的答案形状
+- 实测："只改前两处时构出侧仍是 `()`" ⇒ 第三/第四处之一才是产出 `()` 的那一处；下一人应从 ③④ 起手
+- 判据：两名转绿 + `smoke + feat/trans + feat/compile` 对 `2821 / 18` 逐名新增红 0（起点基线）
+
+### F. `tangentSpaceOf` 的用户面与机件面要一起走（`D-1127-278` 执行记录，截稿后整理）
+- 已落地：`Tangent<T>` 走用户面（`Tangent<bool> = bool`、`Tangent<int> = int`）、`jvp.cml:43` 例子改 `(int, int)`、聚合恒等（`54ccaacc55`：全成员都是自己的切空间时交回 `primal`）
+- 仍存：`tangentSpaceOf` 在机件内部的零节点策略（"内部聚合只带真正需要梯度的成员"）与用户面口径在注释里未成文 ⇒ 截稿后把原则 9.9 的这段话写进 `derivative.h` 注释，别让下一个人再从测试反推
