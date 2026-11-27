@@ -393,7 +393,7 @@ func main() => int sync {
 
 **Fix**
 
-A machine-applicable edit is attached where the report knows the text to write: `data.fixes` of `--error-format json` carries the range and the replacement.
+A machine-applicable edit is attached where the report knows the text to write: `data.fixes` of `--diag-format json` carries the range and the replacement.
 
 **Message**
 
@@ -407,7 +407,7 @@ Illegal character '{0}'.
 No token starts with this character. Outside strings and comments a program consists of ASCII characters; a name is made of letters, digits and '_'.
 ```
 
-**Example** (`test/cases/compile/check/lexical_error.cml`, run as `camel check --lexical-only -O short test/cases/compile/check/lexical_error.cml`)
+**Example** (`test/cases/compile/check/lexical_error.cml`, run as `camel check --lexical-only --diag-format short test/cases/compile/check/lexical_error.cml`)
 
 ```camel
 func main() => int sync {
@@ -422,7 +422,7 @@ func main() => int sync {
 
 **Fix**
 
-A machine-applicable edit is attached where the report knows the text to write: `data.fixes` of `--error-format json` carries the range and the replacement.
+A machine-applicable edit is attached where the report knows the text to write: `data.fixes` of `--diag-format json` carries the range and the replacement.
 
 **Message**
 
@@ -457,7 +457,7 @@ func main() => int sync {
 
 **Fix**
 
-A machine-applicable edit is attached where the report knows the text to write: `data.fixes` of `--error-format json` carries the range and the replacement.
+A machine-applicable edit is attached where the report knows the text to write: `data.fixes` of `--diag-format json` carries the range and the replacement.
 
 **Message**
 
@@ -490,7 +490,7 @@ func main() => int sync {
 
 **Fix**
 
-A machine-applicable edit is attached where the report knows the text to write: `data.fixes` of `--error-format json` carries the range and the replacement.
+A machine-applicable edit is attached where the report knows the text to write: `data.fixes` of `--diag-format json` carries the range and the replacement.
 
 **Message**
 
@@ -553,7 +553,7 @@ func main() => int sync {
 
 **Fix**
 
-A machine-applicable edit is attached where the report knows the text to write: `data.fixes` of `--error-format json` carries the range and the replacement.
+A machine-applicable edit is attached where the report knows the text to write: `data.fixes` of `--diag-format json` carries the range and the replacement.
 
 **Message**
 
@@ -587,7 +587,7 @@ resource a = [b,
 
 **Fix**
 
-A machine-applicable edit is attached where the report knows the text to write: `data.fixes` of `--error-format json` carries the range and the replacement.
+A machine-applicable edit is attached where the report knows the text to write: `data.fixes` of `--diag-format json` carries the range and the replacement.
 
 **Message**
 
@@ -620,7 +620,7 @@ func main() => int sync {
 
 **Fix**
 
-A machine-applicable edit is attached where the report knows the text to write: `data.fixes` of `--error-format json` carries the range and the replacement.
+A machine-applicable edit is attached where the report knows the text to write: `data.fixes` of `--diag-format json` carries the range and the replacement.
 
 **Message**
 
@@ -653,7 +653,7 @@ func main() => int sync {
 
 **Fix**
 
-A machine-applicable edit is attached where the report knows the text to write: `data.fixes` of `--error-format json` carries the range and the replacement.
+A machine-applicable edit is attached where the report knows the text to write: `data.fixes` of `--diag-format json` carries the range and the replacement.
 
 **Message**
 
@@ -753,7 +753,7 @@ func main() => int sync {
 
 **Fix**
 
-A machine-applicable edit is attached where the report knows the text to write: `data.fixes` of `--error-format json` carries the range and the replacement.
+A machine-applicable edit is attached where the report knows the text to write: `data.fixes` of `--diag-format json` carries the range and the replacement.
 
 **Message**
 
@@ -816,7 +816,7 @@ func main() => int sync {
 
 **Fix**
 
-A machine-applicable edit is attached where the report knows the text to write: `data.fixes` of `--error-format json` carries the range and the replacement.
+A machine-applicable edit is attached where the report knows the text to write: `data.fixes` of `--diag-format json` carries the range and the replacement.
 
 **Message**
 
@@ -915,7 +915,7 @@ func main() => int sync {
 
 **Fix**
 
-A machine-applicable edit is attached where the report knows the text to write: `data.fixes` of `--error-format json` carries the range and the replacement.
+A machine-applicable edit is attached where the report knows the text to write: `data.fixes` of `--diag-format json` carries the range and the replacement.
 
 **Message**
 
@@ -948,7 +948,7 @@ func main() => int {
 
 **Fix**
 
-A machine-applicable edit is attached where the report knows the text to write: `data.fixes` of `--error-format json` carries the range and the replacement.
+A machine-applicable edit is attached where the report knows the text to write: `data.fixes` of `--diag-format json` carries the range and the replacement.
 
 **Message**
 
@@ -983,7 +983,7 @@ func main() => int {
 
 **Fix**
 
-A machine-applicable edit is attached where the report knows the text to write: `data.fixes` of `--error-format json` carries the range and the replacement.
+A machine-applicable edit is attached where the report knows the text to write: `data.fixes` of `--diag-format json` carries the range and the replacement.
 
 **Message**
 
@@ -1044,7 +1044,7 @@ func main() => int sync {
 
 **Fix**
 
-A machine-applicable edit is attached where the report knows the text to write: `data.fixes` of `--error-format json` carries the range and the replacement.
+A machine-applicable edit is attached where the report knows the text to write: `data.fixes` of `--diag-format json` carries the range and the replacement.
 
 **Message**
 
@@ -1058,7 +1058,7 @@ A 'when' condition comes before what it guards, so {0} cannot follow it.
 Write it between the parameters and the body: rule add_zero::<T>(x: T) when is_integer::<T>() { x + 0 => x }, or between the patterns of a match case and its arm: case n when n > 0 => n. The trailing form is not read as a condition.
 ```
 
-**Example** (`test/cases/parse/rules/when_after_body.cml`, run as `camel -E short test/cases/parse/rules/when_after_body.cml`)
+**Example** (`test/cases/parse/rules/when_after_body.cml`, run as `camel --diag-format short test/cases/parse/rules/when_after_body.cml`)
 
 ```camel
 rule guarded(x: int) { x + 0 => x } when true
@@ -1222,7 +1222,7 @@ This '>' is read as a comparison with the next line, which starts with {0}: two 
 A '>' after a space, at the end of a line, is the comparison operator, and the expression goes on with the next line. The '>' that closes '<...>' arguments touches the last argument; a chain of comparisons (a < b > c) is never what a program means.
 ```
 
-**Example** (`test/cases/compile/surface/angle_then_name_line.cml`, run as `camel -E short test/cases/compile/surface/angle_then_name_line.cml`)
+**Example** (`test/cases/compile/surface/angle_then_name_line.cml`, run as `camel --diag-format short test/cases/compile/surface/angle_then_name_line.cml`)
 
 ```camel
 func main() => int sync {
@@ -1360,7 +1360,7 @@ Identifiers starting and ending with double underscores are reserved for interna
 Avoid using names like '__example__'; choose different identifiers. To overload an operator, write 'func operator +(a: V, b: V) => V'.
 ```
 
-**Example** (`test/cases/compile/surface/reserved_function_name.cml`, run as `camel -E short test/cases/compile/surface/reserved_function_name.cml`)
+**Example** (`test/cases/compile/surface/reserved_function_name.cml`, run as `camel --diag-format short test/cases/compile/surface/reserved_function_name.cml`)
 
 ```camel
 func __add__(a: int, b: int) => int {
@@ -1429,7 +1429,7 @@ Invalid {0} literal: '{1}'.
 Ensure the literal '{1}' is valid and supported by the language.
 ```
 
-**Example** (`test/cases/compile/literals/int_base_with_exponent.cml`, run as `camel -E short test/cases/compile/literals/int_base_with_exponent.cml`)
+**Example** (`test/cases/compile/literals/int_base_with_exponent.cml`, run as `camel --diag-format short test/cases/compile/literals/int_base_with_exponent.cml`)
 
 ```camel
 func main() => int sync {
@@ -1564,7 +1564,7 @@ Unresolved reference: '{0}'.
 Make sure the name is declared and in scope.
 ```
 
-**Example** (`test/cases/compile/check/semantic_error.cml`, run as `camel check -O short test/cases/compile/check/semantic_error.cml`)
+**Example** (`test/cases/compile/check/semantic_error.cml`, run as `camel check --diag-format short test/cases/compile/check/semantic_error.cml`)
 
 ```camel
 func main() => int sync {
@@ -1797,7 +1797,7 @@ Cannot insert data of type '{1}' into a(n) {0} with element type '{2}'.
 Ensure the data type matches the {0}'s element type, or convert the data to the appropriate type before inserting.
 ```
 
-**Example** (`test/cases/compile/literals/context_struct_field_variable.cml`, run as `camel -E short test/cases/compile/literals/context_struct_field_variable.cml`)
+**Example** (`test/cases/compile/literals/context_struct_field_variable.cml`, run as `camel --diag-format short test/cases/compile/literals/context_struct_field_variable.cml`)
 
 ```camel
 type Point = { x: float, y: float }
@@ -1878,7 +1878,7 @@ Reference '{0}' is declared as imported but is not exported by its module.
 Check that the module exports the name '{0}' or remove the import declaration.
 ```
 
-**Example** (`test/cases/compile/namespace_rules/p09_import_alias.cml`, run as `camel -E short test/cases/compile/namespace_rules/p09_import_alias.cml`)
+**Example** (`test/cases/compile/namespace_rules/p09_import_alias.cml`, run as `camel --diag-format short test/cases/compile/namespace_rules/p09_import_alias.cml`)
 
 ```camel
 // `import <name> from <module>`: what does the single name mean?
@@ -2142,7 +2142,7 @@ The target of an assignment must be a variable, or a path from one.
 A path is a variable followed by any number of fields and elements: 'var p = { x: 1 }; p.x = 2' and 'var xs = [1, 2]; xs[0] = 2' are assignments of the whole variable (design principles 3.5). Any other expression is a temporary, and a store into it would go nowhere: assign the value to the whole variable instead.
 ```
 
-**Example** (`test/cases/compile/semantic/assign_to_temporary.cml`, run as `camel -E short test/cases/compile/semantic/assign_to_temporary.cml`)
+**Example** (`test/cases/compile/semantic/assign_to_temporary.cml`, run as `camel --diag-format short test/cases/compile/semantic/assign_to_temporary.cml`)
 
 ```camel
 type P = { x: int, y: int }
@@ -2287,7 +2287,7 @@ The name '{0}' is imported from the modules '{1}' and '{2}' with {3}.
 Two imports that bring the same name with the same parameter types conflict, and so do two that bring a value of the same name; neither is chosen silently. Give one of them another name where it is imported ('import { name as other_name } from m'), or import the name from one of the modules only and reach the other through its module ('import m', then 'm::name').
 ```
 
-**Example** (`test/cases/compile/module_imports/d5_conflict.cml`, run as `camel -E short test/cases/compile/module_imports/d5_conflict.cml`)
+**Example** (`test/cases/compile/module_imports/d5_conflict.cml`, run as `camel --diag-format short test/cases/compile/module_imports/d5_conflict.cml`)
 
 ```camel
 import { f } from conf_b
@@ -2787,7 +2787,7 @@ Cannot import module '{0}': it has errors ({1}).
 The errors are reported for that module. This one follows from them and goes away when they are fixed.
 ```
 
-**Example** (`test/cases/compile/module_imports/import_order/relative_name/main_short.cml`, run as `camel -E short test/cases/compile/module_imports/import_order/relative_name/main_short.cml`)
+**Example** (`test/cases/compile/module_imports/import_order/relative_name/main_short.cml`, run as `camel --diag-format short test/cases/compile/module_imports/import_order/relative_name/main_short.cml`)
 
 ```camel
 /// imports `short`, whose `import..lib` cannot be formed against its one-component name.
@@ -2915,7 +2915,7 @@ This 'if' has no 'else' and is used as a value.
 An 'if' without 'else' has no value: its arm may be of any type and what the arm gives is dropped. It can only stand as a statement. Where a value is wanted, add an 'else' arm of the same type ('if c then 1 else 0'), or make the result nullable ('if c then 1 else null').
 ```
 
-**Example** (`test/cases/consistency/if_without_else/as_value_let.cml`, run as `camel -E short test/cases/consistency/if_without_else/as_value_let.cml`)
+**Example** (`test/cases/consistency/if_without_else/as_value_let.cml`, run as `camel --diag-format short test/cases/consistency/if_without_else/as_value_let.cml`)
 
 ```camel
 func main() => int sync {
@@ -2946,7 +2946,7 @@ None: choice: the repair is a decision only the writer can make
 The empty array literal takes its element type from where it stands: a declared type, a parameter, the other arm of a branch, an 'as'. Here there is none. Write the type: 'let {0}: int[] = []'.
 ```
 
-**Example** (`test/cases/consistency/entering/err_empty_array_untyped.cml`, run as `camel -E short test/cases/consistency/entering/err_empty_array_untyped.cml`)
+**Example** (`test/cases/consistency/entering/err_empty_array_untyped.cml`, run as `camel --diag-format short test/cases/consistency/entering/err_empty_array_untyped.cml`)
 
 ```camel
 func main() => int sync {
@@ -2976,7 +2976,7 @@ The context arguments <{0}> cannot be bound to '{1}' as a value: {2}.
 'f<w>' used as a value is a partial application: a function that already has its context ('with') arguments, 'let g = inc<1>' then 'g(2)'. It needs 'f' to be one function that takes these arguments. Called in place, 'f<w>(x)', the arguments of the call choose the function.
 ```
 
-**Example** (`test/cases/compile/surface/name_as_value_bound_operator.cml`, run as `camel -E short test/cases/compile/surface/name_as_value_bound_operator.cml`)
+**Example** (`test/cases/compile/surface/name_as_value_bound_operator.cml`, run as `camel --diag-format short test/cases/compile/surface/name_as_value_bound_operator.cml`)
 
 ```camel
 func main() => int sync {
@@ -3005,7 +3005,7 @@ The source of this list comprehension has type '{0}', which has no elements to t
 A list comprehension '[e for x in xs if c]' is 'xs->filter<(x) => c>->map<(x) => e>': 'xs' must be an array (or another value 'map' and 'filter' accept), and 'x' has the type of its elements.
 ```
 
-**Example** (`test/cases/consistency/comprehension/err_not_an_array.cml`, run as `camel -E short test/cases/consistency/comprehension/err_not_an_array.cml`)
+**Example** (`test/cases/consistency/comprehension/err_not_an_array.cml`, run as `camel --diag-format short test/cases/consistency/comprehension/err_not_an_array.cml`)
 
 ```camel
 func main() => int sync {
@@ -3065,7 +3065,7 @@ The value '{0}' depends on itself: {1}.
 The values of the top level of modules are computed before 'main' starts, each from the values it uses: directly, through the functions its initializer calls, and through the values those use, in any module. A value cannot be computed from itself. Compute one of the values in the chain without the other, or turn it into a function.
 ```
 
-**Example** (`test/cases/compile/module_load/value_cycle.cml`, run as `camel -E short test/cases/compile/module_load/value_cycle.cml`)
+**Example** (`test/cases/compile/module_load/value_cycle.cml`, run as `camel --diag-format short test/cases/compile/module_load/value_cycle.cml`)
 
 ```camel
 // Top-level values that depend on each other: ModuleValueCycle, with the chain.
@@ -3099,7 +3099,7 @@ The function '{1}' uses '{0}' only after it is called in its own recursion, wher
 A function that calls itself, directly or through other functions, must use a variable it captures, or be complete, before the recursive call that would pass it: a call is ordered among the uses of the variables it was known to use, and a function value holds what the function captured when it was made. Use '{0}' before the recursive call, or pass it as a parameter.
 ```
 
-**Example** (`test/cases/compile/module_load/recursive_late_var.cml`, run as `camel -E short test/cases/compile/module_load/recursive_late_var.cml`)
+**Example** (`test/cases/compile/module_load/recursive_late_var.cml`, run as `camel --diag-format short test/cases/compile/module_load/recursive_late_var.cml`)
 
 ```camel
 // A recursive function that uses a captured variable only after it calls itself: the call
@@ -3138,7 +3138,7 @@ The name '{0}' is ambiguous here: {1}.
 Two 'using namespace' in force bring something of this name that cannot be told apart: a value or a type from each, or functions of the same parameter types. Write the qualified name of the one meant.
 ```
 
-**Example** (`test/cases/compile/namespace_rules/p14_using_conflict.cml`, run as `camel -E short test/cases/compile/namespace_rules/p14_using_conflict.cml`)
+**Example** (`test/cases/compile/namespace_rules/p14_using_conflict.cml`, run as `camel --diag-format short test/cases/compile/namespace_rules/p14_using_conflict.cml`)
 
 ```camel
 // Two using-directives that bring the same name with the same signature.
@@ -3456,7 +3456,7 @@ The type '{0}' is part of a cycle of types: {1}.
 Each of these types needs the next one to be declared first, and the last needs the first: none of them can be. Remove one of the references that close the cycle. A type may contain itself only through an array, a map, a set or an enum (design principles 5.2).
 ```
 
-**Example** (`test/cases/compile/semantic/type_contains_itself.cml`, run as `camel -E short test/cases/compile/semantic/type_contains_itself.cml`)
+**Example** (`test/cases/compile/semantic/type_contains_itself.cml`, run as `camel --diag-format short test/cases/compile/semantic/type_contains_itself.cml`)
 
 ```camel
 type A = { a: A }
@@ -3518,7 +3518,7 @@ None: choice: what to iterate instead is the writer's to write
 A loop's 'for x in xs' visits the elements of xs in order (design principles 3.10): the elements of an array; the code points of a string, each a one-character string; the (key, value) pairs of a map, in key order (11.3); the sub-tensors of a tensor along its first dimension; the elements of a stream, one pull of its step function per round (5.4); and the integers of a value whose type declares how to walk it -- a range's iterator is such a declaration (5.4, 5.7). 'a..b' is the range value of the integers from 'a' to 'b - 1', left closed and right open, and a 'for' over it counts them without building the array (4.2).
 ```
 
-**Example** (`test/cases/loops/err_not_iterable.cml`, run as `camel -E short test/cases/loops/err_not_iterable.cml`)
+**Example** (`test/cases/loops/err_not_iterable.cml`, run as `camel --diag-format short test/cases/loops/err_not_iterable.cml`)
 
 ```camel
 // `for` takes the elements of an array, a string, a map or a tensor; an int is none of them.
@@ -3581,7 +3581,7 @@ The first value of the loop state '{0}' does not give it a type ('{1}').
 The state of a loop has the type of its first value. 'null' and the empty array '[]' have none of their own: write 'null as T?', or bind the empty array with its type first ('let none: int[] = []') and start from that name.
 ```
 
-**Example** (`test/cases/loops/err_untyped_state.cml`, run as `camel -E short test/cases/loops/err_untyped_state.cml`)
+**Example** (`test/cases/loops/err_untyped_state.cml`, run as `camel --diag-format short test/cases/loops/err_untyped_state.cml`)
 
 ```camel
 func main() => int sync {
@@ -3611,7 +3611,7 @@ The condition after 'while' has type '{0}'; a condition is a 'bool'.
 There is no truth-value conversion: compare explicitly ('n != 0', 'len(s) > 0', 'x != null').
 ```
 
-**Example** (`test/cases/loops/err_condition.cml`, run as `camel -E short test/cases/loops/err_condition.cml`)
+**Example** (`test/cases/loops/err_condition.cml`, run as `camel --diag-format short test/cases/loops/err_condition.cml`)
 
 ```camel
 func main() => int sync {
@@ -3673,7 +3673,7 @@ The variant '{0}' is declared twice in enum '{1}'.
 A variant is one of the values of its enum and is written by its name; each name occurs once.
 ```
 
-**Example** (`test/cases/compile/enum/err_duplicate_variant.cml`, run as `camel -E short test/cases/compile/enum/err_duplicate_variant.cml`)
+**Example** (`test/cases/compile/enum/err_duplicate_variant.cml`, run as `camel --diag-format short test/cases/compile/enum/err_duplicate_variant.cml`)
 
 ```camel
 type Shape = enum {
@@ -3707,7 +3707,7 @@ The field '{0}' is declared twice in variant '{1}' of enum '{2}'.
 A field of a struct variant is written by its name; each name occurs once.
 ```
 
-**Example** (`test/cases/compile/enum/err_duplicate_field.cml`, run as `camel -E short test/cases/compile/enum/err_duplicate_field.cml`)
+**Example** (`test/cases/compile/enum/err_duplicate_field.cml`, run as `camel --diag-format short test/cases/compile/enum/err_duplicate_field.cml`)
 
 ```camel
 type Pair = enum {
@@ -3740,7 +3740,7 @@ The variant '{0}' of enum '{1}' takes {2} field(s), but {3} were given.
 The fields of a variant are those its declaration writes: as many, and in the same order for a variant written with '(...)'.
 ```
 
-**Example** (`test/cases/compile/enum/err_field_count.cml`, run as `camel -E short test/cases/compile/enum/err_field_count.cml`)
+**Example** (`test/cases/compile/enum/err_field_count.cml`, run as `camel --diag-format short test/cases/compile/enum/err_field_count.cml`)
 
 ```camel
 type Shape = enum {
@@ -3774,7 +3774,7 @@ The pattern '{0}' does not match a value of type '{1}': {2}.
 A pattern names a variant of the enum it matches and, if that variant has fields, binds each of them by its position ('Shape::Circle(r)') or by the name its declaration gives ('Shape::Rect { w, h }').
 ```
 
-**Example** (`test/cases/compile/enum/err_unknown_variant.cml`, run as `camel -E short test/cases/compile/enum/err_unknown_variant.cml`)
+**Example** (`test/cases/compile/enum/err_unknown_variant.cml`, run as `camel --diag-format short test/cases/compile/enum/err_unknown_variant.cml`)
 
 ```camel
 type Shape = enum {
@@ -3808,7 +3808,7 @@ The match over '{0}' has no case for {1}, and no 'case _'.
 Every variant of an enum is a value of it, so a match that names variants must name all of them or end with 'case _'. The compiler adds no arm the program does not show.
 ```
 
-**Example** (`test/cases/compile/enum/err_not_exhaustive.cml`, run as `camel -E short test/cases/compile/enum/err_not_exhaustive.cml`)
+**Example** (`test/cases/compile/enum/err_not_exhaustive.cml`, run as `camel --diag-format short test/cases/compile/enum/err_not_exhaustive.cml`)
 
 ```camel
 type Shape = enum {
@@ -3849,7 +3849,7 @@ None: choice: the repair is a decision only the writer can make
 A field of a variant is taken out by matching the value and binding it in the arm of that variant: 'match v { case {2} => ... }'.
 ```
 
-**Example** (`test/cases/compile/enum/err_field_access.cml`, run as `camel -E short test/cases/compile/enum/err_field_access.cml`)
+**Example** (`test/cases/compile/enum/err_field_access.cml`, run as `camel --diag-format short test/cases/compile/enum/err_field_access.cml`)
 
 ```camel
 type Shape = enum {
@@ -3916,7 +3916,7 @@ Field {0} of variant '{1}' has type '{2}', but the value given has type '{3}'.
 The fields of a variant are those its declaration writes.
 ```
 
-**Example** (`test/cases/compile/enum/err_field_type.cml`, run as `camel -E short test/cases/compile/enum/err_field_type.cml`)
+**Example** (`test/cases/compile/enum/err_field_type.cml`, run as `camel --diag-format short test/cases/compile/enum/err_field_type.cml`)
 
 ```camel
 type Shape = enum {
@@ -3950,7 +3950,7 @@ Variant '{0}' of enum '{1}' cannot be built from this value: {2}.
 A variant written with '(...)' is built from its fields in order; one written with '{ }' from a value that has a field of each name it declares; and one without fields is the value itself.
 ```
 
-**Example** (`test/cases/compile/enum/err_struct_missing_field.cml`, run as `camel -E short test/cases/compile/enum/err_struct_missing_field.cml`)
+**Example** (`test/cases/compile/enum/err_struct_missing_field.cml`, run as `camel --diag-format short test/cases/compile/enum/err_struct_missing_field.cml`)
 
 ```camel
 type Shape = enum {
@@ -8150,7 +8150,7 @@ The type '{0}' mentions itself through a collection: recursion through an array,
 A type may reach itself indirectly, through an array, a map, a set or an enum (design principles 5.2), and the shape that needs is not built here: write the type without mentioning itself. Containing itself directly, as a struct field of its own type, is a different error: `ModuleTypeCycle`.
 ```
 
-**Example** (`test/cases/compile/semantic/type_recursion_through_map.cml`, run as `camel -E short test/cases/compile/semantic/type_recursion_through_map.cml`)
+**Example** (`test/cases/compile/semantic/type_recursion_through_map.cml`, run as `camel --diag-format short test/cases/compile/semantic/type_recursion_through_map.cml`)
 
 ```camel
 type Node = { children: Map<int, Node> }
@@ -8180,7 +8180,7 @@ An enum is declared in a type declaration ('type Shape = enum ...') and its type
 An enum is a named type (design principles 5.3): `type Shape = enum { Circle(float), Dot }` declares it, and `Shape` is what is written where a value of it is expected. The variants are written in the `type` declaration and nowhere else.
 ```
 
-**Example** (`test/cases/compile/semantic/enum_where_type_expected.cml`, run as `camel -E short test/cases/compile/semantic/enum_where_type_expected.cml`)
+**Example** (`test/cases/compile/semantic/enum_where_type_expected.cml`, run as `camel --diag-format short test/cases/compile/semantic/enum_where_type_expected.cml`)
 
 ```camel
 type Shape = enum { Dot, Circle(float) }
@@ -8689,7 +8689,7 @@ This statement cannot run: the 'return' written before it gives the value of thi
 A 'return e' is the value of the block it is written in -- a function body, a 'sync' block, or the arm of an 'if' or a 'match' -- and a statement written after it in that same block is never reached. Move the statement before the 'return', or delete it.
 ```
 
-**Example** (`test/cases/compile/return_after/statement_after_return_sync.cml`, run as `camel -E short test/cases/compile/return_after/statement_after_return_sync.cml`)
+**Example** (`test/cases/compile/return_after/statement_after_return_sync.cml`, run as `camel --diag-format short test/cases/compile/return_after/statement_after_return_sync.cml`)
 
 ```camel
 func g() => int sync {
@@ -8978,7 +8978,7 @@ This value has type '{0}' and it is fallible: calling it as a function leaves th
 A 'T!' is a value that reports a failure instead of giving a result, so a call of it has nothing to run: take it apart first ('!!', '->' or 'match'), return it from a function that declares a 'T!', or drop it on purpose with 'let _ = ...', and then call the function it gives.
 ```
 
-**Example** (`test/cases/compile/unused_values/called_fallible.cml`, run as `camel -E short test/cases/compile/unused_values/called_fallible.cml`)
+**Example** (`test/cases/compile/unused_values/called_fallible.cml`, run as `camel --diag-format short test/cases/compile/unused_values/called_fallible.cml`)
 
 ```camel
 // Calling a `T!` as a function: the value reports a failure instead of giving a result, so the
@@ -9339,7 +9339,7 @@ None: choice: the two ways out are the writer's to choose
 A `var` context parameter ('with <var total: int>') is passed in and written back by the call, the same as a `var` parameter (design principles 3.5), so the cell it names belongs to the call. A function value made by a partial application has no call of its own to write it back to, so 'f<w>' cannot bind one: the write would have nowhere to go, and the cell the value captured would never see it. Two ways out: call the function where the name lives ('f<name>(x)'), so the write-back is the assignment written at the call; or hold the state in a `Ref` ('let r = ref(0)', 'get(r)', 'set(r, v)'), which a partial application can bind because a handle is a value, and every call writes the box.
 ```
 
-**Example** (`test/cases/consistency/partial_application/err_var_context_parameter.cml`, run as `camel -E short test/cases/consistency/partial_application/err_var_context_parameter.cml`)
+**Example** (`test/cases/consistency/partial_application/err_var_context_parameter.cml`, run as `camel --diag-format short test/cases/consistency/partial_application/err_var_context_parameter.cml`)
 
 ```camel
 var total: int = 0
@@ -9643,7 +9643,7 @@ This '{0}' gives the value of the '{1}' it is in, and nothing uses that value: i
 An arm of an 'if' or 'match' is a graph of its own: '{0}' in an arm ends the arm and gives the value of the branch, as it does in any block. Here the branch is a statement whose value nothing takes, so the '{0}' has no effect and the function goes on with the next statement. To return from the function through a branch, make the '{1}' the last expression of the function body, or write 'return' in front of it ('return if ... then ... else ...').
 ```
 
-**Example** (`test/cases/compile/diag_json/warning_with_error.cml`, run as `camel --output-format json test/cases/compile/diag_json/warning_with_error.cml`)
+**Example** (`test/cases/compile/diag_json/warning_with_error.cml`, run as `camel --diag-format json test/cases/compile/diag_json/warning_with_error.cml`)
 
 ```camel
 func count(a: int) => int sync {
@@ -9681,7 +9681,7 @@ This value has type '{0}' and nothing uses it: an error it holds is lost{1}.
 A function that returns a 'T!' reports its failure through that value. Take the value apart with '!!', '->' or 'match', return it from a function that declares a 'T!', or drop it on purpose with 'let _ = ...'.
 ```
 
-**Example** (`test/cases/compile/unused_values/fallible_sync.cml`, run as `camel -E short test/cases/compile/unused_values/fallible_sync.cml`)
+**Example** (`test/cases/compile/unused_values/fallible_sync.cml`, run as `camel --diag-format short test/cases/compile/unused_values/fallible_sync.cml`)
 
 ```camel
 func check_same(a: int, b: int) => bool! {
@@ -9715,7 +9715,7 @@ None: choice: the repair is a decision only the writer can make
 Only a value of type 'T?' can be null. In the arm of 'if x != null' the name 'x' is already a 'T'. Remove the test, or test a value that may be null.
 ```
 
-**Example** (`test/cases/consistency/narrowing/compare_plain_with_null.cml`, run as `camel -E short test/cases/consistency/narrowing/compare_plain_with_null.cml ${backend}`)
+**Example** (`test/cases/consistency/narrowing/compare_plain_with_null.cml`, run as `camel --diag-format short test/cases/consistency/narrowing/compare_plain_with_null.cml ${backend}`)
 
 ```camel
 // A value that cannot be null may be compared with `null`: the result is fixed, and the
@@ -9780,7 +9780,7 @@ The variant '{0}' is matched more than once; the later case is never taken.
 A branch takes the first case that matches. Remove the later case, or the earlier one.
 ```
 
-**Example** (`test/cases/compile/enum/warn_duplicate_case.cml`, run as `camel -E short test/cases/compile/enum/warn_duplicate_case.cml`)
+**Example** (`test/cases/compile/enum/warn_duplicate_case.cml`, run as `camel --diag-format short test/cases/compile/enum/warn_duplicate_case.cml`)
 
 ```camel
 type Shape = enum {
@@ -9821,7 +9821,7 @@ This case follows 'case _': it is never taken.
 'case _' matches every value, so nothing after it can. Remove it, or move it before the wildcard.
 ```
 
-**Example** (`test/cases/compile/enum/warn_after_wildcard.cml`, run as `camel -E short test/cases/compile/enum/warn_after_wildcard.cml`)
+**Example** (`test/cases/compile/enum/warn_after_wildcard.cml`, run as `camel --diag-format short test/cases/compile/enum/warn_after_wildcard.cml`)
 
 ```camel
 type Shape = enum {
@@ -9862,7 +9862,7 @@ Every variant of '{0}' is matched before 'case _': the wildcard is never taken.
 Naming every variant already covers every value of the enum. Remove 'case _', or remove the case it was meant to stand in for.
 ```
 
-**Example** (`test/cases/compile/enum/warn_redundant_wildcard.cml`, run as `camel -E short test/cases/compile/enum/warn_redundant_wildcard.cml`)
+**Example** (`test/cases/compile/enum/warn_redundant_wildcard.cml`, run as `camel --diag-format short test/cases/compile/enum/warn_redundant_wildcard.cml`)
 
 ```camel
 type Shape = enum {
@@ -10006,7 +10006,7 @@ This call never runs: {0} has type 'never', and an argument is evaluated before 
 A value of type 'never' is never handed out: what gives it -- a fault, 'fail', or 'exit' -- ends the program before the call. The call is typed 'never' for that reason and no overload is chosen for it. If the call is meant to run, the argument it is written with is what to look at.
 ```
 
-**Example** (`test/cases/consistency/fail_never/never_argument.cml`, run as `camel check -O short test/cases/consistency/fail_never/never_argument.cml`)
+**Example** (`test/cases/consistency/fail_never/never_argument.cml`, run as `camel check --diag-format short test/cases/consistency/fail_never/never_argument.cml`)
 
 ```camel
 func double(x: int) => int {
@@ -10299,7 +10299,7 @@ Array shape mismatch in '{0}': {1}.
 Check the shapes of all operands involved in the operation and ensure they are compatible for broadcasting or direct computation.
 ```
 
-**Example** (`test/cases/loops/fault_tensor_rank0.cml`, run as `camel -E short test/cases/loops/fault_tensor_rank0.cml ${backend}`)
+**Example** (`test/cases/loops/fault_tensor_rank0.cml`, run as `camel --diag-format short test/cases/loops/fault_tensor_rank0.cml ${backend}`)
 
 ```camel
 // Reshaping a tensor to no dimension makes it the one element it holds,
@@ -10345,7 +10345,7 @@ Unrecognized graph rewriting/scheduling/translation pass '{0}'.
 Check the pass name for possible typos, or refer to the documentation to see the passes supported in the current version.
 ```
 
-**Example** (`test/cases/compile/diag_json/div_zero.cml`, run as `camel --output-format json test/cases/compile/diag_json/div_zero.cml std::no_such_pass`)
+**Example** (`test/cases/compile/diag_json/div_zero.cml`, run as `camel --diag-format json test/cases/compile/diag_json/div_zero.cml std::no_such_pass`)
 
 ```camel
 func div(a: int, b: int) => int {
@@ -10410,7 +10410,7 @@ Pass '{0}' failed with an internal error: {1}.
 The pass gave up without a diagnostic of its own: it built or was given a graph it cannot handle, which is a defect of the compiler rather than of the program. Try the pipeline without this pass or with the passes in another order, and report the program together with the pass list.
 ```
 
-**Example** (`test/cases/opt/generic/broken_graph.cml`, run as `camel --output-format json test/cases/opt/generic/broken_graph.cml test::drop_call_argument std::fvm`)
+**Example** (`test/cases/opt/generic/broken_graph.cml`, run as `camel --diag-format json test/cases/opt/generic/broken_graph.cml test::drop_call_argument std::fvm`)
 
 ```camel
 // Used with the test-only pass test::drop_call_argument, which removes the argument of the call
@@ -10783,7 +10783,7 @@ Out of memory{0}: {1}.
 The graph, permanent and meta spaces hold the compiled program (its runtime graphs, its types, the constants of the graphs being compiled) and grow with it; each has a total limit that only guards against a compiler that does not stop allocating. If the program is this large, raise the limit with the environment variable the message names. If a pass is named, the growth may be its doing (an inlining or unrolling that does not end): run the pipeline without it. The auto space holds run-time values: it is bounded by the memory of the host, or by CAMEL_GC_HEAP_LIMIT_MB when that is set, in which case the values the program keeps alive do not fit the limit.
 ```
 
-**Example** (`test/cases/compile/stream/interval_loop_not_materialised.cml`, run as `camel --gc heap_limit_mb= 8 test/cases/compile/stream/interval_loop_not_materialised.cml std::nvm`)
+**Example** (`test/cases/compile/stream/interval_loop_not_materialised.cml`, run as `camel --gc heap_limit_mb=8 test/cases/compile/stream/interval_loop_not_materialised.cml std::nvm`)
 
 ```camel
 // `for i in 0..n` builds no array (design principles 4.2): the rounds
