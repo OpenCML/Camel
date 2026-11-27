@@ -118,3 +118,13 @@ class FactsCompareTestPass : public RuntimeGraphRewritePass {
     const camel::runtime::Program *
     apply(const camel::runtime::Program *program, std::ostream &os) override;
 };
+/// The same four-kind comparison alone: `test::core_kinds_compare` prints one line and nothing
+/// else, so a case that pins the verdict is not reading a window of a longer listing.
+inline constexpr const char *kCoreKindsCompareTestPass = "test::core_kinds_compare";
+
+class CoreKindsCompareTestPass : public RuntimeGraphRewritePass {
+  public:
+    using RuntimeGraphRewritePass::RuntimeGraphRewritePass;
+    const camel::runtime::Program *
+    apply(const camel::runtime::Program *program, std::ostream &os) override;
+};

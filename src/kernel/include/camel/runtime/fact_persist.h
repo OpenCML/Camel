@@ -31,6 +31,7 @@
 #include <optional>
 #include <string>
 #include <string_view>
+#include <unordered_map>
 #include <utility>
 #include <vector>
 
@@ -45,6 +46,14 @@ namespace camel::runtime::fact {
  * printed form). Source positions do not enter it.
  */
 uint64_t portableGraphHash(const Program &program, const GCGraph *graph);
+
+/// The display name of each graph of `graphs`: its own name, and `~<ordinal>` for the second
+/// and every later graph of one name, in the order of the GraphIds. A name is only displayed
+/// and compared as a whole, never taken apart; it is the same in every process that builds the
+/// program the same way. The exporter above and any exporter of a graph's facts share it, so
+/// the same graph is named the same way whichever store answered.
+std::unordered_map<const GCGraph *, std::string>
+qualifiedGraphNames(const std::vector<GCGraph *> &graphs);
 
 /// One fact in the form a cache would hold it.
 struct PortableFact {

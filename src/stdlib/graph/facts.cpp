@@ -3,8 +3,9 @@
 
 /*
  * The facts of the graph module: what the core knows of a graph or a node without the pass
- * computing it again (design 10). Reads go through the context's fact store, so a fact asked
- * for twice is computed once and dropped when a rewrite changes what it read.
+ * computing it again (design 10). Reads go through a fact store -- the framework's for the kinds
+ * that moved there (`camel/facts/core_kinds.h`) and the context's for the others -- so a fact
+ * asked for twice is computed once and dropped when a rewrite changes what it read.
  *
  * A fact about a *draft* is the exception, and it is why every operator here starts at `viewOf`
  * (resolve.h) and not at the store. The store's anchor holds a published `GCGraph`
@@ -32,6 +33,7 @@
 #include "camel/core/rtdata/tagged.h"
 #include "camel/core/tags.h"
 #include "camel/core/type/composite/tuple.h"
+#include "camel/facts/core_values.h"
 #include "camel/runtime/core_facts.h"
 #include "camel/runtime/draft.h"
 #include "camel/runtime/effects.h"
@@ -94,7 +96,7 @@ slot_t effectsKernel(ArgsView &, ArgsView &norm, Context &ctx) {
 }
 
 /// The tensor shape of the node's value as text (`f32[2, 3]`), null when its value is no tensor.
-slot_t shapeKernel(ArgsView &, ArgsView &norm, Context &ctx) {
+slot_t shapeKernel(ArgsView &, ArgsView &norm, Context &) {
     const Handle *handle = norm.get<Handle *>(0);
     const NodeView node  = viewOf(handle, "graph.shape");
     std::optional<fact::TensorShape> shape;
@@ -105,11 +107,13 @@ slot_t shapeKernel(ArgsView &, ArgsView &norm, Context &ctx) {
         // the text the published node prints.
         shape = fact::shapeOfType(node.dataType());
     } else {
-        const Anchor anchors[] = {publishedAnchor(handle, "graph.shape", true)};
-        const auto stored = ctx.facts().obtain<fact::TensorShape>(fact::coreKinds().shape, anchors);
-        if (stored) {
-            shape = *stored;
-        }
+        // The node the store's anchor names, asked of the store that keeps this kind
+        // (`camel/facts/core_values.h`): a shape is the type of the node it is anchored on, and
+        // both registries read that one type, so this is the same answer from the store that will
+        // still have it (test::facts_compare, the `core.kinds` shape row).
+        const Anchor anchor = publishedAnchor(handle, "graph.shape", true);
+        shape =
+            camel::facts::shapeOf(*anchor.graph, static_cast<camel::facts::NodeId>(anchor.node));
     }
     if (!shape || !shape->dtype) {
         return NullSlot;
@@ -120,7 +124,7 @@ slot_t shapeKernel(ArgsView &, ArgsView &norm, Context &ctx) {
 }
 
 /// The numeric permissions the program granted the node, as a bit set.
-slot_t permissionsKernel(ArgsView &, ArgsView &norm, Context &ctx) {
+slot_t permissionsKernel(ArgsView &, ArgsView &norm, Context &) {
     const Handle *handle = norm.get<Handle *>(0);
     const NodeView node  = viewOf(handle, "graph.permissions");
     if (node.isDraft()) {
@@ -129,9 +133,12 @@ slot_t permissionsKernel(ArgsView &, ArgsView &norm, Context &ctx) {
         // it, so this is the published reading taken where the draft keeps it -- not a second one.
         return toSlot<Int64>(camel::core::tag::permissionsOf(node.draft(), node.ref));
     }
-    const Anchor anchors[] = {publishedAnchor(handle, "graph.permissions", true)};
-    const auto granted = ctx.facts().obtain<int>(fact::coreKinds().permissions, anchors);
-    return toSlot<Int64>(granted ? *granted : 0);
+    const Anchor anchor = publishedAnchor(handle, "graph.permissions", true);
+    // The same node the anchor names, asked of the store that keeps this kind
+    // (`camel/facts/core_values.h`). `0` is "nothing granted", the number a missing fact already
+    // produced here, so the value the caller sees does not change with the store it came from.
+    return toSlot<Int64>(
+        camel::facts::permissionsOf(*anchor.graph, static_cast<camel::facts::NodeId>(anchor.node)));
 }
 
 struct FactOp {

@@ -16,6 +16,7 @@
 #include "camel/core/type/composite/struct.h"
 #include "camel/core/type/composite/tuple.h"
 #include "camel/execute/graph_runtime_support.h"
+#include "camel/facts/core_values.h"
 #include "camel/runtime/core_facts.h"
 #include "camel/runtime/graph.h"
 #include "camel/runtime/loop.h"
@@ -796,10 +797,12 @@ class Compiler {
                 ty::Type *knownResult = nullptr;
                 const bool sameTypes  = sameOperandTypes(*g, id, args);
                 if (sameTypes) {
-                    const rt::fact::Anchor anchor{runtimeProgram, g, id};
-                    const auto shape = facts.obtain<rt::fact::TensorShape>(
-                        rt::fact::coreKinds().shape,
-                        {&anchor, 1});
+                    // The node the anchor used to name, asked of the store that keeps this kind
+                    // (`camel/facts/core_values.h`): a shape is the type of the node it is anchored
+                    // on, which is the one reading both registries compute (test::facts_compare,
+                    // the `core.kinds` shape row).
+                    const auto shape =
+                        camel::facts::shapeOf(*g, static_cast<camel::facts::NodeId>(id));
                     if (shape && shape->dtype == ty::TypeCode::Float32 && shape->dims &&
                         std::all_of(
                             shape->dims->begin(),
@@ -850,9 +853,12 @@ class Compiler {
         const rt::GCGraph &graph, rt::gc_node_ref_t node, const std::vector<Value> &args) {
         const bool sameTypes = sameOperandTypes(graph, node, args);
         if (sameTypes) {
-            const rt::fact::Anchor anchor{runtimeProgram, &graph, node};
+            // The same node, asked of the store that keeps this kind (`camel/facts/core_values.h`):
+            // an instance is what the node's operator declares at that node, instantiated from the
+            // operand types and the static arguments -- one body, so the answer is the one the
+            // runtime kind gave (test::facts_compare, the `core.kinds` instance row).
             const auto fact =
-                facts.obtain<rt::fact::NodeInstance>(rt::fact::coreKinds().instance, {&anchor, 1});
+                camel::facts::instanceAt(graph, static_cast<camel::facts::NodeId>(node));
             if (fact && fact->instance &&
                 std::all_of(
                     fact->instance->domain.params.begin(),

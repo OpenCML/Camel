@@ -180,4 +180,13 @@ std::string toString(const EffectSummary &effects);
 std::string toString(const RegionEffects &effects);
 std::string toString(const LoopDomain &domain);
 
+/// The portable text form of a shape ("float32|2,3", "-|2,-1", "float32|?") and of a reorder
+/// freedom ("contract", "regroup, permute"), and the values those texts read back to. A fact's
+/// text must not depend on the registration that wrote it, so the framework's kind for each
+/// (`camel/facts/core_kinds.h`) states the same coder these functions give.
+std::string encodeShape(const TensorShape &shape);
+std::optional<TensorShape> decodeShape(std::string_view text);
+std::string encodeReorder(const Reorder &reorder);
+std::optional<Reorder> decodeReorder(std::string_view text);
+
 } // namespace camel::runtime::fact
