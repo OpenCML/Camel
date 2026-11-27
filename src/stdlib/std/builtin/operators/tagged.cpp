@@ -79,6 +79,11 @@ slot_t __error_new__(ArgsView &with, ArgsView &norm, Context &ctx) {
         String *str = index < norm.size() ? norm.get<String *>(index) : nullptr;
         return str ? str->toString() : std::string();
     };
+    // `error('Kind')`: the message was left out, so the second string is the position of the call,
+    // which the compiler appends after the arguments the program wrote.
+    if (norm.size() == 2) {
+        return makeErrorInfo(text(0), std::string(), text(1));
+    }
     return makeErrorInfo(text(0), text(1), text(2));
 }
 
@@ -91,17 +96,17 @@ slot_t __fail__(ArgsView &with, ArgsView &norm, Context &ctx) {
         return str ? str->toString() : std::string();
     };
     // A fault the program raises itself: it is reported where the call stands, as the fault of
-    // any operator is, and the kind is the one the program wrote (design principles 3.9). The
-    // call has no value, so there is nothing to return.
+    // any operator is, and the kind and the message are the two ordinary arguments the call gives
+    // (design principles 3.9). The call has no value, so there is nothing to return.
     throw camel::core::error::RuntimeFault(
         camel::core::error::RuntimeDiag::ProgramFault,
-        {text(norm, 0)},
+        {text(norm, 1)},
         "",
         nullptr,
         {},
         camel::core::error::RuntimeFaultPolicy::AbortCurrentExecution,
         {},
-        text(with, 0));
+        text(norm, 0));
 }
 
 namespace {
@@ -233,15 +238,34 @@ std::vector<oper_group_ptr_t> getTaggedOperatorGroups() {
                       }
                       return errorType();
                   })}}),
-        // fail<'Kind'>(message): the program's own premise check (design principles 3.9). The
+        // fail('Kind', message): the program's own premise check (design principles 3.9). The
         // kind is the with-argument it writes, the message its argument, and the result is the
         // bottom type `never`: the call gives no value, so it may stand where any type is
         // expected and a branch arm that raises the fault leaves the branch's type to the other
         // arm. It is the fault of an operator, raised where the call is written and isolatable
         // by `attempt`; like every other computation it happens only where its value is wanted,
         // and it is no effect of its own.
-        // The rule of `fail` is the declaration of stdlib/prelude.cml.
-        OperatorGroup::create("fail", {}),
+        // The rule of `fail` is the declaration of stdlib/prelude.cml: the kind and the message
+        // are ordinary arguments and the result is the bottom type `never`. The entry states the
+        // signature so that a call may leave the message out, which is read from the declaration's
+        // default; the group's entries are one signature, so every call means that declaration.
+        OperatorGroup::create(
+            "fail",
+            {{":op/fail",
+              DynamicFuncTypeResolver::create(
+                  {{0, {}}, {-1, {}}},
+                  "(kind: string, message: string) => never",
+                  [](const type_vec_t &, const type_vec_t &norm) -> optional<Type *> {
+                      if (norm.empty() || norm.size() > 2) {
+                          return nullopt;
+                      }
+                      for (Type *type : norm) {
+                          if (type->code() != TypeCode::String) {
+                              return nullopt;
+                          }
+                      }
+                      return Type::Never();
+                  })}}),
         // Fault isolation (design principles 3.9): `attempt(f)` is a function transform. It
         // gives the function whose parameters are `f`'s and whose result is `f`'s result plus
         // `!`; the builder makes that value and the marked call it holds is the node the

@@ -183,14 +183,14 @@ the literal into a constant array, and the program written back builds a differe
 **291/293 = 99.3% 是"语言的事实"，不是打印机的手艺**：实例图在源码里**没有写法**（源写 `vmap(f)`，实例由调用点定），`namespace`/`module` 区域**打印机不支持**。所以这一族**不该在补名字这一层动**，两条路都等作者裁，页面见 `internal/reviews/questions-2026-11-02-generic-instances-and-namespace-blocks.md`（两条各带代价，默认两条都不做）。
 
 **一处更正（把我上一刀的读数收回）：** 上一刀我报"`PLAIN` 两个、名字是 `rulesets.`（以句点结尾）⇒ 前端拼前缀漏了成员名"——**不成立**：那是我统计脚本的截断错误（`sed` 在第一个句点处截断），真名是 `rulesets.jvp::lift<float>` 与 `rulesets.probe_missing::add_ok__lhs`。用正确的提取重扫：**以 `::`、`.` 或 `<` 结尾的名字计数为 0**，`PLAIN` 为 0。所以"前端拼名字漏成员名"这条缺陷**没有可修的点**，这一刀只有分类、没有代码改动。
-**2026-11-02 第十一刀（作者缺陷清单 A7 的第 1 条）：`fail<'Kind'>(message)` 是语句，打印机漏了它。** 缺陷原文：`consistency/fail_never/statement_after_fail` 原程序打印 `before`、报故障、`exit 1`；打印出来的程序打印 `before`、`after`、`exit 0`——**`fail` 语句被丢了**。
+**2026-11-02 第十一刀（作者缺陷清单 A7 的第 1 条）：`fail('Kind', message)` 是语句，打印机漏了它。** 缺陷原文：`consistency/fail_never/statement_after_fail` 原程序打印 `before`、报故障、`exit 1`；打印出来的程序打印 `before`、`after`、`exit 0`——**`fail` 语句被丢了**。
 
 `git grep -n ":op/fail\|kFailOperatorUri" -- src include` 指到 `kernel/include/camel/core/operator_names.h#kFailOperatorUri`：`kFailOperatorUri = ":op/fail"`，注释写着"它**不是效果**，所以它的值不被需要的地方没有东西运行它"。`lib/std/cml/cml.cpp` 的语句走查（`processNode`）只把 `nodeEffect(ref)` 为真的节点当语句打印，而 `fail` 的值类型是 `never`、用户数 0、又不是效果 ⇒ **它是被"跳过"的，不是被当成值表达式丢了**（值表达式那条路也走不到：`users == 0` 时那一支只在有名字或有效果时产出）。
 
-修法：在语句走查里按 URI 认出它，按语言的写法打印（`emitFail`）——`with` 槽里的常量字符串是 `'Kind'`、唯一一个 norm 输入是消息；**kind 不是常量字符串时具名拒绝**（`fail<'Kind'>` 是唯一写法，写别的 kind 就是假打印）：
+修法：在语句走查里按 URI 认出它，按语言的写法打印（`emitFail`）——种类是第一个普通实参的常量字符串、消息是第二个；**kind 不是常量字符串时具名拒绝**（`fail('Kind', message)` 是唯一写法，写别的 kind 就是假打印）：
 
 ```
-a 'fail' whose kind is not a constant string: the statement is written `fail<'Kind'>` and the
+a 'fail' whose kind is not a constant string: the statement is written `fail('Kind', message)` and the
 kind is the value it holds, so a print that cannot read it cannot write the statement
 ```
 
@@ -232,7 +232,7 @@ kind is the value it holds, so a print that cannot read it cannot write the stat
 | `families` | 52 | **52** |
 
 
-**2026-11-02 第十三刀（A7 第 5、6 条）：`print` 的格式说明就在 `with` 槽里，读法与 `fail<'Kind'>` 同源。** 缺陷原文：`trans/cpp/exec/print_formats` 原程序 `3-4|1+2` / `next` / `[5][a]` / `0.50`；打印版 `3 4|1 2` / `next` / `5a` / `0.5`。`consistency/values/float_special` 原程序末三行 `nan` / `     nan` / `+nan`；打印版三行都是 `nan`。
+**2026-11-02 第十三刀（A7 第 5、6 条）：`print` 的格式说明就在 `with` 槽里，读法与 `fail` 的种类同源。** 缺陷原文：`trans/cpp/exec/print_formats` 原程序 `3-4|1+2` / `next` / `[5][a]` / `0.50`；打印版 `3 4|1 2` / `next` / `5a` / `0.5`。`consistency/values/float_special` 原程序末三行 `nan` / `     nan` / `+nan`；打印版三行都是 `nan`。
 
 **`with` 槽的形状**（`lib/std/prelude.cml` 的声明）：
 

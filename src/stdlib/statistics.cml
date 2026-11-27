@@ -45,13 +45,13 @@ export func median::<T>(xs: T[]) => T when is_float::<T>() {
 /// @example [1.0, 2.0, 3.0, 4.0, 5.0]->quantile<0.25>    // 2
 with <q: float>
 export func quantile::<T>(xs: T[]) => T when is_float::<T>() {
-    return if !(q >= 0.0 && q <= 1.0) then fail<'InvalidArgument'>('a quantile is between 0 and 1')
-    else if len(xs) == 0 then fail<'InvalidArgument'>('the quantile of no elements') else T(quantile_of(sort(float(xs)), q))
+    return if !(q >= 0.0 && q <= 1.0) then fail('InvalidArgument', 'a quantile is between 0 and 1')
+    else if len(xs) == 0 then fail('InvalidArgument', 'the quantile of no elements') else T(quantile_of(sort(float(xs)), q))
 }
 
 // The sample variance: the squares of the distances to the mean, added in f64 and divided by n - 1.
 func variance_of(w: float[]) => float {
-    return if len(w) < 2 then fail<'InvalidArgument'>('a variance needs at least two elements') else {
+    return if len(w) < 2 then fail('InvalidArgument', 'a variance needs at least two elements') else {
         let m = sum(w) / float(len(w))
         sum(w->map<func (x) {
             (x - m) * (x - m)

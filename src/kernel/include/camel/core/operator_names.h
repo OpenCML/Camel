@@ -109,7 +109,7 @@ inline constexpr std::string_view kComposeCall = "$comp::<>";
 /// can stop the program.
 inline constexpr std::string_view kRefineExtentOperatorUri = ":op/refine_extent";
 
-/// The operator of `fail<'Kind'>(message)` (design principles 3.9), declared in
+/// The operator of `fail('Kind', message)` (design principles 3.9), declared in
 /// `stdlib/prelude.cml` and built in as the group `fail`: the program's own premise
 /// check, whose call gives the bottom type `never`. A program never writes the URI; the builder
 /// reads the nodes of the calls back by it, for what a `fail` written as a statement of its own

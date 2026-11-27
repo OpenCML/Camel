@@ -161,7 +161,7 @@ struct Never {
     }
 };
 
-/// `fail<'Kind'>(message)` (:op/fail, src/builtin/operators/tagged.cpp): the fault the program
+/// `fail('Kind', message)` (:op/fail, src/builtin/operators/tagged.cpp): the fault the program
 /// raises itself, reported where the call stands, under the kind the program wrote (design
 /// principles 3.9). Nothing of it is returned.
 [[noreturn]] inline Never fail(const Site &site, std::string_view message) {

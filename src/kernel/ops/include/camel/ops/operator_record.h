@@ -230,9 +230,12 @@ struct AttrGrant {
  * because of a name the compiler knows.
  */
 struct CallSpec {
-    /// When the call is written with exactly this many ordinary arguments (-1: never), the
-    /// compiler appends the position of the call as one more, constant string argument.
-    int8_t callSiteAtArity = -1;
+    /// When the call is written with this many ordinary arguments (-1: never), the compiler
+    /// appends the position of the call as one more, constant string argument;
+    /// `callSiteAtArityFrom` gives the smallest arity that still takes it (-1: exactly
+    /// `callSiteAtArity`), because the message of `error` and `fail` may be left out.
+    int8_t callSiteAtArity     = -1;
+    int8_t callSiteAtArityFrom = -1;
     /// The index of the with-argument, or of the ordinary argument, that is a format string
     /// (-1: none): when it is a constant, the compiler checks it against the other arguments.
     int8_t formatWithArg = -1;

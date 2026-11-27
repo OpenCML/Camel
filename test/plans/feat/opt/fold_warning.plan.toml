@@ -157,7 +157,7 @@ timeout_ms = 8000
 
 [[tests]]
 name = "fail_is_intended.fold"
-desc = "A deliberate `fail<'Kind'>(message)` is not a constant expression that faults by accident: std::cxx::fold folds the program without a ConstantExpressionFaults warning."
+desc = "A deliberate `fail('Kind', message)` is not a constant expression that faults by accident: std::cxx::fold folds the program without a ConstantExpressionFaults warning."
 kind = "behavior"
 case = "../../../cases/opt/generic/fold_fail_is_intended.cml"
 args = ["${case}", "std::cxx::fold"]
@@ -171,7 +171,7 @@ timeout_ms = 8000
 
 [[tests]]
 name = "fail_is_intended.opt"
-desc = "A deliberate `fail<'Kind'>(message)` is not a constant expression that faults by accident: std::opt folds the program without a ConstantExpressionFaults warning."
+desc = "A deliberate `fail('Kind', message)` is not a constant expression that faults by accident: std::opt folds the program without a ConstantExpressionFaults warning."
 kind = "behavior"
 case = "../../../cases/opt/generic/fold_fail_is_intended.cml"
 args = ["${case}", "std::opt"]

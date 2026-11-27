@@ -7,7 +7,7 @@
  */
 
 func f(x: int) => int {
-    fail<'NoPremise'>('f was called with an x it cannot take')
+    fail('NoPremise', 'f was called with an x it cannot take')
     return x + 1
 }
 

@@ -21,7 +21,7 @@ enum class RuntimeDiag : uint32_t {
     DivisionByZero  = 0x000001,
     IndexOutOfRange = 0x000002,
     // The fault 'fail' raises (design principles 3.9): the program's own premise check. The kind is
-    // the name the program writes in `fail<'Kind'>(message)` and the message is its own text, so a
+    // the name the program writes in `fail('Kind', message)` and the message is its own text, so a
     // fault of this one number is reported under the kind the program chose; the name below is what
     // the catalogue calls the carrier of such a fault and the message is the program's text alone.
     ProgramFault              = 0x0001AC,

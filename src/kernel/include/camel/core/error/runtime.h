@@ -147,8 +147,8 @@ class RuntimeFault : public std::exception {
     }
 
     RuntimeDiag diag() const { return diag_; }
-    /// The kind of the fault as the program wrote it (`fail<'Kind'>`), or empty for every fault
-    /// the compiler, a kernel or a pass raises. A fault that has one is reported and isolated
+    /// The kind of the fault as the program wrote it (`fail('Kind', message)`), or empty for every
+    /// fault the compiler, a kernel or a pass raises. A fault that has one is reported and isolated
     /// under that kind instead of the name of the catalogue entry it travels as (design
     /// principles 3.9: `fail` raises a fault whose kind the program chooses).
     const std::string &kind() const { return kind_; }

@@ -130,7 +130,7 @@ function run(args, timeout = 120000) {
 /// difference this tool reports is a difference in behaviour.
 ///
 /// A **position** inside the program differs too, and it must not count as a behaviour change: the
-/// printed source is reformatted, so `fail<'NoPremise'>` sits at line 10 in the origin and line 3 in
+/// printed source is reformatted, so `fail('NoPremise', message)` sits at line 10 in the origin and line 3 in
 /// the printed file. A position (`:<line>:<column>`) becomes `:<AT>`, and the rendered snippet below
 /// it -- the `   |` gutter, the numbered source line and its caret row -- becomes `<SNIPPET>`. What is
 /// left is still compared byte for byte: the message, the code, the exit status, and every line the

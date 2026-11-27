@@ -1100,7 +1100,7 @@ to the other arm. The fault is raised where the call is written, and `attempt` i
 into an error value whose kind is the name in the angle brackets.
 
 - Failure: fault `<Kind>` with the message, which `attempt` isolates.
-- Example: `fail<'BadLimit'>('the limit must be positive')`
+- Example: `fail('BadLimit', 'the limit must be positive')`
 
 #### `attempt`
 

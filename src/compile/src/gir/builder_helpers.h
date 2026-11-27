@@ -838,7 +838,7 @@ inline bool valueNeedsSyncEdge(node_handle_t value, node_handle_t chainEnd) {
     return chainEnd != nullptr && !valueReadsThrough(value, chainEnd);
 }
 
-/// Whether `node` is the call `fail<'Kind'>(message)` (design principles 3.9), the operator whose
+/// Whether `node` is the call `fail('Kind', message)` (design principles 3.9), the operator whose
 /// result is the bottom type `never`: the fault is raised where its value is wanted, and the call
 /// is no effect of its own. The builder reads the calls back by this to say what a `fail` written
 /// as a statement of its own means and which statements it leaves unreachable.

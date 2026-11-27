@@ -4,7 +4,7 @@ tier = "fast"
 tags = ["feat", "consistency", "never", "fail", "runtime", "negative"]
 desc = "The bottom type never, the fault fail raises, and the arrow that decides by signature"
 
-# `fail<'Kind'>(message)` raises the fault of the kind the program writes, where the call stands:
+# `fail('Kind', message)` raises the fault of the kind the program writes, where the call stands:
 # the report of a division by zero, with the program's own kind in the place the catalogue name
 # has (faults.plan.toml, div_zero_top). The four back ends must agree on it.
 #
@@ -15,7 +15,7 @@ desc = "The bottom type never, the fault fail raises, and the arrow that decides
 
 [[tests]]
 name = "fail.located"
-desc = "fail<'BadLimit'> raises the fault BadLimit at the call: the shape of DivisionByZero with the kind the program chose, and what was printed before it stays. The position is the call's kind clause, as every call written with one is located."
+desc = "fail('BadLimit', message) raises the fault BadLimit at the call: the shape of DivisionByZero with the kind the program chose, and what was printed before it stays. The position is the call, as a fault of an operator is reported where the call stands."
 kind = "negative"
 case = "../../../cases/consistency/fail_never/fail_located.cml"
 skip_unless = ["node", "test/tools/have-native-jit.mjs"]
@@ -25,7 +25,7 @@ backends_agree = ["exit_code", "stdout_normalized", "diagnostics"]
 expect_exit = 1
 expect_diagnostic_code = "0x040001AC"
 expect_diagnostic_line = 9
-expect_diagnostic_column = 39
+expect_diagnostic_column = 35
 verify_script = """
 assert(input.diagnostics.length === 1, JSON.stringify(input.diagnostics))
 assert(input.diagnostics[0].name === 'RuntimeDiag::' + 'BadLimit', input.diagnostics[0].name)
@@ -168,7 +168,7 @@ assert(input.diagnostics.length === 1, JSON.stringify(input.diagnostics))
 assert(input.diagnostics[0].name === 'SemanticDiag::FailNotExecuted', input.diagnostics[0].name)
 assert(input.diagnostics[0].code === '0x031001C1', input.diagnostics[0].code)
 assert(input.diagnostics[0].line === 10, input.diagnostics[0].line)
-assert(input.diagnostics[0].column === 9, input.diagnostics[0].column)
+assert(input.diagnostics[0].column === 5, input.diagnostics[0].column)
 """
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 20000
@@ -246,7 +246,7 @@ verify_script = """
 assert(input.diagnostics.length === 2, JSON.stringify(input.diagnostics))
 assert(input.diagnostics[1].name === 'RuntimeDiag::' + 'Stopped', input.diagnostics[1].name)
 assert(input.diagnostics[1].code === '0x040001AC', input.diagnostics[1].code)
-assert(input.diagnostics[1].line === 13 && input.diagnostics[1].column === 16, JSON.stringify(input.diagnostics[1]))
+assert(input.diagnostics[1].line === 13 && input.diagnostics[1].column === 12, JSON.stringify(input.diagnostics[1]))
 assert(input.diagnostics[0].name === 'SemanticDiag::NeverArgumentCall', input.diagnostics[0].name)
 assert(input.diagnostics[0].line === 23 && input.diagnostics[0].column === 23, JSON.stringify(input.diagnostics[0]))
 """
@@ -349,7 +349,7 @@ assert(input.diagnostics.length === 3, JSON.stringify(input.diagnostics))
 // warnings are written when the program is compiled, the fault of the `with` argument when it
 // runs. Hence the fault is last although its position (15) is the first of the three.
 assert(input.diagnostics[2].name === 'RuntimeDiag::' + 'Stopped', JSON.stringify(input.diagnostics[2]))
-assert(input.diagnostics[2].line === 15 && input.diagnostics[2].column === 16, JSON.stringify(input.diagnostics[2]))
+assert(input.diagnostics[2].line === 15 && input.diagnostics[2].column === 12, JSON.stringify(input.diagnostics[2]))
 for (const d of input.diagnostics.slice(0, 2)) {
     assert(d.name === 'SemanticDiag::NeverArgumentCall', JSON.stringify(d))
 }
@@ -379,5 +379,37 @@ assert(flat.includes('label="stop",type="FUNC"'), `the argument's own call is no
 assert(!flat.includes('label="double",type="FUNC"'), `the stopped call is built:\n${out}`)
 }
 """
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 20000
+
+[[tests]]
+name = "fail.kind_message"
+desc = "fail('Kind', message), fail('Kind'), error('Kind', message) and error('Kind'): the kind is an ordinary argument and may be computed, the message may be left out and is then the empty string, and attempt hands the pair back unchanged."
+kind = "behavior"
+case = "../../../cases/consistency/fail_never/fail_kind_message.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized", "diagnostics"]
+expect_exit = 0
+expect_stdout_contains = ["TwoArgs | [the message]", "OneArg | []", "ErrorTwo | [the message]", "ErrorOne | []", "Computed | []"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 20000
+
+[[tests]]
+name = "fail.no_message"
+desc = "fail('Kind') with the message left out: the report names the kind the program wrote and its message is the empty string, at the call."
+kind = "negative"
+case = "../../../cases/consistency/fail_never/fail_no_message.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized", "diagnostics"]
+expect_exit = 1
+expect_diagnostic_code = "0x040001AC"
+verify_script = """
+assert(input.diagnostics.length === 1, JSON.stringify(input.diagnostics))
+assert(input.diagnostics[0].name === 'RuntimeDiag::NoPremise', input.diagnostics[0].name)
+"""
+expect_stdout_starts_with = "before\n"
+expect_output_not_contains = ["not reached", "Segmentation fault", "dumped core"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 20000

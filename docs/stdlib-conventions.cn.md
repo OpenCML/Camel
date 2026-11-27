@@ -73,7 +73,7 @@ C++ 模块不再重复写签名与纯度、资源：没有函数体的声明就�
 - **三种失败，三种写法**：
   - 可能没有（查不到、没有这样的元素）：返回 `T?`；
   - 环境或输入造成的失败（文件不存在、网络、解析用户输入、文本不合法）：返回 `T!`，调用点用 `!!`、`->` 的传递或 `match` 处理；
-  - 调用方违反了前提（越界、区间为空、参数不合法）：故障，Camel 函数体里写 `fail<'Kind'>(message)`，种类具体，不用笼统的 `RuntimeError`。
+  - 调用方违反了前提（越界、区间为空、参数不合法）：故障，Camel 函数体里写 `fail('Kind', message)`，种类具体，不用笼统的 `RuntimeError`。
 - **同一种失败只有一种表示**：不要既返回 `T!` 又报故障，也不用 `-1`、空串之类的哨兵值。
 - **有合理定义的值就不报故障**：全函数优先。`split<''>` 得到码点，`repeat<n>` 在 `n` 不为正时得空串，`take<n>` 按定义截断；只有没有合理值时才是前提。
 - **输入可能来自外部、又只有一部分取值合法时，先验证再使用**：给一个 `validate(x): X!`（成功原样交回，可以串起来：`p->validate -> use`），使用它的函数在 `x` 不合法时是故障。`re::validate` 返回 `string!`，`re::find` 遇到非法模式是故障；常量模式写错是程序错误，动态模式先过 `validate`。
@@ -82,7 +82,7 @@ C++ 模块不再重复写签名与纯度、资源：没有函数体的声明就�
 
 ### 5.1 错误种类目录
 
-错误值（`T!`）的种类名（`e.kind`）是 PascalCase，一个种类只有一个意思，不同模块的同类失败共用同一个种类；`@fails error` 只能用本表的种类，要新种类先加到这里。故障的种类是 `RuntimeDiag` 的名字（`InvalidArgument`、`IndexOutOfRange`、`DivisionByZero` 等，见 `docs/diagnostics.md`），`fail<'Kind'>` 取这些名字，不在本表。
+错误值（`T!`）的种类名（`e.kind`）是 PascalCase，一个种类只有一个意思，不同模块的同类失败共用同一个种类；`@fails error` 只能用本表的种类，要新种类先加到这里。故障的种类是 `RuntimeDiag` 的名字（`InvalidArgument`、`IndexOutOfRange`、`DivisionByZero` 等，见 `docs/diagnostics.md`），`fail('Kind', message)` 取这些名字，不在本表。
 
 **通用（环境与输入）**
 

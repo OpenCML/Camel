@@ -2906,10 +2906,10 @@ class CmlPrinter {
                 return;
             }
             if (oper == camel::core::constructedOperators().fail) {
-                // `fail<'Kind'>(message)` is a statement of the language (design principles 3.9),
+                // `fail('Kind', message)` is a statement of the language (design principles 3.9),
                 // and the fault it raises *is* its behaviour: a program printed without it goes on
                 // past the point where the source stops. That was the first case of the A7 defect
-                // (`println('before'); fail<'NoPremise'>('...'); println('after')` printed as
+                // (`println('before'); fail('NoPremise', '...'); println('after')` printed as
                 // `before`, `after`, exit 0). The call is no effect, so the walk that prints
                 // effects never meets it as one; it is written here, where the statement stands.
                 emitFail(ref);
@@ -3243,30 +3243,33 @@ class CmlPrinter {
         emit(indent_ + std::format("{} {} {}", cellName, assignmentOperator(uri), valueText));
     }
 
-    /// `fail<'Kind'>(message)` as a statement. The kind is the constant string the call holds in
-    /// its `with` slot and the message is its one norm input; a `fail` whose kind is not a constant
-    /// has no spelling the printer can write -- `fail<'Kind'>` names the kind, and there is no
-    /// other place to put it -- so that shape is refused by name rather than printed as a `fail`
-    /// of some other kind (a printing that loses the kind is the false printing this cut is about).
+    /// `fail('Kind', message)` as a statement. The kind is the constant string the call holds as
+    /// its first argument and the message is its second, left out when the kind alone says what
+    /// went wrong; a `fail` whose kind is not a constant has no spelling the printer can write --
+    /// `fail('Kind', message)` names the kind, and there is no other place to put it -- so that
+    /// shape is refused by name rather than printed as a `fail` of some other kind (a printing
+    /// that loses the kind is the false printing this cut is about).
     void emitFail(gc_node_ref_t ref) {
-        const auto with = graph_->withInputsOf(ref);
         const auto norm = graph_->normInputsOf(ref);
-        if (with.size() != 1 || norm.size() != 1) {
+        if (norm.empty() || norm.size() > 2) {
             fail(ref, "a 'fail' whose kind and message are not both written");
         }
-        const camel::runtime::GCNode *kind = graph_->node(with.front());
+        const camel::runtime::GCNode *kind = graph_->node(norm.front());
         if (kind == nullptr || kind->kind != camel::runtime::GCNodeKind::Data ||
             kind->dataIndex >= 0 || kind->dataType() == nullptr ||
             kind->dataType()->code() != TypeCode::String) {
             fail(
                 ref,
                 "a 'fail' whose kind is not a constant string: the statement is written "
-                "`fail<'Kind'>` and the kind is the value it holds, so a print that cannot read "
+                "`fail('Kind', message)` and the kind is the value it holds, so a print that "
+                "cannot read "
                 "it cannot write the statement");
         }
-        emit(
-            indent_ + "fail<" + expression(with.front()).text + ">(" +
-            expression(norm.front()).text + ")");
+        std::string message;
+        if (norm.size() == 2) {
+            message = ", " + expression(norm[1]).text;
+        }
+        emit(indent_ + "fail(" + expression(norm.front()).text + message + ")");
     }
 
     // The assignment operator is a node of its own: `a += 5` and `a = 5` have the same shape

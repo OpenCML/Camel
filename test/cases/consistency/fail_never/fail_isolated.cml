@@ -5,7 +5,7 @@
  */
 
 func limit(q: float) => float {
-    return if q > 0.0 then q else fail<'BadLimit'>('the limit must be positive')
+    return if q > 0.0 then q else fail('BadLimit', 'the limit must be positive')
 }
 
 func kind(r: float!) => string {

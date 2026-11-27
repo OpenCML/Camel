@@ -126,8 +126,8 @@ std::string SiteTable::makeSite(
     }
     Diagnostic d = builder.commit(a[0], a[1], a[2], a[3], a[4], a[5], a[6], a[7], a[8], a[9]);
     if (!named.empty()) {
-        // A fault the program names itself (`fail<'Kind'>`): the report says the program's kind,
-        // as the runtime's own failure does (src/core/error/runtime.cpp, the fault's kind).
+        // A fault the program names itself (`fail('Kind', message)`): the report says the program's
+        // kind, as the runtime's own failure does (src/core/error/runtime.cpp, the fault's kind).
         d.name = std::format("RuntimeDiag::{}", named);
     }
     d.sourceContext = context_->sourceContext();

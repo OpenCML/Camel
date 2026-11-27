@@ -1,0 +1,14 @@
+/**
+ * `fail('Kind')` with the message left out: the report is the fault of the kind the program
+ * wrote, and its message is the empty string. Nothing is invented in its place -- not the kind
+ * name, not a sentence about the fault.
+ */
+
+func boom() => never {
+    return fail('NoPremise')
+}
+
+func main() => int sync {
+    println('before')
+    return boom()
+}

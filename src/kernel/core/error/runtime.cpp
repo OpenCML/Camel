@@ -241,7 +241,7 @@ bool isIsolatableFault(RuntimeDiag diag) {
     case RuntimeDiag::RuntimeError:
     case RuntimeDiag::DivisionByZero:
     case RuntimeDiag::IndexOutOfRange:
-    // `fail<'Kind'>(message)`: the program's own premise check, as isolatable as the faults of
+    // `fail('Kind', message)`: the program's own premise check, as isolatable as the faults of
     // the operators it stands beside (design principles 3.9).
     case RuntimeDiag::ProgramFault:
     case RuntimeDiag::SliceOutOfRange:

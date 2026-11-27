@@ -10,7 +10,7 @@
  */
 
 func stop(m: string) => never {
-    return fail<'Stopped'>(m)
+    return fail('Stopped', m)
 }
 
 with <rounds: int>

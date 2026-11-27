@@ -6,12 +6,12 @@
 
 // A function that gives no value back at all.
 func stop(m: string) => never {
-    fail<'Stopped'>(m)
+    fail('Stopped', m)
 }
 
 // One arm gives an int, the other gives no value: the branch is an int.
 func pick(c: bool) => int {
-    return if c then 1 else fail<'NoValue'>('c was false')
+    return if c then 1 else fail('NoValue', 'c was false')
 }
 
 // A `never` value stands where an int is expected.
