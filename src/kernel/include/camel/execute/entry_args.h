@@ -124,13 +124,13 @@ void registerEntryResultSaver(core::type::TypeCode code, EntryResultSaver saver)
  * Has the value the entry graph returns written to the output when a scheduling pass has run
  * the program. `path` is the output file, or empty for standard output. The value is `main`'s
  * own -- an ordinary function's value, not a result of the program and never an exit code
- * (design principles 9.8) -- and the driver writes it out only because it is asked to.
+ * (design principles 9.8) -- and the driver writes it out because `main` declared a return type,
+ * which is the program asking for it. The type decides nothing else: an `int`, a `bool` and a
+ * `byte` are written as any other value is, and none of them is an exit code. The exit code is
+ * only what `process::exit(code)` gives; not calling it means 0.
  *
- *   - `main` returns nothing: nothing is written; with a file, that is
- *     RuntimeDiag::EntryResultNotWritten.
- *   - a status-like value (int, int64, bool, byte) stays off standard output, so a program whose
- *     `main` returns its status prints what it printed before. It is written only to a file that
- *     was asked for.
+ *   - `main` returns nothing (declared `void`, or no declared return type): nothing is written;
+ *     with a file, that is RuntimeDiag::EntryResultNotWritten.
  *   - any other value joins the program's output. On standard output it is printed as `println`
  *     prints it, on a line of its own. To a file it is written in the layout the argument
  *     loaders read (see the head of this file).

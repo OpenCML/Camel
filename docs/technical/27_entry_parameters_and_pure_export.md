@@ -71,22 +71,22 @@ The pass driver (`applyPassesDetailed`, `kernel/execute/pass.cpp`) checks
 `RuntimeDiag::EntryArgumentMissing` at `main`, naming them. The check is in the driver, not in
 each scheduler, so it holds for every scheduling pass, present and future.
 
-The result goes out through the output of the command line (`-o` / `--output <file>`, standard
-output by default). The value `main` returns is an ordinary function's value, not a result of the
-program (design principles 9.8): what the run does with it depends on what it is.
+The value `main` returns goes out through the output of the command line (`-o` / `--output <file>`,
+standard output by default). It is an ordinary function's value, not a result of the program
+(design principles 9.8): a declared return type is the declaration asking for it to be written out,
+and the type says nothing else.
 
-| `main` returns | standard output (no `-o`) | `-o file` |
+| `main` declares | standard output (no `-o`) | `-o file` |
 |---|---|---|
-| nothing | nothing | `EntryResultNotWritten` |
-| a status-like value (`int`, `int64`, `bool`, `byte`) | nothing: the value is the function's own, and it is not the exit code | the literal, as text |
-| any other value | its `println` form, one line | the layout the loaders read |
+| no return type, or `void` | nothing | `EntryResultNotWritten` |
+| any type (`int`, `int64`, `bool`, `byte`, `float`, `string`, a tensor, a tuple, a struct) | its `println` form, one line, after the program's own output | the layout the loaders read |
 
-The second row is what keeps ordinary programs unchanged: a `main` that returns its status prints
-nothing new. The exit code is only what `process::exit(code)` gives, so a program that needs one
-calls it; the returned value is written to the file and nowhere else. The file layout is the one the
-loaders read (`registerEntryResultSaver` for module-defined types: the tensor module writes `.npy`),
-so a result can be given back as an argument. On standard output there is no refusal: every value
-has a `println` form.
+**A number is a number**: a `main` declared `int` that returns `0` prints `0`, and neither `0` nor
+any other return value is an exit code — the exit code is only what `process::exit(code)` gives, so
+a program that needs one calls it. The file layout is the one the loaders read
+(`registerEntryResultSaver` for module-defined types: the tensor module writes `.npy`), so a value
+can be given back as an argument. On standard output there is no refusal: every value has a
+`println` form.
 
 ## 3. Passes of modules the program does not import
 
@@ -159,3 +159,4 @@ the two kinds differently beyond their order.
   `main`.
 - An optimizer state (`nn` Adam state) is not accepted as a parameter type on the command line
   or as a declared model input.
+

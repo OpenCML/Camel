@@ -502,8 +502,8 @@ std::string ProgramEmitter::entryFunction(GCGraph *root, const Entry &entry) {
     // (design principles 9.8): the generated entry returns 0, and the exit code is only what
     // `exit(n)` gives (`run()` takes that from ExitRequest). A declared `T!` that failed is an
     // error nobody handled: reported on standard error, exit code 1
-    // (src/execute/entry_args.cpp, writeEntryResultTo). A value that is not status-like joins the
-    // program's output, as the command line prints it.
+    // (src/execute/entry_args.cpp, writeEntryResultTo). A declared value joins the program's
+    // output, as the command line prints it -- an `int` included, which is no exit code.
     const Type *type    = entry.main->view().funcType()->exitType();
     const bool declared = context_->entryResultDeclared();
     std::string body;

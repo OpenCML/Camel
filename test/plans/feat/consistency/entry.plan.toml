@@ -8,8 +8,9 @@ desc = "The value `main` returns on the four back ends: an ordinary function's v
 #   - `main` is an ordinary function and the program has no result: the value it returns is
 #     the function's value, whatever its type, and does not stand for an exit code;
 #   - the exit code is only `process::exit(code)`'s; not calling it means 0;
-#   - `println(x)` still returns `x`, and the driver writes the value out only when asked to
-#     (a file named with -o), so a value that is not status-like joins the program's output;
+#   - `println(x)` still returns `x`, and a declared return type is the declaration asking for
+#     the value to be written out (standard output, or the file -o names): every declared type
+#     joins the program's output, an `int` included, and none of them is an exit code;
 #   - an error value that reaches the exit of `main` unhandled is reported on standard error
 #     and the exit code is not zero.
 # Every case runs on std::nvm, std::fvm, std::jit and std::prl, which must agree.
@@ -69,12 +70,33 @@ assert(input.normalized.stdout === 'a\na\n', JSON.stringify(input.normalized.std
 
 [[tests]]
 name = "entry.declared_int"
-desc = "main declared int returning 3: the value is the function's value, not the exit code -- nothing is printed and the exit code is 0."
+desc = "main declared int returning 3: the value is written out as any other value is -- `3` on its own line after the program's output -- and the exit code is 0, because a return value is not an exit code."
 case = "../../../cases/consistency/entry/declared_int.cml"
 skip_unless = ["node", "test/tools/have-native-jit.mjs"]
 expect_exit = 0
 verify_script = """
-assert(input.normalized.stdout === 'a\n', JSON.stringify(input.normalized.stdout))
+assert(input.normalized.stdout === 'a\n3\n', JSON.stringify(input.normalized.stdout))
+"""
+
+[[tests]]
+name = "entry.exit_stops_program"
+desc = "process::exit(3) mid-program: the exit code is 3, the program's own output is written first, and the statement written after the call never runs -- `after` is not printed."
+case = "../../../cases/consistency/entry/exit_stops_program.cml"
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 3
+verify_script = """
+assert(input.normalized.stdout === 'before\n', JSON.stringify(input.normalized.stdout))
+"""
+
+[[tests]]
+name = "entry.exit_after_fault"
+desc = "A fault before process::exit(3): the run ends with the fault's own non-zero code, not 3, because the exit call after the fault never runs."
+case = "../../../cases/consistency/entry/exit_after_fault.cml"
+expect_exit = 1
+expect_output_contains = ["Error"]
+verify_script = """
+assert(input.normalized.stdout === 'before\n', JSON.stringify(input.normalized.stdout))
 """
 
 [[tests]]
@@ -152,12 +174,12 @@ assert(d.data.modulePath.endsWith('error_thrown.cml'), d.data.modulePath)
 
 [[tests]]
 name = "entry.fallible_ok"
-desc = "main declared int! that returns a value: the value is the function's value, not the exit code; the exit code is 0 and standard error stays empty."
+desc = "main declared int! that returns a value: the value is written out as any other value is -- 7 -- and gives no exit code; the exit code is 0 and standard error stays empty."
 case = "../../../cases/consistency/entry/fallible_ok.cml"
 skip_unless = ["node", "test/tools/have-native-jit.mjs"]
 expect_exit = 0
 verify_script = """
-assert(input.normalized.stdout === 'before\n', JSON.stringify(input.normalized.stdout))
+assert(input.normalized.stdout === 'before\n7\n', JSON.stringify(input.normalized.stdout))
 assert(input.normalized.stderr === '', JSON.stringify(input.normalized.stderr))
 """
 
