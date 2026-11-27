@@ -1,0 +1,24 @@
+// One corpus of the comparison between the two names of one algebraic simplification
+// (docs/roadmap.cn.md, P: the C++ passes stay, isolated under `cxx::`, and are compared with the
+// Camel ones before anything is deleted). `std::cxx::algebra` and `opt::algebra` are each put to it,
+// and the egraph document of `std::jgir canonical=true egraph=true` is the same, character for
+// character, or the comparison in test/plans/feat/opt/cxx_isolation.plan.toml fails.
+//
+// `x * 3 + x * 4` names one value twice, so the two products are products of one node and the law
+// `x * c1 + x * c2 is x * (c1 + c2)` reads them as one value: the pass fires here by itself, with
+// nothing else in the pipeline. The constants 3 and 4 are gone from the document afterwards and one
+// multiplication over the constant 7 is there instead -- that is what says the pass ran, and a run
+// that did nothing prints both multiplications and both coefficients.
+//
+// The value is printed, so the rewritten value feeds an effect rather than anchoring its graph: a
+// graph's returned value is its exit, and a node that anchors the graph cannot be replaced
+// (docs/technical/45_graph_module.md).
+
+func single_x(x: int) => int {
+    return x * 3 + x * 4
+}
+
+func main() => int sync {
+    println(single_x(5))
+    return 0
+}
