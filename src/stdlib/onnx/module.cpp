@@ -67,19 +67,15 @@ TupleType *fallibleVoid() {
     return type;
 }
 
-// export_model<out: string, dynamic_axes: int[] = [], target: string = 'onnxruntime-cpu'>
-//                                                                     (fn, example)
-//                                                                     => void!
-// `out` is the file the model is written to, and it is a `with` argument because it is a
-// runtime value (a path the program reads from the environment, a name it composes); the
-// axis list and the target are `with` arguments for the same reason. `fn` and `example` stay
-// positional: they are what the export is about.
+// The stage form of the export (`onnx::export_model` as a pass): the same translation
+// `onnx::model` makes, with the file written out. A program that wants the value writes
+// `model(fn, example)->save<out: path>` instead; this entry stays for the pass, which names the
+// stage and gets its path from the pipeline's `out` parameter.
+//
 // The names and the defaults of the `with` parameters are the declaration's
 // (`stdlib/onnx.cml`), which is the one source of the operator's signature (design principles
 // 6.4): a call names them, skips one that has a default, and the value it left out arrives here
-// as that default -- an empty axis list, the target the model is checked against. Neither
-// default needs a case of its own: no axis left dynamic and the default target are what the
-// export does with no argument at all.
+// as that default -- an empty axis list, the target the model is checked against.
 // `example` is the argument of a one-parameter `fn`, or a tuple with one example per parameter.
 // A refusal to translate the function and a file that cannot be written are error values
 // (`ExportUnsupported`, `IOError`): exporting is a tool, and the caller decides how to report
@@ -261,7 +257,9 @@ bool OnnxModule::load() {
     // reads the graph it is handed, and it writes nothing outside the program.
     camel::core::OperatorTable::instance().set("onnx:model", {.pure = true, .readsGraphs = true});
     // `onnx::save` writes the model's bytes to a file: the effect `export_model` had, without the
-    // translation that made the bytes.
+    // translation that made the bytes. `readsGraphs = false` because what it reads is the bytes
+    // the model value already owns, not a graph: the translation happened in `onnx::model`, and
+    // this entry only writes the result down.
     camel::core::OperatorTable::instance().set("onnx:save", {.pure = false, .readsGraphs = false});
     camel::core::OperatorTable::instance().declareResources(
         "onnx:save",

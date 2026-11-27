@@ -248,8 +248,8 @@ Request readRequest(const GCGraph *g, gc_node_ref_t node, const std::string &out
     } else if (with.empty()) {
         throw Refusal{
             originNear(g->view(), node),
-            "the onnx.export_model call names no model file: give it as the `out` argument "
-            "(export_model<out: \"model.onnx\">(fn, example)), or name it with the parameter "
+            "the export names no model file: give it as the `out` argument "
+            "(model(fn, example)->save<out: \"model.onnx\">), or name it with the parameter "
             "out of the pass (onnx::export_model out=\"model.onnx\")"};
     } else if (const auto path = constantOf(g, with[0])) {
         request.path = rtdata::fromSlot<::String *>(path->value)->toString();
