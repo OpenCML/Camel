@@ -1030,11 +1030,12 @@ node_ptr_t Builder::visitResourceDecl(const AST::node_ptr_t &ast) {
     ENTER("ResourceDecl");
     const auto decl = ast->loadAs<AST::ResourceDeclLoad>();
     camel::core::module::Module::ResourceDecl resource;
-    resource.modifiers.unordered   = decl->unordered();
-    resource.modifiers.idempotent  = decl->idempotent();
-    resource.modifiers.overwriting = decl->overwriting();
-    resource.modifiers.readonly    = decl->readonly();
-    resource.modifiers.observed    = decl->observed();
+    // The tree's bits and the kernel's record are filled by the same index, in the table's order:
+    // the parse layer names the words (`parse/ast/resource_modifiers.h`) and the kernel keeps its
+    // own record, so neither this mapping nor either of them spells a word twice.
+    for (size_t i = 0; i < AST::kResourceModifierCount; ++i) {
+        resource.modifiers.setModifier(i, decl->hasModifier(i));
+    }
     for (const Reference &member : decl->members()) {
         resource.members.push_back(member);
     }

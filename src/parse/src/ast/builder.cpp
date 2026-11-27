@@ -697,8 +697,9 @@ typeDecl
     ;
 */
 /*
-resourceDecl : 'export'? 'resource' identDef ('=' bracketIdents
-    | ('unordered' | 'idempotent' | 'overwriting' | 'readonly' | 'observed')*)?
+resourceDecl -- the production is written where it is parsed, at `ParserImpl::parseResourceDecl`
+(syntax/parser.cpp); this visitor reads the same tree. The words after the name come from the
+parse layer's table (`kResourceModifierWords`), so neither this file nor the parser spells them.
 */
 Value Builder::visitResourceDecl(cst::ResourceDecl context) {
     ENTER("ResourceDecl");
@@ -720,25 +721,18 @@ Value Builder::visitResourceDecl(cst::ResourceDecl context) {
         }
     } else {
         // The words after the name are the modifiers, contextual words kept as tokens of this
-        // declaration (so the tree stays lossless) rather than child nodes: `unordered`,
-        // `idempotent`, `overwriting`, `readonly`, `observed` (design principles 3.3). Unknown
-        // words are not read from here: the parser accepts only these five.
+        // declaration (so the tree stays lossless) rather than child nodes (design principles 3.3).
+        // Which words there are is the table's answer (`kResourceModifierWords`), not a list here:
+        // a word the table does not name is not read. The parser accepts only what the table has,
+        // so nothing else reaches this loop.
         for (size_t i = 0; i < context->childCount(); ++i) {
             const auto child = context->child(i);
             if (!child.isToken()) {
                 continue;
             }
-            const std::string word = child.text();
-            if (word == "unordered") {
-                decl->setUnordered(true);
-            } else if (word == "idempotent") {
-                decl->setIdempotent(true);
-            } else if (word == "overwriting") {
-                decl->setOverwriting(true);
-            } else if (word == "readonly") {
-                decl->setReadonly(true);
-            } else if (word == "observed") {
-                decl->setObserved(true);
+            if (const std::optional<size_t> index = resourceModifierIndex(child.text());
+                index.has_value()) {
+                decl->setModifier(*index, true);
             }
         }
     }

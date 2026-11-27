@@ -40,6 +40,7 @@
 
 #pragma once
 
+#include <cstddef>
 #include <cstdint>
 #include <optional>
 #include <span>
@@ -148,7 +149,15 @@ struct ResourceModifiers {
     bool readonly    = false;
     bool observed    = false;
 
-    bool any() const { return unordered || idempotent || overwriting || readonly || observed; }
+    /// Whether the field at `index` is set, and setting it: the positions are this record's own
+    /// table (`resource_semantics.cpp`), and they are the positions the parse layer's word table
+    /// gives the same words. The fields stay named because the equalities' rules below read them by
+    /// name; these two functions are how a table-driven reader -- the AST mapping, `any()` and
+    /// `toString` -- asks about a word without spelling it.
+    bool hasModifier(size_t index) const;
+    void setModifier(size_t index, bool written);
+
+    bool any() const;
     bool operator==(const ResourceModifiers &) const = default;
 };
 
