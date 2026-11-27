@@ -30,7 +30,7 @@
  *      not in that table is new: the
  *      tool prints it with its plan and pushes nothing. It does not look for the lane to blame; the
  *      seat decides. With no new red, the tool writes `<git common dir>/camel-read/<sha>` beside the
- *      build record (`plans=`, `reds=`, `baseline=`, `new=0`), which the pre-push hook requires
+ *      build record (`plans=`, `reds=`, `baseline=`, `tier=fast`, `new=0`), which the pre-push hook requires
  *      before a change to the build's inputs reaches integration. A batch that changes no path the
  *      build reads (the hook's own list) is not read and leaves no record; the hook does not ask for
  *      one either.
@@ -82,6 +82,9 @@ const DEFAULT_READ =
 
 // A case with one of these verdicts is not red; the promotion reads the same three.
 const NOT_RED = new Set(['pass', 'skip', 'xfail'])
+
+// The tier the promotion's red table is measured on; the reading compares only that tier's cases.
+const BASELINE_TIER = 'fast'
 
 function fail(code, why) {
     process.stderr.write(`merge-batch: ${why}\n`)
@@ -351,7 +354,10 @@ function readTip(args, baseSha, tip) {
         }
         rows = readSummary(summary)
     }
-    const reds = rows.filter((row) => !NOT_RED.has(row.status))
+    // A plan file named as a target runs every case in it, whatever the tier asked for, while the
+    // table is measured on one tier. Only the cases of that tier are compared; a row that says
+    // nothing about its tier is compared, because a red that cannot be placed must not be dropped.
+    const reds = rows.filter((row) => !NOT_RED.has(row.status) && (row.tier === undefined || row.tier === BASELINE_TIER))
     const newReds = reds
         .filter((row) => !known.has(`${row.plan}\t${row.test}`) && !known.has(`${row.test}\t${toSlashes(String(row.plan_path ?? ''))}`))
         .map((row) => ({ plan: String(row.plan), case: String(row.test) }))
@@ -363,7 +369,7 @@ function readTip(args, baseSha, tip) {
     fs.mkdirSync(path.dirname(recordFile), { recursive: true })
     fs.writeFileSync(
         recordFile,
-        [`plans=${plans.join(',')}`, `reds=${reds.length}`, `baseline=${baseline.name}`, 'new=0', ''].join('\n'),
+        [`plans=${plans.join(',')}`, `reds=${reds.length}`, `baseline=${baseline.name}`, `tier=${BASELINE_TIER}`, 'new=0', ''].join('\n'),
     )
     return { skipped: false, newReds, plans, reds: reds.length, baseline: baseline.name }
 }
