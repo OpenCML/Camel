@@ -2088,7 +2088,16 @@ const Program *RuntimeGraphDraftSession::runCommit(bool staged, bool detached) {
         if (!owned) {
             if (const auto at = drafts_.find(graph);
                 at != drafts_.end() && at->second->transaction) {
+#ifndef NDEBUG
+                // docs/design/graph-editing/README.cn.md 8.1: a debug build asks all six questions
+                // whatever the record names -- the test layer runs on a debug build, and a check
+                // whose only caller is a run that may skip it is not checked. No switch turns this
+                // off, and the `#else` branch is the line that stood here, so the release path is
+                // unchanged to the character.
+                tier = EditTier{.effects = true, .order = true};
+#else
                 tier = at->second->transaction->edit().editTier();
+#endif
                 const std::span<const gc_node_ref_t> edits =
                     at->second->transaction->edit().lowLevelEdits();
                 changed.assign(edits.begin(), edits.end());
