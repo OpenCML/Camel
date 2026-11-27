@@ -6866,6 +6866,22 @@ the values it captured, sharing every graph nothing changed. The draft is over.
 - Failure: error value `GraphConflict` when a graph the draft touched changed since it was opened; error value `GraphInvalid` when an edit broke an invariant (the message names the graph, the node and the edge); error value `TxnUsed` when the draft was over already.
 - Example: `commit::<(x: int) => int>(open(func (x: int) => int { x + 1 }))`
 
+#### `commit_of`
+
+```camel
+commit_of: (d: Graph, f: F) => F! when is_function::<F>()
+```
+
+The commit an edit block's lowering calls: the same commit, with the function the draft was
+opened from as a witness. The draft is a `Graph`, which does not say what the commit gives, and
+the block's expected type cannot reach into the closure's body where the commit is written;
+design `docs/design/graph-editing/README.cn.md` 2 gives the fallback as `f`'s type, and 5 has
+the draft remember the function it opened. Internal: written by the compiler, never named by a
+program.
+
+- Why it is not compiled: written by the compiler for `edit d = f { … }`
+- Why it is not compiled: commit_of(open(f), f)
+
 #### `abort`
 
 ```camel
