@@ -40,7 +40,7 @@ git and the backlog; this line only has to say which task it was.
 ```
 task-54 | splitting a central header by role, first candidate by churn x rebuild cost | completed | owner: lane-block-hash | r3
 task-58 | diagnostics streams: the three tensor assertions judged one by one | completed | owner: lane-enter-shape | r7
-task-59 | ref_boxes finalized off by 1-2: a collector statistic, awaiting a ruling | completed | owner: lane-parked-rebase | r4
+task-59 @hold | ref_boxes finalized off by 1-2: a collector statistic, awaiting a ruling | completed | owner: lane-parked-rebase | r4
 task-62 | the C++ back end gives T.. a C++ type and writes CALL-shaped iteration as a loop | completed | owner: lane-ssa-residue | r4
 task-63 | slow layer: ten feat.mm.gc_pacing reds judged one by one | completed | owner: lane-arrangeable | r3
 task-64 | verifying -FetchFile "this run did not write it" on the build host | completed | owner: seat-merge-1 | r3
@@ -60,7 +60,25 @@ task-101 | an index page for internal/reports (278 pages, only ls found them) | 
 task-102 | worktree pool close-out: 86 registered trees cleaned toward 16 | completed | owner: lane-enter-shape | r3
 task-103 | one new red: max_pool2d_window_transpose expectation vs implementation | completed | owner: lane-kinds-oper | r3
 task-104 | regenerating the stdlib-signatures region of the AI reference | completed | owner: lane-misc | r3
-task-105 | voided duplicate dispatch of the console-rescue rebase | completed | owner: lane-editview-commit | r4
+task-105 @void | voided duplicate dispatch of the console-rescue rebase | completed | owner: lane-editview-commit | r4
 task-106 | the Range-as-argument family: 11 cases that lost what they measure | completed | owner: lane-enter-shape | r3
 task-109 | lane/cli-rework rebased and read, to judge it for the merge queue | completed | owner: lane-kinds-oper | r4
+```
+
+## Recorded in batch 4 (10)
+
+Marker on the subject: `@void` for a voided dispatch, `@hold` for a finding that awaits a ruling.
+Both are still deleted; the marker is what makes them findable later.
+
+```
+task-127 | native.para_unordered_reduce_callback_arity: defect or stale record | completed | owner: lane-witness | r4
+task-128 | task-128: defunctionalize for streams, parts A and B only | completed | owner: lane-oper-shape-guard | r11
+task-129 | two narrowing pins carry no file name, so they cannot be checked | completed | owner: lane-misc | r3
+task-130 | the 84 reds whose own verify script exits 1, classified | completed | owner: lane-parked-rebase | r4
+task-131 | the 103 reds that no longer compile, grouped by diagnostic and judged | completed | owner: lane-editview-commit | r3
+task-135 | 15 rows of stricter-or-refused: loop state, empty array, branch and match types | completed | owner: lane-parked-rebase | r4
+task-136 | the four after_narrowing verifies: five warnings, stale or changed | completed | owner: lane-editview-commit | r3
+task-137 | the 16 output/value/count mismatches judged one by one | completed | owner: lane-oper-shape-guard | r3
+task-140 | two records repaired: the unordered_reduce scaffolding and four narrow pins | completed | owner: lane-editview-commit | r3
+task-142 | algebra rules: array_combine no longer merges like terms (evidence first) | completed | owner: lane-oper-shape-guard | r3
 ```
