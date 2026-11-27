@@ -302,6 +302,16 @@ runs out (`CAMEL_TOKEN_WAIT_S`, default 1800) it exits **6** -- nothing was meas
 neither `2` (this tool was asked something it cannot do) nor `1` (a reading came back red). A test case
 never pays that price for a full pool: the runner reports it as `tokenWaitSeconds` and moves on. A plan run that gets no token at all within the wait ends with exit `4` and `HOST_STATE=noslot`.
 
+Waiters are served from an ordered queue, not by whoever polls first. A taker with nobody waiting ahead of
+it that finds its tokens free takes them at once; any other registers a ticket in `$TOKEN_DIR/queue` and
+holds a `flock` on it while it waits, so a ticket whose holder died is recognised and removed. Only the
+head of the queue takes, and a wide (`all`) request keeps what it has taken until it has its width, so a
+stream of one-token takers cannot starve it. The order is (effective class, arrival): `CAMEL_TOKEN_CLASS`
+is `funnel` (the merge seat, a promotion), `build`, `test` (default) or `batch` -- `camel-remote.ps1
+-TokenClass` sets it for a run -- and every `CAMEL_TOKEN_AGE_S` seconds (default 300) a ticket waits it
+moves one class toward `funnel`. The class also sets the `nice` value of the command (0, 0, 10, 19).
+`host-tokens.sh show` lists the queue.
+
 The readings are the pool's own, and this is the same rule as the lock files below: `fuser` cannot tell
 an open descriptor from a held lock, so "held" comes from `/proc/locks` matched against the inodes the
 pool cached in `$CAMEL_TOKEN_DIR/inodes`, and the high-water mark comes from the `peak-<n>` markers the
