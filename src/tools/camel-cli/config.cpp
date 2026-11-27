@@ -375,28 +375,28 @@ string gcModeOpt            = ""; // from --gc kind=...
 string gcSpec = ""; // raw --gc (kind=...,nursery_mb=...,promotion_age=...,graph_mb=...)
 string spacesSpec =
     ""; // raw --spaces (block_mb=...,segment_kb=...,meta_mb=...,graph_mb=...,perm_mb=...)
-string blockLimitOpt        = ""; // from --spaces block_mb=... (megabytes)
-string graphGcMbOpt         = ""; // from --gc graph_mb=... (megabytes)
-string gcNurseryMbOpt       = ""; // from --gc nursery_mb=...
-string gcPromotionAgeOpt    = ""; // from --gc promotion_age=...
-string gcLargeThresholdOpt  = ""; // from --gc large_threshold_kb=...
-string gcLargeBudgetOpt     = ""; // from --gc large_budget_mb=...
-string gcGrowthPercentOpt   = ""; // from --gc growth_percent=...
-string gcHeapLimitOpt       = ""; // from --gc heap_limit_mb=...
-string spaceSegmentKbOpt    = ""; // from --spaces segment_kb=...
-string metaSpaceLimitOpt    = ""; // from --spaces meta_mb=...
-string graphSpaceLimitOpt   = ""; // from --spaces graph_mb=...
-string permSpaceLimitOpt    = ""; // from --spaces perm_mb=...
-string gcStressOpt          = ""; // raw --gc-stress (kind=...,alloc=...,safepoint=...)
-string gcCheckOpt           = ""; // raw --gc-check (moves,poison,verify=...,config)
-string collOpt              = ""; // raw --coll (leaf=...,fanout=...,pad=...,validate=...)
-string nativeStackGuardOpt  = ""; // raw --native-stack-guard (on|off)
-string devicesOpt           = ""; // raw --devices (cpu|ordinal[,ordinal...])
-string tensorIsaOpt         = ""; // raw --tensor-isa (native|generic)
-string profileModeOpt       = ""; // raw --profile-mode (normal|full)
-size_t maxRecursionDepth    = 0;  // 0: not given on the command line
-size_t maxMacroDepth        = 0;
-size_t maxMacroRounds       = 0;
+string blockLimitOpt       = ""; // from --spaces block_mb=... (megabytes)
+string graphGcMbOpt        = ""; // from --gc graph_mb=... (megabytes)
+string gcNurseryMbOpt      = ""; // from --gc nursery_mb=...
+string gcPromotionAgeOpt   = ""; // from --gc promotion_age=...
+string gcLargeThresholdOpt = ""; // from --gc large_threshold_kb=...
+string gcLargeBudgetOpt    = ""; // from --gc large_budget_mb=...
+string gcGrowthPercentOpt  = ""; // from --gc growth_percent=...
+string gcHeapLimitOpt      = ""; // from --gc heap_limit_mb=...
+string spaceSegmentKbOpt   = ""; // from --spaces segment_kb=...
+string metaSpaceLimitOpt   = ""; // from --spaces meta_mb=...
+string graphSpaceLimitOpt  = ""; // from --spaces graph_mb=...
+string permSpaceLimitOpt   = ""; // from --spaces perm_mb=...
+string gcStressOpt         = ""; // raw --gc-stress (kind=...,alloc=...,safepoint=...)
+string gcCheckOpt          = ""; // raw --gc-check (moves,poison,verify=...,config)
+string collOpt             = ""; // raw --coll (leaf=...,fanout=...,pad=...,validate=...)
+string nativeStackGuardOpt = ""; // raw --native-stack-guard (on|off)
+string devicesOpt          = ""; // raw --devices (cpu|ordinal[,ordinal...])
+string tensorIsaOpt        = ""; // raw --tensor-isa (native|generic)
+string profileModeOpt      = ""; // raw --profile-mode (normal|full)
+size_t maxRecursionDepth   = 0;  // 0: not given on the command line
+size_t maxMacroDepth       = 0;
+size_t maxMacroRounds      = 0;
 } // namespace Run
 
 namespace Check {
@@ -407,24 +407,24 @@ string configFilePath = "";    // Configuration file path
 } // namespace Check
 
 namespace Inspect {
-bool dumpTokens    = false; // Whether to dump tokens
-bool dumpCST       = false; // Whether to dump Concrete Syntax Tree
-bool dumpAST       = false; // Whether to dump Abstract Syntax Tree
-bool dumpGCT       = false; // Whether to dump Graph Construction Tree
-bool dumpGIR       = false; // Whether to dump Graph Intermediate Representation
-bool dumpTNS       = false; // Whether to dump Topological Node Sequence
-bool dumpOps       = false; // Whether to dump the operators of the imported modules
-bool dumpInstances = false; // Whether to dump the index semantics of every operator node
-bool dumpFacts     = false; // Whether to compute and dump the graph facts of the program
-std::string factKind = "";  // The one kind `--fact` names, empty when no kind was named
-bool dumpTags      = false; // Whether to dump the tags the program declares
-bool dumpAttrs     = false; // Whether to dump the attribute-fate table and check its coverage
-bool dumpTies      = false; // Whether to dump the canonical numbering's tie groups
-bool dumpCopies    = false; // Whether to dump what the plan decided about every update node
+bool dumpTokens      = false; // Whether to dump tokens
+bool dumpCST         = false; // Whether to dump Concrete Syntax Tree
+bool dumpAST         = false; // Whether to dump Abstract Syntax Tree
+bool dumpGCT         = false; // Whether to dump Graph Construction Tree
+bool dumpGIR         = false; // Whether to dump Graph Intermediate Representation
+bool dumpTNS         = false; // Whether to dump Topological Node Sequence
+bool dumpOps         = false; // Whether to dump the operators of the imported modules
+bool dumpInstances   = false; // Whether to dump the index semantics of every operator node
+bool dumpFacts       = false; // Whether to compute and dump the graph facts of the program
+std::string factKind = "";    // The one kind `--fact` names, empty when no kind was named
+bool dumpTags        = false; // Whether to dump the tags the program declares
+bool dumpAttrs       = false; // Whether to dump the attribute-fate table and check its coverage
+bool dumpTies        = false; // Whether to dump the canonical numbering's tie groups
+bool dumpCopies      = false; // Whether to dump what the plan decided about every update node
 bool dumpReuse =
     false; // Whether to dump each operator node's uses, last use and the run's reuse counts
-bool geneCode      = false; // Whether to generate code from GIR
-int passUntil      = -1;    // Pass until the given pass
+bool geneCode = false; // Whether to generate code from GIR
+int passUntil = -1;    // Pass until the given pass
 } // namespace Inspect
 
 } // namespace CmdLineArgs
@@ -782,12 +782,12 @@ bool parseArgs(int argc, char *argv[]) {
                   << std::chrono::duration<double, std::micro>(now - startupLast).count() << "us\n";
         startupLast = std::chrono::steady_clock::now();
     };
-    bool showVersion = false; // Version information
-    bool showHelp    = false; // Help information
-    bool showDocs    = false; // Documentation information
+    bool showVersion           = false; // Version information
+    bool showHelp              = false; // Help information
+    bool showDocs              = false; // Documentation information
     vector<string> docsModules = {};    // `camel docs [<module>]: which module's documentation
-    bool showAbout   = false; // About information
-    bool showZen     = false; // Show Zen of Camel
+    bool showAbout             = false; // About information
+    bool showZen               = false; // Show Zen of Camel
 
     std::string logPresetConsumed;
     std::string logIncludeConsumed;
@@ -1055,8 +1055,8 @@ bool parseArgs(int argc, char *argv[]) {
     if (word != nullptr && args.size() > 1) {
         args.erase(args.begin() + 1); // the word is the command; what it governs follows it
     }
-    argc                     = static_cast<int>(args.size());
-    argv                     = args.data();
+    argc = static_cast<int>(args.size());
+    argv = args.data();
     startupMark("warnings");
 
     // The grammar that reads the line is the one the word picked: a subcommand's group holds its
@@ -1173,8 +1173,8 @@ bool parseArgs(int argc, char *argv[]) {
     if (!traceConsumed.empty()) {
         const std::string unknown = camel::core::enableTraceAreas(traceConsumed);
         if (!unknown.empty()) {
-            std::cerr << "Invalid --trace value: '" << unknown << "'. Expected " << camel::core::traceAreaList()
-                      << ", comma-separated." << std::endl;
+            std::cerr << "Invalid --trace value: '" << unknown << "'. Expected "
+                      << camel::core::traceAreaList() << ", comma-separated." << std::endl;
             exitCode = 1;
             return false;
         }

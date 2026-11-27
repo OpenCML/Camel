@@ -95,15 +95,15 @@ class Tree {
     /// The fields of `decl` that have tag uses, by field index; nullptr when none has.
     const std::map<size_t, std::vector<TagUse>> *fieldTagUsesOf(const Node *decl) const;
 
-// ---- The module a headed block's body reads (design 15.1) --------------------------------
-/// The module the body of function node `func` reads because its block's head named it, and that
-/// body's names are read there and nowhere else. Kept beside the node for the same reason the tag
-/// uses are: it is a fact of the compiler, and a Node is 32 bytes.
-void setBlockHeadModule(const Node *func, std::shared_ptr<camel::core::module::Module> module);
-/// The module the body of `func` reads, or null when `func` is not a headed block's body. The
-/// module is a name layer of that body only: it is not an import of the module it is written in,
-/// and no scope outside the body gains a name from it.
-std::shared_ptr<camel::core::module::Module> blockHeadModuleOf(const Node *func) const;
+    // ---- The module a headed block's body reads (design 15.1) --------------------------------
+    /// The module the body of function node `func` reads because its block's head named it, and
+    /// that body's names are read there and nowhere else. Kept beside the node for the same reason
+    /// the tag uses are: it is a fact of the compiler, and a Node is 32 bytes.
+    void setBlockHeadModule(const Node *func, std::shared_ptr<camel::core::module::Module> module);
+    /// The module the body of `func` reads, or null when `func` is not a headed block's body. The
+    /// module is a name layer of that body only: it is not an import of the module it is written
+    /// in, and no scope outside the body gains a name from it.
+    std::shared_ptr<camel::core::module::Module> blockHeadModuleOf(const Node *func) const;
 
     // One function per kind of node. A new node has no children, no origin and no parent.
     // A name is the written reference (`a::b`); one that is empty or ends in `::` is not a
@@ -264,7 +264,7 @@ std::shared_ptr<camel::core::module::Module> blockHeadModuleOf(const Node *func)
     /// when the declaration is instantiated (design principles 4.4), not when its body is
     /// built.
     struct WhenClause {
-        node_ptr_t condition               = nullptr;
+        node_ptr_t condition = nullptr;
         std::string text;
         camel::source::origin_id_t origin = camel::source::kInvalidOriginId;
     };
@@ -336,7 +336,6 @@ std::shared_ptr<camel::core::module::Module> blockHeadModuleOf(const Node *func)
         const auto found = unpackCounts_.find(node);
         return found == unpackCounts_.end() ? 0 : found->second;
     }
-
 
     /// `typeof e` (design principles 5.6): what the type layer holds for it is a type variable
     /// named by `kTypeOfPlaceholderPrefix` and a number, and this table is what the number names.
