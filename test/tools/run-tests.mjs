@@ -2838,12 +2838,21 @@ function assertionProblems(test) {
  * are expanded the way the other assertion strings are (`${test_tmp}` names this test's scratch
  * directory). An entry with no `case` (a `tool` entry) resolves it from the repository root.
  */
+// The value a relative `expect_diagnostic_file` wrote, beside the path it resolved to: a value
+// that names a file in another part of the tree -- the standard library, whose `fail` sites move
+// whenever the prose above them grows -- is compared against the one path a diagnostic printed, and
+// `sameDiagnosticFile` needs the value itself for that. An absolute value is taken literally.
+const DIAGNOSTIC_FILE_SUFFIX = new Map() // resolved wanted path -> the value the plan wrote
 function namedDiagnosticFile(test, scope) {
     const text = expandTextTokens(test.expect_diagnostic_file, scope)
     const anchor = typeof test.case === 'string' && test.case.length > 0
         ? path.dirname(entryCasePath(test))
         : REPO_ROOT
-    return path.resolve(anchor, text)
+    const resolved = path.resolve(anchor, text)
+    if (!path.isAbsolute(text)) {
+        DIAGNOSTIC_FILE_SUFFIX.set(resolved, text.split(path.sep).join('/'))
+    }
+    return resolved
 }
 
 /**
@@ -2857,7 +2866,18 @@ function namedDiagnosticFile(test, scope) {
 function sameDiagnosticFile(reported, wanted) {
     if (typeof reported !== 'string' || reported.length === 0) return false
     const fold = (one) => (IS_WINDOWS ? one.toLowerCase() : one)
-    return fold(path.resolve(REPO_ROOT, reported)) === fold(wanted)
+    const resolved = path.resolve(REPO_ROOT, reported)
+    // The strict reading first, so a plan that pins a path of its own is not widened by the fallback.
+    if (fold(resolved) === fold(wanted)) return true
+    // A relative value may name a file the program loads from elsewhere in the tree, and the run
+    // reports it through the install's copy of that file. The comparison is then against the one path
+    // the diagnostic printed, on a path boundary: `stdlib/math.cml` matches
+    // `out/latest/stdlib/math.cml` and does not match `mystdlib/math.cml`. Nothing is searched: there
+    // is one path to compare, not a set of candidates.
+    const suffix = DIAGNOSTIC_FILE_SUFFIX.get(wanted)
+    if (suffix === undefined) return false
+    const reportedAt = resolved.split(path.sep).join('/')
+    return fold(reportedAt) === fold(suffix) || fold(reportedAt).endsWith(fold(`/${suffix}`))
 }
 
 async function validateTest(test, result, context) {
