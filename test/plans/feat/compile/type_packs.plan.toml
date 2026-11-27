@@ -133,12 +133,12 @@ timeout_ms = 20000
 
 [[tests]]
 name = "type_packs.gradient_type.printed"
-desc = "The same program under `std::gir`: the node `autodiff:grad` states in its `value_type` the type the call answers, `<float[2]> (float) => float[2]` -- the weight's type in the `with` list, the parameter, and a cotangent of the weight's type as the result. That is the type `Gradient<Loss>` computes, printed by the compiler rather than by the case, and the judgments of the entry above are about the same type: the print and the equality are two readings of one thing."
+desc = "The same program under `std::gir`: the node `autodiff:grad` states in its `value_type` the type the call answers, `<w: float[2]> (x: float) => float[2] pure` -- the weight's type in the `with` list, the parameter, and a cotangent of the weight's type as the result, with the names the signature carries (`w`, `x`) and its resource clause (`pure`) written out beside them: a function's parameters' names and its resources are part of its type (design principles 3.3), so the printed type states them where it states the type. That is the type `Gradient<Loss>` computes, printed by the compiler rather than by the case, and the judgments of the entry above are about the same type: the print and the equality are two readings of one thing."
 kind = "behavior"
 case = "../../../cases/compile/type_packs/gradient_type.cml"
 args = ["${case}", "std::gir", "std::nop"]
 expect_exit = 0
-expect_stdout_contains = ["<float[2]> (float) => float[2]"]
+expect_stdout_contains = ["<w: float[2]> (x: float) => float[2] pure"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 
