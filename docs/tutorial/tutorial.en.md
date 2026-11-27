@@ -65,7 +65,7 @@ Hello, Camel!
 ```
 
 - One `.cml` file is one module, and `module hello` gives it a name (this can be omitted).
-- The program starts at `main`. The `int` that `main` returns is the exit code of the process.
+- The program starts at `main`. The `int` that `main` returns is the function's own value, not the exit code of the process: only `process::exit(code)` gives one, and a program that does not call it ends with 0.
 - The **`sync`** after the return type means that the function body is a sync block: the statements it writes directly run in the order they are written (a sync block does not inherit inward; section 6 explains). For now, just remember "a function that prints has `sync` before its body"; section 6 explains why.
 - A line break is enough between statements; no semicolons are needed.
 

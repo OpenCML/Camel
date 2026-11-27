@@ -3962,10 +3962,12 @@ to_bytes: (xs: T[...]) => Bytes panic when is_plain::<T>()
 The elements of an array as little-endian bytes, in row-major order: the payload `from_bytes`
 reads back. The elements are the array's own bytes, so every pure-data element type has them:
 one byte an element for a `bool` array, four for an `f32` one and eight for an `f64` or `c64`
-one.
+one. `tensor`'s `to_bytes` takes a tensor's buffer rather than an array; the two write the same
+payload for the same elements, so one's bytes compare equal to the other's.
 
 - A native operator of this module: an opaque node, pure.
 - Example: `([1.0, 2.0] as f32[])->to_bytes` gives `[0, 0, 128, 63, 0, 0, 0, 64]`
+- Example: `([1] as i32[])->to_bytes == ([1] as i32[])->to_bytes` gives `true`
 
 ### Sorting
 

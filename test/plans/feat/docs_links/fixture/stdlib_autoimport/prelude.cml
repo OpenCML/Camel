@@ -1,0 +1,5 @@
+/// The one documented name of this miniature library.
+/// @example is_same::<f32, f32>()    // true
+export func fixture_marker() => int {
+    return 0
+}

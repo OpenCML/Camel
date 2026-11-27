@@ -219,11 +219,12 @@ inline std::size_t stackBytesFor(uint32_t limit) {
 
 /// Runs the entry of a generated program and gives the process's exit code.
 ///
-/// `entry` returns the exit code the program's `main` gives (the generated code decides it
-/// from main's declared type, design principles 9.8). A fault ends the program: the output
-/// written so far is flushed, then the report is written to standard error, which is where
-/// `camel` writes its own diagnostics (src/tools/camel-cli/check.cpp), so the program's
-/// standard output stays the program's own, and the exit code is 1. `exit(n)` ends it with n.
+/// `entry` runs `main` and gives 0, or 1 when `main`'s declared `T!` failed (nobody handled the
+/// error value). The exit code of the program is `exit(n)`'s alone (design principles 9.8): the
+/// value `main` returns is an ordinary function's value and never a code. A fault ends the
+/// program: the output written so far is flushed, then the report is written to standard error,
+/// which is where `camel` writes its own diagnostics (src/tools/camel-cli/check.cpp), so the
+/// program's standard output stays the program's own, and the exit code is 1.
 ///
 /// The program runs on a thread of its own whose stack has room for the recursion limit;
 /// `translatedLimit` is the limit the program was translated with.

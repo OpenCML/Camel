@@ -2,11 +2,14 @@ id = "consistency.entry"
 order = 356
 tier = "fast"
 tags = ["feat", "consistency", "runtime", "entry"]
-desc = "What main returns on the four back ends: the result of the program only under a declared return type; an unhandled error value at the exit of main"
+desc = "The value `main` returns on the four back ends: an ordinary function's value, never an exit code; the exit code is `process::exit`'s; an unhandled error value at the exit of main"
 
-# Design principles 9.8 ("效应、错误与并行"):
-#   - only a `main` that declares its return type has a result (the exit code, what -o writes);
-#   - `println(x)` still returns `x`;
+# Design principles 9.8 ("入口与导出"):
+#   - `main` is an ordinary function and the program has no result: the value it returns is
+#     the function's value, whatever its type, and does not stand for an exit code;
+#   - the exit code is only `process::exit(code)`'s; not calling it means 0;
+#   - `println(x)` still returns `x`, and the driver writes the value out only when asked to
+#     (a file named with -o), so a value that is not status-like joins the program's output;
 #   - an error value that reaches the exit of `main` unhandled is reported on standard error
 #     and the exit code is not zero.
 # Every case runs on std::nvm, std::fvm, std::jit and std::prl, which must agree.
@@ -66,12 +69,22 @@ assert(input.normalized.stdout === 'a\na\n', JSON.stringify(input.normalized.std
 
 [[tests]]
 name = "entry.declared_int"
-desc = "main declared int: the value is the exit code and is not printed."
+desc = "main declared int returning 3: the value is the function's value, not the exit code -- nothing is printed and the exit code is 0."
 case = "../../../cases/consistency/entry/declared_int.cml"
 skip_unless = ["node", "test/tools/have-native-jit.mjs"]
-expect_exit = 3
+expect_exit = 0
 verify_script = """
 assert(input.normalized.stdout === 'a\n', JSON.stringify(input.normalized.stdout))
+"""
+
+[[tests]]
+name = "entry.exit_call"
+desc = "main calls process::exit(7): the exit code is the one the call gives; the program's own output is written first and nothing after the call runs."
+case = "../../../cases/consistency/entry/exit_code.cml"
+expect_exit = 7
+verify_script = """
+assert(input.normalized.stdout === 'before\n', JSON.stringify(input.normalized.stdout))
+assert(input.normalized.stderr === '', JSON.stringify(input.normalized.stderr))
 """
 
 # --- an error value at the exit of main ------------------------------------------------------
@@ -139,10 +152,10 @@ assert(d.data.modulePath.endsWith('error_thrown.cml'), d.data.modulePath)
 
 [[tests]]
 name = "entry.fallible_ok"
-desc = "main declared int! that returns a value: the value is the exit code; nothing on standard error."
+desc = "main declared int! that returns a value: the value is the function's value, not the exit code; the exit code is 0 and standard error stays empty."
 case = "../../../cases/consistency/entry/fallible_ok.cml"
 skip_unless = ["node", "test/tools/have-native-jit.mjs"]
-expect_exit = 7
+expect_exit = 0
 verify_script = """
 assert(input.normalized.stdout === 'before\n', JSON.stringify(input.normalized.stdout))
 assert(input.normalized.stderr === '', JSON.stringify(input.normalized.stderr))
@@ -160,11 +173,11 @@ assert(input.normalized.stdout === 'hello camel\n', JSON.stringify(input.normali
 
 [[tests]]
 name = "entry.fallible_ok_output_file"
-desc = "-o with main declared int! and a value: the value is written to the file. (It crashed: the T! box was written as if it were the int.)"
+desc = "-o with main declared int! and a value: the function's value is written to the file (the driver's output effect), and the exit code is 0, not the value. (It crashed: the T! box was written as if it were the int.)"
 case = "../../../cases/consistency/entry/fallible_ok.cml"
 backends = false
 args = ["-o", "${test_tmp}/entry_fallible_ok.out", "${case}"]
-expect_exit = 7
+expect_exit = 0
 verify_script = """
 const file = input.test_tmp + '/entry_fallible_ok.out'
 const text = fs.readFileSync(file, 'utf8')

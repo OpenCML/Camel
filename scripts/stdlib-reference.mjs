@@ -1578,6 +1578,81 @@ async function probeImport(name, moduleName) {
     }
 }
 
+// The names a module exports as a function or as a value (`is_same` is `types`', `encode` is
+// `bytes`' and `json`'s). A doc example's free name -- a callee it neither binds nor imports -- is
+// imported from the one module that exports it, the way its types are; the answer of "which module"
+// is the modules' own declarations, not a probe, because the two scripts that read an example have
+// to answer alike.
+const exportedValues = new Map()
+function moduleExportedValues(module) {
+    if (!exportedValues.has(module.name)) {
+        exportedValues.set(
+            module.name,
+            [...moduleSource(module).matchAll(/^\s*export\s+(?:func\s+(?!operator\b)|let\s+)([A-Za-z_]\w*)/gm)].map((one) => one[1]),
+        )
+    }
+    return exportedValues.get(module.name)
+}
+
+// The module each exported function or value belongs to, as a set of owners: one owner is an import,
+// two are the example's to choose between.
+const valueOwners = new Map()
+function valueOwnersOf(name) {
+    if (valueOwners.size === 0) {
+        for (const module of MODULES) {
+            for (const value of moduleExportedValues(module)) {
+                if (!valueOwners.has(value)) valueOwners.set(value, new Set())
+                valueOwners.get(value).add(module.name)
+            }
+        }
+    }
+    return valueOwners.get(name) || null
+}
+
+// The module the module's own text imports a name from, when it says so: two modules may export
+// `encode`, and the file has already chosen.
+function importedValueModule(module, name) {
+    const text = moduleSource(module)
+    for (const match of text.matchAll(/^\s*import\s*\{([^}]*)\}\s*from\s+([A-Za-z_]\w*)/gm)) {
+        for (const part of match[1].split(',')) {
+            const trimmed = part.trim()
+            if (trimmed === '' || /\s+as\s+/.test(trimmed)) continue
+            if (trimmed === name) return match[2]
+        }
+    }
+    const whole = /^\s*import\s+([A-Za-z_]\w*)\s*$/m.exec(text)
+    return whole ? whole[1] : null
+}
+
+// The names the example calls and does not bring itself. A parameter, a `let`, a `for`'s element or
+// a lambda's parameter is not such a name; a capitalized name is a type and `exampleTypeNames` has
+// it; a name the module documents is already imported by the module line.
+function freeCalleesOf(entry, code, moduleNames) {
+    const bound = new Set(bindArguments(entry, code).map((binding) => binding.name))
+    for (const match of code.matchAll(/\b(?:let|var)\s+([A-Za-z_]\w*)/g)) bound.add(match[1])
+    for (const match of code.matchAll(/\bfor\s+([A-Za-z_]\w*)\s+in\b/g)) bound.add(match[1])
+    const names = []
+    for (const match of code.matchAll(/\b([A-Za-z_]\w*)\s*(?:::<|::<|\()/g)) {
+        const name = match[1]
+        if (bound.has(name) || moduleNames.has(name) || /^[A-Z]/.test(name) || names.includes(name)) continue
+        names.push(name)
+    }
+    return names
+}
+
+async function valueImportsOf(module, entries, entry, code) {
+    const moduleNames = new Set(entries.map((one) => one.name))
+    const imports = new Map()
+    for (const name of freeCalleesOf(entry, code, moduleNames)) {
+        const chosen = importedValueModule(module, name)
+        const owners = valueOwnersOf(name)
+        if (!owners || owners.size === 0 || owners.has('globals') || owners.has(module.name)) continue
+        if (chosen && owners.has(chosen)) imports.set(name, chosen)
+        else if (owners.size === 1) imports.set(name, [...owners][0])
+    }
+    return imports
+}
+
 // The Camel a doc example compiles as: the module's names in scope, the example's arguments bound
 // to their declared parameter types, and the example inside a function. An example that starts
 // with a statement keyword is used as a statement; anything else is an expression and becomes
@@ -1597,6 +1672,13 @@ async function exampleSource(module, entries, entry, code, asStatement = false) 
         if (owner) types.set(name, owner)
     }
     for (const [name, owner] of types) lines.push(`import { ${name} } from ${owner}`)
+    // A function or a value the example calls and does not bring itself: `is_same` is `types`', and
+    // a free name exactly one module exports is imported from that module, the way a type is. Two
+    // modules exporting the same name is not guessed at -- the compile below fails and the example
+    // has to say which one it means.
+    for (const [name, owner] of await valueImportsOf(module, entries, entry, code)) {
+        lines.push(`import { ${name} } from ${owner}`)
+    }
     const params = bindings.map((binding) => `${binding.name}: ${binding.type}`).join(', ')
     // An example that returns an error value leaves a function declared to return a `T!`, so it
     // compiles in a fallible body.

@@ -1,0 +1,5 @@
+/// The one documented name of this miniature library.
+/// @example to_bytes([1] as i32[]) == to_bytes([1] as i32[])    // true
+export func fixture_marker() => int {
+    return 0
+}

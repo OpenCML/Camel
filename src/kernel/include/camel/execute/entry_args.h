@@ -45,8 +45,9 @@
  *                                 `.npy` file for a Tensor parameter).
  *
  * The value `main` returns goes out the same way it would come in (writeEntryResultTo; the
- * output of the command line, `-o` / `--output <file>`, standard output by default). Written to
- * a file: a scalar as a text file holding the literal, a struct
+ * output of the command line, `-o` / `--output <file>`, standard output by default) -- it is the
+ * value of an ordinary function, written only because the driver was asked to (design principles
+ * 9.8). Written to a file: a scalar as a text file holding the literal, a struct
  * or tuple as a directory with one file per leaf, a module-defined type through the saver the
  * module registered (a Tensor as a `.npy` file).
  */
@@ -121,24 +122,26 @@ void registerEntryResultSaver(core::type::TypeCode code, EntryResultSaver saver)
 
 /**
  * Has the value the entry graph returns written to the output when a scheduling pass has run
- * the program. `path` is the output file, or empty for standard output.
+ * the program. `path` is the output file, or empty for standard output. The value is `main`'s
+ * own -- an ordinary function's value, not a result of the program and never an exit code
+ * (design principles 9.8) -- and the driver writes it out only because it is asked to.
  *
  *   - `main` returns nothing: nothing is written; with a file, that is
  *     RuntimeDiag::EntryResultNotWritten.
- *   - `main` returns an exit code (int, bool, byte: the types the process exit code is derived
- *     from): the value stays the exit code. It is written only to a file that was asked for,
- *     never to standard output, so a program whose `main` returns its status prints what it
- *     printed before.
- *   - any other value is the result of the program. On standard output it is printed as
- *     `println` prints it, on a line of its own. To a file it is written in the layout the
- *     argument loaders read (see the head of this file).
+ *   - a status-like value (int, int64, bool, byte) stays off standard output, so a program whose
+ *     `main` returns its status prints what it printed before. It is written only to a file that
+ *     was asked for.
+ *   - any other value joins the program's output. On standard output it is printed as `println`
+ *     prints it, on a line of its own. To a file it is written in the layout the argument
+ *     loaders read (see the head of this file).
  *
  * A value that cannot be written to the file is RuntimeDiag::EntryResultNotWritten, located at
  * `main`.
  *
- * All of this holds for a `main` that declares its return type (Context::entryResultDeclared;
- * design principles 9.8). The value of a `main` that declares none is not a result: nothing
- * is printed, and with a file that is EntryResultNotWritten.
+ * A `main` that declares no return type still ends with a value (its body's); the declaration
+ * decides only whether the driver may write it out (Context::entryResultDeclared; design
+ * principles 9.8). Without a declaration nothing is printed, and with a file that is
+ * EntryResultNotWritten.
  *
  * Under a declared `T!`: a value that has not failed is treated as its `T`. A failed one is an
  * error nobody handled: RuntimeDiag::UnhandledError on standard error (as JSON when

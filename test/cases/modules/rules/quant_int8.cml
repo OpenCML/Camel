@@ -54,6 +54,8 @@ func measure(label: string, quantized: float[2, 2], reference: float[2, 2], rewr
     )
 }
 
+import { exit } from process
+
 func main(tol: float) => int sync {
     let xs = inputs()
     let reference = model(xs)
@@ -64,5 +66,5 @@ func main(tol: float) => int sync {
     quantized.0->foreach<func (line: string) => void {
         println(line)
     }>
-    return if quantized.1 then 0 else 1
+    exit(if quantized.1 then 0 else 1)
 }

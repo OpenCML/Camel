@@ -1,0 +1,1 @@
+export func is_same::<T, U>(x: T, y: U) => bool

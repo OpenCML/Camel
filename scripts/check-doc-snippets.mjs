@@ -99,9 +99,29 @@ function usage(message) {
     if (message) console.error(`check-doc-snippets: ${message}`)
     console.error(
         'usage: node scripts/check-doc-snippets.mjs [--default-roots] [--pages|--source-examples] ' +
-            '[--no-pending] [--camel PATH] [FILE|DIR ...]',
+            '[--no-pending] [--camel PATH] [--stdlib DIR] [FILE|DIR ...]',
     )
     process.exit(2)
+}
+
+// `--stdlib <dir>`: the tree of `.cml` files the source pass reads -- this tree's `src/stdlib` unless
+// named, and taken relative to the repository root unless it is absolute. The argument is taken out
+// here, so it is never read as a page.
+function takeStdlibDir(argv) {
+    for (let i = 0; i < argv.length; i++) {
+        if (argv[i] === '--stdlib') {
+            if (i + 1 >= argv.length) usage('--stdlib needs the directory of a `.cml` tree')
+            const dir = argv[i + 1]
+            argv.splice(i, 2)
+            return dir
+        }
+        if (argv[i].startsWith('--stdlib=')) {
+            const dir = argv[i].slice('--stdlib='.length)
+            argv.splice(i, 1)
+            return dir
+        }
+    }
+    return 'src/stdlib'
 }
 
 // The compiler every snippet is run with: `--camel <path>` names it, else this tree's
@@ -176,38 +196,6 @@ const PENDING_ALL = [
             'a fact\'s conclusion (rewrite design 8.1), and `math:abs_l` is not translated',
     },
     {
-        file: 'docs/language/03_data_model.md',
-        key: '1160bed5c280bcaa',
-        reason:
-            'range values: `C-1123-61` (lane `lane/op-overload-merge`) has not landed, so a ' +
-            '`Range` still shares no `map`/`filter`/`reduce`/`len`, and `to_array` is not ' +
-            'reachable from the page; `D-1123-81` sends these sites back to `0 .. n` once it does',
-    },
-    {
-        file: 'docs/language/en/03_data_model.md',
-        key: '1160bed5c280bcaa',
-        reason:
-            'range values: `C-1123-61` (lane `lane/op-overload-merge`) has not landed, so a ' +
-            '`Range` still shares no `map`/`filter`/`reduce`/`len`, and `to_array` is not ' +
-            'reachable from the page; `D-1123-81` sends these sites back to `0 .. n` once it does',
-    },
-    {
-        file: 'docs/language/05_modules.md',
-        key: '262e1b8beb3c5ce2',
-        reason:
-            'range values: `C-1123-61` (lane `lane/op-overload-merge`) has not landed, so a ' +
-            '`Range` still shares no `map`/`filter`/`reduce`/`len`, and `to_array` is not ' +
-            'reachable from the page; `D-1123-81` sends these sites back to `0 .. n` once it does',
-    },
-    {
-        file: 'docs/language/en/05_modules.md',
-        key: '262e1b8beb3c5ce2',
-        reason:
-            'range values: `C-1123-61` (lane `lane/op-overload-merge`) has not landed, so a ' +
-            '`Range` still shares no `map`/`filter`/`reduce`/`len`, and `to_array` is not ' +
-            'reachable from the page; `D-1123-81` sends these sites back to `0 .. n` once it does',
-    },
-    {
         file: 'docs/language/06_expressions.md',
         key: '75ac69f1262f3640',
         reason:
@@ -240,48 +228,8 @@ const PENDING_ALL = [
             'reachable from the page; `D-1123-81` sends these sites back to `0 .. n` once it does',
     },
     {
-        file: 'docs/reference/camel-for-ai.md',
-        key: '2e04c65435a5af5b',
-        reason:
-            'range values: `C-1123-61` (lane `lane/op-overload-merge`) has not landed, so a ' +
-            '`Range` still shares no `map`/`filter`/`reduce`/`len`, and `to_array` is not ' +
-            'reachable from the page; `D-1123-81` sends these sites back to `0 .. n` once it does',
-    },
-    {
-        file: 'docs/reference/camel-for-ai.md',
-        key: '4c59e07cb3168df6',
-        reason:
-            'range values: `C-1123-61` (lane `lane/op-overload-merge`) has not landed, so a ' +
-            '`Range` still shares no `map`/`filter`/`reduce`/`len`, and `to_array` is not ' +
-            'reachable from the page; `D-1123-81` sends these sites back to `0 .. n` once it does',
-    },
-    {
-        file: 'docs/tutorial/05_arrays_and_loops.cn.md',
-        key: '35950cb2759fddcc',
-        reason:
-            'range values: `C-1123-61` (lane `lane/op-overload-merge`) has not landed, so a ' +
-            '`Range` still shares no `map`/`filter`/`reduce`/`len`, and `to_array` is not ' +
-            'reachable from the page; `D-1123-81` sends these sites back to `0 .. n` once it does',
-    },
-    {
         file: 'docs/tutorial/05_arrays_and_loops.cn.md',
         key: '2232e8099ab54822',
-        reason:
-            'range values: `C-1123-61` (lane `lane/op-overload-merge`) has not landed, so a ' +
-            '`Range` still shares no `map`/`filter`/`reduce`/`len`, and `to_array` is not ' +
-            'reachable from the page; `D-1123-81` sends these sites back to `0 .. n` once it does',
-    },
-    {
-        file: 'docs/tutorial/05_arrays_and_loops.cn.md',
-        key: '0e9cbd1eed1f8681',
-        reason:
-            'range values: `C-1123-61` (lane `lane/op-overload-merge`) has not landed, so a ' +
-            '`Range` still shares no `map`/`filter`/`reduce`/`len`, and `to_array` is not ' +
-            'reachable from the page; `D-1123-81` sends these sites back to `0 .. n` once it does',
-    },
-    {
-        file: 'docs/tutorial/05_arrays_and_loops.en.md',
-        key: '35950cb2759fddcc',
         reason:
             'range values: `C-1123-61` (lane `lane/op-overload-merge`) has not landed, so a ' +
             '`Range` still shares no `map`/`filter`/`reduce`/`len`, and `to_array` is not ' +
@@ -296,70 +244,6 @@ const PENDING_ALL = [
             'reachable from the page; `D-1123-81` sends these sites back to `0 .. n` once it does',
     },
     {
-        file: 'docs/tutorial/05_arrays_and_loops.en.md',
-        key: '0e9cbd1eed1f8681',
-        reason:
-            'range values: `C-1123-61` (lane `lane/op-overload-merge`) has not landed, so a ' +
-            '`Range` still shares no `map`/`filter`/`reduce`/`len`, and `to_array` is not ' +
-            'reachable from the page; `D-1123-81` sends these sites back to `0 .. n` once it does',
-    },
-    {
-        file: 'docs/tutorial/08_modules_and_stdlib.cn.md',
-        key: '7c62e03d1c46ada5',
-        reason:
-            'range values: `C-1123-61` (lane `lane/op-overload-merge`) has not landed, so a ' +
-            '`Range` still shares no `map`/`filter`/`reduce`/`len`, and `to_array` is not ' +
-            'reachable from the page; `D-1123-81` sends these sites back to `0 .. n` once it does',
-    },
-    {
-        file: 'docs/tutorial/08_modules_and_stdlib.cn.md',
-        key: 'd212419bb682fccc',
-        reason:
-            'range values: `C-1123-61` (lane `lane/op-overload-merge`) has not landed, so a ' +
-            '`Range` still shares no `map`/`filter`/`reduce`/`len`, and `to_array` is not ' +
-            'reachable from the page; `D-1123-81` sends these sites back to `0 .. n` once it does',
-    },
-    {
-        file: 'docs/tutorial/08_modules_and_stdlib.en.md',
-        key: '7c62e03d1c46ada5',
-        reason:
-            'range values: `C-1123-61` (lane `lane/op-overload-merge`) has not landed, so a ' +
-            '`Range` still shares no `map`/`filter`/`reduce`/`len`, and `to_array` is not ' +
-            'reachable from the page; `D-1123-81` sends these sites back to `0 .. n` once it does',
-    },
-    {
-        file: 'docs/tutorial/08_modules_and_stdlib.en.md',
-        key: 'd212419bb682fccc',
-        reason:
-            'range values: `C-1123-61` (lane `lane/op-overload-merge`) has not landed, so a ' +
-            '`Range` still shares no `map`/`filter`/`reduce`/`len`, and `to_array` is not ' +
-            'reachable from the page; `D-1123-81` sends these sites back to `0 .. n` once it does',
-    },
-    {
-        file: 'docs/tutorial/09_evaluation_by_dependency.cn.md',
-        key: 'adc1676a0405cb50',
-        reason:
-            'range values: `C-1123-61` (lane `lane/op-overload-merge`) has not landed, so a ' +
-            '`Range` still shares no `map`/`filter`/`reduce`/`len`, and `to_array` is not ' +
-            'reachable from the page; `D-1123-81` sends these sites back to `0 .. n` once it does',
-    },
-    {
-        file: 'docs/tutorial/09_evaluation_by_dependency.en.md',
-        key: 'adc1676a0405cb50',
-        reason:
-            'range values: `C-1123-61` (lane `lane/op-overload-merge`) has not landed, so a ' +
-            '`Range` still shares no `map`/`filter`/`reduce`/`len`, and `to_array` is not ' +
-            'reachable from the page; `D-1123-81` sends these sites back to `0 .. n` once it does',
-    },
-    {
-        file: 'docs/tutorial/tutorial.cn.md',
-        key: '3349eaa84b0532ae',
-        reason:
-            'range values: `C-1123-61` (lane `lane/op-overload-merge`) has not landed, so a ' +
-            '`Range` still shares no `map`/`filter`/`reduce`/`len`, and `to_array` is not ' +
-            'reachable from the page; `D-1123-81` sends these sites back to `0 .. n` once it does',
-    },
-    {
         file: 'docs/tutorial/tutorial.cn.md',
         key: '49e18a2d16879dcb',
         reason:
@@ -368,32 +252,8 @@ const PENDING_ALL = [
             'reachable from the page; `D-1123-81` sends these sites back to `0 .. n` once it does',
     },
     {
-        file: 'docs/tutorial/tutorial.cn.md',
-        key: '2a6c7d995f322bdf',
-        reason:
-            'range values: `C-1123-61` (lane `lane/op-overload-merge`) has not landed, so a ' +
-            '`Range` still shares no `map`/`filter`/`reduce`/`len`, and `to_array` is not ' +
-            'reachable from the page; `D-1123-81` sends these sites back to `0 .. n` once it does',
-    },
-    {
-        file: 'docs/tutorial/tutorial.en.md',
-        key: '3349eaa84b0532ae',
-        reason:
-            'range values: `C-1123-61` (lane `lane/op-overload-merge`) has not landed, so a ' +
-            '`Range` still shares no `map`/`filter`/`reduce`/`len`, and `to_array` is not ' +
-            'reachable from the page; `D-1123-81` sends these sites back to `0 .. n` once it does',
-    },
-    {
         file: 'docs/tutorial/tutorial.en.md',
         key: '49e18a2d16879dcb',
-        reason:
-            'range values: `C-1123-61` (lane `lane/op-overload-merge`) has not landed, so a ' +
-            '`Range` still shares no `map`/`filter`/`reduce`/`len`, and `to_array` is not ' +
-            'reachable from the page; `D-1123-81` sends these sites back to `0 .. n` once it does',
-    },
-    {
-        file: 'docs/tutorial/tutorial.en.md',
-        key: '2a6c7d995f322bdf',
         reason:
             'range values: `C-1123-61` (lane `lane/op-overload-merge`) has not landed, so a ' +
             '`Range` still shares no `map`/`filter`/`reduce`/`len`, and `to_array` is not ' +
@@ -809,6 +669,16 @@ function beforeDiagnostic(text) {
     return (index < 0 ? lines : lines.slice(0, index)).join('\n').replace(/\n+$/, '')
 }
 
+// The run as a page shows it: what the program printed, then what the compiler wrote about the
+// fault. A program's lines and a fault's diagnostic are two streams, and a text block that shows a
+// fault quotes both.
+function wholeRun(result) {
+    return [result.stdout, result.stderr]
+        .map((text) => text.replace(/\n+$/, ''))
+        .filter((text) => text !== '')
+        .join('\n')
+}
+
 function compareText(actual, expected) {
     // `--> D:\path\to\fault.cml:4:15`, `--> /tmp/x/fault.cml:4:15`, `--> .\fault.cml:4:15` and
     // `--> fault.cml:4:15` are one reading: the location line is compared as the line and column
@@ -990,6 +860,50 @@ function writeSnippet(snippet, tempDir) {
     return { entry, files }
 }
 
+// One command for both steps of one snippet: the arguments the page's command fence names, then
+// the entry file and the passes. The two steps build their command here, once, so `--arg` and `-I`
+// reach both of them -- a page that runs its program with a parameter gets that parameter in the
+// compile step too, and the two steps cannot drift into two different commands.
+//
+// What differs is the passes. `run` is what the page itself shows. `compile` is parse + GCT + GIR
+// and then a stop: `std::gir` prints the graph and hands the program on, so a page whose text block
+// shows the run failing at `fault.cml:4:15` would be reported as one that does not compile, and
+// that is the page being right about the language rather than wrong. `std::nop` is the pass that
+// stops there (docs/cli.md, "std::gir").
+function camelCommand(file, command, step) {
+    const options = []
+    const args = command ? command.args : []
+    for (let i = 0; i < args.length; i++) {
+        const arg = args[i]
+        if (arg === '--arg') {
+            const pair = args[++i] ?? ''
+            const eq = pair.indexOf('=')
+            if (eq > 0) {
+                const name = pair.slice(0, eq)
+                const value = pair.slice(eq + 1)
+                // A path on the page is relative to the repository root; the snippet runs in its
+                // own temp directory.
+                const resolved = path.isAbsolute(value) ? value : path.resolve(ROOT, value)
+                options.push('--arg', `${name}=${fs.existsSync(resolved) ? resolved : value}`)
+            } else {
+                options.push('--arg', pair)
+            }
+            continue
+        }
+        if (arg === '-I' || arg === '--include') {
+            const value = args[++i] ?? ''
+            options.push(arg, path.isAbsolute(value) ? value : path.resolve(ROOT, value))
+            continue
+        }
+        options.push(arg)
+    }
+    const passes = command ? command.passes : []
+    if (step === 'compile') {
+        return [...options, file, ...(passes.length > 0 ? passes : ['std::gir']), 'std::nop']
+    }
+    return [...options, file, ...passes]
+}
+
 async function checkSnippet(documentAbs, snippet, lines, fences) {
     const group = snippet.fences
     const marked = group.map((fence) => fence.marker).find(Boolean)
@@ -1014,11 +928,12 @@ async function checkSnippet(documentAbs, snippet, lines, fences) {
             .find((line) => /^\s*\/\/\s*camel\b/.test(line))
         const command = parseCommand(after && after.command) || (inline ? parseCommand({ body: [inline] }) : null)
         const passes = command ? command.passes : []
-        const args = command ? command.args : []
 
-        // Compile first: parse + GCT + GIR, whatever the snippet is.
-        const compilePasses = passes.length > 0 ? passes : ['std::gir']
-        const compiled = await runCamel([written.entry.file, ...compilePasses], tempDir)
+        // Compile first: parse + GCT + GIR, whatever the snippet is. The compile step stops before
+        // the program runs: `std::gir` prints the graph and hands the program on (docs/cli.md,
+        // "std::gir"), so a page whose text block shows a fault would be read as one that does not
+        // compile. `std::nop` is the pass that stops there.
+        const compiled = await runCamel(camelCommand(written.entry.file, command, 'compile'), tempDir)
         if (compiled.timedOut) {
             problems.push(`compiling timed out after ${TIMEOUT_MS} ms`)
         } else if (compiled.code !== 0) {
@@ -1054,33 +969,7 @@ async function checkSnippet(documentAbs, snippet, lines, fences) {
         }
 
         const expected = parseExpected(after.output.body.join('\n'))
-        const options = []
-        for (let i = 0; i < args.length; i++) {
-            const arg = args[i]
-            if (arg === '--arg') {
-                const pair = args[++i] ?? ''
-                const eq = pair.indexOf('=')
-                if (eq > 0) {
-                    const name = pair.slice(0, eq)
-                    const value = pair.slice(eq + 1)
-                    // A path on the page is relative to the repository root; the snippet runs in
-                    // its own temp directory.
-                    const resolved = path.isAbsolute(value) ? value : path.resolve(ROOT, value)
-                    options.push('--arg', `${name}=${fs.existsSync(resolved) ? resolved : value}`)
-                } else {
-                    options.push('--arg', pair)
-                }
-                continue
-            }
-            if (arg === '-I' || arg === '--include') {
-                const value = args[++i] ?? ''
-                options.push(arg, path.isAbsolute(value) ? value : path.resolve(ROOT, value))
-                continue
-            }
-            options.push(arg)
-        }
-        const runArgs = [...options, written.entry.file, ...passes]
-        const ran = await runCamel(runArgs, tempDir)
+        const ran = await runCamel(camelCommand(written.entry.file, command, 'run'), tempDir)
         if (ran.timedOut) {
             problems.push(`running timed out after ${TIMEOUT_MS} ms`)
         } else {
@@ -1098,8 +987,10 @@ async function checkSnippet(documentAbs, snippet, lines, fences) {
                 let difference
                 if (errorDiagnostic && hasLocation) {
                     // The text block is the whole run: the lines printed before the fault, then the
-                    // located diagnostic. Compare all of it (the path is normalised).
-                    difference = compareText(ran.stdout, pageText)
+                    // located diagnostic. Compare all of it (the path is normalised). The lines the
+                    // program prints are standard output and a fault's diagnostic is standard
+                    // error, so the run this block is is the two streams one after the other.
+                    difference = compareText(wholeRun(ran), pageText)
                 } else if (errorDiagnostic) {
                     // A truncated diagnostic: the page keeps the lines printed before it and names
                     // the diagnostic, but leaves out the location and the help.
@@ -1140,7 +1031,10 @@ async function checkSnippet(documentAbs, snippet, lines, fences) {
 // not a program of its own: it is compiled too, and a *semantic* failure is exempted -- the marker
 // names something the example needs and has not got -- while a syntax or lexical failure never is,
 // because no marker makes a spelling the parser refuses into a legal one.
-const STDLIB_ROOT = 'src/stdlib'
+// The `.cml` tree the source pass reads: `--stdlib <dir>` names another one, else this tree's
+// `src/stdlib`. The self-test fixtures name a miniature tree, because the two rules below about a
+// name the example does not bring into scope are about the library's own shape.
+const STDLIB_ROOT = takeStdlibDir(ARGV)
 const DOC_NAME = /^[A-Za-z_]\w*$/
 const DOC_RESERVED = new Set([
     'true', 'false', 'null', 'func', 'let', 'var', 'if', 'else', 'for', 'while', 'match', 'return',
@@ -1393,6 +1287,46 @@ function docTypeNames(bindings, code) {
     return names.filter((name) => !DOC_BUILTIN_TYPES.has(name))
 }
 
+// The names of the example's own module are already in scope, and these are the names it calls that
+// it does not bring itself: a callee, `is_same::<...>()` or `to_bytes(...)`, that the example binds
+// nowhere -- a parameter, a `let`, a `for`'s element, a lambda's parameter -- is a name it expects
+// to find, the way it expects a type to be found.
+function docCallees(code) {
+    const names = []
+    for (const match of code.matchAll(/\b([A-Za-z_]\w*)\s*(?:::<|::<|\()/g)) {
+        if (!names.includes(match[1])) names.push(match[1])
+    }
+    return names
+}
+
+// The module the example's own file imports a name from, when it says so (`import { encode } from
+// bytes`). A file's own import is the strongest reading of what the example means, so it is tried
+// before the export sets are: two modules may export `encode`, and the file has already chosen.
+function docFileImport(text, name) {
+    for (const match of text.matchAll(/^\s*import\s*\{([^}]*)\}\s*from\s+([A-Za-z_]\w*)/gm)) {
+        for (const part of match[1].split(',')) {
+            const trimmed = part.trim()
+            if (trimmed === '' || /\s+as\s+/.test(trimmed)) continue
+            if (trimmed === name) return match[2]
+        }
+    }
+    const whole = /^\s*import\s+([A-Za-z_]\w*)\s*$/m.exec(text)
+    return whole ? whole[1] : null
+}
+
+function docBoundNames(code, bindings) {
+    const names = new Set(bindings.map((binding) => binding.name))
+    for (const match of code.matchAll(/\b(?:let|var)\s+([A-Za-z_]\w*)/g)) names.add(match[1])
+    for (const match of code.matchAll(/\bfor\s+([A-Za-z_]\w*)\s+in\b/g)) names.add(match[1])
+    for (const match of code.matchAll(/\bfunc\s*\(([^()]*)\)/g)) {
+        for (const part of docSplitArguments(match[1])) {
+            const name = /^(?:\.{2,3})?([A-Za-z_]\w*)/.exec(part.trim())
+            if (name) names.add(name[1])
+        }
+    }
+    return names
+}
+
 // One example as a program: the module's documented names in scope, the arguments bound to their
 // declared types, the example inside a function, and an entry point. An example that starts with a
 // statement keyword is used as a statement; anything else is an expression. A call that returns
@@ -1411,6 +1345,9 @@ function docExampleSource(context, entry, code, asStatement) {
     }
     const bindings = docBindings(entry, code)
     const params = bindings.map((binding) => `${binding.name}: ${binding.type}`).join(', ')
+    for (const [name, owner] of context.valueImports || []) {
+        lines.push(`import { ${name} } from ${owner}`)
+    }
     const fallible = /^return\s+error\(/.test(code)
     lines.push(`func __doc_example(${params}) => ${fallible ? 'int!' : 'void'} {`)
     if (asStatement || entry.result === 'void' || DOC_STATEMENT.test(code)) {
@@ -1431,7 +1368,9 @@ async function compileDocExample(context, entry, code) {
         let result = null
         for (const asStatement of [false, true]) {
             fs.writeFileSync(file, docExampleSource(context, entry, code, asStatement))
-            result = await runCamel([file, 'std::gir'], dir)
+            // Compile only: `std::gir` hands the program on, and an example is a fragment inside
+            // `__doc_example`, not something to run. `std::nop` stops the pipeline there.
+            result = await runCamel([file, 'std::gir', 'std::nop'], dir)
             if (result.code === 0) return { ok: true, result }
             // A statement retry is for a call that returns nothing; a syntax error is the same
             // both ways, so only retry what parsed.
@@ -1446,7 +1385,7 @@ async function compileDocExample(context, entry, code) {
 // The whole source pass. Returns the red lines and the counts the summary prints.
 async function checkSourceExamples() {
     const files = []
-    collectSource(STDLIB_ROOT, files)
+    collectSource(path.resolve(ROOT, STDLIB_ROOT), files)
     if (files.length === 0) {
         console.log(`${STDLIB_ROOT}: no .cml file found; refusing to report a pass over no source`)
         return { failed: true }
@@ -1456,14 +1395,25 @@ async function checkSourceExamples() {
     // signature file: `Tangent` is declared both by `transforms`'s signature file and by `types`,
     // and the one an `import` brings is `types`'s.
     const typeOwners = new Map()
+    // Every exported function or value, with every module that exports it. An example's free name
+    // that exactly one module exports is imported from that module, the way a type is
+    // (`is_same` is `types`', `to_bytes` is `array`'s); two modules exporting the same name is a
+    // finding rather than a guess, because which one the example means is the example's to say.
+    const valueOwners = new Map()
     const fileContexts = new Map()
     for (const rel of files) {
         const text = fs.readFileSync(path.resolve(ROOT, rel), 'utf8')
         const info = docFileOf(rel)
         const types = [...text.matchAll(/^\s*export\s+type\s+([A-Za-z_]\w*)/gm)].map((one) => one[1])
-        fileContexts.set(rel, { ...info, text, types })
+        const values = [...text.matchAll(/^\s*export\s+(?:func\s+(?!operator\b)|let\s+)([A-Za-z_]\w*)/gm)].map((one) => one[1])
+        fileContexts.set(rel, { ...info, text, types, values })
         if (info.module && !info.ruleset && !info.signature) {
             for (const name of types) if (!typeOwners.has(name)) typeOwners.set(name, info.module)
+        }
+        for (const name of values) {
+            if (!info.module) continue
+            if (!valueOwners.has(name)) valueOwners.set(name, new Set())
+            valueOwners.get(name).add(info.module)
         }
     }
     for (const rel of files) {
@@ -1530,7 +1480,33 @@ async function checkSourceExamples() {
                         if (owner && owner !== 'globals' && !moduleNames.includes(name)) typeImports.set(name, owner)
                     }
                 }
-                jobs.push({ rel, line: example.line, code, entry, fragments: block.fragments, context: { ...context, typeImports, names: moduleNames } })
+                // The same rule for a *function or a value* the example calls and does not bring: one
+                // module exports it, so it is imported from that module (`is_same` is `types'`).
+                // More than one module exports it, and the example has to say which one it means --
+                // guessing would decide the example's meaning for it.
+                const valueImports = new Map()
+                const ambiguous = []
+                if (!context.ruleset && block.fragments.length === 0) {
+                    const bound = docBoundNames(code, docBindings(entry, code))
+                    for (const name of docCallees(code)) {
+                        if (bound.has(name) || moduleNames.includes(name) || typeImports.has(name)) continue
+                        if (/^[A-Z]/.test(name)) continue
+                        const owners = valueOwners.get(name)
+                        if (!owners || owners.size === 0 || owners.has('globals') || owners.has(entry.module)) continue
+                        const explicit = docFileImport(context.text, name)
+                        if (explicit && owners.has(explicit)) {
+                            valueImports.set(name, explicit)
+                        } else if (owners.size === 1) {
+                            valueImports.set(name, [...owners][0])
+                        } else {
+                            ambiguous.push(`${name} (${[...owners].sort().join(', ')})`)
+                        }
+                    }
+                }
+                jobs.push({
+                    rel, line: example.line, code, entry, fragments: block.fragments, ambiguous,
+                    context: { ...context, typeImports, valueImports, names: moduleNames },
+                })
             }
         }
     }
@@ -1548,6 +1524,21 @@ async function checkSourceExamples() {
                 results[index] = { ...job, ok: false, diagnostic: 'the @example has no declaration below it to bind its names' }
                 continue
             }
+            if (job.ambiguous.length > 0) {
+                // Two modules export the name the example calls, and which one it means is the
+                // example's to say: importing one of them would decide it for the reader.
+                results[index] = {
+                    ...job,
+                    ok: false,
+                    kind: null,
+                    ambiguous: true,
+                    diagnostic:
+                        `more than one module exports ${job.ambiguous.join(', ')}: the example has to say which ` +
+                        'one it means, because importing one of them would decide it for the reader',
+                    raw: [],
+                }
+                continue
+            }
             const compiled = await compileDocExample(job.context, job.entry, job.code)
             const text = `${compiled.result.stdout}\n${compiled.result.stderr}`
             const match = DOC_DIAGNOSTIC_CLASS.exec(text)
@@ -1558,6 +1549,11 @@ async function checkSourceExamples() {
                 kind,
                 excused: !compiled.ok && job.fragments.length > 0 && (kind === 'semantic' || kind === 'internal'),
                 diagnostic: compiled.ok ? '' : firstDiagnostic(compiled.result),
+                // A failure whose class the pattern did not find says nothing about which class the
+                // compiler reported, and the reading a reader needs is the compiler's own text. The
+                // first lines of it are kept for the report below; the classification itself is
+                // unchanged.
+                raw: compiled.ok ? [] : text.replace(/\r\n/g, '\n').split('\n').slice(0, 6).map((line) => line.trimEnd()),
             }
         }
     }
@@ -1567,12 +1563,16 @@ async function checkSourceExamples() {
     const excused = results.filter((one) => one.excused)
     const classes = new Map()
     for (const one of red) {
-        const label = one.kind ? `a ${one.kind} error` : 'no diagnostic class'
+        const label = one.kind ? `a ${one.kind} error` : one.ambiguous ? 'an ambiguous name' : 'no diagnostic class'
         classes.set(label, (classes.get(label) || 0) + 1)
     }
     for (const one of red) {
-        console.log(`${one.rel}:${one.line}: ${one.kind ? `a ${one.kind} error` : 'no diagnostic class'} -- ${one.code}`)
+        const label = one.kind ? `a ${one.kind} error` : one.ambiguous ? 'an ambiguous name' : 'no diagnostic class'
+        console.log(`${one.rel}:${one.line}: ${label} -- ${one.code}`)
         console.log(`    ${one.diagnostic}`)
+        if (!one.kind && !one.ambiguous) {
+            for (const line of one.raw) if (line.trim() !== '') console.log(`      | ${line}`)
+        }
     }
     for (const [label, count] of [...classes].sort(([a], [b]) => a.localeCompare(b))) {
         console.log(`    ${label}: ${count}`)

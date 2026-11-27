@@ -1,6 +1,6 @@
 /**
  * `main` takes parameters: they are the inputs of the program and get their values from the
- * command line (`--arg name=value`). The result is the exit code, as for any `main`.
+ * command line (`--arg name=value`). Its value is the function's own and gives no exit code.
  */
 
 func main(n: int, rate: float, name: string, loud: bool) => int sync {

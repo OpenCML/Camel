@@ -130,13 +130,17 @@ timeout_ms = 8000
 
 [[tests]]
 name = "with_defaults.overload_default_hole"
-desc = "A parameter left out between named ones takes the default of the declaration the call means: `rounds` has a default in both declarations of `show`, and `show<label: 'p'>(3)` reaches the one whose ordinary parameter takes the 3 and gets that declaration's own `rounds` (3 * 8 = 24, the exit code)."
+desc = "A parameter left out between named ones takes the default of the declaration the call means: `rounds` has a default in both declarations of `show`, and `show<label: 'p'>(3)` reaches the one whose ordinary parameter takes the 3 and gets that declaration's own `rounds` (3 * 8 = 24, written to the file `-o` names; the returned value gives no exit code)."
 kind = "behavior"
 case = "../../../cases/compile/with_defaults/overload_default_hole.cml"
-args = ["${case}"]
-expect_exit = 24
+args = ["-o", "${test_tmp}/overload_default_hole.txt", "${case}"]
+expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000
+verify_script = """
+const text = fs.readFileSync(input.test_tmp + '/overload_default_hole.txt', 'utf8').trim()
+assert(text === '24', JSON.stringify(text))
+"""
 
 [[tests]]
 name = "with_defaults.in_value"

@@ -473,7 +473,9 @@ class Context : public std::enable_shared_from_this<Context> {
     void clearProcessExitCode() { processExitCode_.reset(); }
     /** The program ended itself with `exit(code)` (camel/core/process_exit.h). */
     void setProcessExitCode(int code) { processExitCode_ = code; }
-    /** Every scheduling pass reports the value the entry graph returned here. */
+    /** Every scheduling pass reports the value the entry graph returned here. That value is
+     * `main`'s own and gives no exit code (design principles 9.8); the one exception is an
+     * unhandled error value, which ends the program non-zero. */
     void captureProcessExitCode(camel::runtime::GCGraph *graph, slot_t result);
     /**
      * Who else wants the value the entry graph returned (camel/execute/entry_args.h writes it
@@ -484,11 +486,10 @@ class Context : public std::enable_shared_from_this<Context> {
         entryResultHandler_ = std::move(handler);
     }
     /**
-     * Whether the entry function declares its return type. Only then is the value it returns
-     * the result of the program: the exit code, and what `-o` writes (design principles 9.8).
-     * A `main` without a declared return type still has a value (that of its body), which is
-     * nobody's result. The front end that knows the declaration says so here; without a word
-     * from it the value counts, as it did before the rule.
+     * Whether the entry function declares its return type. The value of `main` is a function's
+     * value either way; the declaration decides only whether the driver may write it out
+     * (design principles 9.8). The front end that knows the declaration says so here; without a
+     * word from it the value counts.
      */
     void setEntryResultDeclared(bool declared) { entryResultDeclared_ = declared; }
     bool entryResultDeclared() const { return entryResultDeclared_; }

@@ -66,35 +66,23 @@ context_ptr_t Context::handle() const {
 
 namespace {
 
-/// The exit code the value returned by the entry graph stands for. Only a declared return
-/// type makes the value the program's result (design principles 9.8). Under `T!` a value
-/// that has not failed counts as its `T`; a failed one is an error nobody handled, and the
-/// program ends with a non-zero code (who reports it: camel/execute/entry_args.h).
+/// The exit code the entry graph leaves the process with. An exit code is an explicit effect:
+/// only `process::exit(code)` gives one (design principles 9.8), and that code is already in the
+/// context when the graph returns without one. What the graph returns is the value of `main`,
+/// which is an ordinary function -- the program itself has no result -- so the returned value
+/// does not stand for a code, whatever its type. A `T!` result that *is* an error value is the
+/// one thing that still means something at this boundary: nobody handled it, so the program ends
+/// with a non-zero code (who reports it: camel/execute/entry_args.h).
 int deriveProcessExitCode(camel::runtime::GCGraph *graph, slot_t result, bool declared) {
     if (!declared || !graph || !graph->funcType() || !graph->funcType()->hasExitType())
         return 0;
 
-    Type *resultType = graph->funcType()->exitType();
-    if (TupleType *fallible = asFallible(resultType)) {
+    if (TupleType *fallible = asFallible(graph->funcType()->exitType())) {
         if (camel::core::rtdata::isErrorValue(result)) {
             return 1;
         }
-        result     = camel::core::rtdata::falliblePayload(result);
-        resultType = fallible->payloadType();
     }
-
-    switch (resultType->code()) {
-    case TypeCode::Int32:
-        return static_cast<int>(static_cast<int32_t>(result));
-    case TypeCode::Int64:
-        return static_cast<int>(static_cast<int64_t>(result));
-    case TypeCode::Bool:
-        return result != 0 ? 1 : 0;
-    case TypeCode::Void:
-        return 0;
-    default:
-        return 0;
-    }
+    return 0;
 }
 
 } // namespace
