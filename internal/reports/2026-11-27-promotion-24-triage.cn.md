@@ -58,3 +58,75 @@ BUILD_EXIT=0   RUN_EXIT=1
 
 三项判据（176 名逐名比、9 条按信号分类、`fault_deep.prl_off` 三次）里前两项已出，第三项判 unstable；
 新增红 12 条未清零前 `develop` 不快进。
+
+## 七、撤掉那一枝之后的四次测量
+
+撤的是 `e467f20578`（`Merge lane/editview-gir: a block head's binding is the block's root, opened by
+its kind`），`git revert -m 1` 成一笔 `e8a120c287`，在 `249c85dda1` 上单笔 merge 成 `bb41152893`
+（`Lane-Reading: check=targeted-plans total=158 pass=157 fail=1 red=[probe.editview|editview.sec2_log] state=read`，
+那条红在 promo40 的 `6a78c46c64` 上就已经红，属 promotion 23 的既有名）。撤之前后在撤出的树上
+`BUILD_EXIT=0`（全量 1,180 s，下游 `pass-decl-gate` 与 `footprint-once` 都编过）。
+
+| 读数 | 钉住的 tip | total | pass | fail | skip | known | killed | 对 promotion-23 的 187 名逐名比 |
+|---|---|---|---|---|---|---|---|---|
+| promo43 | `bb41152893` | 9855 | 9632 | 162 | 28 | 33 | **0** | still 161 / gone 26 / new 1 |
+| promo46 | `22afbf1d0c` | 9857 | 9632 | 164 | 28 | 33 | **0** | still 162 / gone 25 / new 2 |
+| promo48 | `c0f6a832d2` | 9861 | 9636 | 164 | 28 | 33 | **0** | still 161 / gone 26 / **new 3** |
+
+`promo43` 的 14 条转绿正是撤走的那 12 条（9 条 `SIGABRT` + 3 条 `exit 1`）与另外两条；撤之后
+`killed by a signal` 在三次读数里都是 0。
+
+## 八、三条新名的处置（都落在 `promo48` 的 P 之前）
+
+1. **`parse.frontend|frontend.ast_record`** —— 记录过期，不是产品红。撤走后 `check-ast-hashes.mjs`
+   在 `22afbf1d0c` 上报 `15 stale (15 mismatch, 0 missing, 0 gone)`，全部是
+   `test/cases/probe/editview/*.cml` 加一条 `test/cases/probe/blockscope/imported_type_in_body.cml`
+   （块根那枝合进来时记的形态，撤走后又要变回去）。重录用 `--update --only` 分两次做（先
+   `test/cases/probe/editview/*`，再那一条），重录后 `0 stale of 4636`。提交 `0476066d2d`。
+2. **`runtime.graph_draft_ledger.never_rises`** —— 结构账，不是产品红。原文：
+   `[LEDGER] RED entered files: src/stdlib/std/macro/rewrite.cpp (first at rewrite.cpp:83:
+   camel::runtime::GraphDraft::NamedEdit edit(draft, camel::runtime::EditKind::Repla…))`。
+   工具给的两条路是拿掉或 `--record --force` 记进 baseline；按 `check.mjs:48-57` 的口径成员身份按角色判，
+   `NamedEdit` 是 `GraphDraft` 的嵌套类型、只能以被删类名构造，没有工厂与别名，`decltype` 藏名字是
+   `check.mjs:52-54` 明确否掉的写法 ⇒ **只能记基线**。`baseline.json` +1 行
+   `"src/stdlib/std/macro/rewrite.cpp"`，提交 `649c9395e1`，说明里写了为什么它留下（提交分档与
+   “一次编辑一次通知”）、为什么只有这一处（`txn.cpp` 有 8 处同入口，范围留给移除类型那一步）。
+3. **`tools.selfchecks|selfchecks.merge_batch`** —— 工具自检（元层），不是产品红。根因是 fixture
+   复制真钩子后钩子只看自己旁边、找不到 `scripts/common.js` 就拒推；修在 `0e89c42942`
+   （推送钩子读被推送检出自己的 `common.js`，没有就不查）。**这条在单跑与合批里读数不同**：
+   在 `c0f6a832d2` 上单跑 `node --test test/tools/merge-batch.test.mjs` 曾报
+   `# FAIL with --push the remote integration is the tool's tip` / `20 checks, 1 failed`，
+   而在同一棵树的整快层 8 路并发里它**是绿的**（`promo48` 的 gone 名单里有它）。
+   ⇒ 这是一条**在负载下不稳的测试**，两种读数都真实存在，写在这里而不是被“排除”。
+
+`promo48` 对上一个 P（`22afbf1d0c`，164 名）是 **still 161 / gone 3 / new 3**，三条 gone 正是上面
+这三条 ⇒ 修复在整快层里生效。
+
+## 九、promo48 的三条新红：新增用例，不是回归
+
+```
+pools|probe.avg_reverse.nvm    expected exit 0, got exit 1
+pools|probe.max_forward.nvm    expected exit 0, got exit 1 | output does not contain
+                               'probe max_forward value=5.599999904632568 tangent=-0.9000000357627869
+                                expected=-0.9000000357627869 diff=0.0 forward_ok=true'
+pools|probe.max_reverse.nvm    expected exit 0, got exit 1
+```
+
+三条都来自 `lane/probe-evidence` 那批新加的探针用例（同一批新 `.cml` 里的三条），在 promotion 23
+与 `22afbf1d0c` 的红表里都不存在 ⇒ 按名字级比较它们是 new，按性质它们是“新用例还没做完”。
+
+## 十、结论与留给决策者的一条
+
+`promo48`：`total 9861 / pass 9636 / fail 164 / skip 28 / known 33 / killed 0`，
+对 promotion-23 **still 161 / gone 26 / new 3**。门禁要求 `comparison.new_reds` 为 0，
+`3 > 0` ⇒ **这一轮不发布，`develop` 停在 `ef2cd2eb63`。**
+
+留给决策者的结构性问题：晋级判据是名字级的 `new = 0`，而计划树每天都在进新用例，这一轮
+“修掉 3 条、新进 3 条”正好把 `fail` 抵平在 164。只要新用例的红与既有用例的回归混在同一个
+名字集里，晋级就会反复卡在“昨天之后新加的用例里恰好有红的”。两条可选口径：
+
+1. 新用例的红单独计一类（“新用例未做完”），门禁只拦既有用例的回归；
+2. 新用例合入前必须自己先跑绿。
+
+两条都要由决策者定，不由签名读数的人定；在此之前，这一轮的红表就是 `164 名`，逐名比的三列
+是 `161 / 26 / 3`。
