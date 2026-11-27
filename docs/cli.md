@@ -197,6 +197,12 @@ allowed. The parenthesised form (`std::opt(safe_fp=true)`), the colon spelling o
 (`safe_fp: true`) and positional parameters are gone: they are refused as
 `RuntimeDiag::InvalidPassParameter`, and the message says how to write the parameter.
 
+A pass word on the command line has the shape of a **module path in the source**: `std::gir`,
+`tiles::compile`. The value of `#op` is another layer: a **URI**, `<module>:<module-internal path>`
+(`std:gir`, `std:cxx::cse`), the identity a declaration gives an operator. Do not unify the two
+spellings: they are not resolved by the same table today — see the note on `#op` in
+[the operator registration page](technical/09_operator_registration.md).
+
 The declarations are read when the pipeline is resolved, from the module search paths. If the
 module's `.cml` file cannot be found or does not declare the pass, the pass is refused rather
 than run on defaults the declaration never gave it: the message names the module and the file the
