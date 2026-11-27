@@ -32,3 +32,20 @@ task-24 | replace(exit(d), v): rewire the reader, keep the node, still refuse de
 task-26 | Two gate reds: attempt/tags plans and the internal/perf file headers | completed | owner: lane-misc | r3 | readings: criteria stated (the three reds quoted before and after, the two gate commands at exit 0, 0 new reds by name) | commit: no commit recorded
 task-27 | Rebase lane/transfer and lane/rescue-1 | completed | owner: lane-parked-rebase | r4 | readings: lane/transfer new tip c550850a6 (base 6d1816ce2), self-checks exit 0, one plan run total 10 / pass 10; lane/rescue-1 had no content of its own (patch already upstream), three plans: transforms 217/208/8 (those eight reds are on the tip already), gc_collections 73/73, showcase_s2 10/10 | commit: c550850a6, 6d1816ce2
 ```
+## Recorded in batch 2 (10)
+
+Format from here on: `id | subject | status | owner | revision`. The result and the commit live in
+git and the backlog; this line only has to say which task it was.
+
+```
+task-54 | splitting a central header by role, first candidate by churn x rebuild cost | completed | owner: lane-block-hash | r3
+task-58 | diagnostics streams: the three tensor assertions judged one by one | completed | owner: lane-enter-shape | r7
+task-59 | ref_boxes finalized off by 1-2: a collector statistic, awaiting a ruling | completed | owner: lane-parked-rebase | r4
+task-62 | the C++ back end gives T.. a C++ type and writes CALL-shaped iteration as a loop | completed | owner: lane-ssa-residue | r4
+task-63 | slow layer: ten feat.mm.gc_pacing reds judged one by one | completed | owner: lane-arrangeable | r3
+task-64 | verifying -FetchFile "this run did not write it" on the build host | completed | owner: seat-merge-1 | r3
+task-65 | test::loop_collect_summary: the state arity and the lost source position | completed | owner: lane-witness | r5
+task-66 | slow layer: four feat.mm.capacity reds judged one by one | completed | owner: lane-oper-shape-guard | r4
+task-69 | three generated files stale: stdlib reference, AI reference, questions index | completed | owner: lane-misc | r3
+task-71 | remaining `let x = 0 .. n` sites used as arrays, judged one by one | completed | owner: lane-arrangeable | r3
+```
