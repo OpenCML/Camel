@@ -3108,6 +3108,7 @@ d2f8495a0e4462bc ok test/cases/modules/autodiff/loop_grad_sum.cml
 2e083daa94517194 ok test/cases/modules/autodiff/loop_grad_tensor_iterable.cml
 6f0d9fa01b4ecb57 ok test/cases/modules/autodiff/loop_grad_tuple_state.cml
 b5e5b1e7e1583741 ok test/cases/modules/autodiff/loop_grad_zero_rounds.cml
+7b082c008af01bc3 ok test/cases/modules/autodiff/loop_residual_grad.cml
 67dc0eea8745985f ok test/cases/modules/autodiff/macro_round_lifetime_gc.cml
 a4aa72dbff2e300e ok test/cases/modules/autodiff/math_erf.cml
 bc7de123bd5d5d71 ok test/cases/modules/autodiff/math_sqrt.cml
@@ -3405,6 +3406,7 @@ e11c76f0ec834ecd ok test/cases/modules/onnx/ort_struct_casts.cml
 9ff1f6d3acba7db2 ok test/cases/modules/onnx/loop_collect/for_collect.cml
 fd769b1a2b6f9912 ok test/cases/modules/onnx/loop_collect/for_collect_static.cml
 0a35246ec3c41c74 ok test/cases/modules/onnx/loop_collect/for_while_collect.cml
+744f17698921fc3c ok test/cases/modules/onnx/loop_collect/forward_collect.cml
 225e1d7c12268392 ok test/cases/modules/onnx/loop_collect/ort_collect.cml
 3a0242e5221a8a0c ok test/cases/modules/onnx/loop_collect/ort_while_collect.cml
 842eb0dcddf0e8b0 ok test/cases/modules/onnx/loop_collect/while_collect.cml
