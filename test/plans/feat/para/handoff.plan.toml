@@ -91,11 +91,6 @@ desc = "The same with the hand-off off."
 kind = "negative"
 case = "../../../cases/para/handoff/fault_deep.cml"
 args = ["${case}", "${run_prl_no_bytecode}"]
-# The crash this entry sometimes dies of is the parallel scheduler's, not this case's: the invariants
-# are checked while a frame's index is read, and one run in two aborts before the fault below is
-# raised. The case and its assertions are untouched -- the field only buys a failing attempt one
-# re-run, and a second failure is still red (`test/tools/run-tests.mjs`).
-flaky = "并行调度器的偶发崩溃（`internal/backlog.md#D-1127-142`）；四次里两绿两崩；该崩溃修掉就删本字段"
 expect_exit = 1
 expect_diagnostic_name = "RuntimeDiag::IndexOutOfRange"
 expect_diagnostic_line = 31
