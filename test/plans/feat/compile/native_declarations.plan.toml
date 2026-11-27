@@ -74,6 +74,17 @@ expect_diagnostic_name = "SemanticDiag::NativeDeclarationNotLoaded"
 expect_diagnostic_code = "0x0300017C"
 expect_output_contains = ["missing_module.cml:", "nowhere:absent", "which no loaded module implements"]
 
+[[tests]]
+name = "native.pass_shaped_not_loaded"
+desc = "A body-less declaration shaped like a pass, written under `#op`: the shape says the name may be used as a pass, and the declaration is still a declaration of an operator, so an operator nothing implements is refused where it is written rather than skipped because nothing needs the pass."
+kind = "negative"
+case = "../../../cases/compile/native/pass_shaped_unimplemented.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::NativeDeclarationNotLoaded"
+expect_diagnostic_code = "0x0300017C"
+expect_output_contains = ["pass_shaped_unimplemented.cml:", "nowhere:reshape", "which no loaded module implements"]
+
 # ---- The declaration is the signature a call is checked against ----
 
 [[tests]]
