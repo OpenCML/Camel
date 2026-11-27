@@ -961,9 +961,8 @@ Builder::visitLinkNode(const GCT::node_ptr_t &gct, std::optional<GCT::Assignment
             // that declares `f32[n - w + 1]` and is called with `f32[6]` compiles and fails at the
             // call when the value does not have that shape.
             node_handle_t &refinedArg = linkedNode(*arg.input);
-refinedArg                = refineExtentNodeOf(
-                valueOf(refinedArg), refined, arg.input->expr);
-            (*arg.types)[arg.index]   = refined;
+            refinedArg = refineExtentNodeOf(valueOf(refinedArg), refined, arg.input->expr);
+            (*arg.types)[arg.index] = refined;
         }
         const auto enter = [&](std::vector<Argument> &inputs, type_vec_t &types, bool with) {
             const size_t count = with ? funcType->withTypesCount() : funcType->normTypesCount();
@@ -2310,8 +2309,7 @@ refinedArg                = refineExtentNodeOf(
             // This is the program-written half of the boundary `Builder::castNodeTo` states for
             // the compiler-written one, and the two answer with one diagnostic.
             if (targetOperator->oper() == camel::core::constructedOperators().enter &&
-                !normInputTypes.empty() &&
-                normInputTypes[0] != nullptr &&
+                !normInputTypes.empty() && normInputTypes[0] != nullptr &&
                 (targetOperator->funcType() == nullptr ||
                  targetOperator->funcType()->exitType() == nullptr ||
                  !targetOperator->funcType()->exitType()->castEntersFrom(normInputTypes[0]))) {
@@ -2706,8 +2704,8 @@ refinedArg                = refineExtentNodeOf(
                 // is asked of the cells themselves -- `castNodeTo` reads the value a node gives,
                 // and a cell's value is the value it holds, not the box (design principles 3.5).
                 Type *own = nodeTypeOf(cell);
-                if (own->code() == TypeCode::Tuple &&
-                    static_cast<TupleType *>(own)->isCell() && wanted->castEntersFrom(own)) {
+                if (own->code() == TypeCode::Tuple && static_cast<TupleType *>(own)->isCell() &&
+                    wanted->castEntersFrom(own)) {
                     return enterNodeOf(cell, wanted, arg.expr, own);
                 }
                 node_handle_t converted = castNodeTo(cell, wanted, arg.expr);
@@ -3082,7 +3080,7 @@ refinedArg                = refineExtentNodeOf(
             if (refined != nullptr && refined != namedExit && actualExit != nullptr &&
                 !refined->equals(actualExit) &&
                 refined->castSafetyFrom(actualExit) != CastSafety::Forbidden) {
-targetNode = refineExtentNodeOf(targetNode, refined, gct);
+                targetNode = refineExtentNodeOf(targetNode, refined, gct);
             }
         }
     }
