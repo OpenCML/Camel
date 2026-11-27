@@ -448,6 +448,20 @@ export func order(before: Node, after: Node) => void
 /// @example inline(n, func () { 0 })
 export func inline::<G>(at: Node, fn: G) => Node when is_function::<G>()
 
+/// Expands the call `at` where it stands: the body of the function the call names is spliced into
+/// the call's place, the call's arguments become the body's parameters, and the node that holds the
+/// body's value is what the operator answers. The call is gone afterwards, and the body takes over
+/// its place in the block's chain and its order edges (design 7 and 15.3).
+///
+/// It is the splice `inline` makes, asked with the call alone: the callee is the graph `callee(at)`
+/// names, so a pass that walks the calls of a program can expand one without holding the function
+/// value it names. The captures of the callee come with that function value, the same way the
+/// parameters do.
+/// @fails fault `InvalidArgument` when the node is not a call, when the callee of the call is not known in this graph (a call through a parameter, or through a closure still being assembled), or when the call is of the graph being edited (a recursion)
+/// @example-fragment n is a call of the surrounding draft
+/// @example inline_call(n)
+export func inline_call(at: Node) => Node
+
 /// Collects a group of the graph's nodes into a function of its own and puts a call of it where the
 /// value the group handed on was read: `inline`'s reverse (design 7 and 15.3). The nodes the group
 /// reads from outside it become that function's parameters, in the order they are found, and the one

@@ -76,10 +76,10 @@ namespace err = camel::core::error;
 /// stands, and not at the operator call that happened to ask for the edit. The shape is the one the
 /// pass-side failures use (`autodiff/pullback.cpp`), because the position a reader needs is the
 /// node's.
-[[noreturn]] void refuseAtOrigin(uint64_t origin, const std::string &message) {
+[[noreturn]] void refuseAtOrigin(uint64_t origin, const char *site, const std::string &message) {
     throw err::RuntimeFault(
         err::RuntimeDiag::RuntimeError,
-        {"graph.inline: " + message},
+        {std::string(site) + ": " + message},
         "",
         nullptr,
         err::ExecutionSiteHint{.cachedOrigin = static_cast<camel::source::origin_id_t>(origin)});
@@ -772,6 +772,77 @@ hangSplicedStatements(camel::runtime::GraphDraft &draft, gc_node_ref_t atRef, si
     return carried.size();
 }
 
+/// Expands the call `atRef` where it stands: the callee's body is spliced into the call's place,
+/// takes over the place the call held in its block's chain and its order edges, and the call itself
+/// is gone (draft_inline.h, `inlineCallableInDraft`). The call's own arguments are the actuals, so
+/// the body's parameters are bound to them; the captures of the callee come with its function value
+/// -- a closure built in the graph being edited is lifted first, its captures becoming the trailing
+/// arguments of the call, so they are bound the same way.
+///
+/// One splice, two operators: `inline(t, at, fn)` expands a call of the function value it is
+/// handed, and `inline_call(t, at)` expands the call it is handed. They differ in what names the
+/// callee, not in how a call is spliced, so the sequence -- find the callee, lift a closure,
+/// splice, refuse where there is nothing to splice -- is written once, here.
+///
+/// A callee that is not known (the call goes through a parameter, or through a closure that is
+/// being assembled) and a call of the graph being edited itself (a recursive call) are refused: an
+/// inline that guessed either would be writing a program the source did not. Both are reported at
+/// the call's own place, where the reader can see the call.
+gc_node_ref_t spliceCallInDraft(
+    TxnState &state, camel::runtime::GraphTransaction &transaction, gc_node_ref_t atRef,
+    const char *site) {
+    auto &draft                                           = transaction.edit();
+    const camel::runtime::DraftNodeHeader *const atHeader = draft.header(atRef);
+    if (atHeader == nullptr) {
+        err::throwRuntimeFault(err::RuntimeDiag::InvalidArgument, site, "the node was removed");
+    }
+    if (atHeader->kind != GCNodeKind::Func && atHeader->kind != GCNodeKind::Call) {
+        err::throwRuntimeFault(
+            err::RuntimeDiag::InvalidArgument,
+            site,
+            "the node is not a call: `inline_call` expands a call, and a node that is not one has "
+            "no body to splice");
+    }
+    if (atHeader->kind == GCNodeKind::Call &&
+        !camel::runtime::devirtualizeStaticCallInDraft(state.session, transaction, atRef, true)) {
+        refuseAtOrigin(
+            draft.nodeOrigin(atRef),
+            site,
+            "the callee of the call is not known in this graph: run `std::defunctionalize` on it "
+            "first");
+    }
+    const GCGraph *calleeGraph = draft.calleeGraphOf(atRef);
+    if (calleeGraph == nullptr) {
+        refuseAtOrigin(
+            draft.nodeOrigin(atRef),
+            site,
+            "the callee of the call is not known in this graph: a call that goes through a "
+            "parameter, or through a closure still being assembled, has no body to splice");
+    }
+    if (calleeGraph->id() == draft.id()) {
+        refuseAtOrigin(
+            draft.nodeOrigin(atRef),
+            site,
+            "the call is of the graph being edited (a recursive call): expanding it would splice "
+            "the graph into itself");
+    }
+    const camel::runtime::GraphDraft::NamedEdit named(
+        draft,
+        camel::runtime::EditKind::Inline,
+        draft.nodeOrigin(atRef));
+    const camel::runtime::DraftInlineResult inlined =
+        camel::runtime::inlineCallableInDraft(state.session, transaction, atRef);
+    if (!inlined) {
+        named.dismiss(); // no splice happened: no edit for the record or the tier to answer for
+        refuseAtOrigin(
+            draft.nodeOrigin(atRef),
+            site,
+            "the call cannot be expanded here (a callee that writes a captured variable keeps the "
+            "value it hands on, and is left as it is)");
+    }
+    return inlined.valueExit;
+}
+
 /// `inline(t, at, fn)`: the body of the function value `fn` spliced into the region `at` is in,
 /// answering the node that holds the body's value. `at` decides the place as well
 /// (docs/design/graph-editing/README.cn.md 7 and 15.3):
@@ -838,26 +909,9 @@ slot_t inlineKernel(ArgsView &, ArgsView &norm, Context &) {
     // function is a statement like any other and takes the branch below: what is expanded there is
     // the function value the operator was given.
     if (atIsCall && draft.calleeGraphOf(atRef) == calleeGraph) {
-        const camel::runtime::GraphDraft::NamedEdit named(
-            draft,
-            camel::runtime::EditKind::Inline,
-            draft.nodeOrigin(atRef));
-        const camel::runtime::DraftInlineResult inlined =
-            camel::runtime::inlineCallableInDraft(state.session, transaction, atRef);
-        if (!inlined) {
-            named.dismiss(); // no splice happened: no edit for the record or the tier to answer for
-            err::throwRuntimeFault(
-                err::RuntimeDiag::InvalidArgument,
-                site,
-                "the call cannot be expanded here (a callee that writes a captured variable keeps "
-                "the value it hands on, and is left as it is)");
-        }
+        const gc_node_ref_t valueExit = spliceCallInDraft(state, transaction, atRef, site);
         return toSlot(
-            Handle::createInTransaction(
-                transaction,
-                inlined.valueExit,
-                at->draft(),
-                mm::autoSpace()));
+            Handle::createInTransaction(transaction, valueExit, at->draft(), mm::autoSpace()));
     }
     // A call takes up a place in the chain only by the rule's own words (design principles 3.1): it
     // is not a node whose place a statement holds, so there is nothing for the body to take over.
@@ -867,6 +921,7 @@ slot_t inlineKernel(ArgsView &, ArgsView &norm, Context &) {
     if (atIsCall) {
         refuseAtOrigin(
             draft.nodeOrigin(atRef),
+            site,
             "the node is a call of a function, and a call has no place of its own for a body to "
             "take "
             "over: `inline` splices a function at a call of that same function, or at a node whose "
@@ -939,6 +994,29 @@ slot_t inlineKernel(ArgsView &, ArgsView &norm, Context &) {
     }
     return toSlot(
         Handle::createInTransaction(transaction, inlined.valueExit, at->draft(), mm::autoSpace()));
+}
+
+/// `inline_call(t, at)`: the call `at` is expanded where it stands -- the callee's body is spliced
+/// into the call's place, its parameters bound to the call's arguments and its captures carried in
+/// by the function value -- and the node that holds the body's value is what the operator answers.
+/// The call is gone afterwards, and the body has its place in the block's chain and its order edges
+/// (docs/design/graph-editing/README.cn.md 7 and 15.3).
+///
+/// It is the same splice `inline(t, at, fn)` makes, asked with the call alone: the callee is
+/// whatever graph that call names, read the way `callee(at)` reads it, and not a function value the
+/// caller already had. The rules a call is expanded under are therefore the splice's own
+/// (`spliceCallInDraft`): a callee that cannot be determined and a call of the graph being edited
+/// are refused at the call's place, and the edit is one `Inline` edit.
+/// @fails fault `InvalidArgument` when the node is not a call, when its callee is not known in this
+/// graph, or when the call is of the graph being edited
+slot_t inlineCallKernel(ArgsView &, ArgsView &norm, Context &) {
+    static const char *site       = "graph.inline_call";
+    const auto *at                = norm.get<Handle *>(0);
+    TxnState &state               = openState(at, site);
+    auto [transaction, atRef]     = draftOf(at, site);
+    const gc_node_ref_t valueExit = spliceCallInDraft(state, transaction, atRef, site);
+    return toSlot(
+        Handle::createInTransaction(transaction, valueExit, at->draft(), mm::autoSpace()));
 }
 
 /// `outline(t, ns)`: the group `ns` of one graph becomes a graph of its own and a call of it takes
@@ -1159,6 +1237,7 @@ const std::vector<TxnOp> &txnOps() {
         {"eval", evalKernel},
         {"order", orderKernel},
         {"inline", inlineKernel},
+        {"inline_call", inlineCallKernel},
         {"outline", outlineKernel},
         {"add_param", addParamKernel},
     };
