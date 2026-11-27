@@ -62,3 +62,17 @@ const calls = (doc.graphs || []).reduce((a, g) => a + (g.nodes || []).filter((n)
 const nodes = (doc.graphs || []).reduce((a, g) => a + (g.nodes || []).length, 0)
 throw new Error("DUP over.after calls=" + calls + " nodes=" + nodes)
 """
+[[tests]]
+name = "dup.over.graph"
+kind = "behavior"
+case = "../../../cases/opt/cxx_isolation/inline_duplication_over.cml"
+args = ["${case}", "std::gir", "std::nop"]
+expect_exit = 0
+timeout_ms = 20000
+verify_script = """
+const text = input.normalized.stdout
+const lines = text.split("\\n")
+const ops = lines.filter((l) => /label=":op\\//.test(l)).length
+const datas = lines.filter((l) => /type="DATA"/.test(l)).length
+throw new Error("OVERGRAPH lines=" + lines.length + " opNodes=" + ops + " dataNodes=" + datas)
+"""
