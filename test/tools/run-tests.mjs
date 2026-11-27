@@ -2838,12 +2838,20 @@ function assertionProblems(test) {
  * are expanded the way the other assertion strings are (`${test_tmp}` names this test's scratch
  * directory). An entry with no `case` (a `tool` entry) resolves it from the repository root.
  */
+// The value a relative `expect_diagnostic_file` wrote is carried beside the path it resolved to: a
+// value that names a file in another part of the tree -- the standard library, whose `fail` sites
+// move whenever the prose above them grows -- is compared against the one path a diagnostic printed,
+// and `sameDiagnosticFile` needs the value itself for that. It is this entry's own value: the pair
+// is made here and handed on, so two entries in one run each read their own, and nothing outlives
+// the assertion that asked. An absolute value is taken literally and carries no suffix.
 function namedDiagnosticFile(test, scope) {
     const text = expandTextTokens(test.expect_diagnostic_file, scope)
     const anchor = typeof test.case === 'string' && test.case.length > 0
         ? path.dirname(entryCasePath(test))
         : REPO_ROOT
-    return path.resolve(anchor, text)
+    const resolved = path.resolve(anchor, text)
+    const suffix = path.isAbsolute(text) ? null : text.split(path.sep).join('/')
+    return { resolved, suffix }
 }
 
 /**
@@ -2857,7 +2865,18 @@ function namedDiagnosticFile(test, scope) {
 function sameDiagnosticFile(reported, wanted) {
     if (typeof reported !== 'string' || reported.length === 0) return false
     const fold = (one) => (IS_WINDOWS ? one.toLowerCase() : one)
-    return fold(path.resolve(REPO_ROOT, reported)) === fold(wanted)
+    const resolved = path.resolve(REPO_ROOT, reported)
+    // The strict reading first, so a plan that pins a path of its own is not widened by the fallback.
+    if (fold(resolved) === fold(wanted.resolved)) return true
+    // A relative value may name a file the program loads from elsewhere in the tree, and the run
+    // reports it through the install's copy of that file. The comparison is then against the one path
+    // the diagnostic printed, on a path boundary: `stdlib/math.cml` matches
+    // `out/latest/stdlib/math.cml` and does not match `mystdlib/math.cml`. Nothing is searched: there
+    // is one path to compare, not a set of candidates.
+    if (wanted.suffix === null) return false
+    const suffix = wanted.suffix
+    const reportedAt = resolved.split(path.sep).join('/')
+    return fold(reportedAt) === fold(suffix) || fold(reportedAt).endsWith(fold(`/${suffix}`))
 }
 
 async function validateTest(test, result, context) {
@@ -3030,7 +3049,7 @@ async function validateTest(test, result, context) {
                 typeof test.expect_diagnostic_line === 'number' ? `line ${test.expect_diagnostic_line}` : null,
                 typeof test.expect_diagnostic_column === 'number' ? `column ${test.expect_diagnostic_column}` : null,
             ].filter(Boolean).join(', ')
-            const askedIn = wantedFile === null ? '' : ` in ${planLabel(wantedFile)}`
+            const askedIn = wantedFile === null ? '' : ` in ${planLabel(wantedFile.resolved)}`
             // The reading that makes a wrong file worth a sentence of its own: the same diagnostic, in
             // the file the run did print it in. Without it the reader sees "no such diagnostic" and
             // has to open the log to learn that it is there, one file over -- which is the reading
