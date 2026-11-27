@@ -1404,3 +1404,13 @@ expect_diagnostic_code = "0x04000033"
 expect_diagnostic_line = 14
 expect_diagnostic_column = 12
 expect_output_contains = ["The struct has no field 'y'. A struct is indexed by the name of one of its fields."]
+
+[[tests]]
+name = "native.native_not_pass_shaped"
+desc = "A body-less declaration that is not shaped like a pass is still a declaration: it is checked for an implementer, not taken for the pipeline's own. The case pins the half a fix to the classification opened -- a declaration that answers no operator-table entry is still seen as a declaration and checked by the same rule. Without the fix the declaration is swallowed whole and the red is `Reference 'twice' is declared as imported but is not exported by its module`."
+kind = "negative"
+case = "../../../cases/compile/native/native_not_pass_shaped.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::NativeDeclarationNotLoaded"
+expect_output_contains = ["names the operator 'native_not_pass_shaped_lib:twice'", "Unresolved reference: 'twice'"]
