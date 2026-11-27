@@ -119,12 +119,20 @@ pwsh -NoProfile -File <你的工作树>\internal\tools\camel-remote.ps1 `
   （`[camel-remote] <plan> exit N (transfer …, build …, plan …, load …; total …)`）
   是相位读数的唯一来源：24 小时 1679 次调用里只有 82 次保留到它，**其中 911 次是调用方自己滤掉的**。
   要少噪音就 `Tee-Object` 存一份再看，**不许让管道决定这条读数存在与否**（2026-11-26 决策者定）。
+· **做“修前/修后”对比时，`Copy-Item` 会保留目标文件的 `LastWriteTime`**（2026-11-27 一条车道实测）：
+  「备份修复 → `git checkout` 回退 → `Copy-Item` 恢复」之后源文件仍比 `.o`/`.cmo` 旧，ninja 判 up-to-date **直接跳过编译**，
+  于是一整轮“修后”测的其实是旧二进制（它第一轮拿到 8/20、13/20 全是假的）。
+  ⇒ 判据：核 `build\src\...\Release\*.cmo` 的 **mtime 与大小**（修前 772096 / 修后 773120），换了才算真的重编。
 · **构建机只管对错**：不跑性能测试、不判耗时预算；墙钟数字只用来判断「有没有卡死」。
   超时先**单独重跑一次**（同一计划、同样的 `-Jobs`）再判红 —— 超时是读数缺失的一种，不是红。
 · **它只量提交**：工作树里有未提交改动时也打 `0 changed file(s)` / `measuring: the commit alone`，量的是那棵树上的提交。
   ⇒ **先 commit，再量**；拿工作树里的改动去量，量到的是上一笔。
-· **每条“取计划读数”的 run 都会自动追加 `check-doc-links`，而它现在会挂 —— 挂住期间它一直持着这棵 checkout 的 tree lock**（2026-11-27 实测）：不需要你传 `-Check`，`camel-remote.ps1:856-859` 自己会加。那个检查的空脚本让 `node` 等 stdin，挂 ~40 分钟；**这期间同一棵树的下一条 run 就是 `no slot on this checkout within 1800 s`（exit 4）**。一条车道因此连续四次 `exit 4` 并误判成“别人占着槽”，换一棵 checkout 立刻通。
-  ⇒ **读到 `[SUMMARY]` / `RUN_EXIT` / `[TREE]` 就当读数到手，立刻按你记录的 PID `taskkill /T /F` 收掉整棵进程树**，锁随之释放；不要等它、也不要为了绕锁去抢别人的树。
+· **每条“取计划读数”的 run 都会自动追加 `check-doc-links`**（不需要你传 `-Check`，`camel-remote.ps1:856-859` 自己会加）。
+  **这条检查曾经挂 40 分钟并持着 tree lock**（`no slot on this checkout within 1800 s` 的真凶之一，2026-11-27 一次车道因此连续四次 `exit 4`）；
+  根因是 `camel-remote` 里 `[string[]]$Entry` 与局部变量 `$entry` 同名（PowerShell 不区分大小写）⇒ 检查器被拼成裸 `node` 等 stdin。
+  **已在 integration 修好**（正确形状：`--- check check-doc-links: node scripts/check-doc-links.mjs --citations ---` → `--- check-doc-links: exit 0 ---`，约 3 秒）。
+  ⇒ 你那条 run 若**仍然**挂在这行，先看是不是你的树还没换底到带修复的 integration，别再去查宿主、也别为绕锁去抢别人的树。
+  ⇒ 例外照旧：读到 `[SUMMARY]` / `RUN_EXIT` / `[TREE]` 就算读数到手，挂住超过 3 分钟就按你自己记录的 PID 整棵收掉。
 · **要换一把宿主 tree lock，就换 checkout 路径**：锁是按 checkout 路径的 cksum 建的。合法的换法只有“另开一棵树”（`-Detach <sha>` 造测量树，或 `git worktree add --detach`）并跑完删掉；**不要动别人的树，也不要去动别人的锁**。
 · **新开的树没有钩子**：`git worktree add` 不会装 `.husky/_`，而 `npx husky` 需要那棵树里有 `node_modules`。缺钩子时 git **不报错**（`core.hooksPath` 指向不存在的目录 ⇒ 每一次 push 的所有钩子静默跳过）。要么用 `new-worktree.ps1` 建（它把这件事做成一步），要么从主检出复制 **husky 自己的 `_` 目录**（不是手写），再用 `-VerifyOnly` 读到检查器自己的输出才算有守卫。
 · **新开的树还缺 `internal/tools/camel-gate.local.json`**（git-ignored 的本地闸门配置）：2026-11-27 一条车道换到新树后，第一次起跑直接报错退出，把本地配置从原树复制过去才跑起来。`new-worktree.ps1` 不管这个文件（它不入库，所以也不该入库）。换树时先 `Test-Path <新树>\internal\tools\camel-gate.local.json`，缺就从原树复制（同机、只读来源）。
@@ -234,7 +242,12 @@ pwsh -NoProfile -File <你的工作树>\internal\tools\camel-remote.ps1 `
 ## 7¾. 换底的四个时机
 
 ```
-换底 = `git fetch origin` + `git rebase origin/integration`：只把 integration 接上来，**不把 integration 合进你的分支**。
+换底 = 把 integration 接上来，**不把 integration 合进你的分支**；但**用 `rebase` 还是 `merge` 取决于这条分支推没推过**（2026-11-27 一条车道
+按仓库规矩纠正了协调者的说法）：`agents/branching.md:9` “do not fast-forward, **rebase shared history** or force-push shared branches”、
+`:42` “Synchronize by **merging** `origin/develop` into the lane, **never by rebasing a pushed lane**”
+  · **没推过的车道分支** ⇒ `git rebase origin/integration`（历史干净、`range-diff` 好看）
+  · **推过的分支**（gate/staging 推过的）⇒ `git merge origin/integration`，产生一笔 “Merge origin/integration (…) into lane/<名字>”
+  · 不确定推没推过 ⇒ 按 `merge` 做（它不会错）；反过来做错就是重写共享历史
 四处必须换：
   ① 交回之前（即使只是报进度）
   ② 插件点名你落后超过 100 笔时，当轮换
@@ -246,6 +259,14 @@ pwsh -NoProfile -File <你的工作树>\internal\tools\camel-remote.ps1 `
 实际是它本地的远程追踪 ref 落后 40 多笔）。一律 `git fetch origin`（无 refspec），
 并先打印 `git log -1 --format=%h origin/integration` 的 sha 再动手。
 **被唤起续做时，第一件事是重读本 skill**，再 `git log --oneline -5` 认自己的位置。
+**你的 `git fetch` 可能根本取不到远端（2026-11-27 实测）**：`origin` 是 SSH（`git@github.com:…`），而机器上的代理只配给
+HTTP(S)（`http.proxy=127.0.0.1:7890`），SSH 走 `ssh.github.com:443` 直连会 `Connection timed out`（握手前就失败，
+`git` 后面那两行 “correct access rights / repository exists” 只是它的通用提示，**不是凭据被拒**）。
+⇒ 这**不影响**换底：所有工作树与主检出共享同一个 `.git`，refs 是共享的，协调者的 fetch 会把它更新。
+⇒ 所以你的做法只有一条：**不 fetch、不推远端**；换底前 `git rev-parse origin/integration` 与协调者报的 sha
+**逐字符比对**，相同才 `rebase`，不同就**停下问**，不许默认自己那份是新的。
+**不许用 `Select-Object -Last N` 截一条命令的输出去读错误**（2026-11-27 一条车道因此把 `fetch` 失败的**第一行**丢掉，
+把“TCP 超时”报成了“凭据被拒”，差点被当成权限问题去修）：要截就 `Tee-Object` 存全文再读尾巴。
 ```
 
 ## 8. 报告格式（≤12 行，跑完报、等点名）
