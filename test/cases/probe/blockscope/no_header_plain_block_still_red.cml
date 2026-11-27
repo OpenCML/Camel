@@ -1,0 +1,11 @@
+// The counter-proof: a plain block has no head, so no module is its scope. The same name that a
+// headed block's body resolves stays unresolved here, which is what says the visibility is the
+// head's and not the program's.
+func main() => int sync {
+    let x = 1
+    if x == 1 {
+        let pick = func (n: Node) => Node { n }
+        println(pick)
+    }
+    return 0
+}

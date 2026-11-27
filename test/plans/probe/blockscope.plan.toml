@@ -1,7 +1,7 @@
 id = "probe.blockscope"
 tier = "fast"
 tags = ["probe"]
-desc = "Where a type name imported by name is visible: in a top-level signature, in the body of a headed block, and what the compiler says when the file does not import it at all. Three readings of one question, so that a red one says which side is missing."
+desc = "Where a type name imported by name is visible: in a top-level signature, in the body of a headed block, and what the compiler says about a plain block, whose scope is the program's. Three readings of one question, so that a red one says which side is missing."
 
 [[tests]]
 name = "blockscope.imported_type_at_top_level"
@@ -24,10 +24,10 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 
 [[tests]]
-name = "blockscope.unimported_type_in_body"
-desc = "The counter-proof: the same body, and no import. The name stays unresolved, which is what says the visibility the case above asks for is the file's import, not every module the compiler knows."
+name = "blockscope.no_header_plain_block_still_red"
+desc = "The counter-proof, and the one that says the visibility is not too wide: a plain block has no head, so no module is its scope, and the same name stays unresolved there."
 kind = "behavior"
-case = "../../cases/probe/blockscope/unimported_type_in_body.cml"
+case = "../../cases/probe/blockscope/no_header_plain_block_still_red.cml"
 args = ["check", "${case}"]
 expect_exit = 1
 expect_output_contains = ["Unresolved type reference: 'Node'"]
