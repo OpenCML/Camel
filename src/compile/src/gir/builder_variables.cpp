@@ -872,7 +872,7 @@ void Builder::dropCarriedVariableUnits() {
         // out, the JOIN or the LOOP that carried it -- and those are not readers: the erase hands
         // the place on and splices the orderings over the node (docs/design/effects/edges.cn.md
         // 1.5, 5.3). The permission belongs to the draft interface and not to this builder
-        // (`GraphDraft::eraseUnreadNodes`): a node outside the set that still reads one of these,
+        // (the draft's `eraseUnreadNodes`): a node outside the set that still reads one of these,
         // or a node the graph names, keeps the whole unit as it was, and the call says so.
         std::vector<camel::runtime::gc_node_ref_t> going(doomed.begin(), doomed.end());
         std::sort(going.begin(), going.end());

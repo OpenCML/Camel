@@ -2141,7 +2141,7 @@ class Builder {
     /// Makes the graphs the declaration facts `set` name (a tag with a `func` parameter) rule
     /// references of `graph` (kGraphRefRule): the tag's fact is a graph reference, and the graph
     /// must be part of the program so that the tag's reader finds it in the frozen graph
-    /// (GCGraph::ruleGraphs) without looking the name up again.
+    /// (the frozen graph's `ruleGraphs`) without looking the name up again.
     void attachRuleGraphs(const compile_graph_ptr_t &graph, camel::core::attr::AttrSetId set);
     /// The graphs named by `func`-valued tag arguments, by GraphId: attachRuleGraphs needs the
     /// graph, and the attribute value only keeps the id.
