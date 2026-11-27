@@ -225,6 +225,18 @@ ast hashes: <N> file(s) checked, 0 stale
 [provenance] tip <录制的那个 sha> (clean)
 ```
 
+`-Check ast-hashes` 的四个词分开读，处置完全不同（本晚实测，`bang-suffix` 带进三份新语料时）：
+
+| 词 | 含义 | 处置 |
+|---|---|---|
+| `mismatch` | 文件在，记录里的 hash 不是它现在的 | 查：内容变了还是记录旧了；查不清就停 |
+| `missing` | **记录里没有这一行**（通常是新 `.cml` 语料或新探针） | 直接 `-UpdateAstHashes` 加，不需要 `-AstDrop` |
+| `gone` | **文件没了**，记录里还剩一行 | 才要弄清楚为什么没了；确实该删才 `-AstDrop` |
+| `stale` | 上面三者之和 | 只看数字会误判成"文件被删了" |
+
+原文形状（三份新语料，一行一条）：`missing  test/cases/opt/cxx_isolation/algebra_bound.cml  recorded -  now 7e1edfc5e433a74a ok`
+—— `recorded -` 就是"记录里没有"，不是"文件没了"。合完复录读 `AST snapshot: 4682 lines recorded, 3 added and 0 removed`。
+
 两个坑：
 
 - `-Check ast-hashes` 的退出码可能是 **1**，而 ast 本身是 `exit 0 / 0 stale` —— 那个 1 来自它**连带跑的 `check-doc-links`**。两个检查共用一个退出码，会让"0 stale"和"exit 1"同时出现；看到这种组合先分开读各自的 `exit`，别把 rc 当成 ast 的判词。
