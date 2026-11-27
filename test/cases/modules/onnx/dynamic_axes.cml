@@ -1,9 +1,0 @@
-/**
- * A tensor input whose first axis stays open: the pass parameter `dynamic_axes` names that axis,
- * so the exported model records a symbolic dimension there instead of the fixed extent 2. The
- * companion case exports the same program without the parameter and finds the extent fixed.
- */
-
-func main(x: f32[2, 3]) => f32[2, 3] sync {
-    return x
-}

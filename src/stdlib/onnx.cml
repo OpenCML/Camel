@@ -64,7 +64,7 @@ export func export_model::<F, E>(fn: F, example: E) => void! when is_function::<
 // scripts/stdlib-reference.mjs takes a declaration's parameters from a single line. The proper fix
 // is for the generator to read the block form. Do not
 // read this as the house style for pass parameters.
-with <out: string = '', target: string = '', dynamic_axes: int[] = [], trace: bool = false, dump: bool = false, prep_stats: bool = false>
+with <out: string = '', target: string = '', trace: bool = false, dump: bool = false, prep_stats: bool = false>
 export func export_model::<F>(f: F) => F! when is_function::<F>()
 
 export type Model<F>

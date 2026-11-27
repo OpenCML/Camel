@@ -780,8 +780,7 @@ OnnxExportPass::apply(const camel::runtime::Program *program, std::ostream &os) 
             options.trace     = trace_;
             options.dump      = dump_;
             options.prepStats = prepStats_;
-            options.target      = target_;
-            options.dynamicAxes = dynamicAxes_;
+            options.target    = target_;
             return options;
         };
         // The body of the stage form: translate what the command line handed the pass (its `f`)
@@ -821,8 +820,7 @@ void registerOnnxPasses() {
             args.getBool("trace"),
             args.getBool("dump"),
             args.getBool("prep_stats"),
-            args.getString("target"),
-            args.getIntArray("dynamic_axes"));
+            args.getString("target"));
     };
     registerModulePass(kPassName, std::move(descriptor));
 }
