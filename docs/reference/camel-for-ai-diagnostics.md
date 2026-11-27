@@ -58,7 +58,7 @@ Source: `diagnostics/registry.tsv`, the one place a diagnostic is declared. Rege
 
 | `ComparisonAcrossLines` | This '>' is read as a comparison with the next line, which starts with {0}: two statements may have been joined into one. |
 
-**Semantic — errors** (`SemanticDiag`) — 240
+**Semantic — errors** (`SemanticDiag`) — 239
 
 | `Redeclaration` | Redeclaration of reference: '{0}'. |
 | `ModuleNotFound` | Module '{0}' not found. {1} |
@@ -189,7 +189,6 @@ Source: `diagnostics/registry.tsv`, the one place a diagnostic is declared. Rege
 | `ConstasTypeRequired` | The 'constas' parameter '{0}' writes no type. |
 | `ConstasValueNotConstant` | The value given for the 'constas' parameter '{0}' is not a compile-time constant of its parameter's type ('{1}'). |
 | `ConstasFunctionNeedsCall` | The declaration '{0}' takes a 'constas' parameter, so it has no function value. |
-| `ConstasInNativeDeclaration` | The body-less declaration '{0}' cannot take a 'constas' parameter. |
 | `ConstasArgumentMissing` | The call gives no value for the 'constas' parameter '{0}'. |
 | `TagValueConflict` | The tag '{0}' gives the fact '{1}' the value {2}, but the node already says {3}. |
 | `DimensionAfterAnyRank` | A dimension pack ('..') must be the last item of its '[...]', and only one may be written. |

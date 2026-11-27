@@ -1,0 +1,12 @@
+// The key a member read names is a compile-time parameter for the same reason the position is: a
+// run cannot choose which field the read names.
+type Point = { x: int, y: int }
+
+func key(p: Point, k: string) => int {
+    return access_key::<Point, int><k>(p)
+}
+
+func main() => int sync {
+    println(key({ x: 1, y: 2 }, 'y'))
+    return 0
+}

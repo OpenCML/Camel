@@ -715,7 +715,7 @@ that answered "cannot fault" while it was a node kind.
 #### `access`
 
 ```camel
-access: <at: int> (x: T) => U
+access: <constas at: int> (x: T) => U
 ```
 
 A member read as an ordinary operator: the ACCS node kind written as a call of the operator
@@ -738,7 +738,7 @@ check. The `ACCS` kind this operator used to be answered the same way.
 #### `access_key`
 
 ```camel
-access_key: <key: string> (x: T) => U
+access_key: <constas key: string> (x: T) => U
 ```
 
 The same member read by name: the field of a struct, which the compiler spells `s.x`. It is a
@@ -6794,6 +6794,45 @@ function value that captures no variable can be expanded.
 - Failure: fault `InvalidArgument` when the function value captures variables, when the node anchors its graph (`at` standing in a chain), when the body cannot be spliced, when `at` is of a published graph, or when the draft is over.
 - Example (a fragment, not compiled): `inline(n, func () { 0 })`
 - Why it is not compiled: n is a node of the surrounding draft
+
+#### `inline_call`
+
+```camel
+inline_call: (at: Node) => Node
+```
+
+Expands the call `at` where it stands: the body of the function the call names is spliced into
+the call's place, the call's arguments become the body's parameters, and the node that holds the
+body's value is what the operator answers. The call is gone afterwards, and the body takes over
+its place in the block's chain and its order edges (design 7 and 15.3).
+
+It is the splice `inline` makes, asked with the call alone: the callee is the graph `callee(at)`
+names, so a pass that walks the calls of a program can expand one without holding the function
+value it names. The captures of the callee come with that function value, the same way the
+parameters do.
+
+- Failure: fault `InvalidArgument` when the node is not a call, when the callee of the call is not known in this graph (a call through a parameter, or through a closure still being assembled), or when the call is of the graph being edited (a recursion).
+- Example (a fragment, not compiled): `inline_call(n)`
+- Why it is not compiled: n is a call of the surrounding draft
+
+#### `callee_is_self`
+
+```camel
+callee_is_self: (at: Node) => bool
+```
+
+Whether the call `at` names the graph it is being edited in -- a recursive call, the one
+`inline_call` refuses: `callee(at)` is that same graph. A pass that walks the calls of a draft
+reads this before it asks for a splice, so a call it selects is a call the operator takes; the
+read and the operator answer one question about one node, from the same place.
+
+Every other node answers `false`: a node that is not a call, a call whose callee is not known
+(through a parameter, or a closure still being assembled), and a node of a published graph name
+no graph an edit holds, so the answer is no. Those calls are refused by `inline_call`, and this
+read does not refuse a second time.
+
+- Example (a fragment, not compiled): `callee_is_self(n)`
+- Why it is not compiled: n is a call of the surrounding draft
 
 #### `outline`
 

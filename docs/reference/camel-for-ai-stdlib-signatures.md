@@ -120,8 +120,8 @@ copy: (x: T) => T
 cast: (x: T) => U panic
 enter: (x: T) => U
 fill: <...slots: int> (template: T, ...fields: ...F) => T
-access: <at: int> (x: T) => U
-access_key: <key: string> (x: T) => U
+access: <constas at: int> (x: T) => U
+access_key: <constas key: string> (x: T) => U
 range: (start: int, end: int, step: int) => int[] panic
 to_range: (start: int, stop: int, step: int) => Range panic
 to_array: (r: Range) => int[]
@@ -655,7 +655,7 @@ arity_probe: <tag: int, extra: int[] = []> (f: F, example: E) => int when is_fun
 zen: () => string
 ```
 
-**`graph`** — import { ... } from graph — 57 name(s)
+**`graph`** — import { ... } from graph — 59 name(s)
 
 ```text
 graph_of: (f: F) => Graph when is_function::<F>()
@@ -710,6 +710,8 @@ erase: (n: Node) => void
 eval: (n: Node) => Node?
 order: (before: Node, after: Node) => void
 inline: (at: Node, fn: G) => Node when is_function::<G>()
+inline_call: (at: Node) => Node
+callee_is_self: (at: Node) => bool
 outline: (ns: Node[]) => Node
 add_param: (like: Node) => Node
 add_constant: (g: Graph, value: T) => Node when is_ordered::<T>()

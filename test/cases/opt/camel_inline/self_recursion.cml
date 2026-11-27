@@ -1,0 +1,14 @@
+/**
+ * A function that calls itself. `opt::inline` leaves the recursive call where it is -- the graph
+ * that call names is the graph being edited -- and still inlines the call its caller makes.
+ */
+
+func down(n: int) => int {
+    return if n <= 0 then 0 else 1 + down(n - 1)
+}
+
+func main() => int sync {
+    let out = down(3)
+    'opt_camel_inline_self out={}'->format<out>->println
+    return 0
+}

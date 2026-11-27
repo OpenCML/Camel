@@ -1,0 +1,15 @@
+/**
+ * The same callee called at three places: twice from `main` and once from inside the callee itself.
+ * The pass expands the two calls `main` makes and leaves the recursive one, so the reading is a
+ * count -- one call left, and it is in the graph whose own call it is.
+ */
+
+func down(n: int) => int {
+    return if n <= 0 then 0 else 1 + down(n - 1)
+}
+
+func main() => int sync {
+    let out = down(3) + down(0)
+    'opt_camel_inline_mixed out={}'->format<out>->println
+    return 0
+}
