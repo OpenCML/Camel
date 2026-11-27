@@ -2884,9 +2884,14 @@ tree_holder() {
 # Only fd 6 and above are looked at, because that is the number this shell opens the lock as and
 # every child inherits it under that number; nothing here opens a descriptor above 5.
 tree_lock_holders() {
-    local d l pid list="" out=""
+    local d l pid list="" out="" mine
+    # The run that asks is not an answer to its own question: this shell has the lock file open (for
+    # the attempt that just failed) and so does every subshell of the scan itself, so its own tree is
+    # left out. The pids of that tree are the guard's `orphan_descendants`, which is sourced above.
+    mine=" `$(orphan_descendants "`$`$" "") `$`$ "
     for d in /proc/[0-9]*/fd; do
         pid=`${d#/proc/}; pid=`${pid%/fd}
+        case "`$mine" in *" `$pid "*) continue;; esac
         for l in "`$d"/*; do
             if [ "`$(readlink "`$l" 2>/dev/null)" = "`$tree_lock" ]; then
                 case " `$list " in *" `$pid "*) ;; *) list="`$list `$pid";; esac
@@ -2897,7 +2902,7 @@ tree_lock_holders() {
     for pid in `$list; do
         out="`$out `$pid(`$(tr '\0' ' ' < "/proc/`$pid/cmdline" 2>/dev/null | cut -c1-100))"
     done
-    printf '%s' "`${out:-none}"
+    if [ -n "`$out" ]; then printf '%s' "`${out# }"; else printf 'none'; fi
 }
 # What a run that cannot get the checkout prints: who the record names, and who is actually on the
 # lock. When the record's pid is gone and something still holds the lock, those holders are the whole
