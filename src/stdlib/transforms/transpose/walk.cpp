@@ -2728,6 +2728,14 @@ bool buildTransposeMember(
                 // only the forward pass knows, so there is nothing here to build that would be that
                 // loop. Refused by name (`skip=state`, the reason spelled on the line) rather than
                 // built as a loop whose parts do not match its form.
+                //
+                // **Temporary.** Where an interval `for` is lowered to a `while` (the front end
+                // states the loop in the `While` form even when the source wrote `for i in 0 ..
+                // n`), the rounds are still enumerable -- the two bounds are the count -- and the
+                // reverse loop can run them the way it runs a sequence. This refusal stands until
+                // that form is kept through the lowering; it is recorded on the card for the
+                // missing enumerable form (interval `for` lowered to `while`), not a statement that
+                // a counting loop has no transpose.
                 if (camel::core::loopHasCondition(function->loopKindOf(ref))) {
                     refuse(TransposeRefusalCause::State);
                     os << " node=" << ref << " origin=" << regionOrigin
