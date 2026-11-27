@@ -73,7 +73,7 @@ class DebugCore final : public camel::execute::ExecutionObserver {
     /// Before the compilation: attaches the recorder to `ctx`.
     void beginCompile(const camel::core::context::context_ptr_t &ctx);
     /// After it. `root` is the graph before any pass; null when the program did not compile.
-    void endCompile(camel::runtime::GCGraph *root);
+    void endCompile(const camel::graph::GraphView *root);
     /// Before the passes run. `notice`: what the user is told about this run (a back end
     /// replaced by a debuggable one); empty when there is nothing to say.
     void beginRun(const std::string &notice);
@@ -103,13 +103,13 @@ class DebugCore final : public camel::execute::ExecutionObserver {
     void activationEntered() override;
     void activationLeft() override;
     void beforeNode(
-        camel::runtime::GCGraph *graph, camel::core::context::Frame *frame,
+        const camel::graph::GraphView *graph, camel::core::context::Frame *frame,
         camel::runtime::gc_node_ref_t node,
         const camel::execute::FusionGroupSite *group) override;
     void tailCall() override;
     void beforeInstruction(const camel::execute::InstructionSite &site) override;
     void faultRaised(const camel::core::error::RuntimeFault &fault, bool isolated) override;
-    void passStarting(bool schedules, camel::runtime::GCGraph *root) override;
+    void passStarting(bool schedules, const camel::graph::GraphView *root) override;
 
   private:
     DebugCore() = default;
@@ -127,7 +127,7 @@ class DebugCore final : public camel::execute::ExecutionObserver {
 
     struct ShadowFrame {
         uint64_t id                        = 0;
-        camel::runtime::GCGraph *graph     = nullptr;
+        const camel::graph::GraphView *graph     = nullptr;
         camel::core::context::Frame *frame = nullptr;
         GraphInfo *info                    = nullptr;
         const NodeInfo *node               = nullptr; // about to run, running, or waited in
@@ -252,12 +252,12 @@ class DebugCore final : public camel::execute::ExecutionObserver {
     };
 
     // program thread
-    ShadowFrame &pushFrame(camel::runtime::GCGraph *graph, camel::core::context::Frame *frame);
+    ShadowFrame &pushFrame(const camel::graph::GraphView *graph, camel::core::context::Frame *frame);
     /// The frame of a call, above the caller's.
-    ShadowFrame &pushCallee(camel::runtime::GCGraph *graph, camel::core::context::Frame *frame);
+    ShadowFrame &pushCallee(const camel::graph::GraphView *graph, camel::core::context::Frame *frame);
     /// The frame of a tail call, in the place of the top frame.
-    ShadowFrame &replaceTop(camel::runtime::GCGraph *graph, camel::core::context::Frame *frame);
-    void firstNodeOfRun(camel::runtime::GCGraph *root);
+    ShadowFrame &replaceTop(const camel::graph::GraphView *graph, camel::core::context::Frame *frame);
+    void firstNodeOfRun(const camel::graph::GraphView *root);
     /// What a stop at a group's tail says about the group: its name, its members' operators in
     /// execution order and the one sentence a console prints (2).
     json fusionDetails(const ShadowFrame &frame, const camel::execute::FusionGroupSite &site);

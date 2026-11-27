@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 #include "program_index.h"
+#include "graph_pair.h"
 #include "camel/runtime/control_regions.h"
 #include "camel/runtime/oper_shape.h"
 #include "camel/runtime/program.h"
@@ -20,6 +21,7 @@ namespace debugger::core {
 
 using namespace camel::runtime;
 namespace fs = std::filesystem;
+
 
 const char *kindName(GCNodeKind kind) {
     // The kinds a frozen graph holds are named once (`camel/runtime/oper_shape.h#nodeKindName`), which
@@ -289,19 +291,20 @@ void ProgramIndex::finishBindings() {
 }
 
 void ProgramIndex::collect(
-    GCGraph *root, std::map<LineKey, LineNodes> &lines, std::vector<GCGraph *> &graphs,
+    const camel::graph::GraphView *root, std::map<LineKey, LineNodes> &lines, std::vector<const camel::graph::GraphView *> &graphs,
     std::unordered_set<origin_t> *origins, ArmOwners *arms) {
+    const auto *rootImpl = pairing::graphOf(ctx_, root);
     const camel::runtime::Program *program =
-        root != nullptr ? ctx_->programOfRuntimeGraph(*root) : nullptr;
+        rootImpl != nullptr ? ctx_->programOfRuntimeGraph(*rootImpl) : nullptr;
     if (program == nullptr) {
         return;
     }
-    std::unordered_set<GCGraph *> seen{root};
-    std::deque<GCGraph *> queue{root};
+    std::unordered_set<decltype(rootImpl)> seen{rootImpl};
+    std::deque<decltype(rootImpl)> queue{rootImpl};
     while (!queue.empty()) {
         auto *g = queue.front();
         queue.pop_front();
-        graphs.push_back(g);
+        graphs.push_back(pairing::viewOf(g));
         if (g->hasNodePayload()) {
             for (auto it = g->nodes().begin(); it != g->nodes().end(); ++it) {
                 const GCNode *n  = *it;
@@ -323,7 +326,7 @@ void ProgramIndex::collect(
                 }
             }
         }
-        program->traceGraphs(*g, [&](GCGraph *next) {
+        program->traceGraphs(*g, [&](auto *next) {
             if (seen.insert(next).second) {
                 queue.push_back(next);
             }
@@ -331,7 +334,7 @@ void ProgramIndex::collect(
     }
 }
 
-void ProgramIndex::compiled(GCGraph *root) {
+void ProgramIndex::compiled(const camel::graph::GraphView *root) {
     findModules();
     finishBindings();
     // Every node the graph builder created has an origin of stage GIR, whether or not the
@@ -358,7 +361,7 @@ void ProgramIndex::compiled(GCGraph *root) {
     compiledKnown_ = true;
 }
 
-void ProgramIndex::running(GCGraph *root) {
+void ProgramIndex::running(const camel::graph::GraphView *root) {
     runningLines_.clear();
     runningGraphs_.clear();
     armOwners_.clear();
@@ -367,29 +370,34 @@ void ProgramIndex::running(GCGraph *root) {
     collect(root, runningLines_, runningGraphs_, nullptr, &armOwners_);
     runningGraphIds_.clear();
     for (auto *g : runningGraphs_) {
-        runningGraphIds_.insert(camel::runtime::toText(g->id()));
+        if (const auto *impl = pairing::graphOf(ctx_, g); impl != nullptr) {
+            runningGraphIds_.insert(camel::runtime::toText(impl->id()));
+        }
     }
     armGraphIds_.clear();
     for (const auto &[arm, owners] : armOwners_) {
-        armGraphIds_.insert(camel::runtime::toText(arm->id()));
+        if (const auto *impl = pairing::graphOf(ctx_, arm); impl != nullptr) {
+            armGraphIds_.insert(camel::runtime::toText(impl->id()));
+        }
     }
     findLiveGraphs(root);
     runningKnown_ = true;
 }
 
-void ProgramIndex::findLiveGraphs(GCGraph *root) {
+void ProgramIndex::findLiveGraphs(const camel::graph::GraphView *root) {
     liveGraphIds_.clear();
     liveOrigins_.clear();
+    const auto *rootImpl = pairing::graphOf(ctx_, root);
     const camel::runtime::Program *program =
-        root != nullptr ? ctx_->programOfRuntimeGraph(*root) : nullptr;
+        rootImpl != nullptr ? ctx_->programOfRuntimeGraph(*rootImpl) : nullptr;
     if (program == nullptr) {
         return;
     }
-    // GCGraph::dependencies() are the graphs of the FUNC nodes (calls, the arms of branches)
+    // The graphs a graph names are the graphs of its FUNC nodes (calls, the arms of branches)
     // and staticGraphRefs() the graphs of the function values in the static area; subGraphs()
     // (every function declared in a graph) are left out: being declared is not being called.
-    std::unordered_set<GCGraph *> seen{root};
-    std::deque<GCGraph *> queue{root};
+    std::unordered_set<decltype(rootImpl)> seen{rootImpl};
+    std::deque<decltype(rootImpl)> queue{rootImpl};
     while (!queue.empty()) {
         auto *g = queue.front();
         queue.pop_front();
@@ -470,9 +478,11 @@ const std::string &ProgramIndex::moduleOfFile(int file) {
 void ProgramIndex::nameFunctions() {
     // A graph, as a value: the table names one past the call and reads its name through the face,
     // which is the same builder-written name (`name`) a frozen graph stores.
-    std::unordered_map<std::string, const camel::graph::Graph *> byGraphId;
+    std::unordered_map<std::string, const camel::graph::GraphView *> byGraphId;
     for (auto *g : initialGraphs_) {
-        byGraphId.emplace(camel::runtime::toText(g->id()), g);
+        if (const auto *impl = pairing::graphOf(ctx_, g); impl != nullptr) {
+            byGraphId.emplace(camel::runtime::toText(impl->id()), g);
+        }
     }
     for (const auto &b : recorder_->built) {
         const SourceLoc &l = loc(b.func);
@@ -492,7 +502,7 @@ void ProgramIndex::nameFunctions() {
             }
             // The builder names the graph with the full name (the module of another module's
             // function, the namespaces, the type arguments of an instance).
-            const std::string_view name = graph->second->view().name();
+            const std::string_view name = graph->second->name();
             if (!isCompilerNamed(std::string(name))) {
                 f.name = withoutTypeArguments(std::string(name));
             }
@@ -510,7 +520,7 @@ void ProgramIndex::nameFunctions() {
     }
 }
 
-std::string ProgramIndex::capturedName(GCGraph *graph, std::string_view shown) {
+std::string ProgramIndex::capturedName(const camel::graph::GraphView *graph, std::string_view shown) {
     // The capturing module writes a value of another module with that module's name, and one
     // of its own as it is written there (GIR builder, captureNameOf).
     const auto colon = shown.find("::");
@@ -523,7 +533,11 @@ std::string ProgramIndex::capturedName(GCGraph *graph, std::string_view shown) {
     // name), with the module unless it is the entry module.
     int file = -1;
     if (auto sc = ctx_ ? ctx_->sourceContext() : nullptr) {
-        file = loc(sc->debugMap().graphOrigin(graph->id())).file;
+        // The origin of a graph is the representation's (debugMap holds the implementation's
+        // graph id), so the pairing is asked for here.
+        if (const auto *impl = pairing::graphOf(ctx_, graph); impl != nullptr) {
+            file = loc(sc->debugMap().graphOrigin(impl->id())).file;
+        }
     }
     const std::string &module = moduleOfFile(file);
     if (module.empty() || topLevelNames_.count(module + "::" + std::string(shown)) == 0) {
@@ -545,10 +559,10 @@ FunctionResolution ProgramIndex::resolveFunction(const std::string &written) con
     const auto &graphs = runningKnown_ ? runningGraphs_ : initialGraphs_;
     // Exact: the full name, or every instance of a generic function. Without the module: the
     // full names `m::<name>` of modules m; one module only, or it is ambiguous.
-    std::vector<GCGraph *> exact;
-    std::map<std::string, std::vector<GCGraph *>> byModule;
+    std::vector<const camel::graph::GraphView *> exact;
+    std::map<std::string, std::vector<const camel::graph::GraphView *>> byModule;
     for (auto *g : graphs) {
-        const std::string &full = g->name();
+        const std::string full(g->name());
         if (isCompilerNamed(full)) {
             continue;
         }
@@ -566,20 +580,25 @@ FunctionResolution ProgramIndex::resolveFunction(const std::string &written) con
             }
         }
     }
-    std::vector<GCGraph *> chosen = exact;
+    std::vector<const camel::graph::GraphView *> chosen = exact;
     if (chosen.empty() && byModule.size() == 1) {
         chosen = byModule.begin()->second;
     }
     if (!chosen.empty()) {
         out.found    = true;
-        out.fullName = withoutTypeArguments(chosen.front()->name());
+        out.fullName = withoutTypeArguments(std::string(chosen.front()->name()));
         if (chosen.front()->name() == name) {
             out.fullName = name; // one instance was asked for
         }
         bool called = false;
         for (auto *g : chosen) {
-            out.graphs.push_back(camel::runtime::toText(g->id()));
-            called = called || liveGraphIds_.count(camel::runtime::toText(g->id())) != 0;
+            const auto *impl = pairing::graphOf(ctx_, g);
+            if (impl == nullptr) {
+                continue;
+            }
+            const std::string id = camel::runtime::toText(impl->id());
+            out.graphs.push_back(id);
+            called = called || liveGraphIds_.count(id) != 0;
         }
         if (!called) {
             out.message = "Nothing in the program calls `" + out.fullName + "`.";
@@ -589,7 +608,8 @@ FunctionResolution ProgramIndex::resolveFunction(const std::string &written) con
     if (byModule.size() > 1) {
         std::string names;
         for (const auto &[module, found] : byModule) {
-            names += (names.empty() ? "" : ", ") + withoutTypeArguments(found.front()->name());
+            names += (names.empty() ? "" : ", ") +
+                     withoutTypeArguments(std::string(found.front()->name()));
         }
         out.message = "`" + written + "` is ambiguous: " + names + ". Write the full name.";
         return out;
@@ -752,16 +772,18 @@ const NodeInfo *GraphInfo::nodeOfInstruction(origin_t origin, int resultSlot) co
     return nullptr;
 }
 
-GraphInfo &ProgramIndex::graph(GCGraph *g) {
+GraphInfo &ProgramIndex::graph(const camel::graph::GraphView *g) {
     if (auto it = graphs_.find(g); it != graphs_.end()) {
         return *it->second;
     }
-    const camel::runtime::Program *programOfGraph = ctx_->programOfRuntimeGraph(*g);
+    const auto *gImpl = pairing::graphOf(ctx_, g);
+    ASSERT(gImpl != nullptr, "A graph of the debugged program is in no program.");
+    const camel::runtime::Program *programOfGraph = ctx_->programOfRuntimeGraph(*gImpl);
     ASSERT(programOfGraph != nullptr, "A graph of the debugged program is in no program.");
     auto info      = std::make_unique<GraphInfo>();
     info->graph    = g;
-    info->name     = g->name();
-    info->graphId  = camel::runtime::toText(g->id());
+    info->name     = std::string(g->name());
+    info->graphId  = camel::runtime::toText(gImpl->id());
 
     // Names of the ports. A function's ports are its declared `with` parameters, its other
     // parameters, and one port per value it captures: a closure node, or, for a function that
@@ -770,10 +792,10 @@ GraphInfo &ProgramIndex::graph(GCGraph *g) {
     std::unordered_map<gc_node_ref_t, std::string> portNames;
     if (auto *type = g->funcType()) {
         const auto names    = type->argNames();
-        const auto with     = g->withPorts();
-        const auto norm     = g->normPorts();
-        const auto closure  = g->closureNodes();
-        const auto captured = g->captureNames();
+        const auto with     = gImpl->withPorts();
+        const auto norm     = gImpl->normPorts();
+        const auto closure  = gImpl->closureNodes();
+        const auto captured = gImpl->captureNames();
         const size_t declaredWith = closure.empty() && captured.size() <= with.size()
                                         ? with.size() - captured.size()
                                         : with.size();
@@ -798,8 +820,8 @@ GraphInfo &ProgramIndex::graph(GCGraph *g) {
     // A graph the compiler made itself (the arm of a branch) takes the values it uses from the
     // function around it as unnamed ports: they are named after what its caller passes there.
     if (auto inherited = inheritedPortNames_.find(g); inherited != inheritedPortNames_.end()) {
-        const auto with = g->withPorts();
-        const auto norm = g->normPorts();
+        const auto with = gImpl->withPorts();
+        const auto norm = gImpl->normPorts();
         for (const auto &[position, name] : inherited->second) {
             const bool isNorm  = position >= kNormPortBase;
             const size_t index = isNorm ? position - kNormPortBase : position;
@@ -814,16 +836,16 @@ GraphInfo &ProgramIndex::graph(GCGraph *g) {
     // through), asked of the graph's own tree: `core.controlRegions` is a fact of the graph, so
     // the answer here is the one the validator and the back ends read, not a second walk that
     // has to be kept in step with it.
-    info->regions = std::make_shared<const camel::runtime::ControlRegions>(*g);
+    info->regions = std::make_shared<const camel::runtime::ControlRegions>(*gImpl);
     // The ports of the condition and of the body of a loop are named as the loop declares them;
     // a name of a port is there while the code runs in its region.
     std::unordered_map<gc_node_ref_t, uint32_t> portRegion;
-    for (uint32_t r = 1; r < g->regionCount(); ++r) {
-        const GCRegion *region = g->region(r);
+    for (uint32_t r = 1; r < gImpl->regionCount(); ++r) {
+        const GCRegion *region = gImpl->region(r);
         if (region->kind != GCRegionKind::LoopCond && region->kind != GCRegionKind::LoopBody) {
             continue;
         }
-        const auto ports = g->regionPorts(r);
+        const auto ports = gImpl->regionPorts(r);
         const auto names =
             region->params != nullptr ? region->params->argNames() : std::vector<std::string_view>{};
         for (size_t i = 0; i < ports.size(); ++i) {
@@ -835,8 +857,8 @@ GraphInfo &ProgramIndex::graph(GCGraph *g) {
     }
 
     std::unordered_map<int, size_t> functionVotes;
-    if (g->hasNodePayload()) {
-        for (auto it = g->nodes().begin(); it != g->nodes().end(); ++it) {
+    if (gImpl->hasNodePayload()) {
+        for (auto it = gImpl->nodes().begin(); it != gImpl->nodes().end(); ++it) {
             const GCNode *n = *it;
             if (n == nullptr) {
                 continue;
@@ -845,7 +867,7 @@ GraphInfo &ProgramIndex::graph(GCGraph *g) {
             node.ref      = it.ref();
             node.kind     = n->kind;
             node.slot     = n->dataIndex;
-            node.origin   = g->nodeOrigin(node.ref);
+            node.origin   = gImpl->nodeOrigin(node.ref);
             node.loc      = loc(node.origin);
             node.function = functionOf(node.loc);
             node.executes = executesKind(n->kind);
@@ -855,11 +877,11 @@ GraphInfo &ProgramIndex::graph(GCGraph *g) {
             }
             switch (n->kind) {
             case GCNodeKind::Oper: {
-                const auto *body = g->nodeBodyAs<GCOperBody>(node.ref);
+                const auto *body = gImpl->nodeBodyAs<GCOperBody>(node.ref);
                 node.label       = std::string(body->uri());
             } break;
             case GCNodeKind::Func: {
-                auto *callee = programOfGraph->calleeOf(*g, node.ref);
+                auto *callee = programOfGraph->calleeOf(*gImpl, node.ref);
                 node.label      = callee ? callee->name() : std::string("?");
                 if (callee != nullptr && callee->name().rfind("__g_", 0) == 0) {
                     // What is passed to a compiler-made graph names its ports (see above).
@@ -867,19 +889,19 @@ GraphInfo &ProgramIndex::graph(GCGraph *g) {
                         if (auto port = portNames.find(input); port != portNames.end()) {
                             return port->second;
                         }
-                        const auto bound = bindingsOfNode(g->nodeOrigin(input));
+                        const auto bound = bindingsOfNode(gImpl->nodeOrigin(input));
                         return bound.empty() ? std::string() : bound.front()->name;
                     };
-                    auto &names = inheritedPortNames_[callee];
+                    auto &names = inheritedPortNames_[pairing::viewOf(callee)];
                     size_t i    = 0;
-                    for (gc_node_ref_t input : g->withInputsOf(node.ref)) {
+                    for (gc_node_ref_t input : gImpl->withInputsOf(node.ref)) {
                         if (std::string name = nameOf(input); !name.empty()) {
                             names.emplace(i, std::move(name));
                         }
                         ++i;
                     }
                     i = 0;
-                    for (gc_node_ref_t input : g->normInputsOf(node.ref)) {
+                    for (gc_node_ref_t input : gImpl->normInputsOf(node.ref)) {
                         if (std::string name = nameOf(input); !name.empty()) {
                             names.emplace(kNormPortBase + i, std::move(name));
                         }
@@ -888,7 +910,7 @@ GraphInfo &ProgramIndex::graph(GCGraph *g) {
                 }
             } break;
             case GCNodeKind::Accs: {
-                const auto *body = g->nodeBodyAs<GCAccsBody>(node.ref);
+                const auto *body = gImpl->nodeBodyAs<GCAccsBody>(node.ref);
                 node.label       = body->accsKind == GCAccsKind::TupleIndex
                                        ? "." + std::to_string(body->value)
                                        : "." + std::string(body->key());
@@ -898,8 +920,8 @@ GraphInfo &ProgramIndex::graph(GCGraph *g) {
                 node.label = name != portNames.end() ? name->second : std::string("port");
             } break;
             case GCNodeKind::Data: {
-                const auto *types = g->staticDataType();
-                ::Tuple *area     = g->staticArea();
+                const auto *types = gImpl->staticDataType();
+                ::Tuple *area     = gImpl->staticArea();
                 const size_t idx  = node.slot < 0 ? static_cast<size_t>(-node.slot) : 0;
                 if (idx != 0 && types != nullptr && area != nullptr && idx < area->size() &&
                     idx < types->size()) {
@@ -930,7 +952,7 @@ GraphInfo &ProgramIndex::graph(GCGraph *g) {
     // The function of the source the graph was built from: the one whose span is the span
     // of the graph's origin; for a graph without one, where most of its nodes were written.
     if (auto sc = ctx_ ? ctx_->sourceContext() : nullptr) {
-        const origin_t graphOrigin = sc->debugMap().graphOrigin(g->id());
+        const origin_t graphOrigin = sc->debugMap().graphOrigin(gImpl->id());
         const SourceLoc &l = loc(graphOrigin);
         if (l.valid()) {
             for (size_t i = 0; i < functions_.size(); ++i) {
@@ -960,7 +982,7 @@ GraphInfo &ProgramIndex::graph(GCGraph *g) {
     info->display = info->name;
     if (info->name.rfind("__g_", 0) == 0) {
         std::string owner;
-        for (auto *outer = programOfGraph->outerOf(*g); outer != nullptr;
+        for (auto *outer = programOfGraph->outerOf(*gImpl); outer != nullptr;
              outer          = programOfGraph->outerOf(*outer)) {
             if (outer->name().rfind("__", 0) != 0) {
                 owner = outer->name();
@@ -987,3 +1009,4 @@ GraphInfo &ProgramIndex::graph(GCGraph *g) {
 }
 
 } // namespace debugger::core
+

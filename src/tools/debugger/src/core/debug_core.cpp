@@ -23,6 +23,7 @@
  */
 
 #include "debug_core.h"
+#include "graph_pair.h"
 
 #include "../state.h"
 
@@ -158,7 +159,7 @@ void DebugCore::beginCompile(const camel::core::context::context_ptr_t &ctx) {
     state_ = State::Idle;
 }
 
-void DebugCore::endCompile(GCGraph *root) {
+void DebugCore::endCompile(const camel::graph::GraphView *root) {
     if (auto ctx = index_.context()) {
         ctx->setSemanticRecorder(nullptr);
     }
@@ -462,7 +463,7 @@ void DebugCore::tailCall() {
     pending_ = Pending::Tail;
 }
 
-void DebugCore::firstNodeOfRun(GCGraph *root) {
+void DebugCore::firstNodeOfRun(const camel::graph::GraphView *root) {
     runIndexed_ = true;
     {
         std::lock_guard lock(indexMutex_);
@@ -472,7 +473,7 @@ void DebugCore::firstNodeOfRun(GCGraph *root) {
     reverifyAll();
 }
 
-void DebugCore::passStarting(bool schedules, GCGraph *) {
+void DebugCore::passStarting(bool schedules, const camel::graph::GraphView *) {
     // A rewrite or translation pass may run graphs of its own for its work (the rules library
     // behind `std::opt`, the function of a macro). Those are the compiler's, not the program's
     // run: while one is in progress no frame is kept and the run is not indexed, so breakpoints
@@ -486,7 +487,8 @@ void DebugCore::passStarting(bool schedules, GCGraph *) {
     }
 }
 
-DebugCore::ShadowFrame &DebugCore::pushFrame(GCGraph *graph, Frame *frame) {
+DebugCore::ShadowFrame &DebugCore::pushFrame(
+    const camel::graph::GraphView *graph, Frame *frame) {
     if (!runIndexed_) {
         firstNodeOfRun(graph);
     }
@@ -504,7 +506,8 @@ DebugCore::ShadowFrame &DebugCore::pushFrame(GCGraph *graph, Frame *frame) {
     return stack_.back();
 }
 
-DebugCore::ShadowFrame &DebugCore::pushCallee(GCGraph *graph, Frame *frame) {
+DebugCore::ShadowFrame &DebugCore::pushCallee(
+    const camel::graph::GraphView *graph, Frame *frame) {
     const bool called = !stack_.empty();
     ShadowFrame &f    = pushFrame(graph, frame);
     // After the push: pushing may have moved the frames.
@@ -520,7 +523,8 @@ DebugCore::ShadowFrame &DebugCore::pushCallee(GCGraph *graph, Frame *frame) {
     return f;
 }
 
-DebugCore::ShadowFrame &DebugCore::replaceTop(GCGraph *graph, Frame *frame) {
+DebugCore::ShadowFrame &DebugCore::replaceTop(
+    const camel::graph::GraphView *graph, Frame *frame) {
     const ShadowFrame old = std::move(stack_.back());
     stack_.pop_back();
     ShadowFrame &f = pushFrame(graph, frame);
@@ -539,7 +543,7 @@ DebugCore::ShadowFrame &DebugCore::replaceTop(GCGraph *graph, Frame *frame) {
 }
 
 void DebugCore::beforeNode(
-    GCGraph *graph, Frame *frame, gc_node_ref_t node,
+    const camel::graph::GraphView *graph, Frame *frame, gc_node_ref_t node,
     const camel::execute::FusionGroupSite *group) {
     // A pass may run graphs of its own for its work (`std::opt`'s rules library, the function of
     // a macro). The program being debugged runs only in a scheduling pass; indexing or keeping
@@ -577,7 +581,8 @@ void DebugCore::beforeNode(
 }
 
 void DebugCore::beforeInstruction(const camel::execute::InstructionSite &site) {
-    auto *graph = site.frame ? site.frame->runtimeGraph() : nullptr;
+    const camel::graph::GraphView *graph =
+        site.frame ? &site.frame->runtimeGraph()->view() : nullptr;
     if (graph == nullptr) {
         return;
     }
@@ -841,7 +846,7 @@ void DebugCore::faultRaised(const camel::core::error::RuntimeFault &fault, bool 
         if (auto reporter = ctx ? ctx->runtimeErrorReporter() : nullptr) {
             auto site = camel::core::error::makeGraphExecutionSite(
                 ctx->sourceContext(),
-                f.graph,
+                pairing::graphOf(ctx, f.graph),
                 stack_.size());
             if (f.origin != 0) {
                 site.cachedOrigin = f.origin;
@@ -1062,13 +1067,17 @@ DebugCore::nodeVariable(ShadowFrame &f, const NodeInfo &n, std::string name, boo
     if (n.slot == 0) {
         return std::nullopt;
     }
-    const GCNode *node = f.graph->node(n.ref);
-    if (node == nullptr || node->dataType() == nullptr) {
+    const auto ref = static_cast<camel::graph::NodeRef>(n.ref);
+    if (f.graph == nullptr || !f.graph->contains(ref)) {
+        return std::nullopt;
+    }
+    const camel::core::type::Type *type = f.graph->typeOf(ref);
+    if (type == nullptr) {
         return std::nullopt;
     }
     Variable v;
     v.name             = std::move(name);
-    v.view.type        = node->dataType();
+    v.view.type        = const_cast<camel::core::type::Type *>(type);
     v.variable         = variable;
     const size_t index = static_cast<size_t>(&n - f.info->nodes.data());
     // Constants and ports have their values from the start; everything else once it ran.
@@ -1134,19 +1143,20 @@ std::vector<DebugCore::Variable> DebugCore::localsOf(const Chain &chain) {
             }
             out.push_back(std::move(*v));
         };
-        for (gc_node_ref_t ref : f.graph->withPorts()) {
+        for (auto ref : f.graph->ports(camel::graph::PortGroup::Context)) {
             addPort(ref);
         }
-        for (gc_node_ref_t ref : f.graph->normPorts()) {
+        for (auto ref : f.graph->ports(camel::graph::PortGroup::Normal)) {
             addPort(ref);
         }
         // The state and the element of a loop whose condition or body the code is in.
         const uint32_t at = f.node != nullptr ? f.node->controlRegion : 0;
         for (uint32_t r = 1; r < f.graph->regionCount(); ++r) {
-            const GCRegion *region = f.graph->region(r);
-            if ((region->kind == GCRegionKind::LoopCond || region->kind == GCRegionKind::LoopBody) &&
+            const camel::graph::RegionRecord region = f.graph->region(r);
+            if ((region.kind == camel::graph::RegionKind::LoopCond ||
+                 region.kind == camel::graph::RegionKind::LoopBody) &&
                 f.info->visibleAt(r, at)) {
-                for (gc_node_ref_t ref : f.graph->regionPorts(r)) {
+                for (auto ref : f.graph->regionParameters(r)) {
                     addPort(ref);
                 }
             }
@@ -1278,7 +1288,7 @@ std::vector<DebugCore::Variable> DebugCore::capturedOf(const Chain &chain) {
         ShadowFrame &f = **it;
         if (f.info->folds() && folded) {
             // What an arm was passed of the function's captured values.
-            for (gc_node_ref_t ref : f.graph->withPorts()) {
+            for (auto ref : f.graph->ports(camel::graph::PortGroup::Context)) {
                 if (const NodeInfo *n = f.info->node(ref); n && capturedNames.count(n->label)) {
                     add(f, ref);
                 }
@@ -1286,10 +1296,10 @@ std::vector<DebugCore::Variable> DebugCore::capturedOf(const Chain &chain) {
             continue;
         }
         // Closure nodes, then the captures a directly called function has as `with` ports.
-        for (gc_node_ref_t ref : f.graph->closureNodes()) {
+        for (auto ref : f.graph->ports(camel::graph::PortGroup::Capture)) {
             add(f, ref);
         }
-        for (gc_node_ref_t ref : f.graph->withPorts()) {
+        for (auto ref : f.graph->ports(camel::graph::PortGroup::Context)) {
             if (f.info->capturePorts.count(ref) != 0) {
                 add(f, ref);
             }
@@ -1681,8 +1691,8 @@ json DebugCore::graphJson(uint64_t frameId) {
         }
         dot << "  n" << n.ref << " [label=\"" << escaped << "\", fillcolor=" << color
             << (std::string_view(state) == "current" ? ", penwidth=3" : "") << "];\n";
-        const auto addEdges = [&](std::span<const gc_node_ref_t> inputs, const char *kind) {
-            for (gc_node_ref_t from : inputs) {
+        const auto addEdges = [&](std::span<const camel::graph::NodeRef> inputs, const char *kind) {
+            for (camel::graph::NodeRef from : inputs) {
                 edges.push_back(json{{"from", from}, {"to", n.ref}, {"kind", kind}});
                 dot << "  n" << from << " -> n" << n.ref
                     << (std::string_view(kind) == "ctrl"   ? " [style=dashed]"
@@ -1691,9 +1701,12 @@ json DebugCore::graphJson(uint64_t frameId) {
                     << ";\n";
             }
         };
-        addEdges(f->graph->normInputsOf(n.ref), "norm");
-        addEdges(f->graph->withInputsOf(n.ref), "with");
-        addEdges(f->graph->ctrlInputsOf(n.ref), "ctrl");
+        addEdges(f->graph->inputs(n.ref, camel::graph::PortGroup::Normal), "norm");
+        addEdges(f->graph->inputs(n.ref, camel::graph::PortGroup::Context), "with");
+        // The control inputs are not a list of their own in the graph's vocabulary: they are the
+        // half of "what makes this node wait" that a wait edge is, asked as that one kind.
+        const auto ctrl = f->graph->predecessors(n.ref, camel::graph::EdgeKind::Wait);
+        addEdges(ctrl, "ctrl");
         nodes.push_back(std::move(j));
     }
     dot << "}\n";
@@ -1900,7 +1913,7 @@ json DebugCore::command(const std::string &name, const json &args) {
                     return fail("no runtime frame");
                 return json{
                     {"ok", true},
-                    {"gir", dumpJsonRuntimeGraph(f->graph, index_.context())}};
+                    {"gir", dumpJsonRuntimeGraph(pairing::graphOf(index_.context(), f->graph), index_.context())}};
             });
         }
         if (name == "graph") {

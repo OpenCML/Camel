@@ -37,7 +37,7 @@ using json = nlohmann::json;
 
 namespace {
 
-bool contains(const std::vector<GCGraph *> &graphs, GCGraph *graph) {
+bool contains(const std::vector<const camel::graph::GraphView *> &graphs, const camel::graph::GraphView *graph) {
     return std::find(graphs.begin(), graphs.end(), graph) != graphs.end();
 }
 
@@ -80,7 +80,7 @@ void DebugCore::placeCallee(ShadowFrame &f, const ShadowFrame *caller) {
     f.presentedDepth = (caller != nullptr ? caller->presentedDepth : 0) + 1;
     f.awaitingEntry  = true;
     std::lock_guard lock(indexMutex_);
-    f.function = functionOf(*f.info, [this](GCGraph *g) -> GraphInfo & { return index_.graph(g); });
+    f.function = functionOf(*f.info, [this](const camel::graph::GraphView *g) -> GraphInfo & { return index_.graph(g); });
 }
 
 void DebugCore::placeReplacement(ShadowFrame &f, const ShadowFrame &old, const ShadowFrame *below) {
@@ -99,7 +99,7 @@ void DebugCore::placeReplacement(ShadowFrame &f, const ShadowFrame &old, const S
     {
         std::lock_guard lock(indexMutex_);
         f.function =
-            functionOf(*f.info, [this](GCGraph *g) -> GraphInfo & { return index_.graph(g); });
+            functionOf(*f.info, [this](const camel::graph::GraphView *g) -> GraphInfo & { return index_.graph(g); });
     }
     if (below != nullptr && below->activation == old.activation) {
         // The replaced frame was an arm whose function goes on below it (the branch was not
@@ -215,9 +215,9 @@ json DebugCore::frameJson(const Chain &chain, bool top) {
                     parameters.insert(node->label);
             }
         };
-        for (auto ref : function->graph->withPorts())
+        for (auto ref : function->graph->ports(camel::graph::PortGroup::Context))
             addParameter(ref);
-        for (auto ref : function->graph->normPorts())
+        for (auto ref : function->graph->ports(camel::graph::PortGroup::Normal))
             addParameter(ref);
         json arguments = json::array();
         for (const Variable &v : localsOf(chain)) {
