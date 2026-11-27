@@ -1,9 +1,8 @@
-// The author's reading of 2026-11-02 18:50, as a case: f(xs, n) = xs[n] * xs[0] at ([3.0, 2.0], 1)
-// answers 6.0 and the gradient of `xs`, [2.0, 3.0], with `()` beside it for the `int` -- an empty
-// member of the answer, because the pullback answers one slot per parameter and `Tangent<int>` is
-// `()`; the `int` itself is a value the caller still passes and takes no answer slot of its own.
-// It first read a `split` refusal, then stopped on the answer's shape: the pullback
-// answered `(float[],)` where `Vjp<F>` declares `(float[], ())`.
+// f(xs, n) = xs[n] * xs[0] at ([3.0, 2.0], 1) answers 6.0 and the gradient of `xs`, [2.0, 3.0], with
+// `0` beside it for the `int`: the gradient of a discrete parameter is the zero of its own type, so
+// the pullback answers `(float[], int)` and the `int` member is a zero, not an empty slot. It once
+// answered `(float[],)` -- one member short -- and then `(float[], ())`, the empty slot the older
+// reading of a discrete tangent wrote.
 import { vjp } from vjp
 
 func mixed(xs: float[], n: int) => float {

@@ -154,9 +154,10 @@ FunctionType *transposeSignature(
             if (!participates[i]) {
                 continue;
             }
-            const camel::core::TangentSpaceAnswer space =
-                camel::core::tangentSpaceOf(function->normTypeAt(i));
-            if (!space.hasSpace() || space.space == nullptr) {
+            // The member this parameter owns is the **user's** tangent of it (`gradientTypeOf`,
+            // principle 9.9), which is the type `Tangent<T>` names -- not the machinery's space,
+            // which a discrete value answers as "no place to accumulate in".
+            if (camel::core::gradientTypeOf(function->normTypeAt(i)) == nullptr) {
                 return nullptr;
             }
         }
@@ -164,11 +165,37 @@ FunctionType *transposeSignature(
     camel::core::type::param_vec_t params;
     std::vector<Type *> cotangentsOfParticipants;
     for (size_t i = 0; i < count; ++i) {
-        Type *const parameter                       = function->normTypeAt(i);
-        const camel::core::TangentSpaceAnswer space = camel::core::tangentSpaceOf(parameter);
+        Type *const parameter         = function->normTypeAt(i);
+        Type *const answerTypeOfParam = camel::core::gradientTypeOf(parameter);
+        const auto *answerTuple       = tt::as_ptr<camel::core::type::TupleType>(answerTypeOfParam);
+        // The answer is a space that exists when the parameter's type has one at all -- including
+        // the discrete ones, whose tangent is the zero of their own type. "a space with no reader
+        // is still a space": that no reader accumulates in it is a fact about the graph, not about
+        // the type.
+        const bool answeredSpace =
+            answerTypeOfParam != nullptr && !(answerTuple != nullptr && answerTuple->size() == 0);
+        // The place whose zero is a constant of its own type: a discrete parameter. Its member is
+        // typed and its zero is written by the walk (`discreteZeroSlot`,
+        // `camel/core/derivative.h`), so the two readings of the answer stay one.
+        const bool typedZeroSlot = camel::core::discreteZeroSlot(parameter).has_value();
         const bool participatesHere =
             participates.empty() ? places.answers(i) : participates[i];
         if (!participatesHere) {
+            if (participates.empty() && typedZeroSlot && answeredSpace) {
+                // A parameter the transposition answers nothing *for* -- no cotangent lands in it
+                // -- but whose tangent space exists: it owns a member of the answer, typed the
+                // parameter's own tangent and filled with its zero, and it takes no port. The zero
+                // is not passed in because nothing can be passed for a value that is always zero;
+                // the space is still part of what the answer says, which is why the member is
+                // there. `vjp.cml`'s pullback declares `(float[], int)` for `f(xs, n)`, and
+                // `grad_array_with_int.fvm` read `(float[], ())` while `n`'s place was taken as an
+                // untyped slot.
+                cotangentsOfParticipants.push_back(answerTypeOfParam);
+                if (answersOf != nullptr) {
+                    answersOf->push_back(i);
+                }
+                continue;
+            }
             if (participates.empty() && isUnitType(parameter)) {
                 // `()` is an **answer** with an empty slot, not a parameter:
                 // `(..Tangent<ParamsOf<F>>)` has one member per parameter, so `Tangent<int>` is
@@ -190,12 +217,12 @@ FunctionType *transposeSignature(
             params.emplace_back(parameter, false);
             continue;
         }
-        if (!space.hasSpace() || space.space == nullptr) {
-            // A parameter a cotangent is answered for and no cotangent can land on: the answer
-            // would have a member with no type, so the signature is refused rather than written.
+        if (answerTypeOfParam == nullptr) {
+            // A parameter a cotangent is answered for and no tangent space at all: the answer would
+            // have a member with no type, so the signature is refused rather than written.
             return nullptr;
         }
-        cotangentsOfParticipants.push_back(space.space);
+        cotangentsOfParticipants.push_back(answerTypeOfParam);
         if (answersOf != nullptr) {
             answersOf->push_back(i);
         }
