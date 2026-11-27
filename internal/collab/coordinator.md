@@ -512,3 +512,7 @@ git worktree add --detach <旧提交>
 **5. "能通过 checker"不是"能被 runtime 读"。**
 `lane-block-hash` 把 `Sequence.elem_type` 写成只包一层：`TypeProto.Tensor` 的消息直接塞进 field 1 ⇒ 字节 `22 04 0a 02 08 01`。**`onnx.checker` 说 ok，`onnxruntime` 直接拒绝**：`Load model … failed: Unsuported type proto value case.` 正确形状要包两层：`22 06 0a 04 0a 02 08 01`。
 教训：**落盘类读数必须两口径都过** —— `onnx.checker` 一次、ORT 真正加载并逐值跑一次；只过 checker 的"通过"是假绿。这条与 `D-1128-47`（设计页写目标、现状写别处）同族：**校验器说的"合法"与消费者说的"能读"不是一件事**。
+
+**6. 一棵树只能有一个车道 —— 我把两条 lane 派进了同一棵 `editview-commit`。**
+2026-11-28 07:1x：`lane-editview-a` 在 `D:\Projects\Camel-wt\editview-commit` 上做着 39 条二分的修复；我把 `lane-editview-commit` 也派进了**同一棵树**（它以为那是自己的）。对方的 `camel-remote` 跑一轮就 `git switch` 了分支并 `pushed lane/pass-decl-3`，前者的未提交改动**整个消失**（`fatal: cannot lock ref 'HEAD'`，`git status` 变空）。前者的第一反应是"有别人的 lane 乱跑"——**其实是我的派工错误**。
+教训：**派工前先在 `git worktree list` 里核那棵树属于谁、当前在哪个枝上**；`spawn_teammate` 时写进派工文案的 cwd 与"工作树"必须是那一条 lane 自己的。**两条 lane 共用一棵树的代价不是冲突，是别人未提交的活凭空消失。**
