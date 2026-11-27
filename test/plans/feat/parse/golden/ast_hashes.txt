@@ -376,7 +376,7 @@ f221e4c2b522ac50 ok docs/tutorial/examples/04_block_return.cml
 4cdade48bf9fc0c0 ok docs/tutorial/examples/04_branches.cml
 1eebbce871b548fb ok docs/tutorial/examples/04_exercise.cml
 87dfc14258b4340f ok docs/tutorial/examples/04_guards.cml
-c6a4e825db9407ac ok docs/tutorial/examples/05_arrays.cml
+ff928854b9e70854 ok docs/tutorial/examples/05_arrays.cml
 a1f60684d33515d2 ok docs/tutorial/examples/05_exercise.cml
 9e260ff474fea32b ok docs/tutorial/examples/05_loops.cml
 f5a123373c9cc02c ok docs/tutorial/examples/05_map_order.cml
@@ -538,7 +538,7 @@ a82098797df46210 ok src/stdlib/perf.cml
 27fc4f4fd00b5fb6 ok src/stdlib/sim.cml
 c850078b6b50daf1 ok src/stdlib/state.cml
 cb7539a8da81e513 ok src/stdlib/statistics.cml
-fb9eca15a5a6474d ok src/stdlib/std.cml
+9377d87dcf46ea44 ok src/stdlib/std.cml
 1e853ee4b632ef01 ok src/stdlib/str.cml
 46747b8669c63121 ok src/stdlib/stream.cml
 8308cebdc691d9b6 ok src/stdlib/tensor.cml
