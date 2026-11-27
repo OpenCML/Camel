@@ -85,3 +85,5 @@
 ### J. onnx 他族 12 条：只读分诊 —— 已派 `lane-witness`（用 `Camel-wt\witness` 树，`ba5a45e9bf` 上只读）
 - 12 条逐名：`ort_core_slice`、`ort_var_parameter`、`ort_const_under_as`、`ort_duplicate_outputs`、`ort_struct_casts`、`example_refusal.tuple.pass`、`example_refusal.shape.pass`、`typed_constant_ends_unrolling.pass`、`function_branch.pass`、`as_refusal.unproven.pass`、`as_refusal.always_fails.pass`、`resnetbn_train_step_export`(timeout)
 - 每条要：第一条诊断原文｜归类（src 缺陷/断言过时/超时/未迁移）｜是否在基线 6 行里｜一句话根因
+
+> 更正（02:1x）：**J 改派 `lane-oper-shape-guard`**，排在 G1c → G1b 之后（原定的 `lane-witness` 上下文不足，且其树停在 `bb26b78dda` —— "测试与二进制必须同树"，所以在别树跑 onnx 计划测的不是目标尖端）。
