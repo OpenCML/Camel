@@ -911,13 +911,10 @@ pi_hits: (samples: int, seed: int) => int panic
 asian_call_price: (paths: int, steps: int, seed: int) => float panic
 ```
 
-**`onnx`** — import { ... } from onnx — 5 name(s)
+**`onnx`** — import { ... } from onnx — 2 name(s)
 
 ```text
 supported_operators: () => string[]
 export_model: <out: string, dynamic_axes: int[] = [], target: string = 'onnxruntime-cpu'> (fn: F, example: E) => void! when is_function::<F>()
-save: <out: string> (m: Model<F>) => void!
-model: <dynamic_axes: int[] = [], target: string = 'onnxruntime-cpu'> (fn: F, example: E) => Model<F>! when is_function::<F>()
-run: <model: Model<F>> (args: A) => ResultOf<F>! when is_function::<F>()
 ```
 <!-- camel-for-ai end: stdlib-signatures -->
