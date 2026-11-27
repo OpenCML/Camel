@@ -122,6 +122,60 @@ void expScalarVjp(camel::core::VjpBuilder &builder, const camel::core::VjpCall &
     }
 }
 
+// For y = max(a, b), the gradient goes to the operand the maximum took, and a tie takes the left
+// one -- the choice the array width's `extremumVjp` makes (stdlib/tensor/ops/elementwise_ops.cpp:
+// `ge` of the two inputs for a maximum, `le` for a minimum), so the scalar and the array answers
+// pick the same operand wherever the two meet. Writing the pick is a branch, which the graph has as
+// a node kind: `if a >= b then dy else 0` for the left input and `if a >= b then 0 else dy` for the
+// right one. `min` is the same with `le` and the arms the other way round.
+template <bool Max>
+void extremumScalarVjp(camel::core::VjpBuilder &builder, const camel::core::VjpCall &call) {
+    using namespace camel::core;
+    using namespace camel::core::rtdata;
+    if (!camel::core::machineryTangentTypeOf(builder.nodeType(call.inputs[0]))) {
+        return;
+    }
+    auto dy = builder.gradientOf(call.output);
+    if (!dy) {
+        return;
+    }
+    Type *type         = builder.nodeType(call.output);
+    const char *narrow = nullptr;
+    switch (type->code()) {
+    case TypeCode::Float32:
+        narrow = Max ? ":op/ge_f" : ":op/le_f";
+        break;
+    case TypeCode::BFloat16:
+        narrow = Max ? ":op/ge_bf" : ":op/le_bf";
+        break;
+    case TypeCode::Float16:
+        narrow = Max ? ":op/ge_f6" : ":op/le_f6";
+        break;
+    default:
+        narrow = Max ? ":op/ge_d" : ":op/le_d";
+        break;
+    }
+    const std::array<vjp_node_t, 2> compared{call.inputs[0], call.inputs[1]};
+    const vjp_node_t condition = builder.addOper(Type::Bool(), narrow, compared);
+    const vjp_node_t zero      = builder.addStatic(
+        type->code() == TypeCode::Float32 ? toSlot<Float32>(0.0f) : toSlot<Float64>(0.0),
+        type);
+    const vjp_node_t tangent = *dy;
+    // Arm 0 is the arm the condition selects; the left input takes the condition's own arm and the
+    // right input the other one, so a tie cannot hand the cotangent to both or to neither.
+    const auto armValue = [tangent, zero](bool left) {
+        return [tangent, zero, left](size_t arm) -> vjp_node_t {
+            return (arm == 0) == left ? tangent : zero;
+        };
+    };
+    builder.accumulateGradient(
+        call.inputs[0],
+        builder.addBranch(type, condition, 2, armValue(true)));
+    builder.accumulateGradient(
+        call.inputs[1],
+        builder.addBranch(type, condition, 2, armValue(false)));
+}
+
 } // namespace
 
 MathModule::MathModule(context_ptr_t ctx) : BuiltinModule("math", ctx) {
@@ -177,6 +231,16 @@ bool MathModule::load() {
     }
     for (const char *uri : {"math:exp_d"}) {
         camel::core::DerivativeRegistry::instance().setRule(uri, &expScalarVjp);
+    }
+    // A maximum and a minimum pick one of their two operands, so their rule is a branch per input
+    // (see `extremumScalarVjp`). With this, a differentiated `abs` -- `max(x, -x)` in
+    // `stdlib/math.cml` -- reaches a rule instead of the "no derivative rule" refusal, and a
+    // `relu`, which is `max(x, 0)`, differentiates too.
+    for (const char *uri : {"math:max_d", "math:max_f", "math:max_bf", "math:max_f6"}) {
+        camel::core::DerivativeRegistry::instance().setRule(uri, &extremumScalarVjp<true>);
+    }
+    for (const char *uri : {"math:min_d", "math:min_f", "math:min_bf", "math:min_f6"}) {
+        camel::core::DerivativeRegistry::instance().setRule(uri, &extremumScalarVjp<false>);
     }
     loaded_ = true;
     return true;
