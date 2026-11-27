@@ -1053,6 +1053,13 @@ bool buildTransposeMember(
         // The order both sweeps below walk the graph in -- the graph's, not the ids'
         // (`cotangentWalkOrder`) -- computed once for this member and shared with every arm.
         const std::vector<gc_node_ref_t> walkOrder = cotangentWalkOrder(function);
+        // A branch is transposed the same way in a region as at the top of the graph, so the arm
+        // that meets one calls the one place that reverses it. `std::function` and not `auto`
+        // because the writer of that place is defined after this arm -- the same seam
+        // `forwardInArm` uses, and for the same reason.
+        std::function<
+            gc_node_ref_t(gc_node_ref_t, gc_node_ref_t, const std::vector<gc_node_ref_t> &)>
+            transposeBranchInRegion;
         const auto runSeeded =
             [&](uint32_t oldRegion,
                 const std::vector<ArmSeed> &seeds,
@@ -1834,10 +1841,9 @@ bool buildTransposeMember(
         // Where an arm's chain stops is a parameter and not a fact read here, because it is a
         // fact about the caller's graph: the top level stops at the tangents the answer is asked
         // for, and a region stops at its own ports.
-        const auto transposeBranchInRegion =
-            [&](gc_node_ref_t joinRef,
-                gc_node_ref_t ctIn,
-                const std::vector<gc_node_ref_t> &stops) -> gc_node_ref_t {
+        transposeBranchInRegion = [&](gc_node_ref_t joinRef,
+                                      gc_node_ref_t ctIn,
+                                      const std::vector<gc_node_ref_t> &stops) -> gc_node_ref_t {
             Type *const joinType  = cotangentTypeOf(joinRef);
             const auto arms       = function->withInputsOf(joinRef);
             const auto normBranch = function->normInputsOf(joinRef);
