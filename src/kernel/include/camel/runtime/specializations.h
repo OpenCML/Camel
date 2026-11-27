@@ -14,11 +14,14 @@
  * value member of Program, copied with it, so a program a rewrite derives from another carries
  * the table along and a session that is handed a program it did not make writes to its own copy.
  *
- * An entry names the callee by GraphId and content revision (graph_id.h, GCGraph::revision), not
- * by address: a graph that was edited since gets a new revision and its entries no longer match,
- * which is what should happen. It names the specialization by GraphId too: a program that no
- * longer holds that graph resolves the id to nothing, and the session makes the specialization
- * again.
+ * An entry names the graph the copy derives from -- the root, not the copy the chain happened to
+ * reach last -- by GraphId and content revision (graph_id.h, GCGraph::revision), not by address: a
+ * graph that was edited since gets a new revision and its entries no longer match, which is what
+ * should happen. The bindings it lists are the whole set the copy carries, so a call written
+ * against that copy is keyed on the root and the merged set instead of on the copy: a copy is the
+ * root with formals erased, and a copy of the copy would be the same graph under a second name. It
+ * names the specialization by GraphId too: a program that no longer holds that graph resolves the
+ * id to nothing, and the session makes the specialization again.
  *
  * The table is a cache, not an owner. A commit binds the graphs the root reaches; a specialization
  * nothing reachable calls any more is let go with the snapshot it was in, and the entry that
@@ -83,8 +86,9 @@ struct RuntimeSpecializationBindingKey {
     }
 };
 
-/// What an entry was made for: the callee graph by identity and content, and the bindings in the
-/// order makeRuntimeSpecializationKey puts them (sorted).
+/// What an entry was made for: the root the copy derives from, by identity and content, and the
+/// whole binding set the copy carries, in the order makeRuntimeSpecializationKey puts them
+/// (sorted).
 struct ProgramSpecializationKey {
     GraphId baseGraph     = kInvalidGraphId;
     uint64_t baseRevision = 0;
@@ -133,6 +137,18 @@ class RuntimeSpecializationTable {
 
     void remember(ProgramSpecializationKey key, GraphId graph) {
         entries_.insert_or_assign(std::move(key), graph);
+    }
+
+    /// The entry that made `graph`, when the table still has it: a copy stands for the graph its
+    /// key roots at and the bindings the key lists, so a call written against the copy is answered
+    /// on the root instead of making a copy of the copy.
+    const ProgramSpecializationKey *keyFor(GraphId graph) const {
+        for (const auto &entry : entries_) {
+            if (entry.second == graph) {
+                return &entry.first;
+            }
+        }
+        return nullptr;
     }
 
     /// Copies the entries `other` has that this table does not (a commit that merged into another
