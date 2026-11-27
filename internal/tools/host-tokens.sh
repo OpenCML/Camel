@@ -558,7 +558,10 @@ self_test() {
     fi
     # 9. the peak is a reading, not a zero. Three tokens held at once must leave the mark at three
     #    even after they are all back: that is the number `tokensPeak` reports, and a pool that never
-    #    records it is a pool nobody can tell from an unused one.
+    #    records it is a pool nobody can tell from an unused one. It starts from an idle pool: a
+    #    worker of check 8 still holding a token would let the holder below take two at a pass and
+    #    give them back, so the mark would read two however the peak is recorded.
+    settle 'free=3 held=0' || { echo "FAIL  the pool did not go idle after the four takers: $out"; bad=$((bad + 1)); }
     ( take 3 >/dev/null; exec sleep 20 ) &
     holder2=$!
     settle 'peak=3'
