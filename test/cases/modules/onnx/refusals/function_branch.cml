@@ -6,7 +6,7 @@
  *
  */
 
-import { export_model } from onnx
+import { model, save } from onnx
 import { reshape, sum } from tensor
 
 func build(h: float[...]) => (x: float[...]) => float[...] {
@@ -33,7 +33,7 @@ func model(x: float[...]) => float[...] {
 
 func main() => void! sync {
     let x = reshape<[2, 2]>([1.0, 2.0, 3.0, 4.0])
-    export_model<out: 'tmp/test/onnx/refusal_function_branch.onnx'>(func (x: float[...]) => float[...] {
+    model(func (x: float[...]) => float[...] {
         model(x)
-    }, x)
+    }, x)->save<out: 'tmp/test/onnx/refusal_function_branch.onnx'>
 }

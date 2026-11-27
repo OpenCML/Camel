@@ -5,7 +5,7 @@
  */
 import { with_grad } from autodiff
 import { get_env } from env
-import { export_model } from onnx
+import { model, save } from onnx
 import { reshape, sum, tanh } from tensor
 
 type P = { w: f32[...], v: f32[...] }
@@ -37,9 +37,9 @@ func main() => string! sync {
     println(r.0)
     println(r.1)
     println(r.2)
-    return match export_model<out: get_env('ONNX_OUT') ?? ''>(func (w: f32[...], v: f32[...], x: f32[...]) => (f32[...], f32[...], f32[...]) {
+    return match model(func (w: f32[...], v: f32[...], x: f32[...]) => (f32[...], f32[...], f32[...]) {
         step(w, v, x)
-    }, (w, v, x)) {
+    }, (w, v, x))->save<out: get_env('ONNX_OUT') ?? ''> {
         case error e => {
             return e
         }

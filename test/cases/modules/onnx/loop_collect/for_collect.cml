@@ -8,7 +8,7 @@
  * about the data: the loop is an ONNX `Loop` and the array is its scan output.
  */
 import { get_env } from env
-import { export_model } from onnx
+import { model, save } from onnx
 
 func build(x: f32[?]) => int[] {
     return loop acc = [] as int[] for v in x do acc->append<int(v * 10.0)>
@@ -19,9 +19,9 @@ func main() => string! sync {
     let xs = build(x)
     println(len(xs))
     println(xs[3])
-    return match export_model<out: get_env('ONNX_OUT') ?? '', dynamic_axes: [0]>(func (x: f32[?]) => int[] {
+    return match model<dynamic_axes: [0]>(func (x: f32[?]) => int[] {
         build(x)
-    }, (x)) {
+    }, (x))->save<out: get_env('ONNX_OUT') ?? ''> {
         case error e => {
             return e
         }

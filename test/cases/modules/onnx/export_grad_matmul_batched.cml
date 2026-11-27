@@ -12,7 +12,7 @@
 
 import { with_grad } from autodiff
 import { get_env } from env
-import { export_model } from onnx
+import { model, save } from onnx
 import { reshape, sum } from tensor
 
 type P = { a: float[...], b: float[...], v: float[...] }
@@ -41,7 +41,7 @@ func main() => string! sync {
     println(r.1.a)
     println(r.1.b)
     println(r.1.v)
-    return match export_model<out: get_env('ONNX_OUT') ?? ''>(step, (m, x)) {
+    return match model(step, (m, x))->save<out: get_env('ONNX_OUT') ?? ''> {
         case error e => {
             return e
         }

@@ -8,7 +8,7 @@
  * collected array's length is the run's business.
  */
 import { get_env } from env
-import { export_model } from onnx
+import { model, save } from onnx
 import { reshape, save_npy, slice, sum } from tensor
 
 /// Row `t` of the data: a slice with bounds that depend on the counter, then the row's shape.
@@ -62,9 +62,9 @@ func main() => string! sync {
     } else 'not recorded'
     let _ = recorded
     return if out == '' then '0'
-    else match export_model<out: out>(func (w: float[4], xs: float[6, 4], ts: float[6], budget: float[1]) => (float[], int, float) {
+    else match model(func (w: float[4], xs: float[6, 4], ts: float[6], budget: float[1]) => (float[], int, float) {
         forward(w, xs, ts, budget)
-    }, (w, xs, ts, shortBudget)) {
+    }, (w, xs, ts, shortBudget))->save<out: out> {
         case error e => {
             return e
         }

@@ -717,7 +717,7 @@ void exportEntry(
         throw Refusal{
             camel::source::kInvalidOriginId,
             std::format(
-                "the program contains no export_model<out: path>(fn, example) call, so "
+                "the program contains no model(fn, example)->save<out: path> call, so "
                 "onnx::export_model translates 'main' itself, and the model file is not named: "
                 "give "
                 "it as the parameter out, onnx::export_model out=\"model.onnx\"")};

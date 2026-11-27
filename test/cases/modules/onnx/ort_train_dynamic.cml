@@ -8,7 +8,7 @@
 import { with_grad } from autodiff
 import { get_env } from env
 import { sgd, save_params } from nn
-import { export_model } from onnx
+import { model, save } from onnx
 import { relu, sum, reshape, shape, load_npy } from tensor
 
 type Mlp = { w1: f32[...], b1: f32[...], w2: f32[...], b2: f32[...] }
@@ -39,7 +39,7 @@ func main() => int sync {
     let out = get_env('ONNX_OUT') ?? ''
     let refused = if out == '' then 0
     else if (get_env('DYN') ?? '') == '1' then sync {
-        match export_model<out: out, dynamic_axes: [0]>(step, (m, x)) {
+        match model<dynamic_axes: [0]>(step, (m, x))->save<out: out> {
             case error e => sync {
                 println(e)
                 1
@@ -47,7 +47,7 @@ func main() => int sync {
             case _ => 0
         }
     } else sync {
-        match export_model<out: out>(step, (m, x)) {
+        match model(step, (m, x))->save<out: out> {
             case error e => sync {
                 println(e)
                 1
