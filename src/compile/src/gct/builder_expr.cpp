@@ -205,8 +205,45 @@ node_ptr_t Builder::visitBlockHeaded(const AST::node_ptr_t &ast) {
     // changes nothing, so it keeps the plain call: a fault in a view is the program's, not a value.
     node_ptr_t valueNode = nullptr;
     if (ast->loadAs<AST::BlockHeadLoad>()->dataType() == AST::DataType::EditExpr) {
+        // The body's steps change a draft, and the block hands on the function the commit makes of
+        // it (design 2, 6: the block's value is the function its commit gives back, never the draft
+        // and never the body's last expression). The draft is the closure's value, so the commit is
+        // called on what the closure answers, inside the fault boundary: a step that fails never
+        // reaches the commit, and the error the boundary hands back is the block's value.
+        const auto commitOper = camel::core::OperatorTable::instance().lookup("graph:commit");
+        GUARD(
+            commitOper.has_value(),
+            "The table has no entry for the operator a block commits by.");
+        node_ptr_t draft = tree_->makeLink(0);
+        *draft << funcNode;
+        node_ptr_t commitRef = tree_->makeDRef(*commitOper, ":block/commit");
+        setOriginFromAst(
+            context_,
+            commitRef,
+            ast,
+            camel::source::OriginKind::GctNode,
+            "gct.block.commit");
+        node_ptr_t commitCall = tree_->makeLink(1);
+        *commitCall << commitRef << draft;
+        setOriginFromAst(
+            context_,
+            commitCall,
+            ast,
+            camel::source::OriginKind::GctNode,
+            "gct.block.commit.call");
+        node_ptr_t handExec = tree_->makeExec(false, false);
+        *handExec << commitCall;
+        FunctionTypeFactory handFactory;
+        node_ptr_t handFunc = tree_->makeFunc("");
+        *handFunc << tree_->makeType(handFactory.buildOpen()) << handExec;
+        if (headModule) {
+            // The commit is the `graph` module's operator, and this body reads that module for the
+            // operator's declarations exactly as the block's own body does (design 15.1): the
+            // module is a name layer of the body the head stands for, and this body is part of it.
+            tree_->setBlockHeadModule(handFunc, headModule);
+        }
         node_ptr_t transform = tree_->makeLink(1);
-        *transform << tree_->makeDRef(camel::execute::kFaultIsolationName) << funcNode;
+        *transform << tree_->makeDRef(camel::execute::kFaultIsolationName) << handFunc;
         setOriginFromAst(
             context_,
             transform,

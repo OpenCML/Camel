@@ -45,9 +45,19 @@ class HandleType final : public type::OtherType {
     /// stands for -- a rule's or a fact's parameter (`v: T`) -- states this type (design principles
     /// 5.9).
     static HandleType *ofValueType(type::Type *valueType);
+    /// `Draft<F>`: the draft an edit block opens on a function of type `F` (graph-editing design 5,
+    /// 6). It is the `Graph` handle -- the same kind, so every query and edit kernel takes it as it
+    /// takes a graph -- and `F` is what its commit hands back. A commit reads the function type off
+    /// the draft it is given, which is why the type carries it: `commit(d: Draft<F>) => F!` names
+    /// `F` nowhere but in the draft, and a draft committed to another function type is a type
+    /// error.
+    static HandleType *ofDraft(type::Type *functionType);
     static bool is(const type::Type *type, HandleKind kind);
 
     HandleKind kind() const { return kind_; }
+
+    /// Whether this is a draft over the graphs of a function (`Draft<F>`), and not a graph.
+    bool draft() const { return draft_; }
 
     /// The type of the value this node stands for, or nullptr when it is written without one.
     type::Type *valueType() const { return paramCount_ == 1 ? params_[0] : nullptr; }
@@ -57,9 +67,11 @@ class HandleType final : public type::OtherType {
     bool determinesTypeParameters() const override { return false; }
 
     /// A node's argument is the type of the value it stands for, so the algebra reads it (design
-    /// principles 5.9): `Node<T>` against `Node<int>` binds `T` to `int`. The other handle kinds
-    /// take no argument.
-    bool typeArguments() const override { return kind_ == HandleKind::Node; }
+    /// principles 5.9): `Node<T>` against `Node<int>` binds `T` to `int`. A draft's argument is the
+    /// type of the function it commits, for the same reason: the algebra reads it off the parameter
+    /// type, so a call names no type the draft already states. The other handle kinds take no
+    /// argument.
+    bool typeArguments() const override { return kind_ == HandleKind::Node || draft_; }
 
     std::string toString() const override;
     std::string mangle() const override;
@@ -73,14 +85,15 @@ class HandleType final : public type::OtherType {
         std::span<const type::TypeArgument> arguments, std::string &error) const override;
 
   private:
-    HandleType(type::TypeCode code, HandleKind kind, type::Type *valueType)
+    HandleType(type::TypeCode code, HandleKind kind, type::Type *valueType, bool draft = false)
         : OtherType(
               code, valueType == nullptr ? 0 : 1,
               valueType == nullptr ? nullptr
                                    : copyParams(std::span<type::Type *const>(&valueType, 1))),
-          kind_(kind) {}
+          kind_(kind), draft_(draft) {}
 
     HandleKind kind_;
+    bool draft_;
 };
 
 /// `type` as the handle type of `kind`, or nullptr when it is another type.

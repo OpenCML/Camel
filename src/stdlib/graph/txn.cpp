@@ -206,6 +206,12 @@ draftOf(const Handle *node, const char *site) {
 /// The function a commit makes: the one the transaction was opened on, over the committed graphs.
 /// Its closure is the opened function's, so the values it captured are captured still and a
 /// function that captures values commits like one that does not.
+///
+/// Its type is the one the commit answers with (`F` of the `F!` the call's result type names), not
+/// the type `open` was given: a block head may write a function type of its own (graph-editing
+/// design, section 2: "when effects are added, the block head writes the new function type"), and
+/// the committed function is that type. The opened type is the fallback for the call that names
+/// none, where the two are the same type anyway.
 slot_t functionOf(TxnState &state, const Program *program, const TupleType *resultType) {
     const auto *graph = program->root();
     if (graph == nullptr || state.function == nullptr) {
@@ -216,8 +222,14 @@ slot_t functionOf(TxnState &state, const Program *program, const TupleType *resu
     }
     // The program is held by no one but this call until the function is made.
     mm::NoCollectionScope noCollection;
-    auto *function = static_cast<::Function *>(
-        state.function->clone(mm::autoSpace(), state.functionType, false));
+    const Type *declared = resultType != nullptr ? resultType->payloadType() : nullptr;
+    const FunctionType *committedType =
+        declared != nullptr && declared->code() == TypeCode::Function
+            ? static_cast<const FunctionType *>(declared)
+            : (state.functionType != nullptr ? static_cast<const FunctionType *>(state.functionType)
+                                             : nullptr);
+    auto *function =
+        static_cast<::Function *>(state.function->clone(mm::autoSpace(), committedType, false));
     function->rebind(program, graph->id());
     return makeOk(toSlot(function), resultType);
 }
