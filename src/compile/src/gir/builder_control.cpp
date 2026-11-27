@@ -2706,6 +2706,41 @@ node_handle_t Builder::attachVisibleLoopState(
     return value;
 }
 
+void Builder::handCarriedStatesOut(
+    node_handle_t loopNode, const std::vector<LoopCarriedState> &carried,
+    const std::vector<Type *> &states, size_t firstState, uint32_t firstMember,
+    const GCT::node_ptr_t &gct) {
+    // A `var` the body wrote is a state of the loop, so a read written after the loop reads the
+    // state the loop hands out: the component of the loop's value at the position the state has
+    // among the loop's states. The value is a tuple whenever the loop has several states, so the
+    // component is read out of it; the read stands in the region the loop is written in, which is
+    // where a read after the loop looks for it.
+    const bool tupleValue = states.size() > 1;
+    for (size_t j = 0; j < carried.size(); ++j) {
+        const size_t index  = firstState + j;
+        node_handle_t value = loopNode;
+        if (tupleValue) {
+            value = memberReadNodeOf(
+                loopNode,
+                states[index],
+                firstMember + static_cast<uint32_t>(index),
+                gct);
+            registerNodeOrigin(context_, value, gct, "gir.loop.value");
+        }
+        if (carried[j].asValue) {
+            // The write the head hands out is recorded where the loop is written: on the head of a
+            // loop around this one, if there is one, so this loop's write is that loop's next state
+            // too. This loop's own port went back with the body it was declared in, so the name
+            // here is the enclosing declaration's again -- the one whose port, if any, takes this
+            // record.
+            noteLoopStateWrite(carried[j].name, value);
+            ssa_.rebind(nodeScope_, carried[j].name, value, armWritesHere());
+        } else {
+            carriedVersions_[carried[j].cell] = value;
+        }
+    }
+}
+
 node_handle_t Builder::visitLoopNode(const GCT::node_ptr_t &gct) {
     ENTER("LOOP");
     using camel::core::LoopKind;
@@ -3827,27 +3862,10 @@ node_handle_t Builder::visitLoopNode(const GCT::node_ptr_t &gct) {
     // is rebound to what the head hands out, so every read after the loop takes that value and no
     // cell is involved anywhere. The rebinding is a write of the name in the region the loop is
     // written in, so the head of a loop *around* this one takes it too (noteLoopStateWrite), and an
-    // arm around it has the join carry it.
-    for (size_t j = 0; j < carried.size(); ++j) {
-        const size_t index  = declaredStates + j;
-        node_handle_t value = loopNode;
-        if (stateCount > 1) {
-            value =
-                memberReadNodeOf(loopNode, stateTypes[index], static_cast<uint32_t>(index), gct);
-            registerNodeOrigin(context_, value, gct, "gir.loop.value");
-        }
-        if (carried[j].asValue) {
-            // The write the head hands out is recorded where the loop is written: on the head of a
-            // loop around this one, if there is one, so this loop's write is that loop's next state
-            // too. This loop's own port went back with the body it was declared in, so the name
-            // here is the enclosing declaration's again -- the one whose port, if any, takes this
-            // record.
-            noteLoopStateWrite(carried[j].name, value);
-            ssa_.rebind(nodeScope_, carried[j].name, value, armWritesHere());
-        } else {
-            carriedVersions_[carried[j].cell] = value;
-        }
-    }
+    // arm around it has the join carry it. The stream path hands its states out the same way
+    // (buildStreamLoop): one function, so the two forms of a loop cannot come to read the value the
+    // other one leaves.
+    handCarriedStatesOut(loopNode, carried, stateTypes, declaredStates, 0, gct);
     if (splitApplied) {
         // The programme sees the struct, not its parts: it is rebuilt from the loop's value,
         // once, in the layout of the type the state had (nested structs included). Nothing of
@@ -4258,21 +4276,11 @@ node_handle_t Builder::buildStreamLoop(
     // not the `var`s the body wrote, which are the loop's own state and no value of the program's
     // (visitLoopNode).
     node_handle_t loopValue = attachVisibleLoopState(loopNode, declaredTypes, 2, gct);
-    for (size_t j = 0; j < carried.size(); ++j) {
-        const size_t index = k + j;
-        node_handle_t value =
-            memberReadNodeOf(loopNode, stateTypes[index], static_cast<uint32_t>(2 + index), gct);
-        registerNodeOrigin(context_, value, gct, "gir.loop.value");
-        // A `var` the body wrote is a state of the loop, so a read written after the loop reads the
-        // state the loop hands out: the value of the LOOP's state, which is what the `let`
-        // writing's destructuring is (visitLoopNode).
-        if (carried[j].asValue) {
-            noteLoopStateWrite(carried[j].name, value);
-            ssa_.rebind(nodeScope_, carried[j].name, value, armWritesHere());
-        } else {
-            carriedVersions_[carried[j].cell] = value;
-        }
-    }
+    // A `var` the body wrote is a state of the loop, so a read written after the loop reads the
+    // state the loop hands out: the value of the LOOP's state, which is what the `let` writing's
+    // destructuring is (visitLoopNode). The two forms of a loop hand their states out the same way,
+    // so that neither can come to leave the value the other one leaves.
+    handCarriedStatesOut(loopNode, carried, stateTypes, k, 2, gct);
     return loopValue;
 }
 
