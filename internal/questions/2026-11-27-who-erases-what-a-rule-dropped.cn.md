@@ -119,5 +119,18 @@ expressed by nothing"）。缺的不是这两条，而是**规则改写不是"�
   `2026-11-27-promotion-19-reds.tsv:61` 红（`065bfb1690`），窗口 820 笔
 ```
 
-状态：**待定，不立项。** 要先答"被丢掉的操作数的顺序位是否随它消失"；答之前不要为了变绿去动
-`tables.mjs`、`dominance` 断言或 dce 的 `isUnanchoredPure`。
+状态：**已定（2026-11-27，答复 D-1127-18）。** 问句“被丢掉的操作数的顺序位是否随它消失”的答案是：
+**随它的替身走。** 裁决原文：
+
+> 不看会不会 fault。原则 `docs/design-principles.cn.md:684` —— 遍保留什么、删什么由遍自己决定；
+> 同步块里结果没用、但可能故障的纯计算被化简遍删掉，不算缺陷。改写遍的契约是：**规则说右边等于左边，
+> 替身接替的是整个被匹配的左边，不只是根。**
+
+落到实现（`writings_driver.cpp` 的替换路径，`eraseUnused` 之前）：被匹配的内层节点在链上带着的顺序位
+**折进替身**（`closeChainOver` / `spliceOrderEdgesOver`），然后照常走删除判定 —— **判据与删除不动**。
+于是 `array_combine` 的 `nodes 5 / edges 6` 是对的，该改的是引擎不是判据。
+
+反控（必须同时成立）：内层节点**另有别的用户**时，它不得因此被删掉 —— 这条是“折进去”不等于“吞掉”的分界。
+
+不立项的旧话作废：不要为了变绿去动 `tables.mjs`、`dominance` 断言或 dce 的 `isUnanchoredPure`；
+这三处一格没动，本条的改动全在 `writings_driver.cpp` 与匹配侧。
