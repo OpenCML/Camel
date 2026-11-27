@@ -4422,6 +4422,7 @@ d9c9c90db93e9ff5 ok test/cases/runtime/edit_record/a_program.cml
 b7fe2345bab84529 ok test/cases/showcase_s2/train_curve.cml
 d6ba16a66d67b7f4 ok test/cases/smoke/core/fib10_pipeline.cml
 ee6fd7edfd524efb ok test/cases/smoke/core/prl_scheduler.cml
+5274076502ce49e5 ok test/cases/tools/arrangeable_fill_access.cml
 7be8e7ab85335a94 ok test/cases/tools/debugger/fixtures/branch.cml
 68a224c66164288b ok test/cases/tools/debugger/fixtures/broken.cml
 e050daf9fd8952ad ok test/cases/tools/debugger/fixtures/calls.cml
