@@ -758,10 +758,6 @@ class GraphDraft : public camel::graph::Graph {
         noteOriginalTypes();
         ++mutations_;
         funcType_ = funcType;
-        // The function type is the graph's own header and stands in no region, so the record keeps
-        // this edit without a region: the kind and the listeners are still owed for it (8.1, the
-        // low-level row).
-        recordEdit(EditKind::LowLevel, {});
     }
     /// Fills the result type of an open signature **where it stands**
     /// (`OpenFunctionType::setExitType`). The signature is the function's identity while its body
