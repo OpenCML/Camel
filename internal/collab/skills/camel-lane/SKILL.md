@@ -531,3 +531,5 @@ git checkout HEAD -- <那一个文件>          # 恢复，git status --porcelai
 · **"注释参与 AST 哈希"**：只改注释的车道会带 7～N 条 `ast stale` —— 那不是红，是**合并后在合并树上重采一次**的活（铁律 14 顺序）；车道不许去改 `ast_hashes.txt`，也不许与别人的整份重采同时动同一份金标。
 · **"用例跑不到"比"用例红"更坏**：新增用例只在 `test/cases/` 存在、`test/plans/` 里没有条目 ⇒ 它永远不跑、也不报警（只在 `ast_hashes.txt` 里留下名字）。交回前用 `git grep -rln <用例名> test/plans` 自查一次；引入笔自带用例跑不到，补条目比留着强。
 · **一处抬、一处不抬 ⇒ 只留一处**：同一条边上有两处各自决定"抬不抬类型"（例：`pairOf`/`mixedMemberTypeOf` 在 gate 侧抬、被前向的 copy 侧不抬）时，正解是**让其中一处做决定**（读另一处的类型），不是两处都抬；判据是"两条边由构造相等"。
+· **重建签名要带上原属性**：`DeclaredFuncTypeResolver` 的 `closedSignature()`/`withoutPacks()` 只写 `name/type/isVar`，会把 `with <constas …>` 标记与 `withNeedsValueAt` 一起**重写丢掉**（不是"丢在 graft 之前"，是"根本没有被抄过去"）。凡见到"某个属性在构造/重写/包装后不见了"，先找**产生端**：`git grep 'addWithArg'`/`addWithConstasArg` 这类重建调用，而不是去补调用点的保护。
+· **补调用点保护是改判据**：一条不变量（如 `hasNames_`）在几十处调用点触发时，要问"这类事实是不是该出现在这个通道里"；`src/compile` 里 `argNameAt(` 有 ~70 处，补 70 处保护等于抹平一类事实。
