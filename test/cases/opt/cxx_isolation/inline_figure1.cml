@@ -1,14 +1,19 @@
 /**
- * The shape a paper's first figure uses: one small function called once, with the product of its
- * result and a sum of the argument. `inc` is a call the front end leaves in place (it is not
- * expanded while the program is built), so a reading taken before the pass sees the call.
+ * The shape a paper's first figure uses: `inc(x) * 3 + (x + 1) * 4`, with the call one level down
+ * so the front end leaves it in the program. `inc` is called from `figure`, which `main` calls: a
+ * reading taken before the pass sees both calls, and the pass is what removes them.
  */
 
 func inc(x: int) => int {
     return x + 1
 }
 
-func main() => int sync {
-    let x = 3
+func figure(x: int) => int {
     return inc(x) * 3 + (x + 1) * 4
+}
+
+func main() => int sync {
+    let out = figure(3)
+    'inline_figure1 out={}'->format<out>->println
+    return 0
 }

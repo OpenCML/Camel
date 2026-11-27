@@ -3,108 +3,43 @@ order = 490
 tier = "fast"
 tags = ["probe", "opt", "inline"]
 
-# A measuring pass, not a judge: the four corpora the comparison is written on, read both ways.
+# A measuring pass, not a judge: the figure corpus, read before and after each inliner.
 
 [[tests]]
-name = "measure.two_level.by_cpp"
+name = "measure.figure1.before"
 kind = "behavior"
-case = "../../../cases/opt/camel_inline/two_level_call.cml"
+case = "../../../cases/opt/cxx_isolation/inline_figure1.cml"
+args = ["${case}", "std::jgir canonical=true", "std::nop"]
+expect_exit = 0
+timeout_ms = 20000
+verify_script = """
+const doc = JSON.parse(input.normalized.stdout)
+const rows = (doc.graphs || []).map((g) => [(g.nodes || []).filter((n) => n.kind === "CALL" || n.kind === "FUNC").length, (g.nodes || []).length])
+throw new Error("COUNT figure1.before " + JSON.stringify(rows))
+"""
+
+[[tests]]
+name = "measure.figure1.by_cpp"
+kind = "behavior"
+case = "../../../cases/opt/cxx_isolation/inline_figure1.cml"
 args = ["${case}", "std::cxx::inline", "std::jgir canonical=true", "std::nop"]
 expect_exit = 0
 timeout_ms = 20000
 verify_script = """
 const doc = JSON.parse(input.normalized.stdout)
 const rows = (doc.graphs || []).map((g) => [(g.nodes || []).filter((n) => n.kind === "CALL" || n.kind === "FUNC").length, (g.nodes || []).length])
-throw new Error("COUNT two_level.by_cpp " + JSON.stringify(rows))
+throw new Error("COUNT figure1.by_cpp " + JSON.stringify(rows))
 """
 
 [[tests]]
-name = "measure.two_level.by_camel"
+name = "measure.figure1.by_camel"
 kind = "behavior"
-case = "../../../cases/opt/camel_inline/two_level_call.cml"
+case = "../../../cases/opt/cxx_isolation/inline_figure1.cml"
 args = ["${case}", "opt::inline", "std::jgir canonical=true", "std::nop"]
 expect_exit = 0
 timeout_ms = 20000
 verify_script = """
 const doc = JSON.parse(input.normalized.stdout)
 const rows = (doc.graphs || []).map((g) => [(g.nodes || []).filter((n) => n.kind === "CALL" || n.kind === "FUNC").length, (g.nodes || []).length])
-throw new Error("COUNT two_level.by_camel " + JSON.stringify(rows))
-"""
-
-[[tests]]
-name = "measure.closure.by_cpp"
-kind = "behavior"
-case = "../../../cases/compile/closure/bound_closures.cml"
-args = ["${case}", "std::cxx::inline", "std::jgir canonical=true", "std::nop"]
-expect_exit = 0
-timeout_ms = 20000
-verify_script = """
-const doc = JSON.parse(input.normalized.stdout)
-const rows = (doc.graphs || []).map((g) => [(g.nodes || []).filter((n) => n.kind === "CALL" || n.kind === "FUNC").length, (g.nodes || []).length])
-throw new Error("COUNT closure.by_cpp " + JSON.stringify(rows))
-"""
-
-[[tests]]
-name = "measure.closure.by_camel"
-kind = "behavior"
-case = "../../../cases/compile/closure/bound_closures.cml"
-args = ["${case}", "opt::inline", "std::jgir canonical=true", "std::nop"]
-expect_exit = 0
-timeout_ms = 20000
-verify_script = """
-const doc = JSON.parse(input.normalized.stdout)
-const rows = (doc.graphs || []).map((g) => [(g.nodes || []).filter((n) => n.kind === "CALL" || n.kind === "FUNC").length, (g.nodes || []).length])
-throw new Error("COUNT closure.by_camel " + JSON.stringify(rows))
-"""
-
-[[tests]]
-name = "measure.budget.by_cpp"
-kind = "behavior"
-case = "../../../cases/opt/camel_inline/two_level_call.cml"
-args = ["${case}", "std::cxx::inline growth_budget=0", "std::jgir canonical=true", "std::nop"]
-expect_exit = 0
-timeout_ms = 20000
-verify_script = """
-const doc = JSON.parse(input.normalized.stdout)
-const rows = (doc.graphs || []).map((g) => [(g.nodes || []).filter((n) => n.kind === "CALL" || n.kind === "FUNC").length, (g.nodes || []).length])
-throw new Error("COUNT budget.by_cpp " + JSON.stringify(rows))
-"""
-
-[[tests]]
-name = "measure.budget.by_camel"
-kind = "behavior"
-case = "../../../cases/opt/camel_inline/two_level_call.cml"
-args = ["${case}", "opt::inline growth_budget=0", "std::jgir canonical=true", "std::nop"]
-expect_exit = 0
-timeout_ms = 20000
-verify_script = """
-const doc = JSON.parse(input.normalized.stdout)
-const rows = (doc.graphs || []).map((g) => [(g.nodes || []).filter((n) => n.kind === "CALL" || n.kind === "FUNC").length, (g.nodes || []).length])
-throw new Error("COUNT budget.by_camel " + JSON.stringify(rows))
-"""
-
-[[tests]]
-name = "measure.recursion.by_cpp"
-kind = "behavior"
-case = "../../../cases/opt/camel_inline/self_recursion.cml"
-args = ["${case}", "std::cxx::inline", "std::jgir canonical=true", "std::nop"]
-expect_exit = 0
-timeout_ms = 20000
-verify_script = """
-const doc = JSON.parse(input.normalized.stdout)
-const rows = (doc.graphs || []).map((g) => [(g.nodes || []).filter((n) => n.kind === "CALL" || n.kind === "FUNC").length, (g.nodes || []).length])
-throw new Error("COUNT recursion.by_cpp " + JSON.stringify(rows))
-"""
-
-[[tests]]
-name = "measure.recursion.by_camel"
-kind = "behavior"
-case = "../../../cases/opt/camel_inline/self_recursion.cml"
-args = ["${case}", "opt::inline", "std::jgir canonical=true", "std::nop"]
-expect_exit = 0
-timeout_ms = 20000
-verify_script = """
-const doc = JSON.parse(input.normalized.stdout)
-const rows = (doc.graphs || []).map((g) => [(g.nodes || []).filter((n) => n.kind === "CALL" || n.kind === "FUNC").length, (g.nodes || []).length])
-throw new Error("COUNT recursion.by_camel " + JSON.stringify(rows))
+throw new Error("COUNT figure1.by_camel " + JSON.stringify(rows))
 """
