@@ -22,6 +22,12 @@
 //     runs it, is the output the page declares (the convention of `docs/language/README.md`:
 //     "a `text` code block is its output"). The snippet is run and its stdout must match. A
 //     command fence chooses the passes and `--arg` values, exactly as the page does.
+//
+// Source examples are the exception on purpose: each `/// @example` line is its own snippet, and
+// consecutive `@example` lines are NOT continuations of one another -- a reader reading the
+// generated reference reads each line as a whole example, so a multi-line example is one line
+// that holds it, and a line that needs a module's names sees that module's own imports (the
+// snippet is read as code written in that module), not an import of its own.
 //   * Otherwise the snippet only has to compile: parse, GCT and GIR, asserted with
 //     `camel <file> std::gir`. A fence with no entry point is compiled as a module with a
 //     generated `func main() => int sync { return 0 }`; the fence itself is not changed.
