@@ -393,8 +393,10 @@ cmd_self_test() {
     esac
     settle 'free=4 held=0' && echo 'ok    the tokens are back when the run ends' || { echo "FAIL  tokens not back after a run: $out"; bad=$((bad + 1)); }
 
-    # 2. a short pool: three of four held elsewhere, a run asking for three gets the one that is free
-    ( "$taker" take 3 >/dev/null; exec sleep 60 ) &
+    # 2. a short pool: three of four held elsewhere, a run asking for three gets the one that is free.
+    #    The holders are `run N -- sleep`: a token lives as long as the process that took it, so a
+    #    separate `take` process would give its tokens back the moment it exits and hold nothing.
+    "$taker" run 3 -- sleep 60 >/dev/null 2>&1 &
     sleeper=$!
     settle 'free=1 held=3'
     out=$(CAMEL_JOBS=3 "$SELF" plan -- bash -c 'echo "in:$CAMEL_JOBS"' 2>&1)
@@ -404,7 +406,7 @@ cmd_self_test() {
     esac
 
     # 3. nothing free: the wait runs out, which is exit 4 with state=noslot, and the command never ran
-    ( "$taker" take 1 >/dev/null; exec sleep 60 ) &
+    "$taker" run 1 -- sleep 60 >/dev/null 2>&1 &
     pids="$sleeper $!"
     settle 'free=0 held=4'
     out=$(CAMEL_TOKEN_WAIT_S=2 CAMEL_JOBS=2 "$SELF" plan -- bash -c 'echo ran-the-command' 2>&1)
@@ -417,7 +419,10 @@ cmd_self_test() {
         *ran-the-command*) echo 'FAIL  the command ran without a token'; bad=$((bad + 1)) ;;
         *) [ "$code" = 4 ] && echo 'ok    a plan run that gets no token says state=noslot, exits 4, and does not run the command' ;;
     esac
-    for i in $pids; do kill -9 "$i" 2>/dev/null; done
+    # The holder's command inherits its tokens, so the whole tree goes.
+    for sleeper in $pids; do
+        for i in $(tree_of "$sleeper" | sort -rn); do kill -9 "$i" 2>/dev/null; done
+    done
     wait 2>/dev/null
     settle 'free=4 held=0' || { echo "FAIL  the test's own holders did not release: $out"; bad=$((bad + 1)); }
 
