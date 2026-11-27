@@ -139,15 +139,27 @@ class ThreeNodeView final : public g::GraphView {
     }
 };
 
-/// The one graph the check has: an object whose address is the identity a fact is anchored on.
+/// The check's graph: the owner's two answers a store keys and versions a fact by -- an identity
+/// that every version of one graph shares, and the revision of its content. The address is
+/// neither: a check that made the address the identity would be checking the defect the store's
+/// re-key removed.
 class CheckGraph final : public g::Graph {
   public:
-    explicit CheckGraph(const g::GraphView &view) : view_(view) {}
+    explicit CheckGraph(const g::GraphView &view, std::uint64_t identity = 1)
+        : view_(view), identity_(identity) {}
     const g::GraphView &view() const override { return view_; }
+    std::uint64_t identity() const { return identity_; }
 
   private:
     const g::GraphView &view_;
+    std::uint64_t identity_;
 };
+
+/// The identity of the graphs the check makes: the one question `GraphAccess::identity` answers.
+std::uint64_t identityOf(const g::Graph &graph) {
+    const auto *check = dynamic_cast<const CheckGraph *>(&graph);
+    return check == nullptr ? std::uint64_t{0} : check->identity();
+}
 
 /// The version of each graph's content, as the owner of the graph would report it.
 std::unordered_map<const g::Graph *, std::uint64_t> versions;
@@ -344,8 +356,9 @@ int runSelfCheck() {
     ThreeNodeView view;
     CheckGraph graph(view);
     const facts::GraphAccess access{
-        .view    = [](const g::Graph &each) { return &each.view(); },
-        .version = [](const g::Graph &each) {
+        .view     = [](const g::Graph &each) { return &each.view(); },
+        .identity = [](const g::Graph &each) { return identityOf(each); },
+        .version  = [](const g::Graph &each) {
             const auto it = versions.find(&each);
             return it == versions.end() ? std::uint64_t{0} : it->second;
         },

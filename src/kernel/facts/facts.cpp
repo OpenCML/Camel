@@ -199,12 +199,27 @@ anchorsOf(const KindInfo &kind, const graph::Graph &graph, const graph::GraphVie
     return all;
 }
 
-/// The version of each anchored graph, one per distinct graph, in anchor order.
-std::vector<std::pair<const graph::Graph *, std::uint64_t>>
-versionsOf(std::span<const Anchor> anchors, const GraphAccess &graphs) {
-    std::vector<std::pair<const graph::Graph *, std::uint64_t>> versions;
+/// The identity the store keys `graph` on, from the owner (`GraphAccess::identity`). 0 when the
+/// access states none: a store cannot invent an identity -- a pointer or a counter of its own would
+/// change when the graph is re-encoded, which is the defect the identity exists to remove -- so a
+/// graph it cannot name is a graph it cannot key, and the read says so (facts.h, `GraphAccess`).
+std::uint64_t identityOf(const GraphAccess &graphs, const graph::Graph &graph) {
+    return graphs.identity ? graphs.identity(graph) : 0;
+}
+
+/// The identity and revision of each anchored graph, one per distinct graph, in anchor order. The
+/// distinctness is the identity's: two anchors on two versions of one graph are one graph read.
+std::vector<VersionMark> versionsOf(std::span<const Anchor> anchors, const GraphAccess &graphs) {
+    std::vector<VersionMark> versions;
     for (const graph::Graph *graph : graphsOf(anchors)) {
-        versions.emplace_back(graph, graphs.version ? graphs.version(*graph) : 0);
+        const std::uint64_t identity = identityOf(graphs, *graph);
+        const auto known = std::find_if(versions.begin(), versions.end(), [&](const auto &v) {
+            return v.identity == identity;
+        });
+        if (known != versions.end()) {
+            continue;
+        }
+        versions.push_back(VersionMark{identity, graphs.version ? graphs.version(*graph) : 0});
     }
     return versions;
 }
@@ -301,11 +316,13 @@ std::string factJson(
     }
     out += "{\"versions\":[";
     for (size_t i = 0; i < stored->versions.size(); ++i) {
+        // The graph's identity, as `anchors` print it: a stamp names the graph, not the object it
+        // was read from, and the object may be gone by the time a fact is printed.
         out += std::format(
             "{}{{\"graph\":{},\"version\":{}}}",
             i ? "," : "",
-            jsonString(labelOf(stored->versions[i].first)),
-            stored->versions[i].second);
+            jsonString(std::to_string(stored->versions[i].identity)),
+            stored->versions[i].revision);
     }
     out += "],\"reads\":{\"nodes\":[";
     for (size_t i = 0; i < stored->reads.nodes.size(); ++i) {
@@ -467,8 +484,20 @@ GraphHolds &graphHolds() {
 
 GraphAccess frozenGraphs(std::function<const graph::Graph *(const graph::Graph &, NodeId)> callee) {
     return GraphAccess{
-        .view    = [](const graph::Graph &graph) { return &graph.view(); },
-        .version = [](const graph::Graph &) { return std::uint64_t(0); },
+        .view = [](const graph::Graph &graph) { return &graph.view(); },
+        .identity =
+            [](const graph::Graph &graph) {
+                return std::uint64_t(runtime::toValue(runtime::graphIdentity(graph)));
+            },
+        .version = [](const graph::Graph &graph) { return runtime::graphRevision(graph); },
+        // What a fact of a kind that reports its reads is checked against: a frozen graph versions
+        // its nodes (`GCGraph::nodeContentHash`), so a fact holds while every node it read is
+        // unchanged although the graph was re-encoded around it. A region has no such number yet,
+        // so a fact that reported reading one keeps the conservative rule (facts.h).
+        .nodeVersion =
+            [](const graph::Graph &graph, NodeId node) {
+                return runtime::graphNodeVersion(graph, static_cast<runtime::gc_node_ref_t>(node));
+            },
         // The owner's answer, when it gave one: a graph does not know its program, so the walk
         // across a call asks whoever holds the graphs (facts.h, GraphAccess::callee).
         .callee = std::move(callee),
@@ -487,9 +516,15 @@ GraphAccess frozenGraphs(std::function<const graph::Graph *(const graph::Graph &
 GraphAccess draftGraphs() {
     return GraphAccess{
         .view = [](const graph::Graph &graph) { return &graph.view(); },
+        // A draft is a graph too: its id is the identity of the version line the session is
+        // editing, and the same id survives the commits a session makes.
+        .identity =
+            [](const graph::Graph &graph) {
+                return std::uint64_t(runtime::toValue(runtime::graphIdentity(graph)));
+            },
         // The draft's revision: a fact about a draft must be dropped when an edit makes what it
-        // read different, and a frozen graph's constant 0 would keep it forever (facts.h).
-        .version = [](const graph::Graph &graph) { return runtime::graphContentVersion(graph); },
+        // read different, and a constant would keep it forever (facts.h).
+        .version = [](const graph::Graph &graph) { return runtime::graphRevision(graph); },
         // Empty, and not for want of a resolver: a draft's callee is a `GraphId` whose graph is
         // held by a `Program`, and no program holds a draft (`Program::calleeOf`).
         .callee  = {},
@@ -564,7 +599,7 @@ void forgetGraph(const graph::Graph *graph) {
 // ---- Store -----------------------------------------------------------------------------------
 
 size_t Store::KeyHash::operator()(const Key &key) const {
-    size_t seed = std::hash<const graph::Graph *>{}(key.graph);
+    size_t seed = std::hash<std::uint64_t>{}(key.graph);
     seed ^=
         std::hash<std::uint32_t>{}(key.kind) + 0x9e3779b97f4a7c15ULL + (seed << 6) + (seed >> 2);
     seed ^= std::hash<NodeId>{}(key.node) + 0x9e3779b97f4a7c15ULL + (seed << 6) + (seed >> 2);
@@ -603,7 +638,14 @@ void Store::checkType(KindId kind, const std::type_info &type) {
 Store::Entry *
 Store::find(KindId kind, std::span<const Anchor> anchors, std::uint64_t target, Status &status) {
     status      = Status::Absent;
-    auto bucket = entries_.find(Key{kind, anchors[0].graph, anchors[0].node});
+    if (anchors.empty() || anchors[0].graph == nullptr) {
+        return nullptr;
+    }
+    const std::uint64_t identity = identityOf(graphs_, *anchors[0].graph);
+    if (identity == 0) {
+        return nullptr; // no identity, so nothing can be keyed on it (facts.h, GraphAccess)
+    }
+    auto bucket = entries_.find(Key{kind, identity, anchors[0].node});
     if (bucket == entries_.end()) {
         return nullptr;
     }
@@ -680,6 +722,16 @@ void Store::putValue(
     if (!value) {
         reject(info.key, "no value");
     }
+    if (anchors.empty() || anchors[0].graph == nullptr) {
+        reject(info.key, "no anchor graph");
+    }
+    const std::uint64_t identity = identityOf(graphs_, *anchors[0].graph);
+    if (identity == 0) {
+        reject(
+            info.key,
+            "the store's owner states no identity for the anchor graph (GraphAccess::identity), "
+            "so a fact about it cannot be keyed");
+    }
     Entry entry;
     entry.anchors  = std::vector<Anchor>(anchors.begin(), anchors.end());
     entry.value    = std::move(value);
@@ -687,7 +739,7 @@ void Store::putValue(
     entry.target   = target;
     entry.epoch    = 0;
     std::lock_guard lock(mutex_);
-    auto &list = entries_[Key{kind, anchors[0].graph, anchors[0].node}];
+    auto &list = entries_[Key{kind, identity, anchors[0].node}];
     auto it    = std::find_if(list.begin(), list.end(), [&](const Entry &known) {
         return sameAnchors(known.anchors, anchors);
     });
@@ -742,6 +794,13 @@ Store::obtainValue(KindId kind, std::span<const Anchor> anchors, std::uint64_t t
     // Stored with what it reported reading: the entry's stamp holds it, and the epoch it was
     // computed at is the registry's while those reads name records.
     const std::uint64_t epoch = reads.declarations() ? ops::Registry::instance().epoch() : 0;
+    const std::uint64_t identity = identityOf(graphs_, *anchors[0].graph);
+    if (identity == 0) {
+        // An access without an owner has no identity either (facts.h, GraphAccess): this read still
+        // answers, and what it computed is not stored -- a fact that cannot be keyed cannot be
+        // found again.
+        return value;
+    }
     Entry entry;
     entry.anchors  = std::vector<Anchor>(anchors.begin(), anchors.end());
     entry.value    = value;
@@ -768,7 +827,7 @@ Store::obtainValue(KindId kind, std::span<const Anchor> anchors, std::uint64_t t
         }
     }
     std::lock_guard lock(mutex_);
-    auto &list = entries_[Key{kind, anchors[0].graph, anchors[0].node}];
+    auto &list = entries_[Key{kind, identity, anchors[0].node}];
     auto it    = std::find_if(list.begin(), list.end(), [&](const Entry &known) {
         return sameAnchors(known.anchors, anchors);
     });
@@ -823,8 +882,15 @@ std::optional<bool> Store::verify(KindId kind, std::span<const Anchor> anchors) 
 void Store::invalidate(KindId kind, std::span<const Anchor> anchors) {
     const KindInfo &info = kindInfo(kind);
     checkAnchors(info, anchors, graphs_);
+    if (anchors.empty() || anchors[0].graph == nullptr) {
+        return;
+    }
+    const std::uint64_t identity = identityOf(graphs_, *anchors[0].graph);
+    if (identity == 0) {
+        return;
+    }
     std::lock_guard lock(mutex_);
-    auto bucket = entries_.find(Key{kind, anchors[0].graph, anchors[0].node});
+    auto bucket = entries_.find(Key{kind, identity, anchors[0].node});
     if (bucket == entries_.end()) {
         return;
     }
@@ -843,9 +909,15 @@ void Store::invalidate(KindId kind, std::span<const Anchor> anchors) {
 }
 
 void Store::invalidateGraph(const graph::Graph *graph) {
+    if (graph == nullptr) {
+        return;
+    }
+    // The entries of this graph, by identity: every version of it the store answered for is one
+    // row of the map, and `graph` names that row whichever version it is.
+    const std::uint64_t identity = identityOf(graphs_, *graph);
     std::lock_guard lock(mutex_);
     for (auto it = entries_.begin(); it != entries_.end();) {
-        if (it->first.graph != graph) {
+        if (it->first.graph != identity) {
             ++it;
             continue;
         }

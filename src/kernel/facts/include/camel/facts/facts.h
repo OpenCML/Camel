@@ -161,7 +161,20 @@ struct Reads {
 struct GraphAccess {
     /// The read-only view of `graph`, or null when the graph is not one this store's owner holds.
     std::function<const graph::GraphView *(const graph::Graph &)> view;
-    /// The version of the graph's content: a stored fact is stale when it changed.
+    /// The graph's identity on its version line: the same number for every version of one graph,
+    /// and a different one for a graph a rewrite created. A fact is keyed on it, not on the graph's
+    /// address, because a fact outlives the object it was computed from: committing an edit encodes
+    /// a *new* graph of the same identity, and the facts about the version before it are still
+    /// about this graph (architecture, core abstractions 1: a node's number is stable on one
+    /// version line). The owner states it (`GCGraph::id`, `GraphDraft::id`, through
+    /// `runtime::graphIdentity`); an access that has no owner has no identity either, and a store
+    /// cannot invent one -- a pointer or a counter of its own would be an identity that changes
+    /// when the graph is re-encoded, which is the defect this hook exists to remove.
+    std::function<std::uint64_t(const graph::Graph &)> identity;
+    /// The version of the graph's content (`runtime::graphRevision`): a stored fact is stale when
+    /// the revision of a graph it read moved. Equal revisions of one identity mean equal content
+    /// (`GCGraph::revision`), so this is the number a fact is stamped with and not the graph's
+    /// address.
     std::function<std::uint64_t(const graph::Graph &)> version;
     /// The version of node `NodeId`'s own content, as the owner states it: the hash of the node's
     /// record, of the nodes it consumes and of its payload (`GCGraph::nodeContentHash`). It is what
@@ -420,14 +433,26 @@ struct Counts {
     size_t puts = 0, hits = 0, misses = 0, stale = 0, revalidated = 0, computed = 0;
 };
 
+/// One graph a fact read, as the stamp carries it: the graph's identity on its version line and the
+/// revision of its content at the time. The identity and not the address, because a fact outlives
+/// the object: a commit encodes another version of the same identity, and the stamp has to compare
+/// against *that* graph when the fact is asked about again. A stamp holding the address of a graph
+/// that has ended would name a dead object, which is the defect the re-key removes.
+struct VersionMark {
+    std::uint64_t identity = 0;
+    std::uint64_t revision = 0;
+
+    bool operator==(const VersionMark &) const = default;
+};
+
 /// One stored fact, as forEach shows it.
 struct StoredFact {
     KindId kind = kNoKind;
     /// The anchors the fact is about.
     std::vector<Anchor> anchors;
     std::shared_ptr<const void> value;
-    /// The version of each anchored graph's content, and what the computation reported.
-    std::vector<std::pair<const graph::Graph *, std::uint64_t>> versions;
+    /// The identity and revision of each graph the fact read, and what the computation reported.
+    std::vector<VersionMark> versions;
     Reads reads;
     std::uint64_t epoch  = 0;
     std::uint64_t target = 0;
@@ -531,7 +556,7 @@ class Store {
     struct Entry {
         std::vector<Anchor> anchors;
         std::shared_ptr<const void> value;
-        std::vector<std::pair<const graph::Graph *, std::uint64_t>> versions;
+        std::vector<VersionMark> versions;
         Reads reads;
         std::uint64_t epoch  = 0;
         std::uint64_t target = 0;
@@ -545,9 +570,14 @@ class Store {
         /// read out would call a fact valid on evidence that is not the whole of what it read.
         bool readsCovered = false;
     };
+    /// A fact is keyed on the graph's *identity*, not on the graph object: committing an edit ends
+    /// the object and encodes another version of the same graph, and the facts about the version
+    /// before the commit are still about this graph (architecture, core abstractions 1). The
+    /// identity comes from the owner (`GraphAccess::identity`); a store that has none cannot key a
+    /// fact and says so rather than inventing one.
     struct Key {
         KindId kind;
-        const graph::Graph *graph;
+        std::uint64_t graph;
         NodeId node;
 
         bool operator==(const Key &) const = default;
@@ -580,9 +610,12 @@ void computeAll(
 
 /**
  * The access a store of a context reads its graphs through: the frozen adapter the graph answers
- * `view()` with, and the constant version 0. A frozen graph's content never changes, so a fact
- * about one cannot be stale for a content reason; what ends it is the graph's lifetime, which is
- * `forgetGraph`.
+ * `view()` with, the graph's identity on its version line (`runtime::graphIdentity`, `GCGraph::id`)
+ * and the revision of its content (`runtime::graphRevision`, `GCGraph::revision`). The address of
+ * the graph object is neither: committing an edit ends the object and encodes another of the same
+ * identity, and a fact about the version before the commit is a fact about this graph -- it is
+ * revalidated rather than dropped when what it read did not change (facts.h,
+ * `Status::Revalidated`).
  *
  * `callee` is the owner's answer to "which graph does this call reach", by identity. The context
  * passes its runtime graph manager's (`Context::programOfRuntimeGraph` + `Program::calleeOf`);
@@ -597,15 +630,18 @@ GraphAccess frozenGraphs(std::function<const graph::Graph *(const graph::Graph &
  * names (`camel/graph/graph.h`). It differs from `frozenGraphs` in the one place the two
  * representations differ for a fact:
  *
- *   - `version` is the draft's revision (`runtime::graphContentVersion`), not the constant 0 a
- *     frozen graph answers: a draft's content changes, so a stored fact about it must be dropped
- *     when an edit makes what it read different. A store that answered 0 here would keep an answer
- *     about a graph that has changed, which is the one failure a stamp exists to prevent.
+ *   - `identity` is the draft's `GraphId` and `version` its revision (`runtime::graphIdentity`,
+ *     `runtime::graphRevision`), not a constant: a draft's content changes with every edit, so a
+ *     stored fact about it must be dropped when an edit makes what it read different, while the
+ *     facts about the version before the edit are still facts about this graph (see the identity
+ *     hook above -- the same identity line every version of a graph lives on). A store that
+ *     answered 0 here would keep an answer about a graph that has changed, which is the one failure
+ *     a stamp exists to prevent.
  *   - `callee` is empty. A draft names its callee by `GraphId` (`GraphDraft::calleeIdOf`), but the
- *     graph that number names is held by a `Program` and a draft being built has none -- the program
- *     answers "no program holds it" for a draft (`Program::calleeOf`), and a draft that decoded a
- *     graph still does not make the draft itself the program's. So a computation that walks across
- *     a call reports that it cannot, rather than answering that the call reaches nothing
+ *     graph that number names is held by a `Program` and a draft being built has none -- the
+ * program answers "no program holds it" for a draft (`Program::calleeOf`), and a draft that decoded
+ * a graph still does not make the draft itself the program's. So a computation that walks across a
+ * call reports that it cannot, rather than answering that the call reaches nothing
  *     (`core.arrangeable` declines for a `Call` and a `Func` for the same reason, and not only this
  *     one).
  *   - the slots are the same writes frozenGraphs makes, and they land nowhere: a draft keeps none
