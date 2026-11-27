@@ -319,6 +319,9 @@ class Builder {
     /// front of the body's statements, so both kinds are one lowering; the block's value is the
     /// last statement's, and the binding is the value the head names.
     node_ptr_t visitBlockHeaded(const AST::node_ptr_t &ast);
+    /// The root a block's body reads its head's name by: the call of the operator the block's kind
+    /// opens a root with, made here because the operator is the compiler's and not a program name.
+    node_ptr_t visitBlockRoot(const AST::node_ptr_t &ast);
     /// The body of a function that writes `yield` of its own (design principles 5.4, language
     /// reference 7.3.1): the machine that hands out a stream. Its `var`s are cells of the
     /// function's own body, so every pull reads the same cells; `step` runs the body from the
