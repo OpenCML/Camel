@@ -1026,11 +1026,11 @@ bool parseArgs(int argc, char *argv[]) {
         }
     }
 
-    if (word != nullptr && word == kSubcommands[0].name) {
+    if (word != nullptr && std::string_view(word) == kSubcommands[0].name) {
         showDocs = true;
-    } else if (word != nullptr && word == kSubcommands[1].name) {
+    } else if (word != nullptr && std::string_view(word) == kSubcommands[1].name) {
         showAbout = true;
-    } else if (word != nullptr && word == kSubcommands[2].name) {
+    } else if (word != nullptr && std::string_view(word) == kSubcommands[2].name) {
         showZen = true;
     }
 
@@ -1052,16 +1052,16 @@ bool parseArgs(int argc, char *argv[]) {
     // own settings, and a line without a word is a run's.
     const parsing_result parsed = [&]() -> parsing_result {
         if (word != nullptr) {
-            if (word == kSubcommands[0].name) {
+            if (std::string_view(word) == kSubcommands[0].name) {
                 return parse(argc, argv, docsCommand | infoFlags);
             }
-            if (word == kSubcommands[1].name) {
+            if (std::string_view(word) == kSubcommands[1].name) {
                 return parse(argc, argv, infoFlags); // bout takes no argument of its own
             }
-            if (word == kSubcommands[2].name) {
+            if (std::string_view(word) == kSubcommands[2].name) {
                 return parse(argc, argv, infoFlags); // zen takes no argument of its own
             }
-            if (word == kSubcommands[3].name) {
+            if (std::string_view(word) == kSubcommands[3].name) {
                 // The name is the argument the word introduced, so it is read here and the parser
                 // is left with the flags: a diagnostic name is never a setting of the parser.
                 if (argc > 1) {
@@ -1069,7 +1069,7 @@ bool parseArgs(int argc, char *argv[]) {
                 }
                 return parse(1, argv, infoFlags);
             }
-            if (word == kSubcommands[4].name) {
+            if (std::string_view(word) == kSubcommands[4].name) {
                 return parse(argc, argv, check);
             }
             return parse(argc, argv, inspect);
