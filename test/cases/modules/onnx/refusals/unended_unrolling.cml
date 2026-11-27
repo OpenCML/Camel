@@ -12,7 +12,7 @@
  * this program as the record of that change.
  */
 
-import { model, save } from onnx
+import { model as onnx_model, save } from onnx
 import { reshape, sum, tanh } from tensor
 
 type P = { w: f32[...] }
@@ -31,7 +31,7 @@ func mk() => P {
     return { w: weights() }
 }
 
-func model(x: f32[...]) => f32[...] {
+func net(x: f32[...]) => f32[...] {
     let m = mk()
     return walk<m>(x, 0)
 }
@@ -39,5 +39,5 @@ func model(x: f32[...]) => f32[...] {
 func main() => void! sync {
     let xs: f32[] = [1.0, 2.0, 3.0, 4.0]
     let x = reshape<[2, 2]>(xs)
-    return model(model, x)->save<out: 'tmp/test/onnx/refusal_unended_unrolling.onnx'>
+    return onnx_model(net, x)->save<out: 'tmp/test/onnx/refusal_unended_unrolling.onnx'>
 }
