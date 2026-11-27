@@ -3,3 +3,8 @@
 func count_muls::<F>(f: F) => int when is_function::<F>() {
     return view d = f { len(nodes(d)->filter<is_mul>) }
 }
+
+// The page assumes the reader has these; their bodies are not what the example is about.
+func is_mul(n: Node) => bool {
+    return false
+}

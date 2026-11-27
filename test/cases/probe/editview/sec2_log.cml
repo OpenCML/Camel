@@ -1,8 +1,8 @@
 // Design `docs/design/graph-editing/README.cn.md` section 2, example 2, verbatim.
 // 加了效应时，块头写出新的函数类型
-export func log_result(f: (x: float) => float) => ((x: float) => float uses console)! {
+export func log_result(f: (x: float) => float) => ((x: float) => float uses var console)! {
     return edit d = f {             // 结果类型取自函数的返回类型
-        let out = exit_of(d)
+        let out = exit(d)
         let w = inline(out, func (y: float) sync { println(`result = ${y}`); y }, out)
         replace(out, w)
     }

@@ -5,3 +5,8 @@ export func fold_zero_adds::<F>(f: F) => F! when is_function::<F>() {
         nodes(d)->filter<is_add_zero>->foreach<func (n: Node) { replace(n, inputs(n)[0]) }>
     }
 }
+
+// The page assumes the reader has these; their bodies are not what the example is about.
+func is_add_zero(n: Node) => bool {
+    return false
+}
