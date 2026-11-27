@@ -527,6 +527,11 @@ ff9eee9cbc6a4008 ok src/stdlib/math.cml
 4bd3189fe34a101a ok src/stdlib/nn.cml
 2f99ae94bcec8605 ok src/stdlib/onnx.cml
 ab449b7d874527d9 ok src/stdlib/opt.cml
+||||||| e6639c4f6b (Merge seat/golden3: the AST record follows the onnx batch - eleven rows, six moved, one added, four gone)
+7894f59b36eee8c4 ok src/stdlib/onnx.cml
+93780c4e22a23893 ok src/stdlib/opt.cml
+109cb1c3af0c4f8a ok src/stdlib/onnx.cml
+93780c4e22a23893 ok src/stdlib/opt.cml
 49015cbc4407a506 ok src/stdlib/optim.cml
 cfd1905583789732 ok src/stdlib/para.cml
 a82098797df46210 ok src/stdlib/perf.cml
@@ -3334,7 +3339,6 @@ e0ef0ceec825900b ok test/cases/modules/nn/siamese_shared_encoder.cml
 2c60c907acff7887 ok test/cases/modules/nn/tiny_cnn.cml
 0923605f63cc6bd1 ok test/cases/modules/nn/tiny_rnn.cml
 566cefbb789c3bb8 ok test/cases/modules/nn/with_context_step_demo.cml
-230b49ee1e010e20 ok test/cases/modules/onnx/dynamic_axes.cml
 66a0943e9bad5560 ok test/cases/modules/onnx/export_branch.cml
 244bcaeda395c486 ok test/cases/modules/onnx/export_canonical_kernel.cml
 8604e275ad4d7e59 ok test/cases/modules/onnx/export_capability.cml
@@ -3388,7 +3392,7 @@ fb979532342617f0 ok test/cases/modules/onnx/export_train_step_frozen.cml
 80bcae8cae23cb3f ok test/cases/modules/onnx/export_train_step_vjp.cml
 ef14ff4c74269f5c ok test/cases/modules/onnx/export_tree_recursion.cml
 577f404b27129672 ok test/cases/modules/onnx/export_unclassified.cml
-6f6015eebbdd68fb ok test/cases/modules/onnx/export_unsupported.cml
+5b458d46ca6b876d ok test/cases/modules/onnx/export_unsupported.cml
 a9c32d4387b89062 ok test/cases/modules/onnx/export_var_append.cml
 32f3fe7948eefd61 ok test/cases/modules/onnx/export_var_compound.cml
 3e61802e3e427386 ok test/cases/modules/onnx/export_var_local.cml
@@ -3434,17 +3438,20 @@ fd769b1a2b6f9912 ok test/cases/modules/onnx/loop_collect/for_collect_static.cml
 de83b3de99a9fd4d ok test/cases/modules/onnx/refusals/as_constant_fails.cml
 17990328fb0cf2c6 ok test/cases/modules/onnx/refusals/as_unproven.cml
 02cc8236160fb56e ok test/cases/modules/onnx/refusals/bad_arity.cml
-2b1c27d5fa354ec0 ok test/cases/modules/onnx/refusals/bad_axis.cml
-d98318492f3c66fc ok test/cases/modules/onnx/refusals/bad_output.cml
-246351da207a3d34 ok test/cases/modules/onnx/refusals/bad_path.cml
-e55fa306a33611be ok test/cases/modules/onnx/refusals/bad_target.cml
+3f93737e41e04f6e ok test/cases/modules/onnx/refusals/bad_axis.cml
+2f3a0251b74c4222 ok test/cases/modules/onnx/refusals/bad_output.cml
+5ea99b442f00b9ca ok test/cases/modules/onnx/refusals/bad_path.cml
+367a64a453f47e82 ok test/cases/modules/onnx/refusals/bad_target.cml
 d2b5b8016a1bdc6a ok test/cases/modules/onnx/refusals/compute_nodes_two_shapes.cml
 bd6ff4acbe6c9714 ok test/cases/modules/onnx/refusals/example_mismatch.cml
 cbf1f11aebb3ba1b ok test/cases/modules/onnx/refusals/function_branch.cml
 df0ef0a1130d8c9d ok test/cases/modules/onnx/refusals/growth_budget.cml
 c939b04ce72381d9 ok test/cases/modules/onnx/refusals/main_reaches_loop.cml
-4fc4a1a589a51bb9 ok test/cases/modules/onnx/refusals/no_out.cml
+6c0a9a40ac080209 ok test/cases/modules/onnx/refusals/no_request.cml
+fe50e42de877f183 ok test/cases/modules/onnx/refusals/request_in_arm.cml
+a247eaee3491ab3f ok test/cases/modules/onnx/refusals/request_in_arm_and_target.cml
 e29c7b134a9ccf37 ok test/cases/modules/onnx/refusals/tuple_example.cml
+a9e1b02678072dfd ok test/cases/modules/onnx/refusals/two_calls.cml
 a32ffbeca062646d ok test/cases/modules/onnx/refusals/unended_unrolling.cml
 92a459e0c795da7a ok test/cases/modules/onnx/refusals/var_arm.cml
 b7f123dfdaee8ef4 ok test/cases/modules/onnx/refusals/var_outer.cml
@@ -3452,6 +3459,7 @@ f5172da767d096fc ok test/cases/modules/onnx/refusals/var_param.cml
 2f6bcede98d28643 ok test/cases/modules/onnx/with_forms/all_defaults.cml
 b8215af40abfa3c3 ok test/cases/modules/onnx/with_forms/only_target.cml
 561c059176dbe9fd ok test/cases/modules/onnx/with_forms/with_dynamic_axes.cml
+||||||| e6639c4f6b (Merge seat/golden3: the AST record follows the onnx batch - eleven rows, six moved, one added, four gone)
 1f49552b5adfd209 ok test/cases/modules/optim/agreement.cml
 9a03c38846aedd82 ok test/cases/modules/optim/derived_typeof.cml
 927412d31ff00040 ok test/cases/modules/optim/dtype_exact.cml
