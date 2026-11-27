@@ -1449,6 +1449,12 @@ class Engine {
     ~Engine() { currentSource = outerSource_; }
 
     GCGraph *gradient(GCGraph *function, bool withValue, bool hasAux);
+
+    /// The origin of the call being differentiated, recorded so that the pullback reserved for it
+    /// can name a position: a pullback's nodes are made here rather than parsed, so none of them
+    /// carries an origin of its own, and the call is the one place a refusal inside the graph can
+    /// point at.
+    void noteCallOrigin(camel::source::origin_id_t origin) { callOrigin_ = origin; }
     const camel::core::context::context_ptr_t &context() const { return context_; }
 
     /// The session the inlining helpers of the runtime layer work in. Nothing is committed
@@ -1583,6 +1589,21 @@ class Engine {
     bool implBodiesBuilt_     = false;
     bool implKernelUrisBuilt_ = false;
     camel::source::source_context_ptr_t outerSource_;
+    /// The origin the pullback reserved for the call the reverse pass is at is reported at, and
+    /// the fallback for a reserve made outside a call (see noteCallOrigin).
+    camel::source::origin_id_t callOrigin_ = camel::source::kInvalidOriginId;
+    camel::source::origin_id_t reportOrigin() const {
+        if (callOrigin_ != camel::source::kInvalidOriginId) {
+            return callOrigin_;
+        }
+        return currentSource ? currentSource->currentRuntimeOrigin()
+                             : camel::source::kInvalidOriginId;
+    }
+    /// The origin each reserved pullback is reported at: the node that was running when the
+    /// pullback was reserved -- the call that asked for the derivative. A pullback's nodes are
+    /// made here rather than parsed, so none of them carries an origin of its own, and this is the
+    /// one place a refusal inside the graph can point at.
+    std::vector<std::pair<rt::GraphId, camel::source::origin_id_t>> pullbackOrigins_;
 };
 
 // ---------------------------------------------------------------- forward rewrite impl
@@ -3102,6 +3123,7 @@ void ForwardRewrite::rewriteCall(gc_node_ref_t call) {
                 inputs.size(),
                 portTypes.size()));
     }
+    engine_.noteCallOrigin(static_cast<camel::source::origin_id_t>(draft().nodeOrigin(call)));
     const PullbackPlan &plan = engine_.planFor(callee);
     const size_t versions    = retarget(call, plan);
     split(call, plan, std::move(inputs), versions);
@@ -4699,6 +4721,7 @@ PullbackPlan Engine::reserve(const std::string &name, const PullbackPlan &types)
     const auto suffix = uniqueSuffix();
     plan.forward      = group_.reserve("autodiff.fwd/" + name + suffix, name + ".fwd");
     plan.pullback     = group_.reserve("autodiff.pb/" + name + suffix, name + ".pb");
+    pullbackOrigins_.emplace_back(plan.pullback, reportOrigin());
     return plan;
 }
 
@@ -4706,6 +4729,7 @@ PullbackPlan Engine::reservePullback(const std::string &name, const PullbackPlan
     PullbackPlan plan = types;
     const auto suffix = uniqueSuffix();
     plan.pullback     = group_.reserve("autodiff.pb/" + name + suffix, name + ".pb");
+    pullbackOrigins_.emplace_back(plan.pullback, reportOrigin());
     return plan;
 }
 
@@ -5354,6 +5378,19 @@ GCGraph *Engine::gradient(GCGraph *function, bool withValue, bool hasAux) {
     // The graphs the inlining made on the way are called by members of the group.
     group_.adopt(inlining_.work());
     group_.encode();
+    // A pullback's nodes are made here, so none of them names a position; the graph does name one
+    // (the call that asked for the derivative), and a refusal raised inside the graph is reported
+    // there rather than at `?:?`.
+    if (currentSource) {
+        for (const auto &[id, origin] : pullbackOrigins_) {
+            if (origin == camel::source::kInvalidOriginId) {
+                continue;
+            }
+            if (GCGraph *graph = group_.encoded(id)) {
+                currentSource->debugMap().registerGraphOrigin(graph->id(), origin);
+            }
+        }
+    }
     return group_.encoded(key);
 }
 
