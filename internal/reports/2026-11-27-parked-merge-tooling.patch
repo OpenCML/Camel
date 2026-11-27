@@ -1,0 +1,168 @@
+diff --git a/internal/tools/merge-lane-push.test.ps1 b/internal/tools/merge-lane-push.test.ps1
+index 9416b564db..22f5946b9a 100644
+--- a/internal/tools/merge-lane-push.test.ps1
++++ b/internal/tools/merge-lane-push.test.ps1
+@@ -176,7 +176,8 @@ $wanted = @(
+     'Test-PushRejection',
+     'Get-PlansForChangedFiles',
+     'Invoke-PlansOnTree',
+-    'Invoke-PushWithRecovery'
++    'Invoke-PushWithRecovery',
++    'Format-PushFailure'
+ )
+ foreach ($name in $wanted) {
+     $found = @($ast.FindAll({
+@@ -195,6 +196,20 @@ $docs = Split-ChangeByPath -Paths @('internal/backlog.md', 'internal/plans/2026-
+ Check 'the backlog, the plans, the reports and the questions are documentation' ($docs.DocsOnly -and $docs.Documentation.Count -eq 4) (($docs.Code -join ', '))
+ Check 'and nothing in that list is called code' ($docs.Code.Count -eq 0) ($docs.Code -join ', ')
+ 
++# --- 0. a remote that does not answer is not a failed push --------------------
++# The line was "git push failed after 0 attempt(s)": the shape check reads origin first, so an
++# unreachable remote never reaches the retry loop, and the reader is sent looking for a broken loop
++# while the network is down. Three numbers now, and the zero denominator says what it is.
++$unreachablePush = @{ Kind = 'unreachable'; Tries = 0; Skipped = 3; Sha = 'not-a-sha' }
++$unreachableText = Format-PushFailure -Push $unreachablePush -Target develop
++Check 'a remote that does not answer says no push was attempted, in those words' `
++    ($unreachableText.Why -match 'could not reach origin' -and $unreachableText.Why -match 'attempted 0, failed 0, skipped 3') $unreachableText.Why
++Check 'and it does not say "0 attempt(s)", which reads as a broken loop' (-not ($unreachableText.Why -match '0 attempt\(s\)')) $unreachableText.Why
++Check 'and the detail names the network rather than the shape' ($unreachableText.How -match 'not a refusal and not a bad shape') $unreachableText.How
++
++$refusedPush = @{ Kind = 'failed'; Tries = 2; Sha = 'not-a-sha' }
++$refusedText = Format-PushFailure -Push $refusedPush -Target develop
++Check 'a push that did run counts attempted, failed and skipped apart' ($refusedText.Why -match 'attempted 2, failed 2, skipped 1') $refusedText.Why
+ $tool = Split-ChangeByPath -Paths @('internal/tools/merge-lane.ps1')
+ Check 'a file under internal/ that a plan reads is NOT documentation' (-not $tool.DocsOnly) (($tool.Documentation -join ', '))
+ Check 'and it is named as code rather than dropped' (($tool.Code -join ',') -eq 'internal/tools/merge-lane.ps1') ($tool.Code -join ',')
+@@ -377,6 +392,19 @@ Check 'and the stop names the paths that landed' (($linesD -join "`n") -match 'i
+ Check 'and says no rule names them' (($linesD -join "`n") -match 'none of them is named by a rule') ($linesD -join "`n")
+ Check 'nothing was pushed' ((Get-OriginTip -Origin $d.Origin) -eq $landedD) (Get-OriginTip -Origin $d.Origin)
+ 
++# --- 5. a real git, a real unreachable remote --------------------------------
++# Sections above read the sentence this run prints; this one makes git fail for real. `origin` is
++# pointed at a closed port, so the fetch inside the shape check fails the way the network failed on
++# this seat at 00:20 -- and the run has to say "nothing was attempted" rather than "0 attempt(s)".
++$e = New-Scenario -Name 'unreachable'
++& git -C $e.Work remote set-url origin 'ssh://git@127.0.0.1:1/nothing-here.git' 2>&1 | Out-Null
++$pushE = Invoke-PushWithRecovery -Tree $e.Work -Target develop -ReRun { @{ Exit = 0; Targets = @(); Rows = 0; Reds = 0; Text = '' } }
++Check 'an origin that cannot be reached is not a failed push' ($pushE.Kind -eq 'unreachable') "kind=$($pushE.Kind)"
++Check 'and it reports zero attempted, zero failed, three skipped' ([int]$pushE.Tries -eq 0 -and [int]$pushE.Skipped -eq 3) "tries=$($pushE.Tries) skipped=$($pushE.Skipped)"
++$unreachableReal = Format-PushFailure -Push $pushE -Target develop
++Check 'and the line a reader sees is the one that says nothing was attempted' `
++    ($unreachableReal.Why -eq 'could not reach origin, so no push was attempted (attempted 0, failed 0, skipped 3)') $unreachableReal.Why
++Check 'and nothing arrived at origin' ((Get-OriginTip -Origin $e.Origin) -eq $e.Base) (Get-OriginTip -Origin $e.Origin)
+ # --- result ------------------------------------------------------------------
+ Write-Host ''
+ if (-not $Keep) { Remove-Item -Recurse -Force $scratch -ErrorAction SilentlyContinue }
+diff --git a/internal/tools/merge-lane-resolved.test.ps1 b/internal/tools/merge-lane-resolved.test.ps1
+index dfc2519df0..628dfeebbe 100644
+--- a/internal/tools/merge-lane-resolved.test.ps1
++++ b/internal/tools/merge-lane-resolved.test.ps1
+@@ -137,9 +137,17 @@ Invoke-RepoGit 'push -q origin elsewhere:integration' | Out-Null
+ Invoke-RepoGit "checkout -q -B oldtip $origin" | Out-Null
+ Invoke-RepoGit 'merge --no-ff -q lane/x -m merge-lane-on-an-old-tip' | Out-Null
+ $staleTip = Invoke-RepoGit 'rev-parse HEAD'
++$script:firstParentShort = $staleTip.Substring(0, 9)
++$script:originShort = $origin.Substring(0, 9)
+ $mergedIn = Run-MergeLane -MergeCommit $staleTip
+ Check 'a merge made on an older origin tip is refused' ($mergedIn.Exit -ne 0) "exit $($mergedIn.Exit)"
+-Check 'and the refusal says integration was merged into the seat, not the lane into integration' ($mergedIn.Text -match 'merging integration into the seat') $mergedIn.Text
++# The refusal used to name one cause -- "you are merging integration into the seat" -- and that was
++# the wrong one both times this seat met it: the tip had moved while the merge was being made. The
++# two causes are now numbered and the two shas are printed, so the check is about the readings and
++# not about a sentence: the first parent, the tip, and the gap between them.
++Check 'and the refusal prints the first parent and the tip, not just a cause' (($script:firstParentShort.Length -eq 9) -and ($script:originShort.Length -eq 9) -and ($mergedIn.Text -match [regex]::Escape($script:firstParentShort)) -and ($mergedIn.Text -match [regex]::Escape($script:originShort))) $mergedIn.Text
++Check 'and it names the tip moving as the first cause' ($mergedIn.Text -match 'The tip moved while this merge was being made') $mergedIn.Text
++Check 'and it does not tell a reader who did not merge integration into the seat that they did' ($mergedIn.Text -notmatch '^.*You are merging integration into the seat') $mergedIn.Text
+ if (-not $Keep) { Remove-Item -LiteralPath $script:root -Recurse -Force -ErrorAction SilentlyContinue }
+ 
+ Write-Host ''
+diff --git a/internal/tools/merge-lane.ps1 b/internal/tools/merge-lane.ps1
+index 7ff1f8abca..546a0eb287 100644
+--- a/internal/tools/merge-lane.ps1
++++ b/internal/tools/merge-lane.ps1
+@@ -410,6 +410,31 @@ function Stop-With {
+     exit 1
+ }
+ 
++# The words a failed push ends in. It is a function because the sentence is a reading, not a
++# decoration: "git push failed after 0 attempt(s)" was printed while the network was down, and it
++# sent this seat looking for a broken retry loop. The three numbers are what a reader acts on --
++# attempted, failed, and skipped because nothing could be sent -- and a zero denominator now says
++# "nothing was attempted" in those words.
++function Format-PushFailure {
++    param([hashtable] $Push, [string] $Target)
++    switch ($Push.Kind) {
++        'unreachable' {
++            return @{
++                Why = "could not reach origin, so no push was attempted (attempted 0, failed 0, skipped $(if ($Push.ContainsKey('Skipped')) { $Push.Skipped } else { 3 }))"
++                How = "The shape check reads origin before anything is pushed, and origin did not answer: this is a network or a remote that is down, not a refusal and not a bad shape. Nothing was sent, so there is nothing to retry. The merge is committed locally and not on origin/$Target."
++            }
++        }
++        default {
++            $attempted = [int]$Push.Tries
++            $skipped = if ($attempted -lt 3) { 3 - $attempted } else { 0 }
++            return @{
++                Why = "the push failed (attempted $attempted, failed $attempted, skipped $skipped)"
++                How = "The merge is committed locally and not on origin/$Target. The push output is above."
++            }
++        }
++    }
++}
++
+ # --- which checkout measures a baseline, and under what name -----------------
+ #
+ # A baseline is "what the plans read on THIS commit". Its identity is therefore the commit and the
+@@ -735,9 +760,14 @@ function Invoke-PushWithRecovery {
+     if ($shape.Kind -eq 'single parent' -or $shape.Kind -eq 'fetch failed' -or $shape.Kind -eq 'no tip') {
+         return @{
+             Ok = $false
+-            Kind = $(if ($shape.Kind -eq 'single parent') { 'not a merge' } else { 'failed' })
++            # 'unreachable' is not 'failed': nothing was attempted, and the difference is what the
++            # reader acts on. 'failed' with zero attempts says "the loop is broken"; this says "the
++            # remote did not answer". The line was "git push failed after 0 attempt(s)", which sent
++            # this seat looking for a bug in the retry loop while the network was down.
++            Kind = $(if ($shape.Kind -eq 'single parent') { 'not a merge' } else { 'unreachable' })
+             Recovered = $false; Sha = (& $head)
+             Targets = @(); Rows = 0; Reds = 0; Shas = @($shape.FirstParent, $shape.Tip); Tries = 0
++            Skipped = 3
+             Lines = @($shape.Message)
+         }
+     }
+@@ -1202,7 +1232,18 @@ try {
+             & git merge-base --is-ancestor $mcFirst $originTarget 2>$null
+             $integratedTheOtherWay = ($LASTEXITCODE -eq 0)
+             if ($integratedTheOtherWay) {
+-                Stop-With "-MergeCommit $($mc.Substring(0, 9)) has $($mcFirst.Substring(0, 9)) as its first parent, and that is an older origin/$Target, not the tip $($originTarget.Substring(0, 9))" "You are merging integration into the seat, and then merging the lane on top of that: the push would not be a fast-forward, and on the first-parent chain integration's own commits would read as arrivals from a lane. Redo the merge on the current tip -- git checkout -B tmp origin/$Target, then git merge --no-ff $Branch with 'git config rerere.enabled true' replaying the resolution you already made -- and pass that commit. Nothing was measured and nothing was pushed." 2
++                # Two causes look the same from here, and the readings below are what tells them
++                # apart. `--is-ancestor` true means the first parent is on origin's own line, which
++                # is the tip moving under the seat; a seat that merged the target into itself has a
++                # first-parent commit origin never had, and `--is-ancestor` is false for it (that
++                # case falls through to the message below, which says so).
++                #
++                # This seat met the first cause twice in one night and was told the second one both
++                # times: the sentence named a mistake the reader had not made, and the two shas that
++                # would have shown it were not printed.
++                $chainGap = @(& git rev-list --count "$mcFirst..$originTarget" 2>$null)
++                $gap = if ($chainGap.Count -gt 0 -and "$($chainGap[0])".Trim() -match '^\d+$') { [int]"$($chainGap[0])".Trim() } else { $null }
++                Stop-With "-MergeCommit $($mc.Substring(0, 9)) has $($mcFirst.Substring(0, 9)) as its first parent, and origin/$Target has moved since: the tip is $($originTarget.Substring(0, 9)), $($(if ($null -ne $gap) { "$gap" } else { 'some' })) commit(s) further on" "Read the two shas above before the causes: first parent $($mcFirst.Substring(0, 9)), origin/$Target now $($originTarget.Substring(0, 9)). (1) The tip moved while this merge was being made -- the common case, and the one the gap counts: redo on the current tip with git checkout -B tmp origin/$Target, then git merge --no-ff $Branch, with 'git config rerere.enabled true' replaying the resolution already made, and pass that commit. (2) The seat merged origin/$Target into itself before merging the lane -- then the first parent is a commit origin never had and would not be an ancestor of the tip at all, so it is not this reading (that case is refused one branch below by name). Nothing was measured and nothing was pushed." 2
+             }
+             Stop-With "-MergeCommit $($mc.Substring(0, 9)) has $($mcFirst.Substring(0, 9)) as its first parent, not origin/$Target $($originTarget.Substring(0, 9))" "Its first parent is the tip the merge lands on, and the push is a fast-forward only from origin/$Target. Merge the lane from a checkout whose HEAD is origin/$Target and pass that commit; nothing was measured and nothing was pushed." 2
+         }
+@@ -2095,10 +2136,15 @@ $transcript = Join-Path ([System.IO.Path]::GetTempPath()) ("camel-merge-rows-$PI
+                     'Nothing arrived to re-land, so this refusal is not a non-fast-forward race and this run does not recover from it. The push output is above; the merge is committed locally and not on origin.' $push.Sha
+             }
+             'fetch failed' {
+-                Stop-With 'git fetch failed after the push was refused' 'What landed cannot be read, so nothing was re-landed and nothing was pushed.' $push.Sha
++                Stop-With 'could not reach origin after the push was refused' 'What landed cannot be read, so nothing was re-landed and nothing was pushed. No attempt of the recovery was made: the remote did not answer.' $push.Sha
++            }
++            'unreachable' {
++                $failed = Format-PushFailure -Push $push -Target $Target
++                Stop-With $failed.Why $failed.How $push.Sha
+             }
+             default {
+-                Stop-With "git push failed after $($push.Tries) attempt(s)" "The merge is committed locally and not on origin/$Target." $push.Sha
++                $failed = Format-PushFailure -Push $push -Target $Target
++                Stop-With $failed.Why $failed.How $push.Sha
+             }
+         }
+     }
