@@ -11,7 +11,7 @@
 | 类型 | 是什么 | 实现 |
 | --- | --- | --- |
 | `Graph`、`Node<T>`、`Op`、`TypeRef`、`Region`、`Tag` | 命名某个函数的图里的东西 | 一个被追踪的 `Handle` 对象（`lib/graph/handle.h`）：种类、所属的 `Program`、`GraphId`、序号、`Type*` |
-| `Txn<F>` | 在函数 `f: F` 上开的事务 | 句柄资源类型：外部资源对象持有一个草稿会话；`commit(t)` 给出同类型的 `F!`。因为是资源，改写它的算子写 `uses t` |
+| 草稿 | `open(f)` 交出的、编辑落在其上的图 | 与 `Graph` 同一个类型，不另立句柄类型（`Handle::createDraft`）：外部资源对象持有草稿会话，`commit(d)` 给出同类型的 `F!`；草稿不作为参数，编辑经从它读出的句柄命名节点（`src/stdlib/graph/txn.cpp`） |
 | `Value` | 值；目前与 `Node` 同一个类型 | `Node` 的另一个名字 |
 | `NodeKind` | `Data, Port, Fill, Accs, Brch, Join, Call, Func, Oper, Gate, Loop` | Camel 的 `enum`（`nodekind.cpp` = `src/stdlib/graph/nodekind.cpp`）；`nodeKindTag` 对 `GCNodeKind` 做穷尽的 `switch`，图模型新增一种节点时这里编译不过，直到它被放进枚举或明确排除（`Bind`、`Dref`、`Dead` 不是程序里看得见的节点）。`Cast`、`Copy`、`Sync` 不在这张表里，也不是节点种类：转换与拷贝是 `:op/cast` / `:op/copy` 的调用，`kind` 对它们答 `Oper`，`op_name` 给出是哪一种；`sync` 块的次序由同步边表达 |
 | `RegionKind` | `Root, Arm, LoopCond, LoopBody, Inline, Block, Dead` | Camel 的 `enum`（`regionkind.cpp`），与 `GCRegionKind` 一一对应；新增一种区域时 `regionKindTag` 编译不过 |
@@ -34,18 +34,24 @@
 
 ## 事务
 
-`open(f)` 在函数 `f` 上开一个 `Txn<F>`：一个 `RuntimeGraphDraftSession` 由一个外部资源对象持有，会话在提交或放弃时释放，没有人提交就由收集器在安全点释放。事务只含 `f` 的图及其可达的子图。编辑有三个，其中两个整节点，都带语义而不暴露原始邻接改写：
+`open(f)` 在函数 `f` 上开草稿，返回的是**草稿的根图**，类型就是 `Graph`（`Handle::createDraft`）：一个 `RuntimeGraphDraftSession` 由一个外部资源对象（`TxnState`）持有，会话在提交或放弃时释放，没有人提交就由收集器在安全点释放。草稿只含 `f` 的图及其可达的子图。
 
-- `replace(t, old, new)`：把同一张图里的 `new` 放到 `old` 的位置并删除 `old`，用的是优化器的 `replaceNode`，所以 `old` 排过的顺序（同步边、顺序边和它的值所来自的有序节点）保持不变。`old` 是图的锚（出口、输出、返回、分支臂首尾）、`new` 由 `old` 算出、或事务已结束，是故障。
-- `erase(t, n)`：删除没有人读取其值的节点。
+草稿不是参数：从草稿读出的每个句柄都记着它属于哪份草稿，所以编辑只命名节点与值，不写位置也不写事务（设计原则 9.3）。编辑算子（`src/stdlib/graph.cml`，内核在 `src/stdlib/graph/txn.cpp`）：
 
-第三个不是一个节点，而是一个值。
+- `replace(old, new)`：把同一张图里的 `new` 放到 `old` 的位置并删除 `old`，用的是优化器的 `replaceNode`，所以 `old` 排过的顺序（同步边、顺序边和它的值所来自的有序节点）保持不变。`old` 是图的锚（出口、输出、返回、分支臂首尾）、`new` 由 `old` 算出、或草稿已结束，是故障。
+- `erase(n)`：删除没有人读取其值的节点。
+- `order(before, after)`：加一条只排序、不让节点运行的顺序边（原则 3.1）；要让一段计算发生在写它的地方，用 `sync` 块。
+- `inline(at, fn)`：把不捕获变量的函数值 `fn` 的体拼进 `at` 所在的区域，交出持有体值的节点；`at` 站在块链里时，链上的位置也交给这段体。
+- `outline(ns)`：`inline` 的反向，把一段纯运算收成自己的函数，在原来的位置留下调用。
+- `add_param(like)`：给草稿的图的函数体加一个形参端口，类型取 `like` 的类型；声明那一半由带新签名的块头写（`docs/design/graph-editing/README.cn.md` 8.4）。
 
-`eval(t, n)` 把节点 `n` 的纯算子放在它自己的常量操作数上求值，返回持有结果的那个节点；没有值可算时返回 `null`。它要的是"在值上求值一个算子"这件事：`constant` 只读一个常量节点的值，`add_constant` 只把遍已经拿在手里的值造成节点，两个都不算。`null` 覆盖四种情形：`n` 不是纯运算（转换、拷贝、访问、填充不在这一步求值，C++ 的折叠每一种都有一个分支）、某个操作数不是图里的常量、算子没有内核、求值出故障。求值出故障不是错误值：必然出故障的常量表达式按设计原则 3.9 留在原处，所以 `eval` 报一条与 C++ 折叠同一条的 `ConstantExpressionFaults` 警告（`raisePassWarning`，位置是节点的 origin）再返回 `null`，程序有没有这个遍都一个样。结果节点是**图的**值：`eval` 与 `add_constant` 一样把值放进图的静态槽，草稿的静态槽是裸引用，所以这个值同样要由 `RuntimeGraphDraftSession::traceStaticSlots` 在安全点重定位。
+另有两个编辑不是节点而是值。
 
-`add_constant(t, g, 值)` 创建事务自己产生的值：把值放进图的静态槽并返回持有它的 `Node`（数值、布尔或字符串；字符串复制进 `permSpace`）。草稿的静态槽是裸引用，NodeVM 的安全点可能在 Camel 代码运行时移动对象，所以 `RuntimeGraphDraftSession::traceStaticSlots` 在每个事务被追踪时把草稿静态槽里的指针重定位；字符串还要独立于追踪活下来，因为旧世代的资源包装对象不一定在每个安全点被追踪。常量折叠（`fold_constants::fold`）就是这样把 `a + b` 的结果做成新值再 `replace`。
+`eval(n)` 把节点 `n` 的纯算子放在它自己的常量操作数上求值，返回持有结果的那个节点；没有值可算时返回 `null`。它要的是"在值上求值一个算子"这件事：`constant` 只读一个常量节点的值，`add_constant` 只把遍已经拿在手里的值造成节点，两个都不算。`null` 覆盖四种情形：`n` 不是纯运算（转换、拷贝、访问、填充不在这一步求值，C++ 的折叠每一种都有一个分支）、某个操作数不是图里的常量、算子没有内核、求值出故障。求值出故障不是错误值：必然出故障的常量表达式按设计原则 3.9 留在原处，所以 `eval` 报一条与 C++ 折叠同一条的 `ConstantExpressionFaults` 警告（`raisePassWarning`，位置是节点的 origin）再返回 `null`，程序有没有这个遍都一个样。结果节点是**图的**值：`eval` 与 `add_constant` 一样把值放进图的静态槽，草稿的静态槽是裸引用，所以这个值同样要由 `RuntimeGraphDraftSession::traceStaticSlots` 在安全点重定位。
 
-`commit(t)` 用 `commitChecked()`：校验草稿（`docs/technical/17_graph_rewrite_api_contracts.md` 4.2 的边不变量），编码新快照，它与旧的共享没有改的图；结果是一个**同类型 `F` 的新函数值**：克隆原来的函数值再 `rebind` 到提交出来的快照，运行中的程序和别人手里的原函数都不变（设计原则 9.1）。错误值的 `kind`：`GraphConflict`（事务读过或写过的图，在上下文的程序里已有别的版本）、`GraphInvalid`（编辑破坏了不变量，消息带图、节点与边）、`TxnUsed`（事务已结束）。`abort(t)` 丢弃事务。改写后的函数值在每个后端上都与原函数算同样的结果。
+`add_constant(g, 值)` 创建草稿自己产生的值：把值放进图的静态槽并返回持有它的 `Node`（数值、布尔或字符串；字符串复制进 `permSpace`）；`g` 是那张图的句柄，在草稿里就是草稿的根图。草稿的静态槽是裸引用，NodeVM 的安全点可能在 Camel 代码运行时移动对象，所以 `RuntimeGraphDraftSession::traceStaticSlots` 在每个事务被追踪时把草稿静态槽里的指针重定位；字符串还要独立于追踪活下来，因为旧世代的资源包装对象不一定在每个安全点被追踪。常量折叠（`fold_constants::fold`）就是这样把 `a + b` 的结果做成新值再 `replace`。
+
+`commit(d)` 用 `commitChecked()`，`d` 是 `open` 交出的草稿句柄：校验草稿（`docs/technical/17_graph_rewrite_api_contracts.md` 4.2 的边不变量），编码新快照，它与旧的共享没有改的图；结果是一个**同类型 `F` 的新函数值**：克隆原来的函数值再 `rebind` 到提交出来的快照，运行中的程序和别人手里的原函数都不变（设计原则 9.1）。错误值的 `kind`：`GraphConflict`（事务读过或写过的图，在上下文的程序里已有别的版本）、`GraphInvalid`（编辑破坏了不变量，消息带图、节点与边）、`TxnUsed`（事务已结束）。`abort(d)` 丢弃草稿。改写后的函数值在每个后端上都与原函数算同样的结果。`edit` 块的降级在块体末尾写的是 `commit_of(d, f)`：草稿是 `Graph`，说不出提交得到什么，由块头那个函数作见证（见 `docs/design/graph-editing/README.cn.md` 5）。
 
 ## 用 Camel 写遍
 
@@ -75,7 +81,7 @@
 上表之外，两个遍各自还有几处"只有 C++ 侧有"的分支：
 
 - `opt::cse` 只合并 `int`、`i32`、`bool` 的常量（`bitEqualType`）：Camel 读不到一个标量的位（`bytes` 编解码的是数组与张量，`math` 没有 `signbit`），`0.0` 与 `-0.0` 用 `==` 相等却是图里两个值，按 `==` 合并会改程序，所以任何浮点常量都不合并。合并节点时它也不合并属性：`tags(n)` 只把属性读成文本、没有写的出口，属性文本不同的两个节点因此不合并，而 C++ 遍会把被合并节点的属性并到一起。
-- `opt::fold` 只折叠**算子**（`NodeKind::Oper`）上的常量：转换、拷贝、访问与填充在 C++ 侧各有一个分支（`isFoldable`），而 `eval(t, n)` 要的是"在值上求值一个算子"，这四种不是算子；按操作数类型就能定出结果的算子（C++ 的 `typeFolder`）也没有出口，`graph` 模块求值的是拿在手里的值。
+- `opt::fold` 只折叠**算子**（`NodeKind::Oper`）上的常量：转换、拷贝、访问与填充在 C++ 侧各有一个分支（`isFoldable`），而 `eval(n)` 要的是"在值上求值一个算子"，这四种不是算子；按操作数类型就能定出结果的算子（C++ 的 `typeFolder`）也没有出口，`graph` 模块求值的是拿在手里的值。
 - `opt::fold` 不折**分支**上的常量：判定是常量时 C++ 遍会挑一条臂并把结构折掉，而在值上求值一个算子不是折它外层的分支结构。
 - `opt::fold` 不折**返回位置**的常量表达式：C++ 遍的 `isFoldable` 在 return 节点没有控制输入时放行它，`replaceFoldResult` 再把图的 exit、output 与 return 锚点搬到折出来的值上；事务没有搬锚点的操作（`replace` 自带"替换锚点"的拒绝），所以这里只求值、只为必然出故障时报出警告，然后原样留下。`opt::fold` 与 `opt::order` 的其余差别见上表（`opt::order` 要删一条控制边，是事务没有的边手术）。
 
@@ -88,7 +94,7 @@
 | 三个遍问"这个节点能不能删／并／折"时读的那两件事 | **已补**：`may_be_recomputed(n)` 读 `OperatorTable::mayBeRecomputed`（纯且可折，C++ 的 `isPureOper`），`may_fault(n)` 读 `nodeMayFault`（算子的 `panic` 读算子记录 `Record::mayFault`，逐元素的收窄读 `OperatorTraits::elementwise`，转换读 `castMayFault`——C++ 的 `isValueOnly` 读的同一特征） | `opt::cse`、`opt::fold`、`opt::dce` 都改问这两条：`is_pure` 只说"声明为纯"，不说"算得出来"，更不说"不会出错" |
 | "能不能挪/丢/并"这一个判据（设计原则 3.4） | **已补**：`may_be_rearranged(n)` 读 `camel::facts::nodeIsFreelyArrangeable`（`camel/facts/arrangeable.h` 的 `core.arrangeable`），C++ 遍读的是同一个事实 | `opt::cse` 的 `mergeable_operation` 与 `opt::dce` 的 `value_only` 都改问这一条，不再各自写 `is_pure && may_be_recomputed && !may_fault`；`may_be_recomputed`／`may_fault` 仍是别的两个问题，各自保留 |
 | `opt::dce` 删掉一个节点时，若它带走的是某个可能出故障的计算的最后一个用处（设计原则 3.3） | 务写不出 `GATE`／算子节点（只有 `add_constant`），但"这个读者是不是它的最后一个读者"用 `inputs`／`value_users`／`may_fault` 就能问 | **已补**：`dead_value` 加一条 `last_read_of_a_fault`——那个读者留下，计算保住那条值的读，故障因此留在程序里（C++ 一侧走的是 `keepThroughValue`：把用处交给一个 `GATE`，数据口读原值、同步前驱是那个节点） |
-| `opt::fold`：把输入全是常量的纯算子求值 | **已补**：`eval(t, n)` 在值上求值一个算子，返回持有结果的节点，求值出故障就报同一警告并返回 `null` | 写出来了（`opt::fold`） |
+| `opt::fold`：把输入全是常量的纯算子求值 | **已补**：`eval(n)` 在值上求值一个算子，返回持有结果的节点，求值出故障就报同一警告并返回 `null` | 写出来了（`opt::fold`） |
 | `opt::fold` 的其余分支：转换、拷贝、访问、填充，以及按操作数类型就能定出结果的算子（`typeFolder`） | `eval` 求值的是**算子**（`NodeKind::Oper`），`Cast`／`Copy`／`Accs`／`Fill` 不是算子，`typeFolder` 也没有出口 | 这些分支仍只在 C++ 侧；`fold_subject` 只用算子的形状，所以这一层没有被两侧比过 |
 | `opt::fold` 折**返回位置**的常量表达式：`isFoldable` 在 return 节点没有控制输入时放行它，`replaceFoldResult` 把图的 exit、output 与 return 锚点搬到折出来的值上 | 搬锚点：事务的 `replace` 拒绝替换锚点（`isReplaceable` 那条），没有别的操作能移动一个锚点 | 只求值（为了必然出故障时报出那条警告）然后原样留下；`fold_subject` 里没有返回位置的常量表达式，所以这一层没有被两侧比过 |
 | `opt::order`：删掉已被必然的数据或控制路径蕴涵的一条控制边 | 删一条边、加一条边：事务只有整节点的 `replace` 与 `erase`，对应 C++ 的 `unlinkInput(Ctrl, …)` 与 `appendControlDependency` | 写不出来 |
