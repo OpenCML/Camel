@@ -1,0 +1,31 @@
+// The other direction of the same rule, and the one that keeps a published graph out of a commit:
+// a `Graph` is not a draft. `Draft<F>` is accepted where a `Graph` is expected -- the queries and
+// the edit operators take the draft as they take a graph -- but a graph the program holds (the graph
+// of a function, or what a `view` block read) was committed by nobody and is not open to edits, so
+// `commit` refuses it even when the call names the type the commit would make.
+//
+// Both calls below are refused: `graph_of(f)` is a `Graph`, and no instance of `commit` takes one.
+import { commit, graph_of, open } from graph
+
+func inc(x: int) => int {
+    return x + 1
+}
+
+func from_a_graph(f: (x: int) => int) => ((x: int) => int)! {
+    return commit(graph_of(f))
+}
+
+func from_a_named_graph(f: (x: int) => int) => ((x: int) => int)! {
+    return commit::<(x: int) => int>(graph_of(f))
+}
+
+func from_a_view(f: (x: int) => int) => int {
+    return view d = f {
+        let g = commit::<(x: int) => int>(d)
+        0
+    }
+}
+
+func main() => int {
+    return 0
+}
