@@ -258,6 +258,66 @@ EditRecordTestPass::apply(const camel::runtime::Program *program, std::ostream &
             rawBatchRecords,
             namedBatchRecords));
 
+    // ---- 8.1's region face: one place, and a place together with its ancestor
+    // -------------------- `editedRegions` is what a publish check walks from, so the two readings
+    // it can give are worth printing as counts and region numbers rather than as a yes/no: an edit
+    // that touched one place answers for that region, and one that touched a region and its
+    // ancestor answers for both in one ascending union. The kinds are printed beside them because
+    // the tier is read off the kinds and the region answer is read off the notes -- an edit can owe
+    // a question and touch one place.
+    compile_graph_ptr_t onePlace = make();
+    auto &onePlaceDraft          = onePlace->edit();
+    const node_handle_t onlyNode =
+        onePlace->addOperNode(camel::core::type::Type::Float32(), ":op/copy");
+    const camel::runtime::gc_node_ref_t onlyNodeId = nodeIdOf(onlyNode);
+    const size_t beforeOnePlace                    = onePlaceDraft.editCount();
+    {
+        const camel::runtime::GraphDraft::NamedEdit one(
+            onePlaceDraft,
+            camel::runtime::EditKind::LowLevel);
+        const camel::runtime::gc_node_ref_t reads[1] = {onlyNodeId};
+        onePlaceDraft.setNormInputs(onlyNodeId, reads);
+    }
+    say(os,
+        std::format(
+            "one_place records={} regions={} kinds={} tier={},{}",
+            onePlaceDraft.editCount() - beforeOnePlace,
+            regionsOf(onePlaceDraft),
+            kindsOf(onePlaceDraft),
+            onePlaceDraft.editTier().effects ? 1 : 0,
+            onePlaceDraft.editTier().order ? 1 : 0));
+
+    // A draft with a block region under the body, and one edit that touches a node of the body and
+    // a node of the block: the record keeps both, and the block's parent is the body the check
+    // walks to, so an edit that touched only the block still answers for the body it stands in.
+    compile_graph_ptr_t ancestor = make();
+    auto &ancestorDraft          = ancestor->edit();
+    const node_handle_t bodyNode =
+        ancestor->addOperNode(camel::core::type::Type::Float32(), ":op/copy");
+    const node_handle_t blockNode =
+        ancestor->addOperNode(camel::core::type::Type::Float32(), ":op/copy");
+    const camel::runtime::gc_node_ref_t bodyNodeId  = nodeIdOf(bodyNode);
+    const camel::runtime::gc_node_ref_t blockNodeId = nodeIdOf(blockNode);
+    const uint32_t block = ancestorDraft.addRegion(camel::runtime::GCRegionKind::Block, 0);
+    ancestorDraft.setNodeRegion(blockNodeId, block);
+    const size_t beforeAncestor = ancestorDraft.editCount();
+    {
+        const camel::runtime::GraphDraft::NamedEdit both(
+            ancestorDraft,
+            camel::runtime::EditKind::Replace);
+        const camel::runtime::gc_node_ref_t reads[1] = {bodyNodeId};
+        ancestorDraft.setNormInputs(blockNodeId, reads);
+        const camel::runtime::gc_node_ref_t reads2[1] = {blockNodeId};
+        ancestorDraft.setNormInputs(bodyNodeId, reads2);
+    }
+    say(os,
+        std::format(
+            "touches_ancestor records={} regions={} notes={} block={} kinds={}",
+            ancestorDraft.editCount() - beforeAncestor,
+            regionsOf(ancestorDraft),
+            ancestorDraft.editNotes().size(),
+            block,
+            kindsOf(ancestorDraft)));
     // A witness that could not run its own case must say so instead of reporting nothing wrong.
     if (notified == 0 || notified != notes) {
         say(os, "MISSING the record and the listeners do not agree");
