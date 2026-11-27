@@ -528,6 +528,10 @@ $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot 'camel-remote-checkers.ps1')
 # This invocation's run name, made once so the host script and the fetch after it agree on it.
 $runName = New-CamelRunName
+# The class the build stage queues in. A lane's build is what that lane is waiting on, so an ordinary
+# run builds at `build` and tests at its own class; the merge seat and a promotion are `funnel` in both
+# stages, and work nobody waits for stays `batch` in both.
+$buildTokenClass = if ($TokenClass -eq 'test') { 'build' } else { $TokenClass }
 # Where a `-FromThisRun` fetch lands in this tree: under the fetched directory, keeping the run's
 # relative path as its tail, so two cases of one run cannot overwrite each other and the path says
 # where the file came from. `.gitignore` covers `test/results/`, so a fetched log can never be committed.
@@ -3023,7 +3027,8 @@ export CAMEL_BRANCH='$branch'
 # How long the pool's taker waits for a token before the run says noslot (-SlotWaitSeconds); the
 # checkout's lock above is waited for the same number of seconds.
 export CAMEL_TOKEN_WAIT_S='$SlotWaitSeconds'
-# The pool's queue order and CPU priority for this run (-TokenClass).
+# The pool's queue order and CPU priority for this run (-TokenClass); the build stage below queues in
+# a class of its own, set on that one command.
 export CAMEL_TOKEN_CLASS='$TokenClass'
 # The plan step's runner names its run directory this (it is set on that one command, see `$runPlan`),
 # so the fetch after the plan (-FromThisRun) reads exactly this run's directory.
@@ -3114,7 +3119,7 @@ if [ '$NoBuild' != 'True' ]; then
     build_idle_limit=1200
     build_total_limit=10800
     build_progress=`$(mktemp)
-    setsid bash -c 'bash "`$1/internal/tools/host-tokens.sh" take-up-to "`$2" -- $buildCmd 2>&1 | tee "`$3"; exit "`${PIPESTATUS[0]}"' _ "`$R" "`$build_want" "`$build_progress" &
+    CAMEL_TOKEN_CLASS='$buildTokenClass' setsid bash -c 'bash "`$1/internal/tools/host-tokens.sh" take-up-to "`$2" -- $buildCmd 2>&1 | tee "`$3"; exit "`${PIPESTATUS[0]}"' _ "`$R" "`$build_want" "`$build_progress" &
     build_pid=`$!
     build_stopped=''
     while kill -0 "`$build_pid" 2>/dev/null; do
