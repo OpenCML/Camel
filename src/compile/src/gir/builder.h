@@ -3354,6 +3354,17 @@ class Builder {
     node_handle_t attachVisibleLoopState(
         node_handle_t loopNode, const std::vector<camel::core::type::Type *> &states,
         uint32_t firstState, const GCT::node_ptr_t &gct);
+    /// The value a loop leaves each carried `var` with, once the loop is built: the component of
+    /// the loop's value at the state's position among the loop's states (visitLoopNode,
+    /// buildStreamLoop). `states` are the loop's state types in order, so `firstState` is the index
+    /// of the first carried `var` among them, and `firstMember` is where the first of them sits in
+    /// the LOOP's With inputs. A `var` the body wrote a value for is a state of the head, so the
+    /// name is rebound to what the head hands out and the write is recorded where the loop is
+    /// written (noteLoopStateWrite); a `var` still held by a cell takes the value as its version.
+    void handCarriedStatesOut(
+        node_handle_t loopNode, const std::vector<LoopCarriedState> &carried,
+        const std::vector<camel::core::type::Type *> &states, size_t firstState,
+        uint32_t firstMember, const GCT::node_ptr_t &gct);
     /// The tail every LOOP node shares once its node and its parts are built (visitLoopNode,
     /// buildStreamLoop): the With inputs are the parts' results (the body's, then the condition's)
     /// and the slot the rounds are counted in, the parts are its regions, and running the loop is
