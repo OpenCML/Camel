@@ -1014,9 +1014,10 @@ export rule jvp_idx_arr::<T>(xs: T[], i: int) { index_into(xs, i) => func (dxs: 
 /// declaration of a *call form* of the same operator (`#op`) rather than a function with a body,
 /// because the third word is not a written dimension here but an operand the law receives: the
 /// subscript spells an axis by where its dots are, and a body cannot say "the dimension this number
-/// names" (`xs[.., at]` would fix the dimension to the last one). The operator's own resolver reads
-/// all three words (`lib/std/builtin/modules/globals.cpp#idxArrayResolver`), and a call to this name
-/// is a call to that node, which is what the walk matches the node against.
+/// names" (`xs[.., at]` would fix the dimension to the last one). The operator's own entry in the
+/// built-in table reads all three words: `lib/std/builtin/modules/globals.cpp` spells
+/// `:op/idx_arr` as `(arr: T[], index: int, axis: int) => T` and takes the axis as an operand, so a
+/// call to this name is a call to that node, which is what the walk matches the node against.
 /// @example index_into_axis([[1.0, 2.0], [3.0, 4.0]], 0, 1)    // [1.0, 3.0]
 #op(':op/idx_arr')
 func index_into_axis::<T>(x: T[...], i: int, at: int) => T[...] panic
