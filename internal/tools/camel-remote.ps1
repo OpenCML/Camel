@@ -1458,6 +1458,14 @@ $exitUnknown = $false
 $treeFailed = $false
 # Phase marks for the summary line: transfer ends at the sync marker, the plan starts at its own.
 $syncedAt = $null
+# How long the host waited for this checkout's lock (`HOST_CHECKOUT_WAIT_MS`). It falls inside the
+# span from the start to the sync marker, so the summary reports it as `wait` and leaves it out of
+# `transfer`: a run that queued half an hour behind another on the same checkout did not transfer
+# for half an hour.
+$checkoutWaitSeconds = 0.0
+# The gpu observation's skipped cases (`check=<name>-skipped [...]`): a recorded red that was skipped
+# is not shown to pass, so it is never offered for trimming.
+$gpuSkipped = @()
 # The checker stage's own clock and results. The start is the stage's marker; the results are read
 # back from the per-checker footers, so the summary at the end names what actually ran instead of
 # what was asked for.
@@ -2323,6 +2331,9 @@ else
         # `fail=` said sixteen. The `$0` is escaped because this text is a PowerShell here-string and
         # an unescaped `$0` arrives at the host as nothing at all.
         gpu_red=`$(printf '%s\n' "`$gpu_reds" | awk 'NR>1{printf ","} {printf "%s", `$0}')
+        # The skipped names, so the local side can tell "not red because it passed" from "not red
+        # because it did not run": only the first lets a recorded name go.
+        gpu_skipped=`$(printf '%s\n' "`$gpu_clean" | sed -nE 's/^\[SKIP\] ([^ ]+).*/\1/p' | awk 'NR>1{printf ","} {printf "%s", `$0}')
         gpu_more=0
         # WHY each red is red, one `<name>|<reason>` per fail, so a recorded entry can be checked
         # against the reason it was recorded for and not only against its name. The reason is the
@@ -2375,6 +2386,7 @@ else
         printf '%s\n' "`$gpu_clean" | tail -n 20
         gpu_total=unknown; gpu_pass=unknown; gpu_fail=unknown; gpu_skip=unknown
         gpu_red=unknown; gpu_more=0; gpu_state=nosummary
+        gpu_skipped=''
         # No reading, so no reasons either; set, because the evidence line below reads it under set -u.
         gpu_evidence=''
     fi
@@ -2388,6 +2400,7 @@ else
     if [ -n "`$gpu_evidence" ]; then
         echo "check=$($gpuObservationName)-evidence [`${gpu_evidence%;}]"
     fi
+    echo "check=$($gpuObservationName)-skipped [`${gpu_skipped}]"
     echo "[camel-remote] --- $($gpuObservationName): exit `$gpu_code ---"
 fi
 "@
@@ -2752,11 +2765,15 @@ if ! flock -w '$SlotWaitSeconds' 6; then
         holder_note="`$holder_record, no longer running (a process it started may still hold the lock)"
     fi
     echo "[camel-remote] no slot on this checkout within $SlotWaitSeconds s (-SlotWaitSeconds): the lock `$tree_lock is held by: `$holder_note"
+    echo "HOST_CHECKOUT_WAIT_MS=`$(( (`$(date +%s%N) - tree_wait_started_ns) / 1000000 ))"
     echo 'HOST_NOSLOT=checkout'
     exit 4
 fi
 printf 'pid=%s since=%s\n' "`$`$" "`$(date -u +%Y-%m-%dT%H:%M:%SZ)" > "`$tree_lock"
 tree_wait_ms=`$(( (`$(date +%s%N) - tree_wait_started_ns) / 1000000 ))
+# The local side takes this wait out of the transfer it reports: the clock it reads transfer by runs
+# from the start to the sync marker, and this wait sits inside that span.
+echo "HOST_CHECKOUT_WAIT_MS=`$tree_wait_ms"
 if [ `$tree_wait_ms -gt 5000 ]; then
     echo "[camel-remote] waited `$(awk "BEGIN{printf \"%.1f\", `$tree_wait_ms/1000}") s for this checkout"
 fi
@@ -3371,6 +3388,10 @@ exit `$code
             # The width the run actually got, reported by the stage that got it: the pool's count for
             # the build, `budget_jobs` for the plan. Recorded as it arrives rather than written from
             # `$Jobs` at the start, so a request of 32 is not what the registry reports as what ran.
+            if ($cleanLine -match '^HOST_CHECKOUT_WAIT_MS=(\d+)$') {
+                $checkoutWaitSeconds = [int64]$Matches[1] / 1000.0
+                return
+            }
             if ($cleanLine -match '^HOST_JOBS_REQUESTED=(\d+)$') {
                 $run.jobsRequested = [int]$Matches[1]
                 Publish-Run
@@ -3548,6 +3569,9 @@ exit `$code
                         state   = $Matches[9]
                     }
                 }
+            }
+            if ($cleanLine -match ('^check=' + [regex]::Escape($gpuObservationName) + '-skipped \[([^\]]*)\]$')) {
+                $gpuSkipped = @($Matches[1] -split ',' | ForEach-Object { $_.Trim() } | Where-Object { $_ })
             }
             # The reason line that follows the reading: `<name>|<reason>` per red, `;` between them.
             # A name is checked against the reason it was recorded for, so a case that is red for a
@@ -4115,12 +4139,15 @@ if ($FromThisRun -and $FetchFile -ne '') {
             # reach the reason, and it is said to be that rather than turned into a verdict.
             $gpuUnchecked = @($gpuStill | Where-Object {
                     $gpuReason[$_] -and (-not $gpuEvidence.ContainsKey($_) -or $gpuEvidence[$_] -eq '-') })
-            # Only a reading that named every red may say a recorded name is gone.
+            # Only a reading that named every red may say a recorded name is gone, and only of a name
+            # that ran: a skipped case is not red and did not pass either, so it stays recorded and is
+            # said to have been skipped.
             $gpuGone = if ($gpuIncomplete) {
                 @()
             } else {
-                @($gpuBaseline | Where-Object { $gpuReds -notcontains $_ })
+                @($gpuBaseline | Where-Object { $gpuReds -notcontains $_ -and $gpuSkipped -notcontains $_ })
             }
+            $gpuSkippedRecorded = @($gpuBaseline | Where-Object { $gpuSkipped -contains $_ })
             $gpuKnown = $gpuReds.Count - $gpuNew.Count
             Write-Host ("[camel-remote] gpu-plans: {0} red, {1} recorded, {2} new, {3} recorded for another reason, {4} recorded name(s) no longer red" -f `
                 $gpuReds.Count, $gpuKnown, $gpuNew.Count, $gpuChanged.Count, $gpuGone.Count)
@@ -4156,6 +4183,9 @@ if ($FromThisRun -and $FetchFile -ne '') {
             }
             if ($gpuGone.Count -gt 0) {
                 Write-Host "[camel-remote] gpu-plans: no longer red, and accepted as it is: $($gpuGone -join ', ') -- $gpuBaselineRel can be trimmed"
+            }
+            if ($gpuSkippedRecorded.Count -gt 0) {
+                Write-Host "[camel-remote] gpu-plans: recorded but skipped in this run, so not shown to pass and kept: $($gpuSkippedRecorded -join ', ')"
             }
         }
     }
@@ -4205,7 +4235,9 @@ if ($FromThisRun -and $FetchFile -ne '') {
     $transferEnd = if ($syncedAt) { $syncedAt } else { $finishedAt }
     $buildEnd = if ($planStartedAt) { $planStartedAt } elseif ($syncedAt) { $finishedAt } else { $transferEnd }
     $planEnd = if ($planStartedAt) { $finishedAt } else { $planStartedAt }
-    $phases = "transfer {0:N1} s, build {1:N1} s" -f ($transferEnd - $startedAt).TotalSeconds, ($buildEnd - $transferEnd).TotalSeconds
+    $transferSpan = ($transferEnd - $startedAt).TotalSeconds
+    $waitPart = [Math]::Min($checkoutWaitSeconds, $transferSpan)
+    $phases = "transfer {0:N1} s, wait {1:N1} s, build {2:N1} s" -f ($transferSpan - $waitPart), $waitPart, ($buildEnd - $transferEnd).TotalSeconds
     if ($null -ne $planStartedAt) { $phases += ", plan {0:N1} s" -f ($finishedAt - $planStartedAt).TotalSeconds }
     $loadEnd = if ($null -ne $loadEnd) { $loadEnd } else { Get-HostLoad -TimeoutSeconds $FinishTimeoutSeconds }
     if ($null -ne $loadEnd) {
