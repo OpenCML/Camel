@@ -1,0 +1,62 @@
+{
+  "kind": "promotion",
+  "promotion": 68,
+  "tip": "a7687dfd27e36c06928bde5f9dbe3a9ff9d45bab",
+  "measured_tip": "a7687dfd27e36c06928bde5f9dbe3a9ff9d45bab",
+  "pushed_develop_sha": "a7687dfd27e36c06928bde5f9dbe3a9ff9d45bab",
+  "note": "the layer was measured at a7687dfd27, the tip at which the sixty-seventh promotion's record and table became published; it carries the fifth batch, the scheduler's root-cause fix and the sixty-seventh record, and it does not carry lane/editview-commit (ff94ce915f was not an ancestor when the run started) nor the main-effects batch, which had not been merged. develop advances to the tip that was measured, not to whatever integration had reached when the reading finished",
+  "tier": "fast",
+  "scope": "test/plans (the whole plan tree)",
+  "jobs": 2,
+  "host": "the build host, promote checkout at a7687dfd27; load 1m 43.67 at the start of the run, 41.61 fifteen minutes before it",
+  "binary_built": "2026-11-28T07:20:44+08:00",
+  "readings": {
+    "total": 9879,
+    "pass": 9671,
+    "fail": 147,
+    "skip": 28,
+    "known": 33,
+    "killed_by_a_signal": 0,
+    "timed_out": 2,
+    "re_run": 2,
+    "re_run_passed": 0,
+    "load_before": "1m 43.67, 5m 41.54, 15m 41.61",
+    "load_warning": "[load] WARNING: 1m load 39.31 > 8 -- readings taken now are not comparable to quiet-host readings (the warning the sixty-sixth and sixty-seventh layers carried; a promotion does not wait on load, D-1128-36)"
+  },
+  "comparison": {
+    "against": "internal/reports/2026-11-28-promotion-67-reds.tsv (the sixty-seventh promotion, 147 names)",
+    "method": "the two red sets compared by the pair (plan, case) exactly as the runner writes them in test_timings[], so a name under a different plan is a different case",
+    "still_red": 147,
+    "turned_green": 0,
+    "turned_green_names": [],
+    "new_reds": 0,
+    "new_reds_names": [],
+    "vanished_reds": 0,
+    "arithmetic": "147 names before: 0 turned green, 0 vanished, 0 appeared, 147 remain red; 147 = this reading red case names, and the two sets are the same set name for name",
+    "notes": [
+      "fault_deep.prl_off is not in this red set: the parallel scheduler's root-cause fix (4ada220bf5) is an ancestor of this tip and the flaky field it guarded was removed from the plan entry, so this promotion used no known-flaky allowance",
+      "the two timeouts are the two transpose_loop_escape cases that were already rows of the sixty-seventh table; they were run alone at this tip and stayed red",
+      "copying batch work: the main-effects batch (4058 files) had not been merged when this run started, so this layer says nothing about it"
+    ]
+  },
+  "timeouts_rerun": {
+    "count": 2,
+    "run_alone": true,
+    "green": [],
+    "still_red_not_timeout": [
+      "transpose_loop_escape.second_state_of_the_same_loop.nvm",
+      "transpose_loop_escape.two_states_before_the_escape.nvm"
+    ],
+    "how": "node test/tools/run-tests.mjs test/plans/feat/compile/transforms.plan.toml --tier fast --jobs 1 --entry of each of the two, at the same tip a7687dfd27"
+  },
+  "red_table": "internal/reports/2026-11-28-promotion-68-reds.tsv",
+  "red_table_rows": 147,
+  "red_table_format": "two columns, the plan id exactly as the runner writes it in test_timings[].plan, then the case name; generated from this run's summary.json plan/test pairs, so the keys match the tool that reads them",
+  "next_promotion_compares_against": "internal/reports/2026-11-28-promotion-68-reds.tsv",
+  "new_red_names": [],
+  "pushed_as": "develop, fast-forwarded from 3f968c32aa to a7687dfd27, the tip this layer measured",
+  "develop_before": "3f968c32aa2349e246c24989e00b0df25883b099",
+  "develop_after": "a7687dfd27e36c06928bde5f9dbe3a9ff9d45bab",
+  "commits_brought_in": 20,
+  "commits_touching_src": 1
+}
