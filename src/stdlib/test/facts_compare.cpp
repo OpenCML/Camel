@@ -23,6 +23,7 @@
 
 #include <array>
 #include <format>
+#include <iostream>
 #include <map>
 #include <memory>
 #include <ostream>
@@ -863,6 +864,18 @@ FactsCompareTestPass::apply(const camel::runtime::Program *program, std::ostream
         draft.noStore,
         draft.kept,
         draft.stale);
+    // Also on stderr, and alone there: a run that truncates the pass output keeps the tail window,
+    // and the one line a case pins must not be what a truncation drops.
+    std::cerr << std::format(
+        "FACTS_COMPARE kind=core.kinds graphs={} nodes={} same={} diff={} no_new={} no_old={} "
+        "ok={}\n",
+        coreKinds.graphs,
+        coreKinds.nodes,
+        coreKinds.same,
+        coreKinds.diff,
+        coreKinds.noNew,
+        coreKinds.noOld,
+        (coreKinds.diff == 0 && coreKinds.noNew == 0 && coreKinds.same >= 1) ? 1 : 0);
     os << std::format(
         "FACTS_COMPARE kind=core.kinds graphs={} nodes={} same={} diff={} no_new={} no_old={} "
         "ok={}\n",
