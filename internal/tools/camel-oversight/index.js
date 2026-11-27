@@ -233,7 +233,11 @@ export function apply(ctx, rawConfig) {
                 if (entry.kind === 'ack') acks.set(entry.id, entry)
                 if (entry.kind === 'superseded') superseded.set(entry.id, entry.by)
                 if (entry.kind === 'claim') claimed = entry.session
-                if (entry.kind === 'tell') tells.push(entry)
+                if (entry.kind === 'tell') {
+                    tells.push(entry)
+                    // The same bound as a live tell (below): the log keeps every one, memory the last 200.
+                    if (tells.length > 200) tells.splice(0, tells.length - 200)
+                }
                 if (entry.kind === 'bind' || entry.kind === 'unbind') applyEntry(binding, entry)
             } catch {
                 // A torn last line from a crash is skipped; the rest of the log still holds.
@@ -709,6 +713,11 @@ export function apply(ctx, rawConfig) {
         beating = true
         try {
             const now = Date.now()
+            // A session that is gone keeps nothing here: its tail and its status time were kept for
+            // the readings of a live session, and a day of lanes left one of each per session ended.
+            const live = new Set(ctx.agents.list().map((agent) => String(agent.id)))
+            for (const id of [...tails.keys()]) if (!live.has(id) && id !== claimed) tails.delete(id)
+            for (const id of [...since.keys()]) if (!live.has(id) && id !== claimed) since.delete(id)
             await reloadHot(config.repo, (change) => {
                 const entry = { kind: 'hot-reload', at: now, ...change }
                 record(entry)
