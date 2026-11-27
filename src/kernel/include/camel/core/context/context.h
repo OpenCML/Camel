@@ -274,6 +274,18 @@ class Context : public std::enable_shared_from_this<Context> {
      */
     context_ptr_t handle() const;
 
+    /**
+     * `handle()` of `context`, for the constructors of the objects the context owns.
+     *
+     * The conversion belongs in the constructor of the object that keeps the reference, and not
+     * at the places that build one: they hand on an owning `context_ptr_t` from `Context::create`
+     * or from another object of the same context, so a construction site added later cannot
+     * forget the rule. A null context stays null.
+     */
+    static context_ptr_t handleOf(const context_ptr_t &context) {
+        return context ? context->handle() : context_ptr_t{};
+    }
+
     bool requireEntry() const { return entryConfig_.requireEntry; }
     /// The command that does not execute the program (an inspection or a translation pass)
     /// lifts the entry requirement after the context is created, before the program is built.
