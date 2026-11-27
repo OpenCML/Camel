@@ -704,7 +704,7 @@ effects: (g: Graph) => Effects
 shape_text: (n: Node) => string?
 permissions: (n: Node) => int
 relative_cost: (n: Node) => float
-open: (f: F) => Draft<F> when is_function::<F>()
+open: (f: F) => Graph when is_function::<F>()
 replace: (old: Node, new: Node) => void
 erase: (n: Node) => void
 eval: (n: Node) => Node?
@@ -713,7 +713,7 @@ inline: (at: Node, fn: G) => Node when is_function::<G>()
 outline: (ns: Node[]) => Node
 add_param: (like: Node) => Node
 add_constant: (g: Graph, value: T) => Node when is_ordered::<T>()
-commit: (d: Draft<F>) => F! when is_function::<F>()
+commit: (d: Graph) => F!
 abort: (d: Graph) => void
 check_pass_boundary: (before: F, after: F) => F! when is_function::<F>()
 ```
