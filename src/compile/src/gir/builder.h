@@ -26,14 +26,14 @@ class Builder {
   public:
     /// A builder for a program of its own: it owns the program's export table (ProgramExports).
     explicit Builder(const camel::core::context::context_ptr_t &context)
-        : context_(context), exports_(&ownExports_) {}
+        : context_(camel::core::context::Context::handleOf(context)), exports_(&ownExports_) {}
 
     /// A builder that declares its modules into `exports`: the program the table belongs to
     /// (the context's own program, whose table other readers use too).
     Builder(
         const camel::core::context::context_ptr_t &context,
         camel::core::module::ProgramExports &exports)
-        : context_(context), exports_(&exports) {}
+        : context_(camel::core::context::Context::handleOf(context)), exports_(&exports) {}
 
     /// The builder of the program compiled on `context`, created on first use.
     static Builder &of(const camel::core::context::context_ptr_t &context);

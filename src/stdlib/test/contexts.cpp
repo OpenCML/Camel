@@ -14,12 +14,18 @@
  * back removes that one and nobody else's. `own` / `own_released` read the pass's own entry by its
  * name. `alive` is the program this pass was given, still allocated in the graph space after a
  * major collection ran while both contexts were alive. `held` is how many owners the second context
- * has while this pass holds one of them: more than one means something else keeps it alive, so its
- * destructor -- the one that gives its registration back -- never runs. The context owns its
- * modules and a module keeps a strong pointer to its context, so `held` reads 2 and a second
- * context of a process is never destroyed. Reported, not fixed here: it is a lifetime defect of its
- * own (the same one makes `--timeit N` keep N contexts), and it is what a fix of the registration
- * path has to be tested through.
+ * has while this pass holds one of them: one means this pass is its only owner, so it is destroyed
+ * where its scope ends and gives its own registration back; more than one means something else
+ * keeps it alive, and then the destructor -- the one that gives the registration back -- never
+ * runs.
+ *
+ * `held` reads 1, and that is what the plan pins. It read 2 while a context owned its modules and a
+ * module kept a strong pointer back to it; the objects a context owns (a module, the executor
+ * manager, the builders it made) take the non-owning handle a context gives of itself now
+ * (Context::handle()), so the cycle is gone and a second context of a process is destroyed at the
+ * end of its scope. A context that has *compiled* something is the case the builder handle covers:
+ * `Context::graphBuildSession()` holds the builder, and a builder that owned its context would keep
+ * every context a run built -- the shape `--timeit N` builds one of per iteration.
  *
  * Before the fix the allocator held one slot: the second context took the first's registration over
  * (`second` stayed 1) and the pass's own registration took the second's over (`released` read 0),

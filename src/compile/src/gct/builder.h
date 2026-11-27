@@ -32,7 +32,7 @@ class Builder {
     Builder(
         const camel::core::context::context_ptr_t &context,
         const camel::core::module::module_ptr_t &module)
-        : context_(context), module_(module) {
+        : context_(camel::core::context::Context::handleOf(context)), module_(module) {
         typeScope_ = std::make_shared<Scope<Reference, Type *>>();
     };
     virtual ~Builder() = default;
