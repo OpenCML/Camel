@@ -702,6 +702,17 @@ using TangentEligibility = bool (*)(Type *);
 
 bool hasTangentType(Type *type) { return machineryTangentTypeOf(type) != nullptr; }
 
+/// The slots of the pair a differentiated call's forward graph hands back: the value the call's
+/// users keep naming, and the closure the gradient runs (design principles 9.9). One name for a
+/// contract that used to be implicit: every reader takes the pair apart by these, so that a shape
+/// carrying more than the two -- a value the pullback's forward graph hands back for a tape --
+/// makes the compiler find the readers that were left behind. `firstResidualSlot` is where such a
+/// slot would start; today nothing fills it, so the pair is exactly two slots wide.
+struct PairShape {
+    static constexpr size_t valueSlot         = 0;
+    static constexpr size_t pullbackSlot      = 1;
+    static constexpr size_t firstResidualSlot = 2;
+};
 /// The graphs differentiating one function: its forward graph returning (value, pullback) and
 /// the pullback graph, with their types. Tangents are ordered like the function's ports (with
 /// ports, then norm ports), skipping ports without a tangent.
@@ -773,7 +784,10 @@ PullbackPlan makePlanTypes(
     // writes (design principles 3.3: a direct call and a call through a function value read one
     // type).
     plan.pullbackType     = plan.pullbackType->withResources(pureClause());
-    plan.forwardValueType = TupleType::create(std::vector<Type *>{valueType, plan.pullbackType});
+    std::vector<Type *> pairSlots(PairShape::firstResidualSlot);
+    pairSlots[PairShape::valueSlot]    = valueType;
+    pairSlots[PairShape::pullbackSlot] = plan.pullbackType;
+    plan.forwardValueType              = TupleType::create(std::move(pairSlots));
     return plan;
 }
 
@@ -1986,7 +2000,8 @@ void ForwardRewrite::split(
         draft().setNormInputs(pair, std::span<const gc_node_ref_t>(&node, 1));
         draft().setNormInputs(value, std::span<const gc_node_ref_t>(&pair, 1));
     }
-    const gc_node_ref_t pullback = addAccs(transaction_, plan.pullbackType, pair, 1);
+    const gc_node_ref_t pullback =
+        addAccs(transaction_, plan.pullbackType, pair, PairShape::pullbackSlot);
     if (part_ != 0) {
         draft().setInsertRegion(0);
     }
@@ -5195,8 +5210,16 @@ GCGraph *Engine::gradient(GCGraph *function, bool withValue, bool hasAux) {
     gc_node_ref_t aux        = kInvalidNodeRef;
     if (hasAux) {
         Type *pairType = typeOf(*transaction, pair);
-        value          = addAccs(*transaction, aggregateElement(pairType, 0), pair, 0);
-        aux            = addAccs(*transaction, aggregateElement(pairType, 1), pair, 1);
+        value          = addAccs(
+            *transaction,
+            aggregateElement(pairType, PairShape::valueSlot),
+            pair,
+            PairShape::valueSlot);
+        aux = addAccs(
+            *transaction,
+            aggregateElement(pairType, PairShape::pullbackSlot),
+            pair,
+            PairShape::pullbackSlot);
     }
     const auto edges                       = siteEdges(rewrite.sites());
     const std::vector<gc_node_ref_t> order = valueOrder(*transaction, value, 0, &edges);
