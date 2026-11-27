@@ -420,7 +420,14 @@ void Builder::readRangeConversion() {
     // The array a range converts to, the range type that conversion takes, and the declaration
     // itself, of the one the prelude writes for it: `to_array(r: Range): int[]`. Read from the
     // declaration's signature, so the compiler names neither type itself.
-    rangeTypesRead_ = true;
+    //
+    // The declaration is looked up again until it is found: it belongs to the prelude, whose
+    // declarations are read while a module is being loaded, so the first call that needs the
+    // conversion may come before it is there -- `len(1 .. 3)` reads the array position of `len`
+    // while the prelude is still being filled. Answering "no such declaration" then would keep the
+    // range out of every later position of the program, one statement at a time, which is a
+    // different program from the one written: so only a read that found the declaration is the
+    // last one.
     const OperatorOverloads &overloads =
         preludeOperatorOverloadsOf(std::string(camel::core::kRangeToArray));
     for (const compile_graph_ptr_t &graph : overloads.graphs) {
@@ -436,6 +443,7 @@ void Builder::readRangeConversion() {
         rangeValueType_       = param;
         rangeArrayType_       = exit;
         rangeConversionGraph_ = graph;
+        rangeTypesRead_       = true;
         return;
     }
 }
