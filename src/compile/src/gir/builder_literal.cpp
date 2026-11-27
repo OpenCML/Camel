@@ -467,12 +467,15 @@ bool Builder::rangeEntersArray(Type *param, Type *value) {
         return true;
     }
     // `xs: T[]` -- an array whose element the declaration leaves to a type variable -- writes the
-    // same position: the array shape is stated and the element is whatever the argument holds, so
-    // the variable binds to the element the range's array has. Only that shape: a rank the
+    // same position: the length is unknown as the range's array has no stated one either, so the
+    // variable binds to the element the range's array has. Only that shape: a length or a rank the
     // parameter fixes (`T[3]`, `T[..]`) is a different entrance, and another element type
     // (`f32[]`) is the refusal the position states.
     const auto *array = tt::as_ptr<const ArrayType>(param);
-    if (array == nullptr || array->rank() != 0 || array->anyRank()) {
+    if (array == nullptr || array->anyRank() || array->rank() > 1) {
+        return false;
+    }
+    if (array->rank() == 1 && !array->extents().front().isUnknown()) {
         return false;
     }
     Type *element = array->elemType();
