@@ -81,7 +81,7 @@ name = "merge_sort.nvm_timeit"
 desc = "Benchmarks the large recursive mergesort workload on the baseline NVM scheduler."
 kind = "benchmark"
 case = "../../cases/para/core/merge_sort.cml"
-args = ["--spaces block_mb=", "8192", "--timeit", "std::nvm/1", "--diag-format", "json", "${case}", "${run_nvm}"]
+args = ["--spaces", "block_mb=8192", "--timeit", "std::nvm/1", "--diag-format", "json", "${case}", "${run_nvm}"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 # 1.63x the 53.07 s CPU read above (the higher of 51.12 s and 53.07 s) rounded up: 1.64x the
@@ -95,7 +95,7 @@ name = "merge_sort.prl_timeit"
 desc = "Benchmarks the large recursive mergesort workload on the PRL scheduler."
 kind = "benchmark"
 case = "../../cases/para/core/merge_sort.cml"
-args = ["--spaces block_mb=", "16384", "--timeit", "std::prl/1", "--diag-format", "json", "${case}", "${run_prl}"]
+args = ["--spaces", "block_mb=16384", "--timeit", "std::prl/1", "--diag-format", "json", "${case}", "${run_prl}"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 # 1.63x the 69.90 s CPU read above (the higher of 69.90 s and 61.85 s) rounded up: 1.65x the

@@ -396,7 +396,7 @@ name = "gc_heap_limit.generational.nvm"
 desc = "A live set of 256 MB under a heap limit of 64 MB (generational, nvm): the program stops with MemoryExhausted, which names the space, the usage, the limit and the variable that raises it."
 kind = "behavior"
 case = "../../../cases/feat/mm/gc/gc_live_large.cml"
-args = ["--gc heap_limit_mb=", "64", "--gc", "kind=generational", "${case}", "--arg", "mb=256", "--arg", "reps=10", "${run_nvm}"]
+args = ["--gc", "heap_limit_mb=64,kind=generational", "${case}", "--arg", "mb=256", "--arg", "reps=10", "${run_nvm}"]
 expect_exit = 1
 expect_output_contains = ["MemoryExhausted", "The auto space (run-time values) is exhausted", "of the limit of 64.0 MB are in use", "--gc heap_limit_mb="]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
@@ -407,7 +407,7 @@ name = "gc_heap_limit.generational.fvm"
 desc = "A live set of 256 MB under a heap limit of 64 MB (generational, fvm): the program stops with MemoryExhausted, which names the space, the usage, the limit and the variable that raises it."
 kind = "behavior"
 case = "../../../cases/feat/mm/gc/gc_live_large.cml"
-args = ["--gc heap_limit_mb=", "64", "--gc", "kind=generational", "${case}", "--arg", "mb=256", "--arg", "reps=10", "${run_fvm}"]
+args = ["--gc", "heap_limit_mb=64,kind=generational", "${case}", "--arg", "mb=256", "--arg", "reps=10", "${run_fvm}"]
 expect_exit = 1
 expect_output_contains = ["MemoryExhausted", "The auto space (run-time values) is exhausted", "of the limit of 64.0 MB are in use", "--gc heap_limit_mb="]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
@@ -418,7 +418,7 @@ name = "gc_heap_limit.generational.fits"
 desc = "16 MB alive and 300 rounds of garbage under the same limit (generational): the limit bounds what is alive, not what is allocated."
 kind = "behavior"
 case = "../../../cases/feat/mm/gc/gc_live_large.cml"
-args = ["--gc heap_limit_mb=", "64", "--gc", "kind=generational", "${case}", "--arg", "mb=16", "--arg", "reps=300", "${run_fvm}"]
+args = ["--gc", "heap_limit_mb=64,kind=generational", "${case}", "--arg", "mb=16", "--arg", "reps=300", "${run_fvm}"]
 expect_exit = 0
 expect_stdout_contains = ["gc_live_large blocks=27 total=236916"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
@@ -429,7 +429,7 @@ name = "gc_heap_limit.mark_sweep.nvm"
 desc = "A live set of 256 MB under a heap limit of 64 MB (mark-sweep, nvm): the program stops with MemoryExhausted, which names the space, the usage, the limit and the variable that raises it."
 kind = "behavior"
 case = "../../../cases/feat/mm/gc/gc_live_large.cml"
-args = ["--gc heap_limit_mb=", "64", "--gc", "kind=mark-sweep", "${case}", "--arg", "mb=256", "--arg", "reps=10", "${run_nvm}"]
+args = ["--gc", "heap_limit_mb=64,kind=mark-sweep", "${case}", "--arg", "mb=256", "--arg", "reps=10", "${run_nvm}"]
 expect_exit = 1
 expect_output_contains = ["MemoryExhausted", "The auto space (run-time values) is exhausted", "of the limit of 64.0 MB are in use", "--gc heap_limit_mb="]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
@@ -440,7 +440,7 @@ name = "gc_heap_limit.mark_sweep.fvm"
 desc = "A live set of 256 MB under a heap limit of 64 MB (mark-sweep, fvm): the program stops with MemoryExhausted, which names the space, the usage, the limit and the variable that raises it."
 kind = "behavior"
 case = "../../../cases/feat/mm/gc/gc_live_large.cml"
-args = ["--gc heap_limit_mb=", "64", "--gc", "kind=mark-sweep", "${case}", "--arg", "mb=256", "--arg", "reps=10", "${run_fvm}"]
+args = ["--gc", "heap_limit_mb=64,kind=mark-sweep", "${case}", "--arg", "mb=256", "--arg", "reps=10", "${run_fvm}"]
 expect_exit = 1
 expect_output_contains = ["MemoryExhausted", "The auto space (run-time values) is exhausted", "of the limit of 64.0 MB are in use", "--gc heap_limit_mb="]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
@@ -451,7 +451,7 @@ name = "gc_heap_limit.mark_sweep.fits"
 desc = "16 MB alive and 300 rounds of garbage under the same limit (mark-sweep): the limit bounds what is alive, not what is allocated."
 kind = "behavior"
 case = "../../../cases/feat/mm/gc/gc_live_large.cml"
-args = ["--gc heap_limit_mb=", "64", "--gc", "kind=mark-sweep", "${case}", "--arg", "mb=16", "--arg", "reps=300", "${run_fvm}"]
+args = ["--gc", "heap_limit_mb=64,kind=mark-sweep", "${case}", "--arg", "mb=16", "--arg", "reps=300", "${run_fvm}"]
 expect_exit = 0
 expect_stdout_contains = ["gc_live_large blocks=27 total=236916"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]

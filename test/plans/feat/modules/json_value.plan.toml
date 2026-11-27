@@ -90,7 +90,7 @@ name = "json.gc.forced_minor.nvm"
 desc = "A Json kept across allocation in a frame slot, through a function and in an array of Json is traced (generational, a minor collection at every safepoint, everything promoted at once (the write-barrier check of docs/technical/36, section 6); nvm). As an `any` it was not."
 kind = "behavior"
 case = "../../../cases/modules/std/json/json_gc.cml"
-args = ["--gc-stress", "safepoint=1,kind=minor", "--gc-check", "verify=both", "--gc promotion_age=", "1", "--gc", "kind=generational", "${case}", "--arg", "n=300", "${run_nvm}"]
+args = ["--gc-stress", "safepoint=1,kind=minor", "--gc-check", "verify=both", "--gc", "promotion_age=1,kind=generational", "${case}", "--arg", "n=300", "${run_nvm}"]
 expect_exit = 0
 expect_stdout_starts_with = "300 [alpha, beta, gamma] x-300\n300 [v-0, v-1, v-2]"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
@@ -146,7 +146,7 @@ name = "json.gc.forced_minor.fvm"
 desc = "A Json kept across allocation in a frame slot, through a function and in an array of Json is traced (generational, a minor collection at every safepoint, everything promoted at once (the write-barrier check of docs/technical/36, section 6); fvm). As an `any` it was not."
 kind = "behavior"
 case = "../../../cases/modules/std/json/json_gc.cml"
-args = ["--gc-stress", "safepoint=1,kind=minor", "--gc-check", "verify=both", "--gc promotion_age=", "1", "--gc", "kind=generational", "${case}", "--arg", "n=300", "${run_fvm}"]
+args = ["--gc-stress", "safepoint=1,kind=minor", "--gc-check", "verify=both", "--gc", "promotion_age=1,kind=generational", "${case}", "--arg", "n=300", "${run_fvm}"]
 expect_exit = 0
 expect_stdout_starts_with = "300 [alpha, beta, gamma] x-300\n300 [v-0, v-1, v-2]"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
@@ -202,7 +202,7 @@ name = "json.gc.forced_minor.prl"
 desc = "A Json kept across allocation in a frame slot, through a function and in an array of Json is traced (generational, a minor collection at every safepoint, everything promoted at once (the write-barrier check of docs/technical/36, section 6); prl). As an `any` it was not."
 kind = "behavior"
 case = "../../../cases/modules/std/json/json_gc.cml"
-args = ["--gc-stress", "safepoint=1,kind=minor", "--gc-check", "verify=both", "--gc promotion_age=", "1", "--gc", "kind=generational", "${case}", "--arg", "n=300", "${run_prl}"]
+args = ["--gc-stress", "safepoint=1,kind=minor", "--gc-check", "verify=both", "--gc", "promotion_age=1,kind=generational", "${case}", "--arg", "n=300", "${run_prl}"]
 expect_exit = 0
 expect_stdout_starts_with = "300 [alpha, beta, gamma] x-300\n300 [v-0, v-1, v-2]"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
@@ -258,7 +258,7 @@ name = "json.gc_macro.forced_minor.nvm"
 desc = "A Json computed by std::macro is a constant in the static area of main and is traced there (generational, a minor collection at every safepoint, everything promoted at once (the write-barrier check of docs/technical/36, section 6); nvm). As an `any` constant it was not."
 kind = "behavior"
 case = "../../../cases/modules/std/json/json_gc_macro.cml"
-args = ["--gc-stress", "safepoint=1,kind=minor", "--gc-check", "verify=both", "--gc promotion_age=", "1", "--gc", "kind=generational", "${case}", "--arg", "n=300", "std::macro", "${run_nvm}"]
+args = ["--gc-stress", "safepoint=1,kind=minor", "--gc-check", "verify=both", "--gc", "promotion_age=1,kind=generational", "${case}", "--arg", "n=300", "std::macro", "${run_nvm}"]
 expect_exit = 0
 expect_stdout_starts_with = "300 [r0, r1, r2] t"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
@@ -314,7 +314,7 @@ name = "json.gc_macro.forced_minor.fvm"
 desc = "A Json computed by std::macro is a constant in the static area of main and is traced there (generational, a minor collection at every safepoint, everything promoted at once (the write-barrier check of docs/technical/36, section 6); fvm). As an `any` constant it was not."
 kind = "behavior"
 case = "../../../cases/modules/std/json/json_gc_macro.cml"
-args = ["--gc-stress", "safepoint=1,kind=minor", "--gc-check", "verify=both", "--gc promotion_age=", "1", "--gc", "kind=generational", "${case}", "--arg", "n=300", "std::macro", "${run_fvm}"]
+args = ["--gc-stress", "safepoint=1,kind=minor", "--gc-check", "verify=both", "--gc", "promotion_age=1,kind=generational", "${case}", "--arg", "n=300", "std::macro", "${run_fvm}"]
 expect_exit = 0
 expect_stdout_starts_with = "300 [r0, r1, r2] t"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
