@@ -93,3 +93,27 @@
 - 清理（全部未跟踪，删前先 `git grep` 查引用）：`t302_*` 8 case + 8 plan、`t307_sugar`、`t312_bad_law_body`、`t350_run_param_probe.plan.toml`（临时探针）、`test/tools/probe-parity-counts.mjs`（按引用决定留删）
 - 交付：第三笔提交 + 计划逐名读数 + 清理后 `status --porcelain` 原文 + tip/numstat + 对 promotion-26（149 名）的逐名差集
 - 前手：`lane-kinds-oper`（上下文到极限，`task-366` 已在其名下 complete）
+
+### L. 工作树登记（2026-11-28 02:3x）
+- `D:\Projects\Camel-wt\op-names` —— 协调者指定，供 `lane-kinds-oper` 做 `task-21`（`git worktree add ... -b lane/op-names origin/integration`）；创建人是该车道，登记在此
+- `D:\Projects\Camel-wt\backend-speed` —— `lane/onnx-g2`（`lane-backend-speed` 于 02:0x 自建，事后追认）
+- 注意：`D:\Projects\Camel-wt\kinds-oper` 目录**不是** `lane/kinds-oper`（该枝不存在），现被 `acc/revert-check2 @ 59f7d17f65` 占着
+
+### M. `Tangent` 律落地后仍红的两条（观察，勿盲动）
+- `transpose_loop_escape.int_is_a_zero_tangent_space.nvm`、`transpose_loop_escape.two_values_of_two_kinds.nvm`：名字正对着 `Tangent` 律，但 E 卡落地后**仍红** ⇒ 它们的红另有原因（不是律本身）。
+- 下一手碰之前：先用同一跑的原文确认"红在哪一句"，再决定是修还是改期望；不要按名字推。
+- 出处：`lane/arg-parse-uaf-w @ 05395ebfd9` 的 `feat/compile/transforms 221/212/8` 读数（8 条逐名已对 promotion-26 表，新增红 0）。
+
+### N. 新建车道树的第一句：补 `camel-gate.local.json`（2026-11-28 记）
+- 新 `git worktree add` 出来的树**不继承** git-ignored 的 `internal/tools/camel-gate.local.json`，缺它时 `camel-remote` 直接拒跑。
+- 做法：从任一在跑的树复制该文件过去，再跑构建/读层；建树记录里写明这一步，否则下一条车道会卡在第一句。
+- 已照此办理的：`backend-speed`（`lane/onnx-g2`，自 console-res 复制）、`op-names`（`lane/op-names`，自 editview-commit 复制）。
+
+### O. 两条枝的去向（决策者 `D-1128-8` ① ②）
+- **`lane/case-study @ 54868b520f`（已恢复、标签 `archive/case-study-20261128` 保留）**：保留；那一笔 `examples: the case study's edits take their nodes from the draft` 写的是**旧的 `open`/`commit` 形状** ⇒ 交给 **edit/view 那一格**（`task-345/352/366`）在**块的降级落地后**改成用 `edit` 块改写，再合。**不要**在降级落地前动它。
+- **`lane/editview-commit`（无树）**：**保留不删** —— 它是 `Draft<F>` 与 C5 的那一版；edit/view 那一格（`task-345/352/366`）修好降级后要在**它的基础上**重落。
+- 相关：`lane/call-resolve-fix` 内容已全合（`git cherry` 两行 `-`），但树 `enter-shape`（`task-319`）停着它 ⇒ 等 319 交回再 detach + 删。
+
+### P. `task-361`（`opt::inline`，CC Figure 1）已改派 `lane-kinds-oper`
+- 决策者 `D-1128-8` ③：`opt-inline` 2.7 小时无树无读数，原 owner `lane-editview-commit` 上下文已用尽 ⇒ 第一步（图算子）已落地编过，**第二步（Camel 写的遍）与第三步（逐字节对照）** 立即另派，CC 优先级排前。
+- 派工要点：按 `src/stdlib/std/cxx/opt/inline/engine.cpp` 的选择规则照写、不另起复制逻辑；`cxx_isolation.plan.toml` 加 `inline.by_cpp`/`inline.by_camel` 四条语料逐字节相等 + "确实内联/确实没内联"断言；"C++ 那边说不清"的单列报协调者。
