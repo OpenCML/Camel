@@ -74,6 +74,12 @@ struct ValueInfo {
     std::string name;
     ElemType type = ElemType::Float;
     std::optional<std::vector<Dim>> shape;
+    /// Whether the type is a sequence of the tensor `type`/`shape` describes: ONNX
+    /// `TypeProto.sequence_type` rather than `TypeProto.tensor_type`. `type` and `shape` are then
+    /// the *element* tensor's -- a sequence has no shape of its own, its length is the run's -- and
+    /// a value of this kind is what a `Loop` carries when the array a body appends to has no fixed
+    /// length (design principles: the reverse pass of a collecting loop appends into an array).
+    bool isSequence = false;
 };
 
 struct Graph;
