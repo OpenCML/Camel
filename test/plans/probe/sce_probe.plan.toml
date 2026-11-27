@@ -1,0 +1,19 @@
+[[tests]]
+name = "probe.sce_float"
+desc = "softmax_cross_entropy of float logits."
+kind = "behavior"
+case = "../../cases/probe/sce_float.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm"]
+expect_exit = 0
+
+[[tests]]
+name = "probe.sce_f32"
+desc = "softmax_cross_entropy of f32 logits."
+kind = "behavior"
+case = "../../cases/probe/sce_f32.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm"]
+expect_exit = 0
+
+

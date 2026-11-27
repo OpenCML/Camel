@@ -129,8 +129,8 @@ tensor::Array *softmaxCrossEntropyLabelsGradLogits(
 
     const int64_t rows         = logits->dim(0);
     const int64_t cols         = logits->dim(1);
-    tensor::Array *grad = tensor::createTensor(
-        TypeCode::Float32,
+    tensor::Array *grad        = tensor::createTensor(
+        logits->dtype(),
         std::span<const int64_t>(logits->shape(), logits->rank()),
         allocator,
         false);
@@ -208,8 +208,8 @@ tensor::Array *softmaxCrossEntropyGradLogits(
 
     const int64_t rows         = logits->dim(0);
     const int64_t cols         = logits->dim(1);
-    tensor::Array *grad = tensor::createTensor(
-        TypeCode::Float32,
+    tensor::Array *grad        = tensor::createTensor(
+        logits->dtype(),
         std::span<const int64_t>(logits->shape(), logits->rank()),
         allocator,
         false);
