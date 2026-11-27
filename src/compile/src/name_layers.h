@@ -22,10 +22,11 @@
  * read with them), and layer 5 is two rows because both chains read it in two steps, in this
  * order -- the imports' unasked names, and then the prelude's exports.
  *
- * The first two rows are answered where the scopes are, by each builder in its own way (the value
- * chain from the graph and template scopes, the type chain from the type scope), so a module-level
- * lookup starts at `rowsFrom(NameRow::ImportedByName)`; those two rows are listed here because the
- * order is one statement, and the reader of either chain has to see where it starts.
+ * The rows above the imports are answered where the scopes are, by each builder in its own way (the
+ * value chain from the graph and template scopes, the type chain from the type scope), except
+ * `BlockHead`, which the module-level chain answers itself from the block the name is written in; so
+ * a module-level lookup starts at `rowsFrom(NameRow::BlockHead)`; the rows above it are listed here
+ * because the order is one statement, and the reader of either chain has to see where it starts.
  */
 #pragma once
 
@@ -42,6 +43,7 @@ namespace camel::compile {
 enum class NameRow : unsigned char {
     Local,
     Module,
+    BlockHead,
     ImportedByName,
     UsingNamespace,
     EveryImport,
@@ -56,13 +58,16 @@ struct NameRowMeaning {
 };
 
 /// The order. This array is the only place it is written down.
-inline constexpr std::array<NameRowMeaning, 7> nameRows = {{
+inline constexpr std::array<NameRowMeaning, 8> nameRows = {{
     {NameRow::Local,
      "the names in force where the name is written: parameters, the lets of the body, and the "
      "names an enclosing function captured"},
     {NameRow::Module,
      "this module's own names, from the innermost namespace out to the top level, and what the C++ "
      "module beside its declaration file exports"},
+    {NameRow::BlockHead,
+     "the module a headed block's body reads: the head names the module its root's handle comes "
+     "from, and that module's names are read in the body and nowhere outside it (design 15.1)"},
     {NameRow::ImportedByName,
      "the names an import brings by name, and the names a prefix of an imported module or "
      "namespace reaches"},

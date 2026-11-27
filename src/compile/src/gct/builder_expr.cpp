@@ -189,6 +189,12 @@ node_ptr_t Builder::visitBlockHeaded(const AST::node_ptr_t &ast) {
     node_ptr_t typeNode = tree_->makeType(type);
     node_ptr_t funcNode = tree_->makeFunc("");
     *funcNode << typeNode << execNode;
+    // The body is the block's, and the module the head named is a name layer of that body alone
+    // (design 15.1): kept beside the node, so the graph builder reads the same module the type
+    // scope did, and no scope outside the body gains a name from it.
+    if (headModule) {
+        tree_->setBlockHeadModule(funcNode, headModule);
+    }
     setOriginFromAst(context_, typeNode, ast, camel::source::OriginKind::GctNode, "gct.block.type");
     setOriginFromAst(context_, funcNode, ast, camel::source::OriginKind::GctNode, "gct.block.func");
     // An edit block's changes are all in or not at all (design 6, 15.1): the block's value is the

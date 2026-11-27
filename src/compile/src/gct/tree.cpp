@@ -8,6 +8,7 @@
 
 #include "camel/compile/gct/tree.h"
 #include "camel/compile/gct/types.h"
+#include "camel/core/module/module.h"
 #include "camel/core/operator_semantics.h"
 
 #include <algorithm>
@@ -91,6 +92,19 @@ void Tree::addTagUses(const Node *node, std::vector<TagUse> uses) {
 const std::vector<TagUse> *Tree::tagUsesOf(const Node *node) const {
     const auto it = tagUses_.find(node);
     return it == tagUses_.end() ? nullptr : &it->second;
+}
+
+void Tree::setBlockHeadModule(
+    const Node *func, std::shared_ptr<camel::core::module::Module> module) {
+    if (module == nullptr) {
+        return;
+    }
+    blockHeadModules_[func] = std::move(module);
+}
+
+std::shared_ptr<camel::core::module::Module> Tree::blockHeadModuleOf(const Node *func) const {
+    const auto it = blockHeadModules_.find(func);
+    return it == blockHeadModules_.end() ? nullptr : it->second;
 }
 
 void Tree::addFieldTagUses(const Node *decl, size_t field, std::vector<TagUse> uses) {

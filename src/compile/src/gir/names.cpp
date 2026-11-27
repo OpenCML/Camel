@@ -232,7 +232,7 @@ auto Builder::valueNameByRow(
     // this module and the `using` frames in force. Which row wins is the table's answer: a row
     // that has the name stops the walk, and no layer is named in this function's order.
     return firstRowHolding<ValueName>(
-        rowsFrom(NameRow::ImportedByName),
+        rowsFrom(NameRow::BlockHead),
         [&](NameRow row) -> RowAnswer<ValueName> {
             switch (row) {
             case NameRow::Local:
@@ -241,6 +241,28 @@ auto Builder::valueNameByRow(
                 // module's imports (visitDRefNode reads them from the graph, template and decorated
                 // scopes).
                 return RowAnswer<ValueName>::absent();
+            case NameRow::BlockHead: {
+                // The body of a headed block reads the module its head names, and reads it as a
+                // module's own names are read: this row answers from that module's exports alone and
+                // only while the body is being built, so the module is a layer of the body and no
+                // scope outside it gains a name (design 15.1). The innermost head answers first; a
+                // block inside a block reads the inner head's module, and the outer head's names
+                // stay in force below it as the scopes of the outer body do.
+                if (exports_ == nullptr) {
+                    return RowAnswer<ValueName>::absent();
+                }
+                for (auto head = blockHeadModules_.rbegin(); head != blockHeadModules_.rend();
+                     ++head) {
+                    if (*head == nullptr) {
+                        continue;
+                    }
+                    auto found = exports_->exportedEntity(**head, Reference(written));
+                    if (found.has_value() && !found->isTag()) {
+                        return RowAnswer<ValueName>::has(ValueName{std::move(found), {}});
+                    }
+                }
+                return RowAnswer<ValueName>::absent();
+            }
             case NameRow::ImportedByName: {
                 // A name brought by name is the name the program means, whatever it is: the
                 // reference written here with an import of it in force has that import's entity and

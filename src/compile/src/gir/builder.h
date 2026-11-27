@@ -447,6 +447,35 @@ class Builder {
     /// program. Never at a module's table: that is the module's own (native) declarations.
     camel::core::module::ProgramExports ownExports_;
     camel::core::module::ProgramExports *exports_;
+    /// The modules the headed blocks whose bodies are being built read (design 15.1), innermost
+    /// last: a name layer of those bodies only, pushed for a body and popped after it, so a name
+    /// outside the body is not read from it (see `name_layers.h`, row `BlockHead`).
+    std::vector<camel::core::module::module_ptr_t> blockHeadModules_;
+    /// Pushes one such module for the build of a body and pops it however the build ends: a body
+    /// that does not compile is answered rather than fatal in a speculative instantiation, and the
+    /// layer must not outlive the body either way.
+    class BlockHeadModuleScope {
+    public:
+        BlockHeadModuleScope(
+            std::vector<camel::core::module::module_ptr_t> &stack,
+            camel::core::module::module_ptr_t module)
+            : stack_(stack), pushed_(module != nullptr) {
+            if (pushed_) {
+                stack_.push_back(std::move(module));
+            }
+        }
+        ~BlockHeadModuleScope() {
+            if (pushed_) {
+                stack_.pop_back();
+            }
+        }
+        BlockHeadModuleScope(const BlockHeadModuleScope &)            = delete;
+        BlockHeadModuleScope &operator=(const BlockHeadModuleScope &) = delete;
+
+    private:
+        std::vector<camel::core::module::module_ptr_t> &stack_;
+        bool pushed_;
+    };
 
     /// Whether the statement being built is one of a sync chain, and whether it varied (the two
     /// decide how a statement is chained, design principles 5.2). Initialized here and not left to

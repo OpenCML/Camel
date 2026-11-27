@@ -1154,6 +1154,11 @@ compile_graph_ptr_t Builder::visitFuncNode(const GCT::node_ptr_t &gct) {
             reportWhenProblem(early, name, when->condition);
         }
     }
+    // A headed block's body reads the module its head named, and reads it there and nowhere else
+    // (design 15.1): the module is a name layer of the body, in force while the body is built.
+    const BlockHeadModuleScope headScope(
+        blockHeadModules_,
+        GCT::Tree::of(gct)->blockHeadModuleOf(gct));
     buildFuncBody(gct, graph, funcType, name, tags, written);
     // A declaration tag whose argument names a function (`#vjp(cube_rule)`) keeps that graph
     // in the reference table of the function's graph: the fact is a graph reference, and the
