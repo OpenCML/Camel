@@ -1,4 +1,4 @@
-# promotion 50 red table: the failing cases of the fast layer measured at the pinned tip
+# promotion 25 red table (the round the logs call promo50): the failing cases of the fast layer measured at the pinned tip
 #
 # [provenance] tip a48f8d65b84b35530e3bb9399cd90077237dc0e6 | binary built 2026-11-27T17:39 | tree34 | tier fast | jobs 8
 # [SUMMARY] total 9863 / pass 9641 / fail 161 / skip 28 / known failures 33 / killed by a signal 0
