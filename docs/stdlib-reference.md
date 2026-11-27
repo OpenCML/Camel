@@ -3275,8 +3275,12 @@ broadcast that handed one element along that lane (design principles 5.4). Two e
 the identity, which is the shape a gradient usually arrives in. Anything else is a fault named at
 the call: a target *longer* than `t`, or one asking for an extent `t` does not have at that
 position, is refused with both shapes in the sentence
-(`lib/tensor/kernels/gradient.cpp#requireSuffixTarget`). The operator never spreads;
-`broadcast_like` is the operator that does.
+(`lib/tensor/kernels/gradient.cpp#requireSuffixTarget`). A one-extent target on a tensor of rank
+three or more is refused too when that extent sits on more than one of its axes: `[4]` on
+`[4, 4, 2, 4]` is the last axis by the suffix reading and axis 0 by another, and the two sum
+different numbers, so the ambiguity is named at the call instead of answered with one reading
+(`lib/tensor/kernels/shape_rules.h`, the judgement the declaration and the kernel share). The
+operator never spreads; `broadcast_like` is the operator that does.
 
 The element type is `t`'s, and the answer is written at it (design principles 9.9: a gradient is
 the width of the value it belongs to). The extents are not in the result type, because they are a
@@ -3304,8 +3308,10 @@ The two directions do not share `sum_to`, because they are not one move: a reduc
 that is a suffix of its operand's shape and adds over the axes in front of it, while a spread
 writes an element into every lane a broadcast would have handed it out along -- the operation
 `broadcast_like` is named for. `sum_to` takes the extents themselves and refuses
-a target *longer* than its operand by name; a law that needs a rank-one value in the lanes of a
-rank-two one says `broadcast_like(value, like)` and reads the shape off a value the cut carries.
+a target *longer* than its operand by name, and a one-extent target that fits more than one axis
+of a rank-three-or-longer operand (the ambiguity `shape_rules.h` names); a law that needs a
+rank-one value in the lanes of a rank-two one says `broadcast_like(value, like)` and reads the
+shape off a value the cut carries.
 
 `like` is a tensor (or a value whose stated shape is the target); `t` is a tensor or a single
 number, and a number is written at `like`'s element type -- a rank-zero operand *is* an element

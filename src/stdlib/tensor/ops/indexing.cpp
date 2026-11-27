@@ -22,6 +22,7 @@
 #include "indexing.h"
 
 #include "../kernels/layout.h"
+#include "../kernels/shape_rules.h"
 #include "support.h"
 
 #include "camel/core/operator_table.h"
@@ -826,6 +827,14 @@ std::optional<uint8_t> sumToLaw(std::optional<TypeCode> dtype) {
  * Otherwise every axis of t is a dim; it is a Reduction dim where `at` has no such axis or states
  * 1 against t's larger extent, and the result is written at `at`'s coordinates.
  *
+ * A rank-1 target on a rank-3-or-longer tensor does not always say which axis it is: `[4]` on
+ * `[4, 4, 2, 4]` is the suffix reading's last axis and also axis 0, and the two sum different
+ * numbers. The kernel refuses that ambiguity by name (`kernels/gradient.cpp#requireSuffixTarget`),
+ * and a call the kernel rejects has no instance here either -- the same answer as a target longer
+ * than the shape (design section 12: a rejected call is "no instance", not an instance that
+ * faults). The judgement itself is `kernels/shape_rules.h`'s, so this declaration and the kernel
+ * cannot drift apart.
+ *
  * Its arms are the float widths its kernel carries, f32 then f64, and each names the law at its
  * own position in that list; an integer or bool operand gets no instance, which is what the
  * kernel's refusal says (design principles 5.1: no conversion to reach an arm).
@@ -835,6 +844,18 @@ std::optional<IndexedInstance> sumToIndexing(const InferContext &ctx) {
     const auto at = ctx.constInts(1);
     if (!g || !at || !fullyKnown(*g) || at->size() > g->size()) {
         return std::nullopt;
+    }
+    // The ambiguity a rank-1 target carries on a rank-3-or-longer shape: the kernel throws, so
+    // there is no instance to give.
+    if (at->size() == 1 && g->size() >= 3) {
+        std::vector<int64_t> extents;
+        extents.reserve(g->size());
+        for (const std::optional<int64_t> &d : *g) {
+            extents.push_back(*d); // fullyKnown(*g): every dim is known
+        }
+        if (!ambiguousRankOneAxes(*at, extents).empty()) {
+            return std::nullopt;
+        }
     }
     IndexBuilder b;
     if (g->size() == at->size() &&

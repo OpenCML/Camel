@@ -544,7 +544,7 @@ e065061c9e91b782 ok src/stdlib/statistics.cml
 9377d87dcf46ea44 ok src/stdlib/std.cml
 1e853ee4b632ef01 ok src/stdlib/str.cml
 46747b8669c63121 ok src/stdlib/stream.cml
-8308cebdc691d9b6 ok src/stdlib/tensor.cml
+ed77c186d082145e ok src/stdlib/tensor.cml
 8f1757aa8f0cbb76 ok src/stdlib/tensor_definitions.cml
 0163a9746312978e ok src/stdlib/test_support.cml
 a3ac49ac09dcaed1 ok src/stdlib/this.cml
