@@ -49,3 +49,18 @@ task-66 | slow layer: four feat.mm.capacity reds judged one by one | completed |
 task-69 | three generated files stale: stdlib reference, AI reference, questions index | completed | owner: lane-misc | r3
 task-71 | remaining `let x = 0 .. n` sites used as arrays, judged one by one | completed | owner: lane-arrangeable | r3
 ```
+
+## Recorded in batch 3 (10)
+
+```
+task-95  | rescuing the 46 uncommitted changes in the console-res worktree | completed | owner: lane-parked-rebase | r3
+task-96  | closing out "one console resource": bounds.cpp, two doc pages, readings | completed | owner: lane-parked-rebase | r4
+task-98  | wiring up the three block-space readings and finding who holds a 9.0 MB block | completed | owner: lane-backend-speed | r3
+task-101 | an index page for internal/reports (278 pages, only ls found them) | completed | owner: lane-misc | r3
+task-102 | worktree pool close-out: 86 registered trees cleaned toward 16 | completed | owner: lane-enter-shape | r3
+task-103 | one new red: max_pool2d_window_transpose expectation vs implementation | completed | owner: lane-kinds-oper | r3
+task-104 | regenerating the stdlib-signatures region of the AI reference | completed | owner: lane-misc | r3
+task-105 | voided duplicate dispatch of the console-rescue rebase | completed | owner: lane-editview-commit | r4
+task-106 | the Range-as-argument family: 11 cases that lost what they measure | completed | owner: lane-enter-shape | r3
+task-109 | lane/cli-rework rebased and read, to judge it for the merge queue | completed | owner: lane-kinds-oper | r4
+```
