@@ -451,6 +451,11 @@ class Builder {
     /// last: a name layer of those bodies only, pushed for a body and popped after it, so a name
     /// outside the body is not read from it (see `name_layers.h`, row `BlockHead`).
     std::vector<camel::core::module::module_ptr_t> blockHeadModules_;
+    /// The same modules while a body is only being read for names and not built
+    /// (`walkStaticBodyNames`): the declaration-site check of a generic template reads a body no
+    /// instance has built, and a name of the head's module is in scope there as it is in the body
+    /// the build would make, so that check reads the same layer the build does (design 15.1).
+    std::vector<camel::core::module::module_ptr_t> staticBodyHeadModules_;
     /// Pushes one such module for the build of a body and pops it however the build ends: a body
     /// that does not compile is answered rather than fatal in a speculative instantiation, and the
     /// layer must not outlive the body either way.
