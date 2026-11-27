@@ -1131,11 +1131,14 @@ const GCGraph *graphOfView(const Program &program, const camel::graph::GraphView
 
 GraphFootprint footprintOf(const Program &program, const camel::graph::GraphView &view) {
     const GCGraph *graph = graphOfView(program, view);
-    // A view the program does not hold is a reader's mistake, not a graph with no footprint: an
-    // empty answer would be read as a fact about the program's content.
-    GUARD(graph != nullptr, "a footprint was asked of a view the program does not hold.");
+    // A view the program does not hold is a mistake in the question, not a graph that touches
+    // nothing. An empty footprint would be read as "this body touches no resource" and would let
+    // every caller take the safe path on a false premise, so the check below is alive in the build
+    // that ships.
     if (graph == nullptr) {
-        return {};
+        cml::fail_invariant(
+            "graph != nullptr",
+            "a footprint was asked of a view the program does not hold.");
     }
     return footprintOf(program, graph);
 }
