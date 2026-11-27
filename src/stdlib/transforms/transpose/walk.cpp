@@ -1827,6 +1827,99 @@ bool buildTransposeMember(
         // front end built and is not what the ids give for a graph a rewrite has changed. A
         // branch's arms are regions, not ids, so they are walked by `runArm` when the branch is
         // reached.
+        // A branch is transposed the same way wherever it sits. The cotangent of a join is the
+        // cotangent of the chain downstream of it; which arm produced the value decides which
+        // arm's chain receives it. Both arms are built, each in its own region, and the join
+        // picks one -- so the two arms' cotangents are joined, not added: only one of them ran.
+        // Where an arm's chain stops is a parameter and not a fact read here, because it is a
+        // fact about the caller's graph: the top level stops at the tangents the answer is asked
+        // for, and a region stops at its own ports.
+        const auto transposeBranchInRegion =
+            [&](gc_node_ref_t joinRef,
+                gc_node_ref_t ctIn,
+                const std::vector<gc_node_ref_t> &stops) -> gc_node_ref_t {
+            Type *const joinType  = cotangentTypeOf(joinRef);
+            const auto arms       = function->withInputsOf(joinRef);
+            const auto normBranch = function->normInputsOf(joinRef);
+            if (joinType == nullptr || arms.size() < 2 || normBranch.empty()) {
+                return rt::kInvalidNodeRef;
+            }
+            // The join carries whichever arm's cotangent came back, so its value type is the
+            // cotangent of the value it joins -- read from the source node. A join created as
+            // `float` and then fed one `f32` arm and one `f32` arm breaks the graph's own edge
+            // invariant ("arm 0 yields a f32, the JOIN is a float"), which is a graph the run
+            // cannot carry.
+            const gc_node_ref_t join = draft.addJoinNode(
+                joinType,
+                rt::kInvalidNodeRef,
+                static_cast<rt::gc_cnt_t>(arms.size()));
+            const gc_node_ref_t brch =
+                draft.addBrchNode(Type::Int64(), join, static_cast<rt::gc_cnt_t>(arms.size()));
+            // The join's norm input is the branch; the branch's own norm input is the condition
+            // this arm was chosen by.
+            const auto conditionInputs = function->normInputsOf(normBranch.front());
+            if (conditionInputs.empty()) {
+                refuse(TransposeRefusalCause::Condition);
+                os << '\n';
+                return rt::kInvalidNodeRef;
+            }
+            const gc_node_ref_t condition = forward(conditionInputs.front());
+            if (!complete || condition == rt::kInvalidNodeRef) {
+                refuse(TransposeRefusalCause::Condition);
+                os << '\n';
+                return rt::kInvalidNodeRef;
+            }
+            // A condition is a choice, not a magnitude: the branch that ran is decided by it, and
+            // the transposed graph copies it forward rather than differentiating it. So the
+            // cotangent never reaches it, and the reading would say nothing about a value that is
+            // in the middle of the graph unless it is said here -- a bool contributes zero because
+            // it has no tangent space, and that is a fact about the derivative, not an omission.
+            if (!hasTangentSpace(conditionInputs.front())) {
+                noteZero(conditionInputs.front(), normBranch.front());
+            }
+            draft.setNormInputs(brch, std::span<const gc_node_ref_t>(&condition, 1));
+            std::vector<gc_node_ref_t> armCotangents;
+            for (size_t k = 0; k < arms.size(); ++k) {
+                const uint32_t oldRegion = function->nodeRegion(arms[k]);
+                const uint32_t newRegion =
+                    draft.addRegion(rt::GCRegionKind::Arm, 0, brch, static_cast<uint32_t>(k));
+                draft.setInsertRegion(newRegion);
+                const gc_node_ref_t armCotangent = runArm(oldRegion, arms[k], ctIn, stops);
+                if (!armsOk || armCotangent == rt::kInvalidNodeRef) {
+                    refuse(TransposeRefusalCause::Arm);
+                    os << " arm=" << k << '\n';
+                    return rt::kInvalidNodeRef;
+                }
+                draft.setRegionResult(newRegion, armCotangent);
+                draft.setInsertRegion(0);
+                armCotangents.push_back(armCotangent);
+                armRegionsBuilt.push_back(newRegion);
+            }
+            // The join names the branch and the branch names the join: the join was made first and
+            // its payload is written now that the branch and the arms exist.
+            camel::runtime::GCJoinBody joinBody{};
+            joinBody.brch     = brch;
+            joinBody.armCount = static_cast<rt::gc_cnt_t>(arms.size());
+            std::vector<std::byte> bytes(sizeof(joinBody));
+            std::memcpy(bytes.data(), &joinBody, sizeof(joinBody));
+            const camel::runtime::DraftNodeHeader *header = draft.header(join);
+            camel::runtime::DraftNodeInit init;
+            init.dataIndex                 = header->dataIndex;
+            init.dataType                  = header->dataType;
+            init.kind                      = header->kind;
+            init.runtimeFlags              = header->runtimeFlags;
+            init.origin                    = header->origin;
+            init.permissions               = header->permissions;
+            init.attrs                     = header->attrs;
+            init.region                    = header->region;
+            init.name                      = header->name;
+            init.payload                   = std::span<const std::byte>(bytes);
+            const gc_node_ref_t joinBranch = brch;
+            init.normInputs                = std::span<const gc_node_ref_t>(&joinBranch, 1);
+            init.withInputs                = armCotangents;
+            draft.rewriteNode(join, init);
+            return join;
+        };
         for (const gc_node_ref_t ref : walkOrder) {
             const camel::runtime::GCNode *node = function->node(ref);
             if (node == nullptr || !hasCotangent[ref]) {
@@ -2196,37 +2289,6 @@ bool buildTransposeMember(
                     os << " node=" << ref << " no-cotangent-space\n";
                     return false;
                 }
-                const gc_node_ref_t join = draft.addJoinNode(
-                    joinType,
-                    rt::kInvalidNodeRef,
-                    static_cast<rt::gc_cnt_t>(arms.size()));
-                const gc_node_ref_t brch =
-                    draft.addBrchNode(Type::Int64(), join, static_cast<rt::gc_cnt_t>(arms.size()));
-                // The join's norm input is the branch; the branch's own norm input is the
-                // condition this arm was chosen by.
-                const auto conditionInputs = function->normInputsOf(normBranch.front());
-                if (conditionInputs.empty()) {
-                    refuse(TransposeRefusalCause::Condition);
-                    os << '\n';
-                    return false;
-                }
-                const gc_node_ref_t condition = forward(conditionInputs.front());
-                if (!complete || condition == rt::kInvalidNodeRef) {
-                    refuse(TransposeRefusalCause::Condition);
-                    os << '\n';
-                    return false;
-                }
-                // A condition is a choice, not a magnitude: the branch that ran is decided by it,
-                // and the transposed graph copies it forward rather than differentiating it. So the
-                // cotangent never reaches it, and the reading would say nothing about a value that
-                // is in the middle of the graph unless it is said here -- a bool contributes zero
-                // because it has no tangent space, and that is a fact about the derivative, not an
-                // omission.
-                if (!hasTangentSpace(conditionInputs.front())) {
-                    noteZero(conditionInputs.front(), normBranch.front());
-                }
-                draft.setNormInputs(brch, std::span<const gc_node_ref_t>(&condition, 1));
-                std::vector<gc_node_ref_t> armCotangents;
                 // Where an arm's chain stops. The answer of the transposed function is the
                 // cotangent of the *tangents* the backward half is given, so an arm of a
                 // residual-bundle half stops at its first tangent port -- not at the bundle, whose
@@ -2268,45 +2330,10 @@ bool buildTransposeMember(
                 } else {
                     stops.push_back(stopPorts.front());
                 }
-                for (size_t k = 0; k < arms.size(); ++k) {
-                    const uint32_t oldRegion = function->nodeRegion(arms[k]);
-                    const uint32_t newRegion =
-                        draft.addRegion(rt::GCRegionKind::Arm, 0, brch, static_cast<uint32_t>(k));
-                    draft.setInsertRegion(newRegion);
-                    const gc_node_ref_t armCotangent = runArm(oldRegion, arms[k], ctJoin, stops);
-                    if (!armsOk || armCotangent == rt::kInvalidNodeRef) {
-                        refuse(TransposeRefusalCause::Arm);
-                        os << " arm=" << k << '\n';
-                        return false;
-                    }
-                    draft.setRegionResult(newRegion, armCotangent);
-                    draft.setInsertRegion(0);
-                    armCotangents.push_back(armCotangent);
-                    armRegionsBuilt.push_back(newRegion);
+                const gc_node_ref_t join = transposeBranchInRegion(ref, ctJoin, stops);
+                if (join == rt::kInvalidNodeRef) {
+                    return false;
                 }
-                // The join names the branch and the branch names the join: the join was made first
-                // and its payload is written now that the branch and the arms exist.
-                camel::runtime::GCJoinBody joinBody{};
-                joinBody.brch     = brch;
-                joinBody.armCount = static_cast<rt::gc_cnt_t>(arms.size());
-                std::vector<std::byte> bytes(sizeof(joinBody));
-                std::memcpy(bytes.data(), &joinBody, sizeof(joinBody));
-                const camel::runtime::DraftNodeHeader *header = draft.header(join);
-                camel::runtime::DraftNodeInit init;
-                init.dataIndex                 = header->dataIndex;
-                init.dataType                  = header->dataType;
-                init.kind                      = header->kind;
-                init.runtimeFlags              = header->runtimeFlags;
-                init.origin                    = header->origin;
-                init.permissions               = header->permissions;
-                init.attrs                     = header->attrs;
-                init.region                    = header->region;
-                init.name                      = header->name;
-                init.payload                   = std::span<const std::byte>(bytes);
-                const gc_node_ref_t joinBranch = brch;
-                init.normInputs                = std::span<const gc_node_ref_t>(&joinBranch, 1);
-                init.withInputs                = armCotangents;
-                draft.rewriteNode(join, init);
                 // The arms answer one cotangent each, and the join is theirs to merge. The
                 // transposed function's answer is one cotangent per parameter the transposition
                 // answers for, so the join's single value is wrapped in the one-slot tuple the
