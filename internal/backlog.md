@@ -1477,3 +1477,4 @@
 | open | task-141 | `lane/editview-a2` 补块作用域那半 + 重录 ast 哈希（裁定 A 之后重判为"要补"）—— **没做**；原 owner lane-editview-a（已停），枝 `lane/editview-new` 是它的后续 | 同上 |
 | open | task-165 | stdlib 红表收尾 —— A 类 9 行 + B 类 6 行照实测重录 —— **没做完**；实际由 `task-167`（lane-misc，`lane/console-rescue`）接手做了 A 类 9 行与 B 类 1/6，余 5 行记录在 `D:\Temp\t165-handover.cn.md` | 同上 |
 | open | task-172 | 验收 `lane/editview-a2 @ c09931ce37`（parse 的块头取模块）—— **没做**；原 owner lane-backend-speed（已停），枝已并入 `lane/editview-new` | 同上 |
+| D-1127-172 | `check-doc-snippets` 两类由他定、派给手上有证据的车道直接改：① 编译步与运行步拼命令行不一致是检查器缺陷（抽成一个函数、按页面给的参数加文件加遍构造一次、编译步只在没给遍时用 `std::gir` 顶上、其余选项与运行步完全相同、删两处各自拼参数的代码）；② PENDING 表 16 条（12 已能过 + 4 键对不上）直接删、不加豁免；页面那 7 条照旧派 `cap-probe` | taken | 派 `task-266` → `cap-probe`（它手上有 27 条 stale 的逐条证据）；**顺序写成"先改 ①、量一次、再看 ②"** —— 4 条 `-I` 类 stale 是检查器的错，① 改完应自己转绿，那 4 个页面就不要再改（改页面等于把检查器的缺陷记到文档头上）；页面 7 条降为第二步、按量完的实际条数做 | 19:38 | ⇒ "stale 表在提醒回头扫表"：量具自己的两处拼参数不一致，会被读成文档欠账 |
