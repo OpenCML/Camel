@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 #include "program_index.h"
+#include "graph_pair.h"
 #include "camel/runtime/control_regions.h"
 #include "camel/runtime/oper_shape.h"
 #include "camel/runtime/program.h"
@@ -21,36 +22,6 @@ namespace debugger::core {
 using namespace camel::runtime;
 namespace fs = std::filesystem;
 
-namespace {
-
-/// The implementation a view belongs to. The program holds both faces of every graph it knows,
-/// and a graph makes its view once and keeps it, so the view's address names the graph. A reader
-/// that needs what only the representation answers -- a node's payload, the graph's id, the
-/// table of graphs it refers to -- asks for the graph this way rather than the view growing a
-/// second face for it.
-const camel::runtime::GCGraph *
-implOf(const camel::core::context::context_ptr_t &ctx, const camel::graph::GraphView *view) {
-    if (ctx == nullptr || view == nullptr) {
-        return nullptr;
-    }
-    const camel::runtime::Program *program = ctx->runtimeProgram();
-    if (program == nullptr) {
-        return nullptr;
-    }
-    for (camel::runtime::GCGraph *graph : program->graphs()) {
-        if (graph != nullptr && &graph->view() == view) {
-            return graph;
-        }
-    }
-    return nullptr;
-}
-
-/// The view of an implementation, which is what this index files a graph under.
-const camel::graph::GraphView *viewOf(const camel::runtime::GCGraph *graph) {
-    return graph == nullptr ? nullptr : &graph->view();
-}
-
-} // namespace
 
 const char *kindName(GCNodeKind kind) {
     // The kinds a frozen graph holds are named once (`camel/runtime/oper_shape.h#nodeKindName`), which
@@ -322,18 +293,18 @@ void ProgramIndex::finishBindings() {
 void ProgramIndex::collect(
     const camel::graph::GraphView *root, std::map<LineKey, LineNodes> &lines, std::vector<const camel::graph::GraphView *> &graphs,
     std::unordered_set<origin_t> *origins, ArmOwners *arms) {
-    const camel::runtime::GCGraph *rootImpl = implOf(ctx_, root);
+    const auto *rootImpl = pairing::graphOf(ctx_, root);
     const camel::runtime::Program *program =
         rootImpl != nullptr ? ctx_->programOfRuntimeGraph(*rootImpl) : nullptr;
     if (program == nullptr) {
         return;
     }
-    std::unordered_set<const camel::runtime::GCGraph *> seen{rootImpl};
-    std::deque<const camel::runtime::GCGraph *> queue{rootImpl};
+    std::unordered_set<decltype(rootImpl)> seen{rootImpl};
+    std::deque<decltype(rootImpl)> queue{rootImpl};
     while (!queue.empty()) {
         auto *g = queue.front();
         queue.pop_front();
-        graphs.push_back(viewOf(g));
+        graphs.push_back(pairing::viewOf(g));
         if (g->hasNodePayload()) {
             for (auto it = g->nodes().begin(); it != g->nodes().end(); ++it) {
                 const GCNode *n  = *it;
@@ -355,7 +326,7 @@ void ProgramIndex::collect(
                 }
             }
         }
-        program->traceGraphs(*g, [&](camel::runtime::GCGraph *next) {
+        program->traceGraphs(*g, [&](auto *next) {
             if (seen.insert(next).second) {
                 queue.push_back(next);
             }
@@ -399,13 +370,13 @@ void ProgramIndex::running(const camel::graph::GraphView *root) {
     collect(root, runningLines_, runningGraphs_, nullptr, &armOwners_);
     runningGraphIds_.clear();
     for (auto *g : runningGraphs_) {
-        if (const auto *impl = implOf(ctx_, g); impl != nullptr) {
+        if (const auto *impl = pairing::graphOf(ctx_, g); impl != nullptr) {
             runningGraphIds_.insert(camel::runtime::toText(impl->id()));
         }
     }
     armGraphIds_.clear();
     for (const auto &[arm, owners] : armOwners_) {
-        if (const auto *impl = implOf(ctx_, arm); impl != nullptr) {
+        if (const auto *impl = pairing::graphOf(ctx_, arm); impl != nullptr) {
             armGraphIds_.insert(camel::runtime::toText(impl->id()));
         }
     }
@@ -416,17 +387,17 @@ void ProgramIndex::running(const camel::graph::GraphView *root) {
 void ProgramIndex::findLiveGraphs(const camel::graph::GraphView *root) {
     liveGraphIds_.clear();
     liveOrigins_.clear();
-    const camel::runtime::GCGraph *rootImpl = implOf(ctx_, root);
+    const auto *rootImpl = pairing::graphOf(ctx_, root);
     const camel::runtime::Program *program =
         rootImpl != nullptr ? ctx_->programOfRuntimeGraph(*rootImpl) : nullptr;
     if (program == nullptr) {
         return;
     }
-    // GCGraph::dependencies() are the graphs of the FUNC nodes (calls, the arms of branches)
+    // The graphs a graph names are the graphs of its FUNC nodes (calls, the arms of branches)
     // and staticGraphRefs() the graphs of the function values in the static area; subGraphs()
     // (every function declared in a graph) are left out: being declared is not being called.
-    std::unordered_set<const camel::runtime::GCGraph *> seen{rootImpl};
-    std::deque<const camel::runtime::GCGraph *> queue{rootImpl};
+    std::unordered_set<decltype(rootImpl)> seen{rootImpl};
+    std::deque<decltype(rootImpl)> queue{rootImpl};
     while (!queue.empty()) {
         auto *g = queue.front();
         queue.pop_front();
@@ -509,7 +480,7 @@ void ProgramIndex::nameFunctions() {
     // which is the same builder-written name (`name`) a frozen graph stores.
     std::unordered_map<std::string, const camel::graph::GraphView *> byGraphId;
     for (auto *g : initialGraphs_) {
-        if (const auto *impl = implOf(ctx_, g); impl != nullptr) {
+        if (const auto *impl = pairing::graphOf(ctx_, g); impl != nullptr) {
             byGraphId.emplace(camel::runtime::toText(impl->id()), g);
         }
     }
@@ -564,7 +535,7 @@ std::string ProgramIndex::capturedName(const camel::graph::GraphView *graph, std
     if (auto sc = ctx_ ? ctx_->sourceContext() : nullptr) {
         // The origin of a graph is the representation's (debugMap holds the implementation's
         // graph id), so the pairing is asked for here.
-        if (const auto *impl = implOf(ctx_, graph); impl != nullptr) {
+        if (const auto *impl = pairing::graphOf(ctx_, graph); impl != nullptr) {
             file = loc(sc->debugMap().graphOrigin(impl->id())).file;
         }
     }
@@ -621,7 +592,7 @@ FunctionResolution ProgramIndex::resolveFunction(const std::string &written) con
         }
         bool called = false;
         for (auto *g : chosen) {
-            const auto *impl = implOf(ctx_, g);
+            const auto *impl = pairing::graphOf(ctx_, g);
             if (impl == nullptr) {
                 continue;
             }
@@ -805,7 +776,7 @@ GraphInfo &ProgramIndex::graph(const camel::graph::GraphView *g) {
     if (auto it = graphs_.find(g); it != graphs_.end()) {
         return *it->second;
     }
-    const camel::runtime::GCGraph *gImpl = implOf(ctx_, g);
+    const auto *gImpl = pairing::graphOf(ctx_, g);
     ASSERT(gImpl != nullptr, "A graph of the debugged program is in no program.");
     const camel::runtime::Program *programOfGraph = ctx_->programOfRuntimeGraph(*gImpl);
     ASSERT(programOfGraph != nullptr, "A graph of the debugged program is in no program.");
@@ -921,7 +892,7 @@ GraphInfo &ProgramIndex::graph(const camel::graph::GraphView *g) {
                         const auto bound = bindingsOfNode(gImpl->nodeOrigin(input));
                         return bound.empty() ? std::string() : bound.front()->name;
                     };
-                    auto &names = inheritedPortNames_[viewOf(callee)];
+                    auto &names = inheritedPortNames_[pairing::viewOf(callee)];
                     size_t i    = 0;
                     for (gc_node_ref_t input : gImpl->withInputsOf(node.ref)) {
                         if (std::string name = nameOf(input); !name.empty()) {

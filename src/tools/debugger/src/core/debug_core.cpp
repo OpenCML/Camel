@@ -23,6 +23,7 @@
  */
 
 #include "debug_core.h"
+#include "graph_pair.h"
 
 #include "../state.h"
 
@@ -487,14 +488,13 @@ void DebugCore::passStarting(bool schedules, const camel::graph::GraphView *) {
 }
 
 DebugCore::ShadowFrame &DebugCore::pushFrame(
-    const camel::graph::GraphView *graph, Frame *frame, GCGraph *impl) {
+    const camel::graph::GraphView *graph, Frame *frame) {
     if (!runIndexed_) {
         firstNodeOfRun(graph);
     }
     ShadowFrame f;
     f.id    = nextFrameId_++;
     f.graph = graph;
-    f.impl  = impl;
     f.frame = frame;
     {
         std::lock_guard lock(indexMutex_);
@@ -507,9 +507,9 @@ DebugCore::ShadowFrame &DebugCore::pushFrame(
 }
 
 DebugCore::ShadowFrame &DebugCore::pushCallee(
-    const camel::graph::GraphView *graph, Frame *frame, GCGraph *impl) {
+    const camel::graph::GraphView *graph, Frame *frame) {
     const bool called = !stack_.empty();
-    ShadowFrame &f    = pushFrame(graph, frame, impl);
+    ShadowFrame &f    = pushFrame(graph, frame);
     // After the push: pushing may have moved the frames.
     ShadowFrame *caller = called ? &stack_[stack_.size() - 2] : nullptr;
     placeCallee(f, caller);
@@ -524,10 +524,10 @@ DebugCore::ShadowFrame &DebugCore::pushCallee(
 }
 
 DebugCore::ShadowFrame &DebugCore::replaceTop(
-    const camel::graph::GraphView *graph, Frame *frame, GCGraph *impl) {
+    const camel::graph::GraphView *graph, Frame *frame) {
     const ShadowFrame old = std::move(stack_.back());
     stack_.pop_back();
-    ShadowFrame &f = pushFrame(graph, frame, impl);
+    ShadowFrame &f = pushFrame(graph, frame);
     f.tailReplaced = old.tailReplaced + 1;
     placeReplacement(f, old, stack_.size() > 1 ? &stack_[stack_.size() - 2] : nullptr);
     if (f.info->folds()) {
@@ -553,13 +553,11 @@ void DebugCore::beforeNode(
         return;
     }
     if (pending_ == Pending::Enter || stack_.empty()) {
-        // `frame` is the one that knows which implementation runs it; `graph` above is what the
-        // frame is read through.
-        pushCallee(graph, frame, frame->runtimeGraph());
+        pushCallee(graph, frame);
     } else if (
         pending_ == Pending::Tail || stack_.back().frame != frame || stack_.back().graph != graph) {
         // A tail call: the callee's frame takes the caller's place (5.2).
-        replaceTop(graph, frame, frame->runtimeGraph());
+        replaceTop(graph, frame);
     }
     pending_       = Pending::None;
     ShadowFrame &f = stack_.back();
@@ -583,7 +581,8 @@ void DebugCore::beforeNode(
 }
 
 void DebugCore::beforeInstruction(const camel::execute::InstructionSite &site) {
-    auto *graph = site.frame ? site.frame->runtimeGraph() : nullptr;
+    const camel::graph::GraphView *graph =
+        site.frame ? &site.frame->runtimeGraph()->view() : nullptr;
     if (graph == nullptr) {
         return;
     }
@@ -592,24 +591,24 @@ void DebugCore::beforeInstruction(const camel::execute::InstructionSite &site) {
         return;
     }
     if (pending_ == Pending::Enter || stack_.empty()) {
-        pushCallee(&graph->view(), site.frame, graph);
+        pushCallee(graph, site.frame);
     } else {
         // What the instruction executed last in this activation did to the call stack.
         switch (stack_.back().lastEffect) {
         case InstructionEffect::Call:
             stack_.back().lastEffect = InstructionEffect::None;
-            pushCallee(&graph->view(), site.frame, graph);
+            pushCallee(graph, site.frame);
             break;
         case InstructionEffect::Return:
             handOnLine(stack_.size() - 1);
             stack_.pop_back();
             if (stack_.empty()) {
-                placeCallee(pushFrame(&graph->view(), site.frame, graph), nullptr);
+                placeCallee(pushFrame(graph, site.frame), nullptr);
             }
             stack_.back().lastEffect = InstructionEffect::None;
             break;
         case InstructionEffect::TailCall:
-            replaceTop(&graph->view(), site.frame, graph);
+            replaceTop(graph, site.frame);
             break;
         default:
             break;
@@ -617,11 +616,11 @@ void DebugCore::beforeInstruction(const camel::execute::InstructionSite &site) {
     }
     pending_       = Pending::None;
     ShadowFrame &f = stack_.back();
-    if (f.frame != site.frame || f.graph != &graph->view()) {
+    if (f.frame != site.frame || f.graph != graph) {
         // Not expected; follow the interpreter rather than show a frame it is not in.
         const ShadowFrame old = std::move(stack_.back());
         stack_.pop_back();
-        ShadowFrame &now = pushFrame(&graph->view(), site.frame, graph);
+        ShadowFrame &now = pushFrame(graph, site.frame);
         now.tailReplaced = old.tailReplaced;
         placeReplacement(now, old, stack_.size() > 1 ? &stack_[stack_.size() - 2] : nullptr);
     }
@@ -847,7 +846,7 @@ void DebugCore::faultRaised(const camel::core::error::RuntimeFault &fault, bool 
         if (auto reporter = ctx ? ctx->runtimeErrorReporter() : nullptr) {
             auto site = camel::core::error::makeGraphExecutionSite(
                 ctx->sourceContext(),
-                f.impl,
+                pairing::graphOf(ctx, f.graph),
                 stack_.size());
             if (f.origin != 0) {
                 site.cachedOrigin = f.origin;
@@ -1914,7 +1913,7 @@ json DebugCore::command(const std::string &name, const json &args) {
                     return fail("no runtime frame");
                 return json{
                     {"ok", true},
-                    {"gir", dumpJsonRuntimeGraph(f->impl, index_.context())}};
+                    {"gir", dumpJsonRuntimeGraph(pairing::graphOf(index_.context(), f->graph), index_.context())}};
             });
         }
         if (name == "graph") {

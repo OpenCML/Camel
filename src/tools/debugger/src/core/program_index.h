@@ -243,7 +243,7 @@ class ProgramIndex {
     FunctionResolution resolveFunction(const std::string &name) const;
 
     /// The full name of a value `graph` captures, from the name the capturing module writes
-    /// (GCGraph::captureNames): with the module, unless it is the entry module's own.
+    /// (the builder's capture names): with the module, unless it is the entry module's own.
     std::string capturedName(const camel::graph::GraphView *graph, std::string_view shown);
 
     /// The bindings whose value is the node with this origin.

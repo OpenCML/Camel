@@ -128,11 +128,6 @@ class DebugCore final : public camel::execute::ExecutionObserver {
     struct ShadowFrame {
         uint64_t id                        = 0;
         const camel::graph::GraphView *graph     = nullptr;
-        // The graph as the implementation that runs it holds it. Every reading of the graph goes
-        // through `graph` above; this one exists for the single caller that asks where in the
-        // implementation a node sits (an execution site for a diagnostic), a question the view
-        // does not answer, and it is never read here.
-        camel::runtime::GCGraph *impl      = nullptr;
         camel::core::context::Frame *frame = nullptr;
         GraphInfo *info                    = nullptr;
         const NodeInfo *node               = nullptr; // about to run, running, or waited in
@@ -257,19 +252,11 @@ class DebugCore final : public camel::execute::ExecutionObserver {
     };
 
     // program thread
-    /// `impl` is the graph as the implementation holds it, kept for the one diagnostic that asks
-    /// where in the implementation a node sits; every reading is of `graph`.
-    ShadowFrame &pushFrame(
-        const camel::graph::GraphView *graph, camel::core::context::Frame *frame,
-        camel::runtime::GCGraph *impl);
+    ShadowFrame &pushFrame(const camel::graph::GraphView *graph, camel::core::context::Frame *frame);
     /// The frame of a call, above the caller's.
-    ShadowFrame &pushCallee(
-        const camel::graph::GraphView *graph, camel::core::context::Frame *frame,
-        camel::runtime::GCGraph *impl);
+    ShadowFrame &pushCallee(const camel::graph::GraphView *graph, camel::core::context::Frame *frame);
     /// The frame of a tail call, in the place of the top frame.
-    ShadowFrame &replaceTop(
-        const camel::graph::GraphView *graph, camel::core::context::Frame *frame,
-        camel::runtime::GCGraph *impl);
+    ShadowFrame &replaceTop(const camel::graph::GraphView *graph, camel::core::context::Frame *frame);
     void firstNodeOfRun(const camel::graph::GraphView *root);
     /// What a stop at a group's tail says about the group: its name, its members' operators in
     /// execution order and the one sentence a console prints (2).

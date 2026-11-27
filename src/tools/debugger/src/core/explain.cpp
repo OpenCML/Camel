@@ -17,6 +17,7 @@
  */
 
 #include "debug_core.h"
+#include "graph_pair.h"
 
 #include "proof.h"
 
@@ -411,7 +412,7 @@ DebugCore::CallAnswer DebugCore::callAtFrame(
             if (auto reporter = context->runtimeErrorReporter()) {
                 auto site = camel::core::error::makeGraphExecutionSite(
                     context->sourceContext(),
-                    f.impl,
+                    pairing::graphOf(context, f.graph),
                     stack_.size());
                 if (f.origin != 0) {
                     site.cachedOrigin = f.origin;
