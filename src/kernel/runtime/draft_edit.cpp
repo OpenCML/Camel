@@ -128,6 +128,21 @@ void GraphDraft::noteEditedNode(gc_node_ref_t id, bool inPlace) {
     recordEdit(EditKind::LowLevel, std::span<const uint32_t>(&region, 1));
 }
 
+void GraphDraft::noteGraphWideEdit() {
+    if (namedEdits_ != 0) {
+        return;
+    }
+    // A header write on a draft with no node in it is the graph coming into being, not an edit of
+    // it: `GraphTransaction::open(id, funcType)` hands the type to the draft that way, and the
+    // draft has its body region before that (which is why `mutations_` is already 1 there). The
+    // setter cannot tell the two apart, so edit accounting never introspects a setter: it reads the
+    // draft's state here, and a caller that means an edit says so by opening a named edit.
+    if (nodesById_.empty()) {
+        return;
+    }
+    recordEdit(EditKind::LowLevel, {});
+}
+
 bool GraphDraft::editedWith(EditKind kind) const {
     return (editKinds_ & (static_cast<uint32_t>(1) << static_cast<uint32_t>(kind))) != 0;
 }
