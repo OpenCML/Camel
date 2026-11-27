@@ -362,7 +362,9 @@ std::string_view importResultName(ImportResult result) {
     case ImportResult::MatchesGraph:
         return "matches the graph";
     case ImportResult::UnknownKind:
-        return "unknown kind";
+        return "unknown kind (no kind has that key)";
+    case ImportResult::NoPortableForm:
+        return "no portable form (the kind states no encode and decode)";
     case ImportResult::OtherVersion:
         return "other version";
     case ImportResult::UnknownGraph:
@@ -378,11 +380,19 @@ std::string_view importResultName(ImportResult result) {
 }
 
 ImportResult importFact(FactStore &store, const Program &program, const PortableFact &fact) {
+    // The two ways a key can fail to name a usable kind are told apart, because they mean
+    // different things to whoever reads the result: no kind has that key (the text came from
+    // another build, or from a key this process never registered), or the kind is here and states
+    // no portable form (it is a Target kind, or a kind of this build that never wrote text). The
+    // second used to be reported as the first, which named nothing and hid a mismatched key.
     const KindId id = findKind(fact.kind);
-    if (id == kNoKind || !kindInfo(id).decode || kindInfo(id).cls == FactClass::Target) {
+    if (id == kNoKind) {
         return ImportResult::UnknownKind;
     }
     const KindInfo &kind = kindInfo(id);
+    if (!kind.decode || kind.cls == FactClass::Target) {
+        return ImportResult::NoPortableForm;
+    }
     if (kind.version != fact.version) {
         return ImportResult::OtherVersion;
     }

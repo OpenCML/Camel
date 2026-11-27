@@ -71,13 +71,15 @@ std::vector<PortableFact> exportFacts(FactStore &store, const Program &program);
 
 /// What loading one PortableFact did.
 enum class ImportResult : uint8_t {
-    Stored,        // a Derived fact, checked and stored
-    MatchesGraph,  // a GraphContent value, equal to the graph's
-    UnknownKind,   // no kind of that key, or it does not decode
-    OtherVersion,  // the kind's version differs
-    UnknownGraph,  // an anchor's graph is not in the program (or a node is out of range)
-    GraphChanged,  // an anchored graph's content hash differs
-    BadValue,      // the kind does not accept the encoded value
+    Stored,           // a Derived fact, checked and stored
+    MatchesGraph,     // a GraphContent value, equal to the graph's
+    UnknownKind,      // no kind has that key (a text from another build, or a key never registered)
+    NoPortableForm,   // the kind is here and states no encode and decode (a Target kind, or one of
+                      // this build that never wrote text)
+    OtherVersion,     // the kind's version differs
+    UnknownGraph,     // an anchor's graph is not in the program (or a node is out of range)
+    GraphChanged,     // an anchored graph's content hash differs
+    BadValue,         // the kind does not accept the encoded value
     DiffersFromGraph, // a GraphContent value that is not the graph's
 };
 
