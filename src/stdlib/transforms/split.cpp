@@ -5,6 +5,8 @@
 #include "refusal_readings.h"
 #include "split_internal.h"
 
+#include "camel/core/derivative.h"
+
 namespace camel::transforms {
 
 /// A refusal, said at the node of the source graph that caused it: the construct the plumbing does
@@ -213,13 +215,19 @@ std::vector<size_t> valuePortsOf(const camel::core::type::FunctionType *liftedTy
         if (value == nullptr || tangent == nullptr) {
             return {};
         }
-        const camel::core::TangentSpaceAnswer space = camel::core::tangentSpaceOf(value);
-        if (space.hasSpace()) {
-            if (tangent != space.space) {
-                return {};
+        // The second half is the value's **user** tangent (`gradientTypeOf`, principle 9.9): a
+        // discrete parameter's slot holds that parameter's own type, not the empty slot the
+        // machinery's space would give it, because `Lift<T>` is `(T, Tangent<T>)`.
+        Type *const chosen = camel::core::gradientTypeOf(const_cast<Type *>(value));
+        if (chosen != nullptr) {
+            const auto *chosenTuple = tt::as_ptr<TupleType>(chosen);
+            if (!(chosenTuple != nullptr && chosenTuple->size() == 0)) {
+                if (tangent != chosen) {
+                    return {};
+                }
+                values.push_back(i);
+                continue;
             }
-            values.push_back(i);
-            continue;
         }
         // A parameter with no tangent space takes the `()` slot: the tangent half keeps its place
         // so that the halves line up position by position.
@@ -1216,9 +1224,21 @@ SplitHalves splitHalvesWith(FunctionType *function, Type *residuals) {
         // makes the half take an argument nobody passes; the other way makes it answer fewer than
         // it declares.
         Type *tangentOfParameter = function->normTypeAt(i + half);
+        // The slot is the **user's** tangent of the parameter (`gradientTypeOf`, principle 9.9),
+        // not the machinery's space of the lifted slot: `Tangent<int>` is `int`, so a discrete
+        // parameter's place in the tangent half is that parameter's own type, and the half declares
+        // what the declaration declares. A space that exists is not the same statement as a space
+        // with a place to accumulate in; asking the second here wrote `()` in an `int`'s place.
+        Type *const userTangent =
+            camel::core::gradientTypeOf(const_cast<Type *>(function->normTypeAt(i)));
+        const auto *userTuple = tt::as_ptr<TupleType>(userTangent);
+        const bool typedSlot =
+            userTangent != nullptr && !(userTuple != nullptr && userTuple->size() == 0);
         if (tangentOfParameter != nullptr &&
             camel::core::tangentSpaceOf(tangentOfParameter).hasSpace()) {
             tangentParams.emplace_back(tangentOfParameter, false);
+        } else if (typedSlot) {
+            tangentParams.emplace_back(userTangent, false);
         } else {
             // The parameter's tangent is `()`: an **answer** the half gives, not an argument it
             // takes. It keeps its place in the half's type so that the transposed half answers one

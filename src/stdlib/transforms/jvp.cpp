@@ -322,8 +322,14 @@ FunctionType *liftSignature(FunctionType *function) {
         params.emplace_back(type, false);
     }
     for (camel::core::type::Type *type : values) {
-        const camel::core::TangentSpaceAnswer answer = camel::core::tangentSpaceOf(type);
-        params.emplace_back(answer.hasSpace() ? answer.space : emptyTupleType(), false);
+        // The tangent half is the **user's** tangent (`gradientTypeOf`, principle 9.9), not the
+        // machinery's space: a number and a boolean keep their own type at zero, because a space
+        // that exists is not the same statement as a space with a place to accumulate in, and
+        // `Lift<T>` is `(T, Tangent<T>)`. The slot is given even when no rule writes in it -- the
+        // halves must stay two lists of one length -- and what it is typed is the law's answer.
+        camel::core::type::Type *const tangent =
+            camel::core::gradientTypeOf(const_cast<camel::core::type::Type *>(type));
+        params.emplace_back(tangent != nullptr ? tangent : emptyTupleType(), false);
     }
     if (params.empty()) {
         return nullptr;
@@ -902,8 +908,19 @@ bool liftGraph(
             // get is a tangent to walk with -- `tangentPorts` holds the invalid ref, so the chain
             // below reads "nothing to differentiate" and answers a zero contribution rather than a
             // `()`-typed node where a direction belongs.
+            // The slot's type is the signature's -- the **user's** tangent (`gradientTypeOf`,
+            // principle 9.9), which is the parameter's own type for a discrete one. It is a port so
+            // that the graph and the declared type line up position by position, and whether the
+            // chain may *read* it is still the machinery's question (`tangentPorts` below keeps the
+            // invalid ref when no direction can be handed in): a slot typed `()` where the
+            // signature says `int` made every reader after the cut read the wrong half.
+            camel::core::type::Type *const userTangent = camel::core::gradientTypeOf(valueType);
+            const auto *userTuple = tt::as_ptr<camel::core::type::TupleType>(userTangent);
+            const bool typedSlot =
+                userTangent != nullptr && !(userTuple != nullptr && userTuple->size() == 0);
             camel::core::type::Type *tangentType =
-                tangentSpace.hasSpace() ? tangentSpace.space : emptyTupleType();
+                typedSlot ? userTangent
+                          : (tangentSpace.hasSpace() ? tangentSpace.space : emptyTupleType());
             const gc_node_ref_t slot =
                 draft.addPortNode(tangentType, draft.allocateRuntimeSlot(tangentType));
             draft.appendNormPort(slot);
