@@ -37,7 +37,9 @@
 #include "camel/runtime/node_roles.h"
 #include "camel/utils/path.h"
 
+#include <filesystem>
 #include <format>
+#include <fstream>
 
 using namespace camel::core::context;
 using namespace camel::core::module;
@@ -54,6 +56,9 @@ constexpr std::string_view kExportOperator = "<onnx::export_model>";
 
 /// The name an error value carries when `onnx::model` itself made it.
 constexpr std::string_view kModelOperator = "<onnx::model>";
+
+/// The name an error value carries when `onnx::save` itself made it.
+constexpr std::string_view kSaveOperator = "<onnx::save>";
 
 /// The result type of the call form: writing the model can fail, so the call gives `void!`
 /// (a refusal to translate the function, or a file that cannot be written).
@@ -169,6 +174,41 @@ slot_t modelKernel(ArgsView &with, ArgsView &norm, Context &ctx) {
     }
 }
 
+// save<out: string>(m: Model<F>) => void!
+//
+// Writes the bytes a model holds and nothing else: the file is the model, and it is the same file
+// `export_model` wrote, because both write the bytes of one translation. `out` is a `with`
+// parameter for the same reason `export_model`'s is: it decides which file, not what is written.
+slot_t saveKernel(ArgsView &with, ArgsView &norm, Context &ctx) {
+    (void)ctx;
+    auto *model = norm.get<camel::onnx::ModelValue *>(0);
+    const std::filesystem::path path =
+        camel::utils::pathFromUtf8(with.get<::String *>(0)->toString());
+    try {
+        if (path.has_parent_path()) {
+            std::error_code ec;
+            std::filesystem::create_directories(path.parent_path(), ec);
+        }
+        std::ofstream out(path, std::ios::binary | std::ios::trunc);
+        if (!out) {
+            throw std::runtime_error(
+                "onnx: cannot open '" + camel::utils::pathToUtf8(path) + "' for writing");
+        }
+        const std::span<const std::byte> bytes = model->bytes();
+        out.write(
+            reinterpret_cast<const char *>(bytes.data()),
+            static_cast<std::streamsize>(bytes.size()));
+        out.flush();
+        if (!out) {
+            throw std::runtime_error(
+                "onnx: failed to write '" + camel::utils::pathToUtf8(path) + "'");
+        }
+    } catch (const std::runtime_error &e) {
+        return makeError("IOError", e.what(), kSaveOperator);
+    }
+    return makeOk(NullSlot, fallibleVoid());
+}
+
 slot_t supportedOperatorsKernel(ArgsView &, ArgsView &, Context &) {
     const auto uris =
         camel::onnx::LoweringRegistry::instance().supported(camel::onnx::kDefaultOpset);
@@ -185,6 +225,7 @@ class OnnxExecutor : public Executor {
         : Executor(
               std::move(ctx), {{"export_model", &exportKernel},
                                {"model", &modelKernel},
+                               {"save", &saveKernel},
                                {"supported_operators", &supportedOperatorsKernel}}) {}
 };
 
@@ -215,10 +256,16 @@ bool OnnxModule::load() {
     // whose purity is set with its traits.
     camel::core::OperatorTable::instance().declare(
         "onnx",
-        {{"model", true}, {"supported_operators", true}});
+        {{"model", true}, {"save", false}, {"supported_operators", true}});
     // `onnx::model` translates a function value and answers it as a model value: the translation
     // reads the graph it is handed, and it writes nothing outside the program.
     camel::core::OperatorTable::instance().set("onnx:model", {.pure = true, .readsGraphs = true});
+    // `onnx::save` writes the model's bytes to a file: the effect `export_model` had, without the
+    // translation that made the bytes.
+    camel::core::OperatorTable::instance().set("onnx:save", {.pure = false, .readsGraphs = false});
+    camel::core::OperatorTable::instance().declareResources(
+        "onnx:save",
+        camel::core::sem::externalAmbient("fs", camel::core::sem::AccessMode::ReadModifyWrite));
     // The type `Model<F>` the module's values have (see model.h).
     camel::core::type::registerNativeType("onnx", "Model", camel::onnx::ModelType::get());
     // export_model translates the graph of the function value it receives: it is handed the

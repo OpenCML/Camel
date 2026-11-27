@@ -38,6 +38,17 @@ export func supported_operators() => string[]
 /// other source: only the translation knows those bytes.
 export type Model<F>
 
+/// Writes `m`, a model, to the file `out`. The bytes are the model itself, so this is the whole
+/// of what the file form of `export_model` did once the translation is done: `save(model(fn,
+/// example), out)` and that form write the same file. `out` is a `with` parameter because it
+/// decides which file, not what is written.
+/// @effect writes a file
+/// @fails error value `IOError` when the file cannot be written
+/// @example model(fn, example)->save<out: "/tmp/model.onnx">
+#op('onnx:save')
+with <out: string>
+export func save::<F>(m: Model<F>) => void!
+
 /// Writes the ONNX model of `fn` applied to arguments like `example` to the file `out`, at the
 /// backend's default opset. The same translation `model` makes; it is this form's job to write it.
 /// @effect writes a file and reads the function's graph
