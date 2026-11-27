@@ -1,0 +1,20 @@
+Board prune, 2026-11-27, per D-1127-162.
+
+Conditions (all three must hold to delete):
+  1  status is completed
+  2  internal/backlog.md carries a row for it that states the result AND the commit
+  3  it was not created today
+
+Scope of this first batch: the completed tasks whose rows I could verify in one
+reading of internal/backlog.md. One id per line, with the subject and the row
+that carries its result.
+
+task-73 | stdlib 参考页剩下的 3 条例外清单缺口（数据缺口，不是页面过期） | backlog L1025 (R-2026-11-26-18): lane/stdlib-exceptions tip 631495115c, +6 lines in scripts/, page untouched | deleted
+
+Held back, and why:
+task-149 | tutorial.examples.05_arrays 四后端全红：判类 + 一次 run 验证 | no backlog row in this tree -> condition 2 unmet (kept)
+task-2, task-4, task-5, task-7 | only the board-process row (L917) mentions them, and its sha is that row's own commit, not theirs -> condition 2 unmet (kept)
+task-24, task-35 | rows are dispatch records (L937, L952), no result+commit yet -> condition 2 unmet (kept)
+
+After this batch the board is at its cap again (256); the next batch needs the
+page-by-page listing, so pruning continues a few ids per turn.
