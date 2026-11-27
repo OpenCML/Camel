@@ -1667,6 +1667,15 @@ Type *Builder::lookupType(const Reference &ref, const AST::node_ptr_t &ast) {
     if (const auto exported = module_->getExportedType(Reference(own)); exported.has_value()) {
         return exported.value();
     }
+    // Inside a headed block, the head's module is where a handle type comes from and the only place
+    // it comes from (graph-editing design 15.1): the types that module exports are readable by
+    // bare name in the body the head stands for, and the same names outside such a body stay
+    // unresolved, which is what says the block's head, not the program, is their source.
+    for (auto head = blockHeadModules_.rbegin(); head != blockHeadModules_.rend(); ++head) {
+        if (const auto exported = (*head)->getExportedType(ref); exported.has_value()) {
+            return exported.value();
+        }
+    }
     // Layer 3: imported by name, or through a module or namespace prefix.
     if (const auto imported = module_->getImportedType(ref, ImportLayer::Named)) {
         return report(imported.value(), importedOrigin(ref));

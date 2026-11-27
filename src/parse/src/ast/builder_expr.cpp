@@ -1591,6 +1591,28 @@ Value Builder::visitBlockHeaded(syn::Node context, DataType type) {
     const Reference root(context.get<cst::IdentDef>().text());
     node_ptr_t node = createNodeAs<BlockHeadLoad>(type, root);
     setNodeTokenRangeByContext(node, context);
+    // A block's head names the root the body reads the graph by, and a root's handle is a type the
+    // `graph` module exports (graph-editing design 15.1: the handle comes from the head and from
+    // nowhere else), so a program that writes an `edit` or `view` block reads that module whether
+    // it wrote the import or not. The import is the head's own: which module declares a handle is
+    // not a second thing the writer answers.
+    // What the head needs is the module itself, and only an import that names no subset is that
+    // module: `import { Node } from graph` brings the names it lists, not the names the module
+    // writes itself -- `edit`, `view`, `open` and the rest are operators of the module rather than
+    // items a list can be asked for, so such an import does not answer this head.
+    bool graphRead = false;
+    for (const auto &imported : imports_) {
+        if (imported->hasPath() && imported->getPath() == "graph" && !imported->hasRefs()) {
+            graphRead = true;
+            break;
+        }
+    }
+    if (!graphRead) {
+        auto imported = std::make_shared<ImportLoad>();
+        imported->setPath("graph");
+        imported->setTokenRange(extractTokenRangeFromContext(context));
+        imports_.push_back(imported);
+    }
     // [0] the function the block is over. [1] the body: a StmtBlock whether the source wrote
     // statements or a single expression, as the arm of an `if` is. A head that lost a piece to a
     // syntax error is built with the pieces it kept.
