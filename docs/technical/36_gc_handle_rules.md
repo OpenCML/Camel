@@ -8,7 +8,7 @@ may be managed by a generational collector and may move; foreign memory is owned
 Camel-native object and stays outside the movable heap; **a module does not keep a raw pointer
 to a Camel object across calls.**
 
-The rules hold for both collectors (`--gc generational`, the default, and `--gc mark-sweep`).
+The rules hold for both collectors (`--gc kind=generational`, the default, and `--gc kind=mark-sweep`).
 Under mark-sweep an object keeps its address, so a violation of rules 2, 3 and 6 goes unnoticed
 until the object is freed; under the generational collector it reads moved memory. Write code
 for the generational collector.
@@ -315,8 +315,8 @@ root tracers), and nothing read before a call is used after it.
 1. Run its tests with `--gc-check poison` (section 8). Tests under `test/plans/feat/modules`,
    `compile`, `linear`, `para`, `trans` and `smoke` are run that way by the default test set
    (`mm.gc_poison_sweep`), so a module with tests there is covered as it is.
-2. Run them with `--gc generational` with `--gc-check verify=both --gc-stress safepoint=1
-   --gc-stress kind=minor --gc-promotion-age 1`: everything is promoted at once, which
+2. Run them with `--gc kind=generational` with `--gc-check verify=both --gc-stress safepoint=1
+   --gc-stress kind=minor --gc promotion_age= 1`: everything is promoted at once, which
    is what shows a missing write barrier (rule 6) as "Old-to-young reference is missing from
    remembered set".
 3. Search for `static`, `thread_local` and members of module state that hold `Object *`,
@@ -391,8 +391,8 @@ here and left to the standard-library work:
 |---|---|
 | `--gc-check poison` | Safepoint poisoning. Turns the generational collector on; **every safepoint moves every young object** (nothing is promoted by age) and overwrites the memory the objects left with the address of an unreadable page. The addresses are not handed out again while room remains above them. A stale pointer faults in that page on its first virtual call or on the first use of a reference read through it, and the process ends with `[camel] GC poison: a pointer to a Camel object was used after a safepoint moved the object` (exit code 134). With `--gc-check verify=both` a stale reference in a root or in an object is reported with its path before it is used |
 | `std::gc::poison` | White-box self-test of the mode |
-| `--gc-promotion-age n` | Survivals before promotion (default 4). 1 promotes everything at once: the setting that shows missing write barriers |
-| `--gc-large-threshold-kb n`, `--gc-nursery-mb n` | Size above which an object is born old (4 KB with mark-sweep, 64 KB with the generational collector) and size of the birth space (4 MB). A small threshold makes ordinary arrays be born old, which is what the tests of such objects need |
+| `--gc promotion_age= n` | Survivals before promotion (default 4). 1 promotes everything at once: the setting that shows missing write barriers |
+| `--gc large_threshold_kb= n`, `--gc nursery_mb= n` | Size above which an object is born old (4 KB with mark-sweep, 64 KB with the generational collector) and size of the birth space (4 MB). A small threshold makes ordinary arrays be born old, which is what the tests of such objects need |
 | `--gc-check verify`, `--gc-stress` | Heap verification and forced collections (`24_gc_verification_guide.md`) |
 | `CAMEL_TEST_TIMEOUT_SCALE=n` | Multiplies the timeouts of the test runner, for running whole plans under these modes |
 | `[[sweeps]]` in a plan | Runs the tests of other plans again under an environment (`docs/test-plans.md`); `mm.gc_poison_sweep` does it for poisoning |
@@ -414,4 +414,4 @@ a stale pointer that is never used again; code that no test runs.
   `any` is removed from the language and from the type system, `json.decode` gives a `Json`
   (`lib/json/value.h`: a kind and a payload whose type the kind fixes, traced like a
   function value or a tensor), and a commit refuses a graph with an undetermined type.
-- **Whether the generational collector becomes the default.** `--gc generational` 可用；默认仍是标记-清除。
+- **Whether the generational collector becomes the default.** `--gc kind=generational` 可用；默认仍是标记-清除。

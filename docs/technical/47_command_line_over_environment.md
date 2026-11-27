@@ -13,16 +13,16 @@ Twenty-one names, twenty-one knobs, no aliases. Only the accepted values have sy
 
 | Environment name | Option | Owner: who sets it, and when |
 |---|---|---|
-| `CAMEL_GC_NURSERY_MB` | `--gc-nursery-mb` | Someone running a big program, and the capacity plans; the birth space of the generational collector |
-| `CAMEL_GC_PROMOTION_AGE` | `--gc-promotion-age` | Operator authors and the generational tests; 1 promotes at the first collection, which is what shows a missing write barrier |
-| `CAMEL_GC_LARGE_THRESHOLD_KB` | `--gc-large-threshold-kb` | Someone sizing the large-object space; a small threshold makes ordinary arrays be born old, which is what the tests of such objects need |
-| `CAMEL_GC_LARGE_BUDGET_MB` | `--gc-large-budget-mb` | The same; large-object bytes between two collections |
-| `CAMEL_GC_GROWTH_PERCENT` | `--gc-growth-percent` | The same; how much the large-object space grows per cycle |
-| `CAMEL_GC_HEAP_LIMIT_MB` | `--gc-heap-limit-mb` | The capacity plans and `docs/technical/23`, `24`; turns "out of memory" into a located diagnostic instead of a host OOM |
-| `CAMEL_SPACE_SEGMENT_KB` | `--space-segment-kb` | Test control: small segments make a small program grow the spaces, so growth is exercised under verification and stress |
-| `CAMEL_META_SPACE_LIMIT_MB` | `--meta-space-limit-mb` | The capacity plans; the space of constants and function objects being compiled |
-| `CAMEL_GRAPH_SPACE_LIMIT_MB` | `--graph-space-limit-mb` | The same; the space of runtime graphs |
-| `CAMEL_PERM_SPACE_LIMIT_MB` | `--perm-space-limit-mb` | The same; the space of types and layouts |
+| `CAMEL_GC_NURSERY_MB` | `--gc nursery_mb=` | Someone running a big program, and the capacity plans; the birth space of the generational collector |
+| `CAMEL_GC_PROMOTION_AGE` | `--gc promotion_age=` | Operator authors and the generational tests; 1 promotes at the first collection, which is what shows a missing write barrier |
+| `CAMEL_GC_LARGE_THRESHOLD_KB` | `--gc large_threshold_kb=` | Someone sizing the large-object space; a small threshold makes ordinary arrays be born old, which is what the tests of such objects need |
+| `CAMEL_GC_LARGE_BUDGET_MB` | `--gc large_budget_mb=` | The same; large-object bytes between two collections |
+| `CAMEL_GC_GROWTH_PERCENT` | `--gc growth_percent=` | The same; how much the large-object space grows per cycle |
+| `CAMEL_GC_HEAP_LIMIT_MB` | `--gc heap_limit_mb=` | The capacity plans and `docs/technical/23`, `24`; turns "out of memory" into a located diagnostic instead of a host OOM |
+| `CAMEL_SPACE_SEGMENT_KB` | `--spaces segment_kb=` | Test control: small segments make a small program grow the spaces, so growth is exercised under verification and stress |
+| `CAMEL_META_SPACE_LIMIT_MB` | `--spaces meta_mb=` | The capacity plans; the space of constants and function objects being compiled |
+| `CAMEL_GRAPH_SPACE_LIMIT_MB` | `--spaces graph_mb=` | The same; the space of runtime graphs |
+| `CAMEL_PERM_SPACE_LIMIT_MB` | `--spaces perm_mb=` | The same; the space of types and layouts |
 | `CAMEL_GC_STRESS_MODE` | `--gc-stress kind=minor\|major\|both` | Operator authors (`docs/technical/36`, `24`) and the `feat/mm`, `gpu` plans |
 | `CAMEL_GC_STRESS_ALLOC` | `--gc-stress alloc=` | The same; collect every N allocations |
 | `CAMEL_GC_STRESS_SAFEPOINT` | `--gc-stress safepoint=` | The same; collect every N safepoints |

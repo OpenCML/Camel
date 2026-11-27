@@ -20,8 +20,8 @@ spaces (one `FreeListAllocator` per segment), `GrowableBumpAllocator` for the pe
 (one `BumpPointerAllocator` per segment). The first segment is as large as the whole space used
 to be (64, 32 and 16 MB); when no segment has room, a further one is reserved, as large as
 everything reserved so far (at most 256 MB, never smaller than the request), until the total
-reaches the limit of the space (`--graph-space-limit-mb`, `--perm-space-limit-mb`,
-`--meta-space-limit-mb`; 256 MB each by default).
+reaches the limit of the space (`--spaces graph_mb=`, `--spaces perm_mb=`,
+`--spaces meta_mb=`; 256 MB each by default).
 
 Invariants:
 
@@ -50,7 +50,7 @@ Invariants:
   request, the usage, the limit and the variable that raises it. The first caller that knows
   what was being built adds it (`during`): the graph builder names the function being compiled,
   the encoders name the graph. The pass driver, the graph builder and the command line report
-  it as `RuntimeDiag::MemoryExhausted`. The auto space has no limit of its own unless `--gc-heap-limit-mb` sets one (the
+  it as `RuntimeDiag::MemoryExhausted`. The auto space has no limit of its own unless `--gc heap_limit_mb=` sets one (the
   elder space grows by segments, the large-object space takes blocks from the host); the limit
   and a refusal by the host are reported the same way.
 
@@ -113,7 +113,7 @@ graph, so a graph a rewrite changes, whose slot types differ, leaves nothing beh
 permanent space. (Before graph model step 3 it was an interned tuple type: one new permanent
 object per changed graph per commit.) Static-area layouts are still interned.
 
-`--space-segment-kb <kilobytes>` sets the first segment of all three spaces. It is a test
+`--spaces segment_kb=<kilobytes>` sets the first segment of all three spaces. It is a test
 control: with 64 KB a program of a few hundred functions makes every space grow several times,
 so growth can be run under heap verification and collection stress (`test/plans/feat/mm/capacity.plan.toml`).
 
@@ -155,7 +155,7 @@ version lives as long as a live `Program` holds it, a `Program` as long as somet
   the heap and `GCGraphManager::sweepMarked()` (installed with `registerGraphSweeper`, one per
   context, called after `markPhase`) frees the unmarked `Program`s and graph versions; the graph
   space also asks for a
-  major collection when it holds a megabyte (`--graph-gc-mb`, default 64) and as much again
+  major collection when it holds a megabyte (`--gc graph_mb=`, default 64) and as much again
   as it held after the last sweep (`requestMajorCollection`). Between passes (nothing runs)
   `collect()` has the heap marked the same way, without sweeping or moving anything
   (`collectGraphSpace`), so a function value of the heap keeps its `Program` there too; it runs
@@ -210,8 +210,8 @@ The elder space grows by segments (32 MB first, each further one as large as eve
 reserved so far, at most 256 MB), so neither allocation nor promotion fails short of the host
 refusing memory. Major collections are paced by volume for both old spaces: one is asked for
 when a space has taken, since its last sweep, the larger of a floor (32 MB for the elder space,
-`--gc-large-budget-mb` for large objects) and `--gc-growth-percent` percent of what
-that sweep left alive. `--gc-heap-limit-mb` bounds what the two hold together. In the
+`--gc large_budget_mb=` for large objects) and `--gc growth_percent=` percent of what
+that sweep left alive. `--gc heap_limit_mb=` bounds what the two hold together. In the
 generational collector a third volume paces a major collection: the blocks held by values
 promoted to the elder space (see "Promoted-block pacing" below).
 
@@ -274,8 +274,8 @@ remembered when promotion leaves old-to-young edges behind.
 
 The verifier compares remembered entries against typed old/large objects whose layouts are known
 from barriers, roots, or relocation metadata. Missing remembered entries report the owner slot, slot
-type, region, and young target. `--gc generational`, the default of a release build, selects the
-moving collector; `--gc mark-sweep` keeps objects where they are.
+type, region, and young target. `--gc kind=generational`, the default of a release build, selects the
+moving collector; `--gc kind=mark-sweep` keeps objects where they are.
 
 Intentionally unbarriered paths are limited to storage that is not an old auto-space container:
 dynamic frame slots are traced roots, graph-space static tuples are graph roots rather than
@@ -301,7 +301,7 @@ Large-object pacing: objects above the generational threshold (4 KB) bypass the 
 spaces, so they never exhaust a space and never trigger a collection on their own. The allocator
 therefore counts large-object bytes since the last sweep and requests a major collection at the
 next safepoint once they exceed a budget. After every sweep the budget is the larger of a floor
-(`--gc-large-budget-mb`, default 4 MB) and `--gc-growth-percent` percent (default 100) of
+(`--gc large_budget_mb=`, default 4 MB) and `--gc growth_percent=` percent (default 100) of
 the large-object volume the sweep left alive. This is the usual heap-growth rule: with a live
 volume `L` and a growth of `g` percent, a program is collected once per `L * g / 100` bytes it
 allocates and the space holds at most `L * (1 + g / 100)`, plus whatever is allocated between the
@@ -335,8 +335,8 @@ promoted: a view of an inline array, `Array::growCompact` moving inline data int
 takeover; the collector counts the block there when the owner is already in the elder space, just
 as if the block had been promoted with the value. The allocator asks for a major collection at
 the next safepoint once the bytes promoted or adopted since the last sweep exceed a budget. After
-every sweep the budget is the larger of the large-object floor (`--gc-large-budget-mb`,
-default 4 MB) and `--gc-growth-percent` percent (default 100) of the block bytes the sweep
+every sweep the budget is the larger of the large-object floor (`--gc large_budget_mb=`,
+default 4 MB) and `--gc growth_percent=` percent (default 100) of the block bytes the sweep
 left in promoted values; the rule and the floor are the same as for the large-object space,
 because these are the same kind of bytes: pure data outside the collected heap that only a full
 mark-sweep can reclaim. The live base is summed with `Block::claimSweepGeneration()` for the same
@@ -395,7 +395,7 @@ do not need source changes:
 - `--gc-stress safepoint=N` requests a collection every `N` explicit runtime safepoints.
 - `--gc-stress kind=minor|major|both` selects which collection kind stress requests use.
 - `--gc-check moves` emits movement records when the copying path relocates an object.
-- `--gc generational` selects the generational collector (the default);
+- `--gc kind=generational` selects the generational collector (the default);
   The older `CAMEL_GC_ENABLE_YOUNG_COPYING` is not read and changes nothing.
 - `--gc-check config` prints the effective GC diagnostic configuration to stderr when the
   process-level allocator is initialized.
