@@ -2219,18 +2219,12 @@ gc_node_ref_t addTangentSum(
 }
 
 /// Whether the reverse loop goes on: one more round while the index is not negative. The
-/// condition is a region of the reverse pass's own graph, like every loop a program has.
+/// condition is a region of the reverse pass's own graph, like every loop a program has. The
+/// states are the loop's own (the round index first), so a caller that carries the same shape
+/// states the same condition through `buildReverseCondRegion` (declared in pullback.h, used by
+/// the transpose of a loop as well).
 void buildReverseCond(const ReverseLoop &loop, rt::GraphTransaction &transaction, uint32_t region) {
-    auto &draft = transaction.edit();
-    draft.setInsertRegion(region);
-    std::vector<gc_node_ref_t> ports;
-    for (Type *type : reverseStateTypes(loop)) {
-        ports.push_back(addPort(transaction, type));
-    }
-    draft.setRegionPorts(region, ports);
-    const std::array<gc_node_ref_t, 2> compare{ports.front(), addLoopInt(transaction, 0)};
-    draft.setRegionResult(region, addOper(transaction, Type::Bool(), ":op/ge_l", compare));
-    draft.setInsertRegion(0);
+    buildReverseCondRegion(transaction, region, reverseStateTypes(loop));
 }
 
 /// One round of the reverse pass: read the round's residuals off the tape, run the body's
@@ -5510,4 +5504,18 @@ GradientGraph buildGradientGraph(
     return {engine.group().program(), graph};
 }
 
+/// The condition region of a reverse counting loop, stated once for every writer of one.
+void buildReverseCondRegion(
+    rt::GraphTransaction &transaction, uint32_t region, std::span<Type *const> stateTypes) {
+    auto &draft = transaction.edit();
+    draft.setInsertRegion(region);
+    std::vector<gc_node_ref_t> ports;
+    for (Type *type : stateTypes) {
+        ports.push_back(addPort(transaction, type));
+    }
+    draft.setRegionPorts(region, ports);
+    const std::array<gc_node_ref_t, 2> compare{ports.front(), addLoopInt(transaction, 0)};
+    draft.setRegionResult(region, addOper(transaction, Type::Bool(), ":op/ge_l", compare));
+    draft.setInsertRegion(0);
+}
 } // namespace camel::autodiff

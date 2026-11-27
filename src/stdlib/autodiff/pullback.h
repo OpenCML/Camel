@@ -36,6 +36,7 @@
 #include "camel/core/context/context.h"
 #include "camel/core/type/composite/func.h"
 #include "camel/runtime/graph.h"
+#include "camel/runtime/graph_txn.h"
 
 #include <optional>
 #include <vector>
@@ -76,6 +77,14 @@ struct GradientGraph {
     camel::runtime::GCGraph *graph         = nullptr;
 };
 
+/// The condition region of a reverse counting loop: one more round while the round index -- the
+/// first of the loop's states -- is not negative. A reverse pass never asks the source loop's own
+/// condition; it counts the rounds the forward pass took, backwards, and this is the test that
+/// says when the count is spent. Shared with the transpose of a loop, so the two writers of a
+/// reverse loop state the same condition in the same words.
+void buildReverseCondRegion(
+    camel::runtime::GraphTransaction &transaction, uint32_t region,
+    std::span<camel::core::type::Type *const> stateTypes);
 /// Builds the graph of grad(f) (or with_grad(f)) for the graph `function` of `program`.
 GradientGraph buildGradientGraph(
     const camel::core::context::context_ptr_t &context, const camel::runtime::Program *program,
