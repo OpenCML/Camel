@@ -1,0 +1,57 @@
+# 2026-11-27 third pass, approved discards: the two untracked duplicates in plain-gate-2, internal/_tcprobe/ in
+# transpose-carry, and the fifteen .log files of pooljvp/internal/_pjprobe (its probe programs and plans stay).
+# plain-gate-2 and transpose-carry then had empty working trees and ancestor tips, so both trees were retired.
+# 2026-11-27 second pass, approved: stdlib-exceptions, grammar-notes, loop-handback removed (trees clean, tips ancestors)
+# and lane/pass-classify-tests archived then deleted. edit-gir and lane/editview-gir are held: they are the raw material
+# the C5 re-land needs after the promotion seat's revert. Merged is a necessary condition, never a sufficient one.
+# 2026-11-27 local branch cleanup — scope: merged lane/* branches, transforms-*, TEMP probe branches
+# guard for every row: `git merge-base --is-ancestor <tip> origin/integration` must hold before `git branch -D`
+# local branches only; no remote ref was touched
+# columns: branch<TAB>tip<TAB>result<TAB>reason-or-worktree<TAB>subject
+lane/cc-loop-forward	4aebdbda15	deleted	ancestor-of-integration	modules(autodiff): the gradient of a loop that collects one value per round, against finite differences
+lane/editview-root	e55c87e220	deleted	ancestor-of-integration	backlog: promotion 23 reached develop with no new reds, and the formatting noise is gone
+lane/effects-1	9702ef5bb4	deleted	ancestor-of-integration	facts compare: the effect answers a graph and its nodes give are compared
+lane/effects-walk	0731f3a238	deleted	ancestor-of-integration	runtime: the effect walk stands where more than one unit can run it
+lane/facts-one-store	94d2abdd18	deleted	ancestor-of-integration	facts: a key that names no kind and a kind with no portable form are told apart
+lane/footprint-once	b9f0ab6837	deleted	ancestor-of-integration	resource_semantics: say why the second walk is not a leftover
+lane/gc-tools	426500675d	deleted	ancestor-of-integration	Merge the regenerated coverage table for the resolver and loop lanes
+lane/pass-as-function	25bbe3cf75	deleted	ancestor-of-integration	test: the missing-pass message names export_model, because that is the pass
+lane/pass-revert	09f3dc01f6	deleted	ancestor-of-integration	compile: take back the pass classification by type shape, which hid 188 names
+lane/pass-spelling-resolve	35c9f3e077	deleted	ancestor-of-integration	backlog: a kind is migrated when its readers moved and its old registration is gone
+lane/plan-kind	0d3735c80a	deleted	ancestor-of-integration	test: the two accepted spellings state the kind they are
+lane/plan-spelling-2	ef623fee8e	deleted	ancestor-of-integration	tests: the edit-view probe asks for the AST dump by its long name
+lane/probe-abort	36419e2003	deleted	ancestor-of-integration	Merge fsh-dev: a lane works its card without stopping for context headroom, and the ONNX-in-program plan is written
+lane/resolver-owner-2	7124f09747	deleted	ancestor-of-integration	core: the operator table keeps no type rule, and two contexts each answer their own
+lane/rewrite-view	1468ca7391	deleted	ancestor-of-integration	Merge lane/plan-kind: the two accepted spellings state the kind they are
+lane/tools-view	50995fc6eb	deleted	ancestor-of-integration	debug: the frame stack holds the view, and the graph is paired where it is asked for
+lane/transforms-split	69a2116b25	deleted	ancestor-of-integration	backlog: a payload reader is not a view reader, and the view says so itself
+lane/transforms-split-2	598ba7e6dc	deleted	ancestor-of-integration	split: reading a loop to cut reads the graph through the view
+lane/transforms-view	ebcbb5e572	deleted	ancestor-of-integration	Merge the ledger record for the nine direct connections the resolver lane brought
+lane/transforms-walk	69a2116b25	deleted	ancestor-of-integration	backlog: a payload reader is not a view reader, and the view says so itself
+lane/abort-fix	f8749cdba0	blocked	checked-out-at D:/Projects/Camel-wt/abort-fix	Merge lane/edit-session: the channel a graph-header write needs to fold into a named edit
+lane/cap-probe	4a7d63d3bc	blocked	checked-out-at D:/Projects/Camel-wt/value-ports	parse: record the arrays example's syntax as the parser reads it
+lane/cpp-noise	7cdbdcbae9	deleted	worktree stdlib-exceptions removed first (clean, ancestor)	cpp standalone: a fault's report goes to standard error, where camel writes its diagnostics
+lane/docs-lambda-probe	c78f57c85e	blocked	checked-out-at D:/Projects/Camel-wt/docs	backlog: the test tiers and the slow tests leave the build host; and a note on my own collision
+lane/editview-b	7c17dc39b4	blocked	checked-out-at D:/Projects/Camel-wt/editview-b	Merge lane/editnote-complete into integration
+lane/editview-commit	6ba0c83007	blocked	checked-out-at D:/Projects/Camel-wt/editview-commit	gir: the value a function parameter drops is judged by the parameter's type
+lane/editview-gir	b073860954	hold	KEEP: raw material for the C5 re-land (the promotion seat reverted it); merged is not the same as deletable	compile: a block's root imports the module whose operator opens it
+lane/facts-kinds	f92b09c353	blocked	checked-out-at D:/Projects/Camel-wt/console-res	feat(facts): core.instance and core.reorder, and the one read behind them
+lane/gc-pacing	6c7dffe5cb	blocked	checked-out-at D:/Projects/Camel-wt/gc-pacing	test(mm): the pacing cases allocate the arrays they document, not a range
+lane/grammar-notes	c55275edcb	deleted	worktree grammar-notes removed first (clean, ancestor)	grammar: the resource declaration names its modifiers instead of a production it never had
+lane/hdrweight-tools	f6f5ea2a80	blocked	checked-out-at D:/Projects/Camel-wt/hdrweight-tools	merge docs/coordinator: the promotion-8 page and record close, and eight backlog rows
+lane/loop-handback	fcccbaac9b	deleted	worktree loop-handback removed first (clean, ancestor)	gir: a loop hands its carried states out through one function
+lane/pass-as-function-names	475b2bec4e	blocked	checked-out-at D:/Projects/Camel-wt/witness	compile: a pass-shaped declaration that claims an operator is still checked
+lane/plain-gate-2	93ab748d73	deleted	tree retired after its two untracked files went away (both were stale copies of committed files)	selftest: the two passes a case declares itself are compiled into libcamel again
+lane/pool-jvp	750191c745	blocked	checked-out-at D:/Projects/Camel-wt/pooljvp	transpose: say what the pooling walks do, in the walk's own words
+lane/resource-eq	c8cbceabaf	blocked	checked-out-at D:/Projects/Camel-wt/resource-eq	gir: an effect is the open access of its resource before the next one is written
+lane/reuse-reading	0a45980e8c	blocked	checked-out-at D:/Projects/Camel-wt/reuse	inspect: make the two reuse vocabularies tellable apart, and pin it
+lane/timeout-retry	08fdf3d04d	blocked	checked-out-at D:/Projects/Camel-wt/timeout-retry	selftest: the re-run case that is red by design gets a plan of its own
+lane/transpose-carry	314c6f6504	deleted	tree retired after internal/_tcprobe/ went away (its readings are transcribed in the two transpose reports)	conv2d_t: give the shaped operators their own parameter lists
+lane/loop-tape-values-wip	6c6e94efec	skipped-guard	not-an-ancestor (TEMP probe branch)	TEMP: compare closure slots with the site's capture type
+lane/task-216-probe	6d114cb579	skipped-guard	not-an-ancestor (TEMP probe branch)	TEMP(probe): are inner captures among the forward graph
+lane/pass-classify-tests	91f7193879	archived-then-deleted	content already upstream (cherry -1); tag archive/pass-classify-tests points at the tip	test: a declaration that is not shaped like a pass is checked, not swallowed
+lane/pass-registry	a3ebba304c	skipped-hold	patch-identical to c1-measure (range-diff =); awaiting one-word confirm against the "do not delete lane/pass-registry*" clause	pass: a pass that reads tag facts states it on the operator, not in a list beside it
+lane/pass-registry-salvaged	34f83155ce	skipped-hold	patch-identical to c1-measure (range-diff =); same clause as above	ops: a pass written under another spelling is the same operator, said on its record
+lane/pass-registry-from-e0	e0e31424d9	skipped-hold	patch-identical to c1-measure (range-diff =); same clause as above	pass: a pass that reads tag facts states it on the operator, not in a list beside it
+lane/pass-classify	4c32ee2955	hold	three commits unmerged, 141 behind; ruling: decide after C1's registry surface lands	test: a declaration that is not shaped like a pass is checked, not swallowed
+lane/pass-decl-gate	8a852a4f55	skipped-instruction	named in the do-not-delete list	compile: a pass-shaped declaration that names an operator is a declaration still
