@@ -148,11 +148,15 @@ class FoldArgsView final : public ArgsView {
     std::vector<type::Type *> types_;
 };
 
-ValueInfo valueInfoOf(const std::string &name, const TensorFacts &facts) {
+ValueInfo valueInfoOf(const std::string &name, const TensorFacts &facts, bool isSequence = false) {
     if (!facts.dtype) {
         throw ExportError(std::format("the dtype of '{}' is not known statically", name));
     }
-    ValueInfo info{.name = name, .type = elemTypeOf(*facts.dtype), .shape = std::nullopt};
+    ValueInfo info{
+        .name       = name,
+        .type       = elemTypeOf(*facts.dtype),
+        .shape      = std::nullopt,
+        .isSequence = isSequence};
     if (facts.shape) {
         std::vector<Dim> dims;
         for (size_t i = 0; i < facts.shape->size(); ++i) {
@@ -162,6 +166,12 @@ ValueInfo valueInfoOf(const std::string &name, const TensorFacts &facts) {
         info.shape = std::move(dims);
     }
     return info;
+}
+
+/// The `ValueInfo` of a value the export states: a sequence says so, and its shape is the
+/// element's.
+ValueInfo valueInfoOf(const std::string &name, const Value &value) {
+    return valueInfoOf(name, factsOf(value), value.isSequence());
 }
 
 /// The elements of the constant tuple or struct `slot` of type `ty`.
@@ -2455,7 +2465,7 @@ Evaluator::LoopEmission Evaluator::emitLoopScanning(
                         "the dtype or shape of a value changes from one call of a recursion to "
                         "the next; a loop can only carry values of a fixed dtype and shape");
                 }
-                inputs.push_back(valueInfoOf(inLeaves[j].name, in));
+                inputs.push_back(valueInfoOf(inLeaves[j].name, inLeaves[j]));
                 outputs.push_back(valueInfoOf(
                     emitter_.node(
                         "Identity",
