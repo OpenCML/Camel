@@ -2342,9 +2342,18 @@ bool buildTransposeMember(
                 }
                 const auto *body           = function->nodeBodyAs<camel::runtime::GCOperBody>(ref);
                 const std::string_view uri = body->uri();
-                const auto candidates      = camel::core::transposeRulesOf(std::string(uri));
+                // The step's own operands, read here because the law's key depends on how many
+                // there are: an operator can file one key at one count and another at another
+                // (`:op/idx_arr` is `index_into(x, i)` at two operands and `index_into_axis(x, i,
+                // at)` at three), and the count asked is the node's, not the law's ports -- a law
+                // may be handed more ports than the node has operands (the extents this walk
+                // appends below), and those are not operands.
+                const auto normOperands   = function->normInputsOf(ref);
+                const size_t operandCount = normOperands.size();
+                const auto candidates =
+                    camel::core::transposeRulesOf(std::string(uri), operandCount);
                 if (candidates.empty()) {
-                    const auto rule    = camel::core::transposeRuleOf(std::string(uri));
+                    const auto rule = camel::core::transposeRuleOf(std::string(uri), operandCount);
                     const char *reason = !rule.has_value() ? "unbound"
                                          : rule->status == camel::core::RuleLookup::NoSuchFamily
                                              ? "no-such-family"
@@ -2361,7 +2370,6 @@ bool buildTransposeMember(
                     os << " uri=" << uri << " reason=" << reason << '\n';
                     return false;
                 }
-                const auto normOperands = function->normInputsOf(ref);
                 // An operator is walked at whatever operands it has, and the *law* says which of
                 // them are positions a cotangent is answered for: `mean_axis(xs, axis, keepdims)`
                 // has three ports, the law names all three, and the last two answer nothing because

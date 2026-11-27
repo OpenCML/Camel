@@ -20,7 +20,12 @@ void answerKey(const std::string &uri, std::ostream &os) {
     // conversion's is its destination's spelling, an operator written with a token has the token, a
     // module operator has its own name. `none` means the operator has no key at all, and a
     // transform refuses it by name -- `:var/get` is a read of a variable and converts nothing.
-    const auto key = camel::core::ruleKeyOf("rulesets.jvp", uri);
+    //
+    // The operand count is not stated, and that is this question's shape: it asks whether *this
+    // URI* has a key, not what a node of some arity lowers to. An operator whose spelling depends
+    // on its count answers with the key its first entry holds (`:op/idx_arr` -> `index_into/2`); a
+    // reader who wants the other count asks the transform's question, which states it.
+    const auto key = camel::core::ruleKeyOf("rulesets.jvp", uri, std::nullopt);
     os << "KEY " << uri << " -> ";
     if (!key.has_value()) {
         os << "none";

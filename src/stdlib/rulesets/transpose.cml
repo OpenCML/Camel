@@ -1011,6 +1011,46 @@ export rule idx_arr_t::<T, X, I, A>(xs: X, i: I, at: A) when is_float::<T>() { i
     scatter_into(zeros_of(ct, extent_product(at)), i, ct)
 } }
 
+// ---- the transpose rule of `:op/idx_arr` at three operands, the read along a named dimension ----
+//
+// `xs[.., i]` reads the position `i` on the dimension the subscript's third word names, and the
+// cotangent of that read belongs to that same position of that same dimension: an array of zeros in
+// `xs`'s shape with `ct` added at `i` along `axis`. The write is the core's scatter, whose own
+// gradient is the axis read back along the same dimension
+// (`lib/std/builtin/operators/derivative.cpp#scatterAddArrayVjp`), so this is the adjoint of the
+// read rather than a second implementation of it.
+//
+// The shape comes from `extents` -- the extents the walk states from the operand's type -- because a
+// transposition is handed the cotangent and no forward value (design principles 4.3), and the axis
+// is the node's own third operand, so it travels with the rule instead of being written here. The
+// law is filed under `index_into_axis`, the three-operand key of the same operator, for the reason
+// `idx_arr_t` above is filed under `index_into`: one law is one key.
+
+/// `xs[.., i]`: what `:op/idx_arr` at three operands means, and the left side this rule is filed
+/// under. Private, like `index_into` above: a family cannot read another module's private function,
+/// so this module spells it for itself. It is a declaration of a *call form* of the same operator
+/// (`#op`), not a function with a body, because the third word is an operand the law receives rather
+/// than a written dimension -- a subscript spells an axis by where its dots are.
+/// @example index_into_axis([[1.0, 2.0], [3.0, 4.0]], 0, 1)    // [1.0, 3.0]
+#op(':op/idx_arr')
+func index_into_axis::<T>(x: T[...], i: int, at: int) => T[...] panic
+
+/// `xs` with `delta` added at position `i` along `at`: the write a transposed read on a dimension
+/// that is not the first needs. Private to this module, like `scatter_into` above.
+#op(':tangent/scatter_add_arr')
+func scatter_into_axis::<T>(xs: T[...], i: int, delta: T[...], at: int) => T[...] panic
+
+/// The transpose of `xs[.., i]`: `ct` at position `i` along the named dimension, zero everywhere
+/// else, in the extents the operand's type states.
+///
+/// `xs` and `ct` are the open rank for the reason the forward law states: the operand is an array of
+/// any rank and the cotangent is that array with one rank fewer, and no type states "one rank fewer".
+export rule idx_arr_axis_t::<T, I, A, E>(xs: T[...], i: I, axis: A, extents: E)
+    when is_float::<T>() {
+    index_into_axis(xs, i, axis) => func (ct: T[...]) {
+    scatter_into_axis(zeros_of_shape(ct, extents), i, ct, axis)
+} }
+
 // ---- the transpose rule of `tensor:take` ----
 //
 // A take picks rows, so its adjoint puts each row's cotangent back where that row came from and
