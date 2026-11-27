@@ -3550,8 +3550,11 @@ class Builder {
     node_handle_t visitUnwrapBrchNode(const GCT::node_ptr_t &gct);
     /// The fault `<kind>: <message>` of a value taken out by `!`: the call `fail(<kind>,
     /// <message>)` the program would write, built from the operands the branch already holds.
-    node_handle_t
-    faultNodeOf(node_handle_t kind, node_handle_t message, const GCT::node_ptr_t &origin);
+    /// `location` is the position the error value records, said beside the `!`; it is null where
+    /// there is none, as when the taken value was `null`.
+    node_handle_t faultNodeOf(
+        node_handle_t kind, node_handle_t message, node_handle_t location,
+        const GCT::node_ptr_t &origin);
     /// The value a declaration without a right side stands for: the C++ module's registered value.
     node_handle_t nativeValueNode(const GCT::node_ptr_t &gct, Type *declared);
     /// The pipe `x -> f` (design principles 3.9). The call is built with `x` as it is, and the

@@ -26,6 +26,7 @@ assert(input.diagnostics.length === 1, JSON.stringify(input.diagnostics))
 assert(input.diagnostics[0].name === 'RuntimeDiag::' + 'NotANumber', input.diagnostics[0].name)
 """
 expect_stdout_contains = ["take=12"]
+expect_output_contains = ["the error was made here: take_fallible.cml:8:35"]
 expect_output_not_contains = ["not reached", "Segmentation fault", "dumped core"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 20000
@@ -47,7 +48,7 @@ assert(input.diagnostics.length === 1, JSON.stringify(input.diagnostics))
 assert(input.diagnostics[0].name === 'RuntimeDiag::' + 'NullValue', input.diagnostics[0].name)
 """
 expect_stdout_contains = ["value=7"]
-expect_output_not_contains = ["not reached", "Segmentation fault", "dumped core"]
+expect_output_not_contains = ["not reached", "the error was made here:", "Segmentation fault", "dumped core"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 20000
 [[tests]]

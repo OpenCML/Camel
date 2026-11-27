@@ -1254,13 +1254,17 @@ node_handle_t Builder::visitUnwrapBrchNode(const GCT::node_ptr_t &gct) {
                 registerNodeOrigin(context_, node, gct, "gir.data");
                 return node;
             };
-            return faultNodeOf(textNode("NullValue"), nullptr, gct);
+            // A null carries no error, so there is no position of an error to say beside the `!`.
+            return faultNodeOf(textNode("NullValue"), nullptr, nullptr, gct);
         }
-        // The error out of the value, and its own kind and message out of the error.
+        // The error out of the value, and its own kind, message and position out of the error: the
+        // position is the one the error value records as text, and the report says it beside the
+        // `!` it stands at (design principles 3.9).
         node_handle_t info   = applyTagOperator(camel::core::oper::TagErrorInfo, name, gct);
         node_handle_t kind   = memberReadNodeOf(info, Type::String(), "kind", gct);
         node_handle_t notice = memberReadNodeOf(info, Type::String(), "message", gct);
-        return faultNodeOf(kind, notice, gct);
+        node_handle_t madeAt = memberReadNodeOf(info, Type::String(), "location", gct);
+        return faultNodeOf(kind, notice, madeAt, gct);
     });
     // The arm the tag does not select: the value taken out, which is the take's value.
     arms[1] = buildArm(gct, [&] {
@@ -1278,20 +1282,34 @@ node_handle_t Builder::visitUnwrapBrchNode(const GCT::node_ptr_t &gct) {
 // is not a GCT node of the program's own (applyTagOperatorCall takes the same route for its one
 // operand). The kind and the message are ordinary arguments, so `fail` reports the fault where the
 // call stands -- the `!` -- and carries what the error said.
-node_handle_t
-Builder::faultNodeOf(node_handle_t kind, node_handle_t message, const GCT::node_ptr_t &origin) {
+node_handle_t Builder::faultNodeOf(
+    node_handle_t kind, node_handle_t message, node_handle_t location,
+    const GCT::node_ptr_t &origin) {
     const auto make = [&](GCT::node_ptr_t node) {
         node->setOrigin(origin->origin());
         return node;
     };
     // A fault with no message is the one-argument `fail(<kind>)`: the kind says what happened and
     // there is nothing to add, which is the same report the program gets from `fail('Kind')`.
-    const bool withMessage = message != nullptr;
-    GCT::node_ptr_t call   = make(tree_->makeLink(withMessage ? 2 : 1));
+    const bool withMessage  = message != nullptr;
+    const bool withLocation = location != nullptr;
+    size_t operands         = 1;
+    if (withMessage) {
+        ++operands;
+    }
+    if (withLocation) {
+        ++operands;
+    }
+    GCT::node_ptr_t call = make(tree_->makeLink(operands));
     *call << make(internalOperatorDref(camel::core::constructedOperators().fail))
           << make(tree_->makeDRef(bindTemporary(kind)));
     if (withMessage) {
         *call << make(tree_->makeDRef(bindTemporary(message)));
+    }
+    if (withLocation) {
+        // The position the error value records, which the `!` passes on so that the report can say
+        // where the error was made beside the `!` it stands at (design principles 3.9).
+        *call << make(tree_->makeDRef(bindTemporary(location)));
     }
     return visitLinkNode(call);
 }

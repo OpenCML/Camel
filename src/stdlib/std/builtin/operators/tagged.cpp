@@ -98,6 +98,17 @@ slot_t __fail__(ArgsView &with, ArgsView &norm, Context &ctx) {
     // A fault the program raises itself: it is reported where the call stands, as the fault of
     // any operator is, and the kind and the message are the two ordinary arguments the call gives
     // (design principles 3.9). The call has no value, so there is nothing to return.
+    //
+    // A third argument is the position the error it takes the place of records -- `x!` takes a
+    // failed value out and raises the error as a fault, and the error structure holds where it was
+    // made as text (design principles 3.9). It travels as a note: the report stands at the `!`, and
+    // the place the error was made is said beside it. Nothing is resolved, so an empty argument
+    // adds nothing.
+    const std::string madeAt = text(norm, 2);
+    std::vector<std::string> notes;
+    if (!madeAt.empty()) {
+        notes.push_back("the error was made here: " + madeAt);
+    }
     throw camel::core::error::RuntimeFault(
         camel::core::error::RuntimeDiag::ProgramFault,
         {text(norm, 1)},
@@ -106,7 +117,8 @@ slot_t __fail__(ArgsView &with, ArgsView &norm, Context &ctx) {
         {},
         camel::core::error::RuntimeFaultPolicy::AbortCurrentExecution,
         {},
-        text(norm, 0));
+        text(norm, 0),
+        std::move(notes));
 }
 
 namespace {
@@ -249,6 +261,9 @@ std::vector<oper_group_ptr_t> getTaggedOperatorGroups() {
         // are ordinary arguments and the result is the bottom type `never`. The entry states the
         // signature so that a call may leave the message out, which is read from the declaration's
         // default; the group's entries are one signature, so every call means that declaration.
+        // A third string is the position of the error a take raised as this fault, which the
+        // builder of a take adds; a program writes two arguments, and programs that predate that
+        // position keep meaning the same call.
         OperatorGroup::create(
             "fail",
             {{":op/fail",
@@ -256,7 +271,7 @@ std::vector<oper_group_ptr_t> getTaggedOperatorGroups() {
                   {{0, {}}, {-1, {}}},
                   "(kind: string, message: string) => never",
                   [](const type_vec_t &, const type_vec_t &norm) -> optional<Type *> {
-                      if (norm.empty() || norm.size() > 2) {
+                      if (norm.empty() || norm.size() > 3) {
                           return nullopt;
                       }
                       for (Type *type : norm) {
