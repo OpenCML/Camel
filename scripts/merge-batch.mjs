@@ -26,7 +26,8 @@
  *      the batch touched (`node scripts/test.js --changed --list`, with the integration tip the batch
  *      started from as the base) are run on the seat through the same command family as the build,
  *      and the cases that are red are compared by name with the red table of the newest promotion
- *      (`internal/reports/*-promotion-<n>-reds.tsv`). A red that is not in that table is new: the
+ *      (the `*-reds.tsv` of the highest promotion number under `internal/reports`). A red that is
+ *      not in that table is new: the
  *      tool prints it with its plan and pushes nothing. It does not look for the lane to blame; the
  *      seat decides. With no new red, the tool writes `<git common dir>/camel-read/<sha>` beside the
  *      build record (`plans=`, `reds=`, `baseline=`, `new=0`), which the pre-push hook requires
