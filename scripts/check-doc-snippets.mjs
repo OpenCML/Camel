@@ -184,12 +184,12 @@ const PENDING_ALL = [
     {
         file: 'docs/tutorial/17_teaching_a_law.cn.md',
         key: '12ee3b07b5c68a43',
-        reason: 'math:abs_l is not translated, so the law cannot fire',
+        reason: "the law checker does not yet sample a conditional law's scalar parameters, so the law cannot fire",
     },
     {
         file: 'docs/tutorial/17_teaching_a_law.en.md',
         key: '12ee3b07b5c68a43',
-        reason: 'math:abs_l is not translated, so the law cannot fire',
+        reason: "the law checker does not yet sample a conditional law's scalar parameters, so the law cannot fire",
     },
 ]
 
