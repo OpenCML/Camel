@@ -4339,7 +4339,6 @@ a3d372c4bd6d36c5 ok test/cases/probe/dpack_dots_ok.cml
 798734aec9c73109 ok test/cases/probe/fill_slots.cml
 74b1e954cd349a00 ok test/cases/probe/gc_pacing_probe2.cml
 ccb11c99dfb9221f ok test/cases/probe/idx_axis_read_second.cml
-380a08dca35e6344 ok test/cases/probe/idx_axis_read_second_2d.cml
 43594fd5547a371d ok test/cases/probe/probe_avg_reverse.cml
 94f6d74a134aef38 ok test/cases/probe/probe_max_forward.cml
 7f7416ab6e443a69 ok test/cases/probe/probe_max_reverse.cml
