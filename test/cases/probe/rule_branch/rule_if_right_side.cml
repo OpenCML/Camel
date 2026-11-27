@@ -21,9 +21,11 @@ func g(a: float, b: float) => float {
 func main() => int sync {
     // The tangent of the first operand is 1 and of the second 0, so the chosen arm is readable from
     // the number: the larger operand answers 1, the smaller answers 0.
-    let (v1, t1) = jvp(g)(2.0, 1.0)
-    println("a>b value=" + to_string(v1) + " tangent=" + to_string(t1))
-    let (v2, t2) = jvp(g)(1.0, 2.0)
-    println("a<b value=" + to_string(v2) + " tangent=" + to_string(t2))
+    let (v1, t1) = jvp(g)(2.0, 1.0, 1.0, 0.0)
+    println(v1)
+    println(t1)
+    let (v2, t2) = jvp(g)(1.0, 2.0, 1.0, 0.0)
+    println(v2)
+    println(t2)
     return 0
 }

@@ -9,8 +9,10 @@ func g(a: float) => float {
 
 func main() => int sync {
     let (v1, t1) = jvp(g)(2.0, 1.0)
-    println("if>0 value=" + to_string(v1) + " tangent=" + to_string(t1))
+    println(v1)
+    println(t1)
     let (v2, t2) = jvp(g)(-3.0, 1.0)
-    println("if<0 value=" + to_string(v2) + " tangent=" + to_string(t2))
+    println(v2)
+    println(t2)
     return 0
 }
