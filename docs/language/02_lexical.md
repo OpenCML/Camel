@@ -92,8 +92,11 @@ let c = a + b
 | 类型与模式位置 | `error` | `match` 的 `case` 模式里，失败的那个 `T!` 取出来的错误：两个词的写法 `error e` |
 | 类型与模式位置 | `fields` | `static for` 与 `static loop` 的头里，`in` 之后的 `fields`（后面是一个类型，给出名字、类型、标签） |
 | 类型与模式位置 | `indices` | 同一个头里，`in` 之后的 `indices`（后面是一个值，逐个给出元素的位置） |
-| 类型与模式位置 | `unordered` | 资源声明里，名字之后的 `unordered`（`resource net unordered`：这个资源上的效应不保持书写顺序） |
+| 类型与模式位置 | `unordered` | 资源声明里，名字之后的 `unordered`（`resource net unordered`：这个资源上的写与写可交换，读与写仍按顺序） |
+| 类型与模式位置 | `idempotent` | 资源声明里，名字之后的 `idempotent`（`resource cache idempotent`：同样的写做两次等于一次） |
+| 类型与模式位置 | `overwriting` | 资源声明里，名字之后的 `overwriting`（`resource sink overwriting`：后写覆盖先写） |
 | 类型与模式位置 | `readonly` | 资源声明里，名字之后的 `readonly`（`resource graph readonly`：它只被读，所以不与任何访问冲突、也不产生顺序；`uses var` 是类型错误） |
+| 类型与模式位置 | `observed` | 资源声明里，名字之后的 `observed`（`resource trace observed`：只有写，且语义上等于什么都没做——不进函数的资源集、不排序，但遍不能删除或合并它，程序也不能读它） |
 | 标签位置名 | `field` | 标签声明的 `on` 之后：标签贴在结构体字段上 |
 | 标签位置名 | `nodes` | 标签声明的 `on` 之后：标签贴在区域内按词法写下的节点上 |
 | 标签位置名 | `param` | 标签声明的 `on` 之后：标签贴在函数参数上 |
