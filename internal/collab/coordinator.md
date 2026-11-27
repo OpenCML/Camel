@@ -508,3 +508,7 @@ git worktree add --detach <旧提交>
 **4. 偶发红要修根因，不要写回 `flaky`。**
 `fault_deep.prl_off` 三次现形（晋级绿 → 批 5 首趟红 → 下趟绿）。临时办法（`flaky` 字段 + 工具认它）只让闸门不响，**根因是引用比所有者活得久**（`OperatorCallSite` 在调用前取 `const ExecPlan &`、调用后才用），修法是持强引用，**语义一字未改**。修完 10 连绿、`flaky` 字段删除。教训：**`flaky` 是记账，不是通行证；账要说得出"哪一行"，说不出就别记账**。
 同一族的另一条：**读的 12 分钟里 integration 又走了十几笔** ⇒ 车道的评分读数要带 `[provenance] tip`，进队前换底再读一次；两段读数不能混成一段。
+
+**5. "能通过 checker"不是"能被 runtime 读"。**
+`lane-block-hash` 把 `Sequence.elem_type` 写成只包一层：`TypeProto.Tensor` 的消息直接塞进 field 1 ⇒ 字节 `22 04 0a 02 08 01`。**`onnx.checker` 说 ok，`onnxruntime` 直接拒绝**：`Load model … failed: Unsuported type proto value case.` 正确形状要包两层：`22 06 0a 04 0a 02 08 01`。
+教训：**落盘类读数必须两口径都过** —— `onnx.checker` 一次、ORT 真正加载并逐值跑一次；只过 checker 的"通过"是假绿。这条与 `D-1128-47`（设计页写目标、现状写别处）同族：**校验器说的"合法"与消费者说的"能读"不是一件事**。
