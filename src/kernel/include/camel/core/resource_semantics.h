@@ -438,6 +438,11 @@ bool declaresOutside(const ResourceSpec &spec);
 /// operator is; `OperatorSemantics::writesForTheRegion` states a declared spec as the same
 /// signature (`signatureOf`) and calls this, so a declaration and a measured body cannot disagree
 /// about what a write is.
+///
+/// What a node touches is stated once, by `conservativeResources` below. Reaching it is a walk, and
+/// there are two of them: a frozen graph is walked by `runtime::footprintOf`, a body still under
+/// construction by `Builder::footprintOf`. The walks differ in the representation they read, not in
+/// the rule they apply.
 bool writesForTheRegion(const ResourceSignature &signature);
 
 /// The ambient resources the language gives every program (design principles 3.3): `stdout`,
