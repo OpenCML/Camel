@@ -21,12 +21,13 @@
  *      prefix, and the result is built again until it is green. The search presumes the tip the
  *      batch started from builds; so, once, when the first build fails, the tip itself is built
  *      before any prefix is. A tip that is red stops the tool: no lane is to blame, none is dropped.
- *   5. Read the built tip. A batch whose files reach the build is the one that can bring reds, and a
- *      lane's own reading, taken on the lane's branch, says nothing about the merged tip. So the plans
- *      the batch touched (`node scripts/test.js --changed --list`, with the integration tip the batch
- *      started from as the base) are run on the seat through the same command family as the build,
- *      and the cases that are red are compared by name with the red table of the newest promotion
- *      (the `*-reds.tsv` of the highest promotion number under `internal/reports`). A red that is
+ *   5. Read the built tip. A lane's own reading, taken on the lane's branch, says nothing about the
+ *      merged tip. A batch whose files reach the build can change the answer of any case, so the
+ *      whole fast layer is run; a batch that changes only cases, plans or pages is run through the
+ *      plans the selector maps it to (`node scripts/test.js --changed --list`, with the integration
+ *      tip the batch started from as the base). The run goes through the same command family as the
+ *      build, and the cases that are red are compared by name with the red table of the newest
+ *      promotion that published develop (see `newestRedTable`). A red that is
  *      not in that table is new: the
  *      tool prints it with its plan and pushes nothing. It does not look for the lane to blame; the
  *      seat decides. With no new red, the tool writes `<git common dir>/camel-read/<sha>` beside the
@@ -338,8 +339,14 @@ function readSummary(file) {
  */
 function readTip(args, baseSha, tip) {
     const files = git(['diff', '--name-only', baseSha, tip]).out.split('\n').filter(Boolean)
-    if (!reachesBuild(files)) {
-        process.stdout.write('merge-batch: the batch changes no path the build reads; no plan is run and no reading record is written\n')
+    // What is read follows what changed. A change the build reads can change the answer of any case
+    // (a compiler file maps to the plans that name it, but what it prints reaches plans nobody
+    // mapped), so the whole fast layer is read. A change to cases, plans or pages without one is read
+    // through the plans the selector maps it to. A batch that changes neither is not read.
+    const code = reachesBuild(files)
+    const cases = files.some((file) => /^(test|examples|docs)\//.test(file))
+    if (!code && !cases) {
+        process.stdout.write('merge-batch: the batch changes no path the build or a plan reads; no plan is run and no reading record is written\n')
         return { skipped: true, newReds: [] }
     }
     const common = path.resolve(seat, git(['rev-parse', '--git-common-dir']).out)
@@ -351,8 +358,12 @@ function readTip(args, baseSha, tip) {
     if (!baseline) fail(2, 'no promotion red table (internal/reports/*-promotion-<n>-reds.tsv) was found to compare with; nothing was pushed')
     const known = parseRedTable(fs.readFileSync(baseline.file, 'utf8'))
 
-    const plans = touchedPlans(baseSha)
-    process.stdout.write(`merge-batch: reading ${plans.length} touched plan(s): ${plans.join(', ') || '(none)'}\n`)
+    const plans = code ? ['test/plans'] : touchedPlans(baseSha)
+    process.stdout.write(
+        code
+            ? 'merge-batch: reading the whole fast layer (test/plans): the batch changes a path the build reads\n'
+            : `merge-batch: reading ${plans.length} touched plan(s): ${plans.join(', ') || '(none)'}\n`,
+    )
     let rows = []
     if (plans.length > 0) {
         const summary = path.join(seat, 'test', 'results', 'fetched', 'summary.json')
