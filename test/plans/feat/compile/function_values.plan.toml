@@ -401,3 +401,13 @@ expect_output_contains = ["Function of type '(float) => (float,)' cannot be call
 expect_output_not_contains = ["Camel Invariant Violation", "Guarantee", "never printed"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000
+
+[[tests]]
+name = "operator_name_has_a_graph"
+desc = "A name bound to an operator holds the operator's function value: `let p = len` binds it and `p('abc')` calls it, and the graph the value path built is printed by `std::gir`."
+kind = "behavior"
+case = "../../../cases/compile/function_values/operator_name_has_a_graph.cml"
+args = ["${case}", "std::gir", "std::nop"]
+expect_exit = 0
+expect_stdout_contains = ["type=\"CALL\", value_type=\"int\""]
+timeout_ms = 20000
