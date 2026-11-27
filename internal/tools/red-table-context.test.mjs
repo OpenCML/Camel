@@ -255,7 +255,11 @@ function runCli(args) {
     )
 
     const tsv = file('generated.tsv')
-    const written = runCli(['--tsv', tsv, '--jobs', '8', '--load', '84.5,87.2,90.1'])
+    // The table is anchored on a develop commit; the tool's default is `origin/develop`, which a
+    // checkout of one branch (a CI run) does not have. The check is about the file the tool writes,
+    // not about which commit it is anchored on, so it names the commit this checkout stands on.
+    const head = spawnSync('git', ['-C', here, 'rev-parse', 'HEAD'], { encoding: 'utf8' }).stdout.trim()
+    const written = runCli(['--tsv', tsv, '--develop', head, '--jobs', '8', '--load', '84.5,87.2,90.1'])
     const header = fs.existsSync(tsv) ? fs.readFileSync(tsv, 'utf8').split('\n').slice(0, 8).join('\n') : '(no file written)'
     check(
         'red-table.mjs --tsv writes a table whose header states jobs and load',
