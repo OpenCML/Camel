@@ -623,19 +623,54 @@ Builder::visitLinkNode(const GCT::node_ptr_t &gct, std::optional<GCT::Assignment
             if (!nodeIsKind(targetNode, runtime::GCNodeKind::Dref)) {
                 return nullptr;
             }
-            const auto &selected = nodeGraphOf(targetNode)->drefTarget(targetNode);
-            if (!std::holds_alternative<oper_group_ptr_t>(selected)) {
-                return nullptr;
+            // The entries of the set this call is resolved against: the rules of the name's
+            // operator group and the functions the built-in layer declares under the same
+            // spelling, which `operatorOverloads_` keeps as one set for this name
+            // (`builtinLayerNamed`). `foreach` over a `Range` is the prelude's function beside the
+            // array's rule, and the group alone does not hold it.
+            std::vector<FunctionType *> entries;
+            const auto takeResolver = [&](const oper_group_ptr_t &group) {
+                if (group == nullptr) {
+                    return;
+                }
+                for (const auto &[uri, resolver] : group->resolvers()) {
+                    if (resolver == nullptr) {
+                        continue;
+                    }
+                    FunctionType *fixed = resolver->fixedSignature();
+                    if (fixed == nullptr) {
+                        fixed = resolver->declaredSignature();
+                    }
+                    if (fixed == nullptr) {
+                        fixed = resolver->graftedSignature();
+                    }
+                    if (fixed != nullptr) {
+                        entries.push_back(fixed);
+                    }
+                }
+            };
+            if (const auto set = operatorOverloads_.find(targetNode);
+                set != operatorOverloads_.end()) {
+                takeResolver(set->second.ops);
+                for (const auto &graph : set->second.graphs) {
+                    if (graph != nullptr && graph->funcType() != nullptr) {
+                        entries.push_back(graph->funcType());
+                    }
+                }
+                for (const auto &tmpl : set->second.templates) {
+                    if (tmpl != nullptr && tmpl->funcType != nullptr) {
+                        entries.push_back(tmpl->funcType);
+                    }
+                }
+            } else {
+                const auto &selected = nodeGraphOf(targetNode)->drefTarget(targetNode);
+                if (!std::holds_alternative<oper_group_ptr_t>(selected)) {
+                    return nullptr;
+                }
+                takeResolver(std::get<oper_group_ptr_t>(selected));
             }
             Type *found = nullptr;
-            for (const auto &[uri, resolver] : std::get<oper_group_ptr_t>(selected)->resolvers()) {
-                FunctionType *fixed = resolver ? resolver->fixedSignature() : nullptr;
-                if (fixed == nullptr && resolver) {
-                    fixed = resolver->declaredSignature();
-                }
-                if (fixed == nullptr && resolver) {
-                    fixed = resolver->graftedSignature();
-                }
+            for (FunctionType *fixed : entries) {
                 if (fixed == nullptr || fixed->hasRest() || fixed->hasWithRest()) {
                     continue;
                 }
@@ -653,7 +688,9 @@ Builder::visitLinkNode(const GCT::node_ptr_t &gct, std::optional<GCT::Assignment
                     continue;
                 }
                 Type *candidate = fixed->withTypeAt(index);
-                if (candidate == nullptr) {
+                if (candidate == nullptr || containsTypeVar(candidate)) {
+                    // A parameter the entry still leaves open says nothing this position can be
+                    // built with; the signature's own reading is the one that stands.
                     continue;
                 }
                 if (found != nullptr && !found->equals(candidate)) {
