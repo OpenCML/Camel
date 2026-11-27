@@ -60,3 +60,10 @@ parse/ast/builder_expr.cpp  删 `let d = f`
 stdlib/graph.cml          export func block_root_graph … { return graph_of(f) }（待删）
 stdlib/graph/txn.cpp      txnKernels: block_root_graph → graphOfKernel（待删）
 ```
+## 更正（2026-11-28 02:2x）：树不是 `block-hash`
+
+**现场在 `D:\Projects\Camel-wt\editview-commit`**，分支 `lane/blockroot @ bbff2c9703`，7 个 `M` 文件原样（`operator_names.h`、`operator_table.h`、`operator_table.cpp`、`gct/builder_expr.cpp`、`parse/ast/builder_expr.cpp`、`stdlib/graph.cml`、`stdlib/graph/txn.cpp`）。
+
+`D:\Projects\Camel-wt\block-hash` 已被 `lane/cli-parse` 占用（`status` 空、behind 518），**不是这条路的地盘**。找现场只用 `git worktree list`，不要按树名猜。
+
+另：仓库里有 12 条别人的 stash（含 `wzj-dev`、`lane/view-gaps` 等），**没有一条属于本车道** —— 接手时不要 `git stash pop` 任何一条。
