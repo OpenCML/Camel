@@ -397,6 +397,7 @@ timeout_ms = 95000
 [[tests]]
 name = "spelling.compact_words_accepted"
 desc = "The compact spelling of the same four options is accepted: no space after a comma."
+kind = "behavior"
 tool = "python"
 case = "../../../tools/option_spelling.py"
 args = ["${case}", "accept", "test/cases/compile/check/clean.cml", "gc"]
@@ -408,6 +409,7 @@ timeout_ms = 95000
 [[tests]]
 name = "spelling.compact_spaces_accepted"
 desc = "The same for `--spaces`."
+kind = "behavior"
 tool = "python"
 case = "../../../tools/option_spelling.py"
 args = ["${case}", "accept", "test/cases/compile/check/clean.cml", "spaces"]
