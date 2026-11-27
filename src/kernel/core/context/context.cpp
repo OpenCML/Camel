@@ -767,6 +767,20 @@ void Context::claimBuiltinSignature(
     builtinClaims_.push_back({rule, {signature}});
 }
 
+void Context::registerResolver(
+    const std::string &uri, const std::shared_ptr<camel::core::type::FuncTypeResolver> &rule) {
+    if (uri.empty() || rule == nullptr) {
+        return;
+    }
+    resolvers_[uri] = rule;
+}
+
+std::shared_ptr<camel::core::type::FuncTypeResolver>
+Context::resolverOf(const std::string &uri) const {
+    const auto found = resolvers_.find(uri);
+    return found == resolvers_.end() ? nullptr : found->second;
+}
+
 std::string Context::checkPreludeDeclarations() {
     if (preludeChecked_) {
         return preludeProblem_;

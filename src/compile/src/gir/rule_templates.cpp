@@ -97,6 +97,7 @@ void publish(
     const compile_graph_ptr_t &rhs, const compile_graph_ptr_t &when, GenericRuleInstance &instance) {
     camel::runtime::Program *program = context.reserveProgram();
     GUARD(program != nullptr, "The context reserves the program an instance is published in.");
+    program->setContext(context.handle());
     encodeToRuntimeProgram(lhs, *program, &context.graphIds());
     instance.program = program;
     instance.lhs     = program->root();

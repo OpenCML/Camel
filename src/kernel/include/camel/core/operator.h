@@ -11,6 +11,7 @@
 #include "camel/core/type/resolver.h"
 
 #include <functional>
+#include <memory>
 #include <stdexcept>
 #include <unordered_map>
 
@@ -116,6 +117,12 @@ class OperatorGroup {
     /// published, so the two cannot say different things, and `resolve` hands the id on without
     /// asking the table anything.
     std::vector<camel::core::OperId> opers_;
+    /// The context whose module holds this group. A group's rules are the type rules of the
+    /// declarations of that context -- a rule's signature names the types the context wrote -- so
+    /// they are registered there and nowhere else (`Context::registerResolver`). Null for a group
+    /// no context holds yet: a merged view made on the way to one. That group answers from the
+    /// table alone, and its rules become findable by the context that attaches it.
+    std::shared_ptr<context::Context> owner_;
 
   public:
     OperatorGroup(
@@ -162,6 +169,15 @@ class OperatorGroup {
     /// The id the table gave the rule at `index`, an index of `resolvers()`. `kNoOper` for a rule
     /// that names no operator: an empty URI is never interned, and such a rule resolves nothing.
     camel::core::OperId operAt(size_t index) const { return opers_[index]; }
+
+    /// Hands the group to the context whose module holds it: from here its rules are what that
+    /// context answers for their operators, and they go out of the world with it.
+    void attachTo(const std::shared_ptr<context::Context> &context) {
+        owner_ = context;
+        registerResolvers();
+    }
+    /// The context that holds the group, or null when no module holds it yet.
+    const std::shared_ptr<context::Context> &owner() const { return owner_; }
 
     /// Adds a rule to a group that is already shared: the prelude's declaration of a built-in
     /// operator is the rule, and the modules that hold the group see it at once.
@@ -253,11 +269,16 @@ class OperatorGroup {
         }
     }
 
-    /// Makes each overload's resolver findable by its URI (see OperatorTable::setResolver), tells
-    /// the table which overloads this group has, so that the types it was registered for can be
-    /// listed (OperatorTable::registeredTypes), and records the id the table gave each URI -- the
-    /// one moment a rule's identity is resolved, which is why `resolve` never looks one up.
-    /// Defined in operator_table.cpp, where the table is: a group constructed here must not need
-    /// the table's definition to compile.
+    /// Records the id the table gave each rule's URI -- the one moment a rule's identity is
+    /// resolved, which is why `resolve` never looks one up -- and tells the table which overloads
+    /// this group has, so that the types it was registered for can be listed
+    /// (OperatorTable::registeredTypes). The rules themselves are not kept by the table: they are
+    /// registered with the context that holds the group (registerResolvers). Defined in
+    /// operator_table.cpp, where the table is: a group constructed here must not need the table's
+    /// definition to compile.
     void publishResolvers();
+
+    /// Registers the group's rules with the context that holds it. Every rule is one of that
+    /// context's: its signature names the types the context's declarations wrote.
+    void registerResolvers();
 };

@@ -9,6 +9,7 @@
  */
 
 #include "registry.h"
+#include "camel/core/context/context.h"
 
 #include "op_stats.h"
 
@@ -357,18 +358,27 @@ void OpRegistry::add(std::string_view protocol, std::vector<OpDef> defs) {
                 break;
             }
         }
-        // An operator without an export name belongs to no operator group, which is what
-        // publishes resolvers by URI. Such an operator still needs its result type to follow its
-        // arguments when types are re-inferred (specialization to an export's input shapes);
-        // otherwise everything downstream of it loses its static shape.
+        // An operator without an export name belongs to no operator group, which is what a
+        // group publishes. Such an operator still needs its result type to follow its arguments
+        // when types are re-inferred (specialization to an export's input shapes); otherwise
+        // everything downstream of it loses its static shape. The rule is the module's own, and a
+        // module's rules are its context's: registerResolvers hands them over at load.
         const Entry &entry = entries_.back();
         byId_.emplace(
             camel::core::OperatorTable::instance().intern(entry.uri),
             entries_.size() - 1);
+    }
+}
+
+void OpRegistry::registerResolvers(
+    const std::shared_ptr<camel::core::context::Context> &context) const {
+    if (context == nullptr) {
+        return;
+    }
+    std::lock_guard guard(mutex_);
+    for (const Entry &entry : entries_) {
         if (entry.def->exports.empty() && entry.def->infer) {
-            camel::core::OperatorTable::instance().setResolver(
-                entry.uri,
-                std::make_shared<OpDefResolver>(entry.def));
+            context->registerResolver(entry.uri, std::make_shared<OpDefResolver>(entry.def));
         }
     }
 }

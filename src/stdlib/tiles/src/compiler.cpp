@@ -3,6 +3,7 @@
 
 // Translate the supported pure tensor subgraphs without running user operators on the host.
 
+#include "camel/core/context/context.h"
 #include "camel/core/node_attrs.h"
 #include "camel/core/operator_semantics.h"
 #include "camel/core/rtdata/array.h"
@@ -15,11 +16,11 @@
 #include "camel/core/type/composite/struct.h"
 #include "camel/core/type/composite/tuple.h"
 #include "camel/execute/graph_runtime_support.h"
-#include "camel/runtime/operator_instance.h"
 #include "camel/runtime/core_facts.h"
 #include "camel/runtime/graph.h"
 #include "camel/runtime/loop.h"
 #include "camel/runtime/oper_shape.h"
+#include "camel/runtime/operator_instance.h"
 #include "src/stdlib/tensor/ops/registry.h"
 #include "src/stdlib/tensor/ops/support.h"
 #include "src/stdlib/tensor/tensor.h"
@@ -142,8 +143,15 @@ class Compiler {
     // program-holder-exempt: borrow-or-foreign-type -- the graphs compiled are of a program the
     // caller holds for the compile.
     const rt::Program *runtimeProgram;
-    Compiler(rt::fact::FactStore &store, const rt::Program *graphs)
-        : facts(store), runtimeProgram(graphs) {}
+    /// The context whose rules the core answers with: a rule's signature names the nominal types
+    /// the declarations of that context wrote, so the type a region's call gets is read from this
+    /// context, never from the process's operator table. Null for a compiler that only binds
+    /// arguments and asks no rule.
+    std::shared_ptr<camel::core::context::Context> context_;
+    Compiler(
+        rt::fact::FactStore &store, const rt::Program *graphs,
+        const std::shared_ptr<camel::core::context::Context> &context)
+        : facts(store), runtimeProgram(graphs), context_(context) {}
     std::unordered_set<rt::GCGraph *> active;
     std::unordered_set<::Function *> loadingFunctions;
     std::unordered_map<core::OperId, size_t> contracts;
@@ -468,7 +476,7 @@ class Compiler {
         region->domain = std::get<std::vector<int64_t>>(*iterable.constant);
         if (region->domain.size() != static_cast<size_t>(*domain->extent))
             throw std::runtime_error("core loop domain disagrees with static array");
-        Compiler nested(facts, runtimeProgram);
+        Compiler nested(facts, runtimeProgram, context_);
         nested.active = active;
         std::vector<Value> initials, states, captures;
         std::vector<size_t> inputs;
@@ -879,7 +887,10 @@ class Compiler {
     /// the front end ran and a rewrite re-runs the same way (draft_types.cpp, operResultType).
     /// Null when the rule is missing or the arguments do not fix a type.
     ty::Type *coreResult(core::OperId id, const std::vector<Value> &args) {
-        const auto resolver = core::OperatorTable::instance().resolver(id);
+        const auto resolver =
+            context_ != nullptr
+                ? context_->resolverOf(std::string(core::OperatorTable::instance().uri(id)))
+                : nullptr;
         if (!resolver)
             return nullptr;
         std::vector<ty::Type *> types;
@@ -904,7 +915,10 @@ class Compiler {
     /// The region cannot be mapped in either case; this is what tells the program which of the two
     /// it is looking at.
     std::string coreRejection(core::OperId id, const std::vector<Value> &args) {
-        const auto resolver = core::OperatorTable::instance().resolver(id);
+        const auto resolver =
+            context_ != nullptr
+                ? context_->resolverOf(std::string(core::OperatorTable::instance().uri(id)))
+                : nullptr;
         if (!resolver)
             return {};
         std::vector<ty::Type *> types;
@@ -1381,7 +1395,7 @@ std::string loopEligibility(
     const rt::Program &program, const rt::GCGraph &graph, rt::gc_node_ref_t id,
     rt::fact::FactStore &facts) {
     try {
-        Compiler compiler(facts, &program);
+        Compiler compiler(facts, &program, program.context());
         Frame frame{.graph = const_cast<rt::GCGraph *>(&graph)};
         const rt::LoopView view(graph, id);
         if (view.kind() != core::LoopKind::For || view.stateCount() == 0)
@@ -1406,7 +1420,10 @@ static Program compileInputs(
     if (!function || !function->graph())
         throw std::runtime_error("expected a function graph");
     ++extractions;
-    Compiler c(facts, function->program());
+    Compiler c(
+        facts,
+        function->program(),
+        function->program() != nullptr ? function->program()->context() : nullptr);
     std::vector<Value> with, norm;
     if (auto *closure = function->tuple()) {
         const auto *types = function->tupleType();
@@ -1483,7 +1500,7 @@ void bindRegionArguments(
         throw std::runtime_error("compiled region argument count changed");
     // Reuse the ordinary input snapshot implementation; no graph node, operator
     // instantiation, inference, scheduling or source generation is visited here.
-    Compiler bindings(facts, nullptr);
+    Compiler bindings(facts, nullptr, program.context());
     for (size_t i = 0; i < arguments.size(); ++i) {
         const auto &argument = arguments[i];
         const auto value     = bindings.host(argument.value, argument.type, true);

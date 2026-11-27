@@ -9,6 +9,7 @@
 #include "camel/runtime/draft_writes.h"
 #include "camel/core/operator_table.h"
 
+#include "camel/core/context/context.h"
 #include "camel/core/mm/alloc/growable.h"
 #include "camel/core/operator_traits.h"
 #include "camel/core/type/composite/func.h"
@@ -113,7 +114,8 @@ bool isWrittenArgument(const GraphDraft &draft, gc_node_ref_t user, bool isWith,
 } // namespace
 
 type::FunctionType *operatorOverloadType(
-    std::string_view uri, const type::type_vec_t &with, const type::type_vec_t &norm) {
+    const std::shared_ptr<camel::core::context::Context> &context, std::string_view uri,
+    const type::type_vec_t &with, const type::type_vec_t &norm) {
     OperQueryKey key{std::string(uri), with.size(), with};
     key.types.insert(key.types.end(), norm.begin(), norm.end());
     {
@@ -123,7 +125,8 @@ type::FunctionType *operatorOverloadType(
         }
     }
     type::FunctionType *answer = nullptr;
-    if (const auto resolver = camel::core::OperatorTable::instance().resolver(uri)) {
+    if (const auto resolver =
+            context != nullptr ? context->resolverOf(std::string(uri)) : nullptr) {
         try {
             const std::vector<type::StaticArg> statics(norm.size());
             const auto resolved = resolver->resolveWith(with, norm, statics);

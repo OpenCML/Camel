@@ -23,6 +23,7 @@
 #include "camel/runtime/graph_id.h"
 #include "camel/runtime/specializations.h"
 
+#include <memory>
 #include <span>
 #include <unordered_set>
 #include <vector>
@@ -43,7 +44,7 @@ class Program final : public camel::core::rtdata::Object {
     Program(const Program &other)
         : camel::core::rtdata::Object(), byId_(other.byId_), own_(other.own_),
           satellite_(other.satellite_), version_(other.version_), count_(other.count_),
-          root_(other.root_), specializations_(other.specializations_) {}
+          root_(other.root_), specializations_(other.specializations_), context_(other.context_) {}
     /// Assigning replaces the table and keeps whose program this is.
     Program &operator=(const Program &other) {
         byId_            = other.byId_;
@@ -53,6 +54,7 @@ class Program final : public camel::core::rtdata::Object {
         count_           = other.count_;
         root_            = other.root_;
         specializations_ = other.specializations_;
+        context_         = other.context_;
         // A copy is a new program and made nothing itself: the commit that produces one records
         // what it made on it (setMadeGraphs). Carrying the source's record would let a work table
         // or a satellite claim graphs it did not make.
@@ -302,6 +304,16 @@ class Program final : public camel::core::rtdata::Object {
     const RuntimeSpecializationTable &specializations() const { return specializations_; }
     RuntimeSpecializationTable &specializations() { return specializations_; }
 
+    /// The context this program is of. A rewrite re-infers the types of the nodes it touches with
+    /// the rules of that context -- a rule's signature names the nominal types that context's
+    /// declarations wrote -- so the program carries it (non-owning, `Context::handle`) and a
+    /// reader of a draft asks it rather than the process's operator table. Null for a program made
+    /// outside a context.
+    const std::shared_ptr<camel::core::context::Context> &context() const { return context_; }
+    void setContext(const std::shared_ptr<camel::core::context::Context> &context) {
+        context_ = context;
+    }
+
   private:
     friend class GCGraphManager;
     /// The graph this program holds that *is* `graph`: a graph's identity is the value itself
@@ -339,6 +351,9 @@ class Program final : public camel::core::rtdata::Object {
     size_t count_            = 0;
     GCGraph *root_           = nullptr;
     RuntimeSpecializationTable specializations_;
+    /// The context this program is of (context(), non-owning): the rules a rewrite types a node
+    /// through are that context's, and they go out of the world with it.
+    std::shared_ptr<camel::core::context::Context> context_;
     /// The ids of the graphs the commit that made this program made (see hasMadeGraphs): not a
     /// copy of the table it came from, and not a difference of tables.
     std::unordered_set<uint32_t> made_;

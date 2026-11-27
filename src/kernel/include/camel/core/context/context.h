@@ -238,6 +238,17 @@ class Context : public std::enable_shared_from_this<Context> {
     void claimBuiltinSignature(
         const std::shared_ptr<camel::core::type::FuncTypeResolver> &rule,
         camel::core::type::FunctionType *signature);
+    /// The type rule of an operator, as this context's own modules declare it. A rule's signature
+    /// names the types the declarations of this context wrote -- a `Range` is the `Range` this
+    /// context's prelude declared -- so the rule belongs to the context and goes with it. Two
+    /// contexts of one process therefore answer with their own rules, and a rule is never read
+    /// here after the context that wrote it is gone: the object that registers one is a group this
+    /// context's module holds.
+    void registerResolver(
+        const std::string &uri, const std::shared_ptr<camel::core::type::FuncTypeResolver> &rule);
+    /// The rule registered for the operator with this URI, or null when this context has none: a
+    /// reader says so rather than dereferencing nothing.
+    std::shared_ptr<camel::core::type::FuncTypeResolver> resolverOf(const std::string &uri) const;
 
   private:
     bool preludeChecked_ = false;
@@ -247,6 +258,12 @@ class Context : public std::enable_shared_from_this<Context> {
         std::shared_ptr<camel::core::type::FuncTypeResolver>,
         std::vector<camel::core::type::FunctionType *>>>
         builtinClaims_;
+    /// The rules this context's modules hold, by the URI of the operator each one answers
+    /// (registerResolver). Read through resolverOf, never through the process's operator table:
+    /// what the table keeps is what an operator is and what implements it, not what its calls are
+    /// typed as here.
+    std::unordered_map<std::string, std::shared_ptr<camel::core::type::FuncTypeResolver>>
+        resolvers_;
 
     Context(const EntryConfig &entryConf, const error::DiagsConfig &diagConf);
 

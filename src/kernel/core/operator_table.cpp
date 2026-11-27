@@ -6,6 +6,7 @@
  */
 
 #include "camel/core/operator_table.h"
+#include "camel/core/context/context.h"
 #include "camel/core/node_attrs.h"
 #include "camel/core/operator.h"
 #include "camel/core/operator_names.h"
@@ -32,11 +33,24 @@ void OperatorGroup::publishResolvers() {
             opers_.push_back(camel::core::kNoOper);
             continue;
         }
-        opers_.push_back(camel::core::OperatorTable::instance().setResolver(uri, resolver));
+        // The table keeps what an operator is and what implements it; the rule a call is typed
+        // through belongs to the context that holds this group, and registerResolvers puts it
+        // there. All this asks of the table is the operator's identity.
+        opers_.push_back(camel::core::OperatorTable::instance().intern(uri));
         uris.push_back(uri);
     }
     if (!uris.empty()) {
         camel::core::OperatorTable::instance().declareGroup(name_, uris);
+    }
+    registerResolvers();
+}
+
+void OperatorGroup::registerResolvers() {
+    if (owner_ == nullptr) {
+        return;
+    }
+    for (const auto &[uri, resolver] : resolvers_) {
+        owner_->registerResolver(uri, resolver);
     }
 }
 

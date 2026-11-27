@@ -126,6 +126,9 @@ TensorModule::TensorModule(context_ptr_t ctx) : BuiltinModule("tensor", ctx) {
     camel::tensor::registerLinearFusion();
     camel::tensor::registerLinearReluFusion();
     camel::tensor::ops::registerTensorOps();
+    // The rules of the operators that answer for no group are this module's, and this module is
+    // this context's: hand them over, so a rewrite types their calls with this context's types.
+    camel::tensor::ops::OpRegistry::instance().registerResolvers(context_);
     camel::tensor::passes::registerTensorPasses();
     // `tensor:multiply`'s batching rule is a `rule` in `stdlib/rulesets/vmap.cml` whose left side
     // is `mul_tensor(x, w)`, and nothing here says so: the array product has no token of its own --

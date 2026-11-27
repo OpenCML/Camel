@@ -382,6 +382,7 @@ bool Module::exportEntity(const Reference &ref, const entity &ent) {
     // (oper::EnumMake and the like), not by this entity name: record the way from the id back
     // to the group, once, here at registration.
     if (ent.isOperGroup() && ent.operGroup() != nullptr) {
+        ent.operGroup()->attachTo(context_);
         auto &table = camel::core::OperatorTable::instance();
         for (const auto &[uri, resolver] : ent.operGroup()->resolvers()) {
             nativeOperatorGroups_[table.intern(uri)] = ent.operGroup();
@@ -405,6 +406,7 @@ bool Module::declarePrivateEntity(const Reference &ref, const entity &ent) {
     // The URI the group answers for is how the compiler names it where it emits the operator
     // itself (the kernel of an `#impl` function), exactly as for an exported group.
     if (ent.isOperGroup() && ent.operGroup() != nullptr) {
+        ent.operGroup()->attachTo(context_);
         auto &table = camel::core::OperatorTable::instance();
         for (const auto &[uri, resolver] : ent.operGroup()->resolvers()) {
             nativeOperatorGroups_[table.intern(uri)] = ent.operGroup();
@@ -416,6 +418,7 @@ bool Module::declarePrivateEntity(const Reference &ref, const entity &ent) {
 bool Module::replaceEntity(const Reference &ref, const entity &ent) {
     const bool written = nativeEntityNS_->assign(ref, ent);
     if (ent.isOperGroup() && ent.operGroup() != nullptr) {
+        ent.operGroup()->attachTo(context_);
         auto &table = camel::core::OperatorTable::instance();
         for (const auto &[uri, resolver] : ent.operGroup()->resolvers()) {
             nativeOperatorGroups_[table.intern(uri)] = ent.operGroup();
