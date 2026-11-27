@@ -520,3 +520,9 @@ git worktree add --detach <旧提交>
 **7. "两个都是指针，非空检查照样通过" —— 版面读反了也像加载成功。**
 同一天第二条同族教训（`D-1128-57` 那条是 checker 与 runtime 不一致）。`lane-ssa-residue` 的报告：本树把 `OrtApiBase` 的两个成员顺序读反了（官方是 `GetApi` 在前、`GetVersionString` 在后），于是"拿 `GetVersionString` 当表、拿 `GetApi(22)` 当版本串函数"——**两者都是函数指针，非空检查全过**，所以"库能加载"一直是假读数；照原顺序调第一个真正的表条目（`CreateStatus`）直接把进程打死（`killed by a signal`，stdout/stderr 全空），改对顺序后同一段代码四步全答话。
 判法：**接外部运行时/动态表的地方，"非空"不是加载成功的证据，必须取一个只有布局对了才读得出的东西**（版本串、首条目调用）当冒烟；并让错误分成"版面/加载错"与"模型被拒"两类，别混成一个崩溃。
+
+**8. 晋级记录与 develop 的物理约束（2 号位实测，2026-11-28 07:2x）。**
+`promotion-record.mjs` 要求 `record.tip == 推给 develop 的 sha`，而 record 提交必须在那个 sha **之上** ⇒ **"record 随 develop 一起推"物理上不可能**。实际走通的路径只有一条：
+1. 先推 `develop` 到**被测量的那个 sha**（pre-push 靠"这个 tip 有 record"放行）；
+2. 再把 record 与红表作为**单独一笔**落到 integration —— 而且是 `git merge --no-ff <record 提交>` + 提交信息带 `Lane-Reading: docs-only` 尾注（直推被拒两次：`a lane commit that went straight in` / `merge(s) without a Lane-Reading trailer`）。
+漏做第 2 步的后果：`newestRedTable()` 仍选上一张表，下一趟的"甲"是拿旧尺子量的 —— 今晚 `promotion-67` 就这样漏过一次，是协调者手工补的。
