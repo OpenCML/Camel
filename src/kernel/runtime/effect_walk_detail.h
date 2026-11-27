@@ -100,7 +100,8 @@ inline OperandClause callClause(const GCGraph &graph, gc_node_ref_t ref) {
 /// program's own graph; a fact kind computes it over a view by bringing a reader instead.
 template <class Reader>
 EffectSummary effectSummaryOfOperatorT(
-    camel::core::OperId oper, const Reader &reader, const GCGraph *graph, gc_node_ref_t ref) {
+    camel::core::OperId oper, const Reader &reader, const typename Reader::Graph *graph,
+    gc_node_ref_t ref) {
     const auto &table = camel::core::OperatorTable::instance();
     const std::optional<camel::core::OperatorTraits> traits = table.find(oper);
     EffectSummary summary;
@@ -132,7 +133,9 @@ EffectSummary effectSummaryOfOperatorT(
 /// The reader of the reading above when the caller has no program: the operand clause is the
 /// operator table's and the node's, and nothing else is asked.
 struct NodeOperandReader {
-    OperandClause operandClause(const GCGraph *graph, gc_node_ref_t ref) const {
+    using Graph = GCGraph;
+    using Node  = gc_node_ref_t;
+    OperandClause operandClause(const Graph *graph, gc_node_ref_t ref) const {
         return functionOperandClause(*graph, ref);
     }
 };
@@ -142,47 +145,49 @@ struct NodeOperandReader {
 /// what lets the same walk run over a read of a graph that is not the program's own (a fact kind's
 /// `compute`, which reads through `GraphAccess` and reports what it read).
 struct ProgramReader {
+    using Graph = GCGraph;
+    using Node  = gc_node_ref_t;
     // program-holder-exempt: borrow-or-foreign-type -- a walk over the program of the call that
     // made it; effects() holds it for the walk.
     const Program &program;
 
-    uint32_t nodeCount(const GCGraph *graph) const { return graph->nodeCount(); }
-    bool hasNode(const GCGraph *graph, gc_node_ref_t ref) const {
+    uint32_t nodeCount(const Graph *graph) const { return graph->nodeCount(); }
+    bool hasNode(const Graph *graph, gc_node_ref_t ref) const {
         return graph->node(ref) != nullptr;
     }
-    GCNodeKind nodeKind(const GCGraph *graph, gc_node_ref_t ref) const {
+    GCNodeKind nodeKind(const Graph *graph, gc_node_ref_t ref) const {
         return graph->node(ref)->kind;
     }
-    uint32_t nodeRegion(const GCGraph *graph, gc_node_ref_t ref) const {
+    uint32_t nodeRegion(const Graph *graph, gc_node_ref_t ref) const {
         return graph->nodeRegion(ref);
     }
     /// The parent of `region`, or nothing when `region` is not a region of `graph`.
-    std::optional<uint32_t> regionParent(const GCGraph *graph, uint32_t region) const {
+    std::optional<uint32_t> regionParent(const Graph *graph, uint32_t region) const {
         const auto *found = graph->region(region);
         if (found == nullptr) {
             return std::nullopt;
         }
         return found->parent;
     }
-    camel::core::OperId operatorOf(const GCGraph *graph, gc_node_ref_t ref) const {
+    camel::core::OperId operatorOf(const Graph *graph, gc_node_ref_t ref) const {
         return graph->nodeBodyAs<GCOperBody>(ref)->oper;
     }
     /// The one reading of an operator's effect at the node it runs at
     /// (`effectSummaryOfOperator`, which `core.operatorEffects` and a per-node reader ask as well),
     /// so this summary and those readers cannot disagree.
-    EffectSummary operatorEffect(const GCGraph *graph, gc_node_ref_t ref) const {
+    EffectSummary operatorEffect(const Graph *graph, gc_node_ref_t ref) const {
         return effectSummaryOfOperatorT(operatorOf(graph, ref), *this, graph, ref);
     }
     /// What a higher-order operator's function operand amounts to at this node: the clause of the
     /// value that arrives in the operand the declaration names.
-    OperandClause operandClause(const GCGraph *graph, gc_node_ref_t ref) const {
+    OperandClause operandClause(const Graph *graph, gc_node_ref_t ref) const {
         return functionOperandClause(*graph, ref);
     }
     /// The graph a `Func` node stands for: the callee's body, which is a graph of the program.
-    const GCGraph *calleeOf(const GCGraph &graph, gc_node_ref_t ref) const {
+    const GCGraph *calleeOf(const Graph &graph, gc_node_ref_t ref) const {
         return program.calleeOf(graph, ref);
     }
-    OperandClause callClauseOf(const GCGraph &graph, gc_node_ref_t ref) const {
+    OperandClause callClauseOf(const Graph &graph, gc_node_ref_t ref) const {
         return callClause(graph, ref);
     }
 };
@@ -192,10 +197,10 @@ struct ProgramReader {
 /// read of it.
 template <class Reader> struct EffectWalkT {
     Reader reader;
-    std::unordered_map<const GCGraph *, EffectSummary> done;
-    std::unordered_set<const GCGraph *> active;
+    std::unordered_map<const typename Reader::Graph *, EffectSummary> done;
+    std::unordered_set<const typename Reader::Graph *> active;
 
-    EffectSummary of(const GCGraph *graph) {
+    EffectSummary of(const typename Reader::Graph *graph) {
         if (graph == nullptr) {
             return {};
         }
@@ -216,7 +221,7 @@ template <class Reader> struct EffectWalkT {
     }
 
     /// The nodes of `graph` that lie in `region` (0: all of them).
-    EffectSummary ofNodes(const GCGraph *graph, uint32_t region) {
+    EffectSummary ofNodes(const typename Reader::Graph *graph, uint32_t region) {
         EffectSummary summary;
         for (gc_node_ref_t ref = 0; ref < reader.nodeCount(graph); ++ref) {
             if (region != 0) {

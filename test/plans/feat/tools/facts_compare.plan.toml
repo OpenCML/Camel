@@ -1,0 +1,41 @@
+id = "tools.facts_compare"
+order = 919
+tier = "fast"
+tags = ["feat", "tools", "facts", "kernel"]
+
+# The effect of a graph is read at two levels: the graph's own answer and the union of its nodes'
+# answers. A reader of one level that disagreed with the other had nothing watching it. The
+# comparison the test tool prints counts the graphs where the two agree, the graphs where they
+# differ, and the graphs it could not read.
+#
+# `no_old` counts the graphs with no nodes: there is no union of node answers to compare against,
+# so the graph is counted and left out rather than counted as an agreement.
+#
+# The new fact layer registers no `core.effects` yet, so that side is not read at all and `no_new`
+# is zero. It is asserted as zero here so that a comparison which silently compared nothing cannot
+# read as green: the same test also pins `diff=0` and requires `same` to be at least one graph.
+# When the kind is registered in the new store, `no_new` becomes the number of graphs the new store
+# cannot answer for and this assertion changes to `> 0` with `diff` still pinned at zero.
+
+[[tests]]
+name = "facts.compare_effects"
+desc = "test::facts_compare reads the effect of every reachable graph through the fact layer (`fact::graphEffects`) and the effect of each of its nodes (`fact::nodeEffects`), and prints how often the graph's own answer agrees with the union of its nodes' answers. The program has a pure function, a branch, a loop and a call through a function value, so every level the walk visits is behind at least one graph of the case. A graph whose program runs outside a context has no store to read and is counted as no_context rather than answered; a graph with no nodes is counted as no_old. The run compares at least one graph, no graph's two answers differ, and no graph is answered by a store that does not exist."
+kind = "behavior"
+case = "../../../cases/facts/tensors_and_loops.cml"
+args = ["${case}", "test::facts_compare"]
+
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout
+const line = out.split('\n').find(l => l.startsWith('FACTS_COMPARE kind=core.effects'))
+assert(line, 'no FACTS_COMPARE line for core.effects')
+const num = (name) => { const m = line.match(new RegExp(name + '=([0-9]+)')); assert(m, `${name} is missing from: ${line}`); return Number(m[1]) }
+assert(num('graphs') > 0, 'no graph was compared')
+assert(num('same') >= 1, `no graph's two effect answers were compared: ${line}`)
+assert(num('diff') === 0, `the graph answer and the union of node answers differ: ${line}`)
+assert(num('no_new') === 0, `a graph was answered by the new store, which registers no core.effects yet: ${line}`)
+assert(num('no_context') === 0, `a graph's program ran outside a context, so its effects were not compared: ${line}`)
+}
+"""
+timeout_ms = 20000

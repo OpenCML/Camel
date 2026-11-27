@@ -12,6 +12,8 @@
 #include "camel/facts/arrangeable.h"
 #include "camel/facts/control_regions.h"
 #include "camel/runtime/control_regions.h"
+#include "camel/runtime/core_facts.h"
+#include "camel/runtime/effects.h"
 #include "camel/runtime/graph.h"
 #include "camel/runtime/graph_placement.h"
 #include "camel/runtime/graph_txn.h"
@@ -584,6 +586,54 @@ void compareDraft(
     }
 }
 
+/// What the effects of a graph answer, and whether the graph's own answer agrees with the union of
+/// its nodes' answers: a per-node reader that disagreed with the graph-level one has nothing else
+/// watching it. Both sides are the reads that exist today (`camel::runtime::fact::graphEffects` and
+/// `::nodeEffects`, over the store the program's context holds), so this compares two readings and
+/// computes no effect of its own.
+///
+/// A graph whose program runs outside a context has no store to read, so the comparison counts it
+/// and moves on rather than inventing a value. The store of the new fact layer answers no
+/// `core.effects` yet, so that side is not read: `no_new` is pinned at 0, and it becomes the count
+/// of graphs the new store cannot answer for once the kind is registered there.
+struct EffectCounts {
+    uint64_t graphs    = 0;
+    uint64_t same      = 0;
+    uint64_t diff      = 0;
+    uint64_t noOld     = 0;
+    uint64_t noContext = 0;
+    uint64_t noNew     = 0;
+};
+
+void compareEffects(
+    const camel::runtime::Program &program, const GCGraph &graph, EffectCounts &counts) {
+    ++counts.graphs;
+    if (graph.nodeCount() == 0) {
+        ++counts.noOld;
+        return;
+    }
+    const auto &context = program.context();
+    if (context == nullptr) {
+        ++counts.noContext;
+        return;
+    }
+    camel::runtime::fact::FactStore &old = context->facts();
+    const camel::runtime::EffectSummary whole =
+        camel::runtime::fact::graphEffects(old, program, &graph);
+    camel::runtime::EffectSummary unioned;
+    for (gc_node_ref_t ref = 0; ref < static_cast<gc_node_ref_t>(graph.nodeCount()); ++ref) {
+        if (graph.node(ref) == nullptr) {
+            continue;
+        }
+        unioned |= camel::runtime::fact::nodeEffects(old, program, graph, ref);
+    }
+    if (whole == unioned) {
+        ++counts.same;
+    } else {
+        ++counts.diff;
+    }
+}
+
 } // namespace
 
 const camel::runtime::Program *
@@ -593,6 +643,7 @@ FactsCompareTestPass::apply(const camel::runtime::Program *program, std::ostream
     ArrangeCounts arrange;
     AnswerCounts answers;
     DraftCounts draft;
+    EffectCounts effects;
     for (auto *graph : collectReachableGraphs(*program)) {
         if (graph == nullptr) {
             continue;
@@ -609,6 +660,7 @@ FactsCompareTestPass::apply(const camel::runtime::Program *program, std::ostream
         compareArrangeable(*graph, *store, arrange);
         censusArrangeable(*graph, *store, answers);
         compareDraft(*program, *graph, *store, draft, os);
+        compareEffects(*program, *graph, effects);
     }
     os << std::format(
         "FACTS_COMPARE kind=core.controlRegions graphs={} regions={} enclosing_same={} "
@@ -625,6 +677,15 @@ FactsCompareTestPass::apply(const camel::runtime::Program *program, std::ostream
         control.withinDiff,
         control.nodesSame,
         control.nodesDiff);
+    os << std::format(
+        "FACTS_COMPARE kind=core.effects graphs={} same={} diff={} no_old={} no_context={} "
+        "no_new={}\n",
+        effects.graphs,
+        effects.same,
+        effects.diff,
+        effects.noOld,
+        effects.noContext,
+        effects.noNew);
     os << std::format(
         "FACTS_COMPARE kind=core.arrangeable graphs={} nodes={} same={} diff={} no_old={} "
         "conversions={}\n",
