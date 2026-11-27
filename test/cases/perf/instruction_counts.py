@@ -182,7 +182,7 @@ def camel_command(camel: Path, source: Path, init: Path) -> list[str]:
     The recorded sweep ran `std::jit` with no `tensor::fuse` in front of it, and the recorded build
     has no such pass; that is the configuration both builds are measured in.
     """
-    return [str(camel), "-t", str(THREADS), "--spaces block_mb=", str(BLOCK_LIMIT_MB), str(source),
+    return [str(camel), "-t", str(THREADS), "--spaces", f"block_mb={BLOCK_LIMIT_MB}", str(source),
             "std::jit", "--arg", "bench=true", "--arg", f"init_dir={init}", "--arg", "final_dir="]
 
 
