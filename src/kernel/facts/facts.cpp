@@ -629,6 +629,27 @@ Store::find(KindId kind, std::span<const Anchor> anchors, std::uint64_t target, 
         status = Status::Valid;
         return &*it;
     }
+    // The precise rule: the graph's content moved, but the owner versions what this fact reported
+    // reading and every one of those is unchanged, so the answer still holds. The entry keeps its
+    // value and its stamp moves with the graph, so the next read is a plain hit.
+    const KindInfo &info = kindInfo(kind);
+    bool readsHold       = false;
+    if (info.dependence == Dependence::Reported && it->readsCovered &&
+        !(it->nodeMarks.empty() && it->regionMarks.empty())) {
+        readsHold = true;
+        for (const auto &[node, hash] : it->nodeMarks) {
+            readsHold = readsHold && graphs_.nodeVersion(*anchors[0].graph, node) == hash;
+        }
+        for (const auto &[region, hash] : it->regionMarks) {
+            readsHold = readsHold && graphs_.regionVersion(*anchors[0].graph, region) == hash;
+        }
+    }
+    if (readsHold && epoch && onTarget) {
+        it->versions = versions;
+        status       = Status::Revalidated;
+        ++counts_.revalidated;
+        return &*it;
+    }
     // The fact is gone: its slot goes first, while the value it names is still the entry's.
     clearSlot(graphs_, kind, it->anchors);
     list.erase(it);
@@ -728,6 +749,24 @@ Store::obtainValue(KindId kind, std::span<const Anchor> anchors, std::uint64_t t
     entry.reads    = std::move(reads);
     entry.epoch    = epoch;
     entry.target   = target;
+    // The precise rule's stamp: the version of everything it said it read, when the owner states
+    // one. A name binding is never covered -- checking it means resolving the name again, and
+    // the owner states no hook for that (`GraphAccess::callee` answers a call, not a name) -- and
+    // operator records are covered by the epoch. One uncovered read keeps the whole fact on the
+    // conservative rule.
+    if (info.dependence == Dependence::Reported && entry.reads.names.empty() &&
+        (entry.reads.nodes.empty() || graphs_.nodeVersion) &&
+        (entry.reads.regions.empty() || graphs_.regionVersion)) {
+        entry.readsCovered = true;
+        for (NodeId node : entry.reads.nodes) {
+            entry.nodeMarks.emplace_back(node, graphs_.nodeVersion(*anchors[0].graph, node));
+        }
+        for (RegionId region : entry.reads.regions) {
+            entry.regionMarks.emplace_back(
+                region,
+                graphs_.regionVersion(*anchors[0].graph, region));
+        }
+    }
     std::lock_guard lock(mutex_);
     auto &list = entries_[Key{kind, anchors[0].graph, anchors[0].node}];
     auto it    = std::find_if(list.begin(), list.end(), [&](const Entry &known) {
@@ -930,8 +969,11 @@ void dump(
         if (!here) {
             continue;
         }
-        if (store.probe(fact.kind, fact.anchors, fact.target) != Status::Valid) {
-            continue; // stale: not printed, and the probe dropped it
+        // Revalidated is printed too: the graph moved and what this fact read did not, so the
+        // answer still holds (the precise rule). A stale fact is not printed and is dropped.
+        const Status status = store.probe(fact.kind, fact.anchors, fact.target);
+        if (status != Status::Valid && status != Status::Revalidated) {
+            continue;
         }
         const KindInfo &info = kindInfo(fact.kind);
         os << "FACT " << factJson(info, fact.anchors, fact.value.get(), &fact, labelOf) << "\n";
