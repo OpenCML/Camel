@@ -464,7 +464,7 @@ The number a text spells, or an error value.
 #### `error`
 
 ```camel
-error: (kind: string, message: string) => Error
+error: (kind: string, message: string = '') => Error
 ```
 
 An Error value of the given kind with the given message; the compiler adds the source
@@ -1090,16 +1090,17 @@ inside the boundary. The name is provisional.
 #### `fail`
 
 ```camel
-fail: <Kind: string> (message: string) => never panic
+fail: (kind: string, message: string = '') => never panic
 ```
 
 Raises a fault of the kind the program writes, with the message it gives. The call gives no
 value at all: its type is the bottom type `never` (design principles 3.9), so it may stand
 where any type is expected, and a branch arm that raises the fault leaves the branch's type
 to the other arm. The fault is raised where the call is written, and `attempt` isolates it
-into an error value whose kind is the name in the angle brackets.
+into an error value whose kind is the first argument. The message may be left out, and then
+it is the empty string: the kind alone says what went wrong.
 
-- Failure: fault `<Kind>` with the message, which `attempt` isolates.
+- Failure: fault `Kind` with the message, which `attempt` isolates.
 - Example: `fail('BadLimit', 'the limit must be positive')`
 
 #### `attempt`
