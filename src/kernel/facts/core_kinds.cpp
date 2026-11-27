@@ -184,22 +184,30 @@ KindId instanceKind() {
                 return std::nullopt;
             }
             log.node(anchors[0].node);
-            const core::OperId oper = view->operatorOf(ref);
-            if (view->kindOf(ref) == camel::graph::NodeKind::Oper) {
-                // The record is half the answer: it is what says whether the operator declares
-                // index semantics at all, and what the instance's text is written against.
-                log.record(oper);
-            }
-            std::optional<camel::core::sem::IndexedInstance> instance =
-                camel::runtime::instanceOf(*view, ref);
-            if (!instance) {
+            // The registration this kind replaces asked first whether the operator declares index
+            // semantics at all, and answered a value either way: a node whose operator declares
+            // them but whose instance cannot be worked out still has the fact, printed as `none`.
+            // That is the difference between "no instance here" and "this node is not about
+            // instances", and the move keeps it.
+            if (view->kindOf(ref) != camel::graph::NodeKind::Oper) {
                 return std::nullopt;
             }
+            const core::OperId oper = view->operatorOf(ref);
+            const camel::core::sem::OperatorSemantics *semantics =
+                camel::core::OperatorTable::instance().semantics(oper);
+            if (semantics == nullptr || semantics->indexing == nullptr) {
+                return std::nullopt;
+            }
+            // The record is half the answer: it is what the operator declares, and what the
+            // instance's text is written against.
+            log.record(oper);
             NodeInstance value;
-            value.instance = instance;
-            value.text     = camel::core::sem::toString(
-                *instance,
-                camel::core::OperatorTable::instance().semantics(oper));
+            const std::optional<camel::core::sem::IndexedInstance> instance =
+                camel::runtime::instanceOf(*view, ref);
+            if (instance) {
+                value.instance = instance;
+                value.text     = camel::core::sem::toString(*instance, semantics);
+            }
             return value;
         },
         // No merge, and the reason: an instance is what one node's operator declares with the facts
