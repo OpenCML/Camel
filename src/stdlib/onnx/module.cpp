@@ -254,8 +254,18 @@ bool OnnxModule::load() {
         "onnx",
         {{"model", true}, {"save", false}, {"supported_operators", true}});
     // `onnx::model` translates a function value and answers it as a model value: the translation
-    // reads the graph it is handed, and it writes nothing outside the program.
-    camel::core::OperatorTable::instance().set("onnx:model", {.pure = true, .readsGraphs = true});
+    // reads the graph it is handed, and it writes nothing outside the program. `foldable = false`
+    // because the call must run where the program writes it, though running it has no effect:
+    // translating a function is where the lowering table is consulted, so an operator the table
+    // does not know is refused *there*, with the position of that call (design principles 3.9).
+    // A pass that evaluated it ahead of time would take that diagnostic away and hand the program
+    // a value computed from a function it never ran -- and, for a function that cannot be
+    // translated at all, would let the refusal become an error value that quietly leaves the
+    // graph (a fold of `tag_is_error` over such a value turns the branch into its error arm, and
+    // an effect in the other arm, `save` writing the file, goes with it).
+    camel::core::OperatorTable::instance().set(
+        "onnx:model",
+        {.pure = true, .readsGraphs = true, .foldable = false});
     // `onnx::save` writes the model's bytes to a file: the effect `export_model` had, without the
     // translation that made the bytes. `readsGraphs = false` because what it reads is the bytes
     // the model value already owns, not a graph: the translation happened in `onnx::model`, and
