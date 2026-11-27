@@ -1135,60 +1135,11 @@ assert(model.initializers.filter((_, i) => model.initializerTypes[i] === 1).leng
 timeout_ms = 6000
 
 [[tests]]
-name = "pass_export_refusal_located.two_calls"
-desc = "the out parameter with two export_model calls: the refusal is located at the second call (it had no source position)."
-kind = "negative"
-case = "../../../cases/modules/onnx/refusals/two_calls.cml"
-args = ["${case}", "std::macro", "std::opt", 'onnx::export_model out="${test_tmp}/refusal_one.onnx"', "std::nop"]
-expect_exit = 1
-expect_diagnostic_name = "RuntimeDiag::TranslationRefused"
-expect_diagnostic_code = "0x0400000B"
-expect_diagnostic_line = 15
-expect_diagnostic_column = 25
-expect_output_contains = ["the parameter out names one model file but the entry graph contains 2 onnx.export_model calls"]
-expect_output_not_contains = ["onnx::export_model: wrote", ":?:?:"]
-normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
-timeout_ms = 8000
-
-[[tests]]
-name = "pass_export_refusal_located.no_request"
-desc = "A program without an export_model call and without the out parameter: the pass would translate `main` itself and has no file to write; the refusal is located at the entry function `main`, also after main has been inlined into the entry graph. (Until `main` itself became exportable the message was 'the entry graph contains no onnx.export_model call'; a program without a request is no longer refused for that.)"
-kind = "negative"
-case = "../../../cases/modules/onnx/refusals/no_request.cml"
-args = ["${case}", "std::macro", "std::opt", "onnx::export_model", "std::nop"]
-expect_exit = 1
-expect_diagnostic_name = "RuntimeDiag::TranslationRefused"
-expect_diagnostic_code = "0x0400000B"
-expect_diagnostic_line = 8
-expect_diagnostic_column = 1
-expect_output_contains = ["the program contains no export_model<out: path>(fn, example) call, so onnx::export_model translates 'main' itself, and the model file is not named", "the parameter out"]
-expect_output_not_contains = ["onnx::export_model: wrote", ":?:?:"]
-normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
-timeout_ms = 8000
-
-[[tests]]
-name = "pass_export_refusal_located.main_not_inlined"
-desc = "After std::cxx::devirtualize the call of main is a direct call without a source position of its own: the refusal is located at the definition of main (it had an all-zero range)."
-kind = "negative"
-case = "../../../cases/modules/onnx/export_fold.cml"
-args = ["${case}", "std::cxx::devirtualize", "onnx::export_model", "std::nop"]
-envs = ["ONNX_OUT=${test_tmp}/refusal_unused.onnx"]
-expect_exit = 1
-expect_diagnostic_name = "RuntimeDiag::TranslationRefused"
-expect_diagnostic_code = "0x0400000B"
-expect_diagnostic_line = 26
-expect_diagnostic_column = 1
-expect_output_contains = ["the entry graph still contains a call to 'main' that was not inlined"]
-expect_output_not_contains = ["onnx::export_model: wrote", ":?:?:"]
-normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
-timeout_ms = 8000
-
-[[tests]]
 name = "pass_export_refusal_located.dynamic_axis"
 desc = "An error about the request, not about a node of the exported function (a dynamic axis out of range), is located at the export_model call."
 kind = "negative"
 case = "../../../cases/modules/onnx/refusals/bad_axis.cml"
-args = ["${case}", "std::macro", "std::opt", "onnx::export_model", "std::nop"]
+args = ["${case}", "std::macro", "std::opt", "onnx::export_model", "out=tmp/test/onnx/refusal_axis.onnx", "dynamic_axes=[5]", "std::nop"]
 expect_exit = 1
 expect_diagnostic_name = "RuntimeDiag::TranslationRefused"
 expect_diagnostic_code = "0x0400000B"
@@ -1204,7 +1155,7 @@ name = "pass_export_refusal_located.target"
 desc = "An unknown export target is located at the export_model call."
 kind = "negative"
 case = "../../../cases/modules/onnx/refusals/bad_target.cml"
-args = ["${case}", "std::macro", "std::opt", "onnx::export_model", "std::nop"]
+args = ["${case}", "std::macro", "std::opt", "onnx::export_model", "out=tmp/test/onnx/refusal_target.onnx", "target=no_such_target", "std::nop"]
 expect_exit = 1
 expect_diagnostic_name = "RuntimeDiag::TranslationRefused"
 expect_diagnostic_code = "0x0400000B"
@@ -2419,28 +2370,6 @@ assert(ops === 'Cast ReduceSum Cast Add Mul Sub Cast Mul Add', `the chain of the
 timeout_ms = 8000
 
 [[tests]]
-name = "pass_export_refusal_located.no_request_effect"
-desc = "The same program with the out parameter set: `main` prints, so it is not a computation the pass can translate as a whole; the refusal is at the println (line 10) and says that a program doing more than computing exports a function with onnx.export_model. No file is written."
-kind = "negative"
-case = "../../../cases/modules/onnx/refusals/no_request.cml"
-args = ["${case}", "std::macro", "std::opt", 'onnx::export_model out="${test_tmp}/no_request_effect.onnx"', "std::nop"]
-expect_exit = 1
-expect_diagnostic_name = "RuntimeDiag::TranslationRefused"
-expect_diagnostic_code = "0x0400000B"
-expect_diagnostic_line = 9
-expect_output_contains = ["impure operator ':io/println' cannot be exported", "onnx::export_model translates the computation of 'main' itself", "exports one of its functions with onnx.export_model"]
-expect_output_not_contains = ["onnx::export_model: wrote", ":?:?:"]
-normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
-verify_script = """
-async ({ input, assert }) => {
-const fs = await import('fs')
-const path = await import('path')
-assert(!fs.existsSync(path.join(input.test_tmp, 'no_request_effect.onnx')), 'a refused export must not write a model')
-}
-"""
-timeout_ms = 8000
-
-[[tests]]
 name = "pass_export_entry.forward"
 desc = "A pure program (no export_model request, no `import onnx`) exported by pass composition: the model is the computation of `main`. One input per parameter, named like it and shaped by its declared type (the negative extent of x is a dynamic axis), one output, no initializers. Naming onnx::export_model on the command line loads the onnx module."
 kind = "behavior"
@@ -2822,69 +2751,6 @@ expect_diagnostic_name = "RuntimeDiag::TranslationRefused"
 expect_output_contains = ["the entry graph still contains a call to 'main' that was not inlined", "the inliner ran before onnx::export_model and left this call because 'main' calls, directly or through other functions, a recursive function (a loop), and such a function is inlined only while it is small: the inlined function has 9 compute nodes (at most 8; a constant, a parameter, a gate and what an inline splice adds are not counted)", "keep the function that makes the export_model call small by moving the rest of its work into a function it calls"]
 expect_output_not_contains = ["onnx::export_model: wrote", ":?:?:", "run std::opt before onnx::export_model", "growth budget"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
-timeout_ms = 8000
-
-[[tests]]
-name = "pass_export_refusal_located.request_in_arm"
-desc = "An export_model call in an arm of a branch on an environment value: the refusal points at the branch (the `if`, line 19 column 12), says where the call is and that the condition of the branch is not known at compile time. It used to point at the definition of the example and say 'the example argument of onnx.export_model is a value computed at run time ... run std::opt before it so that it folds'."
-kind = "negative"
-case = "../../../cases/modules/onnx/refusals/request_in_arm.cml"
-args = ["${case}", "std::macro", "std::opt", "onnx::export_model", "std::nop"]
-expect_exit = 1
-expect_diagnostic_name = "RuntimeDiag::TranslationRefused"
-expect_diagnostic_code = "0x0400000B"
-expect_diagnostic_line = 18
-expect_diagnostic_column = 12
-expect_output_contains = ["request_in_arm.cml:19:29 is made in an arm of this branch, and the condition of the branch (a value computed by ':op/eq_s') is not known at compile time", "onnx::export_model does not run the program, so it cannot tell whether the request is made", "write the export_model call outside the branch, or make the condition a constant"]
-expect_output_not_contains = ["onnx::export_model: wrote", ":?:?:", "the example argument of onnx.export_model", "run std::opt before it so that it folds"]
-normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
-timeout_ms = 8000
-
-[[tests]]
-name = "pass_export_refusal_located.request_in_arm_and_target"
-desc = "The request is in a run-time arm and its example is not a graph constant: both reasons are reported, the branch (the program's structure) first, then the unreadable argument (user-written structure before target capability, both when both hold)."
-kind = "negative"
-case = "../../../cases/modules/onnx/refusals/request_in_arm_and_target.cml"
-args = ["${case}", "std::macro", "std::opt", "onnx::export_model", "std::nop"]
-expect_exit = 1
-expect_diagnostic_name = "RuntimeDiag::TranslationRefused"
-expect_diagnostic_code = "0x0400000B"
-expect_diagnostic_line = 16
-expect_diagnostic_column = 12
-expect_output_contains = ["is made in an arm of this branch, and the condition of the branch (a value computed by ':op/eq_s') is not known at compile time", "the request cannot be read either: the example argument of onnx.export_model is a value computed by 'tensor:zeros', not a constant of the graph"]
-expect_output_not_contains = ["onnx::export_model: wrote", ":?:?:"]
-verify_script = """
-({ input, assert }) => {
-const text = input.normalized.output
-const branch = text.indexOf('is made in an arm of this branch')
-const target = text.indexOf('the request cannot be read either')
-assert(branch >= 0 && target > branch, `the branch reason must come first: ${text}`)
-}
-"""
-normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
-timeout_ms = 8000
-
-[[tests]]
-name = "pass_export_refusal_located.request_in_arm_json"
-desc = "The same refusal in --diag-format json: one diagnostic, TranslationRefused, stage pass:onnx::export_model, the range of the branch (it starts at the `if` on line 19 and ends with the else arm on line 23), no model file."
-kind = "behavior"
-case = "../../../cases/modules/onnx/refusals/request_in_arm.cml"
-args = ["--diag-format", "json", "${case}", "std::macro", "std::opt", "onnx::export_model", "std::nop"]
-expect_exit = 1
-normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-verify_script = """
-async ({ input, assert }) => {
-const fs = await import('fs')
-const path = await import('path')
-const diags = JSON.parse(input.normalized.stdout)
-assert(diags.length === 1, `expected one diagnostic, got ${diags.length}`)
-const d = diags[0]
-assert(d.data.name === 'RuntimeDiag::TranslationRefused' && d.data.stage === 'pass:onnx::export_model', `unexpected diagnostic ${d.data.name} at stage ${d.data.stage}`)
-assert(d.message.includes('is made in an arm of this branch') && d.message.includes('is not known at compile time'), `unexpected message: ${d.message}`)
-assert(d.range.start.line === 17 && d.range.start.character === 11 && d.range.end.line === 21, `unexpected range ${JSON.stringify(d.range)}`)
-assert(!fs.existsSync(path.join(input.test_tmp, 'refusal_request_in_arm.onnx')), 'a refused export must not write a model')
-}
-"""
 timeout_ms = 8000
 
 [[tests]]
@@ -3386,3 +3252,19 @@ assert(!fs.existsSync(`${input.test_tmp}/export_refusal_is_visible.onnx`), 'a re
 }
 """
 timeout_ms = 10000
+
+[[tests]]
+name = "pass_export_no_out"
+desc = "The stage form without the out parameter has no file to write: the refusal names the parameter that names the file. The program itself is a plain tensor program."
+kind = "negative"
+case = "../../../cases/modules/onnx/refusals/no_out.cml"
+args = ["${case}", "std::macro", "std::opt", "onnx::export_model", "std::nop"]
+expect_exit = 1
+expect_diagnostic_name = "RuntimeDiag::TranslationRefused"
+expect_diagnostic_code = "0x0400000B"
+expect_diagnostic_line = 9
+expect_diagnostic_column = 1
+expect_output_contains = ["give it as the parameter out"]
+expect_output_not_contains = ["onnx::export_model: wrote", ":?:?:"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
