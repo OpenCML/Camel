@@ -254,6 +254,14 @@ pwsh -NoProfile -File <你的工作树>\internal\tools\camel-remote.ps1 `
 实际是它本地的远程追踪 ref 落后 40 多笔）。一律 `git fetch origin`（无 refspec），
 并先打印 `git log -1 --format=%h origin/integration` 的 sha 再动手。
 **被唤起续做时，第一件事是重读本 skill**，再 `git log --oneline -5` 认自己的位置。
+**你的 `git fetch` 可能根本取不到远端（2026-11-27 实测）**：`origin` 是 SSH（`git@github.com:…`），而机器上的代理只配给
+HTTP(S)（`http.proxy=127.0.0.1:7890`），SSH 走 `ssh.github.com:443` 直连会 `Connection timed out`（握手前就失败，
+`git` 后面那两行 “correct access rights / repository exists” 只是它的通用提示，**不是凭据被拒**）。
+⇒ 这**不影响**换底：所有工作树与主检出共享同一个 `.git`，refs 是共享的，协调者的 fetch 会把它更新。
+⇒ 所以你的做法只有一条：**不 fetch、不推远端**；换底前 `git rev-parse origin/integration` 与协调者报的 sha
+**逐字符比对**，相同才 `rebase`，不同就**停下问**，不许默认自己那份是新的。
+**不许用 `Select-Object -Last N` 截一条命令的输出去读错误**（2026-11-27 一条车道因此把 `fetch` 失败的**第一行**丢掉，
+把“TCP 超时”报成了“凭据被拒”，差点被当成权限问题去修）：要截就 `Tee-Object` 存全文再读尾巴。
 ```
 
 ## 8. 报告格式（≤12 行，跑完报、等点名）
