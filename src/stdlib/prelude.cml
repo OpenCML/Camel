@@ -378,12 +378,12 @@ export func operator ==(x: f16, y: f16) => bool
 export func operator ==(x: bf16, y: bf16) => bool
 
 /// Whether two single-precision complex values are equal.
-/// @example c64(1.0, 2.0) == c64(1.0, 2.0)    // true
+/// @example c64(1.0) == c64(1.0)    // true
 #op(':op/eq_c')
 export func operator ==(x: c64, y: c64) => bool
 
 /// Whether two double-precision complex values are equal.
-/// @example c128(1.0, 2.0) == c128(1.0, 2.0)    // true
+/// @example c128(1.0) == c128(1.0)    // true
 #op(':op/eq_z')
 export func operator ==(x: c128, y: c128) => bool
 
@@ -1139,7 +1139,7 @@ export func filter(r: Range) => int[] {
 }
 
 /// Calls f for every integer r names, in order, as `foreach` on the array the range names.
-/// @example (0 .. 3)->foreach<func (x) { println(x) }>
+/// @example (0 .. 3)->foreach<func (x: int) { println(x) }>
 with <f: (item: int) => void>
 export func foreach(r: Range) => void {
     return to_array(r)->foreach<f>
