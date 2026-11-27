@@ -364,10 +364,15 @@ template <typename T> KindId registerKind(Kind<T> kind) {
             return print(*static_cast<const T *>(value));
         };
     }
-    if (kind.encode && kind.decode) {
+    // Each is forwarded on its own: the pairing is a rule of the registry (registerKind), which can
+    // say which of the two a kind is missing, and reporting it there is better than dropping it
+    // here.
+    if (kind.encode) {
         info.encode = [encode = std::move(kind.encode)](const void *value) {
             return encode(*static_cast<const T *>(value));
         };
+    }
+    if (kind.decode) {
         info.decode = [decode = std::move(kind.decode)](std::string_view text) {
             std::optional<T> value = decode(text);
             return value ? std::make_shared<const T>(std::move(*value))

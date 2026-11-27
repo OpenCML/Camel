@@ -286,6 +286,19 @@ int runSelfCheck() {
                 return std::optional<std::uint64_t>(counter);
             },
         .print = [](std::uint64_t value) { return std::to_string(value); },
+        // A back end that keeps answers across processes writes this text and reads it back.
+        .encode =
+            [](const std::uint64_t &value) {
+                return std::optional<std::string>(std::to_string(value));
+            },
+        .decode =
+            [](std::string_view text) {
+                try {
+                    return std::optional<std::uint64_t>(std::stoull(std::string(text)));
+                } catch (const std::exception &) {
+                    return std::optional<std::uint64_t>();
+                }
+            },
     });
     const facts::KindId setKind = facts::registerKind<NodeSet>(facts::Kind<NodeSet>{
         .key      = "check.set",
@@ -377,6 +390,65 @@ int runSelfCheck() {
     check(
         store.verify(setKind, asSpan(node0)) == std::nullopt,
         "the validator says nothing about a kind that has no computation");
+
+    // ---- The portable text form --------------------------------------------------------------
+    // A back end keeps an answer across processes as the text its kind states, and reads it back
+    // as the value that was stored: the store's entry is what is written, and what comes back is
+    // the same fact, at the same anchors.
+    {
+        const facts::KindInfo &kind = facts::kindInfo(counterKind);
+        std::optional<std::string> written;
+        std::vector<facts::Anchor> storedAt;
+        store.forEach([&](const facts::StoredFact &fact) {
+            if (fact.kind != counterKind) {
+                return;
+            }
+            written  = kind.encode(fact.value.get());
+            storedAt = fact.anchors;
+        });
+        check(
+            written.has_value() && !written->empty(),
+            "a kind's portable form is text, and writing a value produces some");
+        const std::shared_ptr<const void> read = written ? kind.decode(*written) : nullptr;
+        check(read != nullptr, "the text a kind writes reads back to a value");
+        check(
+            read != nullptr && *static_cast<const std::uint64_t *>(read.get()) == counter,
+            "the value read back is the value that was written");
+        check(
+            storedAt.size() == 1 && storedAt[0].graph == &graph && storedAt[0].node == 0,
+            "the round trip leaves the fact at the anchors it was stored at");
+        check(
+            store.verify(counterKind, asSpan(node0)) == std::optional<bool>(true),
+            "reading a value back through its text does not disturb the stored fact");
+        check(
+            refused("encode and decode", [&] {
+                (void)facts::registerKind<std::uint64_t>(facts::Kind<std::uint64_t>{
+                    .key    = "check.half",
+                    .owner  = "check",
+                    .encode = [](const std::uint64_t &value) {
+                        return std::optional<std::string>(std::to_string(value));
+                    },
+                    .print = [](std::uint64_t value) { return std::to_string(value); },
+                });
+            }),
+            "a kind that writes text but cannot read it back is refused");
+        check(
+            refused("portable form", [&] {
+                (void)facts::registerKind<std::uint64_t>(facts::Kind<std::uint64_t>{
+                    .key    = "check.portable_layout",
+                    .owner  = "check",
+                    .cls    = facts::Class::Target,
+                    .encode = [](const std::uint64_t &value) {
+                        return std::optional<std::string>(std::to_string(value));
+                    },
+                    .decode = [](std::string_view text) {
+                        return std::optional<std::uint64_t>(std::stoull(std::string(text)));
+                    },
+                    .print = [](std::uint64_t value) { return std::to_string(value); },
+                });
+            }),
+            "a Target kind states no portable form");
+    }
 
     // ---- Content, target and the anchors -----------------------------------------------------
     const size_t beforeContent = store.size();
