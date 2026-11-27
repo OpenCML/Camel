@@ -697,7 +697,8 @@ typeDecl
     ;
 */
 /*
-resourceDecl : 'export'? 'resource' identDef ('=' bracketIdents | modifier*)?
+resourceDecl : 'export'? 'resource' identDef ('=' bracketIdents
+    | ('unordered' | 'idempotent' | 'overwriting' | 'readonly' | 'observed')*)?
 */
 Value Builder::visitResourceDecl(cst::ResourceDecl context) {
     ENTER("ResourceDecl");
