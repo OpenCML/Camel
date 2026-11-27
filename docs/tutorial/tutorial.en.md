@@ -1036,10 +1036,6 @@ func main(x: f32[2, 3]) => f32[...] {
 }
 ```
 
-`main` prints nothing and has no `sync`: it is pure. The type of the parameter `x` states the element type and the shape.
-
-**Running it**: the values of the parameters are given on the command line, and a tensor comes from a `.npy` file ([`examples/x.npy`](examples/x.npy) is `[[1, -2, 3], [-4, -5, 6]]`); the value that `main` returns is printed to standard output:
-
 ```bash
 camel docs/tutorial/examples/15_model.cml --arg x=docs/tutorial/examples/x.npy
 ```
@@ -1047,6 +1043,10 @@ camel docs/tutorial/examples/15_model.cml --arg x=docs/tutorial/examples/x.npy
 ```text
 [[2.0], [0.0]]
 ```
+
+`main` prints nothing and has no `sync`: it is pure. The type of the parameter `x` states the element type and the shape.
+
+**Running it**: the values of the parameters are given on the command line, and a tensor comes from a `.npy` file ([`examples/x.npy`](examples/x.npy) is `[[1, -2, 3], [-4, -5, 6]]`); the value that `main` returns is printed to standard output.
 
 **Exporting it**: the same source, with a different set of passes. Nothing in the program was written for the export; not even `import onnx` is needed:
 

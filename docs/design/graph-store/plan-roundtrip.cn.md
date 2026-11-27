@@ -805,6 +805,8 @@ func pick(x: int): string { return 'wide' }
 
 **缺口 D：顺序边（不打印可以，不检查不行）。**
 复现：`camel probe.cml std::jgir canonical=true std::nop` 对
+<!-- camel-snippet: fragment: the two functions the gap is about; the probe file's own setup is not on the page -->
+
 ```camel
 func f() => int sync { let a = println(1)
     let b = println(2)
