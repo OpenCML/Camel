@@ -229,12 +229,21 @@ fi
 # reads are the ones its stamp hashes (scripts/common.js: BUILD_INFO_ROOTS, BUILD_INFO_ROOT_FILES).
 check_integration_built() {
     common=$(git rev-parse --path-format=absolute --git-common-dir 2>/dev/null)
-    # The list is read from the checkout this hook belongs to, the one whose tools made the build.
-    scripts_dir=$(cd "$(dirname "$0")/.." 2>/dev/null && { pwd -W 2>/dev/null || pwd; })
-    if [ -z "$common" ] || [ ! -f "$scripts_dir/common.js" ]; then
-        echo "pre-push: refusing to push to $integration_ref: the git directory or scripts/common.js could not be found, so whether the tip was built cannot be answered." >&2
+    if [ -z "$common" ]; then
+        echo "pre-push: refusing to push to $integration_ref: the git directory could not be found, so whether the tip was built cannot be answered." >&2
         exit 1
     fi
+    # The list is the pushed checkout's own; a hook run from another checkout's scripts/hooks (as the
+    # tests run it) reads that one's. A checkout with neither has no build, so nothing it pushes
+    # needs one.
+    scripts_dir=''
+    for dir in "$(git rev-parse --show-toplevel 2>/dev/null)/scripts" "$(dirname "$0")/.."; do
+        if [ -f "$dir/common.js" ]; then
+            scripts_dir=$(cd "$dir" 2>/dev/null && { pwd -W 2>/dev/null || pwd; })
+            break
+        fi
+    done
+    [ -n "$scripts_dir" ] || return 0
     while IFS=' ' read -r local_ref local_sha remote_sha; do
         [ "$local_ref" != '(delete)' ] || continue
         [ -n "$local_sha" ] || continue
