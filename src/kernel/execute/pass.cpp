@@ -15,8 +15,8 @@
 #include "camel/core/slot.h"
 #include "camel/core/source/manager.h"
 #include "camel/core/tags.h"
-#include "camel/core/type/composite/tuple.h"
 #include "camel/core/trace.h"
+#include "camel/core/type/composite/tuple.h"
 #include "camel/execute/entry_args.h"
 #include "camel/execute/observer.h"
 #include "camel/runtime/core_facts.h"
@@ -26,6 +26,7 @@
 #include "camel/runtime/graph_exit_type.h"
 #include "camel/runtime/resources.h"
 #include "camel/runtime/writings.h"
+#include "camel/utils/assert.h"
 #include "camel_pass.h"
 #include "pass_declarations.h"
 #include "pass_spec.h"
@@ -166,6 +167,20 @@ struct PassImplementationRegistry {
 
 PassImplementationRegistry &passImplementations() {
     static PassImplementationRegistry registry;
+    return registry;
+}
+
+/// The kernels keyed by the operator the pass's declaration names, one entry per operator: the
+/// registry a pass registers in when it registers as what it is rather than under a spelling of
+/// its name (`registerPassKernel`). Indexed by `OperId`, so a lookup is one indexed read and the
+/// two spellings of one pass cannot hold two kernels.
+struct PassKernelRegistry {
+    std::mutex mutex;
+    std::vector<std::optional<PassDescriptor>> kernels;
+};
+
+PassKernelRegistry &passKernels() {
+    static PassKernelRegistry registry;
     return registry;
 }
 
@@ -340,6 +355,41 @@ void registerModulePass(const std::string &path, PassDescriptor descriptor) {
 
 void registerModulePass(const std::string &path, PassFactory factory) {
     registerModulePass(path, passWithoutParameters(std::move(factory)));
+}
+
+void registerPassKernel(camel::core::OperId pass, PassDescriptor descriptor) {
+    if (pass == camel::core::kNoOper) {
+        return; // no operator, no pass: nothing to key the kernel by
+    }
+    const bool readsTags = descriptor.readsTags;
+    auto &kernels        = passKernels();
+    {
+        std::lock_guard lock(kernels.mutex);
+        if (kernels.kernels.size() <= pass) {
+            kernels.kernels.resize(static_cast<size_t>(pass) + 1);
+        }
+        // One registration per operator: the second one is the same pass declared twice, and two
+        // kernels for one declaration can never answer consistently.
+        ASSERT(!kernels.kernels[pass].has_value(), "a pass kernel is registered once per operator");
+        kernels.kernels[pass] = std::move(descriptor);
+    }
+    if (readsTags) {
+        // The pass is a reader of tag facts, and its name in that registry is the operator's own.
+        camel::core::tag::declareReader(
+            std::string(camel::core::OperatorTable::instance().uri(pass)));
+    }
+}
+
+std::optional<PassDescriptor> findPassKernel(camel::core::OperId pass) {
+    if (pass == camel::core::kNoOper) {
+        return std::nullopt;
+    }
+    auto &kernels = passKernels();
+    std::lock_guard lock(kernels.mutex);
+    if (static_cast<size_t>(pass) >= kernels.kernels.size()) {
+        return std::nullopt;
+    }
+    return kernels.kernels[pass];
 }
 
 namespace {
