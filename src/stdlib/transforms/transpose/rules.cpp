@@ -86,7 +86,8 @@ RuleChoice chooseTransposedRule(
     camel::core::context::Context &context, std::string_view uri,
     std::span<const gc_node_ref_t> inputs, size_t dataOperandCount,
     const std::function<const Type *(gc_node_ref_t)> &typeOf, const Type *cotangentType,
-    const std::vector<bool> *answered, const std::vector<Type *> *offeredOperands, bool *lawFits) {
+    const std::vector<bool> *answered, const std::vector<Type *> *offeredOperands, bool *lawFits,
+    const std::function<std::optional<slot_t>(gc_node_ref_t)> *valueOf) {
     std::vector<Type *> actual;
     actual.reserve(inputs.size() + 1);
     if (offeredOperands != nullptr) {
@@ -99,6 +100,24 @@ RuleChoice chooseTransposedRule(
             actual.push_back(const_cast<Type *>(typeOf(input)));
         }
     }
+    // The `<>` value the node carries at each port, in the same order as `actual`, which is what
+    // `chooseRuleAmong` compares a law's own written value against: a law whose left side spells
+    // `log_softmax<0>` answers a node carrying 0 and no other. A port the node passes as a value
+    // has none, and the extents a law of the reduction family is offered are read by a rule and not
+    // from a port, so both are `nullopt` here. The list is built beside `actual` rather than by the
+    // caller so the two cannot be filled in two orders.
+    std::vector<std::optional<slot_t>> portValues;
+    if (valueOf != nullptr) {
+        portValues.reserve(actual.size());
+        for (const gc_node_ref_t input : inputs) {
+            portValues.push_back((*valueOf)(input));
+        }
+        while (portValues.size() < actual.size()) {
+            portValues.push_back(std::nullopt);
+        }
+    }
+    const std::vector<std::optional<slot_t>> *portValueList =
+        valueOf != nullptr ? &portValues : nullptr;
     // The instance the ports are read from is made at the types the right side will be built at,
     // in the order the law names them: the cotangent first, then the node's operands. A law written
     // per shape takes one type parameter per port (`matmul_t` serves the matrix and both vector
@@ -137,7 +156,8 @@ RuleChoice chooseTransposedRule(
         actual,
         dataOperandCount,
         words,
-        answered);
+        answered,
+        portValueList);
     if (!choice.found() && choice.refusal != RuleRefusal::Shape) {
         // The law could not be built at one type per port. That is not this question's to refuse: a
         // law whose right side the expansion can still write is not a law that says this step is
@@ -180,7 +200,8 @@ RuleChoice chooseTransposedRule(
             actual,
             dataOperandCount,
             words,
-            answered);
+            answered,
+            portValueList);
         // `operandTypes` stay the node's own in both readings: the shape test is about the operands
         // the walk will hand the right side, whatever instance the ports were read from.
         if (!choice.found()) {

@@ -1607,6 +1607,16 @@ bool buildTransposeMember(
                 }
                 std::string chosenRule;
                 std::string ruleWhy;
+                // The `<>` value the node carries at each of its ports, so a law whose left side
+                // spells its own configuration is asked about the node's: `constantOf` reads the
+                // static slot a DATA node names and answers nothing for a port the node passes as a
+                // value.
+                const std::function<std::optional<slot_t>(gc_node_ref_t)> valueOf =
+                    [&](gc_node_ref_t node) -> std::optional<slot_t> {
+                    const slot_t *value =
+                        ::camel::transforms::payload_detail::constantOf(*function, node);
+                    return value != nullptr ? std::optional<slot_t>(*value) : std::nullopt;
+                };
                 const RuleChoice armChoice = chooseTransposedRule(
                     *state.context,
                     body->uri(),
@@ -1617,7 +1627,10 @@ bool buildTransposeMember(
                         return at != nullptr ? at->dataType() : nullptr;
                     },
                     armCotangentType,
-                    nullptr);
+                    nullptr,
+                    nullptr,
+                    nullptr,
+                    &valueOf);
                 if (armChoice.rule.name.empty()) {
                     armsOk = false;
                     refuse(TransposeRefusalCause::Rule);
@@ -2366,6 +2379,15 @@ bool buildTransposeMember(
                         !isConstant(input) && wantsCotangent(input) && hasTangentSpace(input));
                 }
                 bool fits         = false;
+                // The `<>` value the node carries at each of its ports, so a law whose left side
+                // spells its own configuration -- `log_softmax_t`'s `log_softmax<0>`, `conv2d_t`'s
+                // `conv2d<1, 0>` -- is asked about the node's configuration and no other's.
+                const std::function<std::optional<slot_t>(gc_node_ref_t)> valueOf =
+                    [&](gc_node_ref_t node) -> std::optional<slot_t> {
+                    const slot_t *value =
+                        ::camel::transforms::payload_detail::constantOf(*function, node);
+                    return value != nullptr ? std::optional<slot_t>(*value) : std::nullopt;
+                };
                 RuleChoice choice = chooseTransposedRule(
                     *state.context,
                     uri,
@@ -2378,7 +2400,8 @@ bool buildTransposeMember(
                     stepCotangentType,
                     &answered,
                     nullptr,
-                    &fits);
+                    &fits,
+                    &valueOf);
                 // A law that has no extents in hand names one port more than its operator has and
                 // is handed them: the extents of the first operand whose type writes them down,
                 // read by `extent_of`'s rule and no value of the program. It is *offered* second,
@@ -2414,7 +2437,8 @@ bool buildTransposeMember(
                             stepCotangentType,
                             &answered,
                             &widened,
-                            &widenedFits);
+                            &widenedFits,
+                            &valueOf);
                         if (widenedFits) {
                             choice         = withExtents;
                             operandTypes   = widened;

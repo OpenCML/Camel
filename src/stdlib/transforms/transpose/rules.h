@@ -35,15 +35,24 @@ camel::core::type::Type *cotangentPortOf(
     camel::core::context::Context &context, const std::string &rule,
     const std::vector<camel::core::type::Type *> &instanceTypes, size_t position);
 
-/// The transpose law that answers an operator here, chosen by the operands' own types, or the
-/// refusal when the declaration does not choose.
+/// The transpose law that answers an operator here, chosen by the operands' own types and by the
+/// `<>` value the node carries at each of its context ports, or the refusal when the declaration
+/// does not choose.
+///
+/// `valueOf` is what makes a law that writes a `<>` value of its own answerable at all
+/// (`rule_expand.h#chooseRuleAmong`'s `portValues`): a law whose left side writes `log_softmax<0>`
+/// is worth asking only of a node that carries 0 there. A caller that cannot answer passes null,
+/// and then such a law is refused rather than guessed -- which is what this family did by not
+/// asking the question at all: every law that spells its configuration on its own left side was
+/// refused, the node's own configuration never read.
 RuleChoice chooseTransposedRule(
     camel::core::context::Context &context, std::string_view uri,
     std::span<const camel::runtime::gc_node_ref_t> inputs, size_t dataOperandCount,
     const std::function<const camel::core::type::Type *(camel::runtime::gc_node_ref_t)> &typeOf,
     const camel::core::type::Type *cotangentType, const std::vector<bool> *answered,
-    const std::vector<camel::core::type::Type *> *offeredOperands = nullptr,
-    bool *lawFits = nullptr);
+    const std::vector<camel::core::type::Type *> *offeredOperands                      = nullptr,
+    bool *lawFits                                                                      = nullptr,
+    const std::function<std::optional<slot_t>(camel::runtime::gc_node_ref_t)> *valueOf = nullptr);
 
 /// The type list as the index's reports write it: `(float[..], float)`, `()` when empty.
 std::string typeTextOf(const std::vector<camel::core::type::Type *> &types);
