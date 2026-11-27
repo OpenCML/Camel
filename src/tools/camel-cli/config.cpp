@@ -1378,8 +1378,11 @@ bool parseArgs(int argc, char *argv[]) {
                         std::exit(1);
                     }
                 } else {
-                    std::cerr << "Invalid --gc-stress key: '" << word.key
-                              << "'. Expected kind, alloc or safepoint." << std::endl;
+                    explainCommaSpace(
+                        "--gc-stress",
+                        word.key,
+                        word.value,
+                        {"kind", "alloc", "safepoint"});
                     std::exit(1);
                 }
             }
@@ -1409,9 +1412,11 @@ bool parseArgs(int argc, char *argv[]) {
                         std::exit(1);
                     }
                 } else {
-                    std::cerr << "Invalid --gc-check word: '" << word.key
-                              << "'. Expected moves, poison, foreign, config or verify=...."
-                              << std::endl;
+                    explainCommaSpace(
+                        "--gc-check",
+                        word.key,
+                        word.value,
+                        {"moves", "poison", "foreign", "config", "verify"});
                     std::exit(1);
                 }
             }
