@@ -130,7 +130,7 @@ verify_script = """
 assert(input.diagnostics.length === 1, JSON.stringify(input.diagnostics))
 assert(input.diagnostics[0].name === 'SemanticDiag::NeverArgumentCall', input.diagnostics[0].name)
 assert(input.diagnostics[0].code === '0x031001C0', input.diagnostics[0].code)
-assert(input.diagnostics[0].line === 16, input.diagnostics[0].line)
+assert(input.diagnostics[0].line === 18, input.diagnostics[0].line)
 assert(input.diagnostics[0].column === 23, input.diagnostics[0].column)
 """
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
@@ -148,7 +148,7 @@ verify_script = """
 assert(input.diagnostics.length === 1, JSON.stringify(input.diagnostics))
 assert(input.diagnostics[0].name === 'SemanticDiag::NeverArgumentCall', input.diagnostics[0].name)
 assert(input.diagnostics[0].code === '0x031001C0', input.diagnostics[0].code)
-assert(input.diagnostics[0].line === 17, input.diagnostics[0].line)
+assert(input.diagnostics[0].line === 21, input.diagnostics[0].line)
 assert(input.diagnostics[0].column === 21, input.diagnostics[0].column)
 """
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
@@ -328,8 +328,8 @@ for (const d of input.diagnostics) {
     assert(d.name === 'SemanticDiag::NeverArgumentCall', JSON.stringify(d))
     assert(d.code === '0x031001C0', JSON.stringify(d))
 }
-assert(input.diagnostics[0].line === 17 && input.diagnostics[0].column === 35, JSON.stringify(input.diagnostics[0]))
-assert(input.diagnostics[1].line === 18 && input.diagnostics[1].column === 41, JSON.stringify(input.diagnostics[1]))
+assert(input.diagnostics[0].line === 19 && input.diagnostics[0].column === 35, JSON.stringify(input.diagnostics[0]))
+assert(input.diagnostics[1].line === 20 && input.diagnostics[1].column === 41, JSON.stringify(input.diagnostics[1]))
 """
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 20000
@@ -344,11 +344,16 @@ expect_exit = 1
 verify_script = """
 // The name is built from two pieces here too: the kind the program writes is its own word.
 assert(input.diagnostics.length === 3, JSON.stringify(input.diagnostics))
-assert(input.diagnostics[0].name === 'RuntimeDiag::' + 'Stopped', JSON.stringify(input.diagnostics[0]))
-assert(input.diagnostics[0].line === 13 && input.diagnostics[0].column === 16, JSON.stringify(input.diagnostics[0]))
-for (const d of input.diagnostics.slice(1)) {
+// The order is the order these are written, not the order of the positions they name: the two
+// warnings are written when the program is compiled, the fault of the `with` argument when it
+// runs. Hence the fault is last although its position (15) is the first of the three.
+assert(input.diagnostics[2].name === 'RuntimeDiag::' + 'Stopped', JSON.stringify(input.diagnostics[2]))
+assert(input.diagnostics[2].line === 15 && input.diagnostics[2].column === 16, JSON.stringify(input.diagnostics[2]))
+for (const d of input.diagnostics.slice(0, 2)) {
     assert(d.name === 'SemanticDiag::NeverArgumentCall', JSON.stringify(d))
 }
+assert(input.diagnostics[0].line === 19 && input.diagnostics[0].column === 35, JSON.stringify(input.diagnostics[0]))
+assert(input.diagnostics[1].line === 20 && input.diagnostics[1].column === 41, JSON.stringify(input.diagnostics[1]))
 """
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 20000
