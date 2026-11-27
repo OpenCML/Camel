@@ -1916,6 +1916,15 @@ bool buildTransposeMember(
             const auto arms       = function->withInputsOf(joinRef);
             const auto normBranch = function->normInputsOf(joinRef);
             if (joinType == nullptr || arms.size() < 2 || normBranch.empty()) {
+                // A join this walk cannot reverse used to answer `invalid` with nothing said, and a
+                // silent invalid is the failure this walk is worst at: the caller of this place
+                // only sees "no cotangent for the stop", which reads like a chain that simply
+                // ended. The three values are printed together rather than three separate refusals,
+                // because which of them is empty is the whole question a reader has.
+                os << "TRANSPOSE function=" << function->name()
+                   << " arm-join-entry region=" << function->nodeRegion(joinRef)
+                   << " ref=" << joinRef << " joinType=" << (joinType == nullptr ? "null" : "ok")
+                   << " arms=" << arms.size() << " norm=" << normBranch.size() << '\n';
                 return rt::kInvalidNodeRef;
             }
             // The join carries whichever arm's cotangent came back, so its value type is the
