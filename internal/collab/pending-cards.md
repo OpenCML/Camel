@@ -98,3 +98,8 @@
 - `D:\Projects\Camel-wt\op-names` —— 协调者指定，供 `lane-kinds-oper` 做 `task-21`（`git worktree add ... -b lane/op-names origin/integration`）；创建人是该车道，登记在此
 - `D:\Projects\Camel-wt\backend-speed` —— `lane/onnx-g2`（`lane-backend-speed` 于 02:0x 自建，事后追认）
 - 注意：`D:\Projects\Camel-wt\kinds-oper` 目录**不是** `lane/kinds-oper`（该枝不存在），现被 `acc/revert-check2 @ 59f7d17f65` 占着
+
+### M. `Tangent` 律落地后仍红的两条（观察，勿盲动）
+- `transpose_loop_escape.int_is_a_zero_tangent_space.nvm`、`transpose_loop_escape.two_values_of_two_kinds.nvm`：名字正对着 `Tangent` 律，但 E 卡落地后**仍红** ⇒ 它们的红另有原因（不是律本身）。
+- 下一手碰之前：先用同一跑的原文确认"红在哪一句"，再决定是修还是改期望；不要按名字推。
+- 出处：`lane/arg-parse-uaf-w @ 05395ebfd9` 的 `feat/compile/transforms 221/212/8` 读数（8 条逐名已对 promotion-26 表，新增红 0）。
