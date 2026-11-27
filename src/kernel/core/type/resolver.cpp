@@ -154,9 +154,18 @@ FunctionType *closedSignature(FunctionType *declared) {
             factory.addWithRest(std::string(declared->argNameAt(i)));
             continue;
         }
-        factory.addWithArg(
-            std::string(declared->argNameAt(i)), declared->withTypeAt(i),
-            declared->withIsVarAt(i));
+        // A parameter the declaration marks `constas` (or one a rule's query marks as a value the
+        // compiler must compute) keeps that mark: closing a signature rebuilds it, and the rebuild
+        // is the same signature, so every property of a parameter has to be written again here.
+        if (declared->withIsConstasAt(i)) {
+            factory.addWithConstasArg(std::string(declared->argNameAt(i)), declared->withTypeAt(i));
+        } else {
+            factory.addWithArg(
+                std::string(declared->argNameAt(i)),
+                declared->withTypeAt(i),
+                declared->withIsVarAt(i),
+                declared->withNeedsValueAt(i));
+        }
     }
     for (size_t i = 0; i < declared->normTypesCount(); ++i) {
         const std::string name(declared->argNameAt(declared->withTypesCount() + i));
@@ -164,7 +173,11 @@ FunctionType *closedSignature(FunctionType *declared) {
             factory.addRestArg(name, declared->restPack());
             continue;
         }
-        factory.addNormArg(name, declared->normTypeAt(i), declared->normIsVarAt(i));
+        if (declared->normIsConstasAt(i)) {
+            factory.addConstasArg(name, declared->normTypeAt(i));
+        } else {
+            factory.addNormArg(name, declared->normTypeAt(i), declared->normIsVarAt(i));
+        }
     }
     factory.setExitType(declared->exitType());
     factory.setResources(declared->resources());
@@ -178,14 +191,26 @@ FunctionType *withoutPacks(FunctionType *declared) {
     const size_t withCount = declared->withTypesCount() - (declared->hasWithRest() ? 1 : 0);
     const size_t normCount = declared->normTypesCount() - (declared->hasRest() ? 1 : 0);
     for (size_t i = 0; i < withCount; ++i) {
-        factory.addWithArg(
-            std::string(declared->argNameAt(i)), declared->withTypeAt(i),
-            declared->withIsVarAt(i));
+        // A parameter the declaration marks `constas` (or one a rule's query marks as a value the
+        // compiler must compute) keeps that mark: closing a signature rebuilds it, and the rebuild
+        // is the same signature, so every property of a parameter has to be written again here.
+        if (declared->withIsConstasAt(i)) {
+            factory.addWithConstasArg(std::string(declared->argNameAt(i)), declared->withTypeAt(i));
+        } else {
+            factory.addWithArg(
+                std::string(declared->argNameAt(i)),
+                declared->withTypeAt(i),
+                declared->withIsVarAt(i),
+                declared->withNeedsValueAt(i));
+        }
     }
     for (size_t i = 0; i < normCount; ++i) {
-        factory.addNormArg(
-            std::string(declared->argNameAt(declared->withTypesCount() + i)),
-            declared->normTypeAt(i), declared->normIsVarAt(i));
+        const std::string normName(declared->argNameAt(declared->withTypesCount() + i));
+        if (declared->normIsConstasAt(i)) {
+            factory.addConstasArg(normName, declared->normTypeAt(i));
+        } else {
+            factory.addNormArg(normName, declared->normTypeAt(i), declared->normIsVarAt(i));
+        }
     }
     factory.setExitType(declared->exitType());
     factory.setResources(declared->resources());

@@ -1792,6 +1792,54 @@ Builder::visitLinkNode(const GCT::node_ptr_t &gct, std::optional<GCT::Assignment
                          }))) {
                         completeWithFor(nullptr, ruleUri, declared, withInputs, withInputTypes);
                     }
+                    if (ruleUri != (*res)->uri() || declared == nullptr) {
+                        continue;
+                    }
+
+                    // A `with` parameter the declaration marks `constas` selects the instance of
+                    // the declaration, so what is written at its position has to be a value the
+                    // compiler works out before the program runs (design principles 5.4). A call of
+                    // a function value is held to that in `takeConstasValues`; a call of an
+                    // operator reaches its rule through `resolveForCall` and does not pass that
+                    // way, so the same refusal is made here -- one check, the one the operator path
+                    // lacks.
+                    const size_t declaredWithCount = declared->withTypesCount();
+                    for (size_t i = 0; i < withInputs.size() && i < declaredWithCount; ++i) {
+                        if (!declared->withIsConstasAt(i)) {
+                            continue;
+                        }
+                        const Argument &argument = withInputs[i];
+                        // A value the compiler works out where it stands: a literal, a constant a
+                        // name holds, a compile-time value handed on, or a call of a pure function
+                        // that reduces to one. The same set `takeConstasValues` accepts.
+                        bool constant = argument.expr != nullptr &&
+                                        argument.expr->type() == GCT::NodeKind::DATA;
+                        if (!constant && argument.node != nullptr) {
+                            constant = constantOfNode(argument.node) != nullptr ||
+                                       staticArgOf(argument.node).value.has_value();
+                        }
+                        if (!constant && argument.expr != nullptr &&
+                            argument.expr->type() == GCT::NodeKind::LINK) {
+                            const FoldedCall folded = foldConstantCall(argument.expr);
+                            if (folded.data != nullptr) {
+                                constant = true;
+                            } else if (folded.refusal != FoldRefusal::NotAProgramCall) {
+                                reportFoldRefusal(folded, argument.expr);
+                            }
+                        }
+                        if (constant) {
+                            continue;
+                        }
+                        diags_->of(SemanticDiag::ConstasValueNotConstant)
+                            .atOrigin(
+                                argument.expr != nullptr && argument.expr->origin() != 0
+                                    ? argument.expr->origin()
+                                    : gct->origin())
+                            .commit(
+                                std::string(declared->argNameAt(i)),
+                                declared->withTypeAt(i)->toString());
+                        throw BuildAbortException();
+                    }
                 }
             }
             if (!res.has_value()) {

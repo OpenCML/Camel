@@ -4,18 +4,34 @@ tier = "fast"
 tags = ["feat", "compile"]
 
 # A member read names its position, or its key, at compile time: those are the parameters of the
-# call that decide which member the read is. The declarations say so with `constas`, the parameter
-# form whose value the compiler resolves before the program runs. This entry is the control: a
-# literal position is a compile-time value, so the call is read and it runs.
+# call that decide which member the read is, so a value only a run knows cannot be one. The
+# declarations say so with `constas`, the parameter form whose value the compiler resolves before
+# the program runs; the two refusals below are the reading of that, and the third entry is the
+# control that says a literal is still a call that runs.
 
 [defaults]
-kind = "behavior"
-args = ["${case}", "std::nvm"]
+kind = "negative"
+args = ["${case}"]
+expect_exit = 1
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000
 
 [[tests]]
+name = "access_at_runtime"
+desc = "The position a member read names is a compile-time parameter; a run-time value is refused where it is written."
+case = "../../../cases/compile/access_const/at_runtime.cml"
+expect_diagnostic_name = "SemanticDiag::ConstasValueNotConstant"
+
+[[tests]]
+name = "access_key_runtime"
+desc = "The key a member read names is a compile-time parameter; a run-time value is refused where it is written."
+case = "../../../cases/compile/access_const/key_runtime.cml"
+expect_diagnostic_name = "SemanticDiag::ConstasValueNotConstant"
+
+[[tests]]
 name = "access_literal"
-desc = "A literal position is a compile-time value, so the member read is read and runs."
-case = "../../../cases/compile/access_const/literal.cml"
+desc = "The control: a literal position is a compile-time value, so the member read is read and runs."
+kind = "behavior"
+args = ["${case}", "std::nvm"]
 expect_exit = 0
+case = "../../../cases/compile/access_const/literal.cml"

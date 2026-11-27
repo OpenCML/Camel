@@ -568,6 +568,9 @@ aa0941df5af401ba ok src/stdlib/rulesets/vmap.cml
 0c368faaef090af5 no src/stdlib/tensor/signatures/tensor.cml
 aa2ab77afb6218d5 ok src/stdlib/tiles/signatures/tiles.cml
 e4210adf416a6f2c no src/stdlib/transforms/signatures/transforms.cml
+1c3fad0be82cbf71 ok test/cases/compile/access_const/at_runtime.cml
+8ec3dc3a2c122257 ok test/cases/compile/access_const/key_runtime.cml
+1248d91fd7116c6f ok test/cases/compile/access_const/literal.cml
 2c8a06ba0fe2f3e6 ok test/cases/compile/broadcast_like_spreads_rank_zero.cml
 dc71e2d3ab7cd429 ok test/cases/compile/closed_rank_rejects_rank_zero.cml
 176c9efddaac8e32 ok test/cases/compile/err_lambda_tuple_arity.cml
