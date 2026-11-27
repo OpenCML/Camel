@@ -3,8 +3,9 @@
  * not from a parameter, so expanding the call has to bind the capture as well as the argument.
  */
 
-func main(x: int) => int sync {
+func main() => int sync {
     let k = 3
+    let x = 2
     let scale = func (v: int) => int {
         return v * k
     }
