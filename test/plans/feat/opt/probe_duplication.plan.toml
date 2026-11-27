@@ -1,0 +1,64 @@
+id = "probe.duplication"
+order = 491
+tier = "fast"
+tags = ["probe", "opt", "inline"]
+
+# The two corpora the duplication rule is read on: a medium callee called twice (fits) and one
+# called twice whose copy is above the budget (must be declined). Each entry throws the call count
+# and the node count of the document, so one run names both sides of the rule.
+
+[[tests]]
+name = "dup.fits.before"
+kind = "behavior"
+case = "../../../cases/opt/cxx_isolation/inline_duplication_fits.cml"
+args = ["${case}", "std::jgir canonical=true", "std::nop"]
+expect_exit = 0
+timeout_ms = 20000
+verify_script = """
+const doc = JSON.parse(input.normalized.stdout)
+const calls = (doc.graphs || []).reduce((a, g) => a + (g.nodes || []).filter((n) => n.kind === "CALL").length, 0)
+const nodes = (doc.graphs || []).reduce((a, g) => a + (g.nodes || []).length, 0)
+throw new Error("DUP fits.before calls=" + calls + " nodes=" + nodes)
+"""
+
+[[tests]]
+name = "dup.fits.after"
+kind = "behavior"
+case = "../../../cases/opt/cxx_isolation/inline_duplication_fits.cml"
+args = ["${case}", "opt::inline", "std::jgir canonical=true", "std::nop"]
+expect_exit = 0
+timeout_ms = 20000
+verify_script = """
+const doc = JSON.parse(input.normalized.stdout)
+const calls = (doc.graphs || []).reduce((a, g) => a + (g.nodes || []).filter((n) => n.kind === "CALL").length, 0)
+const nodes = (doc.graphs || []).reduce((a, g) => a + (g.nodes || []).length, 0)
+throw new Error("DUP fits.after calls=" + calls + " nodes=" + nodes)
+"""
+
+[[tests]]
+name = "dup.over.before"
+kind = "behavior"
+case = "../../../cases/opt/cxx_isolation/inline_duplication_over.cml"
+args = ["${case}", "std::jgir canonical=true", "std::nop"]
+expect_exit = 0
+timeout_ms = 20000
+verify_script = """
+const doc = JSON.parse(input.normalized.stdout)
+const calls = (doc.graphs || []).reduce((a, g) => a + (g.nodes || []).filter((n) => n.kind === "CALL").length, 0)
+const nodes = (doc.graphs || []).reduce((a, g) => a + (g.nodes || []).length, 0)
+throw new Error("DUP over.before calls=" + calls + " nodes=" + nodes)
+"""
+
+[[tests]]
+name = "dup.over.after"
+kind = "behavior"
+case = "../../../cases/opt/cxx_isolation/inline_duplication_over.cml"
+args = ["${case}", "opt::inline", "std::jgir canonical=true", "std::nop"]
+expect_exit = 0
+timeout_ms = 20000
+verify_script = """
+const doc = JSON.parse(input.normalized.stdout)
+const calls = (doc.graphs || []).reduce((a, g) => a + (g.nodes || []).filter((n) => n.kind === "CALL").length, 0)
+const nodes = (doc.graphs || []).reduce((a, g) => a + (g.nodes || []).length, 0)
+throw new Error("DUP over.after calls=" + calls + " nodes=" + nodes)
+"""
