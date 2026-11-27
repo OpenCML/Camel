@@ -26,7 +26,7 @@ import { add_tangent, div_tangent, mul_tangent, neg_tangent, stop_gradient, sub_
 // second import of a name does not add an overload to the first, it hides it (with both imported,
 // `pow_tangent`'s `log(x)` stops resolving: "No matching function found for
 // argument types: <> (float)"). So the scalar one is named here instead.
-import { erfc as math_erfc, erf as math_erf, exp as math_exp, log as math_log, pow, sqrt as math_sqrt } from math
+import { erfc as math_erfc, erf as math_erf, exp as math_exp, log as math_log, pow, sqrt as math_sqrt, tanh as math_tanh } from math
 // The `nn` module's primitives, whose forward rules file below. This is the first `import` from a
 // module that is a library into a module that is a ruleset, and it is the direction design
 // principles 10.1 allows (modules may import each other; only a *type* cycle is diagnosed) -- the
@@ -1148,6 +1148,33 @@ func sqrt_d(x: float) => float {
 export rule jvp_sqrt_d(x: float) { sqrt_d(x) => func (dx: float) {
     (dx * 0.5) / math_sqrt(x)
 } }
+/// `tanh(x)` in the double width: what `math:tanh_d` means, and the left side this rule is filed
+/// under.
+/// @example tanh_d(0.0)    // 0.0
+func tanh_d(x: float) => float {
+    return math_tanh(x)
+}
+
+/// `d(tanh(x)) = (1 - y * y) * dx` with `y = tanh(x)`: the slope is one minus the output squared,
+/// which is the engine's `tanhVjp` (the same law the array rule `jvp_tanh` writes), and the
+/// tangent multiplies it second, in that order, so the scalar and the array reading cannot drift.
+export rule jvp_tanh_d(x: float) { tanh_d(x) => func (dx: float) {
+    dx * (1.0 - math_tanh(x) * math_tanh(x))
+} }
+
+/// `exp(x)` in the double width: what `math:exp_d` means, and the left side this rule is filed under.
+/// @example exp_d(0.0)    // 1.0
+func exp_d(x: float) => float {
+    return math_exp(x)
+}
+
+/// `d(exp(x)) = exp(x) * dx`: the value the operator already produced multiplies the tangent, the
+/// law the engine's `expVjp` and the array rule `jvp_exp` both write.
+export rule jvp_exp_d(x: float) { exp_d(x) => func (dx: float) {
+    math_exp(x) * dx
+} }
+
+
 
 /// `erf(x)` in the double width: what `math:erf_d` means, and the left side this rule is filed under.
 /// @example erf_d(0.0)    // 0.0

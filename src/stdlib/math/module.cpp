@@ -79,6 +79,49 @@ void erfVjp(camel::core::VjpBuilder &builder, const camel::core::VjpCall &call) 
     }
 }
 
+// For y = tanh(x), the VJP is dy * (1 - y * y): the slope is one minus the output squared, the
+// law the array width's `tanhVjp` writes (`stdlib/tensor/ops/elementwise_ops.cpp`), and the
+// tangent multiplies it second, in that order.
+void tanhVjp(camel::core::VjpBuilder &builder, const camel::core::VjpCall &call) {
+    using namespace camel::core;
+    using namespace camel::core::rtdata;
+    if (!camel::core::machineryTangentTypeOf(builder.nodeType(call.inputs[0]))) {
+        return;
+    }
+    if (auto dy = builder.gradientOf(call.output)) {
+        Type *type         = builder.nodeType(call.output);
+        const bool narrow  = type->code() == TypeCode::Float32;
+        const char *mul    = narrow ? ":op/mul_f" : ":op/mul_d";
+        const char *sub    = narrow ? ":op/sub_f" : ":op/sub_d";
+        const vjp_node_t y = call.output;
+        const std::array<vjp_node_t, 2> squareInputs{y, y};
+        const auto square = builder.addOper(type, mul, squareInputs);
+        const auto one =
+            builder.addStatic(narrow ? toSlot<Float32>(1.0f) : toSlot<Float64>(1.0), type);
+        const std::array<vjp_node_t, 2> slopeInputs{one, square};
+        const auto slope = builder.addOper(type, sub, slopeInputs);
+        const std::array<vjp_node_t, 2> product{*dy, slope};
+        builder.accumulateGradient(call.inputs[0], builder.addOper(type, mul, product));
+    }
+}
+
+// For y = exp(x), the VJP is dy * y: the value the operator already produced multiplies the
+// tangent, the law the array width's `expVjp` writes.
+void expScalarVjp(camel::core::VjpBuilder &builder, const camel::core::VjpCall &call) {
+    using namespace camel::core;
+    if (!camel::core::machineryTangentTypeOf(builder.nodeType(call.inputs[0]))) {
+        return;
+    }
+    if (auto dy = builder.gradientOf(call.output)) {
+        Type *type         = builder.nodeType(call.output);
+        const bool narrow  = type->code() == TypeCode::Float32;
+        const char *mul    = narrow ? ":op/mul_f" : ":op/mul_d";
+        const vjp_node_t y = call.output;
+        const std::array<vjp_node_t, 2> product{*dy, y};
+        builder.accumulateGradient(call.inputs[0], builder.addOper(type, mul, product));
+    }
+}
+
 } // namespace
 
 MathModule::MathModule(context_ptr_t ctx) : BuiltinModule("math", ctx) {
@@ -122,6 +165,12 @@ bool MathModule::load() {
     }
     for (const char *uri : {"math:erfc_f", "math:erfc_d"}) {
         camel::core::DerivativeRegistry::instance().setRule(uri, &erfVjp<true>);
+    }
+    for (const char *uri : {"math:tanh_d"}) {
+        camel::core::DerivativeRegistry::instance().setRule(uri, &tanhVjp);
+    }
+    for (const char *uri : {"math:exp_d"}) {
+        camel::core::DerivativeRegistry::instance().setRule(uri, &expScalarVjp);
     }
     loaded_ = true;
     return true;
