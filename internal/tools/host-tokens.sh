@@ -350,6 +350,9 @@ take_up_to() {
     fi
     echo "host-tokens: running at $ACQ_N of $want worker(s) (lane=$LANE, $((ACQ_MS / 1000))s to take them)"
     echo "${CAMEL_TAKE_LABEL:-HOST_BUILD_JOBS}=$ACQ_N"
+    # The label names this one report line, so the command does not inherit it: a taker started
+    # anywhere below (a build inside a plan run, a self-test run as a case) reports under its own.
+    unset CAMEL_TAKE_LABEL
     export CAMEL_TOKENS_HELD="$ACQ_N"
     export CMAKE_BUILD_PARALLEL_LEVEL="$ACQ_N"
     "$@"
@@ -477,7 +480,7 @@ self_test() {
     # The test measures its own pool, so a cover it inherited does not apply to it: run inside a plan
     # run (as a case is), CAMEL_TOKENS_COVERED=1 would make every take below take nothing and every
     # check below read an empty pool.
-    unset CAMEL_TOKENS_COVERED CAMEL_TOKENS_HELD
+    unset CAMEL_TOKENS_COVERED CAMEL_TOKENS_HELD CAMEL_TAKE_LABEL
 
     # 1. three tokens exist and none is held
     out=$(show)
