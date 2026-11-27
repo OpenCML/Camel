@@ -1,0 +1,26 @@
+// An edit block's head expression is evaluated once. The head is the block's only source of a
+// handle, and the lowering reads the function it gives twice -- `open(f)` opens the draft of it,
+// and the commit is given the same function as the witness its result type is read from -- so the
+// function is bound to a name once and read by that name twice (this tree gives a node one parent,
+// because the same expression hanging here twice would be evaluated twice). A head whose
+// evaluation can be seen therefore prints once, and the block still commits: what the case
+// compares is the whole output, so a lowering that evaluated the head twice fails it.
+func next_doubler() => ((x: int) => int) sync {
+    println('head called')
+    return func (x: int) => int { return x * 2 }
+}
+
+func edited() => int sync {
+    let g = edit d = next_doubler() {
+        let _ = len(nodes(d))
+    }
+    return match g {
+        case error e => -1
+        case h => h(5)
+    }
+}
+
+func main() => int sync {
+    println('block=', edited())
+    return 0
+}

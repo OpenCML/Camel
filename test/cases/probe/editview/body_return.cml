@@ -3,13 +3,18 @@
 // `return` here is the body's last statement, and what says it ended the body rather than the
 // function is the statement after the block: it runs. What says the returned value is not the
 // block's is the answer: it is the function's, not `100`.
+//
+// The body was rewritten for the block's new reading: `d` is the draft's root, so the body no
+// longer calls it as a function (`let _ = d(1)` was the older reading, where the head's name was
+// the function). What it does instead is a query on the draft, which is what a body is for, and
+// the `return` stays to keep the panel it pins.
 func inc(x: int) => int {
     return x + 1
 }
 
 func body_returns(f: (x: int) => int) => int sync {
     let g = edit d = f {
-        let _ = d(1)
+        let _ = len(nodes(d))
         return 100
     }
     println('after the block')
