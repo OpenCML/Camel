@@ -90,3 +90,70 @@ $ rg -n 'append' src/stdlib/rulesets/
 collecting loop appends into an array, which ONNX has no operator for"），而不是落到通用的
 "operator ':struct/append_arr' has no ONNX lowering …"。
 `pullback.cpp:2478` 仍未动；源码零改动，`git status` 回 0。
+## 七、step 5 读数（①）与类型层（②）
+
+### ① append 在循环体的哪一路
+
+树 `mm-capacity` @ `lane/loop-tape-values`，借 `616f65b436`，形状 A，同一次运行 `BUILD_EXIT=0` / `binary built 06:13:53`。探针在 `evalLoopNode`：打出 `components[]` 的 uri 与 `eval` 顺序。原文：
+
+```
+[t383c] component[0] uri=:struct/append_arr
+[t383c] component[1] uri=:op/add_l
+[t383c] component[2] uri=:op/add_d
+[t383c] component[3] uri=:op/mul_d
+[t383c] component[4] uri=
+[t383c] component[5] uri=:op/mul_d
+[t383c] component[6] uri=:struct/append_arr
+[t383c] component[7] uri=
+[t383c] component[8] uri=:op/add_d
+[t383c] component[9] uri=
+[t383c] component[10] uri=
+[t383c] eval carried state j=1 (component[1])
+[t383c] eval carried state j=2 (component[2])
+[t383c] eval scan c=0 (component[3])
+[t383c] eval scan c=1 (component[4])
+[t383c] eval scan c=2 (component[5])
+[t383c] eval scan c=3 (component[6])          <- 在这里被拒
+```
+
+判读（三条都是读数，不是推理）：
+
+1. append 是 **scan 槽 3 的分量**（`components[6]`），不是"携带 state 的下一值"——
+   `components[0..2]` 是三个 state，`components[3..10]` 是 8 个 scan 槽。
+2. `components[6] == components[0]`：**同一节点既当 state 0 的分量、又当 scan 槽 3 的分量**（与
+   `068a4b6596` 卡上"一个节点服务两个分量"的整数读数一致）。
+3. state 0 已被 `stateIsTheCollection` 认领，认领它的槽是 **scan 槽 0**（append 的 `with` 操作数
+   = `components[3]` = `:op/mul_d` ⇒ `with.front() == components[states+0]`），所以携带的是 state 1、2。
+
+⇒ 落点因此不是"携带张量 state"，而是**"被认领的 collection 与该 collection 的 append 同时出现在
+scan 槽里"**：槽 0 收元素（`mul_d`，stack 出数组），槽 3 收"数组本身"（每轮长度不同 ⇒ 参差）。
+要补的降级必须让**数组走 sequence 携带**（`SequenceEmpty` / `SequenceInsert` / `ConcatFromSequence`），
+而不是给 scan 槽 3 一条恒等/直通降级（那会丢收集语义）。
+
+### ② 类型层（已提交 `4e8bff4312`）
+
+`ValueInfo` 增 `isSequence`；`encodeValueInfo` 在该标志下把元素自己的 `TypeProto` 包进
+`TypeProto.sequence_type`（field 4）。**只改写盘**，没有任何 caller 置位，未置位时字节与以前完全一致。
+
+验收（最小 `.onnx`，输入 `seq(tensor(float))`、一个 `SequenceLength`、opset 11；同一 binary
+`BUILD_EXIT=0` / `binary built 06:35:02`）：
+```
+export rc=0
+opset=11 producer=camel
+input type bytes: 22040a020801      # field4 len4 { field1 len2 { field1 varint 1 = FLOAT } }
+onnx.checker ok (sequence type, opset 11)
+PASS
+```
+`numstat`：`14 1 src/stdlib/onnx/proto/onnx_writer.cpp`、`6 0 src/stdlib/onnx/proto/onnx_writer.h`。
+相邻计划 `feat/modules/onnx`：10 红，**全部落在纯净尖端的 11 红集合内**（`resnetbn_train_step_export`
+这次因负载没超时，绿了）⇒ 新增红 0。
+
+**两笔在枝上**：`28256c0a86`（点名拒绝，`13 0 exporter.cpp`）、`4e8bff4312`（类型层，2 文件）。
+树 `git status` 空；探针与 `cherry-pick -n 616f65b436` 已还原。
+
+### 一条要报给卡主的事实
+
+`export_loop_carried_array_field` 这条 known-fail 的期望是
+"the dtype or shape of a value changes from one call of a recursion to the next"，
+现在那条用例**先被 append 的点名拒绝接住**（`known failure changed its mind` 提示）。不是新红
+（它本来就在红集里），但那条 known-fail 的期望需要它的属主更新。

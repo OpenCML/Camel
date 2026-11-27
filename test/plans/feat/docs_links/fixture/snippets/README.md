@@ -2,7 +2,11 @@ Fixtures for `docs.snippets_dump_is_compared`, `docs.snippets_dump_excerpt_match
 `docs.snippets_dump_excerpt_different_operator_fails`,
 `docs.snippets_dump_excerpt_number_may_not_be_reused`,
 `docs.snippets_entry_argument_reaches_both_steps`, `docs.snippets_fault_shown_by_the_page` and
-`docs.snippets_fault_text_differs_from_the_page`.
+`docs.snippets_fault_text_differs_from_the_page`, plus `docs.snippets_pending_zero_says_why`.
+
+`pending_zero_sample.md` is the page that case reads with the pending list read as empty: its fence
+does not compile and the list holds no entry for it, so one run prints the zero sentence and refuses
+on the page itself.
 
 `dump_stale.md` is a page whose graph dump does not draw the program: the checker must run the
 fence, compare the dump with the `text` block, and fail naming the first line that differs. The

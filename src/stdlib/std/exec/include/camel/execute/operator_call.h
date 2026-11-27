@@ -31,16 +31,28 @@
 #include "camel/runtime/exec_plan.h"
 #include "camel/utils/assert.h"
 
+#include <memory>
 #include <utility>
 
 namespace camel::execute {
 
 /// Where one operator call stands in the plan it runs in: `node` is the operator node the plan laid
 /// the rows out for, and `frame` is the frame the call reads and writes.
+///
+/// `keepAlive` holds the plan for as long as the site exists, and a site exists across the call
+/// itself. A plan is a fact of a graph version and the store that answers it collects its entries
+/// while the program runs, so a reference taken before the call can outlive the entry it came from:
+/// the call runs arbitrary code -- nested calls, a fault, the graph space reclaiming a version --
+/// and the rows are applied after it returns. With the plan released in between, the rows read a
+/// freed table (`applyRefEntriesForNode` then asks a frame for an index the dead plan no longer
+/// describes). The shared reference is what keeps the answer to "which slot" alive for as long as
+/// the answer is used; a site built from a plan whose owner is not at hand leaves it empty, and the
+/// caller that knows the owner passes it.
 struct OperatorCallSite {
     const camel::runtime::ExecPlan &plan;
     camel::core::context::Frame &frame;
     camel::runtime::gc_node_ref_t node;
+    std::shared_ptr<const camel::runtime::ExecPlan> keepAlive;
 };
 
 /// The site of a bytecode call: bytecode holds the instruction's destination slot where the node
@@ -51,8 +63,18 @@ inline OperatorCallSite
 siteOfSlot(camel::core::context::Frame &frame, camel::runtime::gc_data_idx_t result) {
     const auto *graph = frame.graph();
     GUARD(graph != nullptr, "an operator ran in a frame that has no runtime graph");
-    const camel::runtime::ExecPlan &plan = graph->execPlan();
-    return OperatorCallSite{plan, frame, plan.refNodeOfSlot(result)};
+    std::shared_ptr<const camel::runtime::ExecPlan> owner = camel::runtime::execPlanOf(*graph);
+    return OperatorCallSite{*owner, frame, owner->refNodeOfSlot(result), owner};
+}
+
+/// The site of a call a back end runs as a node: the node itself, and the plan's owner held for the
+/// call (the same reason as `siteOfSlot`).
+inline OperatorCallSite siteOfNode(
+    camel::runtime::GCGraph *graph, camel::core::context::Frame &frame,
+    camel::runtime::gc_node_ref_t node) {
+    GUARD(graph != nullptr, "an operator ran in a frame that has no runtime graph");
+    std::shared_ptr<const camel::runtime::ExecPlan> owner = camel::runtime::execPlanOf(*graph);
+    return OperatorCallSite{*owner, frame, node, owner};
 }
 
 /// Runs `call`, then the rows the plan has at the call's position, and answers what the operator
