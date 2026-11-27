@@ -130,3 +130,24 @@ pools|probe.max_reverse.nvm    expected exit 0, got exit 1
 
 两条都要由决策者定，不由签名读数的人定；在此之前，这一轮的红表就是 `164 名`，逐名比的三列
 是 `161 / 26 / 3`。
+
+## 十一、这三条红的根因（比红本身有价值）
+
+`test/plans/probe/pools.plan.toml` 的头两行写着自己的身份：
+
+```
+# Untracked probe plan: the two walls the pooling laws wait at, measured with the transform trace on.
+# ... Not part of the tree's plans.
+```
+
+而它放在 `test/plans/probe/` 下，整快层按 `-Plan test/plans` 收计划，于是这份**自称不属于计划树**
+的探针计划被当成计划收了：三个 `[[tests]]` 被跑，三条都是 `expected exit 0, got exit 1`。把它收进
+来的是 `70fbfad2d4`（15:11，把 17 个测量物一起收进仓库的那一笔）——它想留住的是测量物，不是
+“这三条探针已经能跑绿”。
+
+处置不由签名读数的人定。按决策者 `D-1127-130` 的口径，这类红只有三种身份：探针写错或断言过期
+⇒ 改到单跑全绿；有意钉住未修缺陷 ⇒ 登记进已知红清单（写明 backlog 行与退出条件）；环境依赖
+⇒ 用例自带跳过条件。**用 tier 把红遮出快层不在这三种之内**；`selfchecks.merge_batch` 可以那样处置，
+是因为它的红依赖墙钟与并发负载，而这里的 `--trace transforms` 的 `exit 1` 不是负载问题。
+
+这条留在页里，是因为“自称不在计划树里的计划放在计划树里”比那三条红更容易复发。
