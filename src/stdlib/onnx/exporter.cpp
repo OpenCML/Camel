@@ -4246,6 +4246,19 @@ Value Evaluator::applyOper(
     }
     const Lowering *lowering = LoweringRegistry::instance().find(uri, emitter_.opset());
     if (!lowering || !with.empty()) {
+        // An append into an array inside a loop the export carries as a body is refused by name,
+        // not by the generic message below: the exporter has no lowering that keeps the array the
+        // append grows. The append's reverse reads only `dy`, but the forward body reads the array
+        // every round -- so the column can only be an array, not its length, and lowering it means
+        // carrying a sequence (SequenceInsert / SequenceAt) or a growing tensor (Concat). This is
+        // work that is not written yet, not work ONNX cannot do: "No lowering at opset N" would
+        // send the reader after a lowering that cannot exist.
+        if (uri == ":struct/append_arr" || uri == ":struct/append_arr_owned") {
+            unsupported(
+                act,
+                "this exporter does not yet lower a collecting loop's reverse into ONNX "
+                "sequences");
+        }
         unsupported(
             act,
             std::format(
