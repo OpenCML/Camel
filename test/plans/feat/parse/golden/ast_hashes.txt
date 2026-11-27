@@ -4363,6 +4363,16 @@ fa8b9a295cd6a5c9 ok test/cases/probe/editview/syntax_only.cml
 d243b9bf2aafcaf4 ok test/cases/probe/editview_b/design_view_min.cml
 10bf3ec93ed55652 ok test/cases/probe/editview_b/draft_handle_leaves.cml
 6d383191e1331425 ok test/cases/probe/editview_b/escapes_accepted.cml
+04e8d92c70aba20f ok test/cases/probe/foreach_lambda/array_filter.cml
+fbc5a22ed39c760c ok test/cases/probe/foreach_lambda/array_form.cml
+98082b4d0948dc5c ok test/cases/probe/foreach_lambda/array_map.cml
+0cf1b52dd8991a7a ok test/cases/probe/foreach_lambda/array_value_form.cml
+8b826114f0aee3b7 ok test/cases/probe/foreach_lambda/range_filter.cml
+5a977eb2d41668e6 ok test/cases/probe/foreach_lambda/range_form.cml
+abd63530e1105c7a ok test/cases/probe/foreach_lambda/range_map.cml
+b3f286ee3221b9fb ok test/cases/probe/foreach_lambda/range_typed.cml
+b538d6467777dc22 ok test/cases/probe/rule_branch/program_if_control.cml
+4153a342695ed6f8 ok test/cases/probe/rule_branch/rule_if_right_side.cml
 835ae3d0fb2bacf6 ok test/cases/resources/conflict_per_resource.cml
 1dfda197c555a488 ok test/cases/resources/effects.cml
 1308a35af80d20f6 ok test/cases/resources/names.cml
