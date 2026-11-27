@@ -1,0 +1,21 @@
+id = "compile.access_const"
+order = 306
+tier = "fast"
+tags = ["feat", "compile"]
+
+# A member read names its position, or its key, at compile time: those are the parameters of the
+# call that decide which member the read is. The declarations say so with `constas`, the parameter
+# form whose value the compiler resolves before the program runs. This entry is the control: a
+# literal position is a compile-time value, so the call is read and it runs.
+
+[defaults]
+kind = "behavior"
+args = ["${case}", "std::nvm"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "access_literal"
+desc = "A literal position is a compile-time value, so the member read is read and runs."
+case = "../../../cases/compile/access_const/literal.cml"
+expect_exit = 0
