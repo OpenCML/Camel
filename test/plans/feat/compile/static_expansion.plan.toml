@@ -315,12 +315,15 @@ timeout_ms = 8000
 
 [[tests]]
 name = "static_access_not_constant"
-desc = "The key of `t.[...]` must be a compile-time constant, not a parameter."
+desc = "The key of `t.[...]` must be a compile-time constant, not a parameter: the refusal is `StaticAccessNotConstant`, spoken at the access itself, and its text says why a run-time value cannot choose a field -- only the selected field is built into the graph. This is the sentence a caller meets when the position of a member read is not known when the function is compiled."
 kind = "negative"
 case = "../../../cases/compile/static_expansion/static_access_not_constant.cml"
 args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::StaticAccessNotConstant"
+expect_diagnostic_line = 2
+expect_diagnostic_column = 15
+expect_stderr_contains = ["The key 'k' of a 't.[...]' access is not known when the function is compiled.", "A run-time value (a 'var', a parameter) cannot choose a field, because only the selected field is built into the graph."]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000
 
