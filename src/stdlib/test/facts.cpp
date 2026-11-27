@@ -490,12 +490,14 @@ FactSeedTestPass::apply(const camel::runtime::Program *program, std::ostream &os
             camel::facts::reorderKind(),
             camel::facts::permissionsKind()};
         std::map<std::string, size_t> counted;
+        // One store can hold several graphs; counting its facts once per graph would multiply them.
+        std::set<camel::facts::Store *> counted_;
         for (auto *graph : collectReachableGraphs(*program)) {
             if (graph == nullptr) {
                 continue;
             }
             camel::facts::Store *movedStore = camel::facts::storeHolding(*graph);
-            if (movedStore == nullptr) {
+            if (movedStore == nullptr || !counted_.insert(movedStore).second) {
                 continue;
             }
             camel::facts::computeAll(*movedStore, *graph, graph->view(), moved);
@@ -503,9 +505,12 @@ FactSeedTestPass::apply(const camel::runtime::Program *program, std::ostream &os
                 ++counted[camel::facts::kindInfo(fact.kind).key];
             });
         }
-        for (const auto &[key, n] : counted) {
-            std::cerr << "SEEDED-DIAG " << key << " " << n << "\n";
-            perKind[key] = n;
+        // Only the four take their count from here: the other kinds are still registered where they
+        // were, and their lines are that registration's reading.
+        for (const auto &kind : moved) {
+            const std::string key = camel::facts::kindInfo(kind).key;
+            std::cerr << "SEEDED-DIAG " << key << " " << counted[key] << "\n";
+            perKind[key] = counted[key];
         }
     }
     for (const auto &[kind, n] : perKind) {
