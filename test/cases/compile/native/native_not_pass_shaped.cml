@@ -1,0 +1,18 @@
+/**
+ * The other direction of the same rule (design principles 9.3): a body-less declaration whose
+ * shape is not a pass's is still a declaration, so it is checked -- and refused -- by the same rule
+ * as a pass-shaped one: it names an operator, and no loaded module implements it.
+ *
+ * The pair says what the fix opened. `native.pass_shaped_declaration_is_still_checked` pins that a
+ * pass-shaped declaration is not skipped; this one pins that a declaration the operator table does
+ * not answer is not swallowed whole either. Without the fix, the declaration is not seen at all and
+ * the red is `Reference 'twice' is declared as imported but is not exported by its module`; with
+ * it, the declaration is seen and refused where it is written.
+ */
+
+import { twice } from native_not_pass_shaped_lib
+
+func main() => int sync {
+    let f = twice(func (x: int) => int { x * 2 })
+    return f(3)
+}
