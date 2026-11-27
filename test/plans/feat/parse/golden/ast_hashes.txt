@@ -1998,6 +1998,7 @@ b91e8517c65a1c33 ok test/cases/compile/transforms/jvp_loop_value_only.cml
 5b1203b44c8b24ce ok test/cases/compile/transforms/jvp_matmul.cml
 08f00c0e18a87879 ok test/cases/compile/transforms/jvp_of_a_pow_call.cml
 6b27bc2d9ce18a08 ok test/cases/compile/transforms/jvp_of_a_power.cml
+8dfecb12a08cf823 ok test/cases/compile/transforms/jvp_range_loop_names_its_iterable.cml
 cee87c3f785cd0d7 ok test/cases/compile/transforms/jvp_rule_at_the_operand_type.cml
 8a80422d39ff04cd ok test/cases/compile/transforms/jvp_structural_zero_at_the_half_widths.cml
 b2ded13fe92cd063 ok test/cases/compile/transforms/jvp_structural_zero_at_the_wide_widths.cml
@@ -2098,7 +2099,7 @@ ba62ec621bca8364 ok test/cases/compile/transforms/transpose_function_value_no_ca
 b002bf76fa7f6f27 ok test/cases/compile/transforms/transpose_gradient_both_legs.cml
 d735064f415bad9d ok test/cases/compile/transforms/transpose_hand_closed_lambda.cml
 97c8eb9dca078099 ok test/cases/compile/transforms/transpose_loop.cml
-7728cf83440c96d4 ok test/cases/compile/transforms/transpose_loop_escape_int.cml
+53269ebb21c92e9a ok test/cases/compile/transforms/transpose_loop_escape_int.cml
 0885ebe2628bce11 ok test/cases/compile/transforms/transpose_loop_escape_reads_one.cml
 4a9c947b52afe6d0 ok test/cases/compile/transforms/transpose_loop_escape_reads_outer.cml
 b19f722c39ea48e1 ok test/cases/compile/transforms/transpose_loop_escape_reads_twice.cml
