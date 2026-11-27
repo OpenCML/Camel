@@ -316,7 +316,7 @@ error[RuntimeDiag::MaxRecursionDepthExceeded]: Maximum recursion depth (1000) ex
 
 (Followed by the location and a suggestion.)
 
-**Other limits**: the nodes, blocks and edge-table entries of a single graph are each at most 65,535; the three memory regions graph space, permanent space and metaspace are 256 MB each, adjusted with `--graph-space-limit-mb`, `--perm-space-limit-mb` and `--meta-space-limit-mb` respectively, and exhausting one is `RuntimeDiag::MemoryExhausted`. For the full table see "Resource limits" in [cli.md](../../cli.md).
+**Other limits**: the nodes, blocks and edge-table entries of a single graph are each at most 65,535; the three memory regions graph space, permanent space and metaspace are 256 MB each, adjusted with `--spaces graph_mb=`, `--spaces perm_mb=` and `--spaces meta_mb=` respectively, and exhausting one is `RuntimeDiag::MemoryExhausted`. For the full table see "Resource limits" in [cli.md](../../cli.md).
 
 ## 4.7 Passes and pipelines
 

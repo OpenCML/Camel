@@ -43,7 +43,7 @@ constexpr std::string_view kCauseLargeBudget      = "large object budget";
 constexpr std::string_view kCauseElderExhausted   = "elder space budget";
 constexpr std::string_view kCauseElderBlockBudget = "promoted block budget";
 constexpr std::string_view kCauseHeapLimit        = "heap limit";
-constexpr const char *kHeapLimitSetting           = "--gc-heap-limit-mb";
+constexpr const char *kHeapLimitSetting           = "--gc heap_limit_mb=";
 
 double megabytes(uint64_t bytes) { return static_cast<double>(bytes) / (1024.0 * 1024.0); }
 

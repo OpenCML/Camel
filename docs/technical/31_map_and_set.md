@@ -516,7 +516,7 @@ and a `Set<T>` as an array, in key order.
   strings, arrays, tuples, `T?` boxes and other maps runs under `--gc-check verify=both` with a
   collection requested every third allocation (`--gc-stress alloc=3`,
   `--gc-stress safepoint=1`), modes `major`, `minor` and `both`, with the non-moving
-  collector and with `--gc generational`, on the four backends: the output is
+  collector and with `--gc kind=generational`, on the four backends: the output is
   that of an undisturbed run and every verification is `ok`. Under the moving collector one
   such run relocated 864 map tables, 344 set tables and 1608 strings (`--gc-check moves`).
 - **Passes.** The operators are pure operators without a registered folder, and a `:op/cast`

@@ -211,7 +211,7 @@ Program *GCGraphManager::reserve() {
 }
 
 namespace {
-// --graph-gc-mb: read by every manager made after the option is applied (default 64 MB).
+// --gc graph_mb: read by every manager made after the option is applied (default 64 MB).
 std::atomic<size_t> graphCollectionFloorBytes{size_t{64} << 20};
 } // namespace
 
