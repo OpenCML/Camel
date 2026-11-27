@@ -1,0 +1,11 @@
+/**
+ * A name bound to an operator is the operator's function value: `let p = len` binds it, and
+ * `p('abc')` calls it. The value the binding holds is the graph the operator's value path built,
+ * so the call is a call and not a diagnostic -- and the graph is there to be printed.
+ */
+
+func main() => int sync {
+    let p = len
+    println(p('abc'))
+    return 0
+}
