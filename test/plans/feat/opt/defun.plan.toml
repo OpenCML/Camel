@@ -414,3 +414,40 @@ expect_exit = 0
 expect_output_not_contains = ["[defun] dispatch"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 10000
+
+[[tests]]
+name = "defun.stream.pull_lowered"
+desc = "A call whose callee is a stream is the pull of the value the step function returns, and it is a call through a value of the family that names the step signature: the family is lowered instead of being left as written, the stream itself takes the enum's place, and the pull becomes one match on the tag -- so nothing is refused, the program prints what it printed without the pass, and no closure is left."
+kind = "behavior"
+case = "../../../cases/opt/defun/stream_pull.cml"
+args = ["${case}", "std::defunctionalize", "std::stats", "std::nvm"]
+expect_exit = 0
+verify_script = """
+const lines = input.normalized.stdout.trim().split('\n')
+assert(lines.includes('DEFUNCTIONALIZE types=2 values=2 calls=2 refused=0'), 'every family is lowered and the pull is counted: ' + input.normalized.stdout)
+assert(lines.includes("DEFUNCTIONALIZE type='() => (int, int..)?' variant='__g_64__' values=1 calls=1"), 'the stream step family is the one the pull counts against: ' + input.normalized.stdout)
+assert(input.normalized.stderr === '', 'nothing is left as written: ' + input.normalized.stderr)
+const stats = JSON.parse(lines.find((line) => line.startsWith('GRAPH_STATS ')).replace('GRAPH_STATS ', ''))
+assert(stats.closures === 0, 'no closure is left: ' + JSON.stringify(stats))
+assert(lines[lines.length - 1] === 'pull 6', 'the program prints what it printed without the pass: ' + lines[lines.length - 1])
+"""
+normalizers = ["strip_ansi", "normalize_newlines"]
+timeout_ms = 15000
+
+[[tests]]
+name = "defun.stream.pull_through_opt"
+desc = "The optimizer's own pipeline lowers a pull: no call through a value and no closure is left after it, and the program prints the line it printed as written."
+kind = "behavior"
+case = "../../../cases/opt/defun/stream_pull.cml"
+args = ["${case}", "std::opt", "std::stats", "std::nvm"]
+expect_exit = 0
+verify_script = """
+const lines = input.normalized.stdout.trim().split('\n')
+const stats = JSON.parse(lines.find((line) => line.startsWith('GRAPH_STATS ')).replace('GRAPH_STATS ', ''))
+assert(stats.indirect_calls === 0, 'no call through a value is left: ' + JSON.stringify(stats))
+assert(stats.closures === 0, 'no closure is left: ' + JSON.stringify(stats))
+assert(lines[lines.length - 1] === 'pull 6', 'the program prints what it printed without the pass: ' + lines[lines.length - 1])
+assert(input.normalized.stderr === '', 'nothing to report: ' + input.normalized.stderr)
+"""
+normalizers = ["strip_ansi", "normalize_newlines"]
+timeout_ms = 15000
