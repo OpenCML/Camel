@@ -1997,6 +1997,7 @@ name = "grad_module_var_sync"
 desc = "A sync function that writes a module-level `var` is differentiated: the write is an effect, so it runs in the forward pass and the counter reads 1 after the call, while the value and the gradient are the plain ones (9.0 and 6.0 at w = 3, x = 1). All four elements together -- `sync`, the module-level `var`, the derivative and `std::opt` -- used to end in a segmentation fault right after the forward pass printed its line, on every scheduler. Under: the four back ends with no optimizer."
 kind = "behavior"
 case = "../../../cases/modules/autodiff/grad_module_var_sync.cml"
+skip_unless = ["node", "test/tools/have-native-jit.mjs"]
 args = ["${case}", "${backend}"]
 backends = ["nvm", "fvm", "jit", "prl"]
 backends_agree = ["exit_code", "stdout_normalized"]
@@ -2011,6 +2012,7 @@ name = "grad_module_var_sync.opt"
 desc = "The same program with the optimizer ahead of the scheduler: the segmentation fault this pins came from exactly this ordering, on every scheduler, while the program without `std::opt` printed the right answer. The schedule is the back end's, so the four of them each carry the optimizer."
 kind = "behavior"
 case = "../../../cases/modules/autodiff/grad_module_var_sync.cml"
+skip_unless = ["node", "test/tools/have-native-jit.mjs"]
 args = ["${case}", "std::opt", "${backend}"]
 backends = ["nvm", "fvm", "jit", "prl"]
 backends_agree = ["exit_code", "stdout_normalized"]

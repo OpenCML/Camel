@@ -43,6 +43,7 @@ name = "used_arm_exit"
 desc = "No warning where the value of the branch is used: the last expression of a body, the operand of return, a let, an argument, an element, an operand; a lambda or a used branch inside an unused arm."
 kind = "behavior"
 case = "../../../cases/compile/branch_exit/used_arm_exit.cml"
+skip_unless = ["node", "test/tools/have-native-jit.mjs"]
 args = ["${case}", "${backend}"]
 backends = ["nvm", "fvm", "jit", "prl"]
 backends_agree = ["exit_code", "stdout_normalized"]

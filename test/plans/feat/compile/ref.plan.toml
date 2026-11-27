@@ -811,6 +811,7 @@ name = "ref.array_element"
 desc = "A `Ref` held by an array, reached through `xs[i]`: a write and two reads in one body (72 and 2, so both the write and the second element are the right box), a write through the element read through the box's own name (5), and `r7`'s shape -- the box escapes into a closure through an element and a later call reads it (2). All four back ends print the same bytes."
 kind = "behavior"
 case = "../../../cases/compile/ref/ref_array_element.cml"
+skip_unless = ["node", "test/tools/have-native-jit.mjs"]
 backends = ["nvm", "fvm", "jit", "prl"]
 args = ["${case}", "${backend}"]
 backends_agree = ["exit_code", "stdout_normalized"]

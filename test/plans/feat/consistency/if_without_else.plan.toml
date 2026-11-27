@@ -14,6 +14,7 @@ name = "if_without_else.statement"
 desc = "Arms of type string, int and void under an if without else, as a statement, as the last statement of a body, with an empty else, inside a lambda: alike on the four back ends, without a diagnostic."
 kind = "behavior"
 case = "../../../cases/consistency/if_without_else/statement.cml"
+skip_unless = ["node", "test/tools/have-native-jit.mjs"]
 args = ["${case}", "${backend}"]
 backends = ["nvm", "fvm", "jit", "prl"]
 backends_agree = ["exit_code", "stdout_normalized"]

@@ -317,6 +317,7 @@ name = "new_values.sort_rebinding"
 desc = "`xs = xs->sort` binds the variable to a sorted array and leaves every other holder of the old one as it was (design principles 11.3): a local, `sort(xs)`, merge_sort, a var parameter, a name a closure captures, floats. Alike on the four back ends."
 kind = "behavior"
 case = "../../../cases/consistency/new_values/sort_rebinding.cml"
+skip_unless = ["node", "test/tools/have-native-jit.mjs"]
 args = ["${case}", "${backend}"]
 backends = ["nvm", "fvm", "jit", "prl"]
 backends_agree = ["exit_code", "stdout_normalized"]

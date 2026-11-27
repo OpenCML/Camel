@@ -753,6 +753,7 @@ name = "vjp_api.analytic_gradient"
 desc = "The library's gradient against the derivative worked out on paper, on the author's example: `f(x, y) = x*x*y` at `x = 3`, `y = 2`, so `df/dx = 2*x*y = 12` and `df/dy = x*x = 9`. `vjp(f)(3.0, 2.0)` gives the pair `(y, pullback)` and `pullback(1.0)` gives the two cotangents, in JAX's order; the program prints `f(3, 2) = 18.0`, `library y = 18.0`, then `library`/`analytic` for `df/dx` and `df/dy`. The library half comes from `transpose(split(reinterp<jvp>(f)))` in `stdlib/vjp.cml` and nothing else -- not from the C++ autodiff -- and the two rulesets that composition needs are that file's own imports, so this program imports `vjp` and nothing else. Run on `nvm`, `fvm`, `jit` and `prl`, which must agree on the exit code and on the whole standard output."
 kind = "behavior"
 case = "../../../cases/compile/transforms/vjp_analytic_gradient.cml"
+skip_unless = ["node", "test/tools/have-native-jit.mjs"]
 args = ["${case}", "${backend}"]
 backends = ["nvm", "fvm", "jit", "prl"]
 backends_agree = ["exit_code", "output_normalized"]
@@ -766,6 +767,7 @@ name = "vjp_api.library_grad_carries_the_second_with_value"
 desc = "The library's `grad` (`stdlib/vjp.cml#grad`) and the engine's (`autodiff`) on a function with two `with` values -- `loss(data) = (w * data) * scale` with `with <w: float, scale: float>` -- which is the shape that changed and the only one that can show the difference: a one-value `with` list has nothing left to carry. `w` is the weight, `scale` is the value the body reads and nothing differentiates (the same pair the case study's loss has), and `data` is an ordinary parameter. d/dw = data * scale = 12 at w = 2, data = 4, scale = 3; the program prints the engine's 12, the library's 12 and their subtraction, so the two are compared as the same number and not as two neighbouring ones. Run on `nvm`, `fvm`, `jit` and `prl`, which must agree on the exit code and on the whole output."
 kind = "behavior"
 case = "../../../cases/compile/transforms/library_grad_carries_the_second_with_value.cml"
+skip_unless = ["node", "test/tools/have-native-jit.mjs"]
 args = ["${case}", "${backend}"]
 backends = ["nvm", "fvm", "jit", "prl"]
 backends_agree = ["exit_code", "output_normalized"]
