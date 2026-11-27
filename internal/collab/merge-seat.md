@@ -205,3 +205,47 @@ node scripts/promote.mjs cancel [<任务号>]                  # 结束工作进
 
 **`write_scopes` 是各车道自己工作树内的相对路径**，所以不同车道之间“根目录重叠”是正常的；
 真正要警觉的是**同一棵工作树里两条任务写同一个文件** —— 出现这种警告，先停手问协调者。
+## 每批带新 `.cml` 时：先合、再复录、复检、最后才编
+
+一批里只要有新的 `.cml`（新用例、新探针、或改动了被 AST 记录覆盖的文件），合并之后 `test/plans/feat/parse/golden/ast_hashes.txt` 就会 stale。四步，顺序不能倒：
+
+```
+① 合：git merge --no-ff <lane>；golden 文件若冲突，一律取 integration 侧（golden 的 owner 是录制方，不是车道）
+② 复录：camel-remote.ps1 -Path . -UpdateAstHashes -NoGpuWatch  ⇒ 输出里必须见到 kept 0 recorded line(s) of the N
+        （kept 0 = 整表重算；有 kept 说明你在一个不是尖端的树上录，或者只点了一部分文件）
+③ 复检：camel-remote.ps1 -Path . -Check ast-hashes -NoGpuWatch ⇒ ast hashes: N file(s) checked, 0 stale
+④ 才编 / 才推：golden 是 test 数据、不是构建输入，所以这一笔本身不要求重编；但**同批的代码改动**仍然要一次构建记录
+```
+
+判据的形状（三行都要贴进交回里）：
+
+```
+ast hashes: <N> file(s) checked, 0 stale
+[camel-remote] ast-hashes exit 0
+[provenance] tip <录制的那个 sha> (clean)
+```
+
+两个坑：
+
+- `-Check ast-hashes` 的退出码可能是 **1**，而 ast 本身是 `exit 0 / 0 stale` —— 那个 1 来自它**连带跑的 `check-doc-links`**。两个检查共用一个退出码，会让"0 stale"和"exit 1"同时出现；看到这种组合先分开读各自的 `exit`，别把 rc 当成 ast 的判词。
+- 数字跟着**尖端**走：换个尖端，stale 行数就该变（本晚实测：`1c226f5d99` 上 3 行，`faa0167b1a` 上 10 行，合完 `rule-branch` 后 12 行）。照抄上一轮的差数会漏录。
+
+## 成批合并后、推送前：在该批碰过的计划上跑一遍，与尖端比红名单
+
+这条规矩来自一次真实的漏失：一批合进来时，我贴的是**该车道自己的读数**加一句 `no new red against <sha>`，
+并没有在**集成后**重跑那批碰过的计划 —— 于是那批带进来的 +80 条红，直到下一轮整层快层才被发现。
+一句话：**车道上的绿、和集成后的绿，不是同一个绿**；而且**同一个绿，还必须在同一个尖端上** ——
+与上一轮快层比、与车道分支比、与另一个工作树里看到的比，都不是这条规矩要的那个比较。
+
+```
+a) 在该批碰过的计划上跑一遍：
+   git diff --name-only origin/integration...HEAD -- test/** 反查出 plan 目录，只跑这些
+b) 与**同一个 integration 尖端**上同一批计划的红名单做差集（不是与上一轮快层比，也不是与车道分支比）
+c) 差集非空 ⇒ **停下，报给协调者**，附三样：差集里的用例名、每一条在尖端上的读数、该批碰过的源码
+   由协调者判性质：预期变化（该批正确改了语义、期望要按设计原则 706 重钉）还是回归（revert -m 1）
+   差集为空 ⇒ 才编、才推
+```
+
+第 (c) 步的处置是"停下报协调者"，**不是"该批不入"**：一批如果正确地改变了语义，它的期望本来就该跟着改，
+写成"差集非空就不入"会把这类批永久挡在外面；正确做法是挡在推送前、由协调者判性质，
+然后**同批带上重钉一起进**。
