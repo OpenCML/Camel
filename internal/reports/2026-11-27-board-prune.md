@@ -120,3 +120,26 @@ This page ends the completed pool: after these 61 deletions only one completed t
 ```
 task-257 | C5 re-landed: the revert of the take-back and the abort fix, twelve ordinary reds left by class | completed | owner: lane-backend-speed | r3
 ```
+
+## State of the board after the prune
+
+Measured with `team_task_list` on the three statuses the tool accepts (`pending`,
+`in_progress`, `completed`); the board has no `open` / `doing` / `blocked` statuses — those words
+are `pending` / `in_progress` in the tool. No page carries a creation timestamp, so the "created
+today" condition was applied by id, as the dispatch said (the high ids at the end of the board are
+today's).
+
+```
+pending      10 tasks
+in_progress  117 tasks   (100 on the first page, 17 on the second)
+completed     0 tasks   (one left after batch 6; recorded in batch 7 above)
+```
+
+Ids in `in_progress` run from task-3 to task-260. Seventeen of them carry ids of 237 and above,
+which is today's dispatch range; the rest are older.
+
+Reconciliation of the record: the page above holds 61 distinct ids, and 61 tasks were deleted —
+`task-22` by this lane, the other 60 by the Team Lead in six batches. A running total quoted as 62
+elsewhere counts one task twice; the id list above is the check.
+
+Nothing outside `completed` was touched: `pending` and `in_progress` were only counted.
