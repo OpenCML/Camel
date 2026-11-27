@@ -1248,7 +1248,7 @@ timeout_ms = 20000
 
 [[tests]]
 name = "transpose_loop_escape.int_is_a_zero_tangent_space"
-desc = "An escape whose target is not a float: `int_escape(x) = let n = int(3x); loop s = x for i in 0..3 do s + float(n)` reads an integer inside the loop body, and the answer is 1.0 -- `x` contributes 1 and the truncation contributes 0, because an integer is a zero tangent space and `float(int(3x))` is a step function that is constant between its jumps. The forward reading is pinned with it: 10.0 is 1 plus three rounds of `int(3)`, so the integer is really there and really used. The two controls are the other half: `g(x) = float(int(5x)) + x` is 1.0 (an integer branch beside a float one does not swallow it), `h(x) = x + x` is 2.0 (no integer anywhere, and not 1). Every transpose is asked twice at different cotangents, and the second answer -- 5.0, 3.0, 4.0 -- is on no forward line, so the answer has to scale with the cotangent and cannot be satisfied by a reading of the value; `skip=` must not appear at all, because this shape used to answer a refusal and a refusal is not an answer. The zero is not printed by a reading of its own: the integer is a closure capture port of the backward half, no cotangent is handed to a capture port, and `noteZero` therefore has no delivery to name (internal/reviews/2026-11-03-does-note-zero-cover-a-closure-capture-port.cn.md). What the numbers say is the whole claim."
+desc = "An escape whose target is not a float: `int_escape(x) = let n = int(3x); loop s = x for i in 0..3 do s + float(n)` reads an integer inside the loop body, and the answer is 1.0 -- `x` contributes 1 and the truncation contributes 0, because an integer is a zero tangent space and `float(int(3x))` is a step function that is constant between its jumps. The forward reading is pinned with it: 10.0 is 1 plus three rounds of `int(3)`, so the integer is really there and really used. The two controls are the other half: `g(x) = float(int(5x)) + x` is 1.0 (an integer branch beside a float one does not swallow it), `h(x) = x + x` is 2.0 (no integer anywhere, and not 1). Every transpose is asked twice at different cotangents, and the second answer -- 5.0, 3.0, 4.0 -- is on no forward line, so the answer has to scale with the cotangent and cannot be satisfied by a reading of the value; `skip=` must not appear at all. The zero is not printed by a reading of its own: the integer is a closure capture port of the backward half, no cotangent is handed to a capture port, and `noteZero` therefore has no delivery to name (internal/reviews/2026-11-03-does-note-zero-cover-a-closure-capture-port.cn.md). What the numbers say is the whole claim. **This entry is red today, and the refusal is its iterable, not its integer**: `for i in 0 .. 3` asks for the walked value's `for` operator (`stdlib/prelude.cml`), whose answer is a stream -- a value with no tangent space -- and the forward lift has no reading for a callee whose result has no tangent space, so it refuses the whole function at that callee (`transforms: jvp cannot differentiate through a function whose result has no tangent space`, placed at `prelude.cml`'s `operator for` and at this case's `jvp` line). The same loop over an array literal lifts with the integer still in its body, so the missing piece is the iterable's reading, not this entry's rule."
 kind = "behavior"
 case = "../../../cases/compile/transforms/transpose_loop_escape_int.cml"
 args = ["${case}", "${backend}"]
@@ -3387,6 +3387,41 @@ expect_exit = 1
 expect_output_contains = ["stdlib/vjp.cml", "transforms: jvp has no forward transform for this function", "name=RuntimeDiag::RuntimeError, code=0x04000000"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 15000
+
+# The refusal a caller meets when one of its callees has no forward transform, pinned by the sentence
+# rather than by the exit code. Before this entry the fault read `transforms: jvp has no forward
+# transform for this function` at the *caller's* `jvp` line and nothing else: the callee's refusal was
+# an empty `JvpGraph` (`jvp.cpp`, `liftGraph`'s signature branch), which prints no `REINTERP` line and
+# sets no place, so a callee could refuse without leaving a reading. The entry is negative on purpose --
+# the shape is out of reach today (a stream has no tangent space, and the forward lift has no reading
+# for it), and what it guards is that the reach is stated: the callee's name, the callee's own line in
+# `stdlib/prelude.cml`, and the cause. The array loop in the same program is the control: it lifts and
+# answers its derivative, so the refusal is about the iterable and not about loops.
+[[tests]]
+name = "jvp_range_loop_refusal_names_its_iterable"
+desc = "`over_a_range(x) = loop s = x for i in 0 .. 3 do s + 1.0` is refused by the forward lift, because walking a range calls the `for` operator of `Range` (`stdlib/prelude.cml`) and that operator answers a stream -- a value with no tangent space. The fault is pinned field by field: the construct (`jvp cannot differentiate through a function whose result has no tangent space`), the callee (`prelude::__iter__`), the place (`stdlib/prelude.cml:` -- the operator's own line, not the caller's), the call site (`jvp_range_loop_names_its_iterable.cml:`, the `jvp(over_a_range)` line), and the fault kind (`RuntimeDiag::RuntimeError, code=0x04000000`). The same program's array loop must run first and answer 4.0 and 1.0, so a refusal that swallowed the whole program -- or a fix that made loops lift by answering a zero nobody asked for -- is a different reading from this one."
+kind = "negative"
+case = "../../../cases/compile/transforms/jvp_range_loop_names_its_iterable.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm"]
+backends_agree = ["exit_code"]
+expect_exit = 1
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.output
+const lines = out.split(String.fromCharCode(10)).map((l) => l.trim())
+const head = JSON.stringify(out.slice(0, 120))
+assert(lines.includes('4.0'), `the array loop lost its value: ${head}`)
+assert(lines.includes('1.0'), `the array loop lost its tangent: ${head}`)
+assert(out.includes('jvp cannot differentiate through a function whose result has no tangent space'), `the refusal does not name the construct: ${head}`)
+assert(out.includes('prelude::__iter__'), `the refusal does not name the callee: ${head}`)
+assert(out.includes('stdlib/prelude.cml:'), `the refusal has no place in the callee: ${head}`)
+assert(out.includes('jvp_range_loop_names_its_iterable.cml:'), `the refusal has no call site: ${head}`)
+assert(out.includes('RuntimeDiag::RuntimeError, code=0x04000000'), `the fault is not the runtime fault: ${head}`)
+}
+"""
+timeout_ms = 20000
 
 # The pair that asks the opposite question. Every other entry in this plan that pins a reading says
 # "when the run asks for the area, the line is there"; these two say "when it does not, the line is

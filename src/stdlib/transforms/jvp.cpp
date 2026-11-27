@@ -558,7 +558,31 @@ bool liftGraph(
     // callee gets and the type a call site fills in are the same list.
     FunctionType *signature = jvpSignature(function.funcType());
     if (signature == nullptr) {
-        return fail(refusal);
+        // A graph with no lift of its own is refused **here**, and the refusal says so. What the
+        // transform refused, it says (`readings.h`), and a caller one level up must not be handed
+        // an empty refusal: `liftFuncValue` keeps what it is given, and an empty one reaches the
+        // kernel as "this function has no forward transform", with no place, no cause and no
+        // reading. The shape that first needed this is the loop operator `prelude::__iter__`, whose
+        // answer is a stream: a function with no lift of its own sat in the body of a function that
+        // has one, and the whole body was reported as unreadable -- the red case's own fault named
+        // the caller's line and nothing else.
+        //
+        // The place is the refused graph's last node, its exit, because that is the line the graph
+        // is written on (`operator for(r: Range)`'s `return`): a reader who asked `jvp` about their
+        // own function has to be told which of its callees refused, not only that something did.
+        os << "REINTERP jvp function=" << name
+           << " skip=" << refusalCauseName(RefusalCause::Signature) << '\n';
+        noteRefusal(RefusalReading("jvp", name, RefusalCause::Signature));
+        JvpGraph refused;
+        if (function.nodeCount() > 0) {
+            refused.refusedOrigin = static_cast<camel::source::origin_id_t>(
+                function.nodeOrigin(function.nodeCount() - 1));
+        }
+        refused.refusedConstruct = "a function whose result has no tangent space";
+        refused.refusedWhy       = std::format(
+            "`{}` answers a value with no tangent space, so it has no forward transform of its own",
+            name);
+        return fail(refusal, std::move(refused));
     }
     if (rt::isValid(source)) {
         // The call site fills its arguments in from this: the order and the length of the value
