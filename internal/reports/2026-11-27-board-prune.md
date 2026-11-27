@@ -112,3 +112,11 @@ task-215 | src/tools view migration, stage 2 of 3: nine files in place, fourteen
 task-216 | tape-carried values: widening the pair to n slots broke 55 reds, so the loop body only (option C) | completed | owner: lane-oper-shape-guard | r5
 task-219 | whether the reference evaluator can read through the view, counted and judged | completed | owner: lane-block-hash | r3
 ```
+
+## Recorded in batch 7 (1)
+
+This page ends the completed pool: after these 61 deletions only one completed task was left.
+
+```
+task-257 | C5 re-landed: the revert of the take-back and the abort fix, twelve ordinary reds left by class | completed | owner: lane-backend-speed | r3
+```
