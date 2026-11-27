@@ -416,6 +416,167 @@ node_handle_t Builder::convertStructValue(
     return out;
 }
 
+void Builder::readRangeConversion() {
+    // The array a range converts to, the range type that conversion takes, and the declaration
+    // itself, of the one the prelude writes for it: `to_array(r: Range): int[]`. Read from the
+    // declaration's signature, so the compiler names neither type itself.
+    //
+    // The declaration is looked up again until it is found: it belongs to the prelude, whose
+    // declarations are read while a module is being loaded, so the first call that needs the
+    // conversion may come before it is there -- `len(1 .. 3)` reads the array position of `len`
+    // while the prelude is still being filled. Answering "no such declaration" then would keep the
+    // range out of every later position of the program, one statement at a time, which is a
+    // different program from the one written: so only a read that found the declaration is the
+    // last one.
+    const OperatorOverloads &overloads =
+        preludeOperatorOverloadsOf(std::string(camel::core::kRangeToArray));
+    for (const compile_graph_ptr_t &graph : overloads.graphs) {
+        FunctionType *type = graph != nullptr ? graph->funcType() : nullptr;
+        if (type == nullptr || type->normTypesCount() != 1 || !type->hasExitType()) {
+            continue;
+        }
+        Type *param = type->normTypeAt(0);
+        Type *exit  = type->exitType();
+        if (param == nullptr || exit == nullptr || exit->code() != TypeCode::Array) {
+            continue;
+        }
+        rangeValueType_       = param;
+        rangeArrayType_       = exit;
+        rangeConversionGraph_ = graph;
+        rangeTypesRead_       = true;
+        return;
+    }
+}
+
+Type *Builder::rangeValueType() {
+    if (!rangeTypesRead_) {
+        readRangeConversion();
+    }
+    return rangeValueType_;
+}
+
+Type *Builder::rangeArrayType() {
+    if (!rangeTypesRead_) {
+        readRangeConversion();
+    }
+    return rangeArrayType_;
+}
+
+bool Builder::rangeEntersArray(Type *param, Type *value) {
+    if (param == nullptr || value == nullptr || param->code() != TypeCode::Array) {
+        return false;
+    }
+    Type *rangeValue = rangeValueType();
+    Type *rangeArray = rangeArrayType();
+    if (rangeValue == nullptr || rangeArray == nullptr || !value->equals(rangeValue)) {
+        return false;
+    }
+    if (param->assignableFrom(rangeArray)) {
+        return true;
+    }
+    // `xs: T[]` -- an array whose element the declaration leaves to a type variable -- writes the
+    // same position: the length is unknown as the range's array has no stated one either, so the
+    // variable binds to the element the range's array has. Only that shape: a length or a rank the
+    // parameter fixes (`T[3]`, `T[..]`) is a different entrance, and another element type
+    // (`f32[]`) is the refusal the position states.
+    const auto *array = tt::as_ptr<const ArrayType>(param);
+    if (array == nullptr || array->anyRank() || array->rank() > 1) {
+        return false;
+    }
+    if (array->rank() == 1 && !array->extents().front().isUnknown()) {
+        return false;
+    }
+    Type *element = array->elemType();
+    // The variable takes the element the range's array has. An array of a type that is not fixed
+    // by the declaration is what this entrance is about; a variable the call binds elsewhere to a
+    // type the range's array does not have is refused when each argument is held to its parameter,
+    // not here, because the two readings of one variable are one question.
+    return element != nullptr && element->code() == TypeCode::TypeVar;
+}
+
+type_vec_t Builder::rangeEnteredTypes(const oper_group_ptr_t &ops, const type_vec_t &normTypes) {
+    // A group answers for the types the call is asked with, and a rule that declares an array
+    // parameter does not take a `Range`: the answer is "no overload", not a conversion, because
+    // nothing in the group asks the position's question. The position's question is the one
+    // `rangeEntersArray` answers, and it is asked here of every declared signature of the group,
+    // so that the call is put to the rules a second time with the array the range converts to.
+    // Only positions a declared parameter writes as an array change: a variable position
+    // (`f(x: T)`) and a position with no shape keep the range as the value it is.
+    if (rangeValueType() == nullptr) {
+        return normTypes;
+    }
+    type_vec_t entered = normTypes;
+    bool changed       = false;
+    for (size_t i = 0; i < entered.size(); ++i) {
+        if (entered[i] == nullptr || !entered[i]->equals(rangeValueType())) {
+            continue;
+        }
+        for (const auto &[uri, resolver] : ops->resolvers()) {
+            FunctionType *declared = resolver->fixedSignature() != nullptr
+                                         ? resolver->fixedSignature()
+                                         : resolver->declaredSignature();
+            if (declared == nullptr || i >= declared->normTypesCount()) {
+                // A rule the kernel keeps without a typed declaration -- the slice and the index
+                // write theirs as text -- still states where its form reads: the first operand of
+                // a subscript is the value being read, and the form that makes it one is the
+                // operator record's answer rather than a URI this file would have to spell. The
+                // range's own form is not one of these: its operands are the bounds.
+                if (i != 0) {
+                    continue;
+                }
+                const std::optional<camel::core::OperId> rule =
+                    camel::core::OperatorTable::instance().lookup(uri);
+                if (!rule.has_value()) {
+                    continue;
+                }
+                const camel::ops::SubscriptForm form =
+                    camel::core::OperatorTable::instance().subscriptFormOf(*rule);
+                if (form == camel::ops::SubscriptForm::Index ||
+                    form == camel::ops::SubscriptForm::Slice) {
+                    entered[i] = rangeArrayType();
+                    changed    = true;
+                    break;
+                }
+                continue;
+            }
+            if (rangeEntersArray(declared->normTypeAt(i), entered[i])) {
+                entered[i] = rangeArrayType();
+                changed    = true;
+                break;
+            }
+        }
+    }
+    return changed ? entered : normTypes;
+}
+
+node_handle_t Builder::rangeArrayNode(node_handle_t node, const GCT::node_ptr_t &origin) {
+    // The call is written the way `to_array(r)` is, except that its callee is the declaration
+    // itself, held under a name of this graph and called through it: no name of the program is
+    // read, and the argument enters the range parameter as written. The two names are the graph's
+    // own and are dropped again, as the interval's are (builder_composition.cpp).
+    if (rangeArrayType() == nullptr || rangeConversionGraph_ == nullptr) {
+        return nullptr;
+    }
+    const auto make = [&](GCT::node_ptr_t made) {
+        if (origin != nullptr) {
+            made->setOrigin(origin->origin());
+        }
+        return made;
+    };
+    node_handle_t callee = createFuncDataNode(rangeConversionGraph_, true, false);
+    if (callee == nullptr) {
+        return nullptr;
+    }
+    const std::string calleeName = bindTemporary(callee);
+    const std::string argName    = bindTemporary(node);
+    GCT::node_ptr_t call         = make(tree_->makeLink(1));
+    *call << make(tree_->makeDRef(calleeName)) << make(tree_->makeDRef(argName));
+    node_handle_t value = visitLinkNode(call);
+    nodeScope_->erase(calleeName, false);
+    nodeScope_->erase(argName, false);
+    return value;
+}
+
 node_handle_t Builder::coerceTo(node_handle_t node, Type *target, const GCT::node_ptr_t &origin) {
     Type *source = valueTypeOf(nodeTypeOf(node));
     if (target->assignableFrom(source)) {
@@ -437,6 +598,21 @@ node_handle_t Builder::coerceTo(node_handle_t node, Type *target, const GCT::nod
             return castNodeTo(valueOf(node), target, origin);
         }
         return node;
+    }
+    // A range is a value of its own type, not an array (design principles 5.4), and the array of
+    // its integers is what a position that expects one makes of it: `let xs: int[] = 0..n`, a
+    // `return 0..n` under `int[]`, an argument written for `xs: int[]`. The conversion is the
+    // library's own declaration (`to_array`), so this is the position asking for an array and the
+    // range only answering it -- a range in any other position stays a range.
+    {
+        Type *rangeValue = rangeValueType();
+        Type *rangeArray = rangeArrayType();
+        if (rangeValue != nullptr && rangeArray != nullptr && source->equals(rangeValue) &&
+            target->assignableFrom(rangeArray)) {
+            if (node_handle_t materialized = rangeArrayNode(node, origin)) {
+                return materialized;
+            }
+        }
     }
     // A literal takes the type of its context (design principles 5.1): `let x: float = 1`,
     // `f(2)` with `f(x: f32)`, `return 2` under `f32`. A value that does not fit the target
