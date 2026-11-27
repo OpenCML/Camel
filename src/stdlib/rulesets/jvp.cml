@@ -1010,15 +1010,16 @@ export rule jvp_idx_arr::<T>(xs: T[], i: int) { index_into(xs, i) => func (dxs: 
 /// under.
 ///
 /// Private, like `index_into` above and for the same reason: a family cannot read another module's
-/// private function, so each family that files a law for this key spells it itself. The body is the
-/// operator with its third word written, and that word is a *value* in the body -- a subscript takes
-/// any `int` there (`reshape<[2, 3]>(x)[.., idx]` with `idx` a parameter is
-/// `test/cases/modules/onnx/export_index_axis.cml`) -- so the axis travels into the law as an
-/// operand instead of being spelled in it.
+/// private function, so each family that files a law for this key spells it itself. It is a
+/// declaration of a *call form* of the same operator (`#op`) rather than a function with a body,
+/// because the third word is not a written dimension here but an operand the law receives: the
+/// subscript spells an axis by where its dots are, and a body cannot say "the dimension this number
+/// names" (`xs[.., at]` would fix the dimension to the last one). The operator's own resolver reads
+/// all three words (`lib/std/builtin/modules/globals.cpp#idxArrayResolver`), and a call to this name
+/// is a call to that node, which is what the walk matches the node against.
 /// @example index_into_axis([[1.0, 2.0], [3.0, 4.0]], 0, 1)    // [1.0, 3.0]
-func index_into_axis::<T>(x: T[...], i: int, at: int) => T[...] {
-    return x[.., at]
-}
+#op(':op/idx_arr')
+func index_into_axis::<T>(x: T[...], i: int, at: int) => T[...] panic
 
 /// `d(xs[.., i]) = dxs[.., i]`: the tangent of a position on the dimension the third word names.
 ///
