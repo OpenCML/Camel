@@ -1114,12 +1114,14 @@ export func is_empty(r: Range) => bool {
 // names -- a range is a value and `to_array` is the one conversion from it, so a range gets no
 // second implementation of these.
 //
-// They are the prelude's exports like the rest, so no `import` is written for them either. They
-// are functions of this module and not rules of the operator group of the same spelling, though:
-// a call from another module resolves the name through that group, which has no rule for a range,
-// so `(0 .. 3)->map<f>` there reports no matching function today (`:mark/map_arr` is the only
-// candidate). Making a range reachable under these names is a rule in the group -- an operator's
-// work -- and not a change to these declarations.
+// They are the prelude's exports like the rest, so no `import` is written for them either. That
+// they are functions of this module and not rules of the operator group of the same spelling is
+// no bar to a call from another module: a name is one set of candidates, whichever form a module
+// writes it in (design principles 4.4 -- the operator group's rules, the program's functions of
+// the name, the overloads its imports bring and these bodies are gathered into one set, and a
+// candidate whose `when` does not hold is not one of them). So `(0 .. 3)->map<f>` from another
+// module resolves to the function below by its argument's type, and the array's own rule
+// (`:mark/map_arr`) stays the candidate of an `int[]` call.
 
 /// f applied to every integer r names; the calls have no order among them, and the result is by
 /// position, as `map` on the array the range names.

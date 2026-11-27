@@ -754,10 +754,45 @@ compile_graph_ptr_t Builder::chooseOperatorOverload(
     for (const Argument &input : normInputs) {
         statics.push_back(staticArgOf(input.node));
     }
+    // The candidates whose own `when` is false for these arguments: dropped from the choice, since
+    // a condition that does not hold makes its declaration inapplicable and the call goes on to
+    // the others (design principles 4.4). Kept so that a call left with no candidate at all says
+    // what it filtered instead of saying the name had nothing.
+    std::vector<std::string> unmetConditions;
+    // Whether a rule of the group takes these arguments **and** its own `when` holds for them: a
+    // rule whose condition is false for the call's types is not one of the call's overloads
+    // (design principles 4.4), so it is not counted as a candidate -- a count that included it
+    // made a call with one candidate look like a call with two, which is an AmbiguousCall at a
+    // name whose other layer's declaration does not apply.
+    const auto ruleHolds = [&](const resolver_ptr_t &resolver) {
+        if (!resolver->resolveWith(withTypes, normTypes, statics).has_value()) {
+            return false;
+        }
+        std::string condition;
+        const RuleVerdict verdict = ruleVerdictForCall(
+            resolver,
+            set.ops != nullptr ? set.ops->name() : set.name,
+            withTypes,
+            normTypes,
+            &condition);
+        if (verdict == RuleVerdict::Applies) {
+            return true;
+        }
+        if (verdict == RuleVerdict::ConditionUnmet) {
+            // Named by its declaration and the condition it wrote, as a template's is
+            // (describeGenericCandidate): one name, two arms, told apart by the condition alone.
+            unmetConditions.push_back(resolver->signature() + " — when " + condition);
+        }
+        return false;
+    };
     // No group, no built-in candidate: the built-ins are the group's, so a set without one is
     // asked of its own functions alone.
-    const bool builtinAccepts =
-        set.ops != nullptr && set.ops->resolve(withTypes, normTypes, statics).has_value();
+    bool builtinAccepts = false;
+    if (set.ops != nullptr && set.ops->resolve(withTypes, normTypes, statics).has_value()) {
+        builtinAccepts = std::ranges::any_of(set.ops->resolvers(), [&](const auto &entry) {
+            return ruleHolds(entry.second);
+        });
+    }
     // Design principles 4.3: an overload of the program is preferred where it is more
     // specific than the others that take the arguments. "More specific" is exact: its
     // parameter types are the argument types themselves (as written, without a value entering
@@ -781,19 +816,13 @@ compile_graph_ptr_t Builder::chooseOperatorOverload(
     const bool builtinExact =
         set.ops != nullptr && std::ranges::any_of(set.ops->resolvers(), [&](const auto &entry) {
             FunctionType *fixed = entry.second->fixedSignature();
-            return fixed != nullptr && exactFor(fixed) &&
-                   entry.second->resolve(withTypes, normTypes).has_value();
+            return fixed != nullptr && exactFor(fixed) && ruleHolds(entry.second);
         });
     const auto where = [&](const void *overload) {
         const auto it = set.moduleOf.find(overload);
         return it == set.moduleOf.end() ? std::string(" (this module)")
                                         : std::format(" (module '{}')", it->second);
     };
-    // The candidates whose own `when` is false for these arguments: dropped from the choice, since
-    // a condition that does not hold makes its declaration inapplicable and the call goes on to
-    // the others (design principles 4.4). Kept so that a call left with no candidate at all says
-    // what it filtered instead of saying the name had nothing.
-    std::vector<std::string> unmetConditions;
     // Exactly as given first, then with the arguments entering `T?` / `T!` parameters (as for
     // a call of a function, visitLinkNode). The built-in overloads take only the first.
     for (const bool entering : {false, true}) {
@@ -863,7 +892,7 @@ compile_graph_ptr_t Builder::chooseOperatorOverload(
                 for (const auto &[uri, resolver] :
                      set.ops != nullptr ? set.ops->resolvers()
                                         : std::vector<std::pair<std::string, resolver_ptr_t>>()) {
-                    if (resolver->resolve(withTypes, normTypes).has_value()) {
+                    if (ruleHolds(resolver)) {
                         overloads.push_back(
                             std::format(
                                 "the built-in or module operator <{}>: {}",
@@ -904,6 +933,11 @@ compile_graph_ptr_t Builder::chooseOperatorOverload(
         return chosen;
     }
     if (!unmetConditions.empty()) {
+        // A pipe whose receiver is a `T?` or a `T!` asks this question with the value as it is
+        // first: every overload was dropped by its own `when`, so none takes the wrapped value,
+        // and the pipe takes it apart and calls again with the payload (visitPipeLink,
+        // peelPipeReceiver) rather than refusing the call here (design principles 3.9, 4.4).
+        yieldToPipe(call);
         // Nothing is left because every candidate the arguments fit was dropped by its own
         // `when`: the call reports the conditions it could not meet, not an overload set it did
         // not match (design principles 4.4).

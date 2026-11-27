@@ -1,0 +1,20 @@
+// A name is one set of candidates: the prelude declares `map` both as the array operator's rule
+// (`:mark/map_arr`, over `T[]`) and as an ordinary function over a `Range`, and this module --
+// which is not the prelude -- reaches the `Range` one by the argument's type (design principles
+// 4.4). The call is written both ways the language has it, as a pipe and as a call.
+func double(x: int) => int {
+    return x * 2
+}
+
+func even(x: int) => bool {
+    return x % 2 == 0
+}
+
+func main() => int sync {
+    println((0 .. 3)->map<double>)
+    println(map<double>(0 .. 3))
+    println((0 .. 5)->filter<even>)
+    println((0 .. 5)->count<even>)
+    (0 .. 3)->foreach<func (x: int) sync { println(x * 3) }>
+    return 0
+}

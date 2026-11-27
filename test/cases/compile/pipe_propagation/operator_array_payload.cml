@@ -1,0 +1,12 @@
+// The same question asked of a payload that an overload does take: `int[]!` is no array, so
+// `len::<A> when is_array::<A>()` does not hold for it, and the pipe peels it and selects the
+// array declaration -- the very declaration the condition speaks of, reached through the value
+// taken out rather than through the wrapped one.
+func wrapped(xs: int[]) => int[]! {
+    return xs
+}
+
+func main() => int sync {
+    println(wrapped([1, 2, 3])->len !! -1)
+    return 0
+}
