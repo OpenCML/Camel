@@ -40,6 +40,7 @@
 
 #pragma once
 
+#include <cstddef>
 #include <cstdint>
 #include <optional>
 #include <span>
@@ -64,7 +65,7 @@ enum class ResourceClass : uint8_t {
     Object,
     /// An object a module wraps; the resource's name says whose (`tiles:device`).
     Foreign,
-    /// State no value names; the resource's name says which (`fs`, `stdout`, `rng`). Two ambient
+    /// State no value names; the resource's name says which (`fs`, `console`, `rng`). Two ambient
     /// resources are the same exactly when their names are.
     Ambient,
     /// A value with identity a handle type declares (`#resource type Stream<T>`); the resource's
@@ -148,7 +149,15 @@ struct ResourceModifiers {
     bool readonly    = false;
     bool observed    = false;
 
-    bool any() const { return unordered || idempotent || overwriting || readonly || observed; }
+    /// Whether the field at `index` is set, and setting it: the positions are this record's own
+    /// table (`resource_semantics.cpp`), and they are the positions the parse layer's word table
+    /// gives the same words. The fields stay named because the equalities' rules below read them by
+    /// name; these two functions are how a table-driven reader -- the AST mapping, `any()` and
+    /// `toString` -- asks about a word without spelling it.
+    bool hasModifier(size_t index) const;
+    void setModifier(size_t index, bool written);
+
+    bool any() const;
     bool operator==(const ResourceModifiers &) const = default;
 };
 
@@ -271,7 +280,7 @@ struct ResourceSpec {
     /// The accesses are the function value's that arrives in the operand `functionOperand` names
     /// (design principles 3.3): what a higher-order operator touches is what
     /// the function the program hands it touches -- `map(f, xs)` over a pure `f` touches nothing,
-    /// over an `f` that prints it writes `stdout` -- so the declaration names the operand and not
+    /// over an `f` that prints it writes `console` -- so the declaration names the operand and not
     /// a resource. The function is the first `with` operand for the array shapes and the first
     /// ordinary operand for `:mark/isolate` (operator_semantics.h, `ElementCalls`). A reader that
     /// has the value (`Builder::reachOfOper`, `EffectWalk::ofNodes`) reads that value's function
@@ -348,7 +357,7 @@ struct ResourceSignature {
     /// The call's result is a new resource of this class.
     std::optional<Resource> allocates;
     /// Running the call is visible outside the program. An ambient resource is the state the
-    /// program does not own, so a signature that names one carries this too: writing `stdout` in a
+    /// program does not own, so a signature that names one carries this too: writing `console` in a
     /// clause promises the effect that comes with it (design principles 3.3).
     bool external = false;
     /// The body reads the spelling of the program (design principles 9.5): a name, a source
@@ -452,9 +461,10 @@ bool declaresOutside(const ResourceSpec &spec);
 /// graph content, so none of them belongs on the view a reader holds.
 bool writesForTheRegion(const ResourceSignature &signature);
 
-/// The ambient resources the language gives every program (design principles 3.3): `stdout`,
-/// `stderr`, `stdin`, `clock`, `env` and `fs`. They need no declaration and every module sees
-/// them; a module may still write `resource fs` to say it uses it, and a group may name them.
+/// The ambient resources the language gives every program (design principles 3.3): `console` --
+/// one resource, whose three channels (standard output, standard error, standard input) reach the
+/// same person -- `clock`, `env` and `fs`. They need no declaration and every module sees them; a
+/// module may still write `resource fs` to say it uses it, and a group may name them.
 std::span<const std::string_view> standardResourceNames();
 
 /// The name of a resource as source text and reports write it: a resource of a module is shown

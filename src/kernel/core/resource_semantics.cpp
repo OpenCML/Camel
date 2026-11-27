@@ -11,6 +11,7 @@
 #include <algorithm>
 #include <array>
 #include <format>
+#include <string_view>
 
 #include "camel/core/module/module.h"
 #include "camel/core/type/base.h"
@@ -243,7 +244,7 @@ std::optional<std::string> checkResources(const ResourceSpec &spec) {
     if (spec.functionOperand) {
         // A node's effect is the union of two sources (design principles 3.3): the accesses the
         // operator declares for itself and the accesses of the function value the named operand
-        // carries -- `map` over a function that prints reaches `stdout`, and an operator that runs
+        // carries -- `map` over a function that prints reaches `console`, and an operator that runs
         // the program's code *and* touches a driver reaches both. The two are statements about
         // different things, so having both is the true shape of such an operator and not a
         // double statement; each half is checked on its own above.
@@ -308,21 +309,56 @@ conflictWords(const ResourceModifiers &modifiers, ResourceModifierConflict confl
     return {};
 }
 
-std::string toString(const ResourceModifiers &modifiers) {
-    // One canonical order: unordered, idempotent, overwriting, readonly, observed. Two entries that
-    // state the same record print the same text, which is what the agreement check compares.
-    std::string out;
-    const auto add = [&out](bool set, std::string_view word) {
-        if (set) {
-            out += " ";
-            out += word;
+namespace {
+
+/// The record's own table: one row per word, in the one order the words are printed in. Adding a
+/// word to the record is a field above and a row here -- the parse layer has its own table for the
+/// words a program writes (`parse/ast/resource_modifiers.h`), and this one is the semantic record's
+/// half of that pair (design principles 3.3).
+struct ModifierRow {
+    std::string_view word;
+    bool ResourceModifiers::*field;
+};
+
+constexpr auto kModifierRows = std::to_array<ModifierRow>({
+    {"unordered", &ResourceModifiers::unordered},
+    {"idempotent", &ResourceModifiers::idempotent},
+    {"overwriting", &ResourceModifiers::overwriting},
+    {"readonly", &ResourceModifiers::readonly},
+    {"observed", &ResourceModifiers::observed},
+});
+
+} // namespace
+
+bool ResourceModifiers::hasModifier(size_t index) const {
+    return index < kModifierRows.size() && this->*(kModifierRows[index].field);
+}
+
+void ResourceModifiers::setModifier(size_t index, bool written) {
+    if (index < kModifierRows.size()) {
+        this->*(kModifierRows[index].field) = written;
+    }
+}
+
+bool ResourceModifiers::any() const {
+    for (const ModifierRow &row : kModifierRows) {
+        if (this->*(row.field)) {
+            return true;
         }
-    };
-    add(modifiers.unordered, "unordered");
-    add(modifiers.idempotent, "idempotent");
-    add(modifiers.overwriting, "overwriting");
-    add(modifiers.readonly, "readonly");
-    add(modifiers.observed, "observed");
+    }
+    return false;
+}
+
+std::string toString(const ResourceModifiers &modifiers) {
+    // The table's order. Two entries that state the same record print the same text, which is what
+    // the agreement check compares.
+    std::string out;
+    for (const ModifierRow &row : kModifierRows) {
+        if (modifiers.*(row.field)) {
+            out += " ";
+            out += row.word;
+        }
+    }
     return out;
 }
 
@@ -541,7 +577,7 @@ bool writesSomething(const ResourceSignature &signature) {
     }
     for (const ResourceSignature::AmbientUse &use : signature.ambient) {
         // An ambient resource is state the program does not own, by definition: writing one is a
-        // write outside the program whatever its name (`stdout`, `fs`, a module's own state).
+        // write outside the program whatever its name (`console`, `fs`, a module's own state).
         if (writes(use.mode)) {
             return true;
         }
@@ -684,7 +720,7 @@ bool writesForTheRegion(const ResourceSignature &signature) {
     }
     for (const ResourceSignature::AmbientUse &use : signature.ambient) {
         // An ambient resource is state the program does not own, by definition: writing one is a
-        // write outside the program whatever its name (`stdout`, `fs`, a module's own state).
+        // write outside the program whatever its name (`console`, `fs`, a module's own state).
         if (writes(use.mode)) {
             return true;
         }

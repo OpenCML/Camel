@@ -1030,11 +1030,12 @@ node_ptr_t Builder::visitResourceDecl(const AST::node_ptr_t &ast) {
     ENTER("ResourceDecl");
     const auto decl = ast->loadAs<AST::ResourceDeclLoad>();
     camel::core::module::Module::ResourceDecl resource;
-    resource.modifiers.unordered   = decl->unordered();
-    resource.modifiers.idempotent  = decl->idempotent();
-    resource.modifiers.overwriting = decl->overwriting();
-    resource.modifiers.readonly    = decl->readonly();
-    resource.modifiers.observed    = decl->observed();
+    // The tree's bits and the kernel's record are filled by the same index, in the table's order:
+    // the parse layer names the words (`parse/ast/resource_modifiers.h`) and the kernel keeps its
+    // own record, so neither this mapping nor either of them spells a word twice.
+    for (size_t i = 0; i < AST::kResourceModifierCount; ++i) {
+        resource.modifiers.setModifier(i, decl->hasModifier(i));
+    }
     for (const Reference &member : decl->members()) {
         resource.members.push_back(member);
     }
@@ -1207,7 +1208,7 @@ Builder::resourceSignatureOf(const AST::node_ptr_t &funcTypeAst, const FunctionT
     // be written beside a full account of the body's resources -- and a pass that reads the
     // spelling and does anything else could not declare it (design principles 9.5), while `panic`
     // would claim the empty resource set (`pure`) merely by being written. A fault statement is not
-    // a promise about effects: an operator that faults may still write stdout (design principles
+    // a promise about effects: an operator that faults may still write `console` (design principles
     // 3.9), and the resources a declaration publishes stay the operator's own (design effects plan
     // 2.2).
     if ((clause->spelling() || clause->panic()) && !clause->pure() && clause->uses().empty()) {

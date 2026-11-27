@@ -1113,7 +1113,7 @@ Arrangeable termsOfOperNode(
 /// all false, "it does not answer for this node" (`Arrangeable`, arrangedable.h). It is not "the
 /// call may fault": the terms are not a claim, and a placement decision that acts on the answer
 /// keeps the call where the program wrote it, which is what every other reader of the graph does.
-/// The consequence is that this kind no longer reads a callee, so it needs no `GraphAccess::callee`
+/// The consequence is that this kind does not read a callee, so it needs no `GraphAccess::callee`
 /// and no recursion guard: what a call runs stays a fact of the graph the callee is anchored on.
 class ArrangeWalk {
   public:

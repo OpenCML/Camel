@@ -9,6 +9,22 @@
 
 namespace camel::parse::ast {
 
+namespace {
+
+/// The modifiers a resource declaration writes, each preceded by a space, in the table's order.
+/// One function for both printers: the dump (`toString`) and the regenerated source (`geneCode`)
+/// read the same bits through it, so the two orders cannot drift apart again.
+void appendModifiers(std::string &out, const ResourceDeclLoad &decl) {
+    for (size_t i = 0; i < kResourceModifierCount; ++i) {
+        if (decl.hasModifier(i)) {
+            out += " ";
+            out.append(kResourceModifierWords[i]);
+        }
+    }
+}
+
+} // namespace
+
 const std::string StmtLoad::geneCode() const { return ""; }
 
 const std::string ImportLoad::toString() const {
@@ -94,23 +110,10 @@ const std::string ResourceDeclLoad::toString() const {
         }
         result += "]";
     } else {
-        // The words in one canonical order, the same order the declaration lists them in the
-        // modifier record: a dump of two statements that say the same thing reads the same.
-        if (unordered_) {
-            result += " unordered";
-        }
-        if (idempotent_) {
-            result += " idempotent";
-        }
-        if (overwriting_) {
-            result += " overwriting";
-        }
-        if (readonly_) {
-            result += " readonly";
-        }
-        if (observed_) {
-            result += " observed";
-        }
+        // The words in the table's order, which is the order the declaration's record keeps them
+        // in: a dump of two statements that say the same thing reads the same, and no word is
+        // spelled here.
+        appendModifiers(result, *this);
     }
     return result + docSuffix();
 }
@@ -124,21 +127,7 @@ const std::string ResourceDeclLoad::geneCode() const {
         }
         return result + "]";
     }
-    if (unordered_) {
-        result += " unordered";
-    }
-    if (idempotent_) {
-        result += " idempotent";
-    }
-    if (overwriting_) {
-        result += " overwriting";
-    }
-    if (readonly_) {
-        result += " readonly";
-    }
-    if (observed_) {
-        result += " observed";
-    }
+    appendModifiers(result, *this);
     return result;
 }
 
