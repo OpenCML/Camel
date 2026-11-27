@@ -149,6 +149,21 @@ node 20.20.2；docker 可用
 分支：`main`（发布）、`develop`（集成）、`fsh-dev`（作者的文档/设计/任务书）。合并一律 `--no-ff`，
 永不 rebase、永不 force-push `main`。
 
+**文档工作树（`D:\Projects\Camel-wt\docs`）的两条操作口径（2026-11-27 实测）：**
+
+```
+· 同步用 **rebase**，不用 merge：这条分支从不作为远端分支存在，只 `push HEAD:integration`；
+  用 merge 同步会在 integration 上留下一笔 "Merge remote-tracking branch 'origin/integration' into docs/…"，
+  主语说的不是被合进来的内容（违反 §5「合并提交要概括合进来的内容」）。rebase 后 `ahead/behind` 干净、历史是一条直线
+· 推送走 **HTTPS**：本机 `origin` 是 SSH，`ssh.github.com:443` 直连会 `Connection timed out`（握手前失败，
+  后面那两行 "correct access rights" 只是 git 的通用提示，不是凭据问题）
+  ⇒ `git push https://github.com/OpenCML/Camel.git HEAD:integration`
+  ⇒ 推前核 `origin/integration..HEAD` 的**唯一文件集合**只有 `internal/**`、`docs/**`、`agents/**`、`AGENTS.md`
+· **推完立即报一句**（本轮唯一一次推送）；合并批次在飞时不推
+· **回执落行只有推上去才算落账**：插件读主检出/develop 侧的 `internal/backlog.md`，
+  行写在未推的 docs 分支上，插件会一直报「回执了 taken 但不在 backlog 里」
+```
+
 ## 4. 构建与测试：只走 `camel-remote.ps1`
 
 ```powershell
