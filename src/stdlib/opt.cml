@@ -3,7 +3,7 @@
 
 /**
  * The optimization passes of the standard library written in Camel: `opt::fold`, `opt::cse`,
- * `opt::dce` and `opt::saturate`. A pass is a function from a function to a function of the same type,
+ * `opt::dce`, `opt::algebra` and `opt::saturate`. A pass is a function from a function to a function of the same type,
  * `(f: F) => F!`, so it applies to one function, `loss->opt::fold->opt::cse`, and the pipeline
  * names it by its module: `camel prog.cml opt::fold std::nvm`. They are the meaning of the C++
  * passes of the same names, `std::cxx::fold`, `std::cxx::cse` and `std::cxx::dce` (the names those
@@ -31,7 +31,7 @@
 import { flatten, all, any } from array
 import { Node, Graph, Draft, NodeKind, graphs_of, graphs, nodes, inputs, with_inputs, value_users, kind, op, op_name, may_be_recomputed, may_fault, may_be_rearranged, is_anchor, is_written_slot, is_constant, constant_bytes, type_of, type_name, region_of, permissions, tags, constant, open, replace, erase, eval, commit, abort } from graph
 import { saturate as saturate_rules } from rewrite
-import { algebra, distribution } from rules
+import { algebra as algebra_laws, distribution, simplify } from rules
 import { is_function } from types
 
 // ---- reading a node as the key of a comparison ----
@@ -334,6 +334,19 @@ export func fold::<F>(f: F) => F! when is_function::<F>() {
     return if all_nodes(graphs_of(f))->any<evaluated> then fold_rounds(f, constant_budget) else f
 }
 
+// ---- algebraic simplification ----
+
+/// The algebraic laws of the rules library, one way, to a fixpoint: `x + 0` is `x`, like terms
+/// merge (`a*x + b*x` is `(a+b)*x`), constant factors gather. It is `rules::simplify`, the same pass
+/// `std::cxx::algebra` runs, so a law is written once, in `rules.cml`. With `strict` only the laws
+/// that need no numeric permission are used, as `safe_fp=true` does for `std::cxx::algebra`.
+/// @fails error value `RuleInvalid` when a rule does not compile
+/// @example (func (x: int) { (x + 1) * 3 + (x + 1) * 4 })->algebra
+with <strict: bool = false>
+export func algebra::<F>(f: F) => F! when is_function::<F>() {
+    return f->simplify<strict: strict>
+}
+
 // ---- saturation ----
 
 /// The rules library's laws, rearranging ones included, applied both ways to the writings of every
@@ -343,5 +356,5 @@ export func fold::<F>(f: F) => F! when is_function::<F>() {
 /// @example (func (x: int) { x * 3 + x * 4 })->saturate
 with <rounds: int = 6, strict: bool = false>
 export func saturate::<F>(f: F) => F! when is_function::<F>() {
-    return f->saturate_rules<concat(algebra, distribution), rounds: rounds, strict: strict>
+    return f->saturate_rules<concat(algebra_laws, distribution), rounds: rounds, strict: strict>
 }
