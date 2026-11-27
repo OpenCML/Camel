@@ -1596,9 +1596,13 @@ Value Builder::visitBlockHeaded(syn::Node context, DataType type) {
     // nowhere else), so a program that writes an `edit` or `view` block reads that module whether
     // it wrote the import or not. The import is the head's own: which module declares a handle is
     // not a second thing the writer answers.
+    // What the head needs is the module itself, and only an import that names no subset is that
+    // module: `import { Node } from graph` brings the names it lists, not the names the module
+    // writes itself -- `edit`, `view`, `open` and the rest are operators of the module rather than
+    // items a list can be asked for, so such an import does not answer this head.
     bool graphRead = false;
     for (const auto &imported : imports_) {
-        if (imported->hasPath() && imported->getPath() == "graph") {
+        if (imported->hasPath() && imported->getPath() == "graph" && !imported->hasRefs()) {
             graphRead = true;
             break;
         }
