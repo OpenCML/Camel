@@ -162,8 +162,12 @@ constexpr uint32_t Name = 1, Type = 2;
 }
 namespace type_f {
 constexpr uint32_t TensorType = 1;          // TypeProto
+constexpr uint32_t SequenceType = 4;          // TypeProto.sequence_type
 constexpr uint32_t ElemType = 1, Shape = 2; // TypeProto.Tensor
 } // namespace type_f
+namespace sequence_f {
+constexpr uint32_t ElemType = 1; // TypeProto.Sequence.elem_type (a TypeProto)
+} // namespace sequence_f
 namespace shape_f {
 constexpr uint32_t Dim      = 1;               // TensorShapeProto
 constexpr uint32_t DimValue = 1, DimParam = 2; // TensorShapeProto.Dimension
@@ -231,7 +235,16 @@ WireWriter encodeValueInfo(const ValueInfo &vi) {
     }
 
     WireWriter type;
-    type.messageField(type_f::TensorType, tensorType);
+    if (vi.isSequence) {
+        // A sequence: `TypeProto.sequence_type` wraps the element's own TypeProto. The element is
+        // written by the same code, so an element with a shape and one without (a tensor of unknown
+        // rank) both work, and the sequence itself carries no shape: its length is the run's.
+        WireWriter sequence;
+        sequence.messageField(sequence_f::ElemType, tensorType);
+        type.messageField(type_f::SequenceType, sequence);
+    } else {
+        type.messageField(type_f::TensorType, tensorType);
+    }
 
     WireWriter w;
     w.stringField(value_info_f::Name, vi.name);
