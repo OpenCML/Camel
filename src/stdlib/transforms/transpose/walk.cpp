@@ -2719,6 +2719,22 @@ bool buildTransposeMember(
                 // The origin a refusal names is the region's: it is where the round was written.
                 const uint32_t regionOrigin =
                     static_cast<uint32_t>(function->region(function->nodeRegion(ref))->origin);
+                // **A loop whose form carries a condition has no sequence of rounds to run
+                // backwards.** The reverse pass runs the rounds the forward pass *did* run -- the
+                // same rounds, from the far end -- and a condition is a decision about a round, not
+                // a count of them: where a `while` stops is not known before it has run, and this
+                // transposition carries no record of it. Running a loop of the same length is what
+                // makes the reverse of a `for` right; a condition makes "the same length" a value
+                // only the forward pass knows, so there is nothing here to build that would be that
+                // loop. Refused by name (`skip=state`, the reason spelled on the line) rather than
+                // built as a loop whose parts do not match its form.
+                if (camel::core::loopHasCondition(function->loopKindOf(ref))) {
+                    refuse(TransposeRefusalCause::State);
+                    os << " node=" << ref << " origin=" << regionOrigin
+                       << " why=a-loop-whose-form-carries-a-condition-has-no-sequence-of-rounds-to-"
+                          "run-backwards\n";
+                    return false;
+                }
                 const gc_node_ref_t bodyRegionOld = [&]() -> uint32_t {
                     for (uint32_t r = 1; r < function->regionCount(); ++r) {
                         const rt::GCRegion *part = function->region(r);
