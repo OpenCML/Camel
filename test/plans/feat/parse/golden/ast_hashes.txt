@@ -4336,9 +4336,9 @@ a3d372c4bd6d36c5 ok test/cases/probe/dpack_dots_ok.cml
 8927fe1d274101df no test/cases/probe/dpack_old_rank.cml
 798734aec9c73109 ok test/cases/probe/fill_slots.cml
 74b1e954cd349a00 ok test/cases/probe/gc_pacing_probe2.cml
-2db18dad7641fdb0 ok test/cases/probe/probe_avg_reverse.cml
-2f3fa79b95e4e99c ok test/cases/probe/probe_max_forward.cml
-6405be50e83e4b54 ok test/cases/probe/probe_max_reverse.cml
+43594fd5547a371d ok test/cases/probe/probe_avg_reverse.cml
+94f6d74a134aef38 ok test/cases/probe/probe_max_forward.cml
+7f7416ab6e443a69 ok test/cases/probe/probe_max_reverse.cml
 41bc7475d3e31496 ok test/cases/probe/probe_pools_reverse.cml
 c0a3d8d9c68cc179 ok test/cases/probe/blockscope/imported_type_at_top_level.cml
 72f66406e1747095 ok test/cases/probe/blockscope/imported_type_in_body.cml
