@@ -141,7 +141,8 @@ Check 'the refusal says which words ask for it' `
 # The generated host script and the fetch after it have to agree on the run's name, and the old flag
 # is gone. The host script is a string inside the tool, so its text is read.
 $tool = Get-Content -LiteralPath (Join-Path $PSScriptRoot 'camel-remote.ps1') -Raw
-Check 'the host script exports the run name to the runner' ($tool -like '*export CAMEL_TEST_RUN_NAME=''$runName''*')
+Check 'the run name is set on the plan step''s command' ($tool -like '*CAMEL_TEST_RUN_NAME=''$runName'' *')
+Check 'the run name is not exported to the rest of the host script' (-not ($tool -like '*export CAMEL_TEST_RUN_NAME*'))
 Check 'the run name is printed' ($tool.Contains('[camel-remote] run name: '))
 Check 'the fetch asks the host about the run it named' ($tool -like '*New-CamelRunDirCommand -LogRootOnHost $remoteLogRoot -Run $runName*')
 Check 'a missing run directory is reported and nothing is fetched' ($tool -like '*the host has no run directory $runName*nothing was fetched*')

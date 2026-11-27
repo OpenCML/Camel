@@ -1989,6 +1989,13 @@ $buildCmd = if ($Config -eq 'Debug') { "npm run debug$stackTraceArg" } else { "n
     } else {
         ':'
     }
+    # The run name belongs to the plan step and to nothing else in this run: the runner names its run
+    # directory after it, the fetch after the plan (-FromThisRun) reads that directory, and a second
+    # runner in the same script (the gpu observation, a checker) given the same name would be refused
+    # for replacing another run's record. So it is set on this one command and not exported.
+    if ($runPlan -ne ':') {
+        $runPlan = $runPlan.Replace('cd $R/ && ', "cd `$R/ && CAMEL_TEST_RUN_NAME='$runName' ")
+    }
 
     # The plan runs as a child of `camel-run`, which takes tokens for it and holds them until that
     # command exits. The command travels as a file, byte for byte: quoting it into `bash -c` would rewrite it,
@@ -2110,7 +2117,7 @@ echo "HOST_JOBS=$CAMEL_JOBS"
 # exactly like a run whose comparison passed.
 $fetchRel = ($FetchFile -replace '\\', '/')
 # `-FromThisRun` names the file by its place inside this invocation's own run directory
-# (`test/results/log/<run name>`, the name exported to the runner as CAMEL_TEST_RUN_NAME). It does not
+# (`test/results/log/<run name>`, the name the plan step hands its runner as CAMEL_TEST_RUN_NAME). It does not
 # travel with the plan. The run directory exists only once the plan has run, so the fetch is a
 # second, small connection after it (the block beside the AST record, further down); the stage here
 # is the named path's, unchanged.
@@ -2310,7 +2317,7 @@ else
         gpu_nfail=`$(printf '%s\n' "`$gpu_reds" | grep -c . || true)
         # EVERY name, not the first twenty. A truncated list was read as the whole list by the
         # ratchet below, and that made `no longer red ... can be trimmed` print for recorded names
-        # that were red in the very same run (2026-11-18: seven of fifteen). The count is in `fail=`;
+        # that were red in the very same run. The count is in `fail=`;
         # `red_more` now says how many names the line withheld, and it is 0. `printf "%s", $0`, not
         # `printf "%s"`: a missing argument prints nothing, which read as "no red names" while
         # `fail=` said sixteen. The `$0` is escaped because this text is a PowerShell here-string and
@@ -2368,6 +2375,8 @@ else
         printf '%s\n' "`$gpu_clean" | tail -n 20
         gpu_total=unknown; gpu_pass=unknown; gpu_fail=unknown; gpu_skip=unknown
         gpu_red=unknown; gpu_more=0; gpu_state=nosummary
+        # No reading, so no reasons either; set, because the evidence line below reads it under set -u.
+        gpu_evidence=''
     fi
     rm -f '$gpuReadingFile'
     # `state` is what the local side ratchets on: `read` is a reading, the other two are "the layer
@@ -2986,9 +2995,8 @@ export CAMEL_BRANCH='$branch'
 # How long the pool's taker waits for a token before the run says noslot (-SlotWaitSeconds); the
 # checkout's lock above is waited for the same number of seconds.
 export CAMEL_TOKEN_WAIT_S='$SlotWaitSeconds'
-# The runner names its run directory this, so the fetch after the plan (-FromThisRun) reads exactly
-# this run's directory whatever other runner invocations appear later in the same checkout.
-export CAMEL_TEST_RUN_NAME='$runName'
+# The plan step's runner names its run directory this (it is set on that one command, see `$runPlan`),
+# so the fetch after the plan (-FromThisRun) reads exactly this run's directory.
 echo "[camel-remote] run name: $runName"
 # The plan is a child of `camel-run` now, in a process of its own, and a shell variable of this
 # script is not that process's environment. `R` names the checkout the plan must run in, so it
@@ -3876,7 +3884,7 @@ if ($fetchRefused -and $FetchFile -ne '' -and $code -eq 0) { $code = 2 }
 
 # The file `-FetchFile <suffix> -FromThisRun` asked for: this invocation's own run's copy of it,
 # brought back by two small commands after the plan. The run is named by this tool (`$runName`,
-# exported to the runner as CAMEL_TEST_RUN_NAME), so the directory read is exactly the one this run
+# handed to the plan step's runner as CAMEL_TEST_RUN_NAME), so the directory read is exactly the one this run
 # wrote and never another one that appeared in the same checkout later. Nothing is guessed when the
 # answer is missing: a run directory that is not there, and a file that is not in it, each say so and
 # name the run.
