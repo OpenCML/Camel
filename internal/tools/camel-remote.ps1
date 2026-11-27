@@ -3088,10 +3088,41 @@ if [ '$NoBuild' != 'True' ]; then
     # always passed it (npm run build -> cmake -> ninja). The pool sets it in the same process that
     # holds the tokens, because a variable written in this shell does not cross into the command: the
     # count has to be decided where the locks are.
+    #
+    # The build is bounded on progress, not on its total. On a host other work has filled, the pool
+    # hands a build the width that is free, and every unit rebuilt at a width of one or two is slow,
+    # not hung: a bound on the total stopped such a build halfway and left the run with no reading
+    # at all. What says a build is stuck is that it stopped finishing steps -- the generator writes
+    # a line for each one -- so the bound is the time since the last line. The outer bound only
+    # keeps a build from outliving the working day. The build runs in a session of its own so that
+    # stopping it stops every compiler under it.
     build_want=`$(budget_jobs `$BUILD_JOBS)
     build_started_ns=`$(date +%s%N)
-    timeout 2400 bash "`$R/internal/tools/host-tokens.sh" take-up-to "`$build_want" -- $buildCmd
+    build_idle_limit=1200
+    build_total_limit=10800
+    build_progress=`$(mktemp)
+    setsid bash -c 'bash "`$1/internal/tools/host-tokens.sh" take-up-to "`$2" -- $buildCmd 2>&1 | tee "`$3"; exit "`${PIPESTATUS[0]}"' _ "`$R" "`$build_want" "`$build_progress" &
+    build_pid=`$!
+    build_stopped=''
+    while kill -0 "`$build_pid" 2>/dev/null; do
+        sleep 15
+        build_idle=`$(( `$(date +%s) - `$(stat -c %Y "`$build_progress") ))
+        build_total=`$(( (`$(date +%s%N) - build_started_ns) / 1000000000 ))
+        if [ "`$build_idle" -ge "`$build_idle_limit" ] || [ "`$build_total" -ge "`$build_total_limit" ]; then
+            build_stopped="no step finished for `${build_idle} s, `${build_total} s in all"
+            kill -TERM -- "-`$build_pid" 2>/dev/null
+            sleep 5
+            kill -KILL -- "-`$build_pid" 2>/dev/null
+            break
+        fi
+    done
+    wait "`$build_pid"
     code=`$?
+    rm -f "`$build_progress"
+    if [ -n "`$build_stopped" ]; then
+        echo "[camel-remote] build stopped: `$build_stopped"
+        code=124
+    fi
     build_ms=`$(( (`$(date +%s%N) - build_started_ns) / 1000000 ))
     # The plan runner folds this into its [SPLIT] line; it is the build's own clock, not this
     # script's (which also carries the npm wrapper).
