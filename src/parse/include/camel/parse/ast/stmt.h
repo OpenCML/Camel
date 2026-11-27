@@ -3,11 +3,14 @@
 
 #pragma once
 
+#include <array>
+#include <cstddef>
 #include <vector>
 
 #include "camel/core/operator_semantics.h"
 
 #include "base.h"
+#include "resource_modifiers.h"
 
 namespace camel::parse::ast {
 
@@ -139,29 +142,24 @@ class TypeDeclLoad : public StmtLoad {
 ///
 /// A single resource names ambient state that no value carries; the list form makes the name a
 /// group of the resources and groups it lists, expanded where it is used. The words after the name
-/// are the modifiers of the resource (design principles 3.3: `unordered`, `idempotent`,
-/// `overwriting`, `readonly`, `observed`), written in any order and combined freely; whether a
-/// combination is possible is the semantic layer's question, not this one (`sem::conflictOf`).
+/// are the modifiers of the resource (design principles 3.3): the table `kResourceModifierWords`
+/// (`resource_modifiers.h`) is the list of them, written in any order and combined freely; whether
+/// a combination is possible is the semantic layer's question, not this one (`sem::conflictOf`).
 class ResourceDeclLoad : public StmtLoad {
   public:
     ResourceDeclLoad(Reference ref) : StmtLoad(StmtType::Resource), ref_(ref) {}
 
     const Reference &ref() const { return ref_; }
 
-    bool unordered() const { return unordered_; }
-    void setUnordered(bool unordered) { unordered_ = unordered; }
-
-    bool idempotent() const { return idempotent_; }
-    void setIdempotent(bool idempotent) { idempotent_ = idempotent; }
-
-    bool overwriting() const { return overwriting_; }
-    void setOverwriting(bool overwriting) { overwriting_ = overwriting; }
-
-    bool readonly() const { return readonly_; }
-    void setReadonly(bool readonly) { readonly_ = readonly; }
-
-    bool observed() const { return observed_; }
-    void setObserved(bool observed) { observed_ = observed; }
+    /// Whether the modifier at `index` -- a position in `kResourceModifierWords` -- is written.
+    bool hasModifier(size_t index) const {
+        return index < modifiers_.size() && modifiers_[index];
+    }
+    void setModifier(size_t index, bool written) {
+        if (index < modifiers_.size()) {
+            modifiers_[index] = written;
+        }
+    }
 
     void addMember(Reference member) { members_.push_back(std::move(member)); }
     const std::vector<Reference> &members() const { return members_; }
@@ -174,12 +172,8 @@ class ResourceDeclLoad : public StmtLoad {
 
   private:
     Reference ref_;
-    bool unordered_   = false;
-    bool idempotent_  = false;
-    bool overwriting_ = false;
-    bool readonly_    = false;
-    bool observed_    = false;
-    bool group_       = false;
+    std::array<bool, kResourceModifierCount> modifiers_{};
+    bool group_ = false;
     std::vector<Reference> members_;
 };
 

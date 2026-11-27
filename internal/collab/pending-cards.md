@@ -87,3 +87,9 @@
 - 每条要：第一条诊断原文｜归类（src 缺陷/断言过时/超时/未迁移）｜是否在基线 6 行里｜一句话根因
 
 > 更正（02:1x）：**J 改派 `lane-oper-shape-guard`**，排在 G1c → G1b 之后（原定的 `lane-witness` 上下文不足，且其树停在 `bb26b78dda` —— "测试与二进制必须同树"，所以在别树跑 onnx 计划测的不是目标尖端）。
+
+### K. `lane/pass-decl` 第三笔 + probe 清理 —— 已改派 `lane-misc`（树 `D:\Projects\Camel-wt\console2`，`f9502dda9b`）
+- 第三笔：管线参数（pipeline-spec）解析 + `run_param` 断言，落成真计划 `test/plans/opt/run_param/…`（用例 `test/cases/opt/run_param/prog.cml` 已在未跟踪）
+- 清理（全部未跟踪，删前先 `git grep` 查引用）：`t302_*` 8 case + 8 plan、`t307_sugar`、`t312_bad_law_body`、`t350_run_param_probe.plan.toml`（临时探针）、`test/tools/probe-parity-counts.mjs`（按引用决定留删）
+- 交付：第三笔提交 + 计划逐名读数 + 清理后 `status --porcelain` 原文 + tip/numstat + 对 promotion-26（149 名）的逐名差集
+- 前手：`lane-kinds-oper`（上下文到极限，`task-366` 已在其名下 complete）

@@ -1147,7 +1147,7 @@ void Builder::measureInferredResources() {
 namespace {
 
 // One resource a node reaches, named the way the body it is written in names it: a parameter of
-// the body, or an ambient resource (`stdout`, `fs`) by the name the declaration gave it. Two
+// the body, or an ambient resource (`console`, `fs`) by the name the declaration gave it. Two
 // effects reach the same resource exactly when their keys are equal (design principles 3.3);
 // a node whose reach the walk cannot place is `unnamed` and stands for every resource at once.
 // Whether two accesses to one resource need an order edge is the resource declaration's answer,
