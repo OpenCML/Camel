@@ -524,3 +524,138 @@ expect_exit = 0
 timeout_ms = 20000
 compare_to = "cxx_isolation.default_pipeline.by_default_name"
 compare_fields = ["exit_code", "stdout_normalized"]
+
+# ---- inlining: the two implementations on four corpora ----
+#
+# The readings below were taken before the assertions were written, which is why each `by_cpp` entry
+# names an absolute count and not "fewer than before": the baseline is the same corpus read with no
+# pass at all. Canonical documents drop the graph names, so a reading is the multiset of
+# `calls/nodes` over the graphs of the document, sorted, plus the total number of call sites.
+#
+#   corpus        before                          after either inliner
+#   figure1       0/3 1/2 1/7 1/9     (3 calls)   0/10 0/15 0/3 1/2   (1 call)   both calls inlined
+#   closure       0/3 0/3 0/3 0/5 1/2 4/26 (6)   unchanged                     a call through a value is left
+#   budget_zero   0/3 1/2 1/4 1/7     (4 calls)   unchanged                     the budget is 0, nothing is copied
+#   recursion     1/11 1/2 1/7        (3 calls)   unchanged                     the callee recurses
+#
+# The three "unchanged" corpora are the control: a comparison of two implementations that both did
+# nothing is a comparison of the input, and the entries say so instead of passing on a coincidence.
+
+[[tests]]
+name = "cxx_isolation.inline_figure1.by_cpp"
+desc = "The C++ inlining on the printed figure of the paper, `inc(x) * 3 + (x + 1) * 4` with the call one level down so the front end keeps it: both call sites are expanded, so the reading is one call site (the document root's) and the graphs are 0/10, 0/15, 0/3, 1/2. The corpus with no pass at all reads 0/3, 1/2, 1/7, 1/9 -- three call sites -- which is the decrease this entry asserts."
+kind = "behavior"
+case = "../../../cases/opt/cxx_isolation/inline_figure1.cml"
+args = ["${case}", "std::cxx::inline", "std::jgir canonical=true", "std::nop"]
+expect_exit = 0
+timeout_ms = 20000
+verify_script = """
+const doc = JSON.parse(input.normalized.stdout)
+if (doc.format !== "camel.gir" || doc.canonical !== true) {
+    throw new Error("std::cxx::inline: the run did not print the canonical document: " + input.normalized.stdout.slice(0, 200))
+}
+const rows = (doc.graphs || []).map((g) => (g.nodes || []).filter((n) => n.kind === "CALL" || n.kind === "FUNC").length + "/" + (g.nodes || []).length)
+const key = rows.slice().sort().join(" ")
+if (key !== "0/10 0/15 0/3 1/2") {
+    throw new Error("std::cxx::inline, figure1: the graphs read " + key + ", not 0/10 0/15 0/3 1/2 -- the corpus reads 0/3 1/2 1/7 1/9 with no pass, so a call site that survives means the pass did not inline it")
+}
+const calls = rows.reduce((a, r) => a + Number(r.split("/")[0]), 0)
+if (calls !== 1) {
+    throw new Error("std::cxx::inline, figure1: " + calls + " call site(s) left, not 1")
+}
+"""
+
+[[tests]]
+name = "cxx_isolation.inline_figure1.by_camel"
+desc = "`opt::inline` on the same figure: the run that produced the C++ reading, with the Camel pass in its place, and the two canonical documents are compared byte for byte."
+kind = "differential"
+case = "../../../cases/opt/cxx_isolation/inline_figure1.cml"
+args = ["${case}", "opt::inline", "std::jgir canonical=true", "std::nop"]
+expect_exit = 0
+timeout_ms = 20000
+compare_to = "cxx_isolation.inline_figure1.by_cpp"
+compare_fields = ["exit_code", "stdout_normalized"]
+
+[[tests]]
+name = "cxx_isolation.inline_closure.by_cpp"
+desc = "The C++ inlining on a call of a closure that captures a local: the callee is a value, not a graph the call names, so nothing is expanded and the reading is the corpus's own -- six call sites, unchanged. The entry asserts the non-change, so a pass that started expanding calls it cannot see is caught."
+kind = "behavior"
+case = "../../../cases/compile/closure/bound_closures.cml"
+args = ["${case}", "std::cxx::inline", "std::jgir canonical=true", "std::nop"]
+expect_exit = 0
+timeout_ms = 20000
+verify_script = """
+const doc = JSON.parse(input.normalized.stdout)
+const rows = (doc.graphs || []).map((g) => (g.nodes || []).filter((n) => n.kind === "CALL" || n.kind === "FUNC").length + "/" + (g.nodes || []).length)
+const key = rows.slice().sort().join(" ")
+if (key !== "0/3 0/3 0/3 0/5 1/2 4/26") {
+    throw new Error("std::cxx::inline, closure: the graphs read " + key + ", not 0/3 0/3 0/3 0/5 1/2 4/26")
+}
+"""
+
+[[tests]]
+name = "cxx_isolation.inline_closure.by_camel"
+desc = "`opt::inline` on the same closure calls: the documents are compared byte for byte, which for a corpus neither side rewrites is the comparison of the input."
+kind = "differential"
+case = "../../../cases/compile/closure/bound_closures.cml"
+args = ["${case}", "opt::inline", "std::jgir canonical=true", "std::nop"]
+expect_exit = 0
+timeout_ms = 20000
+compare_to = "cxx_isolation.inline_closure.by_cpp"
+compare_fields = ["exit_code", "stdout_normalized"]
+
+[[tests]]
+name = "cxx_isolation.inline_budget_zero.by_cpp"
+desc = "The C++ inlining with the growth budget at 0 on a two-level call it would otherwise expand: nothing is copied, so the reading is the corpus's own four call sites."
+kind = "behavior"
+case = "../../../cases/opt/camel_inline/two_level_call.cml"
+args = ["${case}", "std::cxx::inline growth_budget=0", "std::jgir canonical=true", "std::nop"]
+expect_exit = 0
+timeout_ms = 20000
+verify_script = """
+const doc = JSON.parse(input.normalized.stdout)
+const rows = (doc.graphs || []).map((g) => (g.nodes || []).filter((n) => n.kind === "CALL" || n.kind === "FUNC").length + "/" + (g.nodes || []).length)
+const key = rows.slice().sort().join(" ")
+if (key !== "0/3 1/2 1/4 1/7") {
+    throw new Error("std::cxx::inline growth_budget=0: the graphs read " + key + ", not 0/3 1/2 1/4 1/7 -- a budget of 0 copies nothing")
+}
+"""
+
+[[tests]]
+name = "cxx_isolation.inline_budget_zero.by_camel"
+desc = "`opt::inline growth_budget=0` on the same corpus: the documents are compared byte for byte, and both sides must leave the calls standing."
+kind = "differential"
+case = "../../../cases/opt/camel_inline/two_level_call.cml"
+args = ["${case}", "opt::inline growth_budget=0", "std::jgir canonical=true", "std::nop"]
+expect_exit = 0
+timeout_ms = 20000
+compare_to = "cxx_isolation.inline_budget_zero.by_cpp"
+compare_fields = ["exit_code", "stdout_normalized"]
+
+[[tests]]
+name = "cxx_isolation.inline_recursion.by_cpp"
+desc = "The C++ inlining on a function that calls itself: the callee is the graph being edited in the recursive call and it recurses in the one `main` makes, so nothing is expanded and the reading is the corpus's own three call sites."
+kind = "behavior"
+case = "../../../cases/opt/camel_inline/self_recursion.cml"
+args = ["${case}", "std::cxx::inline", "std::jgir canonical=true", "std::nop"]
+expect_exit = 0
+timeout_ms = 20000
+verify_script = """
+const doc = JSON.parse(input.normalized.stdout)
+const rows = (doc.graphs || []).map((g) => (g.nodes || []).filter((n) => n.kind === "CALL" || n.kind === "FUNC").length + "/" + (g.nodes || []).length)
+const key = rows.slice().sort().join(" ")
+if (key !== "1/11 1/2 1/7") {
+    throw new Error("std::cxx::inline, recursion: the graphs read " + key + ", not 1/11 1/2 1/7 -- a recursive callee is not expanded")
+}
+"""
+
+[[tests]]
+name = "cxx_isolation.inline_recursion.by_camel"
+desc = "`opt::inline` on the same recursive corpus: the documents are compared byte for byte, and both sides keep every call."
+kind = "differential"
+case = "../../../cases/opt/camel_inline/self_recursion.cml"
+args = ["${case}", "opt::inline", "std::jgir canonical=true", "std::nop"]
+expect_exit = 0
+timeout_ms = 20000
+compare_to = "cxx_isolation.inline_recursion.by_cpp"
+compare_fields = ["exit_code", "stdout_normalized"]
