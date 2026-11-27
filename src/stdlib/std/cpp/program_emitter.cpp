@@ -498,10 +498,12 @@ std::string ProgramEmitter::entryFunction(GCGraph *root, const Entry &entry) {
     }
     call += ")";
 
-    // Only a `main` that declares its return type gives the program a result (design
-    // principles 9.8): an integer or a bool is the exit code, any other value is printed. A
-    // declared `T!` that failed is an error nobody handled: reported on standard error, exit
-    // code 1 (src/execute/entry_args.cpp, writeEntryResultTo).
+    // The value of `main` is the value of an ordinary function, not a result of the program
+    // (design principles 9.8): the generated entry returns 0, and the exit code is only what
+    // `exit(n)` gives (`run()` takes that from ExitRequest). A declared `T!` that failed is an
+    // error nobody handled: reported on standard error, exit code 1
+    // (src/execute/entry_args.cpp, writeEntryResultTo). A value that is not status-like joins the
+    // program's output, as the command line prints it.
     const Type *type    = entry.main->view().funcType()->exitType();
     const bool declared = context_->entryResultDeclared();
     std::string body;
@@ -521,10 +523,11 @@ std::string ProgramEmitter::entryFunction(GCGraph *root, const Entry &entry) {
     }
     if (!declared || type == nullptr || isVoid(type)) {
         body += value == call ? std::format("    {};\n    return 0;\n", call) : "    return 0;\n";
-    } else if (type->code() == TypeCode::Int32 || type->code() == TypeCode::Int64) {
-        body += std::format("    return static_cast<int>({});\n", value);
-    } else if (type->code() == TypeCode::Bool) {
-        body += std::format("    return {} ? 1 : 0;\n", value);
+    } else if (
+        type->code() == TypeCode::Int32 || type->code() == TypeCode::Int64 ||
+        type->code() == TypeCode::Bool) {
+        // Status-like values stay off standard output; they are the function's value, not a code.
+        body += std::format("    (void)({});\n    return 0;\n", value);
     } else {
         body += std::format("    rt::println({});\n    return 0;\n", value);
     }

@@ -19,13 +19,17 @@ tags = ["feat", "modules", "graph", "edit"]
 
 [[tests]]
 name = "exit_is_the_node_the_function_hands_out"
-desc = "`exit` of the graph of `main` answers the addition the function returns: an operator node, of type `int`, an anchor, read by nothing -- and the same node an independent search for 'the addition that reads an addition' finds, which is what the query claims to be. Before this query existed a pass had to scan `nodes` and test `is_anchor` to name the node an edit that changes what the function gives has to put a value in the place of. The program exits 55, so the graph the pass read is the program that ran."
+desc = "`exit` of the graph of `main` answers the addition the function returns: an operator node, of type `int`, an anchor, read by nothing -- and the same node an independent search for 'the addition that reads an addition' finds, which is what the query claims to be. Before this query existed a pass had to scan `nodes` and test `is_anchor` to name the node an edit that changes what the function gives has to put a value in the place of. The file `-o` names holds 55 -- the value on the node the pass read -- so the graph the pass read is the program that ran; the returned value is the function's own and gives no exit code."
 kind = "behavior"
 case = "../../../cases/modules/graph_pass/edits_exit.cml"
-args = ["${case}", "orderprobe::exit_shape", "std::nvm"]
-expect_exit = 55
+args = ["-o", "${test_tmp}/edits_exit.txt", "${case}", "orderprobe::exit_shape", "std::nvm"]
+expect_exit = 0
 expect_stdout_exact = "NodeKind::Oper int true 0 2 1\ntrue\n"
 timeout_ms = 20000
+verify_script = """
+const text = fs.readFileSync(input.test_tmp + '/edits_exit.txt', 'utf8').trim()
+assert(text === '55', JSON.stringify(text))
+"""
 
 [[tests]]
 name = "params_are_the_ports_the_declaration_states"

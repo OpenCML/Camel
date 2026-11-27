@@ -818,8 +818,9 @@ int runCommand(int argc, char *argv[]) {
                         return 1;
                     }
                     // What `main` returns goes to the output: the file given with -o, else
-                    // standard output (where an exit code is not printed).
-                    // Only a `main` that declares its return type has a result.
+                    // standard output for the values that join the program's output. The value
+                    // is `main`'s own; the exit code comes only from `process::exit(code)`
+                    // (design principles 9.8), never from the returned value.
                     ctx->setEntryResultDeclared(
                         entryDeclaresReturnType(parser->ast()).value_or(true));
                     camel::execute::writeEntryResultTo(

@@ -218,7 +218,7 @@ kind = "behavior"
 case = "../../../cases/compile/module_imports/d4_cpp_computed.cml"
 args = ["${case}", "std::cpp", "std::nop"]
 expect_exit = 0
-expect_output_contains = ["const int64_t v1_seven = seven(depth);", "const int64_t v2_main_ = main_(depth, v1_seven);", "return static_cast<int>(top_level(0));"]
+expect_output_contains = ["const int64_t v1_seven = seven(depth);", "const int64_t v2_main_ = main_(depth, v1_seven);", "(void)(top_level(0));"]
 expect_output_not_contains = ["TranslationRefused"]
 
 [[tests]]
@@ -228,7 +228,7 @@ kind = "behavior"
 case = "../../../cases/compile/module_imports/d4_cpp_literal.cml"
 args = ["${case}", "std::cpp", "std::nop"]
 expect_exit = 0
-expect_stdout_contains = ["return static_cast<int>(main_(0, 10));"]
+expect_stdout_contains = ["(void)(main_(0, 10));"]
 
 #  ---- whose directory an import resolves in ----
 # put the importing module's own directory ahead of the global search roots, so that

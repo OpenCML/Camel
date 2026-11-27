@@ -386,7 +386,7 @@ rt::Fallible<int64_t> v7 = rt::attempt([&] { return risky(rt::call(depth, site_5
 
 ### 7.3 程序的入口与退出
 
-- `main` 声明了整数返回类型：返回值的低 8 位是退出码【实测：`return 300` 的退出码是 44】；`main` 是纯的（没有 `sync`）时也一样，不打印【实测 `func main(): int { return 7 }`：没有输出，退出码 7】。
+- `main` 声明了整数返回类型：返回值是函数自己的值，不决定退出码，生成的程序以 0 结束；`main` 是纯的（没有 `sync`）时也一样，不打印【读码 `stdlib/std/cpp/program_emitter.cpp`：状态类返回值被丢弃，生成函数返回 0（设计原则 9.8）】。
 - `main` 声明了别的返回类型：值按 `println` 的写法打印到标准输出，退出码 0【实测：返回 `'hi'` 打印 `hi`；返回 `0.1 + 0.2` 打印 `0.30000000000000004`】。
 - 没有声明返回类型：不打印，退出码 0（D9 的第二半）。
 - `exit(n)`（`:exit`、`process:exit`）：刷新输出，退出码 n（D9 的第一半；今天被 `catch (...)` 吞成 `Unknown error`）。

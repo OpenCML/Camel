@@ -8,7 +8,8 @@
  *   - scalars.cml returns an int: a text file holding the literal;
  *   - a `main` that returns nothing: RuntimeDiag::EntryResultNotWritten at main, exit 1.
  * On standard output (no `-o`): the tuple is printed as `println` prints it, after the
- * program's own output; an int result is the exit code and is not printed.
+ * program's own output; an int result is not printed, and the exit code is 0 unless the case
+ * calls `exit(code)` (design principles 9.8).
  *
  * Usage: node result.mjs
  */
@@ -79,7 +80,7 @@ for (const pass of [null, 'std::fvm', 'std::nvm', 'std::jit', 'std::tf']) {
         { env, encoding: 'utf8' },
     )
     const text = fs.existsSync(out) ? fs.readFileSync(out, 'utf8').trim() : '(no file)'
-    check(proc.status === 4 && text === '4', `scalar result: ${text}`, `scalar result: exit ${proc.status}, file ${text}`)
+    check(proc.status === 0 && text === '4', `scalar result: ${text}`, `scalar result: exit ${proc.status}, file ${text}`)
 }
 
 {
@@ -126,15 +127,16 @@ for (const pass of [null, 'std::fvm', 'std::nvm', 'std::jit', 'std::tf']) {
 }
 
 {
-    // No -o and an int result: it is the exit code and is not printed.
+    // No -o and an int result: it is not printed; the returned value gives no exit code, so the
+    // process ends with 0.
     const proc = spawnSync(
         CAMEL,
         [path.join(HERE, 'scalars.cml'), '--arg', 'n=3', '--arg', 'rate=0.5', '--arg', 'name=hi', '--arg', 'loud=false'],
         { env, encoding: 'utf8' },
     )
     check(
-        proc.status === 4 && normalizeNewlines(proc.stdout) === 'hi 3 0.5 false\n',
-        'int result on stdout: not printed, exit code 4',
+        proc.status === 0 && normalizeNewlines(proc.stdout) === 'hi 3 0.5 false\n',
+        'int result on stdout: not printed, exit code 0',
         `int result on stdout: exit ${proc.status}: ${JSON.stringify(proc.stdout)}`,
     )
 }

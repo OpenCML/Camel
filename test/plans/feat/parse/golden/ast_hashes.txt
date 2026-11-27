@@ -814,7 +814,7 @@ f49dc5054000a1a6 ok test/cases/compile/diag_render/werror_no_position.cml
 398e22799e75ed1f ok test/cases/compile/entry_args/complex.cml
 b8a5100f72950102 ok test/cases/compile/entry_args/no_params.cml
 73a110b494919875 ok test/cases/compile/entry_args/npy_values.cml
-5148b1d53f7220b4 ok test/cases/compile/entry_args/scalars.cml
+9589018c6105fbca ok test/cases/compile/entry_args/scalars.cml
 0690ace5eebb3c1d ok test/cases/compile/entry_args/struct_param.cml
 9fcc9c46ab687c06 ok test/cases/compile/entry_args/struct_scalars.cml
 84fefe54302f3f8e ok test/cases/compile/entry_args/tensors.cml
@@ -2386,13 +2386,14 @@ debac9969e64d467 ok test/cases/consistency/entering/graph_explicit.cml
 b118668f656aa978 ok test/cases/consistency/entering/rank_not_zero.cml
 4301a1dbc7eb188b ok test/cases/consistency/entering/rank_zero_edges.cml
 596cbf3eb8420f30 ok test/cases/consistency/entering/void_arm.cml
-e844178e3870aaa0 ok test/cases/consistency/entry/declared_int.cml
+2672a07d04d64107 ok test/cases/consistency/entry/declared_int.cml
 cb18bb34987aa27c ok test/cases/consistency/entry/declared_string.cml
 9318d23596b83db1 ok test/cases/consistency/entry/error_from_attempt.cml
 e34a9fc5a67144b6 ok test/cases/consistency/entry/error_from_operator.cml
 b72bd042d665c687 ok test/cases/consistency/entry/error_handled.cml
 d2cd3a5edee71c92 ok test/cases/consistency/entry/error_thrown.cml
-730b1cafe853304e ok test/cases/consistency/entry/fallible_ok.cml
+a3ac427a5da283a1 ok test/cases/consistency/entry/exit_code.cml
+a7226b8805ec7314 ok test/cases/consistency/entry/fallible_ok.cml
 8ee20681d2dd98fb ok test/cases/consistency/entry/fallible_ok_string.cml
 d462c4c5c8f57a88 ok test/cases/consistency/entry/undeclared_int.cml
 8f9784c4af25729e ok test/cases/consistency/entry/undeclared_println.cml
@@ -3390,7 +3391,7 @@ a115b68447494c28 ok test/cases/modules/onnx/ort_grad_loop.cml
 7106c60f35611e44 ok test/cases/modules/onnx/ort_grad_loop_values.cml
 df8fe0ae0a70fd0f ok test/cases/modules/onnx/ort_loop_loaded_weights.cml
 e63a93e718e5faa2 ok test/cases/modules/onnx/ort_loop_values.cml
-3967075c89713d05 ok test/cases/modules/onnx/ort_loop_values_dynamic.cml
+afe872e6b093dd8e ok test/cases/modules/onnx/ort_loop_values_dynamic.cml
 56356b009f5e2955 ok test/cases/modules/onnx/ort_models.cml
 5755d904823ce913 ok test/cases/modules/onnx/ort_slice_bounds.cml
 fbd3b224610aaa86 ok test/cases/modules/onnx/ort_slice_grad_stride.cml
@@ -3502,7 +3503,7 @@ d13cdc23d4601308 ok test/cases/modules/rules/check_real_equality.cml
 cdf50f9ab5f41f66 ok test/cases/modules/rules/check_rules.cml
 b491574051f75ac3 ok test/cases/modules/rules/check_type_cannot_be_made.cml
 fa17a71a840912e6 ok test/cases/modules/rules/check_when.cml
-fb6afed42c2a5a92 ok test/cases/modules/rules/commit_during_rewrite.cml
+bce724dacebca0bb ok test/cases/modules/rules/commit_during_rewrite.cml
 187264701f05f3ab ok test/cases/modules/rules/condition_commit.cml
 2accf89125207d7a ok test/cases/modules/rules/condition_generic_commit.cml
 8a3011e8d120c7fc ok test/cases/modules/rules/condition_generic_print.cml
@@ -3566,8 +3567,8 @@ d4157ef887476da6 ok test/cases/modules/rules/multiset_target.cml
 eb03015684ec91f3 no test/cases/modules/rules/node_of_misuse.cml
 f8b05291682f5150 ok test/cases/modules/rules/pair_target.cml
 bd5b6aa2a8f3cb02 ok test/cases/modules/rules/parts_order.cml
-7bc3c402dd88bafa ok test/cases/modules/rules/quant_int8.cml
-26538d6d93bea18a ok test/cases/modules/rules/quant_int8_without_change_precision.cml
+77c5d161286d74b1 ok test/cases/modules/rules/quant_int8.cml
+275cb77aa5f792fd ok test/cases/modules/rules/quant_int8_without_change_precision.cml
 213f6c1c1736013c ok test/cases/modules/rules/reads_pass.cml
 4602f1ce59b0ead2 ok test/cases/modules/rules/reads_target.cml
 6ff13f40bdaececa ok test/cases/modules/rules/requires.cml

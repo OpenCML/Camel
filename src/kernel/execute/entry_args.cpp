@@ -595,12 +595,14 @@ void writeEntryResultTo(
         [ctx, path = std::move(path), jsonDiagnostics](GCGraph *graph, slot_t value) {
             std::string why;
             try {
-                // Only a `main` that declares its return type has a result (design principles
-                // 9.8). The value an undeclared one happens to end with (that of its last
-                // statement, `println('a')` giving 'a') is neither printed nor written.
-                // An error value such a body ends with is not reported at run time either:
-                // nothing takes it, which the compiler warns about (UnusedFallibleValue,
-                // design principles 3.9).
+                // The value of `main` is the value of an ordinary function, not a result of the
+                // program (design principles 9.8): the driver writes it out only when asked (the
+                // file `-o` names), which is the output effect this handler adds after the graph.
+                // A body whose return type is not declared ends with a value too (the last
+                // statement's, `println('a')` giving 'a'); it is the function's value as well and
+                // is neither printed nor written. An error value such a body ends with is not
+                // reported at run time either: nothing takes it, which the compiler warns about
+                // (UnusedFallibleValue, design principles 3.9).
                 const bool declared = ctx->entryResultDeclared();
                 Type *resultType =
                     declared && graph && graph->funcType() && graph->funcType()->hasExitType()
@@ -616,13 +618,14 @@ void writeEntryResultTo(
                     resultType = fallible->payloadType();
                 }
                 const bool none = !resultType || resultType->code() == TypeCode::Void;
-                // The types the process exit code is derived from
-                // (Context::captureProcessExitCode).
-                const bool exitCode = !none && (resultType->code() == TypeCode::Int32 ||
-                                                resultType->code() == TypeCode::Int64 ||
-                                                resultType->code() == TypeCode::Bool);
+                // Status-like values do not join the program's output: the driver writes them
+                // only to the file `-o` names, so a program whose `main` returns its status reads
+                // as it did.
+                const bool statusLike = !none && (resultType->code() == TypeCode::Int32 ||
+                                                  resultType->code() == TypeCode::Int64 ||
+                                                  resultType->code() == TypeCode::Bool);
                 if (path.empty()) {
-                    if (!none && !exitCode) {
+                    if (!none && !statusLike) {
                         // One piece, like a println: the program's own output is complete by now.
                         std::ostringstream text;
                         rtdata::printSlot(text, value, resultType);

@@ -1,0 +1,11 @@
+/**
+ * `main` ends the program with `process::exit(7)`: the exit code is the one the call gives. The
+ * declarations around it change nothing -- `main`'s own value is an ordinary function's value
+ * and gives no code (design principles 9.8).
+ */
+import process
+
+func main() => int sync {
+    println('before')
+    process::exit(7)
+}

@@ -186,11 +186,11 @@ timeout_ms = 6000
 
 [[tests]]
 name = "arm_write_prints_no_warning_text"
-desc = "A program whose only candidate warning is a direct write to a `var` in a branch arm prints no warning now: a write to a `var` is not an effect (design principles 3.1), and the branch hands the write on as its value (3.5; the rule), so `SemanticDiag::IgnoredSideEffect` is not printed for it. The empty stderr is the point -- the withdrawn rule must not come back -- and the program still prints 11 and exits 11, which is the arm's write reaching the print: the same case asserts both, so the zero is not the whole of it. The text form of a warning (`file:line:col: [Warn]: ... (name=..., code=...)`) is pinned by `feat/compile/diag_options: warn.shown`, and the JSON form by `warning_with_error_json`."
+desc = "A program whose only candidate warning is a direct write to a `var` in a branch arm prints no warning now: a write to a `var` is not an effect (design principles 3.1), and the branch hands the write on as its value (3.5; the rule), so `SemanticDiag::IgnoredSideEffect` is not printed for it. The empty stderr is the point -- the withdrawn rule must not come back -- and the program still prints 11, which is the arm's write reaching the print: the same case asserts both, so the zero is not the whole of it. The value `main` returns gives no exit code (design principles 9.8). The text form of a warning (`file:line:col: [Warn]: ... (name=..., code=...)`) is pinned by `feat/compile/diag_options: warn.shown`, and the JSON form by `warning_with_error_json`."
 kind = "behavior"
 case = "../../../cases/compile/diag_json/warnings_visible.cml"
 args = ["${case}"]
-expect_exit = 11
+expect_exit = 0
 verify_script = """
 assert(input.normalized.stdout === '11\n', 'stdout is the program output only: ' + JSON.stringify(input.normalized.stdout))
 assert(input.stderr === '', 'no warning is printed for a direct write to a var: ' + JSON.stringify(input.stderr))
@@ -204,7 +204,7 @@ desc = "The same program with `--diag-format json`: no diagnostics array is writ
 kind = "behavior"
 case = "../../../cases/compile/diag_json/warnings_visible.cml"
 args = ["--diag-format", "json", "${case}"]
-expect_exit = 11
+expect_exit = 0
 verify_script = """
 assert(input.normalized.stdout === '11\n', 'stdout is the program output only: ' + JSON.stringify(input.normalized.stdout))
 assert(input.stderr === '', 'no diagnostics array for a program with none: ' + JSON.stringify(input.stderr))

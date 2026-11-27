@@ -237,56 +237,56 @@ expect_output_contains = ["RuntimeDiag::DivisionByZero"]
 name = "shared.direct.11"
 case = "../../../cases/modules/selected_protection/shared.cml"
 args = ["${case}", "policy::direct", "order=true", "faults=true", "std::nvm"]
-expect_exit = 41
+expect_exit = 0
 expect_stdout_exact = "41\n41\n"
 
 [[tests]]
 name = "shared.direct.10"
 case = "../../../cases/modules/selected_protection/shared.cml"
 args = ["${case}", "policy::direct", "order=true", "faults=false", "std::nvm"]
-expect_exit = 41
+expect_exit = 0
 expect_stdout_exact = "41\n41\n"
 
 [[tests]]
 name = "shared.direct.01"
 case = "../../../cases/modules/selected_protection/shared.cml"
 args = ["${case}", "policy::direct", "order=false", "faults=true", "std::nvm"]
-expect_exit = 41
+expect_exit = 0
 expect_stdout_exact = "41\n41\n"
 
 [[tests]]
 name = "shared.direct.00"
 case = "../../../cases/modules/selected_protection/shared.cml"
 args = ["${case}", "policy::direct", "order=false", "faults=false", "std::nvm"]
-expect_exit = 41
+expect_exit = 0
 expect_stdout_exact = "41\n41\n"
 
 [[tests]]
 name = "shared.saturated.11"
 case = "../../../cases/modules/selected_protection/shared.cml"
 args = ["${case}", "policy::saturated", "order=true", "faults=true", "std::nvm"]
-expect_exit = 41
+expect_exit = 0
 expect_stdout_exact = "41\n41\n"
 
 [[tests]]
 name = "shared.saturated.10"
 case = "../../../cases/modules/selected_protection/shared.cml"
 args = ["${case}", "policy::saturated", "order=true", "faults=false", "std::nvm"]
-expect_exit = 41
+expect_exit = 0
 expect_stdout_exact = "41\n41\n"
 
 [[tests]]
 name = "shared.saturated.01"
 case = "../../../cases/modules/selected_protection/shared.cml"
 args = ["${case}", "policy::saturated", "order=false", "faults=true", "std::nvm"]
-expect_exit = 41
+expect_exit = 0
 expect_stdout_exact = "41\n41\n"
 
 [[tests]]
 name = "shared.saturated.00"
 case = "../../../cases/modules/selected_protection/shared.cml"
 args = ["${case}", "policy::saturated", "order=false", "faults=false", "std::nvm"]
-expect_exit = 41
+expect_exit = 0
 expect_stdout_exact = "41\n41\n"
 
 [[tests]]
