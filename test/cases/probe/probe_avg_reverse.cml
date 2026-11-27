@@ -1,6 +1,7 @@
-// `avg_pool2d` through the library's own `vjp`, measured apart from `max_pool2d`: its refuse is a
-// different one (`law-reads-a-value`, not a missing forward rule). The number is the library's
-// pullback against the engine's `grad` of the same loss.
+// `avg_pool2d` through the library's own `vjp`, measured apart from `max_pool2d`: its stop is the
+// same one (`law-reads-a-value` at `avg_pool2d_t`), reached through the `avg_pool2d` a forward law
+// writes in its linear half. As in `probe_max_reverse`, a fault on the way becomes an error value at
+// the `attempt` boundary, and the probe prints which of the two happened.
 
 import { grad } from autodiff
 import { avg_pool2d } from nn
@@ -12,21 +13,29 @@ func image() => f32[...] {
 }
 
 func avg_total(x: f32[1, 2, 4, 4]) => float {
-    return float(sum(tanh(avg_pool2d(x, 2))))
+    return float(sum(tanh(avg_pool2d<2, 2, 0>(x))))
 }
 
 with <x: f32[1, 2, 4, 4]>
 func avg_engine() => float {
-    return float(sum(tanh(avg_pool2d(x, 2))))
+    return float(sum(tanh(avg_pool2d<2, 2, 0>(x))))
 }
 
-func main() => int sync {
-    let x = image() as f32[1, 2, 4, 4]
+func measure(x: f32[1, 2, 4, 4]) => string! {
     let (_, pullback) = vjp(avg_total)(x)
     let library = pullback(1.0).0
     let engine = grad(avg_engine)<x>()
     let diff = float(sum(abs(library - engine)))
     let norm = float(sum(abs(library)))
-    `probe avg_reverse diff={} library_norm={}`->format<diff, norm>->println
+    return `probe avg_reverse diff={} library_norm={}`->format<diff, norm>
+}
+
+func main() => int sync {
+    let x = image() as f32[1, 2, 4, 4]
+    let line = match attempt(measure)(x) {
+        case error e => `probe avg_reverse wall kind={}`->format<e.kind>
+        case measured => measured
+    }
+    println(line)
     return 0
 }

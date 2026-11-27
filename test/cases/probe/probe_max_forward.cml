@@ -22,14 +22,14 @@ func direction() => f32[...] {
 }
 
 func max_total(x: f32[1, 2, 4, 4]) => float {
-    return float(sum(max_pool2d(x, 2)))
+    return float(sum(max_pool2d<2, 2, 0>(x)))
 }
 
 func main() => int sync {
     let x = image() as f32[1, 2, 4, 4]
     let dx = direction() as f32[1, 2, 4, 4]
     let (value, tangent) = jvp(max_total)(x, dx)
-    let mask = max_pool2d_grad(x, ones_like(max_pool2d(x, 2)), 2)
+    let mask = max_pool2d_grad<2, 2, 0>(x, ones_like(max_pool2d<2, 2, 0>(x)))
     let expected = float(sum(mask * dx))
     let diff = abs(tangent - expected)
     let ok = diff < 1e-6 && diff > -1e-6
