@@ -367,7 +367,7 @@ cmd_self_test() {
     POOL_DIR="$root/pool"
     # The test measures its own pool, so a cover it inherited does not apply to it (see the same line
     # in host-tokens.sh's self-test): inside a plan run every take would otherwise take nothing.
-    unset CAMEL_TOKENS_COVERED CAMEL_TOKENS_HELD
+    unset CAMEL_TOKENS_COVERED CAMEL_TOKENS_HELD CAMEL_TAKE_LABEL
     "$taker" show >/dev/null 2>&1
 
     # Wait until the pool shows PATTERN, at most about 30 s.
