@@ -3422,7 +3422,7 @@ fd769b1a2b6f9912 ok test/cases/modules/onnx/loop_collect/for_collect_static.cml
 de83b3de99a9fd4d ok test/cases/modules/onnx/refusals/as_constant_fails.cml
 17990328fb0cf2c6 ok test/cases/modules/onnx/refusals/as_unproven.cml
 02cc8236160fb56e ok test/cases/modules/onnx/refusals/bad_arity.cml
-f93351775d008cc2 ok test/cases/modules/onnx/refusals/bad_axis.cml
+2b1c27d5fa354ec0 ok test/cases/modules/onnx/refusals/bad_axis.cml
 d98318492f3c66fc ok test/cases/modules/onnx/refusals/bad_output.cml
 246351da207a3d34 ok test/cases/modules/onnx/refusals/bad_path.cml
 e55fa306a33611be ok test/cases/modules/onnx/refusals/bad_target.cml
