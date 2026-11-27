@@ -57,6 +57,71 @@ namespace camel::compile::gir {
 // is about a **call the program wrote** against the one `Builder::castNodeTo` writes itself: both
 // are the same operator, and the builder decides what the call means by comparing that identity.
 
+std::vector<camel::core::type::StaticArg> Builder::callStaticsFor(
+    const std::vector<Argument> &withInputs, const std::vector<Argument> &normInputs) const {
+    std::vector<camel::core::type::StaticArg> statics;
+    statics.reserve(normInputs.size() + withInputs.size());
+    for (const Argument &input : normInputs) {
+        statics.push_back(staticArgOf(input.node));
+    }
+    for (const Argument &input : withInputs) {
+        statics.push_back(staticArgOf(input.node));
+    }
+    return statics;
+}
+
+camel::core::type::type_vec_t Builder::takeExplicitTypesOf(node_handle_t target) {
+    camel::core::type::type_vec_t taken;
+    if (auto typed = explicitOperatorTypes_.find(target); typed != explicitOperatorTypes_.end()) {
+        taken = std::move(typed->second);
+        explicitOperatorTypes_.erase(typed);
+    }
+    return taken;
+}
+
+camel::core::type::type_vec_t Builder::explicitTypesOf(node_handle_t target) const {
+    if (auto typed = explicitOperatorTypes_.find(target); typed != explicitOperatorTypes_.end()) {
+        return typed->second;
+    }
+    return {};
+}
+
+Builder::CallResolutionInputs Builder::takeCallResolutionInputs(
+    node_handle_t target, const std::vector<Argument> &withInputs,
+    const std::vector<Argument> &normInputs) {
+    CallResolutionInputs inputs;
+    inputs.statics       = callStaticsFor(withInputs, normInputs);
+    inputs.explicitTypes = takeExplicitTypesOf(target);
+    return inputs;
+}
+
+FunctionType *Builder::selectOverloadFor(
+    node_handle_t target, const std::vector<Argument> &withInputs,
+    const std::vector<Argument> &normInputs, const type_vec_t &withInputTypes,
+    const type_vec_t &normInputTypes) {
+    const auto &selected = nodeGraphOf(target)->drefTarget(target);
+    if (!std::holds_alternative<oper_group_ptr_t>(selected)) {
+        return nullptr;
+    }
+    const oper_group_ptr_t &ops = std::get<oper_group_ptr_t>(selected);
+    std::vector<std::pair<std::string, std::string>> unmet;
+    std::vector<std::string> ambiguous;
+    auto chosen = resolveGroupedCall(
+        ops,
+        explicitTypesOf(target),
+        expectedValueType_,
+        withInputTypes,
+        normInputTypes,
+        callStaticsFor(withInputs, normInputs),
+        unmet,
+        &ambiguous,
+        &withInputs);
+    if (!chosen.has_value() || *chosen == nullptr) {
+        return nullptr;
+    }
+    return (*chosen)->funcType();
+}
+
 node_handle_t
 Builder::visitLinkNode(const GCT::node_ptr_t &gct, std::optional<GCT::AssignmentForm> store) {
     // A call. `store` says this call is the store a write makes: the two arguments are the cell
@@ -625,94 +690,31 @@ Builder::visitLinkNode(const GCT::node_ptr_t &gct, std::optional<GCT::Assignment
         // `with` parameter is this position's -- the same rule the array form follows (design
         // principles 5.9: a lambda takes the types it does not write from the function type of
         // the position it stands in).
+        // A callee that is a set of declarations hands its arguments one signature only when its
+        // entries agree (`signatureForArgumentContext`), and the entry a call reaches can be one
+        // whose `with` parameter is concrete while the signature the arguments were typed by is
+        // another entry's and names a type variable the ordinary arguments cannot bind. `foreach`
+        // over a `Range` is that case: the range entry declares `with <f: (item: int) => void>`,
+        // and the signature the arguments got is the array entry's `with <f: (item: T) => void>`,
+        // whose `T` a `Range` says nothing about, so the lambda's parameter had no type to take.
+        // The ordinary arguments are typed by now, so the entry they select is known: ask the
+        // resolution the call itself goes through for it (`selectOverloadFor`) and read that
+        // entry's `with` parameter at this position. A set the resolution cannot decide selects
+        // nothing, and nothing is what this position then gets (design principles 5.9).
         const auto withParameterOfSelectedEntry = [&](size_t index) -> Type * {
             if (!nodeIsKind(targetNode, runtime::GCNodeKind::Dref)) {
                 return nullptr;
             }
-            // The entries of the set this call is resolved against: the rules of the name's
-            // operator group and the functions the built-in layer declares under the same
-            // spelling, which `operatorOverloads_` keeps as one set for this name
-            // (`builtinLayerNamed`). `foreach` over a `Range` is the prelude's function beside the
-            // array's rule, and the group alone does not hold it.
-            std::vector<FunctionType *> entries;
-            const auto takeResolver = [&](const oper_group_ptr_t &group) {
-                if (group == nullptr) {
-                    return;
-                }
-                for (const auto &[uri, resolver] : group->resolvers()) {
-                    if (resolver == nullptr) {
-                        continue;
-                    }
-                    FunctionType *fixed = resolver->fixedSignature();
-                    if (fixed == nullptr) {
-                        fixed = resolver->declaredSignature();
-                    }
-                    if (fixed == nullptr) {
-                        fixed = resolver->graftedSignature();
-                    }
-                    if (fixed != nullptr) {
-                        entries.push_back(fixed);
-                    }
-                }
-            };
-            if (const auto set = operatorOverloads_.find(targetNode);
-                set != operatorOverloads_.end()) {
-                takeResolver(set->second.ops);
-                for (const auto &graph : set->second.graphs) {
-                    if (graph != nullptr && graph->funcType() != nullptr) {
-                        entries.push_back(graph->funcType());
-                    }
-                }
-                for (const auto &tmpl : set->second.templates) {
-                    if (tmpl != nullptr && tmpl->funcType != nullptr) {
-                        entries.push_back(tmpl->funcType);
-                    }
-                }
-            } else {
-                const auto &selected = nodeGraphOf(targetNode)->drefTarget(targetNode);
-                if (!std::holds_alternative<oper_group_ptr_t>(selected)) {
-                    return nullptr;
-                }
-                takeResolver(std::get<oper_group_ptr_t>(selected));
+            FunctionType *entry = selectOverloadFor(
+                targetNode,
+                withInputs,
+                normInputs,
+                withInputTypes,
+                normInputTypes);
+            if (entry == nullptr || entry->withTypesCount() <= index) {
+                return nullptr;
             }
-            Type *found = nullptr;
-            for (FunctionType *fixed : entries) {
-                if (fixed == nullptr || fixed->hasRest() || fixed->hasWithRest()) {
-                    continue;
-                }
-                if (fixed->normTypesCount() != normInputTypes.size() ||
-                    fixed->withTypesCount() <= index) {
-                    continue;
-                }
-                bool fits = true;
-                for (size_t at = 0; at < normInputTypes.size() && fits; ++at) {
-                    Type *parameter = fixed->normTypeAt(at);
-                    fits            = parameter != nullptr && normInputTypes[at] != nullptr &&
-                                      parameter->assignableFrom(normInputTypes[at]);
-                }
-                if (!fits) {
-                    continue;
-                }
-                Type *candidate = fixed->withTypeAt(index);
-                // The parameter is usable as a position when the types it is built from are known
-                // (`usableExpected`): a function type whose parameters are written and whose
-                // result is still a variable is one of those, because the lambda's body is what
-                // decides the result (`completeLambdaSignature`). `map::<U>(r: Range)` declares
-                // exactly that, `with <f: (item: int) => U>`; refusing it left the position open
-                // for a name whose own entry types the parameter.
-                if (candidate == nullptr ||
-                    !usableExpected(substituteTypeVars(candidate, bindings))) {
-                    // A parameter the entry still leaves open says nothing this position can be
-                    // built with; the signature's own reading is the one that stands.
-                    continue;
-                }
-                candidate = substituteTypeVars(candidate, bindings);
-                if (found != nullptr && !found->equals(candidate)) {
-                    return nullptr; // the entries the call fits disagree: nothing to give
-                }
-                found = candidate;
-            }
-            return found;
+            return entry->withTypeAt(index);
         };
         // A value that is not a function (the initial value of a reduction, a shape literal)
         // can be built before the function is: its own type binds the variables the signature
@@ -1722,23 +1724,9 @@ Builder::visitLinkNode(const GCT::node_ptr_t &gct, std::optional<GCT::Assignment
             if (withInputs.empty() && normInputs.size() == 2) {
                 adaptLiteralOperands(ops->name(), normInputs, normInputTypes, gct);
             }
-            // Constant arguments (shape literals, axes) let operators refine their result type.
-            std::vector<StaticArg> normStatics;
-            normStatics.reserve(normInputs.size());
-            for (const Argument &input : normInputs) {
-                normStatics.push_back(staticArgOf(input.node));
-            }
-            // The constants among the with-arguments follow them: an operator whose kernel takes
-            // its with-arguments after the ordinary ones reads one list (kernelArgumentsOf).
-            for (const Argument &input : withInputs) {
-                normStatics.push_back(staticArgOf(input.node));
-            }
-            type_vec_t explicitTypes;
-            if (auto typed = explicitOperatorTypes_.find(targetNode);
-                typed != explicitOperatorTypes_.end()) {
-                explicitTypes = std::move(typed->second);
-                explicitOperatorTypes_.erase(typed);
-            }
+            // The two lists the resolution reads besides the argument types. Taking the explicit
+            // type arguments consumes them, so this is asked here, where the call resolves.
+            auto resolutionInputs = takeCallResolutionInputs(targetNode, withInputs, normInputs);
             // Candidates that took the arguments but whose own `when` condition is false: if no
             // other candidate applies, the call is reported as one whose conditions are unmet
             // (design principles 4.4), not as an ordinary mismatch and never by writing order.
@@ -1782,11 +1770,11 @@ Builder::visitLinkNode(const GCT::node_ptr_t &gct, std::optional<GCT::Assignment
             }
             auto res = resolveGroupedCall(
                 ops,
-                explicitTypes,
+                resolutionInputs.explicitTypes,
                 expectedResult,
                 withInputTypes,
                 normInputTypes,
-                normStatics,
+                resolutionInputs.statics,
                 unmetConditions,
                 &ambiguousConditions,
                 &withInputs);
@@ -1845,7 +1833,7 @@ Builder::visitLinkNode(const GCT::node_ptr_t &gct, std::optional<GCT::Assignment
                     std::vector<std::pair<std::string, std::string>> retriedUnmet;
                     auto retried = resolveGroupedCall(
                         ops,
-                        explicitTypes,
+                        resolutionInputs.explicitTypes,
                         expectedResult,
                         withInputTypes,
                         retriedTypes,
@@ -1855,7 +1843,7 @@ Builder::visitLinkNode(const GCT::node_ptr_t &gct, std::optional<GCT::Assignment
                     if (retried.has_value()) {
                         normInputs     = std::move(retriedInputs);
                         normInputTypes = std::move(retriedTypes);
-                        normStatics    = std::move(retriedStatics);
+                        resolutionInputs.statics = std::move(retriedStatics);
                         res            = retried;
                     }
                 }
@@ -1875,10 +1863,10 @@ Builder::visitLinkNode(const GCT::node_ptr_t &gct, std::optional<GCT::Assignment
                     auto held      = normInputTypes;
                     normInputTypes = enteredTypes;
                     std::vector<std::pair<std::string, std::string>> enteredUnmet;
-                    std::vector<StaticArg> sameStatics = normStatics;
+                    std::vector<StaticArg> sameStatics = resolutionInputs.statics;
                     auto answered                      = resolveGroupedCall(
                         ops,
-                        explicitTypes,
+                        resolutionInputs.explicitTypes,
                         expectedResult,
                         withInputTypes,
                         normInputTypes,
@@ -1947,7 +1935,7 @@ Builder::visitLinkNode(const GCT::node_ptr_t &gct, std::optional<GCT::Assignment
                 // it cannot infer (design principles 5.1, 5.2). The candidate that would have
                 // taken the argument names the variable.
                 if (const std::string name =
-                        unstatedBindingForCall(ops, explicitTypes, normInputTypes);
+                        unstatedBindingForCall(ops, resolutionInputs.explicitTypes, normInputTypes);
                     !name.empty()) {
                     diags_->of(SemanticDiag::FunctionTypeArgumentNotInferred)
                         .atOrigin(gct->origin())
@@ -1992,11 +1980,11 @@ Builder::visitLinkNode(const GCT::node_ptr_t &gct, std::optional<GCT::Assignment
                 bool mixedDiagnostics = false;
                 for (const auto &[uri, resolver] : ops->resolvers()) {
                     if (auto reason = resolver->explainCallRejection(
-                            explicitTypes,
+                            resolutionInputs.explicitTypes,
                             expectedResult,
                             withInputTypes,
                             normInputTypes,
-                            normStatics)) {
+                            resolutionInputs.statics)) {
                         if (std::ranges::find(reasons, *reason) == reasons.end()) {
                             if (auto diag = resolver->rejectionDiag()) {
                                 if (dedicated.has_value() && *dedicated != *diag) {
@@ -2046,8 +2034,9 @@ Builder::visitLinkNode(const GCT::node_ptr_t &gct, std::optional<GCT::Assignment
                             normInputTypes.begin() + static_cast<std::ptrdiff_t>(normCount),
                             normInputTypes.end());
                         const std::vector<StaticArg> statics(
-                            normStatics.begin(),
-                            normStatics.begin() + static_cast<std::ptrdiff_t>(normCount));
+                            resolutionInputs.statics.begin(),
+                            resolutionInputs.statics.begin() +
+                                static_cast<std::ptrdiff_t>(normCount));
                         if (ops->resolve(asWith, asNorm, statics).has_value()) {
                             // A call of a function with an `#impl` kernel resolves in the
                             // kernel's group: the hint names the declaration, not the kernel.
@@ -2211,7 +2200,7 @@ Builder::visitLinkNode(const GCT::node_ptr_t &gct, std::optional<GCT::Assignment
             // argument, not the `void[]` it was built as): it takes the type of the parameter it
             // stands at, the way it takes the type of any other position it stands in (design
             // principles 3.8, 5.1). An argument already of the parameter's type is left as it is.
-            if (!explicitTypes.empty()) {
+            if (!resolutionInputs.explicitTypes.empty()) {
                 for (size_t i = 0; i < normInputs.size(); ++i) {
                     if (i >= targetOperator->funcType()->normTypesCount()) {
                         break;
@@ -2378,7 +2367,7 @@ Builder::visitLinkNode(const GCT::node_ptr_t &gct, std::optional<GCT::Assignment
                 LEAVE("LINK");
                 return transformed;
             }
-            if (!explicitTypes.empty()) {
+            if (!resolutionInputs.explicitTypes.empty()) {
                 // A call whose answer is a fact of the type arguments it names and which reads no
                 // operand (`extent_of::<float[2, 3]>()` is `[2, 3]`) is settled here: the rule is
                 // asked what it answers about those arguments (`settledAnswerOf`), and the graph
@@ -2395,7 +2384,7 @@ Builder::visitLinkNode(const GCT::node_ptr_t &gct, std::optional<GCT::Assignment
                 if (const auto settled = settledAnswerOf(
                         ops,
                         targetOperator->uri(),
-                        explicitTypes,
+                        resolutionInputs.explicitTypes,
                         targetOperator->funcType() != nullptr
                             ? targetOperator->funcType()->exitType()
                             : nullptr)) {
@@ -2461,7 +2450,10 @@ Builder::visitLinkNode(const GCT::node_ptr_t &gct, std::optional<GCT::Assignment
                 Type *resultType = targetFuncType->exitType();
                 std::optional<slot_t> value;
                 try {
-                    value = (*folder)(foldTypes, normStatics, camel::core::mm::autoSpace());
+                    value = (*folder)(
+                        foldTypes,
+                        resolutionInputs.statics,
+                        camel::core::mm::autoSpace());
                 } catch (const std::exception &) {
                     value = std::nullopt;
                 }
