@@ -173,8 +173,8 @@ slot_t __builtin__set_index_in_place__(ArgsView &with, ArgsView &norm, Context &
     return toSlot(copy);
 }
 
-const std::vector<oper_group_ptr_t> &getSetValueOperatorGroups() {
-    static const std::vector<oper_group_ptr_t> groups = {
+std::vector<oper_group_ptr_t> getSetValueOperatorGroups() {
+    const std::vector<oper_group_ptr_t> groups = {
         OperatorGroup::create(
             "__set_field__",
             {{":op/set_field", std::make_shared<SetFieldTypeResolver>()}}),
@@ -187,8 +187,7 @@ const std::vector<oper_group_ptr_t> &getSetValueOperatorGroups() {
               DynamicFuncTypeResolver::create(
                   {{0, {}}, {3, {false, false, false}}},
                   "(array: T[], index: int, value: T) => T[]",
-                  [](const type_vec_t &, const type_vec_t &norm)
-                      -> std::optional<Type *> {
+                  [](const type_vec_t &, const type_vec_t &norm) -> std::optional<Type *> {
                       if (norm.size() != 3 || norm[0] == nullptr ||
                           norm[0]->code() != TypeCode::Array || norm[1] == nullptr ||
                           norm[1]->code() != TypeCode::Int64) {

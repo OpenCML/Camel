@@ -25,4 +25,4 @@ slot_t __builtin__set_index_in_place__(
     ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);
 
 /// The operator group of the three operators, exported by the core module (globals.cpp).
-const std::vector<oper_group_ptr_t> &getSetValueOperatorGroups();
+std::vector<oper_group_ptr_t> getSetValueOperatorGroups();

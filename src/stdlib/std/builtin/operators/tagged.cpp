@@ -142,7 +142,7 @@ slot_t __parse_float__(ArgsView &with, ArgsView &norm, Context &ctx) {
     return parseNumber<Float64>(norm, resultType, "a number", "<parse_float>");
 }
 
-const std::vector<oper_group_ptr_t> &getTaggedOperatorGroups() {
+std::vector<oper_group_ptr_t> getTaggedOperatorGroups() {
     using std::nullopt;
     using std::optional;
     // One argument of a tagged form; `result` gives the type taken out of it.
@@ -159,47 +159,53 @@ const std::vector<oper_group_ptr_t> &getTaggedOperatorGroups() {
                 return result(tagged);
             });
     };
-    static const std::vector<oper_group_ptr_t> groups = {
-// ======= Lowering targets of ??, !!, -> and the match patterns =======
+    const std::vector<oper_group_ptr_t> groups = {
+        // ======= Lowering targets of ??, !!, -> and the match patterns =======
         OperatorGroup::create(
             "__is_null__",
             {{":op/tag_is_null",
-              opening("(value: T?) => bool", TupleType::Tag::Nullable, [](TupleType *) {
-                  return Type::Bool();
-              })}}),
+              opening(
+                  "(value: T?) => bool",
+                  TupleType::Tag::Nullable,
+                  [](TupleType *) { return Type::Bool(); })}}),
         OperatorGroup::create(
             "__null_value__",
             {{":op/tag_null_value",
-              opening("(value: T?) => T", TupleType::Tag::Nullable, [](TupleType *type) {
-                  return type->payloadType();
-              })}}),
+              opening(
+                  "(value: T?) => T",
+                  TupleType::Tag::Nullable,
+                  [](TupleType *type) { return type->payloadType(); })}}),
         // The same type rule as `__null_value__`, and the one of the two that reads the tag itself:
         // a null is the compiler's defect, reported as one (see __unwrap__ above). A program cannot
         // declare this name; the machine the compiler builds writes the call.
         OperatorGroup::create(
             "__unwrap__",
             {{":op/tag_unwrap",
-              opening("(value: T?) => T", TupleType::Tag::Nullable, [](TupleType *type) {
-                  return type->payloadType();
-              })}}),
+              opening(
+                  "(value: T?) => T",
+                  TupleType::Tag::Nullable,
+                  [](TupleType *type) { return type->payloadType(); })}}),
         OperatorGroup::create(
             "__is_error__",
             {{":op/tag_is_error",
-              opening("(value: T!) => bool", TupleType::Tag::Fallible, [](TupleType *) {
-                  return Type::Bool();
-              })}}),
+              opening(
+                  "(value: T!) => bool",
+                  TupleType::Tag::Fallible,
+                  [](TupleType *) { return Type::Bool(); })}}),
         OperatorGroup::create(
             "__error_value__",
             {{":op/tag_error_value",
-              opening("(value: T!) => T", TupleType::Tag::Fallible, [](TupleType *type) {
-                  return type->payloadType();
-              })}}),
+              opening(
+                  "(value: T!) => T",
+                  TupleType::Tag::Fallible,
+                  [](TupleType *type) { return type->payloadType(); })}}),
         OperatorGroup::create(
             "__error_info__",
             {{":op/tag_error_info",
-              opening("(value: T!) => Error", TupleType::Tag::Fallible, [](TupleType *) -> Type * {
-                  return errorType();
-              })}}),
+              opening(
+                  "(value: T!) => Error",
+                  TupleType::Tag::Fallible,
+                  [](TupleType *) -> Type * { return errorType(); })}}),
         OperatorGroup::create(
             "__throw__",
             {{":op/tag_throw",
@@ -216,8 +222,7 @@ const std::vector<oper_group_ptr_t> &getTaggedOperatorGroups() {
               DynamicFuncTypeResolver::create(
                   {{0, {}}, {-1, {}}},
                   "(kind: string, message: string) => Error",
-                  [](const type_vec_t &, const type_vec_t &norm)
-                      -> optional<Type *> {
+                  [](const type_vec_t &, const type_vec_t &norm) -> optional<Type *> {
                       if (norm.size() != 2 && norm.size() != 3) {
                           return nullopt;
                       }
@@ -228,7 +233,7 @@ const std::vector<oper_group_ptr_t> &getTaggedOperatorGroups() {
                       }
                       return errorType();
                   })}}),
-// fail<'Kind'>(message): the program's own premise check (design principles 3.9). The
+        // fail<'Kind'>(message): the program's own premise check (design principles 3.9). The
         // kind is the with-argument it writes, the message its argument, and the result is the
         // bottom type `never`: the call gives no value, so it may stand where any type is
         // expected and a branch arm that raises the fault leaves the branch's type to the other
@@ -247,8 +252,7 @@ const std::vector<oper_group_ptr_t> &getTaggedOperatorGroups() {
               DynamicFuncTypeResolver::create(
                   {{0, {}}, {1, {false}}},
                   "(f: (...args: A) => T) => ((...args: A) => T!)",
-                  [](const type_vec_t &with, const type_vec_t &norm)
-                      -> optional<Type *> {
+                  [](const type_vec_t &with, const type_vec_t &norm) -> optional<Type *> {
                       return camel::execute::resolveAttemptTransformType(with, norm);
                   })}}),
         // The marked call itself, the body of the value `attempt(f)` gives. No program writes
@@ -260,8 +264,7 @@ const std::vector<oper_group_ptr_t> &getTaggedOperatorGroups() {
               DynamicFuncTypeResolver::create(
                   {{0, {}}, {-1, {}}},
                   "(f: (...args: A) => T, ...args: A) => T!",
-                  [](const type_vec_t &with, const type_vec_t &norm)
-                      -> optional<Type *> {
+                  [](const type_vec_t &with, const type_vec_t &norm) -> optional<Type *> {
                       return camel::execute::resolveFaultIsolationType(with, norm);
                   })}}),
         // The rule of `parse_int` is the declaration of stdlib/prelude.cml.

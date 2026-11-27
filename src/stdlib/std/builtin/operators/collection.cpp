@@ -143,7 +143,7 @@ slot_t __coll_eq__(ArgsView &with, ArgsView &norm, Context &ctx) {
     return toSlot<Bool>(norm.get<Table *>(0)->equals(norm.get<Table *>(1), norm.type(0), true));
 }
 
-const std::vector<oper_group_ptr_t> &getCollectionOperatorGroups() {
+std::vector<oper_group_ptr_t> getCollectionOperatorGroups() {
     using std::nullopt;
     using std::optional;
     using resolver_fn =
@@ -183,7 +183,7 @@ const std::vector<oper_group_ptr_t> &getCollectionOperatorGroups() {
             return map ? optional<Type *>(map->sourceArrayType()) : nullopt;
         });
 
-    static const std::vector<oper_group_ptr_t> groups = {
+    const std::vector<oper_group_ptr_t> groups = {
         // ======= Lookup =======
         // `m[k]`: the subscript of a map. It has type `V?` and never faults, where the
         // subscript of an array has type `T` and faults out of range; the overload is chosen

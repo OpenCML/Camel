@@ -26,4 +26,4 @@ slot_t __enum_tag__(ArgsView &with, ArgsView &norm, camel::core::context::Contex
 slot_t __enum_field__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);
 
 /// The operator groups of this file, exported by the globals module beside its own.
-const std::vector<oper_group_ptr_t> &getEnumOperatorGroups();
+std::vector<oper_group_ptr_t> getEnumOperatorGroups();
