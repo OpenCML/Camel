@@ -305,7 +305,9 @@ export func operator []::<T>(xs: T[], i: int) => T panic
 /// (`float[2, 2]`) is not a value of `float[]` (`Type::assignableFrom` compares the element types:
 /// `float` against `float[2]`). The open rank takes every rank and is taken by every rank, and the
 /// rank-zero answer of a one-dimension read is the element itself (design principles 5.4).
+/// @pure
 /// @example [[1.0, 2.0], [3.0, 4.0]][.., 0]    // [1.0, 3.0]
+#op(':struct/index_into_axis')
 export func index_into_axis::<T>(xs: T[...], i: int, at: int) => T[...]
 
 /// The character at position i of a string.
