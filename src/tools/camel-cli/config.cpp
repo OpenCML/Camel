@@ -653,6 +653,36 @@ bool rejectRetiredOptions(int argc, char *argv[]) {
 /// kind=generational,nursery_mb=4,...` and `--spaces block_mb=2048,segment_kb=...`. Each word is
 /// one setting, named as the table lists it; a key neither knows is refused here rather than
 /// silently ignored.
+/// One sentence for every option that reads key=value words: a space around a word is a typo, not
+/// a name, so it is said so and the word is printed as it is written (`--gc a=1,b=2`, without the
+/// space the writer put after a comma). The word is still refused -- what changes is only what the
+/// run says about it. Returns false, so a caller can `return` it.
+bool explainCommaSpace(
+    const char *option, const std::string &raw, const std::string &value,
+    const std::vector<std::string> &names) {
+    std::string trimmed = raw;
+    while (!trimmed.empty() && std::isspace(static_cast<unsigned char>(trimmed.front()))) {
+        trimmed.erase(trimmed.begin());
+    }
+    while (!trimmed.empty() && std::isspace(static_cast<unsigned char>(trimmed.back()))) {
+        trimmed.pop_back();
+    }
+    for (const auto &name : names) {
+        if (trimmed == name) {
+            std::cerr << "Invalid " << option << " key: '" << raw
+                      << "'. A comma separates the words and no space follows it: write '" << option
+                      << " " << trimmed << "=" << (value.empty() ? "..." : value) << "'"
+                      << std::endl;
+            return false;
+        }
+    }
+    std::cerr << "Invalid " << option << " key: '" << raw << "'. Expected " << names.front();
+    for (size_t i = 1; i < names.size(); ++i) {
+        std::cerr << ", " << names[i];
+    }
+    std::cerr << "." << std::endl;
+    return false;
+}
 bool applyMachineSpecs() {
     struct Key {
         const char *name;
@@ -686,13 +716,12 @@ bool applyMachineSpecs() {
                     }
                 }
                 if (found == nullptr) {
-                    std::cerr << "Invalid " << option << " key: '" << word.key << "'. Expected "
-                              << keys[0].name;
-                    for (size_t i = 1; i < count; ++i) {
-                        std::cerr << ", " << keys[i].name;
+                    std::vector<std::string> names;
+                    names.reserve(count);
+                    for (size_t i = 0; i < count; ++i) {
+                        names.emplace_back(keys[i].name);
                     }
-                    std::cerr << "." << std::endl;
-                    return false;
+                    return explainCommaSpace(option, word.key, word.value, names);
                 }
                 if (word.value.empty()) {
                     std::cerr << "Invalid " << option << " word: '" << word.key
@@ -1349,8 +1378,11 @@ bool parseArgs(int argc, char *argv[]) {
                         std::exit(1);
                     }
                 } else {
-                    std::cerr << "Invalid --gc-stress key: '" << word.key
-                              << "'. Expected kind, alloc or safepoint." << std::endl;
+                    explainCommaSpace(
+                        "--gc-stress",
+                        word.key,
+                        word.value,
+                        {"kind", "alloc", "safepoint"});
                     std::exit(1);
                 }
             }
@@ -1380,9 +1412,11 @@ bool parseArgs(int argc, char *argv[]) {
                         std::exit(1);
                     }
                 } else {
-                    std::cerr << "Invalid --gc-check word: '" << word.key
-                              << "'. Expected moves, poison, foreign, config or verify=...."
-                              << std::endl;
+                    explainCommaSpace(
+                        "--gc-check",
+                        word.key,
+                        word.value,
+                        {"moves", "poison", "foreign", "config", "verify"});
                     std::exit(1);
                 }
             }
