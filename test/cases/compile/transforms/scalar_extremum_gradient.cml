@@ -1,0 +1,64 @@
+/**
+ * The gradient of a scalar maximum, minimum, `abs` and `relu` through `with_grad`, and the tie it
+ * takes at the point where the two operands meet, beside what the array width answers for the same
+ * numbers.
+ *
+ * `abs` on a float is `max(x, -x)` and a `relu` is `max(x, 0.0)`, so both reach the same rule; the
+ * gradient of a maximum is the cotangent of the operand that won, which is 1 where the input is the
+ * winner and 0 where it lost. The tie takes the left operand, the choice the array width's
+ * `extremumVjp` makes, and the last lines print both widths on the same numbers so that the two
+ * answers can be read off as text: a scalar 1.0 beside an array [1.0, 1.0].
+ */
+import rulesets.jvp
+import { with_grad } from autodiff
+import { grad } from autodiff
+import { max, min, abs } from math
+import { maximum, minimum, sum } from tensor
+
+with <w: float>
+func habs() => float { return abs(w) }
+
+with <w: float>
+func relu() => float { return max(w, 0.0) }
+
+with <w: float>
+func fmax(y: float) => float { return max(w, y) }
+
+with <w: float>
+func fmin(y: float) => float { return min(w, y) }
+
+with <x: f64[...]>
+func tensorMax() => float { return float(sum(maximum(x, [2.0, 2.0] as f64[]))) }
+
+with <x: f64[...]>
+func tensorMin() => float { return float(sum(minimum(x, [2.0, 2.0] as f64[]))) }
+
+func main() => int sync {
+    let (v1, g1) = with_grad(habs)<2.0>()
+    println(`abs forward={} grad={}`->format<v1, g1>)
+    let (v2, g2) = with_grad(habs)<-3.0>()
+    println(`abs negative forward={} grad={}`->format<v2, g2>)
+    let (v3, g3) = with_grad(relu)<2.0>()
+    println(`relu forward={} grad={}`->format<v3, g3>)
+    let (v4, g4) = with_grad(relu)<-3.0>()
+    println(`relu negative forward={} grad={}`->format<v4, g4>)
+    let (v5, g5) = with_grad(fmax)<2.0>(1.0)
+    println(`max win forward={} grad={}`->format<v5, g5>)
+    let (v6, g6) = with_grad(fmax)<1.0>(2.0)
+    println(`max lose forward={} grad={}`->format<v6, g6>)
+    let (v7, g7) = with_grad(fmax)<2.0>(2.0)
+    println(`max tie forward={} grad={}`->format<v7, g7>)
+    let (v8, g8) = with_grad(fmin)<2.0>(2.0)
+    println(`min tie forward={} grad={}`->format<v8, g8>)
+    let tie = [2.0, 2.0] as f64[]
+    println(`tensor max tie grad={}`->format<grad(tensorMax)<tie>()>)
+    println(`tensor min tie grad={}`->format<grad(tensorMin)<tie>()>)
+    // The same points by central difference of the forward at h = 1e-3, so the gradient above can be
+    // read against a number that does not come from the rule being checked.
+    let (up1, _) = with_grad(habs)<2.001>()
+    let (dn1, _) = with_grad(habs)<1.999>()
+    println(`abs difference h=1e-3 forward +` + `={} -={}`->format<up1, dn1>)
+    let (up2, _) = with_grad(relu)<2.001>()
+    let (dn2, _) = with_grad(relu)<1.999>()
+    println(`relu difference h=1e-3 forward +` + `={} -={}`->format<up2, dn2>)    return 0
+}

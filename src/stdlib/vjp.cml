@@ -233,7 +233,7 @@ export func grad::<F>(f: F) => Gradient<F> when is_function::<F>() {
 /// what the generic form is written with when the library takes it, and this name keeps answering
 /// that shape until then.
 /// @example-fragment `loss` must be a function of one parameter whose result is a pair, and that takes a declaration, so the example is a fragment of a program that declares it
-/// @example let step = has_aux(loss)
+/// @example let step = has_aux(func (w: float) { (w * 2.0, w) })
 export func has_aux(
     f: (w: float) => (float, float)
 ) => (w: float) => ((float, float), float) {

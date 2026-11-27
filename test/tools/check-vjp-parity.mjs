@@ -163,11 +163,19 @@ buildCopy()
 
 const unlisted = runGate(['--root', scratch, '--exempt', EXEMPTIONS])
 report(
-    'a law with no engine rule is reported',
-    unlisted.code === 1 && unlisted.output.includes(FAKE),
-    unlisted.code === 1
-        ? `exit 1 and the report names '${FAKE}'`
-        : `exit ${unlisted.code} and the report ${unlisted.output.includes(FAKE) ? 'names' : 'does not name'} '${FAKE}'`
+    'a law with no engine rule is listed as a capability and fails nothing',
+    unlisted.code === 0 && unlisted.output.includes('0 new'),
+    unlisted.code === 0
+        ? 'exit 0: the engine is the frozen reference, so a law it does not answer is a capability'
+        : `exit ${unlisted.code}: ${unlisted.output.trim().split('\n').slice(-2).join(' | ')}`
+)
+const unlistedTables = runGate(['--root', scratch, '--exempt', EXEMPTIONS, '--tables'])
+report(
+    'and the listing still names it',
+    unlistedTables.output.includes(FAKE),
+    unlistedTables.output.includes(FAKE)
+        ? `the tables name '${FAKE}'`
+        : `the tables do not name '${FAKE}'`
 )
 
 // ---- the same law, written down -----------------------------------------------------------------
@@ -183,13 +191,42 @@ fs.writeFileSync(
         `${FAKE}\tcheck-vjp-parity\ta law this checker wrote, to be caught by the run above\n`
 )
 
-const listed = runGate(['--root', scratch, '--exempt', exemptionCopy])
+// ---- the other direction: a registration nothing files ---------------------------------------
+//
+// The engine's table is the frozen reference; a registration the library does not file is the debt
+// this check exists to catch. A line added to a copy of the engine's own module source stands for
+// one, and the two readings below are the pair the law above no longer is.
+const ENGINE_FAKE = 'fake_parity_eng'
+const engineCopy = path.join(scratch, 'src', 'stdlib', 'math', 'module.cpp')
+fs.appendFileSync(
+    engineCopy,
+    `\n// written by test/tools/check-vjp-parity.mjs: a registration nothing files.\n` +
+        `void checkVjpParityFakeRegistration() {\n` +
+        `    camel::core::DerivativeRegistry::instance().setRule(\"math:${ENGINE_FAKE}_d\", nullptr);\n` +
+        `}\n`
+)
+const engineUnlisted = runGate(['--root', scratch, '--exempt', EXEMPTIONS])
 report(
-    'the same law is not reported once the list holds it',
-    listed.code === 0 && !listed.output.includes(FAKE),
-    listed.code === 0
+    'an engine registration with no law is reported and fails',
+    engineUnlisted.code === 1 && engineUnlisted.output.includes(ENGINE_FAKE),
+    engineUnlisted.code === 1
+        ? `exit 1 and the report names '${ENGINE_FAKE}'`
+        : `exit ${engineUnlisted.code} and the report ${engineUnlisted.output.includes(ENGINE_FAKE) ? 'names' : 'does not name'} '${ENGINE_FAKE}'`
+)
+const engineExemptionCopy = path.join(scratch, 'exemptions-engine.tsv')
+fs.writeFileSync(
+    engineExemptionCopy,
+    `${fs.readFileSync(EXEMPTIONS, 'utf8')}\n` +
+        `${ENGINE_FAKE}	check-vjp-parity	a registration this checker wrote, to be caught by the reading above\n` +
+        `${ENGINE_FAKE}_d	check-vjp-parity	the same key, spelled the way the registration reduces\n`
+)
+const engineListed = runGate(['--root', scratch, '--exempt', engineExemptionCopy])
+report(
+    'the same registration is not reported once the list holds it',
+    engineListed.code === 0 && !engineListed.output.includes(`engine-only ${ENGINE_FAKE}`),
+    engineListed.code === 0
         ? 'exit 0 and the report does not name it'
-        : `exit ${listed.code}: ${listed.output.trim().split('\n').slice(-3).join(' | ')}`
+        : `exit ${engineListed.code}: ${engineListed.output.trim().split('\n').slice(-3).join(' | ')}`
 )
 
 if (!KEEP) {
@@ -199,8 +236,8 @@ if (!KEEP) {
 }
 
 if (failures.length > 0) {
-    console.log(`\nFAIL ${failures.length} of 3 reading(s) of the parity gate`)
+    console.log(`\nFAIL ${failures.length} reading(s) of the parity gate`)
     process.exit(1)
 }
-console.log('\nPASS the parity gate answers the three readings it exists for')
+console.log('\nPASS the parity gate answers the readings it exists for')
 process.exit(0)
