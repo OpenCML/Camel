@@ -947,10 +947,12 @@ void_ptr_t Builder::visitDeclNode(const GCT::node_ptr_t &gct) {
             // declaration is the pipeline's (design principles 9.3); this records the name so
             // the export list does not look for an entity that will not exist.
             unit_->passDeclarations.insert(gct->name());
-            // A pass is told by its type alone, whatever implements it: a module that also
-            // implements the operator (an engine of `rewrite`, called as `f->rewrite<rules>`)
-            // declares that operator as well.
-            if (!declarationHasOperator(gct)) {
+            // A pass of a module written in C++ is registered as a pass of that module, not as an
+            // operator: its declaration names no operator, so nothing here looks for one. A
+            // declaration that does name the operator it stands for (`#op`) is a declaration like
+            // any other, and an operator nothing implements is refused below, where it is written --
+            // that the name may also be used as a pass does not decide whether it is checked.
+            if (!declarationHasOperator(gct) && !nativeOperatorUri(gct).has_value()) {
                 LEAVE("DECL");
                 return nullptr;
             }

@@ -1,0 +1,17 @@
+/**
+ * A body-less declaration shaped like a pass, written under another spelling (`#op`), naming an
+ * operator no loaded module implements.
+ *
+ * The shape is the pipeline's -- one ordinary parameter, the same type failable as the result, and
+ * `when is_function::<F>()` -- so the name may be used as a pass. That is not what a declaration is
+ * checked for: it is still a declaration of an operator, and an operator nothing answers is
+ * refused where it is written, by the same rule as any other body-less declaration, rather than
+ * taken for the pipeline's own because it can also be named as a pass.
+ */
+
+#op('nowhere:reshape')
+export func reshape::<F>(f: F) => F! when is_function::<F>()
+
+func main() => int {
+    return 0
+}
