@@ -65,9 +65,38 @@ if (into.length !== 1 || into[0].transfers !== 1) {
     throw new Error(`the host-to-device call does not transfer once: ${JSON.stringify(main.calls)}`)
 }
 
+// The document the pass wrote, not everything from its first brace on: `std::jgir` prints the dump
+// and the program itself runs on the same stream after it, so the tail holds `main`'s own answer
+// (`36.0` twice here) and a `JSON.parse` of the whole tail fails on it. Braces are counted outside
+// string literals, so a `}` inside a label does not close the document early; what follows the
+// closing brace -- the program's output -- is left where it is.
+function girDocument(text) {
+    const opening = /^\{/m.exec(text)
+    if (opening === null) throw new Error(`no GIR document in the output: ${text.slice(0, 400)}`)
+    let depth = 0
+    let quoted = false
+    let escaped = false
+    for (let i = opening.index; i < text.length; i += 1) {
+        const ch = text[i]
+        if (quoted) {
+            if (escaped) escaped = false
+            else if (ch === '\\') escaped = true
+            else if (ch === '"') quoted = false
+        } else if (ch === '"') {
+            quoted = true
+        } else if (ch === '{') {
+            depth += 1
+        } else if (ch === '}') {
+            depth -= 1
+            if (depth === 0) return text.slice(opening.index, i + 1)
+        }
+    }
+    throw new Error(`the GIR document at ${opening.index} does not close: ${text.slice(opening.index, opening.index + 400)}`)
+}
+
 // What today's outline does with that conclusion: the callee's entry still carries a transfer of
 // its own, because each outlined region moves its inputs instead of following the argument's block.
-const document = JSON.parse(lines.slice(lines.findIndex((line) => line.startsWith('{'))).join('\n'))
+const document = JSON.parse(girDocument(stdout))
 const graphs = Object.fromEntries(document.graphs.map((graph) => [graph.name, graph]))
 const labels = graphs.twice.nodes.map((node) => node.label)
 if (labels.filter((label) => label === 'tiles:run_preferred_resident').length !== 1) {
