@@ -1116,6 +1116,30 @@ NodeResources resourcesOf(const Program &program, const GCGraph &graph, gc_node_
     return resolver.node(graph, node);
 }
 
+namespace {
+/// The graph a view belongs to. One lookup at the boundary, not a table kept past the call: the
+/// view is the graph's own face, so the program holds both and only the pairing is needed here.
+const GCGraph *graphOfView(const Program &program, const camel::graph::GraphView &view) {
+    for (GCGraph *graph : program.graphs()) {
+        if (graph != nullptr && &graph->view() == &view) {
+            return graph;
+        }
+    }
+    return nullptr;
+}
+} // namespace
+
+GraphFootprint footprintOf(const Program &program, const camel::graph::GraphView &view) {
+    const GCGraph *graph = graphOfView(program, view);
+    // A view the program does not hold is a reader's mistake, not a graph with no footprint: an
+    // empty answer would be read as a fact about the program's content.
+    GUARD(graph != nullptr, "a footprint was asked of a view the program does not hold.");
+    if (graph == nullptr) {
+        return {};
+    }
+    return footprintOf(program, graph);
+}
+
 GraphFootprint footprintOf(const Program &program, const GCGraph *graph) {
     FootprintWalk walk(program, core::OperatorTable::instance().declarationEpoch());
     return walk.run(graph);
