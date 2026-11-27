@@ -631,10 +631,11 @@ replace: <pattern: string, new: string> (text: string) => string
 split: <pattern: string> (text: string) => string[]
 ```
 
-**`para`** — import { ... } from para — 2 name(s)
+**`para`** — import { ... } from para — 3 name(s)
 
 ```text
 unordered_foreach: <f: (item: T) => void> (xs: T[]) => void
+unordered_foreach: <f: (item: int) => void> (r: Range) => void
 unordered_reduce: <f: (acc: T, item: T) => T, initial: T> (xs: T[]) => T
 ```
 
