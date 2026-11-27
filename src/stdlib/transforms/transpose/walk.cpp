@@ -2827,28 +2827,47 @@ bool buildTransposeMember(
                 // carries a `float[]` state pulls back an array, and a port typed `float` would
                 // hand that array to a number -- the same read that took the process down when two
                 // elements of one array were summed (design principles 9.9).
+                // The place a state that carries no cotangent has in the component list.
+                constexpr size_t kNoComponent = static_cast<size_t>(-1);
                 std::vector<gc_node_ref_t> ctPorts;
                 std::vector<Type *> stateCotangentTypes;
+                // Which state a carried component is, and in what order the components stand: a
+                // state with no cotangent space (the lowered iterator `int..`, the done flag
+                // `bool`) takes no place in the reverse loop, exactly as `jvp` leaves it unpaired
+                // (`jvp.cpp`, "a state with no tangent space is carried by the loop the way it
+                // always was"). The place a state keeps is the one in this list.
+                std::vector<size_t> carriedStates;
+                std::vector<size_t> stateComponent(stateCount, kNoComponent);
                 stateCotangentTypes.reserve(stateCount);
+                carriedStates.reserve(stateCount);
                 for (size_t i = 0; i < stateCount; ++i) {
                     const size_t portIndex = 1 + i;
-                    // The state's cotangent space, read from the state's own port. A state port
-                    // this loop does not have is a count that disagrees with the region's ports --
-                    // the walk's own defect, not the program's -- so it refuses rather than typing
-                    // the port `float`.
-                    Type *const type = portIndex < regionPorts.size()
-                                           ? cotangentTypeOf(regionPorts[portIndex])
-                                           : nullptr;
-                    if (type == nullptr) {
+                    // A state port this loop does not have is a count that disagrees with the
+                    // region's ports -- the walk's own defect, not the program's -- so it refuses
+                    // rather than reading a space off nothing.
+                    if (portIndex >= regionPorts.size()) {
                         os << "TRANSPOSE function=" << function->name() << " node=" << ref
-                           << " state=" << i << " no-cotangent-space\n";
+                           << " state=" << i << " no-state-port\n";
                         refuse(TransposeRefusalCause::State);
                         return false;
                     }
+                    // The state's cotangent space, read from the state's own port. A state whose
+                    // type has none -- the loop's machine slots, which no rule can differentiate --
+                    // is carried by the loop unchanged and asks nothing back: it is not a refusal,
+                    // because the forward law already treats it that way and the round it belongs
+                    // to is still a round the reverse pass walks.
+                    Type *const type = cotangentTypeOf(regionPorts[portIndex]);
+                    if (type == nullptr) {
+                        stateCotangentTypes.push_back(nullptr);
+                        continue;
+                    }
+                    stateComponent[i] = carriedStates.size();
+                    carriedStates.push_back(i);
                     stateCotangentTypes.push_back(type);
                     ctPorts.push_back(draft.addPortNode(type, draft.allocateRuntimeSlot(type)));
                     newPorts.push_back(ctPorts.back());
                 }
+                const size_t carriedCount = carriedStates.size();
                 draft.setRegionPorts(newRegion, std::span<const gc_node_ref_t>(newPorts));
                 escapes.clear();
                 allowEscapes = true;
@@ -2857,7 +2876,7 @@ bool buildTransposeMember(
                 // the state is, which is why the components are read out here rather than the
                 // tuple node being walked as one value.
                 std::vector<ArmSeed> seeds;
-                if (stateCount == 1) {
+                if (stateCount == 1 && carriedCount == 1) {
                     // The round answers one value, and for an array state that value is a FILL of
                     // its members -- `[x[1], x[0] + x[1] * k]` is a FILL of two numbers, which is
                     // also what the lifted body answers, element by element. Its cotangent is the
@@ -2913,16 +2932,24 @@ bool buildTransposeMember(
                         results.assign(with.begin(), with.end());
                     }
                     for (size_t i = 0; i < stateCount; ++i) {
+                        // A state carried by the loop unchanged has no cotangent to seed: the
+                        // round that value belongs to delivers nothing to it, and the reverse
+                        // loop does not carry it (see the port loop above).
+                        if (stateComponent[i] == kNoComponent) {
+                            continue;
+                        }
                         seeds.push_back(
                             ArmSeed{
                                 i < results.size() ? results[i] : rt::kInvalidNodeRef,
-                                ctPorts[i]});
+                                ctPorts[stateComponent[i]]});
                     }
                 }
                 std::vector<gc_node_ref_t> statePorts(regionPorts.begin() + 1, regionPorts.end());
                 const std::vector<gc_node_ref_t> back = runSeeded(bodyRegionOld, seeds, statePorts);
                 const gc_node_ref_t bodyCotangent =
-                    back.empty() ? rt::kInvalidNodeRef : back.front();
+                    carriedStates.empty() || carriedStates.front() >= back.size()
+                        ? rt::kInvalidNodeRef
+                        : back[carriedStates.front()];
                 allowEscapes = false;
                 // The escapes in target order: the accumulators, the components and the reading all
                 // follow the graph rather than the map's iteration order.
@@ -3020,6 +3047,11 @@ bool buildTransposeMember(
                 std::vector<gc_node_ref_t> regionParts;
                 std::vector<Type *> componentTypes;
                 for (size_t i = 0; i < stateCount; ++i) {
+                    // A state the loop carries unchanged contributes no component: nothing was
+                    // asked back for it, so there is no place for an answer.
+                    if (stateComponent[i] == kNoComponent) {
+                        continue;
+                    }
                     // A state no rule reached pulls nothing back: the zero of the state's own space
                     // says so, rather than a hole in the tuple -- `0.0` for a number, an array of
                     // zeros for an array.
@@ -3091,6 +3123,11 @@ bool buildTransposeMember(
                 // one state that is the whole cotangent of the loop's value; with several it is the
                 // slot of the tuple that the component reads filled in.
                 for (size_t i = 0; i < stateCount; ++i) {
+                    // A state carried by the loop unchanged asks nothing back, so the reverse loop
+                    // has no component for it and takes no seed.
+                    if (stateComponent[i] == kNoComponent) {
+                        continue;
+                    }
                     if (stateCount == 1) {
                         loopNorm.push_back(ctLoop);
                         continue;
@@ -3122,7 +3159,7 @@ bool buildTransposeMember(
                     // is a component of the loop's value like any other, so its zero is the zero of
                     // that component's own cotangent space (`componentTypes`, which the answer's
                     // components were typed from).
-                    const size_t componentAt = stateCount + i;
+                    const size_t componentAt = carriedCount + i;
                     Type *const componentType =
                         componentAt < componentTypes.size() ? componentTypes[componentAt] : nullptr;
                     gc_node_ref_t componentZero =
@@ -3141,7 +3178,7 @@ bool buildTransposeMember(
                     rt::kGCNodeFlagConstant);
                 const std::array<gc_node_ref_t, 2> loopWith{regionResult, roundValue};
                 draft.setWithInputs(loopNode, std::span<const gc_node_ref_t>(loopWith));
-                if (carries || stateCount > 1) {
+                if (carries || carriedCount > 1 || componentTypes.size() > 1) {
                     // The loop's value is one cotangent per state followed by one sum per escaped
                     // value, so each component goes where its own value's cotangent goes: a state's
                     // cotangent to the value that state starts from, a sum to the value that
@@ -3156,23 +3193,26 @@ bool buildTransposeMember(
                         return componentReadOf(walkCtx, componentTypes, loopNode, index);
                     };
                     for (size_t i = 0; i < stateCount; ++i) {
-                        if (stateInitials[i] != rt::kInvalidNodeRef) {
-                            addCotangent(stateInitials[i], component(static_cast<uint32_t>(i)));
+                        if (stateComponent[i] == kNoComponent ||
+                            stateInitials[i] == rt::kInvalidNodeRef) {
+                            continue;
                         }
+                        addCotangent(
+                            stateInitials[i],
+                            component(static_cast<uint32_t>(stateComponent[i])));
                     }
                     for (size_t i = 0; i < caught.size(); ++i) {
                         addCotangent(
                             caught[i].first,
-                            component(static_cast<uint32_t>(stateCount + i)));
+                            component(static_cast<uint32_t>(carriedCount + i)));
                     }
                 } else {
-                    // One state and nothing escaped: the loop's value is that state's cotangent,
-                    // and it is the transposed function's whole answer **when the value the state
-                    // starts from is a parameter** -- the hand-written loop `thrice(x) = loop s = x
-                    // for i in 0..3` is the shape, and there one cotangent, in the one-slot tuple
-                    // the signature promises, is exactly right (handing
-                    // the scalar out unwrapped would take the process down when the graph is
-                    // called).
+                    // One carried component and nothing escaped: the loop's value is that state's
+                    // cotangent, and it is the transposed function's whole answer **when the value
+                    // the state starts from is a parameter** -- the hand-written loop `thrice(x) =
+                    // loop s = x for i in 0..3` is the shape, and there one cotangent, in the
+                    // one-slot tuple the signature promises, is exactly right (handing the scalar
+                    // out unwrapped would take the process down when the graph is called).
                     //
                     // A state that starts at anything else answers no parameter, and the loop's
                     // cotangent then has nowhere to land: the backward half `split` hands out
@@ -3188,11 +3228,17 @@ bool buildTransposeMember(
                     // from the parameters the walk reached, the way every other transposition
                     // builds it, and a parameter nothing delivered to keeps the zero the tail
                     // already writes for it.
-                    if (stateInitials[0] != rt::kInvalidNodeRef) {
-                        addCotangent(stateInitials[0], loopNode);
+                    // The single carried state is the one the answer comes from; a state the loop
+                    // carries unchanged (the iterator, the done flag) answers no parameter.
+                    const size_t singleState    = carriedStates.empty() ? 0 : carriedStates.front();
+                    const gc_node_ref_t initial = singleState < stateInitials.size()
+                                                      ? stateInitials[singleState]
+                                                      : rt::kInvalidNodeRef;
+                    if (initial != rt::kInvalidNodeRef) {
+                        addCotangent(initial, loopNode);
                     }
                     const camel::runtime::GCNode *const start =
-                        stateInitials[0] < nodeCount ? function->node(stateInitials[0]) : nullptr;
+                        initial < nodeCount ? function->node(initial) : nullptr;
                     if (start != nullptr && start->kind == rt::GCNodeKind::Port) {
                         // The member type is the loop's own (`loopType`: the state's cotangent
                         // space, or the tuple of the states' and the sums' spaces). Asking the
