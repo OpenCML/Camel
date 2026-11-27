@@ -462,15 +462,36 @@ func recurses(g: Graph) => bool {
     return callees_of(g)->any<func (c: Graph) => bool { reaches(c, g, [g]) }>
 }
 
+// How many calls of `g` name the graph `c`: the per callee count the C++ engine's duplication rule
+// is about, not the count of every call in `g`.
+func call_sites_of(g: Graph, c: Graph) => int {
+    return len(nodes(g)->filter<func (n: Node) => bool {
+        match callee(n) {
+            case null => false
+            case t => t == c
+        }
+    }>)
+}
+
+// The last way in the C++ engine has and this pass did not: beyond a small callee, a call pays when
+// the copy it makes is not duplicated at the callee's other call sites by more than
+// `duplicationBudgetNodes` (256). `calls` is the number of call sites of that callee in the caller
+// (`engine.cpp`, `(calls - 1) * copied <= duplicationBudgetNodes`).
+func duplication_fits(g: Graph, c: Graph) => bool {
+    let calls = call_sites_of(g, c)
+    return calls > 1 && (calls - 1) * copy_cost(c) <= 256
+}
+
 // Whether the pass expands this call: its callee is a graph of its own (`callee_is_self` is false:
 // a recursive call names the graph being edited, and `inline_call` would refuse it), that graph does
 // not recurse (`recurses`: the C++ engine declines the callers of a recursive function, not only the
-// call inside it), it is small (`smallSubgraphMaxComputeNodes`, 8), and the copy fits the caller's
-// cap (`maxOwnerNodes`, 4096) and what is left of the budget.
+// call inside it), it is small (`smallSubgraphMaxComputeNodes`, 8) or its duplication at the other
+// call sites of the same callee fits `duplicationBudgetNodes`, and the copy fits the caller's cap
+// (`maxOwnerNodes`, 4096) and what is left of the budget.
 func expandable(g: Graph, n: Node, remaining: int) => bool {
     return match callee(n) {
         case null => false
-        case c => !callee_is_self(n) && !recurses(c) && compute_size(c) <= 8 && copy_cost(c) <= remaining && len(nodes(g)) + copy_cost(c) <= 4096
+        case c => !callee_is_self(n) && !recurses(c) && (compute_size(c) <= 8 || duplication_fits(g, c)) && copy_cost(c) <= remaining && len(nodes(g)) + copy_cost(c) <= 4096
     }
 }
 
