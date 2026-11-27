@@ -31,6 +31,8 @@
 
 #include "base.h"
 
+#include "camel/core/oper_id.h"
+
 #include <cstdint>
 #include <map>
 #include <memory>
@@ -152,6 +154,14 @@ PassDescriptor passWithoutParameters(PassFactory factory);
 /// through the same path, so there is one registry of implementations and no separate pass
 /// registry.
 void registerModulePass(const std::string &path, PassDescriptor descriptor);
+
+/// The implementation registered for the operator `pass`, or nullopt when nothing registered one:
+/// the pass the operator names is a declaration the core has no kernel for.
+///
+/// The registry is keyed by the operator (`OperId`), the identity a call of the function carries, so
+/// a reader that already holds an id -- the pipeline resolving a written name once, a program
+/// calling a pass as a function -- asks here without spelling the name again.
+std::optional<PassDescriptor> findPassKernel(camel::core::OperId pass);
 
 /// Splits a comma-separated pass list (`--passes std::opt safe_fp=true,std::fvm`) at the commas
 /// outside string literals. Entries are trimmed; empty ones are dropped.
