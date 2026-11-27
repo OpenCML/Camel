@@ -2,6 +2,12 @@
 // computations of the tangent, chosen by a condition that reads only the inputs. `max` is the
 // operator that needs this; the function below is the same shape written in the case, so the
 // reading does not depend on a rule set that lands separately.
+//
+// The right side was refused at two places that ask two different questions: "the rule's right side
+// is not a straight line: it has a region" (the node's region) and `node 6 kind 6 of 7` (the node's
+// kind, read by the copy's `default:`). A branch written in an ordinary program was differentiated
+// while the same branch written in a rule was not, so the defect was the copy's, not the
+// transform's.
 import rulesets.jvp
 import { jvp } from transforms
 
