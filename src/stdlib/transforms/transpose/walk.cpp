@@ -1089,6 +1089,44 @@ bool buildTransposeMember(
                 if (node == nullptr) {
                     continue;
                 }
+                if (nodeOperatorOf(*function, ref) == NodeOperator::Fill) {
+                    // The `Fill` that built a tuple or a struct: the cotangent that arrived at the
+                    // construction is the **whole** aggregate's, and each member's is that member
+                    // of it -- the transpose of a construction is the member-wise projection
+                    // (design principles 9.9), the rule the main walk applies at `NodeCase::Fill`.
+                    // A loop's states are exactly this shape: the body answers the tuple its
+                    // `Fill` built, so the round's whole cotangent lands here and leaves by the
+                    // members. Without this case the arm stops at the `Fill` with a tuple where a
+                    // scalar belongs, which is what `arm-stop region=4 node=29 kind=4` said.
+                    const auto fill       = fillPayloadOf(*function, ref);
+                    Type *const wholeType = const_cast<Type *>(node->dataType());
+                    const std::optional<size_t> wholeArity =
+                        wholeType != nullptr ? camel::core::type::tree::arity(wholeType)
+                                             : std::nullopt;
+                    if (fill && wholeArity.has_value() && *wholeArity == fill->values.size()) {
+                        std::vector<Type *> memberTypes;
+                        memberTypes.reserve(fill->values.size());
+                        for (size_t i = 0; i < fill->values.size(); ++i) {
+                            memberTypes.push_back(camel::core::type::tree::childType(wholeType, i));
+                        }
+                        for (size_t i = 0; i < fill->values.size(); ++i) {
+                            const gc_node_ref_t part = componentReadOf(
+                                walkCtx,
+                                memberTypes,
+                                local[ref],
+                                static_cast<uint32_t>(i));
+                            if (part == rt::kInvalidNodeRef) {
+                                os << "TRANSPOSE function=" << function->name()
+                                   << " arm-stop region=" << oldRegion << " node=" << ref
+                                   << " kind=fill why=a-member-could-not-be-read\n";
+                                armsOk = false;
+                                return {};
+                            }
+                            deliver(fill->values[i], part, ref);
+                        }
+                        continue;
+                    }
+                }
                 if (node->kind == rt::GCNodeKind::Port) {
                     for (size_t i = 0; i < stops.size(); ++i) {
                         if (stops[i] == ref) {
@@ -2931,17 +2969,65 @@ bool buildTransposeMember(
                         const auto with = function->withInputsOf(oldBodyResult);
                         results.assign(with.begin(), with.end());
                     }
-                    for (size_t i = 0; i < stateCount; ++i) {
-                        // A state carried by the loop unchanged has no cotangent to seed: the
-                        // round that value belongs to delivers nothing to it, and the reverse
-                        // loop does not carry it (see the port loop above).
+                    // The round's cotangent is the **whole** cotangent of what the body answers,
+                    // not one scalar per state: the body's answer is the `Fill` that builds the
+                    // tuple of the states, and the transpose of a construction is the member-wise
+                    // projection of the aggregate's cotangent (design principles 9.9). A seed per
+                    // member would have to reach the arm's walk as a member, and the arm's walk
+                    // meets the `Fill` -- so the seed is the aggregate the `Fill` built, assembled
+                    // here from the cotangent ports of the states that take part, in the order the
+                    // `Fill` declares them. A state carried by the loop unchanged has no cotangent
+                    // to seed: the round that value belongs to delivers nothing to it (see the
+                    // port loop above), so its member is the zero of its own space -- a tuple with
+                    // a hole is not a cotangent of the tuple.
+                    std::vector<gc_node_ref_t> parts(results.size(), rt::kInvalidNodeRef);
+                    for (size_t i = 0; i < stateCount && i < parts.size(); ++i) {
                         if (stateComponent[i] == kNoComponent) {
                             continue;
                         }
-                        seeds.push_back(
-                            ArmSeed{
-                                i < results.size() ? results[i] : rt::kInvalidNodeRef,
-                                ctPorts[stateComponent[i]]});
+                        parts[i] = ctPorts[stateComponent[i]];
+                    }
+                    for (size_t i = 0; i < parts.size(); ++i) {
+                        if (parts[i] == rt::kInvalidNodeRef) {
+                            parts[i] = zeroOfValue(walkCtx, results[i]);
+                        }
+                        if (parts[i] == rt::kInvalidNodeRef) {
+                            parts.clear();
+                            break;
+                        }
+                    }
+                    bool seededTheWhole = false;
+                    if (!parts.empty()) {
+                        const camel::runtime::GCNode *const wholeNode =
+                            function->node(oldBodyResult);
+                        Type *const wholePrimal = wholeNode != nullptr
+                                                      ? const_cast<Type *>(wholeNode->dataType())
+                                                      : nullptr;
+                        const camel::core::TangentSpaceAnswer wholeSpace =
+                            wholePrimal != nullptr ? camel::core::tangentSpaceOf(wholePrimal)
+                                                   : camel::core::TangentSpaceAnswer{};
+                        if (wholeSpace.hasSpace() && wholeSpace.space != nullptr) {
+                            const gc_node_ref_t whole =
+                                aggregateOfMembers(walkCtx, wholeSpace.space, parts);
+                            if (whole != rt::kInvalidNodeRef) {
+                                seeds.push_back(ArmSeed{oldBodyResult, whole});
+                                seededTheWhole = true;
+                            }
+                        }
+                    }
+                    if (!seededTheWhole) {
+                        // The aggregate could not be built (no cotangent space for the tuple, or a
+                        // member's zero that this walk cannot write): the per-state seeds are what
+                        // is left, and the arm's walk says by name where it stops.
+                        for (size_t i = 0; i < stateCount; ++i) {
+                            if (stateComponent[i] == kNoComponent) {
+                                continue;
+                            }
+                            seeds.push_back(
+                                ArmSeed{
+                                    i < results.size() ? results[i] : rt::kInvalidNodeRef,
+                                    ctPorts[stateComponent[i]]});
+                        }
                     }
                 }
                 std::vector<gc_node_ref_t> statePorts(regionPorts.begin() + 1, regionPorts.end());
