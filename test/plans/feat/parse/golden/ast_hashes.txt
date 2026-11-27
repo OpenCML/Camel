@@ -2528,6 +2528,7 @@ dbab38955743a7be ok test/cases/consistency/new_values/sort_rebinding.cml
 6dea20469a761e97 ok test/cases/consistency/new_values/unused_in_lambda.cml
 71783ca5a5a254af ok test/cases/consistency/new_values/unused_operator.cml
 921985361ba9a5ea ok test/cases/consistency/new_values/unused_var.cml
+4092221134f24a6d ok test/cases/consistency/new_values/update_name.cml
 a49afb5179643cbb ok test/cases/consistency/new_values/value_used.cml
 8e22c2933223ff84 ok test/cases/consistency/operator_overloads/ambiguous_generic.cml
 eea9972b76b3a83d ok test/cases/consistency/operator_overloads/arity.cml
