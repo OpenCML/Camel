@@ -274,6 +274,30 @@ normalizers = ["normalize_newlines"]
 timeout_ms = 60000
 
 [[tests]]
+name = "docs.snippets_entry_argument_reaches_both_steps"
+desc = "A page whose command fence gives the program an entry argument: the argument reaches both steps, so the compile step -- which runs the pass the page names -- is given it too, and the run prints the block the page declares."
+kind = "behavior"
+tool = "node"
+case = "../../../scripts/check-doc-snippets.mjs"
+args = ["${case}", "test/plans/feat/docs_links/fixture/snippets/entry_argument_both_steps.md", "--camel", "${camel}"]
+expect_exit = 0
+expect_stdout_contains = ["no stale snippet in"]
+normalizers = ["normalize_newlines"]
+timeout_ms = 60000
+
+[[tests]]
+name = "docs.snippets_fault_shown_by_the_page"
+desc = "A page whose text block quotes a run that faults: the compile step stops before the program runs, and the run step still compares the printed lines and the located diagnostic the block declares."
+kind = "behavior"
+tool = "node"
+case = "../../../scripts/check-doc-snippets.mjs"
+args = ["${case}", "test/plans/feat/docs_links/fixture/snippets/fault_shown_by_the_page.md", "--camel", "${camel}"]
+expect_exit = 0
+expect_stdout_contains = ["no stale snippet in"]
+normalizers = ["normalize_newlines"]
+timeout_ms = 60000
+
+[[tests]]
 name = "docs.diagnostics_catalog"
 desc = "No two diagnostics share a code: the catalogue is the one place a code is written down, and a second name on a value means one of the two is never emitted."
 kind = "behavior"

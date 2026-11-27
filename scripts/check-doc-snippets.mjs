@@ -681,6 +681,16 @@ function beforeDiagnostic(text) {
     return (index < 0 ? lines : lines.slice(0, index)).join('\n').replace(/\n+$/, '')
 }
 
+// The run as a page shows it: what the program printed, then what the compiler wrote about the
+// fault. A program's lines and a fault's diagnostic are two streams, and a text block that shows a
+// fault quotes both.
+function wholeRun(result) {
+    return [result.stdout, result.stderr]
+        .map((text) => text.replace(/\n+$/, ''))
+        .filter((text) => text !== '')
+        .join('\n')
+}
+
 function compareText(actual, expected) {
     // `--> D:\path\to\fault.cml:4:15`, `--> /tmp/x/fault.cml:4:15`, `--> .\fault.cml:4:15` and
     // `--> fault.cml:4:15` are one reading: the location line is compared as the line and column
@@ -862,6 +872,50 @@ function writeSnippet(snippet, tempDir) {
     return { entry, files }
 }
 
+// One command for both steps of one snippet: the arguments the page's command fence names, then
+// the entry file and the passes. The two steps build their command here, once, so `--arg` and `-I`
+// reach both of them -- a page that runs its program with a parameter gets that parameter in the
+// compile step too, and the two steps cannot drift into two different commands.
+//
+// What differs is the passes. `run` is what the page itself shows. `compile` is parse + GCT + GIR
+// and then a stop: `std::gir` prints the graph and hands the program on, so a page whose text block
+// shows the run failing at `fault.cml:4:15` would be reported as one that does not compile, and
+// that is the page being right about the language rather than wrong. `std::nop` is the pass that
+// stops there (docs/cli.md, "std::gir").
+function camelCommand(file, command, step) {
+    const options = []
+    const args = command ? command.args : []
+    for (let i = 0; i < args.length; i++) {
+        const arg = args[i]
+        if (arg === '--arg') {
+            const pair = args[++i] ?? ''
+            const eq = pair.indexOf('=')
+            if (eq > 0) {
+                const name = pair.slice(0, eq)
+                const value = pair.slice(eq + 1)
+                // A path on the page is relative to the repository root; the snippet runs in its
+                // own temp directory.
+                const resolved = path.isAbsolute(value) ? value : path.resolve(ROOT, value)
+                options.push('--arg', `${name}=${fs.existsSync(resolved) ? resolved : value}`)
+            } else {
+                options.push('--arg', pair)
+            }
+            continue
+        }
+        if (arg === '-I' || arg === '--include') {
+            const value = args[++i] ?? ''
+            options.push(arg, path.isAbsolute(value) ? value : path.resolve(ROOT, value))
+            continue
+        }
+        options.push(arg)
+    }
+    const passes = command ? command.passes : []
+    if (step === 'compile') {
+        return [...options, file, ...(passes.length > 0 ? passes : ['std::gir']), 'std::nop']
+    }
+    return [...options, file, ...passes]
+}
+
 async function checkSnippet(documentAbs, snippet, lines, fences) {
     const group = snippet.fences
     const marked = group.map((fence) => fence.marker).find(Boolean)
@@ -886,11 +940,12 @@ async function checkSnippet(documentAbs, snippet, lines, fences) {
             .find((line) => /^\s*\/\/\s*camel\b/.test(line))
         const command = parseCommand(after && after.command) || (inline ? parseCommand({ body: [inline] }) : null)
         const passes = command ? command.passes : []
-        const args = command ? command.args : []
 
-        // Compile first: parse + GCT + GIR, whatever the snippet is.
-        const compilePasses = passes.length > 0 ? passes : ['std::gir']
-        const compiled = await runCamel([written.entry.file, ...compilePasses], tempDir)
+        // Compile first: parse + GCT + GIR, whatever the snippet is. The compile step stops before
+        // the program runs: `std::gir` prints the graph and hands the program on (docs/cli.md,
+        // "std::gir"), so a page whose text block shows a fault would be read as one that does not
+        // compile. `std::nop` is the pass that stops there.
+        const compiled = await runCamel(camelCommand(written.entry.file, command, 'compile'), tempDir)
         if (compiled.timedOut) {
             problems.push(`compiling timed out after ${TIMEOUT_MS} ms`)
         } else if (compiled.code !== 0) {
@@ -926,33 +981,7 @@ async function checkSnippet(documentAbs, snippet, lines, fences) {
         }
 
         const expected = parseExpected(after.output.body.join('\n'))
-        const options = []
-        for (let i = 0; i < args.length; i++) {
-            const arg = args[i]
-            if (arg === '--arg') {
-                const pair = args[++i] ?? ''
-                const eq = pair.indexOf('=')
-                if (eq > 0) {
-                    const name = pair.slice(0, eq)
-                    const value = pair.slice(eq + 1)
-                    // A path on the page is relative to the repository root; the snippet runs in
-                    // its own temp directory.
-                    const resolved = path.isAbsolute(value) ? value : path.resolve(ROOT, value)
-                    options.push('--arg', `${name}=${fs.existsSync(resolved) ? resolved : value}`)
-                } else {
-                    options.push('--arg', pair)
-                }
-                continue
-            }
-            if (arg === '-I' || arg === '--include') {
-                const value = args[++i] ?? ''
-                options.push(arg, path.isAbsolute(value) ? value : path.resolve(ROOT, value))
-                continue
-            }
-            options.push(arg)
-        }
-        const runArgs = [...options, written.entry.file, ...passes]
-        const ran = await runCamel(runArgs, tempDir)
+        const ran = await runCamel(camelCommand(written.entry.file, command, 'run'), tempDir)
         if (ran.timedOut) {
             problems.push(`running timed out after ${TIMEOUT_MS} ms`)
         } else {
@@ -970,8 +999,10 @@ async function checkSnippet(documentAbs, snippet, lines, fences) {
                 let difference
                 if (errorDiagnostic && hasLocation) {
                     // The text block is the whole run: the lines printed before the fault, then the
-                    // located diagnostic. Compare all of it (the path is normalised).
-                    difference = compareText(ran.stdout, pageText)
+                    // located diagnostic. Compare all of it (the path is normalised). The lines the
+                    // program prints are standard output and a fault's diagnostic is standard
+                    // error, so the run this block is is the two streams one after the other.
+                    difference = compareText(wholeRun(ran), pageText)
                 } else if (errorDiagnostic) {
                     // A truncated diagnostic: the page keeps the lines printed before it and names
                     // the diagnostic, but leaves out the location and the help.
@@ -1303,7 +1334,9 @@ async function compileDocExample(context, entry, code) {
         let result = null
         for (const asStatement of [false, true]) {
             fs.writeFileSync(file, docExampleSource(context, entry, code, asStatement))
-            result = await runCamel([file, 'std::gir'], dir)
+            // Compile only: `std::gir` hands the program on, and an example is a fragment inside
+            // `__doc_example`, not something to run. `std::nop` stops the pipeline there.
+            result = await runCamel([file, 'std::gir', 'std::nop'], dir)
             if (result.code === 0) return { ok: true, result }
             // A statement retry is for a call that returns nothing; a syntax error is the same
             // both ways, so only retry what parsed.
@@ -1430,6 +1463,11 @@ async function checkSourceExamples() {
                 kind,
                 excused: !compiled.ok && job.fragments.length > 0 && (kind === 'semantic' || kind === 'internal'),
                 diagnostic: compiled.ok ? '' : firstDiagnostic(compiled.result),
+                // A failure whose class the pattern did not find says nothing about which class the
+                // compiler reported, and the reading a reader needs is the compiler's own text. The
+                // first lines of it are kept for the report below; the classification itself is
+                // unchanged.
+                raw: compiled.ok ? [] : text.replace(/\r\n/g, '\n').split('\n').slice(0, 6).map((line) => line.trimEnd()),
             }
         }
     }
@@ -1445,6 +1483,9 @@ async function checkSourceExamples() {
     for (const one of red) {
         console.log(`${one.rel}:${one.line}: ${one.kind ? `a ${one.kind} error` : 'no diagnostic class'} -- ${one.code}`)
         console.log(`    ${one.diagnostic}`)
+        if (!one.kind) {
+            for (const line of one.raw) if (line.trim() !== '') console.log(`      | ${line}`)
+        }
     }
     for (const [label, count] of [...classes].sort(([a], [b]) => a.localeCompare(b))) {
         console.log(`    ${label}: ${count}`)
