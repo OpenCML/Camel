@@ -266,19 +266,36 @@ function touchedPlans(baseSha) {
     return [...new Set(plans)]
 }
 
-/** The newest promotion's red table (by promotion number) in the seat's tree, or null when there is none. */
+/**
+ * The red table of the newest promotion that published develop, in the seat's tree, or null when there
+ * is none. A promotion that found new reds still writes its table, and that table lists those reds:
+ * comparing with it would accept them as known. So a table counts only beside a record of the same
+ * promotion number that names the develop sha it pushed.
+ */
 function newestRedTable() {
     const dir = path.join(seat, 'internal', 'reports')
-    let best = null
     let names = []
     try {
         names = fs.readdirSync(dir)
     } catch {
         return null
     }
+    const published = new Set()
+    for (const name of names) {
+        const record = /^\d{4}-\d{2}-\d{2}-promotion-(\d+)\.record\.json$/.exec(name)
+        if (!record) continue
+        try {
+            const parsed = JSON.parse(fs.readFileSync(path.join(dir, name), 'utf8'))
+            if (parsed && typeof parsed.pushed_develop_sha === 'string' && parsed.pushed_develop_sha) published.add(Number(record[1]))
+        } catch {
+            // A record that does not parse publishes nothing.
+        }
+    }
+    let best = null
     for (const name of names) {
         const found = /^\d{4}-\d{2}-\d{2}-promotion-(\d+)-reds\.tsv$/.exec(name)
-        if (found && (best === null || Number(found[1]) > best.n)) best = { n: Number(found[1]), name, file: path.join(dir, name) }
+        if (!found || !published.has(Number(found[1]))) continue
+        if (best === null || Number(found[1]) > best.n) best = { n: Number(found[1]), name, file: path.join(dir, name) }
     }
     return best
 }

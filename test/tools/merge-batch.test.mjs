@@ -333,6 +333,12 @@ write(
     '# newest\nplan_a\tknown_red\nlegacy_red\ttest/plans/feat/compile.plan.toml\tfast\t\n',
 );
 write(readMaker, 'internal/reports/2026-01-02-promotion-3-reds-extra.tsv', 'plan_a\tnot_a_table\n');
+// Promotions 2 and 3 published develop; promotion 4 found new reds and did not, so its table (which
+// lists the reds it found, here every name the plan run reports) is not a baseline.
+write(readMaker, 'internal/reports/2026-01-01-promotion-2.record.json', '{"promotion": 2, "pushed_develop_sha": "2222222222222222222222222222222222222222"}\n');
+write(readMaker, 'internal/reports/2026-01-02-promotion-3.record.json', '{"promotion": 3, "pushed_develop_sha": "3333333333333333333333333333333333333333"}\n');
+write(readMaker, 'internal/reports/2026-01-03-promotion-4.record.json', '{"promotion": 4}\n');
+write(readMaker, 'internal/reports/2026-01-03-promotion-4-reds.tsv', '# not published\nplan_a\tknown_red\nplan_a\tonly_in_older\nplan_a\tbrand_new\nplan_a\tfast_new\n');
 const readBase = commit(readMaker, 'the tip with a selector and red tables');
 git(readMaker, ['push', '--quiet', 'origin', 'integration']);
 git(readMaker, ['checkout', '--quiet', '-b', 'lane/code', readBase]);
