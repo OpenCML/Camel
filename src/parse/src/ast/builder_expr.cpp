@@ -1634,7 +1634,12 @@ Value Builder::visitBlockHeaded(syn::Node context, DataType type) {
         node_ptr_t initial = createNodeAs<RepeatedLoad>("Data");
         setNodeTokenRangeByContext(initial, context);
         if (overNode) {
-            *initial << overNode;
+            // The name the head binds is the block's root, not the function the head names: the
+            // body reads it as the graph the compiler opens on that function (BlockRootLoad).
+            node_ptr_t rootLoad = createNodeAs<BlockRootLoad>(type);
+            setNodeTokenRangeByContext(rootLoad, context);
+            *rootLoad << overNode;
+            *initial << rootLoad;
         }
         *binding << initial;
         node_ptr_t stmts = createNodeAs<RepeatedLoad>("Stmt");
