@@ -1,0 +1,12 @@
+/**
+ * A call of a closure that captures a local: the value of `k` comes in with the function value,
+ * not from a parameter, so expanding the call has to bind the capture as well as the argument.
+ */
+
+func main(x: int) => int sync {
+    let k = 3
+    let scale = func (v: int) => int {
+        return v * k
+    }
+    return scale(x) + scale(x + 1)
+}

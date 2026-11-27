@@ -1,0 +1,12 @@
+/**
+ * Two calls of one small function: each is a call the pass would expand, so a run whose growth
+ * budget is 0 is the reading that says the budget is what stops it rather than the selection.
+ */
+
+func bump(x: int) => int {
+    return x + 1
+}
+
+func main(x: int) => int {
+    return bump(x) + bump(x * 2)
+}

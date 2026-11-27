@@ -1,0 +1,13 @@
+/**
+ * The shape a paper's first figure uses: one small function called once, with the product of its
+ * result and a sum of the argument. `inc` is a call the front end leaves in place (it is not
+ * expanded while the program is built), so a reading taken before the pass sees the call.
+ */
+
+func inc(x: int) => int {
+    return x + 1
+}
+
+func main(x: int) => int {
+    return inc(x) * 3 + (x + 1) * 4
+}
