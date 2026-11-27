@@ -1649,20 +1649,15 @@ Value Builder::visitBlockHeaded(syn::Node context, DataType type) {
         bodyNode = any2node(visitBlockExpr(body.node()));
         *node << bodyNode;
     }
-    // [2] the block the head stands for: the binding, then the body's statements.
+    // [2] the block the head stands for: the body's statements, and nothing in front of them.
     if (bodyNode) {
-        node_ptr_t binding = createNodeAs<DataDeclLoad>(true, std::vector<Reference>{root});
-        setNodeTokenRangeByContext(binding, context);
-        *binding << createNodeAs<RepeatedLoad>("Type");
-        node_ptr_t initial = createNodeAs<RepeatedLoad>("Data");
-        setNodeTokenRangeByContext(initial, context);
-        if (overNode) {
-            *initial << overNode;
-        }
-        *binding << initial;
+        // The head's name is not a binding written into the body: it is the block closure's
+        // parameter (design `docs/design/graph-editing/README.cn.md` 90: the body runs as a call of
+        // a closure whose argument is the block's root), so the compiler gives the value where that
+        // closure is built and `root()` stays on the head to name it. One shape for both kinds of
+        // block, and one lowering.
         node_ptr_t stmts = createNodeAs<RepeatedLoad>("Stmt");
         setNodeTokenRangeByContext(stmts, context);
-        *stmts << binding;
         // The body's own statements follow the binding, in the order they were written; a body
         // written as one expression is one expression statement, as visitBlockExpr made it.
         //

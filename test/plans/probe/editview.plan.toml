@@ -59,7 +59,7 @@ timeout_ms = 20000
 
 [[tests]]
 name = "editview.body_fault_keeps_function"
-desc = "An edit block whose body faults: the block's value is the error the fault became, and the function the head was given answers as it did before -- the changes of an edit block are all in or not at all (design 6, 15.1)."
+desc = "An edit block whose body faults: the block's value is the error the fault became, and the function the head was given answers as it did before -- the changes of an edit block are all in or not at all (design 6, 15.1). The body was rewritten for the block's new reading: `d` is the draft's root, so the body no longer calls it as a function."
 kind = "behavior"
 case = "../../cases/probe/editview/body_fault_keeps_function.cml"
 args = ["${case}", "std::nvm"]
@@ -71,13 +71,25 @@ timeout_ms = 20000
 
 [[tests]]
 name = "editview.body_return"
-desc = "A `return` in an edit block's body ends the body, not the function the block stands in, and the block still commits (design 15.1). The statement after the block runs, and the answer is the function's, not the value the body returned."
+desc = "A `return` in an edit block's body ends the body, not the function the block stands in, and the block still commits (design 15.1). The statement after the block runs, and the answer is the function's, not the value the body returned. The body was rewritten for the block's new reading: `d` is the draft's root, so the body no longer calls it as a function, and the `return` it keeps is what pins the panel."
 kind = "behavior"
 case = "../../cases/probe/editview/body_return.cml"
 args = ["${case}", "std::nvm"]
 backends = ["nvm"]
 expect_exit = 0
 expect_stdout_contains = ["after the block", "answer= 6"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "editview.head_evaluated_once"
+desc = "An edit block's head expression is evaluated once, though the lowering reads the function it gives twice: `open(f)` opens the draft of it, and the commit is given the same function as the witness its result type is read from (design 2, 5). The function is bound to a name once and read by that name twice, so a head whose evaluation can be seen prints once. The whole output is compared, so a lowering that evaluated the head twice would fail this case; the block still commits, and the answer is the committed function's."
+kind = "behavior"
+case = "../../cases/probe/editview/head_evaluated_once.cml"
+args = ["${case}", "std::nvm"]
+backends = ["nvm"]
+expect_exit = 0
+expect_stdout_exact = "head called\nblock= 10\n"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 
@@ -128,6 +140,15 @@ kind = "behavior"
 case = "../../cases/probe/editview/sec2_log.cml"
 args = ["check", "${case}"]
 expect_exit = 0
+# A known red, and it is the stdlib's, not the example's. The design declares `inline` variadic --
+# `inline(at, fn, args...)` (`docs/design/graph-editing/README.cn.md:117`) -- and its example passes
+# three arguments (`docs/design/graph-editing/README.cn.md:35`); the module declares two,
+# `export func inline::<G>(at: Node, fn: G) => Node` (`src/stdlib/graph.cml#inline`). Fixing the
+# signature is another card; this case is the reading that says which side is short.
+known_fail = true
+known_fail_owner = "graph module: `inline` (`src/stdlib/graph.cml`)"
+known_fail_reason = "`inline` has no variadic parameters yet: `src/stdlib/graph.cml:449` declares `inline::<G>(at: Node, fn: G) => Node`, while the design's table declares `inline(at, fn, args...)` (`docs/design/graph-editing/README.cn.md:117`), so the example that passes three arguments (`docs/design/graph-editing/README.cn.md:35`) is refused with `NoMatchingFunction`. The design is authoritative: the stdlib is the side that is short, and fixing its signature is another card."
+known_fail_msg = "No matching function found for argument types"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 
@@ -168,5 +189,36 @@ kind = "behavior"
 case = "../../cases/probe/editview/view_value_is_a_plain_value.cml"
 args = ["check", "${case}"]
 expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+[[tests]]
+name = "editview.root_observable_as_graph"
+desc = "`view d = inc { nodes(d) }`: the name a view block's head binds is the block's root, the graph its body reads (design 15.1), so `nodes` -- which takes a `Graph` -- reads it. The name is not the function the block is over."
+kind = "behavior"
+case = "../../cases/probe/editview/root_observable_as_graph.cml"
+args = ["check", "${case}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "editview.root_observable_as_function"
+desc = "The counter-proof: the head's name is a `Graph` handle and a handle is not callable, so `view d = inc { d(2.0) }` is refused. A compiler that accepts it is reading the head's name as the function, which is the value the name must not have. The wording of the refusal is the product's own now that the name is a value of the body's scope (the head's name is the closure's parameter): `Invalid call to 'd' with argument types <> (float): the value this call stands on has type 'Graph', and that is not a function`. Same refusal, its wording updated -- not a loosened assertion."
+kind = "behavior"
+case = "../../cases/probe/editview/root_observable_as_function.cml"
+args = ["check", "${case}"]
+expect_exit = 1
+expect_output_contains = ["Invalid call to 'd' with argument types"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "editview.root_handle_in_gir"
+desc = "The root handle the compiler emits is `graph_of`'s call: the block's `d` is `graph_of(f)`, so the GIR of a program with a headed block holds a node of that operator, and the reading can name it. What pins it is the operator's name in the printed graph -- the same operator a program reaches by writing `graph::graph_of`. The case is the one `view_value_is_a_plain_value` uses, whose `main` gives `std::gir` an entry to compile."
+kind = "behavior"
+case = "../../cases/probe/editview/view_value_is_a_plain_value.cml"
+args = ["${case}", "std::gir"]
+expect_exit = 0
+expect_stdout_contains = ["graph_of"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000

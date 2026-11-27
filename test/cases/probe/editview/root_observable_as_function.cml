@@ -1,0 +1,12 @@
+// The counter-proof: the name a view block's head binds is the block's root, a `Graph` handle, and a
+// handle is not callable. `d(2.0)` must be refused -- the block is over `inc`, and calling it is
+// `inc(2.0)`, written where the function is in scope. A program that compiles this is reading the
+// head's name as the function, which is the wrong value for it.
+func inc(x: float) => float {
+    return x + 1.0
+}
+
+func root_observable_as_function() => float sync {
+    let c = view d = inc { d(2.0) }
+    return c
+}
