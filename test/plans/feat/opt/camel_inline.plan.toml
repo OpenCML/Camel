@@ -1,0 +1,233 @@
+id = "opt.camel_inline"
+order = 488
+tier = "fast"
+tags = ["feat", "opt", "inline", "recursion", "camel"]
+
+# The recursion rule of `opt::inline` (stdlib/opt.cml), and its control.
+#
+# A pass that expands a call whose callee recurses does not stop there: expanding `down` into `main`
+# brings `down(n - 1)` into `main`, that call is still not a call of the graph being edited, and the
+# next round expands it again until the whole growth budget is spent -- `main` grew to 4095 nodes on
+# the first corpus below. The C++ engine declines exactly these calls (`InlineRewriteConfig`, "which
+# functions recurse"), so the pass reads that rule too: `callee_is_self` for the call inside the
+# recursive function, and `recurses` (a walk of the callee's own call graph, in stdlib/opt.cml) for
+# the calls made from outside it.
+#
+# The four corpora are the four shapes:
+#
+#   self_recursion   one function that calls itself: nothing is inlined, on either side;
+#   mutual_recursion a pair that calls each other: nothing is inlined, on either side;
+#   two_level_call   a plain two-level call: everything is inlined -- the control that says the
+#                    recursion rule did not stop the pass from working;
+#   mixed_call_sites one callee called at three places, one of them its own: the two calls `main`
+#                    makes stay as well, because the callee recurses.
+#
+# Each entry reads the graphs with `std::jgir` and compares, graph by graph, the number of call
+# sites (CALL and FUNC nodes) and the number of nodes. The `by_cpp` entry is the C++ implementation
+# on the same file: it is the side the rule is read from, and three of the four corpora come out
+# identical to the letter. The mutual pair is the one difference, written down instead of hidden:
+# the C++ engine also inlines inside the cycle (`is_even` 9 nodes -> 16), while this pass declines
+# both directions (9 nodes) -- "less inlined" is what stdlib/opt.cml's header says this pass may be.
+#
+# The last assertion of every entry is the one the first corpus taught: no graph is above 64 nodes,
+# so a pass that forgot the rule cannot come back as a green reading of a corpus that merely fits.
+
+[[tests]]
+name = "camel_inline.self_recursion.by_cpp"
+desc = "The C++ inlining on a function that calls itself: nothing is inlined, so `main` keeps its call to `down` and `down` keeps its own, and the graphs are the ones the corpus wrote."
+kind = "behavior"
+case = "../../../cases/opt/camel_inline/self_recursion.cml"
+args = ["${case}", "std::cxx::inline", "std::jgir", "std::nop"]
+expect_exit = 0
+timeout_ms = 20000
+verify_script = """
+({ input }) => {
+    const doc = JSON.parse(input.normalized.stdout)
+    const fail = (why) => { throw new Error("std::cxx::inline, self_recursion: " + why) }
+    const calls = (g) => g.nodes.filter((n) => n.kind === "CALL" || n.kind === "FUNC").length
+    const got = {}
+    for (const g of doc.graphs || []) got[g.name] = calls(g) + "/" + g.nodes.length
+    const want = { __root__: "1/2", main: "1/7", down: "1/11" }
+    for (const name of Object.keys(want)) {
+        if (got[name] !== want[name]) fail(name + " is " + (got[name] || "missing") + ", not " + want[name])
+    }
+    for (const g of doc.graphs || []) {
+        if (g.nodes.length > 64) fail(g.name + " holds " + g.nodes.length + " nodes: a recursive callee was expanded")
+    }
+}
+"""
+
+[[tests]]
+name = "camel_inline.self_recursion.by_camel"
+desc = "The Camel inlining (`opt::inline`) on the same file, read the same way: the same graphs, node for node -- the recursive call is left as written (`callee_is_self`) and the call `main` makes is left too, because `down` recurses (`recurses`)."
+kind = "behavior"
+case = "../../../cases/opt/camel_inline/self_recursion.cml"
+args = ["${case}", "opt::inline", "std::jgir", "std::nop"]
+expect_exit = 0
+timeout_ms = 20000
+verify_script = """
+({ input }) => {
+    const doc = JSON.parse(input.normalized.stdout)
+    const fail = (why) => { throw new Error("opt::inline, self_recursion: " + why) }
+    const calls = (g) => g.nodes.filter((n) => n.kind === "CALL" || n.kind === "FUNC").length
+    const got = {}
+    for (const g of doc.graphs || []) got[g.name] = calls(g) + "/" + g.nodes.length
+    const want = { __root__: "1/2", main: "1/7", down: "1/11" }
+    for (const name of Object.keys(want)) {
+        if (got[name] !== want[name]) fail(name + " is " + (got[name] || "missing") + ", not " + want[name])
+    }
+    for (const g of doc.graphs || []) {
+        if (g.nodes.length > 64) fail(g.name + " holds " + g.nodes.length + " nodes: the pass grew a graph past the corpus' own shape")
+    }
+}
+"""
+
+[[tests]]
+name = "camel_inline.mutual_recursion.by_cpp"
+desc = "The C++ inlining on a pair that calls each other: `main` keeps its call (`is_even` reaches a recursion), and the pair's own call is expanded once -- `is_even` grows from 9 nodes to 16, the C++ engine inlining inside the cycle."
+kind = "behavior"
+case = "../../../cases/opt/camel_inline/mutual_recursion.cml"
+args = ["${case}", "std::cxx::inline", "std::jgir", "std::nop"]
+expect_exit = 0
+timeout_ms = 20000
+verify_script = """
+({ input }) => {
+    const doc = JSON.parse(input.normalized.stdout)
+    const fail = (why) => { throw new Error("std::cxx::inline, mutual_recursion: " + why) }
+    const calls = (g) => g.nodes.filter((n) => n.kind === "CALL" || n.kind === "FUNC").length
+    const got = {}
+    for (const g of doc.graphs || []) got[g.name] = calls(g) + "/" + g.nodes.length
+    const want = { __root__: "1/2", main: "1/7", is_even: "1/16", is_odd: "1/9" }
+    for (const name of Object.keys(want)) {
+        if (got[name] !== want[name]) fail(name + " is " + (got[name] || "missing") + ", not " + want[name])
+    }
+    for (const g of doc.graphs || []) {
+        if (g.nodes.length > 64) fail(g.name + " holds " + g.nodes.length + " nodes: a recursive callee was expanded")
+    }
+}
+"""
+
+[[tests]]
+name = "camel_inline.mutual_recursion.by_camel"
+desc = "The Camel inlining on the same pair: `main` keeps its call and both directions of the pair keep theirs -- 9 nodes each, where the C++ engine inlines inside the cycle. The one difference between the two implementations on these four corpora, written down rather than hidden."
+kind = "behavior"
+case = "../../../cases/opt/camel_inline/mutual_recursion.cml"
+args = ["${case}", "opt::inline", "std::jgir", "std::nop"]
+expect_exit = 0
+timeout_ms = 20000
+verify_script = """
+({ input }) => {
+    const doc = JSON.parse(input.normalized.stdout)
+    const fail = (why) => { throw new Error("opt::inline, mutual_recursion: " + why) }
+    const calls = (g) => g.nodes.filter((n) => n.kind === "CALL" || n.kind === "FUNC").length
+    const got = {}
+    for (const g of doc.graphs || []) got[g.name] = calls(g) + "/" + g.nodes.length
+    const want = { __root__: "1/2", main: "1/7", is_even: "1/9", is_odd: "1/9" }
+    for (const name of Object.keys(want)) {
+        if (got[name] !== want[name]) fail(name + " is " + (got[name] || "missing") + ", not " + want[name])
+    }
+    for (const g of doc.graphs || []) {
+        if (g.nodes.length > 64) fail(g.name + " holds " + g.nodes.length + " nodes: the pass grew a graph past the corpus' own shape")
+    }
+}
+"""
+
+[[tests]]
+name = "camel_inline.two_level_call.by_cpp"
+desc = "The C++ inlining where nothing recurses: `twice` inlines `inc` and `main` inlines `twice`, so no call is left -- the reading the recursion rule must not take away."
+kind = "behavior"
+case = "../../../cases/opt/camel_inline/two_level_call.cml"
+args = ["${case}", "std::cxx::inline", "std::jgir", "std::nop"]
+expect_exit = 0
+timeout_ms = 20000
+verify_script = """
+({ input }) => {
+    const doc = JSON.parse(input.normalized.stdout)
+    const fail = (why) => { throw new Error("std::cxx::inline, two_level_call: " + why) }
+    const calls = (g) => g.nodes.filter((n) => n.kind === "CALL" || n.kind === "FUNC").length
+    const got = {}
+    for (const g of doc.graphs || []) got[g.name] = calls(g) + "/" + g.nodes.length
+    const want = { __root__: "1/2", main: "0/10", inc: "0/3", twice: "0/5" }
+    for (const name of Object.keys(want)) {
+        if (got[name] !== want[name]) fail(name + " is " + (got[name] || "missing") + ", not " + want[name])
+    }
+    for (const g of doc.graphs || []) {
+        if (g.nodes.length > 64) fail(g.name + " holds " + g.nodes.length + " nodes")
+    }
+}
+"""
+
+[[tests]]
+name = "camel_inline.two_level_call.by_camel"
+desc = "The Camel inlining on the same file: the same graphs, node for node -- both calls are expanded, so the recursion rule leaves the pass's ordinary work alone."
+kind = "behavior"
+case = "../../../cases/opt/camel_inline/two_level_call.cml"
+args = ["${case}", "opt::inline", "std::jgir", "std::nop"]
+expect_exit = 0
+timeout_ms = 20000
+verify_script = """
+({ input }) => {
+    const doc = JSON.parse(input.normalized.stdout)
+    const fail = (why) => { throw new Error("opt::inline, two_level_call: " + why) }
+    const calls = (g) => g.nodes.filter((n) => n.kind === "CALL" || n.kind === "FUNC").length
+    const got = {}
+    for (const g of doc.graphs || []) got[g.name] = calls(g) + "/" + g.nodes.length
+    const want = { __root__: "1/2", main: "0/10", inc: "0/3", twice: "0/5" }
+    for (const name of Object.keys(want)) {
+        if (got[name] !== want[name]) fail(name + " is " + (got[name] || "missing") + ", not " + want[name])
+    }
+    for (const g of doc.graphs || []) {
+        if (g.nodes.length > 64) fail(g.name + " holds " + g.nodes.length + " nodes: the pass grew a graph past the corpus' own shape")
+    }
+}
+"""
+
+[[tests]]
+name = "camel_inline.mixed_call_sites.by_cpp"
+desc = "The C++ inlining on one callee called at three places, one of them its own: `main` keeps both of its calls, because `down` reaches a recursion."
+kind = "behavior"
+case = "../../../cases/opt/camel_inline/mixed_call_sites.cml"
+args = ["${case}", "std::cxx::inline", "std::jgir", "std::nop"]
+expect_exit = 0
+timeout_ms = 20000
+verify_script = """
+({ input }) => {
+    const doc = JSON.parse(input.normalized.stdout)
+    const fail = (why) => { throw new Error("std::cxx::inline, mixed_call_sites: " + why) }
+    const calls = (g) => g.nodes.filter((n) => n.kind === "CALL" || n.kind === "FUNC").length
+    const got = {}
+    for (const g of doc.graphs || []) got[g.name] = calls(g) + "/" + g.nodes.length
+    const want = { __root__: "1/2", main: "2/10", down: "1/11" }
+    for (const name of Object.keys(want)) {
+        if (got[name] !== want[name]) fail(name + " is " + (got[name] || "missing") + ", not " + want[name])
+    }
+    for (const g of doc.graphs || []) {
+        if (g.nodes.length > 64) fail(g.name + " holds " + g.nodes.length + " nodes: a recursive callee was expanded")
+    }
+}
+"""
+
+[[tests]]
+name = "camel_inline.mixed_call_sites.by_camel"
+desc = "The Camel inlining on the same file, read the same way: the same graphs, node for node -- the two calls `main` makes are left as well, because `down` recurses; only the call inside `down` would ever be a candidate, and `callee_is_self` leaves it."
+kind = "behavior"
+case = "../../../cases/opt/camel_inline/mixed_call_sites.cml"
+args = ["${case}", "opt::inline", "std::jgir", "std::nop"]
+expect_exit = 0
+timeout_ms = 20000
+verify_script = """
+({ input }) => {
+    const doc = JSON.parse(input.normalized.stdout)
+    const fail = (why) => { throw new Error("opt::inline, mixed_call_sites: " + why) }
+    const calls = (g) => g.nodes.filter((n) => n.kind === "CALL" || n.kind === "FUNC").length
+    const got = {}
+    for (const g of doc.graphs || []) got[g.name] = calls(g) + "/" + g.nodes.length
+    const want = { __root__: "1/2", main: "2/10", down: "1/11" }
+    for (const name of Object.keys(want)) {
+        if (got[name] !== want[name]) fail(name + " is " + (got[name] || "missing") + ", not " + want[name])
+    }
+    for (const g of doc.graphs || []) {
+        if (g.nodes.length > 64) fail(g.name + " holds " + g.nodes.length + " nodes: the pass grew a graph past the corpus' own shape")
+    }
+}
+"""

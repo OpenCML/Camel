@@ -1,0 +1,20 @@
+/**
+ * Two functions that call each other: a call of `is_odd` inside `is_even` names a graph of its own,
+ * so the pass expands it once; the call of `is_even` that the copy brings into `is_even` is a call
+ * of the graph being edited, and stays. A round that expands nothing ends the run, so the pass
+ * stops instead of growing the pair.
+ */
+
+func is_even(n: int) => bool {
+    return if n == 0 then true else is_odd(n - 1)
+}
+
+func is_odd(n: int) => bool {
+    return if n == 0 then false else is_even(n - 1)
+}
+
+func main() => int sync {
+    let out = is_even(4)
+    'opt_camel_inline_mutual out={}'->format<out>->println
+    return 0
+}
