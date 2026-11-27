@@ -244,6 +244,34 @@ export const RULES = [
         },
     },
     {
+        // The main checkout belongs to the owner. A branch the tools make (a lane's, a seat's, a trial
+        // revert) standing there, or a file written there, is a lane that resolved a path against the
+        // wrong directory; the owner names neither his branches nor his edits this way, so the first is
+        // news at once, and changes on develop are news when they outlast a short hold.
+        id: 'main-checkout-touched',
+        level: 'wake',
+        hold: 5,
+        cooldown: 30,
+        check: ({ m }) => {
+            const c = readable(m.checkout) && m.checkout
+            if (!c) return null
+            if (/^(lane|seat|trial|b|meta)\//.test(c.head)) {
+                return {
+                    key: `branch:${c.head}`,
+                    text: `主检出 D:\\Projects\\Camel 被切到了工作分支 ${c.head}：是哪条车道（看主检出的 reflog），让它切回 develop、实验一律放进自己的工作树。主检出是负责人的，只在干净地停在 develop 上时被快进。`,
+                }
+            }
+            if (c.head === 'develop' && c.dirty > 0) {
+                const paths = (c.paths || []).join('、')
+                return {
+                    key: `dirty:${paths}`,
+                    text: `主检出 D:\\Projects\\Camel 在 develop 上有 ${c.dirty} 处未提交改动${paths ? `（${paths}）` : ''}：按路径找到写进来的车道复原（git -C <绝对路径> checkout -- <路径>），写文件一律用绝对路径。若是负责人自己的改动，不动。`,
+                }
+            }
+            return null
+        },
+    },
+    {
         id: 'checkout',
         level: 'quiet',
         hold: 15,
