@@ -1,0 +1,14 @@
+// Probe: what does `0 .. n` allocate once its value is used (so it cannot be dropped as dead), and
+// what does the same value allocate when it goes through `to_array`?
+func main() => int sync {
+    let keep = 0 .. 5000000
+    let usedKeep = len(keep)
+    let b1 = std::mem::blocks().bytes
+    let tmp = 0 .. 100000
+    let usedTmp = len(tmp)
+    let b2 = std::mem::blocks().bytes
+    let arr = (0 .. 5000000)->to_array()
+    let b3 = std::mem::blocks().bytes
+    println('probe keep_len={} after_keep={} after_tmp={} after_array={}'->format<usedKeep, b1, b2, b3>)
+    return 0
+}

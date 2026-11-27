@@ -1,0 +1,28 @@
+// A handle leaves the extent it was made in, in the strongest form the tree allows today: the value
+// is a node of a draft that the commit has already ended. The type checker accepts it; the only
+// thing that knows the handle is dead is the runtime check in `draftOf` (src/stdlib/graph/txn.cpp),
+// and nothing reads the handle here, so nothing refuses it either.
+import { graph_of, nodes, Node, open, inline, commit } from graph
+
+func answer() => int {
+    return 21 * 2
+}
+
+func subject(a: int, b: int) => int {
+    return a * b
+}
+
+// The node the transaction made, handed back to ordinary code after the commit closed the draft.
+func leak() => Node {
+    let t = open(subject)
+    let made = inline(t, nodes(graph_of(subject))[0], answer)
+    let edited = commit(t) !! subject
+    println(`[draft-handle] committed, the edited function runs: ${edited(1, 2)}`)
+    return made
+}
+
+func main() => int sync {
+    let dangling = leak()
+    println(`[draft-handle] accepted: a handle to a node of a closed draft: ${dangling == dangling}`)
+    return 0
+}
