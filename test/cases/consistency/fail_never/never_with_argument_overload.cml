@@ -17,7 +17,7 @@ func pick(x: int) => string {
 }
 
 func stop(m: string) => never {
-    return fail<'Stopped'>(m)
+    return fail('Stopped', m)
 }
 
 func main() => int[] sync {

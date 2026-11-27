@@ -1,0 +1,27 @@
+// One corpus of the comparison between the two names of one algebraic simplification
+// (docs/roadmap.cn.md, P). The two names are `std::cxx::algebra` and `opt::algebra`, and the
+// document they are compared in is the egraph one (`std::jgir canonical=true egraph=true`).
+//
+// `(x + 1) * 3 + (x + 1) * 4` writes `x + 1` twice, and two writings are two nodes: no algebraic law
+// reads them as one value, so `algebra` alone rewrites nothing here. The common-subexpression
+// elimination merges the two writings into one value first, and then the law
+// `x * c1 + x * c2 is x * (c1 + c2)` fires -- which is why the two readings of this corpus run each
+// side's cse before its algebra: `opt::cse opt::algebra` against
+// `std::cxx::cse std::cxx::algebra`. Compared after `algebra` alone, both sides would print the
+// corpus the front end built and the equality would be the equality of two non-runs.
+//
+// After the two steps the constants 3 and 4 are gone and one multiplication over the constant 7 is
+// there; a run of the pair that did nothing prints both multiplications and both coefficients, and
+// the entry's reading fails rather than passing on two empty documents.
+//
+// The value is printed, so the rewritten value feeds an effect rather than anchoring its graph
+// (docs/technical/45_graph_module.md).
+
+func two_writes(x: int) => int {
+    return (x + 1) * 3 + (x + 1) * 4
+}
+
+func main() => int sync {
+    println(two_writes(5))
+    return 0
+}

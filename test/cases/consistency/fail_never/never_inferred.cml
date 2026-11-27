@@ -11,7 +11,7 @@ func pick::<T>(x: T) => T {
 }
 
 func stop(m: string) => never {
-    return fail<'Stopped'>(m)
+    return fail('Stopped', m)
 }
 
 func main() => int sync {

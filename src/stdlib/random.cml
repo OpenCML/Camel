@@ -58,7 +58,7 @@ export func key(seed: int) => Key {
 /// @fails fault `InvalidArgument` when i is negative
 /// @example key(42)->fold(3)
 export func fold(k: Key, i: int) => Key {
-    return if i < 0 then fail<'InvalidArgument'>('fold needs a non-negative index') else derive(k, -3 - i)
+    return if i < 0 then fail('InvalidArgument', 'fold needs a non-negative index') else derive(k, -3 - i)
 }
 
 /// Two independent keys derived from k: the same pair every time, and k is not changed.
@@ -154,7 +154,7 @@ export func normal::<T>(k: Key) => T[...] when is_float::<T>() {
 with <low: int, high: int>
 export func randint(k: Key) => int {
     let span = high - low
-    return if span <= 0 || span > 4611686018427387904 then fail<'InvalidArgument'>('randint needs 0 < high - low <= 2^62') else low + below(k, span)
+    return if span <= 0 || span > 4611686018427387904 then fail('InvalidArgument', 'randint needs 0 < high - low <= 2^62') else low + below(k, span)
 }
 
 /// A uniformly random permutation of 0 up to, not including, n: the positions ordered by one

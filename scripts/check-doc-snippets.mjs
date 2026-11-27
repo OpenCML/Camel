@@ -267,7 +267,7 @@ const PENDING_ALL = [
 // this switch is how it gets exercised without emptying the list for the other pages.
 const PENDING = ARGV.includes('--no-pending') ? [] : PENDING_ALL
 
-const PENDING_MAX = 30
+const PENDING_MAX = 10
 
 const OTHER_LANGUAGES = new Set([
     '', 'bash', 'c', 'cpp', 'c++', 'css', 'go', 'html', 'java', 'javascript', 'js', 'json',

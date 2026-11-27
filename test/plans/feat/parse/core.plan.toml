@@ -294,21 +294,6 @@ expect_output_not_contains = ["never printed", "UnknownInternalError"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 10000
 
-[[tests]]
-name = "syntax.no_postfix_bang"
-desc = "The postfix `!` is not in the language (the `!` of `T!` belongs to the type): inside `(a!)` the marker is where the list expects its `,` or its `)` and is refused there. It was a `ConstructNotSupported` while the grammar read the mark and dropped it."
-kind = "negative"
-case = "../../../cases/parse/syntax/no_postfix_bang.cml"
-args = ["${case}"]
-expect_exit = 1
-expect_diagnostic_name = "SyntaxDiag::MissingComma"
-expect_diagnostic_code = "0x02000007"
-expect_diagnostic_line = 10
-expect_diagnostic_column = 15
-expect_output_contains = ["Expected ',' or ')' before '!'."]
-expect_output_not_contains = ["never printed", "UnknownInternalError"]
-normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
-timeout_ms = 10000
 
 [[tests]]
 name = "syntax.no_array_destructuring"

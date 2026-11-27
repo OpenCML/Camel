@@ -100,7 +100,7 @@ c128: (x: c128) => c128
 string: (x: T) => string
 parse_int: (text: string) => int!
 parse_float: (text: string) => float!
-error: (kind: string, message: string) => Error
+error: (kind: string, message: string = '') => Error
 print: <fmt: string> (x: T, ...rest) => T panic
 print: (x: T, ...rest) => T panic
 print: () => void panic
@@ -147,7 +147,7 @@ map: <f: (item: T) => U> (xs: T[]) => U[]
 filter: <f: (item: T) => bool> (xs: T[]) => T[]
 reduce: <f: (acc: U, item: T) => U, initial: U> (xs: T[]) => U
 foreach: <f: (item: T) => void> (xs: T[]) => void
-fail: <Kind: string> (message: string) => never panic
+fail: (kind: string, message: string = '') => never panic
 attempt: (f: F) => F!
 len: (x: C) => int when is_map::<C>() || is_set::<C>()
 get: <key: K> (m: Map<K, V>) => V?

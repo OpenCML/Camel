@@ -1,7 +1,7 @@
 id = "opt.cxx_isolation"
 order = 485
 tier = "fast"
-tags = ["feat", "opt", "cxx", "differential", "fold", "cse"]
+tags = ["feat", "opt", "cxx", "differential", "fold", "cse", "algebra"]
 
 # The C++ optimization passes and the Camel ones are two implementations of one optimization.
 # Neither is deleted yet (docs/roadmap.cn.md, P, written by the author): the C++
@@ -233,6 +233,246 @@ if (flags !== "0,2,2,2,2") {
         + "side moves this entry.")
 }
 """
+
+# ALGEBRA: one law set in the rules library (`rules::algebra`, stdlib/rules.cml) and two names that
+# run it -- the C++ pass under the isolation's name and `opt::algebra` in the module `opt`, which is
+# `rules::simplify` -- so the two readings of one corpus are one document, character for character.
+# They are compared in the egraph document (`std::jgir canonical=true egraph=true`), which is the
+# graph: the classes, the writings, the operator of each writing. The display document is compared
+# too, in one pair below, because this pass prints the same `flags` word on both sides (all three
+# graphs print 2, measured; the C++ passes commit every graph of the program and so does this one),
+# and that is a property of this pass, not of the comparison: the fold pair above prints two different
+# words for the same graphs and cannot be compared, so it is asserted on each side instead.
+#
+# Three corpora, because there is more than one way for the law to see one value:
+#
+#   single_x    `x * 3 + x * 4`: one name written twice, so the two products are products of one
+#               node and `x * c1 + x * c2 is x * (c1 + c2)` reads them as one value. `algebra` alone
+#               fires here.
+#   two_writes  `(x + 1) * 3 + (x + 1) * 4`: `x + 1` written twice is two nodes, and no algebraic law
+#               reads two nodes as one value -- `algebra` alone rewrites nothing, which the control
+#               reading in the entry's comment names (3 additions, 2 multiplications, the constants 3
+#               and 4). The common-subexpression elimination merges the two writings first, and then
+#               the law fires; so each side runs its own cse before its algebra, and the comparison is
+#               of `std::cxx::cse std::cxx::algebra` against `opt::cse opt::algebra`. Compared after
+#               `algebra` alone, both sides would print the corpus the front end built and the
+#               equality would be the equality of two non-runs.
+#   bound       `let a = x + 1` then `a * 3 + a * 4`: the binding makes one value of two writings
+#               without a cse, so the law fires on `algebra` alone. It is the third path to the same
+#               law, and it also carries the doubling (`b + b` over `b = x * 3` folds to `x * 6`) and
+#               the neutral elements (`x * 1 + 0` leaves the port).
+#
+# Every entry says what the document of a run that did nothing would hold, so "both sides did
+# nothing" cannot pass as equality.
+
+[[tests]]
+name = "cxx_isolation.algebra_single_x.by_cpp"
+desc = "The C++ algebraic simplification (`std::cxx::algebra`) on `x * 3 + x * 4`, one name written twice: the egraph document of the graph set it leaves, with no addition, one multiplication over the constant 7 and neither coefficient, which is the document `opt::algebra` is compared against."
+kind = "behavior"
+case = "../../../cases/opt/cxx_isolation/algebra_single_x.cml"
+args = ["${case}", "std::cxx::algebra", "std::jgir canonical=true egraph=true", "std::nop"]
+expect_exit = 0
+timeout_ms = 20000
+verify_script = """
+const doc = JSON.parse(input.normalized.stdout)
+const fail = (why) => {
+    throw new Error("std::cxx::algebra: " + why)
+}
+for (const key of ["class_data", "nodes", "root_eclasses"]) {
+    if (!(key in doc)) {
+        fail("the run did not print the egraph document: " + input.normalized.stdout.slice(0, 200))
+    }
+}
+const ops = Object.values(doc.nodes).map((n) => n.op)
+const count = (op) => ops.filter((o) => o === op).length
+if (doc.root_eclasses.length < 3) {
+    fail("the document holds " + doc.root_eclasses.length + " root class(es), not the three graphs the program has")
+}
+if (count(":op/add_l") !== 0) {
+    fail("the document holds " + count(":op/add_l") + " addition(s): `x * 3 + x * 4` was not merged into one product")
+}
+if (count(":op/mul_l") !== 1) {
+    fail("the document holds " + count(":op/mul_l") + " multiplication(s), not the one the merged coefficients leave")
+}
+for (const gone of ["3", "4"]) {
+    if (count(gone) !== 0) {
+        fail("the document holds the constant " + gone + ": the two coefficients were not merged into one")
+    }
+}
+if (count("7") !== 1) {
+    fail("the document holds " + count("7") + " constant(s) 7, not the one merged coefficient")
+}
+"""
+
+[[tests]]
+name = "cxx_isolation.algebra_single_x.by_camel"
+desc = "The Camel algebraic simplification (`opt::algebra`, stdlib/opt.cml) on the same corpus, in the same document: it is `rules::simplify`, the laws are written once, so this is the C++ reading byte for byte -- same exit, same bytes, no normalizer."
+kind = "differential"
+case = "../../../cases/opt/cxx_isolation/algebra_single_x.cml"
+args = ["${case}", "opt::algebra", "std::jgir canonical=true egraph=true", "std::nop"]
+expect_exit = 0
+timeout_ms = 20000
+compare_to = "cxx_isolation.algebra_single_x.by_cpp"
+compare_fields = ["exit_code", "stdout_normalized"]
+
+[[tests]]
+name = "cxx_isolation.algebra_two_writes.by_cpp"
+desc = "The C++ pair of steps this corpus needs -- the common-subexpression elimination (`std::cxx::cse`) and then the algebraic simplification (`std::cxx::algebra`) -- on `(x + 1) * 3 + (x + 1) * 4`, whose `x + 1` is written twice: the egraph document of the graph set the two steps leave, with one addition, one multiplication over the constant 7 and neither coefficient. `algebra` alone leaves 3 additions, 2 multiplications and both constants, which is why the cse is there and why a reader of this entry should not read it as `algebra` firing by itself."
+kind = "behavior"
+case = "../../../cases/opt/cxx_isolation/algebra_two_writes.cml"
+args = ["${case}", "std::cxx::cse", "std::cxx::algebra", "std::jgir canonical=true egraph=true", "std::nop"]
+expect_exit = 0
+timeout_ms = 20000
+verify_script = """
+const doc = JSON.parse(input.normalized.stdout)
+const fail = (why) => {
+    throw new Error("std::cxx::cse std::cxx::algebra: " + why)
+}
+for (const key of ["class_data", "nodes", "root_eclasses"]) {
+    if (!(key in doc)) {
+        fail("the run did not print the egraph document: " + input.normalized.stdout.slice(0, 200))
+    }
+}
+const ops = Object.values(doc.nodes).map((n) => n.op)
+const count = (op) => ops.filter((o) => o === op).length
+if (doc.root_eclasses.length < 3) {
+    fail("the document holds " + doc.root_eclasses.length + " root class(es), not the three graphs the program has")
+}
+if (count(":op/add_l") !== 1) {
+    fail("the document holds " + count(":op/add_l") + " addition(s), not the one `x + 1` the corpus keeps: "
+        + "the two writings of `x + 1` were not merged, so the cse did nothing")
+}
+if (count(":op/mul_l") !== 1) {
+    fail("the document holds " + count(":op/mul_l") + " multiplication(s), not the one the merged coefficients leave: "
+        + "the two products were not merged, so the algebra did nothing")
+}
+for (const gone of ["3", "4"]) {
+    if (count(gone) !== 0) {
+        fail("the document holds the constant " + gone + ": the two coefficients were not merged into one")
+    }
+}
+if (count("7") !== 1) {
+    fail("the document holds " + count("7") + " constant(s) 7, not the one merged coefficient")
+}
+"""
+
+[[tests]]
+name = "cxx_isolation.algebra_two_writes.by_camel"
+desc = "The Camel pair of the same two steps (`opt::cse`, `opt::algebra`) on the same corpus, in the same document: the C++ reading byte for byte. Each side runs its own cse, so this compares the two implementations of both steps, and it compares them after the algebra -- the step that only fires once the cse has made one value of the two writings."
+kind = "differential"
+case = "../../../cases/opt/cxx_isolation/algebra_two_writes.cml"
+args = ["${case}", "opt::cse", "opt::algebra", "std::jgir canonical=true egraph=true", "std::nop"]
+expect_exit = 0
+timeout_ms = 20000
+compare_to = "cxx_isolation.algebra_two_writes.by_cpp"
+compare_fields = ["exit_code", "stdout_normalized"]
+
+[[tests]]
+name = "cxx_isolation.algebra_bound.by_cpp"
+desc = "The C++ algebraic simplification (`std::cxx::algebra`) on the corpus whose repeated value is bound to a `let`: the egraph document of the graph set it leaves -- the two products of one value merged, the doubling folded into one coefficient, the neutral elements gone -- with the root class of each of the five graphs. A binding makes one value of two writings without a cse, which is the third way to reach the same law."
+kind = "behavior"
+case = "../../../cases/opt/cxx_isolation/algebra_bound.cml"
+args = ["${case}", "std::cxx::algebra", "std::jgir canonical=true egraph=true", "std::nop"]
+expect_exit = 0
+timeout_ms = 20000
+verify_script = """
+const doc = JSON.parse(input.normalized.stdout)
+const fail = (why) => {
+    throw new Error("std::cxx::algebra: " + why)
+}
+for (const key of ["class_data", "nodes", "root_eclasses"]) {
+    if (!(key in doc)) {
+        fail("the run did not print the egraph document: " + input.normalized.stdout.slice(0, 200))
+    }
+}
+const ops = Object.values(doc.nodes).map((n) => n.op)
+const count = (op) => ops.filter((o) => o === op).length
+if (doc.root_eclasses.length < 5) {
+    fail("the document holds " + doc.root_eclasses.length + " root class(es), not the five graphs the program has")
+}
+if (count(":op/add_l") !== 1) {
+    fail("the document holds " + count(":op/add_l") + " addition(s), not the one `x + 1` the corpus keeps: "
+        + "the two products of one value were not merged, so the pass did not fire")
+}
+if (count(":op/mul_l") !== 2) {
+    fail("the document holds " + count(":op/mul_l") + " multiplication(s), not the two the merged coefficients leave")
+}
+for (const gone of ["3", "4"]) {
+    if (count(gone) !== 0) {
+        fail("the document holds the constant " + gone + ": the coefficients of the two products were not merged into one")
+    }
+}
+"""
+
+[[tests]]
+name = "cxx_isolation.algebra_bound.by_camel"
+desc = "The Camel algebraic simplification (`opt::algebra`) on the corpus whose repeated value is bound to a `let`, in the same document: the C++ reading byte for byte. `opt::algebra` is `rules::simplify`, and the binding is what a program writes when it wants one value, so this is the reading that a pass of the module and the C++ pass agree on the shape a `let` gives."
+kind = "differential"
+case = "../../../cases/opt/cxx_isolation/algebra_bound.cml"
+args = ["${case}", "opt::algebra", "std::jgir canonical=true egraph=true", "std::nop"]
+expect_exit = 0
+timeout_ms = 20000
+compare_to = "cxx_isolation.algebra_bound.by_cpp"
+compare_fields = ["exit_code", "stdout_normalized"]
+
+[[tests]]
+name = "cxx_isolation.algebra_display.by_cpp"
+desc = "The same `single_x` run in the display document: the canonical document of the three graphs with the shape the entries above read -- no addition, one multiplication, neither coefficient -- and the `flags` word it prints, 2 for every graph because this pass commits every graph of the program."
+kind = "behavior"
+case = "../../../cases/opt/cxx_isolation/algebra_single_x.cml"
+args = ["${case}", "std::cxx::algebra", "std::jgir canonical=true", "std::nop"]
+expect_exit = 0
+timeout_ms = 20000
+verify_script = """
+const doc = JSON.parse(input.normalized.stdout)
+const fail = (why) => {
+    throw new Error("std::cxx::algebra: " + why)
+}
+if (doc.format !== "camel.gir" || doc.canonical !== true) {
+    fail("the run did not print the canonical document: " + input.normalized.stdout.slice(0, 200))
+}
+const graphs = doc.graphs || []
+if (graphs.length < 3) {
+    fail("the document holds " + graphs.length + " graph(s), not the three the program has")
+}
+// An operator in this document is named by its semantic key, version included (`:op/mul_l@1.0`;
+// std/gir/json/gir_canonical.cpp, the payload of an OPER node), where the egraph document names the
+// node's uri (`:op/mul_l`; std/gir/recordLabel). The count is by name -- the operator the graph
+// calls -- because the version belongs to the operator's declaration in the semantics table and both
+// readings read that one table: pinning the number here would make an operator's own version bump
+// turn this entry red for a reason that has nothing to do with the algebraic laws. The version is not
+// dropped silently, either: every operator this document names has to carry one.
+const opStrings = graphs.flatMap((g) => (g.nodes || []).filter((n) => n.kind === "OPER").map((n) => (n.payload && n.payload.op) ? n.payload.op : ""))
+for (const op of opStrings) {
+    if (op.startsWith(":op/") && !op.includes("@")) {
+        fail("the operator " + op + " carries no version: this document names an operator by its semantic key")
+    }
+}
+const opName = (op) => op.split("@")[0]
+const count = (op) => opStrings.filter((o) => opName(o) === op).length
+if (count(":op/add_l") !== 0) {
+    fail("the document holds " + count(":op/add_l") + " addition(s): `x * 3 + x * 4` was not merged into one product")
+}
+if (count(":op/mul_l") !== 1) {
+    fail("the document holds " + count(":op/mul_l") + " multiplication(s), not the one the merged coefficients leave")
+}
+const flags = graphs.map((g) => g.flags).sort().join(",")
+if (flags !== "2,2,2") {
+    fail("the graph set prints flags [" + flags + "], not [2,2,2]: this pass commits every graph it decodes, "
+        + "as the C++ kernel does, which is what lets this document be compared with the C++ one at all")
+}
+"""
+
+[[tests]]
+name = "cxx_isolation.algebra_display.by_camel"
+desc = "The same Camel run in the display document, compared with the C++ one byte for byte: this pass prints the same `flags` word on both sides (every graph it decodes is committed), so the display documents of the two names are one document, unlike the fold pair's. That equality is the reading: a change to which graphs either implementation commits moves it."
+kind = "differential"
+case = "../../../cases/opt/cxx_isolation/algebra_single_x.cml"
+args = ["${case}", "opt::algebra", "std::jgir canonical=true", "std::nop"]
+expect_exit = 0
+timeout_ms = 20000
+compare_to = "cxx_isolation.algebra_display.by_cpp"
+compare_fields = ["exit_code", "stdout_normalized"]
 # The one name the rework kept. `std::opt` is not a spelling of a sub-pass: it is the name of the
 # default pipeline, the choice "optimize by default", and today it selects the C++ implementation.
 # The two entries below are its reading, and they are a relation rather than a stored document: the

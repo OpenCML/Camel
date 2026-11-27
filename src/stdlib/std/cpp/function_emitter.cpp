@@ -2483,14 +2483,14 @@ bool FunctionEmitter::lowerFail(
         return false;
     }
     const auto *g = frame.graph;
-    // `fail<'Kind'>(message)`: the kind is a constant of the graph -- the tag the program wrote,
+    // `fail('Kind', message)`: the kind is a constant of the graph -- the tag the program wrote,
     // which is what the fault's report is named after (design principles 3.9) -- and the message
-    // is the call's argument. Both are wanted, and neither is a value of the program's own words.
-    const auto with = g->view().inputs(ref, PortGroup::Context);
+    // is the call's second argument, left out when the kind alone says what went wrong. Both are
+    // ordinary arguments now, so both are read from the normal inputs.
     const auto norm = g->view().inputs(ref, PortGroup::Normal);
     std::string kind;
-    if (!with.empty()) {
-        const auto *node = g->node(with[0]);
+    if (!norm.empty()) {
+        const auto *node = g->node(norm[0]);
         if (node->kind == GCNodeKind::Data && node->dataType() != nullptr &&
             node->dataType()->code() == camel::core::type::TypeCode::String) {
             if (const auto *text = camel::core::rtdata::fromSlot<::String *>(
@@ -2509,7 +2509,7 @@ bool FunctionEmitter::lowerFail(
                 "the fault after the kind it was written with",
                 describeFunction(g)));
     }
-    if (norm.size() != 1) {
+    if (norm.empty() || norm.size() > 2) {
         refuse(
             g,
             ref,
@@ -2518,14 +2518,10 @@ bool FunctionEmitter::lowerFail(
                 describeFunction(g),
                 norm.size()));
     }
+    const std::string message =
+        norm.size() == 2 ? valueOf(frame, norm[1]).text : std::string("\"\"");
     const std::string site = program_.sites.siteForProgramFault(g, ref, kind);
-    bind(
-        frame,
-        ref,
-        std::format("rt::fail({}, {})", site, valueOf(frame, norm[0]).text),
-        false,
-        out,
-        "fail");
+    bind(frame, ref, std::format("rt::fail({}, {})", site, message), false, out, "fail");
     return true;
 }
 

@@ -245,6 +245,8 @@ func main() => int sync {
 
 **故障**是程序无法继续的情形：除数为零、下标越界、`match` 没有分支匹配、递归过深、数字文本无法转换等。故障使程序带源码位置终止，退出码为 1；它之前已经产生的输出照常写出。故障不是错误值，`!!` 接不住它。
 
+<!-- camel-snippet: counter-example: the index is deliberately past the end and the program is written to stop there; a wrong program like this is not a program a graph pass can finish -->
+
 ```cml
 func main() => int sync {
     let xs = [1, 2, 3]
@@ -272,6 +274,8 @@ help: Ensure the index is within the valid range of the collection.
 **`exit(n)`** 立即结束程序，退出码为 `n`；此前的输出照常写出。
 
 **递归深度。** 尾位置的调用不占用栈帧，尾递归可以任意深。非尾递归同时打开的调用数有上限，默认 1000，超过是故障 `RuntimeDiag::MaxRecursionDepthExceeded`；用 `--max-recursion-depth <n>` 调整。计数包括通过函数值的调用和高阶算子对每个元素的调用。默认值在各执行后端上相同，并行调度器同样计数。
+
+<!-- camel-snippet: counter-example: the last call is chosen to go past the limit and the program is written to stop there; a wrong program like this is not a program a graph pass can finish -->
 
 ```cml
 func depth(n: int) => int {

@@ -923,6 +923,7 @@ enum ReservedDataOp {
     Compose, // Data lhs, Data rhs -- `a<>b`, the composition alone
     As, // Data lhs, Type rhs
     Access, // Data obj, RefData ref
+    Unwrap, // Data lhs -- `x!`, a branch whose arms the graph builder makes from the tag of `x`
 }
 ReservedExpr(ReservedDataOp op) := Data lhs, Any? rhs ;
 */
@@ -964,6 +965,21 @@ node_ptr_t Builder::visitReservedExpr(const AST::node_ptr_t &ast) {
         node_ptr_t caseNode = tree_->makeCase(CaseType::True);
         *caseNode << execNode;
         *res << lhsNode << caseNode;
+    } break;
+    case AST::ReservedDataOp::Unwrap: {
+        // `x!`: the value out of `x`, and the failure it carries becomes a fault (design
+        // principles 3.9). Whether `x` is a `T?` or a `T!` is a question of its type, which this
+        // builder does not know, so the two arms are made by the graph builder; what is written
+        // here is the branch and the value it takes apart. The node is located at the mark.
+        res = tree_->makeBrch(BranchKind::Unwrap);
+        setOriginFromAst(
+            context_,
+            res,
+            ast,
+            camel::source::OriginKind::GctNode,
+            "gct.tagged.unwrap");
+        node_ptr_t lhsNode = visitData(lhsASTNode);
+        *res << lhsNode;
     } break;
     case AST::ReservedDataOp::Call: {
         // Handle the "Call" operator

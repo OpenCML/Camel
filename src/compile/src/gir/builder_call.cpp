@@ -455,8 +455,14 @@ Builder::visitLinkNode(const GCT::node_ptr_t &gct, std::optional<GCT::Assignment
             for (const auto &[uri, resolver] :
                  std::get<oper_group_ptr_t>(drefTarget)->resolvers()) {
                 const auto *spec = camel::core::OperatorTable::instance().callSpec(uri);
-                if (spec != nullptr && spec->callSiteAtArity >= 0 &&
-                    static_cast<size_t>(spec->callSiteAtArity) + 1 == gct->size()) {
+                if (spec == nullptr || spec->callSiteAtArity < 0) {
+                    continue;
+                }
+                // The node holds the callee and its ordinary arguments, so the arity is one less.
+                const int arity = static_cast<int>(gct->size()) - 1;
+                const int from  = spec->callSiteAtArityFrom >= 0 ? spec->callSiteAtArityFrom
+                                                                 : spec->callSiteAtArity;
+                if (arity >= from && arity <= spec->callSiteAtArity) {
                     return true;
                 }
             }

@@ -26,7 +26,7 @@ Every expression has a definite type at compile time; the graph contains only co
 | Map, set | `Map<K, V>`, `Set<T>` | See 3.6 |
 | Enum | `Shape`, `Option<int>` | See 3.5 |
 | No value | `void` | Return type of a function that returns no value; its only value prints as `null` |
-| Bottom | `never` | The type with no value: `fail<'Kind'>(message)` and `exit(code)` have it, and it fits everywhere (it is assignable to any type, joins a branch and is inferred), but no expression gives a value of it |
+| Bottom | `never` | The type with no value: `fail('Kind', message)` and `exit(code)` have it, and it fits everywhere (it is assignable to any type, joins a branch and is inferred), but no expression gives a value of it |
 | Module types | A type name introduced by a module (e.g. `Json`); a numeric array is not a module type of its own (the transitional `Tensor` name is deleted, and writing it is an unknown name) | Introduced by a module; the name and the arguments in angle brackets are interpreted by the type itself, and the representation is the module's |
 There is no type `any`: after compilation every value has a definite type (design principles 5.10). Writing `any` in any type position is, like any other unknown type name, the compile-time error `SemanticDiag::UnresolvedTypeReference`; a parameter that takes several types uses a type parameter (see [7.5](07_statements.md#75-generic-functions)), and values of different types side by side go in a tuple or a struct.
 
@@ -261,7 +261,7 @@ Rules:
 
 **Errors and faults are two different things.** Only an operation declared to return `T!` produces an error value. Division by zero, an out-of-range subscript and too deep a recursion are faults: the program terminates with a location, and `!!` cannot catch it (see [4.6](04_execution_model.md#46-faults-exit-and-resource-limits)).
 
-To raise a fault from a function body, write `fail<'Kind'>('message')`: it is an expression of type `never` (it has no value), the kind is the name in angle brackets, and `attempt` isolates it into an error value.
+To raise a fault from a function body, write `fail('Kind', 'message')`: it is an expression of type `never` (it has no value), the kind is the name in angle brackets, and `attempt` isolates it into an error value.
 
 **Behaviour of the current implementation, not yet decided**: a `match` on these two forms has exactly two cases; they can be printed but, apart from a `T?` with `null`, not compared with `==`.
 

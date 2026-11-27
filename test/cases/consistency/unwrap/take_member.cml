@@ -1,0 +1,24 @@
+/**
+ * A take is read where any value is read, so a member after it is a member of the value taken out
+ * (design principles 3.9: `read(p)!.rows` takes the value and then reads the field).
+ */
+
+type Row = { count: int, name: string }
+
+func row(n: int) => Row! {
+    return if n > 0 then { count: n, name: 'row' } else error('NoRow', 'there is no row')
+}
+
+func count(n: int) => int {
+    return row(n)!.count
+}
+
+func name(n: int) => string {
+    return row(n)!.name
+}
+
+func main() => int sync {
+    println(count(3))
+    println(name(3))
+    return 0
+}

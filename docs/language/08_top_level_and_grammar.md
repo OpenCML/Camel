@@ -173,6 +173,7 @@ linkExpr           : annoExpr ('->' annoExpr)*
 negExpr            : ('-' | '!' | '~') negPower | linkExpr
 negPower           : ('-' | '!' | '~') negPower | linkExpr ('^' negPower)?
 annoExpr           : accessExpr (indices | parentArgues | structData | angledValues | typeArguments
+                     | memberAccess | '!')*
 memberAccess       : '.' (IDENTIFIER | INTEGER | REAL | '[' dataExpr ']')
 accessExpr         : primaryData ('.' (IDENTIFIER | INTEGER | REAL | '[' dataExpr ']'))*
 shapeComp          : typeExpr '{' staticForExpr '}'

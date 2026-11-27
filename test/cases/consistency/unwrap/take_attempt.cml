@@ -1,0 +1,35 @@
+/**
+ * The take and `attempt` are inverses (design principles 3.9, 3.5): `attempt` turns the fault of
+ * the call it wraps into an error value, and the take inside that call turns an error value back
+ * into a fault, with the kind and the message it had. A take that succeeds gives its value, and
+ * the boundary has nothing to report.
+ */
+
+func parse(n: int) => int! {
+    return if n == 12 then n else error('NotANumber', 'the number is not 12')
+}
+
+func take(n: int) => int {
+    return parse(n)!
+}
+
+func kind(r: int!) => string {
+    return match r {
+        case error e => e.kind
+        case v => 'no error'
+    }
+}
+
+func message(r: int!) => string {
+    return match r {
+        case error e => e.message
+        case v => 'no error'
+    }
+}
+
+func main() => int sync {
+    println(kind(attempt(take)(7)))
+    println(message(attempt(take)(7)))
+    println((attempt(take)(12) !! -1) == 12)
+    return 0
+}

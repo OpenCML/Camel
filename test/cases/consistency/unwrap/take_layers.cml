@@ -1,0 +1,17 @@
+/**
+ * The take reads one layer of mark, the outer one (design principles 3.9: the marks are written
+ * from the inside, so `T?!` is a fallible nullable): `x!` on a `T?!` gives the `T?` the value
+ * holds, and a `null` under it is still a `null` -- only the failure becomes a fault.
+ */
+
+func maybe(n: int) => int?! {
+    return if n > 0 then (if n > 5 then null else n) else error('Bad', 'the number must be positive')
+}
+
+func main() => int sync {
+    let three = maybe(3)!
+    println(three ?? -1)
+    let none = maybe(7)!
+    println(none ?? -1)
+    return 0
+}

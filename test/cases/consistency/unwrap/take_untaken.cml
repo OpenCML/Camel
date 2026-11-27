@@ -1,0 +1,19 @@
+/**
+ * A take raises its fault where the value is wanted, and only there (design principles 3.9: a
+ * fault belongs to a value, and a value on a path the program does not take is never computed).
+ * The arm that is not taken writes a take that would fail, and nothing happens.
+ */
+
+func parse(n: int) => int! {
+    return if n == 12 then n else error('NotANumber', 'the number is not 12')
+}
+
+func pick(n: int) => int {
+    return if n > 12 then parse(n)! else 0
+}
+
+func main() => int sync {
+    println(pick(7))
+    println('end')
+    return 0
+}

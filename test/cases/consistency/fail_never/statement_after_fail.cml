@@ -7,7 +7,7 @@
 
 func main() => int sync {
     println('before')
-    fail<'NoPremise'>('the premise of this program does not hold')
+    fail('NoPremise', 'the premise of this program does not hold')
     println('after')
     return 0
 }

@@ -1,0 +1,24 @@
+/**
+ * The take is a postfix mark that touches the value just before it (design principles 3.9): an
+ * index, a call and a parenthesized expression are all taken from, and the take binds before the
+ * operators around it. `!=` keeps its own reading, so a take followed by `!=` is the take and then
+ * the comparison, and never a `!` that swallowed the `=`.
+ */
+
+func parse(n: int) => int! {
+    return if n == 12 then n else error('NotANumber', 'the number is not 12')
+}
+
+func twice(x: int) => int {
+    return x * 2
+}
+
+func main() => int sync {
+    let xs: (int!)[] = [parse(12), parse(12)]
+    println(xs[0]!)
+    println(twice(parse(12)!))
+    println((parse(12)!))
+    println(parse(12)! + parse(12)!)
+    println(parse(12)! != 7)
+    return 0
+}

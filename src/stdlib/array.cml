@@ -59,7 +59,7 @@ export func drop::<T>(xs: T[]) => T[] {
 /// @example [1, 2, 3, 4, 5]->chunks<2>    // [[1, 2], [3, 4], [5]]
 with <n: int>
 export func chunks::<T>(xs: T[]) => T[][] {
-    return if n < 1 then fail<'InvalidArgument'>('a chunk holds at least one element') else [xs->drop<i>->take<n> for i in range(0, len(xs), n)]
+    return if n < 1 then fail('InvalidArgument', 'a chunk holds at least one element') else [xs->drop<i>->take<n> for i in range(0, len(xs), n)]
 }
 
 /// Each element with its index.
@@ -147,7 +147,7 @@ export func count::<T>(xs: T[]) => int {
 // The elements a reduction reduces; a reduction over no element is a fault.
 func some_elements::<T>(xs: T[...]) => T[] {
     let es = flatten(xs)
-    return if len(es) == 0 then fail<'InvalidArgument'>('a reduction over no elements') else es
+    return if len(es) == 0 then fail('InvalidArgument', 'a reduction over no elements') else es
 }
 
 // The sum of the elements in f64, from +0 in order, never rounded into the element type.

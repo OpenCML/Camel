@@ -928,7 +928,9 @@ void registerBuiltinOperatorTraits() {
         ":struct/append_arr_owned",
         {.name = "append", .minArgs = 1, .declaredByModule = true});
     // What the compiler does at a call because of the operator (design principles log 2.17).
-    registry.declareCallSpec(":op/error_new", {.callSiteAtArity = 2});
+    // The message may be left out, so both arities take the position of the call.
+    registry.declareCallSpec(":op/error_new", {.callSiteAtArity = 2, .callSiteAtArityFrom = 1});
+
     for (const char *uri : {":io/print", ":io/println"}) {
         registry.declareCallSpec(uri, {.formatWithArg = 0, .checkFormat = checkFormatPattern});
     }

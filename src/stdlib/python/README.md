@@ -60,7 +60,7 @@ import { import_module, eval, exec, run_file, attr, call, to_string, to_py, from
 
 func must(r: PyObject!): PyObject {
     return match r {
-        case error e => fail<'InvalidArgument'>(e.message)
+        case error e => fail('InvalidArgument', e.message)
         case v => v
     }
 }

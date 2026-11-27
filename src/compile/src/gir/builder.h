@@ -3544,6 +3544,17 @@ class Builder {
     // the one-bit tag of a value; nothing here adds a node kind. ----
     /// `a ?? b`, `a !! b`.
     node_handle_t visitTaggedBrchNode(const GCT::node_ptr_t &gct);
+    /// `x!` (design principles 3.9): the value out, and the failure it carries raised as a fault.
+    /// The tag `x` carries decides both the arm that raises the fault and the one that takes the
+    /// value out, so both arms are made here.
+    node_handle_t visitUnwrapBrchNode(const GCT::node_ptr_t &gct);
+    /// The fault `<kind>: <message>` of a value taken out by `!`: the call `fail(<kind>,
+    /// <message>)` the program would write, built from the operands the branch already holds.
+    /// `location` is the position the error value records, said beside the `!`; it is null where
+    /// there is none, as when the taken value was `null`.
+    node_handle_t faultNodeOf(
+        node_handle_t kind, node_handle_t message, node_handle_t location,
+        const GCT::node_ptr_t &origin);
     /// The value a declaration without a right side stands for: the C++ module's registered value.
     node_handle_t nativeValueNode(const GCT::node_ptr_t &gct, Type *declared);
     /// The pipe `x -> f` (design principles 3.9). The call is built with `x` as it is, and the

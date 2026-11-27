@@ -805,6 +805,8 @@ class Formatter {
 
     std::any visitAnnoExpr(cst::AnnoExpr context);
 
+    std::any visitBangExpr(cst::BangExpr context);
+
     std::any visitAccessExpr(cst::AccessExpr context);
     std::any visitMemberAccess(cst::MemberAccess context);
 

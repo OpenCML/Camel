@@ -1,0 +1,143 @@
+id = "consistency.unwrap"
+order = 353
+tier = "fast"
+tags = ["feat", "consistency", "unwrap", "runtime"]
+desc = "The take `x!`: the value out of a `T?` or a `T!`, and the failure it carries raised as a fault"
+
+# `x!` is the inverse of `attempt` (design principles 3.9): it takes the value out of a `T!` and
+# raises the failure as a fault with the error's own kind and message, and takes `null` out of a
+# `T?` as the fault `NullValue`. The report is located at the `!`, where the program said the
+# take has to succeed. The back ends must agree on it.
+
+[[tests]]
+name = "unwrap.take_fallible"
+desc = "parse('12')! gives the value 12; parse('x')! raises the fault the error names (NotANumber), where the '!' stands, and 'not reached' is never printed."
+kind = "negative"
+case = "../../../cases/consistency/unwrap/take_fallible.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized", "diagnostics"]
+expect_exit = 1
+expect_diagnostic_code = "0x040001AC"
+expect_diagnostic_line = 14
+expect_diagnostic_column = 23
+verify_script = """
+assert(input.diagnostics.length === 1, JSON.stringify(input.diagnostics))
+assert(input.diagnostics[0].name === 'RuntimeDiag::' + 'NotANumber', input.diagnostics[0].name)
+"""
+expect_stdout_contains = ["take=12"]
+expect_output_contains = ["the error was made here: take_fallible.cml:8:35"]
+expect_output_not_contains = ["not reached", "Segmentation fault", "dumped core"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 20000
+
+[[tests]]
+name = "unwrap.take_nullable"
+desc = "maybe(true)! gives the value 7; maybe(false)! raises the fault NullValue, where the '!' stands, and 'not reached' is never printed."
+kind = "negative"
+case = "../../../cases/consistency/unwrap/take_nullable.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized", "diagnostics"]
+expect_exit = 1
+expect_diagnostic_code = "0x040001AC"
+expect_diagnostic_line = 14
+expect_diagnostic_column = 28
+verify_script = """
+assert(input.diagnostics.length === 1, JSON.stringify(input.diagnostics))
+assert(input.diagnostics[0].name === 'RuntimeDiag::' + 'NullValue', input.diagnostics[0].name)
+"""
+expect_stdout_contains = ["value=7"]
+expect_output_not_contains = ["not reached", "the error was made here:", "Segmentation fault", "dumped core"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 20000
+[[tests]]
+name = "unwrap.take_attempt"
+desc = "The take and attempt are inverses: take(7) faults inside the boundary and the error value keeps the kind and the message the take raised, while take(12) gives 12 and the boundary reports nothing."
+kind = "behavior"
+case = "../../../cases/consistency/unwrap/take_attempt.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_contains = ["NotANumber", "the number is not 12", "true\n"]
+expect_output_not_contains = ["no error", "Segmentation fault", "dumped core"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 20000
+
+[[tests]]
+name = "unwrap.take_postfix"
+desc = "The take touches the value before it -- an index, a call, a parenthesized expression -- and binds before '+'; '!=' is a token of its own, so 'parse(12)! != 7' is the take and then the comparison."
+kind = "behavior"
+case = "../../../cases/consistency/unwrap/take_postfix.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_contains = ["12\n24\n12\n24\n", "true\n"]
+expect_output_not_contains = ["Segmentation fault", "dumped core"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 20000
+
+[[tests]]
+name = "unwrap.take_member"
+desc = "A member written after a take is a member of the value taken out: 'row(n)!.count' takes the row and then reads the field."
+kind = "behavior"
+case = "../../../cases/consistency/unwrap/take_member.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_contains = ["3", "row"]
+expect_output_not_contains = ["Segmentation fault", "dumped core"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 20000
+
+[[tests]]
+name = "unwrap.take_layers"
+desc = "The take reads the outer mark: 'maybe(3)!' on an 'int?!' gives the 3, 'maybe(7)!' gives the null it holds (not a fault), and only the failure of the inner 'T!' would become a fault."
+kind = "behavior"
+case = "../../../cases/consistency/unwrap/take_layers.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_contains = ["3\n-1\n"]
+expect_output_not_contains = ["Segmentation fault", "dumped core"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 20000
+
+[[tests]]
+name = "unwrap.take_untaken"
+desc = "A take raises its fault where the value is wanted, and only there: 'pick(7)' does not enter the arm that writes 'parse(7)!', so the program prints 0 and goes on to print 'end'."
+kind = "behavior"
+case = "../../../cases/consistency/unwrap/take_untaken.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_contains = ["0\nend\n"]
+expect_output_not_contains = ["NotANumber", "Segmentation fault", "dumped core"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 20000
+
+[[tests]]
+name = "unwrap.take_where_text"
+desc = "The place a take names beside the `!` is the text the error records: an error a kernel makes says `<json::decode>`, which is no position in a file, and the report says it as it stands -- the fault still stands at the `!`. This is the boundary of the convention: the place is a reading, never parsed."
+kind = "negative"
+case = "../../../cases/consistency/unwrap/take_where_text.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized", "diagnostics"]
+expect_exit = 1
+expect_diagnostic_code = "0x040001AC"
+expect_diagnostic_line = 12
+expect_diagnostic_column = 32
+verify_script = """
+assert(input.diagnostics.length === 1, JSON.stringify(input.diagnostics))
+assert(input.diagnostics[0].name === 'RuntimeDiag::' + 'JsonParseError', input.diagnostics[0].name)
+"""
+expect_output_contains = ["the error was made here: <json::decode>"]
+expect_output_not_contains = ["not reached", "unknown place", "Segmentation fault", "dumped core"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 20000

@@ -262,6 +262,8 @@ func main() => int sync {
 
 A **fault** is a situation in which the program cannot continue: a zero divisor, an out-of-range subscript, a `match` with no matching case, too deep a recursion, number text that cannot be converted, and so on. A fault terminates the program with a source location and exit code 1; output produced before it is written out as usual. A fault is not an error value, and `!!` cannot catch it.
 
+<!-- camel-snippet: counter-example: the index is deliberately past the end and the program is written to stop there; a wrong program like this is not a program a graph pass can finish -->
+
 ```cml
 func main() => int sync {
     let xs = [1, 2, 3]
@@ -289,6 +291,8 @@ The operator that isolates a fault at a subgraph boundary is `attempt` ([6.10.1]
 **`exit(n)`** ends the program immediately with exit code `n`; earlier output is written out as usual.
 
 **Recursion depth.** A call in tail position does not occupy a stack frame, and tail recursion can be arbitrarily deep. The number of calls open at the same time in non-tail recursion has a limit, 1000 by default; exceeding it is the fault `RuntimeDiag::MaxRecursionDepthExceeded`; adjust it with `--max-recursion-depth <n>`. The count includes calls through function values and the calls a higher-order operator makes for each element. The default is the same on every back end, and the parallel scheduler counts like the others.
+
+<!-- camel-snippet: counter-example: the last call is chosen to go past the limit and the program is written to stop there; a wrong program like this is not a program a graph pass can finish -->
 
 ```cml
 func depth(n: int) => int {

@@ -1,0 +1,30 @@
+/**
+ * The postfix `!` (design principles 3.9) is read where the other postfix forms are: it touches the
+ * value just before it, and it is a `!` with no space before it. A `!` that has its own token keeps
+ * its own reading, so `a != b`, `a!!b` and `a!==b` are not touched by it. What a take means at run
+ * time is measured by the cases of the feature plan; this file is the parser's shape for it.
+ */
+
+func take(a: int!) => int {
+    return a!
+}
+
+func takeFromCall(a: int!) => int {
+    return take(a)!
+}
+
+func takeIndexed(xs: (int!)[]) => int {
+    return xs[0]!
+}
+
+func takeMember(pair: (int!, int)) => int {
+    return pair.0!
+}
+
+func takeParenthesized(a: int!, b: int) => int {
+    return (a! + b)!
+}
+
+func untouched(a: int, b: int) => bool {
+    return a != b
+}

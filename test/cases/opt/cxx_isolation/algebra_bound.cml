@@ -1,0 +1,49 @@
+// The corpus of the comparison between the two names of one algebraic simplification
+// (docs/roadmap.cn.md, P: the C++ passes stay, isolated under `cxx::`, and are compared with the
+// Camel ones before anything is deleted). One program makes one graph set; `std::cxx::algebra` and
+// `opt::algebra` are each put to it, and `std::jgir canonical=true` reads what came out. The two
+// readings are one document, character for character, or the comparison in
+// test/plans/feat/opt/cxx_isolation.plan.toml fails.
+//
+// The corpus holds what the pass is about, and what it must leave alone:
+//
+//   like_terms  `(x + 1) * (1 + 2) + (x + 1) * 4`, with the repeated `x + 1` bound to one `let`. The
+//               front end folds the constants of one expression, so the pass reads
+//               `a * 3 + a * 4` -- two products of one value, scaled. The law `x * c1 + x * c2 is
+//               x * (c1 + c2)` merges them into `a * 7`, and `a` is `x + 1` once: a run that did
+//               nothing prints both multiplications and both additions, a run that fired prints one
+//               multiplication over a constant 7. The binding is what makes the two products share
+//               one node; written twice as an expression, `x + 1` is two nodes and no law reads
+//               them as one value -- that is the matcher's business, not the law's.
+//   doubling    `b * 2` where `b` is `x * 3`: the law `x + x is x * 2` doubles it and the law
+//               `(x * c1) * c2 is x * (c1 * c2)` folds the coefficients into one `x * 6`. A pass
+//               that only had the neutral elements leaves `x * 3` added to itself.
+//   neutral     `x * 1 + 0`: the neutral elements. The two laws leave `x` alone, so this graph is
+//               the port the front end built and no operation at all -- the reading that says the
+//               pass is not merely adding nodes.
+//   main        calls all three; the pass must leave it as the front end built it.
+//
+// Every value is printed, so a rewritten value feeds an effect rather than anchoring its graph: a
+// graph's returned value is its exit, and a node that anchors the graph cannot be replaced
+// (docs/technical/45_graph_module.md).
+
+func like_terms(x: int) => int {
+    let a = x + 1
+    return a * (1 + 2) + a * 4
+}
+
+func doubling(x: int) => int {
+    let b = x * 3
+    return b + b
+}
+
+func neutral(x: int) => int {
+    return x * 1 + 0
+}
+
+func main() => int sync {
+    println(like_terms(5))
+    println(doubling(5))
+    println(neutral(7))
+    return 0
+}

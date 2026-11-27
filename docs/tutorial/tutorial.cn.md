@@ -1036,10 +1036,6 @@ func main(x: f32[2, 3]) => f32[...] {
 }
 ```
 
-`main` 没有打印任何东西，也没有 `sync`：它是纯的。参数 `x` 的类型写明了元素类型与形状。
-
-**运行它**：参数的值从命令行给，张量来自 `.npy` 文件（[`examples/x.npy`](examples/x.npy) 是 `[[1, -2, 3], [-4, -5, 6]]`）；`main` 返回的值打印到标准输出：
-
 ```bash
 camel docs/tutorial/examples/15_model.cml --arg x=docs/tutorial/examples/x.npy
 ```
@@ -1047,6 +1043,10 @@ camel docs/tutorial/examples/15_model.cml --arg x=docs/tutorial/examples/x.npy
 ```text
 [[2.0], [0.0]]
 ```
+
+`main` 没有打印任何东西，也没有 `sync`：它是纯的。参数 `x` 的类型写明了元素类型与形状。
+
+**运行它**：参数的值从命令行给，张量来自 `.npy` 文件（[`examples/x.npy`](examples/x.npy) 是 `[[1, -2, 3], [-4, -5, 6]]`）；`main` 返回的值打印到标准输出。
 
 **导出它**：同一份源码，换一组遍。程序里没有为导出写任何东西，连 `import onnx` 都不需要：
 

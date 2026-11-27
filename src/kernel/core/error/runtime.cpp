@@ -89,10 +89,10 @@ std::string defaultModuleName(const ExecutionSite &site, const std::string &sour
 RuntimeFault::RuntimeFault(
     RuntimeDiag diag, std::vector<std::string> formatArgs, std::string detail,
     std::exception_ptr cause, ExecutionSiteHint hint, RuntimeFaultPolicy policy,
-    std::vector<CarriedReport> carried, std::string kind)
+    std::vector<CarriedReport> carried, std::string kind, std::vector<std::string> notes)
     : diag_(diag), formatArgs_(std::move(formatArgs)), detail_(std::move(detail)),
       kind_(std::move(kind)), cause_(cause), hint_(std::move(hint)), policy_(policy),
-      carried_(std::move(carried)) {}
+      carried_(std::move(carried)), notes_(std::move(notes)) {}
 
 std::string runtimeDiagMessage(RuntimeDiag diag, const std::vector<std::string> &args) {
     return formatIndexedMessage(getDiagInfo(diag).message, args);
@@ -181,6 +181,11 @@ RuntimeErrorReporter::describe(const RuntimeFault &fault, const ExecutionSite &s
             d.related.push_back(label);
         }
     }
+    // What the fault says in words beside its place (see RuntimeFault::notes): a position the
+    // fault holds as text, which has no range to resolve and so is a note and not a label.
+    for (const std::string &note : fault.notes()) {
+        d.notes.push_back(note);
+    }
     d.moduleName = defaultModuleName(site, resolved.sourcePath);
     return d;
 }
@@ -241,7 +246,7 @@ bool isIsolatableFault(RuntimeDiag diag) {
     case RuntimeDiag::RuntimeError:
     case RuntimeDiag::DivisionByZero:
     case RuntimeDiag::IndexOutOfRange:
-    // `fail<'Kind'>(message)`: the program's own premise check, as isolatable as the faults of
+    // `fail('Kind', message)`: the program's own premise check, as isolatable as the faults of
     // the operators it stands beside (design principles 3.9).
     case RuntimeDiag::ProgramFault:
     case RuntimeDiag::SliceOutOfRange:

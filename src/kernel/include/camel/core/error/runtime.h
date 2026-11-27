@@ -136,8 +136,9 @@ class RuntimeFault : public std::exception {
     RuntimeFault(
         RuntimeDiag diag, std::vector<std::string> formatArgs = {}, std::string detail = "",
         std::exception_ptr cause = nullptr, ExecutionSiteHint hint = {},
-        RuntimeFaultPolicy policy = RuntimeFaultPolicy::AbortCurrentExecution,
-        std::vector<CarriedReport> carried = {}, std::string kind = {});
+        RuntimeFaultPolicy policy          = RuntimeFaultPolicy::AbortCurrentExecution,
+        std::vector<CarriedReport> carried = {}, std::string kind = {},
+        std::vector<std::string> notes = {});
 
     template <typename... Args> static RuntimeFault make(RuntimeDiag diag, Args &&...args) {
         std::vector<std::string> formatArgs;
@@ -147,8 +148,8 @@ class RuntimeFault : public std::exception {
     }
 
     RuntimeDiag diag() const { return diag_; }
-    /// The kind of the fault as the program wrote it (`fail<'Kind'>`), or empty for every fault
-    /// the compiler, a kernel or a pass raises. A fault that has one is reported and isolated
+    /// The kind of the fault as the program wrote it (`fail('Kind', message)`), or empty for every
+    /// fault the compiler, a kernel or a pass raises. A fault that has one is reported and isolated
     /// under that kind instead of the name of the catalogue entry it travels as (design
     /// principles 3.9: `fail` raises a fault whose kind the program chooses).
     const std::string &kind() const { return kind_; }
@@ -160,6 +161,11 @@ class RuntimeFault : public std::exception {
     /// The reports this fault carries beside its own (see CarriedReport): empty for a fault that
     /// met one place, one entry per refused place for a fault a whole-function pass raised.
     const std::vector<CarriedReport> &carried() const { return carried_; }
+    /// Lines the report says in words beside its place, with no source range of their own: what a
+    /// fault knows as text where the mechanism of a related position would need a range. `x!` on a
+    /// failed value names the position the error value itself records, which is a string the error
+    /// structure holds (design principles 3.9), so it travels as a note.
+    const std::vector<std::string> &notes() const { return notes_; }
 
     const char *what() const noexcept override;
 
@@ -172,6 +178,7 @@ class RuntimeFault : public std::exception {
     ExecutionSiteHint hint_;
     RuntimeFaultPolicy policy_;
     std::vector<CarriedReport> carried_;
+    std::vector<std::string> notes_;
     mutable std::string what_;
 };
 

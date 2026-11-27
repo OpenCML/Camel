@@ -1,0 +1,41 @@
+/**
+ * `fail` and `error` take the kind as an ordinary argument, and the message may be left out:
+ * `fail('Kind', message)`, `fail('Kind')`, `error('Kind', message)`, `error('Kind')`.
+ * Leaving the message out gives the empty string, not the kind used as a message, and the kind
+ * is a value like any other, so a kind the program computes is the kind the fault and the
+ * error value carry. `attempt` hands back what the call raised, kind and message unchanged.
+ */
+
+func raise_two(kind: string) => int {
+    return fail(kind, 'the message')
+}
+
+func raise_one(kind: string) => int {
+    return fail(kind)
+}
+
+func error_two(kind: string) => int! {
+    return error(kind, 'the message')
+}
+
+func error_one(kind: string) => int! {
+    return error(kind)
+}
+
+func show(r: int!) => string {
+    return match r {
+        case error e => e.kind + ' | [' + e.message + ']'
+        case v => format<v>('value {}')
+    }
+}
+
+func main() => int sync {
+    println(show(attempt(raise_two)('TwoArgs')))
+    println(show(attempt(raise_one)('OneArg')))
+    println(show(error_two('ErrorTwo')))
+    println(show(error_one('ErrorOne')))
+    let computed = 'Comp' + 'uted'
+    println(show(attempt(raise_one)(computed)))
+    println(show(error_one(computed)))
+    return 0
+}

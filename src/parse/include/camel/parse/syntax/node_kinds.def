@@ -109,6 +109,7 @@ CAMEL_NODE(AdditiveExpr, Expr)         // multiplicativeExpr (('+' | '-') multip
 CAMEL_NODE(MultiplicativeExpr, Expr)   // powerExpr (('*' | '/' | '@' | '%') powerExpr)*
 CAMEL_NODE(PowerExpr, Expr)            // nullableExpr ('^' powerExpr)?; also the operand of a prefix operator
 CAMEL_NODE(NullableExpr, Expr)         // unaryExpr (('??' | '!!') dataExpr)?
+CAMEL_NODE(BangExpr, Expr)             // the postfix ! of x!: takes the value out, and its failure is a fault
 CAMEL_NODE(CastExpr, Expr)             // linkExpr ('as' | 'is') typeExpr
 CAMEL_NODE(UnaryExpr, Expr)            // ('!' | '~') linkExpr, '-' negPower
 CAMEL_NODE(LinkExpr, Expr)             // negExpr ('->' annoExpr)*

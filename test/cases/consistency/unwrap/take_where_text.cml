@@ -1,0 +1,15 @@
+/**
+ * The place a take names beside the `!` is the text the error value records, not a position in a
+ * file: an error a kernel makes records the place its own record names -- here `<json::decode>`,
+ * which no file has -- and the report says it as it stands (design principles 3.9). Nothing
+ * resolves that text, so a place that is not a position in a file is a reading, not a defect: the
+ * fault still stands at the `!` and the program still ends as a fault.
+ */
+
+import json
+
+func main() => int sync {
+    let bad = json::decode('{')!
+    println('not reached')
+    return 0
+}

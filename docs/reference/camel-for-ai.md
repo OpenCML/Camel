@@ -421,7 +421,7 @@ These two come from the sources the compiler itself reads, so they cannot drift 
 16  linkExpr            ->                                 repeat, left
 17  negExpr             - ! ~                              prefix
 18  negPower            - ! ~ ^                            prefix, right
-19  annoExpr            -                                  repeat, left
+19  annoExpr            !                                  repeat, left
 ```
 
 The production of each level, as `src/parse/src/syntax/parser_expr.cpp` writes it above the
@@ -446,6 +446,6 @@ unaryExpr          : negExpr ('as' typeExpr)?
 linkExpr           : annoExpr ('->' annoExpr)*
 negExpr            : ('-' | '!' | '~') negPower | linkExpr
 negPower           : ('-' | '!' | '~') negPower | linkExpr ('^' negPower)?
-annoExpr           : accessExpr (indices | parentArgues | structData | angledValues | typeArguments | memberAccess)*
+annoExpr           : accessExpr (indices | parentArgues | structData | angledValues | typeArguments | memberAccess | '!')*
 ```
 <!-- camel-for-ai end: precedence -->

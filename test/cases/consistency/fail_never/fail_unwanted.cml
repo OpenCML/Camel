@@ -7,7 +7,7 @@
 func main() => int sync {
     let v: int? = 7
     println('before')
-    println(v ?? fail<'Unwanted'>('nothing wants this value'))
+    println(v ?? fail('Unwanted', 'nothing wants this value'))
     println('after')
     return 0
 }

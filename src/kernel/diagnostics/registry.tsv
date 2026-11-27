@@ -479,7 +479,7 @@ runtime	RuntimeError	0x000000	error	An error has occurred: {0}.	The runtime has 
 runtime	DivisionByZero	0x000001	error	Attempted division by zero.	Ensure the denominator is not zero before performing division.	none: runtime: the divisor is zero at run time, and where to guard it is the program's logic
 runtime	IndexOutOfRange	0x000002	error	Index {0} is out of range for {1} of length {2}.	Ensure the index is within the valid range of the collection.	none: runtime: the index is computed at run time, and the repair is in the program's logic
 # The fault 'fail' raises (design principles 3.9): the program's own premise check. The kind is
-# the name the program writes in `fail<'Kind'>(message)` and the message is its own text, so a
+# the name the program writes in `fail('Kind', message)` and the message is its own text, so a
 # fault of this one number is reported under the kind the program chose; the name below is what
 # the catalogue calls the carrier of such a fault and the message is the program's text alone.
 runtime	ProgramFault	0x0001AC	error	{0}	The fault was raised by the program itself, and its message says which premise it states.	none: runtime: the fault is raised while the program runs, and where to check the premise is the program's logic

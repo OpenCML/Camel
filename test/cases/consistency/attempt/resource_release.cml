@@ -19,7 +19,7 @@ import { exec, import_module, attr, call, to_py, PyObject } from python
 // A Python call is an error value; these programs expect every call to succeed.
 func must(r: PyObject!) => PyObject {
     return match r {
-        case error e => fail<'InvalidArgument'>(e.message)
+        case error e => fail('InvalidArgument', e.message)
         case v => v
     }
 }

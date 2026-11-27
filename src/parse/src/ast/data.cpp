@@ -198,6 +198,8 @@ std::string to_string(ReservedDataOp op) {
         return "<>";
     case ReservedDataOp::As:
         return "AS";
+    case ReservedDataOp::Unwrap:
+        return "!";
     default:
         ASSERT(false, "Unknown ReservedDataOp");
         return "UnknownReservedDataOp";

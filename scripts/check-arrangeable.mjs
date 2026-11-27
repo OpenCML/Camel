@@ -11,12 +11,13 @@
  * about it -- a tree of a quarter of a million nodes has kinds and operators that one case does not
  * write -- so this tool starts one `camel` per `.cml` the tree tracks and sums the rows:
  *
- *   ARRANGEABLE_SWEEP files=<n> read=<n> skipped=<n> silent=<n> nodes=<n> free=<n> kept=<n>
- *       no_fact=<n> rows=<n>
+ *   ARRANGEABLE_SWEEP files=<n> cases=<n> read=<n> read_cases=<n> skipped=<n> silent=<n>
+ *       nodes=<n> free=<n> kept=<n> no_fact=<n> rows=<n> fixtures=<n> refused=<n> declined=<n>
  *   ARRANGEABLE_KIND node_kind=<kind> nodes=<n> free=<n> kept=<n> no_fact=<n>
  *   ARRANGEABLE_FAMILY family=<name> nodes=<n> free=<n> kept=<n> no_fact=<n>
  *   ARRANGEABLE_ROW node_kind=<kind> oper=<uri|-> nodes=<n> free=<n> kept=<n> no_fact=<n>
  *   ARRANGEABLE_SAMPLE <family> <file> <graph>:<node>
+ *   ARRANGEABLE_SKIPPED <file> <refused|declined>
  *
  * a `KIND` line for every node kind, a `FAMILY` line for every family the tree answered in, and a
  * `ROW` line for the first `--rows N` rows (default 60, `0` for all) plus every operator named with
@@ -25,16 +26,41 @@
  * `SAMPLE` gives up to three nodes per family, with the program they came from -- a count says a
  * family is kept, an example says in which program and at which node to look.
  *
+ * A case the sweep did not read is named with the reason, one line each, because "skipped=1077" over
+ * a thousand cases says nothing a reader can act on. Two reasons, and they are different defects:
+ *
+ *   refused   the output carries no `FACTS_COMPARE` line at all, so the compiler never ran the pass:
+ *             the case wants the arguments or the module roots its own plan gives it, and on its own
+ *             it does not compile. It is a case this sweep cannot read, not one it read and rejected.
+ *   declined  the pass ran and printed, but not the answer table: the graph was there and the store
+ *             answered nothing for it (`state=no-store`, `state=no-kept-ids`). A growing `declined`
+ *             group is a fact-layer reading of its own.
+ *
+ * `fixtures/` directories under `test/cases` are left out by a directory rule and not by a list of
+ * files: those are the inputs other tools read (the debugger's and the language server's own cases), never a program the
+ * corpus runs. The rule is one directory name, so a fixture added tomorrow is left out by the same
+ * line, and how many cases it left out is printed as `fixtures=` so the exclusion is visible rather
+ * than silent.
+ *
  * and then the verdicts it is allowed to make:
  *
- *   1. the sweep read something: `read` at or above `ARRANGEABLE_MIN_READ` (1700). A table summed
- *      over nothing prints zeros in every column and reads exactly like a tree whose nodes are all
- *      free, which is why the lower bound is part of the verdict and not a comment.
+ *   1. the sweep read something: `read_cases` at or above a fraction of the case corpus -- 70% by
+ *      default, `ARRANGEABLE_READ_FRACTION` to move it, and `ARRANGEABLE_MIN_READ` to pin an absolute
+ *      count instead. The numerator is the cases under `test/cases` the sweep read and the denominator
+ *      is the cases under `test/cases`, so the floor is `read_cases >= 70% of (cases - fixtures)` and
+ *      it grows with the corpus: a fixed number was a measure of one tree's corpus, and a corpus that
+ *      grows would have made the same number a looser bound every month with nobody deciding to
+ *      loosen it. Programs outside `test/cases` -- a library module, a document's example -- are read
+ *      and counted in the tables but not in this fraction: they are not cases, and whether one of them
+ *      compiles on its own is not a claim about the corpus. A table summed over nothing prints zeros
+ *      in every column and reads exactly like a tree whose nodes are all free, which is why the bound
+ *      is part of the verdict and not a comment.
  *   2. no node went unanswered: `no_fact` is zero. The fact answers at every node of every graph, or
  *      it does not, and "does not" is a fact-layer defect rather than a placement decision -- there
  *      is no reading of an absent answer, so the sweep refuses one.
- *   3. nothing was dropped in the reading: `silent` is zero. A case that printed an answers line but
- *      whose row this tool cannot parse would otherwise leave the table smaller without saying so.
+ *   3. nothing was dropped in the reading: `silent` is zero. A case that exited zero without printing
+ *      an answers line, or that printed an answers line this tool cannot parse, would otherwise leave
+ *      the table smaller without saying so.
  *
  * There is no fourth verdict about *agreement*: `core.arrangeable` is one answer to one question, and
  * this tool would have to hold a second copy of it to compare against. What the tables are for is the
@@ -48,10 +74,12 @@
  * system temporary directory when run by hand, for the reason `check-plan-refs.mjs` gives: a program
  * that writes a relative path writes it where the process runs.
  *
- * The pass list is `test::facts_compare std::gir`, not `test::facts_compare` alone: the comparison
+ * The pass list is `test::facts_compare std::nop`, not `test::facts_compare` alone: the comparison
  * pass hands the program on, and without a stopper every case would be *executed* as the next
- * fallback (`std::nvm`). `std::gir` prints the graph and answers an empty one, so the pipeline ends
- * there and nothing a case does at run time is in the reading. The DOT is discarded.
+ * fallback (`std::nvm`). `std::nop` ends the pipeline where it stands, so nothing a case does at run
+ * time is in the reading -- and, unlike `std::gir`, it writes no DOT: a graph the printer chokes on
+ * took the answers the case had already printed with it (about 200 of this corpus's cases on the run
+ * that exposed it), and a hundred thousand nodes of DOT per case is not a reading anyway.
  *
  * Exit codes: 0 all three verdicts hold; 1 a verdict is red (the reading is complete); 2 the sweep
  * could not be taken at all (no binary, no case list) -- not a zero.
@@ -68,12 +96,19 @@ const HERE = path.dirname(fileURLToPath(import.meta.url))
 const REPO = path.dirname(HERE)
 const CONCURRENCY = Number(process.env.ARRANGEABLE_JOBS || 8)
 const TIMEOUT_MS = Number(process.env.ARRANGEABLE_TIMEOUT_MS || 60000)
-// The floor under the sweep's coverage, and not a coverage goal: this tree reads 2,981 of its 4,400
-// cases, and the rest want the arguments or the module roots their own plans give them (the same
-// reason `check-plan-refs.mjs` skips the cases it sweeps that do the same). 1,700 is well under that
-// reading on purpose, so a case that stops compiling for a real reason moves the number visibly
-// instead of turning the sweep red for a count it never promised.
-const MIN_READ = Number(process.env.ARRANGEABLE_MIN_READ || 1700)
+// The floor under the sweep's coverage, as a fraction of the case corpus and not a count: this tree
+// reads 3,056 of the 4,133 cases under `test/cases` (the fixtures rule leaves 24 more out), and the
+// rest want the arguments or the module roots their own plans give them (the same reason
+// `check-plan-refs.mjs` skips the cases it sweeps that do the same). 70% is well under that reading
+// on purpose, so a case that stops compiling for a real reason moves the number visibly instead of
+// turning the sweep red for a count it never promised -- and it is a fraction, so a corpus that gains
+// a thousand cases raises the floor with them instead of the same number quietly covering less.
+const READ_FRACTION = Number(process.env.ARRANGEABLE_READ_FRACTION || 0.7)
+// An absolute floor, for a run that wants to pin a count on purpose; the fraction is the default.
+const MIN_READ = process.env.ARRANGEABLE_MIN_READ ? Number(process.env.ARRANGEABLE_MIN_READ) : null
+
+// The directory the rule leaves out, and the only one: a fixture is another tool's input.
+const FIXTURE_DIRECTORY = 'fixtures'
 
 const RUN_ROOT = process.env.CAMEL_TEST_TMPDIR
     ? path.join(path.resolve(process.env.CAMEL_TEST_TMPDIR), 'arrangeable')
@@ -89,10 +124,16 @@ function camelBinary() {
     return path.join(home, 'bin', process.platform === 'win32' ? 'camel.exe' : 'camel')
 }
 
-/// Every `.cml` the revision tracks, read from git and never from a directory walk: an untracked
-/// file in a lane's worktree is that lane's scratch, and a sweep that read one would report about a
-/// tree nobody can check out. A git that refuses is exit 2 -- an empty case list is not a tree with
-/// no cases.
+/// Every `.cml` the revision tracks except the ones under a `fixtures/` directory, plus the count the
+/// rule left out and the subset that is a *case*: the files under `test/cases`. Read from git and
+/// never from a directory walk: an untracked file in a lane's worktree is that lane's scratch, and a
+/// sweep that read one would report about a tree nobody can check out. A git that refuses is exit 2 --
+/// an empty case list is not a tree with no cases.
+///
+/// The subset is what the coverage floor is measured on. A library module under `src/stdlib` and an
+/// example under `docs` are programs the sweep reads, but neither is a case: whether one of them
+/// compiles on its own is not a claim about the case corpus, and counting them in the denominator
+/// would make the floor move when a document gains an example.
 function trackedCases() {
     let out
     try {
@@ -105,16 +146,27 @@ function trackedCases() {
         console.error(`check-arrangeable: git ls-files failed: ${error?.message || error}`)
         process.exit(2)
     }
-    const files = out
-        .split('\0')
-        .filter((name) => name.length > 0)
-        .map((name) => path.join(REPO, name))
-        .sort()
+    const files = []
+    const caseSet = new Set()
+    let fixtures = 0
+    for (const name of out.split('\0')) {
+        if (name.length === 0) continue
+        const parts = name.split('/')
+        if (parts.includes(FIXTURE_DIRECTORY)) {
+            fixtures += 1
+            continue
+        }
+        files.push(path.join(REPO, name))
+        if (parts.length > 2 && parts[0] === 'test' && parts[1] === 'cases') {
+            caseSet.add(path.join(REPO, name))
+        }
+    }
+    files.sort()
     if (files.length === 0) {
         console.error('check-arrangeable: git ls-files named no .cml: refusing to report a zero')
         process.exit(2)
     }
-    return files
+    return { files, fixtures, caseSet }
 }
 
 const ROW_FIELDS = ['nodes', 'free', 'kept', 'no_fact']
@@ -151,6 +203,7 @@ function run(binary, args, cwd) {
         const families = []
         const samples = []
         let ran = false
+        let census = false
         let stdoutFirst = ''
         let stderr = ''
         let finished = false
@@ -158,7 +211,7 @@ function run(binary, args, cwd) {
             if (finished) return
             finished = true
             clearTimeout(timer)
-            resolve({ ...result, rows, families, samples, ran, stdoutFirst, stderr })
+            resolve({ ...result, rows, families, samples, ran, census, stdoutFirst, stderr })
         }
         const timer = setTimeout(() => {
             child.kill('SIGKILL')
@@ -177,6 +230,7 @@ function run(binary, args, cwd) {
                 else if (line.startsWith('FACTS_COMPARE answers_family ')) families.push(line)
                 // The answers line is what says the census ran on this program: a program with no
                 // nodes prints no row and is still a case the sweep read.
+                if (line.startsWith('FACTS_COMPARE ')) census = true
                 if (line.startsWith('FACTS_COMPARE kind=core.arrangeable answers ')) ran = true
                 newline = partial.indexOf('\n')
             }
@@ -214,13 +268,17 @@ function addCounts(target, row, names) {
 
 async function main() {
     const binary = camelBinary()
-    const files = trackedCases()
+    const { files, fixtures, caseSet } = trackedCases()
+    const cases = caseSet.size
     const totals = new Map()
     const familyTotals = new Map()
     const samplesOf = new Map()
-    const unread = []
-    const refused = []
+    // The two kinds of "did not read", kept apart: see the header. `skipped` is a case the compiler
+    // or the store did not answer, `silent` is a case that said nothing at all.
+    const skipped = []
+    const silent = []
     let read = 0
+    let readCases = 0
 
     let next = 0
     async function worker() {
@@ -230,7 +288,7 @@ async function main() {
             const file = files[index]
             const cwd = path.join(RUN_ROOT, path.relative(REPO, file).replace(/[\\/]/g, '__'))
             fs.mkdirSync(cwd, { recursive: true })
-            const result = await run(binary, [file, 'test::facts_compare', 'std::gir'], cwd)
+            const result = await run(binary, [file, 'test::facts_compare', 'std::nop'], cwd)
             dropTree(cwd)
             const relative = path.relative(REPO, file)
             if (!result.ran) {
@@ -245,15 +303,16 @@ async function main() {
                         ? 'internal-error'
                         : `exit=${result.code}`
                 const why = result.timedOut ? 'timeout' : `${cause} ${first}`
-                if (result.code === 0) refused.push(`${relative} ${why}`)
-                else unread.push({ relative, why, cause })
+                if (result.code === 0) silent.push(`${relative} ${why}`)
+                else skipped.push({ relative, kind: result.census ? 'declined' : 'refused', why, cause })
                 continue
             }
             read += 1
+            if (caseSet.has(file)) readCases += 1
             for (const line of result.rows) {
                 const row = parseFields(line, 'FACTS_COMPARE answers_row ', [...ROW_FIELDS])
                 if (row === null || !row.node_kind || !row.oper) {
-                    refused.push(`${relative}: ${line}`)
+                    silent.push(`${relative}: ${line}`)
                     continue
                 }
                 const key = `${row.node_kind}\u0000${row.oper}`
@@ -264,7 +323,7 @@ async function main() {
             for (const line of result.families) {
                 const row = parseFields(line, 'FACTS_COMPARE answers_family ', [...FAMILY_FIELDS])
                 if (row === null || !row.family) {
-                    refused.push(`${relative}: ${line}`)
+                    silent.push(`${relative}: ${line}`)
                     continue
                 }
                 const sum = familyTotals.get(row.family) || { family: row.family }
@@ -290,10 +349,14 @@ async function main() {
     const total = { nodes: 0, free: 0, kept: 0, no_fact: 0 }
     for (const row of rows) addCounts(total, row, ROW_FIELDS)
 
+    const refusedCount = skipped.filter((entry) => entry.kind === 'refused').length
+    const declinedCount = skipped.length - refusedCount
     console.log(
-        `ARRANGEABLE_SWEEP files=${files.length} read=${read} skipped=${unread.length} ` +
-            `silent=${refused.length} nodes=${total.nodes} free=${total.free} ` +
-            `kept=${total.kept} no_fact=${total.no_fact} rows=${rows.length}`)
+        `ARRANGEABLE_SWEEP files=${files.length} cases=${cases} read=${read} ` +
+            `read_cases=${readCases} skipped=${skipped.length} ` +
+            `silent=${silent.length} nodes=${total.nodes} free=${total.free} ` +
+            `kept=${total.kept} no_fact=${total.no_fact} rows=${rows.length} ` +
+            `fixtures=${fixtures} refused=${refusedCount} declined=${declinedCount}`)
 
     // The counts summed over each node kind and each family: the columns a reader compares between
     // two revisions of the fact. A kind's line moves only if that kind's answer moved, and a family's
@@ -344,46 +407,59 @@ async function main() {
             console.log(`ARRANGEABLE_SAMPLE ${family.family} ${sample}`)
         }
     }
-    // Why a case went unread, counted: a sweep whose coverage is a fraction of the tree has to say
-    // what the rest was, or the fraction reads like the tree.
+    // Why a case went unread, counted and then named: a sweep whose coverage is a fraction of the
+    // tree has to say what the rest was, or the fraction reads like the tree. One line per case with
+    // its reason, and the reasons counted above them, so a count and a name come from one reading.
     const causes = new Map()
-    for (const { cause } of unread) {
+    for (const { cause } of skipped) {
         causes.set(cause, (causes.get(cause) || 0) + 1)
     }
     for (const [key, count] of [...causes.entries()].sort((a, b) => b[1] - a[1])) {
         console.log(`ARRANGEABLE_UNREAD_CAUSE ${key} files=${count}`)
     }
-    for (const { relative, why } of unread.slice(0, 12)) {
+    skipped.sort((left, right) => left.relative.localeCompare(right.relative))
+    for (const { relative, kind } of skipped) {
+        console.log(`ARRANGEABLE_SKIPPED ${relative} ${kind}`)
+    }
+    for (const { relative, why } of skipped.slice(0, 12)) {
         console.log(`ARRANGEABLE_UNREAD ${relative} ${why}`)
     }
-    for (const file of refused.slice(0, 12)) console.log(`ARRANGEABLE_SILENT ${file}`)
+    silent.sort()
+    for (const entry of silent) console.log(`ARRANGEABLE_SILENT ${entry}`)
 
+    // The floor: a fraction of the case corpus, unless a run pinned a count instead. The numerator and
+    // the denominator are both printed, so "70% of what" is never a question.
+    const floor = MIN_READ === null ? Math.ceil(cases * READ_FRACTION) : MIN_READ
+    const floorText = MIN_READ === null
+        ? `${READ_FRACTION * 100}% of the ${cases} cases under test/cases (${fixtures} fixtures left out)`
+        : `${MIN_READ} (pinned)`
     let red = false
-    if (read < MIN_READ) {
+    if (readCases < floor) {
         console.log(
-            `ARRANGEABLE_VERDICT read=${read} under the ${MIN_READ} a sweep of this tree reads: ` +
-                'the table is not a reading of the tree')
+            `ARRANGEABLE_VERDICT read_cases=${readCases} under ${floor} (${floorText}): ` +
+                'the table is not a reading of the case corpus')
         red = true
     }
     if (total.no_fact > 0) {
-        const declined = rows.filter((row) => row.no_fact > 0)
+        const unanswered = rows.filter((row) => row.no_fact > 0)
         console.log(
-            `ARRANGEABLE_VERDICT no_fact=${total.no_fact} over ${declined.length} row(s): ` +
+            `ARRANGEABLE_VERDICT no_fact=${total.no_fact} over ${unanswered.length} row(s): ` +
                 'a node the fact answered nothing for has no reading at all ' +
-                declined.slice(0, 8).map((row) => `${row.node_kind}/${row.oper}`).join(' '))
+                unanswered.slice(0, 8).map((row) => `${row.node_kind}/${row.oper}`).join(' '))
         red = true
     }
-    if (refused.length > 0) {
+    if (silent.length > 0) {
         console.log(
-            `ARRANGEABLE_VERDICT silent=${refused.length}: a case compiled and the pass printed no ` +
-                'row, or a row this tool cannot parse')
+            `ARRANGEABLE_VERDICT silent=${silent.length}: a case exited zero with no answers line, ` +
+                'or printed a line this tool cannot parse')
         red = true
     }
     if (!red) {
         console.log(
-            `every node the sweep read was answered by the fact: ${read} cases, ${total.nodes} nodes, ` +
-                `${total.free} free, ${total.kept} kept, ${rows.length} (kind, operator) rows and ` +
-                `${families.length} families`)
+            `every node the sweep read was answered by the fact: ${readCases} of ${cases} cases ` +
+                `(${fixtures} fixtures left out, ${read} of ${files.length} tracked programs read), ` +
+                `${total.nodes} nodes, ${total.free} free, ` +
+                `${total.kept} kept, ${rows.length} (kind, operator) rows and ${families.length} families`)
     }
     process.exit(red ? 1 : 0)
 }

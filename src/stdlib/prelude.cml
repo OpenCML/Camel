@@ -830,7 +830,7 @@ export func parse_float(text: string) => float!
 /// position of the call. `return error(...)` hands it out of a function declared `T!`.
 /// @example return error('RangeError', 'too large')
 #op(':op/error_new')
-export func error(kind: string, message: string) => Error
+export func error(kind: string, message: string = '') => Error
 
 // ---- input and output ----
 
@@ -1097,8 +1097,8 @@ export func to_range(start: int, stop: int, step: int) => Range panic
 /// @fails fault `RangeWithoutEnd` when start or stop is null
 /// @example to_range(1, 5, 1)->to_array()    // [1, 2, 3, 4]
 export func to_array(r: Range) => int[] {
-    let start = r.start ?? fail<'RangeWithoutEnd'>('an open range has no array form: start is left out')
-    let stop = r.stop ?? fail<'RangeWithoutEnd'>('an open range has no array form: stop is left out')
+    let start = r.start ?? fail('RangeWithoutEnd', 'an open range has no array form: start is left out')
+    let stop = r.stop ?? fail('RangeWithoutEnd', 'an open range has no array form: stop is left out')
     return range(start, stop, r.step)
 }
 
@@ -1366,12 +1366,12 @@ export func foreach::<T>(xs: T[]) => void
 /// value at all: its type is the bottom type `never` (design principles 3.9), so it may stand
 /// where any type is expected, and a branch arm that raises the fault leaves the branch's type
 /// to the other arm. The fault is raised where the call is written, and `attempt` isolates it
-/// into an error value whose kind is the name in the angle brackets.
-/// @fails fault `<Kind>` with the message, which `attempt` isolates
-/// @example fail<'BadLimit'>('the limit must be positive')
+/// into an error value whose kind is the first argument. The message may be left out, and then
+/// it is the empty string: the kind alone says what went wrong.
+/// @fails fault `Kind` with the message, which `attempt` isolates
+/// @example fail('BadLimit', 'the limit must be positive')
 #op(':op/fail')
-with <Kind: string>
-export func fail(message: string) => never panic
+export func fail(kind: string, message: string = '') => never panic
 
 /// The function f with the faults of its calls turned into error values: `attempt(f)` takes the
 /// parameters of f and gives the result of f plus `!`. A fault raised inside a call becomes an

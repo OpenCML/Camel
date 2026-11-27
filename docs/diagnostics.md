@@ -10014,7 +10014,7 @@ func double(x: int) => int {
 }
 
 func stop(m: string) => never {
-    return fail<'Stopped'>(m)
+    return fail('Stopped', m)
 }
 
 func main() => int[] sync {
@@ -10046,7 +10046,7 @@ A 'fail' raises its fault where its value is wanted, and it is no effect of its 
 
 ```camel
 func f(x: int) => int {
-    fail<'NoPremise'>('f was called with an x it cannot take')
+    fail('NoPremise', 'f was called with an x it cannot take')
     return x + 1
 }
 
@@ -10081,7 +10081,7 @@ A 'fail' raises its fault and gives no value, so the statements written after it
 ```camel
 func main() => int sync {
     println('before')
-    fail<'NoPremise'>('the premise of this program does not hold')
+    fail('NoPremise', 'the premise of this program does not hold')
     println('after')
     return 0
 }
@@ -11625,7 +11625,7 @@ The fault was raised by the program itself, and its message says which premise i
 
 ```camel
 func limit(q: float) => float {
-    return if q > 0.0 then q else fail<'BadLimit'>('the limit must be positive')
+    return if q > 0.0 then q else fail('BadLimit', 'the limit must be positive')
 }
 
 func main() => int sync {
