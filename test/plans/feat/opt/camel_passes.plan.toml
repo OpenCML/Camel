@@ -315,3 +315,38 @@ case = "../../../cases/opt/camel_passes/fold_constant_budget.cml"
 args = ["${case}", "std::cxx::fold", "constant_budget=1", "std::gir", "std::nop"]
 snapshot_stream = "stdout"
 golden = "./golden/camel_passes.fold.constant_budget.cpp.dot"
+
+[[tests]]
+name = "camel_passes.cse.after_inline.by_cpp"
+desc = "The reference: std::cxx::inline leaves two nodes of `f` computing x + 1 -- one it copied from `inc`, one the program wrote -- and std::cxx::cse makes them one. The reading is the node count after the sweep."
+kind = "behavior"
+case = "../../../cases/opt/camel_passes/cse_after_inline.cml"
+args = ["${case}", "std::cxx::inline", "std::cxx::cse", "std::stats", "std::nop"]
+expect_stdout_contains = ["\"nodes\":22"]
+
+[[tests]]
+name = "camel_passes.cse.after_inline.by_camel"
+desc = "opt::cse after the same inlining gives the same node count: the sweep keys two operations by the control region they run in, not by the region `inline` made, so an expression the inlining copied is the same value as the one it duplicates."
+kind = "differential"
+case = "../../../cases/opt/camel_passes/cse_after_inline.cml"
+args = ["${case}", "std::cxx::inline", "opt::cse", "std::stats", "std::nop"]
+compare_to = "camel_passes.cse.after_inline.by_cpp"
+compare_fields = ["exit_code", "stdout_normalized"]
+
+[[tests]]
+name = "camel_passes.cse.after_inline.reaches_the_shape"
+desc = "The sweep and the algebra together leave one addition and one multiplication of the body's own value: `x -> (+1) -> (*7)`, the shape the C++ pair gives."
+kind = "behavior"
+case = "../../../cases/opt/camel_passes/cse_after_inline.cml"
+args = ["${case}", "std::cxx::inline", "opt::cse", "opt::algebra", "std::stats", "std::nop"]
+expect_stdout_contains = ["\"nodes\":16"]
+
+[[tests]]
+name = "camel_passes.cse.after_inline.still_runs"
+desc = "The program after the inlining and the sweep prints 21, the number the source computes."
+kind = "behavior"
+case = "../../../cases/opt/camel_passes/cse_after_inline.cml"
+args = ["${case}", "std::cxx::inline", "opt::cse", "${backend}"]
+backends = ["nvm", "fvm", "jit"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_stdout_exact = "21\n"
