@@ -164,7 +164,7 @@ func merge_hits::<F>(f: F) => F! sync {
 }
 
 /// Equal values written twice are one node, until none is left.
-/// @example ((x: int): int => x * 2 + x * 2)->cse
+/// @example (func (x: int) { x * 2 + x * 2 })->cse
 export func cse::<F>(f: F) => F! when is_function::<F>() {
     return if graphs_of(f)->any<graph_has_hit> then merge_hits(f)->cse else f
 }
@@ -224,7 +224,7 @@ func dead_values::<F>(f: F) => F! when is_function::<F>() sync {
 }
 
 /// Values nobody reads are erased, until none is left: the value half of `std::cxx::dce`.
-/// @example ((x: int): int => x + 1)->dce
+/// @example (func (x: int) { x + 1 })->dce
 export func dce::<F>(f: F) => F! when is_function::<F>() {
     return dead_values(f)
 }
@@ -325,7 +325,7 @@ func fold_rounds::<F>(f: F, budget: int) => F! when is_function::<F>() sync {
 
 /// A pure operation whose operands are all constants is the value they compute, until none is
 /// left. A function that holds no node to evaluate at all is answered without opening a draft.
-/// @example ((x: int): int => 1 + 2 + x)->fold
+/// @example (func (x: int) { 1 + 2 + x })->fold
 with </// Bytes of constants this pass may materialize in a graph: the same measure and the same
 /// default as `std::cxx::fold` (`constantBytesOf`), read through `constant_bytes`; a value
 /// above it is left as the computation that builds it, and 0 materializes none.
@@ -340,7 +340,7 @@ export func fold::<F>(f: F) => F! when is_function::<F>() {
 /// value for at most `rounds` rounds; nothing is extracted, so the function keeps every writing the
 /// saturation found (`f->extract<nodes>` of `rules` chooses among them). With `strict` only the
 /// laws that need no permission are used, as `safe_fp=true` does for `std::opt`.
-/// @example ((x: int): int => x * 3 + x * 4)->saturate
+/// @example (func (x: int) { x * 3 + x * 4 })->saturate
 with <rounds: int = 6, strict: bool = false>
 export func saturate::<F>(f: F) => F! when is_function::<F>() {
     return f->saturate_rules<concat(algebra, distribution), rounds: rounds, strict: strict>

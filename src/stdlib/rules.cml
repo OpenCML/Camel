@@ -393,7 +393,7 @@ export let fusion_laws: Rule[] = [array_sigmoid_chain]
 /// of the pass. `strict` grants no permission, as `std::opt safe_fp=true` does, so only the laws
 /// that need none fire.
 /// @fails error value `RuleInvalid` when a rule does not compile
-/// @example ((x: int): int => x + 0)->simplify
+/// @example (func (x: int) { x + 0 })->simplify
 with <strict: bool = false>
 export func simplify::<F>(f: F) => F! when is_function::<F>() {
     return f->rewrite<concat(algebra, accuracy_laws), strict: strict>
@@ -403,14 +403,14 @@ export func simplify::<F>(f: F) => F! when is_function::<F>() {
 /// for at most `rounds` rounds; then the smallest writing of each value. (`std::cxx::saturate` is
 /// the saturation alone, which keeps every writing.)
 /// @fails error value `RuleInvalid` when a rule does not compile
-/// @example ((x: int): int => x * 3 + x * 4)->saturate_all
+/// @example (func (x: int) { x * 3 + x * 4 })->saturate_all
 with <rounds: int = 6, strict: bool = false>
 export func saturate_all::<F>(f: F) => F! when is_function::<F>() {
     return f->saturate<concat(algebra, distribution), rounds: rounds, strict: strict>->extract<nodes>
 }
 
 /// The accuracy laws, as the opt-in pass `rules::accuracy`.
-/// @example ((x: float): float => log(1.0 + x))->accuracy
+/// @example (func (x: float) { x * 2.0 })->accuracy
 export func accuracy::<F>(f: F) => F! when is_function::<F>() {
     return f->rewrite<accuracy_laws>
 }
