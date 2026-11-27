@@ -28,7 +28,7 @@ namespace type = camel::core::type;
 namespace {
 
 /// True for a value that is not an object: nothing can change it in place.
-bool isPlainScalar(type::Type *t) {
+bool isPlainScalar(const type::Type *t) {
     switch (t->code()) {
     case type::TypeCode::Int32:
     case type::TypeCode::Int64:
@@ -48,29 +48,45 @@ bool isPlainScalar(type::Type *t) {
 /// The value of `ref` when it is a constant: a static DATA node, also behind GATEs. An object
 /// (an int array) counts only when every user of the DATA node is a pure operator.
 ///
-/// The gates in between are walked by the one walk (`camel/runtime/graph.h#valueBehindGates`).
-std::optional<slot_t> staticValueOf(const GCGraph &graph, gc_node_ref_t ref) {
-    ref             = valueBehindGates(graph, ref);
-    const GCNode *n = graph.node(ref);
-    if (n->kind != GCNodeKind::Data || n->dataIndex >= 0 || n->dataType() == nullptr) {
+/// Read off the view, where the two facts this used to read separately are one question: a GATE's
+/// value is its only data input (graph_view.h, section 1), so the gate walk is the existing
+/// `kindOf` + `inputs` pair rather than a second walk; and `constantOf` is nullopt for every node
+/// that is not a DATA node holding a constant in the static area -- not a node, not DATA, a DATA
+/// node on a runtime slot -- which is the three-part condition this function wrote out by hand.
+std::optional<slot_t>
+staticValueOf(const camel::graph::GraphView &view, camel::graph::NodeRef ref) {
+    while (view.kindOf(ref) == camel::graph::NodeKind::Gate) {
+        const std::span<const camel::graph::NodeRef> in =
+            view.inputs(ref, camel::graph::PortGroup::Normal);
+        if (in.size() != 1) {
+            return std::nullopt;
+        }
+        ref = in.front();
+    }
+    std::optional<slot_t> constant = view.constantOf(ref);
+    if (!constant) {
         return std::nullopt;
     }
-    if (!isPlainScalar(n->dataType())) {
+    const type::Type *t = view.typeOf(ref);
+    if (t == nullptr) {
+        return std::nullopt;
+    }
+    if (!isPlainScalar(t)) {
         const auto &table = core::OperatorTable::instance();
         // Every reader recomputes the value from the constant, so the constant is not shared with a
         // reader that must see it as it is. A with-argument of an operator that takes it after
         // the ordinary ones is such a reader's operand like any other.
-        for (const auto users : {graph.normOutputsOf(ref), graph.withOutputsOf(ref)}) {
-            for (gc_node_ref_t user : users) {
-                const GCNode *u = graph.node(user);
-                if (u->kind != GCNodeKind::Oper ||
-                    !table.mayBeRecomputed(graph.nodeBodyAs<GCOperBody>(user)->oper)) {
+        for (const auto group :
+             {camel::graph::PortGroup::Normal, camel::graph::PortGroup::Context}) {
+            for (camel::graph::NodeRef user : view.users(ref, group)) {
+                if (view.kindOf(user) != camel::graph::NodeKind::Oper ||
+                    !table.mayBeRecomputed(view.operatorOf(user))) {
                     return std::nullopt;
                 }
             }
         }
     }
-    return graph.staticArea()->get<slot_t>(static_cast<size_t>(-n->dataIndex));
+    return constant;
 }
 
 } // namespace
@@ -99,49 +115,59 @@ KernelArguments kernelArgumentsOf(const GraphDraft &draft, gc_node_ref_t node) {
     return out;
 }
 
-std::optional<core::sem::IndexedInstance> instanceOf(const GCGraph &graph, gc_node_ref_t node) {
-    if (!graph.containsNodeRef(node) || graph.node(node)->kind != GCNodeKind::Oper) {
+std::optional<core::sem::IndexedInstance>
+instanceOf(const camel::graph::GraphView &view, camel::graph::NodeRef node) {
+    if (!view.contains(node) || view.kindOf(node) != camel::graph::NodeKind::Oper) {
         return std::nullopt;
     }
     std::vector<type::Type *> norm, with;
     std::vector<type::StaticArg> statics;
-    for (gc_node_ref_t in : graph.normInputsOf(node)) {
-        type::Type *t = graph.node(in)->dataType();
-        if (t == nullptr) {
-            return std::nullopt;
+    // The instance is asked about the arguments in kernel order: the ordinary ones and then the
+    // context ones, with the statics in the same order.
+    for (const auto group : {camel::graph::PortGroup::Normal, camel::graph::PortGroup::Context}) {
+        for (camel::graph::NodeRef in : view.inputs(node, group)) {
+            type::Type *t = const_cast<type::Type *>(view.typeOf(in));
+            if (t == nullptr) {
+                return std::nullopt;
+            }
+            (group == camel::graph::PortGroup::Normal ? norm : with).push_back(t);
+            statics.emplace_back(staticValueOf(view, in));
         }
-        norm.push_back(t);
-        statics.emplace_back(staticValueOf(graph, in));
     }
-    for (gc_node_ref_t in : graph.withInputsOf(node)) {
-        type::Type *t = graph.node(in)->dataType();
-        if (t == nullptr) {
-            return std::nullopt;
-        }
-        with.push_back(t);
-        statics.emplace_back(staticValueOf(graph, in));
-    }
-    // The instance is asked about the arguments in kernel order; the statics are the norm ones
-    // and then the with ones, so they line up with it.
-    core::joinKernelArguments(graph.nodeBodyAs<GCOperBody>(node)->uri(), norm, with);
+    const camel::core::OperatorTable &table = core::OperatorTable::instance();
+    const core::OperId oper                 = view.operatorOf(node);
+    core::joinKernelArguments(table.uri(oper), norm, with);
     return core::sem::instantiate(
-        graph.nodeBodyAs<GCOperBody>(node)->oper,
+        oper,
         core::sem::InstanceContext{.norm = norm, .with = with, .statics = statics});
 }
 
-std::optional<core::sem::ReorderFreedom>
-reorderFreedomOf(const GCGraph &graph, gc_node_ref_t node, const core::sem::NumericPolicy &policy) {
-    const auto instance = instanceOf(graph, node);
+std::optional<core::sem::IndexedInstance> instanceOf(const GCGraph &graph, gc_node_ref_t node) {
+    // Thin: a frozen graph is read through the view every other reader of this file uses, so the
+    // facts and the guard above have one body and this signature only names the adapter.
+    return instanceOf(graph.view(), static_cast<camel::graph::NodeRef>(node));
+}
+
+std::optional<core::sem::ReorderFreedom> reorderFreedomOf(
+    const camel::graph::GraphView &view, camel::graph::NodeRef node,
+    const core::sem::NumericPolicy &policy) {
+    const auto instance = instanceOf(view, node);
     if (!instance || instance->law == core::sem::kNoLaw) {
         return std::nullopt;
     }
     const core::sem::OperatorSemantics *s =
-        core::OperatorTable::instance().semantics(graph.nodeBodyAs<GCOperBody>(node)->oper);
+        core::OperatorTable::instance().semantics(view.operatorOf(node));
     // instantiate validated the law's index against these semantics.
     return core::sem::reorderFreedom(
         s->laws[instance->law],
-        core::tag::effectivePermissions(graph, node, policy),
+        view.effectivePermissionsOf(node, policy),
         policy);
+}
+
+std::optional<core::sem::ReorderFreedom>
+reorderFreedomOf(const GCGraph &graph, gc_node_ref_t node, const core::sem::NumericPolicy &policy) {
+    // Thin, for the same reason as the overload above.
+    return reorderFreedomOf(graph.view(), static_cast<camel::graph::NodeRef>(node), policy);
 }
 
 namespace {
