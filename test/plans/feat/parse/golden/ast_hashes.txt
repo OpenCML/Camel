@@ -371,7 +371,7 @@ face908d763e3750 ok docs/tutorial/examples/02_literals.cml
 73444126b53135d1 ok docs/tutorial/examples/02_values.cml
 03da5d837bedc095 ok docs/tutorial/examples/03_exercise.cml
 79e1a3ec1dc6e4f3 ok docs/tutorial/examples/03_functions.cml
-b6eb84f410d4860e ok docs/tutorial/examples/03_lambdas.cml
+cd699bccb7e2fe20 ok docs/tutorial/examples/03_lambdas.cml
 f221e4c2b522ac50 ok docs/tutorial/examples/04_block_return.cml
 4cdade48bf9fc0c0 ok docs/tutorial/examples/04_branches.cml
 1eebbce871b548fb ok docs/tutorial/examples/04_exercise.cml
@@ -1361,6 +1361,7 @@ b3edaa80eba9abbb ok test/cases/compile/native/para_arity.cml
 5e472d7e4b9869ad ok test/cases/compile/native/para_unordered_pure_result.cml
 0319797f2bded41f ok test/cases/compile/native/para_unordered_reduce_callback_arity.cml
 7561cea77ce38d15 ok test/cases/compile/native/para_unordered_type.cml
+d8f68e36954ae8ee ok test/cases/compile/native/pass_shaped_unimplemented.cml
 693a1aed16254e52 ok test/cases/compile/native/private.cml
 75b0060d23722118 ok test/cases/compile/native/private_import.cml
 b030331496d24214 ok test/cases/compile/native/private_module.cml
