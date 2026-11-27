@@ -673,7 +673,6 @@ void Store::graphGone(const graph::Graph *graph, std::uint64_t identity) {
             ++row;
             continue;
         }
-        const Scope scope = kindInfo(row->first.kind).scope;
         auto &list        = row->second;
         for (auto entry = list.begin(); entry != list.end();) {
             // The slot this entry published lives in the graph that is ending, and a slot that
@@ -698,8 +697,9 @@ void Store::graphGone(const graph::Graph *graph, std::uint64_t identity) {
                 continue;
             }
             // The fact is about the graph, not about the object that held it: it moves to the
-            // version that is still there, and is published there so a reader of that version
-            // finds it in the slot as it would have found it in the old one.
+            // version that is still there. It is not written into that version's slot table: a
+            // node id is stable along a line only for the nodes the encoding kept, and a slot for
+            // a node that version does not carry is a write past the end of its table.
             for (Anchor &anchor : entry->anchors) {
                 if (anchor.graph == graph) {
                     anchor.graph = successor;
@@ -715,7 +715,12 @@ void Store::graphGone(const graph::Graph *graph, std::uint64_t identity) {
                 entry = list.erase(entry);
                 continue;
             }
-            publishSlot(graphs_, row->first.kind, scope, entry->anchors, entry->value.get());
+            // The slot is *not* republished in the version the fact moved to: a node id is
+            // stable along a line only for the nodes the encoding kept, and a slot written for a
+            // node that version does not carry is a write past the end of its table. A reader of
+            // the successor that wants the slot publishes it when it asks (`putValue`/`obtain`),
+            // and until then the entry is found by the anchor scan, which costs a computation of
+            // nothing and never a wild write.
             ++entry;
         }
         row = list.empty() ? entries_.erase(row) : std::next(row);
