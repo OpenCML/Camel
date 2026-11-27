@@ -42,6 +42,13 @@
 - 修法（已派）：`rank >= 3` 且参数长度与多于一根轴相等 ⇒ 拒绝并点名候选轴（`axes 1 or 2`），用既有 `TensorDimensionMismatch`；`rank == 2` 不动
 - 判据：探针改拒绝（逐字+位置+exit code+不 abort）、rank-2 契约读法逐值不变、`feat/modules/nn`+`nn_laws` 新增红 0、`vjp-parity --strict` PASS
 
+### H. `layer_norm` 的 `gamma/beta` 只核"尾随 extents"，不核"该尾随是否唯一"（疑似第四条静默错数，`lane-ssa-residue` 2026-11-28 读源，**未实测**）
+- 依据：`signatures/tensor.cml:340-345` "whose extents are the trailing ones of x, over the trailing axes"；`@fails` 只覆盖 "gamma or beta does not match the trailing extents"（`:343`、`:350`）⇒ **只核尾随，不核是否唯一**
+- 疑似错数：`x = [2,3,2]`、`gamma=[2]` ⇒ "尾随一轴（轴 2）"与"轴 0"都对得上；调用者通道轴不在尾随时，形状全过、按尾随轴算 ⇒ 与 `sum_to`/`batch_norm` 同族（"参数里装不下轴身份"）
+- 下一步：实测两组手算值（按尾随轴 vs 按轴 0）；若确认 ⇒ 同判据 `rank>=3` 且多数组合法 ⇒ 拒绝并点名候选轴
+- **分类备注（`lane-ssa-residue` 提，我认）**：只有"参数里**装不下**轴身份"的才立卡（`sum_to`/`broadcast_like`/`batch_norm`/`layer_norm`）；"参数里装得下但被省略"的（`softmax`/`log_softmax` 的 `axis=-1` 默认）**只写文档提醒、不立卡**
+- **已闭合**：`sum_to` 的静默窗口只剩 rank≥3 且多数相等那一个；`[3,2,2]` 上 `[3]` 已被 `requireSuffixTarget` 逐位比较挡掉（`position 2 is 3 where the tensor has 2`），走不到"落最后轴"
+
 ### F. `tangentSpaceOf` 的用户面与机件面要一起走（`D-1127-278` 执行记录，截稿后整理）
 - 已落地：`Tangent<T>` 走用户面（`Tangent<bool> = bool`、`Tangent<int> = int`）、`jvp.cml:43` 例子改 `(int, int)`、聚合恒等（`54ccaacc55`：全成员都是自己的切空间时交回 `primal`）
 - 仍存：`tangentSpaceOf` 在机件内部的零节点策略（"内部聚合只带真正需要梯度的成员"）与用户面口径在注释里未成文 ⇒ 截稿后把原则 9.9 的这段话写进 `derivative.h` 注释，别让下一个人再从测试反推
