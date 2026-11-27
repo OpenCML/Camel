@@ -370,6 +370,10 @@ git checkout HEAD -- <那一个文件>          # 恢复，git status --porcelai
   已经写过就立即 `git checkout HEAD -- <file>` 还原，再核 `git status --porcelain` 为空；改完用 `git grep -c <旧文本>` 看数**从几减到几**。
 · **报错的属性不是病因**：`graph.permissions` 报“句柄不指向任何节点”，真正的错在更上游那次“边替换边比较”——
   报错点只是第一个碰到失效句柄的地方。定位先从报错往上追一跳，别在报错那一行上改。
+· **在 GCT 的 LINK 节点上读 `name()` 会 SIGSEGV**（2026-11-27 `lane-editview-commit` 两次崩都是探针自己的错，不是判据）：
+  探针先判 `type()` 再读 `name()`，**只在 `DREF` 上读**；`name<args>(…)` 的 callee 在 `WITH` 子节点里，
+  只扫直接子节点会**一条不响**（看着像“这条路没进”，其实是探针没命中）。探针打完 `reset --hard`，
+  并核 `git grep '<标记>'` = 0 才交回。
 · **`--block-limit` 管的是“预留”，不是“在用”**：`room = limit − reserved`，而 `[camel] blocks: peak=` 记的是**在用**。
   两者不是同一口径 —— 2026-11-27 那晚 `limit=3808` 时“在用只有 3767.1 MB、还剩 40.9 MB，却拒了一个 9.0 MB 的分配”，
   就是这条口径差的直接证据（拒绝与“在用”无关）。**拿阶梯探针读出来的数，是“跑得完的最小 limit”，不是峰值用量**；
