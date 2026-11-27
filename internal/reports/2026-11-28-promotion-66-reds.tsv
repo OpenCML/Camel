@@ -136,7 +136,6 @@ probe.editview	editview.sec2_log
 tools.compile_bench	compile_bench.smoke
 tools.grammar	grammar.files
 tools.grammar	grammar.tables
-trans.cpp	empty_struct_text
 trans.effect_trace	macro_body_effect_stage
 trans.pass_dump	dump_after_each_pass
 trans.source_spelling	every_generator_writes_source_the_parser_reads

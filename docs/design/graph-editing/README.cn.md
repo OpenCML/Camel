@@ -14,7 +14,7 @@
 |---|---|---|
 | 规则（由 `rewrite`、`run`、`saturate` 应用） | 声明式改写 | 对这几个算子的一次调用 |
 | `view d = f { … }` | 读图、分析 | 对块体闭包的一次调用，交出普通值 |
-| `edit d = f { … }` | 改图 | 开草稿、带故障隔离地调用块体闭包、块尾提交，交出新函数或错误值 |
+| `edit d = f { … }` | 改图 | 开草稿、块体末尾提交，整个调用套在故障隔离里，交出新函数或错误值 |
 
 这样也顺带解决了今天接口的三个问题：句柄会逃逸、事务会忘记提交或改到一半、读程序的人看不出哪一段在操作图。
 
@@ -87,7 +87,7 @@ export func strip_debug_prints::<F>(f: F) => F! when is_function::<F>() {
 
 ## 5. 编译之后：块体是普通闭包（负责人 2026-11-27）
 
-- **块是类型与静态检查层面的构造，执行时没有特殊对待。** `view d = f { B }` 编成对块体闭包的一次调用，参数是 `f` 的只读图句柄与块捕获的值；`edit d = f { B }` 编成三步：`open(f)` 开草稿，以故障隔离（`attempt` 的方式）调用块体闭包，正常走到块尾就 `commit`。草稿的类型 `Draft<F>` 记着打开的是什么类型的函数，`commit` 由它得出新函数的类型，提交成别的类型是类型错误；块体拿到的 `d` 是草稿根图的句柄，`Draft<F>` 本身只出现在降级生成的代码里。`open`、`commit` 与各个查询、编辑算子都是内核里的普通算子；执行器、后端、导出器都不知道"块"存在。
+- **块是类型与静态检查层面的构造，执行时没有特殊对待。** `view d = f { B }` 编成对块体闭包的一次调用，参数是 `f` 的只读图句柄与块捕获的值；`edit d = f { B }` 编成同一次调用，外面套故障隔离（`attempt(closure)()`）：闭包体内依次是 `open(f)` 开出的草稿（绑在一个程序写不到的内部名字上）、块体自己的语句、以及**块体末尾的** `commit_of(草稿, 块头的函数)`。提交写在闭包里面，所以块体里写的 `return` 结束的是块体、提交照样执行；故障由闭包外面的边界接住，走不到提交，旧函数不动。闭包的结果就是提交产物 `F!`（`attempt` 对已经是 `U!` 的结果不再加第二个 `!`），块的值就是它或那个错误值。草稿的类型是 `Graph`——`open` 交出的就是草稿的根图，它说不出提交得到什么——所以提交写成 `commit_of(d, f)`，由块头那个函数作见证；提交成别的类型是类型错误。`open`、`commit` 与各个查询、编辑算子都是内核里的普通算子；执行器、后端、导出器都不知道"块"存在。
 - **块体对遍透明**：它和别的代码一样在程序的图里，遍、变换、导出照常处理它，块体的闭包也可以内联。编辑与查询算子按它们读写的资源（`graph`、`spelling`、草稿）排序，所以遍不会把对草稿的写重排或合并；对已提交图的读不会被任何操作写，可以合并、外提，对常量函数值的 `view` 本身就是常量。
 - **`edit` 对外是纯的**：草稿是块内新建、出不了块的局部资源，在块边界按效应遮蔽从访问集里去掉（与 `sync` 块的时间线是同一条规则，原则 3.4）；故障又在块体边界隔离成错误值。所以从外面看，`edit` 是函数值进、新函数值出、不会故障的纯计算。求导与批处理不需要特例：句柄与函数值没有切空间。
 - **中途失败不需要回滚**：草稿是 `f` 的写时复制，`f` 从未改动。一步当场检查不过就产生故障，故障沿草稿上的顺序边传播（原则 3.9），之后对草稿的读写都不执行；故障到块体的隔离边界变成错误值，块的值就是它，草稿没人引用即作废。块体里已经执行的外部效应不在可撤回的范围里：事务管的是图。
@@ -192,6 +192,18 @@ export func strip_debug_prints::<F>(f: F) => F! when is_function::<F>() {
 ## 11. 迁移
 
 - `lib/graph/graph.cml`：删除 `graph_of`、`graphs_of`、`Txn<F>`、`open`、`commit`、`abort`；查询与编辑算子的签名不变，句柄类型带上块标签；新增 `inline`、`outline`、`order`、`exit` 一类锚点查询；删除 `add_constant`（它是 `inline(at, () => v)` 的特例）。
+  - 状态（2026-11-28 核）。状态靠标注，事实靠出处；"被谁调用"也是事实的一部分，所以每行三段：公开面 / 谁在调 / 能删吗。
+    - `Txn<F>`：公开面 无（`src/stdlib/graph.cml` 的 `export type` 表 `:42-51` 里没有它）｜谁在调 无（编译器与库都不引用这个名字；`TxnUsed` 只是错误值名，`:494`）｜能删 已落地。
+    - `graph_of`：公开面 `src/stdlib/graph.cml:70`｜谁在调 编译器降级发它取块根（`src/compile/src/gct/builder_expr.cpp:285`）；例子与文档面也写着它（如 `examples/case-study/README.md:293`）｜能删 不能：降级依赖，且要先把块根句柄改成不发它。
+    - `graphs_of`：公开面 `src/stdlib/graph.cml:75`｜谁在调 `src/stdlib/opt.cml:198,363`（`cse` 与 `fold` 的入口判断）、`examples/case-study/edits.cml:48,126`｜能删 要迁移那两处遍与例子，不是删一行。
+    - `open`：公开面 `src/stdlib/graph.cml:402`｜谁在调 编译器降级（`src/compile/src/gct/builder_expr.cpp:228`，块闭包体的第一句）、`src/stdlib/opt.cml:188,250,350`、`examples/case-study/edits.cml:82,91`｜能删 不能：降级与库都依赖，这一项欠收口、不欠迁移。
+    - `commit`：公开面 `src/stdlib/graph.cml:496`｜谁在调 编译器降级**不**发它（块写的是内部的 `commit_of`，`src/compile/src/gct/builder_expr.cpp:231`）；Camel 面 `src/stdlib/opt.cml:192,246,337`、`examples/case-study/edits.cml:86,93`｜能删 先把那三处与例子换成块写法或 `commit_of`，再收口；只删名字会断库。
+    - `abort`：公开面 `src/stdlib/graph.cml:513`｜谁在调 `src/stdlib/opt.cml:341`（`fold` 一轮没折成时）、`test/cases/modules/graph_facts/draft_facts.cml:44`、`test/cases/modules/graph_pass/neutral.cml:101`；编译器不发｜能删 欠收口，且收口前先定"显式放弃"这个写法还要不要。
+    - `inline` / `outline` / `order` / `exit`：公开面 `src/stdlib/graph.cml:449` / `:465` / `:437` / `:114`｜谁在调 `test/cases/modules/graph_function/inline.cml:261,262`、`commit_effect.cml:76`、`outline.cml:96`、`test/cases/modules/graph_pass/orderprobe.cml:137,150`｜能删 已落地（新增完成）。
+    - `add_constant`：公开面 `src/stdlib/graph.cml:490`｜谁在调 `test/cases/modules/graph_pass/fold_constants.cml:32,58`、`typed_constants.cml:46`、`test/cases/modules/graph_draft_id.py:53,73`｜能删 未落地；换 `inline(at, () => v)` 之前先改这四个用例。
+    - 「查询与编辑算子的签名不变」：公开面 `open` / `commit` / `abort` 的形参都已是草稿句柄（`src/stdlib/graph.cml:402` / `:496` / `:513`）｜谁在调 不适用｜能删 这句断言**不成立**，应改为"签名随之改变"。
+    - 「句柄类型带上块标签」：随 `task-389` 定案，本轮不标（没出处不写）。
+    - **在途**：`commit` 与 `commit_of` 的形参正在变 —— `lane/editview-commit`（`ce14a0e31a`）的 8 笔把 `commit` 的形参改成 `Draft<F>`（该枝的 `src/stdlib/graph.cml:504`）并同步 `commit_of`（该枝 `:514`）；**尚未合入**。合入之后 `commit` 那行要再标一次（"形参已是 `Draft<F>`，上面按 `Graph` 写的调用点清单随之改变"），`commit_of` 同理。
 - 用 Camel 写的遍（`lib/opt/opt.cml` 的 `fold`/`cse`/`dce`、`examples/case-study/edits.cml`、`test/cases/modules/graph_pass/*`）：`open … commit` 改写成 `edit d = f { … }`；只读分析改写成 `view`。遍的形状不变，仍是 `(f: F) => F!`。
 - `probe_handle`、`check_pass_boundary` 改成 `view` 块里的查询。
 - 测试：每条现有的 `Txn` 用例改写；另加反例，各报一条具名诊断：句柄作为块的值交出、存进块外的 `Ref`、被离开的闭包带走、图算子写在块外、`view` 的节点交给 `replace`。
@@ -222,7 +234,7 @@ replace(a, b)
 
 **负责人 2026-11-17 已定**：
 - 图操作只写在规则、`view`、`edit` 三处；`view` 保留，是读图的唯一入口。
-- 块是作用域构造（负责人 2026-11-27）：编译之后块体是普通闭包，对遍透明；`view` 是一次调用，`edit` 是开草稿、带故障隔离的调用与块尾提交；标签只在源码层检查；块体允许不终止（第 4、5 节）。
+- 块是作用域构造（负责人 2026-11-27）：编译之后块体是普通闭包，对遍透明；`view` 是一次调用，`edit` 是套在故障隔离里的一次闭包调用（体内开草稿、块体末尾提交）；标签只在源码层检查；块体允许不终止（第 4、5 节）。
 - 加 `outline`，与 `inline` 互为反向；按本质命名：`graft` 改为 `inline`（调用并当场展开），提取改为 `outline`（把一段收回成函数），删除 `add_constant`。不设 `drop_effect`：区域里的写由前端在建图时接到区域出口的 `GATE`（原则 3.1），此后它和别的节点一样，点名它的 `replace` 或 `erase` 才让它消失，不为效应另设算子。往图里插入一个写，由插入它的代码自己让它被用到：拼进一个带 `sync` 的函数再 `replace` 接上（第 2 节 `log_result`）。编辑操作不维护"区域用到写"，提交也不重连；遍把区域拆开重组时，写的用处由遍自己负责（9.5），要核对就显式用 `check_pass_boundary`。`view`、`edit` 两个关键字定名。
 - 没有"程序"这一层：编辑一个函数就是编辑它可达的全部图，对 `main` 编辑即整个程序（第 6 节第 5 条）。
 - `edit` 可以改签名：改了就在块头写出新类型；新增增删形参端口、换出口值两类编辑；提交对照声明的类型检查端口与出口。
