@@ -29,7 +29,9 @@ expect_stdout = "2\n0\n"
 # signature law -- so the two statements about one value disagree at the type level, and that is a
 # decision about `Tangent<T>` (and about the checked example `is_same::<Lift<int>, (int, ())>` in
 # `stdlib/rulesets/jvp.cml`), not something a case here can settle. The case that would pin the
-# reverse reading is `test/cases/probe/t301/vjp_bool.cml`; it comes back with that decision.
+# reverse reading is `test/cases/probe/t301/vjp_bool.cml` (and, for the gradient as a value,
+# `test/cases/probe/t301/grad_bool.cml`); both come back with that decision, and neither is an entry
+# here until it does.
 
 [[tests]]
 name = "a_string_result_still_has_no_tangent"
