@@ -10,7 +10,7 @@
 import { with_grad } from autodiff
 import { get_env } from env
 import { sgd } from nn
-import { model, save } from onnx
+import { export_model } from onnx
 import { relu, mean, reshape } from tensor
 
 type Mlp = { w1: f32[...], b1: f32[...], w2: f32[...], b2: f32[...] }
@@ -36,7 +36,7 @@ func main() => string! sync {
         b2: reshape<[1]>([0.2] as f32[])
     }
     let x = reshape<[2, 2]>([1.0, 2.0, -1.0, 0.5] as f32[])
-    return match model(step, (m, x))->save<out: get_env('ONNX_OUT') ?? ''> {
+    return match export_model<out: get_env('ONNX_OUT') ?? ''>(step, (m, x)) {
         case error e => {
             return e
         }

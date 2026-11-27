@@ -15,7 +15,7 @@
  * Checked by ort_slice_start.py.
  */
 import { get_env } from env
-import { model, save } from onnx
+import { export_model } from onnx
 import { reshape, shape, sum } from tensor
 
 func head(x: f32[...]) => f32[...] {
@@ -35,9 +35,9 @@ func dynamic(x: f32[...]) => f32[...] {
 func main() => string! sync {
     if (get_env('MODE') ?? '') == 'constant' then {
         let x = reshape<[3]>([1.0, 2.0, 3.0] as f32[])
-        return match model(func (x: f32[...]) => f32[...] {
+        return match export_model<out: get_env('ONNX_OUT') ?? ''>(func (x: f32[...]) => f32[...] {
             constants(x)
-        }, x)->save<out: get_env('ONNX_OUT') ?? ''> {
+        }, x) {
             case error e => {
                 return e
             }
@@ -45,9 +45,9 @@ func main() => string! sync {
         }
     } else if (get_env('MODE') ?? '') == 'dynamic' then {
         let x = reshape<[1, 12]>([12.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0] as f32[])
-        return match model(func (x: f32[...]) => f32[...] {
+        return match export_model<out: get_env('ONNX_OUT') ?? ''>(func (x: f32[...]) => f32[...] {
             dynamic(x)
-        }, x)->save<out: get_env('ONNX_OUT') ?? ''> {
+        }, x) {
             case error e => {
                 return e
             }
@@ -55,9 +55,9 @@ func main() => string! sync {
         }
     } else {
         let x = reshape<[3]>([1.0, 2.0, 3.0] as f32[])
-        return match model(func (x: f32[...]) => f32[...] {
+        return match export_model<out: get_env('ONNX_OUT') ?? ''>(func (x: f32[...]) => f32[...] {
             head(x)
-        }, x)->save<out: get_env('ONNX_OUT') ?? ''> {
+        }, x) {
             case error e => {
                 return e
             }

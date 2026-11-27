@@ -5,7 +5,7 @@
  * ort_slice_bounds.py, for the slice alone and inside a branch on the data: MODE=branch).
  */
 import { get_env } from env
-import { model, save } from onnx
+import { export_model } from onnx
 import { reshape, sum } from tensor
 
 func head(x: f32[...]) => f32[...] {
@@ -21,18 +21,18 @@ func main() => string! sync {
     let x = reshape<[3]>([1.0, 1.0, 1.0] as f32[])
     println(head(x))
     if (get_env('MODE') ?? '') == 'branch' then {
-        return match model(func (x: f32[...]) => f32[...] {
+        return match export_model<out: get_env('ONNX_OUT') ?? ''>(func (x: f32[...]) => f32[...] {
             branch(x)
-        }, x)->save<out: get_env('ONNX_OUT') ?? ''> {
+        }, x) {
             case error e => {
                 return e
             }
             case v => 'exported'
         }
     } else {
-        return match model(func (x: f32[...]) => f32[...] {
+        return match export_model<out: get_env('ONNX_OUT') ?? ''>(func (x: f32[...]) => f32[...] {
             head(x)
-        }, x)->save<out: get_env('ONNX_OUT') ?? ''> {
+        }, x) {
             case error e => {
                 return e
             }

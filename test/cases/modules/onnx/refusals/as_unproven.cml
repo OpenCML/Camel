@@ -5,7 +5,7 @@
  * the conversion (line 13) instead of leaving the check out.
  */
 
-import { model, save } from onnx
+import { export_model } from onnx
 import { reshape, tanh } from tensor
 
 func f(x: f32[...]) => f32[...] {
@@ -15,5 +15,5 @@ func f(x: f32[...]) => f32[...] {
 
 func main() => void! sync {
     let ex = reshape<[2, 3]>([1.0, -1.0, 0.5, 2.0, 3.0, -2.0] as f32[])
-    model<dynamic_axes: [0]>(f, ex)->save<out: 'tmp/test/onnx/refusal_as_unproven.onnx'>
+    export_model<out: 'tmp/test/onnx/refusal_as_unproven.onnx', dynamic_axes: [0]>(f, ex)
 }

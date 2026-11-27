@@ -2,15 +2,14 @@
 // SPDX-License-Identifier: MIT
 
 /*
- * The onnx module: translates Camel functions into ONNX models.
+ * The onnx module: exports Camel functions as ONNX models.
  *
- *   onnx.model(fn, example[, dynamic_axes][, target])   the model, as a value
+ *   onnx.export_model(fn, example, path[, dynamic_axes])
  *   onnx.supported_operators()
  *
- * `model` translates `fn` applied to a tensor with `example`'s dtype and shape, leaving the
- * listed input axes dynamic. The translation is a value, and its bytes are the ONNX file (see
- * model.h): writing them is `save`'s business, so the file form of `export_model` is the pair
- * `model` then `save`.
+ * writes the model of `fn` applied to a tensor with `example`'s dtype and
+ * shape to `path`, leaving the listed input axes dynamic, and lists the
+ * operator URIs the backend can lower (see exporter.h).
  */
 
 #pragma once

@@ -7,7 +7,7 @@
  * ort_argmax.py.
  */
 import { get_env } from env
-import { model, save } from onnx
+import { export_model } from onnx
 import { reshape, argmax } from tensor
 import { is_numeric } from types
 
@@ -19,9 +19,9 @@ func forward::<T>(x: T[...]) => (int[...], int[...], int[...])
 func main() => string! sync {
     if (get_env('MODE') ?? '') == 'int' then {
         let x = reshape<[2, 8]>([3, 7, 7, 1, 1, 2, 2, 9, 3, 7, 7, 1, 1, 2, 2, 9])
-        return match model(func (x: int[...]) => (int[...], int[...], int[...]) {
+        return match export_model<out: get_env('ONNX_OUT') ?? ''>(func (x: int[...]) => (int[...], int[...], int[...]) {
             forward(x)
-        }, x)->save<out: get_env('ONNX_OUT') ?? ''> {
+        }, x) {
             case error e => {
                 return e
             }
@@ -29,9 +29,9 @@ func main() => string! sync {
         }
     } else {
         let x = reshape<[2, 8]>([1.0, 3.0, 3.0, -2.0, -2.0, 7.0, 7.0, 0.5, 1.0, 3.0, 3.0, -2.0, -2.0, 7.0, 7.0, 0.5] as f32[])
-        return match model(func (x: f32[...]) => (int[...], int[...], int[...]) {
+        return match export_model<out: get_env('ONNX_OUT') ?? ''>(func (x: f32[...]) => (int[...], int[...], int[...]) {
             forward(x)
-        }, x)->save<out: get_env('ONNX_OUT') ?? ''> {
+        }, x) {
             case error e => {
                 return e
             }
