@@ -2237,22 +2237,15 @@ bool liftGraph(
                     complete = false;
                     break;
                 }
-                Type *gateType = node->dataType();
-                // A gate hands on the value the body wrote, so its type is that value's lifted
-                // shape, read in the order the law reads it: a value with a tangent space is
-                // `(value, tangent)` as a whole (`pairOf` -- what a loop's one state becomes), a
-                // tuple with no space whose members are mixed lifts member by member
-                // (`mixedMemberTypeOf`), and a value the law does not answer for is carried as it
-                // is. Asking the pair first is what the lift does everywhere else: a struct of
-                // floats pairs as one value, and lifting it member by member would give the same
-                // type by a different route -- the route that says "one component per member" when
-                // the loop says "one state".
-                if (TupleType *gatePairType = pairOf(gateType); gatePairType != nullptr) {
-                    gateType = gatePairType;
-                } else if (
-                    Type *mixedGateType = mixedMemberTypeOf(gateType); mixedGateType != nullptr) {
-                    gateType = mixedGateType;
-                }
+                // A gate hands on the value the body wrote, so its type is the type of the copy it
+                // forwards: the lift decided that type once, where the value was copied, and a gate
+                // stands on exactly that value. Lifting it here instead makes a second decision
+                // about the same node -- a gate lifted to `(float, float)` in front of a copy the
+                // lift left a `float` is the edge invariant's "forwards a float as a (float,
+                // float)" (kernel/runtime, the gate's type against the value it forwards). Read
+                // from the copy, the two agree by construction: whether a value is lifted is one
+                // place's answer, not the gate's.
+                Type *gateType           = draft.node(copyOf[forwarded])->header.dataType;
                 const gc_node_ref_t gate = addCopiedGate(ref, gateType, copyOf[forwarded]);
                 if (gate == rt::kInvalidNodeRef) {
                     complete = false;

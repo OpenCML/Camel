@@ -3455,3 +3455,16 @@ expect_exit = 0
 expect_output_contains = ["layer_norm jvp value=[[-0.7247438507721387, -0.5, -0.22474385077213865], [-0.7247438507721387, -0.5, -0.22474385077213865]] tangent=[[-0.5664955603087009, 0.8164959005147592, 2.153612016879025], [-0.5664948798965844, 0.8164959005147592, 2.1536126972911416]]"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
+
+[[tests]]
+name = "transforms.jvp_range_loop_names_its_iterable"
+desc = "A range loop in a differentiated function, read against the array loop beside it. `over_an_array` walks `[1, 2, 3]`, which has no `for` operator to call, so it lifts: `jvp(over_an_array)(1.0, 1.0)` reads 4.0 and 1.0, and those two lines print. `over_a_range` walks `0 .. 3`, whose `for` operator answers a stream -- a value with no tangent space -- so the forward lift has no transform for that callee and refuses where the `jvp` call stands (line 31, column 21), naming the function it refused and its cause (`READING_REFUSAL {\"transform\":\"jvp\",\"function\":\"over_a_range\",\"cause\":\"loop\"}`). The case's own header asks for more than that: the callee's line in `prelude.cml` and the cause in prose. The sentence is still the bare fallback the case exists to replace (`The runtime has no diagnostic of its own for this fault`), so this entry pins where the refusal stops today rather than blessing the sentence -- the case says a refusal is not an answer, and the message that names the iterable's line is a change of its own."
+kind = "behavior"
+case = "../../../cases/compile/transforms/jvp_range_loop_names_its_iterable.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm"]
+expect_exit = 1
+expect_stdout_exact = "4.0\n1.0\n"
+expect_stderr_contains = ["READING_REFUSAL {\"transform\":\"jvp\",\"function\":\"over_a_range\",\"cause\":\"loop\"}", "jvp_range_loop_names_its_iterable.cml:31:21: [Error]: An error has occurred: transforms: jvp has no forward transform for this function"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
