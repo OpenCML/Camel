@@ -1197,7 +1197,7 @@ func max_f6(a: f16, b: f16) => f16 {
 }
 
 /// `d(max(a, b)) = da` where `a >= b`, and `db` where it is not: the choice the array width's
-/// `extremumVjp` makes for `maximum` (`stdlib/tensor/ops/elementwise_ops.cpp:455-465`: `ge(lhs, rhs)`,
+/// `extremumVjp` makes for `maximum` (`stdlib/tensor/ops/elementwise_ops.cpp#extremumVjp`: `ge(lhs, rhs)`,
 /// so a tie goes to the left operand). The branch is written with `if` because the scalar graph has
 /// no select/where operator; the condition reads only the inputs and both arms are linear in the
 /// tangents.
@@ -1206,7 +1206,7 @@ export rule jvp_max_d(a: float, b: float) { max_d(a, b) => func (da: float, db: 
 } }
 
 /// `d(max(a, b)) = da` where `a >= b`, and `db` where it is not: the choice the array width's
-/// `extremumVjp` makes for `maximum` (`stdlib/tensor/ops/elementwise_ops.cpp:455-465`: `ge(lhs, rhs)`,
+/// `extremumVjp` makes for `maximum` (`stdlib/tensor/ops/elementwise_ops.cpp#extremumVjp`: `ge(lhs, rhs)`,
 /// so a tie goes to the left operand). The branch is written with `if` because the scalar graph has
 /// no select/where operator; the condition reads only the inputs and both arms are linear in the
 /// tangents.
@@ -1215,7 +1215,7 @@ export rule jvp_max_f(a: f32, b: f32) { max_f(a, b) => func (da: f32, db: f32) {
 } }
 
 /// `d(max(a, b)) = da` where `a >= b`, and `db` where it is not: the choice the array width's
-/// `extremumVjp` makes for `maximum` (`stdlib/tensor/ops/elementwise_ops.cpp:455-465`: `ge(lhs, rhs)`,
+/// `extremumVjp` makes for `maximum` (`stdlib/tensor/ops/elementwise_ops.cpp#extremumVjp`: `ge(lhs, rhs)`,
 /// so a tie goes to the left operand). The branch is written with `if` because the scalar graph has
 /// no select/where operator; the condition reads only the inputs and both arms are linear in the
 /// tangents.
@@ -1224,7 +1224,7 @@ export rule jvp_max_bf(a: bf16, b: bf16) { max_bf(a, b) => func (da: bf16, db: b
 } }
 
 /// `d(max(a, b)) = da` where `a >= b`, and `db` where it is not: the choice the array width's
-/// `extremumVjp` makes for `maximum` (`stdlib/tensor/ops/elementwise_ops.cpp:455-465`: `ge(lhs, rhs)`,
+/// `extremumVjp` makes for `maximum` (`stdlib/tensor/ops/elementwise_ops.cpp#extremumVjp`: `ge(lhs, rhs)`,
 /// so a tie goes to the left operand). The branch is written with `if` because the scalar graph has
 /// no select/where operator; the condition reads only the inputs and both arms are linear in the
 /// tangents.
