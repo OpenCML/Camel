@@ -1,0 +1,28 @@
+# One-off fixture (not tracked) for compare_base.mjs: a run in which nothing times out. Both cases
+# pass well inside their bounds, so the re-run mechanism has an empty set and must not print
+# anything of its own.
+id = "selftest.compare_quiet"
+order = 6
+tier = "fast"
+
+[defaults]
+tool = "node"
+kind = "behavior"
+case = "../timeout/sleep_ms.mjs"
+normalizers = ["normalize_newlines"]
+
+[[tests]]
+name = "quiet.fast"
+desc = "Exits at once."
+args = ["${case}", "0"]
+timeout_ms = 5000
+expect_exit = 0
+expect_stdout_contains = ["waited 0 ms"]
+
+[[tests]]
+name = "quiet.slowish"
+desc = "Uses a little of its bound and finishes."
+args = ["${case}", "250"]
+timeout_ms = 5000
+expect_exit = 0
+expect_stdout_contains = ["waited 250 ms"]

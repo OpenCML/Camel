@@ -1,0 +1,18 @@
+# One-off harness (not tracked): starts the branch runner and the base runner on the same plan and
+# compares their output. Naming this file as the target runs it in full.
+id = "selftest.compare_base"
+order = 7
+tier = "fast"
+
+[[tests]]
+name = "compare.no_timeout_output"
+desc = "A run in which nothing timed out prints the same lines as the base runner's, after this run's own measurements are masked."
+kind = "behavior"
+tool = "node"
+case = "compare_base.mjs"
+args = ["${case}"]
+timeout_ms = 300000
+expect_exit = 0
+expect_stdout_contains = ["BYTE-IDENTICAL"]
+normalizers = ["normalize_newlines"]
+parallel = false

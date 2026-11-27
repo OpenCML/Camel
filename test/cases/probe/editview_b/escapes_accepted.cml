@@ -1,0 +1,54 @@
+// The shapes design 11 says a block must refuse, written against the entry points this tree has:
+// `graph_of`/`graphs_of` for a graph, `open`/`commit` for an edit, `nodes`/`inputs` for a node. The
+// block head the design names (`view d = f { ... }`, `edit d = f { ... }`) is not a production here,
+// so this file is the reading of what the type checker does with each shape today: it accepts all
+// of them. Nothing here is a criterion; it is the "before" side of one.
+import { graph_of, nodes, inputs, Node, Graph, open, replace, commit } from graph
+import { Ref, ref, get, set } from state
+
+func plus_zero(x: int) => int {
+    return (x + 0) * 2
+}
+
+func other(x: int) => int {
+    return x * 3
+}
+
+// A function whose signature mentions a handle type: by design 3 this is a graph operator, callable
+// only inside a block. It reads a graph handed to it by any caller.
+func firstNode(g: Graph) => Node {
+    return nodes(g)[0]
+}
+
+// A closure that carries a handle out of the extent that read it.
+func keeper::<F>(f: F) => (() => Node) when is_function::<F>() {
+    return func () => Node { firstNode(graph_of(f)) }
+}
+
+func main() => int sync {
+    // 1. A handle as the value of a read: accepted.
+    let n = firstNode(graph_of(plus_zero))
+    println(`[escape-value] accepted: ${n == n}`)
+
+    // 2. A handle stored in a box made outside the extent that read it: the box's content type is
+    // fixed out here, where the design has no block label to name, so the design refuses this.
+    let box: Ref<Node?> = ref(null)
+    set(box, firstNode(graph_of(plus_zero)))
+    println(`[escape-ref] accepted: ${get(box) != null}`)
+
+    // 3. A closure that leaves the extent carrying a handle, called after it left: accepted.
+    let k = keeper(plus_zero)
+    let carried = k()
+    println(`[escape-closure] accepted: ${carried == carried}`)
+
+    // 4. A node of a committed graph given to an edit operator of a transaction opened on another
+    // function: accepted, and applied to the graph the node names.
+    let t = open(plus_zero)
+    let foreign = nodes(graph_of(other))
+    let before = len(foreign)
+    replace(t, foreign[0], inputs(foreign[0])[0])
+    let edited = commit(t) !! plus_zero
+    let after = len(nodes(graph_of(other)))
+    println(`[view-node-to-replace] accepted: ${before}->${after} edited=${edited(5)}`)
+    return 0
+}

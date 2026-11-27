@@ -1,0 +1,47 @@
+# The "before" side of the handle-escape criterion (docs/design/graph-editing/README.cn.md 4 and 11).
+#
+# The design makes every block introduce an unnameable scope label that its handles' types carry, so
+# that a handle cannot be the block's value, be stored outside it, or be carried away by a closure
+# that leaves it, and so that a `view` block's node given to `replace` is a type error rather than a
+# runtime check. Each entry below writes one of those shapes against the entry points this tree has
+# (`graph_of`, `open`/`commit`, `nodes`/`inputs`, `replace`), and asserts what happens today: the
+# type checker accepts every one of them. These are readings and not criteria -- when the label
+# exists these assertions invert, and this file goes with the entry points it reads.
+#
+# `tier = "debug"` keeps the file out of the fast and all layers; naming this file runs it in any
+# build.
+
+id = "probe.editview_b"
+order = 9991
+tier = "debug"
+tags = ["probe"]
+
+[defaults]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 30000
+
+[[tests]]
+name = "probe.editview_b.escapes_accepted"
+desc = "Four shapes, accepted today: a graph operator's node handed to ordinary code as a value (`firstNode(graph_of(plus_zero))`), the same node stored in a `Ref<Node?>` made outside the extent that read it, a closure returned from a function and called after it left with a node inside it, and a node of a committed graph given to `replace` on a transaction opened on another function -- which is applied to the graph the node names, silently. Each line prints `accepted:`."
+kind = "behavior"
+case = "../../probe/editview_b/escapes_accepted.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_contains = ["[escape-value] accepted: true", "[escape-ref] accepted: true", "[escape-closure] accepted: true", "[view-node-to-replace] accepted:"]
+
+[[tests]]
+name = "probe.editview_b.draft_handle_leaves"
+desc = "A handle leaves the extent it was made in, in the strongest form this tree allows: `leak` returns a node of a draft that `commit` has already ended. The type checker accepts it; the handle is dangling and nothing refuses it, because nothing reads it. The reading is that the return type `Node` accepts a handle whose owner is gone."
+kind = "behavior"
+case = "../../probe/editview_b/draft_handle_leaves.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_exact = "[draft-handle] committed, the edited function runs: 2\n[draft-handle] accepted: a handle to a node of a closed draft: true\n"
+
+[[tests]]
+name = "probe.editview_b.design_view_min"
+desc = "The design's block head alone (`view d = f { len(nodes(d)) }`, design 15.1), carrying the integer half of design 4 item 5. Whatever the compiler says about this file is what it says about the production, with nothing else in the file to confuse it."
+kind = "negative"
+case = "../../probe/editview_b/design_view_min.cml"
+args = ["${case}"]
+expect_exit = 1

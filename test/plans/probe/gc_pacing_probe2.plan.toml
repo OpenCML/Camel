@@ -1,0 +1,18 @@
+id = "probe.gc_pacing2"
+order = 998
+tier = "fast"
+tags = ["probe"]
+desc = "Probe: what `0 .. n` allocates when its value is used, and what `to_array` allocates."
+
+[defaults]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 20000
+
+[[tests]]
+name = "probe.gc_pacing2.used_range"
+kind = "behavior"
+case = "../../cases/probe/gc_pacing_probe2.cml"
+args = ["${case}", "${backend}"]
+backends = ["fvm"]
+expect_exit = 0
+expect_stdout_contains = ["probe "]
