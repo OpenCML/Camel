@@ -296,7 +296,7 @@ item b
 item c
 ```
 
-- `(x: int): int => x * x` is a lambda. The function passed to `map` is written in angle brackets because it is a `with` parameter of `map`: the array is the data flowing through, and the function is the configuration.
+- `func (x: int) { x * x }` is a lambda. The function passed to `map` is written in angle brackets because it is a `with` parameter of `map`: the array is the data flowing through, and the function is the configuration.
 - The elements of a `map` or a `filter` have no order among themselves, so a parallel back end can compute them at the same time, and the results are still arranged by position; `reduce` and `foreach` run in element order.
 - The lambda in `foreach` is written `=> sync { ... }`: a function body that is to produce an effect must be a sync block. The next section explains.
 

@@ -82,7 +82,7 @@ let ys = xs->map<func (x) { x * x }>->filter<func (x) { x % 2 == 0 }>
 [`examples/03_lambdas.cml`](examples/03_lambdas.cml)：
 
 ```cml
-// A function with no name is written `(x: int): int => ...`; it can also be kept in a name.
+// A function with no name is written `func (x: int) { ... }`; it can also be kept in a name.
 // Run: camel docs/tutorial/examples/03_lambdas.cml
 
 func main() => int sync {

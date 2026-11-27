@@ -296,7 +296,7 @@ item b
 item c
 ```
 
-- `(x: int): int => x * x` 是 lambda。传给 `map` 的函数写在尖括号里，因为它是 `map` 的 `with` 参数：数组是流过的数据，函数是配置。
+- `func (x: int) { x * x }` 是 lambda。传给 `map` 的函数写在尖括号里，因为它是 `map` 的 `with` 参数：数组是流过的数据，函数是配置。
 - `map`、`filter` 的各个元素之间没有先后，并行的后端可以同时算它们，结果仍按位置排列；`reduce`、`foreach` 按元素顺序执行。
 - `foreach` 里的 lambda 写的是 `=> sync { ... }`：要产生效应的函数体必须是同步块。下一节解释。
 
