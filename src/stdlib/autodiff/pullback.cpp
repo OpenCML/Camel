@@ -1984,7 +1984,7 @@ void ForwardRewrite::split(
     gc_node_ref_t pair = node;
     gc_node_ref_t value;
     if (versions == 0) {
-        value = draft().addAccsNode(plan.valueType, 0u);
+        value = draft().addAccsNode(plan.valueType, PairShape::valueSlot);
         redirectValue(node, value);
         draft().setNormInputs(value, std::span<const gc_node_ref_t>(&node, 1));
     } else {
@@ -1993,7 +1993,7 @@ void ForwardRewrite::split(
         // has becomes the value node.
         value = componentProjectionOf(node, 0);
         if (value == kInvalidNodeRef) {
-            value = draft().addAccsNode(plan.valueType, 0u);
+            value = draft().addAccsNode(plan.valueType, PairShape::valueSlot);
         }
         pair = draft().addAccsNode(plan.forwardValueType, 0u);
         redirectCallValue(node, pair, value);
