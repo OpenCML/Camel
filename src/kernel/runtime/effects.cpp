@@ -98,6 +98,48 @@ OperandClause callClause(const GCGraph &graph, gc_node_ref_t ref) {
     return clauseReach(clauseOfCall(graph, ref).clause);
 }
 
+/// The one reading of an operator's effect, over whatever answers what it needs of the node: which
+/// clause its function operand carries. `effectSummaryOfOperator` is the same reading over the
+/// program's own graph; a fact kind computes it over a view by bringing a reader instead.
+template <class Reader>
+EffectSummary effectSummaryOfOperatorT(
+    camel::core::OperId oper, const Reader &reader, const GCGraph *graph, gc_node_ref_t ref) {
+    const auto &table = camel::core::OperatorTable::instance();
+    const std::optional<camel::core::OperatorTraits> traits = table.find(oper);
+    EffectSummary summary;
+    summary.mayFault |= !traits || traits->mayFault;
+    // The half the declaration states: fixed, whatever the operands are (design principles 3.3).
+    summary.external |= declaresExternalAccess(traits, table.semantics(oper));
+    // What an operator writes is its resource declaration's (design principles 3.3).
+    summary.writesVariables |= table.writesProgramState(oper);
+    if (traits && traits->callsGraphs) {
+        // It runs a function the program hands it, so the node's effect is also what that
+        // function does: the clause of the function value that arrives in the operand the
+        // declaration names (design principles 3.3). The two halves are united and neither one
+        // replaces the other -- an operator declared to reach outside is external even when the
+        // value it is handed is pure.
+        summary.mayNotTerminate = true;
+        if (graph == nullptr) {
+            // No node to read the value off: the conservative answer for the half an operand
+            // carries, because a clause the walk cannot read is not an empty one.
+            summary.external = true;
+        } else {
+            const OperandClause clause = reader.operandClause(graph, ref);
+            summary.external |= clause.external;
+            summary.writesVariables |= clause.writesVariables;
+        }
+    }
+    return summary;
+}
+
+/// The reader of the reading above when the caller has no program: the operand clause is the
+/// operator table's and the node's, and nothing else is asked.
+struct NodeOperandReader {
+    OperandClause operandClause(const GCGraph *graph, gc_node_ref_t ref) const {
+        return functionOperandClause(*graph, ref);
+    }
+};
+
 /// The questions the walk asks of what it walks. A walk over a `Program` holds one of these, and
 /// this is the only reader there is: every graph question the walk has goes through it, which is
 /// what lets the same walk run over a read of a graph that is not the program's own (a fact kind's
@@ -132,7 +174,12 @@ struct ProgramReader {
     /// (`effectSummaryOfOperator`, which `core.operatorEffects` and a per-node reader ask as well),
     /// so this summary and those readers cannot disagree.
     EffectSummary operatorEffect(const GCGraph *graph, gc_node_ref_t ref) const {
-        return effectSummaryOfOperator(operatorOf(graph, ref), graph, ref);
+        return effectSummaryOfOperatorT(operatorOf(graph, ref), *this, graph, ref);
+    }
+    /// What a higher-order operator's function operand amounts to at this node: the clause of the
+    /// value that arrives in the operand the declaration names.
+    OperandClause operandClause(const GCGraph *graph, gc_node_ref_t ref) const {
+        return functionOperandClause(*graph, ref);
     }
     /// The graph a `Func` node stands for: the callee's body, which is a graph of the program.
     const GCGraph *calleeOf(const GCGraph &graph, gc_node_ref_t ref) const {
@@ -254,32 +301,11 @@ EffectSummary ofRegion(const Program &program, const GCGraph *graph, uint32_t re
 
 EffectSummary
 effectSummaryOfOperator(camel::core::OperId oper, const GCGraph *graph, gc_node_ref_t ref) {
-    const auto &table = camel::core::OperatorTable::instance();
-    const std::optional<camel::core::OperatorTraits> traits = table.find(oper);
-    EffectSummary summary;
-    summary.mayFault |= !traits || traits->mayFault;
-    // The half the declaration states: fixed, whatever the operands are (design principles 3.3).
-    summary.external |= declaresExternalAccess(traits, table.semantics(oper));
-    // What an operator writes is its resource declaration's (design principles 3.3).
-    summary.writesVariables |= table.writesProgramState(oper);
-    if (traits && traits->callsGraphs) {
-        // It runs a function the program hands it, so the node's effect is also what that
-        // function does: the clause of the function value that arrives in the operand the
-        // declaration names (design principles 3.3). The two halves are united and neither one
-        // replaces the other -- an operator declared to reach outside is external even when the
-        // value it is handed is pure.
-        summary.mayNotTerminate = true;
-        if (graph == nullptr) {
-            // No node to read the value off: the conservative answer for the half an operand
-            // carries, because a clause the walk cannot read is not an empty one.
-            summary.external = true;
-        } else {
-            const OperandClause clause = functionOperandClause(*graph, ref);
-            summary.external |= clause.external;
-            summary.writesVariables |= clause.writesVariables;
-        }
-    }
-    return summary;
+    // The same reading the walk asks through its reader (design principles 3.3): the operator
+    // table's half and, when the declaration takes its accesses from a function operand, that
+    // operand's clause. This signature is what `graph.is_pure` asks, so it is unchanged; it brings
+    // the reader that has no program because the reading needs none.
+    return effectSummaryOfOperatorT(oper, NodeOperandReader{}, graph, ref);
 }
 
 EffectSummary declaredEffectsOfOperator(camel::core::OperId oper) {
