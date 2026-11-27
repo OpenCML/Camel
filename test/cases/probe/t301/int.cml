@@ -2,7 +2,7 @@ import rulesets.jvp
 import { jvp } from transforms
 
 func f(a: float) => i32 {
-    return to_int(a)
+    return i32(a)
 }
 
 func main() => int sync {

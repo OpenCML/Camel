@@ -12,20 +12,20 @@ timeout_ms = 60000
 
 [[tests]]
 name = "a_bool_result_keeps_its_zero"
-case = "../../../cases/probe/t301/bool.cml"
+case = "../../cases/probe/t301/bool.cml"
 expect_exit = 0
 expect_stdout = "true\nfalse\n"
 
 [[tests]]
 name = "an_int_result_keeps_its_zero"
-case = "../../../cases/probe/t301/int.cml"
+case = "../../cases/probe/t301/int.cml"
 expect_exit = 0
 expect_stdout = "2\n0\n"
 
 [[tests]]
 name = "a_string_result_still_has_no_tangent"
 kind = "negative"
-case = "../../../cases/probe/t301/string.cml"
+case = "../../cases/probe/t301/string.cml"
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::ArgumentsRejected"
 expect_output_contains = ["`jvp` takes a function whose result has a tangent space", "which has none"]
