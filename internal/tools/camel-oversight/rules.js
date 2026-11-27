@@ -26,6 +26,15 @@ export const emptyAndIdle = (lanes, limits) => {
     return `空槽 ${empty} 个${idle.length ? `，闲着的：${idle.join('、')}` : ''}。`
 }
 
+// The share of the host's heap limit in use, or null when the host did not say.
+const heapShare = (memory) =>
+    memory && memory.heapLimit > 0 && typeof memory.heapUsed === 'number' ? memory.heapUsed / memory.heapLimit : null
+const heapLine = (memory, share) => {
+    const gb = (n) => (n / 2 ** 30).toFixed(1)
+    const top = (memory.sessions || []).map((one) => `${String(one.id).slice(-8)}（${one.events} 个事件）`).join('、')
+    return `DSH 的 JS 堆已用 ${gb(memory.heapUsed)}/${gb(memory.heapLimit)} GB（${Math.round(share * 100)}%），事件最多的会话：${top || '无'}；插件自己只占 ${memory.plugin ? `${memory.plugin.tailEntries} 条尾巴、${memory.plugin.streams} 条推送流` : '读不到'}。`
+}
+
 export const RULES = [
     {
         id: 'branch-gate',
@@ -325,6 +334,38 @@ export const RULES = [
             return {
                 key: 'idle',
                 text: `协调者会话空闲${minutes !== null ? ` ${minutes} 分钟` : ''}，backlog 还有 ${backlogOpen} 条没做完。现在开工：先看在做的（${doing.join('、') || '无'}）有没有停着的车道，再从待做的（${open.join('、') || '无'}）补派，开发槽补满（${limits.devSlots} 条）；催合并、跑闸门。不等人。`,
+            }
+        },
+    },
+    {
+        // The host keeps every session's history in its own heap, and reaching the heap limit stops
+        // the host with every session in it. Two thresholds: at the first the coordinator learns what
+        // frees memory and what does not; at the second the owner chooses a moment to restart.
+        id: 'host-memory',
+        level: 'wake',
+        hold: 0,
+        cooldown: 60,
+        check: ({ memory }) => {
+            const share = heapShare(memory)
+            if (share === null || share < 0.7 || share >= 0.85) return null
+            return {
+                key: 'rising',
+                text: `${heapLine(memory, share)}到顶整个 DSH 连同所有会话一起崩。结束已经交回、不再复用的会话，看下一次心跳这个数回不回落：回落就说明结束会话能放内存，记进 backlog；不回落就 oversight_tell 决策者，由负责人找空当重启 DSH。`,
+            }
+        },
+    },
+    {
+        // Urgent so the owner sees it: an urgent reminder is a toast that stays until it is clicked.
+        id: 'host-memory-high',
+        level: 'urgent',
+        hold: 0,
+        cooldown: 30,
+        check: ({ memory }) => {
+            const share = heapShare(memory)
+            if (share === null || share < 0.85) return null
+            return {
+                key: 'high',
+                text: `${heapLine(memory, share)}快到顶了：车道把手上的改动提交到自己的枝上，负责人找空当重启 DSH（启动时加大上限：$env:NODE_OPTIONS = "--max-old-space-size=16384"），不要等它自己崩。`,
             }
         },
     },

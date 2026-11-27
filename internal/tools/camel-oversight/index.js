@@ -40,6 +40,7 @@ import { execFile } from 'node:child_process'
 import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { readFile } from 'node:fs/promises'
 import os from 'node:os'
+import v8 from 'node:v8'
 import path from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import * as bootMeasure from './measure.js'
@@ -247,6 +248,10 @@ export function apply(ctx, rawConfig) {
 
     // ---- what the sessions are doing ---------------------------------------------------------
     const tails = new Map() // session id -> [{seq, time, type, line}]
+    // How many events each live session has produced since this process started: the host keeps a
+    // session's history in its own memory, so this is the reading that says which sessions the heap
+    // grows with.
+    const volume = new Map() // session id -> events
     const since = new Map() // agent id -> time its status last changed
     // The claimed session's tool calls that have not returned, and its last assistant text: what the
     // drift checks below read (a call that blocks the session, a turn that ends by asking the owner).
@@ -257,6 +262,7 @@ export function apply(ctx, rawConfig) {
         ctx.on('session/event', (session, event) => {
             const id = String(session.id)
             if (id === claimed) onTargetEvent(event)
+            volume.set(id, (volume.get(id) || 0) + 1)
             const line = summarize(event)
             if (line === null) return
             const tail = tails.get(id) || []
@@ -725,6 +731,7 @@ export function apply(ctx, rawConfig) {
             const live = new Set(ctx.agents.list().map((agent) => String(agent.id)))
             for (const id of [...tails.keys()]) if (!live.has(id) && id !== claimed) tails.delete(id)
             for (const id of [...since.keys()]) if (!live.has(id) && id !== claimed) since.delete(id)
+            for (const id of [...volume.keys()]) if (!live.has(id) && id !== claimed) volume.delete(id)
             await reloadHot(config.repo, (change) => {
                 const entry = { kind: 'hot-reload', at: now, ...change }
                 record(entry)
@@ -742,6 +749,7 @@ export function apply(ctx, rawConfig) {
             lanesNow = await lanesOf(agent ? String(agent.id) : null)
             const facts = {
                 m: reading,
+                memory: memoryNow(),
                 lanes: lanesNow,
                 limits,
                 now,
@@ -799,6 +807,26 @@ export function apply(ctx, rawConfig) {
     ctx.effect(() => ctx.timer.interval(() => void beat(), Math.max(60, config.watchSeconds) * 1000))
     ctx.effect(() => ctx.timer.timeout(() => void beat(), 20_000))
 
+    // The host's heap, against the limit its process was started with (node's default is about 4 GB
+    // whatever the machine has): the host stops with every session in it when the heap reaches the
+    // limit, so the reading is what lets a restart be chosen instead of suffered. Beside it, what
+    // this plugin itself holds, so that it can be ruled in or out at a glance, and the sessions with
+    // the most events.
+    const memoryNow = () => {
+        const usage = process.memoryUsage()
+        let buffered = 0
+        for (const res of streams) buffered += res.writableLength || 0
+        let tailEntries = 0
+        for (const tail of tails.values()) tailEntries += tail.length
+        return {
+            heapUsed: usage.heapUsed,
+            heapLimit: v8.getHeapStatistics().heap_size_limit,
+            rss: usage.rss,
+            plugin: { tailEntries, delivered: delivered.size, replayable: replayable.length, streams: streams.size, buffered },
+            sessions: [...volume.entries()].sort((a, b) => b[1] - a[1]).slice(0, 5).map(([id, events]) => ({ id, events })),
+            live: volume.size,
+        }
+    }
     const readingSummary = () => {
         if (!reading) return null
         const value = (v) => (v && v.unreadable ? { unreadable: v.unreadable } : v)
@@ -847,6 +875,7 @@ export function apply(ctx, rawConfig) {
             alerts: alertsNow(),
             reminders: reminders.slice(-10),
             reading: readingSummary(),
+            memory: memoryNow(),
             sessions: sessionsNow(),
             recentTurns: id ? recentTurns(id, config.turnsInState) : [],
             unacknowledged: pending(),
