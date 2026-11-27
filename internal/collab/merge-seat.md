@@ -395,3 +395,23 @@ c) 差集非空 ⇒ **停下，报给协调者**，附三样：差集里的用�
 
 1. 直推 integration 的单父提交会先被更早一道闸拒（"is a lane commit that went straight in … every arrival is a merge"）⇒ 这条判据只能在**合并提交**上测；
 2. "哪些路径算构建输入"只有一份清单（`scripts/common.js` 的 `BUILD_INFO_ROOTS` / `BUILD_INFO_ROOT_FILES`），钩子复用它 —— 不要新建第二份。
+
+## 判定"某笔合并被撤掉了没有"：`--is-ancestor` 不是那个判据
+
+撤销是**新增一笔**（`git revert -m 1`），不是改写历史；被撤的合并**仍然是祖先**。所以
+
+```
+git merge-base --is-ancestor <被撤的合并> origin/integration   # 撤完仍然 exit 0
+```
+
+2026-11-28 01:29 我用这条判"撤销还没落库"，而实际上撤销位已经在 `9c6f270c87` 落库了 —— 读数本身没错（那一刻那笔合并确实还没被撤），但**这条命令永远答不了"撤了吗"**。
+
+要用这三条之一：
+
+```
+git log --oneline --first-parent origin/integration | Select-String '^.*Revert merge'
+git ls-tree -r --name-only origin/integration -- src/stdlib/onnx      # 撤完 ⇒ 该子树里只剩 8e29d45d1c 有的文件
+git diff --stat <被撤合并的父> origin/integration -- <那个子树的路径>   # 撤干净 ⇒ 空
+```
+
+判据句：**"撤销的痕迹是一笔新提交，不是祖先关系"**。这也是为什么"撤干净"必须用内容比（子树 IDENTICAL），不能用历史形状比。
