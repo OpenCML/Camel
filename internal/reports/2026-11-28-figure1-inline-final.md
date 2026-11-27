@@ -77,10 +77,50 @@ std::cxx::inline opt::cse         24 nodes      ← 两次书写合成一颗
 
 这排除了"内联体与源码体不同形所以合不了"的解释：两处形态完全一样，`opt::cse` 照样合。
 
-## 四、边界一句
+## 四、库里的 `opt::inline` 也参与这张图（`D-1128-28`）
 
-这一步的 inline 用的是 **`std::cxx::inline`**；库里的 `opt::inline` 尚未进树。
-它落地之后要在本页补一段 `f->opt::inline->…` 与同一份 `cmp` —— **`opt::inline` 现在还不参与这张图**。
+上面一至三节量的是 `std::cxx::inline` 那一侧。库里用 Camel 写的 `opt::inline` 落地后，
+**同一条流水线换成它，四个数字逐个相同、最后一张图逐字节相同**。
+
+读数所挂的树与二进制（`opt::inline` 合进 integration **之前**的枝尖）：
+
+```
+tip       4fc2dcd735d8d7ba7dd0ad409faba0d858104c02   (lane/opt-inline)
+binary    built 2026-11-28T04:22:21+08:00
+build-info revision 4fc2dcd735…  dirty false
+```
+
+被量的程序与第一节相同（`fig1.cml`），`camel fig1.cml std::fvm` → 打印 `21`、`RC=0`。
+
+| 流水线 | nodes | direct_calls |
+|---|---|---|
+| 无 | **19** | 2 |
+| `opt::inline` | **28** | **0** |
+| `opt::inline opt::cse` | **24** | 0 |
+| `opt::inline opt::cse opt::algebra` | **18** | 0 |
+| `std::cxx::inline opt::cse opt::algebra` | 18 | 0 |
+
+四个数字与第一、二节**逐个相同**（`19 / 28 / 24 / 18`，直接调用 `2/0/0/0`）。
+
+两个入口给出同一张图：
+
+```
+$ camel fig1.cml opt::inline opt::cse opt::algebra std::gir std::nop            > opt-inline.dot
+$ camel fig1.cml std::cxx::inline opt::cse opt::algebra std::gir std::nop       > cxx-inline.dot
+$ cmp opt-inline.dot cxx-inline.dot && echo IDENTICAL
+IDENTICAL          （两份 3543 字节逐字节相同）
+```
+
+第三张图的末尾仍是 `x → (+1) → (*7)`，`main` 里是 `(2+1)*7 = 21`。
+
+**三段各自的活**（实测依据，同一份 `std::gir` 原文）：
+`opt::inline` 把 `inc(x)` 展开成 `x + 1`（`add_l` 计 7 处：`f` 2 + `main` 2 + `inc` 自身 1 …）；
+`opt::cse` 把两份 `(x+1)` 合成一处共享（`add_l` 7 → 5）；
+`opt::algebra` 把 `*3 + *4` 折成 `*7`（`mul_l` 4 → 2）。
+**`inc` 自己的图在三段里始终是 3 个节点** —— `inline` 只复制体、不删 callee，删是 `dce` 的事。
+
+> 待补：`opt::inline` 合进 integration 后，在尖端复跑本页四条管线 + `cmp` + 四组 `stats`，
+> 贴新 tip 与 `binary built`，并确认四个数字不变。
 
 ## 五、为什么之前不成立（一行留档）
 
