@@ -36,6 +36,7 @@
 #include "camel/core/context/context.h"
 #include "camel/core/type/composite/func.h"
 #include "camel/runtime/graph.h"
+#include "camel/runtime/graph_txn.h"
 
 #include <optional>
 #include <vector>
@@ -76,6 +77,38 @@ struct GradientGraph {
     camel::runtime::GCGraph *graph         = nullptr;
 };
 
+/// Where the number of rounds a reverse loop counts backwards from comes from. A reverse pass runs
+/// the rounds the forward pass ran, from the last to the first, and the two writers of one differ
+/// only in how they know that number: the pullback reads the tape the forward half recorded, and
+/// the transpose of a loop recomputes it from the loop's own control (an interval's bounds, an
+/// array's length, a condition re-run). One statement of "how many rounds were there", so the two
+/// callers read the same answer through the same function instead of each holding its own count.
+struct ReverseRoundCount {
+    enum class Source : uint8_t {
+        /// The residuals the forward pass recorded, one per round: how many there are is the count.
+        TapeLength,
+        /// A value the caller computed by re-running the loop's control (no recording involved).
+        Recomputed,
+    };
+    Source source = Source::TapeLength;
+    /// The residual array, when the source is TapeLength.
+    camel::runtime::gc_node_ref_t tape = camel::runtime::kInvalidNodeRef;
+    /// The number itself, when the source is Recomputed.
+    camel::runtime::gc_node_ref_t value = camel::runtime::kInvalidNodeRef;
+};
+
+/// The round a reverse counting loop starts at: `rounds - 1`, with the number taken from the
+/// caller's source. The value is an `int` the condition region compares against zero.
+camel::runtime::gc_node_ref_t
+reverseFirstRound(camel::runtime::GraphTransaction &transaction, const ReverseRoundCount &rounds);
+/// The condition region of a reverse counting loop: one more round while the round index -- the
+/// first of the loop's states -- is not negative. A reverse pass never asks the source loop's own
+/// condition; it counts the rounds the forward pass took, backwards, and this is the test that
+/// says when the count is spent. Shared with the transpose of a loop, so the two writers of a
+/// reverse loop state the same condition in the same words.
+void buildReverseCondRegion(
+    camel::runtime::GraphTransaction &transaction, uint32_t region,
+    std::span<camel::core::type::Type *const> stateTypes);
 /// Builds the graph of grad(f) (or with_grad(f)) for the graph `function` of `program`.
 GradientGraph buildGradientGraph(
     const camel::core::context::context_ptr_t &context, const camel::runtime::Program *program,

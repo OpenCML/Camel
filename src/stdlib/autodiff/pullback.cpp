@@ -2219,18 +2219,12 @@ gc_node_ref_t addTangentSum(
 }
 
 /// Whether the reverse loop goes on: one more round while the index is not negative. The
-/// condition is a region of the reverse pass's own graph, like every loop a program has.
+/// condition is a region of the reverse pass's own graph, like every loop a program has. The
+/// states are the loop's own (the round index first), so a caller that carries the same shape
+/// states the same condition through `buildReverseCondRegion` (declared in pullback.h, used by
+/// the transpose of a loop as well).
 void buildReverseCond(const ReverseLoop &loop, rt::GraphTransaction &transaction, uint32_t region) {
-    auto &draft = transaction.edit();
-    draft.setInsertRegion(region);
-    std::vector<gc_node_ref_t> ports;
-    for (Type *type : reverseStateTypes(loop)) {
-        ports.push_back(addPort(transaction, type));
-    }
-    draft.setRegionPorts(region, ports);
-    const std::array<gc_node_ref_t, 2> compare{ports.front(), addLoopInt(transaction, 0)};
-    draft.setRegionResult(region, addOper(transaction, Type::Bool(), ":op/ge_l", compare));
-    draft.setInsertRegion(0);
+    buildReverseCondRegion(transaction, region, reverseStateTypes(loop));
 }
 
 /// One round of the reverse pass: read the round's residuals off the tape, run the body's
@@ -2378,11 +2372,13 @@ void buildReverseClosure(
     const uint32_t bodyRegion = draft.addRegion(rt::GCRegionKind::LoopBody, 0);
     buildReverseCond(loop, transaction, condRegion);
     buildReverseBody(loop, transaction, bodyRegion, tapePorts);
-    // The last round of the tape, and the gradients the first reverse round gets.
-    const std::array<gc_node_ref_t, 1> tape{tapePorts.front()};
-    const gc_node_ref_t count = addOper(transaction, Type::Int64(), ":struct/len_arr", tape);
-    const std::array<gc_node_ref_t, 2> begin{count, addLoopInt(transaction, 1)};
-    std::vector<gc_node_ref_t> initial{addOper(transaction, Type::Int64(), ":op/sub_l", begin)};
+    // The last round of the tape, and the gradients the first reverse round gets. How many rounds
+    // there were is the pullback's reading of the count: the residuals, one per round.
+    const ReverseRoundCount rounds{
+        .source = ReverseRoundCount::Source::TapeLength,
+        .tape   = tapePorts.front()};
+    const gc_node_ref_t firstRound = reverseFirstRound(transaction, rounds);
+    std::vector<gc_node_ref_t> initial{firstRound};
     for (size_t j = 0; j < loop.stateTypes.size(); ++j) {
         if (loop.stateSlot[j] == kNoSlot) {
             continue;
@@ -5510,4 +5506,28 @@ GradientGraph buildGradientGraph(
     return {engine.group().program(), graph};
 }
 
+/// The condition region of a reverse counting loop, stated once for every writer of one.
+void buildReverseCondRegion(
+    rt::GraphTransaction &transaction, uint32_t region, std::span<Type *const> stateTypes) {
+    auto &draft = transaction.edit();
+    draft.setInsertRegion(region);
+    std::vector<gc_node_ref_t> ports;
+    for (Type *type : stateTypes) {
+        ports.push_back(addPort(transaction, type));
+    }
+    draft.setRegionPorts(region, ports);
+    const std::array<gc_node_ref_t, 2> compare{ports.front(), addLoopInt(transaction, 0)};
+    draft.setRegionResult(region, addOper(transaction, Type::Bool(), ":op/ge_l", compare));
+    draft.setInsertRegion(0);
+}
+gc_node_ref_t
+reverseFirstRound(rt::GraphTransaction &transaction, const ReverseRoundCount &rounds) {
+    gc_node_ref_t count = rounds.value;
+    if (rounds.source == ReverseRoundCount::Source::TapeLength) {
+        const std::array<gc_node_ref_t, 1> tape{rounds.tape};
+        count = addOper(transaction, Type::Int64(), ":struct/len_arr", tape);
+    }
+    const std::array<gc_node_ref_t, 2> begin{count, addLoopInt(transaction, 1)};
+    return addOper(transaction, Type::Int64(), ":op/sub_l", begin);
+}
 } // namespace camel::autodiff
