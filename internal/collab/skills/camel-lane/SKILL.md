@@ -119,12 +119,20 @@ pwsh -NoProfile -File <你的工作树>\internal\tools\camel-remote.ps1 `
   （`[camel-remote] <plan> exit N (transfer …, build …, plan …, load …; total …)`）
   是相位读数的唯一来源：24 小时 1679 次调用里只有 82 次保留到它，**其中 911 次是调用方自己滤掉的**。
   要少噪音就 `Tee-Object` 存一份再看，**不许让管道决定这条读数存在与否**（2026-11-26 决策者定）。
+· **做“修前/修后”对比时，`Copy-Item` 会保留目标文件的 `LastWriteTime`**（2026-11-27 一条车道实测）：
+  「备份修复 → `git checkout` 回退 → `Copy-Item` 恢复」之后源文件仍比 `.o`/`.cmo` 旧，ninja 判 up-to-date **直接跳过编译**，
+  于是一整轮“修后”测的其实是旧二进制（它第一轮拿到 8/20、13/20 全是假的）。
+  ⇒ 判据：核 `build\src\...\Release\*.cmo` 的 **mtime 与大小**（修前 772096 / 修后 773120），换了才算真的重编。
 · **构建机只管对错**：不跑性能测试、不判耗时预算；墙钟数字只用来判断「有没有卡死」。
   超时先**单独重跑一次**（同一计划、同样的 `-Jobs`）再判红 —— 超时是读数缺失的一种，不是红。
 · **它只量提交**：工作树里有未提交改动时也打 `0 changed file(s)` / `measuring: the commit alone`，量的是那棵树上的提交。
   ⇒ **先 commit，再量**；拿工作树里的改动去量，量到的是上一笔。
-· **每条“取计划读数”的 run 都会自动追加 `check-doc-links`，而它现在会挂 —— 挂住期间它一直持着这棵 checkout 的 tree lock**（2026-11-27 实测）：不需要你传 `-Check`，`camel-remote.ps1:856-859` 自己会加。那个检查的空脚本让 `node` 等 stdin，挂 ~40 分钟；**这期间同一棵树的下一条 run 就是 `no slot on this checkout within 1800 s`（exit 4）**。一条车道因此连续四次 `exit 4` 并误判成“别人占着槽”，换一棵 checkout 立刻通。
-  ⇒ **读到 `[SUMMARY]` / `RUN_EXIT` / `[TREE]` 就当读数到手，立刻按你记录的 PID `taskkill /T /F` 收掉整棵进程树**，锁随之释放；不要等它、也不要为了绕锁去抢别人的树。
+· **每条“取计划读数”的 run 都会自动追加 `check-doc-links`**（不需要你传 `-Check`，`camel-remote.ps1:856-859` 自己会加）。
+  **这条检查曾经挂 40 分钟并持着 tree lock**（`no slot on this checkout within 1800 s` 的真凶之一，2026-11-27 一次车道因此连续四次 `exit 4`）；
+  根因是 `camel-remote` 里 `[string[]]$Entry` 与局部变量 `$entry` 同名（PowerShell 不区分大小写）⇒ 检查器被拼成裸 `node` 等 stdin。
+  **已在 integration 修好**（正确形状：`--- check check-doc-links: node scripts/check-doc-links.mjs --citations ---` → `--- check-doc-links: exit 0 ---`，约 3 秒）。
+  ⇒ 你那条 run 若**仍然**挂在这行，先看是不是你的树还没换底到带修复的 integration，别再去查宿主、也别为绕锁去抢别人的树。
+  ⇒ 例外照旧：读到 `[SUMMARY]` / `RUN_EXIT` / `[TREE]` 就算读数到手，挂住超过 3 分钟就按你自己记录的 PID 整棵收掉。
 · **要换一把宿主 tree lock，就换 checkout 路径**：锁是按 checkout 路径的 cksum 建的。合法的换法只有“另开一棵树”（`-Detach <sha>` 造测量树，或 `git worktree add --detach`）并跑完删掉；**不要动别人的树，也不要去动别人的锁**。
 · **新开的树没有钩子**：`git worktree add` 不会装 `.husky/_`，而 `npx husky` 需要那棵树里有 `node_modules`。缺钩子时 git **不报错**（`core.hooksPath` 指向不存在的目录 ⇒ 每一次 push 的所有钩子静默跳过）。要么用 `new-worktree.ps1` 建（它把这件事做成一步），要么从主检出复制 **husky 自己的 `_` 目录**（不是手写），再用 `-VerifyOnly` 读到检查器自己的输出才算有守卫。
 · **新开的树还缺 `internal/tools/camel-gate.local.json`**（git-ignored 的本地闸门配置）：2026-11-27 一条车道换到新树后，第一次起跑直接报错退出，把本地配置从原树复制过去才跑起来。`new-worktree.ps1` 不管这个文件（它不入库，所以也不该入库）。换树时先 `Test-Path <新树>\internal\tools\camel-gate.local.json`，缺就从原树复制（同机、只读来源）。
