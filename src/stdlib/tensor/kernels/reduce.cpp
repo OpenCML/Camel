@@ -566,6 +566,43 @@ Array *layerNorm(
                 "layer_norm: gamma shape does not match the input's trailing dimensions");
         }
     }
+    // `gamma` and `beta` state extents and not an axis, so on a rank-2 value the trailing shape is
+    // the last axis, which is the one the caller means. From rank 3 on the same extents may stand
+    // at more than one trailing start -- `[2, 3, 2]` with `[2]` fits the axes from 2 and also from
+    // 0 -- and the shape check cannot tell: the normalization then runs over the last axes while a
+    // caller who wrote the other layout reads the numbers of another normalization. The ambiguity
+    // is refused by name instead of answered with the last start alone. Both parameters share this
+    // check, since they must have the same shape.
+    if (input->rank() >= 3 && offset > 0) {
+        std::vector<size_t> starts;
+        for (size_t start = 0; start <= offset; ++start) {
+            bool matches = true;
+            for (size_t d = 0; d < normRank && matches; ++d) {
+                matches = input->dim(start + d) == gamma->dim(d);
+            }
+            if (matches) {
+                starts.push_back(start);
+            }
+        }
+        if (starts.size() > 1) {
+            std::string fits;
+            for (size_t k = 0; k < starts.size(); ++k) {
+                if (k != 0) {
+                    fits += (k + 1 == starts.size()) ? " or " : ", ";
+                }
+                fits += "from " + std::to_string(starts[k]);
+            }
+            std::string shape;
+            for (size_t d = 0; d < input->rank(); ++d) {
+                shape += (d == 0 ? "" : ", ") + std::to_string(input->dim(d));
+            }
+            throw ShapeError(
+                "layer_norm: the [" + std::to_string(gamma->dim(0)) +
+                "] parameter fits the trailing axes " + fits + " of the tensor's shape [" + shape +
+                "] and does not say which one; a parameter that fits more than one trailing start "
+                "is refused");
+        }
+    }
     if (gamma->dtype() != input->dtype() || beta->dtype() != input->dtype()) {
         throw std::invalid_argument(
             "layer_norm requires the input, gamma and beta to have the same element type");
