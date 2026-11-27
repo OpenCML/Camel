@@ -97,7 +97,10 @@ void regionClosure(
 /// lifted but not cut is a reading of its own (`skip=loop ... why=`), and the next cell of the cut
 /// is one of these lines, not a second entry.
 bool readLoopCut(const rt::GCGraph *function, gc_node_ref_t loop, std::ostream &os, LoopCut &cut) {
-    const std::string name = function->name();
+    // The face answers the name, the regions, their ports and the types; the payload readers
+    // (the member reads below) stay on the frozen graph, which is where the bytes are.
+    const camel::graph::GraphView &view = function->view();
+    const std::string name              = std::string(view.name());
     const auto refuse      = [&](std::string_view what) {
         os << "REINTERP split function=" << name << " skip=" << refusalCauseName(RefusalCause::Loop)
            << " (" << what << ")\n";
@@ -105,7 +108,10 @@ bool readLoopCut(const rt::GCGraph *function, gc_node_ref_t loop, std::ostream &
         return false;
     };
     cut.loop = loop;
-    cut.body = rt::loopBodyOf(*function, loop);
+    const camel::graph::LoopForm form = view.loopFormOf(loop);
+    cut.body.kind                     = form.kind;
+    cut.body.iterableForm             = form.iterableForm;
+    cut.body.collectionCount          = form.collectionCount;
     // The iterable form does not decide whether a loop can be cut: `jvp` lifts both forms
     // . Only the element type
     // differs, and it is read from the tail's own form.
@@ -114,25 +120,25 @@ bool readLoopCut(const rt::GCGraph *function, gc_node_ref_t loop, std::ostream &
             "this loop already collects values, and a cut's tape would have to be merged into a "
             "collection the program asked for");
     }
-    for (uint32_t region = 1; region < function->regionCount(); ++region) {
-        const rt::GCRegion *one = function->region(region);
-        if (one == nullptr || one->owner != loop) {
+    for (uint32_t region = 1; region < view.regionCount(); ++region) {
+        const camel::graph::RegionRecord one = view.region(region);
+        if (one.owner != loop) {
             continue;
         }
-        if (one->kind == rt::GCRegionKind::LoopCond) {
+        if (one.kind == camel::graph::RegionKind::LoopCond) {
             return refuse(
                 "this loop's round count comes from a condition region (`while`), and the cut does "
                 "not enter a condition region yet: the tape says how many rounds ran, but the "
                 "forward half would have to lift the condition into the same region");
         }
-        if (one->kind == rt::GCRegionKind::LoopBody) {
+        if (one.kind == camel::graph::RegionKind::LoopBody) {
             cut.bodyRegion = region;
         }
     }
     if (cut.bodyRegion == 0) {
         return refuse("this loop has no body region, so there is nothing to cut");
     }
-    const std::span<const gc_node_ref_t> ports = function->regionPorts(cut.bodyRegion);
+    const std::span<const camel::graph::NodeRef> ports = view.regionParameters(cut.bodyRegion);
     // One state, and `jvp` writes the round's element as the first port of a `for` loop's body.
     if (ports.size() != 2) {
         return refuse(
@@ -142,20 +148,20 @@ bool readLoopCut(const rt::GCGraph *function, gc_node_ref_t loop, std::ostream &
     }
     cut.elementPort             = ports[0];
     cut.statePort               = ports[1];
-    const rt::GCNode *stateNode = function->node(cut.statePort);
-    if (stateNode == nullptr || stateNode->dataType() == nullptr ||
-        stateNode->dataType()->code() != TypeCode::Tuple) {
+    const camel::core::type::Type *stateType =
+        view.contains(cut.statePort) ? view.typeOf(cut.statePort) : nullptr;
+    if (stateType == nullptr || stateType->code() != TypeCode::Tuple) {
         return refuse(
             "the loop's state port is not the pair `jvp` writes, so the loop is not lifted");
     }
-    const auto *statePair = tt::as_ptr<TupleType>(stateNode->dataType());
+    const auto *statePair = tt::as_ptr<TupleType>(const_cast<camel::core::type::Type *>(stateType));
     if (statePair->size() != 2) {
         return refuse("the loop's state is not a pair, so it is not a lifted loop");
     }
     cut.stateValueType   = statePair->typeAt(0);
     cut.stateTangentType = statePair->typeAt(1);
-    cut.elementType      = function->node(cut.elementPort) != nullptr
-                               ? function->node(cut.elementPort)->dataType()
+    cut.elementType      = view.contains(cut.elementPort)
+                               ? const_cast<camel::core::type::Type *>(view.typeOf(cut.elementPort))
                                : nullptr;
     if (cut.stateValueType == nullptr || cut.stateTangentType == nullptr ||
         cut.elementType == nullptr) {
@@ -163,11 +169,13 @@ bool readLoopCut(const rt::GCGraph *function, gc_node_ref_t loop, std::ostream &
     }
     // The body's yield: the pair (next state, its tangent). Read off the Fill the region answers
     // with, never guessed from the shape of the region.
-    const rt::GCRegion *bodyRegion = function->region(cut.bodyRegion);
-    const gc_node_ref_t result = bodyRegion != nullptr && bodyRegion->result < function->nodeCount()
-                                     ? bodyRegion->result
-                                     : rt::kInvalidNodeRef;
-    const std::span<const gc_node_ref_t> yielded = function->withInputsOf(result);
+    const camel::graph::RegionRecord bodyRegion = view.region(cut.bodyRegion);
+    const gc_node_ref_t result =
+        bodyRegion.result != camel::graph::kNoNode && view.contains(bodyRegion.result)
+            ? bodyRegion.result
+            : rt::kInvalidNodeRef;
+    const std::span<const camel::graph::NodeRef> yielded =
+        view.inputs(result, camel::graph::PortGroup::Context);
     if (result == rt::kInvalidNodeRef || yielded.size() != 2) {
         return refuse(
             "the loop's body does not yield the pair (next state, tangent), so the loop is not "
@@ -176,14 +184,14 @@ bool readLoopCut(const rt::GCGraph *function, gc_node_ref_t loop, std::ostream &
     cut.valueRoot   = yielded[0];
     cut.tangentRoot = yielded[1];
     // The state's two halves, as `jvp` wrote them: projections of the state port inside the region.
-    for (gc_node_ref_t ref = 0; ref < function->nodeCount(); ++ref) {
-        if (function->nodeRegion(ref) != cut.bodyRegion) {
+    for (const camel::graph::NodeRef ref : view.nodes()) {
+        if (view.regionOf(ref) != cut.bodyRegion) {
             continue;
         }
-        const rt::GCNode *node                     = function->node(ref);
         const std::optional<MemberRead> read       = memberReadOf(*function, ref);
-        const std::span<const gc_node_ref_t> reads = function->normInputsOf(ref);
-        if (node == nullptr || !read.has_value() || read->kind != rt::GCAccsKind::TupleIndex ||
+        const std::span<const camel::graph::NodeRef> reads =
+            view.inputs(ref, camel::graph::PortGroup::Normal);
+        if (!view.contains(ref) || !read.has_value() || read->kind != rt::GCAccsKind::TupleIndex ||
             reads.size() != 1 || reads.front() != cut.statePort) {
             continue;
         }
@@ -203,10 +211,10 @@ bool readLoopCut(const rt::GCGraph *function, gc_node_ref_t loop, std::ostream &
     // loop's tape, and the ones it reads from outside the loop are the invariants.
     std::unordered_set<gc_node_ref_t> valueInside;
     std::vector<gc_node_ref_t> valueOutside;
-    regionClosure(function->view(), cut.bodyRegion, cut.valueRoot, valueInside, valueOutside);
+    regionClosure(view, cut.bodyRegion, cut.valueRoot, valueInside, valueOutside);
     std::unordered_set<gc_node_ref_t> tangentInside;
     std::vector<gc_node_ref_t> tangentOutside;
-    regionClosure(function->view(), cut.bodyRegion, cut.tangentRoot, tangentInside, tangentOutside);
+    regionClosure(view, cut.bodyRegion, cut.tangentRoot, tangentInside, tangentOutside);
     std::vector<gc_node_ref_t> tape;
     for (gc_node_ref_t ref : tangentInside) {
         if (ref == cut.stateTangent) {
