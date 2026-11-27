@@ -1458,6 +1458,11 @@ $exitUnknown = $false
 $treeFailed = $false
 # Phase marks for the summary line: transfer ends at the sync marker, the plan starts at its own.
 $syncedAt = $null
+# How long the host waited for this checkout's lock (`HOST_CHECKOUT_WAIT_MS`). It falls inside the
+# span from the start to the sync marker, so the summary reports it as `wait` and leaves it out of
+# `transfer`: a run that queued half an hour behind another on the same checkout did not transfer
+# for half an hour.
+$checkoutWaitSeconds = 0.0
 # The checker stage's own clock and results. The start is the stage's marker; the results are read
 # back from the per-checker footers, so the summary at the end names what actually ran instead of
 # what was asked for.
@@ -2752,11 +2757,15 @@ if ! flock -w '$SlotWaitSeconds' 6; then
         holder_note="`$holder_record, no longer running (a process it started may still hold the lock)"
     fi
     echo "[camel-remote] no slot on this checkout within $SlotWaitSeconds s (-SlotWaitSeconds): the lock `$tree_lock is held by: `$holder_note"
+    echo "HOST_CHECKOUT_WAIT_MS=`$(( (`$(date +%s%N) - tree_wait_started_ns) / 1000000 ))"
     echo 'HOST_NOSLOT=checkout'
     exit 4
 fi
 printf 'pid=%s since=%s\n' "`$`$" "`$(date -u +%Y-%m-%dT%H:%M:%SZ)" > "`$tree_lock"
 tree_wait_ms=`$(( (`$(date +%s%N) - tree_wait_started_ns) / 1000000 ))
+# The local side takes this wait out of the transfer it reports: the clock it reads transfer by runs
+# from the start to the sync marker, and this wait sits inside that span.
+echo "HOST_CHECKOUT_WAIT_MS=`$tree_wait_ms"
 if [ `$tree_wait_ms -gt 5000 ]; then
     echo "[camel-remote] waited `$(awk "BEGIN{printf \"%.1f\", `$tree_wait_ms/1000}") s for this checkout"
 fi
@@ -3371,6 +3380,10 @@ exit `$code
             # The width the run actually got, reported by the stage that got it: the pool's count for
             # the build, `budget_jobs` for the plan. Recorded as it arrives rather than written from
             # `$Jobs` at the start, so a request of 32 is not what the registry reports as what ran.
+            if ($cleanLine -match '^HOST_CHECKOUT_WAIT_MS=(\d+)$') {
+                $checkoutWaitSeconds = [int64]$Matches[1] / 1000.0
+                return
+            }
             if ($cleanLine -match '^HOST_JOBS_REQUESTED=(\d+)$') {
                 $run.jobsRequested = [int]$Matches[1]
                 Publish-Run
@@ -4205,7 +4218,9 @@ if ($FromThisRun -and $FetchFile -ne '') {
     $transferEnd = if ($syncedAt) { $syncedAt } else { $finishedAt }
     $buildEnd = if ($planStartedAt) { $planStartedAt } elseif ($syncedAt) { $finishedAt } else { $transferEnd }
     $planEnd = if ($planStartedAt) { $finishedAt } else { $planStartedAt }
-    $phases = "transfer {0:N1} s, build {1:N1} s" -f ($transferEnd - $startedAt).TotalSeconds, ($buildEnd - $transferEnd).TotalSeconds
+    $transferSpan = ($transferEnd - $startedAt).TotalSeconds
+    $waitPart = [Math]::Min($checkoutWaitSeconds, $transferSpan)
+    $phases = "transfer {0:N1} s, wait {1:N1} s, build {2:N1} s" -f ($transferSpan - $waitPart), $waitPart, ($buildEnd - $transferEnd).TotalSeconds
     if ($null -ne $planStartedAt) { $phases += ", plan {0:N1} s" -f ($finishedAt - $planStartedAt).TotalSeconds }
     $loadEnd = if ($null -ne $loadEnd) { $loadEnd } else { Get-HostLoad -TimeoutSeconds $FinishTimeoutSeconds }
     if ($null -ne $loadEnd) {
