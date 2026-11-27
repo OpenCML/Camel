@@ -1847,7 +1847,7 @@ slot_t TaskflowExecSchedPass::executeCallNodeWithRows(
     // run inside it exactly where the hit of a `Leaf` item runs them, and the value a call made is
     // read back from its slot: `executeCallNode` has written it there before this returns.
     const GCNode *node = requireNode(graph, nodeRef);
-    return camel::execute::runNode({graph->execPlan(), *frame, nodeRef}, [&] {
+    return camel::execute::runNode(camel::execute::siteOfNode(graph, *frame, nodeRef), [&] {
         executeCallNode(graph, nodeRef, frame, region);
         return node->dataIndex == 0 ? NullSlot : frame->get<slot_t>(node->dataIndex);
     });
@@ -1997,7 +1997,7 @@ slot_t TaskflowExecSchedPass::executeLinearNode(
     if (node->kind == GCNodeKind::Oper || node->kind == GCNodeKind::Loop) {
         return executeLinearNodeBody(graph, nodeRef, frame, plan);
     }
-    return camel::execute::runNode({graph->execPlan(), *frame, nodeRef}, [&] {
+    return camel::execute::runNode(camel::execute::siteOfNode(graph, *frame, nodeRef), [&] {
         return executeLinearNodeBody(graph, nodeRef, frame, plan);
     });
 }
@@ -2333,7 +2333,7 @@ slot_t TaskflowExecSchedPass::executePreparedNode(
     if (node->kind == GCNodeKind::Oper || node->kind == GCNodeKind::Loop) {
         return executePreparedNodeBody(graph, nodeRef, frame, sf, buildInfo);
     }
-    return camel::execute::runNode({graph->execPlan(), *frame, nodeRef}, [&] {
+    return camel::execute::runNode(camel::execute::siteOfNode(graph, *frame, nodeRef), [&] {
         return executePreparedNodeBody(graph, nodeRef, frame, sf, buildInfo);
     });
 }
