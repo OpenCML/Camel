@@ -3268,3 +3268,43 @@ expect_output_contains = ["give it as the parameter out"]
 expect_output_not_contains = ["onnx::export_model: wrote", ":?:?:"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000
+
+[[tests]]
+name = "export_dynamic_axes"
+desc = "The pass parameter `dynamic_axes` names an axis of a tensor input: the exported model records a symbolic dimension there, `<parameter>_dim<axis>`, which is the same place a negative extent lands. The companion case exports the same program without the parameter."
+kind = "behavior"
+case = "../../../cases/modules/onnx/dynamic_axes.cml"
+backends = false
+args = ["${case}", "std::macro", "std::opt", "onnx::export_model", "out=${test_tmp}/dynamic_axes.onnx", "dynamic_axes=[0]", "std::nop"]
+expect_exit = 0
+expect_stdout_contains = ["onnx::export_model: wrote ${test_tmp}/dynamic_axes.onnx"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+async ({ input, assert }) => {
+const path = await import('path')
+const fs = await import('fs')
+const bytes = fs.readFileSync(path.join(input.test_tmp, 'dynamic_axes.onnx'))
+assert(bytes.includes('x_dim0'), 'the first axis is not the symbolic dimension x_dim0')
+}
+"""
+timeout_ms = 10000
+
+[[tests]]
+name = "export_dynamic_axes_absent"
+desc = "Without the parameter the same axis keeps its extent: this is the control that shows the parameter is what makes the dimension symbolic, not the type of the input."
+kind = "behavior"
+case = "../../../cases/modules/onnx/dynamic_axes.cml"
+backends = false
+args = ["${case}", "std::macro", "std::opt", "onnx::export_model", "out=${test_tmp}/dynamic_axes_absent.onnx", "std::nop"]
+expect_exit = 0
+expect_stdout_contains = ["onnx::export_model: wrote ${test_tmp}/dynamic_axes_absent.onnx"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+async ({ input, assert }) => {
+const path = await import('path')
+const fs = await import('fs')
+const bytes = fs.readFileSync(path.join(input.test_tmp, 'dynamic_axes_absent.onnx'))
+assert(!bytes.includes('x_dim0'), 'the axis became symbolic without dynamic_axes')
+}
+"""
+timeout_ms = 10000
