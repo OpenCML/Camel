@@ -47,5 +47,6 @@
   "develop_before": "a6ff436b95a66b8436279c782fd13046947b378b",
   "develop_after": "3070b964eb5a71f1e11ae0f25e7d2cc13372c06a",
   "commits_brought_in": 14,
-  "commits_touching_src": 5
+  "commits_touching_src": 5,
+  "red_table_format": "two columns, the plan id exactly as the runner writes it in test_timings[].plan, then the case name; the first pass of this table was generated from the [PLAN] lines of the run log, which carry the plan's declared name rather than the runner's id, and 14 of the 147 rows came out keyed under the wrong plan (compile.transforms, transforms.compositions, transforms.floatgate, compile.stated_extents). Corrected 2026-11-28 06:35 by rebuilding the names from a run summary's own plan/test pairs, and re-checked: 147 rows, 41 distinct plans, and the 14 keys now read transforms, compositions, floatgate, stated_extents -- the same shape promotion-26 used."
 }
