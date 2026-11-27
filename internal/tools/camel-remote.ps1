@@ -473,21 +473,31 @@ param(
     # the named directory is not there, nothing is fetched and no other run is read instead.
     [switch]$FromThisRun,
     # How long a run waits to be admitted before it says `state=noslot` and stops, in seconds. There
-    # are two admissions and this one number is the wait for both: a token of the host's pool (it
-    # reaches the host as `CAMEL_TOKEN_WAIT_S`, for the build and the plan alike) and the lock of the
-    # run's own checkout, which two runs on one worktree cannot share. A wait that runs out on the
-    # lock names the run that holds it. 1800 s
+    # are two admissions. A token of the host's pool is waited for with this number, always (it
+    # reaches the host as `CAMEL_TOKEN_WAIT_S`, for the build and the plan alike). The lock of the
+    # run's own checkout -- which two runs on one worktree cannot share -- is waited for with it only
+    # when the caller asks to wait (`-QueueOnTreeLock`); otherwise a held checkout stops the run at
+    # once. A wait that runs out on the lock names the run that holds it. 1800 s
     # is the shape every wait here has had: a queue behind other lanes' builds is
     # waiting, not a failure, and a reading that was never taken is not a red. It is a parameter
     # because the one case worth measuring on purpose is the refusal -- a lane that wants to see
     # `noslot` should not have to book half an hour of a shared host to read it.
     [int]$SlotWaitSeconds = 1800,
-    # How important this run is to everyone else waiting for the host's token pool. The pool serves
+# How important this run is to everyone else waiting for the host's token pool. The pool serves
     # waiters by class, then by arrival (internal/tools/host-tokens.sh): `funnel` is the run every lane
     # waits on (the merge seat's build, a promotion), `build` a lane's own build, `test` an ordinary
     # run, `batch` work nobody is waiting for. The class also sets the CPU priority the run's
     # processes start at (`funnel` and `build` normal, `test` nice 10, `batch` nice 19).
     [ValidateSet('funnel', 'build', 'test', 'batch')][string]$TokenClass = 'test',
+    # Wait for this run's checkout when another run holds it, instead of stopping at once.
+    #
+    # Two runs on one worktree cannot share it: the second one's build replaces `out/latest`
+    # underneath the first one's tests. Waiting used to be the only behaviour, and a run that waited
+    # said nothing about who it was waiting for -- 1,200 s of a shared host went into a queue whose
+    # holder was never named. A run that finds its checkout held now stops at once and names the
+    # holder (pid, when it took the lock, its run id, its command line); waiting is what a caller
+    # asks for, with this switch, and then it says once a minute how far it has got.
+    [switch]$QueueOnTreeLock,
     # How long the *closing* of a finished run waits, in seconds.
     #
     # After the plan's own last line ([SPLIT], the runner's summary) the run is over; what is left is
@@ -1548,6 +1558,9 @@ $run = @{
     phase           = 'starting'
     state           = $null
     noslotWaitedFor = $null
+    # Who held this run's checkout when it stopped at that lock, in the holder's own words (pid, when
+    # it took the lock, its run id, its command line). Null when no lock was contended.
+    lockHolder      = $null
     overlapping     = @{ atStart = $null; atEnd = $null }
     loadAtStart     = if ($null -ne $loadStart) { "$([math]::Round($loadStart[0], 2))" } else { $null }
     loadAtEnd       = $null
@@ -2765,26 +2778,68 @@ R=`$HOME/camel-work/$name
 tree_key=`$(printf '%s' "`$R" | cksum | cut -d' ' -f1)
 tree_lock="/tmp/camel-tree-`$tree_key.lock"
 # Opened for append: opening must not erase the record of the run that holds the lock, which is what
-# a waiter reads when its wait runs out. The wait is the same -SlotWaitSeconds the token pool is
-# waited for with, so one parameter says how long this run waits for admission, whichever it is.
+# a waiter reads. The record carries the host, the holder's pid, when it took the lock, the run it
+# belongs to and the command line that started it: "held by pid 1234" does not name the machine, the
+# person, the lane or the command, and a run that waits an hour without a name in its output is a
+# queue nobody can act on. The host leads because the question "who holds this checkout" is asked
+# from another machine as often as from this one -- a lock lives in one host's `/tmp`, and a lane
+# reading its own output has no other way to tell which machine is holding the tree it wants.
+tree_holder() {
+    local rec host pid since run cmd
+    rec=`$(head -n 1 "`$tree_lock" 2>/dev/null)
+    # A record written before the host was recorded still parses: the host is the field that goes
+    # missing, never the pid.
+    host=`$(printf '%s' "`$rec" | sed -n 's/^host=\([^ ]*\).*/\1/p')
+    pid=`$(printf '%s' "`$rec" | sed -n 's/.* pid=\([0-9][0-9]*\).*/\1/p')
+    since=`$(printf '%s' "`$rec" | sed -n 's/.* since=\([^ ]*\).*/\1/p')
+    run=`$(printf '%s' "`$rec" | sed -n 's/.* run=\([^ ]*\).*/\1/p')
+    cmd=`$(printf '%s' "`$rec" | sed -n 's/.* cmd=\(.*\)`$/\1/p')
+    if [ -z "`$pid" ]; then
+        printf 'no holder record in %s' "`$tree_lock"
+        return
+    fi
+    # The process answers for itself while it is alive: the record is a sentence about when the lock
+    # was taken, the command line in /proc is what is running now.
+    if [ -r "/proc/`$pid/cmdline" ]; then
+        cmd=`$(tr '\0' ' ' < "/proc/`$pid/cmdline" | cut -c1-240)
+    fi
+    if kill -0 "`$pid" 2>/dev/null; then
+        printf 'host=%s pid=%s since=%s run=%s cmd=%s (running)' "`${host:-?}" "`$pid" "`${since:-?}" "`${run:-?}" "`${cmd:-?}"
+    else
+        printf 'host=%s pid=%s since=%s run=%s cmd=%s (that pid is gone: a process it started may still hold the lock)' "`${host:-?}" "`$pid" "`${since:-?}" "`${run:-?}" "`${cmd:-?}"
+    fi
+}
 exec 6>>"`$tree_lock"
 tree_wait_started_ns=`$(date +%s%N)
-if ! flock -w '$SlotWaitSeconds' 6; then
-    holder_record=`$(head -n 1 "`$tree_lock" 2>/dev/null)
-    holder_pid=`$(printf '%s' "`$holder_record" | sed -n 's/^pid=\([0-9][0-9]*\) .*/\1/p')
-    if [ -z "`$holder_pid" ]; then
-        holder_note='no holder record was written'
-    elif kill -0 "`$holder_pid" 2>/dev/null; then
-        holder_note="`$holder_record, running"
-    else
-        holder_note="`$holder_record, no longer running (a process it started may still hold the lock)"
+if ! flock -n 6; then
+    # A checkout is one run's at a time. Waiting is what a caller asks for; the default is to stop
+    # here and say who holds it, because a run that silently queues for half an hour reads exactly
+    # like a run that is building.
+    if [ '$($QueueOnTreeLock.IsPresent)' != 'True' ]; then
+        echo "[camel-remote] this checkout is busy: another run holds its lock, and this run did not ask to wait for it (-QueueOnTreeLock): `$(tree_holder)"
+        echo "HOST_LOCK_HOLDER=`$(tree_holder)"
+        echo "HOST_CHECKOUT_WAIT_MS=`$(( (`$(date +%s%N) - tree_wait_started_ns) / 1000000 ))"
+        echo 'HOST_NOSLOT=checkout'
+        exit 4
     fi
-    echo "[camel-remote] no slot on this checkout within $SlotWaitSeconds s (-SlotWaitSeconds): the lock `$tree_lock is held by: `$holder_note"
-    echo "HOST_CHECKOUT_WAIT_MS=`$(( (`$(date +%s%N) - tree_wait_started_ns) / 1000000 ))"
-    echo 'HOST_NOSLOT=checkout'
-    exit 4
+    echo "[camel-remote] this checkout is held; waiting for it (-QueueOnTreeLock, at most $SlotWaitSeconds s): `$(tree_holder)"
+    tree_waited=0
+    while ! flock -n 6; do
+        if [ "`$tree_waited" -ge '$SlotWaitSeconds' ]; then
+            echo "[camel-remote] no slot on this checkout within $SlotWaitSeconds s (-SlotWaitSeconds): the lock `$tree_lock is held by: `$(tree_holder)"
+            echo "HOST_LOCK_HOLDER=`$(tree_holder)"
+            echo "HOST_CHECKOUT_WAIT_MS=`$(( (`$(date +%s%N) - tree_wait_started_ns) / 1000000 ))"
+            echo 'HOST_NOSLOT=checkout'
+            exit 4
+        fi
+        sleep 5
+        tree_waited=`$((tree_waited + 5))
+        if [ `$((tree_waited % 60)) -eq 0 ]; then
+            echo "[camel-remote] still waiting for this checkout (`$tree_waited s of at most $SlotWaitSeconds): `$(tree_holder)"
+        fi
+    done
 fi
-printf 'pid=%s since=%s\n' "`$`$" "`$(date -u +%Y-%m-%dT%H:%M:%SZ)" > "`$tree_lock"
+printf 'host=%s pid=%s since=%s run=%s cmd=%s\n' "`$(uname -n)" "`$`$" "`$(date -u +%Y-%m-%dT%H:%M:%SZ)" '$($run.runId)' "`$(tr '\0' ' ' < "/proc/`$`$/cmdline" | cut -c1-240)" > "`$tree_lock"
 tree_wait_ms=`$(( (`$(date +%s%N) - tree_wait_started_ns) / 1000000 ))
 # The local side takes this wait out of the transfer it reports: the clock it reads transfer by runs
 # from the start to the sync marker, and this wait sits inside that span.
@@ -3489,14 +3544,25 @@ exit `$code
                 Write-Host $line
                 return
             }
+            if ($cleanLine -match '^HOST_LOCK_HOLDER=(.*)$') {
+                # Who holds this checkout's lock, in the holder's own words: pid, when it took the
+                # lock, its run id and its command line. Kept because the run that stops here has to
+                # be able to say what it was waiting behind, on the line a reader sees.
+                $run.lockHolder = $Matches[1].Trim()
+                Publish-Run
+                Write-Host $line
+                return
+            }
             if ($cleanLine -match '^HOST_NOSLOT=(\S+)$') {
-                # The host refused to start: no token of the pool came before the deadline. `noslot` is
+                # The host refused to start: no token of the pool came before the deadline, or the
+                # run's own checkout was held and this run did not ask to wait for it. `noslot` is
                 # the reading of "nothing was measured" -- not a red (no reading was taken) and not a
                 # green.
                 $run.state = 'noslot'
                 $run.noslotWaitedFor = $Matches[1]
                 $run.phase = 'noslot'
-                $run.lastLine = "[camel-remote] state=noslot: no host $($Matches[1]) within the wait"
+                $held = if ($run.lockHolder) { " -- held by $($run.lockHolder)" } else { '' }
+                $run.lastLine = "[camel-remote] state=noslot: no host $($Matches[1]) within the wait$held"
                 Publish-Run
                 Write-Host $line
                 return
@@ -4328,8 +4394,15 @@ if ($FromThisRun -and $FetchFile -ne '') {
         $(if ($run.loadAtStart) { $run.loadAtStart } else { 'unknown' }),
         $(if ($run.loadAtEnd) { $run.loadAtEnd } else { 'unknown' }), $overlapText)
     if ($run.state -eq 'noslot') {
-        Write-Host ("[camel-remote] state=noslot: the host did not start this run -- it waited {0} s for the host's {1} and gave up (-SlotWaitSeconds). The pool or the checkout was held by other runs, so this is a run that was not started rather than one that failed: nothing above is a reading" -f `
-            $SlotWaitSeconds, $run.noslotWaitedFor)
+        if ($run.noslotWaitedFor -eq 'checkout' -and -not $QueueOnTreeLock) {
+            Write-Host ("[camel-remote] state=noslot: this checkout is held by another run, so this run did not start -- nothing above is a reading. It stopped at once instead of waiting; pass -QueueOnTreeLock to wait for the checkout instead. Held by: {0}" -f `
+                $(if ($run.lockHolder) { $run.lockHolder } else { 'the lock file names no holder' }))
+        }
+        else {
+            Write-Host ("[camel-remote] state=noslot: the host did not start this run -- it waited {0} s for the host's {1} and gave up (-SlotWaitSeconds). The pool or the checkout was held by other runs, so this is a run that was not started rather than one that failed: nothing above is a reading" -f `
+                $SlotWaitSeconds, $run.noslotWaitedFor)
+            if ($run.lockHolder) { Write-Host "[camel-remote] held by: $($run.lockHolder)" }
+        }
     }
     # The transfer's own breakdown, under -TracePhases. Two lines: where the transfer's seconds went,
     # and what travelled. Segments are the distance between consecutive marks, each named by the mark
