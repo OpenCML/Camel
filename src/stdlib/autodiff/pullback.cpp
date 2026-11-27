@@ -1467,6 +1467,13 @@ class Engine {
     rt::GraphDraftGroup group_;
     std::unordered_map<GCGraph *, PullbackPlan> plans_;
     std::unordered_map<GCGraph *, PullbackPlan> closurePlans_;
+    /// The values a pullback captures, by where the forward graph holds them: the position of one
+    /// of its ports, or `kCapturedValue` for the function's own value. This is the order the
+    /// closure the forward graph builds carries them in -- the order the pullback first read them
+    /// -- and it is what a tape, which cannot carry that closure, has to supply again in the same
+    /// order (design principles 9.9, task-212). The pullback graph's own `closureType` is the
+    /// types of the same slots, in the same order.
+    std::unordered_map<rt::GraphId, std::vector<size_t>> pullbackCapturePorts_;
     std::map<std::pair<const rt::GraphTransaction *, gc_node_ref_t>, LoopBodyPlan> loopBodyPlans_;
     std::set<std::pair<const rt::GraphTransaction *, gc_node_ref_t>> loopBodiesBeingBuilt_;
     std::deque<Pending> pending_;
@@ -1980,6 +1987,9 @@ void ForwardRewrite::split(
 
 /// A value without a gradient has no component in the reverse loop's state.
 constexpr size_t kNoSlot = static_cast<size_t>(-1);
+
+/// A captured value that is the function's own value rather than one of its ports.
+constexpr size_t kCapturedValue = static_cast<size_t>(-1);
 
 /// What the three synthesized graphs of a reverse loop need to know.
 struct ReverseLoop {
@@ -4764,6 +4774,27 @@ void Engine::build(Pending &pending) {
     }
     TupleType *closureType = TupleType::create(std::move(captureTypes));
     pullback.setClosureType(closureType);
+    // Where the forward graph holds each captured value: one of its ports, or the value the
+    // pullback was seeded with. The closure carries them in this order, and a tape that cannot
+    // carry the closure supplies them again in it, so the list is kept beside the plan.
+    {
+        const std::vector<gc_node_ref_t> forwardPorts = portsOf(*pending.source);
+        std::vector<size_t> capturePorts;
+        capturePorts.reserve(captures.size());
+        for (gc_node_ref_t capture : captures) {
+            const auto port = std::find(forwardPorts.begin(), forwardPorts.end(), capture);
+            if (port != forwardPorts.end()) {
+                capturePorts.push_back(static_cast<size_t>(port - forwardPorts.begin()));
+            } else {
+                ASSERT(
+                    capture == value,
+                    "autodiff: a pullback captures a value that is neither a port of the "
+                    "function it is the pullback of nor that function's value.");
+                capturePorts.push_back(kCapturedValue);
+            }
+        }
+        pullbackCapturePorts_.insert_or_assign(plan.pullback, std::move(capturePorts));
+    }
 
     const gc_node_ref_t closure = addClosure(
         group_,
