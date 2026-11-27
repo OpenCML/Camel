@@ -2,7 +2,7 @@
  * A dynamic axis out of range is an error about the pass's own parameter, not about a node of the
  * program: the pass reports it when it translates the program. The case used to name the exported
  * function in an export_model call; the thin stage form translates the program the command line
- * hands it (D-1127-213, form 乙). The program has one tensor input, whose rank the axis is
+ * hands it. The program has one tensor input, whose rank the axis is
  * checked against -- without an input the check has no rank to look at, which is why this case
  * could pass or fail before for a reason that had nothing to do with the axis.
  */
