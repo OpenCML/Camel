@@ -1,0 +1,59 @@
+{
+  "kind": "promotion",
+  "promotion": 25,
+  "tip": "a48f8d65b84b35530e3bb9399cd90077237dc0e6",
+  "measured_tip": "a48f8d65b84b35530e3bb9399cd90077237dc0e6",
+  "pushed_as": "develop, fast-forwarded from ef2cd2eb6390646a4d60c43aac1879d475990832 (the twenty-third promotion's tip) to this record's tip",
+  "develop_before": "ef2cd2eb6390646a4d60c43aac1879d475990832",
+  "develop_after": "a48f8d65b84b35530e3bb9399cd90077237dc0e6",
+  "tier": "fast",
+  "scope": "test/plans (the whole plan tree)",
+  "jobs": 8,
+  "host": "88 (the build host), tree /home/zjwei/camel-work/tree34, detached at a48f8d65b84b",
+  "binary_built": "2026-11-27T17:35:02+08:00",
+  "run_id": "20261127_173501_75808_hfw4 (the round the logs call promo50)",
+  "readings": {
+    "total": 9863,
+    "pass": 9641,
+    "fail": 161,
+    "skip": 28,
+    "known": 33,
+    "timed_out_raw_layer": 0,
+    "killed_by_a_signal": 0,
+    "re_run": 0,
+    "load_before": "1m 39 at the start of the run; the host was shared with other seats throughout",
+    "token_pool": "jobs 8 as the token pool allowed; the pool was shared with other seats throughout",
+    "wall": "build 15.0 s, plan about 300 s, total about 318 s",
+    "second_reading": "none this round: the layer was read once, at the tip that is published; the previous round's two readings both agreed name by name and this round's numbers differ from them only in the three pooling probes that were fixed"
+  },
+  "comparison": {
+    "against": "the twenty-fifth promotion's predecessor, the twenty-fourth promotion's red table, measured on c0f6a832d2 (164 names)",
+    "method": "the two red sets compared name by name: a name the previous table had red and this reading does not is counted as turned green; a name this reading has and the previous table did not is counted as new",
+    "still_red": 161,
+    "turned_green": 3,
+    "turned_green_names": [
+      "probe.avg_reverse.nvm",
+      "probe.max_forward.nvm",
+      "probe.max_reverse.nvm"
+    ],
+    "vanished_reds": 0,
+    "vanished_names": [],
+    "new_reds": 0,
+    "new_reds_names": [],
+    "arithmetic": "164 names before: 3 turned green, 0 vanished, 0 appeared, 161 remain red; 161 + 0 = 161 = this reading's red names, so the columns account for every name",
+    "notes": [
+      "the three that turned green are the pooling probes the twenty-fourth promotion added, and they were fixed by the pooling-probe lane, which corrected the case paths in test/plans/probe/pools.plan.toml (they named ./probe_x.cml while the cases live in test/cases/probe/, so no program ran) and taught the two reverse probes to measure the wall they meet instead of killing the run; this is not the ONNX take-back's doing",
+      "the ONNX take-back (reverting the model/save/run spelling) turns three names red that were already on the twenty-third promotion's red table - export_unsupported_op, as_refusal.constant_fails.pass and as_refusal.constant_fails.operator - so the gate does not count them as new; the lane that re-lands the spelling owns them"
+    ]
+  },
+  "new_reds_disposition": [],
+  "why_not_pushed": "pushed: no new red. Every red name this reading has was already in the previous promotion's table, and the three that left were fixed by a lane rather than dropped",
+  "timeouts_rerun": {
+    "why": "the host ran at 1m load about 39 through the run and every case went through the shared token pool; a timeout here would be a wait, not a hang",
+    "count": 0,
+    "run_alone": false,
+    "green": [],
+    "still_red_not_timeout": [],
+    "note": "no case timed out and none was killed by a signal: the run's summary carries no \"killed by a signal\" and the transcript has no SIGABRT or SIGSEGV line. fault_deep.prl_off, the name the previous rounds called unstable, is not red in this reading at all; it was measured three times in the earlier round (twice green, once a crash) and remains recorded as unstable in the known-red list rather than measured again here"
+  }
+}
