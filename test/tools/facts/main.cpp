@@ -615,6 +615,29 @@ int runSelfCheck() {
         versionedStore.probe(reportedKind, asSpan(askedAt)) == facts::Status::Revalidated,
         "a fact about a node nobody touched is revalidated across a version of its graph");
 
+    // ---- A fact lives until the whole version line is unreachable -----------------------------
+    // Both ends in one place, because a store that clears on the first version to end and a store
+    // that never clears fail the two checks below in opposite directions: a fact is about the
+    // graph, so one version ending must not take it, and a slot left behind by the last version
+    // would name a fact nobody owns (camel/runtime/fact_slots.h).
+    ThreeNodeView lineOneView;
+    ThreeNodeView lineTwoView;
+    CheckGraph    lineOne(lineOneView, /*identity=*/2);
+    CheckGraph    lineTwo(lineTwoView, /*identity=*/2);
+    facts::Store  lineage(versionedAccess);
+    facts::holdGraph(lineage, lineOne, 2);
+    facts::holdGraph(lineage, lineTwo, 2);
+    lineage.put<std::uint32_t>(reportedKind, facts::Anchor{&lineOne, 0}, std::uint32_t{5});
+    facts::forgetGraph(&lineOne, 2);
+    check(
+        lineage.size() == 1 &&
+            lineage.probe(reportedKind, asSpan(facts::Anchor{&lineTwo, 0})) == facts::Status::Valid,
+        "a fact survives one version of its graph ending, while another version of the line is alive");
+    facts::forgetGraph(&lineTwo, 2);
+    check(
+        lineage.size() == 0,
+        "a fact is cleared when the last version of its line ends, and not before");
+
     if (failures == 0) {
         std::cout << "facts self-check: passed\n";
         return 0;

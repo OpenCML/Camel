@@ -80,6 +80,7 @@
 #include <string_view>
 #include <typeindex>
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 namespace camel::graph {
@@ -501,10 +502,26 @@ class Store {
     /// are equal. This is the validator of a kind, and what a test asks rather than trusting it.
     std::optional<bool> verify(KindId kind, std::span<const Anchor> anchors);
 
-    /// Drops the fact at `anchors`, every fact anchored on `graph`, or everything.
+    /// Drops the fact at `anchors`, every fact of `graph`'s identity, or everything.
     void invalidate(KindId kind, std::span<const Anchor> anchors);
     void invalidateGraph(const graph::Graph *graph);
     void clear();
+
+    /// Tells the store that `graph` is a live version of the graph it names: the facts of that
+    /// identity may be anchored on it, and it is one more version of the line that has to end
+    /// before the line's facts are void (`graphGone`). Every graph a store can be asked about
+    /// arrives this way (`holdGraph`, or `storeHolding` for a draft).
+    /// `identity` is the number the owner gives the graph (`GraphAccess::identity`), passed rather
+    /// than read: a graph is announced while it is still being made, and asking a graph that is
+    /// not finished what it is would be asking a half-built object. The store keeps the pointer
+    /// only to know when it ends -- it never dereferences it.
+    void noteGraph(const graph::Graph &graph, std::uint64_t identity);
+    /// Tells the store that the version `graph` ended. A fact of that identity is re-anchored on
+    /// another version of the same line that is still alive -- the fact is about the graph, not
+    /// about the object that held it -- and it is cleared only when no version of the line can be
+    /// reached any more. Each cleared slot is cleared while the value is still the store's and
+    /// through a version that is still there, so nothing is dereferenced after its end.
+    void graphGone(const graph::Graph *graph, std::uint64_t identity);
 
     /// Calls `visitor` for every stored fact, without checking a stamp: what is stored.
     void forEach(const std::function<void(const StoredFact &)> &visitor) const;
@@ -588,11 +605,22 @@ class Store {
 
     static void checkType(KindId kind, const std::type_info &type);
     Entry *find(KindId kind, std::span<const Anchor> anchors, std::uint64_t target, Status &status);
+    /// Clears the slot every anchor of `entry` names, through the graphs that are still there:
+    /// an anchor whose graph has ended names nothing to clear, and reaching through it would name
+    /// a dead object. Caller holds `mutex_`.
+    void clearSlotsOfLocked(KindId kind, const Entry &entry);
+    /// Whether the store still believes `graph` is alive. Caller holds `mutex_`.
+    bool aliveLocked(const graph::Graph *graph) const;
 
     GraphAccess graphs_;
     bool persistent_;
     mutable std::mutex mutex_;
     std::unordered_map<Key, std::vector<Entry>, KeyHash> entries_;
+    /// The graph objects the store has been told are alive (`noteGraph`), and, for each identity,
+    /// the versions of one line among them: what "the whole version line is unreachable" is
+    /// measured against when one version ends (`graphGone`).
+    std::unordered_map<const graph::Graph *, std::uint64_t> alive_;
+    std::unordered_map<std::uint64_t, std::unordered_set<const graph::Graph *>> lines_;
     Counts counts_;
 };
 
@@ -665,7 +693,7 @@ GraphAccess draftGraphs();
  * the framework makes for it (see `storeHolding`). `holdGraph` still accepts one, so a caller that
  * does keep a store of its own for a draft can say so.
  */
-void holdGraph(Store &store, const graph::Graph &graph);
+void holdGraph(Store &store, const graph::Graph &graph, std::uint64_t identity);
 
 /**
  * The store that holds `graph`; null when the graph is not one any store can answer about.
@@ -693,7 +721,7 @@ Store *storeHolding(const graph::Graph &graph);
  * forgotten: nothing else names it, and a draft that outlived it would otherwise leave a store per
  * draft standing for the rest of the process, each holding an answer about a graph that is gone.
  */
-void forgetGraph(const graph::Graph *graph);
+void forgetGraph(const graph::Graph *graph, std::uint64_t identity);
 
 /**
  * `camel inspect --facts`: one line `FACT {json}` per fact about `root` (the graph the tool

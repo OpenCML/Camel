@@ -3863,7 +3863,7 @@ GCGraph::~GCGraph() {
     // there, and the store that was told about this one must not answer about it afterwards
     // (camel/facts/facts.h). This is also what clears the slots first, while the values they name
     // are still the store's: a slot that outlived its fact would be a dangling read (fact_slots.h).
-    camel::facts::forgetGraph(this);
+    camel::facts::forgetGraph(this, toValue(id()));
     // The view is the graph's own (`view()`, camel/graph/graph.h): it holds a reference to this
     // graph, so it goes before the graph does. `GraphView` is complete in this file
     // (graph/gc_graph_view.h), which is why the deleting is here rather than in the header.

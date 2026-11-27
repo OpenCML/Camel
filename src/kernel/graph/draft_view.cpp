@@ -51,7 +51,7 @@ camel::runtime::GraphDraft::~GraphDraft() {
     // answered about it was made for it and is dropped with it (`storeHolding`/`forgetGraph`,
     // camel/facts/facts.h), and a store left behind would answer about the next draft the allocator
     // put at this address.
-    camel::facts::forgetGraph(this);
+    camel::facts::forgetGraph(this, toValue(id()));
 }
 namespace camel::graph {
 namespace {

@@ -546,7 +546,10 @@ GraphAccess draftGraphs() {
     };
 }
 
-void holdGraph(Store &store, const graph::Graph &graph) {
+void holdGraph(Store &store, const graph::Graph &graph, std::uint64_t identity) {
+    // The store's own record of the line: which versions of a graph are alive is what decides
+    // whether a fact survives the end of one of them (graphGone).
+    store.noteGraph(graph, identity);
     GraphHolds &holds = graphHolds();
     std::lock_guard lock(holds.mutex);
     holds.stores[&graph] = &store;
@@ -567,14 +570,15 @@ Store *storeHolding(const graph::Graph &graph) {
         // (`program.cpp`, `holdGraph`) and its answers belong to the session it is being built in
         // (core abstractions section 2), so the framework keeps them itself and drops them with
         // the draft (`forgetGraph`, told from `~GraphDraft`).
-        Store *made          = new Store(draftGraphs(), /*persistent=*/false);
+        Store *made = new Store(draftGraphs(), /*persistent=*/false);
+        made->noteGraph(graph, runtime::toValue(runtime::graphIdentity(graph)));
         holds.stores[&graph] = made;
         holds.made.insert(made);
         return made;
     }
 }
 
-void forgetGraph(const graph::Graph *graph) {
+void forgetGraph(const graph::Graph *graph, std::uint64_t identity) {
     if (graph == nullptr) {
         return;
     }
@@ -597,7 +601,7 @@ void forgetGraph(const graph::Graph *graph) {
     // Outside the holds' lock: the store takes its own (and its destructor takes this one again
     // when it takes its rows out).
     if (store != nullptr) {
-        store->invalidateGraph(graph);
+        store->graphGone(graph, identity);
         if (made) {
             delete store;
         }
@@ -617,6 +621,97 @@ size_t Store::KeyHash::operator()(const Key &key) const {
 Store::Store(GraphAccess graphs, bool persistent)
     : graphs_(std::move(graphs)), persistent_(persistent) {}
 
+bool Store::aliveLocked(const graph::Graph *graph) const {
+    if (graph == nullptr) {
+        return false;
+    }
+    if (alive_.empty()) {
+        // A store nobody told about graphs (one a check keeps for itself) clears as it always did:
+        // its caller is the only one holding the graph, so the graph is there when it clears.
+        return true;
+    }
+    return alive_.find(graph) != alive_.end();
+}
+
+void Store::clearSlotsOfLocked(KindId kind, const Entry &entry) {
+    for (const Anchor &anchor : entry.anchors) {
+        // A graph that has ended is not cleared through: its slot went with it, and the entry that
+        // named it is dropped instead (camel/runtime/fact_slots.h, `clearSlot`).
+        if (!aliveLocked(anchor.graph)) {
+            continue;
+        }
+        const Anchor one = anchor;
+        clearSlot(graphs_, kind, std::span<const Anchor>(&one, 1));
+    }
+}
+
+void Store::noteGraph(const graph::Graph &graph, std::uint64_t identity) {
+    if (identity == 0) {
+        return; // no identity, so this store keys nothing on it and has no line to keep
+    }
+    std::lock_guard lock(mutex_);
+    alive_[&graph] = identity;
+    lines_[identity].insert(&graph);
+}
+
+void Store::graphGone(const graph::Graph *graph, std::uint64_t identity) {
+    if (graph == nullptr || identity == 0) {
+        return;
+    }
+    std::lock_guard lock(mutex_);
+    // The version that is still there, if any: the fact is about the graph, so it moves to that
+    // one instead of going with the object it was read from.
+    const graph::Graph *successor = nullptr;
+    if (const auto line = lines_.find(identity); line != lines_.end()) {
+        for (const graph::Graph *candidate : line->second) {
+            if (candidate != graph) {
+                successor = candidate;
+                break;
+            }
+        }
+    }
+    bool keptAnything = false;
+    for (auto row = entries_.begin(); row != entries_.end();) {
+        if (row->first.graph != identity) {
+            ++row;
+            continue;
+        }
+        auto &list = row->second;
+        for (auto entry = list.begin(); entry != list.end();) {
+            bool unreachable = false;
+            for (Anchor &anchor : entry->anchors) {
+                if (anchor.graph != graph) {
+                    continue;
+                }
+                if (successor != nullptr) {
+                    anchor.graph = successor; // the same graph, a version that is still here
+                } else {
+                    unreachable = true;
+                }
+            }
+            if (!unreachable) {
+                keptAnything = true;
+                ++entry;
+                continue;
+            }
+            // No version of the line can be reached any more: the fact is void. Its slot is
+            // cleared while the value is still the store's and the graph is still there to clear
+            // it (the caller announces the end before the object goes).
+            clearSlot(graphs_, row->first.kind, entry->anchors);
+            entry = list.erase(entry);
+        }
+        row = list.empty() ? entries_.erase(row) : std::next(row);
+    }
+    (void)keptAnything;
+    // The books: this version is no longer alive, and a line that kept no successor is gone.
+    alive_.erase(graph);
+    if (const auto line = lines_.find(identity); line != lines_.end()) {
+        line->second.erase(graph);
+        if (line->second.empty()) {
+            lines_.erase(line);
+        }
+    }
+}
 Store::~Store() {
     // A graph may outlive the store (the store goes with its context; a frozen graph can be freed
     // after it). Every slot this store published is cleared while the values it names are still
@@ -624,7 +719,7 @@ Store::~Store() {
     // name a fact nobody owns (camel/runtime/fact_slots.h).
     for (const auto &[key, list] : entries_) {
         for (const Entry &entry : list) {
-            clearSlot(graphs_, key.kind, entry.anchors);
+            clearSlotsOfLocked(key.kind, entry);
         }
     }
     // A store that goes before the graphs it was told about stops being their answer: the graph's
@@ -701,7 +796,7 @@ Store::find(KindId kind, std::span<const Anchor> anchors, std::uint64_t target, 
         return &*it;
     }
     // The fact is gone: its slot goes first, while the value it names is still the entry's.
-    clearSlot(graphs_, kind, it->anchors);
+    clearSlotsOfLocked(kind, *it);
     list.erase(it);
     if (list.empty()) {
         entries_.erase(bucket);
@@ -905,7 +1000,7 @@ void Store::invalidate(KindId kind, std::span<const Anchor> anchors) {
     auto &list = bucket->second;
     for (auto it = list.begin(); it != list.end();) {
         if (sameAnchors(it->anchors, anchors, graphs_)) {
-            clearSlot(graphs_, kind, it->anchors);
+            clearSlotsOfLocked(kind, *it);
             it = list.erase(it);
         } else {
             ++it;
@@ -930,7 +1025,7 @@ void Store::invalidateGraph(const graph::Graph *graph) {
             continue;
         }
         for (const Entry &entry : it->second) {
-            clearSlot(graphs_, it->first.kind, entry.anchors);
+            clearSlotsOfLocked(it->first.kind, entry);
         }
         it = entries_.erase(it);
     }
@@ -940,7 +1035,7 @@ void Store::clear() {
     std::lock_guard lock(mutex_);
     for (const auto &[key, list] : entries_) {
         for (const Entry &entry : list) {
-            clearSlot(graphs_, key.kind, entry.anchors);
+            clearSlotsOfLocked(key.kind, entry);
         }
     }
     entries_.clear();
