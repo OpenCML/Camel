@@ -433,6 +433,16 @@ std::optional<module_ptr_t> Context::getBuiltinModule(const std::string &name) {
 
 context_ptr_t Context::create(const EntryConfig &entryConf, const DiagsConfig &diagConf) {
     context_ptr_t ctx     = std::shared_ptr<Context>(new Context(entryConf, diagConf));
+    // A process makes a context per program it reads; the count and the address let a reader of
+    // the log tell which context a later line is about, and this is the only place one is made.
+    EXEC_WHEN_DEBUG({
+        static std::atomic<unsigned> contextsCreated{0};
+        CAMEL_LOG_DEBUG_S(
+            "Context",
+            "context #{} created at {}",
+            contextsCreated.fetch_add(1, std::memory_order_relaxed) + 1,
+            static_cast<const void *>(ctx.get()));
+    });
     ctx->exeMgr_          = std::make_unique<ExecutorManager>(ctx);
     ctx->runtimeGraphMgr_ = std::make_unique<camel::runtime::GCGraphManager>();
     // The facts of this context's frozen graphs: one store for the context, made here so that the

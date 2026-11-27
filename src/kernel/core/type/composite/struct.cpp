@@ -39,6 +39,10 @@ StructDecl::StructDecl(
       id_(structDeclCounter.fetch_add(1)) {
     const size_t at = name_.rfind("::");
     shortName_      = at == std::string::npos ? name_ : name_.substr(at + 2);
+    // A declaration is interned once per process and its id is the identity every later line
+    // about it carries; the log names it where it is made.
+    EXEC_WHEN_DEBUG(
+        CAMEL_LOG_DEBUG_S("Type", "struct declaration {} made as #{}", shortName_, id_));
 }
 
 StructDecl *StructDecl::create(
