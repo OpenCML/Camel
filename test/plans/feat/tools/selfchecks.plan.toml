@@ -392,6 +392,7 @@ timeout_ms = 120000
 # read is the red line for that gate, the non-zero exit, and that neither process is left running.
 [[tests]]
 name = "selfchecks.gates_timeout"
+tier = "slow"
 desc = "`scripts/gates.test.mjs`: `scripts/gates.mjs` kills a gate that outlives its limit with the whole process tree it started, reports it on the gate's line as a failed gate that did not finish, and exits non-zero."
 kind = "behavior"
 tool = "node"

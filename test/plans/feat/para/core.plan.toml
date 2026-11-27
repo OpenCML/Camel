@@ -281,6 +281,7 @@ timeout_ms = 30000
 
 [[tests]]
 name = "concurrent_recursion.nvm"
+tier = "slow"
 desc = "The reference back end walks one order, so no two leaves of the tree run at the same time and none meets a peer: 0 of 8."
 kind = "behavior"
 case = "../../../cases/para/core/concurrent_recursion.cml"

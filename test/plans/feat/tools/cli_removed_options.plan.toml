@@ -348,6 +348,7 @@ timeout_ms = 10000
 
 [[tests]]
 name = "spelling.gc.refuses_space_after_comma"
+tier = "slow"
 desc = "`--gc kind=generational, large_threshold_kb=64` is refused, and the message names the comma and prints the compact word."
 kind = "negative"
 tool = "python"

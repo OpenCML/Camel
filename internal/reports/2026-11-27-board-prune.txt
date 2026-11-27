@@ -1,0 +1,29 @@
+Board prune, 2026-11-27, per D-1127-162.
+
+Conditions (all three must hold to delete):
+  1  status is completed
+  2  internal/backlog.md carries a row for it that states the result AND the commit
+  3  it was not created today
+
+Scope of this first batch: the completed tasks whose rows I could verify in one
+reading of internal/backlog.md. One id per line, with the subject and the row
+that carries its result.
+
+task-73 | stdlib 参考页剩下的 3 条例外清单缺口（数据缺口，不是页面过期） | backlog L1025 (R-2026-11-26-18): lane/stdlib-exceptions tip 631495115c, +6 lines in scripts/, page untouched | deleted
+
+Held back, and why:
+task-149 | tutorial.examples.05_arrays 四后端全红：判类 + 一次 run 验证 | no backlog row in this tree -> condition 2 unmet (kept)
+task-2, task-4, task-5, task-7 | only the board-process row (L917) mentions them, and its sha is that row's own commit, not theirs -> condition 2 unmet (kept)
+task-24, task-35 | rows are dispatch records (L937, L952), no result+commit yet -> condition 2 unmet (kept)
+
+After this batch the board is at its cap again (256); the next batch needs the
+page-by-page listing, so pruning continues a few ids per turn.task-10 | Slimming 4: loading has its own shape, and every reader says which | completed | readings: grep count N->0 (criterion as written), plans + red-table comparison | commit: 无提交（该任务描述未记交回 tip）
+task-11 | Misc: widen the process-trace checker and clean what it finds | completed | readings: checker hit counts before/after widening | commit: 无提交（描述未记 tip）
+task-12 | Backend speed: bring small_calls x std::jit back to 115 ms | completed | readings: per-cell timings, bisect group fef8fa378d/b0caf544b7/68f6844368/19327493e2 | commit: bc60d5078（52 个计时文件，已进合并队列）
+task-14 | Witness: rebase and resolve the walkmachinery conflict | completed | readings: 收尾记“已由合并位合入，无残余工作”，merge-tree 等于 integration 的树 | commit: 8ed0263b6 合入提交 332a52a8a
+task-15 | 瘦身：把「放置/形状」声明从 runtime/graph.h 拆到窄头 | completed | readings: TU 数改前/改后、重编单元数、三计划读数 | commit: 无提交（描述未记 tip）
+task-16 | 修读数：entering.positions.plan_regions 的 planned 546 -> 210 漂移二分 | completed | readings: 定向计划四后端转绿、check-process-traces exit 0、与 promotion-9 红表比新增 0 | commit: e98b63e27257b8685ad124ab9a39a8a0109a3828（该支此后不再改动）
+task-17 | 修读数：stdlib_registry 的六条红（示例、注册、迁移条目） | completed | readings: 改前 22/7/15 -> 换底后 14/9/5，逐名比 new=0；六条判定原文在描述里 | commit: 08cdb77f02b126191ef18ed48d228c4c32dd5e89（5 笔：08cdb77f02/8e863f1a0d/8ea5b1002c/d8f7ccef4d/5292cbea18）
+task-18 | 让 :op/cast 的 conversion 形态可测 | completed | readings: [OPER_SHAPE] oper=:op/cast shape=conversion 原文、oper_shape 计划 3/3 全绿、ast_hashes 人工补一行的记录 | commit: 941e7f43e（基 5948f587f，未推）
+task-19 | 审查 3/8/9/14：块哈希碰撞、mayNotTerminate 第二份、性质位两份、C++ 后端算子编号 | completed | readings: 按描述要求逐条给（块名改前同名/改后不同、grep 计数、两处逐位相同） | commit: 无提交（描述未记 tip）
+task-20 | 审查 11：conv2d 梯度步长不整除的用例（先证明它现在错） | completed | readings: 形状读数原文与判定 | commit: 无提交（描述未记 tip）

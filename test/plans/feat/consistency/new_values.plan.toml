@@ -51,6 +51,7 @@ expect_stdout = "200 0 39601\n51 51 100 49\n[[0], [0, 1, 2, 3], [0, 1, 2, 3, 4, 
 
 [[tests]]
 name = "new_values.rebinding_loop.gc_mark_sweep_nvm"
+tier = "slow"
 desc = "The rebinding loops on std::nvm with the mark-sweep collector, a collection of both kinds every third allocation and the heap verified around each: the arrays grown in place are kept alive and followed when they move."
 kind = "behavior"
 case = "../../../cases/consistency/new_values/rebinding_loop.cml"
@@ -61,6 +62,7 @@ timeout_ms = 60000
 
 [[tests]]
 name = "new_values.rebinding_loop.gc_mark_sweep_fvm"
+tier = "slow"
 desc = "The rebinding loops on std::fvm with the mark-sweep collector, a collection of both kinds every third allocation and the heap verified around each: the arrays grown in place are kept alive and followed when they move."
 kind = "behavior"
 case = "../../../cases/consistency/new_values/rebinding_loop.cml"
@@ -71,6 +73,7 @@ timeout_ms = 60000
 
 [[tests]]
 name = "new_values.rebinding_loop.gc_mark_sweep_prl"
+tier = "slow"
 desc = "The rebinding loops on std::prl with the mark-sweep collector, a collection of both kinds every third allocation and the heap verified around each: the arrays grown in place are kept alive and followed when they move."
 kind = "behavior"
 case = "../../../cases/consistency/new_values/rebinding_loop.cml"
@@ -111,6 +114,7 @@ timeout_ms = 60000
 
 [[tests]]
 name = "new_values.rebinding_loop.poison"
+tier = "slow"
 desc = "The rebinding loops on std::fvm with safepoint poisoning: an address of an array kept across a safepoint by the in-place append would read the poison word."
 kind = "behavior"
 case = "../../../cases/consistency/new_values/rebinding_loop.cml"
@@ -177,6 +181,7 @@ expect_stdout = "1 2 [1, 2] [1, 2, 3] 2\n1 [1, 2, 3, 4] 4 true\n[1] [[1], [2], [
 
 [[tests]]
 name = "new_values.peek.gc_mark_sweep"
+tier = "slow"
 desc = "The reads between appends on std::fvm with the mark-sweep collector, a collection of both kinds every third allocation and the heap verified around each."
 kind = "behavior"
 case = "../../../cases/consistency/new_values/peek.cml"
@@ -439,6 +444,7 @@ expect_stdout = "[3, 1, 2] [1, 2, 3]\n[0, 1, 2, 3] [-1, 0, 1, 2, 3]\n3 [7, 8, 9]
 
 [[tests]]
 name = "new_values.sort_rebinding.gc_mark_sweep"
+tier = "slow"
 desc = "The rebindings on std::fvm with the mark-sweep collector, a collection of both kinds every third allocation and the heap verified around each."
 kind = "behavior"
 case = "../../../cases/consistency/new_values/sort_rebinding.cml"

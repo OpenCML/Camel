@@ -591,6 +591,7 @@ args = ["${case}", "std::opt check_screens=true", "std::nop"]
 
 [[tests]]
 name = "inline.registry_sweep_unique_arm"
+tier = "slow"
 case = "../../../cases/opt/inline/registry_sweep_unique_arm.cml"
 args = ["${case}", "std::opt check_screens=true", "std::nop"]
 

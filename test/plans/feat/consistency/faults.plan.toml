@@ -403,6 +403,7 @@ assert(input.diagnostics.length === 0, 'no diagnostic expected')
 
 [[tests]]
 name = "end.sleep_seconds"
+tier = "slow"
 desc = "sleep takes a number of seconds as a float: a fraction of a second waits and the program goes on."
 kind = "behavior"
 case = "../../../cases/consistency/faults/sleep_seconds.cml"

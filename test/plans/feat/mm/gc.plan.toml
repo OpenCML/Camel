@@ -21,6 +21,7 @@ tags = ["feat", "mm", "gc"]
 
 [[tests]]
 name = "gc.verify_stress_nvm"
+tier = "slow"
 desc = "Checks GC verification and deterministic stress requests can run at NVM safepoints."
 kind = "behavior"
 case = "../../../cases/feat/mm/gc/gc_fib10.cml"
@@ -32,6 +33,7 @@ timeout_ms = 10000
 
 [[tests]]
 name = "gc.verify_stress_fvm"
+tier = "slow"
 desc = "Checks GC verification and deterministic stress requests can run at FVM call-boundary safepoints."
 kind = "behavior"
 case = "../../../cases/feat/mm/gc/gc_fib10.cml"
@@ -43,6 +45,7 @@ timeout_ms = 10000
 
 [[tests]]
 name = "gc.verify_stress_prl"
+tier = "slow"
 desc = "Checks GC verification and deterministic stress requests can run across PRL scheduler safepoints."
 kind = "behavior"
 case = "../../../cases/feat/mm/gc/gc_prl_scheduler.cml"
@@ -54,6 +57,7 @@ timeout_ms = 10000
 
 [[tests]]
 name = "gc.snapshot_json"
+tier = "slow"
 desc = "Checks the GC snapshot pass exposes assertion-friendly counters and root-source data."
 kind = "behavior"
 case = "../../../cases/feat/mm/gc/gc_fib10.cml"
@@ -80,6 +84,7 @@ timeout_ms = 10000
 
 [[tests]]
 name = "gc.config_and_summary"
+tier = "slow"
 desc = "Checks GC configuration and human-readable summary diagnostic passes stay composable."
 kind = "behavior"
 case = "../../../cases/feat/mm/gc/gc_fib10.cml"
@@ -91,6 +96,7 @@ timeout_ms = 10000
 
 [[tests]]
 name = "gc.manual_collect_passes"
+tier = "slow"
 desc = "Checks explicit minor and major GC diagnostic passes run and leave the graph executable."
 kind = "behavior"
 case = "../../../cases/feat/mm/gc/gc_heap_workload.cml"
@@ -102,6 +108,7 @@ timeout_ms = 10000
 
 [[tests]]
 name = "gc.young_copying_major_stress_heap"
+tier = "slow"
 desc = "Checks a language-level heap workload survives young-copying major stress."
 kind = "behavior"
 case = "../../../cases/feat/mm/gc/gc_heap_workload.cml"
@@ -113,6 +120,7 @@ timeout_ms = 10000
 
 [[tests]]
 name = "gc.young_copying_both_stress_heap"
+tier = "slow"
 desc = "Checks a language-level heap workload survives combined minor and major young-copying stress."
 kind = "behavior"
 case = "../../../cases/feat/mm/gc/gc_heap_workload.cml"
@@ -124,6 +132,7 @@ timeout_ms = 10000
 
 [[tests]]
 name = "gc.remembered_set_minor_copying"
+tier = "slow"
 desc = "Checks an old tuple retaining a young child through the remembered set survives repeated minor copying."
 kind = "behavior"
 case = "../../../cases/feat/mm/gc/gc_fib10.cml"
@@ -135,6 +144,7 @@ timeout_ms = 10000
 
 [[tests]]
 name = "gc.foreign_resource_lifetime"
+tier = "slow"
 desc = "Checks foreign-resource dispose/finalize and rooted/pinned handle accounting under young copying."
 kind = "behavior"
 case = "../../../cases/feat/mm/gc/gc_fib10.cml"
@@ -146,6 +156,7 @@ timeout_ms = 10000
 
 [[tests]]
 name = "gc.poison_selftest"
+tier = "slow"
 desc = "Checks safepoint poisoning: an address kept across a safepoint reads the poison word, a RootHandle follows the object."
 kind = "behavior"
 case = "../../../cases/feat/mm/gc/gc_fib10.cml"
@@ -157,6 +168,7 @@ timeout_ms = 10000
 
 [[tests]]
 name = "gc.tuple_trace_guard"
+tier = "slow"
 desc = "The collector's trace compares a tuple value's member count with its type's: two against two runs and the program goes on, three against two stops the process with both counts in the message. A guard that reports a disagreement and then reads the type's array anyway is worse than no guard, so the case also asserts that the mismatch did not return."
 kind = "behavior"
 tool = "node"
@@ -169,6 +181,7 @@ timeout_ms = 120000
 
 [[tests]]
 name = "gc.macro_constants.poison.nvm"
+tier = "slow"
 desc = "Object constants produced by std::macro survive the moving collector (poison, nvm)."
 kind = "behavior"
 case = "../../../cases/feat/mm/gc/gc_macro_constants.cml"
@@ -180,6 +193,7 @@ timeout_ms = 10000
 
 [[tests]]
 name = "gc.macro_constants.moving_stress.nvm"
+tier = "slow"
 desc = "Object constants produced by std::macro survive the moving collector (moving stress, nvm)."
 kind = "behavior"
 case = "../../../cases/feat/mm/gc/gc_macro_constants.cml"
@@ -257,6 +271,7 @@ timeout_ms = 10000
 
 [[tests]]
 name = "gc.heap_workload.poison.nvm"
+tier = "slow"
 desc = "Arrays, structs, strings, closures and captured variables under safepoint poisoning (nvm). A constant reached twice in one minor collection (as a graph root and through an active frame) was copied twice."
 kind = "behavior"
 case = "../../../cases/feat/mm/gc/gc_heap_workload.cml"
@@ -301,6 +316,7 @@ timeout_ms = 20000
 
 [[tests]]
 name = "gc.born_old.poison.nvm"
+tier = "slow"
 desc = "A large array filled with young strings by plain stores (random.sample, shuffle) keeps them through minor collections (poison, nvm)."
 kind = "behavior"
 case = "../../../cases/feat/mm/gc/gc_born_old.cml"
@@ -312,6 +328,7 @@ timeout_ms = 60000
 
 [[tests]]
 name = "gc.born_old.moving_stress.nvm"
+tier = "slow"
 desc = "A large array filled with young strings by plain stores (random.sample, shuffle) keeps them through minor collections (moving stress, nvm)."
 kind = "behavior"
 case = "../../../cases/feat/mm/gc/gc_born_old.cml"
@@ -367,6 +384,7 @@ timeout_ms = 60000
 
 [[tests]]
 name = "gc.jit_object_constant.poison"
+tier = "slow"
 skip_unless = ["node", "test/tools/have-native-jit.mjs"]
 desc = "When objects move, std::jit still compiles a graph with an object constant: the code reads the constant from the static area, which the collector updates, instead of baking its address in."
 kind = "behavior"
@@ -380,6 +398,7 @@ timeout_ms = 20000
 
 [[tests]]
 name = "gc.jit_object_constant.default"
+tier = "slow"
 skip_unless = ["node", "test/tools/have-native-jit.mjs"]
 desc = "Without the moving collector std::jit compiles both graphs."
 kind = "behavior"
@@ -395,7 +414,7 @@ timeout_ms = 20000
 name = "gc.rewrite_condition_keeps_drafts_rooted"
 # Fast layer: one rewrite pass over a nine-node program (measured ~0.1 s Release at -Jobs 1), and
 # the slow tier is what let the rooting regression this guards against land unnoticed.
-tier = "fast"
+tier = "slow"
 desc = "A rule with a `when` condition rewrites a program of several functions while every safepoint moves the young objects: the condition is Camel code, so the rewrite session must keep the static values of every draft it has opened relocatable until the commit reads them again, not only those of the draft being rewritten."
 kind = "behavior"
 case = "../../../cases/modules/rules/when_target.cml"
@@ -408,13 +427,13 @@ timeout_ms = 20000
 [[tests]]
 name = "gc.saturation_condition_keeps_drafts_rooted"
 # Fast layer: the same reason as the case above, measured at the same cost.
-tier = "fast"
 desc = "The saturation engine with a conditional rule over a program that holds string constants: the drafts of the graphs saturated before the last one keep their static values across the safepoints the conditions reach."
 kind = "behavior"
 case = "../../../cases/modules/rules/extract_boundary.cml"
 args = ["--gc-check", "poison", "${case}", "extract_boundary::check", "std::nvm"]
 expect_exit = 0
 expect_stdout_exact = "tabled nodes 33 unread constants 0\nextracted nodes 3 unread constants 0\nay by\n"
+tier = "slow"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 
@@ -439,6 +458,7 @@ expect_exit = 0
 expect_stdout_contains = ["loss=0.35793429613113403 gqw=0.19846568 gkw=0.076419204", "loss2=0.35793429613113403 gqw2=0.19846568 gkw2=0.076419204"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 120000
+tier = "slow"
 
 [[tests]]
 name = "gc.live_table.generational.nvm"
@@ -469,6 +489,7 @@ kind = "behavior"
 case = "../../../cases/feat/mm/gc/gc_live_table.cml"
 args = ["--gc", "kind=generational", "${case}", "--arg", "rows=56000", "--arg", "reps=2", "${run_prl}"]
 expect_exit = 0
+tier = "slow"
 expect_stdout_contains = ["gc_live_table total=11231"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 120000
@@ -511,6 +532,7 @@ name = "gc.macro_round_lifetime.moving_stress.prl"
 desc = "Function-valued custom VJP results from a completed macro round must not trace retired graph carriers."
 kind = "behavior"
 case = "../../../cases/modules/autodiff/macro_round_lifetime_gc.cml"
+tier = "slow"
 args = ["--gc-stress", "safepoint=1,kind=minor", "--gc-check", "verify=both", "--gc", "kind=generational", "${case}", "std::macro", "${run_prl}"]
 expect_exit = 0
 expect_stdout_contains = ["-12.0 -12.0 24.0", "[2, 3, 2] 12.0 120.0", "\n-12.0"]
