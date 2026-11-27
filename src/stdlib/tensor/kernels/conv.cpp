@@ -637,6 +637,33 @@ Array *batchNorm(
                 dims(p->shapeSpan()));
         }
     }
+    // The parameters are `[C]`, so what they hold is a length and not an axis. On a rank-2 value
+    // the length is the last axis, which is the channel axis there, and every caller that writes
+    // one means it. From rank 3 on the last axis is no longer the channel axis, so a `[C]` whose
+    // length fits more than one axis does not say which axis it is, and the shape check cannot
+    // tell: `[2, 2, 2]` with `[2]` fits axes 1 and 2, and the statistics differ between them. The
+    // ambiguity is refused by name instead of answered with axis 1 alone.
+    if (input->rank() >= 3) {
+        std::string fits;
+        size_t candidates = 0;
+        for (size_t d = 1; d < input->rank(); ++d) {
+            if (input->dim(d) != C) {
+                continue;
+            }
+            if (candidates != 0) {
+                fits += (candidates + 1 == input->rank() - 1) ? " or " : ", ";
+            }
+            fits += std::to_string(d);
+            ++candidates;
+        }
+        if (candidates > 1) {
+            throw ShapeError(
+                "batch_norm: the [" + std::to_string(C) + "] parameter fits axes " + fits + " of " +
+                "the tensor's shape " + dims(input->shapeSpan()) +
+                " and does not say which one; a rank-1 parameter that fits more than one axis is "
+                "refused");
+        }
+    }
     const TypeCode code = computableElementType("batch_norm", {input, mean, var, gamma, beta});
     return forElementType(code, [&]<typename T>() {
         return batchNormIn<T>(input, mean, var, gamma, beta, eps, allocator);

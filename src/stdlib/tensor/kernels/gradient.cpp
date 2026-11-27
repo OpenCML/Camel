@@ -78,6 +78,31 @@ broadcastStrides(std::span<const int64_t> small, std::span<const int64_t> big, c
         strides[d + shift] = extent == 1 ? 0 : stride;
         stride *= extent;
     }
+    // The same ambiguity read the other way: a rank-1 operand that fits more than one axis of the
+    // target shape does not say which axis it is spread along, and the shape check alone cannot
+    // tell -- `[10, 20]` spread over `[2, 2, 2]` fills the last axis by the suffix reading and the
+    // middle one by another. A longer operand keeps the suffix reading, and the other reading stays
+    // a limitation until the axis goes into the call.
+    if (small.size() == 1 && small[0] != 1 && big.size() >= 3) {
+        std::string fits;
+        size_t candidates = 0;
+        for (size_t d = 0; d < big.size(); ++d) {
+            if (big[d] != small[0]) {
+                continue;
+            }
+            if (candidates != 0) {
+                fits += (candidates + 1 == big.size()) ? " or " : ", ";
+            }
+            fits += std::to_string(d);
+            ++candidates;
+        }
+        if (candidates > 1) {
+            throw ShapeError(
+                std::string(what) + ": the operand " + shapeText(small) + " fits axes " + fits +
+                " and does not say which one; a rank-1 operand that fits more than "
+                "one axis is refused");
+        }
+    }
     return strides;
 }
 
@@ -288,6 +313,34 @@ void requireSuffixTarget(
         throw ShapeError(
             head + ": position " + std::to_string(i + shift) + " is " + std::to_string(want) +
             " where the tensor has " + std::to_string(have));
+    }
+    // A rank-1 target on a rank-2 value means the last axis, which is the channel axis there; from
+    // rank 3 on the last axis is no longer the channel axis, so a rank-1 target that fits more than
+    // one axis is refused. `[2]` on `[2, 2, 2]` sums the last axis by the suffix reading and the
+    // middle one by another, and both are shapes the tensor has: the numbers differ, so the
+    // ambiguity is refused by name instead of answered with the last axis alone. A longer target
+    // keeps the suffix reading: `[2, 2]` on `[2, 2, 2]` is the trailing block, and the other
+    // reading stays a limitation until the axis goes into the call.
+    if (at.size() == 1 && at[0] != 1 && shape.size() >= 3) {
+        std::string fits;
+        size_t candidates = 0;
+        for (size_t d = 0; d < shape.size(); ++d) {
+            if (shape[d] != at[0]) {
+                continue;
+            }
+            if (candidates != 0) {
+                fits += (candidates + 1 == shape.size()) ? " or " : ", ";
+            }
+            fits += std::to_string(d);
+            ++candidates;
+        }
+        if (candidates > 1) {
+            throw ShapeError(
+                std::string(what) + ": the target extents " + shapeText(at) + " fit axes " + fits +
+                " of the tensor's shape " + shapeText(shape) +
+                " and do not say which one; a rank-1 target that fits more than one "
+                "axis is refused");
+        }
     }
 }
 
