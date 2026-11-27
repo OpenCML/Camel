@@ -1417,9 +1417,13 @@ void ParserImpl::parseBracketedIdents(TK closer, NK kind, bool wildcards) {
 }
 
 /// keyParamPair : ('var' | 'const')? identDef (':' typeExpr ('=' dataExpr)?)?
+///              | 'var'? identDef (':' typeExpr ('=' dataExpr)?)?
 ///              | '...' identDef (':' typeExpr)?
 ///              | '...' typeExpr
 ///              | 'constas' identDef (':' typeExpr)?
+/// The first alternative is a rule's or a fact's parameter, where `const` says the left side
+/// matches a constant there (design principles 9.11); everywhere else a parameter writes `var`,
+/// `constas` or nothing, and `const` is not a word a parameter takes.
 /// A rest parameter is written untyped and last in a function declaration's parameter list
 /// (design principles 5.5). A `constas` parameter is written first in that list and is a
 /// compile-time value, not a runtime parameter (design principles 5.4). A type written after a
