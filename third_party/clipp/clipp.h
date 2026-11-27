@@ -2024,6 +2024,14 @@ public:
             if(std::find(flags_.begin(), flags_.end(), arg) != flags_.end()) {
                 return subrange{0,arg.size()};
             }
+            // A word that begins with two dashes is one option name: `--gc` is not a prefix of
+            // `--gc-nursery-mb`, and reading it as `--gc` with `-nursery-mb` attached counted a
+            // name the command line no longer has as an option that exists. Such a word matches
+            // nothing here and is then reported as unknown. One dash keeps the joined form, where
+            // a short flag is a prefix by definition.
+            if(arg.size() > 2 && arg[0] == '-' && arg[1] == '-') {
+                return subrange{};
+            }
             return str::longest_prefix_match(arg, flags_);
         }
     }

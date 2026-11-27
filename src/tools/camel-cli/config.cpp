@@ -597,58 +597,6 @@ bool explainDiagnostic(const std::string &target) {
     return found;
 }
 
-/// The spellings the command line no longer has: each was renamed, merged into a key=value option
-/// or turned into a subcommand (one spelling for each setting), and is deleted. They are named here
-/// rather than left to the parser because an option that begins with a surviving one
-/// (`--gc-nursery-mb` of `--gc`, `--output-format` of `--output`) would otherwise be read as that
-/// option with the rest attached and the value after it taken for the program -- a refusal that
-/// says nothing about the option being gone. Nothing is offered in their place: the message is the
-/// one an unknown option always had.
-bool rejectRetiredOptions(int argc, char *argv[]) {
-    static const char *const kRetired[] = {
-        "--error-format",
-        "-E",
-        "--output-format",
-        "-O",
-        "--max-warning",
-        "-N",
-        "--block-limit",
-        "--graph-gc-mb",
-        "--gc-nursery-mb",
-        "--gc-promotion-age",
-        "--gc-large-threshold-kb",
-        "--gc-large-budget-mb",
-        "--gc-growth-percent",
-        "--gc-heap-limit-mb",
-        "--space-segment-kb",
-        "--meta-space-limit-mb",
-        "--graph-space-limit-mb",
-        "--perm-space-limit-mb",
-        "-n",
-        "--docs",
-        "-d",
-        "--about",
-        "-a",
-        "--zen",
-        "-z",
-        "--explain",
-    };
-    for (int i = 1; i < argc; ++i) {
-        const std::string_view arg = argv[i];
-        for (const char *retired : kRetired) {
-            const std::string_view name = retired;
-            if (arg == name ||
-                (arg.size() > name.size() && arg.starts_with(name) && arg[name.size()] == '=')) {
-                std::cerr << "Error: unknown option '" << retired
-                          << "'. Run 'camel --help' for the options accepted." << std::endl;
-                exitCode = 1;
-                return false;
-            }
-        }
-    }
-    return true;
-}
-
 /// The two places a run's collector and its spaces are set: `--gc
 /// kind=generational,nursery_mb=4,...` and `--spaces block_mb=2048,segment_kb=...`. Each word is
 /// one setting, named as the table lists it; a key neither knows is refused here rather than
@@ -798,9 +746,10 @@ void printCliArgs(Command selected) {
 }
 
 bool parseArgs(int argc, char *argv[]) {
-    if (!rejectRetiredOptions(argc, argv)) {
-        return false;
-    }
+    // An option the command line no longer has is refused by the parser itself: a long word
+    // matches an option name whole (see `parameter::match` in third_party/clipp), so a spelling
+    // that was renamed or merged into a subcommand reaches the unknown-option report below
+    // instead of being read as the option it begins with, with the rest attached to it.
     const bool startupProfile = std::getenv("CAMEL_STARTUP_PROFILE") != nullptr;
     auto startupLast          = std::chrono::steady_clock::now();
     auto startupMark          = [&](const char *stage) {
