@@ -61,8 +61,7 @@ Check 'the exit trap that replaces the guard''s still ends the watchdog' `
 
 # The lock the guard exists for is a `flock` on fd 6 of the run's shell, and the kernel gives it back
 # when the last descriptor on it closes. A child that inherits fd 6 therefore holds that lock after
-# its holder is gone, which is the reading of 2026-11-27: three processes of a dead run still carried
-# /tmp/camel-tree-*.lock, and three later runs exited 4 waiting for it. The four spawn points below
+# its holder is gone, and the runs behind it wait for a lock nobody holds. The spawn points below
 # are the ones that can outlive a step, so the script must close fd 6 in each. These checks read the
 # script rather than run it: the alternative is a run that has to die to show the difference.
 Check 'the token reporter is started with fd 6 closed' `
@@ -152,8 +151,7 @@ echo "__CAMEL_REMOTE_EXIT__=0"
     # A run that starts two long-lived children and then has its own shell killed between two polls:
     # by then the kernel has adopted the children, and one of them moved to a session of its own, so
     # the parent links the sweep reads are gone. What ends them is the list the watchdog wrote down
-    # while the run was still alive -- the reading of 2026-11-27, where three processes of a dead run
-    # kept the checkout lock on fd 6 and three later runs waited for it.
+    # while the run was still alive, which is the whole reason it writes one down.
     WriteLf (Join-Path $scratch 'short.sh') (@'
 set -u
 orphan_dir="__W__/runs"
@@ -267,8 +265,7 @@ sleep 4
 res kept_after_reader "$(cat "$W"/runs/*.out 2>/dev/null | wc -l)"
 # E: the run's own shell is killed between two polls. Its children are nobody's children after that
 # and one of them is in a session of its own, so this is the reading that what the watchdog wrote
-# down is what ends them -- the defect of 2026-11-27, where a dead run's processes went on holding
-# the checkout lock and the runs behind them waited for it.
+# down is what ends them -- and a process left running is what keeps the checkout lock held.
 quiesce; rm -rf "$W/runs"; rm -f "$W"/pid.*
 bash -c "bash $W/short.sh > $W/e.out 2> $W/e.err & wait" &
 reader=$!

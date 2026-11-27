@@ -1563,7 +1563,7 @@ $run = @{
     lockHolder      = $null
     # The processes actually on that lock file, by pid and command: the record names the run that took
     # the lock, and when that run is gone these are what keep it held. Naming them is the difference
-    # between a message and an action (2026-11-27: nine npm/ninja processes of a dead run).
+    # between a message and an action.
     lockHolders     = $null
     # Where this run's output stays on the host when the workstation side is killed: the guard's copy
     # under `~/<workroot>/.remote-runs/`. Null when the host did not say.
@@ -2733,10 +2733,10 @@ orphan_watch() {
     # Every pid this run has been seen with, not only the ones under it at the end. The parent links
     # answer "who is under the run now", and they stop answering the moment the run's own shell dies:
     # the kernel reparents its children, and a build started under `setsid` is a session of its own
-    # from the first instant. That gap is what the 2026-11-27 reading shows -- a run whose session was
-    # gone still had three of its processes running and holding the checkout lock on fd 6, and three
-    # later runs waited out -SlotWaitSeconds for a lock nobody held. So each poll writes down what it
-    # can see, and the end kills the union: what is under the run then, and everything that was.
+    # from the first instant. So each poll writes down what it can see, and the end kills the union:
+    # what is under the run then, and everything that was. A process left behind keeps the checkout
+    # lock held and keeps the CPU time it was given, which is why the sweep does not lean on the
+    # parent links alone.
     orphan_remember() {
         local one
         for one in $(orphan_descendants "$run" "$me"); do
@@ -2784,8 +2784,7 @@ orphan_begin() {
     base="$orphan_dir/$stamp"
     # The name of this run's copy, for the pointer the remote script prints after the guard is sourced
     # (and for anyone reading the host afterwards): the copy is the only place a `[SUMMARY]` survives
-    # the workstation side going away, and 2026-11-27 cost five Debug reruns to the fact that nothing
-    # said where it was.
+    # the workstation side going away, so the path is said rather than hunted for afterwards.
     orphan_copy="$base.out"
     # The host's copy of the run's output. Each stream still reaches ssh byte for byte; a tee whose
     # reader went away ignores the broken pipe and keeps writing the file, so what came before is kept.
@@ -2822,7 +2821,7 @@ $orphanGuard
 # writing to `~/<workroot>/.remote-runs/<stamp>.out` and nothing else does: the run's scratch
 # directory is removed when the run ends, that directory is not. Printing the path here means the
 # last line a person saw names the file that still holds the whole run (`[SUMMARY]`, stack, exit
-# code), instead of costing a rerun to find out what happened. 2026-11-27: five Debug reruns.
+# code), rather than leaving a person to find out what happened by running it again.
 [ -n "`${orphan_copy:-}" ] && echo "[camel-remote] this run's output is kept on the host at `$orphan_copy (the .err beside it), also after this connection is gone"
 # The host's half of -TracePhases: one monotonic mark per segment of "get this checkout to the run's
 # commit". Nothing is printed unless the caller asked, and the mark is taken at the line *after* the
@@ -2877,10 +2876,10 @@ tree_holder() {
 }
 # Which processes have the lock file open, named by pid and command. `flock` says the lock is taken
 # and the record in the file says which run took it; neither says who is holding it *now*. Those are
-# different facts exactly when the run has died and something it started lives on -- 2026-11-27: the
-# record named run 65756, that shell was gone, and nine npm/ninja processes it had started were still
-# holding fd 6, so every run behind it printed "may still hold the lock" and had nothing to act on.
-# Reading the descriptor out of /proc answers it: whoever has this file open is what keeps it held.
+# different facts exactly when the run has died and something it started lives on: the record names a
+# pid that is gone, the lock is still held, and a message that stops there leaves a reader nothing to
+# act on. Reading the descriptor out of /proc answers it: whoever has this file open is what keeps it
+# held.
 # Only fd 6 and above are looked at, because that is the number this shell opens the lock as and
 # every child inherits it under that number; nothing here opens a descriptor above 5.
 tree_lock_holders() {
@@ -3236,11 +3235,9 @@ echo '__CAMEL_REMOTE_SYNCED__'
     done
 # 6>&-: the checkout lock lives on fd 6 of this shell, and the kernel gives it back when the last
 # process holding that file description exits. A child that inherits fd 6 therefore holds the lock
-# after its holder is gone, which is the state found on 2026-11-27: a run's session had died, three
-# processes it had started still carried /tmp/camel-tree-*.lock on fd 6, and three later runs waited
-# out -SlotWaitSeconds and exited 4 on a lock nobody held. So every process here that can outlive one
-# step -- this reporter, the build, the plan, the two installers -- is started with fd 6 closed, and
-# the lock is held by this shell alone.
+# after its holder is gone, and the runs behind it wait for a lock nobody holds. So every process here
+# that can outlive one step -- this reporter, the build, the plan, the two installers -- is started
+# with fd 6 closed, and the lock is held by this shell alone.
 ) 6>&- &
 tokens_reporter=`$!
 if [ '$NoBuild' = 'True' ]; then
