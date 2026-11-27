@@ -474,7 +474,12 @@ namespace {
 /// store is gone names nothing rather than a dead store.
 struct GraphHolds {
     std::mutex mutex;
-    std::unordered_map<const graph::Graph *, Store *> stores;
+    /// Every store that was told about a graph, by the graph's address. A graph is announced to
+    /// each store that answers about it (`holdGraph`), so this is a list and not one store per
+    /// graph: a second announcement must not displace the first, or the first store would never
+    /// hear that the graph ended -- its `alive_` would keep an address that the graph space gives
+    /// to the next graph, and it would clear a slot through it.
+    std::unordered_map<const graph::Graph *, std::vector<Store *>> stores;
     /// The stores the framework made for a graph and therefore owns (`storeHolding`: a draft has no
     /// program to announce it, so its store is made here). They are destroyed in `forgetGraph`,
     /// when the graph says it is gone.
@@ -484,6 +489,35 @@ struct GraphHolds {
 GraphHolds &graphHolds() {
     static GraphHolds *holds = new GraphHolds();
     return *holds;
+}
+
+/// Every store that exists. A graph says it is gone once (`forgetGraph`), and every store hears it:
+/// an entry names the graphs it read in its anchors, and a store told only about the graph it calls
+/// its own would keep an anchor on a graph that ended and read through it later. The list is short
+/// (one store per context plus the drafts) and a graph's end is not on any fast path.
+struct LiveStores {
+    std::mutex mutex;
+    std::vector<Store *> stores;
+};
+
+LiveStores &liveStores() {
+    static LiveStores *live = new LiveStores();
+    return *live;
+}
+
+void addLiveStore(Store *store) {
+    std::lock_guard lock(liveStores().mutex);
+    liveStores().stores.push_back(store);
+}
+
+void removeLiveStore(Store *store) {
+    std::lock_guard lock(liveStores().mutex);
+    std::erase(liveStores().stores, store);
+}
+
+std::vector<Store *> liveStoreList() {
+    std::lock_guard lock(liveStores().mutex);
+    return liveStores().stores;
 }
 
 } // namespace
@@ -550,7 +584,10 @@ void holdGraph(Store &store, const graph::Graph &graph, std::uint64_t identity) 
     store.noteGraph(graph, identity);
     GraphHolds &holds = graphHolds();
     std::lock_guard lock(holds.mutex);
-    holds.stores[&graph] = &store;
+    std::vector<Store *> &told = holds.stores[&graph];
+    if (std::find(told.begin(), told.end(), &store) == told.end()) {
+        told.push_back(&store);
+    }
 }
 
 Store *storeHolding(const graph::Graph &graph) {
@@ -558,8 +595,8 @@ Store *storeHolding(const graph::Graph &graph) {
     {
         std::lock_guard lock(holds.mutex);
         const auto it = holds.stores.find(&graph);
-        if (it != holds.stores.end()) {
-            return it->second;
+        if (it != holds.stores.end() && !it->second.empty()) {
+            return it->second.front();
         }
         if (!runtime::graphIsDraft(graph)) {
             return nullptr;
@@ -570,7 +607,7 @@ Store *storeHolding(const graph::Graph &graph) {
         // the draft (`forgetGraph`, told from `~GraphDraft`).
         Store *made = new Store(draftGraphs(), /*persistent=*/false);
         made->noteGraph(graph, runtime::toValue(runtime::graphIdentity(graph)));
-        holds.stores[&graph] = made;
+        holds.stores[&graph].push_back(made);
         holds.made.insert(made);
         return made;
     }
@@ -580,29 +617,43 @@ void forgetGraph(const graph::Graph *graph, std::uint64_t identity) {
     if (graph == nullptr) {
         return;
     }
-    Store *store = nullptr;
-    bool made    = false;
+    std::vector<Store *> owned;
+    std::vector<Store *> told;
     {
         GraphHolds &holds = graphHolds();
         std::lock_guard lock(holds.mutex);
-        const auto it = holds.stores.find(graph);
-        if (it != holds.stores.end()) {
-            store = it->second;
-            holds.stores.erase(it);
-            const auto own = holds.made.find(store);
-            if (own != holds.made.end()) {
-                holds.made.erase(own);
-                made = true;
+        if (const auto it = holds.stores.find(graph); it != holds.stores.end()) {
+            for (Store *store : it->second) {
+                if (const auto own = holds.made.find(store); own != holds.made.end()) {
+                    holds.made.erase(own);
+                    owned.push_back(store);
+                }
+                told.push_back(store);
             }
+            holds.stores.erase(it);
         }
     }
-    // Outside the holds' lock: the store takes its own (and its destructor takes this one again
-    // when it takes its rows out).
-    if (store != nullptr) {
-        store->graphGone(graph, identity);
-        if (made) {
-            delete store;
+    // Every store that named this graph hears it, not only the one it was announced to: an entry
+    // that named the graph in an anchor lives wherever it was computed, and a store that keeps
+    // such an anchor reads the graph's memory after it is gone. The stores that named it are
+    // known without a sweep (`Store::names`: one lookup per store, and the stores are few), so a
+    // graph's end costs the entries of the stores that actually hold it and not every entry of
+    // every store. Outside the holds' lock, because a store takes its own (and its destructor
+    // takes the holds' again when it takes its rows out).
+    for (Store *store : liveStoreList()) {
+        if (std::find(told.begin(), told.end(), store) != told.end()) {
+            continue;
         }
+        if (!store->names(graph)) {
+            continue;
+        }
+        told.push_back(store);
+    }
+    for (Store *store : told) {
+        store->graphGone(graph, identity);
+    }
+    for (Store *store : owned) {
+        delete store;
     }
 }
 
@@ -617,13 +668,20 @@ size_t Store::KeyHash::operator()(const Key &key) const {
 }
 
 Store::Store(GraphAccess graphs, bool persistent)
-    : graphs_(std::move(graphs)), persistent_(persistent) {}
+    : graphs_(std::move(graphs)), persistent_(persistent) {
+    addLiveStore(this);
+}
+
+bool Store::names(const graph::Graph *graph) const {
+    std::lock_guard lock(mutex_);
+    return named_.find(graph) != named_.end();
+}
 
 bool Store::aliveLocked(const graph::Graph *graph) const {
     if (graph == nullptr) {
         return false;
     }
-    if (alive_.empty()) {
+    if (!toldAboutGraphs_) {
         // A store nobody told about graphs (one a check keeps for itself) clears as it always did:
         // its caller is the only one holding the graph, so the graph is there when it clears.
         return true;
@@ -644,41 +702,69 @@ void Store::clearSlotsOfLocked(KindId kind, const Entry &entry) {
 }
 
 void Store::noteGraph(const graph::Graph &graph, std::uint64_t identity) {
-    if (identity == 0) {
-        return; // no identity, so this store keys nothing on it and has no line to keep
-    }
     std::lock_guard lock(mutex_);
+    // From here on this store is not on its own: it clears only through the graphs it still knows
+    // are alive (`aliveLocked`), and it is told when each of them ends.
+    toldAboutGraphs_ = true;
+    if (identity == 0) {
+        // A graph announced while it is still being built has no identity to key a line with. It is
+        // still a graph this store must hear the end of, or it would clear a slot through the
+        // address after the space handed it to the next graph.
+        alive_[&graph] = 0;
+        return;
+    }
+    // An address is a graph only for as long as that graph is there. If this one was already known
+    // under another identity, its old line is stale and the address must leave it: the space gives
+    // an address to the next graph it builds, and a stale row would make this store re-anchor an
+    // entry onto whatever now lives there.
+    if (const auto previous = alive_.find(&graph); previous != alive_.end()) {
+        if (const auto line = lines_.find(previous->second); line != lines_.end()) {
+            line->second.erase(&graph);
+            if (line->second.empty()) {
+                lines_.erase(line);
+            }
+        }
+    }
     alive_[&graph] = identity;
     lines_[identity].insert(&graph);
 }
 
 void Store::graphGone(const graph::Graph *graph, std::uint64_t identity) {
-    if (graph == nullptr || identity == 0) {
+    if (graph == nullptr) {
         return;
     }
     std::lock_guard lock(mutex_);
-    // The version that is still there, if any: the fact is about the graph, so it moves to that
-    // one instead of going with the object it was read from.
+    // Nothing of this store names the graph and it was never told about it: there is no entry to
+    // drop and no slot of this store to clear, so the sweep below would visit every entry to find
+    // that out.
+    if (named_.find(graph) == named_.end() && alive_.find(graph) == alive_.end()) {
+        return;
+    }
+    // The version that is still there, if any: a fact of this graph's own line moves to it instead
+    // of going with the object it was read from.
     const graph::Graph *successor = nullptr;
-    if (const auto line = lines_.find(identity); line != lines_.end()) {
-        for (const graph::Graph *candidate : line->second) {
-            if (candidate != graph) {
-                successor = candidate;
-                break;
+    if (identity != 0) {
+        if (const auto line = lines_.find(identity); line != lines_.end()) {
+            for (const graph::Graph *candidate : line->second) {
+                if (candidate != graph) {
+                    successor = candidate;
+                    break;
+                }
             }
         }
     }
+    // Every entry that names this graph in any anchor, not only the ones keyed by its identity: a
+    // fact read across a call names several graphs, and the graphs it does not call its own were
+    // announced to *their* store, not this one. An anchor left naming a graph that is gone is read
+    // by `identityOf`/`versionsOf` -- a cast through freed memory -- and the space hands the
+    // address to the next graph it builds, so it is not a read that merely answers wrong.
     for (auto row = entries_.begin(); row != entries_.end();) {
-        if (row->first.graph != identity) {
-            ++row;
-            continue;
-        }
-        auto &list        = row->second;
+        auto &list         = row->second;
+        const bool ownLine = identity != 0 && row->first.graph == identity;
         for (auto entry = list.begin(); entry != list.end();) {
             // The slot this entry published lives in the graph that is ending, and a slot that
-            // outlived its fact would name a value nobody owns -- in memory a later graph may
-            // reuse (camel/runtime/fact_slots.h). It is cleared here, while that graph is still
-            // there, whether the fact moves to another version of the line or goes with it.
+            // outlived its fact would name a value nobody owns. It is cleared here, while that
+            // graph is still there.
             bool named = false;
             for (const Anchor &anchor : entry->anchors) {
                 if (anchor.graph != graph) {
@@ -691,41 +777,37 @@ void Store::graphGone(const graph::Graph *graph, std::uint64_t identity) {
                 ++entry;
                 continue;
             }
-            if (successor == nullptr) {
-                // No version of the line can be reached any more: the fact is void.
+            if (!ownLine || successor == nullptr) {
+                // The fact keeps no way back to this graph: its value was computed with the graph
+                // that is now gone, so it goes with it.
                 entry = list.erase(entry);
                 continue;
             }
             // The fact is about the graph, not about the object that held it: it moves to the
-            // version that is still there. It is not written into that version's slot table: a
-            // node id is stable along a line only for the nodes the encoding kept, and a slot for
-            // a node that version does not carry is a write past the end of its table.
+            // version that is still there. Its slot is not written there -- a node id is stable
+            // along a line only for the nodes the encoding kept, and a slot for a node that
+            // version does not carry is a write past the end of its table.
             for (Anchor &anchor : entry->anchors) {
                 if (anchor.graph == graph) {
                     anchor.graph = successor;
                 }
             }
+            named_.insert(successor);
             bool duplicate = false;
             for (auto other = list.begin(); other != entry && !duplicate; ++other) {
                 duplicate = sameAnchors(other->anchors, entry->anchors);
             }
             if (duplicate) {
-                // The version that is still there already has this fact: the moved copy would be
-                // two entries for one anchor, and the one that was there is the answer.
+                // The version that is still there already has this fact.
                 entry = list.erase(entry);
                 continue;
             }
-            // The slot is *not* republished in the version the fact moved to: a node id is
-            // stable along a line only for the nodes the encoding kept, and a slot written for a
-            // node that version does not carry is a write past the end of its table. A reader of
-            // the successor that wants the slot publishes it when it asks (`putValue`/`obtain`),
-            // and until then the entry is found by the anchor scan, which costs a computation of
-            // nothing and never a wild write.
             ++entry;
         }
         row = list.empty() ? entries_.erase(row) : std::next(row);
-    } // The books: this version is no longer alive, and a line that kept no successor is gone.
+    }
     alive_.erase(graph);
+    named_.erase(graph);
     if (const auto line = lines_.find(identity); line != lines_.end()) {
         line->second.erase(graph);
         if (line->second.empty()) {
@@ -734,6 +816,7 @@ void Store::graphGone(const graph::Graph *graph, std::uint64_t identity) {
     }
 }
 Store::~Store() {
+    removeLiveStore(this);
     // A graph may outlive the store (the store goes with its context; a frozen graph can be freed
     // after it). Every slot this store published is cleared while the values it names are still
     // its own -- after this body they are released with the entries, and a slot left behind would
@@ -747,7 +830,9 @@ Store::~Store() {
     // end (`forgetGraph`) then names no store rather than a dead one.
     GraphHolds &holds = graphHolds();
     std::lock_guard lock(holds.mutex);
-    std::erase_if(holds.stores, [this](const auto &item) { return item.second == this; });
+    std::erase_if(holds.stores, [this](const auto &item) {
+        return std::find(item.second.begin(), item.second.end(), this) != item.second.end();
+    });
 }
 
 void Store::checkType(KindId kind, const std::type_info &type) {
@@ -874,6 +959,11 @@ void Store::putValue(
         *it = std::move(entry);
         publishSlot(graphs_, kind, info.scope, anchors, it->value.get());
     }
+    for (const Anchor &anchor : anchors) {
+        if (anchor.graph != nullptr) {
+            named_.insert(anchor.graph);
+        }
+    }
     ++counts_.puts;
 }
 
@@ -961,6 +1051,11 @@ Store::obtainValue(KindId kind, std::span<const Anchor> anchors, std::uint64_t t
     } else {
         *it = std::move(entry);
         publishSlot(graphs_, kind, info.scope, anchors, it->value.get());
+    }
+    for (const Anchor &anchor : anchors) {
+        if (anchor.graph != nullptr) {
+            named_.insert(anchor.graph);
+        }
     }
     ++counts_.puts;
     return value;

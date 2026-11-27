@@ -522,6 +522,10 @@ class Store {
     /// reached any more. Each cleared slot is cleared while the value is still the store's and
     /// through a version that is still there, so nothing is dereferenced after its end.
     void graphGone(const graph::Graph *graph, std::uint64_t identity);
+    /// Whether a live entry of this store names `graph` in an anchor. A graph's end reaches only
+    /// the stores that named it: the sweep in `graphGone` visits every entry, and a store with no
+    /// anchor on the graph has nothing to drop, so asking costs one lookup instead of a sweep.
+    bool names(const graph::Graph *graph) const;
 
     /// Calls `visitor` for every stored fact, without checking a stamp: what is stored.
     void forEach(const std::function<void(const StoredFact &)> &visitor) const;
@@ -611,6 +615,13 @@ class Store {
     void clearSlotsOfLocked(KindId kind, const Entry &entry);
     /// Whether the store still believes `graph` is alive. Caller holds `mutex_`.
     bool aliveLocked(const graph::Graph *graph) const;
+    /// Whether this store was ever told about a graph. A store told about one is told when each
+    /// ends (graphGone) and clears only through the graphs it still knows are alive; a store nobody
+    /// told (a check's own, in 	est/tools/facts) owns the graphs it reads, so it clears as
+    /// it always did. The flag is not live_.empty(): a graph announced while it is still being
+    /// built has no identity to key a line with, and that announcement still means the store is no
+    /// longer alone.
+    bool toldAboutGraphs_ = false;
 
     GraphAccess graphs_;
     bool persistent_;
@@ -621,6 +632,11 @@ class Store {
     /// measured against when one version ends (`graphGone`).
     std::unordered_map<const graph::Graph *, std::uint64_t> alive_;
     std::unordered_map<std::uint64_t, std::unordered_set<const graph::Graph *>> lines_;
+    /// The graphs some live entry names in an anchor (`putValue`, `obtainValue`), which is what a
+    /// graph's end asks about first (`forgetGraph` -> `names`). Over-approximated on purpose: a
+    /// graph whose last entry is gone stays until it ends, and an extra sweep costs no more than
+    /// the sweep every store used to pay for every graph. Guarded by `mutex_`.
+    std::unordered_set<const graph::Graph *> named_;
     Counts counts_;
 };
 
