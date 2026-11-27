@@ -39,3 +39,14 @@ assert(num('no_context') === 0, `a graph's program ran outside a context, so its
 }
 """
 timeout_ms = 20000
+
+[[tests]]
+name = "facts.arrangeable_fill_access"
+desc = "`core.arrangeable`'s answer for the three operations the compiler writes itself: a construction (`fill`), a member read by place (`access`) and one by name (`access_key`). Each is answered freely arrangeable -- it writes nothing, reaches nothing outside the program, cannot fault where it is written, and ends -- which is what lets a pass move one out of a loop body or an arm. The three are written as calls inside functions so that nothing folds: a construction of constants would be computed before any pass saw the graph and the row would be missing. The rows are the fact layer's own (`FACTS_COMPARE answers_row node_kind=oper oper=...`), one node each, free and not kept; a rewrite that answered one of them no is the red this case exists for."
+kind = "behavior"
+case = "../../../cases/tools/arrangeable_fill_access.cml"
+args = ["${case}", "test::facts_compare"]
+expect_exit = 0
+expect_stdout_contains = ["FACTS_COMPARE answers_row node_kind=oper oper=:op/fill nodes=1 free=1 kept=0 no_fact=0", "FACTS_COMPARE answers_row node_kind=oper oper=:op/access nodes=1 free=1 kept=0 no_fact=0", "FACTS_COMPARE answers_row node_kind=oper oper=:op/access_key nodes=1 free=1 kept=0 no_fact=0"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000

@@ -526,6 +526,25 @@ camel::core::OperId appendInPlaceOper() {
     return camel::core::oper::AppendInPlace;
 }
 
+/// `:struct/concat_arr`, interned once: the operator that joins two arrays end to end. This file
+/// recognises the operators that grow an array's length by id (design section 3.8, R10), so the
+/// one URI that has no compile-time id is spelled in this one place, at the table that gives it
+/// its id, and nowhere else.
+camel::core::OperId concatArrOper() {
+    static const camel::core::OperId id =
+        camel::core::OperatorTable::instance().intern(":struct/concat_arr");
+    return id;
+}
+
+/// Whether an operator grows an array's length: the core's two appends (their ids are the
+/// table's, `oper::Append` and `oper::AppendOwned`) or the concatenation. What the export cannot
+/// compute at export time is refused because the model holds no array whose length a run-time
+/// value decides, and these are the operators that decide it.
+bool growsArrayExtent(camel::core::OperId id) {
+    return id == camel::core::oper::Append || id == camel::core::oper::AppendOwned ||
+           id == concatArrOper();
+}
+
 bool isLocalVariable(const graph::GraphView &g, graph::NodeRef cell) {
     return declaringCellOf(g, cell) != camel::runtime::kInvalidNodeRef;
 }
@@ -1382,9 +1401,7 @@ bool growsItsExtent(const graph::GraphView &g, graph::NodeRef ref) {
     while (!work.empty()) {
         const graph::NodeRef node = work.back();
         work.pop_back();
-        const std::string_view uri = operUriOf(g, node);
-        if (uri == ":struct/append_arr" || uri == ":struct/append_arr_owned" ||
-            uri == ":struct/concat_arr") {
+        if (growsArrayExtent(operIdOf(g, node))) {
             return true;
         }
         // The two input runs are one edge kind on the view (`predecessors`, Data); the set this
@@ -2617,8 +2634,9 @@ bool stateIsTheCollection(
     if (body == nullptr) {
         return false;
     }
-    const std::string_view uri = body->uri();
-    if (uri != ":struct/append_arr" && uri != ":struct/append_arr_owned") {
+    // The appended element is what the round adds: `:struct/append_arr`, or the owned form. The
+    // question is asked of the operator's id, not of the letters of its URI.
+    if (body->oper != camel::core::oper::Append && body->oper != camel::core::oper::AppendOwned) {
         return false;
     }
     const auto norm = g.normInputsOf(node);
@@ -4199,6 +4217,12 @@ Value Evaluator::evalOper(Activation &act, gc_node_ref_t ref) {
     const camel::runtime::KernelArguments kernelArguments = camel::runtime::kernelArgumentsOf(*g, ref);
     std::vector<Value> norm = evalAll(act, kernelArguments.norm);
     std::vector<Value> with = evalAll(act, kernelArguments.with);
+    // A growing array has no ONNX counterpart; say why rather than that it is impure. The node's
+    // operator id answers which operator it is (`:struct/append_arr_in_place` is the compiler's own
+    // in-place form of `append`), so no URI text is compared here.
+    if (body->oper == appendInPlaceOper()) {
+        unsupported(act, kGrowingArray);
+    }
     return applyOper(act, uri, std::move(norm), g->node(ref)->dataType(), std::move(with));
 }
 
@@ -4208,11 +4232,6 @@ Value Evaluator::applyOper(
     Activation &act, const std::string &uri, std::vector<Value> norm, type::Type *resultType,
     std::vector<Value> with) {
     const auto *def = tensor::ops::OpRegistry::instance().find(uri);
-
-    // A growing array has no ONNX counterpart; say why rather than that it is impure.
-    if (uri == ":struct/append_arr_in_place") {
-        unsupported(act, kGrowingArray);
-    }
 
     // Simplification has evaluated every pure operator whose arguments are constants; what is
     // left is translated. Side effects have no ONNX counterpart.

@@ -530,7 +530,7 @@ ab449b7d874527d9 ok src/stdlib/opt.cml
 49015cbc4407a506 ok src/stdlib/optim.cml
 cfd1905583789732 ok src/stdlib/para.cml
 a82098797df46210 ok src/stdlib/perf.cml
-31964f5e7b7127ae ok src/stdlib/prelude.cml
+db6b57f07670f7c0 ok src/stdlib/prelude.cml
 0a2356410c7e5b3c ok src/stdlib/process.cml
 8f9a9b5b4701c251 ok src/stdlib/pyplot.cml
 692ab627c3592a87 ok src/stdlib/python.cml
@@ -4422,6 +4422,7 @@ d9c9c90db93e9ff5 ok test/cases/runtime/edit_record/a_program.cml
 b7fe2345bab84529 ok test/cases/showcase_s2/train_curve.cml
 d6ba16a66d67b7f4 ok test/cases/smoke/core/fib10_pipeline.cml
 ee6fd7edfd524efb ok test/cases/smoke/core/prl_scheduler.cml
+5274076502ce49e5 ok test/cases/tools/arrangeable_fill_access.cml
 7be8e7ab85335a94 ok test/cases/tools/debugger/fixtures/branch.cml
 68a224c66164288b ok test/cases/tools/debugger/fixtures/broken.cml
 e050daf9fd8952ad ok test/cases/tools/debugger/fixtures/calls.cml

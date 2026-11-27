@@ -1,0 +1,33 @@
+// Three operations the compiler writes itself -- a construction (`fill`), a member read by place
+// (`access`) and one by name (`access_key`) -- are answered by `core.arrangeable` as freely
+// arrangeable: they write nothing, reach nothing outside the program, cannot fault where they are
+// written, and end. That answer is what lets a pass move one out of a loop body or an arm, so it is
+// a reading the fact layer states and not a property a reader may re-derive.
+//
+// The case is written in functions so that nothing folds: a construction of constants, or a member
+// read of an aggregate the builder just made, could be computed before any pass sees the graph, and
+// then a form would be missing from the reading instead of being answered.
+//
+// The reading is `test::facts_compare`'s row per operator (`FACTS_COMPARE answers_row
+// node_kind=oper oper=... nodes=... free=... kept=...`): each of the three has one node, answered
+// freely arrangeable, and none answered no.
+type Point = { x: int, y: int }
+
+func built(a: int, b: int) => (int, int) {
+    return fill((0, 0), a, b)
+}
+
+func read_by_place(t: (int, int)) => int {
+    return access::<(int, int), int><0>(t)
+}
+
+func read_by_name(p: Point) => int {
+    return access_key::<Point, int><'y'>(p)
+}
+
+func main() => int sync {
+    let p: Point = { x: 1, y: 2 }
+    let pair = built(3, 4)
+    println(read_by_place(pair), read_by_name(p))
+    return 0
+}
