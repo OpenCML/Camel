@@ -128,13 +128,6 @@ void GraphDraft::noteEditedNode(gc_node_ref_t id, bool inPlace) {
     recordEdit(EditKind::LowLevel, std::span<const uint32_t>(&region, 1));
 }
 
-void GraphDraft::noteGraphWideEdit() {
-    if (namedEdits_ != 0) {
-        return;
-    }
-    recordEdit(EditKind::LowLevel, {});
-}
-
 bool GraphDraft::editedWith(EditKind kind) const {
     return (editKinds_ & (static_cast<uint32_t>(1) << static_cast<uint32_t>(kind))) != 0;
 }
