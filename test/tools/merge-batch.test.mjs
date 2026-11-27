@@ -378,15 +378,14 @@ const known = runRead(
 const knownTip = known.out.split('\n').find((one) => one.startsWith('  tip '))?.trim().split(/\s+/)[1];
 check('reds that are all in the newest promotion table do not stop the batch: exit 0 and pushed', known.status === 0 && knownTip && remoteTip() === knownTip, known.out);
 check(
-    'the plans are the selector\'s, relative to the seat, and the selector is asked against the integration tip the batch started from',
-    fs.readFileSync(readLog, 'utf8').trim() === 'test/plans/smoke,test/plans/feat/compile' &&
-        fs.readFileSync(selectLog, 'utf8').trim() === `--changed --list base=${readBase}`,
+    'a batch that changes a path the build reads is read on the whole fast layer, and the selector is not asked',
+    fs.readFileSync(readLog, 'utf8').trim() === 'test/plans' && !fs.existsSync(selectLog),
     `${fs.existsSync(readLog) ? fs.readFileSync(readLog, 'utf8') : ''}${fs.existsSync(selectLog) ? fs.readFileSync(selectLog, 'utf8') : ''}`,
 );
 const record = knownTip && fs.existsSync(path.join(common, 'camel-read', knownTip)) ? fs.readFileSync(path.join(common, 'camel-read', knownTip), 'utf8') : '';
 check(
     'the reading record is written for the tip: plans, red count, the newest table as baseline, new=0',
-    record.includes('plans=test/plans/smoke,test/plans/feat/compile\n') &&
+    record.includes('plans=test/plans\n') &&
         record.includes('reds=2\n') &&
         record.includes('baseline=2026-01-02-promotion-3-reds.tsv\n') &&
         record.includes('tier=fast\nnew=0\n'),
@@ -509,6 +508,30 @@ check(
         sourceArrive.out.includes('with a change the build reads; run the batch again from the new tip') &&
         !git(readRemote, ['log', '--format=%s', `${sourceBefore}..integration`]).includes('lane/source-arrives'),
     sourceArrive.out,
+);
+
+// A batch that changes cases and no path the build reads is read through the plans the selector maps
+// it to, asked against the tip the batch started from.
+laneFrom('lane/cases-only', 'test/cases/new_case.cml', 'func main() { println(1) }\n');
+for (const file of [readLog, selectLog]) fs.rmSync(file, { force: true });
+fs.writeFileSync(scenario, JSON.stringify([row('plan_a', 'known_red', 'fail')]));
+const casesBase = git(readRemote, ['rev-parse', 'integration']);
+const casesOnly = spawnSync(
+    process.execPath,
+    [
+        tool, '--seat', readSeat, '--lane', 'lane/cases-only=adds a case; its plan green',
+        '--build', 'node -e "process.exit(0)"',
+        '--read', `node "${readStub}" "{seat}" {plans}`,
+        '--base', 'origin/integration',
+    ],
+    { encoding: 'utf8', timeout: 120000 },
+);
+check(
+    'a batch that changes only cases is read through the selector\'s plans, relative to the seat, asked against its starting tip',
+    (casesOnly.status ?? -1) === 0 &&
+        fs.existsSync(readLog) && fs.readFileSync(readLog, 'utf8').trim() === 'test/plans/smoke,test/plans/feat/compile' &&
+        fs.existsSync(selectLog) && fs.readFileSync(selectLog, 'utf8').trim() === `--changed --list base=${casesBase}`,
+    `${casesOnly.stdout ?? ''}${casesOnly.stderr ?? ''}${fs.existsSync(selectLog) ? fs.readFileSync(selectLog, 'utf8') : ''}`,
 );
 
 fs.rmSync(readRoot, { recursive: true, force: true });
