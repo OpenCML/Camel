@@ -524,7 +524,7 @@ cb32c9dd5cb81d91 ok src/stdlib/io.cml
 781c6adf9b64b7fe ok src/stdlib/laws.cml
 d07e8f7a68b8a5c8 ok src/stdlib/math.cml
 4bd3189fe34a101a ok src/stdlib/nn.cml
-ed23091ac6e398c2 ok src/stdlib/onnx.cml
+baea1cad87387cd6 ok src/stdlib/onnx.cml
 98dd633807148399 ok src/stdlib/opt.cml
 49015cbc4407a506 ok src/stdlib/optim.cml
 cfd1905583789732 ok src/stdlib/para.cml
