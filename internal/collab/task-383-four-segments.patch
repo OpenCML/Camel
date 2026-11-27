@@ -1,0 +1,275 @@
+diff --git a/src/stdlib/onnx/exporter.cpp b/src/stdlib/onnx/exporter.cpp
+index ab862ef8cf..9c51998137 100644
+--- a/src/stdlib/onnx/exporter.cpp
++++ b/src/stdlib/onnx/exporter.cpp
+@@ -2726,6 +2726,60 @@ std::string int64ScalarOperand(Emitter &emitter, int64_t value) {
+         TypeCode::Int64);
+ }
+ 
++/// The element facts a carried sequence needs: the collection's element type, with rank 1 when the
++/// collection holds scalars. `ConcatFromSequence` concatenates whole elements, so an element of rank
++/// 0 (the element of `float[]`) cannot be one; such a collection is carried as
++/// `sequence(tensor(float[1]))` and each element is unsqueezed on the way in.
++TensorFacts sequenceElementFacts(const TensorFacts &elem) {
++    if (elem.shape && !elem.shape->empty()) {
++        return elem;
++    }
++    return {elem.dtype, tensor::StaticShape{int64_t{1}}};
++}
++
++/// `SequenceEmpty` for a collection carried as a sequence: the init of a Loop state. The caller
++/// checks that the element type is known (a model states it).
++Value sequenceEmptyValue(const TensorFacts &elem, Emitter &emitter) {
++    const std::string name = emitter.node(
++        "SequenceEmpty",
++        {},
++        {Attribute::makeInt("dtype", static_cast<int64_t>(*elem.dtype))},
++        "seq_empty");
++    return Value::symbolicSequence(name, *elem.dtype, elem.shape);
++}
++
++/// The value an `append` inserts into a carried sequence: rank 0 is unsqueezed to `[1]` (see
++/// `sequenceElementFacts`), rank 1 or more goes in as it is.
++Value sequenceElementValue(const Value &element, Emitter &emitter) {
++    const TensorFacts facts = factsOf(element);
++    if (facts.shape && !facts.shape->empty()) {
++        return element;
++    }
++    const std::string name = emitter.node(
++        "Unsqueeze",
++        {emitter.operand(element, facts.dtype)},
++        {Attribute::makeInts("axes", std::vector<int64_t>{0})},
++        "seq_element");
++    return Value::symbolic(name, facts.dtype, tensor::StaticShape{int64_t{1}});
++}
++
++/// The array a carried sequence stands for, read out where a tensor is wanted: the round's state is
++/// the *prefix* the array has before that round, and `ConcatFromSequence` is `SequenceInsert`'s
++/// inverse. The first dimension is the run's, so it stays open.
++Value concatFromSequence(const Value &sequence, Emitter &emitter) {
++    const TensorFacts elem = factsOf(sequence);
++    const std::string name = emitter.node(
++        "ConcatFromSequence",
++        {emitter.operand(sequence, elem.dtype)},
++        {Attribute::makeInt("axis", 0)},
++        "seq_concat");
++    tensor::StaticShape shape{std::nullopt};
++    if (elem.shape) {
++        shape.insert(shape.end(), elem.shape->begin(), elem.shape->end());
++    }
++    return Value::symbolic(name, elem.dtype, shape);
++}
++
+ Value Evaluator::evalLoopNode(Activation &act, gc_node_ref_t ref) {
+     auto *g                          = act.graph;
+     const camel::runtime::LoopView loop = camel::runtime::loopOf(*g, ref);
+@@ -2762,6 +2816,46 @@ Value Evaluator::evalLoopNode(Activation &act, gc_node_ref_t ref) {
+     }
+     // The states the Loop carries, in the order they are carried: the ones that are no
+     // collection, and the position each has in the vector emitLoopScanning works with.
++    //
++    // A claimed collection whose append is *also* a collected value is the case this has to split:
++    // the same node serves the state's next value and one scan slot (`components[j] ==
++    // components[states + c]`), so the array is one value two paths could own. Reading it out of the
++    // scan is impossible -- one round's value is the whole array grown so far, and a scan output is
++    // one tensor of a fixed shape per round -- so it is carried as a sequence instead: a
++    // `SequenceEmpty` init, `SequenceInsert` a round, `ConcatFromSequence` for whoever wants the
++    // array. The node both positions name is then evaluated once (the memo has it), and the scan slot
++    // it duplicated is not a Loop output at all: `fields` below is built at export time, so that
++    // slot's field is the concatenation taken after the Loop. One array, one path.
++    std::vector<std::optional<size_t>> sequenceCarried(states);
++    for (size_t j = 0; j < states && scans != 0; ++j) {
++        // Only an append can be the array's writer: any other component is one value of the round
++        // that happens to sit in two places (a counter carried as a state and collected as a slot
++        // is the ordinary case), and its scan slot stays a scan output.
++        const std::string_view componentUri = operUriOf(g->view(), components[j]);
++        const bool isAppend = componentUri == ":struct/append_arr" ||
++                              componentUri == ":struct/append_arr_owned";
++        if (!isAppend) {
++            continue;
++        }
++        std::optional<size_t> duplicated;
++        for (size_t c = 0; c < scans; ++c) {
++            if (components[j] == components[states + c]) {
++                duplicated = c;
++                break;
++            }
++        }
++        if (!duplicated.has_value()) {
++            continue;
++        }
++        if (!fromScan[j].has_value()) {
++            unsupported(
++                act,
++                "the same array is both a carried state and a collected value of the loop, and "
++                "neither is the other's only writer; the export cannot tell which one it is");
++        }
++        sequenceCarried[j] = duplicated;
++        fromScan[j]       = std::nullopt;
++    }
+     std::vector<Value> carriedInit;
+     std::vector<std::optional<size_t>> carriedAt(states);
+     for (size_t j = 0; j < states; ++j) {
+@@ -2769,7 +2863,25 @@ Value Evaluator::evalLoopNode(Activation &act, gc_node_ref_t ref) {
+             continue;
+         }
+         carriedAt[j] = carriedInit.size();
+-        carriedInit.push_back(init[j]);
++        if (const std::optional<size_t> slot = sequenceCarried[j]) {
++            // The element the collection holds: the type the append inserts, which is the type of
++            // the node feeding the append's `with` operand (a collection of scalars is carried as
++            // rank-1 elements; see sequenceElementFacts).
++            const auto withIns = g->withInputsOf(components[j]);
++            type::Type *elemTy = withIns.empty() ? nullptr : g->node(withIns.front())->dataType();
++            const TensorFacts element =
++                elemTy != nullptr ? tensor::tensorFactsOf(elemTy) : TensorFacts{};
++            const TensorFacts carried = sequenceElementFacts(element);
++            if (!carried.dtype) {
++                unsupported(
++                    act,
++                    "the elements of the array a loop collects have no dtype the model states");
++            }
++            (void)slot;
++            carriedInit.push_back(sequenceEmptyValue(carried, emitter_));
++        } else {
++            carriedInit.push_back(init[j]);
++        }
+     }
+     // A Loop carries tensors, scalars, and tuples or structs of them: what a recursion carries,
+     // checked the same way (emitLoop checks the shapes of each round).
+@@ -2927,8 +3039,11 @@ Value Evaluator::evalLoopNode(Activation &act, gc_node_ref_t ref) {
+             round.ports.emplace(*elementPort, std::move(element));
+         }
+         for (size_t j = 0; j < states; ++j) {
+-            // A state that is the collection is bound to nothing: its one use is the `append`
+-            // this round does not evaluate, and stateIsTheCollection proved that is the only one.
++            // A state that is the collection is bound to nothing: its one use is the `append` this
++            // round does not evaluate, and stateIsTheCollection proved that is the only one. A state
++            // that is the collection *and* whose append is a collected value is bound to the
++            // sequence it is carried as -- and the append is evaluated, because a scan slot names
++            // it too.
+             round.ports.emplace(
+                 loop.bodyStateParam(j),
+                 fromScan[j].has_value() ? Value{} : state[*carriedAt[j]]);
+@@ -2951,6 +3066,15 @@ Value Evaluator::evalLoopNode(Activation &act, gc_node_ref_t ref) {
+                 }
+             }
+             for (size_t c = 0; c < scans; ++c) {
++                // A slot whose node is a carried state's append is not collected: the append is the
++                // state's next value (a sequence), and the array that slot would collect has no one
++                // shape per round. The array is `ConcatFromSequence` of the state, after the Loop.
++                if (std::ranges::any_of(
++                        sequenceCarried, [c](const std::optional<size_t> &slot) {
++                            return slot.has_value() && *slot == c;
++                        })) {
++                    continue;
++                }
+                 next.push_back(eval(round, components[states + c]));
+             }
+         }
+@@ -2974,28 +3098,50 @@ Value Evaluator::evalLoopNode(Activation &act, gc_node_ref_t ref) {
+     };
+ 
+     // One fact per scan output: the element type the loop's own type declares (what one round
+-    // collects). The shape of a round's value is what the round states, which the body gives.
+-    std::vector<TensorFacts> scanElem(scans);
++    // collects). The shape of a round's value is what the round states, which the body gives. A slot
++    // whose node is a carried state's append is not a scan output (see sequenceCarried above).
++    const auto isSequenceSlot = [&](size_t c) {
++        return std::ranges::any_of(sequenceCarried, [c](const std::optional<size_t> &slot) {
++            return slot.has_value() && *slot == c;
++        });
++    };
++    std::vector<TensorFacts> scanElem;
+     for (size_t c = 0; c < scans; ++c) {
++        if (isSequenceSlot(c)) {
++            continue;
++        }
+         type::Type *element = loop.collectionElemType(c);
+         if (element == nullptr) {
+             unsupported(
+                 act, std::format("collection slot {} of the loop has no element type", c + 1));
+         }
+-        scanElem[c] = tensor::tensorFactsOf(element);
++        scanElem.push_back(tensor::tensorFactsOf(element));
+     }
+ 
+-    const LoopEmission emission =
+-        emitLoopScanning(act, trip, carriedInit, body, scans, scanElem, tripExtent, firstCond);
++    const LoopEmission emission = emitLoopScanning(
++        act, trip, carriedInit, body, scanElem.size(), scanElem, tripExtent, firstCond);
+     // The loop's value, in the layout camel/runtime/loop.h states: the state values, then one
+-    // array per collection slot. A state that is the collection is read out of the scan output.
++    // array per collection slot. A state that is the collection is read out of the scan output; a
++    // slot whose node is a carried state's append is read out of the sequence *after* the Loop --
++    // `fields` is this function's own layout, not the Loop's output order, so the slot still gets a
++    // field while the Loop itself does not write it.
+     std::vector<Value> fields(states + scans);
+     for (size_t j = 0; j < states; ++j) {
+         fields[j] = fromScan[j].has_value() ? emission.scans[*fromScan[j]]
+                                             : emission.states[*carriedAt[j]];
+     }
++    size_t scanned = 0;
+     for (size_t c = 0; c < scans; ++c) {
+-        fields[states + c] = emission.scans[c];
++        if (isSequenceSlot(c)) {
++            for (size_t j = 0; j < states; ++j) {
++                if (sequenceCarried[j] == c) {
++                    fields[states + c] =
++                        concatFromSequence(emission.states[*carriedAt[j]], emitter_);
++                }
++            }
++            continue;
++        }
++        fields[states + c] = emission.scans[scanned++];
+     }
+     if (!loop.valueIsTuple()) {
+         return fields.front();
+@@ -4272,6 +4418,47 @@ Value Evaluator::applyOper(
+             return *folded;
+         }
+     }
++    // A value a Loop carries as a sequence (`sequenceCarried` in evalLoopNode) is not a tensor, and
++    // the two operators that meet one are spelled here rather than as registry entries: they belong
++    // to the carry, not to the operator, and an operator that receives no sequence keeps the path it
++    // had -- this branch is reached only when an argument *is* a sequence.
++    const auto isSequenceValue = [](const Value &v) { return v.isSequence(); };
++    if (std::ranges::any_of(norm, isSequenceValue) ||
++        std::ranges::any_of(with, isSequenceValue)) {
++        if (uri == ":struct/append_arr" || uri == ":struct/append_arr_owned") {
++            // `append` into the array the loop grows is `SequenceInsert`: the array is the sequence,
++            // and the element is what the round adds. A sequence of scalars is carried as rank-1
++            // elements, so a scalar element is unsqueezed first (see sequenceElementFacts).
++            if (norm.size() != 1 || with.size() != 1 || !norm.front().isSequence()) {
++                unsupported(
++                    act,
++                    "an append on a carried sequence must take the sequence and one element");
++            }
++            const Value &carried       = norm.front();
++            const TensorFacts element  = factsOf(with.front());
++            const Value inserted       = sequenceElementValue(with.front(), emitter_);
++            const std::string name     = emitter_.node(
++                "SequenceInsert",
++                {emitter_.operand(carried, factsOf(carried).dtype),
++                 emitter_.operand(inserted, element.dtype)},
++                {},
++                "seq_insert");
++            return Value::symbolicSequence(
++                name, *element.dtype, sequenceElementFacts(element).shape);
++        }
++        // Anything else reading a carried sequence reads an *array*: the sequence's own inverse is
++        // `ConcatFromSequence`, and the call then lowers as it always did. The conversion is here,
++        // at the reader, and never on the sequence's own chain: an append's `norm` operand is the
++        // round's state value, which is the prefix, exactly what the array is.
++        std::vector<Value> coercedNorm, coercedWith;
++        for (const Value &v : norm) {
++            coercedNorm.push_back(v.isSequence() ? concatFromSequence(v, emitter_) : v);
++        }
++        for (const Value &v : with) {
++            coercedWith.push_back(v.isSequence() ? concatFromSequence(v, emitter_) : v);
++        }
++        return applyOper(act, uri, std::move(coercedNorm), resultType, std::move(coercedWith));
++    }
+     const Lowering *lowering = LoweringRegistry::instance().find(uri, emitter_.opset());
+     if (!lowering || !with.empty()) {
+         // An append into an array inside a loop the export carries as a body is refused by name,
