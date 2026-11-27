@@ -1,5 +1,8 @@
-// `max_pool2d` through the library's own `vjp`: the transpose half, reached only if the forward half
-// binds. The number is the library's pullback against the engine's `grad` of the same loss.
+// `max_pool2d` through the library's own `vjp`: the transpose half, which is reached only after the
+// forward half binds. The two pooling laws are filed and not walked today (`rulesets/transpose.cml`
+// and the stops its comment measures at `max_pool2d_t` / `avg_pool2d_t`), so the walk may end in a
+// fault. The probe measures which of the two happened and prints it, instead of ending the run: the
+// wall is the reading, and the trace on standard error carries its reason.
 
 import { grad } from autodiff
 import { max_pool2d } from nn
@@ -11,21 +14,29 @@ func image() => f32[...] {
 }
 
 func max_total(x: f32[1, 2, 4, 4]) => float {
-    return float(sum(tanh(max_pool2d(x, 2))))
+    return float(sum(tanh(max_pool2d<2, 2, 0>(x))))
 }
 
 with <x: f32[1, 2, 4, 4]>
 func max_engine() => float {
-    return float(sum(tanh(max_pool2d(x, 2))))
+    return float(sum(tanh(max_pool2d<2, 2, 0>(x))))
 }
 
-func main() => int sync {
-    let x = image() as f32[1, 2, 4, 4]
+func measure(x: f32[1, 2, 4, 4]) => string! {
     let (_, pullback) = vjp(max_total)(x)
     let library = pullback(1.0).0
     let engine = grad(max_engine)<x>()
     let diff = float(sum(abs(library - engine)))
     let norm = float(sum(abs(library)))
-    `probe max_reverse diff={} library_norm={}`->format<diff, norm>->println
+    return `probe max_reverse diff={} library_norm={}`->format<diff, norm>
+}
+
+func main() => int sync {
+    let x = image() as f32[1, 2, 4, 4]
+    let line = match attempt(measure)(x) {
+        case error e => `probe max_reverse wall kind={}`->format<e.kind>
+        case measured => measured
+    }
+    println(line)
     return 0
 }

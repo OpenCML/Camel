@@ -1,12 +1,13 @@
-# Untracked probe plan: the two walls the pooling laws wait at, measured with the transform trace on.
+# The pooling probes: the two walls the pooling laws wait at, measured with the transform trace on.
 # `probe.max_forward` is the forward half alone (jvp, no transpose) and carries a number; the two
-# reverse cases are the library's vjp, where the transpose half is reached. Not part of the tree's
-# plans.
+# reverse cases are the library's vjp, whose transpose half is refused today at `law-reads-a-value`
+# (the stops the pooling laws in `rulesets/transpose.cml` record in their comments), so each prints
+# the kind of the wall it met, and the trace on standard error carries the wall's own reason.
 [[tests]]
 name = "probe.max_forward"
 desc = "jvp(max_pool2d) forward half: tangent against the engine's mask, trace on, number pinned."
 kind = "behavior"
-case = "./probe_max_forward.cml"
+case = "../../cases/probe/probe_max_forward.cml"
 args = ["--trace", "transforms", "${case}", "${backend}"]
 backends = ["nvm"]
 expect_exit = 0
@@ -14,18 +15,20 @@ expect_output_contains = ["probe max_forward value=5.599999904632568 tangent=-0.
 
 [[tests]]
 name = "probe.max_reverse"
-desc = "max_pool2d through the library's vjp, trace on."
+desc = "max_pool2d through the library's vjp, trace on: the wall the transpose half meets, and the kind it prints."
 kind = "behavior"
-case = "./probe_max_reverse.cml"
+case = "../../cases/probe/probe_max_reverse.cml"
 args = ["--trace", "transforms", "${case}", "${backend}"]
 backends = ["nvm"]
 expect_exit = 0
+expect_output_contains = ["probe max_reverse wall kind=RuntimeError"]
 
 [[tests]]
 name = "probe.avg_reverse"
-desc = "avg_pool2d through the library's vjp, trace on."
+desc = "avg_pool2d through the library's vjp, trace on: the wall the transpose half meets, and the kind it prints."
 kind = "behavior"
-case = "./probe_avg_reverse.cml"
+case = "../../cases/probe/probe_avg_reverse.cml"
 args = ["--trace", "transforms", "${case}", "${backend}"]
 backends = ["nvm"]
 expect_exit = 0
+expect_output_contains = ["probe avg_reverse wall kind=RuntimeError"]
