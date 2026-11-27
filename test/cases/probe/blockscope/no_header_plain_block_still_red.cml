@@ -3,7 +3,7 @@
 // head's and not the program's.
 func main() => int sync {
     let x = 1
-    if x == 1 {
+    if x == 1 then {
         let pick = func (n: Node) => Node { n }
         println(pick)
     }
