@@ -461,3 +461,17 @@ git worktree add --detach <旧提交>
 **坑二：rebase 让笔数变少不等于丢笔。** 9 笔变 5 笔，是因为 4 笔在上游已有等价补丁，`rebase` 正常跳过。判"丢没丢"的办法只有一条：**逐笔在 integration 上查同名提交**，查到就把"原几笔 → 新几笔对应哪一笔"列成对照表写进交回。不写这张表，半年后看这条枝的人只会看到"少了两笔"，然后开始怀疑 rebase 吃掉了东西 —— 而那时已经没人记得查过。
 
 由此得一条通用的：**"读数前后比"里的"前"，永远是"这条活开始之前的那个能代表基线的状态"，不是"这条活开始之前它自己所在的那个位置"。** 两者在落后很多的枝上是不同的两棵树。
+
+## 工作树里留着上个会话的 `rebase-merge`：先读、再 abort、别 `rm -fr`
+
+`coord` 那棵树今晚出现过一个症状组合：`git status` 说 "interactive rebase in progress; onto 164245bb8f"，`git push` 一直被拒（non-fast-forward），`git rebase` 又说 "there is already a rebase-merge directory"。三个都指向同一件事：**上一个会话被强停时留下了一个没走完的 rebase**，而当前分支的 ref 还停在那次 rebase 的 `orig-head` 上。
+
+处置顺序（这次生效的）：
+1. `git rev-parse --git-dir` —— 工作树的 `.git` 是文件，`rebase-merge` 在 `D:/Projects/Camel/.git/worktrees/<名字>/rebase-merge`，不在树根
+2. 读 `head-name`/`orig-head`/`onto`/`stopped-sha`/`message` —— 这五个文件就能说清"它在做什么、卡在哪一步"
+3. `git rebase --abort` —— 回到 `orig-head`
+4. 用 `git reflog` 找回自己真正最新的那个提交，`git reset --hard <sha>`，再按正常方式 rebase 到目标尖端
+
+**不要 `rm -fr` 那个目录**：它里面 `message` 与 `stopped-sha` 是"停止原因"的唯一记录；`--abort` 会先读它们再清场，`rm -fr` 只会把它们丢掉，然后你会对着一个 ref 停错位置的分支猜。
+
+一条伴随症状值得记：`pull --rebase` 在有残留 rebase 时**不报错、也不动**，看起来像成功。所以"pull 之后引用没变"不是远端没更新，可能是本地起不来 —— 判据是 `git rev-parse HEAD` 与 reflog，不是命令的沉默。
