@@ -25,8 +25,16 @@
 // Every transpose here is asked twice, at a different cotangent, and the plan asserts the second
 // answers (4, 3, 5) rather than the first: a number that also appears as a forward reading cannot tell
 // a working transpose from a coincidence, and the answer has to be proportional to the cotangent to
-// pass. `skip=` must not appear at all: this shape answered a refusal before the rule existed, and a
-// refusal is not an answer.
+// pass. `skip=` must not appear at all.
+//
+// This shape is red today, and not for a reason any rule above is about: the refusal is the loop's
+// **iterable**. `for i in 0 .. 3` asks for the walked value's `for` operator (`stdlib/prelude.cml`),
+// whose answer is a stream -- a value with no tangent space -- and the forward lift has no reading for
+// a callee whose result has no tangent space, so the whole function is refused at that callee. The
+// integer escape contributes nothing to the refusal: the same loop over an array literal lifts and
+// differentiates, with `int(3.0 * x)` still inside its body. What is missing is the reading, not the
+// integer rule; until it is written the fault names `stdlib/prelude.cml`'s `operator for` and this
+// file's `jvp` line, which is at least the truth about where the lift stopped.
 import rulesets.jvp
 import rulesets.transpose
 import { jvp, split, transpose } from transforms
