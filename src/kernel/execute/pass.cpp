@@ -2177,8 +2177,8 @@ bool passBoundaryViolation(
         // fine" is told apart from "I refused to look": a decline is the analysis saying it cannot
         // name the resource, and a number that only ever grows is how that shows up. A run that
         // does not ask pays nothing for it, because the arguments are not formatted unless the line
-        // is emitted. The `any unknown` component is the one that is no longer a decline -- it
-        // refuses -- and it is still printed so that a refused run's summary says how many such
+        // is emitted. The `any unknown` component is a refusal, not a decline -- the run stops on
+        // it -- and it is still printed so that a refused run's summary says how many such
         // readings the refusal was about.
         camel::runtime::EffectContainmentReport report;
         const camel::runtime::GCGraph *refused = nullptr;
