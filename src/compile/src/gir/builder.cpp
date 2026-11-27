@@ -895,16 +895,20 @@ void_ptr_t Builder::visitDeclNode(const GCT::node_ptr_t &gct) {
     ENTER("DECL");
     if (gct->nativeDeclaration()) {
         if (!declarationHasOperator(gct)) {
-            // The module implements no operator for this body-less declaration, so nobody calls
-            // it: it is the pipeline's own (a pass, design principles 9.3), which has no executor,
-            // no signature to publish and nothing to export, or a declaration the module promised
-            // and implements nowhere. The operator table answers that, not the declaration's
-            // shape: a function transform `(f: F) => F!` that a module also implements an operator
-            // for is that operator (`rewrite`'s engine, called as `f->rewrite<rules>`). This
-            // records the name so the export list does not look for an entity that will not exist.
+            // The module implements no operator for this body-less declaration. That answers one
+            // question -- is it the pipeline's own (a pass, design principles 9.3), which has no
+            // executor, no signature to publish and nothing to export -- and answers nothing about
+            // whether the declaration should be checked: a declaration that writes `#op` claims an
+            // operator, and a claim nothing implements is reported where it is written
+            // (`declareNativeOperator`, below). Only a declaration that stands for no operator at
+            // all stops here. The operator table says which, not the declaration's shape: a
+            // function transform `(f: F) => F!` a module also implements an operator for is that
+            // operator (`rewrite`'s engine, called as `f->rewrite<rules>`).
             unit_->passDeclarations.insert(gct->name());
-            LEAVE("DECL");
-            return nullptr;
+            if (!nativeOperatorUri(gct).has_value()) {
+                LEAVE("DECL");
+                return nullptr;
+            }
         }
         // A body-less declaration declares an operator of a C++ module (design principles 6.4):
         // it is checked and kept as an operator rule, not as a graph (step 1).
