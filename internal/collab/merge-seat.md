@@ -244,6 +244,33 @@ git ls-remote origin refs/heads/integration   # 这一步是判据；上一行�
 而且报给协调者的必须是**回读的那个 sha**，连同 `HEAD^{tree}` 与构建记录是否在。单父笔、缺 `Lane-Reading`、
 记录落在第二父 —— 这三种拒绝都发生在 `push` 之后、`ls-remote` 之前，只有回读能把它们和"推成功"分开。
 
+## 合之前先 `fetch`，并在**远端尖端**上重放 arrival（2026-11-27 两次实测）
+
+一晚之内错了两次，两次是同一个错：**手里的树不是远端那个尖端**。
+
+一次是回退之后重跑读数，`origin/integration` 还指着回退**之前**的 sha，`git checkout --detach origin/integration`
+拿到的就是那一层 ⇒ 交出去的 "回退后 10 fail / 7 SIGABRT" 其实是**回退前**的读数。这跟"读数不存在"同价。
+一次是两笔 golden 建在旧底上，钩子拒得明明白白：
+
+```
+pre-push: refusing to push <sha> to refs/heads/integration: the oldest merge in the push has first parent
+          <旧尖端>, and refs/heads/integration is <新尖端>.
+pre-push: integration was merged into the seat instead of the lanes into integration;
+```
+
+两条检查项，做在**动手之前**：
+
+```
+1. git fetch https://github.com/OpenCML/Camel.git '+refs/heads/*:refs/remotes/origin/*' --prune
+2. git rev-parse --short origin/integration      # 这就是这一批的第一父
+   git checkout --detach origin/integration      # 然后在这上面 git merge --no-ff <lane> -F <msg>
+3. 被钩子拒了"first parent 不对"，不要重推：把每一枚 arrival 在新尖端上**按原顺序重放**，
+   重放后 `git log --first-parent --format='%h %p %s' -4` 逐级核对第一父，再复检 `-Check ast-hashes`、再编。
+```
+
+同理，贴任何读数都要带两行：`git rev-parse HEAD`（读的是哪棵树）与 `git ls-remote origin refs/heads/integration`（远端在哪）。
+树不对时，读数不是"偏一点"，而是**另一个问题域的读数**。
+
 ## 成批合并后、推送前：在该批碰过的计划上跑一遍，与尖端比红名单
 
 这条规矩来自一次真实的漏失：一批合进来时，我贴的是**该车道自己的读数**加一句 `no new red against <sha>`，
