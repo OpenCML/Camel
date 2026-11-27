@@ -1,5 +1,6 @@
 /**
- * The value main returns is the exit code.
+ * `main` returns 7, and that is the function's value, not the exit code (design principles 9.8):
+ * without a `process::exit(code)` call the run ends 0, after printing `done`.
  */
 
 func main() => int sync {

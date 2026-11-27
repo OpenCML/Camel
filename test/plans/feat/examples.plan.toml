@@ -45,7 +45,7 @@ golden = "golden/examples/algorithms_merge_sort.txt"
 
 [[tests]]
 name = "examples.cli.exit_status"
-desc = "main's int result is the exit code: usage over the limit exits with 1."
+desc = "`exit(1)` is what ends usage over the limit with 1; the int `main` returns is the function's own value (design principles 9.8)."
 case = "../../../examples/cli/exit_status.cml"
 golden = "golden/examples/cli_exit_status.txt"
 args = ["${case}", "--arg", "used=91", "--arg", "limit=80", "${backend}"]

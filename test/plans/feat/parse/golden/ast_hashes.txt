@@ -437,7 +437,7 @@ e157747315101ece ok examples/case-study/train.cml
 ea8b0c6222b24c89 ok examples/case-study/writings/moved.cml
 c2822f654bc941d6 ok examples/case-study/writings/renamed.cml
 2c8d7803faf52ef3 ok examples/case-study/writings/swapped.cml
-8064628ab3f682b8 ok examples/cli/exit_status.cml
+d353a8fa6e276c24 ok examples/cli/exit_status.cml
 686d11808d333e9d ok examples/cli/temperature.cml
 0c61cc3c2c09bd33 ok examples/data/dedup_sets.cml
 c88dbfbb97e32819 ok examples/data/json_roundtrip.cml
@@ -2446,7 +2446,7 @@ f2f67386db87f047 ok test/cases/consistency/faults/index_out_of_range.cml
 1223a4852b556c4b ok test/cases/consistency/faults/int_text_blank.cml
 7a3e41d0e13551ae ok test/cases/consistency/faults/int_text_out_of_range.cml
 6c78fe7a7dc16464 ok test/cases/consistency/faults/int_text_trailing.cml
-61e31bc439f07add ok test/cases/consistency/faults/main_returns_code.cml
+51877f47b95eb079 ok test/cases/consistency/faults/main_returns_code.cml
 e0858442f389e78a ok test/cases/consistency/faults/mod_zero_in_function.cml
 1c65361bad991340 ok test/cases/consistency/faults/negative_index.cml
 8f158ac848516165 ok test/cases/consistency/faults/parallel_lowest_index.cml

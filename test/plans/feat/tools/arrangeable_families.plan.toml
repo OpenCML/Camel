@@ -84,11 +84,13 @@ name = "arrangeable_families.calls"
 desc = "A `sync` block whose first statement is a call of a pure function that cannot fault (`pure_call_first.cml`, the counterexample the chain case is built on). The call family in its plainest form: 2 CALL nodes, both kept. A call is an anchor that may be an effect and the body it runs is another graph's content, so the fact answers no rather than reading a body it does not have -- and the call row says it with nodes named, not only with a count."
 kind = "behavior"
 case = "../../../cases/compile/chain/pure_call_first.cml"
-args = ["${case}", "test::facts_compare"]
+args = ["-o", "${test_tmp}/entry.txt", "${case}", "test::facts_compare"]
 
-expect_exit = 6
+expect_exit = "script"
 verify_script = """
-({ input, assert }) => {
+async ({ input, assert }) => {
+const fs = await import('node:fs')
+assert(input.exit_code === 0, `unexpected exit ${input.exit_code}`)
 const out = input.normalized.stdout
 const rows = (prefix) => out.split('\n').filter(l => l.startsWith(prefix))
 const fam = rows('FACTS_COMPARE answers_family ')
@@ -102,6 +104,8 @@ assert(num(call, 'nodes') === 2 && num(call, 'free') === 0 && num(call, 'kept') 
 assert(num(line, 'no_fact') === 0, `a node got no answer from the kind: ${line}`)
 assert(fam.reduce((acc, l) => acc + num(l, 'nodes'), 0) === num(line, 'nodes'),
     `the family rows do not cover the nodes: ${fam.join(' ; ')}`)
+const value = fs.readFileSync(input.test_tmp + '/entry.txt', 'utf8').trim()
+assert(value === '6', `the value main returns, read from -o: ${value}`)
 }
 """
 timeout_ms = 30000
@@ -111,11 +115,13 @@ name = "arrangeable_families.a_faulting_callee"
 desc = "The same shape with a callee that divides (`fault_call_first.cml`): the call family beside the `oper_may_fault` family, the division inside the callee's own body. A division may fault where it is written, so design principles 3.4 keeps it there -- the fault term is the one that decides, and it decides before the purity a pass could otherwise act on. Both operators are kept, the call with them, and the two rows together are the reading that says a callee that cannot fault is kept for the call and not for the fault."
 kind = "behavior"
 case = "../../../cases/compile/chain/fault_call_first.cml"
-args = ["${case}", "test::facts_compare"]
+args = ["-o", "${test_tmp}/entry.txt", "${case}", "test::facts_compare"]
 
-expect_exit = 50
+expect_exit = "script"
 verify_script = """
-({ input, assert }) => {
+async ({ input, assert }) => {
+const fs = await import('node:fs')
+assert(input.exit_code === 0, `unexpected exit ${input.exit_code}`)
 const out = input.normalized.stdout
 const rows = (prefix) => out.split('\n').filter(l => l.startsWith(prefix))
 const fam = rows('FACTS_COMPARE answers_family ')
@@ -131,6 +137,8 @@ assert(call && num(call, 'kept') === 2 && num(call, 'free') === 0, `a call was a
 assert(num(line, 'no_fact') === 0, `a node got no answer from the kind: ${line}`)
 assert(fam.reduce((acc, l) => acc + num(l, 'nodes'), 0) === num(line, 'nodes'),
     `the family rows do not cover the nodes: ${fam.join(' ; ')}`)
+const value = fs.readFileSync(input.test_tmp + '/entry.txt', 'utf8').trim()
+assert(value === '50', `the value main returns, read from -o: ${value}`)
 }
 """
 timeout_ms = 30000
@@ -167,11 +175,13 @@ name = "arrangeable_families.branch_and_effect"
 desc = "A function that branches over a value of its own and then prints (`branch_and_print.cml`). Here the branch's arms carry no exit GATE, so the branch is a value neither side keeps: 1 BRCH node, free. That is what makes the `brch` row of `arm_loops` readable as a fact about the arm and not about branches in general: the same kind is free where the arms hold no order and kept where one of them does."
 kind = "behavior"
 case = "../../../cases/opt/commit_checks/branch_and_print.cml"
-args = ["${case}", "test::facts_compare"]
+args = ["-o", "${test_tmp}/entry.txt", "${case}", "test::facts_compare"]
 
-expect_exit = 44
+expect_exit = "script"
 verify_script = """
-({ input, assert }) => {
+async ({ input, assert }) => {
+const fs = await import('node:fs')
+assert(input.exit_code === 0, `unexpected exit ${input.exit_code}`)
 const out = input.normalized.stdout
 const rows = (prefix) => out.split('\n').filter(l => l.startsWith(prefix))
 const fam = rows('FACTS_COMPARE answers_family ')
@@ -185,6 +195,8 @@ assert(num(brch, 'nodes') === 1 && num(brch, 'free') === 1 && num(brch, 'kept') 
 assert(num(line, 'no_fact') === 0, `a node got no answer from the kind: ${line}`)
 assert(fam.reduce((acc, l) => acc + num(l, 'nodes'), 0) === num(line, 'nodes'),
     `the family rows do not cover the nodes: ${fam.join(' ; ')}`)
+const value = fs.readFileSync(input.test_tmp + '/entry.txt', 'utf8').trim()
+assert(value === '44', `the value main returns, read from -o: ${value}`)
 }
 """
 timeout_ms = 30000

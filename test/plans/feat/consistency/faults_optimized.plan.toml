@@ -409,11 +409,11 @@ expect_exit = 0
 
 [[tests]]
 name = "end.main_returns_code"
-desc = "The value main returns is the exit code."
+desc = "`main` returns 7 -- the value of an ordinary function, not the exit code (design principles 9.8): the run prints `done` and ends 0."
 kind = "behavior"
 case = "../../../cases/consistency/faults/main_returns_code.cml"
 skip_unless = ["node", "test/tools/have-native-jit.mjs"]
-expect_exit = 7
+expect_exit = 0
 expect_stdout_starts_with = "done\n"
 
 [[tests]]
