@@ -2877,7 +2877,7 @@ node_handle_t Builder::visitLoopNode(const GCT::node_ptr_t &gct) {
     //
     // A composite literal is not one of these, and neither is the empty array literal. A
     // composite has a shape of its own, and the loop's state keeps it: the position then converts
-    // the loop's value (`loop s = {}` under `Nothing` keeps the state `{  }` and a CAST names it;
+    // the loop's value (`loop s = {}` under `Nothing` keeps the state `{}` and a CAST names it;
     // cases/loops/zero_leaf_state.cml). The empty array literal has no element type at all, and
     // takes the position's element type below, once the body is built and the elements it appends
     // are known (inferLoopStateFromAppend).
