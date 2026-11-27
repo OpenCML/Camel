@@ -3,6 +3,11 @@
 // where the program runs and not where the compiler reads it; nothing in the body catches it, so the
 // block's value is the error that fault became. The function the head was given is untouched: it
 // answers as it did before, and the block's error says nothing about it.
+//
+// The body was rewritten for the block's new reading: `d` is the draft's root, so the body no
+// longer calls it as a function (`let _ = d(q)` was the older reading, where the head's name was
+// the function). Its query on the draft stands in that place, and the fault, the two readings and
+// the untouched function are what the case still pins.
 func zero() => int {
     return 0
 }
@@ -13,9 +18,9 @@ func inc(x: int) => int {
 
 func edited(f: (x: int) => int) => int sync {
     let g = edit d = f {
+        let _ = len(nodes(d))
         let z = zero()
-        let q = 10 / z
-        let _ = d(q)
+        println(10 / z)
     }
     return match g {
         case error e => -1
