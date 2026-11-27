@@ -201,6 +201,7 @@ name = "literal_range.limits"
 desc = "The largest and the smallest literals an int and an i32 hold are accepted, -9223372036854775808 included, in every base; the four back ends print the same."
 kind = "behavior"
 case = "../../../cases/compile/literals/integer_limits.cml"
+skip_unless = ["node", "test/tools/have-native-jit.mjs"]
 args = ["${case}", "${backend}"]
 backends = ["nvm", "fvm", "jit", "prl"]
 backends_agree = ["exit_code", "stdout_normalized"]

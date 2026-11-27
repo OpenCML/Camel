@@ -11,6 +11,7 @@ kind = "snapshot"
 snapshot_stream = "stdout"
 snapshot_compare = "text_exact"
 case = "../../../cases/modules/std/json/decode_as.cml"
+skip_unless = ["node", "test/tools/have-native-jit.mjs"]
 args = ["${case}", "${backend}"]
 backends = ["nvm", "fvm", "jit", "prl"]
 backends_agree = ["exit_code", "stdout_normalized"]

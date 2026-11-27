@@ -16,6 +16,7 @@ name = "eprintln_without_import"
 desc = "`eprintln` is in the prelude , so a program calls it without an import; it has println's declaration shape — it returns its first argument — and writes standard error, while the value printed by println goes to standard output."
 kind = "behavior"
 case = "../../../cases/modules/io/eprintln.cml"
+skip_unless = ["node", "test/tools/have-native-jit.mjs"]
 args = ["${case}", "${backend}"]
 backends = ["nvm", "fvm", "jit", "prl"]
 backends_agree = ["exit_code", "stdout_normalized", "stderr_normalized"]

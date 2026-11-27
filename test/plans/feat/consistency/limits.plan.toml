@@ -27,6 +27,7 @@ timeout_ms = 30000
 
 [[tests]]
 name = "limit.direct.fits"
+skip_unless = ["node", "test/tools/have-native-jit.mjs"]
 backends_agree = ["exit_code", "stdout_normalized", "diagnostics"]
 desc = "Limit 100: depth(99) runs."
 envs = ["N=99"]
@@ -35,6 +36,7 @@ expect_stdout_starts_with = "start\n99\ndone\n"
 
 [[tests]]
 name = "limit.direct.exceeds"
+skip_unless = ["node", "test/tools/have-native-jit.mjs"]
 backends_agree = ["exit_code", "stdout_normalized", "diagnostics"]
 desc = "Limit 100: depth(100) stops with MaxRecursionDepthExceeded at the recursive call, naming the limit and how to raise it."
 envs = ["N=100"]
@@ -51,6 +53,7 @@ name = "limit.value.fits"
 backends_agree = ["exit_code", "stdout_normalized", "diagnostics"]
 desc = "Limit 100, recursion through a function value (two calls a level): step(49) runs."
 case = "../../../cases/consistency/limits/depth_value.cml"
+skip_unless = ["node", "test/tools/have-native-jit.mjs"]
 envs = ["N=49"]
 expect_exit = 0
 expect_stdout_starts_with = "start\n49\ndone\n"
@@ -60,6 +63,7 @@ name = "limit.value.exceeds"
 backends_agree = ["exit_code", "stdout_normalized", "diagnostics"]
 desc = "Limit 100, recursion through a function value: step(50) stops with the same diagnostic, at the call through the value. (std::fvm did not count these calls and ran into a segmentation fault.)"
 case = "../../../cases/consistency/limits/depth_value.cml"
+skip_unless = ["node", "test/tools/have-native-jit.mjs"]
 envs = ["N=50"]
 expect_exit = 1
 expect_diagnostic_name = "RuntimeDiag::MaxRecursionDepthExceeded"
@@ -89,6 +93,7 @@ name = "limit.direct.after_devirtualize.fits"
 backends_agree = ["exit_code", "stdout_normalized", "diagnostics"]
 desc = "Limit 100 after std::cxx::devirtualize: depth(99) still runs, on all four back ends."
 args = ["--max-recursion-depth", "100", "${case}", "std::cxx::devirtualize", "${backend}"]
+skip_unless = ["node", "test/tools/have-native-jit.mjs"]
 envs = ["N=99"]
 expect_exit = 0
 expect_stdout_starts_with = "start\n99\ndone\n"
@@ -98,6 +103,7 @@ name = "limit.direct.after_devirtualize.exceeds"
 backends_agree = ["exit_code", "stdout_normalized", "diagnostics"]
 desc = "Limit 100 after std::cxx::devirtualize: depth(100) still stops with MaxRecursionDepthExceeded at the recursive call -- the pass does not buy a frame. Red before the fix: exit 0 and `start\n100\ndone\n`."
 args = ["--max-recursion-depth", "100", "${case}", "std::cxx::devirtualize", "${backend}"]
+skip_unless = ["node", "test/tools/have-native-jit.mjs"]
 envs = ["N=100"]
 expect_exit = 1
 expect_diagnostic_name = "RuntimeDiag::MaxRecursionDepthExceeded"
@@ -147,6 +153,7 @@ name = "limit.moved.direct.without_passes.exceeds"
 backends_agree = ["exit_code", "stdout_normalized", "diagnostics"]
 desc = "Limit 10, nothing added: depth(10) stops, so the boundary the cells below move away from is the one pinned here."
 args = ["--max-recursion-depth", "10", "${case}", "${backend}"]
+skip_unless = ["node", "test/tools/have-native-jit.mjs"]
 backends = ["nvm", "fvm", "jit"]
 envs = ["N=10"]
 expect_exit = 1
@@ -162,6 +169,7 @@ name = "limit.moved.value.without_passes.exceeds"
 backends_agree = ["exit_code", "stdout_normalized", "diagnostics"]
 desc = "Limit 100, nothing added: step(50) stops, the other boundary the cells below move away from."
 case = "../../../cases/consistency/limits/depth_value.cml"
+skip_unless = ["node", "test/tools/have-native-jit.mjs"]
 args = ["--max-recursion-depth", "100", "${case}", "${backend}"]
 backends = ["nvm", "fvm", "jit"]
 envs = ["N=50"]
@@ -178,6 +186,7 @@ name = "limit.moved.direct.after_std_opt.runs"
 backends_agree = ["exit_code", "stdout_normalized", "diagnostics"]
 desc = "Limit 10, the whole std::opt: depth(10) runs -- the pipeline buys one level (allowed, 9.6), and this is where it shows."
 args = ["--max-recursion-depth", "10", "${case}", "std::opt", "${backend}"]
+skip_unless = ["node", "test/tools/have-native-jit.mjs"]
 backends = ["nvm", "fvm", "jit"]
 envs = ["N=10"]
 expect_exit = 0
@@ -188,6 +197,7 @@ name = "limit.moved.direct.after_std_opt.still_stops"
 backends_agree = ["exit_code", "stdout_normalized", "diagnostics"]
 desc = "Limit 10, the whole std::opt, one deeper: depth(11) stops. The level it bought is one, not all of them."
 args = ["--max-recursion-depth", "10", "${case}", "std::opt", "${backend}"]
+skip_unless = ["node", "test/tools/have-native-jit.mjs"]
 backends = ["nvm", "fvm", "jit"]
 envs = ["N=11"]
 expect_exit = 1
@@ -200,6 +210,7 @@ name = "limit.moved.value.after_inline.runs"
 backends_agree = ["exit_code", "stdout_normalized", "diagnostics"]
 desc = "Limit 100 after std::cxx::inline: step(50) runs -- the inliner compacts the mutual recursion to one call per level."
 case = "../../../cases/consistency/limits/depth_value.cml"
+skip_unless = ["node", "test/tools/have-native-jit.mjs"]
 args = ["--max-recursion-depth", "100", "${case}", "std::cxx::inline", "${backend}"]
 backends = ["nvm", "fvm", "jit"]
 envs = ["N=50"]
@@ -211,6 +222,7 @@ name = "limit.moved.value.after_inline.at_the_doubled_boundary"
 backends_agree = ["exit_code", "stdout_normalized", "diagnostics"]
 desc = "Limit 100 after std::cxx::inline: step(100) runs, the boundary having moved from 50 levels to 100."
 case = "../../../cases/consistency/limits/depth_value.cml"
+skip_unless = ["node", "test/tools/have-native-jit.mjs"]
 args = ["--max-recursion-depth", "100", "${case}", "std::cxx::inline", "${backend}"]
 backends = ["nvm", "fvm", "jit"]
 envs = ["N=100"]
@@ -222,6 +234,7 @@ name = "limit.moved.value.after_inline.past_it.still_stops"
 backends_agree = ["exit_code", "stdout_normalized", "diagnostics"]
 desc = "Limit 100 after std::cxx::inline, one level past the doubled boundary: step(101) stops."
 case = "../../../cases/consistency/limits/depth_value.cml"
+skip_unless = ["node", "test/tools/have-native-jit.mjs"]
 args = ["--max-recursion-depth", "100", "${case}", "std::cxx::inline", "${backend}"]
 backends = ["nvm", "fvm", "jit"]
 envs = ["N=101"]
@@ -235,6 +248,7 @@ name = "limit.moved.value.after_saturate.runs"
 backends_agree = ["exit_code", "stdout_normalized", "diagnostics"]
 desc = "Limit 100 after std::cxx::saturate and a named extraction: step(50) runs; this pass moves the boundary too."
 case = "../../../cases/consistency/limits/depth_value.cml"
+skip_unless = ["node", "test/tools/have-native-jit.mjs"]
 args = ["--max-recursion-depth", "100", "${case}", "std::cxx::saturate", "rewrite::extract cost=rules::nodes", "${backend}"]
 backends = ["nvm", "fvm", "jit"]
 envs = ["N=50"]
@@ -246,6 +260,7 @@ name = "limit.moved.value.after_saturate.still_stops"
 backends_agree = ["exit_code", "stdout_normalized", "diagnostics"]
 desc = "Limit 100 after std::cxx::saturate and a named extraction: step(100) stops -- this pass moves the boundary to 99 levels, not past them."
 case = "../../../cases/consistency/limits/depth_value.cml"
+skip_unless = ["node", "test/tools/have-native-jit.mjs"]
 args = ["--max-recursion-depth", "100", "${case}", "std::cxx::saturate", "rewrite::extract cost=rules::nodes", "${backend}"]
 backends = ["nvm", "fvm", "jit"]
 envs = ["N=100"]
@@ -259,6 +274,7 @@ name = "limit.moved.value.after_std_opt.runs"
 backends_agree = ["exit_code", "stdout_normalized", "diagnostics"]
 desc = "Limit 100 after the whole std::opt: step(50) runs."
 case = "../../../cases/consistency/limits/depth_value.cml"
+skip_unless = ["node", "test/tools/have-native-jit.mjs"]
 args = ["--max-recursion-depth", "100", "${case}", "std::opt", "${backend}"]
 backends = ["nvm", "fvm", "jit"]
 envs = ["N=50"]
@@ -270,6 +286,7 @@ name = "limit.moved.value.after_std_opt.at_the_doubled_boundary"
 backends_agree = ["exit_code", "stdout_normalized", "diagnostics"]
 desc = "Limit 100 after the whole std::opt: step(100) runs."
 case = "../../../cases/consistency/limits/depth_value.cml"
+skip_unless = ["node", "test/tools/have-native-jit.mjs"]
 args = ["--max-recursion-depth", "100", "${case}", "std::opt", "${backend}"]
 backends = ["nvm", "fvm", "jit"]
 envs = ["N=100"]
@@ -281,6 +298,7 @@ name = "limit.moved.value.after_std_opt.past_it.still_stops"
 backends_agree = ["exit_code", "stdout_normalized", "diagnostics"]
 desc = "Limit 100 after the whole std::opt, one level past the doubled boundary: step(101) stops."
 case = "../../../cases/consistency/limits/depth_value.cml"
+skip_unless = ["node", "test/tools/have-native-jit.mjs"]
 args = ["--max-recursion-depth", "100", "${case}", "std::opt", "${backend}"]
 backends = ["nvm", "fvm", "jit"]
 envs = ["N=101"]
@@ -294,6 +312,7 @@ name = "limit.map.fits"
 backends_agree = ["exit_code", "stdout_normalized", "diagnostics"]
 desc = "Limit 100, recursion inside a map element (one more call open): depth(98) runs."
 case = "../../../cases/consistency/limits/depth_map.cml"
+skip_unless = ["node", "test/tools/have-native-jit.mjs"]
 envs = ["N=98"]
 expect_exit = 0
 expect_stdout_starts_with = "start\n[98, 3, 1]\ndone\n"
@@ -303,6 +322,7 @@ name = "limit.map.exceeds"
 backends_agree = ["exit_code", "stdout_normalized", "diagnostics"]
 desc = "Limit 100, recursion inside a map element: depth(130) stops with the same diagnostic. The count follows the element onto the thread that runs it under std::prl."
 case = "../../../cases/consistency/limits/depth_map.cml"
+skip_unless = ["node", "test/tools/have-native-jit.mjs"]
 envs = ["N=130"]
 expect_exit = 1
 expect_diagnostic_name = "RuntimeDiag::MaxRecursionDepthExceeded"
@@ -322,6 +342,7 @@ name = "limit.raised.option"
 backends_agree = ["exit_code", "stdout_normalized", "diagnostics"]
 desc = "depth(4000) does not run with the default limit (1000) and runs on all four with --max-recursion-depth 5000."
 args = ["--native-stack-guard", "off", "--max-recursion-depth", "5000", "${case}", "${backend}"]
+skip_unless = ["node", "test/tools/have-native-jit.mjs"]
 envs = ["N=4000"]
 expect_exit = 0
 expect_stdout_starts_with = "start\n4000\ndone\n"
@@ -331,6 +352,7 @@ name = "limit.default"
 backends_agree = ["exit_code", "stdout_normalized", "diagnostics"]
 desc = "Without option and variable every scheduler stops at 1000 open calls (design principles 3.9): depth(999) runs and depth(1000) does not, on all four alike. std::prl counts like the others (it had no count by default)."
 args = ["${case}", "${backend}"]
+skip_unless = ["node", "test/tools/have-native-jit.mjs"]
 envs = ["N=999"]
 expect_exit = 0
 expect_stdout_starts_with = "start\n999\ndone\n"
@@ -339,6 +361,7 @@ expect_stdout_starts_with = "start\n999\ndone\n"
 name = "limit.default_exceeded"
 backends_agree = ["exit_code", "stdout_normalized", "diagnostics"]
 args = ["${case}", "${backend}"]
+skip_unless = ["node", "test/tools/have-native-jit.mjs"]
 envs = ["N=1000"]
 expect_exit = 1
 expect_diagnostic_name = "RuntimeDiag::MaxRecursionDepthExceeded"
@@ -351,6 +374,7 @@ name = "limit.default.value"
 backends_agree = ["exit_code", "stdout_normalized", "diagnostics"]
 desc = "The default limit through a function value (two calls a level, each nesting on the native stack on std::fvm): step(499) runs on all four, within the default thread stacks."
 case = "../../../cases/consistency/limits/depth_value.cml"
+skip_unless = ["node", "test/tools/have-native-jit.mjs"]
 args = ["${case}", "${backend}"]
 envs = ["N=499"]
 expect_exit = 0
@@ -361,6 +385,7 @@ name = "limit.default.value_exceeded"
 backends_agree = ["exit_code", "stdout_normalized", "diagnostics"]
 desc = "step(500) is one call too many under the default limit: the same diagnostic on all four."
 case = "../../../cases/consistency/limits/depth_value.cml"
+skip_unless = ["node", "test/tools/have-native-jit.mjs"]
 args = ["${case}", "${backend}"]
 envs = ["N=500"]
 expect_exit = 1
@@ -372,6 +397,7 @@ name = "limit.default.map"
 backends_agree = ["exit_code", "stdout_normalized", "diagnostics"]
 desc = "The default limit inside a map element (one more call open; on std::prl the count follows the element onto the worker thread that runs it): depth(998) runs."
 case = "../../../cases/consistency/limits/depth_map.cml"
+skip_unless = ["node", "test/tools/have-native-jit.mjs"]
 args = ["${case}", "${backend}"]
 envs = ["N=998"]
 expect_exit = 0
@@ -381,6 +407,7 @@ name = "limit.default.map_exceeded"
 backends_agree = ["exit_code", "stdout_normalized", "diagnostics"]
 desc = "depth(1300) inside a map element stops with the diagnostic on all four, std::prl included."
 case = "../../../cases/consistency/limits/depth_map.cml"
+skip_unless = ["node", "test/tools/have-native-jit.mjs"]
 args = ["${case}", "${backend}"]
 envs = ["N=1300"]
 expect_exit = 1
@@ -396,6 +423,7 @@ snapshot_stream = "stdout"
 snapshot_compare = "text_exact"
 golden = "golden/tail_under_limit.txt"
 case = "../../../cases/consistency/limits/tail_under_limit.cml"
+skip_unless = ["node", "test/tools/have-native-jit.mjs"]
 args = ["--max-recursion-depth", "8", "${case}", "${backend}"]
 expect_exit = 0
 
@@ -480,6 +508,7 @@ name = "limit.macro.option"
 backends_agree = ["exit_code", "stdout_normalized", "diagnostics"]
 desc = "With --max-macro-depth 200 the call is evaluated ahead of time; the program then runs on each back end without recursing at all."
 case = "../../../cases/consistency/limits/macro_depth.cml"
+skip_unless = ["node", "test/tools/have-native-jit.mjs"]
 args = ["--max-macro-depth", "200", "--max-recursion-depth", "4", "${case}", "std::macro", "${backend}"]
 expect_exit = 0
 expect_stdout_starts_with = "100\n"

@@ -116,6 +116,7 @@ name = "comprehension.shadowed"
 desc = "A module that defines its own `map` and `filter`: a call written with one of the names reaches the module's own function, and the built-in operator of the same spelling is not a candidate beside it -- they are two layers and the first layer that has the name answers (design principles 10.2) -- so `xs->map<...>` prints `my map` and `xs->filter<...>` prints `my filter`. A comprehension still means the built-in operators, whose lowering names the built-in group rather than the written name, so the two comprehensions print their arrays. This entry used to expect the opposite: exit 1 and an AmbiguousCall naming the module's `map` beside `:mark/map_arr`, which was the merged-layers defect in its observable shape."
 kind = "behavior"
 case = "../../../cases/consistency/comprehension/shadowed.cml"
+skip_unless = ["node", "test/tools/have-native-jit.mjs"]
 # The four back ends print the same two lines; `backends_agree` is the second claim -- that they
 # agree -- carrying the exit code, the normalised stdout and every diagnostic, in order.
 backends = ["nvm", "fvm", "jit", "prl"]

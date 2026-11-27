@@ -9,6 +9,7 @@ name = "comprehension_context.annotated"
 desc = "`let xs: f32[] = [f32(i) for i in 0..n]` has its elements, as without the annotation: in a `let`, a `var`, a struct field, an argument and a return. It was an empty array of the annotated type."
 kind = "behavior"
 case = "../../../cases/compile/comprehension_context/annotated.cml"
+skip_unless = ["node", "test/tools/have-native-jit.mjs"]
 args = ["${case}", "${backend}"]
 backends = ["nvm", "fvm", "jit"]
 backends_agree = ["exit_code", "diagnostics", "stdout_normalized"]

@@ -26,6 +26,7 @@ timeout_ms = 20000
 name = "entry.undeclared_println"
 desc = "main without a declared return type whose body ends with println('a'): 'a' is printed once, by the call. (It was printed twice: the value println returns was taken for the result.)"
 case = "../../../cases/consistency/entry/undeclared_println.cml"
+skip_unless = ["node", "test/tools/have-native-jit.mjs"]
 expect_exit = 0
 verify_script = """
 assert(input.normalized.stdout === 'a\n', JSON.stringify(input.normalized.stdout))
@@ -36,6 +37,7 @@ assert(input.normalized.stderr === '', JSON.stringify(input.normalized.stderr))
 name = "entry.undeclared_int"
 desc = "main without a declared return type whose body ends with 3: the exit code is 0, not 3."
 case = "../../../cases/consistency/entry/undeclared_int.cml"
+skip_unless = ["node", "test/tools/have-native-jit.mjs"]
 expect_exit = 0
 verify_script = """
 assert(input.normalized.stdout === 'a\n', JSON.stringify(input.normalized.stdout))
@@ -56,6 +58,7 @@ expect_output_contains = ["'main' declares no return type"]
 name = "entry.declared_string"
 desc = "main declared string whose body ends with println('a'): println returns 'a', which is the result; it is printed by the call and then as the result."
 case = "../../../cases/consistency/entry/declared_string.cml"
+skip_unless = ["node", "test/tools/have-native-jit.mjs"]
 expect_exit = 0
 verify_script = """
 assert(input.normalized.stdout === 'a\na\n', JSON.stringify(input.normalized.stdout))
@@ -65,6 +68,7 @@ assert(input.normalized.stdout === 'a\na\n', JSON.stringify(input.normalized.std
 name = "entry.declared_int"
 desc = "main declared int: the value is the exit code and is not printed."
 case = "../../../cases/consistency/entry/declared_int.cml"
+skip_unless = ["node", "test/tools/have-native-jit.mjs"]
 expect_exit = 3
 verify_script = """
 assert(input.normalized.stdout === 'a\n', JSON.stringify(input.normalized.stdout))
@@ -76,6 +80,7 @@ assert(input.normalized.stdout === 'a\n', JSON.stringify(input.normalized.stdout
 name = "entry.error_thrown"
 desc = "An error value handed out by a return reaches the exit of main: UnhandledError on standard error, located at the error(...) call; exit code 1; standard output holds only the program's output."
 case = "../../../cases/consistency/entry/error_thrown.cml"
+skip_unless = ["node", "test/tools/have-native-jit.mjs"]
 expect_exit = 1
 expect_diagnostic_name = "RuntimeDiag::UnhandledError"
 expect_diagnostic_code = "0x04000051"
@@ -90,6 +95,7 @@ assert(input.normalized.stdout === 'before\n', JSON.stringify(input.normalized.s
 name = "entry.error_from_attempt"
 desc = "main returns the result of attempt as it is: the isolated fault is reported as an unhandled error at the place of the fault."
 case = "../../../cases/consistency/entry/error_from_attempt.cml"
+skip_unless = ["node", "test/tools/have-native-jit.mjs"]
 expect_exit = 1
 expect_diagnostic_name = "RuntimeDiag::UnhandledError"
 expect_diagnostic_line = 7
@@ -103,6 +109,7 @@ assert(input.normalized.stdout === 'before\n', JSON.stringify(input.normalized.s
 name = "entry.error_from_operator"
 desc = "An error made by an operator has no position: the report is located at main and says which operator made it (rich text format)."
 case = "../../../cases/consistency/entry/error_from_operator.cml"
+skip_unless = ["node", "test/tools/have-native-jit.mjs"]
 args = ["--diag-format", "text", "--color", "never", "${case}", "${backend}"]
 backends_agree = ["exit_code", "stdout_normalized", "stderr_normalized"]
 expect_exit = 1
@@ -115,6 +122,7 @@ assert(input.normalized.stdout === 'before\n', JSON.stringify(input.normalized.s
 name = "entry.error_json"
 desc = "--diag-format json: the unhandled error is one JSON array on standard error, with the 0-based position of the error."
 case = "../../../cases/consistency/entry/error_thrown.cml"
+skip_unless = ["node", "test/tools/have-native-jit.mjs"]
 args = ["--diag-format", "json", "${case}", "${backend}"]
 backends_agree = ["exit_code", "stdout_normalized", "stderr_normalized"]
 expect_exit = 1
@@ -133,6 +141,7 @@ assert(d.data.modulePath.endsWith('error_thrown.cml'), d.data.modulePath)
 name = "entry.fallible_ok"
 desc = "main declared int! that returns a value: the value is the exit code; nothing on standard error."
 case = "../../../cases/consistency/entry/fallible_ok.cml"
+skip_unless = ["node", "test/tools/have-native-jit.mjs"]
 expect_exit = 7
 verify_script = """
 assert(input.normalized.stdout === 'before\n', JSON.stringify(input.normalized.stdout))
@@ -143,6 +152,7 @@ assert(input.normalized.stderr === '', JSON.stringify(input.normalized.stderr))
 name = "entry.fallible_ok_string"
 desc = "main declared string! that returns a value: the value is printed as the result."
 case = "../../../cases/consistency/entry/fallible_ok_string.cml"
+skip_unless = ["node", "test/tools/have-native-jit.mjs"]
 expect_exit = 0
 verify_script = """
 assert(input.normalized.stdout === 'hello camel\n', JSON.stringify(input.normalized.stdout))
@@ -166,6 +176,7 @@ fs.rmSync(file)
 name = "entry.error_handled"
 desc = "An error value handled with !! before main returns is not reported."
 case = "../../../cases/consistency/entry/error_handled.cml"
+skip_unless = ["node", "test/tools/have-native-jit.mjs"]
 expect_exit = 0
 verify_script = """
 assert(input.normalized.stdout === '-1\n', JSON.stringify(input.normalized.stdout))

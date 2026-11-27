@@ -24,6 +24,7 @@ timeout_ms = 30000
 
 [[tests]]
 name = "framed.operators"
+skip_unless = ["node", "test/tools/have-native-jit.mjs"]
 desc = "Operators in tail loops, match on int and string, struct and tuple values, mutual recursion, a call through a function value, map and reduce in a loop: the same values on every back end."
 expect_exit = 0
 expect_stdout_starts_with = "collatz 111 118\nrepeat >ababababab\nsum_at 31\nmean 3.875\nweigh 3210\nwalk 5050 -100\nswap_sum 1\nparity true false\nfib 6765\ntwice 284626\ntotals 14415\n"
@@ -67,6 +68,7 @@ name = "framed.operators.moving"
 desc = "The same with the generational collector and safepoint poisoning: every safepoint moves every young object and poisons where it was, so a reference that compiled code kept in a register or baked into its code across a safepoint would fault."
 backends = ["fvm", "jit_hot_threshold0", "inline_jit_hot_threshold0"]
 args = ["--gc-check", "poison", "${case}", "${backend}"]
+skip_unless = ["node", "test/tools/have-native-jit.mjs"]
 sweep = false
 timeout_ms = 240000
 expect_exit = 0
@@ -89,6 +91,7 @@ expect_output_not_contains = ["compile skipped", "Segmentation fault", "dumped c
 name = "framed.faults.isolated"
 desc = "An index out of range, a remainder by zero, a division by zero and a recursion past the limit, raised from compiled functions inside `attempt`: each is an error value at the boundary, and the functions run again afterwards."
 case = "../../../cases/linear/jit/framed_faults.cml"
+skip_unless = ["node", "test/tools/have-native-jit.mjs"]
 envs = ["FAULT=none"]
 expect_exit = 0
 expect_stdout_starts_with = "62\n14\n14\n58\nIndexOutOfRange\nDivisionByZero\nDivisionByZero\nMaxRecursionDepthExceeded\n62\n58\nisolated\ndone\n"
@@ -97,6 +100,7 @@ expect_stdout_starts_with = "62\n14\n14\n58\nIndexOutOfRange\nDivisionByZero\nDi
 name = "framed.faults.index"
 desc = "An operator's fault (index out of range) raised from a helper of compiled code: the located diagnostic of the interpreters."
 case = "../../../cases/linear/jit/framed_faults.cml"
+skip_unless = ["node", "test/tools/have-native-jit.mjs"]
 envs = ["FAULT=index"]
 expect_exit = 1
 expect_diagnostic_name = "RuntimeDiag::IndexOutOfRange"
@@ -108,6 +112,7 @@ expect_output_not_contains = ["done", "Segmentation fault", "dumped core"]
 name = "framed.faults.rem"
 desc = "A remainder by zero (an operator) in compiled code."
 case = "../../../cases/linear/jit/framed_faults.cml"
+skip_unless = ["node", "test/tools/have-native-jit.mjs"]
 envs = ["FAULT=rem"]
 expect_exit = 1
 expect_diagnostic_name = "RuntimeDiag::DivisionByZero"
@@ -119,6 +124,7 @@ expect_output_not_contains = ["done", "Segmentation fault", "dumped core"]
 name = "framed.faults.div"
 desc = "A division by zero, which compiled code checks itself, in a graph that also calls an operator."
 case = "../../../cases/linear/jit/framed_faults.cml"
+skip_unless = ["node", "test/tools/have-native-jit.mjs"]
 envs = ["FAULT=div"]
 expect_exit = 1
 expect_diagnostic_name = "RuntimeDiag::DivisionByZero"
@@ -130,6 +136,7 @@ expect_output_not_contains = ["done", "Segmentation fault", "dumped core"]
 name = "framed.faults.depth"
 desc = "A non-tail recursion of framed code past the limit: refused at the same call as in the interpreter (its calls are counted on the interpreter's stack)."
 case = "../../../cases/linear/jit/framed_faults.cml"
+skip_unless = ["node", "test/tools/have-native-jit.mjs"]
 envs = ["FAULT=depth"]
 backends = ["nvm", "fvm", "jit", "prl"]
 expect_exit = 1
@@ -156,6 +163,7 @@ expect_output_contains = ["compiled & cached graph 'pick' as framed code", "comp
 name = "framed.loops"
 desc = "Tail loops of 300000 rounds in framed code (allocating, mutually recursive, with a call in the body): neither the machine stack nor the recursion limit is used per round."
 case = "../../../cases/linear/jit/framed_loops.cml"
+skip_unless = ["node", "test/tools/have-native-jit.mjs"]
 envs = ["N=300000"]
 timeout_ms = 60000
 expect_exit = 0
@@ -259,6 +267,7 @@ expect_output_not_contains = ["OnDemand: compiled & cached graph 'main' as frame
 name = "framed.loops.moving"
 desc = "The loops with safepoint poisoning: the allocating loop and the loop that builds an array run across thousands of collections that move what they hold."
 case = "../../../cases/linear/jit/framed_loops.cml"
+skip_unless = ["node", "test/tools/have-native-jit.mjs"]
 backends = ["fvm", "jit_hot_threshold0", "inline_jit_hot_threshold0"]
 args = ["--gc-check", "poison", "${case}", "${backend}"]
 envs = ["N=20000"]
@@ -271,6 +280,7 @@ expect_stdout_starts_with = "108894\n40001\n900\n88894\ndone\n"
 name = "framed.faults.moving"
 desc = "The isolated faults with safepoint poisoning."
 case = "../../../cases/linear/jit/framed_faults.cml"
+skip_unless = ["node", "test/tools/have-native-jit.mjs"]
 backends = ["fvm", "jit_hot_threshold0", "inline_jit_hot_threshold0"]
 args = ["--gc-check", "poison", "${case}", "${backend}"]
 envs = ["FAULT=none"]

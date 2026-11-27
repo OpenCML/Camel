@@ -163,6 +163,7 @@ name = "self_recursion_shapes.inline.jit"
 desc = "Self-recursive functions of one, two and three arguments and with a float argument, whose recursive arm reads parameters the other arm read first and passes them on in another order, compute the node VM's values once std::cxx::inline has made each a single graph the JIT compiles. A register loaded in one arm of the branch was reused in the other arm (garbage arguments: wrong values, or a recursion that never ended)."
 kind = "behavior"
 case = "../../../cases/linear/jit/self_recursion_shapes.cml"
+skip_unless = ["node", "test/tools/have-native-jit.mjs"]
 args = ["${case}", "std::cxx::inline", "std::jit"]
 expect_exit = 0
 verify_script = """

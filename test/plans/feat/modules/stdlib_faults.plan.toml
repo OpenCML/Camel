@@ -25,6 +25,7 @@ timeout_ms = 20000
 name = "stdlib.fault.index"
 desc = "A string indexed at its length."
 case = "../../../cases/modules/stdlib/fault_index.cml"
+skip_unless = ["node", "test/tools/have-native-jit.mjs"]
 expect_diagnostic_name = "RuntimeDiag::IndexOutOfRange"
 expect_diagnostic_line = 6
 
@@ -41,6 +42,7 @@ expect_diagnostic_line = 6
 name = "stdlib.fault.index_negative"
 desc = "A string indexed with a negative number."
 case = "../../../cases/modules/stdlib/fault_index_negative.cml"
+skip_unless = ["node", "test/tools/have-native-jit.mjs"]
 expect_diagnostic_name = "RuntimeDiag::IndexOutOfRange"
 expect_diagnostic_line = 6
 
@@ -57,6 +59,7 @@ expect_diagnostic_line = 6
 name = "stdlib.fault.index_empty"
 desc = "An empty string indexed at 0."
 case = "../../../cases/modules/stdlib/fault_index_empty.cml"
+skip_unless = ["node", "test/tools/have-native-jit.mjs"]
 expect_diagnostic_name = "RuntimeDiag::IndexOutOfRange"
 expect_diagnostic_line = 6
 
@@ -73,6 +76,7 @@ expect_diagnostic_line = 6
 name = "stdlib.fault.repeat_huge"
 desc = "repeat whose result would be longer than a string can be: refused before anything is allocated."
 case = "../../../cases/modules/stdlib/fault_repeat_huge.cml"
+skip_unless = ["node", "test/tools/have-native-jit.mjs"]
 expect_diagnostic_name = "RuntimeDiag::InvalidArgument"
 expect_diagnostic_line = 5
 
@@ -89,6 +93,7 @@ expect_diagnostic_line = 5
 name = "stdlib.fault.index_char"
 desc = "A string index past the last character (counted in code points, not bytes)."
 case = "../../../cases/modules/stdlib/fault_string_index.cml"
+skip_unless = ["node", "test/tools/have-native-jit.mjs"]
 expect_diagnostic_name = "RuntimeDiag::IndexOutOfRange"
 expect_diagnostic_line = 3
 
@@ -96,6 +101,7 @@ expect_diagnostic_line = 3
 name = "stdlib.fault.shl_width"
 desc = "shl by the width of the integer."
 case = "../../../cases/modules/stdlib/fault_shl_width.cml"
+skip_unless = ["node", "test/tools/have-native-jit.mjs"]
 expect_diagnostic_name = "RuntimeDiag::InvalidArgument"
 expect_diagnostic_line = 5
 
@@ -112,6 +118,7 @@ expect_diagnostic_line = 5
 name = "stdlib.fault.shr_negative"
 desc = "shr by a negative count."
 case = "../../../cases/modules/stdlib/fault_shr_negative.cml"
+skip_unless = ["node", "test/tools/have-native-jit.mjs"]
 expect_diagnostic_name = "RuntimeDiag::InvalidArgument"
 expect_diagnostic_line = 5
 
@@ -128,6 +135,7 @@ expect_diagnostic_line = 5
 name = "stdlib.fault.shl_i32"
 desc = "shl of an i32 by 32."
 case = "../../../cases/modules/stdlib/fault_shl_i32.cml"
+skip_unless = ["node", "test/tools/have-native-jit.mjs"]
 expect_diagnostic_name = "RuntimeDiag::InvalidArgument"
 expect_diagnostic_line = 5
 
@@ -144,6 +152,7 @@ expect_diagnostic_line = 5
 name = "stdlib.fault.clamp_bounds"
 desc = "clamp whose lower bound is above the upper one: the fault of `clamp`, located in the library at its `fail` in stdlib/math.cml."
 case = "../../../cases/modules/stdlib/fault_clamp_bounds.cml"
+skip_unless = ["node", "test/tools/have-native-jit.mjs"]
 expect_diagnostic_name = "RuntimeDiag::InvalidArgument"
 expect_diagnostic_line = 495
 
@@ -160,6 +169,7 @@ expect_diagnostic_line = 495
 name = "stdlib.fault.clamp_nan"
 desc = "clamp with a NaN bound: the fault of `clamp`, located in the library at its `fail` in stdlib/math.cml."
 case = "../../../cases/modules/stdlib/fault_clamp_nan.cml"
+skip_unless = ["node", "test/tools/have-native-jit.mjs"]
 expect_diagnostic_name = "RuntimeDiag::InvalidArgument"
 expect_diagnostic_line = 495
 
@@ -176,6 +186,7 @@ expect_diagnostic_line = 495
 name = "stdlib.fault.gcd_overflow"
 desc = "gcd of the smallest integer, which has no positive counterpart: the fault of `gcd`, located in the library at its `fail` in stdlib/math.cml."
 case = "../../../cases/modules/stdlib/fault_gcd_overflow.cml"
+skip_unless = ["node", "test/tools/have-native-jit.mjs"]
 expect_diagnostic_name = "RuntimeDiag::InvalidArgument"
 expect_diagnostic_line = 577
 
@@ -192,6 +203,7 @@ expect_diagnostic_line = 577
 name = "stdlib.fault.lcm_overflow"
 desc = "lcm that does not fit the integer type: the fault of `lcm`, located in the library at its `fail` in stdlib/math.cml."
 case = "../../../cases/modules/stdlib/fault_lcm_overflow.cml"
+skip_unless = ["node", "test/tools/have-native-jit.mjs"]
 expect_diagnostic_name = "RuntimeDiag::InvalidArgument"
 expect_diagnostic_line = 592
 
@@ -208,6 +220,7 @@ expect_diagnostic_line = 592
 name = "stdlib.fault.quantile_range"
 desc = "quantile outside 0..1: located in the library."
 case = "../../../cases/modules/stdlib/fault_quantile_range.cml"
+skip_unless = ["node", "test/tools/have-native-jit.mjs"]
 expect_diagnostic_name = "RuntimeDiag::InvalidArgument"
 expect_diagnostic_line = 48
 
@@ -224,6 +237,7 @@ expect_diagnostic_line = 48
 name = "stdlib.fault.variance_short"
 desc = "The variance of one element: a fault, located in the library."
 case = "../../../cases/modules/stdlib/fault_variance_short.cml"
+skip_unless = ["node", "test/tools/have-native-jit.mjs"]
 expect_diagnostic_name = "RuntimeDiag::InvalidArgument"
 expect_diagnostic_line = 54
 
@@ -240,6 +254,7 @@ expect_diagnostic_line = 54
 name = "stdlib.fault.stdev_short"
 desc = "The standard deviation of one element: the variance underneath faults."
 case = "../../../cases/modules/stdlib/fault_stdev_short.cml"
+skip_unless = ["node", "test/tools/have-native-jit.mjs"]
 expect_diagnostic_name = "RuntimeDiag::InvalidArgument"
 expect_diagnostic_line = 54
 
@@ -256,6 +271,7 @@ expect_diagnostic_line = 54
 name = "stdlib.fault.median_empty"
 desc = "The median of no element: the quantile underneath faults."
 case = "../../../cases/modules/stdlib/fault_median_empty.cml"
+skip_unless = ["node", "test/tools/have-native-jit.mjs"]
 expect_diagnostic_name = "RuntimeDiag::InvalidArgument"
 expect_diagnostic_line = 49
 
@@ -290,6 +306,7 @@ expect_diagnostic_line = 371
 name = "stdlib.fault.min_empty"
 desc = "min of an empty int[]: the kernel faults at the call, `InvalidArgument`."
 case = "../../../cases/modules/stdlib/fault_array_min_empty.cml"
+skip_unless = ["node", "test/tools/have-native-jit.mjs"]
 expect_diagnostic_name = "RuntimeDiag::InvalidArgument"
 expect_diagnostic_line = 6
 
@@ -297,6 +314,7 @@ expect_diagnostic_line = 6
 name = "stdlib.fault.max_empty"
 desc = "max of an empty int[]: the kernel faults at the call, `InvalidArgument`."
 case = "../../../cases/modules/stdlib/fault_array_max_empty.cml"
+skip_unless = ["node", "test/tools/have-native-jit.mjs"]
 expect_diagnostic_name = "RuntimeDiag::InvalidArgument"
 expect_diagnostic_line = 6
 
@@ -304,6 +322,7 @@ expect_diagnostic_line = 6
 name = "stdlib.fault.min_empty_string"
 desc = "min of an empty string[]: no kernel, so the body faults, located in the library at the `fail` of `some_elements` in stdlib/array.cml."
 case = "../../../cases/modules/stdlib/fault_array_min_empty_string.cml"
+skip_unless = ["node", "test/tools/have-native-jit.mjs"]
 expect_diagnostic_name = "RuntimeDiag::InvalidArgument"
 expect_diagnostic_line = 150
 
@@ -311,6 +330,7 @@ expect_diagnostic_line = 150
 name = "stdlib.fault.mean_empty"
 desc = "mean of an empty float[]: the fault of `some_elements`, located in the library."
 case = "../../../cases/modules/stdlib/fault_array_mean_empty.cml"
+skip_unless = ["node", "test/tools/have-native-jit.mjs"]
 expect_diagnostic_name = "RuntimeDiag::InvalidArgument"
 expect_diagnostic_line = 150
 
@@ -318,6 +338,7 @@ expect_diagnostic_line = 150
 name = "stdlib.fault.argmax_empty"
 desc = "argmax of an empty int[]: the fault of `some_elements`, located in the library."
 case = "../../../cases/modules/stdlib/fault_array_argmax_empty.cml"
+skip_unless = ["node", "test/tools/have-native-jit.mjs"]
 expect_diagnostic_name = "RuntimeDiag::InvalidArgument"
 expect_diagnostic_line = 150
 
@@ -325,6 +346,7 @@ expect_diagnostic_line = 150
 name = "stdlib.fault.argmin_empty"
 desc = "argmin of an empty int[]: the fault of `some_elements`, located in the library."
 case = "../../../cases/modules/stdlib/fault_array_argmin_empty.cml"
+skip_unless = ["node", "test/tools/have-native-jit.mjs"]
 expect_diagnostic_name = "RuntimeDiag::InvalidArgument"
 expect_diagnostic_line = 150
 
@@ -332,5 +354,6 @@ expect_diagnostic_line = 150
 name = "stdlib.fault.chunks_zero"
 desc = "chunks<0>: a chunk holds at least one element, `InvalidArgument` located at the `fail` of `chunks` in stdlib/array.cml."
 case = "../../../cases/modules/stdlib/fault_array_chunks_zero.cml"
+skip_unless = ["node", "test/tools/have-native-jit.mjs"]
 expect_diagnostic_name = "RuntimeDiag::InvalidArgument"
 expect_diagnostic_line = 62

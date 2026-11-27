@@ -91,6 +91,7 @@ tier = "slow"
 name = "attempt.compiled"
 desc = "The callee runs as compiled code under std::jit: a division by zero and a native recursion that is too deep leave the compiled code through its fault exit and are isolated; the compiled code runs again afterwards."
 case = "../../../cases/consistency/attempt/compiled.cml"
+skip_unless = ["node", "test/tools/have-native-jit.mjs"]
 golden = "golden/attempt_compiled.txt"
 
 # Asserts that the function was compiled to native code: only where the JIT generates code
