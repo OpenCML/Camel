@@ -2,16 +2,17 @@
 // Copyright (c) the OpenCML Organization
 // SPDX-License-Identifier: MIT
 
-// One reading over the whole corpus: what `core.arrangeable` answers and what
-// `runtime::nodeIsFreelySchedulable` answers, for every place both graphs call a node.
+// One reading over the whole corpus: what `core.arrangeable` answers at every node of every program
+// the tree tracks, and -- beside it -- how that answer compares with the older reading of the same
+// question, `runtime::nodeIsFreelySchedulable`.
 //
-// Why this is a tool and not a plan entry: it runs `camel <case> test::facts_compare` for every
-// `.cml` under `test/cases` -- 4037 files, about two minutes at `--jobs 6` -- and the numbers it
-// prints move whenever the compiler moves (a node added anywhere moves `nodes`, `agree` and `diff`).
-// A plan entry that asserted those numbers would be red on every unrelated change, and one that
-// asserted nothing would be decoration. So the numbers live in the reports that cite them, and this
-// file is the command that produces them; `test/plans/feat/tools/facts_readers_sweep.plan.toml`
-// runs it in the slow layer, where a change to the pass or to the corpus is meant to be looked at.
+// Why this is a tool and not a plan entry: it runs `camel <case> test::facts_compare std::nop` for
+// every `.cml` under `test/cases`, and the numbers it prints move whenever the compiler moves (a
+// node added anywhere moves `nodes` and `free`). A plan entry that asserted those numbers would be
+// red on every unrelated change, and one that asserted nothing would be decoration. So the numbers
+// live in the reports that cite them, and this file is the command that produces them;
+// `test/plans/feat/tools/facts_readers_sweep.plan.toml` runs it in the slow layer, where a change to
+// the pass or to the corpus is meant to be looked at.
 //
 // What it prints, in this order:
 //
@@ -19,26 +20,53 @@
 //                                                        numbers below belong to (one line, so a
 //                                                        reading copied out of a log carries them)
 //   FACTS_READERS_SWEEP cases= read= skipped= silent= …   the totals: cases swept, cases the pass
-//                                                        answered at all (`read`), cases it declined
-//                                                        (`skipped`), cases that said nothing
-//                                                        (`silent`), and the sums of the per-case
-//                                                        `readers` lines
-//   FACTS_READERS_KIND kind=… nodes=… both_free=… …       the same sums split by node kind, so a
-//                                                        kind that is "freely arrangeable but not
-//                                                        schedulable" has a number of its own
-//   FACTS_READERS_DIFF <path>: <line>                     every disagreeing node, as the pass
-//                                                        printed it
+//                                                        answered at all (`read`), cases it did not
+//                                                        (`skipped`, split into the two reasons
+//                                                        below), cases that said nothing (`silent`),
+//                                                        the sums of the per-case answers, the
+//                                                        cases the directory rule left out
+//                                                        (`fixtures`), and the older comparison's
+//                                                        sums
+//   FACTS_READERS_KIND kind=… nodes=… free=… kept=… …     the same answers split by node kind, so a
+//                                                        kind that is "freely arrangeable" has a
+//                                                        number of its own
+//   FACTS_READERS_FAMILY family=… …                       the same answers split by the family the
+//                                                        answer comes from
+//   FACTS_READERS_SKIP <path> <refused|declined>          every case the sweep did not read, with
+//                                                        which of the two reasons it was
+//   FACTS_READERS_SILENT <path>                           every case that said nothing at all
 //
-// `silent` is the reading that is a defect when it is not zero: a case the pass neither answered
-// nor declined means the program never reached the pass (a compile error is normal and lands in
-// `skipped`), and a corpus whose `skipped` grows without `silent` growing says so.
+// `silent` and `no_fact` are the readings that are a defect when they are not zero. `silent`: the
+// case neither answered nor said why, so the program did not reach the pass and the sweep cannot say
+// anything about it. `no_fact`: a node the fact layer answered nothing for -- an absent answer is
+// not a placement decision, so it cannot be folded into either column.
+//
+// `skipped` is not one thing, and the sweep prints which of the two it is for every case:
+//
+//   refused   the output carries no `FACTS_COMPARE` line at all, so the compiler never ran the
+//             pass: the case is one its own plan gives arguments or module roots to, and on its own
+//             it does not compile. It is a case the sweep cannot read, not one it read and rejected.
+//   declined  the pass ran and printed, but not the answer table: the graph was there and the store
+//             answered nothing for it (`state=no-store`, `state=no-kept-ids`). Those are named,
+//             because a corpus whose decline group grows is a fact-layer reading of its own.
+//
+// The program is never run: the pipeline is `test::facts_compare std::nop`. The comparison pass hands
+// the program on, and without a stopper every case would be *executed* as the next fallback -- which
+// is also why a case whose program never returns was able to hold the whole sweep for minutes when
+// this tool was written without one.
+//
+// `test/cases/**/fixtures/` is left out by a directory rule: those files are inputs other tools read
+// (the debugger's and the language server's own cases), never a program the corpus runs. A rule and
+// not a list, so a fixture added tomorrow is left out by the same line; the cases it left out are
+// counted in `fixtures=`, so the exclusion is visible rather than silent. No other case is skipped by
+// where it lives: what the sweep cannot read, it says so about.
 //
 // Every case runs in its own scratch directory (`fs.mkdtempSync`), never in the checkout: cases
 // that export a model (`onnx::export_model out=m.onnx`) write beside the program, and before this the
 // sweep left a dozen files in the tree it measured.
 //
 // Usage:
-//   node test/tools/probe-facts-readers.mjs                      # the whole corpus, ~2 min
+//   node test/tools/probe-facts-readers.mjs                      # the whole corpus
 //   node test/tools/probe-facts-readers.mjs --jobs 8             # wider
 //   node test/tools/probe-facts-readers.mjs --only cases/loops/  # a subset by path substring
 //   node test/tools/probe-facts-readers.mjs --limit 200          # the first 200, for a smoke run
@@ -46,11 +74,6 @@
 //
 // The binary is `$CAMEL_HOME/bin/camel` when that exists, else `camel` on `PATH`. The reading is
 // only worth what the line 1 provenance says: the machine's binary and the tree it was built from.
-//
-// The readings this produced, with `test::facts_compare` answering in the shape the gate commit
-// introduced: `cases=4037 read=2747 skipped=1290 silent=0 nodes=211894 agree=201518 diff=10376
-// no_fact=0 kinds=8`, with `kind=gate … both_kept=3918 kind_free_pred_kept=0`; before that commit,
-// `diff=10471` and `kind_free_pred_kept=95`, the 95 gate nodes the four terms had called movable.
 
 import fs from 'node:fs'
 import os from 'node:os'
@@ -66,6 +89,9 @@ const CASES = path.join(ROOT, 'test', 'cases')
 // after these, in the order it first appeared, rather than dropped.
 const KIND_ORDER = ['data', 'port', 'oper', 'func', 'call', 'brch', 'loop', 'gate']
 
+// The directory the rule leaves out, and the only one: a fixture is another tool's input.
+const FIXTURE_DIRECTORY = 'fixtures'
+
 function usage() {
     const text = fs.readFileSync(fileURLToPath(import.meta.url), 'utf8')
     const start = text.indexOf('// Usage:')
@@ -74,9 +100,10 @@ function usage() {
     process.stdout.write(
         [
             '',
-            'It sweeps every `.cml` under `test/cases` (4037 files today), ~2 min at --jobs 6.',
-            'It is not part of the fast layer. `--tier slow test/plans/feat/tools/facts_readers_sweep.plan.toml`',
-            'runs the same sweep through the runner, which adds the provenance line the runner prints.',
+            'It sweeps every `.cml` under `test/cases` except the `fixtures/` directories, which are',
+            'other tools’ inputs. It is not part of the fast layer.',
+            '`--tier slow test/plans/feat/tools/facts_readers_sweep.plan.toml` runs the same sweep',
+            'through the runner, which adds the provenance line the runner prints.',
             '',
         ].join('\n')
     )
@@ -128,16 +155,40 @@ function camelBinary(opts) {
     return name
 }
 
+/// Every `.cml` under `test/cases` except the ones under a `fixtures/` directory, and how many the
+/// rule left out. The rule is the directory name and nothing else: a list of files would be a rule
+/// that has to be edited every time another tool adds its input.
 function findCases(dir, out) {
+    const left = { fixtures: 0 }
+    const walk = (current) => {
+        for (const entry of fs.readdirSync(current, { withFileTypes: true })) {
+            const full = path.join(current, entry.name)
+            if (entry.isDirectory()) {
+                if (entry.name === FIXTURE_DIRECTORY) {
+                    left.fixtures += countCases(full)
+                    continue
+                }
+                walk(full)
+            } else if (entry.name.endsWith('.cml')) {
+                out.push(full)
+            }
+        }
+    }
+    walk(dir)
+    return left
+}
+
+function countCases(dir) {
+    let count = 0
     for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
         const full = path.join(dir, entry.name)
         if (entry.isDirectory()) {
-            findCases(full, out)
+            count += countCases(full)
         } else if (entry.name.endsWith('.cml')) {
-            out.push(full)
+            ++count
         }
     }
-    return out
+    return count
 }
 
 function provenance(binary) {
@@ -167,18 +218,14 @@ function runCase(binary, file) {
     return new Promise((resolve) => {
         const scratch = fs.mkdtempSync(path.join(os.tmpdir(), 'camel-readers-'))
         // `stdin` is /dev/null, not inherited: a case that reads its input would otherwise wait on
-        // the runner's stdin forever. That is not hypothetical -- the first run of this tool as a
-        // plan entry sat at the 1400 s bound with no line printed, because one case and then the
-        // whole sweep were waiting for a read that never returns.
+        // the runner's stdin forever.
         //
-        // The per-case clock is the other half of the same guard: a case that waits on a device
-        // (or on anything else that does not answer) is killed, counted as `silent`, and named in
-        // the summary rather than stopping the corpus reading. The bound is 180 s and not 30: the
-        // first bound written here was 30 s, and three cases of the corpus take longer than that
-        // (the sweep's 4037 cases are not one cost class), so the sweep counted them `silent` and
-        // read `diff=10370` where the corpus has 10376 -- a bound tighter than the slowest case is
-        // a reading of the bound and not of the corpus.
-        const child = spawn(binary, [file, 'test::facts_compare'], {
+        // `std::nop` is the second half of that guard and the reason this sweep does not run
+        // programs: the comparison pass hands the graph on, and without a stopper the scheduling
+        // fallback executes it. Reading a fact needs the graph, not the program.
+        //
+        // The per-case clock stays as the last guard, for a case that hangs before the pass runs.
+        const child = spawn(binary, [file, 'test::facts_compare', 'std::nop'], {
             cwd: scratch,
             env: process.env,
             windowsHide: true,
@@ -212,25 +259,37 @@ function runCase(binary, file) {
     })
 }
 
-const READERS = /^FACTS_COMPARE kind=(\S+) readers nodes=(\d+) agree=(\d+) diff=(\d+) no_fact=(\d+)$/m
-const KIND = /^FACTS_COMPARE readers_kind kind=(\w+) nodes=(\d+) both_free=(\d+) both_kept=(\d+) kind_free_pred_kept=(\d+) kind_kept_pred_free=(\d+) no_fact=(\d+)$/gm
-const DIFF = /^FACTS_COMPARE reader_diff (.*)$/gm
+// The pass's own census (`facts_compare.h` is the contract): one total line for `core.arrangeable`'s
+// answer, then the same answers cut by node kind and by family, then one line per (node kind,
+// operator). `free` is "a pass may arrange it anywhere", `kept` is "a pass must leave it where the
+// program wrote it", and `no_fact` is a node the store answered nothing for.
+const ANSWERS =
+    /^FACTS_COMPARE kind=core\.arrangeable answers graphs=(\d+) nodes=(\d+) free=(\d+) kept=(\d+) no_fact=(\d+)\s*$/m
+const ANSWERS_KIND =
+    /^FACTS_COMPARE answers_kind kind=(\w+) nodes=(\d+) free=(\d+) kept=(\d+) no_fact=(\d+)/gm
+const ANSWERS_FAMILY =
+    /^FACTS_COMPARE answers_family family=(\w+) nodes=(\d+) free=(\d+) kept=(\d+) no_fact=(\d+)/gm
+// The older reading of the same question, kept because the two are what a report compares: the fact
+// against `runtime::nodeIsFreelySchedulable`, per node.
+const OLD_FACT =
+    /^FACTS_COMPARE kind=core\.arrangeable graphs=(\d+) nodes=(\d+) same=(\d+) diff=(\d+) no_old=(\d+) conversions=(\d+)\s*$/m
+const ANY_CENSUS = /^FACTS_COMPARE /m
 
 function numbers(match, from) {
     return {
         nodes: Number(match[from]),
-        bothFree: Number(match[from + 1]),
-        bothKept: Number(match[from + 2]),
-        kindFreePredKept: Number(match[from + 3]),
-        kindKeptPredFree: Number(match[from + 4]),
-        noFact: Number(match[from + 5]),
+        free: Number(match[from + 1]),
+        kept: Number(match[from + 2]),
+        noFact: Number(match[from + 3]),
     }
 }
 
 async function main() {
     const opts = parseArgs(process.argv.slice(2))
     const binary = camelBinary(opts)
-    const all = findCases(CASES, []).sort()
+    const all = []
+    const left = findCases(CASES, all)
+    all.sort()
     const relative = (file) => path.relative(ROOT, file).split(path.sep).join('/')
 
     let selected = all
@@ -247,9 +306,25 @@ async function main() {
 
     process.stdout.write(`${provenance(binary)}\n`)
 
-    const totals = { cases: selected.length, read: 0, skipped: 0, silent: 0, nodes: 0, agree: 0, diff: 0, noFact: 0 }
+    const totals = {
+        cases: selected.length,
+        read: 0,
+        skipped: 0,
+        silent: 0,
+        nodes: 0,
+        free: 0,
+        kept: 0,
+        noFact: 0,
+        kinds: 0,
+        fixtures: left.fixtures,
+        oldSame: 0,
+        oldDiff: 0,
+        oldNoOld: 0,
+        oldConversions: 0,
+    }
     const kinds = new Map()
-    const diffs = []
+    const families = new Map()
+    const skips = []
     const silent = []
     let next = 0
 
@@ -262,53 +337,61 @@ async function main() {
             const file = selected[index]
             const { stdout, stderr, failed } = await runCase(binary, file)
             const text = `${stdout}\n${stderr}`
-            const readers = READERS.exec(text)
-            if (!readers) {
-                // A case the pass did not answer said so on its own output and is `skipped`; one
-                // that said nothing -- or that this tool had to kill -- is `silent`, and is named
-                // below, because a corpus read with those leaving no trace reads as coverage it
-                // does not have.
-                if (!failed && (stdout.length > 0 || stderr.length > 0)) {
-                    ++totals.skipped
-                } else {
+            const answers = ANSWERS.exec(text)
+            if (!answers) {
+                if (failed || (stdout.length === 0 && stderr.length === 0)) {
                     ++totals.silent
                     silent.push(relative(file))
+                } else {
+                    // Two reasons, printed per case: the pass never ran (`refused`), or it ran and
+                    // the store answered nothing for the graph (`declined`).
+                    ++totals.skipped
+                    skips.push(`${relative(file)} ${ANY_CENSUS.test(text) ? 'declined' : 'refused'}`)
                 }
                 continue
             }
             ++totals.read
-            totals.nodes += Number(readers[2])
-            totals.agree += Number(readers[3])
-            totals.diff += Number(readers[4])
-            totals.noFact += Number(readers[5])
-            for (const match of text.matchAll(KIND)) {
+            totals.nodes += Number(answers[2])
+            totals.free += Number(answers[3])
+            totals.kept += Number(answers[4])
+            totals.noFact += Number(answers[5])
+            const old = OLD_FACT.exec(text)
+            if (old) {
+                totals.oldSame += Number(old[3])
+                totals.oldDiff += Number(old[4])
+                totals.oldNoOld += Number(old[5])
+                totals.oldConversions += Number(old[6])
+            }
+            for (const match of text.matchAll(ANSWERS_KIND)) {
                 const kind = match[1]
-                const seen = kinds.get(kind) ?? {
-                    nodes: 0,
-                    bothFree: 0,
-                    bothKept: 0,
-                    kindFreePredKept: 0,
-                    kindKeptPredFree: 0,
-                    noFact: 0,
-                }
+                const seen = kinds.get(kind) ?? { nodes: 0, free: 0, kept: 0, noFact: 0 }
                 const counted = numbers(match, 2)
                 for (const key of Object.keys(seen)) {
                     seen[key] += counted[key]
                 }
                 kinds.set(kind, seen)
             }
-            for (const match of text.matchAll(DIFF)) {
-                diffs.push(`FACTS_READERS_DIFF ${relative(file)}: ${match[0]}`)
+            for (const match of text.matchAll(ANSWERS_FAMILY)) {
+                const family = match[1]
+                const seen = families.get(family) ?? { nodes: 0, free: 0, kept: 0, noFact: 0 }
+                const counted = numbers(match, 2)
+                for (const key of Object.keys(seen)) {
+                    seen[key] += counted[key]
+                }
+                families.set(family, seen)
             }
         }
     }
 
     await Promise.all(Array.from({ length: Math.min(opts.jobs, selected.length) }, worker))
 
+    totals.kinds = kinds.size
     process.stdout.write(
         `FACTS_READERS_SWEEP cases=${totals.cases} read=${totals.read} skipped=${totals.skipped} ` +
-            `silent=${totals.silent} nodes=${totals.nodes} agree=${totals.agree} diff=${totals.diff} ` +
-            `no_fact=${totals.noFact} kinds=${kinds.size}\n`
+            `silent=${totals.silent} nodes=${totals.nodes} free=${totals.free} kept=${totals.kept} ` +
+            `no_fact=${totals.noFact} kinds=${totals.kinds} fixtures=${totals.fixtures} ` +
+            `old_same=${totals.oldSame} old_diff=${totals.oldDiff} old_no_old=${totals.oldNoOld} ` +
+            `old_conversions=${totals.oldConversions}\n`
     )
     const ordered = [...KIND_ORDER.filter((kind) => kinds.has(kind)), ...kinds.keys()].filter(
         (kind, index, list) => list.indexOf(kind) === index
@@ -319,22 +402,28 @@ async function main() {
             continue
         }
         process.stdout.write(
-            `FACTS_READERS_KIND kind=${kind} nodes=${counted.nodes} both_free=${counted.bothFree} ` +
-                `both_kept=${counted.bothKept} kind_free_pred_kept=${counted.kindFreePredKept} ` +
-                `kind_kept_pred_free=${counted.kindKeptPredFree} no_fact=${counted.noFact}\n`
+            `FACTS_READERS_KIND kind=${kind} nodes=${counted.nodes} free=${counted.free} ` +
+                `kept=${counted.kept} no_fact=${counted.noFact}\n`
         )
     }
-    // The cases that said nothing are named before the differences: they are the ones the sweep
-    // could not read, and a count without the names is a number nobody can act on.
+    for (const [family, counted] of [...families].sort(([a], [b]) => a.localeCompare(b))) {
+        if (counted.nodes === 0) {
+            continue
+        }
+        process.stdout.write(
+            `FACTS_READERS_FAMILY family=${family} nodes=${counted.nodes} free=${counted.free} ` +
+                `kept=${counted.kept} no_fact=${counted.noFact}\n`
+        )
+    }
+    // Every case the sweep did not read is named with its reason, and every case that said nothing
+    // is named on its own line: a count without the names is a number nobody can act on.
+    skips.sort()
+    for (const line of skips) {
+        process.stdout.write(`FACTS_READERS_SKIP ${line}\n`)
+    }
     silent.sort()
     for (const file of silent) {
         process.stdout.write(`FACTS_READERS_SILENT ${file}\n`)
-    }
-    // Differences are sorted whole-line: the case path first, then the line the pass printed, so two
-    // runs of this tool can be compared with `diff` and a line that moved is a line that moved.
-    diffs.sort()
-    for (const diff of diffs) {
-        process.stdout.write(`${diff}\n`)
     }
 }
 
