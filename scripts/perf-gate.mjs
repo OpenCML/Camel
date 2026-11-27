@@ -338,7 +338,7 @@ const GATEABLE = PLANS.filter((plan) => plan.gateable).map((plan) => plan.id)
 // The plan's own command for one Fibonacci case: `--timeit std::<backend>/10`, the program, then
 // the passes the plan names (std::cxx::inline before the backend when the case inlines).
 function timeit(camel, backend, inline) {
-    const argv = [camel, '--timeit', `${backend}/10`, '--output-format', 'json', FIB_RECURSIVE]
+    const argv = [camel, '--timeit', `${backend}/10`, '--diag-format', 'json', FIB_RECURSIVE]
     if (inline) {
         argv.push('std::cxx::inline')
     }

@@ -43,7 +43,7 @@ import baseline  # noqa: E402
 import scale_programs  # noqa: E402
 
 def timed(pass_name, rounds):
-    return lambda args: (["--timeit", f"{pass_name}/{rounds}"] + args + ["--output-format", "json"], True)
+    return lambda args: (["--timeit", f"{pass_name}/{rounds}"] + args + ["--diag-format", "json"], True)
 
 
 def mode_table(rounds):

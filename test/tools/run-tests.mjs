@@ -1436,7 +1436,7 @@ function parseDiagnostics(text) {
     for (let i = 0; i < starts.length; ++i) {
         const end = i + 1 < starts.length ? starts[i + 1].begin : clean.length
         const closed = suffix.exec(clean.slice(starts[i].after, end))
-        if (closed === null) continue // a message with no name to assert (--error-format text)
+        if (closed === null) continue // a message with no name to assert (--diag-format text)
         diagnostics.push({
             path: starts[i].path,
             line: starts[i].line === '?' ? undefined : Number.parseInt(starts[i].line, 10),
@@ -3125,7 +3125,7 @@ async function runOneTest(test, sharedVars, logContext, scratch, scratchRelative
     // returns an empty graph), so nothing the entry would have executed is executed. This is what
     // makes a case outside the fast tier visible without paying for its run.
     // Only an entry that hands the compiler a case and a pipeline is judged: a tool entry, one that
-    // drives the CLI (`--timeit`, `--output-format`), or one whose first word is a flag is asking
+    // drives the CLI (`--timeit`, `--diag-format`), or one whose first word is a flag is asking
     // something else, and a compile of it would answer a question nobody asked.
     const judgedByCompile =
         logContext.options.compileOnly &&
@@ -3142,12 +3142,12 @@ async function runOneTest(test, sharedVars, logContext, scratch, scratchRelative
     if (judgedByCompile) {
         const firstPass = args.findIndex((word) => /^[A-Za-z_][\w:-]*::/.test(word))
         if (firstPass >= 0) args.length = firstPass
-        const timeit = args.findIndex((word) => word === '--timeit' || word === '--output-format')
+        const timeit = args.findIndex((word) => word === '--timeit' || word === '--diag-format')
         if (timeit >= 0) args.length = Math.min(args.length, timeit)
         args.push('std::gir')
     }    const env = { ...process.env }
     // Assertions on diagnostics (name, code, line, column) read the one-line text format.
-    // A test of the format with source excerpts passes --error-format text, which wins.
+    // A test of the format with source excerpts passes --diag-format text, which wins.
     env.CAMEL_ERROR_FORMAT = 'short'
     env.CAMEL_TEST_TMPDIR = scratch
     // Before the test's own `envs`: a value the test writes for itself wins over the default.
@@ -3728,7 +3728,7 @@ function sweepExclusion(sweep, test) {
     // Options are read by a run: the words go in front of its entry file. A test that asks the
     // compiler (`check`, `inspect`, `--version`) has no run to put them in front of, and they would
     // land on the wrong parser.
-    const RUNDRIVING = new Set(["${case}", "--timeit", "--output-format"])
+    const RUNDRIVING = new Set(["${case}", "--timeit", "--diag-format"])
     if ((sweep.args || []).length > 0 && !RUNDRIVING.has(ownArgs[0])) return 'does not drive a run'
     return null
 }

@@ -296,7 +296,7 @@ function parseRemote(text) {
     return out
 }
 
-// `--output-format json` prints the diagnostics as a JSON array on stdout when the compile or
+// `--diag-format json` prints the diagnostics as a JSON array on stdout when the compile or
 // the run fails. A program that ran may itself print an array (`[2, 4, 6]`), so an element only
 // counts as a diagnostic when it is an object that carries this compiler's own fields.
 function diagnosticsOf(stdout) {

@@ -133,7 +133,7 @@ def resident_matrix():
         a, b = prepare(folder)
         env = dict(os.environ, CAMEL_HOME=INSTALL, TILES_TEST_OUT=str(folder))
         for vm in ['std::nvm', 'std::fvm', 'std::jit', 'std::prl']:
-            result = subprocess.run([EXE, *GCC_CHECK, '--gc', 'generational',
+            result = subprocess.run([EXE, *GCC_CHECK, '--gc', 'kind=generational',
                                      str(Path(__file__).with_suffix('.cml')), vm],
                                     cwd=ROOT, env=env, capture_output=True, text=True, timeout=120)
             assert result.returncode == 0, (vm, result.stdout, result.stderr)

@@ -36,10 +36,10 @@ timeout_ms = 8000
 
 [[tests]]
 name = "format.short"
-desc = "--error-format short is the one-line form the tools read: one line per diagnostic with name and code, and no excerpt."
+desc = "--diag-format short is the one-line form the tools read: one line per diagnostic with name and code, and no excerpt."
 kind = "behavior"
 case = "../../../cases/compile/diag_render/sem_cascade.cml"
-args = ["--error-format", "short", "${case}"]
+args = ["--diag-format", "short", "${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::UnresolvedReference"
 expect_diagnostic_code = "0x0300000B"
@@ -66,7 +66,7 @@ name = "format.option_wins"
 desc = "The option outranks the environment variable."
 kind = "behavior"
 case = "../../../cases/compile/diag_render/sem_cascade.cml"
-args = ["--error-format", "text", "${case}"]
+args = ["--diag-format", "text", "${case}"]
 expect_exit = 1
 expect_output_contains = ["error[SemanticDiag::UnresolvedReference]: Unresolved reference: 'nope'.", "  --> "]
 expect_output_not_contains = ["(name="]
@@ -78,7 +78,7 @@ name = "format.unknown"
 desc = "An unknown format is refused before anything is compiled."
 kind = "behavior"
 case = "../../../cases/compile/diag_render/sem_cascade.cml"
-args = ["--error-format", "fancy", "${case}"]
+args = ["--diag-format", "fancy", "${case}"]
 expect_exit = 1
 expect_output_contains = ["unknown diagnostics format 'fancy'"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
@@ -89,7 +89,7 @@ name = "color.none_when_piped"
 desc = "Output that is not a terminal carries no colour codes, in either text form."
 kind = "behavior"
 case = "../../../cases/compile/diag_render/sem_cascade.cml"
-args = ["--error-format", "text", "${case}"]
+args = ["--diag-format", "text", "${case}"]
 expect_exit = 1
 verify_script = """
 assert(!input.stderr.includes('\u001b'), 'escape codes in piped output')
@@ -102,7 +102,7 @@ name = "color.none_when_piped_short"
 desc = "The one-line form too: it used to be coloured whatever it was written to."
 kind = "behavior"
 case = "../../../cases/compile/diag_render/sem_cascade.cml"
-args = ["--error-format", "short", "${case}"]
+args = ["--diag-format", "short", "${case}"]
 expect_exit = 1
 verify_script = """
 assert(!input.stderr.includes('\u001b'), 'escape codes in piped output')
@@ -114,7 +114,7 @@ name = "color.always"
 desc = "--color always colours piped output."
 kind = "behavior"
 case = "../../../cases/compile/diag_render/sem_cascade.cml"
-args = ["--error-format", "text", "--color", "always", "${case}"]
+args = ["--diag-format", "text", "--color", "always", "${case}"]
 expect_exit = 1
 verify_script = """
 assert(input.stderr.includes('\u001b[1;31merror[SemanticDiag::UnresolvedReference]'), 'severity is coloured')
@@ -165,10 +165,10 @@ timeout_ms = 8000
 
 [[tests]]
 name = "errors.json_array"
-desc = "With several errors --output-format json is still one array."
+desc = "With several errors --diag-format json is still one array."
 kind = "behavior"
 case = "../../../cases/compile/diag_options/many_errors.cml"
-args = ["--output-format", "json", "--max-errors", "4", "${case}"]
+args = ["--diag-format", "json", "--max-errors", "4", "${case}"]
 expect_exit = 1
 verify_script = """
 const diags = JSON.parse(input.stdout)
@@ -198,7 +198,7 @@ name = "json.related_information"
 desc = "The secondary location of a diagnostic is relatedInformation in JSON: the call that instantiated the generic function, with its file and range; the message is free of it."
 kind = "behavior"
 case = "../../../cases/compile/diag_render/sem_generic_instance.cml"
-args = ["--output-format", "json", "${case}"]
+args = ["--diag-format", "json", "${case}"]
 expect_exit = 1
 verify_script = """
 const diags = JSON.parse(input.stdout)
@@ -314,7 +314,7 @@ name = "warn.werror_note"
 desc = "In the text form a promoted warning says why it is an error."
 kind = "behavior"
 case = "../../../cases/compile/diag_options/warning.cml"
-args = ["--error-format", "text", "-Werror", "${case}"]
+args = ["--diag-format", "text", "-Werror", "${case}"]
 expect_exit = 1
 expect_stderr_contains = ["error[SemanticDiag::UnusedAssignedValue]:", "note: this warning is reported as an error because of -Werror"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
@@ -344,14 +344,14 @@ timeout_ms = 8000
 
 [[tests]]
 name = "warn.max_warning"
-desc = "-N / --max-warning limits the warnings shown and says how many were not (it was accepted and ignored before)."
+desc = "-N / --max-warnings limits the warnings shown and says how many were not (it was accepted and ignored before)."
 kind = "behavior"
 case = "../../../cases/compile/diag_options/warning.cml"
-args = ["--max-warning", "0", "${case}"]
+args = ["--max-warnings", "0", "${case}"]
 expect_exit = 0
 verify_script = """
 assert(!input.stderr.includes('UnusedAssignedValue'), 'the warning is not shown')
-assert(input.stderr.includes('1 more warning(s) not shown (--max-warning 0)'), input.stderr)
+assert(input.stderr.includes('1 more warning(s) not shown (--max-warnings 0)'), input.stderr)
 """
 timeout_ms = 8000
 
@@ -392,7 +392,7 @@ name = "explain.name"
 desc = "--explain prints the catalog entry of a name (with or without the type, in any case)."
 kind = "behavior"
 case = "../../../cases/compile/diag_options/warning.cml"
-args = ["--explain", "indexoutofrange"]
+args = ["explain", "indexoutofrange"]
 expect_exit = 0
 expect_stdout_contains = ["RuntimeDiag::IndexOutOfRange  (0x04000002, Error)", "message: Index {0} is out of range for {1} of length {2}."]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
@@ -403,7 +403,7 @@ name = "explain.code"
 desc = "--explain takes a code."
 kind = "behavior"
 case = "../../../cases/compile/diag_options/warning.cml"
-args = ["--explain", "0x0300000B"]
+args = ["explain", "0x0300000B"]
 expect_exit = 0
 expect_stdout_contains = ["SemanticDiag::UnresolvedReference  (0x0300000B, Error)"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
@@ -414,7 +414,7 @@ name = "explain.unknown"
 desc = "--explain of something that is no diagnostic fails."
 kind = "behavior"
 case = "../../../cases/compile/diag_options/warning.cml"
-args = ["--explain", "NoSuchDiagnostic"]
+args = ["explain", "NoSuchDiagnostic"]
 expect_exit = 1
 expect_output_contains = ["no diagnostic is named or numbered 'NoSuchDiagnostic'"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]

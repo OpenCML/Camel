@@ -134,10 +134,10 @@ timeout_ms = 8000
 
 [[tests]]
 name = "constant_fault_reached.json"
-desc = "With --output-format json the warning is one JSON array on stderr (severity Warn, stage pass:std::cxx::fold, the position of the division), and stdout is the program's output followed by the error array, which holds the error only."
+desc = "With --diag-format json the warning is one JSON array on stderr (severity Warn, stage pass:std::cxx::fold, the position of the division), and stdout is the program's output followed by the error array, which holds the error only."
 kind = "behavior"
 case = "../../../cases/opt/generic/fold_constant_fault_reached.cml"
-args = ["--output-format", "json", "${case}", "std::cxx::fold", "std::opt"]
+args = ["--diag-format", "json", "${case}", "std::cxx::fold", "std::opt"]
 expect_exit = 1
 verify_script = """
 const warnings = JSON.parse(input.stderr)

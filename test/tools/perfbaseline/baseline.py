@@ -225,7 +225,7 @@ def graph_stats(stdout):
 
 
 def timeit_mean_ms(stdout):
-    """The mean of the `--timeit --output-format json` summary (a pretty-printed object)."""
+    """The mean of the `--timeit --diag-format json` summary (a pretty-printed object)."""
     for match in reversed(list(re.finditer(r"\{", stdout))):
         payload = None
         try:
@@ -296,9 +296,9 @@ def main():
         stats = run(args + ["std::stats", "std::nop"], env)
         graph = graph_stats(stats["stdout"])
         opt_peak = run(args + ["std::cxx::inline", "std::nop"], env)
-        opt_time = run(["--timeit", f"std::cxx::inline/{rounds}"] + args + ["--output-format", "json"], env)
+        opt_time = run(["--timeit", f"std::cxx::inline/{rounds}"] + args + ["--diag-format", "json"], env)
         optall_peak = run(args + ["std::opt", "std::nop"], env)
-        optall_time = run(["--timeit", f"std::opt/{rounds}"] + args + ["--output-format", "json"], env)
+        optall_time = run(["--timeit", f"std::opt/{rounds}"] + args + ["--diag-format", "json"], env)
         row = {
             "name": name,
             "graphs": graph.get("graphs"),
@@ -316,7 +316,7 @@ def main():
             "exec_peak": {},
         }
         for backend in BACKENDS:
-            timed = run(["--timeit", f"std::{backend}/{rounds}"] + args + ["--output-format", "json"], env)
+            timed = run(["--timeit", f"std::{backend}/{rounds}"] + args + ["--diag-format", "json"], env)
             ran = run(args + [f"std::{backend}"], env)
             row["exec_ms"][backend] = timeit_mean_ms(timed["stdout"])
             row["exec_peak"][backend] = ran["peak"]

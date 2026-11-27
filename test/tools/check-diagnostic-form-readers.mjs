@@ -12,7 +12,7 @@
  *   json  (`-E json`):       the report as an object
  *
  * The form is chosen per run (`src/tools/camel-cli/config.cpp#applyDiagnosticOptions`): `-E` /
- * `--error-format` for `run`, `-O` / `--output-format` for `check`, else `CAMEL_ERROR_FORMAT`, else
+ * `--diag-format` for `run`, `-O` / `--diag-format` for `check`, else `CAMEL_ERROR_FORMAT`, else
  * `text`. The plan runner sets `CAMEL_ERROR_FORMAT=short` for every child it starts
  * (`test/tools/run-tests.mjs`), so a *test case* sees the one-line form by construction -- and a tool
  * that spawns `camel` itself, with the caller's environment, sees the rich one.
@@ -52,7 +52,7 @@ const SHORT_FRAME = ': [Error]: '
 const RICH_HEADER = /error\[/
 
 /// How a tool asks for a form.
-const ASKS_SHORT = [/CAMEL_ERROR_FORMAT\s*[:=]\s*['"]short['"]/, /-E\s+short/, /--error-format[=\s]+short/, /-O\s+short/]
+const ASKS_SHORT = [/CAMEL_ERROR_FORMAT\s*[:=]\s*['"]short['"]/, /-E\s+short/, /--diag-format[=\s]+short/, /-O\s+short/]
 
 /// How a tool starts `camel`.
 const SPAWNS = [/\bspawn(Sync)?\s*\(/, /\bexecFile(Sync)?\s*\(/, /\bexecSync\s*\(/, /\brunProcess\s*\(/, /subprocess\.run\s*\(/]

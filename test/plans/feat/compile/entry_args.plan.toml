@@ -151,7 +151,7 @@ timeout_ms = 8000
 
 [[tests]]
 name = "entry_args.missing_argument_json"
-desc = "The same under each scheduler in --output-format json: one diagnostic, stage run, a source range, and the program does not run."
+desc = "The same under each scheduler in --diag-format json: one diagnostic, stage run, a source range, and the program does not run."
 kind = "behavior"
 tool = "node"
 case = "../../../cases/compile/entry_args/missing.mjs"
@@ -1091,7 +1091,7 @@ name = "entry_args.cpp_struct_refused"
 desc = "A parameter of a type the command line gives camel through files (a struct) is refused by std::cpp, located at main and naming the parameter."
 kind = "behavior"
 case = "../../../cases/compile/entry_args/struct_scalars.cml"
-args = ["-E", "short", "${case}", "std::cpp", "std::nop"]
+args = ["--diag-format", "short", "${case}", "std::cpp", "std::nop"]
 expect_exit = 1
 expect_output_contains = ["RuntimeDiag::TranslationRefused", ".cml:5:1:", "the parameter 'p' of 'main' has type", "std::cpp reads from the command line only the parameters of type int, i32, float, f32, c64, c128, bool and string"]
 expect_output_not_contains = ["internal error", ":?:?:"]

@@ -346,7 +346,7 @@ namespace Run {
 string outputFile               = "";
 string package                  = "";
 string schedular                = "";
-string errorFormat              = ""; // "" = not given; see Diag::format
+string errorFormat              = ""; // from --diag-format; "" = not given; see Diag::format
 string stdLibPath               = ""; // "" means use the default path
 vector<string> includeDirs      = {}; // Include directories
 vector<string> targetFiles      = {};
@@ -371,19 +371,22 @@ int maxThreads    = -1; // -1 means use the maximum number of threads
 string maxRecursionDepthOpt = ""; // raw --max-recursion-depth
 string maxMacroDepthOpt     = ""; // raw --max-macro-depth
 string maxMacroRoundsOpt    = ""; // raw --max-macro-rounds
-string gcModeOpt            = ""; // raw --gc
-string blockLimitOpt        = ""; // raw --block-limit (megabytes)
-string graphGcMbOpt         = ""; // raw --graph-gc-mb (megabytes)
-string gcNurseryMbOpt       = ""; // raw --gc-nursery-mb
-string gcPromotionAgeOpt    = ""; // raw --gc-promotion-age
-string gcLargeThresholdOpt  = ""; // raw --gc-large-threshold-kb
-string gcLargeBudgetOpt     = ""; // raw --gc-large-budget-mb
-string gcGrowthPercentOpt   = ""; // raw --gc-growth-percent
-string gcHeapLimitOpt       = ""; // raw --gc-heap-limit-mb
-string spaceSegmentKbOpt    = ""; // raw --space-segment-kb
-string metaSpaceLimitOpt    = ""; // raw --meta-space-limit-mb
-string graphSpaceLimitOpt   = ""; // raw --graph-space-limit-mb
-string permSpaceLimitOpt    = ""; // raw --perm-space-limit-mb
+string gcModeOpt            = ""; // from --gc kind=...
+string gcSpec = ""; // raw --gc (kind=...,nursery_mb=...,promotion_age=...,graph_mb=...)
+string spacesSpec =
+    ""; // raw --spaces (block_mb=...,segment_kb=...,meta_mb=...,graph_mb=...,perm_mb=...)
+string blockLimitOpt        = ""; // from --spaces block_mb=... (megabytes)
+string graphGcMbOpt         = ""; // from --gc graph_mb=... (megabytes)
+string gcNurseryMbOpt       = ""; // from --gc nursery_mb=...
+string gcPromotionAgeOpt    = ""; // from --gc promotion_age=...
+string gcLargeThresholdOpt  = ""; // from --gc large_threshold_kb=...
+string gcLargeBudgetOpt     = ""; // from --gc large_budget_mb=...
+string gcGrowthPercentOpt   = ""; // from --gc growth_percent=...
+string gcHeapLimitOpt       = ""; // from --gc heap_limit_mb=...
+string spaceSegmentKbOpt    = ""; // from --spaces segment_kb=...
+string metaSpaceLimitOpt    = ""; // from --spaces meta_mb=...
+string graphSpaceLimitOpt   = ""; // from --spaces graph_mb=...
+string permSpaceLimitOpt    = ""; // from --spaces perm_mb=...
 string gcStressOpt          = ""; // raw --gc-stress (kind=...,alloc=...,safepoint=...)
 string gcCheckOpt           = ""; // raw --gc-check (moves,poison,verify=...,config)
 string collOpt              = ""; // raw --coll (leaf=...,fanout=...,pad=...,validate=...)
@@ -400,7 +403,6 @@ namespace Check {
 bool lexical          = false; // Whether to check lexical errors
 bool syntaxOnly       = false; // Whether to check syntax only
 bool ignoreDefiFile   = false; // Whether to ignore the definition file
-string outputFormat   = "";    // Output format; "" = not given, see Diag::format
 string configFilePath = "";    // Configuration file path
 } // namespace Check
 
@@ -455,8 +457,8 @@ std::vector<char *> takeWarningArguments(int argc, char *argv[]) {
 bool applyDiagnosticOptions() {
     using namespace camel::core::error;
 
-    // Format: -E/--error-format (run) or -O/--output-format (check), else the environment.
-    std::string format = selectedCommand == Command::Check ? Check::outputFormat : Run::errorFormat;
+    // Format: --diag-format, the same option in every command, else the environment.
+    std::string format = Run::errorFormat;
     if (format.empty()) {
         if (const char *env = std::getenv("CAMEL_ERROR_FORMAT"); env != nullptr && env[0] != '\0') {
             format = env;
@@ -487,7 +489,7 @@ bool applyDiagnosticOptions() {
         format == "json");
 
     if (Diag::maxErrors < 0 || Diag::maxWarnings < 0) {
-        std::cerr << "Error: --max-errors and --max-warning take a non-negative number."
+        std::cerr << "Error: --max-errors and --max-warnings take a non-negative number."
                   << std::endl;
         return false;
     }
@@ -595,6 +597,116 @@ bool explainDiagnostic(const std::string &target) {
     return found;
 }
 
+/// The spellings the command line no longer has: each was renamed, merged into a key=value option
+/// or turned into a subcommand (one spelling for each setting), and is deleted. They are named here
+/// rather than left to the parser because an option that begins with a surviving one
+/// (`--gc-nursery-mb` of `--gc`, `--output-format` of `--output`) would otherwise be read as that
+/// option with the rest attached and the value after it taken for the program -- a refusal that
+/// says nothing about the option being gone. Nothing is offered in their place: the message is the
+/// one an unknown option always had.
+bool rejectRetiredOptions(int argc, char *argv[]) {
+    static const char *const kRetired[] = {
+        "--error-format",
+        "-E",
+        "--output-format",
+        "-O",
+        "--max-warning",
+        "-N",
+        "--block-limit",
+        "--graph-gc-mb",
+        "--gc-nursery-mb",
+        "--gc-promotion-age",
+        "--gc-large-threshold-kb",
+        "--gc-large-budget-mb",
+        "--gc-growth-percent",
+        "--gc-heap-limit-mb",
+        "--space-segment-kb",
+        "--meta-space-limit-mb",
+        "--graph-space-limit-mb",
+        "--perm-space-limit-mb",
+        "-n",
+        "--docs",
+        "-d",
+        "--about",
+        "-a",
+        "--zen",
+        "-z",
+        "--explain",
+    };
+    for (int i = 1; i < argc; ++i) {
+        const std::string_view arg = argv[i];
+        for (const char *retired : kRetired) {
+            const std::string_view name = retired;
+            if (arg == name ||
+                (arg.size() > name.size() && arg.starts_with(name) && arg[name.size()] == '=')) {
+                std::cerr << "Error: unknown option '" << retired
+                          << "'. Run 'camel --help' for the options accepted." << std::endl;
+                exitCode = 1;
+                return false;
+            }
+        }
+    }
+    return true;
+}
+
+/// The two places a run's collector and its spaces are set: `--gc
+/// kind=generational,nursery_mb=4,...` and `--spaces block_mb=2048,segment_kb=...`. Each word is
+/// one setting, named as the table lists it; a key neither knows is refused here rather than
+/// silently ignored.
+bool applyMachineSpecs() {
+    struct Key {
+        const char *name;
+        std::string *target;
+    };
+    const Key gcKeys[] = {
+        {"kind", &Run::gcModeOpt},
+        {"nursery_mb", &Run::gcNurseryMbOpt},
+        {"promotion_age", &Run::gcPromotionAgeOpt},
+        {"large_threshold_kb", &Run::gcLargeThresholdOpt},
+        {"large_budget_mb", &Run::gcLargeBudgetOpt},
+        {"growth_percent", &Run::gcGrowthPercentOpt},
+        {"heap_limit_mb", &Run::gcHeapLimitOpt},
+        {"graph_mb", &Run::graphGcMbOpt},
+    };
+    const Key spaceKeys[] = {
+        {"block_mb", &Run::blockLimitOpt},
+        {"segment_kb", &Run::spaceSegmentKbOpt},
+        {"meta_mb", &Run::metaSpaceLimitOpt},
+        {"graph_mb", &Run::graphSpaceLimitOpt},
+        {"perm_mb", &Run::permSpaceLimitOpt},
+    };
+    const auto take =
+        [](const char *option, const std::string &spec, const Key *keys, size_t count) {
+            for (const auto &word : splitSpec(spec)) {
+                const Key *found = nullptr;
+                for (size_t i = 0; i < count; ++i) {
+                    if (word.key == keys[i].name) {
+                        found = &keys[i];
+                        break;
+                    }
+                }
+                if (found == nullptr) {
+                    std::cerr << "Invalid " << option << " key: '" << word.key << "'. Expected "
+                              << keys[0].name;
+                    for (size_t i = 1; i < count; ++i) {
+                        std::cerr << ", " << keys[i].name;
+                    }
+                    std::cerr << "." << std::endl;
+                    return false;
+                }
+                if (word.value.empty()) {
+                    std::cerr << "Invalid " << option << " word: '" << word.key
+                              << "'. Expected key=value." << std::endl;
+                    return false;
+                }
+                *found->target = word.value;
+            }
+            return true;
+        };
+    return take("--gc", Run::gcSpec, gcKeys, std::size(gcKeys)) &&
+           take("--spaces", Run::spacesSpec, spaceKeys, std::size(spaceKeys));
+}
+
 /// clipp's positional parameter accepts any non-empty text, so an option it does not know
 /// (`--bogus`, `-x`) is taken for the input file. Report it as an unknown option instead; a
 /// file whose name really begins with '-' is written './-name'.
@@ -657,6 +769,9 @@ void printCliArgs(Command selected) {
 }
 
 bool parseArgs(int argc, char *argv[]) {
+    if (!rejectRetiredOptions(argc, argv)) {
+        return false;
+    }
     const bool startupProfile = std::getenv("CAMEL_STARTUP_PROFILE") != nullptr;
     auto startupLast          = std::chrono::steady_clock::now();
     auto startupMark          = [&](const char *stage) {
@@ -670,6 +785,7 @@ bool parseArgs(int argc, char *argv[]) {
     bool showVersion = false; // Version information
     bool showHelp    = false; // Help information
     bool showDocs    = false; // Documentation information
+    vector<string> docsModules = {};    // `camel docs [<module>]: which module's documentation
     bool showAbout   = false; // About information
     bool showZen     = false; // Show Zen of Camel
 
@@ -696,11 +812,13 @@ bool parseArgs(int argc, char *argv[]) {
     // taken out of argv before clipp sees it (applyWarningArguments): their value is joined to
     // the flag, which clipp cannot express.
     auto diagOps =
-        ((option("--color") & value("when", Diag::color)) %
+        ((option("--diag-format") & value("format", Run::errorFormat)) %
+             "diagnostics format: text (default), short or json; the same option in every command",
+         (option("--color") & value("when", Diag::color)) %
              "colours in diagnostics: auto (only on a terminal), always or never",
          (option("--max-errors") & integer("n", Diag::maxErrors)) %
              "compile errors reported before giving up (default 20; 0: no limit)",
-         (option("-N", "--max-warning") & integer("n", Diag::maxWarnings)) %
+         (option("--max-warnings") & integer("n", Diag::maxWarnings)) %
              "warnings shown (default 1000); further ones are counted, not printed");
 
     auto run =
@@ -717,39 +835,16 @@ bool parseArgs(int argc, char *argv[]) {
          (option("--max-macro-rounds") & value("rounds", maxMacroRoundsOpt)) %
              "limit on the rounds one loop may run while std::macro evaluates it (default: "
              "1000000)",
-         (option("--gc") & value("collector", gcModeOpt)) %
-             "collector of run-time values: generational (default; young objects are copied) or "
-             "mark-sweep (objects keep their address)",
-         (option("--block-limit") & value("megabytes", blockLimitOpt)) %
-             "limit of the data-block space in megabytes (default 2048); raise it for a run that "
-             "builds several large models in one process",
-         (option("--graph-gc-mb") & value("megabytes", graphGcMbOpt)) %
-             "the graph space asks for a collection when it holds this many megabytes more than "
-             "after the last one (default 64)",
-         (option("--gc-nursery-mb") & value("megabytes", gcNurseryMbOpt)) %
-             "the birth space of the generational collector, in megabytes (default 4)",
-         (option("--gc-promotion-age") & value("collections", gcPromotionAgeOpt)) %
-             "minor collections an object survives before it is promoted, 1 to 15 (default 4); 1 "
-             "shows a missing write barrier",
-         (option("--gc-large-threshold-kb") & value("kilobytes", gcLargeThresholdOpt)) %
-             "what counts as a large object, in kilobytes (default 64 generational, 4 mark-sweep)",
-         (option("--gc-large-budget-mb") & value("megabytes", gcLargeBudgetOpt)) %
-             "large-object bytes between collections, in megabytes (default 4)",
-         (option("--gc-growth-percent") & value("percent", gcGrowthPercentOpt)) %
-             "how much the large-object space grows between collections, in percent of what the "
-             "last sweep left (default 100)",
-         (option("--gc-heap-limit-mb") & value("megabytes", gcHeapLimitOpt)) %
-             "the limit of the collected heap, in megabytes (default none); a program that "
-             "outgrows it stops with MemoryExhausted",
-         (option("--space-segment-kb") & value("kilobytes", spaceSegmentKbOpt)) %
-             "the first segment of every growable space, in kilobytes; small segments make a "
-             "small program grow them, for exercising growth",
-         (option("--meta-space-limit-mb") & value("megabytes", metaSpaceLimitOpt)) %
-             "the limit of the meta space (types and function objects), in megabytes",
-         (option("--graph-space-limit-mb") & value("megabytes", graphSpaceLimitOpt)) %
-             "the limit of the graph space (compiled graphs), in megabytes",
-         (option("--perm-space-limit-mb") & value("megabytes", permSpaceLimitOpt)) %
-             "the limit of the permanent space (types and layouts), in megabytes",
+         (option("--gc") & value("key=value,...", gcSpec)) %
+             "the run-time collector, as key=value words: kind=generational|mark-sweep, "
+             "nursery_mb=4, "
+             "promotion_age=4, large_threshold_kb=64, large_budget_mb=4, growth_percent=100, "
+             "heap_limit_mb=N, graph_mb=64 (the graph space asks for a collection after this much "
+             "growth)",
+         (option("--spaces") & value("key=value,...", spacesSpec)) %
+             "the spaces of a run, as key=value words: block_mb=2048 (the data-block space), "
+             "segment_kb=N (the first segment of every growable space), meta_mb=N, graph_mb=N and "
+             "perm_mb=N (the limits of the meta, graph and permanent spaces)",
          (option("--gc-stress") & value("kind=...,alloc=...,safepoint=...", gcStressOpt)) %
              "collect under stress: kind=minor|major|both names the collection, alloc=N collects "
              "every N allocations, safepoint=N every N safepoints",
@@ -775,11 +870,9 @@ bool parseArgs(int argc, char *argv[]) {
          (option("--profile-mode") & value("normal|full", profileModeOpt)) %
              "mode of the profiler of --profile: full also opens the Perfetto UI when the report "
              "is written",
-         option("-n", "--no-cache").set(noCache) % "do not use cache",
+         option("--no-cache").set(noCache) % "do not use cache",
          (option("-I", "--include") & values("include dir", includeDirs)) % "add include directory",
          (option("-L", "--stdlib") & value("stdlib path", stdLibPath)) % "add stdlib path",
-         (option("-E", "--error-format", "--output-format") & value("error format", errorFormat)) %
-             "diagnostics format: text (source excerpts), short (one line each) or json",
          diagOps,
          (option("--passes") & value("pass1 key=value,pass2", passesOpt)) %
              "pass list as comma-separated, each pass followed by its parameters as key=value "
@@ -805,20 +898,25 @@ bool parseArgs(int argc, char *argv[]) {
          opt_values("input", targetFiles) %
              "input file (optional if --input given; at least one required)");
 
-    auto info =
+    // The information commands are subcommands, not options: they are not a setting of a run.
+    // Each is its own group, so the first word of the command line decides which one it is.
+    auto infoFlags =
         (option("-V", "--version").set(showVersion).set(selectedCommand, Command::Info) %
              "show version",
          option("-h", "--help").set(showHelp).set(selectedCommand, Command::Info) %
-             "show this help message",
-         option("-d", "--docs").set(showDocs).set(selectedCommand, Command::Info) %
-             "show documentation",
-         option("-a", "--about").set(showAbout).set(selectedCommand, Command::Info) %
-             "show copyright and related information",
-         (option("--explain").set(selectedCommand, Command::Info) &
-          value("name or code", Diag::explain)) %
-             "describe a diagnostic by its name or code (e.g. --explain IndexOutOfRange)",
-         option("-z", "--zen").set(showZen).set(selectedCommand, Command::Info) %
-             "show the Zen of Camel");
+             "show this help message");
+    auto docsCommand =
+        (command("docs").set(showDocs).set(selectedCommand, Command::Info) %
+             "show the documentation of a module",
+         opt_values("module", docsModules) % "module whose documentation is shown (default: all)");
+    auto aboutCommand = command("about").set(showAbout).set(selectedCommand, Command::Info) %
+                        "show copyright and related information";
+    auto zenCommand =
+        command("zen").set(showZen).set(selectedCommand, Command::Info) % "show the Zen of Camel";
+    auto explainCommand =
+        (command("explain").set(selectedCommand, Command::Info) %
+             "describe a diagnostic by its name or code",
+         (value("name or code", Diag::explain) % "the diagnostic to describe"));
 
     auto check =
         (command("check").set(selectedCommand, Command::Check) %
@@ -827,8 +925,6 @@ bool parseArgs(int argc, char *argv[]) {
              "lexical analysis only: report lexical errors and stop before parsing",
          option("-s", "--syntax-only").set(syntaxOnly) %
              "lexical and syntax analysis only: stop before names and types are checked",
-         (option("-O", "--output-format") & value("output format", outputFormat)) %
-             "diagnostics format: text, short or json",
          diagOps,
          (option("-c", "--config") & value("config file path", configFilePath)) %
              "config file path",
@@ -893,7 +989,8 @@ bool parseArgs(int argc, char *argv[]) {
          globalOps,
          values("input", targetFiles) % "input file");
 
-    auto cli = run | info | check | inspect;
+    auto cli = docsCommand | aboutCommand | zenCommand | explainCommand | run | infoFlags | check |
+               inspect;
     startupMark("construct");
 
     std::vector<char *> args = takeWarningArguments(argc, argv);
@@ -920,6 +1017,10 @@ bool parseArgs(int argc, char *argv[]) {
         return false;
     }
     if (!rejectUnknownOptions()) {
+        return false;
+    }
+    if (!applyMachineSpecs()) {
+        exitCode = 1;
         return false;
     }
 
@@ -1058,7 +1159,7 @@ bool parseArgs(int argc, char *argv[]) {
         if (!Run::gcModeOpt.empty()) {
             const auto mode = camel::core::mm::parseCollectorMode(Run::gcModeOpt);
             if (!mode) {
-                std::cerr << "Error: --gc " << Run::gcModeOpt
+                std::cerr << "Error: --gc kind=" << Run::gcModeOpt
                           << " is not a collector; give mark-sweep or generational." << std::endl;
                 std::exit(1);
             }
@@ -1069,17 +1170,17 @@ bool parseArgs(int argc, char *argv[]) {
             }
         }
 
-        // The memory limits: --block-limit and --graph-gc-mb. Both must be read before the
+        // The memory limits: --spaces block_mb and --gc graph_mb. Both must be read before the
         // spaces they bound exist.
         size_t blockLimitMb   = 0;
         size_t graphGcFloorMb = 0;
-        if (!readMegabyteLimit(Run::blockLimitOpt, "--block-limit", blockLimitMb) ||
-            !readMegabyteLimit(Run::graphGcMbOpt, "--graph-gc-mb", graphGcFloorMb)) {
+        if (!readMegabyteLimit(Run::blockLimitOpt, "--spaces block_mb", blockLimitMb) ||
+            !readMegabyteLimit(Run::graphGcMbOpt, "--gc graph_mb", graphGcFloorMb)) {
             std::exit(1);
         }
         if (blockLimitMb != 0 &&
             !camel::core::mm::selectBlockSpaceLimit(blockLimitMb * camel::core::mm::MB)) {
-            std::cerr << "Error: --block-limit was read after the data-block space was set up."
+            std::cerr << "Error: --spaces block_mb was read after the data-block space was set up."
                       << std::endl;
             std::exit(1);
         }
@@ -1088,7 +1189,7 @@ bool parseArgs(int argc, char *argv[]) {
         }
 
         // The collector's sizing and its checks, and the widths of a collection tree: --gc-*,
-        // --space-segment-kb, the three space limits, --coll. Each has to be read before the
+        // --spaces segment_kb and the three space limits, --coll. Each has to be read before the
         // space or the first table it shapes exists.
         {
             camel::core::mm::AllocatorSizing sizing{};
@@ -1098,16 +1199,16 @@ bool parseArgs(int argc, char *argv[]) {
                 size_t *target;
             };
             const NumberOption numbers[] = {
-                {Run::gcNurseryMbOpt, "--gc-nursery-mb", &sizing.nurseryMb},
-                {Run::gcPromotionAgeOpt, "--gc-promotion-age", &sizing.promotionAge},
-                {Run::gcLargeThresholdOpt, "--gc-large-threshold-kb", &sizing.largeThresholdKb},
-                {Run::gcLargeBudgetOpt, "--gc-large-budget-mb", &sizing.largeBudgetMb},
-                {Run::gcGrowthPercentOpt, "--gc-growth-percent", &sizing.growthPercent},
-                {Run::gcHeapLimitOpt, "--gc-heap-limit-mb", &sizing.heapLimitMb},
-                {Run::spaceSegmentKbOpt, "--space-segment-kb", &sizing.spaceSegmentKb},
-                {Run::metaSpaceLimitOpt, "--meta-space-limit-mb", &sizing.metaSpaceLimitMb},
-                {Run::graphSpaceLimitOpt, "--graph-space-limit-mb", &sizing.graphSpaceLimitMb},
-                {Run::permSpaceLimitOpt, "--perm-space-limit-mb", &sizing.permSpaceLimitMb},
+                {Run::gcNurseryMbOpt, "--gc nursery_mb", &sizing.nurseryMb},
+                {Run::gcPromotionAgeOpt, "--gc promotion_age", &sizing.promotionAge},
+                {Run::gcLargeThresholdOpt, "--gc large_threshold_kb", &sizing.largeThresholdKb},
+                {Run::gcLargeBudgetOpt, "--gc large_budget_mb", &sizing.largeBudgetMb},
+                {Run::gcGrowthPercentOpt, "--gc growth_percent", &sizing.growthPercent},
+                {Run::gcHeapLimitOpt, "--gc heap_limit_mb", &sizing.heapLimitMb},
+                {Run::spaceSegmentKbOpt, "--spaces segment_kb", &sizing.spaceSegmentKb},
+                {Run::metaSpaceLimitOpt, "--spaces meta_mb", &sizing.metaSpaceLimitMb},
+                {Run::graphSpaceLimitOpt, "--spaces graph_mb", &sizing.graphSpaceLimitMb},
+                {Run::permSpaceLimitOpt, "--spaces perm_mb", &sizing.permSpaceLimitMb},
             };
             bool sizingGiven = false;
             for (const auto &number : numbers) {

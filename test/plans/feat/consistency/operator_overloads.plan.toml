@@ -256,7 +256,7 @@ name = "operator_overloads.struct_equality"
 desc = "An overload of `==` for exactly a struct type is more specific than the built-in comparison by content and is called (design principles 4.3); it gives `!=` as its negation; another struct type and the scalars keep the built-in operators. Alike on the four back ends."
 kind = "behavior"
 case = "../../../cases/consistency/operator_overloads/specific/struct_equality.cml"
-args = ["-E", "short", "${case}", "${backend}"]
+args = ["--diag-format", "short", "${case}", "${backend}"]
 backends = ["nvm", "fvm", "jit", "prl"]
 backends_agree = ["exit_code", "stdout_normalized"]
 expect_exit = 0
@@ -286,7 +286,7 @@ name = "operator_overloads.neq_refused"
 desc = "`!=` follows `==` and is not overloaded by itself (design principles 4.3): OperatorNotOverloadable with the reason."
 kind = "negative"
 case = "../../../cases/consistency/operator_overloads/specific/neq_refused.cml"
-args = ["-E", "short", "${case}"]
+args = ["--diag-format", "short", "${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::OperatorNotOverloadable"
 expect_output_contains = ["'!=' cannot be overloaded: it follows an overload of '=='", ".cml:3:1:"]
@@ -296,7 +296,7 @@ name = "operator_overloads.eq_not_bool"
 desc = "`a != b` through an overload of `==` that does not return a bool: OperatorOverloadInvalid where `!=` is used (`==` itself is fine)."
 kind = "negative"
 case = "../../../cases/consistency/operator_overloads/specific/eq_not_bool.cml"
-args = ["-E", "short", "${case}"]
+args = ["--diag-format", "short", "${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::OperatorOverloadInvalid"
 expect_output_contains = ["returns 'int', not 'bool'", ".cml:9:"]
