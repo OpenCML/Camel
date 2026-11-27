@@ -491,16 +491,21 @@ FactSeedTestPass::apply(const camel::runtime::Program *program, std::ostream &os
             camel::facts::permissionsKind()};
         std::map<std::string, size_t> counted;
         // One store can hold several graphs; counting its facts once per graph would multiply them.
-        std::set<camel::facts::Store *> counted_;
+        std::set<camel::facts::Store *> stores;
         for (auto *graph : collectReachableGraphs(*program)) {
             if (graph == nullptr) {
                 continue;
             }
             camel::facts::Store *movedStore = camel::facts::storeHolding(*graph);
-            if (movedStore == nullptr || !counted_.insert(movedStore).second) {
+            if (movedStore == nullptr) {
                 continue;
             }
+            // Every graph is computed in its store; a store that holds several graphs is counted
+            // once below, because counting its facts per graph would multiply them.
             camel::facts::computeAll(*movedStore, *graph, graph->view(), moved);
+            stores.insert(movedStore);
+        }
+        for (camel::facts::Store *movedStore : stores) {
             movedStore->forEach([&](const camel::facts::StoredFact &fact) {
                 ++counted[camel::facts::kindInfo(fact.kind).key];
             });
