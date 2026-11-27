@@ -142,6 +142,7 @@ SemanticDiag::ImplSignatureMismatch	test/cases/compile/native/impl_signature.cml
 SemanticDiag::ImportNameConflict	test/cases/compile/module_imports/d5_conflict.cml
 SemanticDiag::ImportNameNotExported	test/cases/compile/namespace_rules/p09_import_alias.cml
 SemanticDiag::ImportedModuleHasErrors	test/cases/compile/module_imports/import_order/relative_name/main_short.cml
+SemanticDiag::IndexAxisOutOfRange	test/cases/probe/index_axis/axis_one_too_far.cml
 SemanticDiag::InvalidAccessIndex	test/cases/consistency/faults/tuple_index_static.cml
 SemanticDiag::InvalidAnnotation	test/cases/compile/tags/err_numeric_annotation.cml
 SemanticDiag::InvalidExtentExpression	test/cases/compile/array_shape/err_negative.cml

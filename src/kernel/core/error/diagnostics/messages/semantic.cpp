@@ -1926,6 +1926,14 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             },
         },
         {
+            SemanticDiag::IndexAxisOutOfRange,
+            {
+                "IndexAxisOutOfRange",
+                "The axis {0} is out of range for a value of rank {1}.",
+                "A subscript writes the dimension it reads on, counted from the first dimension, and the value it reads has only the dimensions its type gives it. Write an axis the value has, or write the subscript with one dimension, which writes no axis.",
+            },
+        },
+        {
             SemanticDiag::IgnoredSideEffect,
             {
                 "IgnoredSideEffect",

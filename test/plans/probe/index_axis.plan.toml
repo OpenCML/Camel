@@ -1,0 +1,29 @@
+id = "probe.index_axis"
+order = 972
+tier = "fast"
+tags = ["probe"]
+desc = "The axis a subscript writes: a value of rank one read on axis 1 is refused where the call is built, and the reads that write an axis the value has are left alone."
+
+[[tests]]
+name = "index_axis.axis_one_too_far"
+desc = "`xs[[1], 0]` writes axis 1 on a value of rank 1: one diagnostic naming the axis and the rank, at the subscript, and the compiler reports it instead of running the program."
+kind = "behavior"
+case = "../../cases/probe/index_axis/axis_one_too_far.cml"
+args = ["check", "${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::IndexAxisOutOfRange"
+expect_diagnostic_line = 6
+expect_diagnostic_column = 15
+expect_output_contains = ["The axis 1 is out of range for a value of rank 1."]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "index_axis.legal_reads"
+desc = "The counter-proof: `m[1, 0]` writes axis 0, `m[.., 0]` reads a whole dimension and writes the axis of the one after it, and `xs[[0, 1]]` writes axis 0 on the inner value; all three compile and run."
+kind = "behavior"
+case = "../../cases/probe/index_axis/legal_reads.cml"
+args = ["${case}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
