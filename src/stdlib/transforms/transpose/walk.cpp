@@ -3213,7 +3213,22 @@ bool buildTransposeMember(
                 }
                 if (!armsOk || bodyCotangent == rt::kInvalidNodeRef) {
                     refuse(TransposeRefusalCause::State);
-                    os << " node=" << ref << " origin=" << regionOrigin << '\n';
+                    os << " node=" << ref << " origin=" << regionOrigin;
+                    // The cause is **linearity**, and the line says so. A loop that decides its own
+                    // rounds -- one whose form carries a condition, so the round is judged on the
+                    // loop's values before it runs -- is a function of its state and not a fixed
+                    // number of rounds: the number of rounds then depends on values the function
+                    // computes, which makes the function not linear in its parameters, and a
+                    // transposition is the adjoint of a *linear* map. This is a statement about the
+                    // function, not about the loop's form: a loop of a fixed number of rounds over
+                    // constants (the shape `for r in 0 .. n` with `n` a literal) is linear and has
+                    // a transpose. The word the log files the skip under stays `state` -- that is
+                    // the class, not the reason.
+                    if (camel::core::loopHasCondition(rt::loopBodyOf(*function, ref).kind)) {
+                        os << " why=a-condition-or-body-that-reads-a-linear-value-leaves-no-"
+                              "transpose";
+                    }
+                    os << '\n';
                     return false;
                 }
                 // The region hands back one cotangent per state, then one sum per escaped value.
