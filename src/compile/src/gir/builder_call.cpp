@@ -688,11 +688,19 @@ Builder::visitLinkNode(const GCT::node_ptr_t &gct, std::optional<GCT::Assignment
                     continue;
                 }
                 Type *candidate = fixed->withTypeAt(index);
-                if (candidate == nullptr || containsTypeVar(candidate)) {
+                // The parameter is usable as a position when the types it is built from are known
+                // (`usableExpected`): a function type whose parameters are written and whose
+                // result is still a variable is one of those, because the lambda's body is what
+                // decides the result (`completeLambdaSignature`). `map::<U>(r: Range)` declares
+                // exactly that, `with <f: (item: int) => U>`; refusing it left the position open
+                // for a name whose own entry types the parameter.
+                if (candidate == nullptr ||
+                    !usableExpected(substituteTypeVars(candidate, bindings))) {
                     // A parameter the entry still leaves open says nothing this position can be
                     // built with; the signature's own reading is the one that stands.
                     continue;
                 }
+                candidate = substituteTypeVars(candidate, bindings);
                 if (found != nullptr && !found->equals(candidate)) {
                     return nullptr; // the entries the call fits disagree: nothing to give
                 }

@@ -1,11 +1,11 @@
 id = "probe.foreach_lambda_family"
 tier = "fast"
 tags = ["probe"]
-desc = "The same reading one name further: `map` over a range, whose `with <f: (item: int) => U>` leaves its RESULT type open. The lambda's parameters are known (`int`), the result is what the body gives, and the deferred typing refuses the position until every variable in it has a type. This plan is the measurement, not the acceptance: the card it was written beside asks about `foreach`, whose `with` parameter is complete."
+desc = "One reading of the `with` lambda whose parameter types are known and whose result type is not: `map::<U>(r: Range)` declares `with <f: (item: int) => U>`, so `x` is an `int` and `U` is what the body gives. The array forms are the control that the same declaration works when `T` comes from the receiver; the two negatives say the reading invents no type it cannot derive."
 
 [[tests]]
 name = "foreach_lambda_family.array_map"
-desc = "The array form, green: `T` comes from the receiver, so the whole `with` parameter is typed before the lambda is built."
+desc = "The array form, green before this reading: `T` comes from the receiver, so the whole `with` parameter is typed before the lambda is built."
 kind = "behavior"
 case = "../../cases/probe/foreach_lambda/array_map.cml"
 args = ["check", "${case}"]
@@ -15,10 +15,52 @@ timeout_ms = 20000
 
 [[tests]]
 name = "foreach_lambda_family.range_map"
-desc = "The range form, red today: `with <f: (item: int) => U>` -- the parameter types are concrete, the result type is not, and the position is refused as a whole."
+desc = "The range form: `with <f: (item: int) => U>` -- the parameter type is written in the declaration, the result is the lambda's own, and `x` must be an `int` without being written."
 kind = "behavior"
 case = "../../cases/probe/foreach_lambda/range_map.cml"
 args = ["check", "${case}"]
 expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "foreach_lambda_family.array_reduce"
+desc = "`reduce` on an array: the accumulator type is the initial value's and the lambda's two parameters follow it."
+kind = "behavior"
+case = "../../cases/probe/foreach_lambda/array_reduce.cml"
+args = ["check", "${case}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "foreach_lambda_family.range_reduce"
+desc = "`reduce` on a range, the same declaration with `item: int` written: the initial value types `U`, the lambda's two parameters follow it."
+kind = "behavior"
+case = "../../cases/probe/foreach_lambda/range_reduce.cml"
+args = ["check", "${case}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "foreach_lambda_family.extra_parameter_is_refused"
+desc = "A lambda with a parameter the position does not have: nothing expects its type, and the call must say so rather than invent one."
+kind = "behavior"
+case = "../../cases/probe/foreach_lambda/negative_extra_parameter.cml"
+args = ["check", "${case}"]
+expect_exit = 1
+expect_output_contains = ["cannot be inferred"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "foreach_lambda_family.fewer_parameters_is_refused"
+desc = "A lambda with one parameter where the position has two: the second has nothing to take its type from, and the call must say so."
+kind = "behavior"
+case = "../../cases/probe/foreach_lambda/negative_fewer_parameters.cml"
+args = ["check", "${case}"]
+expect_exit = 1
+expect_output_contains = ["cannot be inferred"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000

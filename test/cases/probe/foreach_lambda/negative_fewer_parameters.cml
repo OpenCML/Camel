@@ -1,0 +1,8 @@
+// A lambda with fewer parameters than the position has, and no rest parameter to stand for the
+// rest: the position's second parameter has nothing to take its type from, and the call must say
+// so rather than invent one.
+func main() => int sync {
+    let total = (0 .. 4)->reduce<func (acc) { acc }, 0>
+    println(total)
+    return 0
+}
