@@ -3076,9 +3076,9 @@ bool buildTransposeMember(
                 // The seeds can stand in more than one region: a round's states are answered by
                 // the arms of a branch, and an arm is a region of its own, so the member a state
                 // takes its cotangent from is a node of the arm's region. The sweep that walks a
-                // region only takes nodes of *that* region (`:1085`), so each region is walked with
-                // its own seeds and the answers are summed per stop -- the arms answer the same
-                // stops, and an arm the condition did not choose contributes nothing.
+                // region only takes nodes of *that* region (`runSeeded`), so each region is walked
+                // with its own seeds and the answers are summed per stop -- the arms answer the
+                // same stops, and an arm the condition did not choose contributes nothing.
                 std::vector<gc_node_ref_t> back(statePorts.size(), rt::kInvalidNodeRef);
                 {
                     std::vector<std::pair<uint32_t, std::vector<ArmSeed>>> byRegion;
