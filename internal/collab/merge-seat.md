@@ -256,6 +256,18 @@ git ls-remote origin refs/heads/integration   # 这一步是判据；上一行�
 而且报给协调者的必须是**回读的那个 sha**，连同 `HEAD^{tree}` 与构建记录是否在。单父笔、缺 `Lane-Reading`、
 记录落在第二父 —— 这三种拒绝都发生在 `push` 之后、`ls-remote` 之前，只有回读能把它们和"推成功"分开。
 
+**`push` / `fetch` 非 0 时先读末行**（本晚两次"卡住"其实都不是技术问题）：
+
+| 末行长什么样 | 是什么 | 怎么办 |
+|---|---|---|
+| `schannel: failed to receive handshake, SSL/TLS connection failed` / `unable to access '<url>'` | **网络**（exit 128） | 重试同一条命令；`fetch` 一下再看远端有没有动 |
+| `pre-push: refusing to push …` / `husky - pre-push script failed (code 1)` | **钩子的判定** | 读它点名的原因（第一父不对 / 没构建 / 缺 `Lane-Reading` / 走到评论痕迹），**不要重推** |
+| `! [rejected] … (non-fast-forward)` | 远端在你这一批之后动过 | `fetch` → 在新尖端**重放 arrival** → 再推 |
+| `! [rejected] … (fetch first)` | 同上，但远端 ref 还没取 | 先 `fetch` 再说 |
+
+一句话分界：**`pre-push:`/`husky` 开头才是评价你这批内容，别的都先当网络。**
+"卡住"要逐项排到那一行才能定性 —— 换底？构建？逐名？钩子？网络？五项排完再报 ETA，别把网络那一下报成"车道卡了"。
+
 ## 合之前先 `fetch`，并在**远端尖端**上重放 arrival（2026-11-27 两次实测）
 
 一晚之内错了两次，两次是同一个错：**手里的树不是远端那个尖端**。
