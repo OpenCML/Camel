@@ -14,11 +14,14 @@
 #include "emitter.h"
 #include "exporter.h"
 #include "lowering.h"
+#include "model.h"
 #include "passes/export.h"
+#include "proto/onnx_writer.h"
 
 #include "../tensor/interop.h"
 #include "camel/core/rtdata/array.h"
 #include "camel/core/type/composite/array.h"
+#include "camel/core/type/native.h"
 
 #include "camel/core/context/context.h"
 #include "camel/core/operator_traits.h"
@@ -34,7 +37,9 @@
 #include "camel/runtime/node_roles.h"
 #include "camel/utils/path.h"
 
+#include <filesystem>
 #include <format>
+#include <fstream>
 
 using namespace camel::core::context;
 using namespace camel::core::module;
@@ -49,6 +54,15 @@ namespace {
 /// (docs/technical/29_nullable_and_fallible_values.md 8).
 constexpr std::string_view kExportOperator = "<onnx::export_model>";
 
+/// The name an error value carries when `onnx::model` itself made it.
+constexpr std::string_view kModelOperator = "<onnx::model>";
+
+/// The name an error value carries when `onnx::save` itself made it.
+constexpr std::string_view kSaveOperator = "<onnx::save>";
+
+/// The name an error value carries when `onnx::run` itself made it.
+constexpr std::string_view kRunOperator = "<onnx::run>";
+
 /// The result type of the call form: writing the model can fail, so the call gives `void!`
 /// (a refusal to translate the function, or a file that cannot be written).
 TupleType *fallibleVoid() {
@@ -56,33 +70,22 @@ TupleType *fallibleVoid() {
     return type;
 }
 
-// export_model<out: string, dynamic_axes: int[] = [], target: string = 'onnxruntime-cpu'>
-//                                                                     (fn, example)
-//                                                                     => void!
-// `out` is the file the model is written to, and it is a `with` argument because it is a
-// runtime value (a path the program reads from the environment, a name it composes); the
-// axis list and the target are `with` arguments for the same reason. `fn` and `example` stay
-// positional: they are what the export is about.
+// The stage form of the export (`onnx::export_model` as a pass): the same translation
+// `onnx::model` makes, with the file written out. A program that wants the value writes
+// `model(fn, example)->save<out: path>` instead; this entry stays for the pass, which names the
+// stage and gets its path from the pipeline's `out` parameter.
+//
 // The names and the defaults of the `with` parameters are the declaration's
 // (`stdlib/onnx.cml`), which is the one source of the operator's signature (design principles
 // 6.4): a call names them, skips one that has a default, and the value it left out arrives here
-// as that default -- an empty axis list, the target the model is checked against. Neither
-// default needs a case of its own: no axis left dynamic and the default target are what the
-// export does with no argument at all.
+// as that default -- an empty axis list, the target the model is checked against.
 // `example` is the argument of a one-parameter `fn`, or a tuple with one example per parameter.
 // A refusal to translate the function and a file that cannot be written are error values
 // (`ExportUnsupported`, `IOError`): exporting is a tool, and the caller decides how to report
 // what it could not do.
-slot_t exportKernel(ArgsView &with, ArgsView &norm, Context &ctx) {
-    auto *fn   = norm.get<::Function *>(0);
-    auto *path = with.get<::String *>(0);
-    camel::onnx::ExportOptions options;
-    if (with.size() > 1) {
-        options.dynamicAxes = camel::tensor::parseIntArray(with.get<::Array *>(1), with.type(1));
-    }
-    if (with.size() > 2) {
-        options.target = with.get<::String *>(2)->toString();
-    }
+/// The examples a call gives the export: the argument of a one-parameter function, or a tuple with
+/// one example per parameter. The export and the model entry read them the same way.
+std::vector<camel::onnx::Example> examplesOf(::Function *fn, ArgsView &norm) {
     std::vector<camel::onnx::Example> examples;
     const size_t params = fn && fn->graph() ? fn->graph()->normPorts().size() : 0;
     if (params == 1 || norm.type(1)->code() != TypeCode::Tuple) {
@@ -94,6 +97,20 @@ slot_t exportKernel(ArgsView &with, ArgsView &norm, Context &ctx) {
             examples.push_back({tuple->get<slot_t>(i), tupleType->typeAt(i)});
         }
     }
+    return examples;
+}
+
+slot_t exportKernel(ArgsView &with, ArgsView &norm, Context &ctx) {
+    auto *fn   = norm.get<::Function *>(0);
+    auto *path = with.get<::String *>(0);
+    camel::onnx::ExportOptions options;
+    if (with.size() > 1) {
+        options.dynamicAxes = camel::tensor::parseIntArray(with.get<::Array *>(1), with.type(1));
+    }
+    if (with.size() > 2) {
+        options.target = with.get<::String *>(2)->toString();
+    }
+    std::vector<camel::onnx::Example> examples = examplesOf(fn, norm);
     try {
         // The export simplifies the function with the passes of the pipeline, macro expansion
         // included, and the macro evaluator reaches safepoints. This kernel and the exporter
@@ -119,6 +136,104 @@ slot_t exportKernel(ArgsView &with, ArgsView &norm, Context &ctx) {
     return makeOk(NullSlot, fallibleVoid());
 }
 
+// model<dynamic_axes: int[] = [], target: string = 'onnxruntime-cpu'>(fn, example) => Model<F>!
+//
+// The translation itself is the export's: this entry and `export_model` call the same
+// `camel::onnx::exportFunction`, against the same lowering table, and refuse with the same
+// diagnostics. What differs is where the result goes: the file form writes it, this one answers
+// it as a value so `save` and `run` can take it.
+//
+// What the value holds is the serialized bytes and nothing else (see model.h): the export reads
+// the function, the examples and the constants inside a `NoCollectionScope`, and this value
+// outlives that call, so it must not borrow any of them.
+slot_t modelKernel(ArgsView &with, ArgsView &norm, Context &ctx) {
+    auto *fn = norm.get<::Function *>(0);
+    camel::onnx::ExportOptions options;
+    if (with.size() > 0) {
+        options.dynamicAxes = camel::tensor::parseIntArray(with.get<::Array *>(0), with.type(0));
+    }
+    if (with.size() > 1) {
+        options.target = with.get<::String *>(1)->toString();
+    }
+    std::vector<camel::onnx::Example> examples = examplesOf(fn, norm);
+    TupleType *resultType = TupleType::fallible(camel::onnx::ModelType::of(norm.type(0)));
+    try {
+        camel::core::mm::NoCollectionScope noCollection;
+        const camel::onnx::Model model = camel::onnx::exportFunction(ctx, fn, examples, options);
+        const std::vector<std::byte> bytes = camel::onnx::serialize(model);
+        auto *value                        = camel::onnx::ModelValue::create(
+            std::span<const std::byte>(bytes.data(), bytes.size()),
+            camel::core::mm::autoSpace());
+        return makeOk(camel::core::rtdata::toSlot(value), resultType);
+    } catch (const camel::onnx::ExportError &e) {
+        return makeError(
+            "ExportUnsupported",
+            e.what(),
+            e.location().empty() ? kModelOperator : e.location());
+    }
+}
+
+// save<out: string>(m: Model<F>) => void!
+//
+// Writes the bytes a model holds and nothing else: the file is the model, and it is the same file
+// `export_model` wrote, because both write the bytes of one translation. `out` is a `with`
+// parameter for the same reason `export_model`'s is: it decides which file, not what is written.
+slot_t saveKernel(ArgsView &with, ArgsView &norm, Context &ctx) {
+    (void)ctx;
+    auto *model = norm.get<camel::onnx::ModelValue *>(0);
+    const std::filesystem::path path =
+        camel::utils::pathFromUtf8(with.get<::String *>(0)->toString());
+    try {
+        if (path.has_parent_path()) {
+            std::error_code ec;
+            std::filesystem::create_directories(path.parent_path(), ec);
+        }
+        std::ofstream out(path, std::ios::binary | std::ios::trunc);
+        if (!out) {
+            throw std::runtime_error(
+                "onnx: cannot open '" + camel::utils::pathToUtf8(path) + "' for writing");
+        }
+        const std::span<const std::byte> bytes = model->bytes();
+        out.write(
+            reinterpret_cast<const char *>(bytes.data()),
+            static_cast<std::streamsize>(bytes.size()));
+        out.flush();
+        if (!out) {
+            throw std::runtime_error(
+                "onnx: failed to write '" + camel::utils::pathToUtf8(path) + "'");
+        }
+    } catch (const std::runtime_error &e) {
+        return makeError("IOError", e.what(), kSaveOperator);
+    }
+    return makeOk(NullSlot, fallibleVoid());
+}
+
+// run<model: Model<F>>(args) => ResultOf<F>!
+//
+// Running a model means the translated function applied to `args`; the ONNX runtime is only how
+// it is computed, so the effect of the call is the effect of that function. The model is a value
+// the translation already finished: its bytes are the whole of what there is to run, which is why
+// the call needs no graph of its own and why `model` is a `with` parameter (it decides which
+// model, not what is computed).
+//
+// No runtime is loaded in this build: the module does not link or open the ONNX runtime, so every
+// call answers the error value the declaration promises (`ExportUnsupported`) instead of a result.
+// A caller that wants a result reports it as an error; one that does not gets the unhandled-error
+// diagnostic of the run, which names this operator's place in the program. The session, the
+// dlopen of the C API and the DLPack handover of the tensors are the next step, and they replace
+// the body of this function alone.
+slot_t runKernel(ArgsView &with, ArgsView &norm, Context &ctx) {
+    (void)norm;
+    (void)ctx;
+    auto *model = with.get<camel::onnx::ModelValue *>(0);
+    (void)model;
+    return makeError(
+        "ExportUnsupported",
+        "onnx: the ONNX runtime is not available: this build loads no runtime, so a model value "
+        "cannot be run here",
+        kRunOperator);
+}
+
 slot_t supportedOperatorsKernel(ArgsView &, ArgsView &, Context &) {
     const auto uris =
         camel::onnx::LoweringRegistry::instance().supported(camel::onnx::kDefaultOpset);
@@ -134,6 +249,9 @@ class OnnxExecutor : public Executor {
     explicit OnnxExecutor(context_ptr_t ctx)
         : Executor(
               std::move(ctx), {{"export_model", &exportKernel},
+                               {"run", &runKernel},
+                               {"model", &modelKernel},
+                               {"save", &saveKernel},
                                {"supported_operators", &supportedOperatorsKernel}}) {}
 };
 
@@ -157,12 +275,37 @@ bool OnnxModule::load() {
     context_->registerExecutorFactory("onnx", [ctx = context_]() -> executor_ptr_t {
         return std::make_shared<OnnxExecutor>(ctx);
     });
-    // The purity of every operator (design principles 3.3). export_model writes a file;
+    // The purity of every operator (design principles 3.3). `model` translates a function value and
+    // answers the result as a value, so it writes nothing outside the program;
     // supported_operators only reads the lowering table compiled into the module, which is why
-    // stdlib/onnx.cml declares it pure.
+    // stdlib/onnx.cml declares it pure. The file-writing form is the `export_model` *pass* below,
+    // whose purity is set with its traits.
     camel::core::OperatorTable::instance().declare(
         "onnx",
-        {{"export_model", false}, {"supported_operators", true}});
+        {{"model", true}, {"run", false}, {"save", false}, {"supported_operators", true}});
+    // `onnx::model` translates a function value and answers it as a model value: the translation
+    // reads the graph it is handed, and it writes nothing outside the program. `foldable = false`
+    // because the call must run where the program writes it, though running it has no effect:
+    // translating a function is where the lowering table is consulted, so an operator the table
+    // does not know is refused *there*, with the position of that call (design principles 3.9).
+    // A pass that evaluated it ahead of time would take that diagnostic away and hand the program
+    // a value computed from a function it never ran -- and, for a function that cannot be
+    // translated at all, would let the refusal become an error value that quietly leaves the
+    // graph (a fold of `tag_is_error` over such a value turns the branch into its error arm, and
+    // an effect in the other arm, `save` writing the file, goes with it).
+    camel::core::OperatorTable::instance().set(
+        "onnx:model",
+        {.pure = true, .readsGraphs = true, .foldable = false});
+    // `onnx::save` writes the model's bytes to a file: the effect `export_model` had, without the
+    // translation that made the bytes. `readsGraphs = false` because what it reads is the bytes
+    // the model value already owns, not a graph: the translation happened in `onnx::model`, and
+    // this entry only writes the result down.
+    camel::core::OperatorTable::instance().set("onnx:save", {.pure = false, .readsGraphs = false});
+    camel::core::OperatorTable::instance().declareResources(
+        "onnx:save",
+        camel::core::sem::externalAmbient("fs", camel::core::sem::AccessMode::ReadModifyWrite));
+    // The type `Model<F>` the module's values have (see model.h).
+    camel::core::type::registerNativeType("onnx", "Model", camel::onnx::ModelType::get());
     // export_model translates the graph of the function value it receives: it is handed the
     // program's own graph, also on a back end that lowered loops in a private copy
     // (OperatorTraits::readsGraphs; op-semantics 11.4).

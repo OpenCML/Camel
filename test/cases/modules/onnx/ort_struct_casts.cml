@@ -19,7 +19,7 @@
  * after the declaration's fields with the counter an int64, and match NumPy on ONNX Runtime.
  */
 
-import { export_model } from onnx
+import { model, save } from onnx
 import { reshape, sum, tanh } from tensor
 
 type Run = { state: f32[...], steps: int }
@@ -89,20 +89,20 @@ func report(r1: void!, r2: void!, r3: void!, r4: void!, r5: void!) => string! {
 
 func main() => string! sync {
     let ex = reshape<[2, 2]>([1.0, -2.0, 0.5, 1.5] as f32[])
-    let r1 = export_model<out: 'identity.onnx'>(func (x: f32[...]) => Run {
+    let r1 = model(func (x: f32[...]) => Run {
         identity(x, 1)
-    }, ex)
-    let r2 = export_model<out: 'reordered.onnx'>(func (x: f32[...]) => Run {
+    }, ex)->save<out: 'identity.onnx'>
+    let r2 = model(func (x: f32[...]) => Run {
         reordered(x, 1)
-    }, ex)
-    let r3 = export_model<out: 'declared.onnx'>(func (x: f32[...]) => Run {
+    }, ex)->save<out: 'reordered.onnx'>
+    let r3 = model(func (x: f32[...]) => Run {
         declared(x, 1)
-    }, ex)
-    let r4 = export_model<out: 'argument.onnx'>(func (x: f32[...]) => (Run, int) {
+    }, ex)->save<out: 'declared.onnx'>
+    let r4 = model(func (x: f32[...]) => (Run, int) {
         argument(x, 1)
-    }, ex)
-    let r5 = export_model<out: 'walk.onnx'>(func (x: f32[...]) => Run {
+    }, ex)->save<out: 'argument.onnx'>
+    let r5 = model(func (x: f32[...]) => Run {
         walk(x, 0)
-    }, ex)
+    }, ex)->save<out: 'walk.onnx'>
     return report(r1, r2, r3, r4, r5)
 }

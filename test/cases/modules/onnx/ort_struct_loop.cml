@@ -14,7 +14,7 @@
  * every model are saved there, and the model named by MODEL is exported when ONNX_OUT is set.
  */
 import { get_env } from env
-import { export_model } from onnx
+import { model, save } from onnx
 import { load_npy, reshape, save_npy, sum, tanh } from tensor
 
 // rec: two tensors and a counter, as a struct.
@@ -99,45 +99,45 @@ func main() => string! sync {
     let which = get_env('MODEL') ?? ''
     return if out == '' then '0'
     else if which == 'rec' then sync {
-        match export_model<out: out>(func (x: f32[...]) => Run {
+        match model(func (x: f32[...]) => Run {
             start(x)
-        }, (x)) {
+        }, (x))->save<out: out> {
             case error e => {
                 return e
             }
             case v => '1'
         }
     } else if which == 'tup' then sync {
-        match export_model<out: out>(func (x: f32[...]) => (f32[...], f32[...], int) {
+        match model(func (x: f32[...]) => (f32[...], f32[...], int) {
             startT(x)
-        }, (x)) {
+        }, (x))->save<out: out> {
             case error e => {
                 return e
             }
             case v => '1'
         }
     } else if which == 'nest' then sync {
-        match export_model<out: out>(func (x: f32[...]) => Outer {
+        match model(func (x: f32[...]) => Outer {
             startN(x)
-        }, (x)) {
+        }, (x))->save<out: out> {
             case error e => {
                 return e
             }
             case v => '1'
         }
     } else if which == 'scal' then sync {
-        match export_model<out: out>(func (x: f32[...]) => Small {
+        match model(func (x: f32[...]) => Small {
             startS(x)
-        }, (x)) {
+        }, (x))->save<out: out> {
             case error e => {
                 return e
             }
             case v => '1'
         }
     } else sync {
-        match export_model<out: out>(func (x: f32[...]) => Hold {
+        match model(func (x: f32[...]) => Hold {
             startE(x)
-        }, (x)) {
+        }, (x))->save<out: out> {
             case error e => {
                 return e
             }

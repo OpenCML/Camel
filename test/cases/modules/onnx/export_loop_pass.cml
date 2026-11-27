@@ -10,7 +10,7 @@
  * the pass. Running this one still reports the refusal: the request is what `main` answers.
  */
 import { get_env } from env
-import { export_model } from onnx
+import { model as onnx_model, save } from onnx
 import { reshape, sum, tanh } from tensor
 
 // Depth depends on the data only: halve until the sum is below 1.
@@ -23,7 +23,7 @@ func iterate(i: int, n: int, v: float[...], w: float[...]) => float[...] {
     return if i >= n then v else iterate(i + 1, n, tanh(v @ w) + v, w)
 }
 
-func model(x: float[...], w: float[...]) => (float[...], float[...]) {
+func net(x: float[...], w: float[...]) => (float[...], float[...]) {
     let steps = int(float(sum(x * x)) * 0.2)
     return (halve(x), iterate(0, steps, x, w))
 }
@@ -31,7 +31,7 @@ func model(x: float[...], w: float[...]) => (float[...], float[...]) {
 func main() => void! sync {
     let x = reshape<[2, 2]>([1.0, 2.0, 3.0, 4.0])
     let w = reshape<[2, 2]>([0.5, -0.25, 0.1, 0.3])
-    export_model<out: get_env('ONNX_OUT') ?? ''>(func (x: float[...], w: float[...]) => (float[...], float[...]) {
-        model(x, w)
-    }, (x, w))
+    onnx_model(func (x: float[...], w: float[...]) => (float[...], float[...]) {
+        net(x, w)
+    }, (x, w))->save<out: get_env('ONNX_OUT') ?? ''>
 }

@@ -11,7 +11,7 @@
 import { with_grad } from autodiff
 import { get_env } from env
 import { sgd } from nn
-import { export_model } from onnx
+import { model, save } from onnx
 import { sigmoid, tanh, reshape, shape, zeros, mean, abs } from tensor
 
 type Gru = {
@@ -80,7 +80,7 @@ func main() => string! sync {
         fc_b: reshape<[2]>([0.3, -0.2] as f32[])
     }
     let x = reshape<[2, 3, 2]>([1.0, -1.0, 0.25, -0.25, 0.75, 0.5, 0.5, -0.5, -0.25, 0.25, -0.5, 1.0] as f32[])
-    return match export_model<out: get_env('ONNX_OUT') ?? ''>(step, (m, x)) {
+    return match model(step, (m, x))->save<out: get_env('ONNX_OUT') ?? ''> {
         case error e => {
             return e
         }

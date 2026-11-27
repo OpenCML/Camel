@@ -6,7 +6,7 @@
  */
 
 import { get_env } from env
-import { export_model } from onnx
+import { model, save } from onnx
 import { reshape, relu, shape } from tensor
 
 type Layer = { w: f32[...], b: f32[...] }
@@ -26,9 +26,9 @@ func forward(x: f32[...]) => f32[...] {
 func main() => string! sync {
     let l = { w: reshape<[2, 2]>([1.0, 0.0, 0.0, 1.0] as f32[]), b: reshape<[2]>([0.5, -0.5] as f32[]) }
     let x = reshape<[3, 2]>([1.0, 2.0, 3.0, 4.0, 5.0, 6.0] as f32[])
-    return match export_model<out: get_env('ONNX_OUT') ?? ''>(func (x: f32[...]) => f32[...] {
+    return match model(func (x: f32[...]) => f32[...] {
         forward<l>(x)
-    }, x) {
+    }, x)->save<out: get_env('ONNX_OUT') ?? ''> {
         case error e => {
             return e
         }
