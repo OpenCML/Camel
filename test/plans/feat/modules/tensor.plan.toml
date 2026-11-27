@@ -874,7 +874,10 @@ const within = (values, declared, bound, bits, what) => {
 // 4 ulp (`src/stdlib/math/semantics.cpp:17-18` and `:21-25`, which answer design principles 7.1).
 const DECLARED_BOUNDED = 4
 // A composition adds the roundings its own expression makes on top of the function's bound, and
-// each line below says how many it added.
+// each line below says how many it added: the gradient line's 8 is 2 (exp's declared bound) plus
+// this expression's own roundings and combination, and its 64 is the same sum for `gelu`, whose
+// answer multiplies a 4-ulp `tanh` by a square. The library declares a function's bound, not the
+// bound of an expression built out of that function, so these two numbers stay expressions.
 const lines = input.normalized.stdout.trimEnd().split('\n')
 assert(lines.length === 3, 'expected three lines, got ' + lines.length)
 within(numbersOf(lines[0], 'gelu_grad_f64 forward'), [-0.15880800939172324, 0.0, 0.8411919906082768], DECLARED_BOUNDED, 53, 'gelu forward')
