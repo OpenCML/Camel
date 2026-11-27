@@ -456,8 +456,17 @@ fs.writeFileSync(
         `fs.mkdirSync(path.dirname(path.join(dir, rel)), { recursive: true });\n` +
         `fs.writeFileSync(path.join(dir, rel), 'arrived ' + Date.now() + '\\n');\n` +
         `g('add', '-A'); g('commit', '--quiet', '-m', 'arrival');\n` +
-        `g('push', '--quiet', 'origin', 'HEAD:integration');\n`,
+        `g('push', '--quiet', 'origin', 'HEAD:integration');\n` +
+        // The build record camel-remote writes for the commit it built, which the hook asks for.
+        `const here = (...a) => execFileSync('git', a, { encoding: 'utf8' }).trim();\n` +
+        `const common = path.resolve(here('rev-parse', '--git-common-dir'));\n` +
+        `fs.mkdirSync(path.join(common, 'camel-built'), { recursive: true });\n` +
+        `fs.writeFileSync(path.join(common, 'camel-built', here('rev-parse', 'HEAD')), 'BUILD_EXIT=0\\n');\n`,
 );
+// The arrival cases push through the repository's own pre-push hook (it reads the build-input list
+// from its own checkout when the pushed one has none), so the merge's shape, its trailer and the
+// records it carries are judged by the same hook integration is pushed through.
+git(readSeat, ['config', 'core.hooksPath', path.join(here, '..', '..', 'scripts', 'hooks')]);
 function runArrival(lane, arrival) {
     fs.writeFileSync(scenario, JSON.stringify([row('plan_a', 'known_red', 'fail')]));
     const result = spawnSync(
@@ -476,13 +485,20 @@ laneFrom('lane/docs-arrives', 'src/second.cpp', 'int second() { return 2; }\n');
 const docsArrive = runArrival('lane/docs-arrives', 'internal/page.md');
 const docsTip = remoteTip();
 check(
-    'a page that arrives while the batch is read is merged onto the batch, and the second push lands',
+    'a page that arrives while the batch is read: the batch is merged onto the new tip, the hook takes it, and it lands',
     docsArrive.status === 0 &&
         /pushed\s+yes/.test(docsArrive.out) &&
-        docsArrive.out.includes('the build does not read; merging them onto the batch') &&
-        git(readRemote, ['log', '-1', '--format=%(trailers:key=Lane-Reading,valueonly)', 'integration']).trim() === 'docs-only' &&
-        git(readRemote, ['cat-file', '-e', `${docsTip}:internal/page.md`]) === '',
+        docsArrive.out.includes('the build does not read; merging the batch onto it') &&
+        git(readRemote, ['log', '-1', '--format=%(trailers:key=Lane-Reading,valueonly)', 'integration']).trim().startsWith('built and read at') &&
+        git(readRemote, ['cat-file', '-e', `${docsTip}:internal/page.md`]) === '' &&
+        git(readRemote, ['cat-file', '-e', `${docsTip}:src/second.cpp`]) === '',
     docsArrive.out,
+);
+const carried = fs.existsSync(path.join(common, 'camel-read', docsTip)) ? fs.readFileSync(path.join(common, 'camel-read', docsTip), 'utf8') : '';
+check(
+    'the reading recorded for the batch is carried to the merge that landed, and says where it was taken',
+    carried.includes('new=0\n') && /carried-from=[0-9a-f]{40}\n/.test(carried) && fs.existsSync(path.join(common, 'camel-built', docsTip)),
+    carried,
 );
 laneFrom('lane/source-arrives', 'src/third.cpp', 'int third() { return 3; }\n');
 const sourceBefore = remoteTip();
