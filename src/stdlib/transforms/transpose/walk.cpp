@@ -1620,6 +1620,59 @@ bool buildTransposeMember(
                     // stop -- a state's cotangent to the state's stop and the round's to the
                     // round's -- which is why the parts are read by index rather than handed over
                     // whole.
+                    // A cotangent that is an aggregate the machine carries -- a loop's state tuple
+                    // -- has no space of its own, but its members do: the tuple is `(int.., bool,
+                    // float)`, and the `float` is the state's own cotangent. Design principles 9.9
+                    // puts the members that need a gradient inside the machine's aggregates and
+                    // leaves the rest out, so the branch is reversed once per differentiable member
+                    // and the arms' answers meet at the stops, which is how `sumOfCotangents` adds
+                    // them there.
+                    if (local[ref] != rt::kInvalidNodeRef &&
+                        cotangentTypeOf(local[ref]) == nullptr) {
+                        Type *const wholeType = const_cast<Type *>(node->dataType());
+                        const std::optional<size_t> wholeArity =
+                            wholeType != nullptr ? camel::core::type::tree::arity(wholeType)
+                                                 : std::nullopt;
+                        std::vector<Type *> memberTypes;
+                        bool anyMember = false;
+                        if (wholeArity.has_value()) {
+                            memberTypes.reserve(*wholeArity);
+                            for (size_t i = 0; i < *wholeArity; ++i) {
+                                memberTypes.push_back(
+                                    camel::core::type::tree::childType(wholeType, i));
+                                if (cotangentSpaceOf(memberTypes.back()) != nullptr) {
+                                    anyMember = true;
+                                }
+                            }
+                        }
+                        if (!wholeArity.has_value() || !anyMember) {
+                            noteZero(ref, ref);
+                            continue;
+                        }
+                        for (size_t i = 0; i < memberTypes.size(); ++i) {
+                            if (cotangentSpaceOf(memberTypes[i]) == nullptr) {
+                                continue;
+                            }
+                            const gc_node_ref_t part = componentReadOf(
+                                walkCtx,
+                                memberTypes,
+                                local[ref],
+                                static_cast<uint32_t>(i));
+                            if (part == rt::kInvalidNodeRef) {
+                                os << "TRANSPOSE function=" << function->name()
+                                   << " arm-stop region=" << oldRegion << " node=" << ref
+                                   << " kind=join why=a-member-of-the-state-could-not-be-read\n";
+                                armsOk = false;
+                                return {};
+                            }
+                            const gc_node_ref_t partCotangent =
+                                transposeBranchInRegion(ref, part, stops);
+                            if (!armsOk || partCotangent == rt::kInvalidNodeRef) {
+                                return {};
+                            }
+                        }
+                        continue;
+                    }
                     const gc_node_ref_t branchCotangent =
                         transposeBranchInRegion(ref, local[ref], stops);
                     if (!armsOk || branchCotangent == rt::kInvalidNodeRef) {
@@ -1912,7 +1965,13 @@ bool buildTransposeMember(
         transposeBranchInRegion = [&](gc_node_ref_t joinRef,
                                       gc_node_ref_t ctIn,
                                       const std::vector<gc_node_ref_t> &stops) -> gc_node_ref_t {
-            Type *const joinType  = cotangentTypeOf(joinRef);
+            Type *joinType = cotangentTypeOf(joinRef);
+            if (joinType == nullptr) {
+                Type *const arrived = cotangentTypeOf(ctIn);
+                if (arrived != nullptr) {
+                    joinType = arrived;
+                }
+            }
             const auto arms       = function->withInputsOf(joinRef);
             const auto normBranch = function->normInputsOf(joinRef);
             if (joinType == nullptr || arms.size() < 2 || normBranch.empty()) {
