@@ -39,3 +39,9 @@ refuted abs_of_nonnegative: proposition equality, evidence none,
 ## 排期
 
 **不占 CC 格**，排在 CC 之后的第一个空格（`D-1128-48` ②）。
+## 接单记录（2026-11-28 07:05）
+
+- `lane-kinds-oper`：上下文到极限，未开工（`op-names` 树零改动，已转 `D-1128-51` 给 `lane-oper-shape-guard`）。
+- `lane-witness`：余量已尽，连"读卡 + 定落点"一轮都撑不完，未开工（`witness` 树 `git status` 空、`lane/item-13b @ 4128b8f8cf`）。
+- **⇒ 回到排队**：`D-1128-48` ② 的原话是"不占 CC 格，排在 CC 之后的第一个空格"。现在开发位 8/8 全满、合并位 2/2 在忙、缓冲 1/1 占着，**没有空格可给**；本卡继续留在 `internal/collab/`，等某条车道自然交回再起。
+- 谁接手都要先做第一件事：**报"落点 + 打算怎么翻"**（在规则库里找 `math:abs_l`，找一个同类算子照抄翻译，再改图算子表），再动手。
