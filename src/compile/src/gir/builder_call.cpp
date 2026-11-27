@@ -2118,6 +2118,29 @@ refinedArg                = refineExtentNodeOf(
             rejectValueDroppedByParameter(
                 argumentSignature != nullptr ? argumentSignature : targetFuncType,
                 withInputs);
+            // A range at a position this rule writes as an array is the array here, not the range
+            // it was written as: the rule was chosen with the array the conversion makes
+            // (`rangeEnteredTypes`), and the operand the node reads is that converted value, so
+            // that what the node says about its inputs -- its index-semantics instance among them
+            // -- is what it says when the program writes the array itself. A range at a position
+            // that states no array (`f(x: T)`) keeps its own type and is passed as the value it
+            // is (the ruling on conversion by expected type).
+            for (size_t i = 0; i < normInputs.size(); ++i) {
+                if (i >= targetOperator->funcType()->normTypesCount()) {
+                    break;
+                }
+                Type *parameter = targetOperator->funcType()->normTypeAt(i);
+                Type *actual    = valueTypeOf(nodeTypeOf(normInputs[i].node));
+                if (!rangeEntersArray(parameter, actual)) {
+                    continue;
+                }
+                if (node_handle_t entered =
+                        checkValue(normInputs[i].node, parameter, normInputs[i].expr);
+                    entered != nullptr) {
+                    normInputs[i].node = entered;
+                    normInputTypes[i]  = parameter;
+                }
+            }
             // A constant format string is checked against the arguments it formats now, not
             // when the program runs (CallSpec::checkFormat; design principles 5.4).
             const auto *callSpec =
