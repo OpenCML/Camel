@@ -1344,6 +1344,8 @@ fda013da6998ee75 ok test/cases/compile/native/math_sqrt_type.cml
 0dead50317bd00df ok test/cases/compile/native/math_type.cml
 da7f6c7270f77f30 ok test/cases/compile/native/missing.cml
 d44ce2d19ac9369a ok test/cases/compile/native/missing_module.cml
+608e6cc970399e9f ok test/cases/compile/native/native_not_pass_shaped.cml
+4bf1a4db21e46f70 ok test/cases/compile/native/native_not_pass_shaped_lib.cml
 840b213a0dc8bcad ok test/cases/compile/native/nn_arity.cml
 f2e05bfce1f8b252 ok test/cases/compile/native/nn_declaration_import.cml
 5f717bab25534b53 ok test/cases/compile/native/nn_type.cml
