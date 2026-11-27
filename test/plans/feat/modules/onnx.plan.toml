@@ -106,7 +106,7 @@ timeout_ms = 10000
 
 [[tests]]
 name = "export_unsupported_op"
-desc = "An input-dependent operator without an ONNX lowering (a training loss) is reported by URI, at its source position: the refusal is the error value of the export_model call (`ExportUnsupported`, located at the unsupported call), which nothing handles, so the exit reports it as an unhandled error."
+desc = "An input-dependent operator without an ONNX lowering (a training loss) is reported by URI, at its source position: the refusal is the error value of the onnx::model call (`ExportUnsupported`, located at the unsupported call), which nothing handles, so the exit reports it as an unhandled error."
 kind = "behavior"
 case = "../../../cases/modules/onnx/export_unsupported.cml"
 args = ["${case}"]
@@ -121,7 +121,7 @@ verify_script = """
 ({ input, assert }) => {
 const text = input.normalized.output
 assert(text.includes("operator 'nn:softmax_cross_entropy' has no ONNX lowering at opset 17"), 'missing unsupported-operator detail')
-assert(/[^ ]*export_unsupported[.]cml:14:85:/.test(text), 'missing source position of the unsupported call')
+assert(/[^ ]*export_unsupported[.]cml:15:13:/.test(text), 'missing source position of the unsupported call')
 assert(text.includes('ExportUnsupported'), 'the refusal must be the error value of the export_model call')
 }
 """
