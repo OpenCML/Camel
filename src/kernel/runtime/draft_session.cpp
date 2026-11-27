@@ -1501,6 +1501,16 @@ std::vector<GCGraph *> RuntimeGraphDraftSession::collectReachableRuntimeGraphs()
     return collectCommitClosure();
 }
 
+size_t RuntimeGraphDraftSession::recordedEdits() const {
+    size_t count = 0;
+    for (const auto &entry : drafts_) {
+        if (entry.second && entry.second->transaction) {
+            count += entry.second->transaction->edit().editCount();
+        }
+    }
+    return count;
+}
+
 std::vector<GraphId> RuntimeGraphDraftSession::conflicts() const {
     const Program *current = context_->currentRuntimeProgram();
     // A conflict is a lost race for the context's program, and only a session whose commit could

@@ -1274,17 +1274,20 @@ class GraphDraft : public camel::graph::Graph {
         noteOriginalScalars();
         ++mutations_;
         exit_ = id;
+        noteEditedNode(id, true);
     }
     void setOutputNode(gc_node_ref_t id) {
         noteOriginalScalars();
         ++mutations_;
         output_ = id;
+        noteEditedNode(id, true);
     }
     void setReturnNode(gc_node_ref_t id, GCReturnKind kind) {
         noteOriginalScalars();
         ++mutations_;
         returnNode_ = id;
         returnKind_ = kind;
+        noteEditedNode(id, true);
     }
     gc_slot_idx_t allocateRuntimeSlot(camel::core::type::Type *type);
     size_t appendStaticSlot(slot_t value, camel::core::type::Type *type);

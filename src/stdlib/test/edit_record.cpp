@@ -228,6 +228,36 @@ EditRecordTestPass::apply(const camel::runtime::Program *program, std::ostream &
             evalReading.notes,
             evalReading.calls));
 
+    // ---- what a named edit is for: one batch of primitive writes, recorded once ----------------
+    // The same writes on two drafts, both through the low-level entry. Without a named edit the
+    // record keeps one note per primitive; with one it keeps a single edit. That ratio is why the
+    // batch writes -- a region copied out, a graph rebuilt -- open a named edit at all, and reading
+    // it here means a boundary that stops covering its batch shows up as a number and not as a
+    // paragraph. The writes are nodes made through the builder, which is what those batches do.
+    constexpr size_t kBatch      = 8;
+    compile_graph_ptr_t rawBatch = make();
+    for (size_t i = 0; i < kBatch; ++i) {
+        rawBatch->addOperNode(camel::core::type::Type::Float32(), ":op/copy");
+    }
+    const size_t rawBatchRecords = rawBatch->edit().editCount();
+
+    compile_graph_ptr_t namedBatch = make();
+    {
+        const camel::runtime::GraphDraft::NamedEdit named(
+            namedBatch->edit(),
+            camel::runtime::EditKind::LowLevel);
+        for (size_t i = 0; i < kBatch; ++i) {
+            namedBatch->addOperNode(camel::core::type::Type::Float32(), ":op/copy");
+        }
+    }
+    const size_t namedBatchRecords = namedBatch->edit().editCount();
+    say(os,
+        std::format(
+            "batch_writes={} records_raw={} records_named={}",
+            kBatch,
+            rawBatchRecords,
+            namedBatchRecords));
+
     // A witness that could not run its own case must say so instead of reporting nothing wrong.
     if (notified == 0 || notified != notes) {
         say(os, "MISSING the record and the listeners do not agree");
@@ -270,6 +300,10 @@ EditRecordTestPass::apply(const camel::runtime::Program *program, std::ostream &
     }
     if (inlineReading.calls != 1 || outlineReading.calls != 1 || evalReading.calls != 1) {
         say(os, "MISSING one of the three named edits did not tell its listener once");
+        return program;
+    }
+    if (namedBatchRecords != 1 || rawBatchRecords <= namedBatchRecords) {
+        say(os, "MISSING a named edit over one batch did not record once");
         return program;
     }
     say(os, "ok");
