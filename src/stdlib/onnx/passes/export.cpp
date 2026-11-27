@@ -8,6 +8,7 @@
 #include "export.h"
 
 #include "../../tensor/interop.h"
+#include "../capability.h"
 #include "../emitter.h"
 #include "../exporter.h"
 
@@ -717,10 +718,24 @@ void exportEntry(
         throw Refusal{
             camel::source::kInvalidOriginId,
             std::format(
-                "the program contains no export_model<out: path>(fn, example) call, so "
-                "onnx::export_model translates 'main' itself, and the model file is not named: "
-                "give "
-                "it as the parameter out, onnx::export_model out=\"model.onnx\"")};
+                "the model file is not named: give it as the parameter out, "
+                "onnx::export_model out=\"model.onnx\"")};
+    }
+    // The target is the pass's own parameter: it is checked here, where the pass starts, and it
+    // has nothing to do with whether the program holds an export request (D-1127-102 removed the
+    // request machinery, so this check must not live in it).
+    if (!options.target.empty() && options.target != "none" &&
+        CapabilityTable::forTarget(options.target) == nullptr) {
+        std::string known;
+        for (const std::string &target : CapabilityTable::targets()) {
+            known += (known.empty() ? "" : ", ") + target;
+        }
+        throw Refusal{
+            camel::source::kInvalidOriginId,
+            std::format(
+                "unknown export target '{}' (known: {}, or 'none')",
+                options.target,
+                known)};
     }
     for (auto *g : camel::runtime::collectReachableGraphs(*program, root)) {
         if (g != nullptr) {
@@ -739,10 +754,11 @@ void exportEntry(
         }
         // The program makes no export request, so what is translated is `main` as a whole:
         // say so, a driver program is refused here for what it does besides computing.
-        message += " (the program contains no onnx.export_model call, so onnx::export_model "
-                   "translates the computation of 'main' itself: its parameters are the "
-                   "model's inputs, its result the outputs; a program that does more than "
-                   "compute exports one of its functions with onnx.export_model instead)";
+        // What is translated is the program the command line handed the pass: say so, a driver
+        // program is refused here for what it does besides computing.
+        message += " (the program is translated as a whole: its parameters are the model's "
+                   "inputs, its result the outputs; a program that does more than compute "
+                   "exports one of its functions with onnx.export_model instead)";
         throw Refusal{e.origin(), std::move(message)};
     }
     try {
