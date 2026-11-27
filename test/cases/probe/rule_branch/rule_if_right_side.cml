@@ -3,7 +3,6 @@
 // operator that needs this; the function below is the same shape written in the case, so the
 // reading does not depend on a rule set that lands separately.
 import rulesets.jvp
-import { abs } from prelude
 import { jvp } from transforms
 
 func my_max(a: float, b: float) => float {
@@ -21,7 +20,8 @@ func g(a: float, b: float) => float {
 }
 
 func close(x: float, to: float) => bool {
-    return abs(x - to) < 1.0e-9
+    let d = x - to
+    return d < 1.0e-9 && d > -1.0e-9
 }
 
 func main() => int sync {

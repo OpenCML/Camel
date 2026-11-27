@@ -2,7 +2,6 @@
 // differentiated, and this is what it reads. The same branch written in a rule's right side is the
 // question the other case asks.
 import rulesets.jvp
-import { abs } from prelude
 import { jvp } from transforms
 
 func g(a: float) => float {
@@ -10,7 +9,8 @@ func g(a: float) => float {
 }
 
 func close(x: float, to: float) => bool {
-    return abs(x - to) < 1.0e-9
+    let d = x - to
+    return d < 1.0e-9 && d > -1.0e-9
 }
 
 func main() => int sync {
