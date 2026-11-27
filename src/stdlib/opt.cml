@@ -341,7 +341,7 @@ export func fold::<F>(f: F) => F! when is_function::<F>() {
 /// `std::cxx::algebra` runs, so a law is written once, in `rules.cml`. With `strict` only the laws
 /// that need no numeric permission are used, as `safe_fp=true` does for `std::cxx::algebra`.
 /// @fails error value `RuleInvalid` when a rule does not compile
-/// @example (func (x: int) { (x + 1) * 3 + (x + 1) * 4 })->algebra
+/// @example (func (x: int) { x * 3 + x * 4 })->algebra
 with <strict: bool = false>
 export func algebra::<F>(f: F) => F! when is_function::<F>() {
     return f->simplify<strict: strict>
