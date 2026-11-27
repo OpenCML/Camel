@@ -182,11 +182,22 @@ timeout_ms = 20000
 
 [[tests]]
 name = "editview.root_observable_as_function"
-desc = "The counter-proof: the head's name is a `Graph` handle and a handle is not callable, so `view d = inc { d(2.0) }` is refused. A compiler that accepts it is reading the head's name as the function, which is the value the name must not have."
+desc = "The counter-proof: the head's name is a `Graph` handle and a handle is not callable, so `view d = inc { d(2.0) }` is refused. A compiler that accepts it is reading the head's name as the function, which is the value the name must not have. The wording of the refusal is the product's own now that the name is a value of the body's scope (the head's name is the closure's parameter): `Invalid call to 'd' with argument types <> (float): the value this call stands on has type 'Graph', and that is not a function`. Same refusal, its wording updated -- not a loosened assertion."
 kind = "behavior"
 case = "../../cases/probe/editview/root_observable_as_function.cml"
 args = ["check", "${case}"]
 expect_exit = 1
-expect_output_contains = ["No matching function found for argument types"]
+expect_output_contains = ["Invalid call to 'd' with argument types"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "editview.root_handle_in_gir"
+desc = "The root handle the compiler emits is `graph_of`'s call: the block's `d` is `graph_of(f)`, so the GIR of a program with a headed block holds a node of that operator, and the reading can name it. What pins it is the operator's name in the printed graph -- the same operator a program reaches by writing `graph::graph_of`. The case is the one `view_value_is_a_plain_value` uses, whose `main` gives `std::gir` an entry to compile."
+kind = "behavior"
+case = "../../cases/probe/editview/view_value_is_a_plain_value.cml"
+args = ["${case}", "std::gir"]
+expect_exit = 0
+expect_stdout_contains = ["graph_of"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000

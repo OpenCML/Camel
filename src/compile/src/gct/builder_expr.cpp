@@ -184,7 +184,22 @@ node_ptr_t Builder::visitBlockHeaded(const AST::node_ptr_t &ast) {
     if (headModule) {
         blockHeadModules_.pop_back();
     }
-    FunctionTypeFactory factory; // no parameters; the result is the block's value
+    // The head's name is the block's root, and the body runs as a call of a closure that takes it
+    // as its first argument (design `docs/design/graph-editing/README.cn.md` 90), so the parameter
+    // is in the closure's type: a view's root is the read-only graph, an edit's the draft, and a
+    // handle is a `Graph` in both -- the two differ in which node is passed, not in the type.
+    const std::string headRoot = ast->loadAs<AST::BlockHeadLoad>()->root().toString();
+    Type *rootType             = nullptr;
+    if (headModule != nullptr) {
+        if (const auto exported = headModule->getExportedType(Reference("Graph"));
+            exported.has_value()) {
+            rootType = *exported;
+        }
+    }
+    FunctionTypeFactory factory; // one parameter, the block's root; the result is the block's value
+    if (rootType != nullptr && !headRoot.empty()) {
+        factory.addNormArg(headRoot, rootType, false);
+    }
     FunctionType *type  = factory.buildOpen();
     node_ptr_t typeNode = tree_->makeType(type);
     node_ptr_t funcNode = tree_->makeFunc("");
@@ -203,6 +218,30 @@ node_ptr_t Builder::visitBlockHeaded(const AST::node_ptr_t &ast) {
     // hands on is the value of that boundary -- `attempt`'s transform of the closure, called at
     // the place the block stands, which is `T!` of the closure's result. A `view` block reads and
     // changes nothing, so it keeps the plain call: a fault in a view is the program's, not a value.
+    // The block closure's one parameter is the block's root: the handle the compiler gives the
+    // body, which no source name reaches (design `docs/design/graph-editing/README.cn.md` 64). It
+    // is asked for from the head's function value -- the block's `f` -- and the operator answers
+    // with the read-only graph for a `view` and the draft for an `edit`; both are a `Graph`.
+    node_ptr_t rootHandle = nullptr;
+    if (rootType != nullptr && !headRoot.empty() && ast->at(0) != nullptr) {
+        // The handle is asked of `graph` by its qualified name: that is the module the head is
+        // already read through, since the parser gives every module that writes a head the import
+        // of `graph` (parse/src/ast/builder_expr.cpp, `visitBlockHeaded`), and it is where the
+        // head's `Graph` comes from. A program that shadows `graph` gets its own module for the
+        // head and for this -- the spelling the head already had, not a second way of reaching a
+        // handle. A block's head is the only source of a handle (design
+        // `docs/design/graph-editing/README.cn.md` 64), so the user surface gains no name: the
+        // import is the head's own.
+        node_ptr_t headValue = visitData(ast->atAs<AST::DataLoad>(0));
+        rootHandle           = tree_->makeLink(1);
+        *rootHandle << tree_->makeDRef("graph::graph_of") << headValue;
+        setOriginFromAst(
+            context_,
+            rootHandle,
+            ast,
+            camel::source::OriginKind::GctNode,
+            "gct.block.root");
+    }
     node_ptr_t valueNode = nullptr;
     if (ast->loadAs<AST::BlockHeadLoad>()->dataType() == AST::DataType::EditExpr) {
         node_ptr_t transform = tree_->makeLink(1);
@@ -213,11 +252,17 @@ node_ptr_t Builder::visitBlockHeaded(const AST::node_ptr_t &ast) {
             ast,
             camel::source::OriginKind::GctNode,
             "gct.block.isolate");
-        valueNode = tree_->makeLink(0);
+        valueNode = rootHandle != nullptr ? tree_->makeLink(2) : tree_->makeLink(1);
         *valueNode << transform;
+        if (rootHandle != nullptr) {
+            *valueNode << rootHandle;
+        }
     } else {
-        valueNode = tree_->makeLink(0);
+        valueNode = rootHandle != nullptr ? tree_->makeLink(2) : tree_->makeLink(1);
         *valueNode << funcNode;
+        if (rootHandle != nullptr) {
+            *valueNode << rootHandle;
+        }
     }
     setOriginFromAst(
         context_,
