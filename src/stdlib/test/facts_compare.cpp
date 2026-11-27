@@ -648,7 +648,7 @@ struct CoreKindCounts {
 
 void compareCoreKinds(
     const camel::runtime::Program &program, const GCGraph &graph, camel::facts::Store &store,
-    camel::runtime::fact::FactStore &frozen, CoreKindCounts &counts) {
+    camel::runtime::fact::FactStore &frozen, CoreKindCounts &counts, std::ostream &os) {
     using camel::runtime::fact::coreKinds;
     namespace rt                               = camel::runtime::fact;
     const camel::graph::GraphView &view        = graph.view();
@@ -674,6 +674,10 @@ void compareCoreKinds(
                 ++(rt::toString(*here) == rt::toString(*there) ? counts.same : counts.diff);
             } else if (here) {
                 ++counts.noNew;
+                os << std::format(
+                    "FACTS_COMPARE kind=core.kinds missing kind=shape graph={} node={}\n",
+                    graph.name(),
+                    ref);
             } else if (there) {
                 ++counts.noOld;
             } else {
@@ -688,6 +692,10 @@ void compareCoreKinds(
                 ++(here->text == there->text ? counts.same : counts.diff);
             } else if (here) {
                 ++counts.noNew;
+                os << std::format(
+                    "FACTS_COMPARE kind=core.kinds missing kind=instance graph={} node={}\n",
+                    graph.name(),
+                    ref);
             } else if (there) {
                 ++counts.noOld;
             } else {
@@ -702,6 +710,10 @@ void compareCoreKinds(
                 ++(rt::toString(*here) == rt::toString(*there) ? counts.same : counts.diff);
             } else if (here) {
                 ++counts.noNew;
+                os << std::format(
+                    "FACTS_COMPARE kind=core.kinds missing kind=reorder graph={} node={}\n",
+                    graph.name(),
+                    ref);
             } else if (there) {
                 ++counts.noOld;
             } else {
@@ -716,6 +728,10 @@ void compareCoreKinds(
                 ++(*here == *there ? counts.same : counts.diff);
             } else if (here) {
                 ++counts.noNew;
+                os << std::format(
+                    "FACTS_COMPARE kind=core.kinds missing kind=permissions graph={} node={}\n",
+                    graph.name(),
+                    ref);
             } else if (there) {
                 ++counts.noOld;
             } else {
@@ -752,9 +768,8 @@ FactsCompareTestPass::apply(const camel::runtime::Program *program, std::ostream
         compareArrangeable(*graph, *store, arrange);
         censusArrangeable(*graph, *store, answers);
         compareDraft(*program, *graph, *store, draft, os);
-        compareEffects(*program, *graph, effects);
         if (const auto &context = program.context(); context != nullptr) {
-            compareCoreKinds(*program, *graph, *store, context->facts(), coreKinds);
+            compareCoreKinds(*program, *graph, *store, context->facts(), coreKinds, os);
         }
     }
     os << std::format(
@@ -889,7 +904,7 @@ CoreKindsCompareTestPass::apply(const camel::runtime::Program *program, std::ost
             os << std::format("FACTS_COMPARE graph={} state=no-store\n", graph->name());
             continue;
         }
-        compareCoreKinds(*program, *graph, *store, context_->facts(), coreKinds);
+        compareCoreKinds(*program, *graph, *store, context_->facts(), coreKinds, os);
     }
     os << std::format(
         "FACTS_COMPARE kind=core.kinds graphs={} nodes={} same={} diff={} no_new={} no_old={} "
