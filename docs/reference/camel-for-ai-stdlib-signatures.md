@@ -655,7 +655,7 @@ arity_probe: <tag: int, extra: int[] = []> (f: F, example: E) => int when is_fun
 zen: () => string
 ```
 
-**`graph`** — import { ... } from graph — 57 name(s)
+**`graph`** — import { ... } from graph — 59 name(s)
 
 ```text
 graph_of: (f: F) => Graph when is_function::<F>()
@@ -710,6 +710,8 @@ erase: (n: Node) => void
 eval: (n: Node) => Node?
 order: (before: Node, after: Node) => void
 inline: (at: Node, fn: G) => Node when is_function::<G>()
+inline_call: (at: Node) => Node
+callee_is_self: (at: Node) => bool
 outline: (ns: Node[]) => Node
 add_param: (like: Node) => Node
 add_constant: (g: Graph, value: T) => Node when is_ordered::<T>()
