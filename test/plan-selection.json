@@ -505,9 +505,9 @@
             "plans": ["feat/modules"]
         },
         {
-            "comment": "The command line's diagnostic writer. `main.cpp` decides which stream every diagnostic is written to -- one `diagOut`, chosen once from the error format -- so a change here moves a whole class of readings between standard output and standard error: every plan that asserts what a diagnostic says next to what the program printed reads the same two streams. The union below is that class, and it has to come before `src/tools/` (first match wins), which would otherwise name only feat/tools. The two-entry reading this rule is written for is feat/compile/diag_options and feat/compile/diag_streams: the same fault has to be on standard error and the program's own output alone on standard output, and a writer that picks the wrong stream leaves one of the pair empty.",
+            "comment": "The command line itself: its parser and its diagnostic writer. Every case starts the program through this parser and reads what it wrote to standard output and standard error, so a change here reaches every plan, not a class of them -- the whole fast layer is the selection. A narrower union missed the cases that start with a subcommand (`check`, `inspect`) or pass an inspect option, which went red by the hundred. It comes before `src/tools/` (first match wins), which would otherwise name only feat/tools.",
             "paths": ["src/tools/camel-cli/"],
-            "plans": ["smoke", "feat/compile", "feat/tools", "feat/modules", "feat/linear", "feat/consistency", "feat/opt", "feat/para"]
+            "plans": ["smoke", "feat"]
         },
         {
             "comment": "The language server, debugger, formatter and command-line tools.",
