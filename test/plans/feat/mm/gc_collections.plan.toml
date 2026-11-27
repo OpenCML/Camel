@@ -95,79 +95,79 @@ timeout_ms = 60000
 
 [[tests]]
 name = "gc.collections_major_stable_nvm"
-tier = "fast"
+tier = "slow"
 desc = "Maps and sets on std::nvm with the non-moving collector, stress mode major, heap verification before and after every collection."
 args = ["--gc-stress", "alloc=3,safepoint=1,kind=major", "--gc-check", "verify=both", "${case}", "std::gc::verify", "${run_nvm}"]
 
 [[tests]]
 name = "gc.collections_major_stable_fvm"
-tier = "fast"
+tier = "slow"
 desc = "Maps and sets on std::fvm with the non-moving collector, stress mode major, heap verification before and after every collection."
 args = ["--gc-stress", "alloc=3,safepoint=1,kind=major", "--gc-check", "verify=both", "${case}", "std::gc::verify", "${run_fvm}"]
 
 [[tests]]
 name = "gc.collections_major_stable_prl"
-tier = "fast"
+tier = "slow"
 desc = "Maps and sets on std::prl with the non-moving collector, stress mode major, heap verification before and after every collection."
 args = ["--gc-stress", "alloc=3,safepoint=1,kind=major", "--gc-check", "verify=both", "${case}", "std::gc::verify", "std::prl gc_stress=true"]
 
 [[tests]]
 name = "gc.collections_major_young_nvm"
-tier = "fast"
+tier = "slow"
 desc = "Maps and sets on std::nvm with the moving young-generation collector, stress mode major, heap verification before and after every collection."
 args = ["--gc-stress", "alloc=3,safepoint=1,kind=major", "--gc-check", "verify=both", "--gc", "kind=generational", "${case}", "std::gc::verify", "${run_nvm}"]
 
 [[tests]]
 name = "gc.collections_major_young_fvm"
-tier = "fast"
+tier = "slow"
 desc = "Maps and sets on std::fvm with the moving young-generation collector, stress mode major, heap verification before and after every collection."
 args = ["--gc-stress", "alloc=3,safepoint=1,kind=major", "--gc-check", "verify=both", "--gc", "kind=generational", "${case}", "std::gc::verify", "${run_fvm}"]
 
 [[tests]]
 name = "gc.collections_major_young_prl"
-tier = "fast"
+tier = "slow"
 desc = "Maps and sets on std::prl with the moving young-generation collector, stress mode major, heap verification before and after every collection."
 args = ["--gc-stress", "alloc=3,safepoint=1,kind=major", "--gc-check", "verify=both", "--gc", "kind=generational", "${case}", "std::gc::verify", "std::prl gc_stress=true"]
 
 [[tests]]
 name = "gc.collections_both_stable_nvm"
-tier = "fast"
+tier = "slow"
 desc = "Maps and sets on std::nvm with the non-moving collector, stress mode both, heap verification before and after every collection."
 args = ["--gc-stress", "alloc=3,safepoint=1,kind=both", "--gc-check", "verify=both", "${case}", "std::gc::verify", "${run_nvm}"]
 
 [[tests]]
 name = "gc.collections_both_stable_fvm"
-tier = "fast"
+tier = "slow"
 desc = "Maps and sets on std::fvm with the non-moving collector, stress mode both, heap verification before and after every collection."
 args = ["--gc-stress", "alloc=3,safepoint=1,kind=both", "--gc-check", "verify=both", "${case}", "std::gc::verify", "${run_fvm}"]
 
 [[tests]]
 name = "gc.collections_both_stable_prl"
-tier = "fast"
+tier = "slow"
 desc = "Maps and sets on std::prl with the non-moving collector, stress mode both, heap verification before and after every collection."
 args = ["--gc-stress", "alloc=3,safepoint=1,kind=both", "--gc-check", "verify=both", "${case}", "std::gc::verify", "std::prl gc_stress=true"]
 
 [[tests]]
 name = "gc.collections_both_young_nvm"
-tier = "fast"
+tier = "slow"
 desc = "Maps and sets on std::nvm with the moving young-generation collector, stress mode both, heap verification before and after every collection."
 args = ["--gc-stress", "alloc=3,safepoint=1,kind=both", "--gc-check", "verify=both", "--gc", "kind=generational", "${case}", "std::gc::verify", "${run_nvm}"]
 
 [[tests]]
 name = "gc.collections_both_young_fvm"
-tier = "fast"
+tier = "slow"
 desc = "Maps and sets on std::fvm with the moving young-generation collector, stress mode both, heap verification before and after every collection."
 args = ["--gc-stress", "alloc=3,safepoint=1,kind=both", "--gc-check", "verify=both", "--gc", "kind=generational", "${case}", "std::gc::verify", "${run_fvm}"]
 
 [[tests]]
 name = "gc.collections_both_young_prl"
-tier = "fast"
+tier = "slow"
 desc = "Maps and sets on std::prl with the moving young-generation collector, stress mode both, heap verification before and after every collection."
 args = ["--gc-stress", "alloc=3,safepoint=1,kind=both", "--gc-check", "verify=both", "--gc", "kind=generational", "${case}", "std::gc::verify", "std::prl gc_stress=true"]
 
 [[tests]]
 name = "gc.collection_constants_nvm"
-tier = "fast"
+tier = "slow"
 desc = "Maps and sets stored in the static area of a graph by std::macro, with string, array, map and function values, on std::nvm under heap verification and a collection at every allocation (the non-moving collector): what the constants hold is carried over with them and stays alive."
 case = "../../../cases/compile/collections/macro_constants.cml"
 args = ["--gc-stress", "alloc=1,safepoint=1,kind=both", "--gc-check", "verify=both", "${case}", "std::macro", "std::gc::verify", "${run_nvm}"]
@@ -175,7 +175,7 @@ expect_stdout_contains = ["\"ok\":true", "{1: one, 2: two, 4: more} two 3", "{al
 
 [[tests]]
 name = "gc.collection_constants_fvm"
-tier = "fast"
+tier = "slow"
 desc = "Maps and sets stored in the static area of a graph by std::macro, with string, array, map and function values, on std::fvm under heap verification and a collection at every allocation (the non-moving collector): what the constants hold is carried over with them and stays alive."
 case = "../../../cases/compile/collections/macro_constants.cml"
 args = ["--gc-stress", "alloc=1,safepoint=1,kind=both", "--gc-check", "verify=both", "${case}", "std::macro", "std::gc::verify", "${run_fvm}"]
@@ -183,7 +183,7 @@ expect_stdout_contains = ["\"ok\":true", "{1: one, 2: two, 4: more} two 3", "{al
 
 [[tests]]
 name = "gc.collection_constants_prl"
-tier = "fast"
+tier = "slow"
 desc = "Maps and sets stored in the static area of a graph by std::macro, with string, array, map and function values, on std::prl under heap verification and a collection at every allocation (the non-moving collector): what the constants hold is carried over with them and stays alive."
 case = "../../../cases/compile/collections/macro_constants.cml"
 args = ["--gc-stress", "alloc=1,safepoint=1,kind=both", "--gc-check", "verify=both", "${case}", "std::macro", "std::gc::verify", "${run_prl}"]
@@ -199,109 +199,109 @@ expect_stdout_contains = ["\"ok\":true", "{1: one, 2: two, 4: more} two 3", "{al
 
 [[tests]]
 name = "gc.collections_tiny_major_stable_nvm"
-tier = "fast"
+tier = "slow"
 desc = "Maps and sets as trees of tiny tables on std::nvm with the non-moving collector, stress mode major, heap verification before and after every collection."
 args = ["--gc-stress", "alloc=3,safepoint=1,kind=major", "--gc-check", "verify=both", "--coll", "validate=on,leaf=2,fanout=4", "${case}", "std::gc::verify", "${run_nvm}"]
 
 [[tests]]
 name = "gc.collections_tiny_major_stable_fvm"
-tier = "fast"
+tier = "slow"
 desc = "Maps and sets as trees of tiny tables on std::fvm with the non-moving collector, stress mode major, heap verification before and after every collection."
 args = ["--gc-stress", "alloc=3,safepoint=1,kind=major", "--gc-check", "verify=both", "--coll", "validate=on,leaf=2,fanout=4", "${case}", "std::gc::verify", "${run_fvm}"]
 
 [[tests]]
 name = "gc.collections_tiny_major_stable_prl"
-tier = "fast"
+tier = "slow"
 desc = "Maps and sets as trees of tiny tables on std::prl with the non-moving collector, stress mode major, heap verification before and after every collection."
 args = ["--gc-stress", "alloc=3,safepoint=1,kind=major", "--gc-check", "verify=both", "--coll", "validate=on,leaf=2,fanout=4", "${case}", "std::gc::verify", "std::prl gc_stress=true"]
 
 [[tests]]
 name = "gc.collections_tiny_major_young_nvm"
-tier = "fast"
+tier = "slow"
 desc = "Maps and sets as trees of tiny tables on std::nvm with the moving young-generation collector, stress mode major, heap verification before and after every collection."
 args = ["--gc-stress", "alloc=3,safepoint=1,kind=major", "--gc-check", "verify=both", "--coll", "validate=on,leaf=2,fanout=4", "--gc", "kind=generational", "${case}", "std::gc::verify", "${run_nvm}"]
 
 [[tests]]
 name = "gc.collections_tiny_major_young_fvm"
-tier = "fast"
+tier = "slow"
 desc = "Maps and sets as trees of tiny tables on std::fvm with the moving young-generation collector, stress mode major, heap verification before and after every collection."
 args = ["--gc-stress", "alloc=3,safepoint=1,kind=major", "--gc-check", "verify=both", "--coll", "validate=on,leaf=2,fanout=4", "--gc", "kind=generational", "${case}", "std::gc::verify", "${run_fvm}"]
 
 [[tests]]
 name = "gc.collections_tiny_major_young_prl"
-tier = "fast"
+tier = "slow"
 desc = "Maps and sets as trees of tiny tables on std::prl with the moving young-generation collector, stress mode major, heap verification before and after every collection."
 args = ["--gc-stress", "alloc=3,safepoint=1,kind=major", "--gc-check", "verify=both", "--coll", "validate=on,leaf=2,fanout=4", "--gc", "kind=generational", "${case}", "std::gc::verify", "std::prl gc_stress=true"]
 
 [[tests]]
 name = "gc.collections_tiny_minor_stable_nvm"
-tier = "fast"
+tier = "slow"
 desc = "Maps and sets as trees of tiny tables on std::nvm with the non-moving collector, stress mode minor, heap verification before and after every collection."
 args = ["--gc-stress", "alloc=3,safepoint=1,kind=minor", "--gc-check", "verify=both", "--coll", "validate=on,leaf=2,fanout=4", "${case}", "std::gc::verify", "${run_nvm}"]
 
 [[tests]]
 name = "gc.collections_tiny_minor_stable_fvm"
-tier = "fast"
+tier = "slow"
 desc = "Maps and sets as trees of tiny tables on std::fvm with the non-moving collector, stress mode minor, heap verification before and after every collection."
 args = ["--gc-stress", "alloc=3,safepoint=1,kind=minor", "--gc-check", "verify=both", "--coll", "validate=on,leaf=2,fanout=4", "${case}", "std::gc::verify", "${run_fvm}"]
 
 [[tests]]
 name = "gc.collections_tiny_minor_stable_prl"
-tier = "fast"
+tier = "slow"
 desc = "Maps and sets as trees of tiny tables on std::prl with the non-moving collector, stress mode minor, heap verification before and after every collection."
 args = ["--gc-stress", "alloc=3,safepoint=1,kind=minor", "--gc-check", "verify=both", "--coll", "validate=on,leaf=2,fanout=4", "${case}", "std::gc::verify", "std::prl gc_stress=true"]
 
 [[tests]]
 name = "gc.collections_tiny_minor_young_nvm"
-tier = "fast"
+tier = "slow"
 desc = "Maps and sets as trees of tiny tables on std::nvm with the moving young-generation collector, stress mode minor, heap verification before and after every collection."
 args = ["--gc-stress", "alloc=3,safepoint=1,kind=minor", "--gc-check", "verify=both", "--coll", "validate=on,leaf=2,fanout=4", "--gc", "kind=generational", "${case}", "std::gc::verify", "${run_nvm}"]
 
 [[tests]]
 name = "gc.collections_tiny_minor_young_fvm"
-tier = "fast"
+tier = "slow"
 desc = "Maps and sets as trees of tiny tables on std::fvm with the moving young-generation collector, stress mode minor, heap verification before and after every collection."
 args = ["--gc-stress", "alloc=3,safepoint=1,kind=minor", "--gc-check", "verify=both", "--coll", "validate=on,leaf=2,fanout=4", "--gc", "kind=generational", "${case}", "std::gc::verify", "${run_fvm}"]
 
 [[tests]]
 name = "gc.collections_tiny_minor_young_prl"
-tier = "fast"
+tier = "slow"
 desc = "Maps and sets as trees of tiny tables on std::prl with the moving young-generation collector, stress mode minor, heap verification before and after every collection."
 args = ["--gc-stress", "alloc=3,safepoint=1,kind=minor", "--gc-check", "verify=both", "--coll", "validate=on,leaf=2,fanout=4", "--gc", "kind=generational", "${case}", "std::gc::verify", "std::prl gc_stress=true"]
 
 [[tests]]
 name = "gc.collections_tiny_both_stable_nvm"
-tier = "fast"
+tier = "slow"
 desc = "Maps and sets as trees of tiny tables on std::nvm with the non-moving collector, stress mode both, heap verification before and after every collection."
 args = ["--gc-stress", "alloc=3,safepoint=1,kind=both", "--gc-check", "verify=both", "--coll", "validate=on,leaf=2,fanout=4", "${case}", "std::gc::verify", "${run_nvm}"]
 
 [[tests]]
 name = "gc.collections_tiny_both_stable_fvm"
-tier = "fast"
+tier = "slow"
 desc = "Maps and sets as trees of tiny tables on std::fvm with the non-moving collector, stress mode both, heap verification before and after every collection."
 args = ["--gc-stress", "alloc=3,safepoint=1,kind=both", "--gc-check", "verify=both", "--coll", "validate=on,leaf=2,fanout=4", "${case}", "std::gc::verify", "${run_fvm}"]
 
 [[tests]]
 name = "gc.collections_tiny_both_stable_prl"
-tier = "fast"
+tier = "slow"
 desc = "Maps and sets as trees of tiny tables on std::prl with the non-moving collector, stress mode both, heap verification before and after every collection."
 args = ["--gc-stress", "alloc=3,safepoint=1,kind=both", "--gc-check", "verify=both", "--coll", "validate=on,leaf=2,fanout=4", "${case}", "std::gc::verify", "std::prl gc_stress=true"]
 
 [[tests]]
 name = "gc.collections_tiny_both_young_nvm"
-tier = "fast"
+tier = "slow"
 desc = "Maps and sets as trees of tiny tables on std::nvm with the moving young-generation collector, stress mode both, heap verification before and after every collection."
 args = ["--gc-stress", "alloc=3,safepoint=1,kind=both", "--gc-check", "verify=both", "--coll", "validate=on,leaf=2,fanout=4", "--gc", "kind=generational", "${case}", "std::gc::verify", "${run_nvm}"]
 
 [[tests]]
 name = "gc.collections_tiny_both_young_fvm"
-tier = "fast"
+tier = "slow"
 desc = "Maps and sets as trees of tiny tables on std::fvm with the moving young-generation collector, stress mode both, heap verification before and after every collection."
 args = ["--gc-stress", "alloc=3,safepoint=1,kind=both", "--gc-check", "verify=both", "--coll", "validate=on,leaf=2,fanout=4", "--gc", "kind=generational", "${case}", "std::gc::verify", "${run_fvm}"]
 
 [[tests]]
 name = "gc.collections_tiny_both_young_prl"
-tier = "fast"
+tier = "slow"
 desc = "Maps and sets as trees of tiny tables on std::prl with the moving young-generation collector, stress mode both, heap verification before and after every collection."
 args = ["--gc-stress", "alloc=3,safepoint=1,kind=both", "--gc-check", "verify=both", "--coll", "validate=on,leaf=2,fanout=4", "--gc", "kind=generational", "${case}", "std::gc::verify", "std::prl gc_stress=true"]
 

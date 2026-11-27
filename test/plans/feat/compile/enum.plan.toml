@@ -99,6 +99,7 @@ timeout_ms = 60000
 
 [[tests]]
 name = "gc_mark_sweep"
+tier = "slow"
 desc = "The same program under the mark-sweep collector prints the same values."
 kind = "behavior"
 case = "../../../cases/compile/enum/gc_stress.cml"
