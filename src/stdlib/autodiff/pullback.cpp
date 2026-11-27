@@ -1286,6 +1286,58 @@ class Backward final : public VjpBuilder {
             aggregate,
             index);
     }
+    vjp_node_t addBranch(
+        Type *type, vjp_node_t condition, size_t armCount,
+        const std::function<vjp_node_t(size_t)> &armValue) override {
+        if (condition == rt::kInvalidNodeRef || armCount == 0 || type == nullptr) {
+            return rt::kInvalidNodeRef;
+        }
+        auto &draft              = target();
+        const rt::gc_cnt_t arms  = static_cast<rt::gc_cnt_t>(armCount);
+        const gc_node_ref_t join = draft.addJoinNode(type, rt::kInvalidNodeRef, arms);
+        const gc_node_ref_t brch = draft.addBrchNode(Type::Int64(), join, arms);
+        // The condition is a value of the region the branch stands in, not an arm's input: every
+        // arm reads the same value, which is what makes the pick agree whichever arm runs.
+        const std::array<gc_node_ref_t, 1> conditionInput{condition};
+        draft.setNormInputs(brch, std::span<const gc_node_ref_t>(conditionInput.data(), 1));
+        const uint32_t outer = draft.insertRegion();
+        std::vector<gc_node_ref_t> armResults;
+        armResults.reserve(armCount);
+        for (size_t arm = 0; arm < armCount; ++arm) {
+            const uint32_t region =
+                draft.addRegion(rt::GCRegionKind::Arm, outer, brch, static_cast<uint32_t>(arm));
+            draft.setInsertRegion(region);
+            const gc_node_ref_t result = armValue(arm);
+            draft.setInsertRegion(outer);
+            if (result == rt::kInvalidNodeRef) {
+                return rt::kInvalidNodeRef;
+            }
+            draft.setRegionResult(region, result);
+            armResults.push_back(result);
+        }
+        // The Join names the Brch and takes the arms' results, written the way the other two
+        // writers of a branch in this tree state one (stdlib/transforms/split.cpp, stdlib/
+        // transforms/jvp.cpp), so a rule's branch and a program's are the same node kind.
+        const rt::DraftNodeHeader *header = draft.header(join);
+        rt::DraftNodeInit init;
+        init.dataIndex    = header->dataIndex;
+        init.dataType     = header->dataType;
+        init.kind         = rt::GCNodeKind::Join;
+        init.runtimeFlags = header->runtimeFlags;
+        init.origin       = header->origin;
+        init.permissions  = header->permissions;
+        init.attrs        = header->attrs;
+        init.region       = header->region;
+        init.name         = header->name;
+        const rt::GCJoinBody joinBody{.brch = brch, .armCount = arms};
+        init.payload = std::span<const std::byte>(
+            reinterpret_cast<const std::byte *>(&joinBody),
+            sizeof(joinBody));
+        init.normInputs = std::span<const gc_node_ref_t>(&brch, 1);
+        init.withInputs = armResults;
+        draft.rewriteNode(join, init);
+        return join;
+    }
     std::optional<vjp_node_t> gradientOf(vjp_node_t node) const override;
     void accumulateGradient(vjp_node_t node, vjp_node_t gradient) override;
     bool isActive(vjp_node_t node) const override;
