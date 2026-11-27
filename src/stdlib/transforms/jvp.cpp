@@ -1178,6 +1178,22 @@ bool liftGraph(
             [&pairOf,
              &fillTupleOf](Type *valueType, gc_node_ref_t half, gc_node_ref_t halfTangent) {
                 TupleType *pairType = pairOf(valueType);
+                if (pairType == nullptr) {
+                    // The machinery's tangent space answers nothing for a value the **user's** law
+                    // still pairs: a `bool` or an `int` result keeps its own type, at zero (design
+                    // principles 9.9), and its lift is `(value, zero)`. The law's answer is the one
+                    // the lifted signature declares, so the pair is written from it -- a fill with
+                    // no type is a graph the encoder rejects far from here, and the exit would
+                    // disagree with the signature it was built to satisfy.
+                    //
+                    // Every other shape keeps `pairOf`'s answer, which is the one the walk's
+                    // `pairIsTheCopy` bookkeeping was filled with.
+                    const LiftedShape shape = liftedShapeOf(valueType);
+                    if (!shape.pair || shape.type == nullptr) {
+                        return rt::kInvalidNodeRef;
+                    }
+                    pairType = static_cast<TupleType *>(shape.type);
+                }
                 const std::array<gc_node_ref_t, 2> halves{half, halfTangent};
                 return fillTupleOf(pairType, halves);
             };
@@ -3369,8 +3385,8 @@ bool liftGraph(
             noteRefusal(RefusalReading("jvp", name, RefusalCause::Value));
             return fail(refusal);
         }
-        const gc_node_ref_t chainValue   = copyOf[oldValue];
-        const gc_node_ref_t chainTangent = tangentOf[oldValue];
+        const gc_node_ref_t chainValue = copyOf[oldValue];
+        gc_node_ref_t chainTangent     = tangentOf[oldValue];
         // A body that ends at a branch already yields the pair -- the Join's type is the pair of
         // the value it yields -- so the exit is that value itself. A straight-line body yields a
         // value the rules gave a tangent for, and the exit is the pair built from the two.
@@ -3388,6 +3404,30 @@ bool liftGraph(
         // the pair of the whole value, so only `pairIsTheCopy` knows which of the two this is.
         const bool alreadyLifted = chain != nullptr && exitPair != nullptr &&
                                    chain->dataType == exitPair && pairIsTheCopy.contains(oldValue);
+        if (chainTangent == rt::kInvalidNodeRef && !alreadyLifted && !exitIsLiftedValue) {
+            // A **discrete** answer -- a comparison's `bool`, a count's `int` -- is the one shape
+            // where the walk has no tangent to hand over and the answer is still the law's: the
+            // user's rule gives such a value a gradient of its own type, at zero (design
+            // principles 9.9, `gradientTypeOf`), while the machinery's rule gives it no tangent
+            // space at all, which is why the walk copied it without one (a zero nobody read was
+            // not worth a node). The pair the lifted signature promises is closed here with that
+            // zero, written as the constant its own type states -- the same zero the reverse
+            // transform writes for a discrete member (`camel::core::discreteZeroSlot`).
+            //
+            // The condition is exactly that disagreement, not "the tangent is missing": a `float`
+            // whose tangent the walk failed to make is a defect, and it is still refused below.
+            Type *exitValueType = valueTypeOf(oldValue);
+            const bool discreteWithUserGradient =
+                exitValueType != nullptr && camel::core::gradientTypeOf(exitValueType) != nullptr &&
+                !camel::core::tangentSpaceOf(exitValueType).hasSpace();
+            if (discreteWithUserGradient) {
+                if (const std::optional<slot_t> zero =
+                        camel::core::discreteZeroSlot(exitValueType)) {
+                    chainTangent =
+                        draft.materializeStaticValue(*zero, exitValueType, rt::kGCNodeFlagConstant);
+                }
+            }
+        }
         if (chainTangent == rt::kInvalidNodeRef && !alreadyLifted && !exitIsLiftedValue) {
             os << "REINTERP jvp function=" << name
                << " skip=" << refusalCauseName(RefusalCause::Tangent) << '\n';

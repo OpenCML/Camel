@@ -22,6 +22,15 @@ case = "../../cases/probe/t301/int.cml"
 expect_exit = 0
 expect_stdout = "2\n0\n"
 
+# The reverse half is not pinned here yet, and the reason is a type law rather than this transform:
+# `Pullback<F>` names its cotangent `ct: Tangent<ResultOf<F>>`, and `Tangent<T>` is the machinery's
+# answer (`tangentSpaceOf`, `src/kernel/core/type/typecall.cpp:178`), which is `()` for a `bool`.
+# The forward lift now answers `(value, zero-of-its-own-type)` -- `Lift<bool>` built by `jvp`'s own
+# signature law -- so the two statements about one value disagree at the type level, and that is a
+# decision about `Tangent<T>` (and about the checked example `is_same::<Lift<int>, (int, ())>` in
+# `stdlib/rulesets/jvp.cml`), not something a case here can settle. The case that would pin the
+# reverse reading is `test/cases/probe/t301/vjp_bool.cml`; it comes back with that decision.
+
 [[tests]]
 name = "a_string_result_still_has_no_tangent"
 kind = "negative"

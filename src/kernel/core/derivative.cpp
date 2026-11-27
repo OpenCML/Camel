@@ -308,6 +308,24 @@ std::optional<slot_t> zeroTangentConstantOf(const type::Type *type) {
     return space->zero;
 }
 
+std::optional<slot_t> discreteZeroSlot(const type::Type *type) {
+    if (type == nullptr) {
+        return std::nullopt;
+    }
+    // The builtin scalar codes, and only the ones a constant can state: a module type's discrete
+    // zero is its own operator's, of the value's shape, and this function has no value to give.
+    switch (type->code()) {
+    case type::TypeCode::Int32:
+        return rtdata::toSlot<int32_t>(0);
+    case type::TypeCode::Int64:
+        return rtdata::toSlot<int64_t>(0);
+    case type::TypeCode::Bool:
+        return rtdata::toSlot<bool>(false);
+    default:
+        return std::nullopt;
+    }
+}
+
 Type *gradientTypeOf(Type *parameter) {
     return cachedTangent(parameter, Audience::User);
 }

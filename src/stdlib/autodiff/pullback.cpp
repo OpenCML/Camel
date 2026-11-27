@@ -2234,23 +2234,11 @@ Type *tangentNodeType(Type *primal) {
     return tangent != nullptr ? tangent : primal;
 }
 
-/// The zero of a discrete scalar: an integer or a boolean has derivative zero by definition
-/// (design principles 9.9), and the user's gradient keeps such a member at its own type
-/// (`gradientTypeOf`: a number is its own gradient, at zero). A discrete value a module holds (an
-/// integer tensor) is not answered here: the tangent space of its kind gives the zero operator that
-/// builds a zero of the value's own shape and element type (`tensor:zeros_like`).
-std::optional<slot_t> discreteZeroSlot(Type *type) {
-    switch (type->code()) {
-    case TypeCode::Int32:
-        return toSlot<int32_t>(0);
-    case TypeCode::Int64:
-        return toSlot<int64_t>(0);
-    case TypeCode::Bool:
-        return toSlot<bool>(false);
-    default:
-        return std::nullopt;
-    }
-}
+/// The zero of a discrete scalar is the core's answer, not a table kept here: the forward lift
+/// writes the same zero for a result the walk could not give a tangent to, and two tables that can
+/// disagree is worse than one that is missing (`camel::core::discreteZeroSlot`,
+/// `camel/core/derivative.h`).
+using camel::core::discreteZeroSlot;
 
 /// The zero of `primal`'s tangent; `primalValue` is the primal value (a tensor's zero is taken
 /// from it).
