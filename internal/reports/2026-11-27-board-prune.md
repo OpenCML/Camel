@@ -139,7 +139,8 @@ Ids in `in_progress` run from task-3 to task-260. Seventeen of them carry ids of
 which is today's dispatch range; the rest are older.
 
 Reconciliation of the record: the page above holds 61 distinct ids, and 61 tasks were deleted —
-`task-22` by this lane, the other 60 by the Team Lead in six batches. A running total quoted as 62
-elsewhere counts one task twice; the id list above is the check.
+`task-22` by this lane, the other 60 by the Team Lead in six batches. The count is **61**. A running
+total of 62 that was quoted while the batches ran counted `task-22` twice (once inside batch 1, once
+again on its own); the id list above is the check, and the backlog row has been corrected.
 
 Nothing outside `completed` was touched: `pending` and `in_progress` were only counted.
