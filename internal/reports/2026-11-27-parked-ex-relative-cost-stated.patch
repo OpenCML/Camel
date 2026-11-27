@@ -1,0 +1,149 @@
+diff --git a/docs/cli.md b/docs/cli.md
+index f19aa2bab5..f5a759723e 100644
+--- a/docs/cli.md
++++ b/docs/cli.md
+@@ -328,7 +328,7 @@ default", today the C++ implementation, and nothing about a program that names n
+ - `std::fvm`: high-performance bytecode VM scheduler
+ - `std::jit`: JIT-enabled bytecode VM scheduler. The JIT generates code for x86-64 only. In a build for another processor (arm64 macOS; `ENABLE_FASTVM_JIT` off) `std::jit` is accepted and runs the program on the bytecode interpreter, as `std::fvm` does, with the same results; the build says so once in its log (`-v`: `std::jit: this build has no native code generator ...`). It is a log line and not a warning, so the same command line runs on every platform, also under `-Werror`
+ - `std::gir`: dump the current graph IR and stop
+-- `std::cxx::saturate`: saturate the standard rules library (`lib/rules/rules.cml`) and stop there, leaving the program in the state where a value has several writings — the state the extractors read, and nothing else is changed: no writing is extracted, so every equivalent writing is still in the graph. `rounds: int = 6` bounds the rounds of saturation, `strict: bool = false` keeps the rules that hold bit for bit (design principles 7.4). The dumps of that state draw each class as a dashed cluster of its writings and make an input edge leave the class of the value it reads: `camel f.cml std::cxx::saturate std::gir` (`std::rgir` styles it, `std::jgir` carries the classes and `std::jgir egraph=true` writes the document `egraph-serialize` reads; the `_regions` and the role-annotated variants of the DOT dumps draw it too). They draw no cost: which writing a target would keep is the target's judgement, and the kernel has none. A pass that consumes a program — `std::fvm`, `std::jit`, `std::tf`, `std::cpp`, `onnx::export` — is not given that state at all: the driver stops with `PassNeedsExtraction` unless the pipeline names the extraction, `rewrite::extract cost=<module>::<function>` (for example `camel f.cml std::cxx::saturate rewrite::extract cost=rules::nodes std::nvm`).
++- `std::cxx::saturate`: saturate the standard rules library (`lib/rules/rules.cml`) and stop there, leaving the program in the state where a value has several writings — the state the extractors read, and nothing else is changed: no writing is extracted, so every equivalent writing is still in the graph. `rounds: int = 6` bounds the rounds of saturation, `strict: bool = false` keeps the rules that hold bit for bit (design principles 7.4). The dumps of that state draw each class as a dashed cluster of its writings and make an input edge leave the class of the value it reads: `camel f.cml std::cxx::saturate std::gir` (`std::rgir` styles it, `std::jgir` carries the classes and `std::jgir egraph=true` writes the document `egraph-serialize` reads; the `_regions` and the role-annotated variants of the DOT dumps draw it too). They draw no cost: which writing a target would keep is the target's judgement, and the kernel has none. A pass that consumes a program — `std::fvm`, `std::jit`, `std::tf`, `std::cpp`, `onnx::export` — is not given that state at all: the driver stops with `PassNeedsExtraction` unless the pipeline names the extraction, `rewrite::extract cost=<module>::<function>` (the standard library's default is `rules::default` — one run of a node as its operator states it in the operator's record, read by `graph::relative_cost`, plus the costs of the values it reads — so `camel f.cml std::cxx::saturate rewrite::extract cost=rules::default std::nvm`; `cost=rules::nodes` counts a node apiece instead).
+ - `std::profile`: profile the run and print a report when it ends (see "Profiling a run: `std::profile`")
+ - `tensor::fuse`, `onnx::export`: passes contributed by modules. Writing `<module>::<pass>` on the command line loads the module `<module>` when the program has not imported it, so a program need not import a module only to be translated by its pass. A module that cannot be found, or that has no such pass, leaves the name unknown (`RuntimeDiag::UnrecognizedGraphPass`)
+ 
+diff --git a/docs/technical/44_values_with_several_writings.md b/docs/technical/44_values_with_several_writings.md
+index ff8bd9a906..2357a687a2 100644
+--- a/docs/technical/44_values_with_several_writings.md
++++ b/docs/technical/44_values_with_several_writings.md
+@@ -108,7 +108,10 @@ reduce without `no_infs`; with the matcher reading the operand order, `float_com
+ ## 5. Extraction
+ 
+ `DraftWritings::extract(CostModel)`: the cost of a writing is its own positive cost plus the
+-costs of the values it reads (tree cost); repeated to a fixed point, ties to the smallest node.
++costs of the values it reads — counted **once per value**, because the walk is over the graph's
++values and their classes, not over an unfolded tree, so a subexpression three writings read is
++paid for once (design principles 9.11, "by sharing"); repeated to a fixed point, ties to the
++smallest node.
+ Because a writing's cost exceeds that of each value it reads, a writing that reads its own value
+ is never chosen. Then: nodes that stay read the chosen writings of their inputs; the entry,
+ exit, output, return and region results take the chosen writing; the others are erased; the
+@@ -117,6 +120,18 @@ the cost of a writing is the function value the pipeline names (`rewrite::extrac
+ Camel function `(n: Node, inputs: float[]) => float`), and the hook receives the node and a
+ `CostContext` (draft and context) so a target can read facts. The kernel keeps no table of models
+ by name, no built-in that judges a writing dear, and extracts by no name of its own (D-1123-78).
++The standard library supplies the default, `rules::default` (`lib/rules/rules.cml`): one run of
++the node as its operator states it in the operator's record (`graph::relative_cost`, the record's
++`relativeCost`) plus the costs of the values it reads. An operator states that number where it is
++registered (`CppRegistration::relativeCost`), so a division is dearer than a multiplication and a
++multiplication dearer than an addition without anything comparing a name — and a target library
++that prices its own operators gets its numbers into the same function by stating them.
++
++**An unstated cost is not a cheap one.** An operator that states no cost reads as 1.0, and 1.0
++here means "nobody said", not "cheap": today twenty-two operators state a number (the divisions,
++remainders and multiplications of the core) and every other operator — the core's own remaining
++hundred-and-nine and every operator a module registers — is silent, so 1.0 is the norm and a
++registry that wants an operator to count as dear must state it.
+ 
+ **What extraction keeps** is the retention boundary of the design (graph store 3.5 and 3.6,
+ design principles 3.1): extraction does not decide which side effects happen, so it keeps every
+diff --git a/src/stdlib/graph.cml b/src/stdlib/graph.cml
+index 19f1593c08..cdf4357f0d 100644
+--- a/src/stdlib/graph.cml
++++ b/src/stdlib/graph.cml
+@@ -342,6 +342,14 @@ export func permissions(n: Node) => int
+ /// @example-fragment n is a node of the surrounding pass
+ /// @example relative_cost(n)
+ export func relative_cost(n: Node) => float
++/// Whether the node's operator states its cost, or the 1.0 `relative_cost` answers is nobody
++/// having said. The pair, and the reason this is a second function: `relative_cost` gives 1.0
++/// either way, because both readings cost the same -- it says nothing about a choice -- while
++/// this one tells a register who wants an operator to count as dear whether a number is there
++/// or is a gap.
++/// @example-fragment n is a node of the surrounding pass
++/// @example relative_cost_stated(n)
++export func relative_cost_stated(n: Node) => bool
+ 
+ // ---- transactions ----
+ 
+diff --git a/src/stdlib/graph/module.cpp b/src/stdlib/graph/module.cpp
+index a1f1c38a37..1d5356228c 100644
+--- a/src/stdlib/graph/module.cpp
++++ b/src/stdlib/graph/module.cpp
+@@ -197,6 +197,7 @@ class GraphModule final : public BuiltinModule {
+                 {"op_name", true},
+                 {"is_pure", true},
+                 {"relative_cost", true},
++                {"relative_cost_stated", true},
+                 {"may_be_recomputed", true},
+                 {"may_fault", true},
+                 {"may_be_rearranged", true},
+diff --git a/src/stdlib/graph/read.cpp b/src/stdlib/graph/read.cpp
+index 14848199c1..28c4cf7e36 100644
+--- a/src/stdlib/graph/read.cpp
++++ b/src/stdlib/graph/read.cpp
+@@ -544,6 +544,22 @@ camel::core::OperId operOf(const NodeView &node, const Handle *handle, const cha
+     return graphOf(handle, site).nodeBodyAs<GCOperBody>(handle->index())->oper;
+ }
+ 
++/// Whether the node's operator states its cost, or the 1.0 `relative_cost` answers is the silence
++/// of nobody having said (design principles 9.11). It changes nothing about a choice: `relative_cost`
++/// gives 1.0 either way, which is what the extraction uses. It makes the difference *readable*, so a
++/// register that wanted an operator to count as dear can tell a stated number from a gap instead of
++/// trusting a sentence in a document.
++slot_t relativeCostStatedKernel(ArgsView &, ArgsView &norm, Context &) {
++    const auto *handle             = norm.get<Handle *>(0);
++    const NodeView node            = viewOf(handle, "graph.relative_cost_stated");
++    const camel::core::OperId oper = operOf(node, handle, "graph.relative_cost_stated");
++    if (oper == camel::core::kNoOper) {
++        return toSlot<Bool>(false);
++    }
++    const camel::ops::Record *record = OperatorTable::instance().recordOf(oper);
++    return toSlot<Bool>(record != nullptr && record->relativeCost.stated());
++}
++
+ /// How dear one run of the node is: the relative cost its operator states in its record, and 1.0
+ /// for a node whose operator states nothing or that runs no operator (a datum, a port). It is the
+ /// reading a cost function makes instead of comparing the operator's name (design principles
+@@ -1103,6 +1119,7 @@ const std::vector<ReadOp> &readOps() {
+         {"op_name", opNameKernel},
+         {"is_pure", isPureKernel},
+         {"relative_cost", relativeCostKernel},
++        {"relative_cost_stated", relativeCostStatedKernel},
+         {"may_be_recomputed", mayRecomputeKernel},
+         {"may_fault", mayFaultKernel},
+         {"may_be_rearranged", mayBeRearrangedKernel},
+diff --git a/src/stdlib/std/builtin/executors/builtin_semantics.cpp b/src/stdlib/std/builtin/executors/builtin_semantics.cpp
+index 88b0f7d5f3..301ac9e631 100644
+--- a/src/stdlib/std/builtin/executors/builtin_semantics.cpp
++++ b/src/stdlib/std/builtin/executors/builtin_semantics.cpp
+@@ -424,8 +424,13 @@ void declareBuiltinOperatorFaults() {
+     // How dear a run of the arithmetic is, relative to the cheapest run of the same machine: the
+     // property a cost function reads instead of the operator's name (design principles 9.11, "the
+     // cost of an extraction"). A division and a remainder cost eight, a multiplication three, and
+-    // everything else is left silent and therefore costs one (`Record::relativeCostOf`). The
+-    // numbers are the ones the kernel's retired `weighted` model held, stated here -- where the
++    // addition, subtraction and negation one -- the cheapest run there is, stated rather than left
++    // silent so that "one" is a statement and not a gap (`graph::relative_cost_stated` tells the
++    // two apart). Everything else costs one because nobody said anything, and that one is a gap:
++    // today the core registers a hundred-and-thirty-one operators and the modules register theirs,
++    // and none of them but these forty-six states a number.
++    //
++    // The numbers are the ones the kernel's retired `weighted` model held, stated here -- where the
+     // operator's owner says it -- instead of by comparing the letters of a URI.
+     static constexpr CppCostStatement kCppCostStatements[] = {
+         {":op/div_i", 8.0},  {":op/div_l", 8.0},  {":op/div_f", 8.0},  {":op/div_d", 8.0},
+@@ -433,7 +438,13 @@ void declareBuiltinOperatorFaults() {
+         {":op/mod_i", 8.0},  {":op/mod_l", 8.0},  {":op/mod_f", 8.0},  {":op/mod_d", 8.0},
+         {":op/mod_bf", 8.0}, {":op/mod_f6", 8.0}, {":op/mul_i", 3.0},  {":op/mul_l", 3.0},
+         {":op/mul_f", 3.0},  {":op/mul_d", 3.0},  {":op/mul_c", 3.0},  {":op/mul_z", 3.0},
+-        {":op/mul_bf", 3.0}, {":op/mul_f6", 3.0},
++        {":op/mul_bf", 3.0}, {":op/mul_f6", 3.0}, {":op/add_i", 1.0},  {":op/add_l", 1.0},
++        {":op/add_f", 1.0},  {":op/add_d", 1.0},  {":op/add_c", 1.0},  {":op/add_z", 1.0},
++        {":op/add_bf", 1.0}, {":op/add_f6", 1.0}, {":op/sub_i", 1.0},  {":op/sub_l", 1.0},
++        {":op/sub_f", 1.0},  {":op/sub_d", 1.0},  {":op/sub_c", 1.0},  {":op/sub_z", 1.0},
++        {":op/sub_bf", 1.0}, {":op/sub_f6", 1.0}, {":op/neg_i", 1.0},  {":op/neg_l", 1.0},
++        {":op/neg_f", 1.0},  {":op/neg_d", 1.0},  {":op/neg_c", 1.0},  {":op/neg_z", 1.0},
++        {":op/neg_bf", 1.0}, {":op/neg_f6", 1.0},
+     };
+     for (const CppCostStatement &statement : kCppCostStatements) {
+         camel::ops::CppRegistration registration(statement.uri);
