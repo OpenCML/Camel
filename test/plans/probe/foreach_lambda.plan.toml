@@ -32,3 +32,42 @@ args = ["check", "${case}"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
+[[tests]]
+name = "foreach_lambda.array_map"
+desc = "The array form of `map`: the lambda's parameter comes from the declaration's `with <f: (item: T) => U>`."
+kind = "behavior"
+case = "../../cases/probe/foreach_lambda/array_map.cml"
+args = ["check", "${case}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "foreach_lambda.range_map"
+desc = "The range form of `map`, declared with the same shape of `with` parameter as the array's. Reads whether the same inference holds for the whole family, not only for `foreach`."
+kind = "behavior"
+case = "../../cases/probe/foreach_lambda/range_map.cml"
+args = ["check", "${case}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "foreach_lambda.array_filter"
+desc = "The array form of `filter`, the example the prelude's own text writes."
+kind = "behavior"
+case = "../../cases/probe/foreach_lambda/array_filter.cml"
+args = ["check", "${case}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "foreach_lambda.range_filter"
+desc = "The range form of `filter`: the prelude promises a lambda given to `filter` needs no parameter type, and this is the range spelling of that promise."
+kind = "behavior"
+case = "../../cases/probe/foreach_lambda/range_filter.cml"
+args = ["check", "${case}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000

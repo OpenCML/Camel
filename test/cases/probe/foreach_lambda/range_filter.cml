@@ -1,0 +1,7 @@
+// The range form of `filter`, whose promise (`prelude.cml` says a lambda given to `filter` needs no
+// parameter type) is the one this probe reads.
+func main() => int sync {
+    let ys = (0 .. 5)->filter<func (x) { x % 2 == 0 }>
+    println(ys[0])
+    return 0
+}
