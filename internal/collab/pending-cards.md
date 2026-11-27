@@ -68,3 +68,12 @@
 - 因此本轮读数（`one()!` 报 `operator '!' is not defined`、`!!one()` 报 `Unexpected '!!'`）**不是缺陷**
 - **教训（要进 skill）**：报"语法/特性不支持"之前，先 `git merge-base --is-ancestor <那次合入的提交> HEAD` 核自己的底；底旧时所有"实现不认"的读数都不成立
 - 后续：换底后重跑最小探针与 `c2.by_program`；若仍报同一句，才是缺陷
+
+### E. 第四装配点：改判 —— **阻塞在类型律层，且需要一个类型真值手段**（cap-probe 交回，2026-11-28 02:0x）
+- **判据修正**：两个 E 卡用例在 HEAD 上**本来就绿**（`grad_array_with_int.fvm`、`grad_array_int_parameter_first.nvm`）⇒ 此卡是"落 甲 时别把它们弄红"，不是"修红"
+- **甲 的阻塞逐字**：`vjp.cml:132` 声明 `(float, (ct: float) => (float[], int))`，构出 `(float, (float) => (float[], ()))`
+- **四组阴性（各自单独上机，构出侧字节不变 ⇒ `()` 不是这四处产出）**：`pullback.cpp#planFor` 走用户切向｜`split.cpp#valuePortsOf` 换用户律｜`split.cpp#splitHalvesWith` 离散槽用 `gradientTypeOf`｜`jvp.cpp#liftSignature` 切向半用 `gradientTypeOf`
+- **最可能落点**：`.cml` 类型律层（`types.cml:246 Jvp<F>`、`:268 Transpose<F>`；`split_operator.cpp#splitOperatorSignature` 把 `Split` 的答案声明成 `halves.forward`）；`vjp` 是 `#macro`，`lin` 拿的是**声明类型**
+- **下一手**：纯 `.cml` 探针绕开 `vjp` 宏，直接实例化那两条类型律，看切向半是 `int` 还是 `()`；三支判读（律里就是 `()` ⇒ 改律｜律里是 `int` 而宏里是 `()` ⇒ 宏声明层｜探针写不出该形状 ⇒ 报"设计上不可达"）
+- **取类型的手法**：把值传给形参、让 `NoMatchingFunction` 打印真实类型（沿用 T1 的做法），**不新造工具、不改 plan 断言**
+- **已记的坑**：把 `lift.cpp` 的**普通**参数读法也改成"`int` ⇒ `Tangent` 位"会一次打红 **59** 个 transforms 用例；只能动"提升签名的切向半"
