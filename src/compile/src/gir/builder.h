@@ -371,15 +371,10 @@ class Builder {
     void exportDeclarations(const GCT::node_ptr_t &expt, bool decorated);
     // A body-less declaration of the current module (design principles 6.4, step
     // 1): checked against the operator table and the loaded executors, then kept as a rule of
-    // the operator group of its name. A body-less declaration with the pass applicability is a pass
-    // (`isPassDeclaration`), and an operator as well when the module implements one for it
-    // (`declarationHasOperator`).
+    // the operator group of its name. A declaration the module implements no operator for is the
+    // pipeline's (a pass, design principles 9.3), and the operator table is what says so
+    // (`declarationHasOperator`); the declaration's type shape does not decide it.
     void declareNativeOperator(const GCT::node_ptr_t &gct);
-    // Whether a body-less declaration declares a pass (design principles 9.3): its applicability
-    // condition is `is_function::<T>()`, the same condition the pipeline reads from the module's
-    // `.cml` file. A pass is a function the pipeline applies to the program; nothing of it is
-    // compiled or exported as a function.
-    bool isPassDeclaration(const GCT::node_ptr_t &gct);
     /// Whether the operator this body-less declaration names is the module's, implemented for it.
     bool declarationHasOperator(const GCT::node_ptr_t &gct);
     // Exports the operator groups of the body-less declarations of the current module, one group

@@ -85,7 +85,8 @@ bool namesTypeParameter(const camel::core::tag::Decl &decl, std::string_view typ
 
 /// Whether the declaration's condition says the parameter's type is a function
 /// (`when is_function::<F>()`). The condition is one text and the name is matched in it with the
-/// spaces dropped, exactly as a pass declaration's condition is (Builder::isPassDeclaration): a
+/// spaces dropped, the way the pipeline reads a declaration's condition
+/// (`pass_declarations.cpp`, `passDeclarationApplies`): a
 /// tag carries no instance of its own for the type parameter to be bound in, so there is no
 /// other reading of it. A condition that also says something else still selects every type
 /// parameter it names this way.

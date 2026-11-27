@@ -1404,3 +1404,12 @@ expect_diagnostic_code = "0x04000033"
 expect_diagnostic_line = 14
 expect_diagnostic_column = 12
 expect_output_contains = ["The struct has no field 'y'. A struct is indexed by the name of one of its fields."]
+
+[[tests]]
+name = "native.pass_shaped_declaration_is_still_checked"
+desc = "A body-less declaration that is pass-shaped (`(f: F) => F!` under `when is_function::<F>()`) and writes `#op` for an operator no loaded module implements. Pass-shaped is not a licence to skip the check: the declaration claims an operator, so the error is reported at the declaration, in the module that wrote it."
+kind = "negative"
+case = "../../../cases/compile/native/pass_shaped_absent.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::NativeDeclarationNotLoaded"
