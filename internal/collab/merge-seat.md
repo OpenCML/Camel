@@ -230,6 +230,20 @@ ast hashes: <N> file(s) checked, 0 stale
 - `-Check ast-hashes` 的退出码可能是 **1**，而 ast 本身是 `exit 0 / 0 stale` —— 那个 1 来自它**连带跑的 `check-doc-links`**。两个检查共用一个退出码，会让"0 stale"和"exit 1"同时出现；看到这种组合先分开读各自的 `exit`，别把 rc 当成 ast 的判词。
 - 数字跟着**尖端**走：换个尖端，stale 行数就该变（本晚实测：`1c226f5d99` 上 3 行，`faa0167b1a` 上 10 行，合完 `rule-branch` 后 12 行）。照抄上一轮的差数会漏录。
 
+## 推完的核对是回读远端，不是"我 push 了"
+
+推送成功的判据是**回读**：`git ls-remote origin refs/heads/integration` 给出的 sha 就是你这一批的尖端。
+本地 `rev-parse HEAD` 是**你手上的** sha，不是**远端的** sha —— 今晚出现的一次错位（本地有对象、远端没有）
+差点让晋级位拿一个只存在于对象库里的提交当起跑点。
+
+```
+git push https://github.com/OpenCML/Camel.git HEAD:integration
+git ls-remote origin refs/heads/integration   # 这一步是判据；上一行的成功输出不是
+```
+
+而且报给协调者的必须是**回读的那个 sha**，连同 `HEAD^{tree}` 与构建记录是否在。单父笔、缺 `Lane-Reading`、
+记录落在第二父 —— 这三种拒绝都发生在 `push` 之后、`ls-remote` 之前，只有回读能把它们和"推成功"分开。
+
 ## 成批合并后、推送前：在该批碰过的计划上跑一遍，与尖端比红名单
 
 这条规矩来自一次真实的漏失：一批合进来时，我贴的是**该车道自己的读数**加一句 `no new red against <sha>`，
