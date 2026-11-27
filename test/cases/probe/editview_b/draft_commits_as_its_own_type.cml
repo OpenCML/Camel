@@ -1,0 +1,21 @@
+// The control for the type rule: a draft committed as the type it was opened with is accepted, and
+// the call writes no type argument -- `commit(d)` reads `F` off the draft's own type (design 5, 6:
+// the draft carries the type of the function its commit makes).
+import { commit, open } from graph
+
+func inc(x: int) => int {
+    return x + 1
+}
+
+func edited(f: (x: int) => int) => ((x: int) => int)! {
+    let d = open(f)
+    return commit(d)
+}
+
+func main() => int sync {
+    let g = edited(inc)
+    return match g {
+        case error e => -1
+        case h => h(5)
+    }
+}

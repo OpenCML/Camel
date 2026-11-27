@@ -1,0 +1,24 @@
+// The type rule `Draft<F>` exists for (graph-editing design 5 and 6: the block's value is the
+// function its commit makes, of the type the head's function had). A draft opened on a function of
+// one type is not a draft of another, so committing it as the other type is a type error: nothing
+// here builds a value of the wrong type, and the commit names the type it would make the function.
+//
+// `Draft<A>` and `Draft<B>` are two types because a draft carries the type of the function it
+// commits, the way `Node<T>` carries the type of the value its node stands for. The draft below is
+// of `(x: float) => float`, and the type the call asks for is `(x: int) => int`: a `float`
+// parameter is not one an `int` caller can fill, so the two function types are not interchangeable
+// and the draft is not of the type the call names.
+import { commit, open } from graph
+
+func inc(x: float) => float {
+    return x + 1.0
+}
+
+func wrong(f: (x: float) => float) => ((x: int) => int)! {
+    let d = open(f)
+    return commit::<(x: int) => int>(d)
+}
+
+func main() => int {
+    return 0
+}
