@@ -699,6 +699,20 @@ node_ptr_t Tree::clone(const Node *node) {
         copy->payload_ = node->payload_; // a type, a number or nothing
         break;
     }
+    // The names a node reads come with it: a copy stands where the original stood, so the same
+    // `using` names, the same namespace path and the same tag uses are what it reads. What is
+    // deliberately not here is a case's guard: a CASE node is never copied, and a copy of its
+    // guard would have to be made into this tree (clone(guard)) rather than pointed at the
+    // original's -- a shared pointer would leave the copy naming a node of another tree.
+    if (const auto *uses = Tree::of(node)->tagUsesOf(node)) {
+        tagUses_[copy] = *uses;
+    }
+    if (const auto *usingNames = Tree::of(node)->usingsOf(node)) {
+        usings_[copy] = *usingNames;
+    }
+    if (const auto *path = Tree::of(node)->namespaceOf(node)) {
+        namespaces_[copy] = *path;
+    }
     for (const Node *child : *node) {
         append(*copy, clone(child));
     }
@@ -717,6 +731,11 @@ node_ptr_t Tree::clone(const Node *node) {
         }
         if (const auto *head = Tree::of(node)->headTypeParamsOf(node)) {
             headTypeParams_[copy] = *head;
+        }
+        // The module a headed block's body reads comes with it too: the copy is a block head of
+        // the same kind, so its body resolves names in the same module.
+        if (auto module = Tree::of(node)->blockHeadModuleOf(node); module != nullptr) {
+            blockHeadModules_[copy] = std::move(module);
         }
         // The defaults of the declaration's parameters come with it too: the copy is called
         // with the same rules.
