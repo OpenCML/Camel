@@ -56,7 +56,7 @@ void ParserImpl::parseRuleDecl() {
 
 void ParserImpl::parseRuleDeclRest(size_t m) {
     if (eat(TK::KwWith)) {
-        parseAngledParams();
+        parseAngledParams(false, false, true);
     }
     eat(TK::KwExport);
     bump(); // `rule`
@@ -64,7 +64,7 @@ void ParserImpl::parseRuleDeclRest(size_t m) {
     if (cur_ == TK::ColonColon && (peek(1) == TK::Lt || peek(1) == TK::LAngle)) {
         parseTypeParams();
     }
-    parseParentParams();
+    parseParentParams(false, false, true);
     // The applicability condition, between the parameters and the body: it is part of the
     // signature (design principles 4.4), written in the same position a function writes it in.
     if (atWord(0, "when")) {
@@ -198,7 +198,7 @@ void ParserImpl::parseFactDecl() {
 
 void ParserImpl::parseFactDeclRest(size_t m) {
     if (eat(TK::KwWith)) {
-        parseAngledParams();
+        parseAngledParams(false, false, true);
     }
     eat(TK::KwExport);
     bump(); // `fact`
@@ -207,7 +207,7 @@ void ParserImpl::parseFactDeclRest(size_t m) {
         parseTypeParams();
     }
     if (cur_ == TK::LParen) {
-        parseParentParams();
+        parseParentParams(false, false, true);
     }
     if (!panic_ && expect(TK::Colon)) {
         parseType();

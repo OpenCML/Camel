@@ -1114,7 +1114,7 @@ Builder::operatorValueGraphOf(const oper_idx_ptr_t &op, const GCT::node_ptr_t &o
             nameAt(i, "__w", i),
             opType->withTypeAt(i),
             false,
-            opType->withNeedsValueAt(i));
+            opType->withNeedsCompileTimeAt(i));
     }
     for (size_t i = 0; i < opType->normTypesCount(); ++i) {
         factory.addNormArg(

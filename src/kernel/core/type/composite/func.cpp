@@ -36,11 +36,10 @@ namespace {
 /// The parts a factory collected, its names interned as symbols.
 template <typename Parts>
 Parts partsOf(
-    const std::vector<param_t> &withTypes,
-    const std::vector<param_t> &normTypes, Type *exitType, bool hasNames,
-    const std::vector<std::string> &argNames, bool hasRest,
-    const std::vector<uint16_t> &constasIndices, const std::vector<uint16_t> &withConstIndices,
-    const sem::ResourceSignature &resources) {
+    const std::vector<param_t> &withTypes, const std::vector<param_t> &normTypes, Type *exitType,
+    bool hasNames, const std::vector<std::string> &argNames, bool hasRest,
+    const std::vector<uint16_t> &constasIndices,
+    const std::vector<uint16_t> &withCompileTimeIndices, const sem::ResourceSignature &resources) {
     Parts parts;
     parts.resources = resources;
     parts.params.reserve(withTypes.size() + normTypes.size());
@@ -51,7 +50,7 @@ Parts partsOf(
     parts.hasNames     = hasNames;
     parts.hasRest      = hasRest;
     parts.constasIndices = constasIndices;
-    parts.withConstIndices = withConstIndices;
+    parts.withCompileTimeIndices = withCompileTimeIndices;
     if (hasNames) {
         GUARD(argNames.size() == parts.params.size(), "One name per parameter.");
         parts.names.reserve(argNames.size());
@@ -67,7 +66,7 @@ Parts partsOf(
 // The factory reaches FunctionType's protected Parts through friendship; the helper above is
 // instantiated with it here.
 FunctionType *FunctionTypeFactory::build() {
-    auto parts = (partsOf<FunctionType::Parts>(
+    auto parts        = (partsOf<FunctionType::Parts>(
         withTypes_,
         normTypes_,
         exitType_,
@@ -75,14 +74,14 @@ FunctionType *FunctionTypeFactory::build() {
         argNames_,
         hasRest_,
         constasIndices_,
-        withConstIndices_,
+        withCompileTimeIndices_,
         resources_));
     parts.hasWithRest = hasWithRest_;
     return FunctionType::intern(parts);
 }
 
 OpenFunctionType *FunctionTypeFactory::buildOpen() {
-    auto parts = (partsOf<FunctionType::Parts>(
+    auto parts        = (partsOf<FunctionType::Parts>(
         withTypes_,
         normTypes_,
         exitType_,
@@ -90,7 +89,7 @@ OpenFunctionType *FunctionTypeFactory::buildOpen() {
         argNames_,
         hasRest_,
         constasIndices_,
-        withConstIndices_,
+        withCompileTimeIndices_,
         resources_));
     parts.hasWithRest = hasWithRest_;
     // An open signature stays out of the table (intern.h, "What is not"), but the types it names
@@ -112,7 +111,7 @@ FunctionType::FunctionType(const Parts &parts, bool open)
       withCount_(static_cast<uint16_t>(parts.withCount)),
       normCount_(static_cast<uint16_t>(parts.params.size() - parts.withCount)),
       hasNames_(parts.hasNames), hasRest_(parts.hasRest), hasWithRest_(parts.hasWithRest),
-      constasIndices_(parts.constasIndices), withConstIndices_(parts.withConstIndices),
+      constasIndices_(parts.constasIndices), withCompileTimeIndices_(parts.withCompileTimeIndices),
       resources_(parts.resources), open_(open) {
     for (size_t i = 0; i < parts.params.size(); ++i) {
         const auto &[type, isVar] = parts.params[i];
@@ -207,8 +206,8 @@ FunctionType *FunctionType::intern(const Parts &unfrozen) {
     key.insert(key.end(), parts.constasIndices.begin(), parts.constasIndices.end());
     // A `with` parameter whose argument is part of what the declaration means is part of what the
     // signature is: two signatures that differ there are not the same signature.
-    key.push_back(parts.withConstIndices.size());
-    key.insert(key.end(), parts.withConstIndices.begin(), parts.withConstIndices.end());
+    key.push_back(parts.withCompileTimeIndices.size());
+    key.insert(key.end(), parts.withCompileTimeIndices.begin(), parts.withCompileTimeIndices.end());
     // The resources are part of what a signature promises: two types that differ only there are
     // not the same type (design effects plan 2.2).
     key.push_back(static_cast<uintptr_t>(parts.resources.mode));
@@ -291,7 +290,7 @@ FunctionType::Parts FunctionType::parts() const {
     parts.hasRest   = hasRest_;
     parts.hasWithRest = hasWithRest_;
     parts.constasIndices = constasIndices_;
-    parts.withConstIndices = withConstIndices_;
+    parts.withCompileTimeIndices = withCompileTimeIndices_;
     parts.resources = resources_;
     parts.params.reserve(paramCount());
     for (size_t i = 0; i < paramCount(); ++i) {
@@ -426,8 +425,9 @@ Type *FunctionType::unify(Type *other) const {
     }
     const auto *rhs = static_cast<const FunctionType *>(other);
     if (withCount_ != rhs->withCount_ || normCount_ != rhs->normCount_ ||
-        hasRest_ != rhs->hasRest_ || hasWithRest_ != rhs->hasWithRest_ || constasIndices_ != rhs->constasIndices_ ||
-        withConstIndices_ != rhs->withConstIndices_ || !exitType_ || !rhs->exitType_ ||
+        hasRest_ != rhs->hasRest_ || hasWithRest_ != rhs->hasWithRest_ ||
+        constasIndices_ != rhs->constasIndices_ ||
+        withCompileTimeIndices_ != rhs->withCompileTimeIndices_ || !exitType_ || !rhs->exitType_ ||
         !(resources_ == rhs->resources_)) {
         return nullptr;
     }
@@ -482,7 +482,7 @@ bool FunctionType::assignableFrom(Type *other) const {
     const bool anyWith = hasWithRest_ && !otherFunc.hasWithRest_;
     const bool anyNorm = hasRest_ && !otherFunc.hasRest_;
     if ((!anyWith && (withCount_ != otherFunc.withCount_ ||
-                      withConstIndices_ != otherFunc.withConstIndices_)) ||
+                      withCompileTimeIndices_ != otherFunc.withCompileTimeIndices_)) ||
         (!anyNorm && (normCount_ != otherFunc.normCount_ || hasRest_ != otherFunc.hasRest_ ||
                       constasIndices_ != otherFunc.constasIndices_)) ||
         (!anyWith && hasWithRest_ != otherFunc.hasWithRest_))

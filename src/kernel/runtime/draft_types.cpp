@@ -281,7 +281,7 @@ size_t reinferDraftTypes(GraphDraft &draft) {
         };
         size_t withAt = 0;
         for (const auto &[t, isVar] : withTypes) {
-            factory.addWithArg(name(), t, isVar, funcType->withNeedsValueAt(withAt++));
+            factory.addWithArg(name(), t, isVar, funcType->withNeedsCompileTimeAt(withAt++));
         }
         for (const auto &[t, isVar] : normTypes) {
             factory.addNormArg(name(), t, isVar);

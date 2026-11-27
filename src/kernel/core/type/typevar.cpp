@@ -400,7 +400,7 @@ FunctionTypeFactory rebuildFunctionType(
             paramNameOf(func, i, "__w", i),
             replaced(func->withTypeAt(i)),
             func->withIsVarAt(i),
-            func->withNeedsValueAt(i));
+            func->withNeedsCompileTimeAt(i));
     }
     for (size_t i = 0; i < func->normTypesCount(); ++i) {
         const std::string name = paramNameOf(func, func->withTypesCount() + i, "__n", i);

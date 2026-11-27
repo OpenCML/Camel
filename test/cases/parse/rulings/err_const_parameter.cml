@@ -1,0 +1,11 @@
+// A parameter's value is fixed by the call itself, so `const` says nothing a parameter does not
+// already say. It is not a spelling the language has: the parser accepts `var` and `constas`
+// before a parameter's name, and everything else there is a name.
+
+func total(const x: float[]) => float {
+    return 1.0
+}
+
+func main() => int sync {
+    return 0
+}

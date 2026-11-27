@@ -1354,7 +1354,7 @@ FunctionType *Builder::completeLambdaSignature(
             expectedFunc->hasArgNames() ? std::string(expectedFunc->argNameAt(k)) : std::string(),
             expectedFunc->withTypeAt(k),
             expectedFunc->withIsVarAt(k),
-            expectedFunc->withNeedsValueAt(k));
+            expectedFunc->withNeedsCompileTimeAt(k));
     }
     size_t hole = 0;
     for (size_t i = 0; i < total; ++i) {
@@ -1380,7 +1380,7 @@ FunctionType *Builder::completeLambdaSignature(
                         base + "_" + std::to_string(k - i),
                         expanded,
                         expectedFunc->withIsVarAt(k),
-                        expectedFunc->withNeedsValueAt(k));
+                        expectedFunc->withNeedsCompileTimeAt(k));
                 }
                 continue;
             }
@@ -1448,7 +1448,7 @@ FunctionType *Builder::completeLambdaSignature(
                 nameAt(i),
                 type,
                 funcType->withIsVarAt(i),
-                funcType->withNeedsValueAt(i));
+                funcType->withNeedsCompileTimeAt(i));
         } else {
             factory.addNormArg(nameAt(i), type, funcType->normIsVarAt(i - withCount));
         }

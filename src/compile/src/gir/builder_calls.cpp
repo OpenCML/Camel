@@ -599,7 +599,7 @@ node_handle_t Builder::partialApplicationOf(
             nameAt(i, "__w", i),
             calleeType->withTypeAt(i),
             false,
-            calleeType->withNeedsValueAt(i));
+            calleeType->withNeedsCompileTimeAt(i));
     }
     for (size_t i = 0; i < calleeType->normTypesCount(); ++i) {
         factory.addNormArg(
