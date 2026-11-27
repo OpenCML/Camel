@@ -516,3 +516,7 @@ git worktree add --detach <旧提交>
 **6. 一棵树只能有一个车道 —— 我把两条 lane 派进了同一棵 `editview-commit`。**
 2026-11-28 07:1x：`lane-editview-a` 在 `D:\Projects\Camel-wt\editview-commit` 上做着 39 条二分的修复；我把 `lane-editview-commit` 也派进了**同一棵树**（它以为那是自己的）。对方的 `camel-remote` 跑一轮就 `git switch` 了分支并 `pushed lane/pass-decl-3`，前者的未提交改动**整个消失**（`fatal: cannot lock ref 'HEAD'`，`git status` 变空）。前者的第一反应是"有别人的 lane 乱跑"——**其实是我的派工错误**。
 教训：**派工前先在 `git worktree list` 里核那棵树属于谁、当前在哪个枝上**；`spawn_teammate` 时写进派工文案的 cwd 与"工作树"必须是那一条 lane 自己的。**两条 lane 共用一棵树的代价不是冲突，是别人未提交的活凭空消失。**
+
+**7. "两个都是指针，非空检查照样通过" —— 版面读反了也像加载成功。**
+同一天第二条同族教训（`D-1128-57` 那条是 checker 与 runtime 不一致）。`lane-ssa-residue` 的报告：本树把 `OrtApiBase` 的两个成员顺序读反了（官方是 `GetApi` 在前、`GetVersionString` 在后），于是"拿 `GetVersionString` 当表、拿 `GetApi(22)` 当版本串函数"——**两者都是函数指针，非空检查全过**，所以"库能加载"一直是假读数；照原顺序调第一个真正的表条目（`CreateStatus`）直接把进程打死（`killed by a signal`，stdout/stderr 全空），改对顺序后同一段代码四步全答话。
+判法：**接外部运行时/动态表的地方，"非空"不是加载成功的证据，必须取一个只有布局对了才读得出的东西**（版本串、首条目调用）当冒烟；并让错误分成"版面/加载错"与"模型被拒"两类，别混成一个崩溃。
