@@ -1053,7 +1053,7 @@ bool parseArgs(int argc, char *argv[]) {
     const parsing_result parsed = [&]() -> parsing_result {
         if (word != nullptr) {
             if (word == kSubcommands[0].name) {
-                return parse(argc, argv, docsCommand);
+                return parse(argc, argv, docsCommand | infoFlags);
             }
             if (word == kSubcommands[1].name) {
                 return parse(argc, argv, infoFlags); // bout takes no argument of its own
@@ -1062,7 +1062,7 @@ bool parseArgs(int argc, char *argv[]) {
                 return parse(argc, argv, infoFlags); // zen takes no argument of its own
             }
             if (word == kSubcommands[3].name) {
-                return parse(argc, argv, explainCommand);
+                return parse(argc, argv, explainCommand | infoFlags);
             }
             if (word == kSubcommands[4].name) {
                 return parse(argc, argv, check);
