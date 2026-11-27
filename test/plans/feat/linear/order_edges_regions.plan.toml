@@ -32,72 +32,87 @@ tags = ["feat", "linear", "runtime", "effects", "gir"]
 [defaults]
 kind = "behavior"
 case = "../../../cases/linear/runtime/order_edges_regions.cml"
-expect_exit = 56
+expect_exit = 0
 timeout_ms = 20000
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 
 [[tests]]
 name = "order_edges_regions.interp"
 desc = "The three shapes print `9`, then the two lines of the arm the branch takes, then the loop's rounds, and return 56, with no pass (the interpreter, which counts dependencies by region)."
-args = ["${case}"]
+args = ["-o", "${test_tmp}/entry.txt", "${case}"]
 expect_exit = "script"
 verify_script = """
-({ input, assert }) => {
+async ({ input, assert }) => {
+const fs = await import('node:fs')
 const out = input.normalized.stdout.trim().split('\n').join(' | ')
 assert(out === '9 | 1 | 2 | 0 | 1', `unexpected output: ${out}`)
-assert(input.exit_code === 56, `unexpected exit ${input.exit_code}`)
+assert(input.exit_code === 0, `unexpected exit ${input.exit_code}`)
+const value = fs.readFileSync(input.test_tmp + '/entry.txt', 'utf8').trim()
+assert(value === '56', `the value main returns, read from -o: ${value}`)
 }
 """
 
 [[tests]]
 name = "order_edges_regions.nvm"
 desc = "The three shapes print `9`, then the two lines of the arm the branch takes, then the loop's rounds, and return 56 (stdio pipeline: std::nvm)."
-args = ["${case}", "${run_nvm}"]
+args = ["-o", "${test_tmp}/entry.txt", "${case}", "${run_nvm}"]
 expect_exit = "script"
 verify_script = """
-({ input, assert }) => {
+async ({ input, assert }) => {
+const fs = await import('node:fs')
 const out = input.normalized.stdout.trim().split('\n').join(' | ')
 assert(out === '9 | 1 | 2 | 0 | 1', `unexpected output: ${out}`)
-assert(input.exit_code === 56, `unexpected exit ${input.exit_code}`)
+assert(input.exit_code === 0, `unexpected exit ${input.exit_code}`)
+const value = fs.readFileSync(input.test_tmp + '/entry.txt', 'utf8').trim()
+assert(value === '56', `the value main returns, read from -o: ${value}`)
 }
 """
 
 [[tests]]
 name = "order_edges_regions.fvm"
 desc = "The three shapes print `9`, then the two lines of the arm the branch takes, then the loop's rounds, and return 56 (stdio pipeline: std::fvm)."
-args = ["${case}", "${run_fvm}"]
+args = ["-o", "${test_tmp}/entry.txt", "${case}", "${run_fvm}"]
 expect_exit = "script"
 verify_script = """
-({ input, assert }) => {
+async ({ input, assert }) => {
+const fs = await import('node:fs')
 const out = input.normalized.stdout.trim().split('\n').join(' | ')
 assert(out === '9 | 1 | 2 | 0 | 1', `unexpected output: ${out}`)
-assert(input.exit_code === 56, `unexpected exit ${input.exit_code}`)
+assert(input.exit_code === 0, `unexpected exit ${input.exit_code}`)
+const value = fs.readFileSync(input.test_tmp + '/entry.txt', 'utf8').trim()
+assert(value === '56', `the value main returns, read from -o: ${value}`)
 }
 """
 
 [[tests]]
 name = "order_edges_regions.jit"
 desc = "The three shapes print `9`, then the two lines of the arm the branch takes, then the loop's rounds, and return 56 (stdio pipeline: std::jit)."
-args = ["${case}", "${run_jit}"]
+args = ["-o", "${test_tmp}/entry.txt", "${case}", "${run_jit}"]
 expect_exit = "script"
 verify_script = """
-({ input, assert }) => {
+async ({ input, assert }) => {
+const fs = await import('node:fs')
 const out = input.normalized.stdout.trim().split('\n').join(' | ')
 assert(out === '9 | 1 | 2 | 0 | 1', `unexpected output: ${out}`)
-assert(input.exit_code === 56, `unexpected exit ${input.exit_code}`)
+assert(input.exit_code === 0, `unexpected exit ${input.exit_code}`)
+const value = fs.readFileSync(input.test_tmp + '/entry.txt', 'utf8').trim()
+assert(value === '56', `the value main returns, read from -o: ${value}`)
 }
 """
 
 [[tests]]
 name = "order_edges_regions.prl"
 desc = "The three shapes print `9`, then the two lines of the arm the branch takes, then the loop's rounds, and return 56, at four threads (stdio pipeline: std::prl)."
-args = ["-t", "4", "${case}", "${run_prl}"]
-expect_exit = "script"
+args = ["-o", "${test_tmp}/entry.txt", "-t", "4", "${case}", "${run_prl}"]
+expect_exit = 0
 verify_script = """
-({ input, assert }) => {
+async ({ input, assert }) => {
+const fs = await import('node:fs')
 const out = input.normalized.stdout.trim().split('\n').join(' | ')
+assert(input.exit_code === 0, `unexpected exit ${input.exit_code}`)
 assert(out === '9 | 1 | 2 | 0 | 1', `unexpected output: ${out}`)
-assert(input.exit_code === 56, `unexpected exit ${input.exit_code}`)
+const value = fs.readFileSync(input.test_tmp + '/entry.txt', 'utf8').trim()
+assert(value === '56', `the value main returns, read from -o: ${value}`)
 }
 """
 
@@ -105,7 +120,7 @@ assert(input.exit_code === 56, `unexpected exit ${input.exit_code}`)
 name = "order_edges_regions.gir"
 desc = "No order edge crosses the border of a control region: the read before the branch that does not feed its condition is ordered by an edge on the BRCH, no edge hangs on the LOOP (a `var` write is not a resource and orders nothing), and the statements inside an arm are still ordered among themselves by an edge inside that arm (docs/design/effects/edges.cn.md 4.6; design principles 3.1). The edge inside the first arm changed with the rule on a branch written as a statement: that branch joins no value, so its two writes are the cell's two versions and the pair that still carries the arm's order is its two prints (design principles 3.5, F3)."
 case = "../../../cases/linear/runtime/order_edges_regions.cml"
-args = ["${case}", "std::jgir", "std::nop"]
+args = ["-o", "${test_tmp}/entry.txt", "${case}", "std::jgir", "std::nop"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """

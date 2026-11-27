@@ -20,7 +20,9 @@ desc = "A translating pass prints or exports and hands the graph on; `std::nop` 
 #   after_nop_never_run `std::nop std::gir` -- the `gir` after the empty graph never runs, and the
 #                       warning says so
 #
-# The case returns 7: 0 is "nothing ran" and 7 is "it ran", and no graph carries an exit code.
+# The case prints `ran` and returns 7. The print is what says the program ran: the returned value
+# is the function's own and is not the exit code (design principles 9.8), so the entry that proves
+# "it ran" reads the line, and the run ends 0.
 
 [defaults]
 kind = "behavior"
@@ -37,10 +39,11 @@ expect_stdout_starts_with = "digraph"
 
 [[tests]]
 name = "one_dump_runs_it"
-desc = "`std::gir` alone prints the graph and hands it on: nothing consumes it, so the default scheduling pass runs the program and its 7 is the exit code."
+desc = "`std::gir` alone prints the graph and hands it on: nothing consumes it, so the default scheduling pass runs the program, which prints `ran`; the run ends 0, the returned 7 being the function's own value (design principles 9.8)."
 case = "../../../cases/trans/hand_on/hand_on.cml"
 args = ["${case}", "std::gir"]  # camel-pass-scan: keep -- this case pins that the program runs
-expect_exit = 7
+expect_stdout_matches = ["^ran$"]
+expect_exit = 0
 expect_stdout_starts_with = "digraph"
 
 [[tests]]

@@ -52,7 +52,7 @@
 ## 4. `graph_id.h`、`entry_args.h` 为什么下移
 
 - **`graph_id.h`**：`GraphId` 是 `enum class` 加一个计数器，零依赖。今天 5 个 `core` 头（`context.h`、`node_attrs.h`、`data/composite/func.h`、`rtdata/func.h`、`source/manager.h`）为了这一个 id，把 `graph` 层的头目录带进了 `core`。下移之后 `include/camel/core/` 里这 5 条边同时消失，另外 5 个包含者（`runtime/` 的 4 个与 `modules/graph/handle.h`）只换一行路径。受影响 10 个文件。
-- **`entry_args.h`**：它今天在 `execute`，而 `frontend` 的建图器（`builder.cpp`、9 个 `builder_*.cpp` 与 `builder_helpers.h`，共 11 个文件）为了 `entryFunctionOrigin`、`unboundEntryParameters`、`boundEntryArguments` 三个查询向上包含它——这是 `compile` 向上的三条边里最宽的一条（另两条都在 `builder_modules.cpp`，见 6.2 的第 7 条）。入口参数是"建入口图时把值绑成常量"，属于 `graph` 层，不是驱动的事；下到 `include/camel/runtime/` 之后这条边变成向下。`execute` 那半（`bindEntryArguments`、`writeEntryResultTo`、loader/saver 登记、`reportPassErrorValue`）留在同一页：下到 `graph` 之后，两个调用方——`frontend` 的建图器与 `execute` 的驱动——都在它上面，都是向下引用。受影响 21 个文件。
+- **`entry_args.h`**：它今天在 `execute`，而 `frontend` 的建图器（`builder.cpp`、9 个 `builder_*.cpp` 与 `builder_helpers.h`，共 11 个文件）为了 `entryFunctionOrigin`、`unboundEntryParameters`、`boundEntryArguments` 三个查询向上包含它——这是 `compile` 向上的三条边里最宽的一条（另两条都在 `builder_modules.cpp`，见 6.2 的第 7 条）。入口参数是"建入口图时把值绑成常量"，属于 `graph` 层，不是驱动的事；下到 `include/camel/runtime/` 之后这条边变成向下。`execute` 那半（`bindEntryArguments`、入口结果写出（`-o`）、loader/saver 登记、`reportPassErrorValue`）留在同一页：下到 `graph` 之后，两个调用方——`frontend` 的建图器与 `execute` 的驱动——都在它上面，都是向下引用。受影响 21 个文件。
 
 ## 5. 内核接口目录
 
@@ -119,7 +119,7 @@
 
 **Q3 `graph_id.h` 下移后命名空间。** 默认路径-only，留 `camel::runtime`：`graph` 这一层在代码里还叫 `runtime`（`src/runtime` 也还没改名），只搬一个文件改命名空间会把 10 个包含点里的 `runtime::GraphId` 一起动，而它换不来任何东西。改 `camel::core::GraphId` 作为独立一笔也可以，等 `src/runtime` 整体改名前一次做完更省。
 
-**Q4 `entry_args.h` 整页下移还是拆两页。** 默认整页下到 `include/camel/runtime/`，并把 `Context` 参数改成前置声明（`context_ptr_t` 在 `core` 侧留一份别名，或在 `camel/core/` 给 `Context` 一个前置声明头）。备选：拆——建图期那三个查询下移，命令行那半（`bindEntryArguments`、`writeEntryResultTo`、loader/saver 登记）留在 `execute`。拆开的代价是 loader/saver 的登记表要与绑定分居两地，而登记表正是"模块定义的类型怎么从命令行读"的唯一一处。
+**Q4 `entry_args.h` 整页下移还是拆两页。** 默认整页下到 `include/camel/runtime/`，并把 `Context` 参数改成前置声明（`context_ptr_t` 在 `core` 侧留一份别名，或在 `camel/core/` 给 `Context` 一个前置声明头）。备选：拆——建图期那三个查询下移，命令行那半（`bindEntryArguments`、入口结果写出（`-o`）、loader/saver 登记）留在 `execute`。拆开的代价是 loader/saver 的登记表要与绑定分居两地，而登记表正是"模块定义的类型怎么从命令行读"的唯一一处。
 
 **Q5 内核接口这一轮立多少。** 默认只立目录与 `camel/kernel/module.h` 一份门，图的五项等 R1 合入后由第 4 路与 R3 给接口。备选：现在就把五项立成空壳——会在第 4 路落地时改两次。
 

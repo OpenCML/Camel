@@ -45,6 +45,14 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "norma
 name = "commit_tier_inplace.inplace"
 desc = "An edit that makes no node takes a console write out of its block's chain: the commit is asked the order check and refuses the pair that is left unordered, the same edit publishes where a data edge orders the two, and the same pair with the order turned round publishes."
 case = "../../../cases/opt/commit_checks/inplace_edit.cml"
-args = ["${case}", "test::commit_inplace", "std::nvm"]
-expect_exit = 7
+args = ["-o", "${test_tmp}/entry.txt", "${case}", "test::commit_inplace", "std::nvm"]
+expect_exit = "script"
 expect_stdout_contains = ["commit_inplace: the tier is which edit the draft used, not whether it made a node", "waited for node", "and now waits for nothing; the draft makes no node", "asked the effect and the order checks (the table's last row: an edge taken away owes all six), and refused, check=order", "commit_inplace: two writes to stdout with no edge ordering either before the other -- refused", "asked the effect and the order checks (the table's last row: an edge taken away owes all six), and published", "published, which is the answer: the question was asked and the graph did not break it", "commit_inplace: unordered-published=0 ordered-published=1", "now runs after node", "the order turned round", "published, which is the answer: the check asks for an order, not for the one the program wrote", "commit_inplace: reversed-published=1"]
+verify_script = """
+async ({ input, assert }) => {
+const fs = await import('node:fs')
+assert(input.exit_code === 0, `unexpected exit ${input.exit_code}`)
+const value = fs.readFileSync(input.test_tmp + '/entry.txt', 'utf8').trim()
+assert(value === '7', `the value main returns, read from -o: ${value}`)
+}
+"""

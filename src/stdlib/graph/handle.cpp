@@ -22,6 +22,24 @@ using namespace camel::core::type;
 using camel::runtime::GraphId;
 using camel::runtime::Program;
 
+namespace {
+/// The intern key that tells a draft from the graph it behaves as: a draft is the `Graph` handle
+/// kind, so only the key of the table entry and the type argument tell the two apart.
+constexpr uintptr_t kDraftKeyWord = 0x4452u; // "DR"
+
+/// Whether a type is one the compiler is still binding -- a type variable of a generic function, or
+/// the argument of an enum instance its value does not determine. A draft's type argument is one of
+/// these on the declaration side (`commit(d: Draft<F>)`), and it takes the type the argument has;
+/// once it is a function type on both sides, the two have to be the same one.
+bool binding(const Type *type) {
+    if (type == nullptr) {
+        return false;
+    }
+    const auto code = type->code();
+    return code == TypeCode::TypeVar || code == TypeCode::EnumHole;
+}
+} // namespace
+
 const char *handleKindName(HandleKind kind) {
     switch (kind) {
     case HandleKind::Program:
@@ -99,24 +117,58 @@ bool HandleType::is(const Type *type, HandleKind kind) {
     return type != nullptr && type->code() == get(kind)->code();
 }
 
+HandleType *HandleType::ofDraft(Type *functionType) {
+    const HandleType *graph = get(HandleKind::Graph);
+    // One object per function type, from the type table, keyed by the canonical id of the type: a
+    // draft of `(x: int) => int` is one type wherever it is written, and `Draft<A>` and `Draft<B>`
+    // are two, so committing one to the other is the type error it should be.
+    if (functionType == nullptr) {
+        const uintptr_t bare[2] = {static_cast<uintptr_t>(HandleKind::Graph), kDraftKeyWord};
+        return static_cast<HandleType *>(TypeTable::instance().internOther(
+            graph->code(),
+            std::span<const uintptr_t>(bare, 2),
+            [&]() -> Type * {
+                void *mem = mm::permSpace().alloc(sizeof(HandleType), alignof(HandleType));
+                ASSERT(mem != nullptr, "Failed to allocate HandleType from permSpace");
+                return new (mem) HandleType(graph->code(), HandleKind::Graph, nullptr, true);
+            }));
+    }
+    const uintptr_t parts[3] = {
+        static_cast<uintptr_t>(HandleKind::Graph),
+        kDraftKeyWord,
+        typeKeyWord(TypeTable::instance().canonical(functionType))};
+    return static_cast<HandleType *>(TypeTable::instance().internOther(
+        graph->code(),
+        std::span<const uintptr_t>(parts, 3),
+        [&]() -> Type * {
+            void *mem = mm::permSpace().alloc(sizeof(HandleType), alignof(HandleType));
+            ASSERT(mem != nullptr, "Failed to allocate HandleType from permSpace");
+            return new (mem) HandleType(graph->code(), HandleKind::Graph, functionType, true);
+        }));
+}
+
 const HandleType *asHandleType(const Type *type, HandleKind kind) {
     return HandleType::is(type, kind) ? static_cast<const HandleType *>(type) : nullptr;
 }
 
 std::string HandleType::toString() const {
     Type *value = valueType();
-    return value == nullptr ? std::string(handleKindName(kind_))
-                            : std::string(handleKindName(kind_)) + "<" + value->toString() + ">";
+    const std::string name = draft_ ? std::string("Draft") : std::string(handleKindName(kind_));
+    return value == nullptr ? name : name + "<" + value->toString() + ">";
 }
 
 std::string HandleType::mangle() const {
     Type *value = valueType();
-    return value == nullptr ? std::string("graph.") + handleKindName(kind_)
-                            : std::string("graph.") + handleKindName(kind_) + "_" + value->mangle();
+    const std::string name =
+        draft_ ? std::string("graph.Draft") : std::string("graph.") + handleKindName(kind_);
+    return value == nullptr ? name : name + "_" + value->mangle();
 }
 
 Type *HandleType::clone(bool deep) const {
     (void)deep;
+    if (draft_) {
+        return paramCount_ != 1 ? ofDraft(nullptr) : ofDraft(params_[0]);
+    }
     if (paramCount_ != 1) {
         return get(kind_);
     }
@@ -125,7 +177,7 @@ Type *HandleType::clone(bool deep) const {
 
 Type *HandleType::unify(Type *other) const {
     const auto *have = asHandleType(other, kind_);
-    if (have == nullptr) {
+    if (have == nullptr || have->draft_ != draft_) {
         return nullptr;
     }
     Type *mine   = valueType();
@@ -136,16 +188,23 @@ Type *HandleType::unify(Type *other) const {
     if (theirs == nullptr) {
         return const_cast<HandleType *>(this);
     }
+    if (draft_ && !binding(mine) && !binding(theirs)) {
+        // A draft is committed as the function type it was opened on, and the commit answers with
+        // that same type (design 6; `commit`'s own "the same type as the one that was opened"): the
+        // two are one type, not two the one gives way to. A draft of `(x: int) => int` is not a
+        // draft of `(x: float) => float`, however far one function type can stand for the other.
+        return mine->equals(theirs) ? const_cast<HandleType *>(this) : nullptr;
+    }
     Type *united = mine->unify(theirs);
     if (united == nullptr) {
         return nullptr;
     }
-    return ofValueType(united);
+    return draft_ ? ofDraft(united) : ofValueType(united);
 }
 
 bool HandleType::equals(Type *other) const {
     const auto *have = asHandleType(other, kind_);
-    if (have == nullptr) {
+    if (have == nullptr || have->draft_ != draft_) {
         return false;
     }
     Type *mine   = valueType();
@@ -157,13 +216,55 @@ bool HandleType::equals(Type *other) const {
 }
 
 CastSafety HandleType::castSafetyFrom(Type *source) const {
-    return is(source, kind_) ? CastSafety::Safe : CastSafety::Forbidden;
+    const auto *have = asHandleType(source, kind_);
+    if (have == nullptr) {
+        return CastSafety::Forbidden;
+    }
+    // A handle type with a type argument stands for a particular one of the things of its kind --
+    // `Node<int>` for a node of an int, `Draft<F>` for the draft of a function of type `F` -- so
+    // the argument is compared for sameness and never for standing in: a draft of one function type
+    // is not a draft of another, and a graph is not a draft (design 6; `commit` answers "the same
+    // type as the one that was opened").
+    if (draft_) {
+        if (!have->draft_) {
+            return CastSafety::Forbidden;
+        }
+        Type *mine   = valueType();
+        Type *theirs = have->valueType();
+        if (mine == nullptr || theirs == nullptr) {
+            return mine == theirs ? CastSafety::Safe : CastSafety::Forbidden;
+        }
+        if (binding(mine) || binding(theirs)) {
+            return CastSafety::Safe;
+        }
+        return mine->equals(theirs) ? CastSafety::Safe : CastSafety::Forbidden;
+    }
+    return CastSafety::Safe;
 }
 
 bool HandleType::assignableFrom(Type *source) const {
     const auto *have = asHandleType(source, kind_);
     if (have == nullptr) {
         return false;
+    }
+    // A draft is a graph -- the kernels take it as one -- but a graph is not a draft, and a draft
+    // of one function type is not a draft of another: that is the type error committing the wrong
+    // function type would otherwise not be. Two drafts are the same draft only when their function
+    // types are the same type; before the compiler has bound a type variable there is nothing to
+    // compare, and the algebra binds it.
+    if (draft_) {
+        if (!have->draft_) {
+            return false;
+        }
+        Type *mine   = valueType();
+        Type *theirs = have->valueType();
+        if (mine == nullptr || theirs == nullptr) {
+            return mine == theirs;
+        }
+        if (binding(mine) || binding(theirs)) {
+            return true;
+        }
+        return mine->equals(theirs);
     }
     // A node written without a value type is a node whose value type the program did not state: a
     // caller takes it where a value type is stated (`range::<int>(n)`), and a node whose value type
@@ -177,6 +278,12 @@ bool HandleType::assignableFrom(Type *source) const {
 }
 
 OtherType *HandleType::cloneWithParams(std::span<Type *const> params) const {
+    if (draft_) {
+        if (params.empty()) {
+            return ofDraft(nullptr);
+        }
+        return params.size() == 1 ? ofDraft(params[0]) : nullptr;
+    }
     if (kind_ != HandleKind::Node) {
         return params.empty() ? get(kind_) : nullptr;
     }
@@ -191,6 +298,16 @@ OtherType *HandleType::cloneWithParams(std::span<Type *const> params) const {
 
 Type *
 HandleType::cloneWithArguments(std::span<const TypeArgument> arguments, std::string &error) const {
+    if (draft_) {
+        if (arguments.empty()) {
+            return ofDraft(nullptr);
+        }
+        if (arguments.size() != 1 || arguments[0].type == nullptr) {
+            error = "Draft takes one type argument: the type of the function it commits";
+            return nullptr;
+        }
+        return ofDraft(arguments[0].type);
+    }
     if (kind_ != HandleKind::Node) {
         if (!arguments.empty()) {
             error = std::string(handleKindName(kind_)) + " takes no type argument";

@@ -31,7 +31,7 @@ name = "dce_effect_under_pure_arithmetic.reference"
 desc = "No pass: the statement of the `sync` block prints `5`, and the function returns 7."
 case = "../../../cases/opt/effects/dce_effect_under_pure_arithmetic.cml"
 args = ["${case}", "${backend}"]
-expect_exit = 7
+expect_exit = 0
 expect_stdout_exact = "5\n"
 
 [[tests]]
@@ -39,7 +39,7 @@ name = "dce_effect_under_pure_arithmetic.dce"
 desc = "`std::cxx::dce` drops the unread subtraction: the print it holds stays."
 case = "../../../cases/opt/effects/dce_effect_under_pure_arithmetic.cml"
 args = ["${case}", "std::cxx::dce", "${backend}"]
-expect_exit = 7
+expect_exit = 0
 expect_stdout_exact = "5\n"
 
 [[tests]]
@@ -47,32 +47,56 @@ name = "dce_effect_under_pure_arithmetic.opt"
 desc = "The same program through the whole optimizer."
 case = "../../../cases/opt/effects/dce_effect_under_pure_arithmetic.cml"
 args = ["${case}", "std::opt", "${backend}"]
-expect_exit = 7
+expect_exit = 0
 expect_stdout_exact = "5\n"
 
 [[tests]]
 name = "inline_argument_effect.reference"
 desc = "No pass: `first` returns the 5 it reads, and the argument's `9` is printed before it."
 case = "../../../cases/opt/effects/inline_argument_effect.cml"
-args = ["${case}", "${backend}"]
-expect_exit = 5
+args = ["-o", "${test_tmp}/entry.txt", "${case}", "${backend}"]
+expect_exit = "script"
 expect_stdout_exact = "9\n"
+verify_script = """
+async ({ input, assert }) => {
+const fs = await import('node:fs')
+assert(input.exit_code === 0, `unexpected exit ${input.exit_code}`)
+const value = fs.readFileSync(input.test_tmp + '/entry.txt', 'utf8').trim()
+assert(value === '5', `the value main returns, read from -o: ${value}`)
+}
+"""
 
 [[tests]]
 name = "inline_argument_effect.inline"
 desc = "`std::cxx::inline` binds no use to the parameter the callee never reads; the argument's effect stays."
 case = "../../../cases/opt/effects/inline_argument_effect.cml"
-args = ["${case}", "std::cxx::inline", "${backend}"]
-expect_exit = 5
+args = ["-o", "${test_tmp}/entry.txt", "${case}", "std::cxx::inline", "${backend}"]
+expect_exit = "script"
 expect_stdout_exact = "9\n"
+verify_script = """
+async ({ input, assert }) => {
+const fs = await import('node:fs')
+assert(input.exit_code === 0, `unexpected exit ${input.exit_code}`)
+const value = fs.readFileSync(input.test_tmp + '/entry.txt', 'utf8').trim()
+assert(value === '5', `the value main returns, read from -o: ${value}`)
+}
+"""
 
 [[tests]]
 name = "inline_argument_effect.opt"
 desc = "The same program through the whole optimizer."
 case = "../../../cases/opt/effects/inline_argument_effect.cml"
-args = ["${case}", "std::opt", "${backend}"]
-expect_exit = 5
+args = ["-o", "${test_tmp}/entry.txt", "${case}", "std::opt", "${backend}"]
+expect_exit = "script"
 expect_stdout_exact = "9\n"
+verify_script = """
+async ({ input, assert }) => {
+const fs = await import('node:fs')
+assert(input.exit_code === 0, `unexpected exit ${input.exit_code}`)
+const value = fs.readFileSync(input.test_tmp + '/entry.txt', 'utf8').trim()
+assert(value === '5', `the value main returns, read from -o: ${value}`)
+}
+"""
 
 [[tests]]
 name = "fold_keeps_arm_effect.reference"
@@ -205,7 +229,7 @@ name = "fold_leaves_no_control_edge.reference"
 desc = "No pass: the two prints of the source run, and the program returns the second one's value."
 case = "../../../cases/opt/effects/fold_leaves_no_control_edge.cml"
 args = ["${case}", "${backend}"]
-expect_exit = 8
+expect_exit = 0
 expect_stdout_exact = "8\n8\n"
 
 [[tests]]
@@ -213,7 +237,7 @@ name = "fold_leaves_no_control_edge.fold"
 desc = "`std::cxx::fold` takes the same two prints on every back end."
 case = "../../../cases/opt/effects/fold_leaves_no_control_edge.cml"
 args = ["${case}", "std::cxx::fold", "${backend}"]
-expect_exit = 8
+expect_exit = 0
 expect_stdout_exact = "8\n8\n"
 
 [[tests]]
@@ -221,7 +245,7 @@ name = "fold_leaves_no_control_edge.opt"
 desc = "The same program through the whole optimizer."
 case = "../../../cases/opt/effects/fold_leaves_no_control_edge.cml"
 args = ["${case}", "std::opt", "${backend}"]
-expect_exit = 8
+expect_exit = 0
 expect_stdout_exact = "8\n8\n"
 
 # "Is an operator the passes write still reachable?" is a number pinned by name: `:enum/tag` and

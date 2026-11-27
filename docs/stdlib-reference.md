@@ -6084,8 +6084,11 @@ The graph of a function, as a value. A function is a graph; this module reads it
 draft, edits it. The handles `Graph`, `Node`, `Op`, `TypeRef`, `Region` and `Tag` name things
 inside the graphs of one function and compare with `==` and `!=`. Reads are pure.
 
-A draft is a `Graph`: `open(f)` answers the graph `f` is, in a copy the edits go to, and every
-handle read through it names a node of that copy. The root queries take the draft -- `nodes(d)`,
+A draft is a `Draft<F>`: `open(f)` answers the graph `f` is, in a copy the edits go to, and every
+handle read through it names a node of that copy. `F` is the type of the function its commit
+makes, so a draft goes where a `Graph` is stated -- the queries and the edit operators take it as
+one -- and a `Graph` does not go where a draft is stated: committing one is committing the type it
+was opened on. The root queries take the draft -- `nodes(d)`,
 `graphs(d)`, `params(d)`, `exit(d)` -- and an edit names the nodes it changes and nothing else:
 `replace(old, new)`, `erase(n)`. The draft is reached through the nodes, so a second argument
 naming it is not needed and not offered (docs/design/graph-editing/README.cn.md 15.2, 15.3).
@@ -6702,7 +6705,7 @@ a program is immutable (design principles 3.3).
 #### `open`
 
 ```camel
-open: (f: F) => Graph when is_function::<F>()
+open: (f: F) => Draft<F> when is_function::<F>()
 ```
 
 Opens a function's graphs as a draft and gives the graph of the function itself: what an edit
@@ -6850,14 +6853,14 @@ creates may be live at a safepoint where its draft is not traced.
 #### `commit`
 
 ```camel
-commit: (d: Graph) => F!
+commit: (d: Draft<F>) => F! when is_function::<F>()
 ```
 
 Checks the edits and makes the changed function: the same type as the one that was opened, with
 the values it captured, sharing every graph nothing changed. The draft is over.
 
 - Failure: error value `GraphConflict` when a graph the draft touched changed since it was opened; error value `GraphInvalid` when an edit broke an invariant (the message names the graph, the node and the edge); error value `TxnUsed` when the draft was over already.
-- Example: `commit::<(x: int) => int>(open(func (x: int) => int { x + 1 }))`
+- Example: `commit(open(func (x: int) => int { x + 1 }))`
 
 #### `abort`
 
@@ -9184,3 +9187,62 @@ one that runtime has (`'none'` switches the check off).
 - Example: `export_model<out: "/tmp/model.onnx">(func (x: float) { x * 2.0 }, 2.0)`
 - Example: `export_model<out: "/tmp/model.onnx", dynamic_axes: [0]>(func (xs: f32[2, 3]) { xs[0][0] }, [[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]] as f32[2, 3])`
 - Example: `export_model<out: "/tmp/model.onnx", target: "onnxruntime-cpu">(func (x: float) { x * 2.0 }, 2.0)`
+
+#### `save`
+
+```camel
+save: <out: string> (m: Model<F>) => void!
+```
+
+Writes `m`, a model, to the file `out`. The bytes are the model itself, so this is the whole
+of what the file form of `export_model` did once the translation is done: `save(model(fn,
+example), out)` and that form write the same file. `out` is a `with` parameter because it
+decides which file, not what is written.
+
+- With effects: writes a file.
+- Failure: error value `IOError` when the file cannot be written.
+- Example: `model(fn, example)->save<out: "/tmp/model.onnx">`
+
+#### `model`
+
+```camel
+model: <dynamic_axes: int[] = [], target: string = 'onnxruntime-cpu'> (fn: F, example: E) => Model<F>! when is_function::<F>()
+```
+
+Translates `fn` applied to arguments like `example` into an ONNX model, at the backend's
+default opset. `example` is one argument of a one-parameter `fn`, or a tuple with one example
+per parameter; the function's graph is translated after the generic passes, and a node the
+backend cannot lower is refused. A tensor the function captured from around it is translated
+as an initializer of the model, so a trained network is exported as it is, without being
+rewritten to take its parameters as arguments. `dynamic_axes` and `target` are `with`
+parameters because they are runtime values: `dynamic_axes` names the axes of the tensor inputs
+that are left unknown in the model (which is what lets one model run at several shapes), and
+`target` names the runtime whose capability data decides whether a node this backend lowers is
+one that runtime has (`'none'` switches the check off).
+
+- With effects: reads the function's graph.
+- Failure: error value `ExportUnsupported` when `fn` is not a function, when the graph cannot be translated (a call that remains, an operator without an ONNX lowering, a dtype or shape the exporter cannot name), or when the target runtime rejects a node.
+- Example: `let m = model(func (x: float) { x * 2.0 }, 2.0)`
+- Example: `let m = model<dynamic_axes: [0]>(func (xs: f32[2, 3]) { xs[0][0] }, [[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]] as f32[2, 3])`
+
+#### `run`
+
+```camel
+run: <model: Model<F>> (args: A) => ResultOf<F>! when is_function::<F>()
+```
+
+Runs a model on the arguments its function takes, given the way `model` took their example:
+the one argument of a one-parameter function, or a tuple with one entry per parameter. Running a
+model means the translated function applied to those arguments -- the ONNX runtime is only how it
+is computed, so what the call reads and writes is what that function reads and writes. `model`
+is a `with` parameter because it decides which model, not what is computed: a call writes
+`(x, y)->run<model: m>`.
+
+The result type is the function's own (`ResultOf<F>!`). `A` stands for the argument list: a
+declaration cannot write a rest parameter with a type, so the declaration names one parameter and
+the kernel reads the arguments as the function's parameter list.
+
+- With effects: the effect of the model's function.
+- Failure: error value `ExportUnsupported` when the runtime the model targets is unavailable, or its session cannot be loaded or run.
+- Example: `let m = model(func (x: float) { x * 2.0 }, 2.0)`
+- Example: `let y = 3.0->run<model: m>`

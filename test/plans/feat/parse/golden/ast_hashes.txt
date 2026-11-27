@@ -437,7 +437,7 @@ e157747315101ece ok examples/case-study/train.cml
 ea8b0c6222b24c89 ok examples/case-study/writings/moved.cml
 c2822f654bc941d6 ok examples/case-study/writings/renamed.cml
 2c8d7803faf52ef3 ok examples/case-study/writings/swapped.cml
-8064628ab3f682b8 ok examples/cli/exit_status.cml
+d353a8fa6e276c24 ok examples/cli/exit_status.cml
 686d11808d333e9d ok examples/cli/temperature.cml
 0c61cc3c2c09bd33 ok examples/data/dedup_sets.cml
 c88dbfbb97e32819 ok examples/data/json_roundtrip.cml
@@ -517,7 +517,7 @@ ff143e01e0e4dbb0 ok src/stdlib/bytes.cml
 a5076fc3f00f63eb ok src/stdlib/ckpt.cml
 091e49283aec1438 ok src/stdlib/env.cml
 0797036114bc4a4c ok src/stdlib/fs.cml
-dfcf7400f28e1fef ok src/stdlib/graph.cml
+276fe5d7c3908605 ok src/stdlib/graph.cml
 c653d7d211aed8b2 ok src/stdlib/hash.cml
 cb32c9dd5cb81d91 ok src/stdlib/io.cml
 70530f2be80f49bf ok src/stdlib/json.cml
@@ -525,7 +525,7 @@ cb32c9dd5cb81d91 ok src/stdlib/io.cml
 7d5de741d221bff6 ok src/stdlib/math.cml
 4bd3189fe34a101a ok src/stdlib/nn.cml
 2f99ae94bcec8605 ok src/stdlib/onnx.cml
-93780c4e22a23893 ok src/stdlib/opt.cml
+0d3b32880ccd919f ok src/stdlib/opt.cml
 49015cbc4407a506 ok src/stdlib/optim.cml
 cfd1905583789732 ok src/stdlib/para.cml
 a82098797df46210 ok src/stdlib/perf.cml
@@ -2446,7 +2446,7 @@ f2f67386db87f047 ok test/cases/consistency/faults/index_out_of_range.cml
 1223a4852b556c4b ok test/cases/consistency/faults/int_text_blank.cml
 7a3e41d0e13551ae ok test/cases/consistency/faults/int_text_out_of_range.cml
 6c78fe7a7dc16464 ok test/cases/consistency/faults/int_text_trailing.cml
-61e31bc439f07add ok test/cases/consistency/faults/main_returns_code.cml
+51877f47b95eb079 ok test/cases/consistency/faults/main_returns_code.cml
 e0858442f389e78a ok test/cases/consistency/faults/mod_zero_in_function.cml
 1c65361bad991340 ok test/cases/consistency/faults/negative_index.cml
 8f158ac848516165 ok test/cases/consistency/faults/parallel_lowest_index.cml
@@ -4346,10 +4346,10 @@ a3d372c4bd6d36c5 ok test/cases/probe/dpack_dots_ok.cml
 c0a3d8d9c68cc179 ok test/cases/probe/blockscope/imported_type_at_top_level.cml
 72f66406e1747095 ok test/cases/probe/blockscope/imported_type_in_body.cml
 189eaf24bd2269a5 ok test/cases/probe/blockscope/no_header_plain_block_still_red.cml
-205ab64409366ec5 ok test/cases/probe/editview/body_fault_keeps_function.cml
+a2dda77d37a9c5d4 ok test/cases/probe/editview/body_fault_keeps_function.cml
 52a3dde1aef29273 ok test/cases/probe/editview/body_last_expression_42.cml
 733ac188d604665b ok test/cases/probe/editview/body_last_expression_43.cml
-39a76210995647db ok test/cases/probe/editview/body_return.cml
+4a515c091b013d06 ok test/cases/probe/editview/body_return.cml
 f798a0c45f6fd7eb ok test/cases/probe/editview/edit_value.cml
 21c822df1c93fd16 ok test/cases/probe/editview/names.cml
 f68beec6d501120e ok test/cases/probe/editview/sec12_escape.cml
@@ -4363,8 +4363,11 @@ fa8b9a295cd6a5c9 ok test/cases/probe/editview/syntax_only.cml
 f29f25c55200f3ba ok test/cases/probe/editview/view_value_is_a_plain_value.cml
 65346afeaf5f514d ok test/cases/probe/editview/view_value_is_not_an_int.cml
 d243b9bf2aafcaf4 ok test/cases/probe/editview_b/design_view_min.cml
+6ebb70bbc91f9700 ok test/cases/probe/editview_b/draft_commits_as_its_own_type.cml
 10bf3ec93ed55652 ok test/cases/probe/editview_b/draft_handle_leaves.cml
+0c250343126ae393 ok test/cases/probe/editview_b/draft_of_one_type_is_not_another.cml
 6d383191e1331425 ok test/cases/probe/editview_b/escapes_accepted.cml
+8b600f1c4b626428 ok test/cases/probe/editview_b/graph_is_not_a_draft.cml
 04e8d92c70aba20f ok test/cases/probe/foreach_lambda/array_filter.cml
 fbc5a22ed39c760c ok test/cases/probe/foreach_lambda/array_form.cml
 98082b4d0948dc5c ok test/cases/probe/foreach_lambda/array_map.cml

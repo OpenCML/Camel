@@ -122,13 +122,15 @@ name = "commit_checks.a_type_that_promises_nothing"
 desc = "A call through a parameter of function type carries a Generic signature. The body behind the value prints, and that is not a violation: there was no promise to break."
 kind = "behavior"
 case = "../../../cases/opt/commit_checks/generic_call.cml"
-args = ["-vv", "--log-include", "Pass", "--trace", "effects", "${case}", "std::opt", "std::nvm"]
-expect_exit = 3
+args = ["-o", "${test_tmp}/entry.txt", "-vv", "--log-include", "Pass", "--trace", "effects", "${case}", "std::opt", "std::nvm"]
+expect_exit = "script"
 timeout_ms = 20000
 expect_stdout_contains = ["3"]
 expect_stderr_contains = ["effect containment: checked"]
 verify_script = """
-({ input, assert }) => {
+async ({ input, assert }) => {
+const fs = await import('node:fs')
+assert(input.exit_code === 0, `unexpected exit ${input.exit_code}`)
 const out = input.normalized.stderr
 const line = out.split('\n').find(l => l.includes('effect containment: checked '))
 assert(line !== undefined, `no summary line in: ${out}`)
@@ -139,5 +141,7 @@ const m = line.match(/checked (\d+) call site\(s\), declined (\d+) reading\(s\)/
 assert(m !== null, `the summary line does not parse: ${line}`)
 assert(Number(m[1]) >= 3, `checked ${m[1]}: the three call sites of this program must be compared`)
 assert(Number(m[2]) === 0, `the generic call site was declined instead of judged: ${line}`)
+const value = fs.readFileSync(input.test_tmp + '/entry.txt', 'utf8').trim()
+assert(value === '3', `the value main returns, read from -o: ${value}`)
 }
 """
