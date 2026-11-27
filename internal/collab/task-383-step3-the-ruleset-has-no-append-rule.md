@@ -231,3 +231,39 @@ component[0] 与 component[6] 是同一个节点（与 ① 的 `components[6] ==
 `SequenceInsert` 接进 append 的降级、`ConcatFromSequence` 的消费端强制转换、`SequenceEmpty` 的 init、
 取 `stateIsTheCollection` 的认领一致性（"同一数组两条路 ⇒ `unsupported`"）。三条 known-fail 与正向化
 按 `D-1128-57` 排在降级能过之后。
+## 十、step 8：四段一笔的落法（插入点 + 元素秩这条新约束）
+
+### 插入点（`exporter.cpp:4275-4299`，`applyOper` 里 registry-miss **之前**）
+```cpp
+const Lowering *lowering = LoweringRegistry::instance().find(uri, emitter_.opset());
+if (!lowering || !with.empty()) {
+    // ① 先看 norm/with 里有没有 isSequence() 的值：
+    //    · append             ⇒ SequenceInsert(seq, elem)    ⇒ 返回 symbolicSequence(...)
+    //    · 其他 Oper          ⇒ 把 sequence 实参换成 ConcatFromSequence(axis=0) 后**重入** applyOper
+    //    · 都没有 sequence    ⇒ 落到下面现有的两条 unsupported（一字不改）
+```
+机械保证：`hasSequenceArg == false` 时与原逻辑完全一致 ⇒ 现有红用例的消息不会被这次改动换掉。
+
+### 槽 3（`fields[states + c]`）
+`fields` 是导出期拼的（`2992-2998`），**不是** Loop 的输出布局；所以被取消的那个 scan 槽的字段改成
+`ConcatFromSequence(S_out, axis=0)`（`S_out = emission.states[carriedAt[j]]`）即可，Loop 自身输出数少一个不影响消费方。
+
+### 新约束（这轮读代码才发现，落之前必须先定）：`float[]` 的元素是**标量**，`ConcatFromSequence` 不接受秩 0
+- 被携带的序列，元素必须是**秩 ≥ 1** 的张量，否则 `ConcatFromSequence(axis=0)` 拼不起来；
+- 所以 `float[]` 这条要携带成 **`sequence(tensor(float[1]))`**：每轮 `SequenceInsert(S, Unsqueeze(elem, axes=[0]))`，
+  取用时 `ConcatFromSequence(axis=0)` ⇒ `float[?]`；
+- 元素本身是张量（如 `float[4][]`）时元素已经是 `float[4]`，不需要 `Unsqueeze`。
+
+### 四段落的顺序（一笔）
+1. `sequenceEmptyValue(elemFacts)`：`SequenceEmpty(dtype=元素类型)`；元素秩见上；
+2. append → `SequenceInsert`（+ 秩 0 时的 `Unsqueeze`）；
+3. 消费端 `ConcatFromSequence`（只在 `applyOper` 拦截点；**sequence state 自己的链上没有转换**，append 读到的
+   `norm` 就是当轮 state 值 = 前缀）；
+4. `stateIsTheCollection` 一致性：认领成立且该节点又是某个 scan 槽的分量 ⇒ 走 sequence 携带（单路）；
+   某节点既是 state 分量又是 scan 分量但**认领不成立** ⇒ `unsupported("the same array is both a carried
+   state and a collected value …")`（不静默挑一条）；
+5. 形状 A 双口径（`onnx.checker` + ORT 逐值 vs `std::nvm`），再改三条用例。
+
+### 状态
+枝 `lane/loop-tape-values @ 07e61574fe`（五笔，未推）；`git status` 空；探针与 `cherry-pick` 已还原。
+四段**未开始改**：这条路要求一次落完才有可检查、可被 ORT 读的中间态；本轮时间盒内只做到把落法定死 + 发现元素秩约束。
