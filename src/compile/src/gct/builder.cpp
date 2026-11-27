@@ -1208,7 +1208,7 @@ Builder::resourceSignatureOf(const AST::node_ptr_t &funcTypeAst, const FunctionT
     // be written beside a full account of the body's resources -- and a pass that reads the
     // spelling and does anything else could not declare it (design principles 9.5), while `panic`
     // would claim the empty resource set (`pure`) merely by being written. A fault statement is not
-    // a promise about effects: an operator that faults may still write stdout (design principles
+    // a promise about effects: an operator that faults may still write `console` (design principles
     // 3.9), and the resources a declaration publishes stay the operator's own (design effects plan
     // 2.2).
     if ((clause->spelling() || clause->panic()) && !clause->pure() && clause->uses().empty()) {

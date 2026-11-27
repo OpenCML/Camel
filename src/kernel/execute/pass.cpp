@@ -1631,13 +1631,13 @@ OrderVerdict orderedInProgram(const ProgramEffects &effects, EffectSite earlier,
 /// an effect on state the program does not own.
 ///
 /// The boundary is the set of standard ambient resources *and the way each is used*: a pass that
-/// turns a write of `stdout` into a read of it has changed what the program does to state it does
+/// turns a write of `console` into a read of it has changed what the program does to state it does
 /// not own, and the names alone would not say so. The whole program is compared, not one graph at a
 /// time: inlining moves an effect from a callee graph into its caller and deletes the callee, which
 /// changes each graph's own resources and the program's none. The order of those effects is
 /// `effectOrderViolation`; this is the other half of the boundary.
 ///
-/// The name a resource use is reported by: `stdout (write)`, not `stdout`.
+/// The name a resource use is reported by: `console (write)`, not `console` alone.
 std::string useText(const std::string &name, camel::core::sem::AccessMode mode) {
     std::string out = name;
     out += " (";
@@ -1779,7 +1779,7 @@ std::vector<std::string> portDeclarationViolation(const camel::runtime::Program 
     return {};
 }
 /// Whether running the node is something the program observes: it touches state the program does
-/// not own (an ambient resource: stdout, the filesystem, the clock, the environment, the
+/// not own (an ambient resource: console, the filesystem, the clock, the environment, the
 /// generator), or it writes state the program does own and that state is still there. Reading a
 /// variable is not one of them, and neither is a computation whose value nobody reads: dropping one
 /// changes nothing the program can see, which is exactly what a pass is allowed to do with it.

@@ -713,7 +713,7 @@ Value Builder::visitResourceDecl(cst::ResourceDecl context) {
         decl->setGroup(true);
         if (const auto list = group->get<cst::IdentList>()) {
             for (const auto member : list->all<cst::IdentDef>()) {
-                // A member is a name as written: `stdout` is the resource every program has,
+                // A member is a name as written: `console` is the resource every program has,
                 // and `m::r` one of another module's. An enclosing namespace is not implied
                 // (a group may name a standard resource from inside a namespace block).
                 decl->addMember(Reference(member->text()));

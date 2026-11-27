@@ -244,7 +244,7 @@ std::optional<std::string> checkResources(const ResourceSpec &spec) {
     if (spec.functionOperand) {
         // A node's effect is the union of two sources (design principles 3.3): the accesses the
         // operator declares for itself and the accesses of the function value the named operand
-        // carries -- `map` over a function that prints reaches `stdout`, and an operator that runs
+        // carries -- `map` over a function that prints reaches `console`, and an operator that runs
         // the program's code *and* touches a driver reaches both. The two are statements about
         // different things, so having both is the true shape of such an operator and not a
         // double statement; each half is checked on its own above.
@@ -577,7 +577,7 @@ bool writesSomething(const ResourceSignature &signature) {
     }
     for (const ResourceSignature::AmbientUse &use : signature.ambient) {
         // An ambient resource is state the program does not own, by definition: writing one is a
-        // write outside the program whatever its name (`stdout`, `fs`, a module's own state).
+        // write outside the program whatever its name (`console`, `fs`, a module's own state).
         if (writes(use.mode)) {
             return true;
         }
@@ -720,7 +720,7 @@ bool writesForTheRegion(const ResourceSignature &signature) {
     }
     for (const ResourceSignature::AmbientUse &use : signature.ambient) {
         // An ambient resource is state the program does not own, by definition: writing one is a
-        // write outside the program whatever its name (`stdout`, `fs`, a module's own state).
+        // write outside the program whatever its name (`console`, `fs`, a module's own state).
         if (writes(use.mode)) {
             return true;
         }
