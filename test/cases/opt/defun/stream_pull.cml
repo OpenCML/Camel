@@ -1,0 +1,10 @@
+/// A program that pulls a stream: the loop's condition calls the stream's step function, so the
+/// call through the value is written with a stream where the function it reaches is, and its tag is
+/// only known where the pull runs.
+import stream
+
+func main() => int sync {
+    let s = stream::from_array([1, 2, 3])
+    println('pull {}'->format<loop acc = 0 for x in s do acc + x>)
+    return 0
+}

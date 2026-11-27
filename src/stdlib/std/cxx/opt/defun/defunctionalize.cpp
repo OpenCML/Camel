@@ -499,7 +499,15 @@ template <class Draft>
 gc_node_ref_t emitCallThroughValue(
     Draft &draft, const Family &family, std::span<const gc_node_ref_t> arguments,
     std::span<const gc_node_ref_t> withArguments, gc_node_ref_t value, ty::Type *resultType,
-    uint32_t region, gc_node_ref_t place) {
+    uint32_t region, gc_node_ref_t place, const GraphTypeSubstitution *types = nullptr) {
+    // A dispatch written while the program is being retyped hands the call the types the function
+    // it reaches has now: the variant's captures and the call's result are members of the old
+    // table, and a capture that is a value of another family lowered in the same change is named by
+    // that family's enum. Writing the old name here makes the call hand a signature to a parameter
+    // that says the enum, which the commit refuses.
+    if (types != nullptr && resultType != nullptr) {
+        resultType = types->apply(resultType);
+    }
     const gc_cnt_t count = static_cast<gc_cnt_t>(family.variants.size());
     // The nodes of the dispatch are written in `region` -- the region the call itself is in, and
     // the one the arms below are regions of -- and not in the region the draft happens to be
@@ -574,7 +582,10 @@ gc_node_ref_t emitCallThroughValue(
             ASSERT(
                 variant.captures[field] != nullptr,
                 "A variant of a function family has a capture whose type is not known.");
-            ty::Type *taken          = variant.captures[field];
+            ty::Type *taken = variant.captures[field];
+            if (types != nullptr) {
+                taken = types->apply(taken);
+            }
             const gc_node_ref_t take = draft.addOperNode(taken, nullptr, ":enum/field");
             const std::vector<gc_node_ref_t> operands{variantTag, fieldIndex, value};
             draft.setNormInputs(take, operands);
@@ -651,7 +662,8 @@ gc_node_ref_t emitCallThroughValue(
 template <class Draft>
 GCGraph *writeWrapperGraph(
     Draft &draft, RuntimeGraphDraftSession &session, const Family &from,
-    ty::FunctionType *signature, const std::string &name) {
+    ty::FunctionType *signature, const std::string &name,
+    const GraphTypeSubstitution *types = nullptr) {
     draft.setProgram(&session.work());
     std::vector<gc_node_ref_t> ports;
     for (ty::Type *type : signature->normTypesSpan()) {
@@ -674,7 +686,8 @@ GCGraph *writeWrapperGraph(
         value,
         signature->exitType(),
         0,
-        kInvalidNodeRef);
+        kInvalidNodeRef,
+        types);
     draft.setExitNode(result);
     auto *encoded = draft.encode(name, name);
     session.adoptGraph(encoded);
@@ -864,21 +877,24 @@ DefunctionalizeRewritePass::apply(const camel::runtime::Program *program, std::o
                 if (calleeType != nullptr && calleeType->code() == TypeCode::Stream) {
                     // A stream's value is its step function and its state, and it has no other
                     // runtime representation (design principles 5.4): the call through a stream is
-                    // the pull of the value the step function returns. It is a call through a
-                    // value, but not one whose callee the graph holds as a signature of its own --
-                    // the callee is the stream -- so this pass cannot rewrite it the way it
-                    // rewrites a call through a function value, and the family that names the step
-                    // signature is left as written: the value keeps the form the pull reads,
-                    // instead of being handed to it as an enum.
-                    if (auto *stream = static_cast<ty::StreamType *>(calleeType)) {
-                        for (auto &entry : plans) {
-                            if (sameFamily(entry.second.type, stream->stepType())) {
-                                refuseIfUnsaid(
-                                    entry.second,
-                                    "a stream of this signature is pulled, and a pull is not a "
-                                    "call through a value this pass rewrites");
-                            }
+                    // the pull of the value the step function returns, which is a call through a
+                    // value of the family that names the step signature. The callee is written as
+                    // a stream rather than as that signature, so the tag is only known where the
+                    // pull runs: the site is recorded as one whose variant the run time decides,
+                    // and the rewrite below lowers it to one match on the tag like any other.
+                    auto *stream   = static_cast<ty::StreamType *>(calleeType);
+                    TypePlan *plan = nullptr;
+                    for (auto &entry : plans) {
+                        if (sameFamily(entry.second.type, stream->stepType())) {
+                            plan = &entry.second;
+                            break;
                         }
+                    }
+                    if (plan != nullptr) {
+                        ++plan->calls;
+                        CallSite site;
+                        site.ref = ref;
+                        callsites[toValue(graph->id())].push_back(site);
                     }
                     continue;
                 }
@@ -979,12 +995,39 @@ DefunctionalizeRewritePass::apply(const camel::runtime::Program *program, std::o
                                               input) != withs.end();
                     }
                     if (!readsAsCallee && !readsAsArgument) {
-                        std::string why = "the value is read by a node that is not a call";
-                        if (fromStream) {
-                            why += ": a stream of this signature is carried where the pass would "
-                                   "have to change the type that names it";
+                        // A value the graph puts into a slot of a composite it is building is
+                        // carried, not called: a closure's construction keeps what it captures in
+                        // the slots its function names, and the family that owns the closure
+                        // carries those same slots as the variant's payload, so a captured value
+                        // goes in as whatever it becomes. A stream is carried the same way inside
+                        // a tuple, an array or another stream: a substitution rebuilds those
+                        // composites component by component, so the slot names what the value
+                        // becomes too. Only a composite the substitution does not reach (a named
+                        // type) would hand the tag to a slot that still says the signature.
+                        const ty::Type *built = node.dataType();
+                        const auto *builtFill =
+                            built != nullptr && camel::execute::shapeOfKind(node.kind) ==
+                                                    camel::execute::OperShape::Construction
+                                ? graph->nodeBodyAs<GCFillBody>(ref)
+                                : nullptr;
+                        const bool capturedIntoClosure =
+                            builtFill != nullptr &&
+                            builtFill->fillKind == GCFillKind::FunctionClosure;
+                        const bool intoAComposite =
+                            capturedIntoClosure || (fromStream && built != nullptr &&
+                                                    (built->code() == TypeCode::Tuple ||
+                                                     built->code() == TypeCode::Array ||
+                                                     built->code() == TypeCode::Stream ||
+                                                     built->code() == TypeCode::Function) &&
+                                                    mentions(built, inputType, 0));
+                        if (!intoAComposite) {
+                            std::string why = "the value is read by a node that is not a call";
+                            if (fromStream) {
+                                why += ": a stream of this signature is carried where the pass "
+                                       "would have to change the type that names it";
+                            }
+                            refuseIfUnsaid(planned->second, std::move(why));
                         }
-                        refuseIfUnsaid(planned->second, std::move(why));
                     }
                     if (fromStream) {
                         continue;
@@ -1426,13 +1469,26 @@ DefunctionalizeRewritePass::apply(const camel::runtime::Program *program, std::o
         if (type == nullptr) {
             return;
         }
+        // A stream's value is its step function and its state, and it has no other runtime
+        // representation (design principles 5.4), so a stream of one of these signatures *is* a
+        // value of the family that names it: the object that names the stream is replaced by the
+        // family's enum too, and the pull reads the tag where it read the stream. Both halves are
+        // one change -- retyping only the signature leaves the graph handing an enum where it
+        // declares the stream, which the exit check refuses.
+        ty::Type *step = type->code() == TypeCode::Stream
+                             ? static_cast<ty::StreamType *>(type)->stepType()
+                             : nullptr;
         for (Family *family : accepted) {
             for (TypePlan *member : family->members) {
                 // A family is its signature with every resource clause it is written with (design
                 // principles 5.2), so an object that differs from a member only in the clause is a
                 // member too: a call would otherwise hand the tag to a signature that still says
                 // the function type.
-                if (type->equals(member->type) || sameFamily(type, member->type)) {
+                const bool memberOf =
+                    type->equals(member->type) || sameFamily(type, member->type) ||
+                    (step != nullptr &&
+                     (step->equals(member->type) || sameFamily(step, member->type)));
+                if (memberOf) {
                     equivalents[member->type->typeId()].insert(type);
                 }
             }
@@ -1594,7 +1650,8 @@ DefunctionalizeRewritePass::apply(const camel::runtime::Program *program, std::o
                 session,
                 *wrapper.from,
                 signature,
-                std::format("{}$wrap", wrapper.into->variants.front().name));
+                std::format("{}$wrap", wrapper.into->variants.front().name),
+                &types);
             wrapper.graph = made->id();
             wrappedGraphs.insert(made->id());
             familyOfGraph.emplace(made->id(), wrapper.into);
@@ -1916,7 +1973,8 @@ DefunctionalizeRewritePass::apply(const camel::runtime::Program *program, std::o
                     withs.front(),
                     header->dataType,
                     draft.nodeRegion(id),
-                    id);
+                    id,
+                    &types);
                 ++rewroteCalls;
             }
         }
