@@ -608,6 +608,61 @@ Builder::visitLinkNode(const GCT::node_ptr_t &gct, std::optional<GCT::Assignment
             }
             return true;
         };
+        // A callee that is a set of declarations hands its arguments one signature only when its
+        // entries agree (`signatureForArgumentContext`), and the entry a call reaches can be one
+        // whose `with` parameter is concrete while the signature the arguments were typed by is
+        // another entry's and names a type variable the ordinary arguments cannot bind. `foreach`
+        // over a `Range` is that case: the range entry declares `with <f: (item: int) => void>`,
+        // and the signature the arguments got is the array entry's `with <f: (item: T) => void>`,
+        // whose `T` a `Range` says nothing about, so the lambda's parameter had no type to take.
+        // The ordinary arguments are typed by now, so the entry they select is known, and its
+        // `with` parameter is this position's -- the same rule the array form follows (design
+        // principles 5.9: a lambda takes the types it does not write from the function type of
+        // the position it stands in).
+        const auto withParameterOfSelectedEntry = [&](size_t index) -> Type * {
+            if (!nodeIsKind(targetNode, runtime::GCNodeKind::Dref)) {
+                return nullptr;
+            }
+            const auto &selected = nodeGraphOf(targetNode)->drefTarget(targetNode);
+            if (!std::holds_alternative<oper_group_ptr_t>(selected)) {
+                return nullptr;
+            }
+            Type *found = nullptr;
+            for (const auto &[uri, resolver] : std::get<oper_group_ptr_t>(selected)->resolvers()) {
+                FunctionType *fixed = resolver ? resolver->fixedSignature() : nullptr;
+                if (fixed == nullptr && resolver) {
+                    fixed = resolver->declaredSignature();
+                }
+                if (fixed == nullptr && resolver) {
+                    fixed = resolver->graftedSignature();
+                }
+                if (fixed == nullptr || fixed->hasRest() || fixed->hasWithRest()) {
+                    continue;
+                }
+                if (fixed->normTypesCount() != normInputTypes.size() ||
+                    fixed->withTypesCount() <= index) {
+                    continue;
+                }
+                bool fits = true;
+                for (size_t at = 0; at < normInputTypes.size() && fits; ++at) {
+                    Type *parameter = fixed->normTypeAt(at);
+                    fits            = parameter != nullptr && normInputTypes[at] != nullptr &&
+                                      parameter->assignableFrom(normInputTypes[at]);
+                }
+                if (!fits) {
+                    continue;
+                }
+                Type *candidate = fixed->withTypeAt(index);
+                if (candidate == nullptr) {
+                    continue;
+                }
+                if (found != nullptr && !found->equals(candidate)) {
+                    return nullptr; // the entries the call fits disagree: nothing to give
+                }
+                found = candidate;
+            }
+            return found;
+        };
         // A value that is not a function (the initial value of a reduction, a shape literal)
         // can be built before the function is: its own type binds the variables the signature
         // still leaves open (`reduce<(a, b) => a + b, 0>` with nothing else fixing the
@@ -620,6 +675,17 @@ Builder::visitLinkNode(const GCT::node_ptr_t &gct, std::optional<GCT::Assignment
                 }
                 Type *pattern = parameterOf(i);
                 Type *wanted = pattern != nullptr ? substituteTypeVars(pattern, bindings) : nullptr;
+                if (!usableExpected(wanted)) {
+                    // The signature's own answer names a variable nothing here binds: the entry
+                    // the ordinary arguments select may still declare this parameter concretely.
+                    if (Type *selected = withParameterOfSelectedEntry(i); selected != nullptr) {
+                        Type *substituted = substituteTypeVars(selected, bindings);
+                        if (usableExpected(substituted)) {
+                            pattern = selected;
+                            wanted  = substituted;
+                        }
+                    }
+                }
                 const bool isFunction = wanted != nullptr && wanted->code() == TypeCode::Function;
                 if (isFunction != functionsPass) {
                     continue;
