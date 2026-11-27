@@ -432,6 +432,28 @@ check(
     mixed.status === 5 && mixed.out.includes('new red  plan_a  fast_new\n') && !mixed.out.includes('slow_new'),
     mixed.out,
 );
+// A red outside the table on a case whose plan declares it flaky is printed and recorded, and does
+// not stop the batch; beside it, a red on a case that declares nothing is still new.
+const flakyOnly = runRead([{ ...row('plan_a', 'sometimes', 'fail'), flaky: 'the scheduler crash (backlog row)' }], ['--base', readBase, '--no-fetch']);
+const flakyTip = flakyOnly.out.split('\n').find((one) => one.startsWith('  tip '))?.trim().split(/\s+/)[1];
+const flakyRecord = flakyTip && fs.existsSync(path.join(common, 'camel-read', flakyTip)) ? fs.readFileSync(path.join(common, 'camel-read', flakyTip), 'utf8') : '';
+check(
+    'a red on a case declared flaky is named as flaky and recorded, and the batch is not stopped by it',
+    flakyOnly.status === 0 &&
+        flakyOnly.out.includes('flaky red  plan_a  sometimes  (the scheduler crash (backlog row))\n') &&
+        !flakyOnly.out.includes('new red') &&
+        flakyRecord.includes('flaky=plan_a/sometimes\nnew=0\n'),
+    `${flakyOnly.out}${flakyRecord}`,
+);
+const flakyBeside = runRead(
+    [{ ...row('plan_a', 'sometimes', 'fail'), flaky: 'the scheduler crash (backlog row)' }, row('plan_a', 'fast_new', 'fail')],
+    ['--base', readBase, '--no-fetch'],
+);
+check(
+    'beside a flaky red, a red on a case that declares nothing is new and stops the batch',
+    flakyBeside.status === 5 && flakyBeside.out.includes('new red  plan_a  fast_new\n') && !flakyBeside.out.includes('new red  plan_a  sometimes'),
+    flakyBeside.out,
+);
 
 // Integration moves while the batch builds. The build stub pushes a commit to the remote from the
 // maker's clone, so the batch's first push is refused; a page the build does not read is merged onto

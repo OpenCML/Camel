@@ -4770,6 +4770,9 @@ function slotTiming(entry, clock, marks, windows) {
         // The layer the case belongs to, so a reader that compares reds across runs can compare
         // like with like: a plan file named as a target runs in full, whatever the tier asked for.
         tier: testTier(entry.plan, entry.test),
+        // The plan's own `flaky` text, so a reader of the summary can tell a red that the case's
+        // known intermittent defect may explain from one it cannot.
+        flaky: entry.test.__flaky ?? null,
         status: entry.outcome ? entry.outcome.status : 'fail',
         // The child was ended at its limit: what separates a case that is slow from one that is wrong.
         timed_out: result ? result.timedOut === true : false,
