@@ -373,8 +373,8 @@ const Builder::OperatorOverloads &Builder::importedOperatorOverloadsOf(const std
             imported.mod != nullptr ? imported.mod->name() : std::string();
         // One entity may carry the whole set -- the rules of the name's operator group and the
         // functions of the name a module also declares with a body -- so each form it carries is
-        // a candidate, not only the first one. A module that declares the name both ways used to
-        // arrive as one of the two, and the other was not a candidate at all.
+        // a candidate, not only the first one: a module that declares the name both ways
+        // contributes both forms, and taking only one would hide the other from resolution.
         if (ent.isOperGroup()) {
             if (const auto &ops = ent.operGroup()) {
                 for (const auto &overload : ops->resolvers()) {
