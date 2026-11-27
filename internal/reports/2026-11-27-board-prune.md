@@ -97,3 +97,18 @@ task-171 | defunctionalize streams: baseline readings and current touch points |
 task-173 | whether docs/tutorial/examples is consumed by cases, file by file | completed | owner: lane-block-hash | r3
 task-174 | docs examples versus the parse baseline, a reference reading | completed | owner: lane-arrangeable | r3
 ```
+
+## Recorded in batch 6 (10)
+
+```
+task-199 | src/stdlib/autodiff 40 direct references sorted into three classes (read-only pass) | completed | owner: lane-block-hash | r5
+task-200 | src/stdlib/rewrite 23 references: six moved to GraphView, sixteen kept with a reason | completed | owner: lane-block-hash | r6
+task-202 | src/tools 54 direct GCGraph references mapped to 52 real sites, entry point GraphView::view() | completed | owner: lane-kinds-oper | r5
+task-203 | src/compile references down to one (lane/compile-view, two commits), graph_encode kept as implementation | completed | owner: lane-arrangeable | r8
+task-206 | C3: a loop whose rounds the data decides, exported as Loop, ORT and nvm agree value by value | completed | owner: lane-oper-shape-guard | r4
+task-211 | stale CLI spellings checked: nothing to change, inspect --ops is still accepted | completed | owner: lane-misc | r4
+task-213 | pass classification gains isPassShaped: net minus 80 reds, the 187 revert reds reach zero | completed | owner: lane-editview-a | r5
+task-215 | src/tools view migration, stage 2 of 3: nine files in place, fourteen errors located by line | completed | owner: lane-kinds-oper | r10
+task-216 | tape-carried values: widening the pair to n slots broke 55 reds, so the loop body only (option C) | completed | owner: lane-oper-shape-guard | r5
+task-219 | whether the reference evaluator can read through the view, counted and judged | completed | owner: lane-block-hash | r3
+```
