@@ -172,7 +172,7 @@ camel docs/tutorial/examples/17_fact.cml
 ```
 
 ```text
-sampled abs_of_nonnegative: proposition equality, evidence samples 100, fired 8 of 8, coverage integer scalar int: abs(x) = x
+refuted abs_of_nonnegative: proposition equality, evidence none, reason the rule never fired on its own left side in 64 tries, the rule never fired on its own left side, coverage beyond translation coverage: the operator 'math:abs_l' is not translated
 
 9
 ```
