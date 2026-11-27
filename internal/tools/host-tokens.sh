@@ -142,17 +142,22 @@ read_holder_mode() {
 }
 
 holders_of() {
-    local file ino i pid
+    local file ino i pid locks
     file=$(token_path "$1")
     if [ -r /proc/locks ]; then
         ino=$(stat -c %i "$file" 2>/dev/null) || return 0
         [ -n "$ino" ] || return 0
+        # The table is taken in one builtin read and the lines are walked from that copy. A `read`
+        # loop straight on /proc/locks makes the kernel regenerate the table for every line it hands
+        # out, so on a host with a few hundred locks one walk costs seconds and a `show` over the pool
+        # costs a minute; `count_held` reads it the same way for the same reason.
+        locks="$(< /proc/locks)" 2>/dev/null || return 0
         # `N: FLOCK ADVISORY WRITE <pid> <major>:<minor>:<inode> <start> <end>`: the pid is the field
         # before the one that ends in this inode. A blocked waiter is a `->` entry and is skipped.
         while read -r _ type _ _ lpid where _ _; do
             [ "$type" = 'FLOCK' ] || continue
             [ "${where##*:}" = "$ino" ] && echo "$lpid"
-        done < /proc/locks
+        done <<< "$locks"
     else
         fuser "$file" 2>/dev/null | tr -s ' ' '\n' | grep -E '^[0-9]+$' | sort -u || true
     fi
