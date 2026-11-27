@@ -1,4 +1,4 @@
-// The claim `src/stdlib/rulesets/transpose.cml:1506` makes -- that `avg_pool2d_t` is "the one [law]
+// The claim `src/stdlib/rulesets/transpose.cml#avg_pool2d_t` makes -- that `avg_pool2d_t` is "the one [law]
 // a `grad` reaches today" -- read against the six `filed-not-walked` markers, which say it is not
 // reached. One loss per operator, and the library's number against the engine's, so a law that is
 // reached is also a law that answers the right thing.
