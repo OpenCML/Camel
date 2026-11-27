@@ -221,6 +221,10 @@ DraftWritings::rewrite(std::span<const Rule> rules, size_t maxRounds, RewriteLog
                     std::vector<gc_node_ref_t> matchedWaits(
                         draft_.ctrlInputsOf(node).begin(),
                         draft_.ctrlInputsOf(node).end());
+                    // The operator terms the left side read below its root. The replacement takes
+                    // the left side's place, and the terms it no longer reads have to leave the
+                    // block's chain with it (below, before the place is handed over).
+                    std::vector<gc_node_ref_t> matchedTerms;
                     // A statement of a `sync` block is ordered by the statement written before it, and
                     // that edge is a sync edge (docs/design/effects/edges.cn.md 1.5); a control input
                     // is the other kind of wait such a statement carries, and one taken from the node
@@ -236,6 +240,7 @@ DraftWritings::rewrite(std::span<const Rule> rules, size_t maxRounds, RewriteLog
                     }
                     std::optional<std::vector<gc_node_ref_t>> chosen;
                     std::optional<std::vector<gc_node_ref_t>> chosenWaits;
+                    std::optional<std::vector<gc_node_ref_t>> chosenTerms;
                     MatchRemainder remainder;
                     std::optional<MatchRemainder> chosenRemainder;
                     matchFrom(
@@ -245,12 +250,14 @@ DraftWritings::rewrite(std::span<const Rule> rules, size_t maxRounds, RewriteLog
                         bind,
                         bound,
                         &matchedWaits,
+                        &matchedTerms,
                         !ordered_,
                         [&] {
                             if (!chosen &&
                                 (!rule.when || rule.when(Match{*this, node, bind, remainder}))) {
                                 chosen          = bind;
                                 chosenWaits     = matchedWaits;
+                                chosenTerms     = matchedTerms;
                                 chosenRemainder = remainder;
                                 return true;
                             }
@@ -351,6 +358,74 @@ DraftWritings::rewrite(std::span<const Rule> rules, size_t maxRounds, RewriteLog
                     }
                     ++appliedInRound;
                     ++stats.applied;
+                    // The replacement stands for the whole matched left side, not for its root
+                    // alone. A term the right side no longer reads was a statement of that left
+                    // side -- in a `sync` block the computations the matched expression is written
+                    // in run as statements of the block's chain -- and the place it held there is
+                    // the left side's to give up. The chain closes over the term (`closeChainOver`:
+                    // what the term waited for is what the statements after it wait for, in both
+                    // the sync and the control kind), so what the block says where the matched
+                    // expression stood is the left side's own statements
+                    // (docs/design/effects/edges.cn.md 4).
+                    //
+                    // A term whose value something outside the left side still reads keeps its
+                    // place: closing the chain over a statement another reader waits for would take
+                    // an ordering a live statement stands in, so the check asks for terms read by
+                    // nothing but the left side itself. A term the right side still reads stands
+                    // outside that set by construction -- the code just built for it reads the term
+                    // -- so a law that keeps a term as its value keeps the term where it was.
+                    //
+                    // Closing the chain is all this does. The term is then a value nobody reads on
+                    // a chain nobody waits for, and `eraseUnused` right after is what erases it, as
+                    // it erases the root's other discarded inputs. A matched term takes part in a
+                    // rule
+                    // (`takesPart`; the matcher refuses one that does not), so the deletion is the
+                    // plain unread-node one and no guard is asked about it: what a rewrite erases
+                    // is the pass's to decide (design principles :684).
+                    {
+                        const std::vector<gc_node_ref_t> leftSide =
+                            chosenTerms.value_or(std::vector<gc_node_ref_t>{});
+                        const auto sitsInLeftSide = [&](gc_node_ref_t at) {
+                            return at == node || std::find(leftSide.begin(), leftSide.end(), at) !=
+                                                     leftSide.end();
+                        };
+                        for (gc_node_ref_t inside : leftSide) {
+                            if (inside == node || !draft_.alive(inside)) {
+                                continue;
+                            }
+                            bool readOutside = false;
+                            for (gc_node_ref_t user : draft_.normUsersOf(inside)) {
+                                readOutside = readOutside || !sitsInLeftSide(user);
+                            }
+                            for (gc_node_ref_t user : draft_.withUsersOf(inside)) {
+                                readOutside = readOutside || !sitsInLeftSide(user);
+                            }
+                            if (readOutside) {
+                                continue;
+                            }
+                            const std::vector<gc_node_ref_t> ctrlUsers(
+                                draft_.ctrlUsersOf(inside).begin(),
+                                draft_.ctrlUsersOf(inside).end());
+                            draft_.closeChainOver(inside);
+                            // The control kind names the same pair beside the sync edge until the
+                            // edges go (src/kernel/runtime/graph_edges.cpp, `checkSyncEdges` reads
+                            // the sync edge back), so the pairs that named this term are taken away
+                            // here -- the replacement's wait on it included, which the closing
+                            // above has already turned into a wait on what the term waited for.
+                            for (gc_node_ref_t user : ctrlUsers) {
+                                if (user == inside || !draft_.alive(user)) {
+                                    continue;
+                                }
+                                std::vector<gc_node_ref_t> kept;
+                                for (gc_node_ref_t in : draft_.ctrlInputsOf(user)) {
+                                    if (in != inside) {
+                                        kept.push_back(in);
+                                    }
+                                }
+                                draft_.setCtrlInputs(user, kept);
+                            }
+                        }
+                    }
                     eraseUnused(node, recorded);
                     if (log != nullptr) {
                         log->push_back(std::move(*step));
@@ -441,6 +516,7 @@ SaturateStats DraftWritings::saturate(std::span<const Rule> rules, const Budget 
                     bind,
                     bound,
                     nullptr,
+                    nullptr, // saturation leaves the alternatives standing: nothing is erased
                     !ordered_ && !rule.twoWay,
                     [&] {
                         if (!rule.when || rule.when(Match{*this, node, bind, remainder})) {

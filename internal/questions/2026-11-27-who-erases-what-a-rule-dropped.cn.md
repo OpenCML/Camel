@@ -119,18 +119,47 @@ expressed by nothing"）。缺的不是这两条，而是**规则改写不是"�
   `2026-11-27-promotion-19-reds.tsv:61` 红（`065bfb1690`），窗口 820 笔
 ```
 
-状态：**已定（2026-11-27，答复 D-1127-18）。** 问句“被丢掉的操作数的顺序位是否随它消失”的答案是：
+
+状态：**已定（D-1127-18）**
+
+## 裁决
+
+问句“被丢掉的操作数的顺序位是否随它消失”的答案是：
 **随它的替身走。** 裁决原文：
 
 > 不看会不会 fault。原则 `docs/design-principles.cn.md:684` —— 遍保留什么、删什么由遍自己决定；
 > 同步块里结果没用、但可能故障的纯计算被化简遍删掉，不算缺陷。改写遍的契约是：**规则说右边等于左边，
 > 替身接替的是整个被匹配的左边，不只是根。**
 
-落到实现（`writings_driver.cpp` 的替换路径，`eraseUnused` 之前）：被匹配的内层节点在链上带着的顺序位
-**折进替身**（`closeChainOver` / `spliceOrderEdgesOver`），然后照常走删除判定 —— **判据与删除不动**。
-于是 `array_combine` 的 `nodes 5 / edges 6` 是对的，该改的是引擎不是判据。
+被匹配的内层节点在链上的位置折进替身，这件事由引擎（writings 的替换路径）做；判据与删除不动。
 
 反控（必须同时成立）：内层节点**另有别的用户**时，它不得因此被删掉 —— 这条是“折进去”不等于“吞掉”的分界。
 
-不立项的旧话作废：不要为了变绿去动 `tables.mjs`、`dominance` 断言或 dce 的 `isUnanchoredPure`；
-这三处一格没动，本条的改动全在 `writings_driver.cpp` 与匹配侧。
+
+## 改了什么
+
+契约落在替换路径上，不在删除路径上（删除判定的语义一行未改）：
+
+```
+src/kernel/include/camel/runtime/writings.h    matchFrom 多收一个 termOut：左边在根之下读到的算子节点
+src/kernel/runtime/writings_match.cpp          匹配时把走过的算子项记进 termOut（失败回溯时缩回）
+src/kernel/runtime/writings_driver.cpp         换位（takeStatementPlace）与等待边都落好之后、eraseUnused
+                                               之前，把"除了左边自己没人读"的项逐条 closeChainOver，
+                                               并摘掉 control 里点名它的那几对；之后 eraseUnused 照常
+                                               把它当无读者的节点删掉
+```
+
+合链放在换位之后，是因为换位本身要把根的链位（含它当时的前驱）交给替身；先合链会把那条前驱从根眼
+前拿走。顺序反过来之后，替身先按原样接过根的位与等待，再让链从前驱直接连到替身，替身对那几项的
+control 等待同时被摘掉（`closeChainOver` 已经把"它等过什么"交给了替身，见 `draft.cpp:1606-1676`）。
+
+关键点：合链的条件是**除左边自己（根与其他项）之外没有 norm/with 用户**。右边仍读到的项自然落在
+这个集合之外（替身就是它的用户），所以"规则把某一项留作自己的值"时那一项原地不动；这同时就是新加的
+反控 `algebra_rules.tensor.shared_term_stays`（`test/cases/opt/algebra_rules/shared_term.cml`：
+`let p = x * 3.0; let a = p + x * 5.0; println(p)` —— 律照样匹配，但 `p` 另有一个读者，改写后
+`shared` 图上必须仍是 `tensor_mul 2` / `tensor_add 0`）。
+
+另有一条把数字点名：`algebra_rules.tensor.left_side_leaves_the_chain`（同一个 `tensor_forms.cml`）断言
+`array_combine` 就是 **`nodes 5 / edges 6 / tensor_mul 1 / tensor_add 0 / println 1`**。`tables.mjs` 对
+改写过的形态只做"节点、边、每种算子都不多于参考列"的界，单靠它一个"只缩小"的实现也能过；这条把数
+写死在那张表上，引擎哪天不再合链，它按名字和计数红。

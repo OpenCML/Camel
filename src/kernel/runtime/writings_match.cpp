@@ -192,8 +192,8 @@ bool acceptsType(
 bool DraftWritings::matchFrom(
     camel::core::sem::PermissionMask context, std::vector<Item> &work, size_t at,
     std::vector<gc_node_ref_t> &bind, std::vector<uint8_t> &bound,
-    std::vector<gc_node_ref_t> *waits, bool commuted, const std::function<bool()> &emit,
-    MatchRemainder *remainder) {
+    std::vector<gc_node_ref_t> *waits, std::vector<gc_node_ref_t> *termOut, bool commuted,
+    const std::function<bool()> &emit, MatchRemainder *remainder) {
     if (at == work.size()) {
         return emit();
     }
@@ -217,13 +217,14 @@ bool DraftWritings::matchFrom(
                 const auto b = constantOf(item.node);
                 same = a && b && sameConstantValue(a->first, a->second, b->first, b->second);
             }
-            return same && matchFrom(context, work, at + 1, bind, bound, waits, commuted, emit);
+            return same &&
+                   matchFrom(context, work, at + 1, bind, bound, waits, termOut, commuted, emit);
         }
         bound[p.var] = 1;
         bind[p.var]  = item.node;
         {
             const bool matched =
-                matchFrom(context, work, at + 1, bind, bound, waits, commuted, emit);
+                matchFrom(context, work, at + 1, bind, bound, waits, termOut, commuted, emit);
             bound[p.var] = 0;
             return matched;
         }
@@ -232,7 +233,7 @@ bool DraftWritings::matchFrom(
         if (!found || !sameConstantValue(found->first, found->second, p.value, p.type)) {
             return false;
         }
-        return matchFrom(context, work, at + 1, bind, bound, waits, commuted, emit);
+        return matchFrom(context, work, at + 1, bind, bound, waits, termOut, commuted, emit);
     }
     case Pattern::Kind::Op: {
         // The root of a rule is the node itself; below it, any writing of the value read.
@@ -277,16 +278,27 @@ bool DraftWritings::matchFrom(
                     }
                 }
             }
+            // The terms of the left side, root first: a rewrite replaces the whole left side and
+            // not only its root, and the place each term held in a `sync` block's chain is the
+            // left side's to close over (`closeChainOver`), which the caller does.
+            const size_t savedTerms = termOut != nullptr ? termOut->size() : 0;
+            if (termOut != nullptr &&
+                std::find(termOut->begin(), termOut->end(), candidate) == termOut->end()) {
+                termOut->push_back(candidate);
+            }
             const size_t saved = work.size();
             for (size_t i = 0; i < inputs.size(); ++i) {
                 const size_t input = swapped ? (i == 0 ? 1 : 0) : i;
                 work.push_back({&p.args[i], inputs[input]});
             }
             const bool matched =
-                matchFrom(context, work, at + 1, bind, bound, waits, commuted, emit);
+                matchFrom(context, work, at + 1, bind, bound, waits, termOut, commuted, emit);
             work.resize(saved);
             if (waits != nullptr) {
                 waits->resize(savedWaits);
+            }
+            if (termOut != nullptr && !matched) {
+                termOut->resize(savedTerms);
             }
             return matched;
         };
@@ -518,6 +530,7 @@ bool DraftWritings::matchFrom(
                             bind,
                             bound,
                             waits,
+                            termOut,
                             commuted,
                             emit,
                             remainder);
